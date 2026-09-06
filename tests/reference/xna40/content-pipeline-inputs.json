@@ -474,8 +474,8 @@
         "tests": {
           "importer": "XnaWmvImporter.ImportAndItsRefusalsMatchXna, XnaVideoContent.AReadableVideoAnswersItsOwnShape",
           "processor": "XnaVideoProcessor.DefaultsAndProcessMatchXna",
-          "sourceToXnb": "",
-          "sourceToCnb": "",
+          "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
+          "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
           "malformed": "XnaVideoContent.EveryRefusalIsTheOneSentenceXnaGives",
           "target": ""
         },
@@ -484,7 +484,7 @@
         "windowsPhone": "UNVERIFIED",
         "xbox360": "UNVERIFIED",
         "status": "IMPLEMENTED",
-        "note": "Every refusal is the measured one, including the split that makes a missing file a FileNotFoundException through the importer and an InvalidContentException through VideoContent's own constructor. The successful path could not be measured (Wine 10.0 has no Media Foundation), so the shape read from the container is held to the format. The source-to-XNB leg is not named yet."
+        "note": "Every refusal is the measured one, including the split that makes a missing file a FileNotFoundException through the importer and an InvalidContentException through VideoContent's own constructor. The successful path could not be measured (Wine 10.0 has no Media Foundation), so the shape read from the container is held to the format. The source-to-XNB leg is not named yet. The canonical route now reads the frame metadata from the file: `cna_content` has no decoder and must not grow one, so the importer takes a probe from whoever registers it and `cna_content_pipeline` supplies one over the build-time media decoder. Before that, `width`, `height` and `framesPerSecond` were required parameters, so a `.wmv` -- the one video format XNA itself accepts -- could not be built by naming it and nothing else."
       }
     },
     ".x": {

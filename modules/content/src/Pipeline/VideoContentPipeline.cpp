@@ -2,6 +2,8 @@
 
 #include "CNA/Content/Pipeline/VideoContentPipeline.hpp"
 
+#include <utility>
+
 #include <cmath>
 #include <filesystem>
 #include <limits>
@@ -69,8 +71,10 @@ namespace CNA::Content::Pipeline
             return static_cast<std::uint32_t>(duration);
         }
 
-        std::uint32_t Dimension(const ContentProcessorParameters& parameters, const char* name)
+        std::uint32_t Dimension(const ContentProcessorParameters& parameters, const char* name,
+                                const std::uint32_t fallback)
         {
+            if (fallback != 0u && parameters.Find(name) == nullptr) { return fallback; }
             const std::uint64_t value = UnsignedParameter(parameters, name, true);
             if (value == 0u || value > Cnb::CnbMaxVideoDimension)
             {
@@ -81,10 +85,11 @@ namespace CNA::Content::Pipeline
             return static_cast<std::uint32_t>(value);
         }
 
-        float FramesPerSecond(const ContentProcessorParameters& parameters)
+        float FramesPerSecond(const ContentProcessorParameters& parameters, const float fallback)
         {
             const ContentProcessorParameterValue* value =
                 parameters.Find(VideoFramesPerSecondParameter);
+            if (value == nullptr && fallback > 0.0f) { return fallback; }
             if (value == nullptr)
             {
                 throw std::invalid_argument(
@@ -132,15 +137,25 @@ namespace CNA::Content::Pipeline
             const std::string problem = Cnb::CnbLogicalNameProblem(reference);
             if (!problem.empty())
             {
-                throw std::invalid_argument("VideoProcessor parameter 'streamReference' is " +
+                throw std::invalid_argument("VideoProcessor parameter 'streamReference' " +
                                             problem + ".");
             }
             return reference;
         }
 
+        /** @brief What the probe read for this source, or an all-zero fallback. */
+        [[nodiscard]] ProbedVideoMetadata ProbedOrNothing(const ImportedVideoSource* imported)
+        {
+            if (imported == nullptr || !imported->probed.has_value()) { return {}; }
+            return *imported->probed;
+        }
+
         Cnb::CnbVideoData ReadMetadata(const ImportedVideoSource* imported,
                                        const ContentProcessorParameters& parameters)
         {
+            // A parameter always wins over the probe: the project said so, and XNA lets a project
+            // override what its own build read from the file.
+            const ProbedVideoMetadata probed = ProbedOrNothing(imported);
             Cnb::CnbVideoData video;
             if (imported != nullptr) { video.streamReference = StreamReference(*imported, parameters); }
             else if (const std::string* stream =
@@ -150,17 +165,23 @@ namespace CNA::Content::Pipeline
                 if (!problem.empty())
                 {
                     throw std::invalid_argument(
-                        "VideoProcessor parameter 'streamReference' is " + problem + ".");
+                        "VideoProcessor parameter 'streamReference' " + problem + ".");
                 }
             }
-            video.durationMs = DurationMs(parameters);
-            video.width = Dimension(parameters, VideoWidthParameter);
-            video.height = Dimension(parameters, VideoHeightParameter);
-            video.framesPerSecond = FramesPerSecond(parameters);
-            video.soundtrackType = SoundtrackType(parameters);
+            video.durationMs = parameters.Find(VideoDurationMsParameter) == nullptr
+                                   ? probed.durationMs
+                                   : DurationMs(parameters);
+            video.width = Dimension(parameters, VideoWidthParameter, probed.width);
+            video.height = Dimension(parameters, VideoHeightParameter, probed.height);
+            video.framesPerSecond = FramesPerSecond(parameters, probed.framesPerSecond);
+            video.soundtrackType = parameters.Find(VideoSoundtrackTypeParameter) == nullptr
+                                       ? probed.soundtrackType
+                                       : SoundtrackType(parameters);
             return video;
         }
     }
+
+    VideoImporter::VideoImporter(VideoMetadataProbe probe) : probe_(std::move(probe)) {}
 
     ContentComponentIdentity VideoImporter::Identity() const
     {
@@ -212,6 +233,13 @@ namespace CNA::Content::Pipeline
                                      (error ? ": " + error.message() : std::string{}) + ".");
         }
         ImportedVideoSource imported;
+        if (probe_)
+        {
+            // A probe that cannot read this particular file answers nothing rather than throwing:
+            // the metadata may still arrive as parameters, and refusing here would turn a build
+            // that used to work into one that does not.
+            imported.probed = probe_(context.SourcePath());
+        }
         imported.mediaSource = context.SourcePath();
         imported.streamReference = CNA::Internal::ContentPathToUtf8(relative);
         imported.byteSize = static_cast<std::uint64_t>(size);
@@ -224,6 +252,11 @@ namespace CNA::Content::Pipeline
         context.LogInfo("recorded " + std::to_string(imported.byteSize) +
                         "-byte external streaming video source; media bytes remain external.");
         return ContentValue::Create(ImportedVideoSourceType, std::move(imported));
+    }
+
+    VideoProcessor::VideoProcessor(const bool metadataFromSource)
+        : metadataFromSource_(metadataFromSource)
+    {
     }
 
     ContentComponentIdentity VideoProcessor::Identity() const
@@ -254,6 +287,19 @@ namespace CNA::Content::Pipeline
                                             name + "'.");
             }
         }
+        if (metadataFromSource_)
+        {
+            // The importer probes the file, so the three frame parameters are optional here; what
+            // is present still has to be well formed, and Process() refuses a source the probe
+            // could not read either.
+            ImportedVideoSource assumed;
+            // A name that passes, because what is under validation here is the parameters; the
+            // real reference comes from the imported source when Process() runs.
+            assumed.streamReference = "probe";
+            assumed.probed = ProbedVideoMetadata{1u, 1u, 1.0f, 0u, 0u};
+            static_cast<void>(ReadMetadata(&assumed, parameters));
+            return;
+        }
         static_cast<void>(ReadMetadata(nullptr, parameters));
     }
 
@@ -261,6 +307,20 @@ namespace CNA::Content::Pipeline
                                          ContentProcessorContext& context) const
     {
         const ImportedVideoSource& imported = input.Get<ImportedVideoSource>();
+        if (metadataFromSource_ && !imported.probed.has_value() &&
+            (context.Parameters().Find(VideoWidthParameter) == nullptr ||
+             context.Parameters().Find(VideoHeightParameter) == nullptr ||
+             context.Parameters().Find(VideoFramesPerSecondParameter) == nullptr))
+        {
+            // This build can read a video and could not read this one. Saying that is the useful
+            // half of the message; naming the parameters that would let the build proceed anyway
+            // is the other half, because a project may know what a file this decoder cannot open
+            // actually contains.
+            throw std::invalid_argument(
+                "VideoProcessor could not read the frame metadata of this video. Give 'width', "
+                "'height' and 'framesPerSecond' as processor parameters, or replace the file with "
+                "one this build can read.");
+        }
         Cnb::CnbVideoData video = ReadMetadata(&imported, context.Parameters());
         context.AddDeploymentFile(imported.mediaSource, video.streamReference);
         context.AddRuntimeReference(video.streamReference);
@@ -295,10 +355,11 @@ namespace CNA::Content::Pipeline
                 "Microsoft.Xna.Framework.Media.Video", Cnb::CnbMediaSchemaVersion};
     }
 
-    void RegisterVideoContentPipeline(ContentPipelineRegistry& registry)
+    void RegisterVideoContentPipeline(ContentPipelineRegistry& registry, VideoMetadataProbe probe)
     {
-        registry.RegisterImporter(std::make_shared<VideoImporter>());
-        registry.RegisterProcessor(std::make_shared<VideoProcessor>());
+        const bool hasProbe = static_cast<bool>(probe);
+        registry.RegisterImporter(std::make_shared<VideoImporter>(std::move(probe)));
+        registry.RegisterProcessor(std::make_shared<VideoProcessor>(hasProbe));
         registry.RegisterWriter(std::make_shared<VideoContentWriter>());
     }
 }

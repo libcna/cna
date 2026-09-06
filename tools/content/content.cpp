@@ -29,6 +29,7 @@
 #include "CNA/Content/Pipeline/ModelContentPipeline.hpp"
 #include "CNA/Content/Pipeline/SongContentPipeline.hpp"
 #include "CNA/Content/Pipeline/SoundEffectContentPipeline.hpp"
+#include "CNA/Content/Pipeline/BuildTimeMediaDecoder.hpp"
 #include "CNA/Content/Pipeline/SpriteFontContentPipeline.hpp"
 #include "CNA/Content/Pipeline/XnaModelSourceContentPipeline.hpp"
 #include "CNA/Content/Pipeline/TextureCompressionPipeline.hpp"
@@ -2705,7 +2706,7 @@ namespace CNA::Content::Pipeline
         RegisterTexture2DContentPipeline(registry, MakeBlockCompressionTextureEncoder());
         RegisterSoundEffectContentPipeline(registry);
         RegisterSongContentPipeline(registry);
-        RegisterVideoContentPipeline(registry);
+        RegisterVideoContentPipeline(registry, BuildTimeMedia::MakeVideoMetadataProbe());
         RegisterModelContentPipeline(registry);
         RegisterCnjContentPipeline(registry);
         RegisterXnbContentPipeline(registry);

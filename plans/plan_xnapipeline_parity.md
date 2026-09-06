@@ -912,11 +912,14 @@ about the format that the corpus does not show. sharp-runtime (`next`, sibling c
 `sharp-runtimenext`) carries the XML fixes this phase needed; another session works in that
 checkout concurrently, so stage only your own hunks there. The nine texture extensions are `IMPLEMENTED+TESTED`. `.x` and `.fbx` are now registered
 canonically (`modules/content-pipeline/src/XnaModelSourceContentPipeline.cpp`) and want only the
-target leg; `.xml` is the one source extension still with no canonical importer at all. `.wmv`
-resolves to `CNA.VideoImporter` (it was missing from that importer's extension list, the same
-defect the four texture formats had) but its processor requires explicit
-`width`/`height`/`duration` parameters, because nothing in `cna_content` can probe a video -- the
-façade's `VideoProcessor` can, through `BuildTimeMediaDecoder`, and the two are not joined up yet.
+target leg; `.xml` is the one source extension still with no canonical importer at all. `.wmv` resolves to
+`CNA.VideoImporter` (it was missing from that importer's extension list, the same defect the four
+texture formats had) and the canonical route now reads the frame metadata from the file:
+`cna_content` has no decoder and must not grow one, so `VideoImporter` takes a
+`VideoMetadataProbe` from whoever registers it and `cna_content_pipeline` supplies one over
+`BuildTimeMedia::ProbeVideo`. A parameter still overrides what the probe read, a build with no
+decoder behaves exactly as before, and a file the decoder cannot open is refused with a sentence
+that says so rather than one naming a missing parameter.
 Next: the intermediate-XML route, the `processor` and `target` legs the matrix still names,
 then `XNAPP-182` (the font atlas differential, which needs a font registered in the Wine prefix),
 `XNAPP-191`/`192` (the effect compiler comparison), and `XNAPP-201`/`202` and Phase 14, each of

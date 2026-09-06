@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Content/Pipeline/BuildTimeMediaDecoder.hpp"
 
+#include <algorithm>
+#include <filesystem>
+#include <optional>
+
+#include "CNA/Internal/ContentPath.hpp"
+
 #include <stdexcept>
 
 #ifdef CNA_HAVE_BUILD_MEDIA
@@ -424,4 +430,41 @@ namespace CNA::Content::Pipeline::BuildTimeMedia
         avio_closep(&format->pb);
     }
 #endif
+
+        VideoMetadataProbe MakeVideoMetadataProbe()
+        {
+            if (!IsAvailable()) { return {}; }
+            return [](const std::filesystem::path& source) -> std::optional<ProbedVideoMetadata>
+            {
+                ProbedVideo probed;
+                try
+                {
+                    probed = ProbeVideo(CNA::Internal::ContentPathToUtf8(source));
+                }
+                catch (const std::exception&)
+                {
+                    // Not a refusal: a file this decoder cannot read may still be described by
+                    // parameters, and the processor is the one that decides.
+                    return std::nullopt;
+                }
+                if (probed.width <= 0 || probed.height <= 0 || probed.framesPerSecond <= 0.0f)
+                {
+                    return std::nullopt;
+                }
+                ProbedVideoMetadata metadata;
+                metadata.width = static_cast<std::uint32_t>(probed.width);
+                metadata.height = static_cast<std::uint32_t>(probed.height);
+                metadata.framesPerSecond = probed.framesPerSecond;
+                // Ticks are 100 nanoseconds, which is how XNA's own VideoContent reports a length.
+                metadata.durationMs = probed.durationTicks <= 0
+                                          ? 0u
+                                          : static_cast<std::uint32_t>(
+                                                std::min<std::int64_t>(probed.durationTicks / 10000,
+                                                                       2147483647));
+                // XNA's VideoSoundtrackType: 0 Music, 1 Dialog, 2 MusicAndDialog. A file with no
+                // audio at all still says Music, because the enumeration has no "none".
+                metadata.soundtrackType = 0u;
+                return metadata;
+            };
+        }
 }

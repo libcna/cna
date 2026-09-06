@@ -1855,7 +1855,11 @@ TEST(ContentPipelineCliTest, VideoBuildRequiresExplicitFrameMetadata)
     std::string log;
     EXPECT_NE(RunTool({"build", source.string(), "-o", output.string()}, log), 0);
     EXPECT_NE(log.find("Process (CNA.VideoProcessor)"), std::string::npos) << log;
-    EXPECT_NE(log.find("requires u64 parameter 'width'"), std::string::npos) << log;
+    // Which sentence appears depends on whether this build has a media decoder: with one, the
+    // processor says it could not read the file and names the parameters that would let the build
+    // proceed anyway; without one, it says the parameters are required. Both name 'width', which
+    // is the part that is true either way (plans/plan_xnapipeline_parity.md XNAPP-021).
+    EXPECT_NE(log.find("'width'"), std::string::npos) << log;
     EXPECT_FALSE(std::filesystem::exists(output));
 }
 

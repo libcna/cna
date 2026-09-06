@@ -3,6 +3,8 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <functional>
+#include <optional>
 #include <string>
 
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
@@ -34,6 +36,46 @@ namespace CNA::Content::Pipeline
     /** @brief VideoProcessor optional u64 VideoSoundtrackType value (0 through 2). */
     inline constexpr const char* VideoSoundtrackTypeParameter = "soundtrackType";
 
+    /**
+     * @brief What a build-time probe answered about a streaming video source.
+     *
+     * XNA's own `VideoProcessor` gets these from the file, because the XNA build has a media stack
+     * to ask. `cna_content` has none and must not grow one -- a game that loads a compiled video
+     * needs no decoder -- so the probe is injected at registration by whoever does
+     * (`cna_content_pipeline`, through `BuildTimeMedia::ProbeVideo`). Without one the processor
+     * still works and simply requires the metadata as parameters, which is what it did before
+     * (plans/plan_xnapipeline_parity.md `XNAPP-021`).
+     */
+    struct ProbedVideoMetadata
+    {
+        /** @brief Frame width in pixels. */
+        std::uint32_t width = 0u;
+
+        /** @brief Frame height in pixels. */
+        std::uint32_t height = 0u;
+
+        /** @brief Frames per second, as the stream's own rate. */
+        float framesPerSecond = 0.0f;
+
+        /** @brief Stream length in milliseconds. */
+        std::uint32_t durationMs = 0u;
+
+        /** @brief XNA's `VideoSoundtrackType`: 0 music, 1 dialog, 2 both. */
+        std::uint32_t soundtrackType = 0u;
+
+        /** @brief Compares the complete probed metadata. */
+        bool operator==(const ProbedVideoMetadata&) const = default;
+    };
+
+    /**
+     * @brief Reads a streaming video source's frame metadata, or answers nothing.
+     *
+     * @param source The native media file.
+     * @return The metadata, or `std::nullopt` when this build cannot read the file.
+     */
+    using VideoMetadataProbe =
+        std::function<std::optional<ProbedVideoMetadata>(const std::filesystem::path& source)>;
+
     /** @brief Source-oriented identity of a streaming video file without embedded media bytes. */
     struct ImportedVideoSource
     {
@@ -46,6 +88,14 @@ namespace CNA::Content::Pipeline
         /** @brief Source size used only for diagnostics; the primary dependency owns hashing. */
         std::uint64_t byteSize = 0u;
 
+        /**
+         * @brief What the registered probe read from the file, when there is one.
+         *
+         * Part of the imported value, and therefore part of what the incremental build compares:
+         * a file whose frame rate changed is a different import even when its size did not.
+         */
+        std::optional<ProbedVideoMetadata> probed;
+
         /** @brief Compares the complete imported source identity. */
         bool operator==(const ImportedVideoSource&) const = default;
     };
@@ -54,6 +104,16 @@ namespace CNA::Content::Pipeline
     class VideoImporter final : public ContentImporter
     {
     public:
+        /** @brief Creates an importer that records a source without reading its frame metadata. */
+        VideoImporter() = default;
+
+        /**
+         * @brief Creates an importer that asks @p probe what the source's frames look like.
+         *
+         * @param probe The build-time probe; an empty one behaves as the default constructor.
+         */
+        explicit VideoImporter(VideoMetadataProbe probe);
+
         /** @brief Returns the stable built-in importer identity. */
         [[nodiscard]] ContentComponentIdentity Identity() const override;
 
@@ -73,12 +133,27 @@ namespace CNA::Content::Pipeline
          * @return Root-relative stream identity and checked source size.
          */
         [[nodiscard]] ContentValue Import(ContentImporterContext& context) const override;
+
+    private:
+        VideoMetadataProbe probe_;
     };
 
     /** @brief Produces canonical Video metadata and its separate runtime media XREF. */
     class VideoProcessor final : public ContentProcessor
     {
     public:
+        /** @brief Creates a processor that requires the frame metadata as parameters. */
+        VideoProcessor() = default;
+
+        /**
+         * @brief Creates a processor that may take the frame metadata from the imported source.
+         *
+         * @param metadataFromSource True when the registered importer probes the file, which is
+         *        what makes `width`, `height` and `framesPerSecond` optional; a parameter still
+         *        overrides what the probe read.
+         */
+        explicit VideoProcessor(bool metadataFromSource);
+
         /** @brief Returns the stable built-in processor identity. */
         [[nodiscard]] ContentComponentIdentity Identity() const override;
 
@@ -104,6 +179,9 @@ namespace CNA::Content::Pipeline
          */
         [[nodiscard]] ContentValue Process(const ContentValue& input,
                                            ContentProcessorContext& context) const override;
+
+    private:
+        bool metadataFromSource_ = false;
     };
 
     /** @brief Pipeline writer adapter over the authoritative Video CNB codec. */
@@ -138,6 +216,9 @@ namespace CNA::Content::Pipeline
      * @brief Registers the built-in Video importer, processor, and writer adapter.
      *
      * @param registry Explicit registry to configure before builds begin.
+     * @param probe Optional build-time frame-metadata probe; without one a build must supply
+     *        `width`, `height` and `framesPerSecond` as processor parameters.
      */
-    void RegisterVideoContentPipeline(ContentPipelineRegistry& registry);
+    void RegisterVideoContentPipeline(ContentPipelineRegistry& registry,
+                                      VideoMetadataProbe probe = {});
 }

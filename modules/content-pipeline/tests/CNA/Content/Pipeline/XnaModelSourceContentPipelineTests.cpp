@@ -13,13 +13,16 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
 #include "CNA/Content/Pipeline/ModelContentPipeline.hpp"
 #include "CNA/Content/Pipeline/Texture2DContentPipeline.hpp"
+#include "CNA/Content/Pipeline/BuildTimeMediaDecoder.hpp"
 #include "CNA/Content/Pipeline/TextureCompressionPipeline.hpp"
+#include "CNA/Content/Pipeline/VideoContentPipeline.hpp"
 #include "CNA/Content/Pipeline/XnaModelSourceContentPipeline.hpp"
 
 namespace Pipeline = CNA::Content::Pipeline;
@@ -202,4 +205,35 @@ TEST(XnaModelSourceContentPipelineTest, EveryMalformedModelSourceIsRefused)
         const ModelSource source(fixture);
         EXPECT_THROW((void)BuildModel(source.Root(), fixture), std::exception) << fixture;
     }
+}
+
+// plans/plan_xnapipeline_parity.md XNAPP-021: the video route's frame metadata.
+//
+// XNA's VideoProcessor reads a video's size, rate and length from the file. `cna_content` has no
+// decoder and must not grow one, so the canonical importer takes a probe from whoever registers
+// it. Before this the three were required parameters, which meant a `.wmv` -- the one video format
+// XNA itself accepts -- could not be built by naming it and nothing else.
+TEST(XnaVideoProbeTest, TheBuildTimeProbeSuppliesWhatTheProcessorWouldOtherwiseRequire)
+{
+    if (!CNA::Content::Pipeline::BuildTimeMedia::IsAvailable())
+    {
+        GTEST_SKIP() << "this build has no media decoder";
+    }
+    const Pipeline::VideoMetadataProbe probe =
+        CNA::Content::Pipeline::BuildTimeMedia::MakeVideoMetadataProbe();
+    ASSERT_TRUE(static_cast<bool>(probe));
+
+    const std::filesystem::path media = Locate("tests/assets/xna40/media");
+    const std::optional<Pipeline::ProbedVideoMetadata> read =
+        probe(media / "wmv_64x48_15fps_silent.wmv");
+    ASSERT_TRUE(read.has_value());
+    EXPECT_EQ(read->width, 64u);
+    EXPECT_EQ(read->height, 48u);
+    EXPECT_NEAR(read->framesPerSecond, 15.0f, 0.01f);
+    EXPECT_GT(read->durationMs, 0u);
+
+    // A file the decoder cannot open answers nothing rather than throwing, so a project that knows
+    // what the file contains can still describe it with parameters.
+    EXPECT_FALSE(probe(media / "truncated.wmv").has_value());
+    EXPECT_FALSE(probe(media / "empty.wmv").has_value());
 }

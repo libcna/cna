@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include "CNA/Content/Pipeline/VideoContentPipeline.hpp"
+
 namespace CNA::Content::Pipeline
 {
     /**
@@ -113,6 +115,20 @@ namespace CNA::Content::Pipeline
          * @throws std::runtime_error when the file cannot be opened or has no video stream.
          */
         [[nodiscard]] ProbedVideo ProbeVideo(const std::string& filename);
+
+        /**
+         * @brief The canonical video route's frame-metadata probe, backed by this decoder.
+         *
+         * `cna_content` cannot read a media file and must not learn how -- a game that loads a
+         * compiled video needs no decoder -- so the canonical `VideoImporter` takes its probe from
+         * whoever registers it. This is that probe. It answers nothing when this build has no
+         * decoder or when the file is not one it can read, which leaves the processor requiring
+         * the metadata as parameters exactly as it did before (plans/plan_xnapipeline_parity.md
+         * `XNAPP-021`).
+         *
+         * @return A probe suitable for RegisterVideoContentPipeline().
+         */
+        [[nodiscard]] VideoMetadataProbe MakeVideoMetadataProbe();
 
         /**
          * @brief Encodes PCM samples to Windows Media audio in an ASF container.
