@@ -95,7 +95,17 @@ path (perspective, depth test, texturing) through the same harness, also green i
 `CNA_WEBGPU_DEMO=cna_webgpu_{pbr3d,envmap3d,skinned3d,dualtexture3d,alphatest3d}_page` confirm every
 stock effect shader -- `PbrEffect`, cube-map `EnvironmentMapEffect`, bone-palette `SkinnedEffect`,
 `DualTextureEffect` and `AlphaTestEffect` -- compiles and renders in-browser (`plans/plan_webgpu.md`
-`WEBGPU-121`/`122`, both ✅). **`WEBGPU-133` (fixed).** Under a **multiple-`ReadBackbuffer`-per-frame** pattern (which the effect
+`WEBGPU-121`/`122`, both ✅). Since 2026-09-06,
+`CNA_WEBGPU_DEMO=cna_webgpu_compiled_effect_page` drives **compiled XNA Effects** through the same
+harness (11/11; needs `-DCNA_WEBGPU_COMPILED_EFFECTS=ON` on the Emscripten configure):
+
+```sh
+emcmake cmake -S . -B cmake-build-wasm-webgpu -DCNA_GRAPHICS_RENDERER=WEBGPU \
+      -DCNA_BUILD_EXAMPLES=ON -DCNA_WEBGPU_COMPILED_EFFECTS=ON \
+      -DFETCHCONTENT_SOURCE_DIR_FNA3D="$HOME/deps/FNA3D"
+cmake --build cmake-build-wasm-webgpu --target cna_webgpu_compiled_effect_page -j4
+CNA_WEBGPU_DEMO=cna_webgpu_compiled_effect_page scripts/run-webgpu-browser-test.sh
+``` **`WEBGPU-133` (fixed).** Under a **multiple-`ReadBackbuffer`-per-frame** pattern (which the effect
 suites use), `ReadBackbuffer()`'s buffer-map wait yields to the browser event loop (`emscripten_sleep`,
 Asyncify), and the browser presents and invalidates the canvas's current surface texture during that
 yield. The renderer cached the acquired texture across the yield, so a later same-frame flush re-
