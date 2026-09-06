@@ -431,7 +431,11 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte4Throws)
 TEST_F(UnsupportedFormatConstructionTest, Bgra5551Throws)
 {
     // REMED-GFX-244 promoted the packed 16-bit formats on EasyGL's ES 3 generation too.
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2))
+    // plan_vulkan.md VULKAN-173: and on Vulkan, where SurfaceFormat::Bgra5551 is
+    // VK_FORMAT_A1R5G5B5_UNORM_PACK16 field for field -- core 1.0, no extension. Verified by a real
+    // sampled draw (Vulkan_Packed16Format), not by a readback, which Texture2D serves from a CPU
+    // copy and which therefore cannot see a wrong channel order.
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Vulkan))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Bgra5551));
     }
@@ -671,6 +675,14 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
         // (EasyGL_Packed16Format) rather than by a readback, which this renderer serves from a CPU
         // copy and which therefore cannot see a wrong channel order.
         const bool easyGlPacked16 = CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2);
+        // plan_vulkan.md VULKAN-173: CNA's Vulkan renderer stores the two packed 16-bit formats
+        // whose exact VkFormat is CORE 1.0 -- Bgr565 as VK_FORMAT_R5G6B5_UNORM_PACK16 and Bgra5551
+        // as VK_FORMAT_A1R5G5B5_UNORM_PACK16, both field for field. Bgra4444 is deliberately NOT
+        // here: VK_FORMAT_A4R4G4B4_UNORM_PACK16 came with VK_EXT_4444_formats and is core only in
+        // 1.3, while the instance asks for 1.1, so the renderer refuses it by name (VULKAN-179).
+        // A separate flag rather than an addition to the line above, because the two renderers
+        // promote DIFFERENT sets and merging them would hide exactly that.
+        const bool vulkanPacked16 = CNA_RENDERER_IS(Vulkan);
         // REMED-GFX-242: this fixture's device is Reach, and a format the profile excludes is
         // refused however capable the renderer is -- so the profile is a factor of "supported",
         // not an alternative to it.
@@ -682,6 +694,8 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
             || (easyGlPacked16 && (format == SurfaceFormat::Bgr565
                                    || format == SurfaceFormat::Bgra5551
                                    || format == SurfaceFormat::Bgra4444))
+            || (vulkanPacked16 && (format == SurfaceFormat::Bgr565
+                                   || format == SurfaceFormat::Bgra5551))
             // REMED-GFX-244: block-compressed content is accepted on every EasyGL profile, since
             // the decode fallback needs no extension -- unlike the packed formats one line up,
             // whose sized storage is ES 3.

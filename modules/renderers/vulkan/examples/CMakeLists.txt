@@ -2048,6 +2048,17 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_Swapchain_Sync COMMAND cna_test_vulkan_swapchain_sync
             TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-173: the packed 16-bit formats, SAMPLED in a real draw rather than
+        # merely constructed -- VULKAN-170 measured that a construct-and-read test cannot tell a
+        # stored format from a claimed one, because Texture2D::GetData is served from the shared
+        # CPU shadow. This is the renderer-agnostic REMED-GFX-244 source, whose per-leg gate is the
+        # renderer's own ClassifySurfaceFormatEXT verdict.
+        cna_vulkan_test(cna_test_vulkan_packed16_format
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_packed16_format_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Packed16Format
+            COMMAND cna_test_vulkan_packed16_format
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-407: a Texture3D, TextureCube or RenderTargetCube renderer that
         # outlives its GraphicsDevice must not leak its Vulkan objects, and must not read the
         # destroyed VulkanRenderer on the way out. The discriminator is VULKAN-393's output gate,

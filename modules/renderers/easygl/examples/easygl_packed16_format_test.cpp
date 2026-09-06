@@ -32,6 +32,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgr565.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgra4444.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgra5551.hpp"
@@ -97,6 +98,22 @@ class Packed16FormatTest final : public Game
     template <typename Packed, typename Make>
     void RunLeg(GraphicsDevice& dev, const char* name, SurfaceFormat format, Make make)
     {
+        // plan_vulkan.md VULKAN-173. This source is registered by more than one renderer now, and
+        // not every renderer stores all three formats: CNA's Vulkan renderer has no core-1.0
+        // spelling for Bgra4444 (VK_FORMAT_A4R4G4B4_UNORM_PACK16 is VK_EXT_4444_formats / core
+        // 1.3, and the instance asks for 1.1), so it deliberately does not claim it.
+        //
+        // The gate is the RENDERER'S OWN CLAIM, not a renderer name and not a silent skip. A
+        // renderer that answers Supported must pass the full pixel leg below; one that does not
+        // claim the format must REFUSE it, by name, and that refusal is asserted here rather than
+        // tolerated. So this cannot hide a regression in either direction: a renderer that stops
+        // claiming a format it used to store fails the first branch's absence, and one that starts
+        // claiming Bgra4444 is immediately held to the pixels.
+        using CNA::Internal::Renderers::RendererFormatVerdict;
+        const bool claimed =
+            dev.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(format)) ==
+            RendererFormatVerdict::Supported;
+
         std::unique_ptr<Texture2D> texture;
         try
         {
@@ -104,7 +121,16 @@ class Packed16FormatTest final : public Game
         }
         catch (const std::exception& e)
         {
-            check(false, std::string(name) + ": construction threw: " + e.what());
+            check(!claimed, std::string(name) +
+                                ": a format the renderer does not claim is refused by name, and "
+                                "one it claims must construct [" + e.what() + "]");
+            return;
+        }
+        if (!claimed)
+        {
+            check(false, std::string(name) +
+                             ": constructed a format the renderer does not claim -- an unclaimed "
+                             "format must refuse rather than be stored as something else");
             return;
         }
 

@@ -15,6 +15,7 @@
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <cstdio>
@@ -79,6 +80,24 @@ class SurfaceFormatThrowsTest : public Game
             std::printf("[FAIL] %s — wrong exception type: %s\n", label, e.what());
             ++fail_;
         }
+    }
+
+    /// plan_vulkan.md VULKAN-173: the renderer's OWN verdict, replacing three
+    /// `#if defined(CNA_GL_PROFILE_*)` guards that encoded an OpenGL fact in a file registered by
+    /// more than one renderer family. The question these legs ask is "does THIS renderer store the
+    /// format", and IGraphicsRenderer::ClassifySurfaceFormatEXT is the renderer-neutral way to ask
+    /// it -- an ES-3-class GL profile answers Supported exactly where the old macros did, and
+    /// CNA's Vulkan renderer answers it for the formats it has a core VkFormat for. Nothing is
+    /// skipped either way: a claimed format must construct, an unclaimed one must throw.
+    void expectPerRendererClaim(GraphicsDevice& dev, const char* label, SurfaceFormat format,
+                                auto fn)
+    {
+        using CNA::Internal::Renderers::RendererFormatVerdict;
+        const bool claimed =
+            dev.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(format)) ==
+            RendererFormatVerdict::Supported;
+        if (claimed) expectNoThrow(label, fn);
+        else         expectThrows(label, fn);
     }
 
     void expectNoThrow(const char* label, auto fn)
@@ -174,15 +193,9 @@ protected:
         // REMED-GFX-244: the packed 16-bit formats are ES 3 sized-internal-format storage, so they
         // take the same guard the signed-normalized pair does -- promoted off the ES 2 generation,
         // refused on it rather than falling back to an unsized layout the driver picks.
-#if defined(CNA_GL_PROFILE_OPENGLES3) || defined(CNA_GL_PROFILE_OPENGL33) || defined(CNA_GL_PROFILE_WEBGL2)
-        expectNoThrow("Texture2D Bgra5551", [&]{
+        expectPerRendererClaim(dev, "Texture2D Bgra5551", SurfaceFormat::Bgra5551, [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Bgra5551);
         });
-#else
-        expectThrows("Texture2D Bgra5551", [&]{
-            Texture2D t(dev, 2, 2, false, SurfaceFormat::Bgra5551);
-        });
-#endif
         // The two signed-normalized byte formats stand or fall together: EasyGL classifies them in
         // one predicate ("Both signed-normalized byte formats need the ES 3 sized-internal-format
         // set"), so NormalizedByte2 belongs under the same guard NormalizedByte4 already had.
@@ -192,21 +205,12 @@ protected:
         // NormalizedByte2 or NormalizedByte4 is accepted at BOTH GraphicsProfile.Reach and .HiDef,
         // and neither is among the eleven formats Reach refuses. Demanding a throw here was an
         // over-specification of XNA rather than a contract. See spikes/xna-pixel-center-spike/.
-#if defined(CNA_GL_PROFILE_OPENGLES3) || defined(CNA_GL_PROFILE_OPENGL33) || defined(CNA_GL_PROFILE_WEBGL2)
-        expectNoThrow("Texture2D NormalizedByte2", [&]{
+        expectPerRendererClaim(dev, "Texture2D NormalizedByte2", SurfaceFormat::NormalizedByte2, [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::NormalizedByte2);
         });
-        expectNoThrow("Texture2D NormalizedByte4", [&]{
+        expectPerRendererClaim(dev, "Texture2D NormalizedByte4", SurfaceFormat::NormalizedByte4, [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::NormalizedByte4);
         });
-#else
-        expectThrows("Texture2D NormalizedByte2", [&]{
-            Texture2D t(dev, 2, 2, false, SurfaceFormat::NormalizedByte2);
-        });
-        expectThrows("Texture2D NormalizedByte4", [&]{
-            Texture2D t(dev, 2, 2, false, SurfaceFormat::NormalizedByte4);
-        });
-#endif
         expectThrowsNotSupported("Texture2D Single", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Single);
         });
@@ -264,21 +268,12 @@ protected:
 #if 1
         // REMED-GFX-244, same guard as Bgra5551 above. Bgra4444 had no non-Skia leg at all before
         // this ticket, so its behaviour on every GL profile was simply unstated.
-#if defined(CNA_GL_PROFILE_OPENGLES3) || defined(CNA_GL_PROFILE_OPENGL33) || defined(CNA_GL_PROFILE_WEBGL2)
-        expectNoThrow("Texture2D Bgr565", [&]{
+        expectPerRendererClaim(dev, "Texture2D Bgr565", SurfaceFormat::Bgr565, [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Bgr565);
         });
-        expectNoThrow("Texture2D Bgra4444", [&]{
+        expectPerRendererClaim(dev, "Texture2D Bgra4444", SurfaceFormat::Bgra4444, [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Bgra4444);
         });
-#else
-        expectThrows("Texture2D Bgr565", [&]{
-            Texture2D t(dev, 2, 2, false, SurfaceFormat::Bgr565);
-        });
-        expectThrows("Texture2D Bgra4444", [&]{
-            Texture2D t(dev, 2, 2, false, SurfaceFormat::Bgra4444);
-        });
-#endif
         expectThrowsNotSupported("Texture2D Alpha8", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Alpha8);
         });

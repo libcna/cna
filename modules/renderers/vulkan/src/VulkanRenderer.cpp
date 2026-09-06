@@ -2181,6 +2181,28 @@ namespace CNA::Internal::Renderers::Vulkan
             case SurfaceFormat::Color:
                 out = { VK_FORMAT_R8G8B8A8_UNORM, 4 };
                 return true;
+            // plan_vulkan.md VULKAN-173. The two packed 16-bit formats GraphicsProfile.Reach
+            // permits whose Vulkan spelling is CORE 1.0, so no extension and no version bump is
+            // needed to name them. Component order is the entire risk here and is not guessed:
+            //   Bgra5551 is D3DFMT_A1R5G5B5 -- A in bit 15, R 10..14, G 5..9, B 0..4 -- which is
+            //     VK_FORMAT_A1R5G5B5_UNORM_PACK16 field for field.
+            //   Bgr565 is D3DFMT_R5G6B5 -- R 11..15, G 5..10, B 0..4 -- which is
+            //     VK_FORMAT_R5G6B5_UNORM_PACK16 field for field.
+            // XNA's names read the channels in little-endian MEMORY order, Vulkan's read them from
+            // the high bit of the packed word down; that is why the two spellings look reversed
+            // and describe the same 16 bits. `Vulkan_Packed16Format` asserts the drawn colour, not
+            // the acceptance, because a swapped R and B survives every construction check.
+            case SurfaceFormat::Bgr565:
+                out = { VK_FORMAT_R5G6B5_UNORM_PACK16, 2 };
+                return true;
+            case SurfaceFormat::Bgra5551:
+                out = { VK_FORMAT_A1R5G5B5_UNORM_PACK16, 2 };
+                return true;
+            // Bgra4444 is deliberately NOT here: its Vulkan spelling
+            // (VK_FORMAT_A4R4G4B4_UNORM_PACK16) arrived with VK_EXT_4444_formats and is core only
+            // in 1.3, while this renderer asks for 1.1. Claiming a format from a version the
+            // instance did not request is exactly the widening VULKAN-170's two gates exist to
+            // stop. VULKAN-179 owns it.
             default:
                 return false;
         }
