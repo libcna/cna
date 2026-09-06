@@ -64,6 +64,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # plans/plan_software.md SOFTWARE-61/84: this renderer's half of the cross-renderer diagnostic
         # dump -- not registered as a ctest, just a plain executable a developer/script runs by
         # hand alongside SOFTWARE's own cna_diag_software and cna_diag_compare.
+        # plan_vulkan.md VULKAN-214: the control -- 'preserve survives a resize' is a claim
+        # about the XNA contract, so one renderer cannot answer it alone.
+        cna_easygl_test(cna_test_easygl_rendertarget_preserve_across_resize
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_preserve_across_resize_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_RenderTargetPreserveAcrossResize
+            COMMAND cna_test_easygl_rendertarget_preserve_across_resize
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-058: the control that turned a candidate finding into a
         # defect -- EasyGL masked the sprite correctly while Vulkan painted the whole target.
         cna_easygl_test(cna_test_easygl_spritebatch_depthstencil_state

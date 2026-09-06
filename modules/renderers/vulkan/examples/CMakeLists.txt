@@ -2471,6 +2471,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-214: a PreserveContents target across a real window resize,
+        # which on this renderer is a swapchain recreation.
+        cna_vulkan_test(cna_test_vulkan_rendertarget_preserve_across_resize
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_preserve_across_resize_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_RenderTargetPreserveAcrossResize
+            COMMAND cna_test_vulkan_rendertarget_preserve_across_resize
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-058: a SpriteBatch must honour the DepthStencilState its
         # Begin() installs -- the 2D pipeline used to hardcode it off entirely.
         cna_vulkan_test(cna_test_vulkan_spritebatch_depthstencil_state
