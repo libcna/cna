@@ -2302,6 +2302,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_clear_overloads
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-371: the occlusion-query reset/reuse cycle.
+        cna_vulkan_test(cna_test_vulkan_occlusion_query_cycle
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/occlusion_query_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_OcclusionQuery_Cycle
+            COMMAND cna_test_vulkan_occlusion_query_cycle
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-339: the release path that also runs vkDeviceWaitIdle and the
         # retirement lists. HasRenderer() must be false after the first Dispose and no second
         # release may be attempted.
