@@ -143,18 +143,18 @@
         "fixture": "tests/assets/xna40/source/probe.fx",
         "tests": {
           "importer": "XnaSourceCorpus.TheCommittedEffectReadsAsItsOwnSource",
-          "processor": "",
-          "sourceToXnb": "",
-          "sourceToCnb": "",
-          "malformed": "",
-          "target": ""
+          "processor": "XnaEffectProcessor.TheRealCompilerAnswersWhatXnaAnswered",
+          "sourceToXnb": "EffectSourceCommandLineTest.AnFxInASourceTreeIsAnAssetRatherThanBeingSilentlyIgnored, EffectSourceCommandLineTest.TheCompiledBytesTheCompilerReturnedReachTheXnbUnchanged",
+          "sourceToCnb": "EffectSourceCommandLineTest.AnFxAskedForCnbIsRefusedWithTheArchitecturalReason",
+          "malformed": "XnaEffectProcessor.TheRealCompilerAnswersWhatXnaAnswered",
+          "target": "XnaEffectProcessor.TheRealCompilerAnswersWhatXnaAnswered"
         },
-        "differentialEvidence": "",
+        "differentialEvidence": "tests/reference/xna40/graphics/graphics-content-oracle.json effectprocessor/*, tests/reference/xna40/graphics/effect-compile-simple.bin",
         "windows": "SUPPORTED",
         "windowsPhone": "UNVERIFIED",
         "xbox360": "UNVERIFIED",
-        "status": "IMPLEMENTED",
-        "note": "The importer and the EffectContent it answers are implemented; what is missing is the genuine-compiler comparison XNAPP-191/192 ask for, which runs the .fx through BuildContent under Wine against the prefix's own d3dcompiler."
+        "status": "IMPLEMENTED+TESTED",
+        "note": "The route is measured against the genuine EffectProcessor with the compiler XNA itself used, Microsoft's legacy fxc at fx_2_0 from the June 2010 DirectX SDK, run through Wine. Two things came out of it. First, a real defect: a path handed to a compiler through a launcher was spelled the host's way, so fxc read '/tmp/.../effect.fxb' as an option and the whole .fx route was broken on every non-Windows machine; paths are now spelled the way the launcher's program reads them. Second, a measurement nothing in this repository had: XNA's compiled effect is a fixed sixteen-byte header -- magic 0xBCF00BCF, the offset of the inner token, two zero dwords -- in front of the Direct3D 9 Effect Framework binary, identical for two unrelated effects, and CNA now emits it. What still differs is the blob behind that header: XNA compiles from a memory buffer through d3dx9 and CNA runs the fxc command line, which embeds source information the memory path does not, so this effect is sixteen bytes longer and first differs at offset 50. A relative source name and a working directory do not close it; only calling D3DXCreateEffectCompiler on a buffer would, which needs a native helper (XNAPP-191/192). sourceToCnb is a documented refusal rather than a gap: a .cnb carrying Direct3D 9 bytecode would be unloadable on every CNA renderer that is not Direct3D 9. The differential skips on a machine with no fxc -- set CNA_FXC to one -- so this row's coverage is real here and conditional elsewhere, which no other row is."
       }
     },
     ".hdr": {

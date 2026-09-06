@@ -16,7 +16,7 @@
 | built-in importers | 10/10 (100.0%) | 0 | 0 |
 | built-in processors | 12/12 (100.0%) | 0 | 0 |
 | processor properties | 47/47 (100.0%) | 0 | 0 |
-| source extensions IMPLEMENTED+TESTED | 16/18 (88.9%) | 0 | 2 |
+| source extensions IMPLEMENTED+TESTED | 17/18 (94.4%) | 0 | 1 |
 
 Status vocabulary: EXACT_EQUIVALENT, SEMANTIC_EQUIVALENT (spelling differs, capability identical; note says how),
 HOST_SUBSTITUTION (Microsoft-host mechanism replaced; note says how), EXTERNAL_BLOCKED (note names the

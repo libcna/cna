@@ -478,6 +478,8 @@
   {"case": "materialprocessor/null_input", "result": "throws ArgumentNullException: Value cannot be null.\r\nParameter name: input"},
   {"case": "materialprocessor/base_material", "result": "MaterialContent opaque={} textures={} built=[]"},
   {"case": "effectprocessor/compile_simple", "result": "bytes=476 head=CF0BF0BC"},
+  {"case": "effectprocessor/compile_simple_digest", "result": "bytes=476 head=CF0BF0BC100000000000000000000000 sha256=C1AEBD35F46A6B8AB9CDCD3DE86D90399820CE4E7AA4D24A81193A386BA36667"},
+  {"case": "effectprocessor/compile_second_digest", "result": "bytes=1716 head=CF0BF0BC1000000000000000000000000109FFFE"},
   {"case": "effectprocessor/compile_error", "result": "throws InvalidContentException: Errors compiling bad.fx:\r\nbad.fx(1,6): error X3000: invalid target or usage string"},
   {"case": "effectprocessor/empty_code", "result": "throws InvalidContentException: Errors compiling empty.fx:\r\nID3DXEffectCompiler: There were no techniques\r\nID3DXEffectCompiler: Compilation failed"},
   {"case": "effectprocessor/defines_used", "result": "bytes=476"},

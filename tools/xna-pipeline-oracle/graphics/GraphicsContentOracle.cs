@@ -1800,6 +1800,51 @@ namespace Cna.Xna40.GraphicsOracle
                 byte[] code = compiled.GetEffectCode();
                 return "bytes=" + code.Length + " head=" + Hex(new byte[] { code[0], code[1], code[2], code[3] });
             });
+            // XNAPP-021/191: the same compile, described well enough to tell "XNA ran fxc" from
+            // "XNA ran something that agrees with fxc about the length". The first sixteen bytes
+            // and a digest of the whole thing settle it; the length alone did not.
+            Record("effectprocessor/compile_simple_digest", () =>
+            {
+                var processor = new EffectProcessor();
+                var effect = new EffectContent();
+                effect.EffectCode = "float4 PS() : COLOR0 { return float4(1,0,0,1); }\n" +
+                                    "technique T { pass P { PixelShader = compile ps_2_0 PS(); } }\n";
+                effect.Identity = new ContentIdentity("shader.fx");
+                CompiledEffectContent compiled = processor.Process(effect, new RecordingProcessorContext());
+                byte[] code = compiled.GetEffectCode();
+                var head = new byte[Math.Min(16, code.Length)];
+                Array.Copy(code, head, head.Length);
+                // The bytes themselves go beside the measurement, because "the same length and a
+                // different header" is a claim that can only be settled by comparing them.
+                File.WriteAllBytes(Path.Combine(outputDirectory, "effect-compile-simple.bin"), code);
+                using (var sha = System.Security.Cryptography.SHA256.Create())
+                {
+                    return "bytes=" + code.Length + " head=" + Hex(head) + " sha256=" +
+                           Hex(sha.ComputeHash(code));
+                }
+            });
+            // A second, larger source: if the sixteen bytes in front of the D3DX blob are a
+            // fixed header rather than something derived from the effect, they are identical here.
+            Record("effectprocessor/compile_second_digest", () =>
+            {
+                var processor = new EffectProcessor();
+                var effect = new EffectContent();
+                effect.EffectCode =
+                    "float4x4 World; float4 Tint;\n" +
+                    "struct VSOut { float4 pos : POSITION; float2 uv : TEXCOORD0; };\n" +
+                    "VSOut VS(float4 p : POSITION, float2 t : TEXCOORD0) {\n" +
+                    "  VSOut o; o.pos = mul(p, World); o.uv = t; return o; }\n" +
+                    "float4 PS(float2 uv : TEXCOORD0) : COLOR0 { return Tint * uv.xyxy; }\n" +
+                    "technique T { pass P { VertexShader = compile vs_2_0 VS();\n" +
+                    "  PixelShader = compile ps_2_0 PS(); } }\n";
+                effect.Identity = new ContentIdentity("second.fx");
+                CompiledEffectContent compiled = processor.Process(effect, new RecordingProcessorContext());
+                byte[] code = compiled.GetEffectCode();
+                var head = new byte[Math.Min(20, code.Length)];
+                Array.Copy(code, head, head.Length);
+                File.WriteAllBytes(Path.Combine(outputDirectory, "effect-compile-second.bin"), code);
+                return "bytes=" + code.Length + " head=" + Hex(head);
+            });
             Record("effectprocessor/compile_error", () =>
             {
                 var processor = new EffectProcessor();

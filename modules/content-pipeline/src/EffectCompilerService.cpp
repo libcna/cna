@@ -154,6 +154,54 @@ namespace CNA::Content::Pipeline
         };
 
         /** @brief The external-process backend. */
+        /**
+         * @brief Puts the header XNA's own pipeline puts in front of a compiled effect.
+         *
+         * `fxc /T fx_2_0 /Fo` writes the bare Direct3D 9 Effect Framework binary, magic
+         * `0xFEFF0901`. XNA's `EffectProcessor` answers the same binary behind a sixteen-byte
+         * header -- magic `0xBCF00BCF`, the offset of the inner token, then two zero dwords --
+         * and that is what reaches an `.xnb` and what a game loads. Measured, not inferred:
+         * `effectprocessor/compile_simple_digest` and `effectprocessor/compile_second_digest`
+         * record the genuine processor's bytes for two unrelated effects and the sixteen bytes
+         * are identical in both, followed in each case by the `0xFEFF0901` blob
+         * (plans/plan_xnapipeline_parity.md `XNAPP-021`).
+         *
+         * Applied here rather than in the processor because this is where an *fxc result*
+         * exists: a caller that supplies its own compiler is handing over finished bytes, and
+         * those still reach the container unchanged.
+         *
+         * @param bytecode The compiler's output, wrapped in place when it needs wrapping.
+         */
+        void WrapAsXnaEffect(std::vector<std::uint8_t>& bytecode)
+        {
+            constexpr std::uint32_t kEffectFrameworkToken = 0xFEFF0901u;
+            constexpr std::uint32_t kXna4EffectWrapperToken = 0xBCF00BCFu;
+            constexpr std::size_t kHeaderBytes = 16u;
+            if (bytecode.size() < 4u) { return; }
+            const std::uint32_t leading = static_cast<std::uint32_t>(bytecode[0]) |
+                                          (static_cast<std::uint32_t>(bytecode[1]) << 8) |
+                                          (static_cast<std::uint32_t>(bytecode[2]) << 16) |
+                                          (static_cast<std::uint32_t>(bytecode[3]) << 24);
+            if (leading != kEffectFrameworkToken) { return; }
+
+            std::vector<std::uint8_t> wrapped;
+            wrapped.reserve(bytecode.size() + kHeaderBytes);
+            const auto word32 = [&wrapped](std::uint32_t value)
+            {
+                for (int shift = 0; shift < 32; shift += 8)
+                {
+                    wrapped.push_back(static_cast<std::uint8_t>((value >> shift) & 0xFFu));
+                }
+            };
+            word32(kXna4EffectWrapperToken);
+            word32(static_cast<std::uint32_t>(kHeaderBytes));
+            word32(0u);
+            word32(0u);
+            wrapped.insert(wrapped.end(), bytecode.begin(), bytecode.end());
+            bytecode = std::move(wrapped);
+        }
+
+
         class ExternalEffectCompiler final : public EffectCompilerService
         {
         public:
@@ -184,13 +232,20 @@ namespace CNA::Content::Pipeline
                 const ScratchDirectory scratch;
                 const std::filesystem::path output = scratch.Path() / "effect.fxb";
 
+                // Every path in one translation, in a fixed order: output, source, then the
+                // include directories.
+                std::vector<std::filesystem::path> paths{output, request.source};
+                paths.insert(paths.end(), request.includeDirectories.begin(),
+                             request.includeDirectories.end());
+                const std::vector<std::string> spelled = SpellForLauncher(paths);
+
                 std::vector<std::string> arguments;
                 if (!launcher_.empty()) { arguments.push_back(executable_.string()); }
                 arguments.push_back("/nologo");
                 arguments.push_back("/T");
                 arguments.push_back(kTargetProfile);
                 arguments.push_back("/Fo");
-                arguments.push_back(output.string());
+                arguments.push_back(spelled[0]);
                 arguments.push_back(request.debugInformation ? "/Zi" : "/Qstrip_debug");
                 arguments.push_back("/D");
                 arguments.push_back(request.profile == EffectSourceProfile::HiDef
@@ -201,12 +256,12 @@ namespace CNA::Content::Pipeline
                     arguments.push_back("/D");
                     arguments.push_back(value.empty() ? name : name + "=" + value);
                 }
-                for (const std::filesystem::path& directory : request.includeDirectories)
+                for (std::size_t at = 2u; at < spelled.size(); ++at)
                 {
                     arguments.push_back("/I");
-                    arguments.push_back(directory.string());
+                    arguments.push_back(spelled[at]);
                 }
-                arguments.push_back(request.source.string());
+                arguments.push_back(spelled[1]);
 
                 const CNA::Internal::HostProcessResult process = CNA::Internal::RunHostProcess(
                     launcher_.empty() ? executable_ : launcher_, arguments);
@@ -253,6 +308,7 @@ namespace CNA::Content::Pipeline
                 }
                 result.bytecode.assign(std::istreambuf_iterator<char>(stream),
                                        std::istreambuf_iterator<char>());
+                WrapAsXnaEffect(result.bytecode);
                 result.succeeded = !result.bytecode.empty();
                 if (!result.succeeded)
                 {
@@ -266,6 +322,52 @@ namespace CNA::Content::Pipeline
             }
 
         private:
+
+            /**
+             * @brief The launcher's own spelling of each path.
+             *
+             * A compiler run through a launcher is a foreign program: `fxc.exe` under Wine reads
+             * `/tmp/build/effect.fxb` as an option, because a leading `/` is how a Windows command
+             * line begins one, and answers `Unknown or invalid option`. Wine can spell a host path
+             * the way the program it runs will read it, so ask it -- once per compile, for every
+             * path at once, which is what `winepath` accepts.
+             *
+             * Any other launcher gets the paths unchanged: a translation that has not been
+             * measured is a guess, and a guess here turns a working build into a puzzling one.
+             *
+             * @param paths The host paths, in order.
+             * @return The spellings, in the same order; the inputs unchanged when no translation
+             *         applies or the launcher could not answer.
+             */
+            [[nodiscard]] std::vector<std::string> SpellForLauncher(
+                const std::vector<std::filesystem::path>& paths) const
+            {
+                std::vector<std::string> spelled;
+                spelled.reserve(paths.size());
+                for (const std::filesystem::path& path : paths) { spelled.push_back(path.string()); }
+                if (!launcherTranslatesPaths_ || paths.empty()) { return spelled; }
+
+                std::vector<std::string> arguments{"winepath", "-w"};
+                for (const std::string& path : spelled) { arguments.push_back(path); }
+                const CNA::Internal::HostProcessResult process =
+                    CNA::Internal::RunHostProcess(launcher_, arguments);
+                if (!process.started || process.exitCode != 0) { return spelled; }
+
+                std::vector<std::string> lines;
+                std::istringstream stream(process.standardOutput);
+                std::string line;
+                while (std::getline(stream, line))
+                {
+                    while (!line.empty() && (line.back() == '\r' || line.back() == '\n'))
+                    {
+                        line.pop_back();
+                    }
+                    if (!line.empty()) { lines.push_back(line); }
+                }
+                // One line per path, or the answer is not the one that was asked for.
+                return lines.size() == spelled.size() ? lines : spelled;
+            }
+
             void Resolve(const ExternalEffectCompilerOptions& options)
             {
                 identity_.targetProfile = kTargetProfile;
@@ -278,6 +380,11 @@ namespace CNA::Content::Pipeline
                                     ? std::filesystem::path(ConfiguredLauncher())
                                     : std::filesystem::path(fromEnvironment);
                 }
+
+                // Wine is the launcher this project documents, and the only one whose path
+                // translation has been measured here.
+                const std::string launcherName = launcher_.filename().string();
+                launcherTranslatesPaths_ = launcherName.rfind("wine", 0) == 0;
 
                 executable_ = options.executable;
                 if (executable_.empty())
@@ -362,6 +469,8 @@ namespace CNA::Content::Pipeline
 
             std::filesystem::path executable_;
             std::filesystem::path launcher_;
+            /** @brief Whether the launcher can spell a host path for the program it runs. */
+            bool launcherTranslatesPaths_ = false;
             EffectCompilerIdentity identity_;
             bool available_ = false;
             std::string reason_;

@@ -811,6 +811,35 @@ The texture route's five legs were the only ones measured; seven extensions carr
   claim, with the recorded XNA refusals asserted so the leg turns into a differential the moment
   the environment can answer.
 
+### The `.fx` route against the compiler XNA used (`XNAPP-021`, `XNAPP-191`/`192`)
+
+Microsoft's legacy `fxc` at `fx_2_0` from the June 2010 DirectX SDK is on this machine and runs
+under Wine, so the route could be measured rather than reasoned about. Two things came out of it.
+
+**A real defect.** A path handed to a compiler *through a launcher* was spelled the host's way, so
+`fxc.exe` read `/tmp/cna-fx-0-.../effect.fxb` as an option -- a leading `/` is how a Windows command
+line begins one -- and answered `Unknown or invalid option`. The whole `.fx` route was broken on
+every non-Windows build machine, which is every machine this project builds on, and no test caught
+it because every other `.fx` test drives a scripted compiler. Paths are now spelled the way the
+launcher's program reads them, asked of the launcher itself (`winepath -w`, once per compile for
+every path at once) rather than guessed; a launcher whose translation has not been measured gets
+the paths unchanged.
+
+**A measurement nothing here had.** `EffectCompilerService.cpp` already said XNA "wraps it in a
+`0xBCF00BCF` header carrying the offset of the inner token" -- what nobody had measured is the
+header's contents. It is sixteen bytes: magic `0xBCF00BCF`, `0x10` (the offset of the inner token),
+then two zero dwords, and it is byte-identical in front of two unrelated effects
+(`effectprocessor/compile_simple_digest`, `effectprocessor/compile_second_digest`, with XNA's own
+bytes published beside them). CNA emits it now, so its container header is XNA's.
+
+**What still differs, exactly.** The blob behind the header. XNA compiles from a memory buffer
+through `d3dx9`; CNA runs the `fxc` command line, which embeds source information the memory path
+does not. For the measured effect XNA's inner blob is 460 bytes and `fxc`'s is 476, first differing
+at offset 50 of the blob. It is not the source path: compiling from a file named `shader.fx` with a
+relative name and a working directory gives the same 476. Closing it means calling
+`D3DXCreateEffectCompiler` on a buffer, which needs a small native helper linked against `d3dx9`
+and run under Wine -- `d3dx9_43.dll` is present, so this is work rather than a blocker.
+
 | `XNAPP-216` | `FbxImporter`: hierarchy, transforms, meshes, channels, normals/tangents/UVs/colours, skin weights, animations, materials/textures, coordinate-system and unit conversion as `BuildContent` observably does them. | [x] Measured first, and almost every rule differs from the `.x` route's for no reason a reader would predict. **FBX is already right-handed, so nothing is converted** -- positions and normals pass through as written where `.x` negates Z -- and yet **the winding IS reversed**, a polygon `0, 1, 2` answering indices `2, 1, 0`. **A texture coordinate's V is flipped** (`0.2` answers `0.8`), where `.x`'s is not. The channel order is normals, texture coordinates, then colours; `.x`'s is normals, colours, then texture coordinates. A vertex colour is **not** quantized through eight bits; `.x`'s is. A material reaches a batch **only through a `LayerElementMaterial`** -- a `Connect` alone leaves the batch material-less -- and it keeps the name the file gave it, where a `.x` material's name is dropped; and `Opacity` and `Shininess` are **not read at all**, every material answering the SDK's own alpha of 1 and specular power of 20. The three refusals are told apart by content and not by size: a file with no FBX header is the loader's initialization failure at 31 bytes and at 1024 alike, a DirectX `.x` file is `Could not detect file format`, and a document that parses no further is `encountered when importing the scene`. |
 | `XNAPP-218` | Read the FBX versions XNA cannot: its FBX SDK 2011.3.1 refuses every document of version 7400 and above. | [x] **A deliberate divergence, recorded rather than assumed away.** Every current exporter writes 7400 or 7500, and the genuine importer refuses all of them (measured, `fbx/fbx_binary_modern.fbx`); matching a bundled SDK's age would serve nobody. CNA's reader takes the text encoding (which is what a 6.1 document is, and what XNA reads) and the binary record stream alike, with zlib for the deflated arrays and a named refusal without it. |
 | `XNAPP-217` | FBX black-box corpus (CNA-authored/generated, plus permissively licensed) compared per §24. | [x] Six documents in `tests/assets/xna40/model`, written by `make_fbx_fixtures.py` in **FBX 6.1 ASCII** for a measured reason: XNA carries FBX SDK 2011.3.1, and an FBX written by a current tool is version 7400 or 7500, which that SDK refuses. Nothing is third-party: the content is authored here and the container is written here. `XnaFbxImporter` compares each graph for graph against `model-import-oracle.json`, with two documented normalizations -- a triangle is compared as a cycle, because the SDK picks its own starting corner when it triangulates a quad, and every number to a tolerance, because both sides' matrices come out of float trigonometry. |
@@ -947,9 +976,14 @@ texture formats had) and the canonical route now reads the frame metadata from t
 `BuildTimeMedia::ProbeVideo`. A parameter still overrides what the probe read, a build with no
 decoder behaves exactly as before, and a file the decoder cannot open is refused with a sentence
 that says so rather than one naming a missing parameter.
-Sixteen of the eighteen extensions are `IMPLEMENTED+TESTED`; the two that are not are `.fx`, whose
-route needs an effect compiler, and `.xml`, which has no canonical importer at all. Next: the
-intermediate-XML route, then `.fx`,
+Seventeen of the eighteen extensions are `IMPLEMENTED+TESTED`. The one that is not is `.xml`, and
+it is not a coding gap: 1466 of the sample corpus's `.xml` assets declare **game-defined** types
+(`RolePlayingGameData.Armor`, `MovipaLibrary.LayoutInfo`, `Particle3DSample.ParticleSettings`), which
+is what the extension is *for* -- a game's own content types, built through a game's own pipeline
+assembly. Reaching those is `XNAPP-260`, not a built-in route. What a built-in route could cover is
+the handful the framework itself defines (`Graphics:NodeContent`, `Graphics:MeshContent`,
+`System.String[]`, `System.Collections.Generic.List[...]`), and it would be XNB-only, because CNB has
+no schema for an arbitrary XNA object. Next: that decision,
 then `XNAPP-182` (the font atlas differential, which needs a font registered in the Wine prefix),
 `XNAPP-191`/`192` (the effect compiler comparison), and `XNAPP-201`/`202` and Phase 14, each of
 which waits on a decoder this build does not have -- measure XNA's answer first and record

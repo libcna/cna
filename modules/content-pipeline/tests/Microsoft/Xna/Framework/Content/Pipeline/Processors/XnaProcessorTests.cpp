@@ -37,6 +37,8 @@
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/TextureContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/MeshBuilder.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/StockMaterials.hpp"
+#include <optional>
+#include <cstdlib>
 #include "CNA/Content/Pipeline/EffectCompilerService.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentImporterContext.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/EffectImporter.hpp"
@@ -2164,5 +2166,115 @@ TEST(XnaFontProcessors, EveryTargetAndProfileAnswersWhatXnaAnswers)
                          }),
                   Expected("fontprofile/" + label))
             << label;
+    }
+}
+
+namespace
+{
+    /**
+     * @brief A real fxc, or an empty options object when this machine has none.
+     *
+     * The whole `.fx` route is measured against XNA's own `EffectProcessor`, which means running
+     * the compiler XNA ran: Microsoft's legacy `fxc` at `fx_2_0`. `CNA_FXC` names it when a caller
+     * wants a particular one; otherwise the DirectX SDK (June 2010) copy is looked for where the
+     * oracle's own tooling keeps it. On a machine with neither, the differential skips rather than
+     * pretending a fake compiler measured anything.
+     */
+    [[nodiscard]] std::optional<CNA::Content::Pipeline::ExternalEffectCompilerOptions> RealFxc()
+    {
+        CNA::Content::Pipeline::ExternalEffectCompilerOptions options;
+        const char* fromEnvironment = std::getenv("CNA_FXC");
+        if (fromEnvironment != nullptr && *fromEnvironment != '\0')
+        {
+            options.executable = fromEnvironment;
+        }
+        else
+        {
+            const std::filesystem::path sdk =
+                "/rv/tmp/samples/_tools/directx-sdk-june-2010/extract/DXSDK/Utilities/bin/x86/fxc.exe";
+            std::error_code error;
+            if (!std::filesystem::exists(sdk, error) || error) { return std::nullopt; }
+            options.executable = sdk;
+        }
+        const char* launcher = std::getenv("CNA_FXC_LAUNCHER");
+        options.launcher = launcher != nullptr && *launcher != '\0' ? launcher : "wine";
+        return options;
+    }
+}
+
+// plans/plan_xnapipeline_parity.md XNAPP-021, XNAPP-191/192: the `.fx` route against the genuine
+// EffectProcessor, with the compiler XNA itself used.
+//
+// Every other `.fx` test in this tree drives a scripted compiler, which measures the plumbing and
+// nothing about the bytes. This one runs Microsoft's legacy fxc through Wine and compares what
+// CNA's processor answers with what XNA's answered on the same source -- the byte count and the
+// container's first four bytes, which is what the oracle recorded.
+TEST(XnaEffectProcessor, TheRealCompilerAnswersWhatXnaAnswered)
+{
+    const std::optional<CNA::Content::Pipeline::ExternalEffectCompilerOptions> options = RealFxc();
+    if (!options.has_value())
+    {
+        GTEST_SKIP() << "no fxc on this machine; set CNA_FXC to one";
+    }
+    const std::shared_ptr<const CNA::Content::Pipeline::EffectCompilerService> compiler =
+        CNA::Content::Pipeline::MakeExternalEffectCompiler(*options);
+    if (!compiler->Available())
+    {
+        GTEST_SKIP() << "the effect compiler could not be started: " << compiler->UnavailableReason();
+    }
+
+    const std::string source = "float4 PS() : COLOR0 { return float4(1,0,0,1); }\n"
+                               "technique T { pass P { PixelShader = compile ps_2_0 PS(); } }\n";
+
+    Processors::EffectProcessor processor(compiler);
+    auto effect = std::make_shared<Graphics::EffectContent>();
+    effect->setEffectCodeProperty(source);
+    effect->setIdentityProperty(Xna::ContentIdentity("shader.fx"));
+    RecordingContext context;
+    const auto compiled = processor.Process(effect, context);
+    ASSERT_NE(compiled, nullptr);
+    const std::vector<SharpRuntime::bytecs> code = compiled->GetEffectCode();
+    ASSERT_GE(code.size(), 4u);
+    std::ostringstream head;
+    head << std::uppercase << std::hex << std::setfill('0');
+    for (std::size_t at = 0; at < 16u; ++at) { head << std::setw(2) << static_cast<int>(code[at]); }
+
+    // The container header is XNA's, exactly: magic 0xBCF00BCF, the offset of the inner token,
+    // then two zero dwords. Measured on two unrelated effects and identical in both.
+    const std::string xna = Expected("effectprocessor/compile_simple_digest");
+    ASSERT_NE(xna.find("head="), std::string::npos) << xna;
+    const std::string xnaHead = xna.substr(xna.find("head=") + 5u, 32u);
+    EXPECT_EQ(head.str().substr(0, 32), xnaHead.substr(0, 32));
+    EXPECT_EQ(head.str().substr(0, 8), "CF0BF0BC");
+
+    // What is *not* identical is the blob behind it, and the reason is measured rather than
+    // guessed: XNA compiles from a memory buffer through d3dx9, and CNA runs the `fxc` command
+    // line, which embeds source information the memory path does not. The two differ by sixteen
+    // bytes for this effect, first at offset 50 of the inner blob, and a relative source name and
+    // a working directory do not close it -- only calling D3DXCreateEffectCompiler on a buffer
+    // would, which needs a native helper this build does not have (XNAPP-191/192).
+    EXPECT_GT(code.size(), 476u)
+        << "CNA's inner blob is the larger one; if this now matches XNA's 476 bytes, the route "
+           "reached byte parity and this test should assert equality instead";
+
+    // A source fxc rejects is refused with the compiler's own diagnostics, as XNA's is: the
+    // recorded case is an InvalidContentException naming the file, the line and the error code.
+    Processors::EffectProcessor failing(compiler);
+    auto bad = std::make_shared<Graphics::EffectContent>();
+    bad->setEffectCodeProperty("this is not an effect");
+    bad->setIdentityProperty(Xna::ContentIdentity("bad.fx"));
+    RecordingContext badContext;
+    try
+    {
+        (void)failing.Process(bad, badContext);
+        FAIL() << "fxc rejects this source and so must the processor";
+    }
+    catch (const std::exception& error)
+    {
+        const std::string said(error.what());
+        const std::string xna = Expected("effectprocessor/compile_error");
+        EXPECT_NE(said.find("bad.fx"), std::string::npos) << said;
+        EXPECT_NE(said.find("X3000"), std::string::npos)
+            << "XNA answered: " << xna << "\nCNA answered: " << said;
     }
 }
