@@ -2219,6 +2219,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_skinned_effect_integration
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-262: PBR per-map contribution: normal, metallic-roughness, occlusion and emissive each changing the result.
+        cna_vulkan_test(cna_test_vulkan_pbr_material_maps
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_material_maps_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Pbr_MaterialMaps
+            COMMAND cna_test_vulkan_pbr_material_maps
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-339: the release path that also runs vkDeviceWaitIdle and the
         # retirement lists. HasRenderer() must be false after the first Dispose and no second
         # release may be attempted.
