@@ -1865,9 +1865,9 @@
    "note": "T is constrained by a concept to the 22 pixel types XNA permits (detail/PixelTraits.hpp), where XNA discovers them through VectorConverter at run time.",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
-     "note": "Not implemented. XNA's parameterless constructor leaves a 0x0 bitmap for reflection to fill; CNA's derived types and its type registry construct through the sized constructor, which refuses a zero dimension as XNA's does."
+     "status": "EXACT_EQUIVALENT",
+     "cna": "PixelBitmapContent()",
+     "note": ""
     },
     "constructor:.ctor(System.Int32, System.Int32)": {
      "status": "EXACT_EQUIVALENT",
@@ -1885,7 +1885,7 @@
      "note": ""
     },
     "method:GetRow(System.Int32)": {
-     "status": "SEMANTIC_EQUIVALENT",
+     "status": "EXACT_EQUIVALENT",
      "cna": "GetRow(intcs) -> std::span<T> / std::span<const T>",
      "note": "XNA returns the bitmap's own row array, so writing through it changes the bitmap (measured, color/get_row_is_live). A std::span keeps that aliasing where a std::vector copy would silently lose it."
     },
@@ -1905,17 +1905,17 @@
      "note": ""
     },
     "method:ToString()": {
-     "status": "SEMANTIC_EQUIVALENT",
+     "status": "EXACT_EQUIVALENT",
      "cna": "ToString()",
      "note": "Inherited from BitmapContent, which composes the display name a virtual TypeDisplayName() supplies; C++ has no run-time generic type name to format as XNA's override does. The text matches (PixelBitmapContent<Color>, 3x2)."
     },
     "method:TryCopyFrom(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle, Microsoft.Xna.Framework.Rectangle)": {
-     "status": "SEMANTIC_EQUIVALENT",
+     "status": "EXACT_EQUIVALENT",
      "cna": "TryCopyFrom(const std::shared_ptr<BitmapContent>&, Rectangle, Rectangle)",
      "note": "reference parameters are shared_ptr carriers: a BitmapContent is polymorphic and owned, so CNA passes std::shared_ptr<BitmapContent> where XNA passes the reference itself."
     },
     "method:TryCopyTo(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle, Microsoft.Xna.Framework.Rectangle)": {
-     "status": "SEMANTIC_EQUIVALENT",
+     "status": "EXACT_EQUIVALENT",
      "cna": "TryCopyTo(const std::shared_ptr<BitmapContent>&, Rectangle, Rectangle)",
      "note": "reference parameters are shared_ptr carriers: a BitmapContent is polymorphic and owned, so CNA passes std::shared_ptr<BitmapContent> where XNA passes the reference itself."
     },

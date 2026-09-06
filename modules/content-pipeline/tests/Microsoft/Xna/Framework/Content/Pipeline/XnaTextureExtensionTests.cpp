@@ -33,6 +33,7 @@
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/PixelBitmapContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/TextureContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/TextureProcessor.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/TextureImporter.hpp"
@@ -618,4 +619,26 @@ TEST(XnaTextureExtension, EveryTargetAndProfileAnswersWhatXnaAnswers)
                   Expected("textureprofile/" + label))
             << label;
     }
+}
+
+// XNAPP-090: the parameterless constructor XNA declares on PixelBitmapContent<T>.
+//
+// It leaves a zero-by-zero bitmap for a serializer to fill, and every dimension-checked accessor
+// refuses on it -- which is what stops an empty one being mistaken for a usable one.
+TEST(XnaTextureExtension, AnUnsizedPixelBitmapIsEmptyAndRefusesEveryAccessor)
+{
+    Graphics::PixelBitmapContent<Color> bitmap;
+    EXPECT_EQ(bitmap.getWidthProperty(), 0);
+    EXPECT_EQ(bitmap.getHeightProperty(), 0);
+    EXPECT_TRUE(bitmap.GetPixelData().empty());
+    EXPECT_THROW((void)bitmap.GetPixel(0, 0), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(bitmap.SetPixel(0, 0, Color(1, 2, 3, 4)), System::ArgumentOutOfRangeException);
+    // The format is still the pixel type's own, because that is a property of T and not of a size.
+    Microsoft::Xna::Framework::Graphics::SurfaceFormat format{};
+    EXPECT_TRUE(bitmap.TryGetFormat(format));
+    EXPECT_EQ(format, Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color);
+
+    Graphics::PixelBitmapContent<Vector4> floats;
+    EXPECT_EQ(floats.getWidthProperty(), 0);
+    EXPECT_TRUE(floats.GetPixelData().empty());
 }

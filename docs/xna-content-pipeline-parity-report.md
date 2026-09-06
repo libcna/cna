@@ -11,7 +11,7 @@
 | Quantity | Implemented (EXACT + SEMANTIC + HOST_SUBSTITUTION) | EXTERNAL_BLOCKED | MISSING |
 |---|---|---:|---:|
 | public/protected types | 126/128 (98.4%) | 0 | 2 |
-| public/protected members | 698/705 (99.0%) | 0 | 7 |
+| public/protected members | 699/705 (99.1%) | 0 | 6 |
 | enum values | 27/27 (100.0%) | 0 | 0 |
 | built-in importers | 8/10 (80.0%) | 0 | 2 |
 | built-in processors | 12/12 (100.0%) | 0 | 0 |
@@ -21,7 +21,7 @@
 Status vocabulary: EXACT_EQUIVALENT, SEMANTIC_EQUIVALENT (spelling differs, capability identical; note says how),
 HOST_SUBSTITUTION (Microsoft-host mechanism replaced; note says how), EXTERNAL_BLOCKED (note names the
 unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 45, SEMANTIC_EQUIVALENT 76, HOST_SUBSTITUTION 5, EXTERNAL_BLOCKED 0, MISSING 2.
-Member status by value: EXACT_EQUIVALENT 449, SEMANTIC_EQUIVALENT 238, HOST_SUBSTITUTION 11, EXTERNAL_BLOCKED 0, MISSING 7.
+Member status by value: EXACT_EQUIVALENT 454, SEMANTIC_EQUIVALENT 234, HOST_SUBSTITUTION 11, EXTERNAL_BLOCKED 0, MISSING 6.
 
 Rules applied mechanically: 3 delegate plumbing members are listed in section 7 and not counted; 3 exception
 serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serialization has no C++ counterpart).
@@ -570,17 +570,17 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `NodeContent` | property | `Transform` | EXACT_EQUIVALENT | `getTransformProperty() / setTransformProperty()` |  |
 | `NodeContentCollection` | method | `GetParent(Microsoft.Xna.Framework.Content.Pipeline.Graphics.NodeContent)` | SEMANTIC_EQUIVALENT | `GetParent(const std::shared_ptr<NodeContent>&) -> NodeContent*` | children are owned and shared, so they travel as std::shared_ptr; the parent back-reference is a raw pointer valid while the child is in the collection, the carrier rule ChildCollection already sets. |
 | `NodeContentCollection` | method | `SetParent(Microsoft.Xna.Framework.Content.Pipeline.Graphics.NodeContent, Microsoft.Xna.Framework.Content.Pipeline.Graphics.NodeContent)` | SEMANTIC_EQUIVALENT | `SetParent(const std::shared_ptr<NodeContent>&, NodeContent*)` | children are owned and shared, so they travel as std::shared_ptr; the parent back-reference is a raw pointer valid while the child is in the collection, the carrier rule ChildCollection already sets. |
-| `PixelBitmapContent<T>` | constructor | `.ctor()` | MISSING |  | Not implemented. XNA's parameterless constructor leaves a 0x0 bitmap for reflection to fill; CNA's derived types and its type registry construct through the sized constructor, which refuses a zero dimension as XNA's does. |
+| `PixelBitmapContent<T>` | constructor | `.ctor()` | EXACT_EQUIVALENT | `PixelBitmapContent()` |  |
 | `PixelBitmapContent<T>` | constructor | `.ctor(System.Int32, System.Int32)` | EXACT_EQUIVALENT | `PixelBitmapContent(intcs, intcs)` |  |
 | `PixelBitmapContent<T>` | method | `GetPixel(System.Int32, System.Int32)` | EXACT_EQUIVALENT | `GetPixel(intcs, intcs)` |  |
 | `PixelBitmapContent<T>` | method | `GetPixelData()` | EXACT_EQUIVALENT | `GetPixelData()` |  |
-| `PixelBitmapContent<T>` | method | `GetRow(System.Int32)` | SEMANTIC_EQUIVALENT | `GetRow(intcs) -> std::span<T> / std::span<const T>` | XNA returns the bitmap's own row array, so writing through it changes the bitmap (measured, color/get_row_is_live). A std::span keeps that aliasing where a std::vector copy would silently lose it. |
+| `PixelBitmapContent<T>` | method | `GetRow(System.Int32)` | EXACT_EQUIVALENT | `GetRow(intcs) -> std::span<T> / std::span<const T>` | XNA returns the bitmap's own row array, so writing through it changes the bitmap (measured, color/get_row_is_live). A std::span keeps that aliasing where a std::vector copy would silently lose it. |
 | `PixelBitmapContent<T>` | method | `ReplaceColor(T, T)` | EXACT_EQUIVALENT | `ReplaceColor(const T&, const T&)` |  |
 | `PixelBitmapContent<T>` | method | `SetPixel(System.Int32, System.Int32, T)` | EXACT_EQUIVALENT | `SetPixel(intcs, intcs, const T&)` |  |
 | `PixelBitmapContent<T>` | method | `SetPixelData(System.Byte[])` | EXACT_EQUIVALENT | `SetPixelData(const std::vector<bytecs>&)` |  |
-| `PixelBitmapContent<T>` | method | `ToString()` | SEMANTIC_EQUIVALENT | `ToString()` | Inherited from BitmapContent, which composes the display name a virtual TypeDisplayName() supplies; C++ has no run-time generic type name to format as XNA's override does. The text matches (PixelBitmapContent<Color>, 3x2). |
-| `PixelBitmapContent<T>` | method | `TryCopyFrom(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle, Microsoft.Xna.Framework.Rectangle)` | SEMANTIC_EQUIVALENT | `TryCopyFrom(const std::shared_ptr<BitmapContent>&, Rectangle, Rectangle)` | reference parameters are shared_ptr carriers: a BitmapContent is polymorphic and owned, so CNA passes std::shared_ptr<BitmapContent> where XNA passes the reference itself. |
-| `PixelBitmapContent<T>` | method | `TryCopyTo(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle, Microsoft.Xna.Framework.Rectangle)` | SEMANTIC_EQUIVALENT | `TryCopyTo(const std::shared_ptr<BitmapContent>&, Rectangle, Rectangle)` | reference parameters are shared_ptr carriers: a BitmapContent is polymorphic and owned, so CNA passes std::shared_ptr<BitmapContent> where XNA passes the reference itself. |
+| `PixelBitmapContent<T>` | method | `ToString()` | EXACT_EQUIVALENT | `ToString()` | Inherited from BitmapContent, which composes the display name a virtual TypeDisplayName() supplies; C++ has no run-time generic type name to format as XNA's override does. The text matches (PixelBitmapContent<Color>, 3x2). |
+| `PixelBitmapContent<T>` | method | `TryCopyFrom(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle, Microsoft.Xna.Framework.Rectangle)` | EXACT_EQUIVALENT | `TryCopyFrom(const std::shared_ptr<BitmapContent>&, Rectangle, Rectangle)` | reference parameters are shared_ptr carriers: a BitmapContent is polymorphic and owned, so CNA passes std::shared_ptr<BitmapContent> where XNA passes the reference itself. |
+| `PixelBitmapContent<T>` | method | `TryCopyTo(Microsoft.Xna.Framework.Content.Pipeline.Graphics.BitmapContent, Microsoft.Xna.Framework.Rectangle, Microsoft.Xna.Framework.Rectangle)` | EXACT_EQUIVALENT | `TryCopyTo(const std::shared_ptr<BitmapContent>&, Rectangle, Rectangle)` | reference parameters are shared_ptr carriers: a BitmapContent is polymorphic and owned, so CNA passes std::shared_ptr<BitmapContent> where XNA passes the reference itself. |
 | `PixelBitmapContent<T>` | method | `TryGetFormat(out Microsoft.Xna.Framework.Graphics.SurfaceFormat)` | EXACT_EQUIVALENT | `TryGetFormat(SurfaceFormat&)` |  |
 | `PositionCollection` | constructor | `.ctor()` | EXACT_EQUIVALENT | `PositionCollection()` |  |
 | `SkinnedMaterialContent` | constant | `AlphaKey` | SEMANTIC_EQUIVALENT | `SkinnedMaterialContent::AlphaKey` | a C# `const string` is a `static constexpr std::string_view`, with the same value and the same compile-time constancy. |

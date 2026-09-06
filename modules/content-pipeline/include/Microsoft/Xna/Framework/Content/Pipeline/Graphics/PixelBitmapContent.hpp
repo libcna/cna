@@ -81,6 +81,17 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
         CNAEXT static const std::string XnaTypeName;
 
         /**
+         * @brief Initializes a new instance of PixelBitmapContent.
+         *
+         * The bitmap is zero by zero and holds no pixels, which is what XNA's own parameterless
+         * constructor leaves for its serializer to fill. Every dimension-checked accessor refuses
+         * on it, exactly as it would on a bitmap whose size was never set, so an empty one cannot
+         * be mistaken for a usable one; `SetPixelData` with an empty span is what a reader hands
+         * it, and the sized constructor is what code that knows the size uses.
+         */
+        PixelBitmapContent() : PixelBitmapContentBase() { Register(); }
+
+        /**
          * @brief Initializes a new instance of PixelBitmapContent with the specified width or height.
          *
          * @param width Width, in pixels, of the bitmap resource.
