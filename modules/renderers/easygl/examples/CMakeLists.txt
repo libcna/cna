@@ -64,6 +64,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # plans/plan_software.md SOFTWARE-61/84: this renderer's half of the cross-renderer diagnostic
         # dump -- not registered as a ctest, just a plain executable a developer/script runs by
         # hand alongside SOFTWARE's own cna_diag_software and cna_diag_compare.
+        # plan_vulkan.md VULKAN-050: registered here as the CONTROL for the Vulkan run -- the
+        # whole question is whether two renderers with different submission models agree about
+        # SpriteSortMode::Immediate, and a one-renderer measurement cannot answer it.
+        cna_easygl_test(cna_test_easygl_spritebatch_sort_mode_semantics
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_sort_mode_semantics_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_SpriteBatch_SortModeSemantics
+            COMMAND cna_test_easygl_spritebatch_sort_mode_semantics
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         cna_easygl_test(cna_diag_easygl ${CNA_GRAPHICS_EXAMPLES_DIR}/cross_renderer_diagnostic_scene.cpp)
 
         # plans/plan_direct2d.md D2D-129: the 2D counterpart of the dump above. The 3D scene next to it
