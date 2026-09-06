@@ -1211,6 +1211,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_indexed_draw_range
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-096: every public BlendState/DepthStencilState/RasterizerState field
+        # measured against the pipeline key by cardinality -- the only instrument that can see a
+        # field the key silently drops.
+        cna_vulkan_test(cna_test_vulkan_pipeline_key_state_coverage
+                        vulkan_pipeline_key_state_coverage_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_PipelineKeyStateCoverage
+            COMMAND cna_test_vulkan_pipeline_key_state_coverage
+            TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plans/plan_vulkan.md VULKAN-394: the sibling question for the ~20 PipelineKey-keyed caches.
         cna_vulkan_test(cna_test_vulkan_pipeline_cache_bound
                         vulkan_pipeline_cache_bound_test.cpp)
