@@ -2083,6 +2083,20 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_bound_resource_dispose
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-339: the release path that also runs vkDeviceWaitIdle and the
+        # retirement lists. HasRenderer() must be false after the first Dispose and no second
+        # release may be attempted.
+        cna_vulkan_test(cna_test_vulkan_handle_release
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_handle_release_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_HandleRelease
+            COMMAND cna_test_vulkan_handle_release
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_double_dispose
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_double_dispose_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DoubleDispose
+            COMMAND cna_test_vulkan_double_dispose
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-095: MultiSampleCount changed on a LIVE device. Vulkan-owned rather
         # than a registration of easygl_msaa_change_test.cpp, because that source asserts EasyGL's
         # own limit -- that the count cannot change post-construction -- which is false here.
