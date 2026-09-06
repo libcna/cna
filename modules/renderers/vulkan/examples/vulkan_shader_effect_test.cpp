@@ -223,27 +223,48 @@ protected:
             return;
         }
 
-        // Set red tint via SetUniformVec4 → pushConst_[20..23] (byte offset 80).
-        fx.SetUniformVec4("uColor", 1.0f, 0.0f, 0.0f, 1.0f);
-        fx.Apply();
+        // plan_vulkan.md VULKAN-251: TWO batches with DIFFERENT uniform values, into two regions.
+        //
+        // One value proves less than it looks. A shader that ignored `uColor` entirely would draw
+        // the white texture and fail the old single check -- but a uniform delivered to the wrong
+        // push-constant slot, or with only one channel arriving, can still land on "reddish". Two
+        // distinct values make the drawn colour a FUNCTION of the uniform: both regions come out
+        // identical unless the value is really being carried through.
+        //
+        // Sound because each batch snapshots the effect's push constants at End()
+        // (`VulkanRenderer.cpp:1355`), so the two do not collapse onto the last value the way
+        // F-12 predicted for buffers -- checked before relying on it.
+        const auto drawTinted = [&](float r, float g, float b, const Rectangle& dest) {
+            fx.SetUniformVec4("uColor", r, g, b, 1.0f);
+            fx.Apply();
+            sb_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend,
+                       nullptr, nullptr, nullptr, &fx);
+            sb_->Draw(tex_, dest, Rectangle(0, 0, 1, 1), Color::White);
+            sb_->End();
+        };
+        drawTinted(1.0f, 0.0f, 0.0f, Rectangle(W / 8,     H / 4, W / 4, H / 2));  // left: red
+        drawTinted(0.0f, 0.0f, 1.0f, Rectangle(W * 5 / 8, H / 4, W / 4, H / 2));  // right: blue
 
-        sb_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend,
-                   nullptr, nullptr, nullptr, &fx);
-        sb_->Draw(tex_,
-                  Rectangle(W / 4, H / 4, W / 2, H / 2),
-                  Rectangle(0, 0, 1, 1),
-                  Color::White);
-        sb_->End();
-
-        // Centre pixel should be red (white texture × red tint), corner green (background).
-        const Rectangle centReg(W / 2, H / 2, 1, 1);
+        const Rectangle leftReg(W / 4,     H / 2, 1, 1);
+        const Rectangle rightReg(W * 3 / 4, H / 2, 1, 1);
         const Rectangle bgReg(1, 1, 1, 1);
-        Color centPx(0, 0, 0, 0), bgPx(0, 0, 0, 0);
-        device.GetBackBufferData(&centReg, &centPx, 0, 1);
-        device.GetBackBufferData(&bgReg,   &bgPx,   0, 1);
+        Color leftPx(0, 0, 0, 0), rightPx(0, 0, 0, 0), bgPx(0, 0, 0, 0);
+        device.GetBackBufferData(&leftReg,  &leftPx,  0, 1);
+        device.GetBackBufferData(&rightReg, &rightPx, 0, 1);
+        device.GetBackBufferData(&bgReg,    &bgPx,    0, 1);
 
-        const bool centOk = (centPx.getRProperty() >= 200 && centPx.getGProperty() <= 50);
-        const bool bgOk   = (bgPx.getGProperty()   >= 200 && bgPx.getRProperty()   <= 50);
+        const bool leftOk  = (leftPx.getRProperty()  >= 200 && leftPx.getBProperty()  <= 60);
+        const bool rightOk = (rightPx.getBProperty() >= 200 && rightPx.getRProperty() <= 60);
+        const bool centOk  = leftOk && rightOk;
+        const bool bgOk    = (bgPx.getGProperty() >= 200 && bgPx.getRProperty() <= 50);
+        std::printf("[%s] VULKAN-251: two uniform values give two colours -- left=(%d,%d,%d) "
+                    "expected red, right=(%d,%d,%d) expected blue\n",
+                    centOk ? "ok" : "FAIL",
+                    leftPx.getRProperty(), leftPx.getGProperty(), leftPx.getBProperty(),
+                    rightPx.getRProperty(), rightPx.getGProperty(), rightPx.getBProperty());
+
+        // Kept for the refusal legs below, which need one live effect that demonstrably works.
+        const Color centPx = leftPx;
 
         // plan_vulkan.md VULKAN-265: the four array uniform setters must REFUSE, not fall
         // silent. The centre-pixel check above is this leg's control: it proves the very same
