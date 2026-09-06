@@ -2357,6 +2357,20 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-433: the EnvironmentMapEffect and SkinnedEffect goldens. The first is the one VULKAN-260 has a stake in: its Fresnel term was per-fragment until that row, so a golden it now matches is evidence the fix is the XNA shape and not merely a different one.
+        cna_vulkan_test(cna_test_vulkan_environmentmapeffect_golden
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_environmentmapeffect_golden_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_EnvironmentMapEffect_Golden
+            COMMAND cna_test_vulkan_environmentmapeffect_golden
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_skinnedeffect_golden
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_skinnedeffect_golden_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SkinnedEffect_Golden
+            COMMAND cna_test_vulkan_skinnedeffect_golden
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-339: the release path that also runs vkDeviceWaitIdle and the
         # retirement lists. HasRenderer() must be false after the first Dispose and no second
         # release may be attempted.
