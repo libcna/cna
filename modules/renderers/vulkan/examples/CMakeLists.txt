@@ -2226,6 +2226,18 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_pbr_material_maps
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-263: Effect::Clone and CurrentTechnique -- mostly shared logic, but a cloned effect must not share renderer-side pipeline or descriptor state, which is Vulkan-specific.
+        cna_vulkan_test(cna_test_vulkan_effect_clone
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_effect_clone_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_EffectClone
+            COMMAND cna_test_vulkan_effect_clone
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_effect_current_technique
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_effect_current_technique_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_EffectCurrentTechnique
+            COMMAND cna_test_vulkan_effect_current_technique
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-339: the release path that also runs vkDeviceWaitIdle and the
         # retirement lists. HasRenderer() must be false after the first Dispose and no second
         # release may be attempted.
