@@ -15,11 +15,11 @@
 
 ## 1. Current status
 
-**Implementation under way.** Sixty-three tasks are ✅ — the sixty-two listed here (`VULKAN-004`, `-008`, `-020`, `-021`, `-022`, `-023`, `-025`, `-026`, `-027`,
+**Implementation under way.** Sixty-four tasks are ✅ — the sixty-three listed here (`VULKAN-004`, `-008`, `-020`, `-021`, `-022`, `-023`, `-025`, `-026`, `-027`,
 `-055`, `-090`, `-091`, `-094`, `-215`, `-097`, `-098`, `-130`, `-131`, `-132`, `-133`, `-134`, `-141`, `-144`, `-145`, `-146`, `-147`, `-148`, `-149`, `-150`,
-`-151`, `-152`, `-153`, `-154`, `-155`, `-156`, `-157`, `-158`, `-159`, `-160`, `-161`, `-162`, `-163`, `-250`, `-265`, `-332`, `-333`,
+`-151`, `-152`, `-153`, `-154`, `-155`, `-156`, `-157`, `-158`, `-159`, `-160`, `-161`, `-162`, `-163`, `-250`, `-251`, `-265`, `-332`, `-333`,
 `-330`, `-331`, `-346`, `-347`, `-348`, `-370`, `-390`, `-391`, `-392`, `-394`, `-395`, `-396`, `-400`, `-401`, `-470`, `-474`), plus
-`VULKAN-011` from the planning session, which is the sixty-third. `VULKAN-146` took two attempts: the first was reverted for a regression
+`VULKAN-011` from the planning session, which is the sixty-fourth. `VULKAN-146` took two attempts: the first was reverted for a regression
 only the full `ctest` could see (F-21), and the second added the piece the original scope was
 missing — which stock program runs has to ask the declaration too, not just where its inputs live.
 Twenty-two rows were opened by work that discovered something the plan had not, and **fifteen of them
@@ -411,6 +411,7 @@ against the top of this section.
 | `VULKAN-132` | **251/251** `^Vulkan_`, full `ctest` **not re-run** | the added test is `Vulkan_DynamicBufferUpdate`, **3/3**. No production code changed — the row's finding is that F-12's conclusion does not hold — so nothing outside this renderer's own test set can move. |
 | `VULKAN-133` | **252/252** `^Vulkan_`, full `ctest` **not re-run** | the added test is `Vulkan_DynamicBufferStress`, a registration of the renderer-agnostic EasyGL source, **36/36** on the first run. Only this file's registration changed. |
 | `VULKAN-330` + `VULKAN-331` | **253/253** `^Vulkan_`, **9091/9110** full `ctest` | the added test is `Vulkan_PresentationMode`, **8/8** — five legs for the presented rectangle, three for its consumers. One run covers both rows: they are two halves of one feature and the tree under test contains both. Gathered in four `-I` chunks after four whole-suite runs were OOM-killed by another session's builds. |
+| `VULKAN-251` | **253/253** `^Vulkan_`, full `ctest` **not re-run** | no new ctest; `Vulkan_ShaderEffect_SpirV` gains a two-value uniform proof in place of its single-value check. One test source changed. |
 
 ### 7.6 The EasyGL cross-check (the measurement that reclassified four failures)
 
@@ -749,7 +750,7 @@ Classifications: `PARITY` · `VULKAN_STRONGER` · `TEST_GAP` · `IMPLEMENTATION_
 
 | Area | EasyGL evidence | Vulkan evidence | Classification | Tasks |
 |---|---|---|---|---|
-| Presentation mode (letterbox/overscan/stretch/…) | real | silent no-op | `IMPLEMENTATION_GAP` | `VULKAN-330`, `VULKAN-331` |
+| Presentation mode (letterbox/overscan/stretch/…) | real | **real** since `VULKAN-330`/`-331`: the mode is stored, the presented rectangle is applied at the pass default and both replay sites, and `GetDefaultViewportRect` plus both coordinate transforms map through it | `PARITY` — same algorithm as EasyGL's, same `FixedHeightDynamicWidth` default | `VULKAN-330` ✅, `VULKAN-331` ✅ (`Vulkan_PresentationMode`) |
 | Runtime VSync / `PresentInterval` | `EasyGL_GraphicsDeviceManager_Vsync`, `_PresentInterval` | none; setter not overridden | `IMPLEMENTATION_GAP` | `VULKAN-332`, `VULKAN-333` |
 | `PresentationParameters` round-trip | `EasyGL_PresentationParameters` | none | `TEST_GAP` | `VULKAN-335` |
 | Backbuffer resize / real window resize | `EasyGL_BackbufferResize`, `_RealWindowResize` | `Vulkan_ViewportResetAfterResize` only | `TEST_GAP` | `VULKAN-336`, `VULKAN-337` |
