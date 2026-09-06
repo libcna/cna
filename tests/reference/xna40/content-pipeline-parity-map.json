@@ -4212,279 +4212,279 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Tasks.BuildContent": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "HOST_SUBSTITUTION",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Tasks::BuildContent",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Tasks/BuildContent.hpp",
+   "note": "MSBuild's own hosting has no C++ counterpart: nothing discovers this task, sets its properties or calls Execute(). Everything a task author can observe is here -- every input property, every output property and the bool Execute() contract -- and the caller takes the engine's role. An item-valued property is a std::vector<TaskItem>, TaskItem being ITaskItem's developer-visible contract: an ItemSpec and a case-insensitive metadata table. The build itself is the one canonical coordinator (RunContentCompiler), so this is a translation from MSBuild's item model to that coordinator's, not a second build engine; the XNA-to-canonical component-name mapping it uses is shared with the .contentproj reader.",
    "members": {
     "constant:CancelEventNameFormat": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "BuildContent::CancelEventNameFormat",
+     "note": "XNA's own value verbatim, a string.Format template whose one argument is the content project's GUID. There is no Windows named event here and nothing waits on one; the constant is the observable part."
     },
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "BuildContent()",
      "note": ""
     },
     "property:BuildConfiguration": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getBuildConfigurationProperty() / setBuildConfigurationProperty()",
      "note": ""
     },
     "property:CompressContent": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getCompressContentProperty() / setCompressContentProperty()",
      "note": ""
     },
     "property:ContentProjectGUID": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getContentProjectGUIDProperty() / setContentProjectGUIDProperty()",
      "note": ""
     },
     "property:IntermediateDirectory": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getIntermediateDirectoryProperty() / setIntermediateDirectoryProperty()",
      "note": ""
     },
     "property:IntermediateFiles": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getIntermediateFilesProperty()",
+     "note": "a std::vector<TaskItem> rather than an ITaskItem[]; read-only, as XNA's is, and filled by Execute()."
     },
     "property:LoggerRootDirectory": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getLoggerRootDirectoryProperty() / setLoggerRootDirectoryProperty()",
      "note": ""
     },
     "property:OutputContentFiles": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getOutputContentFilesProperty()",
+     "note": "a std::vector<TaskItem> rather than an ITaskItem[]; read-only, as XNA's is, and filled by Execute()."
     },
     "property:OutputDirectory": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getOutputDirectoryProperty() / setOutputDirectoryProperty()",
      "note": ""
     },
     "property:PipelineAssemblies": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getPipelineAssembliesProperty()/setPipelineAssembliesProperty()",
+     "note": "a std::vector<TaskItem> rather than an ITaskItem[]."
     },
     "property:PipelineAssemblyDependencies": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getPipelineAssemblyDependenciesProperty()/setPipelineAssemblyDependenciesProperty()",
+     "note": "a std::vector<TaskItem> rather than an ITaskItem[]."
     },
     "property:RebuildAll": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getRebuildAllProperty() / setRebuildAllProperty()",
      "note": ""
     },
     "property:RebuiltContentFiles": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getRebuiltContentFilesProperty()",
+     "note": "a std::vector<TaskItem> rather than an ITaskItem[]; read-only, as XNA's is, and filled by Execute()."
     },
     "property:RootDirectory": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getRootDirectoryProperty() / setRootDirectoryProperty()",
      "note": ""
     },
     "property:SourceAssets": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getSourceAssetsProperty()/setSourceAssetsProperty()",
+     "note": "a std::vector<TaskItem> rather than an ITaskItem[]."
     },
     "property:TargetPlatform": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getTargetPlatformProperty() / setTargetPlatformProperty()",
      "note": ""
     },
     "property:TargetProfile": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getTargetProfileProperty() / setTargetProfileProperty()",
      "note": ""
     },
     "method:Execute()": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "HOST_SUBSTITUTION",
+     "cna": "Execute()",
+     "note": "Builds every source asset through the canonical coordinator into .xnb, honouring the Name, Importer, Processor, Link and ProcessorParameters metadata a .contentproj writes, and fills OutputContentFiles, RebuiltContentFiles and IntermediateFiles from the build manifest. RebuildAll drops the incremental state. A non-empty PipelineAssemblies is refused rather than ignored, because C++ has no assembly to load and a project naming one expects its own importers to run."
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Tasks.BuildXact": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "HOST_SUBSTITUTION",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Tasks::BuildXact",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Tasks/BuildXact.hpp",
+   "note": "MSBuild's own hosting has no C++ counterpart: nothing discovers this task, sets its properties or calls Execute(). Everything a task author can observe is here -- every input property, every output property and the bool Execute() contract -- and the caller takes the engine's role. An item-valued property is a std::vector<TaskItem>, TaskItem being ITaskItem's developer-visible contract: an ItemSpec and a case-insensitive metadata table. Carries one CNAEXT pair the inventory does not list, SetXactCompilerEXT()/HasXactCompilerEXT(), because XNA finds XactBld3.exe through its own installation and there is none to find here.",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "BuildXact()",
      "note": ""
     },
     "property:BuildConfiguration": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getBuildConfigurationProperty() / setBuildConfigurationProperty()",
      "note": ""
     },
     "property:ContentProjectGUID": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getContentProjectGUIDProperty() / setContentProjectGUIDProperty()",
      "note": ""
     },
     "property:IntermediateDirectory": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getIntermediateDirectoryProperty() / setIntermediateDirectoryProperty()",
      "note": ""
     },
     "property:IntermediateFiles": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getIntermediateFilesProperty()",
+     "note": "a std::vector<TaskItem> rather than an ITaskItem[]; read-only, as XNA's is, and filled by Execute()."
     },
     "property:LoggerRootDirectory": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getLoggerRootDirectoryProperty() / setLoggerRootDirectoryProperty()",
      "note": ""
     },
     "property:OutputDirectory": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getOutputDirectoryProperty() / setOutputDirectoryProperty()",
      "note": ""
     },
     "property:OutputXactFiles": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getOutputXactFilesProperty()",
+     "note": "a std::vector<TaskItem> rather than an ITaskItem[]; read-only, as XNA's is, and filled by Execute()."
     },
     "property:RebuildAll": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getRebuildAllProperty() / setRebuildAllProperty()",
      "note": ""
     },
     "property:RebuiltXactFiles": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getRebuiltXactFilesProperty()",
+     "note": "a std::vector<TaskItem> rather than an ITaskItem[]; read-only, as XNA's is, and filled by Execute()."
     },
     "property:RootDirectory": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getRootDirectoryProperty() / setRootDirectoryProperty()",
      "note": ""
     },
     "property:TargetPlatform": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getTargetPlatformProperty() / setTargetPlatformProperty()",
      "note": ""
     },
     "property:TargetProfile": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getTargetProfileProperty() / setTargetProfileProperty()",
      "note": ""
     },
     "property:XactProjects": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getXactProjectsProperty()/setXactProjectsProperty()",
+     "note": "a std::vector<TaskItem> rather than an ITaskItem[]."
     },
     "property:XnaFrameworkVersion": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getXnaFrameworkVersionProperty() / setXnaFrameworkVersionProperty()",
      "note": ""
     },
     "method:Execute()": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "HOST_SUBSTITUTION",
+     "cna": "Execute()",
+     "note": "Validates every named project -- that it exists, opens, and opens with an XACT signature -- and then invokes the XACT compiler named by SetXactCompilerEXT() or CNA_XACTBLD, through CNA_XACTBLD_LAUNCHER where one is set, collecting the .xgs, .xwb and .xsb it produced. Validation runs whether or not a compiler is present, so a bad project is told what is wrong with it rather than being told the tool is missing. Compiling an .xap itself needs Microsoft's own XactBld3.exe, which ships with the XNA Game Studio tools and is not something CNA can reimplement or redistribute; where none is found the task answers false with a message naming it."
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Tasks.CleanContent": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "HOST_SUBSTITUTION",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Tasks::CleanContent",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Tasks/CleanContent.hpp",
+   "note": "MSBuild's own hosting has no C++ counterpart: nothing discovers this task, sets its properties or calls Execute(). Everything a task author can observe is here -- every input property, every output property and the bool Execute() contract -- and the caller takes the engine's role. An item-valued property is a std::vector<TaskItem>, TaskItem being ITaskItem's developer-visible contract: an ItemSpec and a case-insensitive metadata table.",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "CleanContent()",
      "note": ""
     },
     "property:BuildConfiguration": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getBuildConfigurationProperty() / setBuildConfigurationProperty()",
      "note": ""
     },
     "property:ContentProjectGUID": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getContentProjectGUIDProperty() / setContentProjectGUIDProperty()",
      "note": ""
     },
     "property:IntermediateDirectory": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getIntermediateDirectoryProperty() / setIntermediateDirectoryProperty()",
      "note": ""
     },
     "property:OutputDirectory": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getOutputDirectoryProperty() / setOutputDirectoryProperty()",
      "note": ""
     },
     "property:RootDirectory": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getRootDirectoryProperty() / setRootDirectoryProperty()",
      "note": ""
     },
     "property:TargetPlatform": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getTargetPlatformProperty() / setTargetPlatformProperty()",
      "note": ""
     },
     "property:TargetProfile": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getTargetProfileProperty() / setTargetProfileProperty()",
      "note": ""
     },
     "method:Execute()": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "HOST_SUBSTITUTION",
+     "cna": "Execute()",
+     "note": "Removes only the files a valid output manifest proves the pipeline owns, which is the canonical cleaner's own rule; a directory with no manifest is left alone rather than emptied, and one that is not there at all is a success."
     }
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Tasks.GetLastOutputs": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "HOST_SUBSTITUTION",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::Tasks::GetLastOutputs",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Tasks/CleanContent.hpp",
+   "note": "MSBuild's own hosting has no C++ counterpart: nothing discovers this task, sets its properties or calls Execute(). Everything a task author can observe is here -- every input property, every output property and the bool Execute() contract -- and the caller takes the engine's role. An item-valued property is a std::vector<TaskItem>, TaskItem being ITaskItem's developer-visible contract: an ItemSpec and a case-insensitive metadata table. Carries one CNAEXT member the inventory does not list, SetOutputDirectoryEXT(): XNA keeps its incremental state under the intermediate directory and CNA's manifest lives beside the compiled output, so the caller can name that directly.",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "GetLastOutputs()",
      "note": ""
     },
     "property:ContentProjectGUID": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getContentProjectGUIDProperty() / setContentProjectGUIDProperty()",
      "note": ""
     },
     "property:IntermediateDirectory": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "getIntermediateDirectoryProperty() / setIntermediateDirectoryProperty()",
      "note": ""
     },
     "property:OutputContentFiles": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "getOutputContentFilesProperty()",
+     "note": "a std::vector<TaskItem> rather than an ITaskItem[]; read-only, as XNA's is."
     },
     "method:Execute()": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "HOST_SUBSTITUTION",
+     "cna": "Execute()",
+     "note": "Reads the previous build's manifest and nothing else, so it never rebuilds. No previous build is an empty answer and not a failure, which is what a project asking what is there needs."
     }
    }
   },

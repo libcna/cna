@@ -10,8 +10,8 @@
 
 | Quantity | Implemented (EXACT + SEMANTIC + HOST_SUBSTITUTION) | EXTERNAL_BLOCKED | MISSING |
 |---|---|---:|---:|
-| public/protected types | 122/128 (95.3%) | 0 | 6 |
-| public/protected members | 649/705 (92.1%) | 0 | 56 |
+| public/protected types | 126/128 (98.4%) | 0 | 2 |
+| public/protected members | 698/705 (99.0%) | 0 | 7 |
 | enum values | 27/27 (100.0%) | 0 | 0 |
 | built-in importers | 8/10 (80.0%) | 0 | 2 |
 | built-in processors | 12/12 (100.0%) | 0 | 0 |
@@ -20,8 +20,8 @@
 
 Status vocabulary: EXACT_EQUIVALENT, SEMANTIC_EQUIVALENT (spelling differs, capability identical; note says how),
 HOST_SUBSTITUTION (Microsoft-host mechanism replaced; note says how), EXTERNAL_BLOCKED (note names the
-unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 45, SEMANTIC_EQUIVALENT 76, HOST_SUBSTITUTION 1, EXTERNAL_BLOCKED 0, MISSING 6.
-Member status by value: EXACT_EQUIVALENT 416, SEMANTIC_EQUIVALENT 226, HOST_SUBSTITUTION 7, EXTERNAL_BLOCKED 0, MISSING 56.
+unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 45, SEMANTIC_EQUIVALENT 76, HOST_SUBSTITUTION 5, EXTERNAL_BLOCKED 0, MISSING 2.
+Member status by value: EXACT_EQUIVALENT 449, SEMANTIC_EQUIVALENT 238, HOST_SUBSTITUTION 11, EXTERNAL_BLOCKED 0, MISSING 7.
 
 Rules applied mechanically: 3 delegate plumbing members are listed in section 7 and not counted; 3 exception
 serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serialization has no C++ counterpart).
@@ -36,7 +36,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `Microsoft.Xna.Framework.Content.Pipeline.Processors` | 28 | 28 | 0 | 0 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler` | 5 | 5 | 0 | 0 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate` | 7 | 7 | 0 | 0 |
-| `Microsoft.Xna.Framework.Content.Pipeline.Tasks` | 4 | 0 | 0 | 4 |
+| `Microsoft.Xna.Framework.Content.Pipeline.Tasks` | 4 | 4 | 0 | 0 |
 
 ## 3. Type matrix
 
@@ -159,10 +159,10 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `….Serialization.Intermediate` | `IntermediateSerializer` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermediate::IntermediateSerializer` | XNA discovers ContentTypeSerializer classes and member layouts by reflection; CNA registers serializers (AddTypeSerializer) and describes types (ContentTypeDescriptor), which are CNAEXT additions rather than changes to the XNA surface. |
 | `….Serialization.Intermediate` | `IntermediateWriter` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermediate::IntermediateWriter` |  |
 | `…` | `TargetPlatform` | enum | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::TargetPlatform` |  |
-| `….Tasks` | `BuildContent` | class | MISSING |  |  |
-| `….Tasks` | `BuildXact` | class | MISSING |  |  |
-| `….Tasks` | `CleanContent` | class | MISSING |  |  |
-| `….Tasks` | `GetLastOutputs` | class | MISSING |  |  |
+| `….Tasks` | `BuildContent` | class | HOST_SUBSTITUTION | `Microsoft::Xna::Framework::Content::Pipeline::Tasks::BuildContent` | MSBuild's own hosting has no C++ counterpart: nothing discovers this task, sets its properties or calls Execute(). Everything a task author can observe is here -- every input property, every output property and the bool Execute() contract -- and the caller takes the engine's role. An item-valued property is a std::vector<TaskItem>, TaskItem being ITaskItem's developer-visible contract: an ItemSpec and a case-insensitive metadata table. The build itself is the one canonical coordinator (RunContentCompiler), so this is a translation from MSBuild's item model to that coordinator's, not a second build engine; the XNA-to-canonical component-name mapping it uses is shared with the .contentproj reader. |
+| `….Tasks` | `BuildXact` | class | HOST_SUBSTITUTION | `Microsoft::Xna::Framework::Content::Pipeline::Tasks::BuildXact` | MSBuild's own hosting has no C++ counterpart: nothing discovers this task, sets its properties or calls Execute(). Everything a task author can observe is here -- every input property, every output property and the bool Execute() contract -- and the caller takes the engine's role. An item-valued property is a std::vector<TaskItem>, TaskItem being ITaskItem's developer-visible contract: an ItemSpec and a case-insensitive metadata table. Carries one CNAEXT pair the inventory does not list, SetXactCompilerEXT()/HasXactCompilerEXT(), because XNA finds XactBld3.exe through its own installation and there is none to find here. |
+| `….Tasks` | `CleanContent` | class | HOST_SUBSTITUTION | `Microsoft::Xna::Framework::Content::Pipeline::Tasks::CleanContent` | MSBuild's own hosting has no C++ counterpart: nothing discovers this task, sets its properties or calls Execute(). Everything a task author can observe is here -- every input property, every output property and the bool Execute() contract -- and the caller takes the engine's role. An item-valued property is a std::vector<TaskItem>, TaskItem being ITaskItem's developer-visible contract: an ItemSpec and a case-insensitive metadata table. |
+| `….Tasks` | `GetLastOutputs` | class | HOST_SUBSTITUTION | `Microsoft::Xna::Framework::Content::Pipeline::Tasks::GetLastOutputs` | MSBuild's own hosting has no C++ counterpart: nothing discovers this task, sets its properties or calls Execute(). Everything a task author can observe is here -- every input property, every output property and the bool Execute() contract -- and the caller takes the engine's role. An item-valued property is a std::vector<TaskItem>, TaskItem being ITaskItem's developer-visible contract: an ItemSpec and a case-insensitive metadata table. Carries one CNAEXT member the inventory does not list, SetOutputDirectoryEXT(): XNA keeps its incremental state under the intermediate directory and CNA's manifest lives beside the compiled output, so the caller can name that directly. |
 | `…` | `TextureImporter` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::TextureImporter` | the texture is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). |
 | `…` | `VideoContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::VideoContent` | The constructor is eager, as the genuine one is: it probes inside the constructor, so a file that is not there, is not a video, or is named by an empty string is refused there with the one sentence XNA gives, and a null name reaches the message as an empty name rather than being refused as null. Carries one CNAEXT member the inventory does not list, HasSoundtrackEXT(), because a processor deciding what a soundtrack type means for a silent source has no other way to ask. The VideoSoundtrackType setter XNA declares internal stays public and is marked CNAEXT, because C++ has no assembly boundary. |
 | `…` | `WavImporter` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::WavImporter` | the audio is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). |
@@ -940,55 +940,55 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `TargetPlatform` | enum value | `Windows = 0` | EXACT_EQUIVALENT | `TargetPlatform::Windows` |  |
 | `TargetPlatform` | enum value | `Xbox360 = 1` | EXACT_EQUIVALENT | `TargetPlatform::Xbox360` |  |
 | `TargetPlatform` | enum value | `WindowsPhone = 2` | EXACT_EQUIVALENT | `TargetPlatform::WindowsPhone` |  |
-| `BuildContent` | constant | `CancelEventNameFormat` | MISSING |  |  |
-| `BuildContent` | constructor | `.ctor()` | MISSING |  |  |
-| `BuildContent` | property | `BuildConfiguration` | MISSING |  |  |
-| `BuildContent` | property | `CompressContent` | MISSING |  |  |
-| `BuildContent` | property | `ContentProjectGUID` | MISSING |  |  |
-| `BuildContent` | property | `IntermediateDirectory` | MISSING |  |  |
-| `BuildContent` | property | `IntermediateFiles` | MISSING |  |  |
-| `BuildContent` | property | `LoggerRootDirectory` | MISSING |  |  |
-| `BuildContent` | property | `OutputContentFiles` | MISSING |  |  |
-| `BuildContent` | property | `OutputDirectory` | MISSING |  |  |
-| `BuildContent` | property | `PipelineAssemblies` | MISSING |  |  |
-| `BuildContent` | property | `PipelineAssemblyDependencies` | MISSING |  |  |
-| `BuildContent` | property | `RebuildAll` | MISSING |  |  |
-| `BuildContent` | property | `RebuiltContentFiles` | MISSING |  |  |
-| `BuildContent` | property | `RootDirectory` | MISSING |  |  |
-| `BuildContent` | property | `SourceAssets` | MISSING |  |  |
-| `BuildContent` | property | `TargetPlatform` | MISSING |  |  |
-| `BuildContent` | property | `TargetProfile` | MISSING |  |  |
-| `BuildContent` | method | `Execute()` | MISSING |  |  |
-| `BuildXact` | constructor | `.ctor()` | MISSING |  |  |
-| `BuildXact` | property | `BuildConfiguration` | MISSING |  |  |
-| `BuildXact` | property | `ContentProjectGUID` | MISSING |  |  |
-| `BuildXact` | property | `IntermediateDirectory` | MISSING |  |  |
-| `BuildXact` | property | `IntermediateFiles` | MISSING |  |  |
-| `BuildXact` | property | `LoggerRootDirectory` | MISSING |  |  |
-| `BuildXact` | property | `OutputDirectory` | MISSING |  |  |
-| `BuildXact` | property | `OutputXactFiles` | MISSING |  |  |
-| `BuildXact` | property | `RebuildAll` | MISSING |  |  |
-| `BuildXact` | property | `RebuiltXactFiles` | MISSING |  |  |
-| `BuildXact` | property | `RootDirectory` | MISSING |  |  |
-| `BuildXact` | property | `TargetPlatform` | MISSING |  |  |
-| `BuildXact` | property | `TargetProfile` | MISSING |  |  |
-| `BuildXact` | property | `XactProjects` | MISSING |  |  |
-| `BuildXact` | property | `XnaFrameworkVersion` | MISSING |  |  |
-| `BuildXact` | method | `Execute()` | MISSING |  |  |
-| `CleanContent` | constructor | `.ctor()` | MISSING |  |  |
-| `CleanContent` | property | `BuildConfiguration` | MISSING |  |  |
-| `CleanContent` | property | `ContentProjectGUID` | MISSING |  |  |
-| `CleanContent` | property | `IntermediateDirectory` | MISSING |  |  |
-| `CleanContent` | property | `OutputDirectory` | MISSING |  |  |
-| `CleanContent` | property | `RootDirectory` | MISSING |  |  |
-| `CleanContent` | property | `TargetPlatform` | MISSING |  |  |
-| `CleanContent` | property | `TargetProfile` | MISSING |  |  |
-| `CleanContent` | method | `Execute()` | MISSING |  |  |
-| `GetLastOutputs` | constructor | `.ctor()` | MISSING |  |  |
-| `GetLastOutputs` | property | `ContentProjectGUID` | MISSING |  |  |
-| `GetLastOutputs` | property | `IntermediateDirectory` | MISSING |  |  |
-| `GetLastOutputs` | property | `OutputContentFiles` | MISSING |  |  |
-| `GetLastOutputs` | method | `Execute()` | MISSING |  |  |
+| `BuildContent` | constant | `CancelEventNameFormat` | SEMANTIC_EQUIVALENT | `BuildContent::CancelEventNameFormat` | XNA's own value verbatim, a string.Format template whose one argument is the content project's GUID. There is no Windows named event here and nothing waits on one; the constant is the observable part. |
+| `BuildContent` | constructor | `.ctor()` | EXACT_EQUIVALENT | `BuildContent()` |  |
+| `BuildContent` | property | `BuildConfiguration` | EXACT_EQUIVALENT | `getBuildConfigurationProperty() / setBuildConfigurationProperty()` |  |
+| `BuildContent` | property | `CompressContent` | EXACT_EQUIVALENT | `getCompressContentProperty() / setCompressContentProperty()` |  |
+| `BuildContent` | property | `ContentProjectGUID` | EXACT_EQUIVALENT | `getContentProjectGUIDProperty() / setContentProjectGUIDProperty()` |  |
+| `BuildContent` | property | `IntermediateDirectory` | EXACT_EQUIVALENT | `getIntermediateDirectoryProperty() / setIntermediateDirectoryProperty()` |  |
+| `BuildContent` | property | `IntermediateFiles` | SEMANTIC_EQUIVALENT | `getIntermediateFilesProperty()` | a std::vector<TaskItem> rather than an ITaskItem[]; read-only, as XNA's is, and filled by Execute(). |
+| `BuildContent` | property | `LoggerRootDirectory` | EXACT_EQUIVALENT | `getLoggerRootDirectoryProperty() / setLoggerRootDirectoryProperty()` |  |
+| `BuildContent` | property | `OutputContentFiles` | SEMANTIC_EQUIVALENT | `getOutputContentFilesProperty()` | a std::vector<TaskItem> rather than an ITaskItem[]; read-only, as XNA's is, and filled by Execute(). |
+| `BuildContent` | property | `OutputDirectory` | EXACT_EQUIVALENT | `getOutputDirectoryProperty() / setOutputDirectoryProperty()` |  |
+| `BuildContent` | property | `PipelineAssemblies` | SEMANTIC_EQUIVALENT | `getPipelineAssembliesProperty()/setPipelineAssembliesProperty()` | a std::vector<TaskItem> rather than an ITaskItem[]. |
+| `BuildContent` | property | `PipelineAssemblyDependencies` | SEMANTIC_EQUIVALENT | `getPipelineAssemblyDependenciesProperty()/setPipelineAssemblyDependenciesProperty()` | a std::vector<TaskItem> rather than an ITaskItem[]. |
+| `BuildContent` | property | `RebuildAll` | EXACT_EQUIVALENT | `getRebuildAllProperty() / setRebuildAllProperty()` |  |
+| `BuildContent` | property | `RebuiltContentFiles` | SEMANTIC_EQUIVALENT | `getRebuiltContentFilesProperty()` | a std::vector<TaskItem> rather than an ITaskItem[]; read-only, as XNA's is, and filled by Execute(). |
+| `BuildContent` | property | `RootDirectory` | EXACT_EQUIVALENT | `getRootDirectoryProperty() / setRootDirectoryProperty()` |  |
+| `BuildContent` | property | `SourceAssets` | SEMANTIC_EQUIVALENT | `getSourceAssetsProperty()/setSourceAssetsProperty()` | a std::vector<TaskItem> rather than an ITaskItem[]. |
+| `BuildContent` | property | `TargetPlatform` | EXACT_EQUIVALENT | `getTargetPlatformProperty() / setTargetPlatformProperty()` |  |
+| `BuildContent` | property | `TargetProfile` | EXACT_EQUIVALENT | `getTargetProfileProperty() / setTargetProfileProperty()` |  |
+| `BuildContent` | method | `Execute()` | HOST_SUBSTITUTION | `Execute()` | Builds every source asset through the canonical coordinator into .xnb, honouring the Name, Importer, Processor, Link and ProcessorParameters metadata a .contentproj writes, and fills OutputContentFiles, RebuiltContentFiles and IntermediateFiles from the build manifest. RebuildAll drops the incremental state. A non-empty PipelineAssemblies is refused rather than ignored, because C++ has no assembly to load and a project naming one expects its own importers to run. |
+| `BuildXact` | constructor | `.ctor()` | EXACT_EQUIVALENT | `BuildXact()` |  |
+| `BuildXact` | property | `BuildConfiguration` | EXACT_EQUIVALENT | `getBuildConfigurationProperty() / setBuildConfigurationProperty()` |  |
+| `BuildXact` | property | `ContentProjectGUID` | EXACT_EQUIVALENT | `getContentProjectGUIDProperty() / setContentProjectGUIDProperty()` |  |
+| `BuildXact` | property | `IntermediateDirectory` | EXACT_EQUIVALENT | `getIntermediateDirectoryProperty() / setIntermediateDirectoryProperty()` |  |
+| `BuildXact` | property | `IntermediateFiles` | SEMANTIC_EQUIVALENT | `getIntermediateFilesProperty()` | a std::vector<TaskItem> rather than an ITaskItem[]; read-only, as XNA's is, and filled by Execute(). |
+| `BuildXact` | property | `LoggerRootDirectory` | EXACT_EQUIVALENT | `getLoggerRootDirectoryProperty() / setLoggerRootDirectoryProperty()` |  |
+| `BuildXact` | property | `OutputDirectory` | EXACT_EQUIVALENT | `getOutputDirectoryProperty() / setOutputDirectoryProperty()` |  |
+| `BuildXact` | property | `OutputXactFiles` | SEMANTIC_EQUIVALENT | `getOutputXactFilesProperty()` | a std::vector<TaskItem> rather than an ITaskItem[]; read-only, as XNA's is, and filled by Execute(). |
+| `BuildXact` | property | `RebuildAll` | EXACT_EQUIVALENT | `getRebuildAllProperty() / setRebuildAllProperty()` |  |
+| `BuildXact` | property | `RebuiltXactFiles` | SEMANTIC_EQUIVALENT | `getRebuiltXactFilesProperty()` | a std::vector<TaskItem> rather than an ITaskItem[]; read-only, as XNA's is, and filled by Execute(). |
+| `BuildXact` | property | `RootDirectory` | EXACT_EQUIVALENT | `getRootDirectoryProperty() / setRootDirectoryProperty()` |  |
+| `BuildXact` | property | `TargetPlatform` | EXACT_EQUIVALENT | `getTargetPlatformProperty() / setTargetPlatformProperty()` |  |
+| `BuildXact` | property | `TargetProfile` | EXACT_EQUIVALENT | `getTargetProfileProperty() / setTargetProfileProperty()` |  |
+| `BuildXact` | property | `XactProjects` | SEMANTIC_EQUIVALENT | `getXactProjectsProperty()/setXactProjectsProperty()` | a std::vector<TaskItem> rather than an ITaskItem[]. |
+| `BuildXact` | property | `XnaFrameworkVersion` | EXACT_EQUIVALENT | `getXnaFrameworkVersionProperty() / setXnaFrameworkVersionProperty()` |  |
+| `BuildXact` | method | `Execute()` | HOST_SUBSTITUTION | `Execute()` | Validates every named project -- that it exists, opens, and opens with an XACT signature -- and then invokes the XACT compiler named by SetXactCompilerEXT() or CNA_XACTBLD, through CNA_XACTBLD_LAUNCHER where one is set, collecting the .xgs, .xwb and .xsb it produced. Validation runs whether or not a compiler is present, so a bad project is told what is wrong with it rather than being told the tool is missing. Compiling an .xap itself needs Microsoft's own XactBld3.exe, which ships with the XNA Game Studio tools and is not something CNA can reimplement or redistribute; where none is found the task answers false with a message naming it. |
+| `CleanContent` | constructor | `.ctor()` | EXACT_EQUIVALENT | `CleanContent()` |  |
+| `CleanContent` | property | `BuildConfiguration` | EXACT_EQUIVALENT | `getBuildConfigurationProperty() / setBuildConfigurationProperty()` |  |
+| `CleanContent` | property | `ContentProjectGUID` | EXACT_EQUIVALENT | `getContentProjectGUIDProperty() / setContentProjectGUIDProperty()` |  |
+| `CleanContent` | property | `IntermediateDirectory` | EXACT_EQUIVALENT | `getIntermediateDirectoryProperty() / setIntermediateDirectoryProperty()` |  |
+| `CleanContent` | property | `OutputDirectory` | EXACT_EQUIVALENT | `getOutputDirectoryProperty() / setOutputDirectoryProperty()` |  |
+| `CleanContent` | property | `RootDirectory` | EXACT_EQUIVALENT | `getRootDirectoryProperty() / setRootDirectoryProperty()` |  |
+| `CleanContent` | property | `TargetPlatform` | EXACT_EQUIVALENT | `getTargetPlatformProperty() / setTargetPlatformProperty()` |  |
+| `CleanContent` | property | `TargetProfile` | EXACT_EQUIVALENT | `getTargetProfileProperty() / setTargetProfileProperty()` |  |
+| `CleanContent` | method | `Execute()` | HOST_SUBSTITUTION | `Execute()` | Removes only the files a valid output manifest proves the pipeline owns, which is the canonical cleaner's own rule; a directory with no manifest is left alone rather than emptied, and one that is not there at all is a success. |
+| `GetLastOutputs` | constructor | `.ctor()` | EXACT_EQUIVALENT | `GetLastOutputs()` |  |
+| `GetLastOutputs` | property | `ContentProjectGUID` | EXACT_EQUIVALENT | `getContentProjectGUIDProperty() / setContentProjectGUIDProperty()` |  |
+| `GetLastOutputs` | property | `IntermediateDirectory` | EXACT_EQUIVALENT | `getIntermediateDirectoryProperty() / setIntermediateDirectoryProperty()` |  |
+| `GetLastOutputs` | property | `OutputContentFiles` | SEMANTIC_EQUIVALENT | `getOutputContentFilesProperty()` | a std::vector<TaskItem> rather than an ITaskItem[]; read-only, as XNA's is. |
+| `GetLastOutputs` | method | `Execute()` | HOST_SUBSTITUTION | `Execute()` | Reads the previous build's manifest and nothing else, so it never rebuilds. No previous build is an empty answer and not a failure, which is what a project asking what is there needs. |
 | `TextureImporter` | constructor | `.ctor()` | EXACT_EQUIVALENT | `TextureImporter()` |  |
 | `TextureImporter` | method | `Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)` | SEMANTIC_EQUIVALENT | `Import(const std::string&, ContentImporterContext&) -> std::shared_ptr<TextureContent>` | the texture is answered by shared pointer; every source XNA reads is read the same way and answers the same content -- a DDS included, whose compressed blocks stay compressed, whose cube becomes a TextureCubeContent and whose volume a Texture3DContent, and whose DX10 extension is refused as XNA refuses it. |
 | `VideoContent` | constructor | `.ctor(System.String)` | EXACT_EQUIVALENT | `VideoContent(const std::string&)` |  |
