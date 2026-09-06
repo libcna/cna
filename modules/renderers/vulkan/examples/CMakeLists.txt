@@ -2124,6 +2124,18 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_device_dispose_order
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-343: ApplyChanges() on a live device is a full Reset on Vulkan.
+        cna_vulkan_test(cna_test_vulkan_resource_events
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_resource_events_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_ResourceEvents
+            COMMAND cna_test_vulkan_resource_events
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_device_reset_events
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_device_reset_events_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DeviceResetEvents
+            COMMAND cna_test_vulkan_device_reset_events
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-095: MultiSampleCount changed on a LIVE device. Vulkan-owned rather
         # than a registration of easygl_msaa_change_test.cpp, because that source asserts EasyGL's
         # own limit -- that the count cannot change post-construction -- which is false here.
