@@ -15,7 +15,7 @@
 
 ## 1. Current status
 
-**Implementation under way.** **One hundred and fifty-one tasks are ✅, one 🟨 and twenty-eight ⬜** as of 2026-09-06 (`awk -F'|' '/^\| VULKAN-[0-9]+ \|/ {print $4}' plans/plan_vulkan.md | sort | uniq -c`, which is the authority for these counts and is what every row-status change is re-run against). The paragraph below is the inline list as it stood at **one hundred and nineteen** ✅ and is kept as history rather than maintained; it names the hundred and eighteen listed here (`VULKAN-004`, `-009`, `-008`, `-020`, `-021`, `-022`, `-023`, `-025`, `-026`, `-027`,
+**Implementation under way.** **One hundred and fifty-two tasks are ✅, one 🟨 and twenty-seven ⬜** as of 2026-09-06 (`awk -F'|' '/^\| VULKAN-[0-9]+ \|/ {print $4}' plans/plan_vulkan.md | sort | uniq -c`, which is the authority for these counts and is what every row-status change is re-run against). The paragraph below is the inline list as it stood at **one hundred and nineteen** ✅ and is kept as history rather than maintained; it names the hundred and eighteen listed here (`VULKAN-004`, `-009`, `-008`, `-020`, `-021`, `-022`, `-023`, `-025`, `-026`, `-027`,
 `-055`, `-090`, `-091`, `-094`, `-095`, `-215`, `-097`, `-098`, `-130`, `-131`, `-132`, `-133`, `-134`, `-141`, `-144`, `-145`, `-146`, `-147`, `-148`, `-149`, `-150`,
 `-151`, `-152`, `-153`, `-154`, `-155`, `-156`, `-157`, `-158`, `-159`, `-160`, `-161`, `-162`, `-163`, `-170`, `-171`, `-172`, `-173`, `-174`, `-175`, `-176`, `-177`, `-179`, `-250`, `-251`, `-265`, `-332`, `-333`,
 `-330`, `-331`, `-339`, `-340`, `-341`, `-342`, `-343`, `-346`, `-347`, `-348`, `-349`, `-370`, `-390`, `-391`, `-392`, `-393`, `-394`, `-395`, `-396`, `-399`, `-400`, `-401`, `-402`, `-403`, `-404`, `-405`, `-406`, `-407`, `-408`, `-470`, `-471`, `-474`, `-475`, `-476`, `-477`, `-481`, `-482`), plus
@@ -325,6 +325,31 @@ and must be applied in any fresh worktree:
    `SharpRuntime::Storage::StoragePaths::SetIsolatedStorageRootOverride` that
    `modules/storage/src/StorageDevice.cpp:290` requires. Building against the sibling default fails
    at `cna_storage`. This is a checkout-version mismatch, recorded here so it is not re-diagnosed.
+
+> **Re-confirmed 2026-09-06 (`VULKAN-001`), against the commit the work has actually reached rather
+> than the one it started from.** Branch **`vulkan`**, **1055** commits ahead of its fork point
+> `1bb2145d9` on `develop`. Both configurations are the ones every measurement in this plan was taken
+> with, read back from their own caches rather than retyped:
+>
+> ```
+> cmake -S . -B cmake-build-vulkan -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+>       -DCNA_GRAPHICS_RENDERER=VULKAN -DCNA_ENABLE_DRACO=OFF -DCNA_USE_CCACHE=ON \
+>       -DCNA_TEST_DISPLAY=:99 \
+>       -DCNA_SHARP_RUNTIME_ROOT=/rv/data/development/github.com/openeggbert/sharp-runtimenext
+> cmake -S . -B cmake-build-easygl -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+>       -DCNA_GRAPHICS_RENDERER=OPENGLES3 -DCNA_ENABLE_DRACO=OFF -DCNA_USE_CCACHE=ON \
+>       -DCNA_TEST_DISPLAY=:99 \
+>       -DCNA_SHARP_RUNTIME_ROOT=/rv/data/development/github.com/openeggbert/sharp-runtimenext
+> ```
+>
+> `cmake --build` exit code **0** for both. **No fourth fix was needed**, which is the part of this
+> row that could only be answered by doing it: the three above are still the whole list.
+>
+> One thing the block above does not say and a reader will want: both caches carry
+> `CMAKE_CXX_COMPILER_LAUNCHER` as a **list** --
+> `/usr/bin/cmake;-E;env;CCACHE_BASEDIR=/rv/data/development/github.com/openeggbert;/usr/bin/ccache`
+> -- not a bare `ccache`. Anything that re-passes it unquoted through a shell splits it and the
+> configure fails; a `-C` preload cache is the way to carry it into a new build directory.
 
 ### 7.3 Test inventory
 
@@ -927,7 +952,7 @@ started, not silently widened.
 
 | ID | Task | Status | Acceptance criterion |
 |---|---|---|---|
-| VULKAN-001 | Record the implementation baseline commit and both build configurations | ⬜ | This file's §7 is re-confirmed against the commit work actually starts from: branch, SHA, the three worktree fixes of §7.2, both `cmake` command lines, and `cmake --build` exit codes for both directories. A configure that needs a fourth fix is added to §7.2 rather than worked around locally. |
+| VULKAN-001 | Record the implementation baseline commit and both build configurations | ✅ | **§7.2 re-confirmed against the commit the work has actually reached, not the one it started from** -- branch `vulkan`, **1055** commits ahead of its fork point `1bb2145d9` on `develop`. Both `cmake` command lines are written out in §7.2, **read back from the two `CMakeCache.txt` files** rather than retyped from memory, and `cmake --build` returns **0** for both directories. **The row's real question is answered by doing it, not by reading:** a configure needing a fourth fix would have had to be added to §7.2. None was -- the three recorded fixes (submodule init, `-DCNA_ENABLE_DRACO=OFF`, and the `sharp-runtimenext` root) are still the whole list, and both configurations still configure and build clean from them. **One thing §7.2 did not say and a reader will hit within minutes:** both caches carry `CMAKE_CXX_COMPILER_LAUNCHER` as a **list** -- `cmake;-E;env;CCACHE_BASEDIR=…;ccache` -- rather than a bare `ccache`. Re-passing it unquoted through a shell splits it and the configure fails; a `-C` preload cache is how to carry it into a new build directory. That is now in §7.2, because a baseline that cannot be reproduced is not a baseline. |
 | VULKAN-002 | Establish a green **EasyGL** test baseline and record it | ⬜ | `ctest --test-dir cmake-build-easygl` run under Xvfb, full output captured, then `--rerun-failed -j1` to separate flakes from failures. The exact pass/fail list is written into this file's §7 as the reference-renderer baseline. A pre-existing EasyGL failure is named, not rounded away. |
 | VULKAN-003 | Establish a green **Vulkan** test baseline and record it | ⬜ | Same, for `cmake-build-vulkan`, and separately for `-R '^Vulkan_'`. Every failure is classified: CNA defect, environment, or driver. Nothing is called "accepted" without naming what accepts it. |
 | VULKAN-004 | Fix or quarantine the pre-existing non-Vulkan build break so the suite can be built at all | ✅ | **Fixed at the call site.** `CnbTextureCodecTests.cpp:475` passed one argument to `CnbDocument::Parse(std::vector<std::uint8_t>, const std::string& origin, const CnbReadLimits&)`; `origin` has no default and every one of the file's other eleven `Parse` calls supplies one (`:190`, `:210`, `:217`, …). The asset is encoded as `EncodeTexture2DToCnb(data, "mipped")`, so the origin is `"mipped.cnb"`. Introduced by `347139500` (`feat(cnb): generate mip chains when compiling a source image`); not another plan's in-flight work, so it is repaired rather than quarantined. **Evidence:** `cmake --build cmake-build-vulkan -j16` exits **0**; `ctest -R CnbTextureCodecTest` is 15/15 including `GeneratedMipChainSurvivesAnEncodeDecodeRoundTrip`. **Discovered while closing it:** §7.3's `Total Tests: 302` / `407` were measured with this break present. `gtest_discover_tests` runs each test binary *after* it links, so the unbuildable `cna_content_test_objects` suppressed every test it and its dependents own. With the build green the same command reports **9071** registered CTests for the Vulkan configuration. The `215 ^Vulkan_` count is unchanged and is the number this plan's parity arithmetic actually uses. `VULKAN-006` owns re-stating §7.3 from a green build. |
