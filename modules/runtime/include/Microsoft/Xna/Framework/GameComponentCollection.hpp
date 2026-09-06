@@ -3,7 +3,9 @@
 #pragma once
 
 #include <cstddef>
+#include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "CNA/CNAHelper.hpp"
@@ -54,6 +56,35 @@ namespace Microsoft::Xna::Framework
          * @return true if the component is present; false otherwise.
          */
         [[nodiscard]] bool Contains(IGameComponent* item) const;
+
+        /**
+         * @brief Adds a component the collection keeps alive for as long as it is registered.
+         *
+         * XNA's `GameComponentCollection` is a `Collection<IGameComponent>` and therefore holds a
+         * strong reference: a component stays alive for exactly as long as it is registered, and a
+         * game that drops its own last reference leaves a live component in `Game.Components`
+         * rather than a dangling one. This overload restores that guarantee for a component the
+         * game owns on the heap; the raw-pointer overload remains right for one the game holds as
+         * a member and outlives itself.
+         *
+         * The reference is released after `ComponentRemoved` is raised, so a handler still sees a
+         * live component, and dropping it may destroy the component there and then.
+         *
+         * @note CNAEXT — not a separate XNA overload; C++ has to say which of the two ownership
+         *       shapes a call means, where C# has only one.
+         * @param item The component to add. A null pointer is added as a null entry, matching the
+         *        raw-pointer overload.
+         */
+        CNAEXT void Add(std::shared_ptr<IGameComponent> item);
+
+        /**
+         * @brief Inserts a component the collection keeps alive, at the given index.
+         *
+         * @note CNAEXT — see Add(std::shared_ptr<IGameComponent>).
+         * @param index Zero-based index to insert at.
+         * @param item The component to insert.
+         */
+        CNAEXT void Insert(size_type index, std::shared_ptr<IGameComponent> item);
 
         /**
          * @brief Adds a component to the end of the collection.
@@ -132,6 +163,10 @@ namespace Microsoft::Xna::Framework
 
     private:
         std::vector<IGameComponent*> items_;
+
+        // Strong references for components added through the shared_ptr overloads; a
+        // component added as a raw pointer has no entry and its lifetime stays the game's.
+        std::unordered_map<IGameComponent*, std::shared_ptr<IGameComponent>> owned_;
 
         void InsertItem(size_type index, IGameComponent* item);
         void RemoveItem(size_type index);
