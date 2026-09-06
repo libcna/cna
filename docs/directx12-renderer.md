@@ -11,12 +11,28 @@ that launch is too heavy for a normal CI run on this dev loop. See "Known limita
 boundary. Select it with:
 
 ```bash
-cmake -S . -B cmake-build-d3d12 \
-  -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake \
-  -DCNA_GRAPHICS_RENDERER=D3D12 \
+cmake -S . -B cmake-build-d3d12 -G Ninja \
+  -DCMAKE_TOOLCHAIN_FILE="$PWD/cmake/toolchains/mingw-w64.cmake" \
+  -DCNA_GRAPHICS_RENDERER=DIRECTX12 \
   -DCNA_BUILD_TESTS=ON
-cmake --build cmake-build-d3d12 --target CnaTests
+cmake --build cmake-build-d3d12
 ```
+
+The renderer identity is **`DIRECTX12`**, not `D3D12`, and the toolchain file must be an absolute
+path — both corrected by `plans/plan_dx.md` `DX-249`, which found the documented command does not
+work. `--target CnaTests` was also wrong: that target does not build on any Windows toolchain (see
+`.github/workflows/d3d-windows-ci.yml`'s own header), and it is not what produces this renderer's
+test executables.
+
+### Running the tests off-screen
+
+`CNA_FORCE_HEADLESS_DEVICE_EXT=DIRECTX12` makes `GraphicsDevice` create this renderer's device as
+if `PresentationParameters::HeadlessEXT` had been set — no window, no swap chain, rendering into the
+implicit off-screen back buffer (`DX-241`) and reading it back through `GetBackBufferData`
+(`DX-205`). That is what lets the renderer-neutral `Game`-harness corpus run here at all, since
+`CreateSwapChainForHwnd` faults inside vanilla Wine's `dxgi.dll`; `ctest -L DIRECTX12` sets it for
+every registered fixture (`DX-235`). It is a comma-separated renderer-name list, so it cannot
+accidentally put a renderer that has no headless mode into one.
 
 `D3D12` is hard-gated to `CMAKE_SYSTEM_NAME=Windows` at configure time, same as `D3D11`. The
 `cna_renderer_directx12` target links only `d3d12`+`dxgi`+`D3DCommon` — no `dxguid`, no
@@ -145,6 +161,36 @@ rather than starting a new scheme.
 ## Known limitations (2026-07-14, re-audited against `plans/plan_dx.md`'s actual `DX-100`–`DX-148` row
 status — most of this section's earlier revisions predated Phase DX13/DX14/DX15 landing and were
 significantly stale; re-derived from source, not copy-edited)
+
+> **Partially superseded on 2026-09-06 by Phase DX17.** Everything below still describes the
+> swap-chain/real-Windows boundary correctly, but several *rendering* gaps it does not mention have
+> since been closed, and a few things it presents as working were measured not to be. What changed,
+> each with the row that changed it and the fixture that proves it:
+>
+> * `GraphicsDevice.ScissorRectangle` and `RasterizerState.ScissorTestEnable` were a complete no-op,
+>   including for `SpriteBatch` — now real (`DX-201`).
+> * The whole stencil half of `DepthStencilState` was discarded, and `GraphicsDevice.ReferenceStencil`
+>   was swallowed by an un-overridden virtual — both real now (`DX-202`, `DX-203`), and `SpriteBatch`
+>   honours them too (`DX-210`).
+> * `RasterizerState.DepthBias`/`SlopeScaleDepthBias` were dropped (`DX-206`). Slope-scale bias is
+>   proven; constant bias has no observable effect on **either** D3D renderer here and is an open
+>   question, `DX-256` — not a D3D12-specific defect.
+> * `GraphicsDevice.BlendFactor` had no operand at all, so `Blend::BlendFactor` sampled whatever the
+>   command list defaulted to (`DX-204`).
+> * **Every pipeline state hardcoded `SampleDesc.Count = 1`**, so no draw into the MSAA render
+>   targets this section describes as "real" was legal. The clear/resolve proofs it cites never
+>   exercised a draw. Fixed and pixel-proven by a differential AA test (`DX-207`).
+> * `LineList`, `LineStrip` and `PointListEXT` threw by name (`DX-208`).
+> * `GraphicsDevice.GetBackBufferData` threw — there was no `ReadBackbuffer` override (`DX-205`) —
+>   and a windowless device could not `Clear()` or draw at all until the game bound a
+>   `RenderTarget2D` (`DX-241`).
+> * **A `RenderTarget2D` bound through the public `GraphicsDevice.SetRenderTarget` had no
+>   depth-stencil view**, because the one-target case routes through the MRT path and that path
+>   dropped it (`DX-255`); the cube-face path had the same omission (`DX-209`). Depth and stencil
+>   testing inside a render target did not work at all.
+>
+> `ctest -L DIRECTX12` went from 2 registered tests to 30 over the same phase (`DX-235`). The
+> remaining failures are listed there per fixture, each owned by a task row.
 
 - **Swap-chain presentation under *plain* Wine does not work — but under a properly Proton-managed
   launch, it does.** `CreateSwapChainForHwnd`/`FLIP_DISCARD` crashes under plain Wine: a null-pointer

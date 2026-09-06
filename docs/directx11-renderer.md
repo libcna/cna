@@ -8,12 +8,23 @@ real Windows hardware verification is a separate, still-open gate, see "Known li
 it with:
 
 ```bash
-cmake -S . -B cmake-build-d3d11 \
-  -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake \
-  -DCNA_GRAPHICS_RENDERER=D3D11 \
+cmake -S . -B cmake-build-d3d11 -G Ninja \
+  -DCMAKE_TOOLCHAIN_FILE="$PWD/cmake/toolchains/mingw-w64.cmake" \
+  -DCNA_GRAPHICS_RENDERER=DIRECTX11 \
   -DCNA_BUILD_TESTS=ON
 cmake --build cmake-build-d3d11 -j
 ```
+
+Three corrections to that command, all found by running it (`plans/plan_dx.md` `DX-249`):
+
+* the renderer identity is **`DIRECTX11`**, not `D3D11` — `D3D11` is not one of the 49 accepted
+  values and fails configuration;
+* the toolchain file must be an **absolute** path. The vendored-SDL prebuild runs its own
+  sub-configure from a different working directory, and a relative toolchain path fails there with
+  `Could not find toolchain file`, several minutes into the configure;
+* `CNA_SHARP_RUNTIME_ROOT` must name a sharp-runtime checkout that has the `Xml.Serialization`
+  module. `Xml.Serialization` is excluded from the component set on Windows targets (`DX-250`), but
+  the sibling checkout still has to be new enough for the rest.
 
 `D3D11` is hard-gated to `CMAKE_SYSTEM_NAME=Windows` at configure time — attempting it on a native
 Linux/macOS configure fails fast with `FATAL_ERROR`, pointing at the MinGW-w64 toolchain file above.
@@ -44,6 +55,21 @@ renderer's *logic* (call sequencing, resource lifetime, HLSL correctness, pixel 
 "Wine proves the logic, not real-hardware parity" bar this project already established for
 `SDL_RENDERER`. Real DXGI present/tearing behavior, real device-lost recovery, WARP fallback, and
 MSVC-vs-MinGW ABI parity are still open — see `plans/plan_dx.md` `DX-90`/`DX-91`.
+
+**Measured state as of 2026-09-06 (`plans/plan_dx.md` Phase DX17).** This renderer's own code was
+almost unchanged by that phase — it was already the stronger of the two — but its *proof* was not
+what it looked like. Until `DX-251`, **the entire D3D11 example/CTest suite had been unbuildable
+since the physical-module migration** (`cna_renderer_d3dcommon` was a PRIVATE dependency of a module
+whose public headers include it), so the last recorded numbers in the plan could not have been
+reproduced from the tree. With that fixed, `ctest -L DIRECTX11` runs **49 tests** and
+`DirectX11_Smoke` is **165/165 checks**. Four tests fail, all pre-existing or newly opened rather
+than regressions: `DirectX11_DescriptorCapacityContract` and `DirectX11_PointSamplingContract` (the
+pixel-centre family, `DX-253`), `DirectX11_DualTextureSlotSamplerContract` (a shared fixture whose
+skip path leaves a render target bound, plus a genuinely missing `dual_texture_colored3d` shader
+variant, `DX-254`), and `DirectX11_DepthBias` (`DX-256`, which fails identically on D3D12 and is
+therefore not a D3D11 defect). One real feature gap this renderer *does* have and the text above
+does not mention: `DualTextureEffect` is refused at any vertex stride but 20, because
+`dual_texture_colored3d` was never ported.
 
 ## Development environment: Wine + DXVK dev-loop
 
