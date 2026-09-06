@@ -936,7 +936,13 @@ namespace Microsoft::Xna::Framework::Graphics
             only.combinedByteBase = 0;
             only.vertexOffset = 0;
             only.instanceFrequency = 0;
-            only.vertexCount = currentVertexBuffer_->GetRenderer().GetVertexCount();
+            // plans/plan_fx.md FX-131: a stream's length is the VertexBuffer's own VertexCount -- the capacity it
+            // was constructed with, which XNA fixes there and never changes -- not how many
+            // vertices the last SetData happened to carry. SetData(data, startIndex, elementCount)
+            // writes a PREFIX of the buffer and leaves the rest as it was; validating against the
+            // prefix refuses a draw XNA allows, and a game that fills a large buffer once and
+            // rewrites a short prefix each frame is exactly the shape that hits it.
+            only.vertexCount = currentVertexBuffer_->getVertexCountProperty();
             p.vertexStreamCount = 1;
             p.combinedVertexStride = only.strideInBytes;
             return;
@@ -997,7 +1003,7 @@ namespace Microsoft::Xna::Framework::Graphics
             stream.strideInBytes =
                 buffer->getVertexDeclarationProperty().getVertexStrideProperty();
             stream.instanceFrequency = binding.getInstanceFrequencyProperty();
-            stream.vertexCount = buffer->GetRenderer().GetVertexCount();
+            stream.vertexCount = buffer->getVertexCountProperty();  // plans/plan_fx.md FX-131, see above
             if (stream.instanceFrequency == 0)
             {
                 stream.combinedByteBase = combinedByteBase;
@@ -1129,7 +1135,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // request that leaves the buffer is an error, never a silently clamped or widened draw.
         const int consumedVertexCount =
             CheckedPrimitiveElementCount(primitiveType, primitiveCount);
-        const int availableVertexCount = currentVertexBuffer_->GetRenderer().GetVertexCount();
+        const int availableVertexCount = currentVertexBuffer_->getVertexCountProperty();
         // REMED-GFX-200: the binding offset moves the whole range, so it is part of what must fit.
         const int bindingVertexOffset = CurrentVertexBufferOffset();
         if (bindingVertexOffset > availableVertexCount ||
@@ -1212,7 +1218,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 "The requested primitive range exceeds the bound index buffer.");
         }
 
-        const int availableVertexCount = currentVertexBuffer_->GetRenderer().GetVertexCount();
+        const int availableVertexCount = currentVertexBuffer_->getVertexCountProperty();
         // REMED-GFX-200: the binding offset moves the whole declared range, so it is part of what
         // must fit -- exactly as DrawInstancedPrimitives below has counted it since REMED-GFX-118.
         const int bindingVertexOffset = CurrentVertexBufferOffset();
@@ -1316,7 +1322,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // REMED-GFX-200: the same binding-0 rule the ordinary routes above now use, single-sourced.
         const int vertexBufferOffset = CurrentVertexBufferOffset();
 
-        const int availableVertexCount = currentVertexBuffer_->GetRenderer().GetVertexCount();
+        const int availableVertexCount = currentVertexBuffer_->getVertexCountProperty();
         if (vertexBufferOffset > availableVertexCount ||
             baseVertex > availableVertexCount - vertexBufferOffset ||
             minVertexIndex > availableVertexCount - vertexBufferOffset - baseVertex ||

@@ -563,6 +563,36 @@ namespace CNA::Internal::Renderers::EasyGL
         MOJOSHADER_effectBeginPass(effectData_, passIndex);
         passActive_ = true;
 
+        // plans/plan_fx.md FX-129: a pass names its own shader pair, and MojoShader binds it through
+        // MOJOSHADER_glBindShaders -- which returns SILENTLY when the pair fails to link, leaving
+        // the PREVIOUS program bound (`program = MOJOSHADER_glLinkProgram(v, p); if (program ==
+        // NULL) return;`). Nothing downstream can tell: BindCompiledEffectForDrawEXT reads the
+        // bound pair back with MOJOSHADER_glGetBoundShaders and validates this draw's vertex
+        // declaration against a shader from an unrelated effect. The first symptom is a complaint
+        // naming an attribute this effect never had -- and when the two layouts happen to agree,
+        // there is no symptom at all, just the wrong program's pixels. Compare what the pass
+        // selected with what is actually bound, here, where the pass that failed is still known.
+        //
+        // A pass with no vertex shader of its own is the one shape this cannot judge: GL has no
+        // such thing as a pixel-only program ("program lacks a vertex shader"), so the link is
+        // *expected* to fail and leaving the previously bound program current is exactly how such
+        // a pass inherits a vertex shader (FX-128). Only a pass that offered MojoShader a complete
+        // pair is checked.
+        MOJOSHADER_glShader* boundVertexShader = nullptr;
+        MOJOSHADER_glShader* boundPixelShader = nullptr;
+        MOJOSHADER_glGetBoundShaders(&boundVertexShader, &boundPixelShader);
+        if ((effectData_->current_vert != nullptr) && (effectData_->current_pixl != nullptr) &&
+            (static_cast<const void*>(boundVertexShader) != effectData_->current_vert ||
+             static_cast<const void*>(boundPixelShader) != effectData_->current_pixl))
+        {
+            const char* const linkError = MOJOSHADER_glGetError();
+            throw System::NotSupportedException(
+                std::string("CNA EasyGL: this compiled effect's pass could not be made current -- "
+                            "linking its vertex and pixel shader pair failed, so the previously "
+                            "bound program is still the current one. GL reported: ") +
+                ((linkError != nullptr && linkError[0] != '\0') ? linkError : "(no message)"));
+        }
+
         if (stateChanges_.render_state_change_count > kMaximumReflectedItems ||
             (stateChanges_.render_state_change_count > 0 &&
              stateChanges_.render_state_changes == nullptr) ||

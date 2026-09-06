@@ -7515,8 +7515,24 @@ else
             vbo.set_sub_data(::easygl::BufferTarget::Array, data, byte_count, 0);
         } else {
             // None (or first-ever upload): standard glBufferData.
-            vbo.set_data(::easygl::BufferTarget::Array, data, byte_count,
-                         ::easygl::BufferUsage::DynamicDraw);
+            //
+            // plans/plan_fx.md FX-131: sized by the buffer's own CAPACITY, not by this upload. XNA fixes a
+            // VertexBuffer's VertexCount at construction and SetData(data, startIndex,
+            // elementCount) writes a PREFIX, leaving the rest of the buffer as it was -- so a
+            // short upload must not shrink the storage a later draw is entitled to read. Sizing
+            // it to byte_count made the GL buffer track the last upload instead, which is both a
+            // divergence and an out-of-bounds read waiting to happen. The Discard branch above
+            // already allocates this way; this is the same allocation without the orphaning.
+            const std::size_t total = static_cast<std::size_t>(capacity) * stride_in_bytes_;
+            if (total > byte_count) {
+                vbo.set_data(::easygl::BufferTarget::Array, nullptr, total,
+                             ::easygl::BufferUsage::DynamicDraw);
+                if (byte_count > 0)
+                    vbo.set_sub_data(::easygl::BufferTarget::Array, data, byte_count, 0);
+            } else {
+                vbo.set_data(::easygl::BufferTarget::Array, data, byte_count,
+                             ::easygl::BufferUsage::DynamicDraw);
+            }
             gpu_allocated_ = true;
         }
     }
