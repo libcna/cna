@@ -2281,6 +2281,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-336: backbuffer resize -- the path VULKAN-404 found serving the pre-resize frame.
+        cna_vulkan_test(cna_test_vulkan_backbuffer_resize
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_backbuffer_resize_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_BackbufferResize
+            COMMAND cna_test_vulkan_backbuffer_resize
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-339: the release path that also runs vkDeviceWaitIdle and the
         # retirement lists. HasRenderer() must be false after the first Dispose and no second
         # release may be attempted.
