@@ -20,9 +20,12 @@
 // only the fields that differ from a per-variant default) if the full-tuple key's cache-object count
 // becomes a real, measured problem, but that is not assumed to be true yet.
 //
-// Stencil state and scissor-enable are deliberately NOT part of this first key/desc (matches the
-// concrete-first-implementation scope this and other DX-12x rows explicitly allow) -- a documented,
-// honest gap, not silently dropped.
+// plans/plan_dx.md DX-202 closed the stencil half of that gap: every field of XNA's DepthStencilState
+// except ReferenceStencil is now part of this key and of the D3D12_DEPTH_STENCIL_DESC below.
+// ReferenceStencil is deliberately NOT here, and that is not an omission: it is not part of
+// D3D12_DEPTH_STENCIL_DESC at all, it is an argument to OMSetStencilRef() at record time -- the
+// same split D3D11DepthStencilStateCache already documents for OMSetDepthStencilState() (DX-203).
+// Scissor-enable is still out; that is DX-201.
 
 #include "CNA/Internal/Renderers/D3DCommon/D3DShaderCache.hpp"
 
@@ -32,6 +35,7 @@
 #include <cstddef>
 #include <map>
 #include <tuple>
+#include <utility>
 
 namespace CNA::Internal::Renderers::DirectX12
 {
@@ -75,6 +79,23 @@ namespace CNA::Internal::Renderers::DirectX12
         bool depthWriteEnable = true;
         int depthFunc = 3; // CompareFunction::LessEqual (XNA's own DepthStencilState.Default)
 
+        // DX-202: the stencil half, same raw-XNA-ordinal convention as everything above and the
+        // same field set D3D11DepthStencilStateCache::GetOrCreate already takes. Defaults are XNA's
+        // own DepthStencilState.Default: stencil off, CompareFunction::Always (ordinal 0),
+        // StencilOperation::Keep (ordinal 0), full 8-bit read/write masks, single-sided.
+        bool stencilEnable = false;
+        int stencilFunc = 0;        // CompareFunction::Always
+        int stencilPass = 0;        // StencilOperation::Keep
+        int stencilFail = 0;        // StencilOperation::Keep
+        int stencilDepthFail = 0;   // StencilOperation::Keep
+        int stencilMask = 0xFF;
+        int stencilWriteMask = 0xFF;
+        bool twoSidedStencilMode = false;
+        int ccwStencilFunc = 0;
+        int ccwStencilPass = 0;
+        int ccwStencilFail = 0;
+        int ccwStencilDepthFail = 0;
+
         // Rasterizer (D3DStateMapping::CullModeToD3D11 / FillModeToD3D11 ordinals).
         int cullMode = 2;  // CullMode::CullCounterClockwiseFace (XNA's own RasterizerState.CullCounterClockwise default)
         int fillMode = 0;  // FillMode::Solid
@@ -86,6 +107,30 @@ namespace CNA::Internal::Renderers::DirectX12
         // ColorWriteChannels (R=1,G=2,B=4,A=8) is bit-identical to D3D12_COLOR_WRITE_ENABLE_*.
         int colorWriteMask = 15;             // ColorWriteChannels.All
         unsigned int sampleMask = 0xFFFFFFFFu; // MultiSampleMask == -1 (all samples)
+
+        /// DX-202: every field of this struct, by value, as the cache key. Adding a field to the
+        /// struct and forgetting it here is the one mistake that would make two different pipeline
+        /// states share one cached PSO, so this list and the field list above are kept adjacent
+        /// deliberately.
+        [[nodiscard]] std::tuple<int, std::size_t,
+                                 int, int, int, int, int, int,
+                                 bool, bool, int,
+                                 bool, int, int, int, int, int, int,
+                                 bool, int, int, int, int,
+                                 int, int,
+                                 int, unsigned> AsCacheKeyEXT() const
+        {
+            return std::make_tuple(static_cast<int>(variant), strideInBytes,
+                                   colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend,
+                                   colorBlendFunc, alphaBlendFunc,
+                                   depthEnable, depthWriteEnable, depthFunc,
+                                   stencilEnable, stencilFunc, stencilPass, stencilFail,
+                                   stencilDepthFail, stencilMask, stencilWriteMask,
+                                   twoSidedStencilMode, ccwStencilFunc, ccwStencilPass,
+                                   ccwStencilFail, ccwStencilDepthFail,
+                                   cullMode, fillMode,
+                                   colorWriteMask, sampleMask);
+        }
     };
 
     /// Caches ID3D12PipelineState (graphics) objects keyed by D3D12PipelineStateDesc's full field
@@ -115,12 +160,15 @@ namespace CNA::Internal::Renderers::DirectX12
         [[nodiscard]] std::size_t GetCacheSizeEXT() const { return cache_.size(); }
 
     private:
-        using Key = std::tuple<int, std::size_t,
-                               int, int, int, int, int, int,
-                               bool, bool, int,
-                               int, int,
-                               int, unsigned,          // + colorWriteMask, sampleMask (REMED-GFX-077)
-                               unsigned, unsigned>; // + rtvFormat, dsvFormat
+        // DX-202: the key is derived from the desc rather than re-listed field by field. A hand-written
+        // tuple type plus a hand-written brace initialiser is two places to forget a new field, and
+        // forgetting one there is silent -- two genuinely different pipeline states would collide on
+        // one cache entry and the second draw would quietly get the first one's state. AsCacheKeyEXT()
+        // is the single list; the render-target formats are appended here because they are arguments
+        // to GetOrCreate(), not properties of the desc.
+        using Key = decltype(std::tuple_cat(
+            std::declval<const D3D12PipelineStateDesc&>().AsCacheKeyEXT(),
+            std::make_tuple(0u, 0u)));
         std::map<Key, ComPtr<ID3D12PipelineState>> cache_;
     };
 }

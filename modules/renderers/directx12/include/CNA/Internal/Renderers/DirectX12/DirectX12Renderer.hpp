@@ -74,6 +74,11 @@ namespace CNA::Internal::Renderers::DirectX12
         /// swap chain is available (e.g. off-screen construction, or this dev loop's own
         /// documented Wine/vkd3d-proton swap-chain limitation -- see DX-100/DX-102).
         void Present() override;
+        /// plans/plan_dx.md DX-203: GraphicsDevice.ReferenceStencil, which XNA exposes as a standalone
+        /// property rather than as part of DepthStencilState. On D3D12 it is not pipeline state at
+        /// all -- it is OMSetStencilRef() on the command list -- so setting it only records the
+        /// value here and every subsequent draw applies it, with no PSO rebuild and no cache entry.
+        void SetReferenceStencil(int referenceStencil) override;
         /// plans/plan_dx.md DX-205: real GPU->CPU readback of this device's back buffer, the same
         /// contract D3D11's own DX-28 override implements. The source is the swap chain's current
         /// back buffer when there is a swap chain, and DX-241's implicit off-screen back buffer
@@ -422,7 +427,9 @@ namespace CNA::Internal::Renderers::DirectX12
          *  convention BindOffscreenColorTargetEXT() itself documents). CNAEXT. */
         void BindOffscreenColorTargetsEXT(ID3D12Resource* const* resources,
                                           const D3D12_CPU_DESCRIPTOR_HANDLE* rtvs,
-                                          int count, DXGI_FORMAT format, int width, int height);
+                                          int count, DXGI_FORMAT format, int width, int height,
+                                          D3D12_CPU_DESCRIPTOR_HANDLE dsv = D3D12_CPU_DESCRIPTOR_HANDLE{},
+                                          DXGI_FORMAT dsvFormat = DXGI_FORMAT_UNKNOWN);
         /** @brief Clears the off-screen binding set by BindOffscreenColorTargetEXT() -- subsequent
          *  Clear()/draw calls fall back to the honest "not yet implemented" throw. CNAEXT. */
         void UnbindOffscreenColorTargetEXT();
@@ -611,6 +618,15 @@ namespace CNA::Internal::Renderers::DirectX12
                                   const Matrix& world, const Matrix& view, const Matrix& projection,
                                   PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
 
+        /// plans/plan_dx.md DX-202: copies every tracked XNA render-state ordinal into @p psoDesc. This used
+        /// to be the same thirteen assignments written out at each of the three draw sites, which is
+        /// how the stencil half stayed missing from all three at once. A single function is also
+        /// what keeps a *new* PSO field from being wired into two sites and forgotten in the third --
+        /// a mistake whose only symptom would be one draw route silently using another's state.
+        /// The variant, stride and render-target formats stay per-site: they are properties of the
+        /// draw, not of the device's current state.
+        void FillPsoStateFromCurrentEXT(D3D12PipelineStateDesc& psoDesc) const;
+
         std::unique_ptr<PlatformRendererSurfaceState> surface_;
         HWND hwnd_ = nullptr;
         int virtualWidth_ = 0;
@@ -709,6 +725,10 @@ namespace CNA::Internal::Renderers::DirectX12
         IRenderTargetCubeRenderer* currentCubeRT_ = nullptr;
         /// REMED-GFX-134: finalizes and forgets the currently tracked cube target, if any.
         void FlushPendingCubeResolveEXT();
+        /// DX-255: finalizes a previously bound MRT set (or single target bound through
+        /// SetRenderTargets) by calling UnbindAsRenderTarget() on each of its targets, then clears
+        /// the tracking. Idempotent; a no-op when nothing was bound that way.
+        void FlushPendingMrtResolveEXT();
 
         // DX-106/DX-109: single shared per-resource barrier-state tracker, registered with by every
         // real D3D12 resource this renderer creates (vertex/index buffers, textures -- DX-109).
@@ -804,6 +824,25 @@ namespace CNA::Internal::Renderers::DirectX12
         bool currentDepthEnable_ = false;
         bool currentDepthWriteEnable_ = false;
         int currentDepthFunc_ = 3;       // CompareFunction::LessEqual (real XNA ordinal)
+        // DX-202/DX-203: the stencil half of DepthStencilState, tracked exactly like the depth half
+        // above and defaulting to XNA's own DepthStencilState.Default (stencil off,
+        // CompareFunction::Always, StencilOperation::Keep, full masks, single-sided, reference 0).
+        // currentReferenceStencil_ is deliberately NOT a PSO field: D3D12 takes it through
+        // OMSetStencilRef() at record time, which is why GraphicsDevice.ReferenceStencil can change
+        // between draws without rebuilding a pipeline state.
+        bool currentStencilEnable_ = false;
+        int currentStencilFunc_ = 0;
+        int currentStencilPass_ = 0;
+        int currentStencilFail_ = 0;
+        int currentStencilDepthFail_ = 0;
+        int currentStencilMask_ = 0xFF;
+        int currentStencilWriteMask_ = 0xFF;
+        bool currentTwoSidedStencilMode_ = false;
+        int currentCcwStencilFunc_ = 0;
+        int currentCcwStencilPass_ = 0;
+        int currentCcwStencilFail_ = 0;
+        int currentCcwStencilDepthFail_ = 0;
+        int currentReferenceStencil_ = 0;
         int currentCullMode_ = 0;        // CullMode::None
         int currentFillMode_ = 0;        // FillMode::Solid
 
@@ -814,6 +853,17 @@ namespace CNA::Internal::Renderers::DirectX12
         ID3D12Resource* extraMrtResources_[kMaxExtraMrtTargets] = {};
         D3D12_CPU_DESCRIPTOR_HANDLE extraMrtRtvs_[kMaxExtraMrtTargets]{};
         int extraMrtCount_ = 0;
+
+        /// plans/plan_dx.md DX-255: the render targets a SetRenderTargets() call bound, so each one's own
+        /// UnbindAsRenderTarget() -- where the per-target MSAA resolve and mip regeneration live --
+        /// runs when the set is replaced. `currentCustomRT_` is a single pointer and cannot
+        /// represent N targets; this is the same split DirectX11Renderer's own
+        /// currentMRTTargets_/FlushPendingMRTResolveEXT() already uses (DX-143), which D3D12 never
+        /// got. The first entry is also tracked here rather than in currentCustomRT_, so exactly one
+        /// of the two mechanisms owns a given bind.
+        static constexpr int kMaxMrtTargets = kMaxExtraMrtTargets + 1;
+        IRenderTargetRenderer* currentMrtTargets_[kMaxMrtTargets] = {};
+        int currentMrtCount_ = 0;
 
         // DX-120: the currently-active occlusion query heap (non-owning, nullptr when no query is
         // active), always slot 0. Real, non-obvious constraint discovered while landing DX-120:

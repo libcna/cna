@@ -28,13 +28,9 @@ namespace CNA::Internal::Renderers::DirectX12
                                                                       const D3D12PipelineStateDesc& desc,
                                                                       DXGI_FORMAT rtvFormat, DXGI_FORMAT dsvFormat)
     {
-        const Key key{static_cast<int>(desc.variant), desc.strideInBytes,
-                      desc.colorSrcBlend, desc.alphaSrcBlend, desc.colorDstBlend, desc.alphaDstBlend,
-                      desc.colorBlendFunc, desc.alphaBlendFunc,
-                      desc.depthEnable, desc.depthWriteEnable, desc.depthFunc,
-                      desc.cullMode, desc.fillMode,
-                      desc.colorWriteMask, desc.sampleMask,
-                      static_cast<unsigned>(rtvFormat), static_cast<unsigned>(dsvFormat)};
+        const Key key = std::tuple_cat(
+            desc.AsCacheKeyEXT(),
+            std::make_tuple(static_cast<unsigned>(rtvFormat), static_cast<unsigned>(dsvFormat)));
         auto it = cache_.find(key);
         if (it != cache_.end())
             return it->second;
@@ -93,13 +89,39 @@ namespace CNA::Internal::Renderers::DirectX12
         // REMED-GFX-077: BlendState.ColorWriteChannels slot 0 (bit-identical to D3D12_COLOR_WRITE_ENABLE_*).
         rt0.RenderTargetWriteMask = static_cast<UINT8>(desc.colorWriteMask & 0xF);
 
-        // Depth -- stencil deliberately left disabled/default, see this header's own file-level doc
-        // comment for why that's an honest, documented gap rather than a silent omission.
+        // Depth and stencil. plans/plan_dx.md DX-202: the stencil half is a field-for-field mirror of
+        // D3D11DepthStencilStateCache::GetOrCreate, through the same D3DCommon mapping tables, so
+        // one XNA DepthStencilState means the same thing on both D3D renderers by construction.
         D3D12_DEPTH_STENCIL_DESC& ds = psoDesc.DepthStencilState;
         ds.DepthEnable = desc.depthEnable ? TRUE : FALSE;
         ds.DepthWriteMask = desc.depthWriteEnable ? D3D12_DEPTH_WRITE_MASK_ALL : D3D12_DEPTH_WRITE_MASK_ZERO;
         ds.DepthFunc = static_cast<D3D12_COMPARISON_FUNC>(CompareFunctionToD3D11(desc.depthFunc));
-        ds.StencilEnable = FALSE;
+        ds.StencilEnable = desc.stencilEnable ? TRUE : FALSE;
+        ds.StencilReadMask = static_cast<UINT8>(desc.stencilMask);
+        ds.StencilWriteMask = static_cast<UINT8>(desc.stencilWriteMask);
+
+        ds.FrontFace.StencilFunc = static_cast<D3D12_COMPARISON_FUNC>(CompareFunctionToD3D11(desc.stencilFunc));
+        ds.FrontFace.StencilPassOp = static_cast<D3D12_STENCIL_OP>(StencilOperationToD3D11(desc.stencilPass));
+        ds.FrontFace.StencilFailOp = static_cast<D3D12_STENCIL_OP>(StencilOperationToD3D11(desc.stencilFail));
+        ds.FrontFace.StencilDepthFailOp =
+            static_cast<D3D12_STENCIL_OP>(StencilOperationToD3D11(desc.stencilDepthFail));
+
+        // XNA's DepthStencilState.TwoSidedStencilMode gates whether the CounterClockwise* fields are
+        // used at all; when false, the front-face ops apply to both faces. Same rule
+        // D3D11DepthStencilStateCache states, and the same one EasyGL follows by only calling the
+        // *_separate(Back, ...) GL entry points when it is true.
+        if (desc.twoSidedStencilMode)
+        {
+            ds.BackFace.StencilFunc = static_cast<D3D12_COMPARISON_FUNC>(CompareFunctionToD3D11(desc.ccwStencilFunc));
+            ds.BackFace.StencilPassOp = static_cast<D3D12_STENCIL_OP>(StencilOperationToD3D11(desc.ccwStencilPass));
+            ds.BackFace.StencilFailOp = static_cast<D3D12_STENCIL_OP>(StencilOperationToD3D11(desc.ccwStencilFail));
+            ds.BackFace.StencilDepthFailOp =
+                static_cast<D3D12_STENCIL_OP>(StencilOperationToD3D11(desc.ccwStencilDepthFail));
+        }
+        else
+        {
+            ds.BackFace = ds.FrontFace;
+        }
 
         psoDesc.NumRenderTargets = (rtvFormat == DXGI_FORMAT_UNKNOWN) ? 0 : 1;
         psoDesc.RTVFormats[0] = rtvFormat;

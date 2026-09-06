@@ -567,6 +567,7 @@ namespace CNA::Internal::Renderers::DirectX12
             owner_->GetResourceStateTrackerEXT().TrackResource(depthResource_.Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE);
 
             dsv_ = owner_->AllocateDsvDescriptorEXT();
+            dsvFormat_ = depthDxgiFormat; // DX-209: needed by BindAsRenderTargetFace()
             D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
             dsvDesc.Format = depthDxgiFormat;
             dsvDesc.ViewDimension = isMsaa_ ? D3D12_DSV_DIMENSION_TEXTURE2DMS : D3D12_DSV_DIMENSION_TEXTURE2D;
@@ -587,8 +588,17 @@ namespace CNA::Internal::Renderers::DirectX12
         activeFace_ = face;
         if (owner_)
         {
+            // plans/plan_dx.md DX-209: bind this cube's own depth-stencil view too. DX-146 fixed exactly
+            // this omission for the 2D leg and left the cube leg behind, so a RenderTargetCube with
+            // a real depth buffer gave every face-targeted draw NO depth buffer -- depth and stencil
+            // tests inert, ClearDepth/ClearStencil inert. XNA allocates ONE depth-stencil buffer per
+            // RenderTargetCube, shared by all six faces (FNA: one glDepthStencilBuffer per target),
+            // which is exactly what this one dsv_ is; a face change therefore does not reset depth,
+            // and that shared-ness is itself part of the contract
+            // (rendertarget_depthstencil_usage_test U2).
             owner_->BindOffscreenColorTargetEXT(colorResource_.Get(), rtv_[face],
-                                                DXGI_FORMAT_R8G8B8A8_UNORM, size_, size_);
+                                                DXGI_FORMAT_R8G8B8A8_UNORM, size_, size_,
+                                                dsv_, dsvFormat_);
         }
     }
 

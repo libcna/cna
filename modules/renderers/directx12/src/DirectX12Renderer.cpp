@@ -885,11 +885,16 @@ namespace CNA::Internal::Renderers::DirectX12
     void DirectX12Renderer::BindOffscreenColorTargetsEXT(ID3D12Resource* const* resources,
                                                               const D3D12_CPU_DESCRIPTOR_HANDLE* rtvs,
                                                               int count, DXGI_FORMAT format,
-                                                              int width, int height)
+                                                              int width, int height,
+                                                              D3D12_CPU_DESCRIPTOR_HANDLE dsv,
+                                                              DXGI_FORMAT dsvFormat)
     {
+        // plans/plan_dx.md DX-255: the depth-stencil view is forwarded. It used to be omitted here, and
+        // because the two trailing parameters of BindOffscreenColorTargetEXT() are defaulted, that
+        // omission was silent: every target bound through this function got a null DSV.
         BindOffscreenColorTargetEXT(count > 0 ? resources[0] : nullptr,
                                     count > 0 ? rtvs[0] : D3D12_CPU_DESCRIPTOR_HANDLE{},
-                                    format, width, height);
+                                    format, width, height, dsv, dsvFormat);
 
         extraMrtCount_ = std::max(0, std::min(count - 1, kMaxExtraMrtTargets));
         for (int i = 0; i < extraMrtCount_; ++i)
@@ -1100,6 +1105,7 @@ namespace CNA::Internal::Renderers::DirectX12
     void DirectX12Renderer::SetRenderTargetCubeFace(IRenderTargetCubeRenderer* rt, int face)
     {
         FlushPendingCubeResolveEXT();
+        FlushPendingMrtResolveEXT(); // DX-255
         if (!rt)
         {
             SetRenderTarget2D(nullptr);
@@ -1118,6 +1124,7 @@ namespace CNA::Internal::Renderers::DirectX12
     {
         // REMED-GFX-134: finalize a prior cube-face bind too -- see FlushPendingCubeResolveEXT.
         FlushPendingCubeResolveEXT();
+        FlushPendingMrtResolveEXT(); // DX-255
         // DX-144: unbind whatever custom target was PREVIOUSLY bound before switching -- this is
         // where D3D12RenderTargetRenderer::UnbindAsRenderTarget() (and therefore GenerateMipsEXT())
         // actually fires. Without this, SetRenderTarget2D(nullptr) blindly restored the back buffer
@@ -1162,6 +1169,7 @@ namespace CNA::Internal::Renderers::DirectX12
         // REMED-GFX-134: and the same for a prior cube-face bind, whose own finalize was never
         // reached at all. SetRenderTargetCubeFace() below re-tracks the new one.
         FlushPendingCubeResolveEXT();
+        FlushPendingMrtResolveEXT(); // DX-255
         if (currentCustomRT_)
         {
             currentCustomRT_->UnbindAsRenderTarget();
@@ -1188,6 +1196,7 @@ namespace CNA::Internal::Renderers::DirectX12
         ID3D12Resource* resources[8];
         D3D12_CPU_DESCRIPTOR_HANDLE rtvs[8];
         const int n = std::min(count, 8);
+        D3D12RenderTargetRenderer* first = nullptr;
         for (int i = 0; i < n; ++i)
         {
             auto* rt = dynamic_cast<D3D12RenderTargetRenderer*>(
@@ -1196,10 +1205,42 @@ namespace CNA::Internal::Renderers::DirectX12
                 throw std::runtime_error("DirectX12Renderer::SetRenderTargets: target is not a real D3D12RenderTargetRenderer");
             resources[i] = rt->GetColorResourceEXT();
             rtvs[i] = rt->GetRtvEXT();
+            if (i == 0) first = rt;
         }
+        // plans/plan_dx.md DX-255: XNA takes the depth-stencil buffer from render target 0, exactly as
+        // DirectX11Renderer::SetRenderTargets() already does. Omitting it here is what made every
+        // RenderTarget2D bound through GraphicsDevice::SetRenderTarget -- which routes through this
+        // function even for ONE target -- silently have no depth buffer at all: no depth test, no
+        // stencil test, and ClearDepth/ClearStencil inert against it. Found by
+        // rendertarget_depthstencil_usage_test, which scored 7/29 on this renderer solely because of
+        // it, while its own C1 control ("does depth testing work at all inside a render target?")
+        // could never pass.
         BindOffscreenColorTargetsEXT(resources, rtvs, n, DXGI_FORMAT_R8G8B8A8_UNORM,
                                      renderTargets[0].GetWidth(),
-                                     renderTargets[0].GetHeight());
+                                     renderTargets[0].GetHeight(),
+                                     first ? first->GetDsvEXT() : D3D12_CPU_DESCRIPTOR_HANDLE{},
+                                     first ? first->GetDsvFormatEXT() : DXGI_FORMAT_UNKNOWN);
+
+        // DX-255: and remember the set, so each target's own UnbindAsRenderTarget() (MSAA resolve,
+        // mip regeneration) runs when it is replaced. currentCustomRT_ cannot hold N targets; this
+        // mirrors D3D11's own currentMRTTargets_/FlushPendingMRTResolveEXT (DX-143), which D3D12
+        // never had -- so an MRT set's targets were never finalized here at all.
+        currentMrtCount_ = std::min(n, kMaxMrtTargets);
+        for (int i = 0; i < currentMrtCount_; ++i)
+            currentMrtTargets_[i] = renderTargets[i].GetRenderTarget2D();
+    }
+
+    void DirectX12Renderer::FlushPendingMrtResolveEXT()
+    {
+        if (currentMrtCount_ <= 0) return;
+        // Copy and clear first: UnbindAsRenderTarget() calls back into this renderer
+        // (RestoreBackBufferRenderTargetEXT), and re-entering this function must find nothing to do.
+        IRenderTargetRenderer* targets[kMaxMrtTargets] = {};
+        const int n = currentMrtCount_;
+        for (int i = 0; i < n; ++i) targets[i] = currentMrtTargets_[i];
+        currentMrtCount_ = 0;
+        for (int i = 0; i < n; ++i)
+            if (targets[i]) targets[i]->UnbindAsRenderTarget();
     }
 
     void DirectX12Renderer::Clear(float r, float g, float b, float a)
@@ -1645,21 +1686,78 @@ namespace CNA::Internal::Renderers::DirectX12
 
     void DirectX12Renderer::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,
                                                         int depthFunc,
-                                                        bool /*stencilEnable*/, int /*stencilFunc*/,
-                                                        int /*stencilPass*/, int /*stencilFail*/,
-                                                        int /*stencilDepthFail*/,
-                                                        int /*stencilMask*/, int /*stencilWriteMask*/,
-                                                        int /*referenceStencil*/,
-                                                        bool /*twoSidedStencilMode*/,
-                                                        int /*ccwStencilFunc*/, int /*ccwStencilPass*/,
-                                                        int /*ccwStencilFail*/, int /*ccwStencilDepthFail*/)
+                                                        bool stencilEnable, int stencilFunc,
+                                                        int stencilPass, int stencilFail,
+                                                        int stencilDepthFail,
+                                                        int stencilMask, int stencilWriteMask,
+                                                        int referenceStencil,
+                                                        bool twoSidedStencilMode,
+                                                        int ccwStencilFunc, int ccwStencilPass,
+                                                        int ccwStencilFail, int ccwStencilDepthFail)
     {
-        // DX-118: stencil fields deliberately not threaded into the PSO cache key -- matches
-        // D3D12PipelineStateCache's own documented "stencil deliberately NOT part of this first
-        // key/desc" scope (DX-107). Depth-only for now; a real, honest follow-up gap.
+        // plans/plan_dx.md DX-202/DX-203: every field is now carried. DX-118 deliberately dropped the
+        // stencil half because D3D12PipelineStateCache had no stencil in its key; it does now, so
+        // the parameters that were named-and-discarded here are named and used. Twelve of the
+        // thirteen are pipeline state; referenceStencil is not (OMSetStencilRef at record time),
+        // which is why it is tracked alongside rather than folded into the PSO key.
         currentDepthEnable_ = depthEnable;
         currentDepthWriteEnable_ = depthWriteEnable;
         currentDepthFunc_ = depthFunc;
+        currentStencilEnable_ = stencilEnable;
+        currentStencilFunc_ = stencilFunc;
+        currentStencilPass_ = stencilPass;
+        currentStencilFail_ = stencilFail;
+        currentStencilDepthFail_ = stencilDepthFail;
+        currentStencilMask_ = stencilMask;
+        currentStencilWriteMask_ = stencilWriteMask;
+        currentTwoSidedStencilMode_ = twoSidedStencilMode;
+        currentCcwStencilFunc_ = ccwStencilFunc;
+        currentCcwStencilPass_ = ccwStencilPass;
+        currentCcwStencilFail_ = ccwStencilFail;
+        currentCcwStencilDepthFail_ = ccwStencilDepthFail;
+        // XNA applies DepthStencilState.ReferenceStencil as part of the state object, and
+        // GraphicsDevice.ReferenceStencil overrides it afterwards (DX-203); taking it here keeps the
+        // two orders consistent with D3D11, whose OMSetDepthStencilState call does the same.
+        currentReferenceStencil_ = referenceStencil;
+    }
+
+    void DirectX12Renderer::SetReferenceStencil(int referenceStencil)
+    {
+        // DX-203: no PSO involvement at all -- every draw records OMSetStencilRef() from this value,
+        // so the next draw sees it. That is what makes ReferenceStencil a standalone, immediately
+        // effective property rather than something that has to go through ApplyDepthStencilState.
+        currentReferenceStencil_ = referenceStencil;
+    }
+
+    void DirectX12Renderer::FillPsoStateFromCurrentEXT(D3D12PipelineStateDesc& psoDesc) const
+    {
+        psoDesc.colorSrcBlend = currentColorSrcBlend_;
+        psoDesc.alphaSrcBlend = currentAlphaSrcBlend_;
+        psoDesc.colorDstBlend = currentColorDstBlend_;
+        psoDesc.alphaDstBlend = currentAlphaDstBlend_;
+        psoDesc.colorBlendFunc = currentColorBlendFunc_;
+        psoDesc.alphaBlendFunc = currentAlphaBlendFunc_;
+        psoDesc.colorWriteMask = currentColorWriteMask_; // REMED-GFX-077 (static PSO state)
+        psoDesc.sampleMask = currentSampleMask_;         // REMED-GFX-077 (static PSO state)
+        psoDesc.depthEnable = currentDepthEnable_;
+        psoDesc.depthWriteEnable = currentDepthWriteEnable_;
+        psoDesc.depthFunc = currentDepthFunc_;
+        // DX-202: the stencil half, which used to be dropped between ApplyDepthStencilState() and
+        // the PSO.
+        psoDesc.stencilEnable = currentStencilEnable_;
+        psoDesc.stencilFunc = currentStencilFunc_;
+        psoDesc.stencilPass = currentStencilPass_;
+        psoDesc.stencilFail = currentStencilFail_;
+        psoDesc.stencilDepthFail = currentStencilDepthFail_;
+        psoDesc.stencilMask = currentStencilMask_;
+        psoDesc.stencilWriteMask = currentStencilWriteMask_;
+        psoDesc.twoSidedStencilMode = currentTwoSidedStencilMode_;
+        psoDesc.ccwStencilFunc = currentCcwStencilFunc_;
+        psoDesc.ccwStencilPass = currentCcwStencilPass_;
+        psoDesc.ccwStencilFail = currentCcwStencilFail_;
+        psoDesc.ccwStencilDepthFail = currentCcwStencilDepthFail_;
+        psoDesc.cullMode = currentCullMode_;
+        psoDesc.fillMode = currentFillMode_;
     }
 
     void DirectX12Renderer::ApplyRasterizerState(int cullMode, int fillMode,
@@ -1731,19 +1829,7 @@ namespace CNA::Internal::Renderers::DirectX12
         // back-face-culled this test triangle after D3D's NDC->screen-space Y-flip, with no
         // debug-layer error available on this dev loop -- why depthEnable=false/cullMode=None
         // became this path's safe starting default in the first place.
-        psoDesc.colorSrcBlend = currentColorSrcBlend_;
-        psoDesc.alphaSrcBlend = currentAlphaSrcBlend_;
-        psoDesc.colorDstBlend = currentColorDstBlend_;
-        psoDesc.alphaDstBlend = currentAlphaDstBlend_;
-        psoDesc.colorBlendFunc = currentColorBlendFunc_;
-        psoDesc.alphaBlendFunc = currentAlphaBlendFunc_;
-        psoDesc.colorWriteMask = currentColorWriteMask_; // REMED-GFX-077 (static PSO state)
-        psoDesc.sampleMask = currentSampleMask_;         // REMED-GFX-077 (static PSO state)
-        psoDesc.depthEnable = currentDepthEnable_;
-        psoDesc.depthWriteEnable = currentDepthWriteEnable_;
-        psoDesc.depthFunc = currentDepthFunc_;
-        psoDesc.cullMode = currentCullMode_;
-        psoDesc.fillMode = currentFillMode_;
+        FillPsoStateFromCurrentEXT(psoDesc);
         auto pso = psoCache_.GetOrCreate(device_.Get(), rootSig.Get(), psoDesc, boundColorFormat_, boundDsvFormat_);
         if (!pso)
             throw std::runtime_error("DrawColoredPrimitives: failed to create colored3d PSO");
@@ -1783,6 +1869,9 @@ namespace CNA::Internal::Renderers::DirectX12
 
         cmdList->SetGraphicsRootSignature(rootSig.Get());
         cmdList->SetPipelineState(pso.Get());
+        // plans/plan_dx.md DX-203: the stencil reference is command-list state, not pipeline state, so it
+        // is recorded per draw. Harmless when the PSO has StencilEnable = FALSE.
+        cmdList->OMSetStencilRef(static_cast<UINT>(currentReferenceStencil_));
         cmdList->IASetPrimitiveTopology(nativeTopology);
 
         D3D12_VERTEX_BUFFER_VIEW vbView = d3dVb.GetViewEXT();
@@ -1834,19 +1923,7 @@ namespace CNA::Internal::Renderers::DirectX12
         psoDesc.strideInBytes = 16;
         // DX-118: depth/cull/blend state is now real and runtime-settable -- see
         // DrawColoredPrimitives's own equivalent block for the full rationale/history.
-        psoDesc.colorSrcBlend = currentColorSrcBlend_;
-        psoDesc.alphaSrcBlend = currentAlphaSrcBlend_;
-        psoDesc.colorDstBlend = currentColorDstBlend_;
-        psoDesc.alphaDstBlend = currentAlphaDstBlend_;
-        psoDesc.colorBlendFunc = currentColorBlendFunc_;
-        psoDesc.alphaBlendFunc = currentAlphaBlendFunc_;
-        psoDesc.colorWriteMask = currentColorWriteMask_; // REMED-GFX-077 (static PSO state)
-        psoDesc.sampleMask = currentSampleMask_;         // REMED-GFX-077 (static PSO state)
-        psoDesc.depthEnable = currentDepthEnable_;
-        psoDesc.depthWriteEnable = currentDepthWriteEnable_;
-        psoDesc.depthFunc = currentDepthFunc_;
-        psoDesc.cullMode = currentCullMode_;
-        psoDesc.fillMode = currentFillMode_;
+        FillPsoStateFromCurrentEXT(psoDesc);
         auto pso = psoCache_.GetOrCreate(device_.Get(), rootSig.Get(), psoDesc, boundColorFormat_, boundDsvFormat_);
         if (!pso)
             throw std::runtime_error("DrawIndexedColoredPrimitives: failed to create colored3d PSO");
@@ -1884,6 +1961,9 @@ namespace CNA::Internal::Renderers::DirectX12
 
         cmdList->SetGraphicsRootSignature(rootSig.Get());
         cmdList->SetPipelineState(pso.Get());
+        // plans/plan_dx.md DX-203: the stencil reference is command-list state, not pipeline state, so it
+        // is recorded per draw. Harmless when the PSO has StencilEnable = FALSE.
+        cmdList->OMSetStencilRef(static_cast<UINT>(currentReferenceStencil_));
         cmdList->IASetPrimitiveTopology(nativeTopology);
 
         D3D12_VERTEX_BUFFER_VIEW vbView = d3dVb.GetViewEXT();
@@ -2106,19 +2186,7 @@ namespace CNA::Internal::Renderers::DirectX12
         psoDesc.strideInBytes = stride;
         // DX-118: depth/cull/blend state is now real and runtime-settable -- see
         // DrawColoredPrimitives's own equivalent block for the full rationale/history.
-        psoDesc.colorSrcBlend = currentColorSrcBlend_;
-        psoDesc.alphaSrcBlend = currentAlphaSrcBlend_;
-        psoDesc.colorDstBlend = currentColorDstBlend_;
-        psoDesc.alphaDstBlend = currentAlphaDstBlend_;
-        psoDesc.colorBlendFunc = currentColorBlendFunc_;
-        psoDesc.alphaBlendFunc = currentAlphaBlendFunc_;
-        psoDesc.colorWriteMask = currentColorWriteMask_; // REMED-GFX-077 (static PSO state)
-        psoDesc.sampleMask = currentSampleMask_;         // REMED-GFX-077 (static PSO state)
-        psoDesc.depthEnable = currentDepthEnable_;
-        psoDesc.depthWriteEnable = currentDepthWriteEnable_;
-        psoDesc.depthFunc = currentDepthFunc_;
-        psoDesc.cullMode = currentCullMode_;
-        psoDesc.fillMode = currentFillMode_;
+        FillPsoStateFromCurrentEXT(psoDesc);
         auto pso = psoCache_.GetOrCreate(device_.Get(), rootSig.Get(), psoDesc, boundColorFormat_, boundDsvFormat_);
         if (!pso)
             throw std::runtime_error("DrawPrimitivesEx: failed to create PSO for the selected variant");
@@ -2633,6 +2701,9 @@ namespace CNA::Internal::Renderers::DirectX12
 
         cmdList->SetGraphicsRootSignature(rootSig.Get());
         cmdList->SetPipelineState(pso.Get());
+        // plans/plan_dx.md DX-203: the stencil reference is command-list state, not pipeline state, so it
+        // is recorded per draw. Harmless when the PSO has StencilEnable = FALSE.
+        cmdList->OMSetStencilRef(static_cast<UINT>(currentReferenceStencil_));
         cmdList->IASetPrimitiveTopology(nativeTopology);
 
         D3D12_VERTEX_BUFFER_VIEW vbView = d3dVb.GetViewEXT();
@@ -2860,6 +2931,7 @@ namespace CNA::Internal::Renderers::DirectX12
 
         cmdList->SetGraphicsRootSignature(rootSig.Get());
         cmdList->SetPipelineState(pso);
+        cmdList->OMSetStencilRef(static_cast<UINT>(currentReferenceStencil_)); // DX-203
         cmdList->IASetPrimitiveTopology(nativeTopology);
 
         // REMED-GFX-123: a D3D12 vertex-buffer view has no separate offset field, so the public

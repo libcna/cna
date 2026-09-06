@@ -293,6 +293,10 @@ namespace CNA::Internal::Renderers::DirectX12
 
         ComPtr<ID3D12Resource> depthResource_;
         D3D12_CPU_DESCRIPTOR_HANDLE dsv_{};
+        /// plans/plan_dx.md DX-209: needed by BindAsRenderTargetFace() for the same reason the 2D leg's
+        /// own dsvFormat_ is needed by BindAsRenderTarget() -- the bound DSV's format is baked into
+        /// every pipeline state built for a draw against this face.
+        DXGI_FORMAT dsvFormat_ = DXGI_FORMAT_UNKNOWN;
         bool hasDepth_ = false;
 
         int size_ = 0;
