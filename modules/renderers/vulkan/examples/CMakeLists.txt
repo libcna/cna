@@ -2337,6 +2337,26 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_real_window_resize
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-432: the stock-effect goldens, compared against the SAME PNGs EasyGL is compared against -- the point of a golden is that two renderers land on one image, not that each keeps its own.
+        cna_vulkan_test(cna_test_vulkan_basiceffect_golden
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_basiceffect_golden_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_BasicEffect_Golden
+            COMMAND cna_test_vulkan_basiceffect_golden
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_alphatesteffect_golden
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_alphatesteffect_golden_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_AlphaTestEffect_Golden
+            COMMAND cna_test_vulkan_alphatesteffect_golden
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_dualtextureeffect_golden
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_dualtextureeffect_golden_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DualTextureEffect_Golden
+            COMMAND cna_test_vulkan_dualtextureeffect_golden
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-339: the release path that also runs vkDeviceWaitIdle and the
         # retirement lists. HasRenderer() must be false after the first Dispose and no second
         # release may be attempted.
