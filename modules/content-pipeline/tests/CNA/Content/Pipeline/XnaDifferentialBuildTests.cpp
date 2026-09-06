@@ -18,62 +18,20 @@
 #include <algorithm>
 #include <cstdlib>
 #include <filesystem>
-#include <optional>
-#include <fstream>
-#include <iterator>
 #include <map>
-#include <memory>
-#include <utility>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Content/Pipeline/Tasks/BuildContent.hpp"
-#include "System/Environment.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Tasks/ContentTask.hpp"
+#include "XnaDifferentialCorpus.hpp"
 
 namespace Tasks = Microsoft::Xna::Framework::Content::Pipeline::Tasks;
 
 namespace
 {
-    std::filesystem::path Locate(const std::filesystem::path& relative)
-    {
-        for (std::filesystem::path dir = std::filesystem::current_path(); !dir.empty();
-             dir = dir.parent_path())
-        {
-            if (std::filesystem::exists(dir / relative)) { return dir / relative; }
-            if (dir == dir.root_path()) { break; }
-        }
-        for (std::filesystem::path dir = std::filesystem::path(__FILE__).parent_path(); !dir.empty();
-             dir = dir.parent_path())
-        {
-            if (std::filesystem::exists(dir / relative)) { return dir / relative; }
-            if (dir == dir.root_path()) { break; }
-        }
-        return relative;
-    }
-
-    std::string ReadText(const std::filesystem::path& path)
-    {
-        std::ifstream stream(path, std::ios::binary);
-        return {std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
-    }
-
-    /** @brief One field of one object in a flat JSON array, found by scanning rather than parsing. */
-    std::string Field(const std::string& object, const std::string& key)
-    {
-        const std::string needle = "\"" + key + "\":";
-        const std::size_t at = object.find(needle);
-        if (at == std::string::npos) { return {}; }
-        std::size_t from = object.find_first_not_of(" \t", at + needle.size());
-        if (from == std::string::npos) { return {}; }
-        if (object[from] == '"')
-        {
-            const std::size_t end = object.find('"', from + 1u);
-            return object.substr(from + 1u, end - from - 1u);
-        }
-        const std::size_t end = object.find_first_of(",}", from);
-        return object.substr(from, end - from);
-    }
+    using namespace CNA::Tests::XnaDifferential;
 
     /** @brief What XNA's own BuildContent did with one corpus case. */
     struct XnaOutcome
@@ -106,34 +64,6 @@ namespace
         XnaOutcome xna;
     };
 
-    /** @brief Splits a flat JSON array of objects into its objects. */
-    std::vector<std::string> Objects(const std::string& text, const std::string& arrayKey)
-    {
-        std::vector<std::string> objects;
-        const std::size_t start = text.find("\"" + arrayKey + "\"");
-        if (start == std::string::npos) { return objects; }
-        int depth = 0;
-        std::size_t from = 0;
-        for (std::size_t at = start; at < text.size(); ++at)
-        {
-            if (text[at] == '{')
-            {
-                if (depth == 0) { from = at; }
-                ++depth;
-            }
-            else if (text[at] == '}')
-            {
-                --depth;
-                if (depth == 0) { objects.push_back(text.substr(from, at - from + 1u)); }
-            }
-            else if (text[at] == ']' && depth == 0)
-            {
-                break;
-            }
-        }
-        return objects;
-    }
-
     std::vector<Case> Corpus()
     {
         const std::filesystem::path manifest =
@@ -159,32 +89,7 @@ namespace
             one.processor = Field(row, "processor");
             one.platform = Field(row, "platform");
             one.profile = Field(row, "profile");
-            // The parameters object is nested, so it is taken out of the row by hand: the manifest
-            // is written by this repository and its shape is known.
-            const std::size_t at = row.find("\"parameters\":");
-            if (at != std::string::npos)
-            {
-                const std::size_t open = row.find('{', at);
-                const std::size_t close = row.find('}', open);
-                if (open != std::string::npos && close != std::string::npos)
-                {
-                    const std::string body = row.substr(open + 1u, close - open - 1u);
-                    std::size_t from = 0;
-                    while (true)
-                    {
-                        const std::size_t keyStart = body.find('"', from);
-                        if (keyStart == std::string::npos) { break; }
-                        const std::size_t keyEnd = body.find('"', keyStart + 1u);
-                        const std::size_t valueStart = body.find('"', keyEnd + 1u);
-                        const std::size_t valueEnd = body.find('"', valueStart + 1u);
-                        if (valueEnd == std::string::npos) { break; }
-                        one.parameters.emplace_back(
-                            body.substr(keyStart + 1u, keyEnd - keyStart - 1u),
-                            body.substr(valueStart + 1u, valueEnd - valueStart - 1u));
-                        from = valueEnd + 1u;
-                    }
-                }
-            }
+            one.parameters = Parameters(row);
             const auto found = answered.find(one.name);
             if (found != answered.end()) { one.xna = found->second; }
             cases.push_back(one);
@@ -192,94 +97,6 @@ namespace
         return cases;
     }
 
-    /**
-     * @brief Sets environment variables for the length of a test and puts them back.
-     *
-     * Restoring matters more than setting: a variable left behind is seen by every later test in
-     * the process, and a leaked `CNA_FXC` sends unrelated builds through a Wine compiler they never
-     * asked for. Only a null value removes a variable, so a previously-unset one is restored by
-     * passing the empty optional through rather than an empty string.
-     */
-    class ScopedEnvironment
-    {
-    public:
-        void Set(const std::string& name, const std::string& value)
-        {
-            previous_.emplace_back(name, System::Environment::GetEnvironmentVariable(name));
-            System::Environment::SetEnvironmentVariable(name, value);
-        }
-        ~ScopedEnvironment()
-        {
-            for (auto entry = previous_.rbegin(); entry != previous_.rend(); ++entry)
-            {
-                System::Environment::SetEnvironmentVariable(entry->first, entry->second);
-            }
-        }
-        ScopedEnvironment() = default;
-        ScopedEnvironment(const ScopedEnvironment&) = delete;
-        ScopedEnvironment& operator=(const ScopedEnvironment&) = delete;
-
-    private:
-        std::vector<std::pair<std::string, std::optional<std::string>>> previous_;
-    };
-
-    /** @brief A source root holding one corpus source, removed when the case ends. */
-    class OneSource
-    {
-    public:
-        OneSource(const std::string& label, const std::string& source)
-            : root_(std::filesystem::temp_directory_path() / ("cna_xnapp265_" + label))
-        {
-            std::filesystem::remove_all(root_);
-            std::filesystem::create_directories(Source());
-            std::filesystem::create_directories(Output());
-            const std::filesystem::path from = Locate("tests/assets/xna40") / source;
-            name_ = from.filename().string();
-            std::error_code error;
-            std::filesystem::copy_file(from, Source() / name_,
-                                       std::filesystem::copy_options::overwrite_existing, error);
-            // A model's material names a texture beside it, so every image in the model corpus
-            // travels with a model source. Every image rather than a list of names, because a list
-            // goes stale the moment a fixture names a texture nobody remembered to add and the
-            // symptom is a case that quietly stops being compared -- and only for a model, because
-            // `BuildContent` builds the whole source root and a texture source's own directory
-            // holds the malformed fixtures the refusal cases are made of.
-            const std::string sourceExtension = from.extension().string();
-            if (sourceExtension == ".x" || sourceExtension == ".fbx")
-            {
-                for (const std::filesystem::directory_entry& sibling :
-                     std::filesystem::directory_iterator(from.parent_path(), error))
-                {
-                    if (error) { break; }
-                    const std::string extension = sibling.path().extension().string();
-                    if (extension == ".png" || extension == ".dds" || extension == ".tga" ||
-                        extension == ".bmp" || extension == ".jpg")
-                    {
-                        std::error_code copyError;
-                        std::filesystem::copy_file(sibling.path(),
-                                                   Source() / sibling.path().filename(),
-                                                   std::filesystem::copy_options::overwrite_existing,
-                                                   copyError);
-                    }
-                }
-            }
-        }
-        ~OneSource()
-        {
-            std::error_code error;
-            std::filesystem::remove_all(root_, error);
-        }
-        OneSource(const OneSource&) = delete;
-        OneSource& operator=(const OneSource&) = delete;
-
-        [[nodiscard]] std::filesystem::path Source() const { return root_ / "src"; }
-        [[nodiscard]] std::filesystem::path Output() const { return root_ / "out"; }
-        [[nodiscard]] const std::string& Name() const { return name_; }
-
-    private:
-        std::filesystem::path root_;
-        std::string name_;
-    };
 }
 
 // Every corpus case has an answer from XNA, and the corpus is not empty. A case added to the
@@ -328,27 +145,7 @@ TEST(XnaDifferentialBuildTest, CnaAcceptsAndRefusesTheSameSourcesXnaDoes)
         Locate("tools/xna-pipeline-oracle").parent_path().parent_path() /
         "build" / "xna-pipeline-oracle" / "differential" / "cna";
     std::filesystem::remove_all(publishRoot, error);
-    // Present-but-empty is not configured: a variable can be set to an empty string, and a build
-    // told the compiler is "" fails instantly in a way that reads like a disagreement about content.
-    const char* configured = std::getenv("CNA_FXC");
-    bool haveFxc = configured != nullptr && *configured != '\0';
-    if (!haveFxc)
-    {
-        const std::filesystem::path fxc(
-            "/rv/tmp/samples/_tools/directx-sdk-june-2010/extract/DXSDK/Utilities/bin/x86/fxc.exe");
-        const std::filesystem::path prefix =
-            std::filesystem::path(std::getenv("HOME") == nullptr ? "" : std::getenv("HOME")) /
-            ".wine-cna-xna40";
-        if (std::filesystem::exists(fxc, error) && !error &&
-            std::filesystem::exists(prefix, error) && !error)
-        {
-            environment.Set("CNA_FXC", fxc.string());
-            environment.Set("CNA_FXC_LAUNCHER", "wine");
-            environment.Set("WINEPREFIX", prefix.string());
-            environment.Set("WINEDEBUG", "-all");
-            haveFxc = true;
-        }
-    }
+    const bool haveFxc = ConfigureEffectCompiler(environment);
 
     std::vector<std::string> disagreements;
     for (const Case& one : Corpus())

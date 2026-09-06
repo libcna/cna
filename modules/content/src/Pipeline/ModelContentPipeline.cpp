@@ -348,7 +348,8 @@ namespace CNA::Content::Pipeline
             static_cast<void>(value);
             if (name != ModelGenerateChildAssetsParameter)
             {
-                throw std::invalid_argument(
+                throw ContentParameterError(
+                    ContentParameterFault::UnknownName, name,
                     "ModelProcessor does not recognize parameter '" + name + "'.");
             }
         }

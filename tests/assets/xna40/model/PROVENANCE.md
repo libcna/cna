@@ -54,3 +54,11 @@ that XNA merges a mesh's geometry batches into one vertex buffer and one index b
 positions and UVs are `quad_textured.x`'s; `second.png` is the 4x4 texture probe again, because
 XNA refuses to DXT-compress anything smaller and `ModelProcessor` compresses a model's textures by
 default.
+
+## The model with a texture that is not there
+
+`missing_texture.x` is `quad_textured.x` with its `TextureFilename` changed to name
+`absent_surface.png`, which is deliberately not committed. It is the error corpus's
+missing-dependency case (`plans/plan_xnapipeline_parity.md` `XNAPP-267`): XNA answers
+`Missing asset "...absent_surface.png"`, and a build that skipped the material instead would
+produce a model referring to nothing.

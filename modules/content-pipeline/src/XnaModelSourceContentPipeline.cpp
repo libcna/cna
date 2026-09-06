@@ -205,7 +205,8 @@ namespace CNA::Content::Pipeline
                         bindings_.Find(name);
                     if (binding == nullptr)
                     {
-                        throw std::invalid_argument(
+                        throw ContentParameterError(
+                            ContentParameterFault::UnknownName, name,
                             "processor 'TextureProcessor' has no parameter named '" + name + "'.");
                     }
                     ContentProcessorParameters single;
@@ -216,8 +217,9 @@ namespace CNA::Content::Pipeline
                     }
                     catch (const System::Exception& error)
                     {
-                        throw std::invalid_argument("processor parameter '" + name + "': " +
-                                                    error.getMessageProperty());
+                        throw ContentParameterError(
+                            ContentParameterFault::UnconvertibleValue, name,
+                            "processor parameter '" + name + "': " + error.getMessageProperty());
                     }
                 }
             }
@@ -330,8 +332,10 @@ namespace CNA::Content::Pipeline
                         bindings_.Find(name);
                     if (binding == nullptr)
                     {
-                        throw std::invalid_argument(std::string("processor '") + kModelProcessorName +
-                                                    "' has no parameter named '" + name + "'.");
+                        throw ContentParameterError(
+                            ContentParameterFault::UnknownName, name,
+                            std::string("processor '") + kModelProcessorName +
+                                "' has no parameter named '" + name + "'.");
                     }
                     ContentProcessorParameters single;
                     single.Set(name, value);
@@ -342,8 +346,9 @@ namespace CNA::Content::Pipeline
                     }
                     catch (const System::Exception& error)
                     {
-                        throw std::invalid_argument("processor parameter '" + name + "': " +
-                                                    error.getMessageProperty());
+                        throw ContentParameterError(
+                            ContentParameterFault::UnconvertibleValue, name,
+                            "processor parameter '" + name + "': " + error.getMessageProperty());
                     }
                 }
             }

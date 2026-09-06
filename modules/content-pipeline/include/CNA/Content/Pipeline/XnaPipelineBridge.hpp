@@ -411,8 +411,9 @@ namespace CNA::Content::Pipeline
                 const Xna::ProcessorParameterBinding<TProcessor>* binding = bindings_.Find(name);
                 if (binding == nullptr)
                 {
-                    throw std::invalid_argument("processor '" + className_ +
-                                                "' has no parameter named '" + name + "'.");
+                    throw ContentParameterError(ContentParameterFault::UnknownName, name,
+                                                "processor '" + className_ +
+                                                    "' has no parameter named '" + name + "'.");
                 }
                 const Xna::OpaqueDataDictionary boxed = ToOpaqueData(ContentProcessorParametersOf(name, value));
                 try
@@ -421,8 +422,9 @@ namespace CNA::Content::Pipeline
                 }
                 catch (const System::Exception& error)
                 {
-                    throw std::invalid_argument("processor parameter '" + name + "': " +
-                                                error.getMessageProperty());
+                    throw ContentParameterError(ContentParameterFault::UnconvertibleValue, name,
+                                                "processor parameter '" + name + "': " +
+                                                    error.getMessageProperty());
                 }
             }
         }

@@ -79,13 +79,50 @@ namespace CNA::Content::Pipeline
             return text;
         }
 
+        /**
+         * @brief The highest Direct3D 9 shader model a compiled effect contains, or 0 for none.
+         *
+         * A compiled `fx_2_0` effect stores each shader as a Direct3D 9 bytecode blob, and every
+         * such blob begins with a version token: `0xFFFEmmnn` for a vertex shader and `0xFFFFmmnn`
+         * for a pixel shader, `mm` being the major version. Those tokens are DWORD-aligned inside
+         * the container, so the highest major version present can be read without a container
+         * parser -- which this module has not got, and which pulling a renderer's bytecode reader
+         * into a build-time library to obtain would be the wrong trade.
+         *
+         * Verified against the corpus's two effects: `probe.fx` answers 2 and
+         * `shader_model_3.fx` answers 3 (plans/plan_xnapipeline_parity.md XNAPP-267). A major
+         * version outside 1..3 is not a shader token -- `0xFFFFFFFF` is the container's own end
+         * marker -- and is skipped.
+         *
+         * @param bytecode The compiled effect.
+         * @return The highest major shader version found, or 0 when none was.
+         */
+        [[nodiscard]] unsigned HighestShaderModel(const std::vector<std::uint8_t>& bytecode)
+        {
+            unsigned highest = 0u;
+            for (std::size_t at = 0u; at + 4u <= bytecode.size(); at += 4u)
+            {
+                const std::uint32_t token = static_cast<std::uint32_t>(bytecode[at]) |
+                                            (static_cast<std::uint32_t>(bytecode[at + 1u]) << 8) |
+                                            (static_cast<std::uint32_t>(bytecode[at + 2u]) << 16) |
+                                            (static_cast<std::uint32_t>(bytecode[at + 3u]) << 24);
+                const std::uint32_t kind = token & 0xFFFF0000u;
+                if (kind != 0xFFFE0000u && kind != 0xFFFF0000u) { continue; }
+                const unsigned major = (token >> 8) & 0xFFu;
+                if (major < 1u || major > 3u) { continue; }
+                highest = std::max(highest, major);
+            }
+            return highest;
+        }
+
         /** @brief Reads the `profile` parameter, defaulting to Reach. */
         [[nodiscard]] EffectSourceProfile ReadProfile(
-            const ContentProcessorParameters& parameters)
+            const ContentProcessorParameters& parameters,
+            const EffectSourceProfile fallback = EffectSourceProfile::Reach)
         {
             const ContentProcessorParameterValue* value =
                 parameters.Find(EffectProfileParameter);
-            if (value == nullptr) { return EffectSourceProfile::Reach; }
+            if (value == nullptr) { return fallback; }
             const std::string* text = std::get_if<std::string>(value);
             EffectSourceProfile profile = EffectSourceProfile::Reach;
             if (text == nullptr || !TryParseEffectSourceProfile(Lowercase(*text), profile))
@@ -394,7 +431,8 @@ namespace CNA::Content::Pipeline
             if (name != EffectProfileParameter && name != EffectDefinesParameter &&
                 name != EffectDebugParameter)
             {
-                throw std::invalid_argument(
+                throw ContentParameterError(
+                    ContentParameterFault::UnknownName, name,
                     "EffectSourceProcessor does not recognize parameter '" + name + "'.");
             }
         }
@@ -417,7 +455,15 @@ namespace CNA::Content::Pipeline
 
         EffectCompileRequest request;
         request.source = source.source;
-        request.profile = ReadProfile(parameters);
+        // XNA has no `profile` parameter on its EffectProcessor: the profile is the build's, and
+        // the processor obeys it. CNA's parameter is an extension, so it wins when a project sets
+        // it and the build's own target profile is what answers otherwise.
+        request.profile = ReadProfile(
+            parameters,
+            context.Environment().targetProfile ==
+                    Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef
+                ? EffectSourceProfile::HiDef
+                : EffectSourceProfile::Reach);
         request.defines = ReadDefines(parameters);
         request.debugInformation = ReadDebug(parameters);
         // The source's own directory, so `#include "Common.fxh"` beside the effect works without
@@ -468,6 +514,21 @@ namespace CNA::Content::Pipeline
                 " bytes that do not begin with an Effect Framework 9.1 signature, so they are "
                 "not an XNA-compatible compiled effect. An XNA 4.0 runtime's Effect constructor "
                 "requires that container; the compiler must be asked for the fx_2_0 profile.");
+        }
+
+        // Reach is shader model 2.0 and HiDef is 3.0, and the compiler does not enforce it: an
+        // `.fx` saying `compile vs_3_0` compiles happily under fx_2_0 and then fails to load on a
+        // Reach device. XNA refuses it at build time, in these words, and so does this
+        // (plans/plan_xnapipeline_parity.md XNAPP-267).
+        if (request.profile == EffectSourceProfile::Reach)
+        {
+            const unsigned model = HighestShaderModel(compiled.bytecode);
+            if (model > 2u)
+            {
+                throw ContentLoadException(
+                    "XNA Framework Reach profile does not support vertex shader model " +
+                    std::to_string(model) + ".0.");
+            }
         }
 
         context.LogInfo("compiled " + std::to_string(compiled.bytecode.size()) +

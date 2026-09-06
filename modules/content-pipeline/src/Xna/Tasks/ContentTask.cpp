@@ -66,12 +66,25 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
 
     const std::vector<std::string>& ContentTask::ErrorsEXT() const noexcept { return errors_; }
 
+    const std::vector<std::string>& ContentTask::WarningsEXT() const noexcept { return warnings_; }
+
     void ContentTask::LogMessage(const std::string& message)
     {
         messages_.push_back(message);
         if (logger_ != nullptr)
         {
             logger_->LogMessage(message);
+        }
+    }
+
+    void ContentTask::LogWarning(const std::string& message)
+    {
+        warnings_.push_back(message);
+        if (logger_ != nullptr)
+        {
+            // The logger's own warning takes a help link and the identity of the content it is
+            // about; a task-level warning has neither, and passing empty ones is what says so.
+            logger_->LogWarning({}, {}, message);
         }
     }
 

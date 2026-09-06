@@ -283,8 +283,9 @@ namespace CNA::Content::Pipeline
                 name != VideoWidthParameter && name != VideoHeightParameter &&
                 name != VideoFramesPerSecondParameter && name != VideoSoundtrackTypeParameter)
             {
-                throw std::invalid_argument("VideoProcessor does not recognize parameter '" +
-                                            name + "'.");
+                throw ContentParameterError(
+                    ContentParameterFault::UnknownName, name,
+                    "VideoProcessor does not recognize parameter '" + name + "'.");
             }
         }
         if (metadataFromSource_)

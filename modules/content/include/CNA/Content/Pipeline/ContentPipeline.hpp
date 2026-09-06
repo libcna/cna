@@ -173,6 +173,33 @@ namespace CNA::Content::Pipeline
      * can ask the questions XNA lets it ask. Every field has the default XNA's own tooling uses
      * for a Windows build.
      */
+    /**
+     * @brief How strictly a build refuses what XNA would only warn about.
+     *
+     * `cna-content`'s own default is Strict, and deliberately: a parameter naming a property the
+     * processor has not got, or a character region the font cannot cover, is a mistake in the
+     * project that nothing else in the build will notice, and refusing is how an author finds out.
+     *
+     * XNA warns and carries on for both, measured case by case in
+     * plans/plan_xnapipeline_parity.md XNAPP-267, so the XNA task façade selects XnaCompatible:
+     * a `.contentproj` that builds there has to build here. Every refusal *not* listed as a
+     * leniency stays a refusal in both modes -- an impossible request is impossible whoever asked.
+     */
+    enum class ContentStrictness
+    {
+        /** @brief Refuse what cannot be honoured exactly. */
+        Strict,
+
+        /**
+         * @brief Warn and fall back where XNA warns and falls back.
+         *
+         * Two places today: a processor parameter it cannot recognise or convert is dropped and
+         * the processor keeps its default, and a character a font has no glyph for is drawn with
+         * the font's own `.notdef` rather than refusing the whole font.
+         */
+        XnaCompatible,
+    };
+
     struct ContentBuildEnvironment
     {
         /** @brief Platform the content is built for. */
@@ -190,6 +217,9 @@ namespace CNA::Content::Pipeline
 
         /** @brief Directory a component may use for scratch files, or empty for none. */
         std::filesystem::path intermediateDirectory;
+
+        /** @brief How strictly this build refuses what XNA would only warn about. */
+        ContentStrictness strictness = ContentStrictness::Strict;
 
         /** @brief Compares every field. */
         bool operator==(const ContentBuildEnvironment&) const = default;
@@ -446,6 +476,70 @@ namespace CNA::Content::Pipeline
     /** @brief Bounded value types accepted by dynamic processor configuration. */
     using ContentProcessorParameterValue =
         std::variant<bool, std::int64_t, std::uint64_t, double, std::string>;
+
+    /**
+     * @brief The two ways a processor parameter can be wrong on its own terms.
+     *
+     * Kept apart from every other reason a processor refuses one, because these two are the ones a
+     * host may choose to be lenient about. A parameter naming a property the processor has not got,
+     * and a value that cannot be converted to the property's type, are mistakes in the *project*
+     * that leave the processor's own defaults perfectly usable. "This build has no DXT encoder" and
+     * "this image cannot be block-compressed at 3x2" are not: honouring the request is impossible
+     * and defaulting past it would produce content nobody asked for.
+     *
+     * XNA is lenient about exactly these two -- it warns and builds with the default, measured in
+     * plans/plan_xnapipeline_parity.md XNAPP-267 -- and `cna-content` is not, because a typo in a
+     * parameter name should stop a build that nothing else will notice.
+     */
+    enum class ContentParameterFault
+    {
+        /** @brief The processor has no parameter of that name. */
+        UnknownName,
+
+        /** @brief The parameter exists and its written value is not of the property's type. */
+        UnconvertibleValue,
+    };
+
+    /**
+     * @brief A processor's refusal of one named parameter, carrying which one and why.
+     *
+     * Derives from `std::invalid_argument` so that every existing handler keeps working; what it
+     * adds is the two facts a lenient host needs, so that leniency never has to read a message.
+     */
+    class ContentParameterError : public std::invalid_argument
+    {
+    public:
+        /**
+         * @brief Creates the error.
+         *
+         * @param fault Which of the two mistakes this is.
+         * @param parameter The parameter's name, exactly as the processor knows it.
+         * @param message The full sentence, which stays the diagnostic a strict build reports.
+         */
+        ContentParameterError(ContentParameterFault fault, std::string parameter,
+                              const std::string& message)
+            : std::invalid_argument(message), fault_(fault), parameter_(std::move(parameter))
+        {
+        }
+
+        /**
+         * @brief Which of the two mistakes this is.
+         *
+         * @return The fault.
+         */
+        [[nodiscard]] ContentParameterFault Fault() const noexcept { return fault_; }
+
+        /**
+         * @brief The parameter the processor refused.
+         *
+         * @return Its name.
+         */
+        [[nodiscard]] const std::string& Parameter() const noexcept { return parameter_; }
+
+    private:
+        ContentParameterFault fault_;
+        std::string parameter_;
+    };
 
     /** @brief Ordered, explicitly typed processor parameters. */
     class ContentProcessorParameters

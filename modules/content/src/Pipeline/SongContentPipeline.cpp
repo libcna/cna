@@ -154,8 +154,9 @@ namespace CNA::Content::Pipeline
             if (name != SongStreamReferenceParameter && name != SongNameParameter &&
                 name != SongDurationMsParameter)
             {
-                throw std::invalid_argument("SongProcessor does not recognize parameter '" + name +
-                                            "'.");
+                throw ContentParameterError(
+                    ContentParameterFault::UnknownName, name,
+                    "SongProcessor does not recognize parameter '" + name + "'.");
             }
         }
         static_cast<void>(OptionalString(parameters, SongNameParameter));

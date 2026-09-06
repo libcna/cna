@@ -63,6 +63,9 @@ namespace
         bool quiet = false;
         bool explain = false;
 
+        /** @brief How strictly this invocation refuses what XNA would only warn about. */
+        Pipeline::ContentStrictness strictness = Pipeline::ContentStrictness::Strict;
+
         /** @brief Default compiled container for every asset this invocation builds. */
         Pipeline::ContentOutputFormat format = Pipeline::ContentOutputFormat::Cnb;
 
@@ -246,7 +249,7 @@ namespace
                "         [--xnb-reader-names xna40|portable]\n"
                "         [--xnb-allow-unverified-xbox]\n"
                "         [--fx-compiler <path>] [--fx-compiler-launcher <program>]\n"
-               "         [--explain] [--quiet]\n"
+               "         [--explain] [--quiet] [--xna-compatible]\n"
             << "       cna-content clean <output-directory> [--quiet]\n\n"
             << "Builds source content through Importer -> Processor -> Content Type Writer.\n"
             << "--format selects the compiled container: CNA's native .cnb (the default) or the\n"
@@ -362,6 +365,15 @@ namespace
                     throw std::invalid_argument("the output path was specified more than once.");
                 }
                 command.output = arguments[index];
+            }
+            else if (IsOption(argument, "--xna-compatible"))
+            {
+                // Warn and fall back exactly where XNA warns and falls back: a processor parameter
+                // it cannot recognise or convert, and a character the font has no glyph for. This
+                // tool's own default is to refuse both, because each is a mistake in the project
+                // that nothing else in the build will notice
+                // (plans/plan_xnapipeline_parity.md XNAPP-267).
+                command.strictness = Pipeline::ContentStrictness::XnaCompatible;
             }
             else if (IsOption(argument, "--quiet"))
             {
@@ -1927,7 +1939,8 @@ namespace
         ManifestLoadState manifestState,
         const std::filesystem::path& sourceRoot, const std::filesystem::path& outputRoot,
         const Pipeline::ContentSourceRootCapabilities& externalSourceRoots,
-        const std::filesystem::path& stagingRoot, const std::set<std::string>& plannedNodes)
+        const std::filesystem::path& stagingRoot, const std::set<std::string>& plannedNodes,
+        const Pipeline::ContentBuildEnvironment& environment)
     {
         BuildNodePlan plan;
         plan.item = &item;
@@ -1956,6 +1969,7 @@ namespace
             request.writer = item.writer;
             request.outputFormat = item.format;
             request.parameters = item.parameters;
+            request.environment = environment;
             Pipeline::ContentBuildResult result = pipeline.Build(request);
             plan.messages = result.messages;
 
@@ -2023,7 +2037,8 @@ namespace
         const std::filesystem::path& sourceRoot, const std::filesystem::path& outputRoot,
         const Pipeline::ContentSourceRootCapabilities& externalSourceRoots,
         const std::map<std::string, std::string>& effectiveFingerprints,
-        const std::set<std::string>& plannedNodes)
+        const std::set<std::string>& plannedNodes,
+        const Pipeline::ContentBuildEnvironment& environment)
     {
         BuildNodeOutcome outcome;
         const BuildItem& item = *plan.item;
@@ -2080,6 +2095,7 @@ namespace
             request.writer = item.writer;
             request.outputFormat = item.format;
             request.parameters = item.parameters;
+            request.environment = environment;
             Pipeline::ContentBuildResult result = pipeline.Build(request);
             outcome.manifest = Pipeline::MakeContentBuildManifestEntry(
                 result, sourceRoot, outputRoot, item.output, externalSourceRoots);
@@ -2275,6 +2291,33 @@ namespace
             return 1;
         }
 
+        // The host-level facts every component of this build is entitled to know: which target the
+        // content is for, which profile it must respect, where the artefacts go, and how strictly
+        // this invocation refuses what XNA would only warn about. Built once, before any node runs,
+        // because it is the same for all of them (plans/plan_xnapipeline_parity.md XNAPP-267).
+        Pipeline::ContentBuildEnvironment buildEnvironment;
+        switch (command.xnbOptions.platform)
+        {
+        case CNA::Internal::Xnb::XnbTargetPlatform::Xbox360:
+            buildEnvironment.targetPlatform = Pipeline::ContentTargetPlatform::Xbox360;
+            break;
+        case CNA::Internal::Xnb::XnbTargetPlatform::WindowsPhone:
+            buildEnvironment.targetPlatform = Pipeline::ContentTargetPlatform::WindowsPhone;
+            break;
+        default:
+            // Every other container target -- DesktopGL and the rest of the extended ecosystem --
+            // is a desktop build as far as a processor is concerned; the container byte is the
+            // writer's business, not the processor's.
+            buildEnvironment.targetPlatform = Pipeline::ContentTargetPlatform::Windows;
+            break;
+        }
+        buildEnvironment.targetProfile =
+            command.xnbOptions.graphicsProfile == CNA::Internal::Xnb::XnbGraphicsProfile::HiDef
+                ? Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef
+                : Microsoft::Xna::Framework::Graphics::GraphicsProfile::Reach;
+        buildEnvironment.outputDirectory = outputRoot;
+        buildEnvironment.strictness = command.strictness;
+
         std::vector<BuildNodePlan> plans(builds.size());
         // Known before any node runs, so which node keeps a contested asset name does not depend
         // on the order the nodes happen to finish in.
@@ -2290,7 +2333,7 @@ namespace
                     plans[offset] = PrepareBuildNode(
                         builds[offset], offset, pipeline, *registry, previousManifest,
                         loadedManifest.state, sourceRoot, outputRoot, externalSourceRoots,
-                        staging->Path(), plannedNodes);
+                        staging->Path(), plannedNodes, buildEnvironment);
                     continue;
                 }
 
@@ -2305,7 +2348,8 @@ namespace
                             return PrepareBuildNode(
                                 builds[index], index, pipeline, *registry, previousManifest,
                                 loadedManifest.state, sourceRoot, outputRoot,
-                                externalSourceRoots, staging->Path(), plannedNodes);
+                                externalSourceRoots, staging->Path(), plannedNodes,
+                                buildEnvironment);
                         }));
                 }
                 for (std::size_t index = offset; index < end; ++index)
@@ -2555,7 +2599,8 @@ namespace
             {
                 outcomes.push_back(ExecuteBuildNode(
                     plans[ready.front()], pipeline, sourceRoot, outputRoot,
-                    externalSourceRoots, effectiveFingerprints, plannedNodes));
+                    externalSourceRoots, effectiveFingerprints, plannedNodes,
+                    buildEnvironment));
             }
             else
             {
@@ -2571,7 +2616,8 @@ namespace
                             {
                                 return ExecuteBuildNode(
                                     plans[index], pipeline, sourceRoot, outputRoot,
-                                    externalSourceRoots, effectiveFingerprints, plannedNodes);
+                                    externalSourceRoots, effectiveFingerprints, plannedNodes,
+                                    buildEnvironment);
                             }));
                     }
                     for (std::future<BuildNodeOutcome>& future : futures)

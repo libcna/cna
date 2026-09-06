@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    plans/plan_xnapipeline_parity.md XNAPP-267: a description asking for glyphs the font has not
+    got.
+
+    Liberation Mono covers Latin; this asks for U+4E00..U+4E0F, which is CJK. Whether that is an
+    error or a substitution is exactly what the case measures: a processor may refuse the region or
+    fall back to <DefaultCharacter>, and the two builds have to make the same choice.
+
+    The font name is the family, spelled as the face declares it, because the two sides resolve a
+    font differently on purpose: XNA asks Windows for an installed family, CNA looks for a file
+    beside the description so that a build produces the same bytes on every machine. The harness
+    presents the same face to each in the form that side resolves; see control_font.spritefont.
+-->
+<XnaContent xmlns:Graphics="Microsoft.Xna.Framework.Content.Pipeline.Graphics">
+  <Asset Type="Graphics:FontDescription">
+    <FontName>Liberation Mono</FontName>
+    <Size>14</Size>
+    <Spacing>0</Spacing>
+    <UseKerning>true</UseKerning>
+    <Style>Regular</Style>
+    <CharacterRegions>
+      <CharacterRegion>
+        <Start>&#x4E00;</Start>
+        <End>&#x4E0F;</End>
+      </CharacterRegion>
+    </CharacterRegions>
+  </Asset>
+</XnaContent>

@@ -1,0 +1,347 @@
+{
+  "format": "CNA.XnaDifferential.Corpus",
+  "version": 1,
+  "comment": "plans/plan_xnapipeline_parity.md XNAPP-267 (§23): the corpus of builds that are meant to go wrong. Same shape as corpus.json and driven by the same oracle, because a refusal has to be measured the same way an acceptance is. What this file adds is three fields. `class` names the failure the case is about. `expect` is what XNA actually did, taken from the recorded run and checked against it, so this manifest cannot drift away from the measurement. `mentions` is the subject both sides' diagnostics have to name -- the parameter, the missing file, the undeclared identifier -- which is the part of a message that can be compared at all: the sentences are each side's own, the subject is the content's. A case with no `mentions` is one whose two messages share no such token (a corrupt file is just corrupt), and there the outcome is the whole claim. `control` marks a row that is meant to build: a class needs a source on each side of its rule, or a refusal proves only that the route is broken.",
+  "classes": {
+    "MalformedSource": "The bytes are not what the extension and the importer say they are.",
+    "TruncatedSource": "The bytes begin correctly and stop early.",
+    "UnknownImporter": "The item names an importer no assembly defines.",
+    "UnknownProcessor": "The item names a processor no assembly defines.",
+    "ProcessorInputMismatch": "The importer's output type is not the processor's input type.",
+    "UnknownParameter": "The item sets a processor parameter the processor has not got.",
+    "UnparsableParameter": "The parameter exists and the text cannot be converted to its type.",
+    "ImpossibleParameter": "The parameter's value is well-formed and cannot be honoured for this source.",
+    "MissingDependency": "The source names a file beside it that is not there.",
+    "CyclicReference": "The source's own reference graph does not terminate.",
+    "UnsupportedTarget": "The content is valid and the target profile or platform cannot take it.",
+    "BadDeclaration": "The document is well-formed and declares something that does not exist.",
+    "MissingGlyph": "A character region asks for glyphs the resolved font has not got.",
+    "ShaderCompileFailure": "The shader compiler rejected the source."
+  },
+  "cases": [
+    {
+      "case": "malformed/tga_bytes",
+      "class": "MalformedSource",
+      "expect": "refused",
+      "source": "texture/garbage.tga",
+      "importer": "TextureImporter",
+      "processor": "SpriteTextureProcessor",
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
+      "case": "malformed/png_empty",
+      "class": "MalformedSource",
+      "expect": "refused",
+      "source": "texture/empty.png",
+      "importer": "TextureImporter",
+      "processor": "SpriteTextureProcessor",
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
+      "case": "malformed/x_bytes",
+      "class": "MalformedSource",
+      "expect": "refused",
+      "source": "model/not_x.x",
+      "importer": "XImporter",
+      "processor": "ModelProcessor",
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
+      "case": "truncated/png",
+      "class": "TruncatedSource",
+      "expect": "refused",
+      "source": "texture/truncated.png",
+      "importer": "TextureImporter",
+      "processor": "SpriteTextureProcessor",
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
+      "case": "truncated/dds",
+      "class": "TruncatedSource",
+      "expect": "refused",
+      "source": "texture/truncated.dds",
+      "importer": "TextureImporter",
+      "processor": "SpriteTextureProcessor",
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
+      "case": "truncated/x",
+      "class": "TruncatedSource",
+      "expect": "refused",
+      "source": "model/truncated.x",
+      "importer": "XImporter",
+      "processor": "ModelProcessor",
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
+      "case": "control/png_sprite",
+      "class": "control",
+      "control": true,
+      "expect": "built-with-warning",
+      "mentions": [
+        "SpriteTextureProcessor"
+      ],
+      "source": "texture/probe.png",
+      "importer": "TextureImporter",
+      "processor": "SpriteTextureProcessor",
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
+      "case": "control/png_model_texture",
+      "class": "control",
+      "control": true,
+      "expect": "built-with-warning",
+      "mentions": [
+        "ModelTextureProcessor"
+      ],
+      "source": "texture/probe_4x4.png",
+      "importer": "TextureImporter",
+      "processor": "ModelTextureProcessor",
+      "platform": "Windows",
+      "profile": "HiDef"
+    },
+    {
+      "case": "declaration/unknown_importer",
+      "class": "UnknownImporter",
+      "expect": "refused",
+      "mentions": [
+        "NoSuchImporter"
+      ],
+      "source": "texture/probe.png",
+      "importer": "NoSuchImporter",
+      "processor": "SpriteTextureProcessor",
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
+      "case": "declaration/unknown_processor",
+      "class": "UnknownProcessor",
+      "expect": "refused",
+      "mentions": [
+        "NoSuchProcessor"
+      ],
+      "source": "texture/probe.png",
+      "importer": "TextureImporter",
+      "processor": "NoSuchProcessor",
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
+      "case": "declaration/processor_input_mismatch",
+      "class": "ProcessorInputMismatch",
+      "expect": "refused",
+      "mentions": [
+        "SoundEffectProcessor"
+      ],
+      "source": "texture/probe.png",
+      "importer": "TextureImporter",
+      "processor": "SoundEffectProcessor",
+      "platform": "Windows",
+      "profile": "Reach",
+      "note": "XNA also names the two content types -- AudioContent and Texture2DContent. Those are not compared: the canonical layer has its own imported types and its message names the one it actually had, which is the truth about what was imported rather than a translation of it. The processor's name is shared and is compared."
+    },
+    {
+      "case": "parameter/unknown_name",
+      "class": "UnknownParameter",
+      "expect": "built-with-warning",
+      "mentions": [
+        "NoSuchParameter"
+      ],
+      "source": "texture/probe.png",
+      "importer": "TextureImporter",
+      "processor": "TextureProcessor",
+      "parameters": {
+        "NoSuchParameter": "1"
+      },
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
+      "case": "parameter/unparsable_enum",
+      "class": "UnparsableParameter",
+      "expect": "built-with-warning",
+      "mentions": [
+        "TextureFormat",
+        "NotAFormat"
+      ],
+      "source": "texture/probe.png",
+      "importer": "TextureImporter",
+      "processor": "TextureProcessor",
+      "parameters": {
+        "TextureFormat": "NotAFormat"
+      },
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
+      "case": "parameter/unparsable_number",
+      "class": "UnparsableParameter",
+      "expect": "built-with-warning",
+      "mentions": [
+        "Scale",
+        "not-a-number"
+      ],
+      "source": "model/bare_mesh.x",
+      "importer": "XImporter",
+      "processor": "ModelProcessor",
+      "parameters": {
+        "Scale": "not-a-number"
+      },
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
+      "case": "parameter/impossible_dxt_size",
+      "class": "ImpossibleParameter",
+      "expect": "refused",
+      "mentions": [
+        "3x2",
+        "multiples of four"
+      ],
+      "source": "texture/probe_3x2.png",
+      "importer": "TextureImporter",
+      "processor": "TextureProcessor",
+      "parameters": {
+        "TextureFormat": "DxtCompressed"
+      },
+      "platform": "Windows",
+      "profile": "HiDef"
+    },
+    {
+      "case": "dependency/missing_texture",
+      "class": "MissingDependency",
+      "expect": "refused",
+      "mentions": [
+        "absent_surface.png"
+      ],
+      "source": "model/missing_texture.x",
+      "importer": "XImporter",
+      "processor": "ModelProcessor",
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
+      "case": "control/x_textured",
+      "class": "control",
+      "control": true,
+      "expect": "built",
+      "source": "model/quad_textured.x",
+      "importer": "XImporter",
+      "processor": "ModelProcessor",
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
+      "case": "cyclic/fx_include",
+      "class": "CyclicReference",
+      "expect": "refused",
+      "mentions": [
+        "cyclic_include.fx"
+      ],
+      "source": "source/cyclic_include.fx",
+      "importer": "EffectImporter",
+      "processor": "EffectProcessor",
+      "platform": "Windows",
+      "profile": "HiDef"
+    },
+    {
+      "case": "shader/compile_error",
+      "class": "ShaderCompileFailure",
+      "expect": "refused",
+      "mentions": [
+        "broken.fx",
+        "X3004",
+        "NeverDeclared"
+      ],
+      "source": "source/broken.fx",
+      "importer": "EffectImporter",
+      "processor": "EffectProcessor",
+      "platform": "Windows",
+      "profile": "HiDef"
+    },
+    {
+      "case": "target/shader_model_3_reach",
+      "class": "UnsupportedTarget",
+      "expect": "refused",
+      "mentions": [
+        "Reach",
+        "vertex shader model 3.0"
+      ],
+      "source": "source/shader_model_3.fx",
+      "importer": "EffectImporter",
+      "processor": "EffectProcessor",
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
+      "case": "control/shader_model_3_hidef",
+      "class": "control",
+      "control": true,
+      "expect": "built",
+      "source": "source/shader_model_3.fx",
+      "importer": "EffectImporter",
+      "processor": "EffectProcessor",
+      "platform": "Windows",
+      "profile": "HiDef"
+    },
+    {
+      "case": "font/malformed_xml",
+      "class": "MalformedSource",
+      "expect": "refused",
+      "source": "source/malformed.spritefont",
+      "importer": "FontDescriptionImporter",
+      "processor": "FontDescriptionProcessor",
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
+      "case": "font/unknown_type",
+      "class": "BadDeclaration",
+      "expect": "refused",
+      "mentions": [
+        "NoSuchDescription"
+      ],
+      "source": "source/unknown_type.spritefont",
+      "importer": "FontDescriptionImporter",
+      "processor": "FontDescriptionProcessor",
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
+      "case": "font/missing_glyph",
+      "class": "MissingGlyph",
+      "expect": "built-with-warning",
+      "mentions": [
+        "U+4e00"
+      ],
+      "source": "source/missing_glyph.spritefont",
+      "importer": "FontDescriptionImporter",
+      "processor": "FontDescriptionProcessor",
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
+      "case": "control/font_description",
+      "class": "control",
+      "control": true,
+      "expect": "built",
+      "source": "source/control_font.spritefont",
+      "importer": "FontDescriptionImporter",
+      "processor": "FontDescriptionProcessor",
+      "platform": "Windows",
+      "profile": "Reach"
+    }
+  ],
+  "expectValues": {
+    "refused": "The build failed and said why.",
+    "built": "The build succeeded and said nothing.",
+    "built-with-warning": "The build succeeded and warned. XNA does this more often than a reimplementation expects: an unknown or unconvertible processor parameter and a character region the font cannot cover are all warnings, not errors."
+  }
+}

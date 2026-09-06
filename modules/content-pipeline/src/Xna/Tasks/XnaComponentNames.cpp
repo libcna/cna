@@ -45,13 +45,19 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
                   {{"generateMipmaps", "false"}, {"textureFormat", "Color"}},
                   ""}},
                 {"SpriteTextureProcessor",
-                 {"CNA.TextureProcessor",
-                  {{"generateMipmaps", "false"}, {"textureFormat", "Color"}},
-                  ""}},
+                 {.canonicalName = "CNA.TextureProcessor",
+                  .defaults = {{"generateMipmaps", "false"}, {"textureFormat", "Color"}},
+                  .obsoleteMessage =
+                      "SpriteTextureProcessor is obsolete, and may be removed in a future "
+                      "version. TextureProcessor (Texture - XNA Framework) should be used "
+                      "instead."}},
                 {"ModelTextureProcessor",
-                 {"CNA.TextureProcessor",
-                  {{"generateMipmaps", "true"}, {"textureFormat", "DxtCompressed"}},
-                  ""}},
+                 {.canonicalName = "CNA.TextureProcessor",
+                  .defaults = {{"generateMipmaps", "true"}, {"textureFormat", "DxtCompressed"}},
+                  .obsoleteMessage =
+                      "ModelTextureProcessor is obsolete, and may be removed in a future "
+                      "version. TextureProcessor (Texture - XNA Framework) should be used "
+                      "instead."}},
                 {"FontDescriptionProcessor", {"CNA.FontDescriptionProcessor", {}, ""}},
                 // The XNA model processor, not the glTF one: an XNA project's models are
                 // `.x` and `.fbx` files, and those import to XNA's own scene graph. The
@@ -85,7 +91,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
             const auto found = map.find(Bare(xnaName));
             if (found != map.end())
             {
-                return found->second;
+                XnaComponentMapping mapping = found->second;
+                mapping.known = true;
+                return mapping;
             }
             return {"", {},
                     std::string("'") + xnaName + "' is not a built-in XNA " + kind +

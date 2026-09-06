@@ -159,6 +159,19 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
          */
         CNAEXT [[nodiscard]] const std::vector<std::string>& ErrorsEXT() const noexcept;
 
+        /**
+         * @brief The warnings the task recorded, newest last.
+         *
+         * Kept apart from the messages because the difference is the whole point of a warning: XNA
+         * *builds* an asset whose processor parameter it could not recognise or convert, and one
+         * whose character region the font cannot cover, and says so in a warning. A project that
+         * cannot tell those lines from progress messages cannot act on them
+         * (plans/plan_xnapipeline_parity.md XNAPP-267).
+         *
+         * @return The lines.
+         */
+        CNAEXT [[nodiscard]] const std::vector<std::string>& WarningsEXT() const noexcept;
+
     protected:
         /**
          * @brief Records a message.
@@ -174,9 +187,17 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
          */
         void LogError(const std::string& message);
 
+        /**
+         * @brief Records a warning, which does not stop the build.
+         *
+         * @param message The text.
+         */
+        void LogWarning(const std::string& message);
+
     private:
         ContentBuildLogger* logger_ = nullptr;
         std::vector<std::string> messages_;
+        std::vector<std::string> warnings_;
         std::vector<std::string> errors_;
     };
 }

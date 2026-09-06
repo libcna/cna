@@ -1374,9 +1374,47 @@ namespace CNA::Content::Pipeline
         const ContentComponentIdentity processorIdentity = stage.processor->Identity();
         try
         {
-            stage.processor->ValidateParameters(request.parameters);
+            // What the processor is actually given. It differs from what the project asked for
+            // only under WarnAndDefault, and only for the two mistakes a processor's own defaults
+            // survive: a parameter it has not got, and one whose written value is not of the
+            // property's type. Every other refusal still fails the build, because honouring it is
+            // impossible rather than merely wrong -- a missing DXT encoder defaulted past would
+            // ship a texture nobody asked for (plans/plan_xnapipeline_parity.md XNAPP-267).
+            ContentProcessorParameters effective = request.parameters;
+            if (request.environment.strictness == ContentStrictness::XnaCompatible)
+            {
+                // Bounded by the parameter count: each pass removes exactly one, and a pass that
+                // removes none has either succeeded or thrown something leniency does not cover.
+                for (std::size_t attempt = 0; attempt <= effective.Values().size(); ++attempt)
+                {
+                    try
+                    {
+                        stage.processor->ValidateParameters(effective);
+                        break;
+                    }
+                    catch (const ContentParameterError& refused)
+                    {
+                        ContentProcessorParameters remaining;
+                        for (const auto& [name, value] : effective.Values())
+                        {
+                            if (name != refused.Parameter()) { remaining.Set(name, value); }
+                        }
+                        if (remaining.Values().size() == effective.Values().size())
+                        {
+                            // The processor named a parameter that is not in the set; nothing can
+                            // be dropped, so the refusal stands.
+                            throw;
+                        }
+                        effective = std::move(remaining);
+                        EmitLog(logger, ContentLogLevel::Warning, stage.source, logicalName,
+                                ContentPipelineStage::Process, processorIdentity.name,
+                                refused.what());
+                    }
+                }
+            }
+            stage.processor->ValidateParameters(effective);
             ContentProcessorContext context(stage.root, stage.source, logicalName,
-                                            processorIdentity.name, request.parameters,
+                                            processorIdentity.name, effective,
                                             externalSourceRoots, dependencies, logger,
                                             request.outputFormat, request.environment, this);
             stage.processed = stage.processor->Process(stage.imported, context);

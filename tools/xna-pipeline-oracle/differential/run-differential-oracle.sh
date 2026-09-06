@@ -12,12 +12,18 @@
 #   CNA_XNA40_REFERENCES  directory holding the pipeline assemblies (XNA GS 4.0 References/Windows/x86)
 #   CNA_XNA40_WINEPREFIX  Wine prefix with .NET Framework 4.0 (default ~/.wine-cna-xna40)
 #   CNA_XNA40_DISPLAY     X display for the pipeline's D3D9 device (default :99)
-#   $1                    output directory (default tests/reference/xna40/differential)
+#   $1                    manifest to run: `corpus` (the default) or `errors`
+#   $2                    output directory (default tests/reference/xna40/differential[-errors])
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$here/../../.." && pwd)"
-out="${1:-$repo/tests/reference/xna40/differential}"
+manifest="${1:-corpus}"
+[ -f "$here/$manifest.json" ] || {
+    echo "run-differential-oracle: no manifest $here/$manifest.json" >&2; exit 2; }
+default_out="$repo/tests/reference/xna40/differential"
+[ "$manifest" = "corpus" ] || default_out="$default_out-$manifest"
+out="${2:-$default_out}"
 refs="${CNA_XNA40_REFERENCES:-/rv/tmp/samples/_tools/xna-game-studio-4-refresh/admin/Program Files/Microsoft XNA/XNA Game Studio/v4.0/References/Windows/x86}"
 prefix="${CNA_XNA40_WINEPREFIX:-$HOME/.wine-cna-xna40}"
 build="$repo/build/xna-pipeline-oracle/differential"
@@ -60,6 +66,19 @@ cp "$media_helper" "$build/run/"
 mkdir -p "$build/run/sources"
 cp -a "$repo/tests/assets/xna40/." "$build/run/sources/"
 
+# XNA resolves a font by asking Windows for an installed *family*, so a .spritefont case needs the
+# face where that lookup can see it. Wine already exposes the host's fonts, and Liberation Mono is
+# the one the corpus names, so nothing is installed here: copying the repository's own copy into
+# the prefix's Fonts directory actively breaks it, because Wine then reports the family with its
+# Regular style unavailable and every font case fails for a reason that is not XNA's
+# (plans/plan_xnapipeline_parity.md XNAPP-267). The differential test hands CNA the committed copy
+# instead, because CNA resolves a file rather than a family; one face, presented to each side the
+# way that side looks for one.
+if command -v fc-list >/dev/null && [ -z "$(fc-list : family | grep -i 'Liberation Mono')" ]; then
+    echo "run-differential-oracle: Liberation Mono is not installed; the .spritefont cases will" >&2
+    echo "  record a font-resolution failure that is the host's rather than XNA's." >&2
+fi
+
 mcs -sdk:4 -platform:x86 -target:exe -nologo -out:"$build/run/DifferentialOracle.exe" \
     -r:"$msbuild_framework" -r:"$msbuild_utilities" \
     -r:"$build/run/Microsoft.Xna.Framework.dll" \
@@ -67,9 +86,9 @@ mcs -sdk:4 -platform:x86 -target:exe -nologo -out:"$build/run/DifferentialOracle
     -r:"$build/run/Microsoft.Xna.Framework.Content.Pipeline.dll" \
     "$here/DifferentialOracle.cs"
 
-cp "$here/corpus.json" "$build/run/corpus.json"
+cp "$here/$manifest.json" "$build/run/$manifest.json"
 win() { env WINEPREFIX="$prefix" WINEDEBUG=-all wine winepath -w "$1" 2>/dev/null; }
-win_corpus="$(win "$build/run/corpus.json")"
+win_corpus="$(win "$build/run/$manifest.json")"
 win_sources="$(win "$build/run/sources")"
 win_results="$(win "$build/run/results")"
 win_assemblies="$(win "$build/run")"

@@ -58,8 +58,9 @@ namespace CNA::Content::Pipeline
             {
                 return *boolean;
             }
-            throw std::invalid_argument(std::string("TextureProcessor parameter '") + name +
-                                        "' must be true or false.");
+            throw ContentParameterError(ContentParameterFault::UnconvertibleValue, name,
+                                        std::string("TextureProcessor parameter '") + name +
+                                            "' must be true or false.");
         }
 
         /** @brief Reads and validates the `textureFormat` parameter. */
@@ -72,15 +73,17 @@ namespace CNA::Content::Pipeline
             const std::string* text = std::get_if<std::string>(value);
             if (text == nullptr)
             {
-                throw std::invalid_argument(
+                throw ContentParameterError(
+                    ContentParameterFault::UnconvertibleValue, TextureFormatParameter,
                     "TextureProcessor parameter 'textureFormat' must be a string.");
             }
             const std::optional<TextureBuildFormat> parsed = TryParseTextureBuildFormat(*text);
             if (!parsed.has_value())
             {
-                throw std::invalid_argument(
+                throw ContentParameterError(
+                    ContentParameterFault::UnconvertibleValue, TextureFormatParameter,
                     "TextureProcessor parameter 'textureFormat' is '" + *text +
-                    "'; it must be NoChange, Color, DxtCompressed, Dxt1, Dxt3 or Dxt5.");
+                        "'; it must be NoChange, Color, DxtCompressed, Dxt1, Dxt3 or Dxt5.");
             }
             return *parsed;
         }
@@ -382,7 +385,8 @@ namespace CNA::Content::Pipeline
             const std::string* text = std::get_if<std::string>(value);
             if (text == nullptr)
             {
-                throw std::invalid_argument(
+                throw ContentParameterError(
+                    ContentParameterFault::UnconvertibleValue, TextureColorKeyParameter,
                     "TextureProcessor parameter 'colorKey' must be a string in R,G,B form.");
             }
             return ParseColorKey(*text);
@@ -617,8 +621,9 @@ namespace CNA::Content::Pipeline
                 name != TexturePremultiplyAlphaParameter &&
                 name != TextureResizeToPowerOfTwoParameter)
             {
-                throw std::invalid_argument("TextureProcessor does not recognize parameter '" +
-                                            name + "'.");
+                throw ContentParameterError(
+                    ContentParameterFault::UnknownName, name,
+                    "TextureProcessor does not recognize parameter '" + name + "'.");
             }
         }
         static_cast<void>(ReadColorKey(parameters));

@@ -40,6 +40,36 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
 
         /** @brief Why no canonical component matches, when @ref canonicalName is empty. */
         std::string reason;
+
+        /**
+         * @brief XNA's own obsolescence sentence for this component, or empty when it is current.
+         *
+         * XNA marks two of its processors obsolete and warns when a project names one, which is
+         * something a project reads and acts on. Measured from the genuine build rather than
+         * assumed: `SpriteTextureProcessor` and `ModelTextureProcessor` warn, the other ten do not
+         * (tests/reference/xna40/differential-errors/, plans/plan_xnapipeline_parity.md
+         * XNAPP-267).
+         *
+         * Second-to-last of the fields, before @ref known, because the tables are written as
+         * aggregates and the two obsolete entries name their fields.
+         */
+        std::string obsoleteMessage;
+
+        /**
+         * @brief Whether XNA itself defines a component of this name.
+         *
+         * Not the same question as whether @ref canonicalName is empty, and the difference is a
+         * build outcome rather than a nicety. `XmlImporter` and `PassThroughProcessor` are real XNA
+         * components the canonical graph reaches without being named, so they map to no canonical
+         * name and a project that writes them is right. A name XNA has never defined is a project
+         * that will not build against a real XNA toolchain either, and XNA answers
+         * `Cannot find importer "..."` rather than quietly building something else
+         * (plans/plan_xnapipeline_parity.md XNAPP-267).
+         *
+         * Last of the fields because the tables above are written as aggregates without it; the
+         * lookup sets it.
+         */
+        bool known = false;
     };
 
     /**

@@ -8,6 +8,7 @@
 #include <fstream>
 #include <iterator>
 #include <map>
+#include <iostream>
 #include <memory>
 #include <sstream>
 
@@ -40,6 +41,69 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
             }
             return true;
         }
+
+        /**
+         * @brief Redirects the two standard streams into a buffer for as long as it lives.
+         *
+         * MSBuild's own `BuildContent` reports what the build said through the engine, and a
+         * project reads those lines to find out which asset failed and why. CNA's task drives the
+         * canonical coordinator, whose diagnostics are its streams: a failure on `cerr`, everything
+         * else on `cout`. Without this the task could only report that the build "returned status
+         * 1", which names neither the asset nor the reason and is not something a developer can act
+         * on (plans/plan_xnapipeline_parity.md XNAPP-267).
+         *
+         * The redirection is process-wide for the length of one `Execute()`, which is what it has
+         * to be: the coordinator writes to the same two objects everything else does.
+         */
+        class CapturedOutput
+        {
+        public:
+            /** @brief Starts capturing, remembering where the streams pointed. */
+            CapturedOutput()
+                : previousOut_(std::cout.rdbuf(out_.rdbuf())),
+                  previousError_(std::cerr.rdbuf(error_.rdbuf()))
+            {
+            }
+
+            /** @brief Puts both streams back. */
+            ~CapturedOutput()
+            {
+                std::cout.rdbuf(previousOut_);
+                std::cerr.rdbuf(previousError_);
+            }
+
+            CapturedOutput(const CapturedOutput&) = delete;
+            CapturedOutput& operator=(const CapturedOutput&) = delete;
+
+            /** @brief What the coordinator reported as a failure. */
+            [[nodiscard]] std::vector<std::string> Failures() const { return Lines(error_.str()); }
+
+            /** @brief Everything else the coordinator said. */
+            [[nodiscard]] std::vector<std::string> Progress() const { return Lines(out_.str()); }
+
+        private:
+            /** @brief Splits captured text into lines, dropping blanks and trailing space. */
+            [[nodiscard]] static std::vector<std::string> Lines(const std::string& text)
+            {
+                std::vector<std::string> lines;
+                std::istringstream stream(text);
+                std::string line;
+                while (std::getline(stream, line))
+                {
+                    while (!line.empty() && (line.back() == '\r' || line.back() == ' '))
+                    {
+                        line.pop_back();
+                    }
+                    if (!line.empty()) { lines.push_back(line); }
+                }
+                return lines;
+            }
+
+            std::ostringstream out_;
+            std::ostringstream error_;
+            std::streambuf* previousOut_;
+            std::streambuf* previousError_;
+        };
 
         /** @brief Splits `a=b;c=d`, which is how a `.contentproj` writes processor parameters. */
         [[nodiscard]] std::vector<std::pair<std::string, std::string>> SplitParameters(
@@ -380,6 +444,15 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
             if (!importerName.empty())
             {
                 const XnaComponentMapping mapping = MapXnaImporterName(importerName);
+                if (!mapping.known)
+                {
+                    // XNA's own words, because the situation is XNA's: a project naming an importer
+                    // no assembly defines does not build there either. Building the source through
+                    // whatever route its extension suggests would hide that until the project
+                    // reached a real toolchain (plans/plan_xnapipeline_parity.md XNAPP-267).
+                    LogError("Cannot find importer \"" + importerName + "\". " + mapping.reason);
+                    return false;
+                }
                 if (mapping.canonicalName.empty())
                 {
                     // Not a hard failure for the two that mean "let the graph choose": naming
@@ -396,6 +469,18 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
             if (!processorName.empty())
             {
                 const XnaComponentMapping mapping = MapXnaProcessorName(processorName);
+                if (!mapping.known)
+                {
+                    LogError("Cannot find content processor \"" + processorName + "\". " +
+                             mapping.reason);
+                    return false;
+                }
+                if (!mapping.obsoleteMessage.empty())
+                {
+                    // XNA's own sentence, in XNA's own place: a project naming an obsolete
+                    // processor is told so and builds anyway.
+                    LogWarning(mapping.obsoleteMessage);
+                }
                 if (mapping.canonicalName.empty())
                 {
                     LogMessage("BuildContent: processor \"" + processorName + "\" for \"" + key +
@@ -531,8 +616,18 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
                                std::istreambuf_iterator<char>());
         }();
 
+        // No `--quiet`: that flag suppresses everything that is not a failure, and a build's
+        // warnings are exactly what a project needs -- XNA warns rather than fails for an unknown
+        // processor parameter, a value it cannot convert and a character region the font cannot
+        // cover. Nothing reaches a console regardless, because the streams are captured below.
+        // `--xna-compatible` is XNA's own strictness, measured: a `.contentproj` naming a processor
+        // parameter the processor has not got, writing a value it cannot convert, or asking for
+        // characters the font has no glyphs for, builds there with a warning. The canonical tool
+        // refuses all three, which is right for it and wrong for a façade standing in for XNA
+        // (plans/plan_xnapipeline_parity.md XNAPP-267).
         std::vector<std::filesystem::path> arguments{
-            "build", root, "-o", output, "--format", "xnb", "--config", configurationFile, "--quiet"};
+            "build",    root,              "-o",  output, "--format", "xnb",
+            "--config", configurationFile, "--xna-compatible"};
         if (!targetPlatform_.empty())
         {
             std::string platform(targetPlatform_);
@@ -564,19 +659,48 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
         }
 
         int status = 1;
-        try
+        std::vector<std::string> failures;
+        std::vector<std::string> progress;
+        std::string threw;
         {
-            status = Canon::RunContentCompiler(
-                arguments, [](const Canon::ContentCompilerOptions& options)
-                {
-                    auto registry = std::make_shared<Canon::ContentPipelineRegistry>();
-                    Canon::RegisterBuiltInContentPipeline(*registry, options);
-                    return registry;
-                });
+            TaskDetail::CapturedOutput captured;
+            try
+            {
+                status = Canon::RunContentCompiler(
+                    arguments, [](const Canon::ContentCompilerOptions& options)
+                    {
+                        auto registry = std::make_shared<Canon::ContentPipelineRegistry>();
+                        Canon::RegisterBuiltInContentPipeline(*registry, options);
+                        return registry;
+                    });
+            }
+            catch (const std::exception& failure)
+            {
+                threw = failure.what();
+            }
+            failures = captured.Failures();
+            progress = captured.Progress();
         }
-        catch (const std::exception& failure)
+        // Reported after the streams are back, keeping the coordinator's own three-way split
+        // rather than guessing at one from the words: a failure is what it wrote to the error
+        // stream, a warning is what it labelled one, and everything else is progress. Which line
+        // is which is what a project reads the list for.
+        for (const std::string& line : failures) { LogError(line); }
+        for (const std::string& line : progress)
         {
-            LogError(std::string("BuildContent failed: ") + failure.what());
+            const std::size_t at = line.find_first_not_of(' ');
+            if (at != std::string::npos && line.compare(at, 8, "warning ") == 0)
+            {
+                LogWarning(line.substr(at));
+            }
+            else
+            {
+                LogMessage(line);
+            }
+        }
+        if (!threw.empty())
+        {
+            LogError(std::string("BuildContent failed: ") + threw);
             return false;
         }
         if (status != 0)

@@ -139,8 +139,19 @@ namespace CNA::Content::Pipeline
      */
     [[nodiscard]] std::filesystem::path FindSystemFontFile(const std::string& fontName);
 
+    /**
+     * @brief Rasterizes a resolved font description into a sprite-font atlas.
+     *
+     * @param description The description, with its font file already resolved.
+     * @param warnings Receives every warning the rasterization produced.
+     * @param strictness Whether a character the font has no glyph for refuses the build or is
+     *        drawn with the font's own `.notdef` and warned about, which is what XNA does
+     *        (plans/plan_xnapipeline_parity.md XNAPP-267).
+     * @return The atlas and its glyph table.
+     */
     [[nodiscard]] Cnb::CnbSpriteFontData RasterizeFontDescription(
-        const FontDescription& description, std::vector<std::string>& warnings);
+        const FontDescription& description, std::vector<std::string>& warnings,
+        ContentStrictness strictness = ContentStrictness::Strict);
 
     /** @brief Reads a `.spritefont` and resolves the font file it names. */
     class FontDescriptionImporter final : public ContentImporter

@@ -408,7 +408,8 @@ namespace CNA::Content::Pipeline
     }
 
     Cnb::CnbSpriteFontData RasterizeFontDescription(const FontDescription& description,
-                                                    std::vector<std::string>& warnings)
+                                                    std::vector<std::string>& warnings,
+                                                    const ContentStrictness strictness)
     {
         const std::vector<SharpRuntime::charcs> characters =
             ExpandCharacterRegions(description);
@@ -454,13 +455,12 @@ namespace CNA::Content::Pipeline
         glyphs.reserve(characters.size());
         for (const SharpRuntime::charcs character : characters)
         {
-            const FT_UInt glyphIndex =
+            FT_UInt glyphIndex =
                 FT_Get_Char_Index(face.Handle(), static_cast<FT_ULong>(character));
             if (glyphIndex == 0u)
             {
-                throw std::runtime_error(
-                    "'" + origin + "' has no glyph for U+" +
-                    [character]
+                const std::string codepoint =
+                    "U+" + [character]
                     {
                         static constexpr char kDigits[] = "0123456789ABCDEF";
                         std::string text(4u, '0');
@@ -471,9 +471,29 @@ namespace CNA::Content::Pipeline
                                          ((3u - index) * 4u)) & 0xFu];
                         }
                         return text;
-                    }() +
-                    ". A SpriteFont must be able to draw every character its regions ask for; "
-                    "narrow <CharacterRegions> or choose a font that covers them.");
+                    }();
+                if (strictness != ContentStrictness::XnaCompatible)
+                {
+                    throw std::runtime_error(
+                        "'" + origin + "' has no glyph for " + codepoint +
+                        ". A SpriteFont must be able to draw every character its regions ask "
+                        "for; narrow <CharacterRegions> or choose a font that covers them.");
+                }
+                // XNA builds this font. It draws the missing characters from the machine's own
+                // default font and warns that redistributing the result may not be licensed
+                // (measured: tests/reference/xna40/differential-errors/, font/missing_glyph).
+                // Reaching for a second font would make the build depend on what is installed,
+                // which is the one thing this pipeline will not do, so the character is drawn
+                // with the font's own glyph 0 -- the box a font supplies for exactly this. The
+                // font ends up covering the same characters XNA's does; what is inside the cell
+                // differs, and the warning says so (plans/plan_xnapipeline_parity.md XNAPP-267).
+                warnings.push_back(
+                    "'" + origin + "' has no glyph for " + codepoint +
+                    ", so it is drawn with the font's own .notdef glyph. XNA substitutes the "
+                    "machine's default font here; CNA does not, because a content build must "
+                    "produce the same bytes on every machine. Narrow <CharacterRegions> or "
+                    "choose a font that covers them.");
+                glyphIndex = 0u;
             }
             if (FT_Load_Glyph(face.Handle(), glyphIndex, FT_LOAD_DEFAULT) != 0)
             {
@@ -638,7 +658,8 @@ namespace CNA::Content::Pipeline
     }
 #else
     Cnb::CnbSpriteFontData RasterizeFontDescription(const FontDescription&,
-                                                    std::vector<std::string>&)
+                                                    std::vector<std::string>&,
+                                                    const ContentStrictness)
     {
         throw std::runtime_error(
             "this build has no font rasterizer, so a .spritefont cannot be compiled. Configure "
@@ -861,9 +882,10 @@ namespace CNA::Content::Pipeline
         for (const auto& [name, value] : parameters.Values())
         {
             static_cast<void>(value);
-            throw std::invalid_argument(
+            throw ContentParameterError(
+                ContentParameterFault::UnknownName, name,
                 "FontDescriptionProcessor does not recognize parameter '" + name +
-                "'; a .spritefont carries its own complete policy.");
+                    "'; a .spritefont carries its own complete policy.");
         }
     }
 
@@ -872,7 +894,8 @@ namespace CNA::Content::Pipeline
     {
         const FontDescription& description = input.Get<FontDescription>();
         std::vector<std::string> warnings;
-        Cnb::CnbSpriteFontData font = RasterizeFontDescription(description, warnings);
+        Cnb::CnbSpriteFontData font =
+            RasterizeFontDescription(description, warnings, context.Environment().strictness);
         for (const std::string& warning : warnings) { context.LogWarning(warning); }
         context.LogInfo("rasterized " + std::to_string(font.characters.size()) +
                         " glyph(s) into a " + std::to_string(font.atlas.width) + "x" +
