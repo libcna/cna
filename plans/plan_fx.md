@@ -1282,8 +1282,17 @@ refuses a compiled `Effect` explicitly.
   `DIRECT2D`, `CANVAS`, `HTML_DOM`, `SVG_DOM`, `SKIA`, `BLEND2D`, `SOFTWARE`, `FREEDIRECT`.
 - **Programmable, but not through anything MojoShader emits**: `PORTABLEGL`, whose shader stage is
   a pair of C function pointers rather than a compiled program -- there is nothing for a translated
-  shader to become. `WEBGPU` consumes WGSL, which the pinned MojoShader does not emit; it is
-  reconsidered only if a SPIR-V route into wgpu-native is proven, and stays out of scope for v1.
+  shader to become. `WEBGPU`'s own shader language is WGSL, which the pinned MojoShader does not
+  emit, and it stays out of scope for v1 -- but the reason recorded here was wrong and
+  `plans/plan_webgpu.md` `WEBGPU-194` corrected it on 2026-09-06. This entry used to say WebGPU
+  "consumes WGSL" full stop, reconsidered "only if a SPIR-V route into wgpu-native is proven". A
+  SPIR-V route is in the pinned headers: `WGPUShaderSourceSPIRV` and the instance feature
+  `WGPUInstanceFeatureName_ShaderSourceSPIRV` are declared by BOTH `wgpu-native v29.0.1.1` and the
+  browser's `emdawnwebgpu` port, with `wgpuHasInstanceFeature()` to ask for it at runtime. What is
+  NOT established is whether either implementation actually advertises the feature -- that is a
+  runtime question nobody here has measured, and SPIR-V is not part of the WebGPU specification, so
+  a browser answering yes would be surprising. The scope verdict is unchanged; only its stated
+  premise is. `plans/plan_webgpu.md` `WEBGPU-166`/`203`/`204` own the measurement.
 - **Not rendering backends**: `HEADLESS`, `STUB`.
 
 #### What this assessment does not claim

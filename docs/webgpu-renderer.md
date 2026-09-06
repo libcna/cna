@@ -944,6 +944,61 @@ string. This half is derived from the port's own JavaScript, not confirmed in a 
 confirmation belongs with `WEBGPU-196`.
 
 
+## What the 2026-09-06 coverage batch changed (`WEBGPU-174`–`191`, `195`)
+
+Swept here by `WEBGPU-194`, because each of these is a capability this document either did not
+mention or implied the renderer lacked. They are behaviour changes, not just new tests.
+
+**A missing texture no longer refuses a draw.** `AlphaTestEffect` with a null `Texture`, and
+`DualTextureEffect` with a null `Texture` or `Texture2`, used to abort: the shape selector gated
+those families on the texture being bound, so the draw fell into the stride-derived ladder and was
+refused there. Opaque white is the identity for `tex * colour` and is what `EasyGLRenderer` binds
+for a missing unit, so both families now take the neutral-white default (`WEBGPU-174`/`175`).
+`EnvironmentMapEffect` still carries the same gate for its cube map and is left to its own row.
+
+**`EnvironmentMapEffect`'s Fresnel weight is computed per VERTEX**, clamped to [0,1], and
+interpolated — not recomputed per fragment (`WEBGPU-176`). XNA evaluates `ComputeFresnelFactor` in
+the vertex shader and Direct3D 9 saturates the `COLOR1` register it travels in; recomputing per
+fragment is a different function once vertices carry different normals, and is invisible on a
+flat-normal quad, which is why every earlier test missed it.
+
+**`SkinnedEffect` accepts any declaration that can supply its five semantics**, not only stride 52
+and 56 (`WEBGPU-177`). `BLENDINDICES0` may be declared `Vector4` as well as `Byte4` — XNA's
+`VertexElementFormat` describes the bytes in the buffer, not the register — and such a stream is
+normalized into the canonical record at capture rather than being refused. WebGPU has no vertex
+format that reads unsigned bytes as un-normalized floats, so a rewrite is what avoids doubling every
+skinned shader.
+
+**`SurfaceFormat::NormalizedByte2`/`NormalizedByte4` are stored natively** as `rg8snorm`/`rgba8snorm`
+(`WEBGPU-184`). Neither is renderable in core WebGPU, so such a texture drops its `RenderAttachment`
+usage and a MIP-MAPPED one is refused by name — this renderer generates mips by drawing into each
+level, which a non-renderable format has no path for. `Bgr565`, `Bgra5551` and `Bgra4444` stay
+refused by name and `GetAdditionalLimitationsTextEXT()` says why: WebGPU has no 16-bit packed colour
+format, so accepting them would mean a texture reporting one format while the GPU holds another.
+
+**`SupportsCapability(MultiSampleAntiAliasing)` answers from the device probe** rather than the
+shared permissive default (`WEBGPU-195`), so it and `PickSampleCount()` are one answer instead of
+two.
+
+**A device-loss gate exists and is load-bearing.** `CanBeginDrawEXT()` reports `false` while the
+device is lost (`WEBGPU-181`), and on this pin that is a safety mechanism rather than a convenience:
+`WEBGPU-180` measured that `wgpuSurfaceGetCurrentTexture` on a surface whose device is lost does not
+return a failure status but panics inside wgpu-native and aborts the process. See *Device loss: what
+the pin actually does* above.
+
+**A stale `GraphicsDevice.Viewport` was scaling every sprite** (`WEBGPU-178`). `GetViewportSize()`
+answered from the last surface CONFIGURATION rather than the last surface the platform REPORTED, so
+in a one-frame program the device's `Viewport` kept its 800x480 default over a 128x96 backbuffer and
+`SpriteBatch`, whose projection comes from that `Viewport`, drew everything at 128/800 of its size.
+
+**What is still not byte-identical to the reference renderer, and why.** Three parity fixtures
+deliberately do not compare frames: `sampler_filters` (magnification lands its gradient half a texel
+apart), `rasterizer_viewport` (276 pixels of 12800, all on triangle hypotenuses), and
+`parity_sprite_geometry`'s single half-pixel-destination cell (32 pixels, its top and left coverage
+edges). All three are the same cause — the pixel-centre convention `WEBGPU-187` owns — and each
+fixture's assertions are internal A/B claims that hold on both renderers.
+
+
 ## Important limitations
 
 The desktop feature set now covers 3D (every stock effect, with FNA fog parity), real instancing,
