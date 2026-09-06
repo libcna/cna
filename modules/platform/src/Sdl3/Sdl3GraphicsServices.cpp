@@ -127,7 +127,7 @@ namespace CNA::Platform::Sdl3 {
     GlContextHandle Sdl3GlContext::CreateContext(const WindowId window,
                                                  const GlContextDescription& description)
     {
-        std::lock_guard<std::mutex> lock(SdlGlobalStateMutex());
+        SdlGlobalStateLock lock;
         SDL_Window* nativeWindow = RequireSdl3Window(window, "GlContext::CreateContext");
 
         // Attributes must be set BEFORE context creation; setting them afterwards is silently
@@ -266,7 +266,7 @@ namespace CNA::Platform::Sdl3 {
 
     std::vector<std::string> Sdl3VulkanSurface::GetInstanceExtensions() const
     {
-        std::lock_guard<std::mutex> lock(SdlGlobalStateMutex());
+        SdlGlobalStateLock lock;
         const VulkanLoaderLease loader("VulkanSurface::GetInstanceExtensions");
 
         Uint32 count = 0;
@@ -288,7 +288,7 @@ namespace CNA::Platform::Sdl3 {
     VulkanSurfaceHandle Sdl3VulkanSurface::CreateSurface(const VulkanInstanceHandle instance,
                                                          const WindowId window)
     {
-        std::lock_guard<std::mutex> lock(SdlGlobalStateMutex());
+        SdlGlobalStateLock lock;
         SDL_Window* nativeWindow = RequireSdl3Window(window, "VulkanSurface::CreateSurface");
 
         // Value-initialised rather than VK_NULL_HANDLE: that macro needs a real Vulkan header,
@@ -309,7 +309,7 @@ namespace CNA::Platform::Sdl3 {
         {
             return;
         }
-        std::lock_guard<std::mutex> lock(SdlGlobalStateMutex());
+        SdlGlobalStateLock lock;
         SDL_Vulkan_DestroySurface(static_cast<VkInstance>(instance),
                                   FromSurfaceHandle<VkSurfaceKHR>(surface), nullptr);
     }

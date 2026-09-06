@@ -15,6 +15,7 @@
 #include <atomic>
 #include <cstdio>
 #include <mutex>
+#include <optional>
 
 #if defined(__linux__) || defined(__unix__)
 #include <dlfcn.h>
@@ -211,7 +212,25 @@ namespace CNA::Platform::Sdl3 {
         // SDL_Quit(): PLAT-4 established that global SDL lifetime belongs to the host
         // application, and calling it here would tear down subsystems the host still holds.
         // Cached native handles must close before the subsystems that own them.
-        std::lock_guard<std::mutex> lock(SdlGlobalStateMutex());
+        //
+        // plans/plan_vulkan.md VULKAN-159 (finding F-28): do NOT re-lock when this very thread is
+        // already inside the critical section. `exit()` can be reached from within a platform call
+        // that holds the mutex -- measured with gdb on 2026-09-05, Xlib's default error handler
+        // calling exit() from inside SDL_CreateWindow, itself called from CreateWindow which took
+        // the lock -- and the static destructors exit() then runs include this one. Re-locking a
+        // non-recursive mutex on its owning thread never returns, which is how F-27 hung a whole
+        // ctest run.
+        //
+        // Skipping the lock is safe precisely in that case and only in that case: the thread that
+        // owns the mutex is this one, so there is no concurrent access to exclude, and every other
+        // thread is still shut out by the lock this thread continues to hold. The alternative
+        // considered and rejected was a recursive mutex, which would silently sanction
+        // re-entrancy in the ten other methods that must not have it.
+        std::optional<SdlGlobalStateLock> lock;
+        if (!SdlGlobalStateHeldByThisThread())
+        {
+            lock.emplace();
+        }
         sensors_.Deactivate();
         haptics_.Deactivate();
         for (const auto& [subsystem, count] : ownedRefCounts_)
@@ -231,7 +250,7 @@ namespace CNA::Platform::Sdl3 {
 
     bool Sdl3Platform::HasVulkanSupport() const
     {
-        std::lock_guard<std::mutex> lock(SdlGlobalStateMutex());
+        SdlGlobalStateLock lock;
         if (vulkanAvailable_.has_value())
         {
             return *vulkanAvailable_;
@@ -310,7 +329,7 @@ namespace CNA::Platform::Sdl3 {
 
     void Sdl3Platform::AcquireSubsystem(const PlatformSubsystem subsystem)
     {
-        std::lock_guard<std::mutex> lock(SdlGlobalStateMutex());
+        SdlGlobalStateLock lock;
         if (!SDL_InitSubSystem(ToSdlFlag(subsystem)))
         {
             std::string detail = LastSdlError();
@@ -334,7 +353,7 @@ namespace CNA::Platform::Sdl3 {
 
     void Sdl3Platform::ReleaseSubsystem(const PlatformSubsystem subsystem)
     {
-        std::lock_guard<std::mutex> lock(SdlGlobalStateMutex());
+        SdlGlobalStateLock lock;
         // An unpaired release is a documented no-op, not an error: cleanup may follow partial
         // initialization even though successful owners balance every acquisition.
         const auto it = ownedRefCounts_.find(subsystem);
@@ -360,14 +379,14 @@ namespace CNA::Platform::Sdl3 {
 
     bool Sdl3Platform::IsSubsystemInitialized(const PlatformSubsystem subsystem) const
     {
-        std::lock_guard<std::mutex> lock(SdlGlobalStateMutex());
+        SdlGlobalStateLock lock;
         const SDL_InitFlags flag = ToSdlFlag(subsystem);
         return (SDL_WasInit(flag) & flag) != 0;
     }
 
     std::unique_ptr<IPlatformWindow> Sdl3Platform::CreateWindow(const WindowDescription& description)
     {
-        std::lock_guard<std::mutex> lock(SdlGlobalStateMutex());
+        SdlGlobalStateLock lock;
 
         // Creation-time flags only. Render intent and high-DPI in particular CANNOT be applied
         // afterwards -- the native surface attributes are chosen when the window is made -- which
