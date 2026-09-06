@@ -3,6 +3,7 @@
 
 #include <map>
 #include <string>
+#include <utility>
 #include <string_view>
 #include <vector>
 
@@ -96,8 +97,16 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
 
     private:
         std::string itemSpec_;
-        // Case-insensitive, as MSBuild metadata is; the comparator lowers both sides.
-        std::map<std::string, std::string> metadata_;
+        /**
+         * @brief Folded name to the name as it was written and its value.
+         *
+         * MSBuild matches a metadata name without regard to case but reports the names as the
+         * project spelled them, and the difference is load-bearing here: a processor parameter is
+         * derived from the part of the name after `ProcessorParameters_`, and a processor's own
+         * property has a case (`Scale`, `TextureFormat`). Folding the stored name turned every
+         * parameter into one no processor recognised (plans/plan_xnapipeline_parity.md XNAPP-265).
+         */
+        std::map<std::string, std::pair<std::string, std::string>> metadata_;
     };
 
     /**

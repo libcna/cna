@@ -767,6 +767,23 @@ namespace CNA::Content::Pipeline
             }
             else
             {
+                // XNA refuses to block-compress a texture whose level-0 dimensions are not
+                // multiples of four, and says so in exactly these words. Measured on the genuine
+                // BuildContent from both sides: 2x2 and 3x2 are refused, 4x4 builds
+                // (tests/reference/xna40/differential, cases texture/png_texture_dxt,
+                // texture/png3x2_texture_dxt, texture/png4x4_texture_dxt). Without it a project
+                // that asks for DXT on such a texture fails its build under XNA and quietly ships
+                // a padded one from CNA (plans/plan_xnapipeline_parity.md XNAPP-265).
+                //
+                // Only on the path that actually compresses: a `.cnb` keeps the uncompressed
+                // pixels and says so above, so XNA's rule has nothing to refuse there.
+                if (texture.width % 4u != 0u || texture.height % 4u != 0u)
+                {
+                    throw ContentLoadException(
+                        "Invalid texture. Face 0 is sized " + std::to_string(texture.width) + "x" +
+                        std::to_string(texture.height) +
+                        ", but textures using DXT compressed formats must be multiples of four.");
+                }
                 CompressTextureLevels(texture, target, encoder_);
                 context.LogInfo("compressed " + std::to_string(texture.mipCount) +
                                 " mip level(s) to " + Cnb::CnbTextureFormatToString(target) +

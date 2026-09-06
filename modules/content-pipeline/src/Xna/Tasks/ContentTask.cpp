@@ -29,12 +29,12 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
     std::string TaskItem::GetMetadata(const std::string& name) const
     {
         const auto found = metadata_.find(Fold(name));
-        return found == metadata_.end() ? std::string() : found->second;
+        return found == metadata_.end() ? std::string() : found->second.second;
     }
 
     void TaskItem::SetMetadata(const std::string& name, std::string value)
     {
-        metadata_[Fold(name)] = std::move(value);
+        metadata_[Fold(name)] = {name, std::move(value)};
     }
 
     bool TaskItem::HasMetadata(const std::string& name) const
@@ -46,10 +46,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
     {
         std::vector<std::string> names;
         names.reserve(metadata_.size());
-        for (const auto& [name, value] : metadata_)
+        for (const auto& [folded, entry] : metadata_)
         {
-            (void)value;
-            names.push_back(name);
+            (void)folded;
+            names.push_back(entry.first);
         }
         return names;
     }

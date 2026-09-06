@@ -192,7 +192,13 @@ namespace
 
         ~ScopedEnvironment()
         {
-            System::Environment::SetEnvironmentVariable(name_, previous_.value_or(std::string{}));
+            // The optional is passed through, not flattened: only a null value removes a variable,
+            // and an empty string leaves a present-but-empty one behind
+            // (sharp-runtime Environment.cpp #2313). Flattening it here restored a variable that
+            // had been unset as set-to-empty, which every later test in the process then saw --
+            // and a check for "is a compiler configured" answered yes to an empty path
+            // (plans/plan_xnapipeline_parity.md XNAPP-265).
+            System::Environment::SetEnvironmentVariable(name_, previous_);
         }
 
         ScopedEnvironment(const ScopedEnvironment&) = delete;

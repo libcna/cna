@@ -31,8 +31,13 @@ tokenizer. Nothing here was downloaded and nothing is third-party content.
 
 ## The texture a fixture names
 
-`quad_textured.x` names `surface.png`, and `surface.png` beside it is that file: the same 2x2
-probe the texture corpus uses (`tests/assets/xna40/texture/probe.png`, byte for byte). It is here
+`quad_textured.x` names `surface.png`, and `surface.png` beside it is that file: the 4x4 probe the
+texture corpus uses (`tests/assets/xna40/texture/probe_4x4.png`, byte for byte). Four by four
+rather than the 2x2 everything else uses, because `ModelProcessor` builds a model's textures with
+`TextureFormat` defaulting to `DxtCompressed`, and XNA refuses to DXT-compress a texture whose
+dimensions are not multiples of four -- measured, `texture/png_texture_dxt` and
+`model/x_textured` in the differential corpus. A 2x2 here would make this fixture one XNA itself
+cannot build. It is here
 so the model is a complete asset -- the source-to-output legs build it through the real
 coordinator, which imports, processes and publishes the texture as its own output before the model
 can refer to it, exactly as XNA's `MaterialProcessor` does. `two_materials.x` names `blue.dds`,

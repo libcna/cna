@@ -23,6 +23,7 @@ the same raw pixels.
 | `probe.tga` | 34 |
 | `probe.xyz` | 76 |
 | `probe_3x2.png` | 85 |
+| `probe_4x4.png` | 119 |
 | `probe_flat.hdr` | 89 |
 | `truncated.dds` | 60 |
 | `truncated.png` | 20 |

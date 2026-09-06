@@ -26,6 +26,21 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
 
     namespace TaskDetail
     {
+        /** @brief MSBuild compares a metadata name without regard to case; so does this. */
+        [[nodiscard]] bool EqualsIgnoringCase(const std::string& left, const std::string& right)
+        {
+            if (left.size() != right.size()) { return false; }
+            for (std::size_t at = 0; at < left.size(); ++at)
+            {
+                if (std::tolower(static_cast<unsigned char>(left[at])) !=
+                    std::tolower(static_cast<unsigned char>(right[at])))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         /** @brief Splits `a=b;c=d`, which is how a `.contentproj` writes processor parameters. */
         [[nodiscard]] std::vector<std::pair<std::string, std::string>> SplitParameters(
             const std::string& text)
@@ -402,8 +417,12 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
             }
             for (const std::string& name : asset.MetadataNames())
             {
-                static const std::string prefix = "processorparameters_";
-                if (name.rfind(prefix, 0) == 0 && name.size() > prefix.size())
+                // The name is compared without regard to case, as MSBuild compares metadata, but
+                // what follows the prefix is taken exactly as the project wrote it: it becomes a
+                // processor parameter, and a processor's own property has a case.
+                static const std::string prefix = "ProcessorParameters_";
+                if (name.size() > prefix.size() &&
+                    TaskDetail::EqualsIgnoringCase(name.substr(0, prefix.size()), prefix))
                 {
                     parameters.emplace_back(name.substr(prefix.size()), asset.GetMetadata(name));
                 }
@@ -411,12 +430,24 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
             if (!parameters.empty())
             {
                 // The reader refuses a repeated parameter name, and the project's own value must
-                // win over the mapping's default, so the last one written is kept.
-                std::map<std::string, std::string> effective;
+                // win over the mapping's default, so the last value written is kept. The *name*
+                // kept is the first one written, which is the mapping's: a canonical processor
+                // standing in for an XNA one spells its parameters its own way (`textureFormat`
+                // where XNA writes `TextureFormat`), and a project that names the XNA spelling is
+                // setting that same parameter rather than an unknown second one. Matched without
+                // regard to case, as MSBuild matches metadata (XNAPP-265).
+                std::vector<std::pair<std::string, std::string>> effectiveOrder;
                 for (const auto& [name, value] : parameters)
                 {
-                    effective[name] = value;
+                    const auto found = std::find_if(
+                        effectiveOrder.begin(), effectiveOrder.end(),
+                        [&name](const std::pair<std::string, std::string>& entry)
+                        { return TaskDetail::EqualsIgnoringCase(entry.first, name); });
+                    if (found == effectiveOrder.end()) { effectiveOrder.emplace_back(name, value); }
+                    else { found->second = value; }
                 }
+                std::map<std::string, std::string> effective;
+                for (const auto& [name, value] : effectiveOrder) { effective[name] = value; }
                 if (!firstField)
                 {
                     configuration << ", ";

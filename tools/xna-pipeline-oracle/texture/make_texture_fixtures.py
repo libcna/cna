@@ -168,6 +168,32 @@ def png_3x2(path):
           chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b""))
 
 
+def png_4x4(path):
+    """Four by four: the smallest size XNA's DXT compression accepts.
+
+    XNA refuses to DXT-compress a texture whose dimensions are not multiples of four -- measured,
+    `texture/png_texture_dxt` in the differential corpus -- so proving the rule needs a source on
+    each side of it, not only the one that fails (XNAPP-265).
+    """
+    palette = PIXELS + [(0, 0, 0, 255), (128, 128, 128, 64), (255, 255, 0, 255), (0, 255, 255, 255),
+                        (255, 0, 255, 255), (64, 64, 64, 255), (200, 100, 50, 255),
+                        (10, 20, 30, 255), (250, 250, 250, 255), (1, 2, 3, 4), (9, 8, 7, 255),
+                        (30, 60, 90, 200)]
+    raw = b""
+    for row in range(4):
+        raw += b"\x00"
+        for column in range(4):
+            raw += bytes(palette[row * 4 + column])
+
+    def chunk(tag, payload):
+        return (struct.pack(">I", len(payload)) + tag + payload +
+                struct.pack(">I", zlib.crc32(tag + payload) & 0xFFFFFFFF))
+
+    header = struct.pack(">IIBBBBB", 4, 4, 8, 6, 0, 0, 0)
+    write(path, b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) +
+          chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b""))
+
+
 def write(path, data):
     with open(path, "wb") as handle:
         handle.write(data)
@@ -194,6 +220,7 @@ def main():
     dds(os.path.join(out, "probe.dds"))
     jpg(os.path.join(out, "probe.jpg"))
     png_3x2(os.path.join(out, "probe_3x2.png"))
+    png_4x4(os.path.join(out, "probe_4x4.png"))
     # The same PNG bytes under an extension no importer declares: the importer must read the file
     # and not its name.
     png(os.path.join(out, "probe.xyz"))
