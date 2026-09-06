@@ -10,18 +10,18 @@
 
 | Quantity | Implemented (EXACT + SEMANTIC + HOST_SUBSTITUTION) | EXTERNAL_BLOCKED | MISSING |
 |---|---|---:|---:|
-| public/protected types | 126/128 (98.4%) | 0 | 2 |
-| public/protected members | 699/705 (99.1%) | 0 | 6 |
+| public/protected types | 127/128 (99.2%) | 0 | 1 |
+| public/protected members | 703/705 (99.7%) | 0 | 2 |
 | enum values | 27/27 (100.0%) | 0 | 0 |
-| built-in importers | 8/10 (80.0%) | 0 | 2 |
+| built-in importers | 9/10 (90.0%) | 0 | 1 |
 | built-in processors | 12/12 (100.0%) | 0 | 0 |
 | processor properties | 47/47 (100.0%) | 0 | 0 |
 | source extensions IMPLEMENTED+TESTED | 0/18 (0.0%) | 0 | 18 |
 
 Status vocabulary: EXACT_EQUIVALENT, SEMANTIC_EQUIVALENT (spelling differs, capability identical; note says how),
 HOST_SUBSTITUTION (Microsoft-host mechanism replaced; note says how), EXTERNAL_BLOCKED (note names the
-unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 45, SEMANTIC_EQUIVALENT 76, HOST_SUBSTITUTION 5, EXTERNAL_BLOCKED 0, MISSING 2.
-Member status by value: EXACT_EQUIVALENT 454, SEMANTIC_EQUIVALENT 234, HOST_SUBSTITUTION 11, EXTERNAL_BLOCKED 0, MISSING 6.
+unavailable component), MISSING. Type status by value: EXACT_EQUIVALENT 44, SEMANTIC_EQUIVALENT 78, HOST_SUBSTITUTION 5, EXTERNAL_BLOCKED 0, MISSING 1.
+Member status by value: EXACT_EQUIVALENT 456, SEMANTIC_EQUIVALENT 236, HOST_SUBSTITUTION 11, EXTERNAL_BLOCKED 0, MISSING 2.
 
 Rules applied mechanically: 3 delegate plumbing members are listed in section 7 and not counted; 3 exception
 serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serialization has no C++ counterpart).
@@ -31,7 +31,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | Namespace | Types | Implemented | Blocked | Missing |
 |---|---:|---:|---:|---:|
 | `Microsoft.Xna.Framework.Content.Pipeline.Audio` | 5 | 5 | 0 | 0 |
-| `Microsoft.Xna.Framework.Content.Pipeline` | 32 | 30 | 0 | 2 |
+| `Microsoft.Xna.Framework.Content.Pipeline` | 32 | 31 | 0 | 1 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Graphics` | 47 | 47 | 0 | 0 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Processors` | 28 | 28 | 0 | 0 |
 | `Microsoft.Xna.Framework.Content.Pipeline.Serialization.Compiler` | 5 | 5 | 0 | 0 |
@@ -71,7 +71,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `….Graphics` | `BitmapContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::BitmapContent` | All 13 members present. The copy protocol runs in XNA's order -- argument validation, zero-size no-op, same-instance snapshot, destination TryCopyFrom, source TryCopyTo, then the Vector4 intermediate -- verified against tests/reference/xna40/graphics. |
 | `….Graphics` | `BoneContent` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::BoneContent` |  |
 | `….Graphics` | `BoneWeight` | struct | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::BoneWeight` | A value type here as in XNA, with the measured guards: the name may not be empty and the weight must lie in [0, 1], NaN included because neither comparison is true of it (boneweight/weight_range). Both properties are read-only and neither is serialized, so a weight is an empty <Item /> element. |
-| `….Graphics` | `BoneWeightCollection` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::BoneWeightCollection` |  |
+| `….Graphics` | `BoneWeightCollection` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::BoneWeightCollection` | Carries one CNAEXT member the inventory does not list, an equality operator: a vertex channel needs its element type to be equality-comparable, and XNA's reference type compares by identity, which comparing the weights themselves agrees with wherever identity applies. |
 | `….Graphics` | `DualTextureMaterialContent` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::DualTextureMaterialContent` | Adds no state: every property is a view over the base's OpaqueData or Textures, verified entry by entry against tests/reference/xna40/graphics (case material/dualtexture_properties or material/basic_properties). |
 | `….Graphics` | `Dxt1BitmapContent` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::Dxt1BitmapContent` |  |
 | `….Graphics` | `Dxt3BitmapContent` | class | EXACT_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::Graphics::Dxt3BitmapContent` |  |
@@ -168,7 +168,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `…` | `WavImporter` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::WavImporter` | the audio is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). |
 | `…` | `WmaImporter` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::WmaImporter` | the audio is answered by shared pointer. The genuine importer could not be measured here -- Wine carries no Windows Media Format runtime, so every WMA is refused before it is opened (docs/xna-content-pipeline-media.md section 6) -- so this reads the format itself and answers the shape the MP3 measurement settled for the same SongProcessor input. |
 | `…` | `WmvImporter` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::WmvImporter` | the video is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). The refusals are the measured ones, including the split that makes a missing file a FileNotFoundException here and an InvalidContentException through VideoContent's own constructor. |
-| `…` | `XImporter` | class | MISSING |  |  |
+| `…` | `XImporter` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::XImporter` | the node graph is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). Both encodings the format defines for uncompressed data are read, text and binary, and thirteen corpus files are compared graph for graph against the genuine importer (tests/reference/xna40/model). The two compressed encodings, tzip and bzip, are refused by name rather than mis-read. |
 | `…` | `XmlImporter` | class | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::XmlImporter` | the imported object is a ContentObject rather than a System.Object reference, which is what a boxed value of any type is here; the descriptor XNA declares through an attribute is answered by a static Attribute(). |
 
 ## 4. Importers
@@ -183,7 +183,7 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `WavImporter` | .wav | `SoundEffectProcessor` | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::WavImporter` | the audio is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). |
 | `WmaImporter` | .wma | `SongProcessor` | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::WmaImporter` | the audio is answered by shared pointer. The genuine importer could not be measured here -- Wine carries no Windows Media Format runtime, so every WMA is refused before it is opened (docs/xna-content-pipeline-media.md section 6) -- so this reads the format itself and answers the shape the MP3 measurement settled for the same SongProcessor input. |
 | `WmvImporter` | .wmv | `VideoProcessor` | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::WmvImporter` | the video is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). The refusals are the measured ones, including the split that makes a missing file a FileNotFoundException here and an InvalidContentException through VideoContent's own constructor. |
-| `XImporter` | .x | `ModelProcessor` | MISSING |  |  |
+| `XImporter` | .x | `ModelProcessor` | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::XImporter` | the node graph is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). Both encodings the format defines for uncompressed data are read, text and binary, and thirteen corpus files are compared graph for graph against the genuine importer (tests/reference/xna40/model). The two compressed encodings, tzip and bzip, are refused by name rather than mis-read. |
 | `XmlImporter` | .xml | `-` | SEMANTIC_EQUIVALENT | `Microsoft::Xna::Framework::Content::Pipeline::XmlImporter` | the imported object is a ContentObject rather than a System.Object reference, which is what a boxed value of any type is here; the descriptor XNA declares through an attribute is answered by a static Attribute(). |
 
 ## 5. Processors and properties
@@ -1006,10 +1006,10 @@ serialization members are HOST_SUBSTITUTION by rule (System.Runtime.Serializatio
 | `WmaImporter` | method | `Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)` | SEMANTIC_EQUIVALENT | `Import(const std::string&, ContentImporterContext&) -> std::shared_ptr<AudioContent>` | the audio is answered by shared pointer, and a source whose bytes are not Windows Media audio is refused whatever its extension says. The successful path is not measured against the genuine importer, which this environment cannot run. |
 | `WmvImporter` | constructor | `.ctor()` | EXACT_EQUIVALENT | `WmvImporter()` |  |
 | `WmvImporter` | method | `Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)` | SEMANTIC_EQUIVALENT | `Import(const std::string&, ContentImporterContext&) -> std::shared_ptr<VideoContent>` | the video is answered by shared pointer; the missing-file message carries XNA's own unformatted "{0}". |
-| `XImporter` | constructor | `.ctor()` | MISSING |  |  |
-| `XImporter` | method | `Dispose()` | MISSING |  |  |
-| `XImporter` | method | `Dispose(System.Boolean)` | MISSING |  |  |
-| `XImporter` | method | `Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)` | MISSING |  |  |
+| `XImporter` | constructor | `.ctor()` | EXACT_EQUIVALENT | `XImporter()` |  |
+| `XImporter` | method | `Dispose()` | SEMANTIC_EQUIVALENT | `Dispose()` | nothing native is held open past Import, which reads the file whole and closes it; the pattern is here because XNA declares it, and a second call is accepted. |
+| `XImporter` | method | `Dispose(System.Boolean)` | EXACT_EQUIVALENT | `Dispose(bool)` |  |
+| `XImporter` | method | `Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)` | SEMANTIC_EQUIVALENT | `Import(const std::string&, ContentImporterContext&) -> std::shared_ptr<NodeContent>` | the graph is answered by shared pointer. Every measured behaviour is reproduced: Z negated on positions, normals and a frame's matrix as the basis change S M S; a single top-level Frame answering as the root; one GeometryContent per material sharing the mesh's positions; skin weights read only where an XSkinMeshHeader declares a skeleton, with zero weights dropped; a mesh child ordered before a frame child; vertex colours quantized through eight bits; separate rotation, scale and position key lists merged by interpolation at the union of their times; a tick worth 1/4800 of a second unless AnimTicksPerSecond says otherwise; a Duration that is the last key truncated to whole milliseconds while the keys keep full precision; and every animation in a set landing on the skeleton's root bone where there is one and on its own target where there is not. Refusals carry the D3DX code the genuine reader picks -- BADFILE, BADFILETYPE, BADFILEVERSION, PARSEERROR or E_FAIL. |
 | `XmlImporter` | constructor | `.ctor()` | EXACT_EQUIVALENT | `XmlImporter()` |  |
 | `XmlImporter` | method | `Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)` | SEMANTIC_EQUIVALENT | `Import(const std::string&, ContentImporterContext&) -> ContentObject` | the object is boxed as a ContentObject; a missing file is refused with FileNotFoundException and a malformed document with XNA's own deserialization sentence, whose parser-specific tail differs and is recorded in docs/xna-intermediate-xml-format.md. |
 

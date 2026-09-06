@@ -1037,10 +1037,10 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.Graphics.BoneWeightCollection": {
-   "status": "EXACT_EQUIVALENT",
+   "status": "SEMANTIC_EQUIVALENT",
    "cna": "Microsoft::Xna::Framework::Content::Pipeline::Graphics::BoneWeightCollection",
    "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Graphics/VertexCollections.hpp",
-   "note": "",
+   "note": "Carries one CNAEXT member the inventory does not list, an equality operator: a vertex channel needs its element type to be equality-comparable, and XNA's reference type compares by identity, which comparing the weights themselves agrees with wherever identity applies.",
    "members": {
     "constructor:.ctor()": {
      "status": "EXACT_EQUIVALENT",
@@ -4614,30 +4614,30 @@
    }
   },
   "Microsoft.Xna.Framework.Content.Pipeline.XImporter": {
-   "status": "MISSING",
-   "cna": "",
-   "header": "",
-   "note": "",
+   "status": "SEMANTIC_EQUIVALENT",
+   "cna": "Microsoft::Xna::Framework::Content::Pipeline::XImporter",
+   "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/ModelImporters.hpp",
+   "note": "the node graph is answered by shared pointer, which is the lifetime a .NET reference gives it; the descriptor XNA declares through an attribute is answered by a static Attribute(). Both encodings the format defines for uncompressed data are read, text and binary, and thirteen corpus files are compared graph for graph against the genuine importer (tests/reference/xna40/model). The two compressed encodings, tzip and bzip, are refused by name rather than mis-read.",
    "members": {
     "constructor:.ctor()": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "XImporter()",
      "note": ""
     },
     "method:Dispose()": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Dispose()",
+     "note": "nothing native is held open past Import, which reads the file whole and closes it; the pattern is here because XNA declares it, and a second call is accepted."
     },
     "method:Dispose(System.Boolean)": {
-     "status": "MISSING",
-     "cna": "",
+     "status": "EXACT_EQUIVALENT",
+     "cna": "Dispose(bool)",
      "note": ""
     },
     "method:Import(System.String, Microsoft.Xna.Framework.Content.Pipeline.ContentImporterContext)": {
-     "status": "MISSING",
-     "cna": "",
-     "note": ""
+     "status": "SEMANTIC_EQUIVALENT",
+     "cna": "Import(const std::string&, ContentImporterContext&) -> std::shared_ptr<NodeContent>",
+     "note": "the graph is answered by shared pointer. Every measured behaviour is reproduced: Z negated on positions, normals and a frame's matrix as the basis change S M S; a single top-level Frame answering as the root; one GeometryContent per material sharing the mesh's positions; skin weights read only where an XSkinMeshHeader declares a skeleton, with zero weights dropped; a mesh child ordered before a frame child; vertex colours quantized through eight bits; separate rotation, scale and position key lists merged by interpolation at the union of their times; a tick worth 1/4800 of a second unless AnimTicksPerSecond says otherwise; a Duration that is the last key truncated to whole milliseconds while the keys keep full precision; and every animation in a set landing on the skeleton's root bone where there is one and on its own target where there is not. Refusals carry the D3DX code the genuine reader picks -- BADFILE, BADFILETYPE, BADFILEVERSION, PARSEERROR or E_FAIL."
     }
    }
   },

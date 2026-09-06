@@ -98,7 +98,19 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
     class BoneWeightCollection final : public System::Collections::ObjectModel::Collection<BoneWeight>
     {
     public:
-        /** @brief .NET full name of this type. */
+                /**
+         * @brief Compares two collections element by element.
+         *
+         * XNA's is a reference type and compares by identity; a vertex channel needs its element
+         * type to be equality-comparable, and comparing the weights themselves is the reading
+         * that agrees with identity wherever identity applies.
+         *
+         * @param other The collection to compare with.
+         * @return true when both hold the same weights in the same order.
+         */
+        CNAEXT [[nodiscard]] bool operator==(const BoneWeightCollection& other) const noexcept;
+
+/** @brief .NET full name of this type. */
         CNAEXT static constexpr std::string_view XnaTypeName =
             "Microsoft.Xna.Framework.Content.Pipeline.Graphics.BoneWeightCollection";
 

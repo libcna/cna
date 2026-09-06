@@ -1,0 +1,6 @@
+xof 0303txt 0032
+
+Frame Root {
+  FrameTransformMatrix {
+    1.000000, 0.000000, 0.000000, 0.000000,
+    0.000000, 1.0000

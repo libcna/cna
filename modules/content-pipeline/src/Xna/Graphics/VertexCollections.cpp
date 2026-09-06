@@ -111,3 +111,22 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
 
     std::string PositionCollection::ToString() const { return std::string(XnaTypeName); }
 }
+
+namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
+{
+    bool BoneWeightCollection::operator==(const BoneWeightCollection& other) const noexcept
+    {
+        if (getCountProperty() != other.getCountProperty())
+        {
+            return false;
+        }
+        for (SharpRuntime::intcs i = 0; i < getCountProperty(); ++i)
+        {
+            if (!((*this)[i] == other[i]))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+}

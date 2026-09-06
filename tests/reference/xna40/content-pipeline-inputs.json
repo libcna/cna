@@ -498,23 +498,23 @@
     "outputType": "Microsoft.Xna.Framework.Content.Pipeline.Graphics.NodeContent"
    },
    "cna": {
-    "importer": "",
-    "processor": "",
-    "fixture": "",
+    "importer": "Microsoft::Xna::Framework::Content::Pipeline::XImporter",
+    "processor": "ModelProcessor",
+    "fixture": "tests/assets/xna40/model/quad_textured.x",
     "tests": {
-     "importer": "",
+     "importer": "XnaXImporter.EveryFileAnswersTheGraphXnaAnswers, XnaXImporter.SkinningAndAnimationAnswerWhatXnaAnswers",
      "processor": "",
      "sourceToXnb": "",
      "sourceToCnb": "",
-     "malformed": "",
+     "malformed": "XnaXImporter.RefusalsMatchXna",
      "target": ""
     },
-    "differentialEvidence": "",
-    "windows": "UNVERIFIED",
+    "differentialEvidence": "tests/reference/xna40/model/model-import-oracle.json x/*",
+    "windows": "SUPPORTED",
     "windowsPhone": "UNVERIFIED",
     "xbox360": "UNVERIFIED",
-    "status": "MISSING",
-    "note": "XImporter: Phase 16. Not written, and not measured."
+    "status": "IMPLEMENTED",
+    "note": "Thirteen corpus files -- text and binary, hierarchy, materials, skinning and animation -- are compared graph for graph against the genuine importer. The source-to-XNB and source-to-CNB legs are not named yet."
    }
   },
   ".xml": {
