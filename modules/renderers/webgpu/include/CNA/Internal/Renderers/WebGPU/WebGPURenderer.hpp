@@ -133,7 +133,31 @@ namespace CNA::Internal::Renderers::WebGPU
         [[nodiscard]] virtual WebGPUSampledTextureEXT SampledCube() const = 0;
     };
 
-    class WebGPUTextureRenderer final : public ITextureRenderer, public IWebGPUSamplable
+    /**
+     * @brief A renderer-owned object holding native handles that belong to the current `WGPUDevice`.
+     *
+     * `WEBGPU-182`. A device loss destroys the device, and every handle made from it dies with it.
+     * The renderer keeps one registry of these so a loss can release them all and a restore can
+     * rebuild them, and so a resource that OUTLIVES the renderer can be told to stop pointing at it.
+     *
+     * A class implements this only when it can genuinely rebuild itself from data CNA still holds.
+     * The kinds that cannot are counted instead, and `DebugSimulateContextLoss()` refuses by name
+     * while any of them is alive rather than leaving a dead handle for a caller to trip over.
+     */
+    class IWebGPUDeviceResourceEXT
+    {
+    public:
+        virtual ~IWebGPUDeviceResourceEXT() = default;
+        /** @brief Releases every native handle made from the current device. */
+        virtual void ReleaseDeviceObjectsEXT() = 0;
+        /** @brief Rebuilds those handles on the new device, from the data CNA retained. */
+        virtual void RecreateAfterDeviceLossEXT() = 0;
+        /** @brief Forgets the renderer, for a resource that outlives it. */
+        virtual void DetachOwnerEXT() = 0;
+    };
+
+    class WebGPUTextureRenderer final : public ITextureRenderer, public IWebGPUSamplable,
+                                        public IWebGPUDeviceResourceEXT
     {
     public:
         WebGPUTextureRenderer(WebGPURenderer& owner, const ImageData& data);
@@ -165,6 +189,14 @@ namespace CNA::Internal::Renderers::WebGPU
         {
             return cpuPixels_;
         }
+
+        /** @brief `WEBGPU-182`: releases the native handles this object made from the device. */
+        void ReleaseDeviceObjectsEXT() override;
+        /** @brief `WEBGPU-182`: rebuilds them on the new device. */
+        void RecreateAfterDeviceLossEXT() override;
+        /** @brief `WEBGPU-182`: forgets the renderer. */
+        void DetachOwnerEXT() override { owner_ = nullptr; }
+
         /// WEBGPU-51: real CPU readback of an arbitrary Texture2D renderer, via the same staged
         /// MAP_READ-buffer/aligned-row/async-map-and-poll technique WEBGPU-91's ReadBackbuffer()
         /// and WebGPURenderTargetRenderer::GetData() already established -- copies the WHOLE
@@ -619,7 +651,8 @@ namespace CNA::Internal::Renderers::WebGPU
         int mipLevels_ = 1;
     };
 
-    class WebGPUVertexBufferRenderer final : public IVertexBufferRenderer
+    class WebGPUVertexBufferRenderer final : public IVertexBufferRenderer,
+                                             public IWebGPUDeviceResourceEXT
     {
     public:
         WebGPUVertexBufferRenderer(WebGPURenderer& owner, int vertexCapacity);
@@ -651,6 +684,14 @@ namespace CNA::Internal::Renderers::WebGPU
         // per-frame render actually runs, so the bytes must be copied out now, not referenced.
         [[nodiscard]] const std::vector<std::uint8_t>& ShadowData() const { return shadowData_; }
 
+        /** @brief `WEBGPU-182`: releases the native handles this object made from the device. */
+        void ReleaseDeviceObjectsEXT() override;
+        /** @brief `WEBGPU-182`: rebuilds them on the new device. */
+        void RecreateAfterDeviceLossEXT() override;
+        /** @brief `WEBGPU-182`: forgets the renderer. */
+        void DetachOwnerEXT() override { owner_ = nullptr; }
+
+
     private:
         WebGPURenderer* owner_ = nullptr;
         WGPUBuffer buffer_ = nullptr;
@@ -662,7 +703,8 @@ namespace CNA::Internal::Renderers::WebGPU
         CNA::Internal::Graphics::DeclaredVertexLayout declaration_;
     };
 
-    class WebGPUIndexBufferRenderer final : public IIndexBufferRenderer
+    class WebGPUIndexBufferRenderer final : public IIndexBufferRenderer,
+                                            public IWebGPUDeviceResourceEXT
     {
     public:
         WebGPUIndexBufferRenderer(WebGPURenderer& owner, int indexCapacity, bool thirtyTwoBit);
@@ -678,6 +720,14 @@ namespace CNA::Internal::Renderers::WebGPU
         [[nodiscard]] WGPUBuffer Buffer() const { return buffer_; }
         // See WebGPUVertexBufferRenderer::ShadowData() for why this exists.
         [[nodiscard]] const std::vector<std::uint8_t>& ShadowData() const { return shadowData_; }
+
+        /** @brief `WEBGPU-182`: releases the native handles this object made from the device. */
+        void ReleaseDeviceObjectsEXT() override;
+        /** @brief `WEBGPU-182`: rebuilds them on the new device. */
+        void RecreateAfterDeviceLossEXT() override;
+        /** @brief `WEBGPU-182`: forgets the renderer. */
+        void DetachOwnerEXT() override { owner_ = nullptr; }
+
 
     private:
         void Upload(const void* data, int indexCount, bool dataIsThirtyTwoBit);
@@ -2611,6 +2661,13 @@ namespace CNA::Internal::Renderers::WebGPU
          */
         void DebugRestoreContext() override;
 
+        /** @brief `WEBGPU-182`: adds a resource to the device-loss registry. @param resource The resource. */
+        void RegisterDeviceResourceEXT(IWebGPUDeviceResourceEXT* resource);
+        /** @brief `WEBGPU-182`: removes one. @param resource The resource. */
+        void UnregisterDeviceResourceEXT(IWebGPUDeviceResourceEXT* resource);
+        /** @brief `WEBGPU-182`: counts a resource kind that cannot survive a loss. @param delta +1 or -1. */
+        void CountUnrecoverableResourceEXT(int delta) { unrecoverableResourceCount_ += delta; }
+
     private:
         /// WEBGPU-181: set while the device is unusable; the only thing standing between a lost
         /// device and the process abort WEBGPU-180 measured. WEBGPU-182 is what will set it from a
@@ -2618,6 +2675,14 @@ namespace CNA::Internal::Renderers::WebGPU
         bool deviceLost_ = false;
         /// WEBGPU-181: whether texture renderers keep a reference to the framework's CPU pixels.
         bool contextRecoveryEnabled_ = true;
+        /// WEBGPU-182: every live resource holding handles made from the current device, so a loss
+        /// can release them all and a restore can rebuild them. Raw pointers, because each entry
+        /// registers in its own constructor and unregisters in its own destructor.
+        std::vector<IWebGPUDeviceResourceEXT*> liveDeviceResources_;
+        /// WEBGPU-182: live resources of a kind that CANNOT rebuild itself -- a TextureCube,
+        /// RenderTargetCube, Texture3D, occlusion query or custom effect. A loss refuses by name
+        /// while any of them exists rather than leaving a dead handle behind.
+        int unrecoverableResourceCount_ = 0;
         /// WEBGPU-182: how a device-loss/reset reaches `GraphicsDevice`'s own public events. Kept
         /// from `GraphicsRendererCreateArgs` because this renderer raises them itself -- the pinned
         /// wgpu-native never delivers the device-lost callback for an application-initiated

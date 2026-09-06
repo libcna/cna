@@ -31,6 +31,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
 
 #include <array>
@@ -154,6 +155,18 @@ public:
         // Nothing between the loss and the restore may touch the device: WEBGPU-180 measured that
         // wgpuSurfaceGetCurrentTexture on a lost device aborts the process rather than returning a
         // status, which is exactly what CanBeginDrawEXT() exists to stop a caller from reaching.
+        // Created BEFORE the loss, and used after it: this is the acceptance's real claim, and the
+        // one a device cycle alone does not prove. Recovery is ON here, so the texture's pixels are
+        // shared with the framework and the renderer has something to re-upload.
+        auto survivor = MakeSprite(device);
+        auto survivingVertices = std::make_unique<VertexBuffer>(
+            device, VertexPositionColor::getVertexDeclarationStatic(), 3, BufferUsage::None);
+        const VertexPositionColor triangle[3] = {
+            {Vector3(-0.9f, -0.9f, 0.0f), kSprite},
+            {Vector3(0.9f, -0.9f, 0.0f), kSprite},
+            {Vector3(0.0f, 0.9f, 0.0f), kSprite}};
+        survivingVertices->SetData(triangle, 3);
+
         int lost = 0, resetting = 0, reset = 0;
         device.DeviceLost += [&lost](System::Object*, const System::EventArgs&) { ++lost; };
         device.DeviceResetting += [&resetting](System::Object*, const System::EventArgs&) {
@@ -172,8 +185,42 @@ public:
         check(resetting == 1 && reset == 1,
               "the restore raised DeviceResetting and DeviceReset exactly once each");
 
-        // The device really works afterwards, not merely reports that it does: a clear, a fresh
-        // texture, a sprite draw and a readback all on the NEW device.
+        // The resources created BEFORE the loss still work, which is what the registry exists for.
+        {
+            device.Clear(kClearColor);
+            SpriteBatch batch(device);
+            batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &pointClamp, nullptr, nullptr);
+            batch.Draw(*survivor, Rectangle(0, 0, kSize, kSize), Color::White);
+            batch.End();
+            const Color centre = ReadCentre(device);
+            check(std::abs(centre.getRProperty() - kSprite.getRProperty()) <= 8,
+                  "a texture uploaded BEFORE the loss still samples correctly afterwards -- its "
+                  "content came back from the CPU pixels WEBGPU-181 shares");
+        }
+        {
+            device.Clear(kClearColor);
+            RasterizerState noCull;
+            noCull.setCullModeProperty(CullMode::None);
+            device.setRasterizerStateProperty(noCull);
+            BasicEffect effect(device);
+            effect.setWorldProperty(Matrix::getIdentityProperty());
+            effect.setViewProperty(Matrix::getIdentityProperty());
+            effect.setProjectionProperty(Matrix::getIdentityProperty());
+            effect.setLightingEnabledProperty(false);
+            effect.setTextureEnabledProperty(false);
+            effect.setVertexColorEnabledProperty(true);
+            device.SetVertexBuffer(survivingVertices.get());
+            effect.Apply();
+            device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
+            device.SetVertexBuffer(nullptr);
+            const Color centre = ReadCentre(device);
+            check(std::abs(centre.getRProperty() - kSprite.getRProperty()) <= 8,
+                  "a VertexBuffer created BEFORE the loss still draws -- its bytes live in the CPU "
+                  "shadow the deferred replay reads, so the dead native handle never mattered");
+        }
+
+        // And a resource created AFTER the recreate works too: a clear, a fresh texture, a sprite
+        // draw and a readback all on the NEW device.
         {
             device.Clear(kClearColor);
             auto texture = MakeSprite(device);

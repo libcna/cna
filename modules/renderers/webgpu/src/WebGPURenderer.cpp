@@ -1491,12 +1491,72 @@ namespace CNA::Internal::Renderers::WebGPU
             if (compressed_)
                 UpdatePixelsLevel(0, data.pixels.data(), width_, height_);
             else
-                UpdatePixels(data.pixels.data(), width_ * 4);
+                UpdatePixels(data.pixels.data(), width_ * blockBytes_);
+        }
+        owner.RegisterDeviceResourceEXT(this);   // WEBGPU-182
+    }
+
+    void WebGPUTextureRenderer::ReleaseDeviceObjectsEXT()
+    {
+        // The sampled_ handle is a shared_ptr a queued command may still hold; dropping this
+        // object's reference is right, and REMED-GFX-167 keeps the last one alive as long as a
+        // command needs it. The device is going anyway, and DiscardQueuedCommands has already run.
+        sampled_.reset();
+        if (view_ != nullptr) { wgpuTextureViewRelease(view_); view_ = nullptr; }
+        if (texture_ != nullptr) { wgpuTextureRelease(texture_); texture_ = nullptr; }
+    }
+
+    void WebGPUTextureRenderer::RecreateAfterDeviceLossEXT()
+    {
+        if (owner_ == nullptr || texture_ != nullptr) return;
+        WGPUTextureDescriptor descriptor{};
+        descriptor.label = StringView("CNA WebGPU Texture2D (recreated)");
+        const bool renderable = !compressed_ && wgpuFormat_ != WGPUTextureFormat_RG8Snorm &&
+                                wgpuFormat_ != WGPUTextureFormat_RGBA8Snorm;
+        descriptor.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst |
+                           WGPUTextureUsage_CopySrc |
+                           (renderable ? WGPUTextureUsage_RenderAttachment : WGPUTextureUsage_None);
+        descriptor.dimension = WGPUTextureDimension_2D;
+        descriptor.size = WGPUExtent3D{static_cast<std::uint32_t>(width_),
+                                       static_cast<std::uint32_t>(height_), 1};
+        descriptor.format = wgpuFormat_;
+        descriptor.mipLevelCount = static_cast<std::uint32_t>(mipLevels_);
+        descriptor.sampleCount = 1;
+        texture_ = wgpuDeviceCreateTexture(owner_->Device(), &descriptor);
+        if (texture_ == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to recreate a Texture2D after a device loss");
+        view_ = wgpuTextureCreateView(texture_, nullptr);
+        if (view_ == nullptr)
+        {
+            wgpuTextureRelease(texture_);
+            texture_ = nullptr;
+            throw std::runtime_error("CNA WebGPU: failed to recreate a Texture2D view");
+        }
+        sampled_ = std::make_shared<const WebGPUSampledResourceEXT>(texture_, view_);
+
+        // The content, from whatever CNA still holds: the compressed block store for a BC texture
+        // (this renderer is its authoritative store) and WEBGPU-181's shared CPU pixels otherwise.
+        // A texture whose game turned context recovery off has neither, and comes back allocated
+        // but empty -- which is exactly what turning recovery off asked for.
+        if (compressed_)
+        {
+            for (int level = 0; level < mipLevels_; ++level)
+            {
+                const auto& blocks = compressedLevels_[static_cast<std::size_t>(level)];
+                if (blocks.empty()) continue;
+                UpdatePixelsLevel(level, blocks.data(), std::max(1, width_ >> level),
+                                  std::max(1, height_ >> level));
+            }
+        }
+        else if (cpuPixels_ && !cpuPixels_->empty())
+        {
+            UpdatePixels(cpuPixels_->data(), width_ * blockBytes_);
         }
     }
 
     WebGPUTextureRenderer::~WebGPUTextureRenderer()
     {
+        if (owner_ != nullptr) owner_->UnregisterDeviceResourceEXT(this);   // WEBGPU-182
         if (view_ != nullptr)
             wgpuTextureViewRelease(view_);
         if (texture_ != nullptr)
@@ -1743,6 +1803,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                         int surfaceFormat)
         : owner_(&owner), size_(size)
     {
+        // WEBGPU-182: this kind cannot rebuild itself on a new device, so a simulated loss refuses while one is alive.
+        owner.CountUnrecoverableResourceEXT(1);
         if (size_ <= 0)
             throw std::invalid_argument("CNA WebGPU: TextureCube size must be positive");
 
@@ -1817,6 +1879,8 @@ namespace CNA::Internal::Renderers::WebGPU
 
     WebGPUTextureCubeRenderer::~WebGPUTextureCubeRenderer()
     {
+        // WEBGPU-182.
+        if (owner_ != nullptr) owner_->CountUnrecoverableResourceEXT(-1);
         if (cubeView_ != nullptr) wgpuTextureViewRelease(cubeView_);
         if (texture_ != nullptr) wgpuTextureRelease(texture_);
     }
@@ -2093,6 +2157,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                                   int surfaceFormat)
         : owner_(&owner), size_(size), preserveContents_(preserveContents)
     {
+        // WEBGPU-182: this kind cannot rebuild itself on a new device, so a simulated loss refuses while one is alive.
+        owner.CountUnrecoverableResourceEXT(1);
         if (size_ <= 0)
             throw std::invalid_argument("CNA WebGPU: RenderTargetCube size must be positive");
         // WEBGPU-165: THIS cube's own requested sample count, clamped by the same empirical adapter
@@ -2287,6 +2353,8 @@ namespace CNA::Internal::Renderers::WebGPU
 
     WebGPURenderTargetCubeRenderer::~WebGPURenderTargetCubeRenderer()
     {
+        // WEBGPU-182.
+        if (owner_ != nullptr) owner_->CountUnrecoverableResourceEXT(-1);
         // RenderTargetCube::Dispose() (mirroring RenderTarget2D's own Task 717 precedent) already
         // refuses to dispose a render target still bound on its GraphicsDevice -- kept as
         // defense-in-depth, mirroring WebGPURenderTargetRenderer's own identical destructor guard.
@@ -2462,6 +2530,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                     int depth, bool mipMap)
         : owner_(&owner), width_(width), height_(height), depth_(depth)
     {
+        // WEBGPU-182: this kind cannot rebuild itself on a new device, so a simulated loss refuses while one is alive.
+        owner.CountUnrecoverableResourceEXT(1);
         if (width_ <= 0 || height_ <= 0 || depth_ <= 0)
             throw std::invalid_argument("CNA WebGPU: Texture3D dimensions must be positive");
 
@@ -2488,6 +2558,8 @@ namespace CNA::Internal::Renderers::WebGPU
 
     WebGPUTexture3DRenderer::~WebGPUTexture3DRenderer()
     {
+        // WEBGPU-182.
+        if (owner_ != nullptr) owner_->CountUnrecoverableResourceEXT(-1);
         if (texture_ != nullptr) wgpuTextureRelease(texture_);
     }
 
@@ -2637,6 +2709,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                           int surfaceFormat)
         : owner_(&owner), width_(width), height_(height), preserveContents_(preserveContents)
     {
+        // WEBGPU-182: this kind cannot rebuild itself on a new device, so a simulated loss refuses while one is alive.
+        owner.CountUnrecoverableResourceEXT(1);
         if (width_ <= 0 || height_ <= 0)
             throw std::invalid_argument("CNA WebGPU: RenderTarget2D dimensions must be positive");
 
@@ -2828,6 +2902,8 @@ namespace CNA::Internal::Renderers::WebGPU
 
     WebGPURenderTargetRenderer::~WebGPURenderTargetRenderer()
     {
+        // WEBGPU-182.
+        if (owner_ != nullptr) owner_->CountUnrecoverableResourceEXT(-1);
         // RenderTarget2D::Dispose() (Task 717's own precedent) already refuses to dispose a
         // render target still bound on its GraphicsDevice, so this should never actually trigger
         // through the public API -- but a stack-allocated target's C++ destructor runs directly and
@@ -3009,12 +3085,29 @@ namespace CNA::Internal::Renderers::WebGPU
     WebGPUVertexBufferRenderer::WebGPUVertexBufferRenderer(WebGPURenderer& owner, int vertexCapacity)
         : owner_(&owner), vertexCapacity_(std::max(0, vertexCapacity))
     {
+        owner.RegisterDeviceResourceEXT(this);   // WEBGPU-182
     }
 
     WebGPUVertexBufferRenderer::~WebGPUVertexBufferRenderer()
     {
+        if (owner_ != nullptr) owner_->UnregisterDeviceResourceEXT(this);   // WEBGPU-182
         if (buffer_ != nullptr)
             wgpuBufferRelease(buffer_);
+    }
+
+    void WebGPUVertexBufferRenderer::ReleaseDeviceObjectsEXT()
+    {
+        if (buffer_ != nullptr) { wgpuBufferRelease(buffer_); buffer_ = nullptr; }
+        capacityBytes_ = 0;
+    }
+
+    void WebGPUVertexBufferRenderer::RecreateAfterDeviceLossEXT()
+    {
+        // Deliberately nothing. This renderer's deferred replay builds its own vertex buffer from
+        // `shadowData_` at flush time -- nothing binds `buffer_` in a render pass -- so a vertex
+        // buffer that survives a device loss already draws correctly, and the next SetData
+        // recreates the native handle lazily. Recreating one here would allocate GPU memory no
+        // draw reads.
     }
 
     void WebGPUVertexBufferRenderer::SetData(const void* data, int vertexCount, std::size_t strideInBytes)
@@ -3090,10 +3183,24 @@ namespace CNA::Internal::Renderers::WebGPU
                                                         bool thirtyTwoBit)
         : owner_(&owner), indexCapacity_(std::max(0, indexCapacity)), thirtyTwoBit_(thirtyTwoBit)
     {
+        owner.RegisterDeviceResourceEXT(this);   // WEBGPU-182
+    }
+
+    void WebGPUIndexBufferRenderer::ReleaseDeviceObjectsEXT()
+    {
+        if (buffer_ != nullptr) { wgpuBufferRelease(buffer_); buffer_ = nullptr; }
+        capacityBytes_ = 0;
+    }
+
+    void WebGPUIndexBufferRenderer::RecreateAfterDeviceLossEXT()
+    {
+        // Nothing, for the same reason as the vertex buffer: the replay builds its own index buffer
+        // from the CPU shadow at flush time.
     }
 
     WebGPUIndexBufferRenderer::~WebGPUIndexBufferRenderer()
     {
+        if (owner_ != nullptr) owner_->UnregisterDeviceResourceEXT(this);   // WEBGPU-182
         if (buffer_ != nullptr)
             wgpuBufferRelease(buffer_);
     }
@@ -3340,6 +3447,19 @@ namespace CNA::Internal::Renderers::WebGPU
     }
 
 
+
+    void WebGPURenderer::RegisterDeviceResourceEXT(IWebGPUDeviceResourceEXT* resource)
+    {
+        if (resource != nullptr) liveDeviceResources_.push_back(resource);
+    }
+
+    void WebGPURenderer::UnregisterDeviceResourceEXT(IWebGPUDeviceResourceEXT* resource)
+    {
+        liveDeviceResources_.erase(
+            std::remove(liveDeviceResources_.begin(), liveDeviceResources_.end(), resource),
+            liveDeviceResources_.end());
+    }
+
     void WebGPURenderer::ReleaseDeviceOwnedObjectsEXT()
     {
         // WEBGPU-182. Everything below was created FROM device_, and every pointer released here is
@@ -3408,6 +3528,22 @@ namespace CNA::Internal::Renderers::WebGPU
     void WebGPURenderer::DebugSimulateContextLoss()
     {
         if (deviceLost_) return;
+        // WEBGPU-182: refuse by name rather than leaving a dead handle for a caller to trip over.
+        // A TextureCube, RenderTargetCube, Texture3D, occlusion query or custom effect holds native
+        // objects this renderer cannot yet rebuild, and a loss taken while one is alive would hand
+        // it back pointing at a destroyed device.
+        if (unrecoverableResourceCount_ > 0)
+        {
+            throw System::NotSupportedException(
+                "CNA WebGPU: a simulated device loss is refused while a TextureCube, "
+                "RenderTargetCube, Texture3D, occlusion query or custom ShaderEffect is alive -- "
+                "those kinds cannot yet be rebuilt on a new device, and recovering without them "
+                "would leave dead native handles behind (plans/plan_webgpu.md WEBGPU-182)");
+        }
+        // Every registered resource gives up its handles BEFORE the device goes, so nothing is
+        // released against a destroyed device afterwards.
+        for (IWebGPUDeviceResourceEXT* resource : liveDeviceResources_)
+            if (resource != nullptr) resource->ReleaseDeviceObjectsEXT();
         // WEBGPU-180 measured that this pin delivers NO device-lost callback for an
         // application-initiated destroy -- not under AllowProcessEvents with the instance pumped,
         // not with wgpuDevicePoll, not on releasing the last reference, not under AllowSpontaneous.
@@ -3445,6 +3581,11 @@ namespace CNA::Internal::Renderers::WebGPU
         // device needs. This also recreates the depth and MSAA attachments and every stock shader
         // module and pipeline cache, all of which ReleaseDeviceOwnedObjectsEXT nulled.
         ConfigureSurface(true);
+        // The game's own resources, rebuilt from the data CNA retained: WEBGPU-181's shared CPU
+        // pixels for a texture, the compressed block store for a BC one, and nothing at all for a
+        // vertex or index buffer, whose draws read the CPU shadow rather than the native handle.
+        for (IWebGPUDeviceResourceEXT* resource : liveDeviceResources_)
+            if (resource != nullptr) resource->RecreateAfterDeviceLossEXT();
         deviceLost_ = false;
         if (deviceEventCallback_) deviceEventCallback_(RendererDeviceEvent::Reset);
     }
@@ -3456,8 +3597,14 @@ namespace CNA::Internal::Renderers::WebGPU
         // a reference to the texture it samples, and these vectors are members -- destroyed after
         // this body, i.e. after device_/adapter_/instance_ are gone. A frame abandoned rather than
         // presented (surface acquisition failure) is the path that can still hold commands here.
-        // WEBGPU-182: one function for both the destructor and a device recreate, so the two can
-        // never drift apart about what belongs to the device.
+        // WEBGPU-182: tell every registered resource to forget this renderer FIRST. Their own
+        // destructors call back here to unregister, and a resource that outlives the renderer would
+        // otherwise dereference a destroyed owner from inside a destructor -- the worst place for it.
+        for (IWebGPUDeviceResourceEXT* resource : liveDeviceResources_)
+            if (resource != nullptr) resource->DetachOwnerEXT();
+        liveDeviceResources_.clear();
+        // One function for both the destructor and a device recreate, so the two can never drift
+        // apart about what belongs to the device.
         ReleaseDeviceOwnedObjectsEXT();
         if (surfaceConfigured_ && surface_ != nullptr) wgpuSurfaceUnconfigure(surface_);
         if (queue_ != nullptr) wgpuQueueRelease(queue_);
@@ -7319,12 +7466,16 @@ namespace CNA::Internal::Renderers::WebGPU
     WebGPUOcclusionQueryRenderer::WebGPUOcclusionQueryRenderer(WebGPURenderer* owner)
         : owner_(owner)
     {
+        // WEBGPU-182: this kind cannot rebuild itself on a new device, so a simulated loss refuses while one is alive.
+        if (owner_ != nullptr) owner_->CountUnrecoverableResourceEXT(1);
         owner_->EnsureOcclusionResources();
         slot_ = owner_->AllocateOcclusionSlot(this);
     }
 
     WebGPUOcclusionQueryRenderer::~WebGPUOcclusionQueryRenderer()
     {
+        // WEBGPU-182.
+        if (owner_ != nullptr) owner_->CountUnrecoverableResourceEXT(-1);
         if (owner_ != nullptr) owner_->PurgeOcclusionQuery(this);
     }
 
@@ -7364,10 +7515,17 @@ namespace CNA::Internal::Renderers::WebGPU
     // DrawPrimitivesEx()/DrawIndexedPrimitivesEx().
     // ===================================================================================
 
-    WebGPUEffectRenderer::WebGPUEffectRenderer(WebGPURenderer* owner) : owner_(owner) {}
+    WebGPUEffectRenderer::WebGPUEffectRenderer(WebGPURenderer* owner) : owner_(owner)
+    {
+        // WEBGPU-182: this kind cannot rebuild itself on a new device, so a simulated loss refuses
+        // while one is alive.
+        if (owner_ != nullptr) owner_->CountUnrecoverableResourceEXT(1);
+    }
 
     WebGPUEffectRenderer::~WebGPUEffectRenderer()
     {
+        // WEBGPU-182.
+        if (owner_ != nullptr) owner_->CountUnrecoverableResourceEXT(-1);
         for (auto& [key, pipe] : pipelineCache_)
             if (pipe != nullptr) wgpuRenderPipelineRelease(pipe);
         pipelineCache_.clear();

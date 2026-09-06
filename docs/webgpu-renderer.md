@@ -991,11 +991,17 @@ the pin actually does* above.
 destroys the `WGPUDevice`; `DebugRestoreContext()` requests a new one from the surviving adapter,
 re-configures the same surface and raises `DeviceResetting`/`DeviceReset`. Verified end to end:
 `CanBeginDrawEXT()` goes false and back, each event fires exactly once, and a texture created and
-drawn AFTER the recreate renders correctly with no validation error. **What is NOT yet handled is a
-resource created BEFORE the loss** — a `Texture2D`, `VertexBuffer`, `IndexBuffer` or
-`RenderTarget2D` still holds a dead native handle afterwards, because the renderer has no registry
-of live resources to walk. Until it does, the debug hooks are safe only for a caller that recreates
-its own resources.
+drawn AFTER the recreate renders correctly with no validation error. A `Texture2D` uploaded before the loss still samples
+correctly afterwards, and a `VertexBuffer` created before it still draws — the first is rebuilt from
+`WEBGPU-181`'s shared CPU pixels (or the compressed block store), and the second needed no rebuild at
+all, because the deferred replay builds its own vertex buffer from the CPU shadow and nothing binds
+the renderer's native handle in a render pass.
+
+**What still cannot survive a loss is refused rather than broken.** A `TextureCube`,
+`RenderTargetCube`, `Texture3D`, occlusion query or custom `ShaderEffect` cannot yet rebuild itself,
+and `RenderTarget2D` is in that set too, so a live one is counted and `DebugSimulateContextLoss()`
+throws `System::NotSupportedException` naming them while any exists — a named refusal in place of a
+dead native handle.
 
 **A stale `GraphicsDevice.Viewport` was scaling every sprite** (`WEBGPU-178`). `GetViewportSize()`
 answered from the last surface CONFIGURATION rather than the last surface the platform REPORTED, so
