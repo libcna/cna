@@ -2135,6 +2135,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_vertexbuffer_setdata
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-136: BufferUsage::WriteOnly must refuse GetData -- shared-layer behaviour whose Vulkan integration was unproven.
+        cna_vulkan_test(cna_test_vulkan_buffer_usage
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_buffer_usage_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_BufferUsage
+            COMMAND cna_test_vulkan_buffer_usage
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-339: the release path that also runs vkDeviceWaitIdle and the
         # retirement lists. HasRenderer() must be false after the first Dispose and no second
         # release may be attempted.
