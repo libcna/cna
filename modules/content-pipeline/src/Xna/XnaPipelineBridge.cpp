@@ -529,8 +529,40 @@ namespace CNA::Content::Pipeline
                 "ContentProcessorContext::BuildAsset needs a running pipeline; this context was created "
                 "outside a coordinator.");
         }
-        const std::string logicalName =
-            assetName.empty() ? DeriveAssetName(std::filesystem::path(sourceFilename), context_->SourceRoot()) : assetName;
+        // A nested build with no asset name of its own gets a *generated* one, and XNA's generated
+        // names carry an index: a model's textures come out as `surface_0` and `second_0`, not
+        // `surface` and `second`. The index is per derived name rather than a running counter --
+        // measured with a model naming two different textures, which produced `_0` twice
+        // (tests/reference/xna40/differential, case model/x_two_textures; the single-texture case
+        // model/x_textured produced `surface_0` and the intermediate `quad_textured_0.xml`).
+        // Only `_0` is measured: a second build of the *same* source under a different processing
+        // is refused below rather than given `_1` (plans/plan_xnapipeline_parity.md XNAPP-266).
+        const std::string key = NestedAssetKey(sourceFilename, importerName, processorName,
+                                               processorParameters);
+        std::string logicalName = assetName;
+        if (logicalName.empty())
+        {
+            // The same source built the same way twice is one asset and keeps one name, which is
+            // what makes a material that names a texture twice produce a single build.
+            const auto already = generatedNames_.find(key);
+            if (already != generatedNames_.end())
+            {
+                logicalName = already->second;
+            }
+            else
+            {
+                const std::string derived =
+                    DeriveAssetName(std::filesystem::path(sourceFilename), context_->SourceRoot());
+                std::size_t index = 0;
+                for (const auto& [existingKey, existingName] : generatedNames_)
+                {
+                    (void)existingKey;
+                    if (existingName.rfind(derived + "_", 0) == 0) { ++index; }
+                }
+                logicalName = derived + "_" + std::to_string(index);
+                generatedNames_.emplace(key, logicalName);
+            }
+        }
         if (logicalName == context_->LogicalName())
         {
             throw Xna::PipelineException("BuildAsset: nested asset name '{0}' is the current asset's own name.", logicalName);
@@ -543,7 +575,6 @@ namespace CNA::Content::Pipeline
 
         // The same source built the same way twice is one asset; a different source (or a
         // different processing) under one name is a collision, as it is in XNA.
-        const std::string key = NestedAssetKey(sourceFilename, importerName, processorName, processorParameters);
         const auto known = nestedAssets_.find(logicalName);
         if (known != nestedAssets_.end())
         {

@@ -746,12 +746,17 @@ namespace
         request.logger = &logger;
         const Canon::ContentBuildResult result = pipeline.Build(request);
 
-        const std::string expectedFirst = (root / "bin" / "nested/first.xnb").generic_string();
+        // A generated nested-asset name carries XNA's index: the first asset generated from
+        // `nested/first.greet` is `nested/first_0` (measured through the genuine BuildContent,
+        // tests/reference/xna40/differential case model/x_textured). Built twice the same
+        // way, it stays one asset under one name -- which is what the repeated reference below
+        // and the single additional output prove.
+        const std::string expectedFirst = (root / "bin" / "nested/first_0.xnb").generic_string();
         const std::string expectedSecond = (root / "bin" / "Named/Second.xnb").generic_string();
         EXPECT_EQ(std::string(result.output.bytes.begin(), result.output.bytes.end()),
                   "outer|" + expectedFirst + "|" + expectedFirst + "|" + expectedSecond + "|> SECOND");
         ASSERT_EQ(result.output.additionalOutputs.size(), 2u);
-        EXPECT_EQ(result.output.additionalOutputs[0].logicalName, "nested/first");
+        EXPECT_EQ(result.output.additionalOutputs[0].logicalName, "nested/first_0");
         EXPECT_EQ(std::string(result.output.additionalOutputs[0].bytes.begin(), result.output.additionalOutputs[0].bytes.end()), "> first");
         EXPECT_EQ(result.output.additionalOutputs[0].rootReaderName, "TestGame.StringReader");
         EXPECT_EQ(result.output.additionalOutputs[0].assetTypeId, 77u);
@@ -773,7 +778,7 @@ namespace
         EXPECT_TRUE(second);
         std::vector<std::string> references;
         for (const auto& reference : result.runtimeReferences) { references.push_back(reference.logicalName); }
-        EXPECT_EQ(references, (std::vector<std::string>{"Named/Second", "nested/first"}));
+        EXPECT_EQ(references, (std::vector<std::string>{"Named/Second", "nested/first_0"}));
 
         // A collision under one name is refused as a processing failure of the outer node.
         request.processor = "CollidingProcessor";

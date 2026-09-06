@@ -283,6 +283,14 @@
       "profile": "HiDef"
     },
     {
+      "case": "model/x_two_textures",
+      "source": "model/two_textures.x",
+      "importer": "XImporter",
+      "processor": "ModelProcessor",
+      "platform": "Windows",
+      "profile": "HiDef"
+    },
+    {
       "case": "model/x_truncated_refused",
       "source": "model/truncated.x",
       "importer": "XImporter",

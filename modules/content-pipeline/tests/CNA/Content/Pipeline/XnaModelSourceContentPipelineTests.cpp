@@ -150,12 +150,15 @@ TEST(XnaModelSourceContentPipelineTest, AMaterialsTextureIsBuiltAsItsOwnAsset)
     const Pipeline::ContentBuildResult result = BuildModel(source.Root(), "quad_textured.x");
 
     ASSERT_EQ(result.output.additionalOutputs.size(), 1u);
-    EXPECT_EQ(result.output.additionalOutputs[0].logicalName, "surface");
+    // XNA's generated nested-asset names carry an index, so a model's texture is `surface_0`
+    // rather than `surface` (measured through the genuine BuildContent,
+    // tests/reference/xna40/differential/differential-oracle.json case model/x_textured).
+    EXPECT_EQ(result.output.additionalOutputs[0].logicalName, "surface_0");
     EXPECT_FALSE(result.output.additionalOutputs[0].bytes.empty());
     bool referred = false;
     for (const Pipeline::RuntimeContentReference& reference : result.runtimeReferences)
     {
-        if (reference.logicalName == "surface") { referred = true; }
+        if (reference.logicalName == "surface_0") { referred = true; }
     }
     EXPECT_TRUE(referred) << "the model must name the texture it was built with";
 }

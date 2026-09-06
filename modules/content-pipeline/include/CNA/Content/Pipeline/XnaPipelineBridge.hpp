@@ -3,6 +3,7 @@
 
 #include <filesystem>
 #include <map>
+#include <set>
 #include <memory>
 #include <string>
 #include <type_traits>
@@ -231,6 +232,18 @@ namespace CNA::Content::Pipeline
         mutable XnaBridgeLogger logger_;
         Xna::OpaqueDataDictionary parameters_;
         std::map<std::string, std::string> nestedAssets_;
+
+        /**
+         * @brief Generated nested-asset names, keyed by what was built.
+         *
+         * XNA's generated names carry an index (`surface_0`), and the index is per derived name
+         * rather than a running counter -- a model naming two different textures produces
+         * `surface_0` and `second_0` (measured, `tests/reference/xna40/differential`, case
+         * `model/x_two_textures`). Keyed by the build rather than by the name so that the same
+         * source built the same way twice keeps one name and one asset, which is what a material
+         * naming one texture twice depends on (plans/plan_xnapipeline_parity.md `XNAPP-266`).
+         */
+        std::map<std::string, std::string> generatedNames_;
     };
 
     /**

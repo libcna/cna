@@ -238,16 +238,29 @@ namespace
             std::error_code error;
             std::filesystem::copy_file(from, Source() / name_,
                                        std::filesystem::copy_options::overwrite_existing, error);
-            // A model's material names a texture beside it, and the corpus's own sources are the
-            // ones XNA was given, so anything the source refers to travels with it.
-            for (const char* companion : {"surface.png", "blue.dds"})
+            // A model's material names a texture beside it, so every image in the model corpus
+            // travels with a model source. Every image rather than a list of names, because a list
+            // goes stale the moment a fixture names a texture nobody remembered to add and the
+            // symptom is a case that quietly stops being compared -- and only for a model, because
+            // `BuildContent` builds the whole source root and a texture source's own directory
+            // holds the malformed fixtures the refusal cases are made of.
+            const std::string sourceExtension = from.extension().string();
+            if (sourceExtension == ".x" || sourceExtension == ".fbx")
             {
-                const std::filesystem::path beside = from.parent_path() / companion;
-                if (std::filesystem::exists(beside, error) && !error)
+                for (const std::filesystem::directory_entry& sibling :
+                     std::filesystem::directory_iterator(from.parent_path(), error))
                 {
-                    std::filesystem::copy_file(beside, Source() / companion,
-                                               std::filesystem::copy_options::overwrite_existing,
-                                               error);
+                    if (error) { break; }
+                    const std::string extension = sibling.path().extension().string();
+                    if (extension == ".png" || extension == ".dds" || extension == ".tga" ||
+                        extension == ".bmp" || extension == ".jpg")
+                    {
+                        std::error_code copyError;
+                        std::filesystem::copy_file(sibling.path(),
+                                                   Source() / sibling.path().filename(),
+                                                   std::filesystem::copy_options::overwrite_existing,
+                                                   copyError);
+                    }
                 }
             }
         }
@@ -399,9 +412,15 @@ TEST(XnaDifferentialBuildTest, CnaAcceptsAndRefusesTheSameSourcesXnaDoes)
         }
         if (cnaBuilt != one.xna.built)
         {
+            std::string said;
+            for (const std::string& line : task.ErrorsEXT())
+            {
+                said += (said.empty() ? "" : " | ") + line;
+            }
             disagreements.push_back(one.name + ": XNA " + (one.xna.built ? "built" : "refused") +
                                     ", CNA " + (cnaBuilt ? "built" : "refused") + "\n    XNA said: " +
-                                    one.xna.row.substr(0, 400));
+                                    one.xna.row.substr(0, 300) + "\n    CNA said: " +
+                                    said.substr(0, 300));
         }
     }
 

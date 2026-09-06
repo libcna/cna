@@ -43,3 +43,14 @@ coordinator, which imports, processes and publishes the texture as its own outpu
 can refer to it, exactly as XNA's `MaterialProcessor` does. `two_materials.x` names `blue.dds`,
 which is deliberately *not* committed: that fixture measures the importer, and a model whose
 texture is missing is one of the things a build has to report rather than skip.
+
+## The two-texture model
+
+`two_textures.x` and `second.png` exist to answer one question the rest of the corpus could not:
+XNA's generated nested-asset names carry an index (`surface_0`), and a model naming a single
+texture cannot say whether that index is a running counter or restarts per derived name. A model
+naming two different textures answers it -- both come out `_0` -- and the same case then showed
+that XNA merges a mesh's geometry batches into one vertex buffer and one index buffer. Its
+positions and UVs are `quad_textured.x`'s; `second.png` is the 4x4 texture probe again, because
+XNA refuses to DXT-compress anything smaller and `ModelProcessor` compresses a model's textures by
+default.
