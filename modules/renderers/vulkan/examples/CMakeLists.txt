@@ -2330,6 +2330,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_unknown_stride_rejection
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-350: a real window resize, which on Vulkan is a swapchain recreation.
+        cna_vulkan_test(cna_test_vulkan_real_window_resize
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_real_window_resize_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_RealWindowResize
+            COMMAND cna_test_vulkan_real_window_resize
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-339: the release path that also runs vkDeviceWaitIdle and the
         # retirement lists. HasRenderer() must be false after the first Dispose and no second
         # release may be attempted.

@@ -11664,12 +11664,52 @@ namespace CNA::Internal::Renderers::Vulkan
 
     void VulkanRenderer::GetViewportSize(int& width, int& height)
     {
-        width = surfaceInfo_.drawableSize.width;
-        height = surfaceInfo_.drawableSize.height;
-        if (width <= 0 || height <= 0)
+        // plan_vulkan.md VULKAN-350. This is the LOGICAL size -- what
+        // `GraphicsDevice.Viewport.Width/Height` reports to game code -- and it is a different
+        // question from `GetPresentedRectEXT`'s physical rectangle. `VULKAN-330`/`VULKAN-331`
+        // implemented the presentation mode in the physical half only, so until this row
+        // `FixedHeightDynamicWidth` -- CNA's default -- did not pin the height here and a real
+        // window resize moved it. `VULKAN-337` measured that against
+        // `easygl_real_window_resize_test.cpp`, which passes its other three checks on this
+        // renderer.
+        //
+        // Deliberately the same algorithm as `EasyGLSurfaceState::GetLogicalSize`, for the reason
+        // `GetPresentedRectEXT` gives for mirroring its physical twin: the modes have to mean the
+        // same thing on both renderers or the mode is a per-renderer word rather than a contract.
+        //
+        // The client size, not the drawable size, is what the aspect is taken from -- a HiDPI
+        // drawable is the same window -- which is why `displayScale` divides out first.
+        const double scale = surfaceInfo_.displayScale > 0.0f
+            ? static_cast<double>(surfaceInfo_.displayScale) : 1.0;
+        int clientWidth  = static_cast<int>(std::lround(
+            static_cast<double>(surfaceInfo_.drawableSize.width) / scale));
+        int clientHeight = static_cast<int>(std::lround(
+            static_cast<double>(surfaceInfo_.drawableSize.height) / scale));
+        if (clientWidth <= 0 || clientHeight <= 0)
         {
-            width = static_cast<int>(swapchainExtent_.width);
-            height = static_cast<int>(swapchainExtent_.height);
+            clientWidth  = static_cast<int>(swapchainExtent_.width);
+            clientHeight = static_cast<int>(swapchainExtent_.height);
+        }
+
+        // No virtual resolution means no mode to apply: the logical size IS the client size, which
+        // is exactly what this function returned before this row.
+        if (virtualHeight_ <= 0)
+        {
+            width  = clientWidth;
+            height = clientHeight;
+            return;
+        }
+
+        height = virtualHeight_;
+        if (presentationMode_ == CNA::Internal::Renderers::CnaPresentationMode::FixedHeightDynamicWidth
+            && clientHeight > 0)
+        {
+            width = static_cast<int>(
+                static_cast<double>(clientWidth) * virtualHeight_ / clientHeight + 0.5);
+        }
+        else
+        {
+            width = virtualWidth_ > 0 ? virtualWidth_ : clientWidth;
         }
     }
 
