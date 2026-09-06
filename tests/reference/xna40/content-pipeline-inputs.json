@@ -233,7 +233,7 @@
         "fixture": "tests/assets/xna40/media/mp3_mono_44100_128k.mp3",
         "tests": {
           "importer": "XnaMp3Importer.EveryMp3AnswersTheFormatAndDurationXnaAnswers",
-          "processor": "",
+          "processor": "XnaSongProcessor.ASongIsWrittenAsRealWindowsMediaAudioBesideTheAsset, XnaSongProcessor.TheQualityChoosesTheBitRate",
           "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
           "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
           "malformed": "XnaMp3Importer.RefusalsMatchXna",
@@ -353,7 +353,7 @@
         "fixture": "tests/assets/xna40/source/probe.spritefont, tests/assets/xna40/source/buildable.spritefont",
         "tests": {
           "importer": "XnaSourceCorpus.TheCommittedSpriteFontReadsEveryElementItNames, XnaFontDescriptionImporter.ReadsASpriteFontAsXnaDoes, XnaFontDescriptionImporter.WhichElementsAreRequiredMatchesXna",
-          "processor": "",
+          "processor": "XnaFontProcessors.DefaultsMatchXna, XnaFontProcessors.RefusalsMatchXna",
           "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
           "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
           "malformed": "XnaFontDescriptionImporter.RefusalsMatchXna",
@@ -443,7 +443,7 @@
         "fixture": "tests/assets/xna40/media/wma_mono_44100.wma",
         "tests": {
           "importer": "XnaWmaImporter.EveryWmaReadsAsTheDecodedPcmTheSongPathNeeds",
-          "processor": "",
+          "processor": "XnaSongProcessor.ASongIsWrittenAsRealWindowsMediaAudioBesideTheAsset, XnaSongProcessor.TheQualityChoosesTheBitRate",
           "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
           "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
           "malformed": "XnaWmaImporter.RefusalsMatchXna",
@@ -473,7 +473,7 @@
         "fixture": "tests/assets/xna40/media/wmv_64x48_15fps_silent.wmv",
         "tests": {
           "importer": "XnaWmvImporter.ImportAndItsRefusalsMatchXna, XnaVideoContent.AReadableVideoAnswersItsOwnShape",
-          "processor": "XnaVideoProcessor.DefaultsAndProcessMatchXna",
+          "processor": "XnaVideoProcessor.DefaultsAndProcessMatchXna, XnaVideoProcessor.TheEnumValuesMatchXna, XnaVideoProbeTest.TheBuildTimeProbeSuppliesWhatTheProcessorWouldOtherwiseRequire",
           "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
           "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
           "malformed": "XnaVideoContent.EveryRefusalIsTheOneSentenceXnaGives",
