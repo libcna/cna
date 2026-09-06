@@ -108,7 +108,17 @@ protected:
         bool complete = false;
         bool precise  = true;
 
-        for (int frame = 0; frame < kMaxPollFrames; ++frame)
+        // plan_vulkan.md VULKAN-182: ONE query, recorded once and then polled across frames.
+        //
+        // This loop used to build a NEW OcclusionQuery every iteration and check it immediately
+        // after `EndDraw()`, so no query was ever polled more than once. On llvmpipe that works,
+        // because a software rasterizer has finished the frame by the time the submit returns. On
+        // real hardware it cannot: the result is not ready that instant, the next iteration throws
+        // the query away and makes another, and sixty frames later nothing has ever completed --
+        // measured on RADV, where leg A reported exactly that while the renderer was correct.
+        //
+        // Polling one query until it completes is also the XNA idiom this test claims to cover;
+        // a game does not discard and re-issue its query every frame.
         {
             BasicEffect fx(dev);
             fx.VertexColorEnabled = true;
@@ -125,11 +135,20 @@ protected:
             query->End();
 
             EndDraw();          // submit the frame the query was recorded in
+        }
+
+        for (int frame = 0; frame < kMaxPollFrames; ++frame)
+        {
             if (query->getIsCompleteProperty()) {
                 complete = true;
                 counted  = query->getPixelCountProperty();
                 break;
             }
+            // An ordinary frame, with nothing tagged for the query: the renderer resets only the
+            // pools of queries tagged on a pending draw, so this keeps the device advancing
+            // without disturbing the result being waited for.
+            dev.Clear(Color(0, 0, 0, 255));
+            EndDraw();
         }
 
         check(complete, "A the query completes and the renderer states its precision",
