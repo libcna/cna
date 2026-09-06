@@ -15,7 +15,7 @@
 
 ## 1. Current status
 
-**Implementation under way.** **One hundred and fifty-two tasks are ✅, one 🟨 and twenty-seven ⬜** as of 2026-09-06 (`awk -F'|' '/^\| VULKAN-[0-9]+ \|/ {print $4}' plans/plan_vulkan.md | sort | uniq -c`, which is the authority for these counts and is what every row-status change is re-run against). The paragraph below is the inline list as it stood at **one hundred and nineteen** ✅ and is kept as history rather than maintained; it names the hundred and eighteen listed here (`VULKAN-004`, `-009`, `-008`, `-020`, `-021`, `-022`, `-023`, `-025`, `-026`, `-027`,
+**Implementation under way.** **One hundred and fifty-three tasks are ✅, one 🟨 and twenty-six ⬜** as of 2026-09-06 (`awk -F'|' '/^\| VULKAN-[0-9]+ \|/ {print $4}' plans/plan_vulkan.md | sort | uniq -c`, which is the authority for these counts and is what every row-status change is re-run against). The paragraph below is the inline list as it stood at **one hundred and nineteen** ✅ and is kept as history rather than maintained; it names the hundred and eighteen listed here (`VULKAN-004`, `-009`, `-008`, `-020`, `-021`, `-022`, `-023`, `-025`, `-026`, `-027`,
 `-055`, `-090`, `-091`, `-094`, `-095`, `-215`, `-097`, `-098`, `-130`, `-131`, `-132`, `-133`, `-134`, `-141`, `-144`, `-145`, `-146`, `-147`, `-148`, `-149`, `-150`,
 `-151`, `-152`, `-153`, `-154`, `-155`, `-156`, `-157`, `-158`, `-159`, `-160`, `-161`, `-162`, `-163`, `-170`, `-171`, `-172`, `-173`, `-174`, `-175`, `-176`, `-177`, `-179`, `-250`, `-251`, `-265`, `-332`, `-333`,
 `-330`, `-331`, `-339`, `-340`, `-341`, `-342`, `-343`, `-346`, `-347`, `-348`, `-349`, `-370`, `-390`, `-391`, `-392`, `-393`, `-394`, `-395`, `-396`, `-399`, `-400`, `-401`, `-402`, `-403`, `-404`, `-405`, `-406`, `-407`, `-408`, `-470`, `-471`, `-474`, `-475`, `-476`, `-477`, `-481`, `-482`), plus
@@ -546,6 +546,45 @@ against the top of this section.
 | `VULKAN-024` | **338/338** `^Vulkan_`, full `ctest` **not re-run** | the added test is `Vulkan_ProfileLimitsAudit`, **6/6**. One production addition, read-only: `GetDeviceLimitsEXT()`, which nothing else calls. |
 | `VULKAN-180` | `^Vulkan_` green within the full run, full `ctest` **9186/9199** | the legs added are G and H of `Vulkan_ProfileLimitsAudit`, taking it to **8/8**. The full suite was mandatory: the new `vkBindImageMemory` check is on the path every texture takes. 13 failures -- the standing set plus one known ENet parallel flake; none new, none in `Vulkan_*`. |
 
+### 7.5b The EasyGL reference baseline (`VULKAN-002`, 2026-09-06)
+
+The reference renderer's own numbers, taken the way the row requires -- a full run, then
+`--rerun-failed -j1` to separate a flake from a failure -- because "at least as complete and correct
+as EasyGL" is meaningless without knowing what EasyGL itself does here.
+
+```
+ctest --test-dir cmake-build-easygl -j2        → 9175/9198 passed, 23 failed
+ctest --test-dir cmake-build-easygl --rerun-failed -j1 → 6 of the 23 pass, 17 do not
+```
+
+**Six flakes, all of them the known parallel-contention set** and none renderer-related:
+`WaveBankTest.IsInUseFalseSoonAfterCueNaturallyFinishesWithoutExplicitStop`,
+`ENetBackendTest.ClientPromotesItselfWhenItIsTheOnlyKnownSurvivor`, and four
+`ENetDiscoveryServiceTest` cases. They pass alone and fail under `-j2`, which is exactly the
+"audio/ENet want the machine to themselves" pattern this project has recorded before.
+
+**Seventeen deterministic failures, and four of them are `EasyGL_` tests -- named here rather than
+rounded away, because the row insists and because the parity gate depends on it:**
+
+| Test | Kind |
+|---|---|
+| `EasyGL_HandleRelease` | **SEGFAULT**, reproduces serially |
+| `EasyGL_DeviceDisposeOrder` | **SEGFAULT**, reproduces serially |
+| `EasyGL_StockEffectSamplerContract` | Failed |
+| `EasyGL_SamplerComponentIsolation` | Failed |
+
+The other thirteen are the shared set this plan has recorded all along and that fails identically in
+the Vulkan configuration: one SpriteFont XNB/CNB equivalence, one content video, six
+`GraphicsDeviceSubsystemLifecycle`, `PacketReaderTest.ReadColorReadsSixteenBytesAsFloats`,
+`GameWindowPlatformTest`, and three C-API gates.
+
+**What this means for the campaign, stated plainly:** the maturity reference is **not** green on its
+own renderer set, while `^Vulkan_` is **338/338**. Two of EasyGL's four are segfaults. That does not
+make Vulkan "ahead" -- the four are specific defects, not a coverage measure -- but it does mean
+`VULKAN-487`'s final delta audit must not treat "EasyGL passes it" as a given for any of those four,
+and must not import them as Vulkan work either: they are EasyGL defects on EasyGL's own branch, and
+this plan's §5 rule is that EasyGL is the maturity reference, never the semantic authority.
+
 ### 7.6 The EasyGL cross-check (the measurement that reclassified four failures)
 
 Four of the six failing Vulkan tests run from sources that are registered on **both** renderers.
@@ -953,7 +992,7 @@ started, not silently widened.
 | ID | Task | Status | Acceptance criterion |
 |---|---|---|---|
 | VULKAN-001 | Record the implementation baseline commit and both build configurations | ✅ | **§7.2 re-confirmed against the commit the work has actually reached, not the one it started from** -- branch `vulkan`, **1055** commits ahead of its fork point `1bb2145d9` on `develop`. Both `cmake` command lines are written out in §7.2, **read back from the two `CMakeCache.txt` files** rather than retyped from memory, and `cmake --build` returns **0** for both directories. **The row's real question is answered by doing it, not by reading:** a configure needing a fourth fix would have had to be added to §7.2. None was -- the three recorded fixes (submodule init, `-DCNA_ENABLE_DRACO=OFF`, and the `sharp-runtimenext` root) are still the whole list, and both configurations still configure and build clean from them. **One thing §7.2 did not say and a reader will hit within minutes:** both caches carry `CMAKE_CXX_COMPILER_LAUNCHER` as a **list** -- `cmake;-E;env;CCACHE_BASEDIR=…;ccache` -- rather than a bare `ccache`. Re-passing it unquoted through a shell splits it and the configure fails; a `-C` preload cache is how to carry it into a new build directory. That is now in §7.2, because a baseline that cannot be reproduced is not a baseline. |
-| VULKAN-002 | Establish a green **EasyGL** test baseline and record it | ⬜ | `ctest --test-dir cmake-build-easygl` run under Xvfb, full output captured, then `--rerun-failed -j1` to separate flakes from failures. The exact pass/fail list is written into this file's §7 as the reference-renderer baseline. A pre-existing EasyGL failure is named, not rounded away. |
+| VULKAN-002 | Establish a green **EasyGL** test baseline and record it | ✅ | **Established, and it is not green -- which is the finding, and the reason the row said "a pre-existing EasyGL failure is named, not rounded away".** Recorded as new §7.5b. `ctest --test-dir cmake-build-easygl -j2` → **9175/9198**, 23 failed; `--rerun-failed -j1` → **6 pass, 17 do not**, which is what separates a flake from a failure and is why the row asks for it. **The six flakes are the known parallel-contention set** -- one `WaveBankTest` and five ENet cases -- and none is renderer-related. **Of the seventeen that reproduce serially, four are `EasyGL_` tests: `EasyGL_HandleRelease` and `EasyGL_DeviceDisposeOrder` both SEGFAULT, plus `EasyGL_StockEffectSamplerContract` and `EasyGL_SamplerComponentIsolation`.** The other thirteen are the shared content/lifecycle/network/C-API set that fails identically in the Vulkan configuration. **Consequence for this plan, written into §7.5b rather than left implicit:** the maturity reference is not green on its own renderer set while `^Vulkan_` is **338/338**. That does not make Vulkan "ahead" -- four specific defects are not a coverage measure -- but `VULKAN-487` must not assume "EasyGL passes it" for any of those four when it recomputes the delta, and must not import them as Vulkan work either. They are EasyGL defects on EasyGL's own branch, and §5's rule is that EasyGL is the maturity reference and never the semantic authority. |
 | VULKAN-003 | Establish a green **Vulkan** test baseline and record it | ⬜ | Same, for `cmake-build-vulkan`, and separately for `-R '^Vulkan_'`. Every failure is classified: CNA defect, environment, or driver. Nothing is called "accepted" without naming what accepts it. |
 | VULKAN-004 | Fix or quarantine the pre-existing non-Vulkan build break so the suite can be built at all | ✅ | **Fixed at the call site.** `CnbTextureCodecTests.cpp:475` passed one argument to `CnbDocument::Parse(std::vector<std::uint8_t>, const std::string& origin, const CnbReadLimits&)`; `origin` has no default and every one of the file's other eleven `Parse` calls supplies one (`:190`, `:210`, `:217`, …). The asset is encoded as `EncodeTexture2DToCnb(data, "mipped")`, so the origin is `"mipped.cnb"`. Introduced by `347139500` (`feat(cnb): generate mip chains when compiling a source image`); not another plan's in-flight work, so it is repaired rather than quarantined. **Evidence:** `cmake --build cmake-build-vulkan -j16` exits **0**; `ctest -R CnbTextureCodecTest` is 15/15 including `GeneratedMipChainSurvivesAnEncodeDecodeRoundTrip`. **Discovered while closing it:** §7.3's `Total Tests: 302` / `407` were measured with this break present. `gtest_discover_tests` runs each test binary *after* it links, so the unbuildable `cna_content_test_objects` suppressed every test it and its dependents own. With the build green the same command reports **9071** registered CTests for the Vulkan configuration. The `215 ^Vulkan_` count is unchanged and is the number this plan's parity arithmetic actually uses. `VULKAN-006` owns re-stating §7.3 from a green build. |
 | VULKAN-005 | Record the Vulkan physical device, driver, extensions and layer environment | ✅ | **§7.1 regenerated from a fresh `vulkaninfo --summary` and from the renderer's own startup dump, with the selected device named rather than assumed.** Instance API **1.4.309**, eight instance layers including `VK_LAYER_KHRONOS_validation` **1.4.309**, and the same two devices as before: GPU0 `AMD Radeon 780M (RADV PHOENIX)` (`DRIVER_ID_MESA_RADV`, apiVersion 1.4.305, conformance 1.4.0.0) and GPU1 `llvmpipe (LLVM 19.1.7, 256 bits)` (`DRIVER_ID_MESA_LLVMPIPE`, conformance 1.3.1.1). **The selection is measured, not inferred:** the renderer's startup dump under Xvfb `:99` prints four repetitions of `vulkan: No DRI3 support detected - required for presentation` as `PickPhysicalDevice` rejects RADV, then `[Vulkan] GPU: llvmpipe (LLVM 19.1.7, 256 bits)`. So §7.1's existing account of why the physical GPU is unreachable still holds today, and every number in this plan is llvmpipe's. **One correction to the row above it rather than a rewrite:** it recorded "Mesa 25.0.7-2+deb13u1" for GPU0, which is `driverInfo`; the numeric `driverVersion` is **25.0.7** (GPU1's is 0.0.1). A bug report wants the numeric one, so both are now stated. **And one addition the section did not have:** the device limits, because `VULKAN-024` had to go and get them and nothing recorded them -- `maxImageDimension2D` 16384, `maxImageDimensionCube` 32768, `maxImageDimension3D` **4096**, `maxColorAttachments` 8, `maxVertexInputBindings` 32. The 3D limit is four times smaller than the 2D one, and it is the number `VULKAN-180` was found through. |
