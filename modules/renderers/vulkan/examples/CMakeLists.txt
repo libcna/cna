@@ -2471,6 +2471,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-213: the three render-target lifetime shapes the existing four
+        # lifetime tests do not reach -- disposal with work still queued, in three arrangements.
+        cna_vulkan_test(cna_test_vulkan_rendertarget_lifetime_shapes
+                        vulkan_rendertarget_lifetime_shapes_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_RenderTargetLifetimeShapes
+            COMMAND cna_test_vulkan_rendertarget_lifetime_shapes
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-338: twenty-two back-to-back swapchain recreations, a minimized
         # (0x0) drawable with a frame presented in that state, and a restore -- with live
         # resources across all of it.
