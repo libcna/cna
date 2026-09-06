@@ -100,17 +100,30 @@ protected:
         //     "does not reconfigure MSAA" and relies on the renderer reporting what is really in
         //     effect -- so it is the one place where the identity default reaches a game.
         const int applied = vk->GetMultiSampleCount();
+        // plan_vulkan.md VULKAN-184: the value handed in is derived from the device, not the
+        // literal 8 this leg used to use.
+        //
+        // C2's whole point is that the store keeps the APPLIED count rather than the one it was
+        // given, so the two must differ or the leg proves nothing -- which is what C1 guards. The
+        // literal 8 made that guard a statement about the DEVICE ("this one cannot satisfy 8x"),
+        // true on llvmpipe and false on RADV, where 8x is applied and C1 failed while the renderer
+        // was behaving perfectly. `applied + 1` is never a valid sample count -- every one of them
+        // is a power of two -- so no device can ever apply it, and C1 holds by construction on all
+        // of them.
+        const int handed = applied + 1;
         PresentationParameters wants = device.getPresentationParametersProperty().Clone();
-        wants.setMultiSampleCountProperty(8);
+        wants.setMultiSampleCountProperty(handed);
         device.SetPresentationParameters(wants);
         const int seen =
             device.getPresentationParametersProperty().getMultiSampleCountProperty();
-        check(applied != 8,
-              "C1 the 8x this device cannot satisfy really is clamped, to " +
+        check(handed != applied,
+              "C1 the count handed in (" + std::to_string(handed) +
+                  ") is one no device can apply, so it differs from the applied " +
                   std::to_string(applied) + " -- without this the next leg is vacuous");
         check(seen == applied,
               "C2 SetPresentationParameters stores the applied count (" + std::to_string(seen) +
-                  " == " + std::to_string(applied) + "), not the 8 it was handed");
+                  " == " + std::to_string(applied) + "), not the " + std::to_string(handed) +
+                  " it was handed");
 
         Exit();
     }

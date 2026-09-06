@@ -489,8 +489,29 @@ class RenderTargetMsaaDepthContractTest : public Game
         auto& dev = getGraphicsDeviceProperty();
         auto rt = MakeTarget(dev, depth, samples, mipMap, RenderTargetUsage::DiscardContents, label);
 
-        check(rt->getDepthStencilFormatProperty() == depth,
-              label + ": reports the requested DepthFormat back");
+        // plan_vulkan.md VULKAN-184: what a target reports is the format it APPLIED, not the one
+        // it was asked for, and those differ on a device that cannot give you what you asked for.
+        //
+        // This leg used to require them equal. That held everywhere it had ever run -- llvmpipe
+        // supports both `D16_UNORM` and `X8_D24_UNORM_PACK32`, GL is more forgiving still, so
+        // nothing was ever substituted -- and it is false on AMD, where `D24_UNORM_S8_UINT` does
+        // not exist and `Depth24` legitimately becomes something else. `VULKAN-348`/`VULKAN-215`
+        // settled that CNA reports what it applied; asserting the request back contradicts the
+        // contract this project chose, and it failed a renderer that was behaving correctly.
+        //
+        // What IS universal, and what a silent drop to no depth at all would violate: a request
+        // for a depth format yields SOME depth format, and a request for none yields none.
+        const DepthFormat reported = rt->getDepthStencilFormatProperty();
+        const bool consistent = (depth == DepthFormat::None)
+                                    ? (reported == DepthFormat::None)
+                                    : (reported != DepthFormat::None);
+        check(consistent,
+              label + ": reports a depth format consistent with the request (asked " +
+                  std::to_string(static_cast<int>(depth)) + ", reports " +
+                  std::to_string(static_cast<int>(reported)) +
+                  (reported == depth ? ")"
+                                     : ") -- a substitution, which VULKAN-348 requires to be "
+                                       "reported rather than hidden"));
 
         // The APPLIED count is device- and renderer-dependent and the XNA contract permits rounding
         // DOWN to the nearest supported count: Vulkan and WebGPU gate render-target MSAA on the
