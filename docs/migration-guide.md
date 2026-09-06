@@ -118,7 +118,12 @@ Real, currently-open caveats worth knowing about instead:
   garbage state.
 - **EasyGL: a full-backbuffer `SpriteBatch` draw before any 3D draw in the same frame breaks that
   frame's 3D rendering** (Task 933) — investigated, root cause not yet isolated.
-- **Vulkan `RasterizerState.DepthBias` has no effect** — one isolated, unresolved case.
+- ~~**Vulkan `RasterizerState.DepthBias` has no effect**~~ — **withdrawn 2026-09-06.** Measured in
+  `plans/plan_vulkan.md` §7.4: `Vulkan_DepthBias` was a **test** written against OpenGL's depth
+  range, not a renderer defect. The renderer drives real dynamic `vkCmdSetDepthBias` from ten
+  pipeline sites. Kept struck through rather than deleted: a known-issues list that warns readers
+  away from a working feature does the same harm as one that hides a broken one, and someone who
+  remembers this entry should be able to see it was retracted (`VULKAN-481`).
 - **Bgfx: `DrawIndexedPrimitivesEx`'s non-wireframe path silently discards `startIndex`/`baseVertex`**
   (Task 954) — not hit by any current CNA sample (every `Model`/`ModelMeshPart` owns its own buffer
   starting at 0), but affects a genuine sub-range indexed draw if your game does one.

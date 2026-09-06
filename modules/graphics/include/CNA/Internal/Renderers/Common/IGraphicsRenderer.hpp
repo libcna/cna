@@ -2201,12 +2201,22 @@ namespace CNA::Internal::Renderers
         /// Depth24Stencil8=3), passed as `int` to avoid coupling this renderer-agnostic header
         /// to the XNA namespace — mirrors CreateTexture3D/CreateTextureCube's `surfaceFormat`
         /// convention. EasyGL and Bgfx honor the exact requested format (None omits the
-        /// depth/stencil attachment entirely); Vulkan always allocates a combined depth+stencil
-        /// buffer using its device-wide format regardless of the exact value requested, since
-        /// varying it per render target would require a depth-format-keyed render pass/pipeline
-        /// cache (Vulkan render-pass-compatibility rules require matching attachment formats
-        /// for the pipelines this renderer currently shares across the backbuffer and every
-        /// render target) — a real architectural change, tracked as Task 911 (Task 877).
+        /// depth/stencil attachment entirely); **Vulkan now does too** — Task 911 made the
+        /// architectural change this comment used to describe as pending, so each render target
+        /// picks its own real `VkFormat` via `PickDepthFormat` (`VK_FORMAT_UNDEFINED` for
+        /// `DepthFormat::None`, i.e. no attachment at all) and each distinct format gets its own
+        /// render pass and pipeline-cache entries. `plans/plan_vulkan.md` D-04 / `VULKAN-481`.
+        /// **What this said before, kept so the correction is visible rather than silent:**
+        /// "Vulkan always allocates a combined depth+stencil buffer using its device-wide format
+        /// regardless of the exact value requested … a real architectural change, tracked as Task
+        /// 911 (Task 877)." True when written; the change landed. Since `VULKAN-215` the applied
+        /// format is also *reported* — `RenderTarget2D`/`RenderTargetCube.DepthStencilFormat` show
+        /// what was allocated rather than what was asked for.
+        ///
+        /// The **back buffer** is the one place the old sentence still half-applies: it allocates
+        /// depth unconditionally, even for a `None` request. That is measured and deliberate —
+        /// `VULKAN-349` weighed it and left it, recording that the cost is portability rather than
+        /// memory.
         /// `mipMap` requests a full mip chain, auto-generated from level 0 when the target is
         /// unbound (matching FNA3D's OPENGL_ResolveTarget behavior) — all 3 renderers implement
         /// this (Task 336/878/906). `multiSampleCount` requests a multisampled color (and depth,
