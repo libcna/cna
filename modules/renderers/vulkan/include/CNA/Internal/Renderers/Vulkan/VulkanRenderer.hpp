@@ -273,6 +273,9 @@ namespace CNA::Internal::Renderers::Vulkan
         VkDeviceMemory      memory_        = VK_NULL_HANDLE;
         VkImageView         imageView_     = VK_NULL_HANDLE;
         VkDescriptorSet     descriptorSet_ = VK_NULL_HANDLE;
+        /// plan_vulkan.md VULKAN-181: see VulkanRenderTargetRenderer's twin -- the set no longer
+        /// always comes from `owner_->descriptorPool_`, so it must be freed from its own pool.
+        VkDescriptorPool    descriptorPool_ = VK_NULL_HANDLE;
         VulkanRenderer* owner_      = nullptr;
     };
 
@@ -399,6 +402,11 @@ namespace CNA::Internal::Renderers::Vulkan
         VkFramebuffer           msaaFramebuffer_ = VK_NULL_HANDLE;
         int                     appliedMultiSampleCount_ = 0;
         VkDescriptorSet         descriptorSet_ = VK_NULL_HANDLE;
+        /// plan_vulkan.md VULKAN-181: the pool `descriptorSet_` was allocated from. It is no
+        /// longer always `owner_->descriptorPool_`: this class now goes through
+        /// `AllocateTexSamplerDescSetEXT`, which chains a fresh pool when the existing ones
+        /// are full, so the set has to be freed from whichever pool actually produced it.
+        VkDescriptorPool        descriptorPool_ = VK_NULL_HANDLE;
         VulkanRenderer*  owner_        = nullptr;
         // REMED-GFX-166: the destination the deferred queues name, built once at the end of the
         // constructor from the immutable handles above. Shared, so a command queued against this
@@ -2403,6 +2411,10 @@ namespace CNA::Internal::Renderers::Vulkan
         static constexpr uint32_t MaxSpriteVertices = 8192;
         static constexpr uint32_t MaxSpriteIndices  = MaxSpriteVertices / 4 * 6;
         static constexpr uint32_t MaxDescriptorSets = 512;
+        /// plan_vulkan.md VULKAN-181: `maxSets` for a chained per-effect descriptor pool --
+        /// the same size the seven base pools are created with (`512 * MaxFramesInFlight`),
+        /// so a chained pool is a like-for-like extension rather than a different bound.
+        static constexpr uint32_t kEffectPoolMaxSets = 512u * MaxFramesInFlight;
 
         // --- Core Vulkan objects (lifetime = renderer) ---
         RendererSurfaceInfo surfaceInfo_;
@@ -2656,6 +2668,38 @@ namespace CNA::Internal::Renderers::Vulkan
         /// VULKAN-390: allocate one single-sampler set, chaining a new pool when the current ones
         /// are full. Throws a named exception if the device refuses; never substitutes a resource.
         void AllocateTexSamplerDescSetEXT(VkDescriptorSet& outSet, VkDescriptorPool& outPool);
+        /**
+         * @brief plan_vulkan.md VULKAN-181: allocate one descriptor set, chaining another pool when
+         *        every existing one is full.
+         *
+         * The seven per-effect caches each had ONE fixed pool and threw the moment a device refused
+         * another set. On llvmpipe that never happened; on RADV it happened in
+         * `Vulkan_DescriptorCapacityContract`'s very first textured leg. This is
+         * `AllocateTexSamplerDescSetEXT`'s policy, generalised so each family can bring its own
+         * base pool, layout and pool sizes.
+         *
+         * @param overflow  That family's chained pools; a new one is appended when needed.
+         * @param base      The family's original pool, tried after the newest overflow ones.
+         * @param layout    The set layout to allocate.
+         * @param sizes     Pool sizes for a chained pool -- the same shape the base pool used.
+         * @param sizeCount Number of entries in @p sizes.
+         * @param maxSets   `maxSets` for a chained pool.
+         * @param outSet    The allocated set, or VK_NULL_HANDLE if even a fresh pool refused.
+         * @param outPool   The pool @p outSet came from; the caller must free it from that pool.
+         */
+        void AllocateFromGrowingPoolEXT(VkDescriptorPool base,
+                                        VkDescriptorSetLayout layout,
+                                        const VkDescriptorPoolSize* sizes, uint32_t sizeCount,
+                                        uint32_t maxSets,
+                                        VkDescriptorSet& outSet, VkDescriptorPool& outPool);
+        /// VULKAN-181: the chained pools, keyed by the BASE pool they extend.
+        ///
+        /// Keyed rather than one shared list, so a family's chain contains only its own pools. A
+        /// shared list would still work -- the pool sizes cover the widest layout -- but it would
+        /// make "how many allocation attempts does this family make" depend on what every other
+        /// family had already done, which is exactly the kind of history-dependence a test cannot
+        /// state a contract against.
+        std::unordered_map<VkDescriptorPool, std::vector<VkDescriptorPool>> effectOverflowPools_;
         bool anisotropySupported_ = false;
         float maxSamplerAnisotropy_ = 1.f;
         bool independentBlendSupported_ = false;
@@ -2705,6 +2749,11 @@ namespace CNA::Internal::Renderers::Vulkan
         static constexpr std::size_t kMaxEffectSampledViews = 7;
         struct EffectDescSetEntry {
             VkDescriptorSet                                  set = VK_NULL_HANDLE;
+            /// plan_vulkan.md VULKAN-181: the pool this set came from. These caches used to have
+            /// exactly one pool each, so eviction could take it as a parameter; they can now chain
+            /// further pools when a device refuses another set, and a set must be freed from the
+            /// pool that produced it.
+            VkDescriptorPool                                 pool = VK_NULL_HANDLE;
             std::array<VkImageView, kMaxEffectSampledViews>  views{}; // VK_NULL_HANDLE-padded
         };
         using EffectDescSetCache =
@@ -3365,7 +3414,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // cache that references `view`, so a later resource reusing the freed VkImageView handle
         // value gets a fresh descriptor set rather than aliasing this (now-destroyed) one. Called
         // once per effect cache from EvictSampledViewFromCaches().
-        void EvictViewFromEffectCache(EffectDescSetCache& caches, VkDescriptorPool pool,
+        void EvictViewFromEffectCache(EffectDescSetCache& caches, VkDescriptorPool /*unusedSinceVulkan181*/,
                                       VkImageView view, RetiredResources& into);
     public:
         // REMED-GFX-076: read-only test introspection -- total live entries across all seven

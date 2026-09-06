@@ -532,13 +532,18 @@ namespace CNA::Internal::Renderers::Vulkan
             throw std::runtime_error("vkCreateImageView (texture) failed");
 
         // --- Descriptor set ---
-        VkDescriptorSetAllocateInfo dsInfo{};
-        dsInfo.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        dsInfo.descriptorPool     = owner_->descriptorPool_;
-        dsInfo.descriptorSetCount = 1;
-        dsInfo.pSetLayouts        = &owner_->descriptorSetLayout_;
-        // VULKAN-391: through the shared helper, so this arm is reachable by the injection hook.
-        if (AllocateOneDescriptorSet(dev, dsInfo, descriptorSet_) != VK_SUCCESS)
+        // plan_vulkan.md VULKAN-181: through AllocateTexSamplerDescSetEXT, which chains a further
+        // pool when the existing ones are full, instead of allocating straight out of the base
+        // pool and throwing the moment it is exhausted.
+        //
+        // VULKAN-391 built that growth path and then only the on-the-fly sampled-descriptor cache
+        // used it; every Texture2D and every RenderTarget2D still took the base pool directly. On
+        // llvmpipe the 512-set base pool absorbed everything and the gap was invisible. On RADV it
+        // is not: `Vulkan_DescriptorCapacityContract` -- whose subject is 256 simultaneously live
+        // textures -- failed EVERY leg with `vkAllocateDescriptorSets failed` (VULKAN-012's first
+        // real-hardware run). The pool that grows was there; these two callers were not using it.
+        owner_->AllocateTexSamplerDescSetEXT(descriptorSet_, descriptorPool_);
+        if (descriptorSet_ == VK_NULL_HANDLE)
             throw std::runtime_error("vkAllocateDescriptorSets (texture) failed");
 
         VkDescriptorImageInfo imgDescInfo{};
@@ -566,7 +571,12 @@ namespace CNA::Internal::Renderers::Vulkan
         // never hit a stale set. Frees happen once the consuming frame's fence has completed.
         VulkanRenderer::RetiredResources r;
         owner_->EvictSampledViewFromCaches(imageView_, r);
-        if (descriptorSet_ != VK_NULL_HANDLE) { r.descriptorSets.push_back(descriptorSet_); descriptorSet_ = VK_NULL_HANDLE; }
+        // VULKAN-181: freed from the pool it actually came from, which is no longer always the
+        // base pool -- poolDescriptorSets is REMED-GFX-076's existing (pool, set) queue.
+        if (descriptorSet_ != VK_NULL_HANDLE) {
+            r.poolDescriptorSets.emplace_back(descriptorPool_, descriptorSet_);
+            descriptorSet_ = VK_NULL_HANDLE; descriptorPool_ = VK_NULL_HANDLE;
+        }
         if (imageView_     != VK_NULL_HANDLE) { r.imageViews.push_back(imageView_);         imageView_     = VK_NULL_HANDLE; }
         if (image_         != VK_NULL_HANDLE) { r.images.push_back(image_);                  image_         = VK_NULL_HANDLE; }
         if (memory_        != VK_NULL_HANDLE) { r.memories.push_back(memory_);               memory_        = VK_NULL_HANDLE; }
@@ -1003,13 +1013,10 @@ namespace CNA::Internal::Renderers::Vulkan
         }
 
         // --- Descriptor set so the RT can be sampled as a texture ---
-        VkDescriptorSetAllocateInfo dsInfo{};
-        dsInfo.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        dsInfo.descriptorPool     = owner_->descriptorPool_;
-        dsInfo.descriptorSetCount = 1;
-        dsInfo.pSetLayouts        = &owner_->descriptorSetLayout_;
-        // VULKAN-391: through the shared helper, so this arm is reachable by the injection hook.
-        if (AllocateOneDescriptorSet(dev, dsInfo, descriptorSet_) != VK_SUCCESS)
+        // plan_vulkan.md VULKAN-181: through the growing allocator, exactly as
+        // VulkanTextureRenderer now does; see the reasoning there.
+        owner_->AllocateTexSamplerDescSetEXT(descriptorSet_, descriptorPool_);
+        if (descriptorSet_ == VK_NULL_HANDLE)
             throw std::runtime_error("VulkanRenderTargetRenderer: vkAllocateDescriptorSets failed");
 
         VkDescriptorImageInfo imgDesc{};
@@ -1076,7 +1083,11 @@ namespace CNA::Internal::Renderers::Vulkan
         VulkanRenderer::RetiredResources r;
         owner_->EvictSampledViewFromCaches(colorSampleView_, r);
         owner_->EvictSampledViewFromCaches(colorView_, r);
-        if (descriptorSet_   != VK_NULL_HANDLE) { r.descriptorSets.push_back(descriptorSet_); descriptorSet_   = VK_NULL_HANDLE; }
+        // VULKAN-181: freed from its own pool -- see VulkanTextureRenderer's twin.
+        if (descriptorSet_   != VK_NULL_HANDLE) {
+            r.poolDescriptorSets.emplace_back(descriptorPool_, descriptorSet_);
+            descriptorSet_ = VK_NULL_HANDLE; descriptorPool_ = VK_NULL_HANDLE;
+        }
         if (framebuffer_     != VK_NULL_HANDLE) { r.framebuffers.push_back(framebuffer_);     framebuffer_     = VK_NULL_HANDLE; }
         if (msaaFramebuffer_ != VK_NULL_HANDLE) { r.framebuffers.push_back(msaaFramebuffer_); msaaFramebuffer_ = VK_NULL_HANDLE; }
         if (colorView_       != VK_NULL_HANDLE) { r.imageViews.push_back(colorView_);         colorView_       = VK_NULL_HANDLE; }
@@ -2537,6 +2548,11 @@ namespace CNA::Internal::Renderers::Vulkan
         for (VkDescriptorPool pool : texSamplerOverflowPools_)
             if (pool != VK_NULL_HANDLE) vkDestroyDescriptorPool(device_, pool, nullptr);
         texSamplerOverflowPools_.clear();
+        // VULKAN-181: the per-effect chained pools, destroyed with their base pools below.
+        for (auto& [base, chained] : effectOverflowPools_)
+            for (VkDescriptorPool pool : chained)
+                if (pool != VK_NULL_HANDLE) vkDestroyDescriptorPool(device_, pool, nullptr);
+        effectOverflowPools_.clear();
         if (descriptorSetLayout_ != VK_NULL_HANDLE) { vkDestroyDescriptorSetLayout(device_, descriptorSetLayout_, nullptr); descriptorSetLayout_ = VK_NULL_HANDLE; }
         texSamplerDescSets_.clear(); // descriptor sets freed with pools above
         for (auto& [k, entry] : samplerCache_)
@@ -4344,6 +4360,57 @@ namespace CNA::Internal::Renderers::Vulkan
 
         texSamplerDescSets_[key] = TexSamplerDescSetEXT{ ds, dsPool };
         return ds;
+    }
+
+    void VulkanRenderer::AllocateFromGrowingPoolEXT(VkDescriptorPool base,
+                                                    VkDescriptorSetLayout layout,
+                                                    const VkDescriptorPoolSize* sizes,
+                                                    uint32_t sizeCount, uint32_t maxSets,
+                                                    VkDescriptorSet& outSet,
+                                                    VkDescriptorPool& outPool)
+    {
+        outSet  = VK_NULL_HANDLE;
+        outPool = VK_NULL_HANDLE;
+        std::vector<VkDescriptorPool>& overflow = effectOverflowPools_[base];
+
+        VkDescriptorSetAllocateInfo ai{};
+        ai.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        ai.descriptorSetCount = 1;
+        ai.pSetLayouts        = &layout;
+
+        // Newest pool first: the older ones are full, which is why the newer ones exist.
+        for (auto pool = overflow.rbegin(); pool != overflow.rend(); ++pool) {
+            ai.descriptorPool = *pool;
+            if (AllocateOneDescriptorSet(device_, ai, outSet) == VK_SUCCESS) {
+                outPool = *pool;
+                return;
+            }
+        }
+        ai.descriptorPool = base;
+        if (AllocateOneDescriptorSet(device_, ai, outSet) == VK_SUCCESS) {
+            outPool = base;
+            return;
+        }
+
+        VkDescriptorPoolCreateInfo ci{};
+        ci.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        // REMED-GFX-076's individual-free bit, because eviction frees single sets from these pools.
+        ci.flags         = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+        ci.maxSets       = maxSets;
+        ci.poolSizeCount = sizeCount;
+        ci.pPoolSizes    = sizes;
+        VkDescriptorPool grown = VK_NULL_HANDLE;
+        if (vkCreateDescriptorPool(device_, &ci, nullptr, &grown) != VK_SUCCESS)
+            return;   // caller refuses by name; outSet stays VK_NULL_HANDLE
+
+        ai.descriptorPool = grown;
+        if (AllocateOneDescriptorSet(device_, ai, outSet) != VK_SUCCESS) {
+            vkDestroyDescriptorPool(device_, grown, nullptr);
+            outSet = VK_NULL_HANDLE;
+            return;
+        }
+        overflow.push_back(grown);
+        outPool = grown;
     }
 
     void VulkanRenderer::AllocateTexSamplerDescSetEXT(VkDescriptorSet& outSet,
@@ -6774,19 +6841,28 @@ namespace CNA::Internal::Renderers::Vulkan
             return it->second.set;
         }
 
-        VkDescriptorSetAllocateInfo ai{};
-        ai.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        ai.descriptorPool     = descriptorPool2Tex_;
-        ai.descriptorSetCount = 1;
-        ai.pSetLayouts        = &descriptorSetLayout2Tex_;
         VkDescriptorSet ds = VK_NULL_HANDLE;
+        VkDescriptorPool dsPool = VK_NULL_HANDLE;
         // VULKAN-391: one contract for every descriptor allocation in this renderer -- a caller
         // never receives VK_NULL_HANDLE, because the only thing a caller could do with one is bind
         // it, and binding a null descriptor set is a segfault (measured under VULKAN-390's
         // mutation probe). Refused BY NAME at the draw, which is where this runs, rather than at
         // Present. Routed through AllocateOneDescriptorSet so the test-only injection hook can
         // reach this arm at all -- it could not before, which is why this arm had no test.
-        if (AllocateOneDescriptorSet(device_, ai, ds) != VK_SUCCESS)
+        // VULKAN-181: through the growing allocator. Before it, this pool was fixed and a
+        // device that refused another set ended the draw -- which never happened on
+        // llvmpipe and happened on RADV's very first textured leg of
+        // Vulkan_DescriptorCapacityContract. The refusal below now means the device would
+        // not give us a NEW POOL either, which is a real exhaustion rather than a bound.
+        {
+            const VkDescriptorPoolSize sizes[] = {
+                { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, kEffectPoolMaxSets * 8 },
+                { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, kEffectPoolMaxSets },
+            };
+            AllocateFromGrowingPoolEXT(descriptorPool2Tex_, descriptorSetLayout2Tex_,
+                                       sizes, 2u, kEffectPoolMaxSets, ds, dsPool);
+        }
+        if (ds == VK_NULL_HANDLE)
             throw std::runtime_error(
                 "The Vulkan renderer: DualTextureEffect\'s descriptor pool is full and the device "
                 "refused another set. Refused rather than binding a null descriptor set.");
@@ -6821,7 +6897,7 @@ namespace CNA::Internal::Renderers::Vulkan
         writes[2].pBufferInfo     = &bufInfo;
         vkUpdateDescriptorSets(device_, 3, writes, 0, nullptr);
         // REMED-GFX-076: record the sampled views so this entry is evicted+freed when either dies.
-        cache[key] = EffectDescSetEntry{ ds, { view0, view1, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE } };
+        cache[key] = EffectDescSetEntry{ ds, dsPool, { view0, view1, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE } };
         return ds;
     }
 
@@ -7148,19 +7224,28 @@ namespace CNA::Internal::Renderers::Vulkan
         auto it = cache.find(key);
         if (it != cache.end()) return it->second.set;
 
-        VkDescriptorSetAllocateInfo ai{};
-        ai.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        ai.descriptorPool     = descriptorPoolEnvMap_;
-        ai.descriptorSetCount = 1;
-        ai.pSetLayouts        = &descriptorSetLayoutEnvMap_;
         VkDescriptorSet ds = VK_NULL_HANDLE;
+        VkDescriptorPool dsPool = VK_NULL_HANDLE;
         // VULKAN-391: one contract for every descriptor allocation in this renderer -- a caller
         // never receives VK_NULL_HANDLE, because the only thing a caller could do with one is bind
         // it, and binding a null descriptor set is a segfault (measured under VULKAN-390's
         // mutation probe). Refused BY NAME at the draw, which is where this runs, rather than at
         // Present. Routed through AllocateOneDescriptorSet so the test-only injection hook can
         // reach this arm at all -- it could not before, which is why this arm had no test.
-        if (AllocateOneDescriptorSet(device_, ai, ds) != VK_SUCCESS)
+        // VULKAN-181: through the growing allocator. Before it, this pool was fixed and a
+        // device that refused another set ended the draw -- which never happened on
+        // llvmpipe and happened on RADV's very first textured leg of
+        // Vulkan_DescriptorCapacityContract. The refusal below now means the device would
+        // not give us a NEW POOL either, which is a real exhaustion rather than a bound.
+        {
+            const VkDescriptorPoolSize sizes[] = {
+                { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, kEffectPoolMaxSets * 8 },
+                { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, kEffectPoolMaxSets },
+            };
+            AllocateFromGrowingPoolEXT(descriptorPoolEnvMap_, descriptorSetLayoutEnvMap_,
+                                       sizes, 2u, kEffectPoolMaxSets, ds, dsPool);
+        }
+        if (ds == VK_NULL_HANDLE)
             throw std::runtime_error(
                 "The Vulkan renderer: EnvironmentMapEffect\'s descriptor pool is full and the device "
                 "refused another set. Refused rather than binding a null descriptor set.");
@@ -7199,7 +7284,7 @@ namespace CNA::Internal::Renderers::Vulkan
         vkUpdateDescriptorSets(device_, 3, writes, 0, nullptr);
 
         // REMED-GFX-076: record the sampled views so this entry is evicted+freed when either dies.
-        cache[key] = EffectDescSetEntry{ ds, { view2D, viewCube, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE } };
+        cache[key] = EffectDescSetEntry{ ds, dsPool, { view2D, viewCube, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE } };
         return ds;
     }
 
@@ -7425,19 +7510,28 @@ namespace CNA::Internal::Renderers::Vulkan
         auto it = cache.find(key);
         if (it != cache.end()) return it->second.set;
 
-        VkDescriptorSetAllocateInfo ai{};
-        ai.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        ai.descriptorPool     = descriptorPoolLitTextured_;
-        ai.descriptorSetCount = 1;
-        ai.pSetLayouts        = &descriptorSetLayoutLitTextured_;
         VkDescriptorSet ds = VK_NULL_HANDLE;
+        VkDescriptorPool dsPool = VK_NULL_HANDLE;
         // VULKAN-391: one contract for every descriptor allocation in this renderer -- a caller
         // never receives VK_NULL_HANDLE, because the only thing a caller could do with one is bind
         // it, and binding a null descriptor set is a segfault (measured under VULKAN-390's
         // mutation probe). Refused BY NAME at the draw, which is where this runs, rather than at
         // Present. Routed through AllocateOneDescriptorSet so the test-only injection hook can
         // reach this arm at all -- it could not before, which is why this arm had no test.
-        if (AllocateOneDescriptorSet(device_, ai, ds) != VK_SUCCESS)
+        // VULKAN-181: through the growing allocator. Before it, this pool was fixed and a
+        // device that refused another set ended the draw -- which never happened on
+        // llvmpipe and happened on RADV's very first textured leg of
+        // Vulkan_DescriptorCapacityContract. The refusal below now means the device would
+        // not give us a NEW POOL either, which is a real exhaustion rather than a bound.
+        {
+            const VkDescriptorPoolSize sizes[] = {
+                { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, kEffectPoolMaxSets * 8 },
+                { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, kEffectPoolMaxSets },
+            };
+            AllocateFromGrowingPoolEXT(descriptorPoolLitTextured_, descriptorSetLayoutLitTextured_,
+                                       sizes, 2u, kEffectPoolMaxSets, ds, dsPool);
+        }
+        if (ds == VK_NULL_HANDLE)
             throw std::runtime_error(
                 "The Vulkan renderer: the lit-textured BasicEffect\'s descriptor pool is full and the device "
                 "refused another set. Refused rather than binding a null descriptor set.");
@@ -7469,7 +7563,7 @@ namespace CNA::Internal::Renderers::Vulkan
         vkUpdateDescriptorSets(device_, 2, writes, 0, nullptr);
 
         // REMED-GFX-076: record the sampled view so this entry is evicted+freed when it dies.
-        cache[key] = EffectDescSetEntry{ ds, { view2D, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE } };
+        cache[key] = EffectDescSetEntry{ ds, dsPool, { view2D, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE } };
         return ds;
     }
 
@@ -7817,19 +7911,28 @@ namespace CNA::Internal::Renderers::Vulkan
         auto it = cache.find(key);
         if (it != cache.end()) return it->second.set;
 
-        VkDescriptorSetAllocateInfo ai{};
-        ai.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        ai.descriptorPool     = descriptorPoolFogTex3D_;
-        ai.descriptorSetCount = 1;
-        ai.pSetLayouts        = &descriptorSetLayoutFogTex3D_;
         VkDescriptorSet ds = VK_NULL_HANDLE;
+        VkDescriptorPool dsPool = VK_NULL_HANDLE;
         // VULKAN-391: one contract for every descriptor allocation in this renderer -- a caller
         // never receives VK_NULL_HANDLE, because the only thing a caller could do with one is bind
         // it, and binding a null descriptor set is a segfault (measured under VULKAN-390's
         // mutation probe). Refused BY NAME at the draw, which is where this runs, rather than at
         // Present. Routed through AllocateOneDescriptorSet so the test-only injection hook can
         // reach this arm at all -- it could not before, which is why this arm had no test.
-        if (AllocateOneDescriptorSet(device_, ai, ds) != VK_SUCCESS)
+        // VULKAN-181: through the growing allocator. Before it, this pool was fixed and a
+        // device that refused another set ended the draw -- which never happened on
+        // llvmpipe and happened on RADV's very first textured leg of
+        // Vulkan_DescriptorCapacityContract. The refusal below now means the device would
+        // not give us a NEW POOL either, which is a real exhaustion rather than a bound.
+        {
+            const VkDescriptorPoolSize sizes[] = {
+                { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, kEffectPoolMaxSets * 8 },
+                { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, kEffectPoolMaxSets },
+            };
+            AllocateFromGrowingPoolEXT(descriptorPoolFogTex3D_, descriptorSetLayoutFogTex3D_,
+                                       sizes, 2u, kEffectPoolMaxSets, ds, dsPool);
+        }
+        if (ds == VK_NULL_HANDLE)
             throw std::runtime_error(
                 "The Vulkan renderer: the textured BasicEffect\'s descriptor pool is full and the device "
                 "refused another set. Refused rather than binding a null descriptor set.");
@@ -7861,7 +7964,7 @@ namespace CNA::Internal::Renderers::Vulkan
         vkUpdateDescriptorSets(device_, 2, writes, 0, nullptr);
 
         // REMED-GFX-076: record the sampled view so this entry is evicted+freed when it dies.
-        cache[key] = EffectDescSetEntry{ ds, { view2D, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE } };
+        cache[key] = EffectDescSetEntry{ ds, dsPool, { view2D, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE } };
         return ds;
     }
 
@@ -8915,19 +9018,28 @@ namespace CNA::Internal::Renderers::Vulkan
         auto it = cache.find(key);
         if (it != cache.end()) return it->second.set;
 
-        VkDescriptorSetAllocateInfo ai{};
-        ai.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        ai.descriptorPool     = descriptorPoolSkinned_;
-        ai.descriptorSetCount = 1;
-        ai.pSetLayouts        = &descriptorSetLayoutSkinned_;
         VkDescriptorSet ds = VK_NULL_HANDLE;
+        VkDescriptorPool dsPool = VK_NULL_HANDLE;
         // VULKAN-391: one contract for every descriptor allocation in this renderer -- a caller
         // never receives VK_NULL_HANDLE, because the only thing a caller could do with one is bind
         // it, and binding a null descriptor set is a segfault (measured under VULKAN-390's
         // mutation probe). Refused BY NAME at the draw, which is where this runs, rather than at
         // Present. Routed through AllocateOneDescriptorSet so the test-only injection hook can
         // reach this arm at all -- it could not before, which is why this arm had no test.
-        if (AllocateOneDescriptorSet(device_, ai, ds) != VK_SUCCESS)
+        // VULKAN-181: through the growing allocator. Before it, this pool was fixed and a
+        // device that refused another set ended the draw -- which never happened on
+        // llvmpipe and happened on RADV's very first textured leg of
+        // Vulkan_DescriptorCapacityContract. The refusal below now means the device would
+        // not give us a NEW POOL either, which is a real exhaustion rather than a bound.
+        {
+            const VkDescriptorPoolSize sizes[] = {
+                { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, kEffectPoolMaxSets * 8 },
+                { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, kEffectPoolMaxSets },
+            };
+            AllocateFromGrowingPoolEXT(descriptorPoolSkinned_, descriptorSetLayoutSkinned_,
+                                       sizes, 2u, kEffectPoolMaxSets, ds, dsPool);
+        }
+        if (ds == VK_NULL_HANDLE)
             throw std::runtime_error(
                 "The Vulkan renderer: SkinnedEffect\'s descriptor pool is full and the device "
                 "refused another set. Refused rather than binding a null descriptor set.");
@@ -8977,7 +9089,7 @@ namespace CNA::Internal::Renderers::Vulkan
         vkUpdateDescriptorSets(device_, 3, writes, 0, nullptr);
 
         // REMED-GFX-076: record the sampled view so this entry is evicted+freed when it dies.
-        cache[key] = EffectDescSetEntry{ ds, { view2D, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE } };
+        cache[key] = EffectDescSetEntry{ ds, dsPool, { view2D, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE } };
         return ds;
     }
 
@@ -9401,19 +9513,28 @@ namespace CNA::Internal::Renderers::Vulkan
         auto it = cache.find(key);
         if (it != cache.end()) return it->second.set;
 
-        VkDescriptorSetAllocateInfo ai{};
-        ai.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        ai.descriptorPool     = descriptorPoolPbr_;
-        ai.descriptorSetCount = 1;
-        ai.pSetLayouts        = &descriptorSetLayoutPbr_;
         VkDescriptorSet ds = VK_NULL_HANDLE;
+        VkDescriptorPool dsPool = VK_NULL_HANDLE;
         // VULKAN-391: one contract for every descriptor allocation in this renderer -- a caller
         // never receives VK_NULL_HANDLE, because the only thing a caller could do with one is bind
         // it, and binding a null descriptor set is a segfault (measured under VULKAN-390's
         // mutation probe). Refused BY NAME at the draw, which is where this runs, rather than at
         // Present. Routed through AllocateOneDescriptorSet so the test-only injection hook can
         // reach this arm at all -- it could not before, which is why this arm had no test.
-        if (AllocateOneDescriptorSet(device_, ai, ds) != VK_SUCCESS)
+        // VULKAN-181: through the growing allocator. Before it, this pool was fixed and a
+        // device that refused another set ended the draw -- which never happened on
+        // llvmpipe and happened on RADV's very first textured leg of
+        // Vulkan_DescriptorCapacityContract. The refusal below now means the device would
+        // not give us a NEW POOL either, which is a real exhaustion rather than a bound.
+        {
+            const VkDescriptorPoolSize sizes[] = {
+                { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, kEffectPoolMaxSets * 8 },
+                { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, kEffectPoolMaxSets },
+            };
+            AllocateFromGrowingPoolEXT(descriptorPoolPbr_, descriptorSetLayoutPbr_,
+                                       sizes, 2u, kEffectPoolMaxSets, ds, dsPool);
+        }
+        if (ds == VK_NULL_HANDLE)
             throw std::runtime_error(
                 "The Vulkan renderer: PbrEffect\'s descriptor pool is full and the device "
                 "refused another set. Refused rather than binding a null descriptor set.");
@@ -9461,7 +9582,7 @@ namespace CNA::Internal::Renderers::Vulkan
         vkUpdateDescriptorSets(device_, 8, writes, 0, nullptr);
 
         // REMED-GFX-076: record the sampled views so this entry is evicted+freed when any dies.
-        cache[key] = EffectDescSetEntry{ ds, { baseColor, normalMap, metallicRoughness, emissive,
+        cache[key] = EffectDescSetEntry{ ds, dsPool, { baseColor, normalMap, metallicRoughness, emissive,
                                                occlusion, specular, specularColor } };
         return ds;
     }
@@ -9720,19 +9841,28 @@ namespace CNA::Internal::Renderers::Vulkan
         auto it = cache.find(key);
         if (it != cache.end()) return it->second.set;
 
-        VkDescriptorSetAllocateInfo ai{};
-        ai.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        ai.descriptorPool     = descriptorPoolPbrSkinned_;
-        ai.descriptorSetCount = 1;
-        ai.pSetLayouts        = &descriptorSetLayoutPbrSkinned_;
         VkDescriptorSet ds = VK_NULL_HANDLE;
+        VkDescriptorPool dsPool = VK_NULL_HANDLE;
         // VULKAN-391: one contract for every descriptor allocation in this renderer -- a caller
         // never receives VK_NULL_HANDLE, because the only thing a caller could do with one is bind
         // it, and binding a null descriptor set is a segfault (measured under VULKAN-390's
         // mutation probe). Refused BY NAME at the draw, which is where this runs, rather than at
         // Present. Routed through AllocateOneDescriptorSet so the test-only injection hook can
         // reach this arm at all -- it could not before, which is why this arm had no test.
-        if (AllocateOneDescriptorSet(device_, ai, ds) != VK_SUCCESS)
+        // VULKAN-181: through the growing allocator. Before it, this pool was fixed and a
+        // device that refused another set ended the draw -- which never happened on
+        // llvmpipe and happened on RADV's very first textured leg of
+        // Vulkan_DescriptorCapacityContract. The refusal below now means the device would
+        // not give us a NEW POOL either, which is a real exhaustion rather than a bound.
+        {
+            const VkDescriptorPoolSize sizes[] = {
+                { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, kEffectPoolMaxSets * 8 },
+                { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, kEffectPoolMaxSets },
+            };
+            AllocateFromGrowingPoolEXT(descriptorPoolPbrSkinned_, descriptorSetLayoutPbrSkinned_,
+                                       sizes, 2u, kEffectPoolMaxSets, ds, dsPool);
+        }
+        if (ds == VK_NULL_HANDLE)
             throw std::runtime_error(
                 "The Vulkan renderer: SkinnedPbrEffect\'s descriptor pool is full and the device "
                 "refused another set. Refused rather than binding a null descriptor set.");
@@ -9790,7 +9920,7 @@ namespace CNA::Internal::Renderers::Vulkan
         vkUpdateDescriptorSets(device_, 9, writes, 0, nullptr);
 
         // REMED-GFX-076: record the sampled views so this entry is evicted+freed when any dies.
-        cache[key] = EffectDescSetEntry{ ds, { baseColor, normalMap, metallicRoughness, emissive,
+        cache[key] = EffectDescSetEntry{ ds, dsPool, { baseColor, normalMap, metallicRoughness, emissive,
                                                occlusion, specular, specularColor } };
         return ds;
     }
@@ -12509,8 +12639,12 @@ namespace CNA::Internal::Renderers::Vulkan
     // key is not reversible). Rare (once per dying sampled resource) and bounded by the small,
     // pool-capped cache size, so the full-cache scan is acceptable.
     void VulkanRenderer::EvictViewFromEffectCache(EffectDescSetCache& caches,
-        VkDescriptorPool pool, VkImageView view, RetiredResources& into)
+        VkDescriptorPool /*unusedSinceVulkan181*/, VkImageView view, RetiredResources& into)
     {
+        // VULKAN-181: the pool comes from the ENTRY now, not from the caller. These caches used to
+        // have exactly one pool each; they can chain further ones, and a set freed from the wrong
+        // pool is undefined behaviour rather than a leak. The parameter is kept so the seven call
+        // sites do not have to change shape, and is deliberately unused.
         for (auto& cache : caches)
         {
             for (auto it = cache.begin(); it != cache.end(); )
@@ -12518,8 +12652,8 @@ namespace CNA::Internal::Renderers::Vulkan
                 bool refs = false;
                 for (VkImageView v : it->second.views) if (v == view) { refs = true; break; }
                 if (refs) {
-                    if (it->second.set != VK_NULL_HANDLE)
-                        into.poolDescriptorSets.emplace_back(pool, it->second.set);
+                    if (it->second.set != VK_NULL_HANDLE && it->second.pool != VK_NULL_HANDLE)
+                        into.poolDescriptorSets.emplace_back(it->second.pool, it->second.set);
                     it = cache.erase(it);
                 } else {
                     ++it;

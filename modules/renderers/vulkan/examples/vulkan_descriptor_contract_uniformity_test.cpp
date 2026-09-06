@@ -92,6 +92,13 @@ class VulkanDescriptorContractUniformityTest : public Game
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     std::unique_ptr<Texture2D>   texA_;
     std::unique_ptr<Texture2D>   texB_;
+    /// plan_vulkan.md VULKAN-181: one texture per leg, because these descriptor sets are CACHED by
+    /// (view, sampler). Two legs sharing a texture means the second one allocates nothing, finds
+    /// the first one's set, and reports success no matter what failure is injected -- which is
+    /// exactly how the refusal leg silently stopped testing anything when the absorbed leg was
+    /// added in front of it.
+    std::unique_ptr<Texture2D>   texC_;
+    std::unique_ptr<Texture2D>   texD_;
     std::unique_ptr<TextureCube> cube_;
     int  pass_ = 0;
     int  fail_ = 0;
@@ -172,19 +179,41 @@ class VulkanDescriptorContractUniformityTest : public Game
             return;
         }
 
+        // plan_vulkan.md VULKAN-181 changed what ONE injected failure means, and this is the test
+        // that says so. These pools used to be fixed: a single refusal ended the draw, and one
+        // injected failure was enough to reach the named exception. They chain another pool now,
+        // so one failure is ABSORBED -- the draw succeeds, correctly. Reaching the refusal takes
+        // TWO consecutive failures: the base pool's attempt and the freshly chained pool's own
+        // first allocation. That is the same shape `Vulkan_DescriptorPoolOverflow`'s leg C already
+        // used for the combined-image-sampler pool, and this file now matches it.
+        //
+        // The absorbed case is asserted first, because a test that only checked the refusal would
+        // pass just as well against a renderer that had stopped growing at all.
         VulkanRenderer::SetDescriptorAllocationFailuresForTestEXT(1, skipFirst);
-        const std::string refused = DrawOnce(dev, vb, make, texB_.get());
+        const std::string absorbed = DrawOnce(dev, vb, make, texB_.get());
+        VulkanRenderer::SetDescriptorAllocationFailuresForTestEXT(0);
+        check(absorbed.empty(),
+              std::string(label) + " absorbs a single allocation failure by chaining a pool",
+              absorbed.empty() ? "the draw succeeded, as it must once the pool can grow"
+                               : "refused: " + absorbed);
+
+        // Enough to defeat every attempt the growing allocator can make -- its own chained pools,
+        // the base, and one fresh pool -- without the test having to know how many that is. Naming
+        // a small number here would make this leg depend on how many pools this family happened to
+        // have chained already, which is history, not contract.
+        VulkanRenderer::SetDescriptorAllocationFailuresForTestEXT(64, skipFirst);
+        const std::string refused = DrawOnce(dev, vb, make, texC_.get());
         VulkanRenderer::SetDescriptorAllocationFailuresForTestEXT(0);
 
         const bool named = refused.find(expected) != std::string::npos;
         const bool contract =
             refused.find("Refused rather than binding a null descriptor set") != std::string::npos;
         check(!refused.empty() && named && contract,
-              std::string(label) + " refuses by name instead of handing back a null set",
+              std::string(label) + " refuses by name when even a fresh pool is refused",
               refused.empty() ? "the draw SUCCEEDED with an allocation failure injected"
                               : refused);
 
-        const std::string recovered = DrawOnce(dev, vb, make, texB_.get());
+        const std::string recovered = DrawOnce(dev, vb, make, texD_.get());
         check(recovered.empty(),
               std::string(label) + " and the refusal left the renderer usable",
               recovered.empty() ? "the same draw succeeds once the injection is disarmed"
@@ -207,6 +236,8 @@ protected:
         const Color b[2] = { Color(30, 230, 30, 255), Color(230, 230, 30, 255) };
         texA_ = std::make_unique<Texture2D>(dev, 2, 1);  texA_->SetData(a, 2);
         texB_ = std::make_unique<Texture2D>(dev, 2, 1);  texB_->SetData(b, 2);
+        texC_ = std::make_unique<Texture2D>(dev, 2, 1);  texC_->SetData(a, 2);
+        texD_ = std::make_unique<Texture2D>(dev, 2, 1);  texD_->SetData(b, 2);
         cube_ = std::make_unique<TextureCube>(dev, 1, false, SurfaceFormat::Color);
         for (int face = 0; face < 6; ++face) {
             Color grey(128, 128, 128, 255);
