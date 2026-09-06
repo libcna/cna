@@ -2070,59 +2070,19 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # ==================================================================================
-        # plan_vulkan.md VULKAN-393 -- the suite-level Vulkan validation gate.
+        # plan_vulkan.md VULKAN-393 / VULKAN-408 -- the Vulkan validation gate.
         #
-        # MUST STAY LAST IN THIS FILE. It reads the directory's TESTS property, so it only sees
-        # registrations that already exist; a registration added below it is silently ungated.
-        #
-        # What it does: every Vulkan CTest registered above fails if its combined output contains
-        # a "[Vulkan Validation]" line -- the exact prefix VulkanRenderer's debug messenger prints
-        # for every message the Khronos layer reports at severity WARNING or above. The gate is
-        # therefore the whole suite's workload, not a representative sample of it: 254 tests
-        # covering sprites, fonts, state, buffers, every draw route, textures, render targets,
-        # MRT, cubes, volumes, effects, models, presentation, resize and occlusion.
-        #
-        # Why an OUTPUT gate rather than an in-process assertion on GetValidationMessagesEXT():
-        # VULKAN-405's leak was reported DURING vkDestroyDevice, after the last line of the test
-        # body, out of the very object whose message list an in-process check would have read.
-        # Teardown-time messages are a real class -- object tracking is exactly where leaks are
-        # named -- and only the process's output can carry them.
-        #
-        # The allowlist. VULKAN-393's own wording asked for "a documented allowlist of driver/
-        # layer messages with a reason each". VULKAN-009 measured the inventory and VULKAN-404,
-        # -405 and -406 emptied it: across all 254 tests there are now ZERO messages, and not one
-        # of the three that existed was a driver or layer artefact. So there is no message to
-        # allow, and a per-message allowlist would be a mechanism with nothing in it. What is
-        # provided instead is a per-TEST exemption list, empty, and auditable in one place: adding
-        # a name here requires naming the message and the reason next to it, and VULKAN-477
-        # requires that no entry is ever CNA-attributable.
-        set(CNA_VULKAN_VALIDATION_GATE_EXEMPT
-            # <Ctest name>   # the exact message, and why it is not ours
-        )
-        # The gate cannot pass vacuously. Four tests assert
-        # VulkanRenderer::IsValidationActiveEXT() before judging anything --
-        # Vulkan_RenderTarget_ProducerConsumer, Vulkan_Swapchain_Sync,
-        # Vulkan_BackbufferReadbackDimension and Vulkan_CubeVolume_SetDataContract -- so a build
-        # in which the layer never loaded goes red instead of reporting a clean suite.
-        get_property(_cna_vulkan_gated_tests DIRECTORY PROPERTY TESTS)
-        foreach(_cna_vk_test IN LISTS _cna_vulkan_gated_tests)
-            if(_cna_vk_test IN_LIST CNA_VULKAN_VALIDATION_GATE_EXEMPT)
-                continue()
-            endif()
-            get_test_property(${_cna_vk_test} FAIL_REGULAR_EXPRESSION _cna_vk_fail_regex)
-            if(NOT _cna_vk_fail_regex)
-                set(_cna_vk_fail_regex "")
-            endif()
-            # FAIL_REGULAR_EXPRESSION is a LIST of regexes, so appending is a list append and the
-            # patterns a registration already set (VUID-…, SYNC-HAZARD, …) keep working alongside
-            # this one rather than being replaced by it.
-            if(NOT "\\[Vulkan Validation\\]" IN_LIST _cna_vk_fail_regex)
-                list(APPEND _cna_vk_fail_regex "\\[Vulkan Validation\\]")
-                set_tests_properties(${_cna_vk_test} PROPERTIES
-                    FAIL_REGULAR_EXPRESSION "${_cna_vk_fail_regex}")
-            endif()
-        endforeach()
-
+        # VULKAN-393 built it here, over this directory's own 254 registrations. VULKAN-408 moved
+        # the mechanism to cmake/TestHelpers.cmake and the call to the ROOT CMakeLists, because
+        # this directory is 254 of the configuration's 9 117 CTests and every one of the others
+        # runs this renderer too -- VULKAN-477 measured 20 validation messages entirely outside
+        # this prefix. Nothing is registered here any more; the gate reaches these tests from
+        # cna_register_renderer_test() like every other, and the exemption list lives with it so
+        # there is exactly one place to audit. The one thing still needed HERE is the re-merge:
+        # nine registrations in this file call set_tests_properties(... FAIL_REGULAR_EXPRESSION ...)
+        # after their registration, which REPLACES the property rather than adding to it. This must
+        # therefore stay last in the file.
+        cna_apply_vulkan_validation_gate()
     endif()
 
 # Module-local tests get the same headless-safe skip convention the root one-shot

@@ -1009,7 +1009,22 @@ if(CNA_BUILD_TESTS)
     # CTest runs then fail to find fixture files that the same binary finds fine when run
     # directly from the repo root. Mirrors the already-correct pattern in
     # cmake/Tests/EasyGLTests.cmake / VulkanTests.cmake.
-    gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    # plan_vulkan.md VULKAN-408: the Vulkan validation output gate, for the half of the suite the
+    # tree-wide sweep cannot reach. DISCOVERY_MODE PRE_TEST registers these cases at TEST time, so
+    # they are in no directory's TESTS property at configure time and
+    # cna_apply_vulkan_validation_gate() never sees them -- yet they are ~8 700 of this
+    # configuration's 9 117 CTests and every one of them runs the selected renderer. VULKAN-477's
+    # whole-suite inventory found all 20 of its messages here, in MetalResourceHealth's own
+    # device-outliving test. gtest_discover_tests(PROPERTIES ...) is the only hook that reaches
+    # them, and it is applied only where a VkDevice can exist at all.
+    cna_vulkan_validation_gate_applies(_cna_unit_tests_vk_gate)
+    if(_cna_unit_tests_vk_gate)
+        gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            PROPERTIES FAIL_REGULAR_EXPRESSION "\\[Vulkan Validation\\]")
+    else()
+        gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    endif()
 
     # D2D-118/D2D-119: a stable label and one explicit runner make the renderer's device-free
     # capability, blend, mip-policy, HRESULT and pixel-conversion contract independently runnable.
