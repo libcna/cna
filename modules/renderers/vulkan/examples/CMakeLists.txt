@@ -2417,6 +2417,20 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-436: the shared sample scenes.
+        cna_vulkan_test(cna_test_vulkan_sample_dualtexture_swap
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_sample_dualtexture_swap_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Sample_DualTextureSwap
+            COMMAND cna_test_vulkan_sample_dualtexture_swap
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_fullscreen_field
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_fullscreen_field_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_FullscreenField
+            COMMAND cna_test_vulkan_fullscreen_field
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-339: the release path that also runs vkDeviceWaitIdle and the
         # retirement lists. HasRenderer() must be false after the first Dispose and no second
         # release may be attempted.
