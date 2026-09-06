@@ -2106,6 +2106,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_resource_leak
             TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-341: a move must not leave two entries in liveVertexBuffers_ /
+        # liveIndexBuffers_ / liveRenderTargets_ pointing at one object -- a shape the EasyGL
+        # registry does not have, so this source asks a different question here than there.
+        cna_vulkan_test(cna_test_vulkan_move_semantics
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_move_semantics_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_MoveSemantics
+            COMMAND cna_test_vulkan_move_semantics
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-095: MultiSampleCount changed on a LIVE device. Vulkan-owned rather
         # than a registration of easygl_msaa_change_test.cpp, because that source asserts EasyGL's
         # own limit -- that the count cannot change post-construction -- which is false here.
