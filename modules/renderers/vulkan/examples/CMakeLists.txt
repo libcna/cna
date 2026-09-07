@@ -2383,6 +2383,38 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_presentation_parameters
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-189: how EmissiveColor composes into the lit result. Renderer-
+        # agnostic source; this renderer had emissive tests but nothing pinning the composition.
+        cna_vulkan_test(cna_test_vulkan_emissive_ambient_composition
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_emissive_ambient_composition_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_EmissiveAmbientComposition
+            COMMAND cna_test_vulkan_emissive_ambient_composition
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-192: the three whole-scene smoke tests -- several subsystems at
+        # once, which is the shape that catches an integration defect the unit-shaped tests cannot.
+        cna_vulkan_test(cna_test_vulkan_sample_keyboard_cube3d
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_sample_keyboard_cube3d_test.cpp)
+        # The same include the EasyGL registration needs: the scene drives itself through the
+        # platform module's shared canned-keyboard test decorator.
+        target_include_directories(cna_test_vulkan_sample_keyboard_cube3d PRIVATE
+                                   ${CMAKE_SOURCE_DIR}/modules/platform/tests)
+        cna_register_renderer_test(NAME Vulkan_Sample_KeyboardCube3D
+            COMMAND cna_test_vulkan_sample_keyboard_cube3d
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_sample_layered_blend
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_sample_layered_blend_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Sample_LayeredBlend
+            COMMAND cna_test_vulkan_sample_layered_blend
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_sample_moving_quad3d
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_sample_moving_quad3d_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Sample_MovingQuad3D
+            COMMAND cna_test_vulkan_sample_moving_quad3d
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-188 (finding F-35): D3D9 saturates a vertex shader's colour output
         # before the rasterizer interpolates it. EasyGL's own FX-123 test is renderer-agnostic, so
         # it is registered here rather than rewritten.
