@@ -92,7 +92,15 @@ void main() {
     // sum interpolated between two vertices and the triangle came out brighter than D3D9's,
     // with a different GRADIENT rather than a rounding difference. plans/plan_fx.md FX-122 is
     // the same semantic in MojoShader's path and FX-123 is EasyGL's; this is Vulkan's.
-    vLitRGB = clamp(lightSum * pc.diffuseColor.rgb + fog.emissiveColor.rgb, 0.0, 1.0);
+    // plan_vulkan.md VULKAN-205 (F-39): the vertex colour multiplies HERE, inside the
+    // saturate, not in the fragment stage afterwards. Direct3D 9 clamps oD0 with the colour
+    // already folded in -- FNA's Vc variants do `vout.Diffuse *= vin.Color` ahead of it
+    // (FX-125), and VULKAN-200 wrote exactly this for BasicEffect's own colour variant.
+    // Clamping first and scaling afterwards is a different picture: a lit sum of 1.8 with a
+    // colour of 0.5 gives 0.9 this way and 0.5 the other, measured at 230 against 128.
+    vec4 vc = (pc.vertexColorEnabled > 0.5) ? aColor : vec4(1.0);
+    vLitRGB = clamp((lightSum * pc.diffuseColor.rgb + fog.emissiveColor.rgb) * vc.rgb,
+                    0.0, 1.0);
 
     float specularPower = fog.specularColor_power.w;
     vec3 h0 = normalize(E - normalize(pc.light0Dir));          float spec0 = pow(max(dot(h0, N), 0.0) * zeroL0, specularPower);

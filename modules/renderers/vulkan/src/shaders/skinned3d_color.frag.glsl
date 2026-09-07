@@ -62,8 +62,13 @@ void main() {
                         + spec2 * fog.light2Spec_pad.xyz) * fog.specularColor_power.xyz;
     vec4  tex    = (pc.textureEnabled > 0.5) ? texture(uTexture, vUV) : vec4(1.0);
     vec4  vc     = (pc.vertexColorEnabled > 0.5) ? vColor : vec4(1.0, 1.0, 1.0, 1.0);
-    outColor = vec4(litRGB * tex.rgb, pc.diffuseColor.a * tex.a * vc.a);
+    // plan_vulkan.md VULKAN-205 (F-39): the colour multiplies the DIFFUSE, before the specular
+    // is added -- FNA's per-pixel Vc path is `color = tex * pin.Diffuse` (which carries
+    // vin.Color.rgb) then `color.rgb *= lightResult.Diffuse` then AddSpecular. Multiplying the
+    // whole fragment afterwards tinted the highlight, which the real XNA runtime does not do
+    // (spikes/xna-vertex-color-specular-spike/). There is no vertex-stage saturate to be inside
+    // on this per-pixel path, so unlike the vertex-lit sibling only the ordering moves.
+    outColor = vec4(litRGB * tex.rgb * vc.rgb, pc.diffuseColor.a * tex.a * vc.a);
     outColor.rgb += specularRGB * outColor.a;
-    outColor.rgb *= vc.rgb;
     outColor.rgb = mix(fog.fogColorEnabled.xyz, outColor.rgb, vFogFactor);
 }
