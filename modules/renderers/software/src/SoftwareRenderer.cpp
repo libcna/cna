@@ -2214,6 +2214,18 @@ namespace CNA::Internal::Renderers::Software
             float lambdaCube;
         };
 
+        /// SOFTWARE-111: evaluates the exact stock-effect alpha-test expression shared by FNA's
+        /// AlphaTestEffect shaders and CNA's GPU renderers. The four values already contain the
+        /// half-byte threshold and pass/fail clip weights selected for the public CompareFunction.
+        [[nodiscard]] bool AlphaTestPasses(const GpuDrawParams& params, float alpha)
+        {
+            const bool comparison = params.alphaTest[1] > 0.0f
+                ? std::fabs(alpha - params.alphaTest[0]) < params.alphaTest[1]
+                : alpha < params.alphaTest[0];
+            const float clipWeight = comparison ? params.alphaTest[2] : params.alphaTest[3];
+            return !(clipWeight < 0.0f);
+        }
+
         /// REMED-GFX-082: writes one already-interpolated shaded fragment -- the whole texture/diffuse/
         /// dual-texture/env-map/blend pipeline that used to live inline in RasterizeTriangleShaded's
         /// fill loop. `p*` are the perspective-premultiplied attribute sums (attr * invW), divided by
@@ -2244,33 +2256,9 @@ namespace CNA::Internal::Renderers::Software
             if (ctx.stencilState.testEnabled && fb.stencilBuffer.empty())
                 throw std::logic_error(
                     "Software rasterizer received enabled stencil state without stencil storage.");
-            // Stencil runs before depth and shading, matching the GPU fragment-test order. GDI-073
-            // deliberately keeps one stencil byte per PIXEL: after sample-mask/coverage rejection,
-            // this comparison/operation runs once for the triangle fragment and gates its complete
-            // active colour-sample set. It does not claim a per-sample depth/stencil attachment.
-            // A failed stencil test updates only StencilFail and must not reach depth or colour.
-            if (ctx.stencilState.testEnabled && !StencilComparisonPasses(
-                    ctx.stencilState.reference, fb.stencilBuffer[pixelIndex],
-                    ctx.stencilState.readMask, ctx.stencilState.compareFunction))
-            {
-                WriteStencil(fb, ctx.stencilState, pixelIndex, ctx.stencilState.failOperation);
-                return;
-            }
-            // REMED-GFX-030: comparison precedes shading and every color/depth write.
             if (ctx.depthState.testEnabled && fb.depthBuffer.empty())
                 throw std::logic_error(
                     "Software rasterizer received enabled depth state without depth storage.");
-            if (ctx.depthState.testEnabled &&
-                !DepthFragmentPasses(ctx.depthState, depth, fb.depthBuffer[pixelIndex]))
-            {
-                if (ctx.stencilState.testEnabled)
-                    WriteStencil(fb, ctx.stencilState, pixelIndex,
-                                 ctx.stencilState.depthFailOperation);
-                return;
-            }
-
-            if (ctx.stencilState.testEnabled)
-                WriteStencil(fb, ctx.stencilState, pixelIndex, ctx.stencilState.passOperation);
 
             float r = pr / invW, g = pg / invW, b = pb / invW, a = pa / invW;
 
@@ -2313,6 +2301,38 @@ namespace CNA::Internal::Renderers::Software
             g *= ctx.params.diffuseColor[1];
             b *= ctx.params.diffuseColor[2];
             a *= ctx.params.diffuseColor[3];
+
+            // FNA's AlphaTestEffect pixel shader evaluates texture * vertex colour * diffuse/alpha,
+            // then clip(), and only afterward applies fog. A discarded fragment must not update
+            // colour, depth, or any stencil operation. The default vector passes, so evaluating it
+            // unconditionally also keeps non-alpha-tested stock effects on one exact path.
+            if (!AlphaTestPasses(ctx.params, a))
+                return;
+
+            // SOFTWARE-111: alpha-test discard precedes every observable depth/stencil operation.
+            // GDI-073 deliberately keeps one stencil byte per PIXEL: after sample-mask/coverage and
+            // alpha rejection, this comparison/operation runs once and gates the complete active
+            // colour-sample set. It does not claim a per-sample depth/stencil attachment.
+            if (ctx.stencilState.testEnabled && !StencilComparisonPasses(
+                    ctx.stencilState.reference, fb.stencilBuffer[pixelIndex],
+                    ctx.stencilState.readMask, ctx.stencilState.compareFunction))
+            {
+                WriteStencil(fb, ctx.stencilState, pixelIndex, ctx.stencilState.failOperation);
+                return;
+            }
+            // REMED-GFX-030: comparison precedes every color/depth write. A depth failure performs
+            // only the configured stencil depth-fail operation.
+            if (ctx.depthState.testEnabled &&
+                !DepthFragmentPasses(ctx.depthState, depth, fb.depthBuffer[pixelIndex]))
+            {
+                if (ctx.stencilState.testEnabled)
+                    WriteStencil(fb, ctx.stencilState, pixelIndex,
+                                 ctx.stencilState.depthFailOperation);
+                return;
+            }
+
+            if (ctx.stencilState.testEnabled)
+                WriteStencil(fb, ctx.stencilState, pixelIndex, ctx.stencilState.passOperation);
 
             // GDI-022: ColorMatrixEffect is intentionally a small fixed CPU SpriteBatch effect,
             // not a shader language. It acts after the ordinary texture/tint calculation and

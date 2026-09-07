@@ -185,6 +185,10 @@ rather than always passing.
   rule. Adjacent triangles therefore own a shared edge exactly once regardless of draw order or
   submitted winding, including the Software renderer's four coverage samples; manual diagonal
   exceptions are no longer part of solid rasterization.
+- **Complete `AlphaTestEffect` comparisons** (`SOFTWARE-111`) — all eight XNA `CompareFunction`
+  values use FNA's half-byte threshold encoding after texture, vertex and effect alpha are
+  multiplied. A rejected fragment is discarded before colour, depth or stencil writes; a null
+  texture contributes opaque white, matching the stock-effect path on EasyGL.
 - **`SpriteBatch` honors a custom `GraphicsDevice.Viewport`** (`REMED-GFX-073`) — sprite
   coordinates are viewport-local (sprite `(0,0)` = the viewport's top-left), the result is placed at
   `Viewport.X/Y`, and pixels outside the viewport rectangle are clipped, matching real XNA/FNA and

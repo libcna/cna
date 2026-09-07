@@ -84,6 +84,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_TopLeftFill COMMAND cna_test_software_top_left_fill
         TIMEOUT 30 LABELS "Software")
 
+    # SOFTWARE-111: the same public AlphaTestEffect fragment contract is compiled for Software and
+    # EasyGL: all compares, composed alpha sources, null texture and discard-before-depth-write.
+    cna_software_test(cna_test_software_alpha_test_effect_contract
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/alpha_test_effect_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_AlphaTestEffectContract
+        COMMAND cna_test_software_alpha_test_effect_contract TIMEOUT 30 LABELS "Software")
+
     cna_software_test(cna_test_software_dual_envmap_skinned software_dual_envmap_skinned_test.cpp)
     cna_register_renderer_test(NAME Software_DualEnvmapSkinned COMMAND cna_test_software_dual_envmap_skinned
         TIMEOUT 30 LABELS "Software")
