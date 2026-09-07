@@ -9,6 +9,7 @@
 #include "CNA/Internal/Renderers/DirectX11/D3D11SpriteBatch.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DShaderCache.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DConstantBuffers.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DRasterizationConvention.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <algorithm>
@@ -968,6 +969,30 @@ namespace CNA::Internal::Renderers::DirectX11
         context_->Unmap(buffer, 0);
     }
 
+    Matrix DirectX11Renderer::ApplyXnaPixelCenterEXT(const Matrix& transform) const
+    {
+        D3D11_VIEWPORT viewport{};
+        UINT viewportCount = 1;
+        context_->RSGetViewports(&viewportCount, &viewport);
+
+        bool multisampledDestination = false;
+        if (currentRTVCount_ > 0 && currentColorRTVs_[0] != nullptr)
+        {
+            ComPtr<ID3D11Resource> resource;
+            currentColorRTVs_[0]->GetResource(resource.GetAddressOf());
+            ComPtr<ID3D11Texture2D> texture;
+            if (resource && SUCCEEDED(resource.As(&texture)))
+            {
+                D3D11_TEXTURE2D_DESC desc{};
+                texture->GetDesc(&desc);
+                multisampledDestination = desc.SampleDesc.Count > 1;
+            }
+        }
+
+        return D3DCommon::ApplyXnaPixelCenter(
+            transform, viewport.Width, viewport.Height, multisampledDestination);
+    }
+
     void DirectX11Renderer::DrawColoredPrimitives(
         const IVertexBufferRenderer& vb, const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount)
@@ -999,7 +1024,7 @@ namespace CNA::Internal::Renderers::DirectX11
         // legacy path (diffuseColor=white, vertexColorEnabled=true), matching every other renderer's
         // own DrawColoredPrimitives behavior (Task 364).
         D3DCommon::D3DPerDrawConstants perDraw{};
-        const Matrix wvp = world * view * projection;
+        const Matrix wvp = ApplyXnaPixelCenterEXT(world * view * projection);
         wvp.ToColumnMajor(perDraw.Mvp); // row-major flat layout, matches HLSL row_major cbuffer field
         perDraw.DiffuseColor[0] = perDraw.DiffuseColor[1] = perDraw.DiffuseColor[2] = perDraw.DiffuseColor[3] = 1.0f;
         perDraw.VertexColorEnabled = 1.0f;
@@ -1058,7 +1083,7 @@ namespace CNA::Internal::Renderers::DirectX11
             throw std::runtime_error("DrawIndexedColoredPrimitives: failed to create colored3d input layout");
 
         D3DCommon::D3DPerDrawConstants perDraw{};
-        const Matrix wvp = world * view * projection;
+        const Matrix wvp = ApplyXnaPixelCenterEXT(world * view * projection);
         wvp.ToColumnMajor(perDraw.Mvp);
         perDraw.DiffuseColor[0] = perDraw.DiffuseColor[1] = perDraw.DiffuseColor[2] = perDraw.DiffuseColor[3] = 1.0f;
         perDraw.VertexColorEnabled = 1.0f;
@@ -1464,7 +1489,7 @@ namespace CNA::Internal::Renderers::DirectX11
         if (!layout)
             throw std::runtime_error("DrawPrimitivesEx: failed to create input layout for the selected variant/stride");
 
-        const Matrix wvp = world * view * projection;
+        const Matrix wvp = ApplyXnaPixelCenterEXT(world * view * projection);
 
         // DX-65/DX-66: dual_texture3d needs t0+t1 (both Texture2D); env_map3d needs t0 (Texture2D)
         // + t1 (TextureCube). PBR needs seven slots: the five core maps plus KHR_materials_specular
@@ -2064,7 +2089,7 @@ namespace CNA::Internal::Renderers::DirectX11
         // first field is named "Vp" (view*projection only, world comes from the per-instance
         // buffer instead) rather than "Mvp", same struct reused for the byte layout only.
         D3DCommon::D3DPerDrawConstants perDraw{};
-        const Matrix vp = view * projection;
+        const Matrix vp = ApplyXnaPixelCenterEXT(view * projection);
         vp.ToColumnMajor(perDraw.Mvp);
         perDraw.DiffuseColor[0] = params.diffuseColor[0];
         perDraw.DiffuseColor[1] = params.diffuseColor[1];

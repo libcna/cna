@@ -12,6 +12,7 @@
 #include "CNA/Internal/Renderers/DirectX12/D3D12EffectRenderer.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12Texture3D.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DConstantBuffers.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DRasterizationConvention.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -928,6 +929,15 @@ namespace CNA::Internal::Renderers::DirectX12
         // Unset or degenerate viewport => full bound target, byte-identical to the pre-fix hardcode.
         return D3D12_VIEWPORT{0.0f, 0.0f, static_cast<float>(boundColorWidth_),
                               static_cast<float>(boundColorHeight_), 0.0f, 1.0f};
+    }
+
+    Matrix DirectX12Renderer::ApplyXnaPixelCenterEXT(const Matrix& transform) const
+    {
+        const D3D12_VIEWPORT viewport = GetEffectiveViewportEXT();
+        const bool multisampledDestination =
+            boundColorResource_ != nullptr && boundColorResource_->GetDesc().SampleDesc.Count > 1;
+        return D3DCommon::ApplyXnaPixelCenter(
+            transform, viewport.Width, viewport.Height, multisampledDestination);
     }
 
     void DirectX12Renderer::BindOffscreenColorTargetsEXT(ID3D12Resource* const* resources,
@@ -1969,7 +1979,7 @@ namespace CNA::Internal::Renderers::DirectX12
         // Same "raw vertex color, no GpuDrawParams" legacy convention D3D11's own DrawColoredPrimitives
         // uses (diffuseColor=white, vertexColorEnabled=true, fog disabled) -- see D3DConstantBuffers.hpp.
         D3DPerDrawConstants perDraw{};
-        const Matrix wvp = world * view * projection;
+        const Matrix wvp = ApplyXnaPixelCenterEXT(world * view * projection);
         wvp.ToColumnMajor(perDraw.Mvp);
         perDraw.DiffuseColor[0] = perDraw.DiffuseColor[1] = perDraw.DiffuseColor[2] = perDraw.DiffuseColor[3] = 1.0f;
         perDraw.VertexColorEnabled = 1.0f;
@@ -2063,7 +2073,7 @@ namespace CNA::Internal::Renderers::DirectX12
             throw std::runtime_error("DrawIndexedColoredPrimitives: failed to create colored3d PSO");
 
         D3DPerDrawConstants perDraw{};
-        const Matrix wvp = world * view * projection;
+        const Matrix wvp = ApplyXnaPixelCenterEXT(world * view * projection);
         wvp.ToColumnMajor(perDraw.Mvp);
         perDraw.DiffuseColor[0] = perDraw.DiffuseColor[1] = perDraw.DiffuseColor[2] = perDraw.DiffuseColor[3] = 1.0f;
         perDraw.VertexColorEnabled = 1.0f;
@@ -2327,7 +2337,7 @@ namespace CNA::Internal::Renderers::DirectX12
         if (!pso)
             throw std::runtime_error("DrawPrimitivesEx: failed to create PSO for the selected variant");
 
-        const Matrix wvp = world * view * projection;
+        const Matrix wvp = ApplyXnaPixelCenterEXT(world * view * projection);
 
         // cbAddresses[i] is bound to root CBV parameter i (b0, b1, ...) -- see each branch below for
         // which struct/register each variant actually needs, field-for-field matching the real HLSL
@@ -3051,7 +3061,7 @@ namespace CNA::Internal::Renderers::DirectX12
         // field is named "Vp" (view*projection only, world comes from the per-instance buffer
         // instead) rather than "Mvp", same struct reused for the byte layout only.
         D3DPerDrawConstants perDraw{};
-        const Matrix vp = view * projection;
+        const Matrix vp = ApplyXnaPixelCenterEXT(view * projection);
         vp.ToColumnMajor(perDraw.Mvp);
         perDraw.DiffuseColor[0] = params.diffuseColor[0];
         perDraw.DiffuseColor[1] = params.diffuseColor[1];

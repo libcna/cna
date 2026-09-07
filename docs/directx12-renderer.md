@@ -188,9 +188,15 @@ significantly stale; re-derived from source, not copy-edited)
 >   depth-stencil view**, because the one-target case routes through the MRT path and that path
 >   dropped it (`DX-255`); the cube-face path had the same omission (`DX-209`). Depth and stencil
 >   testing inside a render target did not work at all.
+> * Microsoft XNA 4.0's stock 3D path uses D3D9 integer pixel centres, measured as 100/100 against
+>   81/100 for D3D10+ half-integers on the discriminating `3x3 -> 10x10` geometry. D3D12 now uses
+>   the same viewport-derived D3DCommon correction as D3D11, while SpriteBatch remains unshifted
+>   because XNA measured it at 100/100 half-integer (`DX-253`). `DirectX12_XnaPixelCenter` and the
+>   former U2/descriptor failures are green. The remaining SpriteBatch render-target-source and
+>   C7 ordinal failures are separately owned by `DX-258`/`DX-259`.
 >
-> `ctest -L DIRECTX12` went from 2 registered tests to 30 over the same phase (`DX-235`). The
-> remaining failures are listed there per fixture, each owned by a task row.
+> The latest `ctest -L DIRECTX12` run has **32 registered tests, 26 passed and 6 failed**. The
+> remaining failures are listed in the plan per fixture, each owned by a task row.
 
 - **Swap-chain presentation under *plain* Wine does not work — but under a properly Proton-managed
   launch, it does.** `CreateSwapChainForHwnd`/`FLIP_DISCARD` crashes under plain Wine: a null-pointer

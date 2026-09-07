@@ -170,6 +170,9 @@ function(cna_register_d3d_parity_tests)
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/point_sampling_contract_test.cpp"
         DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 600)
     cna_d3d_parity_fixture(
+        NAME XnaPixelCenter TARGET xna_pixel_center DIRECTX12_ORDER 115
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/xna_pixel_center_contract_test.cpp")
+    cna_d3d_parity_fixture(
         NAME RenderTarget_ProducerConsumer TARGET rt_producer_consumer
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_producer_consumer_test.cpp"
         DIRECTX11_TIMEOUT 120 DIRECTX11_ONLY

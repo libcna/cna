@@ -568,6 +568,8 @@ namespace CNA::Internal::Renderers::DirectX12
         /// the width_ x height_ D24_UNORM_S8_UINT depth-stencil resource plus its DSV, registered
         /// with the resource-state tracker in D3D12_RESOURCE_STATE_DEPTH_WRITE.
         void CreateDefaultDepthStencilResources();
+
+        [[nodiscard]] Matrix ApplyXnaPixelCenterEXT(const Matrix& transform) const;
         /// DX-116: releases every window-size-dependent resource CreateWindowSizeDependentViews()
         /// created -- back-buffer resources/RTV handles and the depth-stencil resource/DSV handle
         /// (RTV/DSV heap slot *indices* are not reclaimed, matching DX-103's own documented

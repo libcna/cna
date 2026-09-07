@@ -228,6 +228,8 @@ namespace CNA::Internal::Renderers::DirectX11
                                   PrimitiveType primitive, int primitiveCount,
                                   const GpuDrawParams& params);
 
+        [[nodiscard]] Matrix ApplyXnaPixelCenterEXT(const Matrix& transform) const;
+
         PlatformRendererSurfaceState surface_;
         HWND hwnd_ = nullptr;
         int width_ = 0;

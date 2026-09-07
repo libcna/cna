@@ -71,6 +71,16 @@ therefore not a D3D11 defect). One real feature gap this renderer *does* have an
 does not mention: `DualTextureEffect` is refused at any vertex stride but 20, because
 `dual_texture_colored3d` was never ported.
 
+**Measured update, 2026-09-07 (`DX-242`, `DX-254`, `DX-253`).** Microsoft XNA 4.0 was rerun from
+`~/.wine-cna-xna40` through its D3D9 path on display `:0`: a non-integer `3x3 -> 10x10` stock 3D
+draw matched integer pixel centres 100/100 and half-integers 81/100, while SpriteBatch matched the
+opposite convention 100/100. D3D11 now post-multiplies every stock/instanced 3D WVP/VP by the
+shared D3DCommon just-under-half-pixel translation derived from the active viewport; SpriteBatch
+is deliberately unchanged and MSAA keeps its native sample positions. The direct
+`DirectX11_XnaPixelCenter` one-pixel-triangle fixture passes, as do `DescriptorCapacity` 29/29,
+`PointSampling` 146/146 and `TextureFilterOrdinal` 70/70. The complete label is now **51 tests,
+50 passed, 1 failed**; the sole remaining failure is constant depth bias (`DX-256`).
+
 ## Development environment: Wine + DXVK dev-loop
 
 This renderer was built almost entirely without a Windows machine:
