@@ -4145,6 +4145,14 @@ namespace CNA::Internal::Renderers::Vulkan
                                          VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
                                          const VulkanVertexInputLayoutEXT& vertexLayout = {},
                                          bool textured = false);
+        /// plan_vulkan.md VULKAN-223: builds the stock-effect family half of a queued 3D draw --
+        /// descriptor sets, UBO payloads and the per-family flags. Extracted from the two ordinary
+        /// draw routes, which carried copies differing by one redundant statement, so that a third
+        /// caller (the instanced route, `VULKAN-218`) becomes possible without a third copy.
+        void FillStockFamilyRecordEXT(Pending3DDraw& d, const GpuDrawParams& params,
+                                      bool needsPbr, bool needsSkinned, bool needsEnvMap,
+                                      bool needsDualTex, bool needsLitTextured,
+                                      bool needsLitUntextured, bool needsLitColored);
         void FillInstancedPushConst(float (&pc)[32], const Matrix& world, const Matrix& view, const Matrix& proj,
                                     const GpuDrawParams& p);
         void CreateFrame3DInstBuffers();

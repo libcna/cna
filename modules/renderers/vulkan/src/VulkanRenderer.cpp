@@ -14174,6 +14174,211 @@ namespace CNA::Internal::Renderers::Vulkan
         PushPending3DDraw(std::move(d));
     }
 
+    // plan_vulkan.md VULKAN-223: the stock-effect family dispatch, extracted from the TWO ordinary
+    // draw routes that carried copies of it. `DrawPrimitivesEx` and `DrawIndexedPrimitivesEx`
+    // differed by exactly ONE statement out of 165 -- a redundant `EnsureDualTexResources()` that
+    // `GetOrCreateDualTexDescSet` already makes on its own -- so the extraction is
+    // behaviour-preserving by construction rather than by argument. The surviving copy is the
+    // indexed route's, which had the extra call; keeping it costs nothing and losing it would have
+    // been a silent behaviour change in the direction this refactor is least able to see.
+    //
+    // It exists because a THIRD caller is what `VULKAN-218` needs: an instanced draw can only reach
+    // the lit, dual-texture and env-map families if their descriptor sets and UBO payloads are
+    // built for it, and copying 186 lines a third time is not a way to get there.
+    void VulkanRenderer::FillStockFamilyRecordEXT(
+        Pending3DDraw& d, const GpuDrawParams& params,
+        bool needsPbr, bool needsSkinned, bool needsEnvMap, bool needsDualTex,
+        bool needsLitTextured, bool needsLitUntextured, bool needsLitColored)
+    {
+            if (needsPbr && needsSkinned) {
+                EnsurePbrSkinnedResources();
+                const auto* vsBase = dynamic_cast<const IVulkanSamplable*>(params.texture0);
+                const auto* vsNorm = dynamic_cast<const IVulkanSamplable*>(params.pbrNormalMap);
+                const auto* vsMR   = dynamic_cast<const IVulkanSamplable*>(params.pbrMetallicRoughnessMap);
+                const auto* vsEmis = dynamic_cast<const IVulkanSamplable*>(params.pbrEmissiveMap);
+                const auto* vsOcc  = dynamic_cast<const IVulkanSamplable*>(params.pbrOcclusionMap);
+                const auto* vsSpec = dynamic_cast<const IVulkanSamplable*>(params.pbrSpecularMap);
+                const auto* vsSpecColor = dynamic_cast<const IVulkanSamplable*>(params.pbrSpecularColorMap);
+                EnsureDefaultFlatNormalTexture();
+                VkImageView vBase = vsBase ? vsBase->GetVkImageView() : defaultWhiteView_;
+                VkImageView vNorm = vsNorm ? vsNorm->GetVkImageView() : defaultFlatNormalView_;
+                VkImageView vMR   = vsMR   ? vsMR->GetVkImageView()   : defaultWhiteView_;
+                VkImageView vEmis = vsEmis ? vsEmis->GetVkImageView() : defaultWhiteView_;
+                VkImageView vOcc  = vsOcc  ? vsOcc->GetVkImageView()  : defaultWhiteView_;
+                VkImageView vSpec = vsSpec ? vsSpec->GetVkImageView() : defaultWhiteView_;
+                VkImageView vSpecColor = vsSpecColor ? vsSpecColor->GetVkImageView() : defaultWhiteView_;
+                d.pbrDescSet = GetOrCreatePbrSkinnedDescSet(
+                    currentFrame_, vBase, vNorm, vMR, vEmis, vOcc, vSpec, vSpecColor,
+                                                            PbrSlotSamplersRawEXT().s);
+                const int count = std::min(params.boneCount, 72);
+                d.boneMatrices.assign(params.boneTransforms, params.boneTransforms + count * 16);
+                FillPbrUboData(d.pbrUboData, params, static_cast<float>(params.weightsPerVertex));
+            } else if (needsPbr) {
+                EnsurePbrResources();
+                const auto* vsBase = dynamic_cast<const IVulkanSamplable*>(params.texture0);
+                const auto* vsNorm = dynamic_cast<const IVulkanSamplable*>(params.pbrNormalMap);
+                const auto* vsMR   = dynamic_cast<const IVulkanSamplable*>(params.pbrMetallicRoughnessMap);
+                const auto* vsEmis = dynamic_cast<const IVulkanSamplable*>(params.pbrEmissiveMap);
+                const auto* vsOcc  = dynamic_cast<const IVulkanSamplable*>(params.pbrOcclusionMap);
+                const auto* vsSpec = dynamic_cast<const IVulkanSamplable*>(params.pbrSpecularMap);
+                const auto* vsSpecColor = dynamic_cast<const IVulkanSamplable*>(params.pbrSpecularColorMap);
+                EnsureDefaultFlatNormalTexture();
+                VkImageView vBase = vsBase ? vsBase->GetVkImageView() : defaultWhiteView_;
+                VkImageView vNorm = vsNorm ? vsNorm->GetVkImageView() : defaultFlatNormalView_;
+                VkImageView vMR   = vsMR   ? vsMR->GetVkImageView()   : defaultWhiteView_;
+                VkImageView vEmis = vsEmis ? vsEmis->GetVkImageView() : defaultWhiteView_;
+                VkImageView vOcc  = vsOcc  ? vsOcc->GetVkImageView()  : defaultWhiteView_;
+                VkImageView vSpec = vsSpec ? vsSpec->GetVkImageView() : defaultWhiteView_;
+                VkImageView vSpecColor = vsSpecColor ? vsSpecColor->GetVkImageView() : defaultWhiteView_;
+                d.pbrDescSet = GetOrCreatePbrDescSet(
+                    currentFrame_, vBase, vNorm, vMR, vEmis, vOcc, vSpec, vSpecColor,
+                                                     PbrSlotSamplersRawEXT().s);
+                FillPbrUboData(d.pbrUboData, params, 0.0f);
+            } else if (needsSkinned) {
+                EnsureSkinnedResources();
+                const auto* vs = dynamic_cast<const IVulkanSamplable*>(params.texture0);
+                VkImageView v2d = vs ? vs->GetVkImageView() : defaultWhiteView_;
+                d.skinnedDescSet = GetOrCreateSkinnedDescSet(currentFrame_, v2d, slotSamplers_[0]);
+                const int count = std::min(params.boneCount, 72);
+                d.boneMatrices.assign(params.boneTransforms, params.boneTransforms + count * 16);
+                d.skinnedFogUboData[0] = params.fogColor[0]; d.skinnedFogUboData[1] = params.fogColor[1];
+                d.skinnedFogUboData[2] = params.fogColor[2]; d.skinnedFogUboData[3] = params.fogEnabled ? 1.f : 0.f;
+                d.skinnedFogUboData[4] = params.fogVector[0]; d.skinnedFogUboData[5] = params.fogVector[1];
+                d.skinnedFogUboData[6] = params.fogVector[2]; d.skinnedFogUboData[7] = params.fogVector[3];
+                // Task 893: DirectionalLight1/DirectionalLight2 diffuse forwarding.
+                d.skinnedFogUboData[8]  = params.light1Dir[0]; d.skinnedFogUboData[9]  = params.light1Dir[1];
+                d.skinnedFogUboData[10] = params.light1Dir[2]; d.skinnedFogUboData[11] = 0.f;
+                d.skinnedFogUboData[12] = params.light1Diffuse[0]; d.skinnedFogUboData[13] = params.light1Diffuse[1];
+                d.skinnedFogUboData[14] = params.light1Diffuse[2]; d.skinnedFogUboData[15] = 0.f;
+                d.skinnedFogUboData[16] = params.light2Dir[0]; d.skinnedFogUboData[17] = params.light2Dir[1];
+                d.skinnedFogUboData[18] = params.light2Dir[2]; d.skinnedFogUboData[19] = 0.f;
+                d.skinnedFogUboData[20] = params.light2Diffuse[0]; d.skinnedFogUboData[21] = params.light2Diffuse[1];
+                d.skinnedFogUboData[22] = params.light2Diffuse[2]; d.skinnedFogUboData[23] = 0.f;
+                // Task 894: World matrix (for world-space position -> eye vector), EyePosition,
+                // per-light SpecularColor, and material SpecularColor/SpecularPower.
+                for (int wi = 0; wi < 16; ++wi) d.skinnedFogUboData[24 + wi] = params.worldColMajor[wi];
+                d.skinnedFogUboData[40] = params.eyePositionWorld[0];
+                d.skinnedFogUboData[41] = params.eyePositionWorld[1];
+                d.skinnedFogUboData[42] = params.eyePositionWorld[2];
+                d.skinnedFogUboData[43] = static_cast<float>(params.weightsPerVertex); // Task 895
+                d.skinnedFogUboData[44] = params.specularColor[0]; d.skinnedFogUboData[45] = params.specularColor[1];
+                d.skinnedFogUboData[46] = params.specularColor[2]; d.skinnedFogUboData[47] = params.specularPower;
+                d.skinnedFogUboData[48] = params.light0Specular[0]; d.skinnedFogUboData[49] = params.light0Specular[1];
+                d.skinnedFogUboData[50] = params.light0Specular[2]; d.skinnedFogUboData[51] = 0.f;
+                d.skinnedFogUboData[52] = params.light1Specular[0]; d.skinnedFogUboData[53] = params.light1Specular[1];
+                d.skinnedFogUboData[54] = params.light1Specular[2]; d.skinnedFogUboData[55] = 0.f;
+                d.skinnedFogUboData[56] = params.light2Specular[0]; d.skinnedFogUboData[57] = params.light2Specular[1];
+                d.skinnedFogUboData[58] = params.light2Specular[2]; d.skinnedFogUboData[59] = 0.f;
+
+                // REMED-GFX-008: emissiveColor vec4 — the CPU pre-folds (emissive + ambient*diffuse)*alpha
+                // into params.emissiveColor. The skinned shaders add it AFTER the lightSum*diffuse multiply
+                // (litRGB = lightSum*diffuse + emissiveColor), so both AmbientLightColor and EmissiveColor
+                // reach skinned draws (previously the shaders read the always-zero ambientColor and never
+                // added emissive, silently dropping both).
+                d.skinnedFogUboData[60] = params.emissiveColor[0]; d.skinnedFogUboData[61] = params.emissiveColor[1];
+                d.skinnedFogUboData[62] = params.emissiveColor[2]; d.skinnedFogUboData[63] = 0.f;
+            } else if (needsEnvMap) {
+                EnsureEnvMapResources();
+                const auto* vs0 = dynamic_cast<const IVulkanSamplable*>(params.texture0);
+                const auto* vtc = dynamic_cast<const IVulkanCubeSamplable*>(params.envMap);
+                VkImageView v2d  = vs0 ? vs0->GetVkImageView()       : defaultWhiteView_;
+                VkImageView vcub = vtc ? vtc->GetVkCubeImageView()    : defaultWhiteCubeView_;
+                d.envMapDescSet  = GetOrCreateEnvMapDescSet(currentFrame_, v2d, vcub,
+                                                            slotSamplers_[0], slotSamplers_[1]);
+                d.envMapUboData[0]  = params.eyePositionWorld[0];
+                d.envMapUboData[1]  = params.eyePositionWorld[1];
+                d.envMapUboData[2]  = params.eyePositionWorld[2];
+                d.envMapUboData[3]  = 0.f;
+                d.envMapUboData[4]  = params.diffuseColor[0]; d.envMapUboData[5]  = params.diffuseColor[1];
+                d.envMapUboData[6]  = params.diffuseColor[2]; d.envMapUboData[7]  = params.diffuseColor[3];
+                d.envMapUboData[8]  = params.emissiveColor[0]; d.envMapUboData[9]  = params.emissiveColor[1];
+                d.envMapUboData[10] = params.emissiveColor[2]; d.envMapUboData[11] = params.envMapAmount;
+                d.envMapUboData[12] = params.light0Dir[0]; d.envMapUboData[13] = params.light0Dir[1];
+                d.envMapUboData[14] = params.light0Dir[2]; d.envMapUboData[15] = 0.f;
+                d.envMapUboData[16] = params.light0Diffuse[0]; d.envMapUboData[17] = params.light0Diffuse[1];
+                d.envMapUboData[18] = params.light0Diffuse[2]; d.envMapUboData[19] = params.fresnelEnabled ? 1.f : 0.f;
+                d.envMapUboData[20] = params.envMapSpecular[0]; d.envMapUboData[21] = params.envMapSpecular[1];
+                d.envMapUboData[22] = params.envMapSpecular[2]; d.envMapUboData[23] = params.fresnelFactor;
+                // Task 899's noted cheap leftover: fog packed into EnvMapParams' spare tail bytes.
+                d.envMapUboData[24] = params.fogColor[0]; d.envMapUboData[25] = params.fogColor[1];
+                d.envMapUboData[26] = params.fogColor[2]; d.envMapUboData[27] = params.fogEnabled ? 1.f : 0.f;
+                d.envMapUboData[28] = params.fogVector[0]; d.envMapUboData[29] = params.fogVector[1];
+                d.envMapUboData[30] = params.fogVector[2]; d.envMapUboData[31] = params.fogVector[3];
+                // Task 890: DirectionalLight1/DirectionalLight2 diffuse forwarding.
+                d.envMapUboData[32] = params.light1Dir[0]; d.envMapUboData[33] = params.light1Dir[1];
+                d.envMapUboData[34] = params.light1Dir[2]; d.envMapUboData[35] = 0.f;
+                d.envMapUboData[36] = params.light1Diffuse[0]; d.envMapUboData[37] = params.light1Diffuse[1];
+                d.envMapUboData[38] = params.light1Diffuse[2]; d.envMapUboData[39] = 0.f;
+                d.envMapUboData[40] = params.light2Dir[0]; d.envMapUboData[41] = params.light2Dir[1];
+                d.envMapUboData[42] = params.light2Dir[2]; d.envMapUboData[43] = 0.f;
+                d.envMapUboData[44] = params.light2Diffuse[0]; d.envMapUboData[45] = params.light2Diffuse[1];
+                d.envMapUboData[46] = params.light2Diffuse[2]; d.envMapUboData[47] = 0.f;
+            } else if (needsDualTex) {
+                EnsureDualTexResources();
+                const auto* vs0 = dynamic_cast<const IVulkanSamplable*>(params.texture0);
+                const auto* vs1 = dynamic_cast<const IVulkanSamplable*>(params.texture1);
+                VkImageView v0 = vs0 ? vs0->GetVkImageView() : defaultWhiteView_;
+                VkImageView v1 = vs1 ? vs1->GetVkImageView() : defaultWhiteView_;
+                d.dualTexDescSet = GetOrCreateDualTexDescSet(currentFrame_, v0, v1, slotSamplers_[0], slotSamplers_[1]);
+                d.dualTexFogUboData[0] = params.fogColor[0]; d.dualTexFogUboData[1] = params.fogColor[1];
+                d.dualTexFogUboData[2] = params.fogColor[2]; d.dualTexFogUboData[3] = params.fogEnabled ? 1.f : 0.f;
+                d.dualTexFogUboData[4] = params.fogVector[0]; d.dualTexFogUboData[5] = params.fogVector[1];
+                d.dualTexFogUboData[6] = params.fogVector[2]; d.dualTexFogUboData[7] = params.fogVector[3];
+            // plan_vulkan.md VULKAN-199: the untextured layout is the same FAMILY -- same
+            // descriptor set, same UBO, same fragment stage -- so it takes this arm too. Gating
+            // it on needsLitTextured alone bound a pipeline that statically uses set 0 with no
+            // set bound at all, which the validation layer named at the first draw.
+            } else if (needsLitTextured || needsLitUntextured || needsLitColored) {
+                EnsureLitTexturedResources();
+                const auto* vs = dynamic_cast<const IVulkanSamplable*>(params.texture0);
+                VkImageView view = vs ? vs->GetVkImageView() : defaultWhiteView_;
+                d.litTexturedDescSet = GetOrCreateLitTexturedDescSet(currentFrame_, view, slotSamplers_[0]);
+                d.litUboData[0]  = params.light1Dir[0];     d.litUboData[1]  = params.light1Dir[1];
+                d.litUboData[2]  = params.light1Dir[2];     d.litUboData[3]  = 0.f;
+                d.litUboData[4]  = params.light1Diffuse[0]; d.litUboData[5]  = params.light1Diffuse[1];
+                d.litUboData[6]  = params.light1Diffuse[2]; d.litUboData[7]  = 0.f;
+                d.litUboData[8]  = params.light2Dir[0];     d.litUboData[9]  = params.light2Dir[1];
+                d.litUboData[10] = params.light2Dir[2];     d.litUboData[11] = 0.f;
+                d.litUboData[12] = params.light2Diffuse[0]; d.litUboData[13] = params.light2Diffuse[1];
+                d.litUboData[14] = params.light2Diffuse[2]; d.litUboData[15] = 0.f;
+                d.litUboData[16] = params.emissiveColor[0]; d.litUboData[17] = params.emissiveColor[1];
+                d.litUboData[18] = params.emissiveColor[2]; d.litUboData[19] = 0.f;
+                // World matrix (Task 898: needed by the vertex shader for a correct world-space
+                // position/normal, since the 128-byte PC has no spare room for it).
+                for (int wi = 0; wi < 16; ++wi) d.litUboData[20 + wi] = params.worldColMajor[wi];
+                d.litUboData[36] = params.eyePositionWorld[0]; d.litUboData[37] = params.eyePositionWorld[1];
+                d.litUboData[38] = params.eyePositionWorld[2]; d.litUboData[39] = 0.f;
+                d.litUboData[40] = params.light0Specular[0]; d.litUboData[41] = params.light0Specular[1];
+                d.litUboData[42] = params.light0Specular[2]; d.litUboData[43] = 0.f;
+                d.litUboData[44] = params.light1Specular[0]; d.litUboData[45] = params.light1Specular[1];
+                d.litUboData[46] = params.light1Specular[2]; d.litUboData[47] = 0.f;
+                d.litUboData[48] = params.light2Specular[0]; d.litUboData[49] = params.light2Specular[1];
+                d.litUboData[50] = params.light2Specular[2]; d.litUboData[51] = 0.f;
+                d.litUboData[52] = params.specularColor[0]; d.litUboData[53] = params.specularColor[1];
+                d.litUboData[54] = params.specularColor[2]; d.litUboData[55] = params.specularPower;
+                d.litUboData[56] = params.fogColor[0]; d.litUboData[57] = params.fogColor[1];
+                d.litUboData[58] = params.fogColor[2]; d.litUboData[59] = params.fogEnabled ? 1.f : 0.f;
+                d.litUboData[60] = params.fogVector[0]; d.litUboData[61] = params.fogVector[1];
+                d.litUboData[62] = params.fogVector[2]; d.litUboData[63] = params.fogVector[3];
+            } else {
+                // Shared fallback fill: reached both by alpha-test draws (whose pipeline also uses
+                // the plain single-sampler descriptorSetLayout_/d.descSet) and, when !needsAlphaTest,
+                // by the colored3d/textured3d/colored_textured3d fog-capable bundle (Task 899).
+                const auto* vs = params.texture0 ? dynamic_cast<const IVulkanSamplable*>(params.texture0) : nullptr;
+                VkImageView view = vs ? vs->GetVkImageView() : defaultWhiteView_;
+                d.descSet = GetOrCreateTexSamplerDescSet(view, slotSamplers_[0]);
+                if (d.useFogTex3D) {
+                    EnsureFogTex3DResources();
+                    d.fogTex3DDescSet = GetOrCreateFogTex3DDescSet(currentFrame_, view, slotSamplers_[0]);
+                    d.fogTex3DUboData[0] = params.fogColor[0]; d.fogTex3DUboData[1] = params.fogColor[1];
+                    d.fogTex3DUboData[2] = params.fogColor[2]; d.fogTex3DUboData[3] = params.fogEnabled ? 1.f : 0.f;
+                    d.fogTex3DUboData[4] = params.fogVector[0]; d.fogTex3DUboData[5] = params.fogVector[1];
+                    d.fogTex3DUboData[6] = params.fogVector[2]; d.fogTex3DUboData[7] = params.fogVector[3];
+                }
+            }
+    }
+
+
     void VulkanRenderer::DrawPrimitivesEx(
         const IVertexBufferRenderer& vb_in,
         const Matrix& world, const Matrix& view, const Matrix& projection,
@@ -14354,195 +14559,9 @@ namespace CNA::Internal::Renderers::Vulkan
         // Task 1103: real XNA default is PreferPerPixelLighting=false (per-vertex/
         // Gouraud lighting) -- only meaningful while lighting is actually enabled.
         d.preferVertexLit = params.lightingEnabled && !params.preferPerPixelLighting;
-        if (needsPbr && needsSkinned) {
-            EnsurePbrSkinnedResources();
-            const auto* vsBase = dynamic_cast<const IVulkanSamplable*>(params.texture0);
-            const auto* vsNorm = dynamic_cast<const IVulkanSamplable*>(params.pbrNormalMap);
-            const auto* vsMR   = dynamic_cast<const IVulkanSamplable*>(params.pbrMetallicRoughnessMap);
-            const auto* vsEmis = dynamic_cast<const IVulkanSamplable*>(params.pbrEmissiveMap);
-            const auto* vsOcc  = dynamic_cast<const IVulkanSamplable*>(params.pbrOcclusionMap);
-            const auto* vsSpec = dynamic_cast<const IVulkanSamplable*>(params.pbrSpecularMap);
-            const auto* vsSpecColor = dynamic_cast<const IVulkanSamplable*>(params.pbrSpecularColorMap);
-            EnsureDefaultFlatNormalTexture();
-            VkImageView vBase = vsBase ? vsBase->GetVkImageView() : defaultWhiteView_;
-            VkImageView vNorm = vsNorm ? vsNorm->GetVkImageView() : defaultFlatNormalView_;
-            VkImageView vMR   = vsMR   ? vsMR->GetVkImageView()   : defaultWhiteView_;
-            VkImageView vEmis = vsEmis ? vsEmis->GetVkImageView() : defaultWhiteView_;
-            VkImageView vOcc  = vsOcc  ? vsOcc->GetVkImageView()  : defaultWhiteView_;
-            VkImageView vSpec = vsSpec ? vsSpec->GetVkImageView() : defaultWhiteView_;
-            VkImageView vSpecColor = vsSpecColor ? vsSpecColor->GetVkImageView() : defaultWhiteView_;
-            d.pbrDescSet = GetOrCreatePbrSkinnedDescSet(
-                currentFrame_, vBase, vNorm, vMR, vEmis, vOcc, vSpec, vSpecColor,
-                                                        PbrSlotSamplersRawEXT().s);
-            const int count = std::min(params.boneCount, 72);
-            d.boneMatrices.assign(params.boneTransforms, params.boneTransforms + count * 16);
-            FillPbrUboData(d.pbrUboData, params, static_cast<float>(params.weightsPerVertex));
-        } else if (needsPbr) {
-            EnsurePbrResources();
-            const auto* vsBase = dynamic_cast<const IVulkanSamplable*>(params.texture0);
-            const auto* vsNorm = dynamic_cast<const IVulkanSamplable*>(params.pbrNormalMap);
-            const auto* vsMR   = dynamic_cast<const IVulkanSamplable*>(params.pbrMetallicRoughnessMap);
-            const auto* vsEmis = dynamic_cast<const IVulkanSamplable*>(params.pbrEmissiveMap);
-            const auto* vsOcc  = dynamic_cast<const IVulkanSamplable*>(params.pbrOcclusionMap);
-            const auto* vsSpec = dynamic_cast<const IVulkanSamplable*>(params.pbrSpecularMap);
-            const auto* vsSpecColor = dynamic_cast<const IVulkanSamplable*>(params.pbrSpecularColorMap);
-            EnsureDefaultFlatNormalTexture();
-            VkImageView vBase = vsBase ? vsBase->GetVkImageView() : defaultWhiteView_;
-            VkImageView vNorm = vsNorm ? vsNorm->GetVkImageView() : defaultFlatNormalView_;
-            VkImageView vMR   = vsMR   ? vsMR->GetVkImageView()   : defaultWhiteView_;
-            VkImageView vEmis = vsEmis ? vsEmis->GetVkImageView() : defaultWhiteView_;
-            VkImageView vOcc  = vsOcc  ? vsOcc->GetVkImageView()  : defaultWhiteView_;
-            VkImageView vSpec = vsSpec ? vsSpec->GetVkImageView() : defaultWhiteView_;
-            VkImageView vSpecColor = vsSpecColor ? vsSpecColor->GetVkImageView() : defaultWhiteView_;
-            d.pbrDescSet = GetOrCreatePbrDescSet(
-                currentFrame_, vBase, vNorm, vMR, vEmis, vOcc, vSpec, vSpecColor,
-                                                 PbrSlotSamplersRawEXT().s);
-            FillPbrUboData(d.pbrUboData, params, 0.0f);
-        } else if (needsSkinned) {
-            EnsureSkinnedResources();
-            const auto* vs = dynamic_cast<const IVulkanSamplable*>(params.texture0);
-            VkImageView v2d = vs ? vs->GetVkImageView() : defaultWhiteView_;
-            d.skinnedDescSet = GetOrCreateSkinnedDescSet(currentFrame_, v2d, slotSamplers_[0]);
-            const int count = std::min(params.boneCount, 72);
-            d.boneMatrices.assign(params.boneTransforms, params.boneTransforms + count * 16);
-            d.skinnedFogUboData[0] = params.fogColor[0]; d.skinnedFogUboData[1] = params.fogColor[1];
-            d.skinnedFogUboData[2] = params.fogColor[2]; d.skinnedFogUboData[3] = params.fogEnabled ? 1.f : 0.f;
-            d.skinnedFogUboData[4] = params.fogVector[0]; d.skinnedFogUboData[5] = params.fogVector[1];
-            d.skinnedFogUboData[6] = params.fogVector[2]; d.skinnedFogUboData[7] = params.fogVector[3];
-            // Task 893: DirectionalLight1/DirectionalLight2 diffuse forwarding.
-            d.skinnedFogUboData[8]  = params.light1Dir[0]; d.skinnedFogUboData[9]  = params.light1Dir[1];
-            d.skinnedFogUboData[10] = params.light1Dir[2]; d.skinnedFogUboData[11] = 0.f;
-            d.skinnedFogUboData[12] = params.light1Diffuse[0]; d.skinnedFogUboData[13] = params.light1Diffuse[1];
-            d.skinnedFogUboData[14] = params.light1Diffuse[2]; d.skinnedFogUboData[15] = 0.f;
-            d.skinnedFogUboData[16] = params.light2Dir[0]; d.skinnedFogUboData[17] = params.light2Dir[1];
-            d.skinnedFogUboData[18] = params.light2Dir[2]; d.skinnedFogUboData[19] = 0.f;
-            d.skinnedFogUboData[20] = params.light2Diffuse[0]; d.skinnedFogUboData[21] = params.light2Diffuse[1];
-            d.skinnedFogUboData[22] = params.light2Diffuse[2]; d.skinnedFogUboData[23] = 0.f;
-            // Task 894: World matrix (for world-space position -> eye vector), EyePosition,
-            // per-light SpecularColor, and material SpecularColor/SpecularPower.
-            for (int wi = 0; wi < 16; ++wi) d.skinnedFogUboData[24 + wi] = params.worldColMajor[wi];
-            d.skinnedFogUboData[40] = params.eyePositionWorld[0];
-            d.skinnedFogUboData[41] = params.eyePositionWorld[1];
-            d.skinnedFogUboData[42] = params.eyePositionWorld[2];
-            d.skinnedFogUboData[43] = static_cast<float>(params.weightsPerVertex); // Task 895
-            d.skinnedFogUboData[44] = params.specularColor[0]; d.skinnedFogUboData[45] = params.specularColor[1];
-            d.skinnedFogUboData[46] = params.specularColor[2]; d.skinnedFogUboData[47] = params.specularPower;
-            d.skinnedFogUboData[48] = params.light0Specular[0]; d.skinnedFogUboData[49] = params.light0Specular[1];
-            d.skinnedFogUboData[50] = params.light0Specular[2]; d.skinnedFogUboData[51] = 0.f;
-            d.skinnedFogUboData[52] = params.light1Specular[0]; d.skinnedFogUboData[53] = params.light1Specular[1];
-            d.skinnedFogUboData[54] = params.light1Specular[2]; d.skinnedFogUboData[55] = 0.f;
-            d.skinnedFogUboData[56] = params.light2Specular[0]; d.skinnedFogUboData[57] = params.light2Specular[1];
-            d.skinnedFogUboData[58] = params.light2Specular[2]; d.skinnedFogUboData[59] = 0.f;
-
-            // REMED-GFX-008: emissiveColor vec4 — the CPU pre-folds (emissive + ambient*diffuse)*alpha
-            // into params.emissiveColor. The skinned shaders add it AFTER the lightSum*diffuse multiply
-            // (litRGB = lightSum*diffuse + emissiveColor), so both AmbientLightColor and EmissiveColor
-            // reach skinned draws (previously the shaders read the always-zero ambientColor and never
-            // added emissive, silently dropping both).
-            d.skinnedFogUboData[60] = params.emissiveColor[0]; d.skinnedFogUboData[61] = params.emissiveColor[1];
-            d.skinnedFogUboData[62] = params.emissiveColor[2]; d.skinnedFogUboData[63] = 0.f;
-        } else if (needsEnvMap) {
-            EnsureEnvMapResources();
-            const auto* vs0 = dynamic_cast<const IVulkanSamplable*>(params.texture0);
-            const auto* vtc = dynamic_cast<const IVulkanCubeSamplable*>(params.envMap);
-            VkImageView v2d  = vs0 ? vs0->GetVkImageView()       : defaultWhiteView_;
-            VkImageView vcub = vtc ? vtc->GetVkCubeImageView()    : defaultWhiteCubeView_;
-            d.envMapDescSet  = GetOrCreateEnvMapDescSet(currentFrame_, v2d, vcub,
-                                                        slotSamplers_[0], slotSamplers_[1]);
-            // Pack UBO data: eyePos, diffuse, emissive+envMapAmount, light0Dir,
-            // light0Diff+fresnelEnabled, envMapSpecular+fresnelFactor
-            d.envMapUboData[0]  = params.eyePositionWorld[0];
-            d.envMapUboData[1]  = params.eyePositionWorld[1];
-            d.envMapUboData[2]  = params.eyePositionWorld[2];
-            d.envMapUboData[3]  = 0.f;
-            d.envMapUboData[4]  = params.diffuseColor[0]; d.envMapUboData[5]  = params.diffuseColor[1];
-            d.envMapUboData[6]  = params.diffuseColor[2]; d.envMapUboData[7]  = params.diffuseColor[3];
-            d.envMapUboData[8]  = params.emissiveColor[0]; d.envMapUboData[9]  = params.emissiveColor[1];
-            d.envMapUboData[10] = params.emissiveColor[2]; d.envMapUboData[11] = params.envMapAmount;
-            d.envMapUboData[12] = params.light0Dir[0]; d.envMapUboData[13] = params.light0Dir[1];
-            d.envMapUboData[14] = params.light0Dir[2]; d.envMapUboData[15] = 0.f;
-            d.envMapUboData[16] = params.light0Diffuse[0]; d.envMapUboData[17] = params.light0Diffuse[1];
-            d.envMapUboData[18] = params.light0Diffuse[2]; d.envMapUboData[19] = params.fresnelEnabled ? 1.f : 0.f;
-            d.envMapUboData[20] = params.envMapSpecular[0]; d.envMapUboData[21] = params.envMapSpecular[1];
-            d.envMapUboData[22] = params.envMapSpecular[2]; d.envMapUboData[23] = params.fresnelFactor;
-            // Task 899's noted cheap leftover: fog packed into EnvMapParams' spare tail bytes.
-            d.envMapUboData[24] = params.fogColor[0]; d.envMapUboData[25] = params.fogColor[1];
-            d.envMapUboData[26] = params.fogColor[2]; d.envMapUboData[27] = params.fogEnabled ? 1.f : 0.f;
-            d.envMapUboData[28] = params.fogVector[0]; d.envMapUboData[29] = params.fogVector[1];
-            d.envMapUboData[30] = params.fogVector[2]; d.envMapUboData[31] = params.fogVector[3];
-            // Task 890: DirectionalLight1/DirectionalLight2 diffuse forwarding.
-            d.envMapUboData[32] = params.light1Dir[0]; d.envMapUboData[33] = params.light1Dir[1];
-            d.envMapUboData[34] = params.light1Dir[2]; d.envMapUboData[35] = 0.f;
-            d.envMapUboData[36] = params.light1Diffuse[0]; d.envMapUboData[37] = params.light1Diffuse[1];
-            d.envMapUboData[38] = params.light1Diffuse[2]; d.envMapUboData[39] = 0.f;
-            d.envMapUboData[40] = params.light2Dir[0]; d.envMapUboData[41] = params.light2Dir[1];
-            d.envMapUboData[42] = params.light2Dir[2]; d.envMapUboData[43] = 0.f;
-            d.envMapUboData[44] = params.light2Diffuse[0]; d.envMapUboData[45] = params.light2Diffuse[1];
-            d.envMapUboData[46] = params.light2Diffuse[2]; d.envMapUboData[47] = 0.f;
-        } else if (needsDualTex) {
-            const auto* vs0 = dynamic_cast<const IVulkanSamplable*>(params.texture0);
-            const auto* vs1 = dynamic_cast<const IVulkanSamplable*>(params.texture1);
-            VkImageView v0 = vs0 ? vs0->GetVkImageView() : defaultWhiteView_;
-            VkImageView v1 = vs1 ? vs1->GetVkImageView() : defaultWhiteView_;
-            d.dualTexDescSet = GetOrCreateDualTexDescSet(currentFrame_, v0, v1, slotSamplers_[0], slotSamplers_[1]);
-            d.dualTexFogUboData[0] = params.fogColor[0]; d.dualTexFogUboData[1] = params.fogColor[1];
-            d.dualTexFogUboData[2] = params.fogColor[2]; d.dualTexFogUboData[3] = params.fogEnabled ? 1.f : 0.f;
-            d.dualTexFogUboData[4] = params.fogVector[0]; d.dualTexFogUboData[5] = params.fogVector[1];
-            d.dualTexFogUboData[6] = params.fogVector[2]; d.dualTexFogUboData[7] = params.fogVector[3];
-        // plan_vulkan.md VULKAN-199: the untextured layout is the same FAMILY -- same
-        // descriptor set, same UBO, same fragment stage -- so it takes this arm too. Gating
-        // it on needsLitTextured alone bound a pipeline that statically uses set 0 with no
-        // set bound at all, which the validation layer named at the first draw.
-        } else if (needsLitTextured || needsLitUntextured || needsLitColored) {
-            EnsureLitTexturedResources();
-            const auto* vs = dynamic_cast<const IVulkanSamplable*>(params.texture0);
-            VkImageView view = vs ? vs->GetVkImageView() : defaultWhiteView_;
-            d.litTexturedDescSet = GetOrCreateLitTexturedDescSet(currentFrame_, view, slotSamplers_[0]);
-            // Pack UBO data: light1Dir+pad, light1Diffuse+pad, light2Dir+pad, light2Diffuse+pad,
-            // emissiveColor+pad.
-            d.litUboData[0]  = params.light1Dir[0];     d.litUboData[1]  = params.light1Dir[1];
-            d.litUboData[2]  = params.light1Dir[2];     d.litUboData[3]  = 0.f;
-            d.litUboData[4]  = params.light1Diffuse[0]; d.litUboData[5]  = params.light1Diffuse[1];
-            d.litUboData[6]  = params.light1Diffuse[2]; d.litUboData[7]  = 0.f;
-            d.litUboData[8]  = params.light2Dir[0];     d.litUboData[9]  = params.light2Dir[1];
-            d.litUboData[10] = params.light2Dir[2];     d.litUboData[11] = 0.f;
-            d.litUboData[12] = params.light2Diffuse[0]; d.litUboData[13] = params.light2Diffuse[1];
-            d.litUboData[14] = params.light2Diffuse[2]; d.litUboData[15] = 0.f;
-            d.litUboData[16] = params.emissiveColor[0]; d.litUboData[17] = params.emissiveColor[1];
-            d.litUboData[18] = params.emissiveColor[2]; d.litUboData[19] = 0.f;
-            // World matrix (Task 898: needed by the vertex shader for a correct world-space
-            // position/normal, since the 128-byte PC has no spare room for it).
-            for (int wi = 0; wi < 16; ++wi) d.litUboData[20 + wi] = params.worldColMajor[wi];
-            d.litUboData[36] = params.eyePositionWorld[0]; d.litUboData[37] = params.eyePositionWorld[1];
-            d.litUboData[38] = params.eyePositionWorld[2]; d.litUboData[39] = 0.f;
-            d.litUboData[40] = params.light0Specular[0]; d.litUboData[41] = params.light0Specular[1];
-            d.litUboData[42] = params.light0Specular[2]; d.litUboData[43] = 0.f;
-            d.litUboData[44] = params.light1Specular[0]; d.litUboData[45] = params.light1Specular[1];
-            d.litUboData[46] = params.light1Specular[2]; d.litUboData[47] = 0.f;
-            d.litUboData[48] = params.light2Specular[0]; d.litUboData[49] = params.light2Specular[1];
-            d.litUboData[50] = params.light2Specular[2]; d.litUboData[51] = 0.f;
-            d.litUboData[52] = params.specularColor[0]; d.litUboData[53] = params.specularColor[1];
-            d.litUboData[54] = params.specularColor[2]; d.litUboData[55] = params.specularPower;
-            d.litUboData[56] = params.fogColor[0]; d.litUboData[57] = params.fogColor[1];
-            d.litUboData[58] = params.fogColor[2]; d.litUboData[59] = params.fogEnabled ? 1.f : 0.f;
-            d.litUboData[60] = params.fogVector[0]; d.litUboData[61] = params.fogVector[1];
-            d.litUboData[62] = params.fogVector[2]; d.litUboData[63] = params.fogVector[3];
-        } else {
-            // Shared fallback fill: reached both by alpha-test draws (whose pipeline also uses
-            // the plain single-sampler descriptorSetLayout_/d.descSet) and, when !needsAlphaTest,
-            // by the colored3d/textured3d/colored_textured3d fog-capable bundle (Task 899).
-            const auto* vs = params.texture0 ? dynamic_cast<const IVulkanSamplable*>(params.texture0) : nullptr;
-            VkImageView view = vs ? vs->GetVkImageView() : defaultWhiteView_;
-            d.descSet = GetOrCreateTexSamplerDescSet(view, slotSamplers_[0]);
-            if (d.useFogTex3D) {
-                EnsureFogTex3DResources();
-                d.fogTex3DDescSet = GetOrCreateFogTex3DDescSet(currentFrame_, view, slotSamplers_[0]);
-                d.fogTex3DUboData[0] = params.fogColor[0]; d.fogTex3DUboData[1] = params.fogColor[1];
-                d.fogTex3DUboData[2] = params.fogColor[2]; d.fogTex3DUboData[3] = params.fogEnabled ? 1.f : 0.f;
-                d.fogTex3DUboData[4] = params.fogVector[0]; d.fogTex3DUboData[5] = params.fogVector[1];
-                d.fogTex3DUboData[6] = params.fogVector[2]; d.fogTex3DUboData[7] = params.fogVector[3];
-            }
-        }
+        // VULKAN-223: the family dispatch both ordinary routes used to inline, verbatim.
+        FillStockFamilyRecordEXT(d, params, needsPbr, needsSkinned, needsEnvMap, needsDualTex,
+                                 needsLitTextured, needsLitUntextured, needsLitColored);
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
         // plans/plan_fx.md FX-065: a compiled Effect owns the whole program, so it replaces the stock
         // stride-dispatched selection above rather than layering on it. Everything the deferred
@@ -14741,192 +14760,9 @@ namespace CNA::Internal::Renderers::Vulkan
         // Task 1103: real XNA default is PreferPerPixelLighting=false (per-vertex/
         // Gouraud lighting) -- only meaningful while lighting is actually enabled.
         d.preferVertexLit = params.lightingEnabled && !params.preferPerPixelLighting;
-        if (needsPbr && needsSkinned) {
-            EnsurePbrSkinnedResources();
-            const auto* vsBase = dynamic_cast<const IVulkanSamplable*>(params.texture0);
-            const auto* vsNorm = dynamic_cast<const IVulkanSamplable*>(params.pbrNormalMap);
-            const auto* vsMR   = dynamic_cast<const IVulkanSamplable*>(params.pbrMetallicRoughnessMap);
-            const auto* vsEmis = dynamic_cast<const IVulkanSamplable*>(params.pbrEmissiveMap);
-            const auto* vsOcc  = dynamic_cast<const IVulkanSamplable*>(params.pbrOcclusionMap);
-            const auto* vsSpec = dynamic_cast<const IVulkanSamplable*>(params.pbrSpecularMap);
-            const auto* vsSpecColor = dynamic_cast<const IVulkanSamplable*>(params.pbrSpecularColorMap);
-            EnsureDefaultFlatNormalTexture();
-            VkImageView vBase = vsBase ? vsBase->GetVkImageView() : defaultWhiteView_;
-            VkImageView vNorm = vsNorm ? vsNorm->GetVkImageView() : defaultFlatNormalView_;
-            VkImageView vMR   = vsMR   ? vsMR->GetVkImageView()   : defaultWhiteView_;
-            VkImageView vEmis = vsEmis ? vsEmis->GetVkImageView() : defaultWhiteView_;
-            VkImageView vOcc  = vsOcc  ? vsOcc->GetVkImageView()  : defaultWhiteView_;
-            VkImageView vSpec = vsSpec ? vsSpec->GetVkImageView() : defaultWhiteView_;
-            VkImageView vSpecColor = vsSpecColor ? vsSpecColor->GetVkImageView() : defaultWhiteView_;
-            d.pbrDescSet = GetOrCreatePbrSkinnedDescSet(
-                currentFrame_, vBase, vNorm, vMR, vEmis, vOcc, vSpec, vSpecColor,
-                                                        PbrSlotSamplersRawEXT().s);
-            const int count = std::min(params.boneCount, 72);
-            d.boneMatrices.assign(params.boneTransforms, params.boneTransforms + count * 16);
-            FillPbrUboData(d.pbrUboData, params, static_cast<float>(params.weightsPerVertex));
-        } else if (needsPbr) {
-            EnsurePbrResources();
-            const auto* vsBase = dynamic_cast<const IVulkanSamplable*>(params.texture0);
-            const auto* vsNorm = dynamic_cast<const IVulkanSamplable*>(params.pbrNormalMap);
-            const auto* vsMR   = dynamic_cast<const IVulkanSamplable*>(params.pbrMetallicRoughnessMap);
-            const auto* vsEmis = dynamic_cast<const IVulkanSamplable*>(params.pbrEmissiveMap);
-            const auto* vsOcc  = dynamic_cast<const IVulkanSamplable*>(params.pbrOcclusionMap);
-            const auto* vsSpec = dynamic_cast<const IVulkanSamplable*>(params.pbrSpecularMap);
-            const auto* vsSpecColor = dynamic_cast<const IVulkanSamplable*>(params.pbrSpecularColorMap);
-            EnsureDefaultFlatNormalTexture();
-            VkImageView vBase = vsBase ? vsBase->GetVkImageView() : defaultWhiteView_;
-            VkImageView vNorm = vsNorm ? vsNorm->GetVkImageView() : defaultFlatNormalView_;
-            VkImageView vMR   = vsMR   ? vsMR->GetVkImageView()   : defaultWhiteView_;
-            VkImageView vEmis = vsEmis ? vsEmis->GetVkImageView() : defaultWhiteView_;
-            VkImageView vOcc  = vsOcc  ? vsOcc->GetVkImageView()  : defaultWhiteView_;
-            VkImageView vSpec = vsSpec ? vsSpec->GetVkImageView() : defaultWhiteView_;
-            VkImageView vSpecColor = vsSpecColor ? vsSpecColor->GetVkImageView() : defaultWhiteView_;
-            d.pbrDescSet = GetOrCreatePbrDescSet(
-                currentFrame_, vBase, vNorm, vMR, vEmis, vOcc, vSpec, vSpecColor,
-                                                 PbrSlotSamplersRawEXT().s);
-            FillPbrUboData(d.pbrUboData, params, 0.0f);
-        } else if (needsSkinned) {
-            EnsureSkinnedResources();
-            const auto* vs = dynamic_cast<const IVulkanSamplable*>(params.texture0);
-            VkImageView v2d = vs ? vs->GetVkImageView() : defaultWhiteView_;
-            d.skinnedDescSet = GetOrCreateSkinnedDescSet(currentFrame_, v2d, slotSamplers_[0]);
-            const int count = std::min(params.boneCount, 72);
-            d.boneMatrices.assign(params.boneTransforms, params.boneTransforms + count * 16);
-            d.skinnedFogUboData[0] = params.fogColor[0]; d.skinnedFogUboData[1] = params.fogColor[1];
-            d.skinnedFogUboData[2] = params.fogColor[2]; d.skinnedFogUboData[3] = params.fogEnabled ? 1.f : 0.f;
-            d.skinnedFogUboData[4] = params.fogVector[0]; d.skinnedFogUboData[5] = params.fogVector[1];
-            d.skinnedFogUboData[6] = params.fogVector[2]; d.skinnedFogUboData[7] = params.fogVector[3];
-            // Task 893: DirectionalLight1/DirectionalLight2 diffuse forwarding.
-            d.skinnedFogUboData[8]  = params.light1Dir[0]; d.skinnedFogUboData[9]  = params.light1Dir[1];
-            d.skinnedFogUboData[10] = params.light1Dir[2]; d.skinnedFogUboData[11] = 0.f;
-            d.skinnedFogUboData[12] = params.light1Diffuse[0]; d.skinnedFogUboData[13] = params.light1Diffuse[1];
-            d.skinnedFogUboData[14] = params.light1Diffuse[2]; d.skinnedFogUboData[15] = 0.f;
-            d.skinnedFogUboData[16] = params.light2Dir[0]; d.skinnedFogUboData[17] = params.light2Dir[1];
-            d.skinnedFogUboData[18] = params.light2Dir[2]; d.skinnedFogUboData[19] = 0.f;
-            d.skinnedFogUboData[20] = params.light2Diffuse[0]; d.skinnedFogUboData[21] = params.light2Diffuse[1];
-            d.skinnedFogUboData[22] = params.light2Diffuse[2]; d.skinnedFogUboData[23] = 0.f;
-            // Task 894: World matrix (for world-space position -> eye vector), EyePosition,
-            // per-light SpecularColor, and material SpecularColor/SpecularPower.
-            for (int wi = 0; wi < 16; ++wi) d.skinnedFogUboData[24 + wi] = params.worldColMajor[wi];
-            d.skinnedFogUboData[40] = params.eyePositionWorld[0];
-            d.skinnedFogUboData[41] = params.eyePositionWorld[1];
-            d.skinnedFogUboData[42] = params.eyePositionWorld[2];
-            d.skinnedFogUboData[43] = static_cast<float>(params.weightsPerVertex); // Task 895
-            d.skinnedFogUboData[44] = params.specularColor[0]; d.skinnedFogUboData[45] = params.specularColor[1];
-            d.skinnedFogUboData[46] = params.specularColor[2]; d.skinnedFogUboData[47] = params.specularPower;
-            d.skinnedFogUboData[48] = params.light0Specular[0]; d.skinnedFogUboData[49] = params.light0Specular[1];
-            d.skinnedFogUboData[50] = params.light0Specular[2]; d.skinnedFogUboData[51] = 0.f;
-            d.skinnedFogUboData[52] = params.light1Specular[0]; d.skinnedFogUboData[53] = params.light1Specular[1];
-            d.skinnedFogUboData[54] = params.light1Specular[2]; d.skinnedFogUboData[55] = 0.f;
-            d.skinnedFogUboData[56] = params.light2Specular[0]; d.skinnedFogUboData[57] = params.light2Specular[1];
-            d.skinnedFogUboData[58] = params.light2Specular[2]; d.skinnedFogUboData[59] = 0.f;
-
-            // REMED-GFX-008: emissiveColor vec4 — the CPU pre-folds (emissive + ambient*diffuse)*alpha
-            // into params.emissiveColor. The skinned shaders add it AFTER the lightSum*diffuse multiply
-            // (litRGB = lightSum*diffuse + emissiveColor), so both AmbientLightColor and EmissiveColor
-            // reach skinned draws (previously the shaders read the always-zero ambientColor and never
-            // added emissive, silently dropping both).
-            d.skinnedFogUboData[60] = params.emissiveColor[0]; d.skinnedFogUboData[61] = params.emissiveColor[1];
-            d.skinnedFogUboData[62] = params.emissiveColor[2]; d.skinnedFogUboData[63] = 0.f;
-        } else if (needsEnvMap) {
-            EnsureEnvMapResources();
-            const auto* vs0 = dynamic_cast<const IVulkanSamplable*>(params.texture0);
-            const auto* vtc = dynamic_cast<const IVulkanCubeSamplable*>(params.envMap);
-            VkImageView v2d  = vs0 ? vs0->GetVkImageView()       : defaultWhiteView_;
-            VkImageView vcub = vtc ? vtc->GetVkCubeImageView()    : defaultWhiteCubeView_;
-            d.envMapDescSet  = GetOrCreateEnvMapDescSet(currentFrame_, v2d, vcub,
-                                                        slotSamplers_[0], slotSamplers_[1]);
-            d.envMapUboData[0]  = params.eyePositionWorld[0];
-            d.envMapUboData[1]  = params.eyePositionWorld[1];
-            d.envMapUboData[2]  = params.eyePositionWorld[2];
-            d.envMapUboData[3]  = 0.f;
-            d.envMapUboData[4]  = params.diffuseColor[0]; d.envMapUboData[5]  = params.diffuseColor[1];
-            d.envMapUboData[6]  = params.diffuseColor[2]; d.envMapUboData[7]  = params.diffuseColor[3];
-            d.envMapUboData[8]  = params.emissiveColor[0]; d.envMapUboData[9]  = params.emissiveColor[1];
-            d.envMapUboData[10] = params.emissiveColor[2]; d.envMapUboData[11] = params.envMapAmount;
-            d.envMapUboData[12] = params.light0Dir[0]; d.envMapUboData[13] = params.light0Dir[1];
-            d.envMapUboData[14] = params.light0Dir[2]; d.envMapUboData[15] = 0.f;
-            d.envMapUboData[16] = params.light0Diffuse[0]; d.envMapUboData[17] = params.light0Diffuse[1];
-            d.envMapUboData[18] = params.light0Diffuse[2]; d.envMapUboData[19] = params.fresnelEnabled ? 1.f : 0.f;
-            d.envMapUboData[20] = params.envMapSpecular[0]; d.envMapUboData[21] = params.envMapSpecular[1];
-            d.envMapUboData[22] = params.envMapSpecular[2]; d.envMapUboData[23] = params.fresnelFactor;
-            // Task 899's noted cheap leftover: fog packed into EnvMapParams' spare tail bytes.
-            d.envMapUboData[24] = params.fogColor[0]; d.envMapUboData[25] = params.fogColor[1];
-            d.envMapUboData[26] = params.fogColor[2]; d.envMapUboData[27] = params.fogEnabled ? 1.f : 0.f;
-            d.envMapUboData[28] = params.fogVector[0]; d.envMapUboData[29] = params.fogVector[1];
-            d.envMapUboData[30] = params.fogVector[2]; d.envMapUboData[31] = params.fogVector[3];
-            // Task 890: DirectionalLight1/DirectionalLight2 diffuse forwarding.
-            d.envMapUboData[32] = params.light1Dir[0]; d.envMapUboData[33] = params.light1Dir[1];
-            d.envMapUboData[34] = params.light1Dir[2]; d.envMapUboData[35] = 0.f;
-            d.envMapUboData[36] = params.light1Diffuse[0]; d.envMapUboData[37] = params.light1Diffuse[1];
-            d.envMapUboData[38] = params.light1Diffuse[2]; d.envMapUboData[39] = 0.f;
-            d.envMapUboData[40] = params.light2Dir[0]; d.envMapUboData[41] = params.light2Dir[1];
-            d.envMapUboData[42] = params.light2Dir[2]; d.envMapUboData[43] = 0.f;
-            d.envMapUboData[44] = params.light2Diffuse[0]; d.envMapUboData[45] = params.light2Diffuse[1];
-            d.envMapUboData[46] = params.light2Diffuse[2]; d.envMapUboData[47] = 0.f;
-        } else if (needsDualTex) {
-            EnsureDualTexResources();
-            const auto* vs0 = dynamic_cast<const IVulkanSamplable*>(params.texture0);
-            const auto* vs1 = dynamic_cast<const IVulkanSamplable*>(params.texture1);
-            VkImageView v0 = vs0 ? vs0->GetVkImageView() : defaultWhiteView_;
-            VkImageView v1 = vs1 ? vs1->GetVkImageView() : defaultWhiteView_;
-            d.dualTexDescSet = GetOrCreateDualTexDescSet(currentFrame_, v0, v1, slotSamplers_[0], slotSamplers_[1]);
-            d.dualTexFogUboData[0] = params.fogColor[0]; d.dualTexFogUboData[1] = params.fogColor[1];
-            d.dualTexFogUboData[2] = params.fogColor[2]; d.dualTexFogUboData[3] = params.fogEnabled ? 1.f : 0.f;
-            d.dualTexFogUboData[4] = params.fogVector[0]; d.dualTexFogUboData[5] = params.fogVector[1];
-            d.dualTexFogUboData[6] = params.fogVector[2]; d.dualTexFogUboData[7] = params.fogVector[3];
-        // plan_vulkan.md VULKAN-199: the untextured layout is the same FAMILY -- same
-        // descriptor set, same UBO, same fragment stage -- so it takes this arm too. Gating
-        // it on needsLitTextured alone bound a pipeline that statically uses set 0 with no
-        // set bound at all, which the validation layer named at the first draw.
-        } else if (needsLitTextured || needsLitUntextured || needsLitColored) {
-            EnsureLitTexturedResources();
-            const auto* vs = dynamic_cast<const IVulkanSamplable*>(params.texture0);
-            VkImageView view = vs ? vs->GetVkImageView() : defaultWhiteView_;
-            d.litTexturedDescSet = GetOrCreateLitTexturedDescSet(currentFrame_, view, slotSamplers_[0]);
-            d.litUboData[0]  = params.light1Dir[0];     d.litUboData[1]  = params.light1Dir[1];
-            d.litUboData[2]  = params.light1Dir[2];     d.litUboData[3]  = 0.f;
-            d.litUboData[4]  = params.light1Diffuse[0]; d.litUboData[5]  = params.light1Diffuse[1];
-            d.litUboData[6]  = params.light1Diffuse[2]; d.litUboData[7]  = 0.f;
-            d.litUboData[8]  = params.light2Dir[0];     d.litUboData[9]  = params.light2Dir[1];
-            d.litUboData[10] = params.light2Dir[2];     d.litUboData[11] = 0.f;
-            d.litUboData[12] = params.light2Diffuse[0]; d.litUboData[13] = params.light2Diffuse[1];
-            d.litUboData[14] = params.light2Diffuse[2]; d.litUboData[15] = 0.f;
-            d.litUboData[16] = params.emissiveColor[0]; d.litUboData[17] = params.emissiveColor[1];
-            d.litUboData[18] = params.emissiveColor[2]; d.litUboData[19] = 0.f;
-            // World matrix (Task 898: needed by the vertex shader for a correct world-space
-            // position/normal, since the 128-byte PC has no spare room for it).
-            for (int wi = 0; wi < 16; ++wi) d.litUboData[20 + wi] = params.worldColMajor[wi];
-            d.litUboData[36] = params.eyePositionWorld[0]; d.litUboData[37] = params.eyePositionWorld[1];
-            d.litUboData[38] = params.eyePositionWorld[2]; d.litUboData[39] = 0.f;
-            d.litUboData[40] = params.light0Specular[0]; d.litUboData[41] = params.light0Specular[1];
-            d.litUboData[42] = params.light0Specular[2]; d.litUboData[43] = 0.f;
-            d.litUboData[44] = params.light1Specular[0]; d.litUboData[45] = params.light1Specular[1];
-            d.litUboData[46] = params.light1Specular[2]; d.litUboData[47] = 0.f;
-            d.litUboData[48] = params.light2Specular[0]; d.litUboData[49] = params.light2Specular[1];
-            d.litUboData[50] = params.light2Specular[2]; d.litUboData[51] = 0.f;
-            d.litUboData[52] = params.specularColor[0]; d.litUboData[53] = params.specularColor[1];
-            d.litUboData[54] = params.specularColor[2]; d.litUboData[55] = params.specularPower;
-            d.litUboData[56] = params.fogColor[0]; d.litUboData[57] = params.fogColor[1];
-            d.litUboData[58] = params.fogColor[2]; d.litUboData[59] = params.fogEnabled ? 1.f : 0.f;
-            d.litUboData[60] = params.fogVector[0]; d.litUboData[61] = params.fogVector[1];
-            d.litUboData[62] = params.fogVector[2]; d.litUboData[63] = params.fogVector[3];
-        } else {
-            // Shared fallback fill: reached both by alpha-test draws (whose pipeline also uses
-            // the plain single-sampler descriptorSetLayout_/d.descSet) and, when !needsAlphaTest,
-            // by the colored3d/textured3d/colored_textured3d fog-capable bundle (Task 899).
-            const auto* vs = params.texture0 ? dynamic_cast<const IVulkanSamplable*>(params.texture0) : nullptr;
-            VkImageView view = vs ? vs->GetVkImageView() : defaultWhiteView_;
-            d.descSet = GetOrCreateTexSamplerDescSet(view, slotSamplers_[0]);
-            if (d.useFogTex3D) {
-                EnsureFogTex3DResources();
-                d.fogTex3DDescSet = GetOrCreateFogTex3DDescSet(currentFrame_, view, slotSamplers_[0]);
-                d.fogTex3DUboData[0] = params.fogColor[0]; d.fogTex3DUboData[1] = params.fogColor[1];
-                d.fogTex3DUboData[2] = params.fogColor[2]; d.fogTex3DUboData[3] = params.fogEnabled ? 1.f : 0.f;
-                d.fogTex3DUboData[4] = params.fogVector[0]; d.fogTex3DUboData[5] = params.fogVector[1];
-                d.fogTex3DUboData[6] = params.fogVector[2]; d.fogTex3DUboData[7] = params.fogVector[3];
-            }
-        }
+        // VULKAN-223: the family dispatch both ordinary routes used to inline, verbatim.
+        FillStockFamilyRecordEXT(d, params, needsPbr, needsSkinned, needsEnvMap, needsDualTex,
+                                 needsLitTextured, needsLitUntextured, needsLitColored);
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
         // plans/plan_fx.md FX-065: a compiled Effect owns the whole program, so it replaces the stock
         // stride-dispatched selection above rather than layering on it. Everything the deferred
