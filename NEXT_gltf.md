@@ -47,7 +47,7 @@ session needs to start work without re-deriving the state.
   needed one missing development symlink (`libwayland-egl.so.1` is installed, `libwayland-dev` is
   not); with the linker pointed at the installed runtime library it builds and runs, 705/709 glTF
   and PBR tests. The live draw tier is now **fourteen** renderers.
-- **Build trees for this checkout belong on `/media/robertvokac/claude/tmp/cna/`** (owner's
+- **Build trees for this checkout belong on `build-probe/`** (owner's
   instruction, 2026-08-18): a real directory there plus an in-repo symlink, since the repo disk was
   at 78% and that one has 92 GB free. `cmake-build-igl` and `cmake-build-bgfx` were moved that way;
   `cmake-build-gltf-fna3d` and `cmake-build-opengl1` were created there. Note the naming: that
