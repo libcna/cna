@@ -191,6 +191,44 @@ GL-incomplete under `Anisotropic`/`Mip*` filters.
 
 ---
 
+## 8. The half of Task 293 that a `SpriteBatch` frame never reached (`plans/plan_vulkan.md` VULKAN-166, 2026-09-07)
+
+Task 293 above fixed `GraphicsDevice.SamplerStates[u]` for the **3D** draw entry points, by adding
+the missing `applySamplerStatesToRenderer()` calls to the eighteen `DrawUserPrimitives` overloads
+that lacked them. That is where it stopped, and the gap it left is exact: **that method runs from
+the draw entry points only**, so in a frame whose only drawing is a `SpriteBatch`, nothing ever
+pushed slots 1–15 to any renderer at all. The renderer kept whatever those slots held from an
+earlier 3D draw, or the state it was constructed with.
+
+Invisible for years, because a stock sprite draw uses exactly one texture and the batch carries its
+sampler down its own path (`ISpriteBatchRenderer::SetSamplerFilter`/`SetSamplerAddressMode`, and
+since VULKAN-164 `SetSamplerAddressModeWEXT`). It becomes decisive the moment a **custom effect**
+binds a second texture to the same batch: XNA governs the texture at sampler register *u* with
+`SamplerStates[u]`, and CNA gave every unit slot 0's state.
+
+**Fixed in the shared layer**, where FNA puts it: `SpriteBatch` now publishes the device's sampler
+states from the two places FNA's `PrepRenderState` runs — `Begin()` for `SpriteSortMode::Immediate`
+(which never reaches a batch flush) and the flush otherwise. One narrower difference remains and is
+worth stating rather than implying parity: XNA re-applies device state at every draw call, and
+CNA's sprite path does not go through the device's draw entry points, so a `SamplerStates[u]`
+assigned *between* `Begin()` and a `Draw()` reaches a `Deferred` batch (published at its flush) but
+not an `Immediate` one.
+
+**It publishes from slot 1 upward, deliberately.** Slot 0 already has a writer — the batch's own
+sampler, down the `ISpriteBatchRenderer` path — and giving one slot two writers with no ordering
+between them across twelve renderer families is the exact shape of the bug Task 293 fixed and of
+VULKAN-164's second defect. The consequence is that `GraphicsDevice.SamplerStates[0]` still does
+**not** hold the batch's `SamplerState` after `Begin()`, where FNA's `PrepRenderState` assigns it
+(`SpriteBatch.cs:1426`); that remaining divergence is tracked as `plans/plan_vulkan.md`
+VULKAN-194 rather than folded in here, because assigning it changes what a 3D draw *after* a
+`SpriteBatch` samples with, on every renderer at once.
+
+Pixel-proven on Vulkan by `Vulkan_ShaderEffect_PerUnitSampler`
+(`modules/renderers/vulkan/examples/vulkan_shader_effect_per_unit_sampler_test.cpp`): two 1×1×2
+volumes bound to units 0 and 1 of one `ShaderEffect`, sampled at `W = 1.25`, with `AddressW = Wrap`
+on one unit and `Clamp` on the other. One pixel separates all four possible worlds, and the test
+carries both mutations that produced them.
+
 ## Summary: what actually works today, per renderer
 
 **Updated 2026-07-11** — Vulkan/Bgfx mip `SetData` and EasyGL anisotropic filtering rows reflect

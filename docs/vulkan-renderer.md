@@ -314,6 +314,16 @@ covers it.
   `sampler3D` at 8–11, by `SetTexture` unit. The `SpriteBatch` draw's own texture stays at set 0
   binding 0. A unit nothing was bound to reads the renderer's white 1×1 rather than undefined
   memory.
+- **Sampler state** for unit *u* is `GraphicsDevice.SamplerStates[u]`, as in XNA — so two bound
+  textures in one batch can be filtered and addressed differently. Unit 0 is the exception, and it
+  is a deliberate one: a `SpriteBatch` owns slot 0 and publishes the state passed to `Begin()`
+  there, so unit 0 always carries the batch's own sampler no matter what `SamplerStates[0]` holds.
+  Set `SamplerStates[1..15]` **before** `Begin()`. Setting them afterwards reaches a `Deferred`
+  batch, whose flush publishes them, but not an `Immediate` one, whose only publication point is
+  `Begin()` — XNA re-applies device state per draw call and CNA's sprite path does not go through
+  the device's draw entry points, so that narrow window is a CNA boundary rather than an XNA
+  promise. This matters most for `sampler3D`, whose `AddressW` is the one axis a 2D sprite never
+  exercises.
 - **Array uniforms** are four more bindings in set 1 — 12 `float`, 13 `vec2`, 14 `vec3`, 15 `mat4`
   — each holding 72 elements, which is XNA's own `SkinnedEffect.MaxBones`. Declare only the one
   you use. std140 pads a `float`, `vec2` or `vec3` array element to 16 bytes and this renderer

@@ -238,6 +238,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_texture3d_addressw
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-166: a ShaderEffect's texture unit u takes SamplerStates[u], so
+        # two bound volumes in one batch can be addressed differently.
+        cna_vulkan_test(cna_test_vulkan_shader_effect_per_unit_sampler
+                        vulkan_shader_effect_per_unit_sampler_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_ShaderEffect_PerUnitSampler
+            COMMAND cna_test_vulkan_shader_effect_per_unit_sampler
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-255: a ShaderEffect driving a 3D draw with a custom vertex layout.
         cna_vulkan_test(cna_test_vulkan_shader_effect_3d
                         vulkan_shader_effect_3d_test.cpp)

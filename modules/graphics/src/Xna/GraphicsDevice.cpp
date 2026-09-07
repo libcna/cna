@@ -3510,10 +3510,11 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
-    void GraphicsDevice::applySamplerStatesToRenderer()
+    void GraphicsDevice::applySamplerStatesToRenderer(int firstSlot)
     {
         if (!renderer_) return;
-        for (int i = 0; i < SamplerStateCollection::MaxSamplers; ++i)
+        if (firstSlot < 0) firstSlot = 0;
+        for (int i = firstSlot; i < SamplerStateCollection::MaxSamplers; ++i)
         {
             const SamplerState& ss = samplerStates_[i];
             renderer_->ApplySamplerState(i,

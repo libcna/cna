@@ -239,6 +239,14 @@ namespace Microsoft::Xna::Framework::Graphics
                     static_cast<int>(effectiveSampler.getAddressWProperty()));
                 renderer_->SetImmediateMode(sortMode_ == SpriteSortMode::Immediate);
                 renderer_->Begin();
+                // plan_vulkan.md VULKAN-166: FNA's PrepRenderState pushes the whole sampler state
+                // down, and it runs from Begin() for Immediate (where no flushBatch ever will) and
+                // from FlushBatch otherwise. Do the same, from the same two places. Slot 0 is
+                // excluded because the three calls above already carry the batch's own sampler to
+                // it; slots 1 and up had no writer at all in a SpriteBatch-only frame, so a
+                // ShaderEffect's second texture unit was sampled with the first one's state.
+                if (graphicsDevice_ != nullptr && sortMode_ == SpriteSortMode::Immediate)
+                    graphicsDevice_->applySamplerStatesToRenderer(1);
             }
             catch (...)
             {
@@ -365,6 +373,11 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void SpriteBatch::flushBatch()
     {
+        // plan_vulkan.md VULKAN-166: before the empty check, matching FNA's FlushBatch, which
+        // calls PrepRenderState first and only then returns early on numSprites == 0.
+        if (graphicsDevice_ != nullptr)
+            graphicsDevice_->applySamplerStatesToRenderer(1);
+
         if (spriteQueue_.empty()) return;
 
         if (sortMode_ == SpriteSortMode::BackToFront)

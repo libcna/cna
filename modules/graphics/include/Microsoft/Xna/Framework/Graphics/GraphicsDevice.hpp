@@ -1567,7 +1567,19 @@ namespace Microsoft::Xna::Framework::Graphics
         void SetVirtualResolution(int width, int height);
         void SetPresentationMode(int mode);
         void applyPresentationParametersToWindow();
-        void applySamplerStatesToRenderer();
+        /**
+         * @brief Pushes SamplerStates[firstSlot..MaxSamplers-1] down to the renderer.
+         *
+         * Called from every draw entry point with the default, and from SpriteBatch's flush
+         * with firstSlot == 1 (plan_vulkan.md VULKAN-166): a sprite batch owns slot 0 through
+         * ISpriteBatchRenderer::SetSamplerFilter/SetSamplerAddressMode/SetSamplerAddressModeWEXT,
+         * so re-publishing it here would give one slot two writers with no ordering between them
+         * across the renderer families. Slots 1 and up have no other writer at all, which is why
+         * a ShaderEffect's second texture unit could not be sampled differently from its first.
+         *
+         * @param firstSlot Lowest sampler slot to publish; slots below it are left alone.
+         */
+        void applySamplerStatesToRenderer(int firstSlot = 0);
 
         /**
          * @brief Resets Viewport and ScissorRectangle to (0, 0, width, height).

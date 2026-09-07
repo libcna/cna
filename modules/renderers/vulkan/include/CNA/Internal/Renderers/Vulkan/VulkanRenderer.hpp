@@ -668,7 +668,10 @@ namespace CNA::Internal::Renderers::Vulkan
         /// plan_vulkan.md VULKAN-164: the sampler the current set was built with. The set is
         /// rebuilt when it changes, because two batches can bind the same textures with
         /// different SamplerStates and the second must not reuse the first one's sampler.
-        VkSampler             boundSetSampler_ = VK_NULL_HANDLE;
+        /// VULKAN-166 made it one entry per texture unit rather than one for the whole set: in
+        /// XNA the texture at sampler register `u` is governed by `SamplerStates[u]`, so unit 1
+        /// can differ from unit 0 and the freshness test has to see that.
+        std::array<VkSampler, kMaxEffectBoundTextures> boundSetSamplers_{};
         /// VULKAN-252: the CPU-side copy of the four arrays, in the layout the buffer holds. Each
         /// element occupies 16 bytes for `float`, `vec2` and `vec3` alike, which is what std140
         /// does to an array of any of them -- so a shader declaring `float uFloats[72]` reads
