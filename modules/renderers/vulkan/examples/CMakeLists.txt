@@ -2383,6 +2383,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_presentation_parameters
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-398: 120 frames of everything at once, asserting the LAST frame
+        # and that no cache grew across the last eighty.
+        cna_vulkan_test(cna_test_vulkan_repeated_use_stress
+                        vulkan_repeated_use_stress_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_RepeatedUseStress
+            COMMAND cna_test_vulkan_repeated_use_stress
+            TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-178: Texture2D::FromStream and SaveAsPng/SaveAsJpeg, both of which
         # go through this renderer's own upload and readback paths. The sources are SDL_Renderer's
         # (Tasks 682/683) and contain nothing renderer-specific but the presentation mode they
