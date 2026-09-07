@@ -88,6 +88,16 @@ on it) rather than assuming either way.
   contract of the `Microsoft::Xna::Framework::Content::Pipeline` façade over that engine
   (`plans/plan_xnapipeline_parity.md`); `xna-content-pipeline-parity-report.md` is the generated
   member-by-member parity report.
+- **[`xna-content-pipeline-migration.md`](xna-content-pipeline-migration.md)** — porting an
+  existing XNA content project: building the `.contentproj` you already have, the source-directory
+  and custom-compiler routes, `.xnb` versus `.cnb`, custom importers/processors/writers, the `.xml`
+  route, and what behaves differently on purpose. The content half of `migration-guide.md`.
+- **[`xna-content-pipeline-components.md`](xna-content-pipeline-components.md)** — generated
+  reference for every built-in importer, every extension it declares, every processor and every
+  processor property, with the XNA default each answered and CNA's C++ spelling of it.
+- **[`xna-content-pipeline-final-audit.md`](xna-content-pipeline-final-audit.md)** — generated: the
+  twenty-six conditions the pipeline parity mission set for calling the local work done, each
+  checked against the file or the named test that is its evidence.
 - **[`xna-intermediate-xml-format.md`](xna-intermediate-xml-format.md)** — the XNA 4.0
   intermediate XML format as measured by running the genuine `IntermediateSerializer`; the
   specification CNA's serializer and `XmlImporter` implement, backed by the corpus in

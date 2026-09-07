@@ -156,30 +156,48 @@ engineering time — so don't plan a port around them without checking current s
 decision, is **fixed as of Task 447/854, 2026-07-10** — real per-draw-call query correlation is now
 implemented; see `docs/occlusionquery-support.md`.)
 
-## Content pipeline: the other big difference
+## Content pipeline: no longer the other big difference
 
-Real XNA/FNA games ship compiled `.xnb` binary assets built by the Content Pipeline build tool.
-**CNA's `ContentManager` does not read `.xnb` files at all** — it uses a file-extension-based
-loader instead (e.g. loading a `.png`/`.jpg` directly for a `Texture2D`, a `.model.json` for a
-`Model`). If your game ships `.xnb` assets, you cannot point CNA's `ContentManager` at them
-unchanged — you'll need to either re-export your source assets in a format CNA's loaders
-recognize, or write a new loader. `ContentReader`/`ContentTypeReaderManager`/`LzxDecoder` (the
-classes that would read raw XNB binaries) are intentionally not implemented in CNA (see
-`docs/xna-4-api-coverage.md` §3/§6). `Model`'s own content-pipeline loader additionally has real
-gaps versus FNA's `.xnb` format today (no bone hierarchy, no `ParentBone` wiring — Task 440); a
-hand-built `Model` via its public constructors works today, but loading one through
-`ContentManager` does not yet fully round-trip a real FNA-authored model asset.
+**This section described the state before the content pipeline existed, and was wrong from the
+moment it did; it is corrected here (`plans/plan_xnapipeline_parity.md` `XNAPP-320`, 2026-09-07).**
+It said that CNA's `ContentManager` does not read `.xnb` at all and that
+`ContentReader`/`ContentTypeReaderManager`/`LzxDecoder` are intentionally not implemented. All of
+that is now false, and the paragraph above ("The former blockers that matter to existing ports")
+had already said so.
+
+What is true today:
+
+* **`ContentManager` reads `.xnb`**, through `ContentReader`, `ContentTypeReaderManager` and a real
+  LZX decoder, for every registered built-in reader.
+* **The build side exists too**: `cna-content` is a content pipeline with XNA's own importers and
+  processors, and it writes both CNA's `.cnb` and XNA's `.xnb`. Eleven asset families of its `.xnb`
+  output are verified by loading them in a genuine XNA 4.0 runtime.
+* **Your `.contentproj` is an input**, built as a project, with its own platform, profile,
+  compression and per-item components.
+
+The whole of that story — the three ways in, the container choice, custom importers and
+processors, the `.xml` route, and what still behaves differently on purpose — is
+**[`xna-content-pipeline-migration.md`](xna-content-pipeline-migration.md)**, which is the document
+to read for the content half of a port. The per-component reference is
+[`xna-content-pipeline-components.md`](xna-content-pipeline-components.md) and the member-by-member
+parity matrix is [`xna-content-pipeline-parity-report.md`](xna-content-pipeline-parity-report.md).
+
+`Model` remains the one asset worth checking by hand: its loader's gaps versus a real FNA-authored
+model (bone hierarchy, `ParentBone` wiring — Task 440) are tracked separately from the pipeline
+work above.
 
 ## Summary checklist for a new port
 
 1. Rewrite every C# property access as `getXProperty()`/`setXProperty()`.
 2. Pick a renderer: SDL_Renderer for 2D-only, EasyGL for anything with 3D.
-3. Re-export or rewrite your content pipeline — don't expect `.xnb` assets to load unchanged.
+3. Bring your content across with [`xna-content-pipeline-migration.md`](xna-content-pipeline-migration.md):
+   build the `.contentproj` you already have, or point `cna-content` at the source directory.
+   Existing `.xnb` files load as they are.
 4. Check the "what doesn't work yet" list above against your game's actual feature use before
    committing to a renderer.
-5. Check whether your game loads custom `.fx` effect bytecode or ships `.xnb` content — both are
-   currently unsupported (see "The two gaps that actually matter" above) and are the most common
-   reasons a real XNA/FNA game can't port as-is yet.
+5. If your game loads compiled `.fx` bytecode, check the renderer: it needs FNA3D, SDL_GPU or the
+   EasyGL/OpenGL family with compiled effects configured in (see "The former blockers that matter
+   to existing ports" above).
 
 ## 2D compatibility checklist (Task 487)
 
@@ -286,7 +304,7 @@ an intentional, documented CNA convenience, not a signature mismatch.
 |---|---|---|
 | `Model::Draw(Matrix world, Matrix view, Matrix projection)` | ✅ | Correct on EasyGL/Vulkan/Bgfx; throws on SDL_Renderer by design. |
 | Constructing a `Model` by hand (`CNAEXT` constructors) | ✅ | **Fixed, Task 916** (2026-07-09) — an optional `rootBoneIndex` parameter (default `0`) now lets you specify a root bone other than `bones[0]`. |
-| Loading a `Model` via `ContentManager` | ⚠️ | CNA's own `.model.json` format, not FNA's `.xnb` — real gaps versus FNA's loader (no bone hierarchy/`ParentBone`/`BoundingSphere`/`Tag` wiring, Task 440). Don't expect an FNA-authored `.xnb` model to load as-is; see "Content pipeline" above. |
+| Loading a `Model` via `ContentManager` | ⚠️ | An `.xnb` model loads through `ModelReader`, and the reader is swept over a corpus by the `CnaXnbModelCorpusSweep` ctest; CNA's own `.cnb`/`.model.json` routes remain. The loader gaps recorded under Task 440 (bone hierarchy/`ParentBone`/`BoundingSphere`/`Tag` wiring) are tracked separately, so check a real authored model rather than assuming either extreme. See "Content pipeline" above. |
 | `ModelMesh`/`ModelBone` collections (`ModelMeshCollection`, `ModelBoneCollection`) | ✅ | `TryGetValue`/`Contains`/`begin()`/`end()` all present (Tasks 432/433). |
 | `Model::CopyBoneTransformsFrom`/`To` | ⚠️ | Loop bound is `Bones.Count`, not the caller array's length like FNA — an intentional, safer deviation (see "Known deviations" list), not a bug. |
 

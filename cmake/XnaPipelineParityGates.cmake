@@ -56,6 +56,32 @@ add_test(NAME XnaPipelineInputParityMatrixIsCurrent
 set_tests_properties(XnaPipelineParityReportIsCurrent XnaPipelineInputParityMatrixIsCurrent
                      PROPERTIES LABELS "parity;xnapipeline")
 
+# The component reference (XNAPP-320): every importer, every extension it declares, every processor
+# and every processor property, joined with CNA's spelling of each. It is generated from the same
+# three measured files the report is, so the same `--check` keeps it from drifting: a property whose
+# default changes, or one CNA stops spelling, fails here rather than being read by somebody a year
+# later as though it were still true.
+add_test(NAME XnaPipelineComponentReferenceIsCurrent
+         COMMAND "${Python3_EXECUTABLE}" "${_xnapp_oracle}/component_reference.py"
+                 --inventory "${_xnapp_reference}/content-pipeline-api.json"
+                 --map "${_xnapp_reference}/content-pipeline-parity-map.json"
+                 --inputs "${_xnapp_reference}/content-pipeline-inputs.json"
+                 --output "${CMAKE_CURRENT_SOURCE_DIR}/docs/xna-content-pipeline-components.md"
+                 --check)
+set_tests_properties(XnaPipelineComponentReferenceIsCurrent PROPERTIES LABELS "parity;xnapipeline")
+
+# The mission's own definition of done, executed rather than asserted (XNAPP-330). Twenty-six
+# conditions, each checked against the file or the named test that is its evidence: a renamed test,
+# a deleted gate registration or a missing document fails this, and so does a committed audit
+# document that is not what a regeneration writes. What it deliberately does not do is re-run the
+# suite -- a test that exists but fails is a red suite, and that is the suite's own answer.
+add_test(NAME XnaPipelineFinalAuditIsGreen
+         COMMAND "${Python3_EXECUTABLE}" "${_xnapp_oracle}/final_audit.py"
+                 --repo "${CMAKE_CURRENT_SOURCE_DIR}"
+                 --output "${CMAKE_CURRENT_SOURCE_DIR}/docs/xna-content-pipeline-final-audit.md"
+                 --check)
+set_tests_properties(XnaPipelineFinalAuditIsGreen PROPERTIES LABELS "parity;xnapipeline")
+
 # =====================================================================================
 # The rest of the plan's §29 gates, as ctests (plans/plan_xnapipeline_parity.md XNAPP-310).
 #
