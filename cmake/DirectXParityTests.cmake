@@ -16,7 +16,7 @@ function(cna_register_d3d_parity_tests)
     macro(cna_d3d_parity_fixture)
         cmake_parse_arguments(F
             "DIRECTX11_ONLY;DIRECTX12_ONLY;DIRECTX12_NO_HEADLESS"
-            "NAME;TARGET;SOURCE;DIRECTX11_TIMEOUT;DIRECTX12_TIMEOUT;DIRECTX12_ORDER;REASON;DIRECTX11_ENVIRONMENT"
+            "NAME;TARGET;SOURCE;DIRECTX11_TIMEOUT;DIRECTX12_TIMEOUT;DIRECTX12_ORDER;REASON;DIRECTX11_ENVIRONMENT;WORKING_DIRECTORY"
             ""
             ${ARGN})
 
@@ -42,6 +42,7 @@ function(cna_register_d3d_parity_tests)
         set(_cna_d3d_fixture_${F_NAME}_DIRECTX12_ONLY "${F_DIRECTX12_ONLY}")
         set(_cna_d3d_fixture_${F_NAME}_DIRECTX12_NO_HEADLESS "${F_DIRECTX12_NO_HEADLESS}")
         set(_cna_d3d_fixture_${F_NAME}_DIRECTX11_ENVIRONMENT "${F_DIRECTX11_ENVIRONMENT}")
+        set(_cna_d3d_fixture_${F_NAME}_WORKING_DIRECTORY "${F_WORKING_DIRECTORY}")
         set(_cna_d3d_fixture_${F_NAME}_REASON "${F_REASON}")
 
         if(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11")
@@ -139,6 +140,64 @@ function(cna_register_d3d_parity_tests)
         NAME TriangleStripWinding TARGET triangle_strip_winding DIRECTX12_ORDER 530
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/triangle_strip_winding_test.cpp"
         DIRECTX11_TIMEOUT 600 DIRECTX12_TIMEOUT 900)
+    cna_d3d_parity_fixture(
+        NAME BasicEffect_Properties TARGET basiceffect_properties DIRECTX12_ORDER 540
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/basic_effect_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME BasicEffect_Golden TARGET basiceffect_golden DIRECTX12_ORDER 550
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_basiceffect_golden_test.cpp"
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    cna_d3d_parity_fixture(
+        NAME BasicEffect_PositionNormal TARGET basiceffect_position_normal DIRECTX12_ORDER 560
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_basiceffect_position_normal_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME BasicEffect_MultiLightEmissive TARGET basiceffect_multilight_emissive DIRECTX12_ORDER 570
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_basiceffect_multilight_emissive_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME BasicEffect_Specular TARGET basiceffect_specular DIRECTX12_ORDER 580
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_basiceffect_specular_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME BasicEffect_PreferPerPixelLighting TARGET basiceffect_preferperpixellighting DIRECTX12_ORDER 590
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_basiceffect_preferperpixellighting_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME BasicEffect_Combinations TARGET basiceffect_combinations DIRECTX12_ORDER 600
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_basiceffect_combinations_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME BasicEffect_VertexColorDisabled TARGET basiceffect_vertexcolor_disabled DIRECTX12_ORDER 610
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_basiceffect_vertexcolor_disabled_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME BasicEffect_VertexColorEnabled TARGET basiceffect_vertexcolor_enabled DIRECTX12_ORDER 620
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_basiceffect_vertexcolor_enabled_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME BasicEffect_TextureEnabled TARGET basiceffect_texture_enabled DIRECTX12_ORDER 630
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_basiceffect_texture_enabled_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME BasicEffect_TextureVertexColorEnabled TARGET basiceffect_texture_vertexcolor_enabled DIRECTX12_ORDER 640
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_basiceffect_texture_vertexcolor_enabled_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME BasicEffect_OneLight TARGET basiceffect_one_light DIRECTX12_ORDER 650
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_basiceffect_one_light_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME BasicEffect_Emissive TARGET basiceffect_emissive DIRECTX12_ORDER 660
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_basiceffect_emissive_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME BasicEffect_Combined TARGET basiceffect_combined DIRECTX12_ORDER 670
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_basiceffect_combined_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME BasicEffect_DefaultLighting TARGET basiceffect_default_lighting DIRECTX12_ORDER 680
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_basiceffect_default_lighting_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME BasicEffect_Fog TARGET basiceffect_fog DIRECTX12_ORDER 690
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_basiceffect_fog_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME BasicEffect_VertexColorClamp TARGET basiceffect_vertex_color_clamp DIRECTX12_ORDER 700
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_basiceffect_vertex_color_clamp_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME BasicEffect_WorldScalePrecision TARGET basiceffect_world_scale_precision DIRECTX12_ORDER 710
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_basiceffect_world_scale_precision_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME BasicEffect_LitVertexColor TARGET basiceffect_lit_vertex_color DIRECTX12_ORDER 720
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_basiceffect_lit_vertex_color_test.cpp")
     cna_d3d_parity_fixture(
         NAME Pbr_VertexColor TARGET pbr_vertexcolor SOURCE directx11_pbr_vertexcolor_test.cpp
         DIRECTX11_ONLY REASON "The fixture directly exercises the D3D11 PBR frontend")
@@ -361,6 +420,10 @@ function(cna_register_d3d_parity_tests)
             endif()
         endif()
 
+        if(_cna_d3d_fixture_${_cna_d3d_fixture}_WORKING_DIRECTORY)
+            list(APPEND _cna_d3d_registration WORKING_DIRECTORY
+                "${_cna_d3d_fixture_${_cna_d3d_fixture}_WORKING_DIRECTORY}")
+        endif()
         cna_register_renderer_test(${_cna_d3d_registration})
     endforeach()
 endfunction()

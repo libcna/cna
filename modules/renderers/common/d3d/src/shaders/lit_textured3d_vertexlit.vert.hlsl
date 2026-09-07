@@ -108,11 +108,14 @@ VSOutput main(VSInput input)
     float3 h0 = normalize(E - nL0); float spec0 = pow(max(dot(h0, N), 0.0) * zeroL0, SpecularColorPower.w);
     float3 h1 = normalize(E - nL1); float spec1 = pow(max(dot(h1, N), 0.0) * zeroL1, SpecularColorPower.w);
     float3 h2 = normalize(E - nL2); float spec2 = pow(max(dot(h2, N), 0.0) * zeroL2, SpecularColorPower.w);
-    output.SpecularRGB = (spec0 * Light0SpecularPad.xyz + spec1 * Light1SpecularPad.xyz
-                          + spec2 * Light2SpecularPad.xyz) * SpecularColorPower.xyz;
+    output.SpecularRGB = saturate(
+        (spec0 * Light0SpecularPad.xyz + spec1 * Light1SpecularPad.xyz
+         + spec2 * Light2SpecularPad.xyz) * SpecularColorPower.xyz);
 
-    output.LitRGB =
-        (lightSum * DiffuseColor.rgb + EmissiveColorPad.xyz) * vertexColor.rgb;
+    // XNA's D3D9 COLOR outputs clamp before interpolation. These TEXCOORD outputs need the
+    // equivalent explicit clamp on newer D3D shader models.
+    output.LitRGB = saturate(
+        (lightSum * DiffuseColor.rgb + EmissiveColorPad.xyz) * vertexColor.rgb);
 
     // REMED-GFX-005/010: FNA view-space fog. FogVector now carries EffectHelpers.SetFogVector
     // (World*View 3rd column baked CPU-side); keep = 1 - saturate(dot(pos, fogVector)) is the
