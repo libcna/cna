@@ -26,6 +26,11 @@ namespace CNA::Internal::Renderers::D3DCommon
         Textured3d,
         ColoredTextured3d,
         LitTextured3d,
+        /// BasicEffect's per-pixel-lit vertex-color family.
+        LitTextured3dColored,
+        /// BasicEffect Position+Normal input variant. It shares LitTextured3d's pixel shader but
+        /// does not require UV or Color inputs from the caller's declaration.
+        LitUntextured3d,
         AlphaTest3d,
         DualTexture3d,
         EnvMap3d,
@@ -40,6 +45,10 @@ namespace CNA::Internal::Renderers::D3DCommon
         /// LitTextured3d/Skinned3d, selected when GpuDrawParams::preferPerPixelLighting is false
         /// (XNA's real default) -- identical Blinn-Phong math, evaluated in the vertex stage.
         LitTextured3dVertexLit,
+        /// BasicEffect's default per-vertex-lit vertex-color family.
+        LitTextured3dVertexLitColored,
+        /// Per-vertex-lit counterpart of LitUntextured3d.
+        LitUntextured3dVertexLit,
         Skinned3dVertexLit,
         /// plans/plan_cnj.md CNB-58 follow-up: PbrEffect's metallic-roughness BRDF (unskinned), HLSL
         /// port of EasyGLRenderer::EnsurePbrProgram(). Stride 48

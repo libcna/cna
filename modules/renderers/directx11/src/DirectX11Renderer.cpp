@@ -1042,7 +1042,8 @@ namespace CNA::Internal::Renderers::DirectX11
         if (!vs || !ps)
             throw std::runtime_error("DrawColoredPrimitives: failed to create colored3d shader objects");
 
-        auto layout = inputLayoutCache_.GetOrCreate(device_.Get(), variant, stride);
+        auto layout = inputLayoutCache_.GetOrCreate(
+            device_.Get(), variant, stride, d3dVb.GetDeclarationEXT().GetElements());
         if (!layout)
             throw std::runtime_error("DrawColoredPrimitives: failed to create colored3d input layout");
 
@@ -1104,7 +1105,8 @@ namespace CNA::Internal::Renderers::DirectX11
         if (!vs || !ps)
             throw std::runtime_error("DrawIndexedColoredPrimitives: failed to create colored3d shader objects");
 
-        auto layout = inputLayoutCache_.GetOrCreate(device_.Get(), variant, stride);
+        auto layout = inputLayoutCache_.GetOrCreate(
+            device_.Get(), variant, stride, d3dVb.GetDeclarationEXT().GetElements());
         if (!layout)
             throw std::runtime_error("DrawIndexedColoredPrimitives: failed to create colored3d input layout");
 
@@ -1385,15 +1387,22 @@ namespace CNA::Internal::Renderers::DirectX11
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
-        // REMED-GFX-DECL-GUARD: before any ID3D11InputLayout is created and before any draw is
-        // issued. This renderer selects that layout from the shared D3DCommon stride table
-        // (REMED-GFX-217), so a declaration the table's entry cannot represent is refused rather
-        // than rendered from the wrong bytes. An out-of-table stride is left to
-        // InputElementsForStride's own established rejection.
-        RequireFaithfulDeclarationEXT(vb, ib != nullptr ? "ordinary-indexed" : "ordinary-nonindexed");
         // DX-62/DX-63/DX-64/DX-65/DX-66/DX-67: real effect-aware variant dispatch.
         const auto& d3dVb = static_cast<const D3D11VertexBufferRenderer&>(vb);
         const std::size_t stride = d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
+        const auto& vertexElements = d3dVb.GetDeclarationEXT().GetElements();
+        using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+        const bool hasDeclaration = !vertexElements.empty();
+        const auto hasElement = [&](VertexElementUsage usage, int usageIndex = 0)
+        {
+            return D3DCommon::DeclarationHasElement(vertexElements, usage, usageIndex);
+        };
+        const bool hasNormal = hasDeclaration ? hasElement(VertexElementUsage::Normal)
+                                              : stride == 32;
+        const bool hasColor = hasDeclaration ? hasElement(VertexElementUsage::Color)
+                                             : stride == 16 || stride == 24;
+        const bool hasTexCoord = hasDeclaration ? hasElement(VertexElementUsage::TextureCoordinate)
+                                                : stride == 20 || stride == 24 || stride == 32;
 
         // A PBR MASK draw keeps the PBR shader and evaluates alpha coverage there. The standalone
         // AlphaTestEffect path only accepts stride 20/24 and cannot carry a tangent-space basis.
@@ -1409,10 +1418,9 @@ namespace CNA::Internal::Renderers::DirectX11
         // skinned3d's non-PBR shader).
         const bool needsSkinned     = params.skinned && !needsPbr
                                      && !needsAlphaTest && !needsDualTex && !needsEnvMap;
-        // stride==32 always uses lit_textured3d (BasicEffect's VertexPositionNormalTexture path,
-        // lit or not -- the shader itself branches on LightingEnabled), unless a higher-priority
-        // effect claims this draw first. Mirrors VulkanRenderer::DrawPrimitivesEx exactly.
-        const bool needsLitTextured = (stride == 32) && !needsAlphaTest && !needsDualTex
+        // A declared normal selects BasicEffect's lit family regardless of the record's byte size.
+        // The stride-only rule remains solely for internal buffers that carry no declaration.
+        const bool needsLitTextured = hasNormal && !needsAlphaTest && !needsDualTex
                                      && !needsEnvMap && !needsPbr && !needsSkinned;
 
         // DX-136: alpha_test3d.vert.hlsl (stride 20, Position+UV) and its sibling
@@ -1489,21 +1497,29 @@ namespace CNA::Internal::Renderers::DirectX11
                         : D3DCommon::D3DShaderVariant::Skinned3d);
         else if (needsLitTextured)
             // Same real-default fix for BasicEffect's lit-textured bucket.
-            variant = (params.lightingEnabled && !params.preferPerPixelLighting)
-                    ? D3DCommon::D3DShaderVariant::LitTextured3dVertexLit
-                    : D3DCommon::D3DShaderVariant::LitTextured3d;
+            variant = hasTexCoord
+                ? (hasColor
+                    ? ((params.lightingEnabled && !params.preferPerPixelLighting)
+                        ? D3DCommon::D3DShaderVariant::LitTextured3dVertexLitColored
+                        : D3DCommon::D3DShaderVariant::LitTextured3dColored)
+                    : ((params.lightingEnabled && !params.preferPerPixelLighting)
+                        ? D3DCommon::D3DShaderVariant::LitTextured3dVertexLit
+                        : D3DCommon::D3DShaderVariant::LitTextured3d))
+                : ((params.lightingEnabled && !params.preferPerPixelLighting)
+                    ? D3DCommon::D3DShaderVariant::LitUntextured3dVertexLit
+                    : D3DCommon::D3DShaderVariant::LitUntextured3d);
         else
         {
-            switch (stride)
-            {
-            case 16: variant = D3DCommon::D3DShaderVariant::Colored3d; break;
-            case 20: variant = D3DCommon::D3DShaderVariant::Textured3d; break;
-            case 24: variant = D3DCommon::D3DShaderVariant::ColoredTextured3d; break;
-            default:
+            if (hasTexCoord && hasColor)
+                variant = D3DCommon::D3DShaderVariant::ColoredTextured3d;
+            else if (hasTexCoord)
+                variant = D3DCommon::D3DShaderVariant::Textured3d;
+            else if (hasColor || hasDeclaration)
+                variant = D3DCommon::D3DShaderVariant::Colored3d;
+            else
                 throw std::runtime_error(
                     "DirectX11Renderer::DrawPrimitivesEx: unsupported vertex stride " +
                     std::to_string(stride) + " for the colored/textured bundle (plans/plan_dx.md DX-62)");
-            }
         }
 
         auto vs = D3DCommon::CreateVertexShaderForVariant(device_.Get(), variant);
@@ -1511,7 +1527,8 @@ namespace CNA::Internal::Renderers::DirectX11
         if (!vs || !ps)
             throw std::runtime_error("DrawPrimitivesEx: failed to create shader objects for the selected variant");
 
-        auto layout = inputLayoutCache_.GetOrCreate(device_.Get(), variant, stride);
+        auto layout = inputLayoutCache_.GetOrCreate(
+            device_.Get(), variant, stride, vertexElements);
         if (!layout)
             throw std::runtime_error("DrawPrimitivesEx: failed to create input layout for the selected variant/stride");
 

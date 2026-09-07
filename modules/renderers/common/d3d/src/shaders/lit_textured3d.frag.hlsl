@@ -46,11 +46,19 @@ struct PSInput
     float4 Tint      : TEXCOORD2;
     float3 WorldPos  : TEXCOORD3;
     float  FogFactor : TEXCOORD4;
+#ifdef CNA_LIT_VERTEX_COLOR_INPUT
+    float4 Color     : TEXCOORD5;
+#endif
 };
 
 float4 main(PSInput input) : SV_Target
 {
     float4 tex = (TextureEnabled > 0.5) ? uTexture.Sample(uTextureSampler, input.UV) : float4(1.0, 1.0, 1.0, 1.0);
+#ifdef CNA_LIT_VERTEX_COLOR_INPUT
+    float4 vertexColor = (VertexColorEnabled > 0.5) ? input.Color : float4(1.0, 1.0, 1.0, 1.0);
+#else
+    const float4 vertexColor = float4(1.0, 1.0, 1.0, 1.0);
+#endif
 
     float4 color;
     if (LightingEnabled > 0.5)
@@ -77,14 +85,14 @@ float4 main(PSInput input) : SV_Target
         // EmissiveColor is added after the light-sum*DiffuseColor multiply, not scaled by it
         // (matches FNA's Lighting.fxh: result.Diffuse = sum*DiffuseColor + EmissiveColor).
         float3 lit = lightSum * input.Tint.rgb + EmissiveColorPad.xyz;
-        color = float4(lit, input.Tint.a) * tex;
+        color = float4(lit, input.Tint.a) * tex * vertexColor;
         // Specular is added after the texture*diffuse multiply, scaled by the resulting alpha
         // (FNA's AddSpecular macro), never by the texture directly.
         color.rgb += specularRGB * color.a;
     }
     else
     {
-        color = input.Tint * tex;
+        color = input.Tint * tex * vertexColor;
     }
     // Task 888: mix toward FogColor as FogFactor -> 0 (matches EasyGL's established formula).
     color.rgb = lerp(FogColor.xyz, color.rgb, input.FogFactor);

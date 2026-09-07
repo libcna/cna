@@ -9,10 +9,38 @@
 
 #include <d3d11.h>
 #include <d3d12.h>
+#include <array>
 #include <cstddef>
+#include <vector>
+
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 
 namespace CNA::Internal::Renderers::D3DCommon
 {
+    using D3DVertexDeclarationKey = std::vector<std::array<int, 4>>;
+
+    /// Returns a stable, value-based cache key for a caller-provided vertex declaration.
+    D3DVertexDeclarationKey VertexDeclarationCacheKey(
+        const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& elements);
+
+    /// Translates a caller-provided XNA vertex declaration to D3D11 input elements.
+    /// Returns false if an element carries an invalid format, usage or negative offset/index.
+    bool InputElementsForDeclaration(
+        const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& elements,
+        std::vector<D3D11_INPUT_ELEMENT_DESC>& output);
+
+    /// Translates a caller-provided XNA vertex declaration to D3D12 input elements.
+    /// Returns false if an element carries an invalid format, usage or negative offset/index.
+    bool InputElementsForDeclarationD3D12(
+        const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& elements,
+        std::vector<D3D12_INPUT_ELEMENT_DESC>& output);
+
+    /// Returns whether the declaration contains the requested semantic and usage index.
+    bool DeclarationHasElement(
+        const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& elements,
+        Microsoft::Xna::Framework::Graphics::VertexElementUsage usage,
+        int usageIndex = 0);
+
     /// Returns the D3D11_INPUT_ELEMENT_DESC array (and its element count via @p count) for the
     /// given vertex stride in bytes, or nullptr / count=0 if the stride is not one of this
     /// project's established stride-keyed layouts (16/20/24/32/48/52/56/68).

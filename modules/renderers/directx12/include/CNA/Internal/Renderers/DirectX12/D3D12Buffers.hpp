@@ -44,9 +44,8 @@ namespace CNA::Internal::Renderers::DirectX12
         D3D12VertexBufferRenderer(DirectX12Renderer* renderer, int vertex_capacity);
 
         void SetData(const void* data, int vertex_count, std::size_t stride_in_bytes) override;
-        // REMED-GFX-DECL-GUARD: this renderer still selects its D3D12_INPUT_LAYOUT_DESC from the
-        // shared D3DCommon stride table (REMED-GFX-217), but the declaration is remembered rather
-        // than discarded so a draw can refuse one that table would silently reinterpret.
+        // DX-221: ordinary draws translate this declaration into their native input layout.
+        // Instanced draws still use the legacy stride table and validate it before submission.
         void SetVertexDeclaration(const VertexDeclaration& vertexDeclaration) override
         {
             declaration_.Remember(vertexDeclaration);
@@ -54,7 +53,7 @@ namespace CNA::Internal::Renderers::DirectX12
         void SetDataWithOptions(const void* data, int vertex_count, std::size_t stride_in_bytes,
                                 SetDataOptions options) override;
         [[nodiscard]] int GetVertexCount() const override { return vertexCount_; }
-        /// The declaration this buffer carries, for REMED-GFX-DECL-GUARD's fidelity check.
+        /// The declaration this buffer carries for native layout translation and instancing checks.
         [[nodiscard]] const CNA::Internal::Graphics::DeclaredVertexLayout& GetDeclarationEXT() const
         {
             return declaration_;
@@ -82,8 +81,8 @@ namespace CNA::Internal::Renderers::DirectX12
         CNA::Internal::Graphics::DeclaredVertexLayout declaration_;
     };
 
-    /// REMED-GFX-DECL-GUARD: throws `System::NotSupportedException` unless @p vb's declaration can
-    /// be represented faithfully by the shared D3DCommon stride table's entry for its stride.
+    /// REMED-GFX-DECL-GUARD: protects the still-table-driven instanced route by throwing
+    /// `System::NotSupportedException` unless @p vb's declaration matches its stride-table entry.
     /// Pure: creates nothing, queues nothing and leaves no partial native object behind, so a
     /// rejected draw cannot poison the device. An out-of-table stride is left to the table's own
     /// established rejection.

@@ -1960,6 +1960,7 @@ namespace CNA::Internal::Renderers::DirectX12
         D3D12PipelineStateDesc psoDesc;
         psoDesc.variant = D3DShaderVariant::Colored3d;
         psoDesc.strideInBytes = 16;
+        psoDesc.vertexElements = d3dVb.GetDeclarationEXT().GetElements();
         psoDesc.topologyType = static_cast<int>(ToD3D12TopologyType(primitive)); // plans/plan_dx.md DX-208
         // DX-118: depth/cull/blend state is now real and runtime-settable via
         // ApplyDepthStencilState/ApplyRasterizerState/ApplyBlendState (tracked in this renderer's
@@ -2064,6 +2065,7 @@ namespace CNA::Internal::Renderers::DirectX12
         D3D12PipelineStateDesc psoDesc;
         psoDesc.variant = D3DShaderVariant::Colored3d;
         psoDesc.strideInBytes = 16;
+        psoDesc.vertexElements = d3dVb.GetDeclarationEXT().GetElements();
         psoDesc.topologyType = static_cast<int>(ToD3D12TopologyType(primitive)); // plans/plan_dx.md DX-208
         // DX-118: depth/cull/blend state is now real and runtime-settable -- see
         // DrawColoredPrimitives's own equivalent block for the full rationale/history.
@@ -2143,12 +2145,6 @@ namespace CNA::Internal::Renderers::DirectX12
     {
         // GLTF-394: reject line/point topology before declaration/target/PSO work can mask the reason.
         const D3D12_PRIMITIVE_TOPOLOGY nativeTopology = ToD3D12Topology(primitive);
-        // REMED-GFX-DECL-GUARD: before any D3D12_INPUT_LAYOUT_DESC is built and before any draw is
-        // issued. This renderer selects that layout from the shared D3DCommon stride table
-        // (REMED-GFX-217), so a declaration the table's entry cannot represent is refused rather
-        // than rendered from the wrong bytes. An out-of-table stride is left to
-        // InputElementsForStrideD3D12's own established rejection.
-        RequireFaithfulDeclarationEXT(vb, ib != nullptr ? "ordinary-indexed" : "ordinary-nonindexed");
         if (!boundColorResource_)
         {
             NotYetImplemented("DrawPrimitivesEx (no off-screen color target bound -- "
@@ -2157,6 +2153,19 @@ namespace CNA::Internal::Renderers::DirectX12
 
         const auto& d3dVb = static_cast<const D3D12VertexBufferRenderer&>(vb);
         const std::size_t stride = d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
+        const auto& vertexElements = d3dVb.GetDeclarationEXT().GetElements();
+        using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+        const bool hasDeclaration = !vertexElements.empty();
+        const auto hasElement = [&](VertexElementUsage usage, int usageIndex = 0)
+        {
+            return D3DCommon::DeclarationHasElement(vertexElements, usage, usageIndex);
+        };
+        const bool hasNormal = hasDeclaration ? hasElement(VertexElementUsage::Normal)
+                                              : stride == 32;
+        const bool hasColor = hasDeclaration ? hasElement(VertexElementUsage::Color)
+                                             : stride == 16 || stride == 24;
+        const bool hasTexCoord = hasDeclaration ? hasElement(VertexElementUsage::TextureCoordinate)
+                                                : stride == 20 || stride == 24 || stride == 32;
 
         // A PBR MASK draw keeps the PBR shader and evaluates alpha coverage there. The standalone
         // AlphaTestEffect path only accepts stride 20/24 and cannot carry a tangent-space basis.
@@ -2173,10 +2182,9 @@ namespace CNA::Internal::Renderers::DirectX12
         // dual-texture/env-map remain mutually exclusive effect families chosen afterwards.
         const bool needsSkinned = params.skinned && !needsPbr
                                  && !needsAlphaTest && !needsDualTex && !needsEnvMap;
-        // stride==32 always uses lit_textured3d (BasicEffect's VertexPositionNormalTexture path, lit
-        // or not -- the shader itself branches on LightingEnabled), unless a higher-priority effect
-        // claims the draw first -- same priority D3D11's own DrawPrimitivesExImpl uses.
-        const bool needsLitTextured = (stride == 32) && !needsAlphaTest && !needsDualTex
+        // A declared normal selects BasicEffect's lit family regardless of the record's byte size.
+        // The stride-only rule remains solely for internal buffers that carry no declaration.
+        const bool needsLitTextured = hasNormal && !needsAlphaTest && !needsDualTex
                                      && !needsEnvMap && !needsPbr && !needsSkinned;
 
         // env_map3d.vert.hlsl's VSInput is Position+Normal+UV (32 bytes), same as lit_textured3d.
@@ -2295,28 +2303,36 @@ namespace CNA::Internal::Renderers::DirectX12
         else if (needsLitTextured)
         {
             // Same real-default fix for BasicEffect's lit-textured bucket.
-            variant = (params.lightingEnabled && !params.preferPerPixelLighting)
-                    ? D3DShaderVariant::LitTextured3dVertexLit
-                    : D3DShaderVariant::LitTextured3d;
+            variant = hasTexCoord
+                ? (hasColor
+                    ? ((params.lightingEnabled && !params.preferPerPixelLighting)
+                        ? D3DShaderVariant::LitTextured3dVertexLitColored
+                        : D3DShaderVariant::LitTextured3dColored)
+                    : ((params.lightingEnabled && !params.preferPerPixelLighting)
+                        ? D3DShaderVariant::LitTextured3dVertexLit
+                        : D3DShaderVariant::LitTextured3d))
+                : ((params.lightingEnabled && !params.preferPerPixelLighting)
+                    ? D3DShaderVariant::LitUntextured3dVertexLit
+                    : D3DShaderVariant::LitUntextured3d);
             hasTexture = true;
             numCbvs = 2; // PerDraw (b0) + LitLightParams (b1).
             numSrvs = 1;
         }
         else
         {
-            hasTexture = (stride != 16);
+            hasTexture = hasTexCoord;
             numCbvs = 2; // PerDraw (b0) + FogParams (b1) -- including the stride-16 (colored3d) case.
             numSrvs = hasTexture ? 1 : 0;
-            switch (stride)
-            {
-            case 16: variant = D3DShaderVariant::Colored3d; break;
-            case 20: variant = D3DShaderVariant::Textured3d; break;
-            case 24: variant = D3DShaderVariant::ColoredTextured3d; break;
-            default:
+            if (hasTexCoord && hasColor)
+                variant = D3DShaderVariant::ColoredTextured3d;
+            else if (hasTexCoord)
+                variant = D3DShaderVariant::Textured3d;
+            else if (hasColor || hasDeclaration)
+                variant = D3DShaderVariant::Colored3d;
+            else
                 throw std::runtime_error(
                     "DirectX12Renderer::DrawPrimitivesEx: unsupported vertex stride " +
                     std::to_string(stride) + " for the colored/textured bundle (plans/plan_dx.md DX-111)");
-            }
         }
 
         const int numSamplers = numSrvs; // DX-119: one real, runtime-settable sampler descriptor
@@ -2329,6 +2345,7 @@ namespace CNA::Internal::Renderers::DirectX12
         D3D12PipelineStateDesc psoDesc;
         psoDesc.variant = variant;
         psoDesc.strideInBytes = stride;
+        psoDesc.vertexElements = vertexElements;
         psoDesc.topologyType = static_cast<int>(ToD3D12TopologyType(primitive)); // plans/plan_dx.md DX-208
         // DX-118: depth/cull/blend state is now real and runtime-settable -- see
         // DrawColoredPrimitives's own equivalent block for the full rationale/history.

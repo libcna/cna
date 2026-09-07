@@ -43,7 +43,20 @@ namespace CNA::Internal::Renderers::DirectX12
         GetPixelShaderBytecode(desc.variant, psBytes, psSize);
 
         UINT inputElementCount = 0;
-        const D3D12_INPUT_ELEMENT_DESC* inputElements = InputElementsForStrideD3D12(desc.strideInBytes, inputElementCount);
+        std::vector<D3D12_INPUT_ELEMENT_DESC> translatedElements;
+        const D3D12_INPUT_ELEMENT_DESC* inputElements = nullptr;
+        if (!desc.vertexElements.empty())
+        {
+            if (InputElementsForDeclarationD3D12(desc.vertexElements, translatedElements))
+            {
+                inputElements = translatedElements.data();
+                inputElementCount = static_cast<UINT>(translatedElements.size());
+            }
+        }
+        else
+        {
+            inputElements = InputElementsForStrideD3D12(desc.strideInBytes, inputElementCount);
+        }
 
         if (!device || !rootSignature || !vsBytes || !psBytes || !inputElements)
         {

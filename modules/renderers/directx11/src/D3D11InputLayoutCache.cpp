@@ -8,7 +8,17 @@ namespace CNA::Internal::Renderers::DirectX11
     ComPtr<ID3D11InputLayout> D3D11InputLayoutCache::GetOrCreate(
         ID3D11Device* device, D3DShaderVariant variant, std::size_t strideInBytes)
     {
-        const auto key = std::make_pair(static_cast<int>(variant), strideInBytes);
+        static const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement> noDeclaration;
+        return GetOrCreate(device, variant, strideInBytes, noDeclaration);
+    }
+
+    ComPtr<ID3D11InputLayout> D3D11InputLayoutCache::GetOrCreate(
+        ID3D11Device* device, D3DShaderVariant variant, std::size_t strideInBytes,
+        const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& declaration)
+    {
+        const Key key{
+            static_cast<int>(variant), strideInBytes,
+            CNA::Internal::Renderers::D3DCommon::VertexDeclarationCacheKey(declaration)};
         const auto it = cache_.find(key);
         if (it != cache_.end())
             return it->second;
@@ -16,8 +26,22 @@ namespace CNA::Internal::Renderers::DirectX11
         ComPtr<ID3D11InputLayout> layout;
 
         UINT elementCount = 0;
-        const D3D11_INPUT_ELEMENT_DESC* elements =
-            CNA::Internal::Renderers::D3DCommon::InputElementsForStride(strideInBytes, elementCount);
+        std::vector<D3D11_INPUT_ELEMENT_DESC> translatedElements;
+        const D3D11_INPUT_ELEMENT_DESC* elements = nullptr;
+        if (!declaration.empty())
+        {
+            if (CNA::Internal::Renderers::D3DCommon::InputElementsForDeclaration(
+                    declaration, translatedElements))
+            {
+                elements = translatedElements.data();
+                elementCount = static_cast<UINT>(translatedElements.size());
+            }
+        }
+        else
+        {
+            elements = CNA::Internal::Renderers::D3DCommon::InputElementsForStride(
+                strideInBytes, elementCount);
+        }
         if (elements == nullptr || elementCount == 0 || device == nullptr)
         {
             cache_.emplace(key, layout);

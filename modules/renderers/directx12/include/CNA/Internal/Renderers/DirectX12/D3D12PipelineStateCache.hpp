@@ -28,6 +28,7 @@
 // Scissor-enable is still out; that is DX-201.
 
 #include "CNA/Internal/Renderers/D3DCommon/D3DShaderCache.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DVertexFormatHelper.hpp"
 
 #include <d3d12.h>
 #include <wrl/client.h>
@@ -36,6 +37,7 @@
 #include <map>
 #include <tuple>
 #include <utility>
+#include <vector>
 
 namespace CNA::Internal::Renderers::DirectX12
 {
@@ -52,6 +54,7 @@ namespace CNA::Internal::Renderers::DirectX12
     {
         D3DShaderVariant variant = D3DShaderVariant::Colored3d;
         std::size_t strideInBytes = 16;
+        std::vector<Microsoft::Xna::Framework::Graphics::VertexElement> vertexElements;
 
         // Blend (D3DStateMapping::BlendToD3D11 / BlendFunctionToD3D11 ordinals -- raw
         // Microsoft::Xna::Framework::Graphics enum ordinals, fed through D3DStateMapping's own
@@ -133,15 +136,10 @@ namespace CNA::Internal::Renderers::DirectX12
         /// struct and forgetting it here is the one mistake that would make two different pipeline
         /// states share one cached PSO, so this list and the field list above are kept adjacent
         /// deliberately.
-        [[nodiscard]] std::tuple<int, std::size_t,
-                                 int, int, int, int, int, int,
-                                 bool, bool, int,
-                                 bool, int, int, int, int, int, int,
-                                 bool, int, int, int, int,
-                                 int, int, int, float,
-                                 int, unsigned, unsigned, int> AsCacheKeyEXT() const
+        [[nodiscard]] auto AsCacheKeyEXT() const
         {
             return std::make_tuple(static_cast<int>(variant), strideInBytes,
+                                   D3DCommon::VertexDeclarationCacheKey(vertexElements),
                                    colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend,
                                    colorBlendFunc, alphaBlendFunc,
                                    depthEnable, depthWriteEnable, depthFunc,

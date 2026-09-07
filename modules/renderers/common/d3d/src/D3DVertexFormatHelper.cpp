@@ -7,6 +7,50 @@ namespace CNA::Internal::Renderers::D3DCommon
 {
     namespace
     {
+        using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+        using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+
+        const char* SemanticName(VertexElementUsage usage)
+        {
+            switch (usage)
+            {
+                case VertexElementUsage::Position:          return "POSITION";
+                case VertexElementUsage::Color:             return "COLOR";
+                case VertexElementUsage::TextureCoordinate: return "TEXCOORD";
+                case VertexElementUsage::Normal:            return "NORMAL";
+                case VertexElementUsage::Binormal:          return "BINORMAL";
+                case VertexElementUsage::Tangent:           return "TANGENT";
+                case VertexElementUsage::BlendIndices:      return "BLENDINDICES";
+                case VertexElementUsage::BlendWeight:       return "BLENDWEIGHT";
+                case VertexElementUsage::Depth:             return "DEPTH";
+                case VertexElementUsage::Fog:               return "FOG";
+                case VertexElementUsage::PointSize:         return "PSIZE";
+                case VertexElementUsage::Sample:            return "SAMPLE";
+                case VertexElementUsage::TessellateFactor:  return "TESSFACTOR";
+            }
+            return nullptr;
+        }
+
+        DXGI_FORMAT DxgiFormat(VertexElementFormat format)
+        {
+            switch (format)
+            {
+                case VertexElementFormat::Single:           return DXGI_FORMAT_R32_FLOAT;
+                case VertexElementFormat::Vector2:          return DXGI_FORMAT_R32G32_FLOAT;
+                case VertexElementFormat::Vector3:          return DXGI_FORMAT_R32G32B32_FLOAT;
+                case VertexElementFormat::Vector4:          return DXGI_FORMAT_R32G32B32A32_FLOAT;
+                case VertexElementFormat::Color:            return DXGI_FORMAT_R8G8B8A8_UNORM;
+                case VertexElementFormat::Byte4:            return DXGI_FORMAT_R8G8B8A8_UINT;
+                case VertexElementFormat::Short2:           return DXGI_FORMAT_R16G16_SINT;
+                case VertexElementFormat::Short4:           return DXGI_FORMAT_R16G16B16A16_SINT;
+                case VertexElementFormat::NormalizedShort2: return DXGI_FORMAT_R16G16_SNORM;
+                case VertexElementFormat::NormalizedShort4: return DXGI_FORMAT_R16G16B16A16_SNORM;
+                case VertexElementFormat::HalfVector2:      return DXGI_FORMAT_R16G16_FLOAT;
+                case VertexElementFormat::HalfVector4:      return DXGI_FORMAT_R16G16B16A16_FLOAT;
+            }
+            return DXGI_FORMAT_UNKNOWN;
+        }
+
         // Stride 16: VertexPositionColor.
         const D3D11_INPUT_ELEMENT_DESC kStride16[] = {
             { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0,  D3D11_INPUT_PER_VERTEX_DATA, 0 },
@@ -133,6 +177,99 @@ namespace CNA::Internal::Renderers::D3DCommon
             case 80: count = static_cast<UINT>(std::size(kStride80)); return kStride80;
             default: count = 0; return nullptr;
         }
+    }
+
+    D3DVertexDeclarationKey VertexDeclarationCacheKey(
+        const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& elements)
+    {
+        D3DVertexDeclarationKey key;
+        key.reserve(elements.size());
+        for (const auto& element : elements)
+        {
+            key.push_back({
+                element.getOffsetProperty(),
+                static_cast<int>(element.getVertexElementFormatProperty()),
+                static_cast<int>(element.getVertexElementUsageProperty()),
+                element.getUsageIndexProperty(),
+            });
+        }
+        return key;
+    }
+
+    bool InputElementsForDeclaration(
+        const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& elements,
+        std::vector<D3D11_INPUT_ELEMENT_DESC>& output)
+    {
+        output.clear();
+        output.reserve(elements.size());
+        for (const auto& element : elements)
+        {
+            const char* semantic = SemanticName(element.getVertexElementUsageProperty());
+            const DXGI_FORMAT format = DxgiFormat(element.getVertexElementFormatProperty());
+            if (semantic == nullptr || format == DXGI_FORMAT_UNKNOWN ||
+                element.getOffsetProperty() < 0 || element.getUsageIndexProperty() < 0)
+            {
+                output.clear();
+                return false;
+            }
+
+            output.push_back({
+                semantic,
+                static_cast<UINT>(element.getUsageIndexProperty()),
+                format,
+                0,
+                static_cast<UINT>(element.getOffsetProperty()),
+                D3D11_INPUT_PER_VERTEX_DATA,
+                0,
+            });
+        }
+        return !output.empty();
+    }
+
+    bool InputElementsForDeclarationD3D12(
+        const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& elements,
+        std::vector<D3D12_INPUT_ELEMENT_DESC>& output)
+    {
+        output.clear();
+        output.reserve(elements.size());
+        for (const auto& element : elements)
+        {
+            const char* semantic = SemanticName(element.getVertexElementUsageProperty());
+            const DXGI_FORMAT format = DxgiFormat(element.getVertexElementFormatProperty());
+            if (semantic == nullptr || format == DXGI_FORMAT_UNKNOWN ||
+                element.getOffsetProperty() < 0 || element.getUsageIndexProperty() < 0)
+            {
+                output.clear();
+                return false;
+            }
+
+            output.push_back({
+                semantic,
+                static_cast<UINT>(element.getUsageIndexProperty()),
+                format,
+                0,
+                static_cast<UINT>(element.getOffsetProperty()),
+                D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,
+                0,
+            });
+        }
+        return !output.empty();
+    }
+
+    bool DeclarationHasElement(
+        const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& elements,
+        Microsoft::Xna::Framework::Graphics::VertexElementUsage usage,
+        int usageIndex)
+    {
+        for (const auto& element : elements)
+        {
+            if (element.getVertexElementUsageProperty() == usage &&
+                element.getUsageIndexProperty() == usageIndex)
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     namespace

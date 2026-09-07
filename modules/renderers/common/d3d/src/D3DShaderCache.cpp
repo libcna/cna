@@ -22,6 +22,8 @@ namespace CNA::Internal::Renderers::D3DCommon
                 case D3DShaderVariant::Textured3d:        return {kTextured3dVertDxbc, kTextured3dVertDxbc_size};
                 case D3DShaderVariant::ColoredTextured3d: return {kColoredTextured3dVertDxbc, kColoredTextured3dVertDxbc_size};
                 case D3DShaderVariant::LitTextured3d:     return {kLitTextured3dVertDxbc, kLitTextured3dVertDxbc_size};
+                case D3DShaderVariant::LitTextured3dColored: return {kLitTextured3dColoredVertDxbc, kLitTextured3dColoredVertDxbc_size};
+                case D3DShaderVariant::LitUntextured3d:   return {kLitUntextured3dVertDxbc, kLitUntextured3dVertDxbc_size};
                 case D3DShaderVariant::AlphaTest3d:       return {kAlphaTest3dVertDxbc, kAlphaTest3dVertDxbc_size};
                 case D3DShaderVariant::DualTexture3d:     return {kDualTexture3dVertDxbc, kDualTexture3dVertDxbc_size};
                 case D3DShaderVariant::EnvMap3d:          return {kEnvMap3dVertDxbc, kEnvMap3dVertDxbc_size};
@@ -30,6 +32,8 @@ namespace CNA::Internal::Renderers::D3DCommon
                 case D3DShaderVariant::Instanced3d:       return {kInstanced3dVertDxbc, kInstanced3dVertDxbc_size};
                 case D3DShaderVariant::AlphaTestColored3d: return {kAlphaTestColored3dVertDxbc, kAlphaTestColored3dVertDxbc_size};
                 case D3DShaderVariant::LitTextured3dVertexLit: return {kLitTextured3dVertexLitVertDxbc, kLitTextured3dVertexLitVertDxbc_size};
+                case D3DShaderVariant::LitTextured3dVertexLitColored: return {kLitTextured3dVertexLitColoredVertDxbc, kLitTextured3dVertexLitColoredVertDxbc_size};
+                case D3DShaderVariant::LitUntextured3dVertexLit: return {kLitUntextured3dVertexLitVertDxbc, kLitUntextured3dVertexLitVertDxbc_size};
                 case D3DShaderVariant::Skinned3dVertexLit:     return {kSkinned3dVertexLitVertDxbc, kSkinned3dVertexLitVertDxbc_size};
                 case D3DShaderVariant::Pbr3d:                  return {kPbr3dVertDxbc, kPbr3dVertDxbc_size};
                 case D3DShaderVariant::Pbr3dDualUv:            return {kPbr3dDualUvVertDxbc, kPbr3dDualUvVertDxbc_size};
@@ -51,6 +55,8 @@ namespace CNA::Internal::Renderers::D3DCommon
                 case D3DShaderVariant::Textured3d:        return {kTextured3dFragDxbc, kTextured3dFragDxbc_size};
                 case D3DShaderVariant::ColoredTextured3d: return {kColoredTextured3dFragDxbc, kColoredTextured3dFragDxbc_size};
                 case D3DShaderVariant::LitTextured3d:     return {kLitTextured3dFragDxbc, kLitTextured3dFragDxbc_size};
+                case D3DShaderVariant::LitTextured3dColored: return {kLitTextured3dColoredFragDxbc, kLitTextured3dColoredFragDxbc_size};
+                case D3DShaderVariant::LitUntextured3d:   return {kLitTextured3dFragDxbc, kLitTextured3dFragDxbc_size};
                 case D3DShaderVariant::AlphaTest3d:       return {kAlphaTest3dFragDxbc, kAlphaTest3dFragDxbc_size};
                 case D3DShaderVariant::DualTexture3d:     return {kDualTexture3dFragDxbc, kDualTexture3dFragDxbc_size};
                 case D3DShaderVariant::EnvMap3d:          return {kEnvMap3dFragDxbc, kEnvMap3dFragDxbc_size};
@@ -59,6 +65,8 @@ namespace CNA::Internal::Renderers::D3DCommon
                 case D3DShaderVariant::Instanced3d:       return {kInstanced3dFragDxbc, kInstanced3dFragDxbc_size};
                 case D3DShaderVariant::AlphaTestColored3d: return {kAlphaTestColored3dFragDxbc, kAlphaTestColored3dFragDxbc_size};
                 case D3DShaderVariant::LitTextured3dVertexLit: return {kLitTextured3dVertexLitFragDxbc, kLitTextured3dVertexLitFragDxbc_size};
+                case D3DShaderVariant::LitTextured3dVertexLitColored: return {kLitTextured3dVertexLitFragDxbc, kLitTextured3dVertexLitFragDxbc_size};
+                case D3DShaderVariant::LitUntextured3dVertexLit: return {kLitTextured3dVertexLitFragDxbc, kLitTextured3dVertexLitFragDxbc_size};
                 case D3DShaderVariant::Skinned3dVertexLit:     return {kSkinned3dVertexLitFragDxbc, kSkinned3dVertexLitFragDxbc_size};
                 case D3DShaderVariant::Pbr3d:                  return {kPbr3dFragDxbc, kPbr3dFragDxbc_size};
                 case D3DShaderVariant::Pbr3dDualUv:            return {kPbr3dDualUvFragDxbc, kPbr3dDualUvFragDxbc_size};

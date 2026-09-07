@@ -677,8 +677,8 @@ each backend's own accepted-stride set:
 | **Software** | yes (CPU) | 16/20/24/32/52 only | same three cases, measured identically to Vulkan | stride 12 and every other out-of-table stride: *"unsupported vertex stride (only 16/20/24/32/52 supported in v1)"* — an honest declared v1 boundary, **not** this defect |
 | **WebGPU** | yes | **16 only** without a bound texture; 20/24/32 need `params.texture0 != nullptr` | **`colorPosition16` alone** — five of the oracle's seven declarations never reach native submission | the other five, via `REMED-GFX-214`'s stride-16 message. Loud, deterministic, pre-native |
 | **SDL_GPU** | yes | same dispatch shape as WebGPU (`stride == 16`; 20/24/32 gated on `texture0`) | **`colorPosition16` alone**, by the same reasoning | the rest, by fall-through to the same loud stride-16 requirement |
-| **D3D11** | yes | 16/20/24/32/48/52/56/68 | the three measured cases, by shared `InputElementsForStride` | out-of-table strides throw *"unsupported vertex stride"* |
-| **D3D12** | yes | same, via `InputElementsForStrideD3D12` | same | same |
+| **D3D11** | yes | any valid single-stream `VertexDeclaration`; the old stride table remains only for buffers without one | **none after `DX-221` (2026-09-07)**; the complete declaration value enters the input-layout cache key | invalid native formats/usages are refused; the instanced route remains table-driven and guarded |
+| **D3D12** | yes | same, translated into the PSO input layout | **none after `DX-221` (2026-09-07)**; the complete declaration value enters the PSO cache key | same; instancing remains separately guarded |
 | **D3D9** | yes | same, via `GetOrCreateVertexDeclarationEXT(stride)` | same | same |
 | **Headless** | **no** | n/a | **NONE — this backend has no native vertex layout of any kind.** `DrawPrimitivesEx` validates its arguments and calls `DrawColoredPrimitives`, which records a trace; no pixel is ever produced, so no pixel can be wrong. It already reports `MultiStreamVertexInput = false` on exactly this reasoning | n/a |
 
@@ -687,11 +687,11 @@ each backend's own accepted-stride set:
 ticket's scope is **seven** rasterizing backends, not eight. This is recorded rather than silently
 dropped.
 
-**D3D9/D3D11/D3D12 runtime-untested.** No D3D display is reachable here, so their rows above are
-source-derived from the shared `D3DCommon` table rather than measured. That is *not* a reason to
-leave the classification at REVIEW: the loss point is a **shared** helper whose public consequence
-is already measured at pixel level on Vulkan and Software, and the D3D backends consume it
-unchanged.
+**D3D11/D3D12 update (2026-09-07).** The original guard classification was subsequently measured
+under Wine+DXVK and Wine+vkd3d-proton. `DX-221` replaced the ordinary single-stream stride lookup
+with a shared declaration translator: a stride-24 Position+Normal declaration and a stride-36
+Position+Normal+Color+UV declaration now render correctly on both APIs (2/2 each). D3D9 remains
+source-derived and retains the guarded stride table.
 
 **The declaration classes, separated:**
 
@@ -921,8 +921,10 @@ translator, still renders every one of them correctly and is the control proving
 declaration, `positionOnly12` on Vulkan, `positionTexture20`, `positionColorTexture16/24` and every
 pre-existing loud rejection are unchanged.
 
-**Checkpoint blockers of `REMED-GFX-217` and `REMED-GFX-218` are RESOLVED. Both tickets stay OPEN**
-for the real translators, which remain in this plan alongside `REMED-GFX-203` … `-208`.
+**Checkpoint blockers of `REMED-GFX-217` and `REMED-GFX-218` are RESOLVED.** Their non-D3D
+translators remain open here alongside `REMED-GFX-203` … `-208`; the D3D11/D3D12 single-stream
+translator was completed by `plans/plan_dx.md` `DX-221` on 2026-09-07. Multi-stream D3D input is
+still the distinct `REMED-GFX-207` task.
 
 ### 4.5 `REMED-GFX-209` — **DONE 2026-08-04**
 
