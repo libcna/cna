@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -282,6 +283,16 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
         /** @brief The flattened skeleton's bone names, in the order their indices follow. */
         std::vector<std::string> skeleton_;
 
+        /**
+         * @brief The material each source material was converted to, for one `Process` call.
+         *
+         * `MaterialProcessor` replaces a material's texture references with the built ones *in
+         * place*, so converting the same material twice would hand the second conversion an
+         * already-built `.xnb` path to build. XNA converts each distinct material once and every
+         * batch that names it shares the result (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-127).
+         */
+        std::map<const Graphics::MaterialContent*, std::shared_ptr<Graphics::MaterialContent>>
+            convertedMaterials_;
         Color colorKeyColor_{255, 0, 255, 255};
         bool colorKeyEnabled_ = true;
         MaterialProcessorDefaultEffect defaultEffect_ = MaterialProcessorDefaultEffect::BasicEffect;

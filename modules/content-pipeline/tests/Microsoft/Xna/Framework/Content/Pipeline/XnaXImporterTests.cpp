@@ -607,9 +607,10 @@ TEST(XnaFbxImporter, TheAttributeMatchesXna)
 TEST(XnaFbxImporter, EveryFileAnswersTheGraphXnaAnswers)
 {
     for (const std::string& fixture :
-         {"fbx_bare_mesh.fbx", "fbx_cameras.fbx", "fbx_hierarchy.fbx", "fbx_oblique.fbx",
-          "fbx_prerotation_units.fbx", "fbx_quad_polygon.fbx", "fbx_quad_textured.fbx",
-          "fbx_split_vertices.fbx", "fbx_two_materials.fbx"})
+         {"fbx_bare_mesh.fbx", "fbx_cameras.fbx", "fbx_hierarchy.fbx",
+          "fbx_material_factor_texture.fbx", "fbx_oblique.fbx", "fbx_prerotation_units.fbx",
+          "fbx_quad_polygon.fbx", "fbx_quad_textured.fbx", "fbx_split_vertices.fbx",
+          "fbx_two_materials.fbx"})
     {
         ImporterContext context;
         ExpectSame(NormalizeTriangles(SortAnimations(ImportFbx(fixture, context))),

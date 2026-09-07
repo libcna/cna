@@ -178,6 +178,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
         {
             throw System::ArgumentNullException("input");
         }
+        convertedMaterials_.clear();
         // The processor's own scale and rotation are baked into the scene rather than left on the
         // root bone: the geometry moves and every node's transform is re-expressed in the new
         // frame (measured, modelprocessor/scale_rotation_detail and rotation_order, which also
@@ -390,8 +391,23 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
         const std::vector<std::shared_ptr<Graphics::GeometryContent>>& geometryCollection,
         ContentProcessorContext& context)
     {
-        const std::shared_ptr<Graphics::MaterialContent> converted =
-            material == nullptr ? nullptr : ConvertMaterial(material, context);
+        std::shared_ptr<Graphics::MaterialContent> converted;
+        if (material != nullptr)
+        {
+            // Converted once per distinct material: `MaterialProcessor` replaces a texture
+            // reference with the built one in place, so a second conversion of the same material
+            // would be handed an already-built `.xnb` to build (XNASWEEP-127).
+            const auto found = convertedMaterials_.find(material.get());
+            if (found != convertedMaterials_.end())
+            {
+                converted = found->second;
+            }
+            else
+            {
+                converted = ConvertMaterial(material, context);
+                convertedMaterials_.emplace(material.get(), converted);
+            }
+        }
         for (const std::shared_ptr<Graphics::GeometryContent>& geometry : geometryCollection)
         {
             if (geometry == nullptr)

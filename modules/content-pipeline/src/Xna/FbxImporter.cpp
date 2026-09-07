@@ -10,10 +10,12 @@
 #include <iterator>
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "CNA/Content/Pipeline/FbxFileReader.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentIdentity.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/ExternalReference.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/StockMaterials.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/VertexChannelNames.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
@@ -71,6 +73,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             const Canon::FbxNode* node = nullptr;
             std::vector<std::int64_t> children;
             std::vector<std::int64_t> materials;
+            /** @brief `Texture` objects a `Connect` names against this one, in file order. */
+            std::vector<std::int64_t> textures;
             Vector3 translation{0.0f, 0.0f, 0.0f};
             Vector3 rotation{0.0f, 0.0f, 0.0f};
             Vector3 preRotation{0.0f, 0.0f, 0.0f};
@@ -98,7 +102,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          */
         [[nodiscard]] bool IsSceneNode(const std::string& kind)
         {
-            return kind != "Material" && kind != "Camera" && kind != "CameraSwitcher";
+            return kind != "Material" && kind != "Texture" && kind != "Camera" &&
+                   kind != "CameraSwitcher";
         }
 
         /** @brief One `Properties60`/`Properties70` entry, by its name. */
@@ -400,7 +405,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         {
             for (const Canon::FbxNode& node : block->children)
             {
-                if (node.name != "Model" && node.name != "Geometry" && node.name != "Material")
+                if (node.name != "Model" && node.name != "Geometry" && node.name != "Material" &&
+                    node.name != "Texture")
                 {
                     continue;
                 }
@@ -422,6 +428,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 if (node.name == "Material")
                 {
                     object.kind = "Material";
+                }
+                if (node.name == "Texture")
+                {
+                    object.kind = "Texture";
                 }
                 object.translation = PropertyVector(node, "Lcl Translation", Vector3(0.0f, 0.0f, 0.0f));
                 object.rotation = PropertyVector(node, "Lcl Rotation", Vector3(0.0f, 0.0f, 0.0f));
@@ -472,6 +482,22 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     childObject->second.attached = true;
                     continue;
                 }
+                if (childObject->second.kind == "Texture")
+                {
+                    // A texture hangs off the *model*, beside the material, not off the material
+                    // (measured on SAMPLE-030's `tank.fbx`, whose connections read
+                    // `Texture::steamroller_tank61_file3 -> Model::r_engine_geo`; the genuine
+                    // importer answers `materialTexture Texture=engine_diff_tex.tga` on that
+                    // model's material). A repeat is dropped: an exporter names the same texture
+                    // once per layer element (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-127).
+                    std::vector<std::int64_t>& list = parentObject->second.textures;
+                    if (std::find(list.begin(), list.end(), child) == list.end())
+                    {
+                        list.push_back(child);
+                    }
+                    childObject->second.attached = true;
+                    continue;
+                }
                 parentObject->second.children.push_back(child);
                 childObject->second.attached = true;
             }
@@ -490,16 +516,77 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             // The measured answer is the SDK's defaults for everything but the diffuse colour: an
             // Opacity of 0.5 and a Shininess of 2 both come back as 1 and 20, so those two are not
             // read from a 6.1 material at all.
-            material->setDiffuseColorProperty(
-                PropertyVector(*object.node, "DiffuseColor", Vector3(0.0f, 0.0f, 0.0f)));
-            material->setEmissiveColorProperty(
-                PropertyVector(*object.node, "EmissiveColor", Vector3(0.0f, 0.0f, 0.0f)));
+            //
+            // A colour is its `<Name>Color` times its `<Name>Factor`, which is how the SDK's own
+            // `Diffuse`, `Specular` and `Emissive` compatibility properties are written beside
+            // them. SAMPLE-030's `tank.fbx` is the case that shows it: `DiffuseColor` is (1,1,1)
+            // with a `DiffuseFactor` of 0.8, the file's own `Diffuse` is (0.8,0.8,0.8), and the
+            // genuine importer answers 0.8 (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-127).
+            const auto scaled = [&object](const std::string& name)
+            {
+                const Vector3 colour = PropertyVector(*object.node, name + "Color",
+                                                      Vector3(0.0f, 0.0f, 0.0f));
+                const auto factor =
+                    static_cast<float>(PropertyNumber(*object.node, name + "Factor", 1.0));
+                return Vector3(colour.X * factor, colour.Y * factor, colour.Z * factor);
+            };
+            material->setDiffuseColorProperty(scaled("Diffuse"));
+            material->setEmissiveColorProperty(scaled("Emissive"));
             material->setAlphaProperty(1.0f);
-            material->setSpecularColorProperty(
-                PropertyVector(*object.node, "SpecularColor", Vector3(0.0f, 0.0f, 0.0f)));
+            material->setSpecularColorProperty(scaled("Specular"));
             material->setSpecularPowerProperty(20.0f);
             materials.emplace(identity, std::move(material));
         }
+
+        // A model's texture, attached to the material that model uses. The pair is what varies:
+        // `tank.fbx` shares `engine_phong` across nine models and every one of them names
+        // `engine_diff_tex.tga`, so one instance per (material, texture) is both what XNA writes --
+        // two effects for twelve meshes -- and what keeps two models that name different textures
+        // apart (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-127).
+        const std::filesystem::path sourceDirectory = std::filesystem::path(filename).parent_path();
+        const auto textureFile = [&objects](const std::int64_t identity) -> std::string
+        {
+            const auto found = objects.find(identity);
+            if (found == objects.end() || found->second.node == nullptr) { return {}; }
+            for (const char* field : {"RelativeFilename", "FileName"})
+            {
+                const Canon::FbxNode* named = found->second.node->Find(field);
+                if (named != nullptr)
+                {
+                    std::string text = named->Text(0);
+                    if (!text.empty()) { return text; }
+                }
+            }
+            return {};
+        };
+        std::map<std::pair<std::int64_t, std::int64_t>, std::shared_ptr<BasicMaterialContent>> textured;
+        const auto withTexture =
+            [&](const std::shared_ptr<BasicMaterialContent>& base, const std::int64_t materialIdentity,
+                const std::int64_t textureIdentity) -> std::shared_ptr<BasicMaterialContent>
+        {
+            if (textureIdentity == 0) { return base; }
+            std::string named = textureFile(textureIdentity);
+            if (named.empty()) { return base; }
+            const std::pair<std::int64_t, std::int64_t> key{materialIdentity, textureIdentity};
+            const auto found = textured.find(key);
+            if (found != textured.end()) { return found->second; }
+            // Spelled the way the tool that wrote the file spells a path, as the `.x` route does.
+            std::replace(named.begin(), named.end(), '\\', '/');
+            auto copy = std::make_shared<BasicMaterialContent>();
+            copy->setNameProperty(base->getNameProperty());
+            copy->setDiffuseColorProperty(base->getDiffuseColorProperty().value_or(Vector3(0, 0, 0)));
+            copy->setEmissiveColorProperty(base->getEmissiveColorProperty().value_or(Vector3(0, 0, 0)));
+            // Set in the order the material was first filled: the description a game or an oracle
+            // reads back is the dictionary's insertion order, and Alpha comes before the specular
+            // pair (measured, fbx/fbx_material_factor_texture.fbx).
+            copy->setAlphaProperty(base->getAlphaProperty().value_or(1.0f));
+            copy->setSpecularColorProperty(base->getSpecularColorProperty().value_or(Vector3(0, 0, 0)));
+            copy->setSpecularPowerProperty(base->getSpecularPowerProperty().value_or(0.0f));
+            copy->setTextureProperty(std::make_shared<ExternalReference<Graphics::TextureContent>>(
+                (sourceDirectory / named).lexically_normal().string()));
+            textured.emplace(key, copy);
+            return copy;
+        };
 
         const auto build = [&](const std::int64_t identity, auto&& self) -> std::shared_ptr<NodeContent>
         {
@@ -652,11 +739,27 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                         const auto material = materials.find(batchMaterials[batch]);
                         if (material != materials.end())
                         {
-                            batchContent->setMaterialProperty(material->second);
+                            // A texture reaches the material the way a material reaches a batch:
+                            // through a layer element. The same fixture built without a
+                            // `LayerElementTexture` answers a material with no texture at all
+                            // (measured, fbx/fbx_material_factor_texture.fbx, XNASWEEP-127).
+                            const std::int64_t texture =
+                                geometry->Find("LayerElementTexture") == nullptr || object.textures.empty()
+                                    ? 0
+                                    : (batch < object.textures.size() ? object.textures[batch]
+                                                                      : object.textures.front());
+                            batchContent->setMaterialProperty(
+                                withTexture(material->second, batchMaterials[batch], texture));
                         }
                     }
                     // Normals, then texture coordinates, then colours: the order the genuine
-                    // importer answers, which is not the .x route's.
+                    // importer answers, which is not the .x route's. A mesh that declares *no*
+                    // normals is the exception -- the SDK generates them and appends them after
+                    // the channels the file did declare, so they come last there (measured,
+                    // fbx/fbx_material_factor_texture.fbx, whose only declared channel is UV;
+                    // plans/plan_xna_sample_xnb_sweep.md XNASWEEP-127).
+                    const bool declaresNormals = normals.stride != 0u && !normals.values.empty();
+                    const auto addNormals = [&]
                     {
                         std::vector<Vector3> channel;
                         for (std::size_t v = 0; v < used.size(); ++v)
@@ -671,7 +774,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                         }
                         batchContent->getVerticesProperty().getChannelsProperty().Add<Vector3>(
                             VertexChannelNames::Normal(), channel);
-                    }
+                    };
+                    if (declaresNormals) { addNormals(); }
                     if (uvs.stride != 0u && !uvs.values.empty())
                     {
                         std::vector<Vector2> channel;
@@ -704,6 +808,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                         batchContent->getVerticesProperty().getChannelsProperty().Add<Vector4>(
                             VertexChannelNames::Color(0), channel);
                     }
+                    if (!declaresNormals) { addNormals(); }
                 }
                 node = mesh;
             }
