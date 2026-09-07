@@ -161,7 +161,8 @@ def reader_table_only(data: bytes, head):
     """The type-reader table of a file whose payload the parser refused."""
     body = data[14:] if head["decompressedSize"] is not None else data[10:]
     if head["compressedLzx"]:
-        body = xnb_conformance.lzx_decompress(body, head["decompressedSize"], "<inventory>")
+        # The decoder answers (payload, statistics); only the payload is wanted here.
+        body = xnb_conformance.lzx_decompress(body, head["decompressedSize"], "<inventory>")[0]
     elif head["compressedLz4"]:
         body = xnb_conformance.lz4_block_decompress(body, head["decompressedSize"], "<inventory>")
     cursor = xnb_conformance.Cursor(body, "<inventory>")

@@ -23,11 +23,13 @@ import concurrent.futures
 import hashlib
 import json
 import os
+import posixpath
 import re
 import shutil
 import subprocess
 import sys
 import time
+import xml.etree.ElementTree as ET
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
@@ -35,10 +37,18 @@ SWEEP = os.path.join(REPO, "build", "xna-sample-sweep")
 
 PLATFORM_OPTION = {"w": "windows", "m": "windowsphone", "x": "xbox360"}
 
-FONT_DIRECTORY = ("/rv/tmp/samples/SAMPLE-140-RedistributableTTFs_ARCHIVE_3_1/original/"
-                  "RedistributableTTFs")
-FXC = ("/rv/tmp/samples/_tools/directx-sdk-june-2010/extract/DXSDK/Utilities/bin/x86/fxc.exe")
 WINEPREFIX = os.path.expanduser("~/.wine-cna-xna40")
+
+# The fonts the reference build itself saw, in the order it would have found them: the Wine
+# prefix's own `Fonts` directory is what the genuine `FontDescriptionProcessor` resolved a family
+# through, and the XNA redistributable pack beside it carries the families that prefix has not got
+# (Pericles Light, Pescadero, Segoe Keycaps, Segoe Print, Wasco Sans, News Gothic, OCR A Extended,
+# Jing Jing, Andy). Both are read, never written.
+FONT_DIRECTORIES = (
+    os.path.join(WINEPREFIX, "drive_c", "windows", "Fonts"),
+    "/rv/tmp/samples/SAMPLE-140-RedistributableTTFs_ARCHIVE_3_1/original/RedistributableTTFs",
+)
+FXC = ("/rv/tmp/samples/_tools/directx-sdk-june-2010/extract/DXSDK/Utilities/bin/x86/fxc.exe")
 
 
 def slug(text):
@@ -69,22 +79,78 @@ def first_difference(left, right):
     return first, differing
 
 
+MSBUILD_NS = "http://schemas.microsoft.com/developer/msbuild/2003"
+
+
+def reconstruct_project(project, runner, staged):
+    """The project as the sample's runner actually built it, beside a copy of its sources.
+
+    Most of these runners hand-list their assets and pass no `ProcessorParameters` at all, so the
+    reference carries the processor's own defaults whatever the project declares. Building the
+    project as written would then compare a correct build against a reference nobody produced from
+    it. The reconstruction is the project with exactly the parameters the runner set -- none, for
+    almost all of them -- and it needs the sources beside it because the sample tree is read-only.
+
+    @param project The original `.contentproj`.
+    @param runner The sample's entry in `runner-provenance.json`.
+    @param staged Directory to build the reconstruction in.
+    @return The reconstructed project's path, or None when the project needs no reconstruction.
+    """
+    overrides = {posixpath.basename(k): v for k, v in runner.get("parameterOverrides", {}).items()}
+    ET.register_namespace("", MSBUILD_NS)
+    tree = ET.parse(project)
+    changed = False
+    for item in tree.getroot().iter("{%s}Compile" % MSBUILD_NS):
+        include = (item.get("Include") or "").replace("\\", "/")
+        wanted = overrides.get(posixpath.basename(include), {})
+        for child in list(item):
+            local = child.tag.rsplit("}", 1)[-1]
+            if local.lower().startswith("processorparameters"):
+                item.remove(child)
+                changed = True
+        for name in sorted(wanted):
+            element = ET.SubElement(item, "{%s}ProcessorParameters_%s" % (MSBUILD_NS, name))
+            element.text = wanted[name]
+            changed = True
+    if not changed:
+        return None
+    source = os.path.dirname(project)
+    if not os.path.isdir(staged):
+        shutil.copytree(source, staged,
+                        ignore=shutil.ignore_patterns("bin", "obj", "*.xnb"))
+    written = os.path.join(staged, os.path.basename(project))
+    tree.write(written, encoding="utf-8", xml_declaration=True)
+    return written
+
+
 def build_one(job):
-    unit, root, tool, outdir, timeout = job
+    unit, root, tool, outdir, timeout, provenance, staging = job
     output = os.path.join(outdir, slug(unit["outputRoot"]))
     shutil.rmtree(output, ignore_errors=True)
     os.makedirs(output, exist_ok=True)
     project = os.path.join(root, unit["project"])
+    runner = provenance.get(unit["sample"], {})
+    reconstructed = None
+    if runner.get("kind") in ("explicit", "enumerated"):
+        staged = os.path.join(staging, slug(unit["project"]).replace(".contentproj", ""))
+        try:
+            reconstructed = reconstruct_project(project, runner, staged)
+        except Exception as error:  # noqa: BLE001 - a reconstruction that fails is a finding
+            reconstructed = None
+            print("reconstruct failed for %s: %s" % (unit["project"], error), flush=True)
+    if reconstructed:
+        project = reconstructed
     arguments = [
         tool, "build", project, "-o", output,
         "--format", "xnb",
         "--xnb-platform", PLATFORM_OPTION.get(unit["platform"], "windows"),
         "--xnb-profile", "hidef" if unit["hiDef"] else "reach",
         "--xnb-compress", "lzx" if unit["compressed"] else "none",
-        "--font-directory", FONT_DIRECTORY,
         "--fx-compiler", FXC,
         "--fx-compiler-launcher", "wine",
     ]
+    for directory in FONT_DIRECTORIES:
+        arguments += ["--font-directory", directory]
     if unit["platform"] == "x":
         arguments.append("--xnb-allow-unverified-xbox")
     environment = dict(os.environ)
@@ -103,6 +169,7 @@ def build_one(job):
     return {
         "outputRoot": unit["outputRoot"],
         "output": output,
+        "reconstructedProject": reconstructed,
         "status": status,
         "seconds": round(time.time() - started, 2),
         "stdout": out,
@@ -166,6 +233,9 @@ def main(argv=None):
     parser.add_argument("--only", default=None, help="build only units whose root contains this")
     parser.add_argument("--timeout", type=int, default=1800)
     parser.add_argument("--tool", default=os.path.join(REPO, "cmake-build-debug", "cna-content"))
+    parser.add_argument("--provenance",
+                        default=os.path.join(SWEEP, "manifest", "runner-provenance.json"))
+    parser.add_argument("--staging", default=os.path.join(SWEEP, "staged"))
     args = parser.parse_args(argv)
 
     with open(args.map, encoding="utf-8") as handle:
@@ -181,9 +251,15 @@ def main(argv=None):
                 by_root.setdefault(unit["outputRoot"], []).append(mapping)
                 break
 
+    provenance = {}
+    if os.path.exists(args.provenance):
+        with open(args.provenance, encoding="utf-8") as handle:
+            provenance = json.load(handle).get("samples", {})
     os.makedirs(args.outdir, exist_ok=True)
+    os.makedirs(args.staging, exist_ok=True)
     results = []
-    jobs = [(unit, root, args.tool, args.outdir, args.timeout) for unit in units]
+    jobs = [(unit, root, args.tool, args.outdir, args.timeout, provenance, args.staging)
+            for unit in units]
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as pool:
         for unit, build in zip(units, pool.map(build_one, jobs)):
             rows = compare_unit(unit, root, build, by_root.get(unit["outputRoot"], []))
@@ -198,6 +274,7 @@ def main(argv=None):
                 "hiDef": unit["hiDef"],
                 "compressed": unit["compressed"],
                 "buildStatus": build["status"],
+                "reconstructedProject": build.get("reconstructedProject"),
                 "seconds": build["seconds"],
                 "counts": counts,
                 "rows": rows,

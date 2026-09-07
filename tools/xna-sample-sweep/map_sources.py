@@ -22,6 +22,7 @@ import collections
 import json
 import os
 import posixpath
+import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -47,11 +48,17 @@ def sample_projects(root, sample):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--manifest", required=True)
+    parser.add_argument("--provenance", default=None,
+                        help="runner-provenance.json; without it a project's parameters are used")
     parser.add_argument("--out", required=True)
     args = parser.parse_args(argv)
 
     with open(args.manifest, encoding="utf-8") as handle:
         manifest = json.load(handle)
+    provenance = {}
+    if args.provenance and os.path.exists(args.provenance):
+        with open(args.provenance, encoding="utf-8") as handle:
+            provenance = json.load(handle).get("samples", {})
     root = manifest["root"]
     entries = manifest["entries"]
 
@@ -99,9 +106,26 @@ def main(argv=None):
             wanted = platform_hint.most_common(1)[0][0] if platform_hint else None
             root_words = output_root.lower()
 
+            # A sample that ships one project per exercise has several that explain a root
+            # equally well, and the count alone leaves the choice to sort order: the
+            # CatapultWars training kit's seven output roots all name 33 to 39 assets and four of
+            # its projects declare the same ones, so three roots were read against another
+            # exercise's `sky.png` and came out 800x720 against a reference of 800x480. The
+            # variant's own name is what tells them apart, so it is scored: the words in the
+            # output root's directory that also appear in the project's path.
+            variant = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", output_root.rstrip("/").split("/")[-2]
+                             if output_root.rstrip("/").split("/")[-1].lower().startswith("content")
+                             and len(output_root.rstrip("/").split("/")) > 1
+                             else output_root.rstrip("/").split("/")[-1])
+            variant_words = [w for w in re.split(r"[^A-Za-z0-9]+", variant.lower())
+                             if len(w) > 3 and w not in ("content", "build", "xna4", "bin")]
+
             def rank(project_path, explained):
                 relative = os.path.relpath(project_path, root).replace(os.sep, "/").lower()
                 pristine = 0 if ("diagnostic" in relative or "diag" in relative) else 1
+                spaced = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ",
+                                os.path.relpath(project_path, root)).lower()
+                affinity_name = sum(1 for word in variant_words if word in spaced)
                 # `m` is Windows Phone, `x` is Xbox 360, `w` is Windows.
                 affinity = 0
                 for token, letter in (("phone", "m"), ("xbox", "x"), ("windows", "w")):
@@ -113,7 +137,7 @@ def main(argv=None):
                         affinity += 1
                     if in_project and wanted is not None and wanted != letter:
                         affinity -= 1
-                return (explained, pristine, affinity, -len(relative))
+                return (explained, pristine, affinity_name, affinity, -len(relative))
 
             owner, best_rank = None, None
             for project_path, items in sorted(roots[output_root].items()):
@@ -175,13 +199,28 @@ def main(argv=None):
                     mappings.append(record)
                     continue
                 source = os.path.join(projects[owner].directory, item.source.replace("/", os.sep))
+                # A project's `ProcessorParameters` reached the reference only where the sample's
+                # own runner passed them on. Most of these runners hand-list their assets and set
+                # none, so the reference carries the processor's defaults whatever the project
+                # says, and comparing against the project's parameters marks a correct build wrong
+                # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-021`).
+                runner = provenance.get(sample, {})
+                parameters = item.processor_parameters
+                parameterSource = "project"
+                if runner.get("kind") in ("explicit", "enumerated"):
+                    overrides = {posixpath.basename(k): v
+                                 for k, v in runner.get("parameterOverrides", {}).items()}
+                    parameters = overrides.get(posixpath.basename(item.source), {})
+                    parameterSource = "runner:" + runner["kind"]
                 record.update({
                     "project": os.path.relpath(owner, root),
                     "source": item.source,
                     "sourceRelative": os.path.relpath(source, root) if os.path.exists(source) else None,
                     "importer": item.get("Importer"),
                     "processor": item.get("Processor"),
-                    "processorParameters": item.processor_parameters,
+                    "processorParameters": parameters,
+                    "projectParameters": item.processor_parameters,
+                    "parameterSource": parameterSource,
                     "status": "mapped" if os.path.isfile(source) else "no-source",
                 })
                 mappings.append(record)

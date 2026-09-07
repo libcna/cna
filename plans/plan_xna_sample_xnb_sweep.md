@@ -174,4 +174,8 @@ final qualification.
 | `XNASWEEP-103` | One asset with no component refused the whole project, three times over. | [ ] |
 | `XNASWEEP-104` | A sprite-font atlas's height is the graphics profile's rule, and CNA used Reach's for both. | [ ] |
 | `XNASWEEP-105` | A font family was matched against the typographic family, not the one Windows matches. | [ ] |
+| `XNASWEEP-106` | A `.x` material's specular power of zero is not a value; the genuine importer writes none. | [ ] |
+| `XNASWEEP-107` | A `.x` mesh with no `MeshNormals` got a constant normal instead of a generated one. | [ ] |
+| `XNASWEEP-108` | Every effect was compiled optimized, because nothing carried the build configuration. | [ ] |
+| `XNASWEEP-109` | A PNG's own `gAMA` chunk was ignored; GDI+, and therefore XNA, applies it. | [ ] |
 
