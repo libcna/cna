@@ -504,10 +504,9 @@ namespace CNA::Internal::Renderers::Software
         std::array<int, 6> faceLevels_{1, 1, 1, 1, 1, 1};
     };
 
-    // Cube-map render targets, Texture3D, and hardware occlusion queries remain out of scope for
-    // v1 (plans/plan_software.md Boundaries) -- CreateRenderTargetCube/CreateTexture3D/
-    // CreateOcclusionQuery all keep IGraphicsRenderer's own shared default (returns nullptr).
-    // REMED-CONTENT-004: Texture3D's own absence is now reported via
+    // Cube-map render targets, Texture3D, and CPU occlusion queries are tracked parity gaps --
+    // CreateRenderTargetCube/CreateTexture3D/CreateOcclusionQuery currently keep IGraphicsRenderer's
+    // shared default (returns nullptr). REMED-CONTENT-004: Texture3D's own absence is reported via
     // SupportsCapability(GraphicsCapability::Texture3D) => false, so Texture3D's constructor fails
     // cleanly instead of a caller's SetData()/GetData() calls silently discarding data.
 

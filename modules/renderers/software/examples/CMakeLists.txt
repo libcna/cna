@@ -600,6 +600,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
         COMMAND cna_test_software_point_sampling
         TIMEOUT 300 LABELS "Software")
 
+    # SOFTWARE-104: a capability is a usable public promise, not a statement about what a CPU
+    # renderer might eventually implement. False entries are paired with the current factory/API
+    # boundary so unsupported queries, volume textures and custom shaders cannot masquerade as
+    # working features while their implementation tasks are pending.
+    cna_software_test(cna_test_software_capability_contract software_capability_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_CapabilityContract
+        COMMAND cna_test_software_capability_contract
+        TIMEOUT 30 LABELS "Software")
+
     # plans/plan_software.md SOFTWARE-61/84: this renderer's half of the cross-renderer diagnostic dump --
     # not registered as a ctest (see cna_diag_compare's own comment above), just a plain
     # executable a developer/script runs by hand.

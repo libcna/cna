@@ -104,6 +104,20 @@ namespace CNA::Internal::Renderers::Software
             // call.
             case CNA::GraphicsCapability::Texture3D:
                 return false;
+            case CNA::GraphicsCapability::AnisotropicFiltering:
+                // The CPU sampler currently maps TextureFilter::Anisotropic onto its isotropic
+                // linear path and ignores MaxAnisotropy. SOFTWARE-117 will opt this back in only
+                // after an oblique-minification fixture proves a real anisotropic implementation.
+                return false;
+            case CNA::GraphicsCapability::OcclusionQuery:
+                // CreateOcclusionQuery() still has the shared null default. SOFTWARE-122 will
+                // provide a deterministic surviving-sample counter and restore this capability.
+                return false;
+            case CNA::GraphicsCapability::CustomEffects:
+                // SoftwareEffectRenderer accepts source for resource compatibility, but the CPU
+                // rasterizer never executes that source. Its fixed stock-effect path is not custom
+                // shader support.
+                return false;
             case CNA::GraphicsCapability::MultiStreamVertexInput:
                 // REMED-GFX-201: implemented -- the vertex reader resolves each combined-layout
                 // byte offset to the stream that owns it, so every attribute is fetched from its
