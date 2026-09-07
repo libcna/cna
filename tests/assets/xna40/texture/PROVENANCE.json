@@ -11,6 +11,48 @@
       "thirdParty": false
     },
     {
+      "file": "font_sheet.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_font_sheet_fixtures.py",
+      "note": "A font sheet in XNA's own shape for FontTextureProcessor: three 5x7 glyph cells separated by magenta.",
+      "thirdParty": false
+    },
+    {
+      "file": "font_sheet_alpha_border.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_font_sheet_fixtures.py",
+      "note": "The same sheet bordered in transparent black rather than magenta, which is what settles that the separator colour is fixed and not read from the image.",
+      "thirdParty": false
+    },
+    {
+      "file": "font_sheet_edge_touch.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_font_sheet_fixtures.py",
+      "note": "A sheet whose last glyph runs to the right edge with no separator column after it, which is what says a glyph does not have to be enclosed.",
+      "thirdParty": false
+    },
+    {
+      "file": "font_sheet_many.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_font_sheet_fixtures.py",
+      "note": "Ten equal cells, so the packer's row wrapping is visible.",
+      "thirdParty": false
+    },
+    {
+      "file": "font_sheet_uneven.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_font_sheet_fixtures.py",
+      "note": "The same, with cells of three different widths, so the packing order is visible.",
+      "thirdParty": false
+    },
+    {
+      "file": "font_sheet_white_corner.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_font_sheet_fixtures.py",
+      "note": "A sheet whose corner texel is white while the rest of its border is magenta, which is what says the scan starts at the first magenta texel rather than at the origin.",
+      "thirdParty": false
+    },
+    {
       "file": "garbage.tga",
       "origin": "generated",
       "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",

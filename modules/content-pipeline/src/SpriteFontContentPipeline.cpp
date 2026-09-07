@@ -9,8 +9,10 @@
 #include <memory>
 #include <set>
 #include <stdexcept>
+#include <variant>
 
 #include "CNA/Content/Pipeline/CnjContentPipeline.hpp"
+#include "CNA/Content/Pipeline/Texture2DContentPipeline.hpp"
 #include "CNA/Content/Pipeline/TextureCompressionPipeline.hpp"
 #include "CNA/Internal/ContentPath.hpp"
 #include "CNA/Internal/Xml.hpp"
@@ -27,6 +29,7 @@ namespace CNA::Content::Pipeline
     {
         constexpr const char* kImporterName = "CNA.FontDescriptionImporter";
         constexpr const char* kProcessorName = "CNA.FontDescriptionProcessor";
+        constexpr const char* kFontTextureProcessorName = "CNA.FontTextureProcessor";
 
         /** @brief Largest atlas side this pipeline will produce, matching XNA's Reach limit. */
         constexpr std::uint32_t kMaximumAtlasSide = 2048u;
@@ -387,44 +390,126 @@ namespace CNA::Content::Pipeline
         [[nodiscard]] bool PackGlyphs(const std::vector<RasterGlyph>& glyphs,
                                        const std::uint32_t width, const std::uint32_t maximumHeight,
                                        std::vector<PackedGlyph>& placements,
-                                       std::uint32_t& usedHeight)
+                                       std::uint32_t& usedHeight, const std::uint32_t kGap)
         {
-            constexpr std::uint32_t kPadding = 1u;
+            constexpr std::uint32_t kMargin = 1u;
             placements.assign(glyphs.size(), PackedGlyph{});
-            // Tallest first. A shelf is as tall as its tallest member, so packing in character
-            // order lets one accented capital raise the shelf every other glyph on it sits in;
-            // ordering by height keeps each shelf close to the height of what is on it. The
-            // glyphs themselves are not reordered -- only the order they are placed in -- so a
-            // glyph's rectangle still belongs to its own character.
+            // Tallest first, then widest. A shelf is as tall as its tallest member, so packing in
+            // character order lets one accented capital raise the shelf every other glyph on it
+            // sits in; ordering by height keeps each shelf close to the height of what is on it,
+            // and the width tie-break is XNA's own. The glyphs themselves are not reordered --
+            // only the order they are placed in -- so a glyph's rectangle still belongs to its own
+            // character.
             std::vector<std::size_t> order(glyphs.size());
             for (std::size_t index = 0u; index < order.size(); ++index) { order[index] = index; }
             std::stable_sort(order.begin(), order.end(),
                              [&glyphs](const std::size_t left, const std::size_t right)
-                             { return glyphs[left].height > glyphs[right].height; });
+                             {
+                                 if (glyphs[left].height != glyphs[right].height)
+                                 {
+                                     return glyphs[left].height > glyphs[right].height;
+                                 }
+                                 // Widest first among equals, which is XNA's own tie-break:
+                                 // a sheet of 4x6, 7x6 and 3x6 cells comes out at (1,1), (10,1)
+                                 // and (1,9) there, and that is the widest, then the next, then
+                                 // the wrap (plans/plan_xnapipeline_parity.md XNAPP-139).
+                                 return glyphs[left].width > glyphs[right].width;
+                             });
 
-            std::uint32_t penX = kPadding;
-            std::uint32_t penY = kPadding;
+            std::uint32_t penX = kMargin;
+            std::uint32_t penY = kMargin;
             std::uint32_t shelfHeight = 0u;
             for (const std::size_t index : order)
             {
                 const RasterGlyph& glyph = glyphs[index];
-                if (glyph.width + kPadding > width || glyph.height + kPadding > maximumHeight)
+                if (glyph.width + 2u * kMargin > width ||
+                    glyph.height + 2u * kMargin > maximumHeight)
                 {
                     return false;
                 }
-                if (penX + glyph.width + kPadding > width)
+                if (penX + glyph.width + kMargin > width)
                 {
-                    penX = kPadding;
-                    penY += shelfHeight + kPadding;
+                    penX = kMargin;
+                    penY += shelfHeight + kGap;
                     shelfHeight = 0u;
                 }
-                if (penY + glyph.height + kPadding > maximumHeight) { return false; }
+                if (penY + glyph.height + kMargin > maximumHeight) { return false; }
                 placements[index] = {penX, penY};
-                penX += glyph.width + kPadding;
+                penX += glyph.width + kGap;
                 shelfHeight = std::max(shelfHeight, glyph.height);
             }
-            usedHeight = penY + shelfHeight + kPadding;
+            usedHeight = penY + shelfHeight + kMargin;
             return true;
+        }
+
+        /**
+         * @brief Chooses the atlas width that wastes least, then packs into it.
+         *
+         * Every width the glyphs could go in, keeping the one that wastes least. Area first, then
+         * the squarer of two sheets of equal area, then the wider: a 16x1024 sheet holds the same
+         * 95 glyphs as a 128x128 one and is a poor texture on every renderer, so "smallest" alone
+         * is not the whole rule. XNA's own atlases are all within a factor of two of square, and
+         * none is narrower than 16.
+         *
+         * @param glyphs The glyphs to pack.
+         * @param side Receives the chosen width.
+         * @param usedHeight Receives the rows actually occupied.
+         * @param placements Receives one placement per glyph.
+         * @param gap Texels between two glyphs. One for the description route, whose packer is
+         *        CNA's own and whose atlas is a recorded divergence either way; **two** for a font
+         *        sheet, where it is measured -- three 5x7 glyphs come out at (1,1), (8,1) and
+         *        (1,10) in a 16x32 atlas, which is a one-texel margin and a two-texel gap and no
+         *        other rule (plans/plan_xnapipeline_parity.md XNAPP-139).
+         * @return False when the glyphs do not fit any allowed atlas.
+         */
+        [[nodiscard]] bool ChooseAtlas(const std::vector<RasterGlyph>& glyphs, std::uint32_t& side,
+                                       std::uint32_t& usedHeight,
+                                       std::vector<PackedGlyph>& placements,
+                                       const std::uint32_t gap)
+        {
+            const auto squareness = [](const std::uint32_t width, const std::uint32_t height)
+            {
+                std::uint32_t larger = std::max(width, height);
+                std::uint32_t smaller = std::min(width, height);
+                std::uint32_t steps = 0u;
+                while (smaller < larger) { smaller <<= 1; ++steps; }
+                return steps;
+            };
+            std::uint32_t widestGlyph = 1u;
+            for (const RasterGlyph& glyph : glyphs)
+            {
+                widestGlyph = std::max(widestGlyph, glyph.width + 1u);
+            }
+
+            std::vector<PackedGlyph> candidatePlacements;
+            side = 0u;
+            usedHeight = 0u;
+            std::uint64_t bestArea = 0u;
+            std::uint32_t bestSquareness = 0u;
+            for (std::uint32_t candidate = std::max(16u, RoundUpToPowerOfTwo(widestGlyph));
+                 candidate <= kMaximumAtlasSide; candidate <<= 1)
+            {
+                std::uint32_t candidateHeight = 0u;
+                if (!PackGlyphs(glyphs, candidate, kMaximumAtlasSide, candidatePlacements,
+                                candidateHeight, gap))
+                {
+                    continue;
+                }
+                const std::uint32_t rounded = RoundUpToPowerOfTwo(candidateHeight);
+                const std::uint64_t area = static_cast<std::uint64_t>(candidate) * rounded;
+                const std::uint32_t shape = squareness(candidate, rounded);
+                if (side != 0u && (area > bestArea ||
+                                   (area == bestArea && shape >= bestSquareness)))
+                {
+                    continue;
+                }
+                side = candidate;
+                usedHeight = candidateHeight;
+                bestArea = area;
+                bestSquareness = shape;
+                placements = candidatePlacements;
+            }
+            return side != 0u;
         }
     }
 
@@ -575,55 +660,10 @@ namespace CNA::Content::Pipeline
         // the height afterwards -- what this did before -- transposes three of those five
         // (plans/plan_xnapipeline_parity.md XNAPP-182).
         //
-        std::uint32_t widestGlyph = 1u;
-        for (const RasterGlyph& glyph : glyphs)
-        {
-            widestGlyph = std::max(widestGlyph, glyph.width + 1u);
-        }
-
-        // Every width the glyphs could go in, keeping the one that wastes least. Area first, then
-        // the squarer of two sheets of equal area, then the wider: a 16x1024 sheet holds the same
-        // 95 glyphs as a 128x128 one and is a poor texture on every renderer, so "smallest" alone
-        // is not the whole rule. XNA's own atlases are all within a factor of two of square.
-        const auto squareness = [](const std::uint32_t width, const std::uint32_t height)
-        {
-            std::uint32_t larger = std::max(width, height);
-            std::uint32_t smaller = std::min(width, height);
-            std::uint32_t steps = 0u;
-            while (smaller < larger) { smaller <<= 1; ++steps; }
-            return steps;
-        };
         std::vector<PackedGlyph> placements;
-        std::vector<PackedGlyph> candidatePlacements;
         std::uint32_t side = 0u;
         std::uint32_t usedHeight = 0u;
-        std::uint64_t bestArea = 0u;
-        std::uint32_t bestSquareness = 0u;
-        for (std::uint32_t candidate = std::max(16u, RoundUpToPowerOfTwo(widestGlyph));
-             candidate <= kMaximumAtlasSide; candidate <<= 1)
-        {
-            std::uint32_t candidateHeight = 0u;
-            if (!PackGlyphs(glyphs, candidate, kMaximumAtlasSide, candidatePlacements,
-                            candidateHeight))
-            {
-                continue;
-            }
-            const std::uint32_t rounded = RoundUpToPowerOfTwo(candidateHeight);
-            const std::uint64_t area = static_cast<std::uint64_t>(candidate) * rounded;
-            const std::uint32_t shape = squareness(candidate, rounded);
-            if (side != 0u &&
-                (area > bestArea ||
-                 (area == bestArea && shape >= bestSquareness)))
-            {
-                continue;
-            }
-            side = candidate;
-            usedHeight = candidateHeight;
-            bestArea = area;
-            bestSquareness = shape;
-            placements = candidatePlacements;
-        }
-        if (side == 0u)
+        if (!ChooseAtlas(glyphs, side, usedHeight, placements, 1u))
         {
             throw std::runtime_error(
                 "'" + origin + "' at size " + std::to_string(description.size) + " needs " +
@@ -1027,9 +1067,329 @@ namespace CNA::Content::Pipeline
         return ContentValue::Create(ProcessedSpriteFontType, std::move(font));
     }
 
+    namespace
+    {
+        /**
+         * @brief The colour a font sheet separates its glyphs with.
+         *
+         * Fixed at magenta rather than read from the sheet's own corner: a sheet bordered in
+         * transparent black is refused with the same sentence an empty one gets, so XNA is not
+         * taking the border colour from the image (measured, `fonttexture/sheet_alpha_border`).
+         * Alpha is not part of the comparison, because a sheet may be authored with the separator
+         * opaque or transparent and XNA reads both.
+         */
+        [[nodiscard]] bool IsSeparator(const std::uint8_t* texel) noexcept
+        {
+            return texel[0] == 255u && texel[1] == 0u && texel[2] == 255u;
+        }
+
+        /** @brief One glyph found in a sheet. */
+        struct SheetGlyph
+        {
+            std::uint32_t x = 0u;
+            std::uint32_t y = 0u;
+            std::uint32_t width = 0u;
+            std::uint32_t height = 0u;
+        };
+
+        /**
+         * @brief Every glyph rectangle in a sheet, in reading order.
+         *
+         * Rows of glyphs are the bands of scanlines that hold anything but the separator, and the
+         * glyphs in a band are the runs of columns that do. Measured against three genuine builds:
+         * a sheet of three equal cells, one of three unequal ones and one of ten answered exactly
+         * these rectangles, in this order.
+         */
+        [[nodiscard]] std::vector<SheetGlyph> FindSheetGlyphs(const std::uint32_t width,
+                                                              const std::uint32_t height,
+                                                              const std::vector<std::uint8_t>& rgba)
+        {
+            const auto texel = [&](const std::uint32_t x, const std::uint32_t y) {
+                return (static_cast<std::size_t>(y) * width + x) * 4u;
+            };
+
+            // The sheet begins at its first magenta texel, and a sheet with none has no glyphs at
+            // all. Both halves are measured. A 2x2 image of four ordinary colours is refused --
+            // `Cannot build this font: there were no glyphs found to build` -- and so is a sheet
+            // whose cells are separated by transparent black instead, which has perfectly good
+            // glyphs in it; that is what says the separator colour is fixed rather than read from
+            // the image. And a sheet whose *corner* texel is white while the rest of its border is
+            // magenta still answers exactly its three glyphs, which is what says the scan starts at
+            // the first magenta texel rather than at the origin (plans/plan_xnapipeline_parity.md
+            // XNAPP-139).
+            std::uint32_t originX = width;
+            std::uint32_t originY = height;
+            for (std::uint32_t y = 0u; y < height && originY == height; ++y)
+            {
+                for (std::uint32_t x = 0u; x < width; ++x)
+                {
+                    const std::size_t at = texel(x, y);
+                    if (at + 3u < rgba.size() && IsSeparator(&rgba[at]))
+                    {
+                        originX = x;
+                        originY = y;
+                        break;
+                    }
+                }
+            }
+            if (originY == height) { return {}; }
+
+            const auto occupied = [&](const std::uint32_t x, const std::uint32_t y) {
+                const std::size_t at = texel(x, y);
+                return at + 3u < rgba.size() && !IsSeparator(&rgba[at]);
+            };
+
+            std::vector<SheetGlyph> glyphs;
+            std::uint32_t y = originY;
+            while (y < height)
+            {
+                std::uint32_t bandTop = y;
+                bool any = false;
+                for (std::uint32_t x = originX; x < width && !any; ++x) { any = occupied(x, bandTop); }
+                if (!any) { ++y; continue; }
+
+                std::uint32_t bandBottom = bandTop;
+                while (bandBottom + 1u < height)
+                {
+                    bool next = false;
+                    for (std::uint32_t x = originX; x < width && !next; ++x)
+                    {
+                        next = occupied(x, bandBottom + 1u);
+                    }
+                    if (!next) { break; }
+                    ++bandBottom;
+                }
+
+                std::uint32_t x = originX;
+                while (x < width)
+                {
+                    bool column = false;
+                    for (std::uint32_t row = bandTop; row <= bandBottom && !column; ++row)
+                    {
+                        column = occupied(x, row);
+                    }
+                    if (!column) { ++x; continue; }
+                    std::uint32_t right = x;
+                    while (right + 1u < width)
+                    {
+                        bool next = false;
+                        for (std::uint32_t row = bandTop; row <= bandBottom && !next; ++row)
+                        {
+                            next = occupied(right + 1u, row);
+                        }
+                        if (!next) { break; }
+                        ++right;
+                    }
+                    glyphs.push_back({x, bandTop, right - x + 1u, bandBottom - bandTop + 1u});
+                    x = right + 1u;
+                }
+                y = bandBottom + 1u;
+            }
+            return glyphs;
+        }
+    }
+
+    Cnb::CnbSpriteFontData BuildFontFromTextureSheet(const std::uint32_t width,
+                                                     const std::uint32_t height,
+                                                     const std::vector<std::uint8_t>& rgba,
+                                                     const SharpRuntime::charcs firstCharacter,
+                                                     const std::string& origin)
+    {
+        const std::vector<SheetGlyph> found = FindSheetGlyphs(width, height, rgba);
+        if (found.empty())
+        {
+            // XNA's own sentence, measured from a build of a sheet with no glyph in it.
+            Fail(origin, "Cannot build this font: there were no glyphs found to build");
+        }
+
+        std::vector<RasterGlyph> glyphs;
+        glyphs.reserve(found.size());
+        for (const SheetGlyph& glyph : found)
+        {
+            RasterGlyph raster;
+            raster.width = glyph.width;
+            raster.height = glyph.height;
+            raster.coverage.assign(static_cast<std::size_t>(glyph.width) * glyph.height * 4u, 0u);
+            for (std::uint32_t row = 0u; row < glyph.height; ++row)
+            {
+                const std::size_t from =
+                    ((static_cast<std::size_t>(glyph.y) + row) * width + glyph.x) * 4u;
+                std::copy_n(rgba.begin() + static_cast<std::ptrdiff_t>(from),
+                            static_cast<std::size_t>(glyph.width) * 4u,
+                            raster.coverage.begin() +
+                                static_cast<std::ptrdiff_t>(static_cast<std::size_t>(row) *
+                                                            glyph.width * 4u));
+            }
+            glyphs.push_back(std::move(raster));
+        }
+
+        std::vector<PackedGlyph> placements;
+        std::uint32_t side = 0u;
+        std::uint32_t usedHeight = 0u;
+        if (!ChooseAtlas(glyphs, side, usedHeight, placements, 2u))
+        {
+            Fail(origin, "the glyphs in this sheet do not fit a " +
+                             std::to_string(kMaximumAtlasSide) + "x" +
+                             std::to_string(kMaximumAtlasSide) + " atlas");
+        }
+
+        Cnb::CnbSpriteFontData font;
+        font.atlas.width = side;
+        font.atlas.height = RoundUpToPowerOfTwo(usedHeight);
+        font.atlas.depth = 1u;
+        font.atlas.faceCount = 1u;
+        font.atlas.mipCount = 1u;
+        Cnb::CnbTextureRepresentation representation;
+        representation.format = Cnb::CnbTextureFormat::Rgba8;
+        representation.levels.emplace_back(
+            static_cast<std::size_t>(side) * font.atlas.height * 4u, 0u);
+
+        std::int32_t lineSpacing = 0;
+        for (std::size_t index = 0u; index < glyphs.size(); ++index)
+        {
+            const RasterGlyph& glyph = glyphs[index];
+            const PackedGlyph& placement = placements[index];
+            for (std::uint32_t row = 0u; row < glyph.height; ++row)
+            {
+                const std::size_t to =
+                    ((static_cast<std::size_t>(placement.y) + row) * side + placement.x) * 4u;
+                std::copy_n(glyph.coverage.begin() +
+                                static_cast<std::ptrdiff_t>(static_cast<std::size_t>(row) *
+                                                            glyph.width * 4u),
+                            static_cast<std::size_t>(glyph.width) * 4u,
+                            representation.levels.front().begin() +
+                                static_cast<std::ptrdiff_t>(to));
+            }
+            font.glyphBounds.push_back(Microsoft::Xna::Framework::Rectangle(
+                static_cast<SharpRuntime::intcs>(placement.x),
+                static_cast<SharpRuntime::intcs>(placement.y),
+                static_cast<SharpRuntime::intcs>(glyph.width),
+                static_cast<SharpRuntime::intcs>(glyph.height)));
+            // Measured: the cropping rectangle is the glyph's own size at the origin, and the
+            // kerning triple is (0, width, 0) -- a sheet says nothing about bearings.
+            font.cropping.push_back(Microsoft::Xna::Framework::Rectangle(
+                0, 0, static_cast<SharpRuntime::intcs>(glyph.width),
+                static_cast<SharpRuntime::intcs>(glyph.height)));
+            font.kerning.push_back(Microsoft::Xna::Framework::Vector3(
+                0.0f, static_cast<float>(glyph.width), 0.0f));
+            font.characters.push_back(static_cast<SharpRuntime::charcs>(
+                static_cast<std::uint32_t>(firstCharacter) + static_cast<std::uint32_t>(index)));
+            lineSpacing = std::max(lineSpacing, static_cast<std::int32_t>(glyph.height));
+        }
+        font.atlas.representations.push_back(std::move(representation));
+        // Measured: the tallest glyph, a spacing of zero, and no default character.
+        font.lineSpacing = lineSpacing;
+        font.spacing = 0.0f;
+        font.defaultCharacter.reset();
+        return font;
+    }
+
+    ContentComponentIdentity FontTextureProcessor::Identity() const
+    {
+        return {kFontTextureProcessorName, "1"};
+    }
+
+    std::string FontTextureProcessor::InputType() const { return ImportedImageType; }
+
+    std::string FontTextureProcessor::OutputType() const { return ProcessedSpriteFontType; }
+
+    void FontTextureProcessor::ValidateParameters(
+        const ContentProcessorParameters& parameters) const
+    {
+        for (const auto& [name, value] : parameters.Values())
+        {
+            static_cast<void>(value);
+            if (name == FontTextureFirstCharacterParameter ||
+                name == TexturePremultiplyAlphaParameter || name == TextureFormatParameter)
+            {
+                continue;
+            }
+            throw ContentParameterError(
+                ContentParameterFault::UnknownName, name,
+                "FontTextureProcessor does not recognize parameter '" + name +
+                    "'; it takes FirstCharacter, PremultiplyAlpha and TextureFormat.");
+        }
+    }
+
+    ContentValue FontTextureProcessor::Process(const ContentValue& input,
+                                               ContentProcessorContext& context) const
+    {
+        const ImportedImage& sheet = input.Get<ImportedImage>();
+        SharpRuntime::charcs firstCharacter = u' ';
+        if (const ContentProcessorParameterValue* named =
+                context.Parameters().Find(FontTextureFirstCharacterParameter);
+            named != nullptr)
+        {
+            // A `.contentproj` writes the character as text; a configuration document may write
+            // its code point as a number. Both are what the property means.
+            if (const std::string* text = std::get_if<std::string>(named); text != nullptr)
+            {
+                if (text->empty())
+                {
+                    throw ContentParameterError(ContentParameterFault::UnconvertibleValue,
+                                                FontTextureFirstCharacterParameter,
+                                                "FirstCharacter must be one character.");
+                }
+                firstCharacter =
+                    static_cast<SharpRuntime::charcs>(static_cast<unsigned char>(text->front()));
+            }
+            else if (const std::int64_t* code = std::get_if<std::int64_t>(named); code != nullptr)
+            {
+                if (*code < 0 || *code > 0xFFFF)
+                {
+                    throw ContentParameterError(ContentParameterFault::UnconvertibleValue,
+                                                FontTextureFirstCharacterParameter,
+                                                "FirstCharacter must be a code point.");
+                }
+                firstCharacter = static_cast<SharpRuntime::charcs>(*code);
+            }
+            else
+            {
+                throw ContentParameterError(ContentParameterFault::UnconvertibleValue,
+                                            FontTextureFirstCharacterParameter,
+                                            "FirstCharacter must be one character or a code point.");
+            }
+        }
+
+        Cnb::CnbSpriteFontData font = BuildFontFromTextureSheet(
+            sheet.width, sheet.height, sheet.rgbaPixels, firstCharacter,
+            CNA::Internal::ContentPathToUtf8(context.SourcePath()));
+        context.LogInfo("found " + std::to_string(font.characters.size()) +
+                        " glyph(s) in the sheet and packed them into a " +
+                        std::to_string(font.atlas.width) + "x" +
+                        std::to_string(font.atlas.height) + " atlas.");
+        // Deliberately *not* compressed by default, where `FontDescriptionProcessor`'s atlas is.
+        // The difference is XNA's own: this processor has a `TextureFormat` property whose default
+        // is `Color`, and a genuine build of a sheet writes an uncompressed atlas
+        // (`fonttexture/sheet_default`); the description processor has no such property and always
+        // writes DXT3. A build that asks for `DxtCompressed` gets it.
+        if (const ContentProcessorParameterValue* format =
+                context.Parameters().Find(TextureFormatParameter);
+            format != nullptr)
+        {
+            const std::string* named = std::get_if<std::string>(format);
+            std::string wanted = named == nullptr ? std::string() : *named;
+            std::transform(wanted.begin(), wanted.end(), wanted.begin(),
+                           [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            if (wanted == "dxtcompressed" || wanted == "dxt3")
+            {
+                CompressAtlasForXnb(font, context);
+            }
+            else if (wanted != "color" && wanted != "nochange" && !wanted.empty())
+            {
+                throw ContentParameterError(
+                    ContentParameterFault::UnconvertibleValue, TextureFormatParameter,
+                    "FontTextureProcessor takes NoChange, Color or DxtCompressed, not '" +
+                        wanted + "'.");
+            }
+        }
+        return ContentValue::Create(ProcessedSpriteFontType, std::move(font));
+    }
+
     void RegisterSpriteFontSourceContentPipeline(ContentPipelineRegistry& registry)
     {
         registry.RegisterImporter(std::make_shared<const FontDescriptionImporter>());
         registry.RegisterProcessor(std::make_shared<const FontDescriptionProcessor>());
+        registry.RegisterProcessor(std::make_shared<const FontTextureProcessor>());
     }
 }

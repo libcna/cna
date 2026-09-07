@@ -95,9 +95,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
                   "graph does for a source with no processor; name none and the asset passes "
                   "through."}},
                 {"FontTextureProcessor",
-                 {"", {},
-                  "the sprite-font-from-texture route is not implemented in this build; a "
-                  ".spritefont source and FontDescriptionProcessor are."}},
+                 {.canonicalName = "CNA.FontTextureProcessor",
+                  .parameterNames = {{"FirstCharacter", "firstCharacter"},
+                                     {"PremultiplyAlpha", "premultiplyAlpha"},
+                                     {"TextureFormat", "textureFormat"}}}},
                 {"MaterialProcessor",
                  {"", {},
                   "MaterialProcessor is reached through ModelProcessor rather than named on an "

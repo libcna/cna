@@ -893,6 +893,62 @@
       "processor": "PassThroughProcessor",
       "platform": "Windows",
       "profile": "Reach"
+    },
+    {
+      "case": "fonttexture/png_default",
+      "source": "texture/probe.png",
+      "importer": "TextureImporter",
+      "processor": "FontTextureProcessor",
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
+      "case": "fonttexture/sheet_default",
+      "source": "texture/font_sheet.png",
+      "importer": "TextureImporter",
+      "processor": "FontTextureProcessor",
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
+      "case": "fonttexture/sheet_uneven",
+      "source": "texture/font_sheet_uneven.png",
+      "importer": "TextureImporter",
+      "processor": "FontTextureProcessor",
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
+      "case": "fonttexture/sheet_many",
+      "source": "texture/font_sheet_many.png",
+      "importer": "TextureImporter",
+      "processor": "FontTextureProcessor",
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
+      "case": "fonttexture/sheet_alpha_border",
+      "source": "texture/font_sheet_alpha_border.png",
+      "importer": "TextureImporter",
+      "processor": "FontTextureProcessor",
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
+      "case": "fonttexture/sheet_edge_touch",
+      "source": "texture/font_sheet_edge_touch.png",
+      "importer": "TextureImporter",
+      "processor": "FontTextureProcessor",
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
+      "case": "fonttexture/sheet_white_corner",
+      "source": "texture/font_sheet_white_corner.png",
+      "importer": "TextureImporter",
+      "processor": "FontTextureProcessor",
+      "platform": "Windows",
+      "profile": "Reach"
     }
   ]
 }

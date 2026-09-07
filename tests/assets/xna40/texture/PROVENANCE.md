@@ -69,3 +69,13 @@ these two say what it is in one build each.
 `PROVENANCE.json` beside this file lists every fixture in this directory with where it came from.
 `tools/provenance/provenance_gate.py` fails when a file here has no row, when a row names a file
 that is not here, and when a row claims third-party content with no licence.
+
+## The font sheets
+
+`plans/plan_xnapipeline_parity.md` `XNAPP-139` added four more, written by
+`tools/xna-pipeline-oracle/texture/make_font_sheet_fixtures.py`: the sheets XNA's
+`FontTextureProcessor` reads, whose glyphs are separated by magenta. Each answers one question the
+others cannot -- three equal cells for the glyph table and the atlas, three unequal ones for the
+order glyphs come out in and the order they are packed in, ten for where a row wraps and what the
+padding is, and one bordered in transparent black rather than magenta, which is what settles that
+the separator colour is fixed rather than read from the image.

@@ -210,6 +210,73 @@ namespace CNA::Content::Pipeline
     };
 
     /**
+     * @brief The character the first glyph of a font sheet is; `FontTextureProcessor`'s own
+     *        `FirstCharacter`, whose XNA default is the space.
+     */
+    inline constexpr const char* FontTextureFirstCharacterParameter = "firstCharacter";
+
+    /**
+     * @brief Builds a sprite font out of a sheet of glyph images.
+     *
+     * XNA's `FontTextureProcessor` reads a texture whose glyphs are separated by **magenta**
+     * (255, 0, 255) -- measured, and it is that colour and not the sheet's own top-left texel: a
+     * sheet bordered in transparent black is refused with the same sentence an empty one is. Each
+     * non-magenta rectangle is one glyph, taken in reading order, and the characters run
+     * consecutively from `firstCharacter`. Everything else follows from the glyphs: the line
+     * spacing is the tallest of them, the spacing is zero, each cropping rectangle is the glyph's
+     * own size at the origin, and each kerning triple is `(0, width, 0)` -- all four measured from
+     * genuine builds of three sheets (`tools/xna-pipeline-oracle/differential/fonttexture.json`,
+     * plans/plan_xnapipeline_parity.md `XNAPP-139`).
+     *
+     * @param width Sheet width in texels.
+     * @param height Sheet height in texels.
+     * @param rgba Sheet pixels, R, G, B, A per texel.
+     * @param firstCharacter The character the first glyph is.
+     * @param origin Path named in a refusal.
+     * @return The packed font.
+     * @throws InvalidContentException when the sheet holds no glyph, in XNA's own words.
+     */
+    [[nodiscard]] Cnb::CnbSpriteFontData BuildFontFromTextureSheet(
+        std::uint32_t width, std::uint32_t height, const std::vector<std::uint8_t>& rgba,
+        SharpRuntime::charcs firstCharacter, const std::string& origin);
+
+    /**
+     * @brief Turns a sheet of glyph images into canonical SpriteFont data.
+     *
+     * Registered against the same imported type the texture route takes, and
+     * @ref ContentProcessor::SelectedByNameOnly so it never competes with it: a `.png` builds as a
+     * texture unless a project names this processor, which is exactly what XNA does.
+     */
+    class FontTextureProcessor final : public ContentProcessor
+    {
+    public:
+        /** @brief Returns the stable built-in processor identity. */
+        [[nodiscard]] ContentComponentIdentity Identity() const override;
+
+        /** @brief Returns ImportedImageType. */
+        [[nodiscard]] std::string InputType() const override;
+
+        /** @brief Returns ProcessedSpriteFontType. */
+        [[nodiscard]] std::string OutputType() const override;
+
+        /** @brief Accepts `firstCharacter`, `premultiplyAlpha` and `textureFormat`. */
+        void ValidateParameters(const ContentProcessorParameters& parameters) const override;
+
+        /** @brief Never chosen for an imported image unless a build names it. */
+        [[nodiscard]] bool SelectedByNameOnly() const override { return true; }
+
+        /**
+         * @brief Finds the glyphs, packs them and answers the font.
+         *
+         * @param input ImportedImage value.
+         * @param context Call-scoped processor context.
+         * @return Canonical CnbSpriteFontData boxed as ProcessedSpriteFontType.
+         */
+        [[nodiscard]] ContentValue Process(const ContentValue& input,
+                                           ContentProcessorContext& context) const override;
+    };
+
+    /**
      * @brief Registers the `.spritefont` importer and its rasterizing processor.
      *
      * The existing SpriteFont writers -- CNB's and XNB's -- consume the processed value unchanged,
