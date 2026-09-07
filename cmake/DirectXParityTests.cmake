@@ -529,6 +529,21 @@ function(cna_register_d3d_parity_tests)
         NAME TextureCube_PartialRect_RoundTrip TARGET texturecube_partial_rect DIRECTX12_ORDER 1740
         SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_texturecube_partial_rect_test.cpp")
     cna_d3d_parity_fixture(
+        NAME TextureAddressMode TARGET texture_address_mode DIRECTX12_ORDER 1750
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_texture_address_mode_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME TextureAddressMode_Mirror TARGET texture_address_mode_mirror DIRECTX12_ORDER 1760
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_texture_address_mode_mirror_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME SamplerState_DualTextureEffect TARGET sampler_state_effect DIRECTX12_ORDER 1770
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_sampler_state_effect_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME TextureAddressMode_Clamp_DualTextureEffect TARGET texture_address_mode_clamp_effect DIRECTX12_ORDER 1780
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_texture_address_mode_clamp_effect_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME TextureAddressMode_Mirror_DualTextureEffect TARGET texture_address_mode_mirror_effect DIRECTX12_ORDER 1790
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_texture_address_mode_mirror_effect_test.cpp")
+    cna_d3d_parity_fixture(
         NAME SpriteBatch_CustomViewport TARGET spritebatch_custom_viewport
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_custom_viewport_test.cpp"
         DIRECTX11_ONLY REASON "D3D12 presentation-corpus adoption is tracked by DX-234 and DX-236")
