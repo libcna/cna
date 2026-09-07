@@ -118,12 +118,12 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
         // The parameters the runtime passes on, name for name (measured,
         // materialprocessor/properties_forwarded).
         OpaqueDataDictionary parameters;
-        parameters.SetValue<Color>("ColorKeyColor", colorKeyColor_);
-        parameters.SetValue<bool>("ColorKeyEnabled", colorKeyEnabled_);
-        parameters.SetValue<bool>("GenerateMipmaps", generateMipmaps_);
-        parameters.SetValue<bool>("PremultiplyAlpha", premultiplyTextureAlpha_);
-        parameters.SetValue<bool>("ResizeToPowerOfTwo", resizeTexturesToPowerOfTwo_);
-        parameters.SetValue<TextureProcessorOutputFormat>("TextureFormat", textureFormat_);
+        parameters.SetValue<Color>("ColorKeyColor", getColorKeyColorProperty());
+        parameters.SetValue<bool>("ColorKeyEnabled", getColorKeyEnabledProperty());
+        parameters.SetValue<bool>("GenerateMipmaps", getGenerateMipmapsProperty());
+        parameters.SetValue<bool>("PremultiplyAlpha", getPremultiplyTextureAlphaProperty());
+        parameters.SetValue<bool>("ResizeToPowerOfTwo", getResizeTexturesToPowerOfTwoProperty());
+        parameters.SetValue<TextureProcessorOutputFormat>("TextureFormat", getTextureFormatProperty());
         return std::make_shared<ExternalReference<Graphics::TextureContent>>(
             context.BuildAsset<Graphics::TextureContent, Graphics::TextureContent>(*texture, "TextureProcessor",
                                                                                   parameters));

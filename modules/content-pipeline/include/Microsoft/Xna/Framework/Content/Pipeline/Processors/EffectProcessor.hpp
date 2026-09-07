@@ -49,14 +49,14 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
          *
          * @return `Auto` by default.
          */
-        [[nodiscard]] EffectProcessorDebugMode getDebugModeProperty() const noexcept;
+        [[nodiscard]] virtual EffectProcessorDebugMode getDebugModeProperty() const noexcept;
 
         /**
          * @brief Sets how the effect is compiled.
          *
          * @param value The wanted mode.
          */
-        void setDebugModeProperty(EffectProcessorDebugMode value) noexcept;
+        virtual void setDebugModeProperty(EffectProcessorDebugMode value) noexcept;
 
         /**
          * @brief Gets the preprocessor definitions applied to the source.
@@ -64,14 +64,14 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
          * @return The definitions, `NAME=value` separated by semicolons; empty by default, which
          *         is the null XNA starts with.
          */
-        [[nodiscard]] const std::string& getDefinesProperty() const noexcept;
+        [[nodiscard]] virtual const std::string& getDefinesProperty() const noexcept;
 
         /**
          * @brief Sets the preprocessor definitions applied to the source.
          *
          * @param value The definitions, `NAME=value` separated by semicolons.
          */
-        void setDefinesProperty(std::string value);
+        virtual void setDefinesProperty(std::string value);
 
         /**
          * @brief Compiles the effect.

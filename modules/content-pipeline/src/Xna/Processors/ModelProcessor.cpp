@@ -181,10 +181,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
         // root bone: the geometry moves and every node's transform is re-expressed in the new
         // frame (measured, modelprocessor/scale_rotation_detail and rotation_order, which also
         // name the order the three rotations compose in).
-        const Matrix adjustment = Matrix::CreateRotationZ(MathHelper::ToRadians(rotationZ_)) *
-                                  Matrix::CreateRotationX(MathHelper::ToRadians(rotationX_)) *
-                                  Matrix::CreateRotationY(MathHelper::ToRadians(rotationY_)) *
-                                  Matrix::CreateScale(scale_);
+        const Matrix adjustment = Matrix::CreateRotationZ(MathHelper::ToRadians(getRotationZProperty())) *
+                                  Matrix::CreateRotationX(MathHelper::ToRadians(getRotationXProperty())) *
+                                  Matrix::CreateRotationY(MathHelper::ToRadians(getRotationYProperty())) *
+                                  Matrix::CreateScale(getScaleProperty());
         Graphics::MeshHelper::TransformScene(input, adjustment);
 
         // The skeleton is found once, before any geometry is processed, because the blend indices
@@ -220,7 +220,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
             if (const auto mesh = std::dynamic_pointer_cast<Graphics::MeshContent>(node))
             {
                 ModelMeshPartContentCollection parts;
-                if (generateTangentFrames_)
+                if (getGenerateTangentFramesProperty())
                 {
                     Graphics::MeshHelper::CalculateTangentFrames(
                         mesh, Graphics::VertexChannelNames::TextureCoordinate(0),
@@ -255,7 +255,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
                 {
                     ProcessGeometryUsingMaterial(materials[group], grouped[group], context);
                 }
-                if (swapWindingOrder_)
+                if (getSwapWindingOrderProperty())
                 {
                     Graphics::MeshHelper::SwapWindingOrder(mesh);
                 }
@@ -350,13 +350,13 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
         // The material goes through the material processor, with this processor's own texture
         // properties (measured, modelprocessor/triangle records the conversion and its parameters).
         OpaqueDataDictionary parameters;
-        parameters.SetValue<Color>("ColorKeyColor", colorKeyColor_);
-        parameters.SetValue<bool>("ColorKeyEnabled", colorKeyEnabled_);
-        parameters.SetValue<MaterialProcessorDefaultEffect>("DefaultEffect", defaultEffect_);
-        parameters.SetValue<bool>("GenerateMipmaps", generateMipmaps_);
-        parameters.SetValue<bool>("PremultiplyTextureAlpha", premultiplyTextureAlpha_);
-        parameters.SetValue<bool>("ResizeTexturesToPowerOfTwo", resizeTexturesToPowerOfTwo_);
-        parameters.SetValue<TextureProcessorOutputFormat>("TextureFormat", textureFormat_);
+        parameters.SetValue<Color>("ColorKeyColor", getColorKeyColorProperty());
+        parameters.SetValue<bool>("ColorKeyEnabled", getColorKeyEnabledProperty());
+        parameters.SetValue<MaterialProcessorDefaultEffect>("DefaultEffect", getDefaultEffectProperty());
+        parameters.SetValue<bool>("GenerateMipmaps", getGenerateMipmapsProperty());
+        parameters.SetValue<bool>("PremultiplyTextureAlpha", getPremultiplyTextureAlphaProperty());
+        parameters.SetValue<bool>("ResizeTexturesToPowerOfTwo", getResizeTexturesToPowerOfTwoProperty());
+        parameters.SetValue<TextureProcessorOutputFormat>("TextureFormat", getTextureFormatProperty());
         return context.Convert<Graphics::MaterialContent, Graphics::MaterialContent>(material, "MaterialProcessor",
                                                                                      parameters);
     }
@@ -376,7 +376,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
             }
             // A skinned model needs its weights; without them the runtime refuses by name
             // (measured, modelprocessor/default_effect_skinned).
-            if (defaultEffect_ == MaterialProcessorDefaultEffect::SkinnedEffect &&
+            if (getDefaultEffectProperty() == MaterialProcessorDefaultEffect::SkinnedEffect &&
                 !geometry->getVerticesProperty().getChannelsProperty().Contains(
                     std::string(Graphics::VertexChannelNames::Weights())))
             {
@@ -516,7 +516,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
         {
             typed = channels.ConvertChannelContent<Color>(vertexChannelIndex);
         }
-        if (typed == nullptr || !premultiplyVertexColors_)
+        if (typed == nullptr || !getPremultiplyVertexColorsProperty())
         {
             return;
         }

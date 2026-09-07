@@ -30,14 +30,14 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          *
          * @return The display name, or empty when none was given.
          */
-        [[nodiscard]] const std::string& getDisplayNameProperty() const noexcept;
+        [[nodiscard]] virtual const std::string& getDisplayNameProperty() const noexcept;
 
         /**
          * @brief Sets the display name shown to users.
          *
          * @param value The display name.
          */
-        void setDisplayNameProperty(std::string value);
+        virtual void setDisplayNameProperty(std::string value);
 
     private:
         std::string displayName_;

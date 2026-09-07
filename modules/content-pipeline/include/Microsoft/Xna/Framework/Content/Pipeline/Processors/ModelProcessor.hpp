@@ -42,155 +42,155 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
          * @brief Gets the colour keyed out of every texture the model's materials name.
          * @return The key colour; magenta by default.
          */
-        [[nodiscard]] Color getColorKeyColorProperty() const noexcept;
+        [[nodiscard]] virtual Color getColorKeyColorProperty() const noexcept;
         /**
          * @brief Sets the colour keyed out of every texture the model's materials name.
          * @param value The key colour.
          */
-        void setColorKeyColorProperty(Color value) noexcept;
+        virtual void setColorKeyColorProperty(Color value) noexcept;
 
         /**
          * @brief Gets whether the key colour is turned transparent.
          * @return true by default.
          */
-        [[nodiscard]] bool getColorKeyEnabledProperty() const noexcept;
+        [[nodiscard]] virtual bool getColorKeyEnabledProperty() const noexcept;
         /**
          * @brief Sets whether the key colour is turned transparent.
          * @param value true to key the colour out.
          */
-        void setColorKeyEnabledProperty(bool value) noexcept;
+        virtual void setColorKeyEnabledProperty(bool value) noexcept;
 
         /**
          * @brief Gets the effect a geometry with no material of its own is given.
          * @return `BasicEffect` by default.
          */
-        [[nodiscard]] MaterialProcessorDefaultEffect getDefaultEffectProperty() const noexcept;
+        [[nodiscard]] virtual MaterialProcessorDefaultEffect getDefaultEffectProperty() const noexcept;
         /**
          * @brief Sets the effect a geometry with no material of its own is given.
          * @param value The wanted effect.
          */
-        void setDefaultEffectProperty(MaterialProcessorDefaultEffect value) noexcept;
+        virtual void setDefaultEffectProperty(MaterialProcessorDefaultEffect value) noexcept;
 
         /**
          * @brief Gets whether each texture is given a mipmap chain.
          * @return true by default.
          */
-        [[nodiscard]] bool getGenerateMipmapsProperty() const noexcept;
+        [[nodiscard]] virtual bool getGenerateMipmapsProperty() const noexcept;
         /**
          * @brief Sets whether each texture is given a mipmap chain.
          * @param value true to build one.
          */
-        void setGenerateMipmapsProperty(bool value) noexcept;
+        virtual void setGenerateMipmapsProperty(bool value) noexcept;
 
         /**
          * @brief Gets whether tangent frames are computed for meshes that lack them.
          * @return false by default.
          */
-        [[nodiscard]] bool getGenerateTangentFramesProperty() const noexcept;
+        [[nodiscard]] virtual bool getGenerateTangentFramesProperty() const noexcept;
         /**
          * @brief Sets whether tangent frames are computed for meshes that lack them.
          * @param value true to compute them.
          */
-        void setGenerateTangentFramesProperty(bool value) noexcept;
+        virtual void setGenerateTangentFramesProperty(bool value) noexcept;
 
         /**
          * @brief Gets whether each texture's colour is multiplied by its alpha.
          * @return true by default.
          */
-        [[nodiscard]] bool getPremultiplyTextureAlphaProperty() const noexcept;
+        [[nodiscard]] virtual bool getPremultiplyTextureAlphaProperty() const noexcept;
         /**
          * @brief Sets whether each texture's colour is multiplied by its alpha.
          * @param value true to premultiply.
          */
-        void setPremultiplyTextureAlphaProperty(bool value) noexcept;
+        virtual void setPremultiplyTextureAlphaProperty(bool value) noexcept;
 
         /**
          * @brief Gets whether vertex colours are multiplied by their alpha.
          * @return true by default.
          */
-        [[nodiscard]] bool getPremultiplyVertexColorsProperty() const noexcept;
+        [[nodiscard]] virtual bool getPremultiplyVertexColorsProperty() const noexcept;
         /**
          * @brief Sets whether vertex colours are multiplied by their alpha.
          * @param value true to premultiply.
          */
-        void setPremultiplyVertexColorsProperty(bool value) noexcept;
+        virtual void setPremultiplyVertexColorsProperty(bool value) noexcept;
 
         /**
          * @brief Gets whether each texture is resized to the next power of two.
          * @return false by default.
          */
-        [[nodiscard]] bool getResizeTexturesToPowerOfTwoProperty() const noexcept;
+        [[nodiscard]] virtual bool getResizeTexturesToPowerOfTwoProperty() const noexcept;
         /**
          * @brief Sets whether each texture is resized to the next power of two.
          * @param value true to resize.
          */
-        void setResizeTexturesToPowerOfTwoProperty(bool value) noexcept;
+        virtual void setResizeTexturesToPowerOfTwoProperty(bool value) noexcept;
 
         /**
          * @brief Gets the rotation applied about the X axis, in degrees.
          * @return Zero by default.
          */
-        [[nodiscard]] SharpRuntime::Single getRotationXProperty() const noexcept;
+        [[nodiscard]] virtual SharpRuntime::Single getRotationXProperty() const noexcept;
         /**
          * @brief Sets the rotation applied about the X axis, in degrees.
          * @param value The rotation.
          */
-        void setRotationXProperty(SharpRuntime::Single value) noexcept;
+        virtual void setRotationXProperty(SharpRuntime::Single value) noexcept;
 
         /**
          * @brief Gets the rotation applied about the Y axis, in degrees.
          * @return Zero by default.
          */
-        [[nodiscard]] SharpRuntime::Single getRotationYProperty() const noexcept;
+        [[nodiscard]] virtual SharpRuntime::Single getRotationYProperty() const noexcept;
         /**
          * @brief Sets the rotation applied about the Y axis, in degrees.
          * @param value The rotation.
          */
-        void setRotationYProperty(SharpRuntime::Single value) noexcept;
+        virtual void setRotationYProperty(SharpRuntime::Single value) noexcept;
 
         /**
          * @brief Gets the rotation applied about the Z axis, in degrees.
          * @return Zero by default.
          */
-        [[nodiscard]] SharpRuntime::Single getRotationZProperty() const noexcept;
+        [[nodiscard]] virtual SharpRuntime::Single getRotationZProperty() const noexcept;
         /**
          * @brief Sets the rotation applied about the Z axis, in degrees.
          * @param value The rotation.
          */
-        void setRotationZProperty(SharpRuntime::Single value) noexcept;
+        virtual void setRotationZProperty(SharpRuntime::Single value) noexcept;
 
         /**
          * @brief Gets the uniform scale applied to the model.
          * @return One by default.
          */
-        [[nodiscard]] SharpRuntime::Single getScaleProperty() const noexcept;
+        [[nodiscard]] virtual SharpRuntime::Single getScaleProperty() const noexcept;
         /**
          * @brief Sets the uniform scale applied to the model.
          * @param value The scale.
          */
-        void setScaleProperty(SharpRuntime::Single value) noexcept;
+        virtual void setScaleProperty(SharpRuntime::Single value) noexcept;
 
         /**
          * @brief Gets whether triangle winding is reversed.
          * @return false by default.
          */
-        [[nodiscard]] bool getSwapWindingOrderProperty() const noexcept;
+        [[nodiscard]] virtual bool getSwapWindingOrderProperty() const noexcept;
         /**
          * @brief Sets whether triangle winding is reversed.
          * @param value true to reverse it.
          */
-        void setSwapWindingOrderProperty(bool value) noexcept;
+        virtual void setSwapWindingOrderProperty(bool value) noexcept;
 
         /**
          * @brief Gets the format each texture is converted to.
          * @return `DxtCompressed` by default.
          */
-        [[nodiscard]] TextureProcessorOutputFormat getTextureFormatProperty() const noexcept;
+        [[nodiscard]] virtual TextureProcessorOutputFormat getTextureFormatProperty() const noexcept;
         /**
          * @brief Sets the format each texture is converted to.
          * @param value The wanted format.
          */
-        void setTextureFormatProperty(TextureProcessorOutputFormat value) noexcept;
+        virtual void setTextureFormatProperty(TextureProcessorOutputFormat value) noexcept;
 
         /**
          * @brief Processes the scene into a model.

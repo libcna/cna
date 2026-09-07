@@ -146,7 +146,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
     {
         // Measured: the glyphs stand for consecutive characters from FirstCharacter
         // (fontprocessor/texture_character_for_index and /texture_first_character_set).
-        return static_cast<SharpRuntime::charcs>(static_cast<SharpRuntime::intcs>(firstCharacter_) + index);
+        return static_cast<SharpRuntime::charcs>(
+            static_cast<SharpRuntime::intcs>(getFirstCharacterProperty()) + index);
     }
 
     std::shared_ptr<SpriteFontContent> FontTextureProcessor::Process(

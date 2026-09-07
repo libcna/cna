@@ -1656,6 +1656,88 @@ TEST(XnaModelProcessor, TangentFramesAreGeneratedAndRefusedAsXnaDoes)
               Expected("modelprocessor/tangent_frames_no_texcoords"));
 }
 
+// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-118: a processor property is `virtual` in XNA, and a
+// game overrides it rather than setting it. The Normal Mapping sample's processor is written
+// exactly this way -- `public override bool GenerateTangentFrames { get { return true; } }` -- so
+// that no project setting can turn off something the effect requires. Twenty-six build units in the
+// sample corpus derive from a built-in processor.
+//
+// A non-virtual accessor fails silently: the derived class compiles, its override is never called,
+// and the model is built with the base's answer. So these do not check the keyword -- the gate
+// `XnaPipelineOverridableMembersAreVirtual` checks that against the CLR metadata -- they check the
+// consequence, that the base's own work consults the override.
+namespace
+{
+    /** @brief A game's processor forcing tangent frames on the way the Normal Mapping sample does. */
+    class TangentDemandingModelProcessor final : public Processors::ModelProcessor
+    {
+    public:
+        [[nodiscard]] bool getGenerateTangentFramesProperty() const noexcept override { return true; }
+        void setGenerateTangentFramesProperty(bool) noexcept override {}
+    };
+
+    /** @brief A game's processor fixing the scale, so the transform path is measured too. */
+    class HalfSizeModelProcessor final : public Processors::ModelProcessor
+    {
+    public:
+        [[nodiscard]] SharpRuntime::Single getScaleProperty() const noexcept override { return 0.5f; }
+    };
+
+    /** @brief A game's texture processor that never colour-keys, whatever the project asks. */
+    class NeverKeyedTextureProcessor final : public TextureProcessor
+    {
+    public:
+        [[nodiscard]] bool getColorKeyEnabledProperty() const noexcept override { return false; }
+    };
+}
+
+TEST(XnaProcessorOverriding, AModelProcessorSubclassGeneratesTangentFramesTheBaseWouldNot)
+{
+    TangentDemandingModelProcessor overridden;
+    RecordingContext overriddenContext;
+    const std::string fromOverride =
+        DescribeModelFull(overridden.Process(TriangleScene(), overriddenContext));
+
+    Processors::ModelProcessor stock;
+    stock.setGenerateTangentFramesProperty(true);
+    RecordingContext stockContext;
+    const std::string fromProperty = DescribeModelFull(stock.Process(TriangleScene(), stockContext));
+
+    EXPECT_EQ(fromOverride, fromProperty);
+    // And it is not merely the default: a processor left alone produces something else.
+    Processors::ModelProcessor untouched;
+    RecordingContext untouchedContext;
+    EXPECT_NE(fromOverride, DescribeModelFull(untouched.Process(TriangleScene(), untouchedContext)));
+    // The setter is virtual too, so the sample's `set { }` really does refuse the project's value.
+    overridden.setGenerateTangentFramesProperty(false);
+    EXPECT_TRUE(overridden.getGenerateTangentFramesProperty());
+}
+
+TEST(XnaProcessorOverriding, AModelProcessorSubclassScalesTheSceneTheBaseWouldNot)
+{
+    HalfSizeModelProcessor overridden;
+    RecordingContext overriddenContext;
+    const std::string fromOverride =
+        DescribeModelFull(overridden.Process(TriangleScene(), overriddenContext));
+
+    Processors::ModelProcessor stock;
+    stock.setScaleProperty(0.5f);
+    RecordingContext stockContext;
+    EXPECT_EQ(fromOverride, DescribeModelFull(stock.Process(TriangleScene(), stockContext)));
+}
+
+TEST(XnaProcessorOverriding, ATextureProcessorSubclassKeepsTheColourTheBaseWouldKeyOut)
+{
+    NeverKeyedTextureProcessor overridden;
+    auto texture = std::make_shared<Texture2DContent>();
+    auto bitmap = std::make_shared<PixelBitmapContent<Color>>(2, 1);
+    bitmap->SetPixel(0, 0, Color(255, 0, 255, 255));
+    bitmap->SetPixel(1, 0, Color(10, 20, 30, 255));
+    texture->getMipmapsProperty().Add(bitmap);
+    EXPECT_EQ(RunProcessor(overridden, texture, "Texture2DContent"),
+              Expected("textureprocessor/color_key_disabled"));
+}
+
 TEST(XnaVertexBufferContent, WritesAndSizesAsXnaDoes)
 {
     Processors::VertexBufferContent buffer(24);

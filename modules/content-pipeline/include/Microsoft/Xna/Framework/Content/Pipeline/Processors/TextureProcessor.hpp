@@ -41,84 +41,84 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
          *
          * @return The key colour; magenta by default.
          */
-        [[nodiscard]] Color getColorKeyColorProperty() const noexcept;
+        [[nodiscard]] virtual Color getColorKeyColorProperty() const noexcept;
 
         /**
          * @brief Sets the colour keyed out of the texture.
          *
          * @param value The key colour.
          */
-        void setColorKeyColorProperty(Color value) noexcept;
+        virtual void setColorKeyColorProperty(Color value) noexcept;
 
         /**
          * @brief Gets whether the key colour is turned transparent.
          *
          * @return true by default.
          */
-        [[nodiscard]] bool getColorKeyEnabledProperty() const noexcept;
+        [[nodiscard]] virtual bool getColorKeyEnabledProperty() const noexcept;
 
         /**
          * @brief Sets whether the key colour is turned transparent.
          *
          * @param value true to key the colour out.
          */
-        void setColorKeyEnabledProperty(bool value) noexcept;
+        virtual void setColorKeyEnabledProperty(bool value) noexcept;
 
         /**
          * @brief Gets whether a mipmap chain is built.
          *
          * @return false by default; true for a model texture.
          */
-        [[nodiscard]] bool getGenerateMipmapsProperty() const noexcept;
+        [[nodiscard]] virtual bool getGenerateMipmapsProperty() const noexcept;
 
         /**
          * @brief Sets whether a mipmap chain is built.
          *
          * @param value true to build one.
          */
-        void setGenerateMipmapsProperty(bool value) noexcept;
+        virtual void setGenerateMipmapsProperty(bool value) noexcept;
 
         /**
          * @brief Gets whether the colour channels are multiplied by the alpha channel.
          *
          * @return true by default.
          */
-        [[nodiscard]] bool getPremultiplyAlphaProperty() const noexcept;
+        [[nodiscard]] virtual bool getPremultiplyAlphaProperty() const noexcept;
 
         /**
          * @brief Sets whether the colour channels are multiplied by the alpha channel.
          *
          * @param value true to premultiply.
          */
-        void setPremultiplyAlphaProperty(bool value) noexcept;
+        virtual void setPremultiplyAlphaProperty(bool value) noexcept;
 
         /**
          * @brief Gets whether the texture is resized to the next power of two.
          *
          * @return false by default.
          */
-        [[nodiscard]] bool getResizeToPowerOfTwoProperty() const noexcept;
+        [[nodiscard]] virtual bool getResizeToPowerOfTwoProperty() const noexcept;
 
         /**
          * @brief Sets whether the texture is resized to the next power of two.
          *
          * @param value true to resize.
          */
-        void setResizeToPowerOfTwoProperty(bool value) noexcept;
+        virtual void setResizeToPowerOfTwoProperty(bool value) noexcept;
 
         /**
          * @brief Gets the format the texture is converted to.
          *
          * @return `Color` by default; `DxtCompressed` for a model texture.
          */
-        [[nodiscard]] TextureProcessorOutputFormat getTextureFormatProperty() const noexcept;
+        [[nodiscard]] virtual TextureProcessorOutputFormat getTextureFormatProperty() const noexcept;
 
         /**
          * @brief Sets the format the texture is converted to.
          *
          * @param value The wanted format.
          */
-        void setTextureFormatProperty(TextureProcessorOutputFormat value) noexcept;
+        virtual void setTextureFormatProperty(TextureProcessorOutputFormat value) noexcept;
 
         /**
          * @brief Processes the texture.

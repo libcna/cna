@@ -115,8 +115,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
             throw System::ArgumentNullException("input");
         }
         Graphics::MipmapChainCollection& faces = input->getFacesProperty();
-        const bool needsColor = colorKeyEnabled_ || premultiplyAlpha_ || resizeToPowerOfTwo_ ||
-                                textureFormat_ != TextureProcessorOutputFormat::NoChange;
+        const bool needsColor = getColorKeyEnabledProperty() || getPremultiplyAlphaProperty() ||
+                                getResizeToPowerOfTwoProperty() ||
+                                getTextureFormatProperty() != TextureProcessorOutputFormat::NoChange;
         // With NoChange the texture keeps the bitmap type it arrived with, whatever the steps in
         // between needed (measured, tests/reference/xna40/graphics case
         // textureprocessor/no_change: a Bgr565 texture stays Bgr565).
@@ -146,11 +147,11 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
             std::shared_ptr<Graphics::PixelBitmapContent<Color>> pixels = AsColor(level);
             // The measured order: key the colour out, resize, then premultiply
             // (tests/reference/xna40/graphics, textureprocessor/color_key and /premultiply).
-            if (colorKeyEnabled_)
+            if (getColorKeyEnabledProperty())
             {
-                pixels->ReplaceColor(colorKeyColor_, Color(0, 0, 0, 0));
+                pixels->ReplaceColor(getColorKeyColorProperty(), Color(0, 0, 0, 0));
             }
-            if (resizeToPowerOfTwo_)
+            if (getResizeToPowerOfTwoProperty())
             {
                 const SharpRuntime::intcs width = NextPowerOfTwo(pixels->getWidthProperty());
                 const SharpRuntime::intcs height = NextPowerOfTwo(pixels->getHeightProperty());
@@ -161,7 +162,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
                     pixels = resized;
                 }
             }
-            if (premultiplyAlpha_)
+            if (getPremultiplyAlphaProperty())
             {
                 for (SharpRuntime::intcs y = 0; y < pixels->getHeightProperty(); ++y)
                 {
@@ -178,15 +179,15 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
             chain->Clear();
             chain->Add(pixels);
         }
-        if (generateMipmaps_)
+        if (getGenerateMipmapsProperty())
         {
             input->GenerateMipmaps(true);
         }
-        if (textureFormat_ == TextureProcessorOutputFormat::NoChange && sawBitmap)
+        if (getTextureFormatProperty() == TextureProcessorOutputFormat::NoChange && sawBitmap)
         {
             input->ConvertBitmapType(originalType);
         }
-        if (textureFormat_ == TextureProcessorOutputFormat::DxtCompressed)
+        if (getTextureFormatProperty() == TextureProcessorOutputFormat::DxtCompressed)
         {
             // Dxt1 carries one bit of alpha, so it is enough unless a pixel is partly transparent
             // (measured, textureprocessor/dxt versus /dxt_opaque and /dxt_colorkeyed_opaque).

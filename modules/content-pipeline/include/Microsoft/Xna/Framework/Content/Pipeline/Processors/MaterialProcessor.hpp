@@ -44,78 +44,78 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
          * @brief Gets the colour keyed out of every texture this material names.
          * @return The key colour; magenta by default.
          */
-        [[nodiscard]] Color getColorKeyColorProperty() const noexcept;
+        [[nodiscard]] virtual Color getColorKeyColorProperty() const noexcept;
         /**
          * @brief Sets the colour keyed out of every texture this material names.
          * @param value The key colour.
          */
-        void setColorKeyColorProperty(Color value) noexcept;
+        virtual void setColorKeyColorProperty(Color value) noexcept;
 
         /**
          * @brief Gets whether the key colour is turned transparent.
          * @return true by default.
          */
-        [[nodiscard]] bool getColorKeyEnabledProperty() const noexcept;
+        [[nodiscard]] virtual bool getColorKeyEnabledProperty() const noexcept;
         /**
          * @brief Sets whether the key colour is turned transparent.
          * @param value true to key the colour out.
          */
-        void setColorKeyEnabledProperty(bool value) noexcept;
+        virtual void setColorKeyEnabledProperty(bool value) noexcept;
 
         /**
          * @brief Gets the effect a material with none of its own is given.
          * @return `BasicEffect` by default.
          */
-        [[nodiscard]] MaterialProcessorDefaultEffect getDefaultEffectProperty() const noexcept;
+        [[nodiscard]] virtual MaterialProcessorDefaultEffect getDefaultEffectProperty() const noexcept;
         /**
          * @brief Sets the effect a material with none of its own is given.
          * @param value The wanted effect.
          */
-        void setDefaultEffectProperty(MaterialProcessorDefaultEffect value) noexcept;
+        virtual void setDefaultEffectProperty(MaterialProcessorDefaultEffect value) noexcept;
 
         /**
          * @brief Gets whether each texture is given a mipmap chain.
          * @return true by default, unlike the texture processor's own default.
          */
-        [[nodiscard]] bool getGenerateMipmapsProperty() const noexcept;
+        [[nodiscard]] virtual bool getGenerateMipmapsProperty() const noexcept;
         /**
          * @brief Sets whether each texture is given a mipmap chain.
          * @param value true to build one.
          */
-        void setGenerateMipmapsProperty(bool value) noexcept;
+        virtual void setGenerateMipmapsProperty(bool value) noexcept;
 
         /**
          * @brief Gets whether each texture's colour is multiplied by its alpha.
          * @return true by default.
          */
-        [[nodiscard]] bool getPremultiplyTextureAlphaProperty() const noexcept;
+        [[nodiscard]] virtual bool getPremultiplyTextureAlphaProperty() const noexcept;
         /**
          * @brief Sets whether each texture's colour is multiplied by its alpha.
          * @param value true to premultiply.
          */
-        void setPremultiplyTextureAlphaProperty(bool value) noexcept;
+        virtual void setPremultiplyTextureAlphaProperty(bool value) noexcept;
 
         /**
          * @brief Gets whether each texture is resized to the next power of two.
          * @return false by default.
          */
-        [[nodiscard]] bool getResizeTexturesToPowerOfTwoProperty() const noexcept;
+        [[nodiscard]] virtual bool getResizeTexturesToPowerOfTwoProperty() const noexcept;
         /**
          * @brief Sets whether each texture is resized to the next power of two.
          * @param value true to resize.
          */
-        void setResizeTexturesToPowerOfTwoProperty(bool value) noexcept;
+        virtual void setResizeTexturesToPowerOfTwoProperty(bool value) noexcept;
 
         /**
          * @brief Gets the format each texture is converted to.
          * @return `DxtCompressed` by default, unlike the texture processor's own default.
          */
-        [[nodiscard]] TextureProcessorOutputFormat getTextureFormatProperty() const noexcept;
+        [[nodiscard]] virtual TextureProcessorOutputFormat getTextureFormatProperty() const noexcept;
         /**
          * @brief Sets the format each texture is converted to.
          * @param value The wanted format.
          */
-        void setTextureFormatProperty(TextureProcessorOutputFormat value) noexcept;
+        virtual void setTextureFormatProperty(TextureProcessorOutputFormat value) noexcept;
 
         /**
          * @brief Processes the material.

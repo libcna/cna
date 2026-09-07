@@ -111,15 +111,15 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
         }
         Canonical::EffectCompileRequest request;
         request.source = source;
-        request.defines = ParseDefines(defines_);
+        request.defines = ParseDefines(getDefinesProperty());
         request.profile = context.getTargetProfileProperty() ==
                                   Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef
                               ? Canonical::EffectSourceProfile::HiDef
                               : Canonical::EffectSourceProfile::Reach;
         // Auto follows the build configuration, which is what its name says and what the
         // documented behaviour is; the other two decide for themselves.
-        request.debugInformation = debugMode_ == EffectProcessorDebugMode::Debug ||
-                                   (debugMode_ == EffectProcessorDebugMode::Auto &&
+        request.debugInformation = getDebugModeProperty() == EffectProcessorDebugMode::Debug ||
+                                   (getDebugModeProperty() == EffectProcessorDebugMode::Auto &&
                                     context.getBuildConfigurationProperty() == "Debug");
         const Canonical::EffectCompileResult result = compiler_->Compile(request);
         if (!result.succeeded)

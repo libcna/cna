@@ -79,42 +79,42 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
          *
          * @return A space by default, measured.
          */
-        [[nodiscard]] SharpRuntime::charcs getFirstCharacterProperty() const noexcept;
+        [[nodiscard]] virtual SharpRuntime::charcs getFirstCharacterProperty() const noexcept;
 
         /**
          * @brief Sets the character the first glyph in the texture stands for.
          *
          * @param value The first character.
          */
-        void setFirstCharacterProperty(SharpRuntime::charcs value) noexcept;
+        virtual void setFirstCharacterProperty(SharpRuntime::charcs value) noexcept;
 
         /**
          * @brief Gets whether the glyphs' colour is multiplied by their alpha.
          *
          * @return true by default.
          */
-        [[nodiscard]] bool getPremultiplyAlphaProperty() const noexcept;
+        [[nodiscard]] virtual bool getPremultiplyAlphaProperty() const noexcept;
 
         /**
          * @brief Sets whether the glyphs' colour is multiplied by their alpha.
          *
          * @param value true to premultiply.
          */
-        void setPremultiplyAlphaProperty(bool value) noexcept;
+        virtual void setPremultiplyAlphaProperty(bool value) noexcept;
 
         /**
          * @brief Gets the format the glyph atlas is converted to.
          *
          * @return `Color` by default.
          */
-        [[nodiscard]] TextureProcessorOutputFormat getTextureFormatProperty() const noexcept;
+        [[nodiscard]] virtual TextureProcessorOutputFormat getTextureFormatProperty() const noexcept;
 
         /**
          * @brief Sets the format the glyph atlas is converted to.
          *
          * @param value The wanted format.
          */
-        void setTextureFormatProperty(TextureProcessorOutputFormat value) noexcept;
+        virtual void setTextureFormatProperty(TextureProcessorOutputFormat value) noexcept;
 
         /**
          * @brief Builds the sprite font from the texture.

@@ -118,6 +118,18 @@ add_test(NAME XnaPipelineProcessorDefaultsMatchTheMeasurement
 set_tests_properties(XnaPipelineProcessorDefaultsMatchTheMeasurement
                      PROPERTIES LABELS "parity;xnapipeline")
 
+# plans/plan_xna_sample_xnb_sweep.md XNASWEEP-118: every member the CLR marks virtual on a type a
+# game can derive from is virtual in CNA too. A non-virtual accessor fails silently -- the derived
+# class compiles and its override is never called -- and 26 build units in the sample corpus derive
+# from a built-in processor, one of them overriding `GenerateTangentFrames`.
+add_test(NAME XnaPipelineOverridableMembersAreVirtual
+         COMMAND "${Python3_EXECUTABLE}" "${_xnapp_oracle}/virtual_members_gate.py"
+                 --inventory "${_xnapp_reference}/content-pipeline-api.json"
+                 --include "${CMAKE_CURRENT_SOURCE_DIR}/modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline"
+                 --include "${CMAKE_CURRENT_SOURCE_DIR}/modules/content/include/Microsoft/Xna/Framework/Content/Pipeline")
+set_tests_properties(XnaPipelineOverridableMembersAreVirtual
+                     PROPERTIES LABELS "parity;xnapipeline")
+
 # The provenance gate: nothing Microsoft owns is in the tree, no font that is not licensed for it,
 # no production source carrying someone else's copyright header, every vendored third party
 # declared, and the directory the oracle copies Microsoft's assemblies into really is ignored.
