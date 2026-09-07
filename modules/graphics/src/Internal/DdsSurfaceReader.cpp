@@ -124,6 +124,22 @@ namespace CNA::Internal::Graphics
         {
             refuse("the DDS header names a size this reader will not read.");
         }
+        // A texture has as many levels as halving its longest side takes and no more, so a header
+        // claiming more is describing something that cannot exist. Checked on the *declaration*,
+        // before anything is sized from it: a mutated header naming 1 929 379 840 levels would
+        // otherwise reach `resize` and ask for forty-odd gigabytes of empty vectors, which is not
+        // a refusal, a crash or a diagnostic -- it is a build that stops answering
+        // (plans/plan_xnapipeline_parity.md XNAPP-290).
+        std::uint32_t maximumLevels = 1u;
+        for (std::uint32_t side = std::max({result.width, result.height, result.depth});
+             side > 1u; side >>= 1)
+        {
+            ++maximumLevels;
+        }
+        if (result.mipCount > maximumLevels)
+        {
+            refuse("the DDS header names more mip levels than its own dimensions can have.");
+        }
         if ((pixelFormatFlags & kPixelFormatFourCc) != 0u)
         {
             switch (fourCc)
