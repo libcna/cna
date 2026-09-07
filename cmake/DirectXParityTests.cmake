@@ -568,6 +568,14 @@ function(cna_register_d3d_parity_tests)
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/envmap_cube_sampler_state_test.cpp"
         DIRECTX11_TIMEOUT 600 DIRECTX12_TIMEOUT 600)
     cna_d3d_parity_fixture(
+        NAME TextureMipFilter_DualTextureEffect TARGET texture_mip_filter_effect DIRECTX12_ORDER 1870
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_texture_mip_filter_effect_test.cpp"
+        DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 600)
+    cna_d3d_parity_fixture(
+        NAME ColorSpace_MidTone TARGET colorspace_midtone DIRECTX12_ORDER 1880
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/colorspace_midtone_contract_test.cpp"
+        DIRECTX11_TIMEOUT 600 DIRECTX12_TIMEOUT 600)
+    cna_d3d_parity_fixture(
         NAME SpriteBatch_CustomViewport TARGET spritebatch_custom_viewport
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_custom_viewport_test.cpp"
         DIRECTX11_ONLY REASON "D3D12 presentation-corpus adoption is tracked by DX-234 and DX-236")
