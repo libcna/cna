@@ -2,14 +2,15 @@
 
 ## Status of this document
 
-**This document is incomplete, and that is deliberate rather than an oversight.** The full
-capability boundary is `plans/plan_vulkan.md` `VULKAN-480`, which is a Phase 13 row and has not been
-written yet — it should be written *after* that phase's re-audits (`VULKAN-470`–`VULKAN-474`), so
-that what it claims is checked rather than remembered.
+**Complete as of 2026-09-07 (`VULKAN-480`), and written after the re-audits it depends on**
+(`VULKAN-470`–`VULKAN-474`) so that what it claims was checked rather than remembered. Every
+section names the row that put it there and the test that keeps it true; a claim with no test named
+beside it is not in here.
 
-What is here is the part that completed rows have measured and that a reader needs *before* the rest
-exists. Each section names the row that put it there and the test that keeps it true. Anything not
-listed below is not yet documented; read `plans/plan_vulkan.md` rather than assuming.
+The header this replaced said the document was deliberately incomplete, and it was — `VULKAN-098`
+created the file because its own acceptance needed somewhere to write the depth-range divergence
+down, and later rows added a section each. What was missing until now is the part below: the
+capability boundary in one table, the formats, and the environment the numbers came from.
 
 Select the renderer with:
 
@@ -17,6 +18,83 @@ Select the renderer with:
 cmake -S . -B cmake-build-vulkan -DCNA_GRAPHICS_RENDERER=VULKAN -DCMAKE_BUILD_TYPE=Debug
 cmake --build cmake-build-vulkan -j
 ```
+
+---
+
+## The capability boundary
+
+`VULKAN-480`. **Test:** `Vulkan_CapabilitySnapshot` — every row below is one line of a snapshot a
+CTest asserts, so this table cannot drift from the renderer without a test going red.
+
+`Origin` says where the answer comes from: **fixed** is a property of this renderer, **device** is
+asked of the physical device at runtime and may differ on other hardware than the two this project
+measures on (§*Environment* below).
+
+| Capability | Answer | Origin |
+|---|---|---|
+| 3D pipeline, depth/stencil, stencil independent of depth | supported | fixed |
+| `SpriteBatch`, render targets, render-target cube, MRT | supported | MRT: device |
+| MSAA (backbuffer and per-target) | supported | device |
+| Anisotropic filtering | supported | device |
+| Wire-frame rasterization | supported | fixed |
+| Occlusion queries, precise pixel counts | supported | fixed |
+| Instanced drawing | supported | fixed |
+| Additive blending | supported | fixed |
+| `Texture3D` storage **and** sampling | supported | fixed |
+| Source-based `ShaderEffect` (SPIR-V) | supported | fixed |
+| `ShaderEffect` **source execution** | unsupported | fixed |
+| Multi-stream vertex input | **unsupported** | fixed |
+| Compiled XNA `.fx` effects | **unsupported** here | fixed |
+| Compute shaders, compute image binding, indirect draw | **unsupported** | fixed |
+| Float32 / Float16 render targets, half-float linear filtering | **unsupported** | device |
+| GPU timers, shadow sampling, image-based lighting | **unsupported** | fixed |
+
+Two entries need their sentence rather than a cell:
+
+- **`ShaderEffectSourceExecution` is `false` while `ShaderEffects` is `true`**, and that is not a
+  contradiction. A `ShaderEffect` object is accepted and its program runs; what this renderer does
+  not do is compile the *source* it is handed. It takes SPIR-V — see the `ShaderEffect` section
+  below, which is the whole of that contract.
+- **Compiled `.fx` effects are a build option, not an absence.** `CNA_VULKAN_COMPILED_EFFECTS`
+  exists and `plans/plan_fx.md` owns it; the capability reads `unsupported` in the ordinary build
+  this document describes.
+
+### Limits
+
+| Limit | Value here | Origin |
+|---|---|---|
+| `MaxTextureDimension` | 16384 | device |
+| `MaxVertexStreams` | 1 | fixed — one binding at vertex rate (a per-instance second binding is a different thing; see `ShaderEffect` below) |
+| Every compute limit | 0 | fixed — there is no compute path |
+
+### Surface formats
+
+Nine `SurfaceFormat` values have a `VkFormat` here: `Color`, `Bgr565`, `Bgra5551`, `Bgra4444`,
+`NormalizedByte2`, `NormalizedByte4`, `Dxt1`, `Dxt3`, `Dxt5`. Anything else is **deferred**, never
+refused: a format this renderer has never looked at is the framework's to judge
+(`Texture::ValidateFormat`), and saying "unsupported" would be a claim it has not earned
+(`VULKAN-170`).
+
+For a format it does map, the verdict comes from the **device's own** `VkFormatProperties` rather
+than from that list — a build that maps a format is not a device that can sample it (`VULKAN-170`,
+test `Vulkan_ProfileLimitsAudit` and `Vulkan_CapabilitySnapshot`).
+
+**Render targets are narrower than textures: `Color` only.** All 26 other formats answer `false`,
+from the device, and a `RenderTarget2D` asking for one is refused rather than silently substituted
+(`VULKAN-171`, `VULKAN-020`). **Colour transfer** — `GetData`/`SetData` shaped as `Color` — refuses
+`NormalizedByte4` and `NormalizedByte2` explicitly even though the framework's four-byte rule would
+admit the first: its bytes are signed and sample to [-1, 1], so a `Color`-shaped transfer would read
+the wrong values while looking well-formed (`VULKAN-174`).
+
+### Environment these numbers came from
+
+Measured on the machine `plans/plan_vulkan.md` §7.1 describes: Vulkan instance API **1.4.309**,
+`VK_LAYER_KHRONOS_validation` **1.4.309** present and **on** for the whole test suite
+(`VULKAN-393`/`VULKAN-408` fail any CTest whose output contains a `[Vulkan Validation]` line), and
+two devices — **AMD Radeon 780M (RADV PHOENIX)**, Mesa 25.0.7, conformance 1.4.0.0, and
+**llvmpipe (LLVM 19.1.7)**, conformance 1.3.1.1. The `device`-origin rows above were read from
+llvmpipe unless stated; where the two devices differ the difference is in the plan, not here — the
+one that matters for a reader is MSAA, where llvmpipe offers up to 4× and RADV up to 8×.
 
 ---
 
@@ -253,6 +331,44 @@ covers it.
   stands.
 - **Clip space is Vulkan's**, not OpenGL's or D3D9's: the shader is written for this renderer, so
   nothing flips Y for it. See the depth-range section above for the other half of that.
+
+---
+
+## Where this renderer differs from EasyGL, and why
+
+`VULKAN-480`. EasyGL is this project's reference for **coverage and maturity**, never for
+semantics — the rule and the three rows that applied it are in the conformance section above. What
+follows is the list of places where the two renderers do not do the same thing, each with the
+reason and where the evidence lives. `plans/plan_vulkan.md` §10 is the full matrix; this is the
+short form a reader needs before opening it.
+
+**Differences that are deliberate and permanent:**
+
+| Difference | Why |
+|---|---|
+| `ShaderEffect` takes **SPIR-V**, EasyGL takes GLSL | `ShaderEffect` carries renderer-specific source by contract. The section above is the whole story, including why EasyGL's 37 GLSL-payload tests are not a Vulkan backlog. |
+| Clip space is `[0, 1]`, EasyGL's is `[-1, 1]` | Vulkan's own convention; see the depth-range section, which also names who owns the half EasyGL does not cover. |
+| Set numbering for a custom effect's textures | Set 0 is the `SpriteBatch` texture, set 1 the effect's own. EasyGL's unit 0 *is* the sprite texture. Both are internally consistent; the shader is renderer-specific anyway. |
+| Array uniforms hold **72** elements | A fixed uniform-buffer block, where EasyGL's array is whatever length the GLSL declares. 72 is XNA's own `SkinnedEffect.MaxBones`; past it this renderer refuses by name rather than truncating. |
+| **Multi-stream vertex input is refused**, not emulated | Reported `false` with a written reason instead of silently drawing from stream 0, which is what a renderer that answers `true` and binds one stream does. |
+
+**Differences where this renderer does more:**
+
+| Difference | Why it is not parity |
+|---|---|
+| MSAA can change at runtime | `ApplyMultiSampleCount` really tears down and rebuilds; EasyGL cannot change MSAA after construction, so the shared test asserted an echo until `VULKAN-095` corrected it. |
+| Per-target MSAA sample counts | A `RenderTarget2D` carries its own count rather than the device's (`VULKAN-216`). |
+| Real depth bias | `vkCmdSetDepthBias` as dynamic state on ten pipeline sites. |
+| `SpriteSortMode::Immediate` honoured at the renderer boundary | EasyGL does not override `SetImmediateMode` at all. |
+| Precise occlusion counts on real hardware | `VK_QUERY_CONTROL_PRECISE_BIT` with the feature enabled, answered honestly through `PixelCountIsPreciseEXT` (`VULKAN-370`). |
+
+**Differences that are gaps, and are owned:** compute shaders, indirect draw, GPU timers, shadow
+sampling and image-based lighting are all `false` here and implemented on EasyGL. They are outside
+this campaign's scope — the ordinary XNA graphics surface — and `plans/plan_modern.md` owns the
+engine layer that uses them. The capability profile reports them `false` rather than accepting the
+call and doing nothing, which is the property that matters: `GraphicsDevice`'s four EXT queries
+(`ExecutesShaderEffectSourceEXT`, `SupportsShadowSamplingEXT`, `SupportsImageBasedLightingEXT`,
+`SupportsComputeShadersEXT`) answer the same way.
 
 ---
 
