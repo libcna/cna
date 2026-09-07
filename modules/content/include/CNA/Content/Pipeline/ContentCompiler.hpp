@@ -82,6 +82,15 @@ namespace CNA::Content::Pipeline
         std::vector<std::filesystem::path> fontDirectories;
 
         /**
+         * @brief The build configuration, as MSBuild's `$(Configuration)`.
+         *
+         * XNA's `EffectProcessor.DebugMode` defaults to `Auto`, which follows it, so it decides
+         * whether an effect that names no debug mode is compiled with debug information and
+         * without optimization (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-108`).
+         */
+        std::string buildConfiguration = "Release";
+
+        /**
          * @brief The container options this invocation selected.
          *
          * Informational, and the reason it exists is a third party's writers. A caller's registry
@@ -109,7 +118,8 @@ namespace CNA::Content::Pipeline
                    xmaEncoderExecutable == other.xmaEncoderExecutable &&
                    xmaEncoderLauncher == other.xmaEncoderLauncher &&
                    xmaEncoderArguments == other.xmaEncoderArguments &&
-                   fontDirectories == other.fontDirectories;
+                   fontDirectories == other.fontDirectories &&
+                   buildConfiguration == other.buildConfiguration;
         }
     };
 

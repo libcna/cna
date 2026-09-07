@@ -781,6 +781,15 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
             arguments.emplace_back("--xnb-profile");
             arguments.emplace_back(profile);
         }
+        if (!buildConfiguration_.empty())
+        {
+            // `EffectProcessor.DebugMode` defaults to `Auto`, which follows the build
+            // configuration; a content project's own default is `Debug`. Without this the
+            // coordinator saw `Release` for every project and compiled every effect optimized
+            // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-108`).
+            arguments.emplace_back("--build-configuration");
+            arguments.emplace_back(buildConfiguration_);
+        }
         if (compressContent_)
         {
             // LZX is the compression XNA 4.0 itself produced and the only compressed form its

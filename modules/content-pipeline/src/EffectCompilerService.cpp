@@ -528,7 +528,21 @@ namespace CNA::Content::Pipeline
                 arguments.push_back(kTargetProfile);
                 arguments.push_back("/Fo");
                 arguments.push_back(spelled[0]);
-                arguments.push_back(request.debugInformation ? "/Zi" : "/Qstrip_debug");
+                // XNA's `DebugMode.Debug` is "debug information *and* optimizations disabled",
+                // which is what its own documentation says and what the corpus shows: four of the
+                // five sample effects whose reference is uncompressed come out at exactly the
+                // length XNA wrote under `/Zi /Od`, and at a quite different one under `/Zi`
+                // alone -- 1744 against 1608, 1652 against 1340, 3668 against 3724, 4796 against
+                // 4428 (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-108`).
+                if (request.debugInformation)
+                {
+                    arguments.push_back("/Zi");
+                    arguments.push_back("/Od");
+                }
+                else
+                {
+                    arguments.push_back("/Qstrip_debug");
+                }
                 arguments.push_back("/D");
                 arguments.push_back(request.profile == EffectSourceProfile::HiDef
                                         ? "CNA_HIDEF=1"

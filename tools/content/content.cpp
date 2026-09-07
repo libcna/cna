@@ -82,6 +82,16 @@ namespace
          */
         bool onlyConfiguredAssets = false;
 
+        /**
+         * @brief The build configuration, as MSBuild's `$(Configuration)`.
+         *
+         * XNA's `EffectProcessor.DebugMode` defaults to `Auto`, which follows this, and a content
+         * project's own default is `Debug` -- so a project built without saying which
+         * configuration it is gets optimized effects where XNA's own build gets debuggable ones
+         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-108`).
+         */
+        std::string buildConfiguration = "Release";
+
         /** @brief Default compiled container for every asset this invocation builds. */
         Pipeline::ContentOutputFormat format = Pipeline::ContentOutputFormat::Cnb;
 
@@ -280,7 +290,7 @@ namespace
                "         [--fx-compiler <path>] [--fx-compiler-launcher <program>]\n"
                "         [--xma-encoder <path>] [--xma-encoder-launcher <program>]\n"
                "         [--xma-encoder-arg <argument>]...\n"
-               "         [--font-directory <dir>]...\n"
+               "         [--font-directory <dir>]... [--build-configuration <name>]\n"
                "         [--explain] [--quiet] [--xna-compatible]\n"
                "         [--only-configured-assets]\n"
             << "       cna-content clean <output-directory> [--quiet]\n\n"
@@ -344,6 +354,11 @@ namespace
                "{output}, {quality}, {loopStart} and {loopLength} substituted; the default is\n"
                "{input} {output}. CNA_XMA_ENCODER, CNA_XMA_ENCODER_LAUNCHER and\n"
                "CNA_XMA_ENCODER_ARGS are the environment forms. See docs/xma-encoder-backend.md.\n"
+               "\n"
+               "--build-configuration is MSBuild's $(Configuration), Release unless given. It is\n"
+               "what EffectProcessor.DebugMode's default of Auto follows: a Debug build compiles\n"
+               "effects with debug information and without optimization, which is what XNA does.\n"
+               "A .contentproj build takes the project's own Configuration unless this names one.\n"
                "\n"
                "--font-directory adds a directory to the .spritefont font search, ahead of the\n"
                "platform's own; repeat it per directory. CNA_FONT_PATH in the environment says\n"
@@ -665,6 +680,21 @@ namespace
                         "repeat the option once per argument.");
                 }
                 command.services.xmaEncoderArguments.push_back(arguments[index].string());
+            }
+            else if (IsOption(argument, "--build-configuration"))
+            {
+                if (++index >= arguments.size())
+                {
+                    throw std::invalid_argument(
+                        "--build-configuration requires a name, such as Debug or Release.");
+                }
+                if (arguments[index].empty())
+                {
+                    throw std::invalid_argument(
+                        "--build-configuration must not be empty.");
+                }
+                command.buildConfiguration = CNA::Internal::ContentPathToUtf8(arguments[index]);
+                command.services.buildConfiguration = command.buildConfiguration;
             }
             else if (IsOption(argument, "--font-directory"))
             {
@@ -2310,7 +2340,11 @@ namespace
         std::string extension = CNA::Internal::ContentPathToUtf8(source.extension());
         std::transform(extension.begin(), extension.end(), extension.begin(),
                        [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        return extension == ".contentproj";
+        // A *directory* whose name happens to end in `.contentproj` is a directory, and taking it
+        // for a project reached the reader, which answered "basic_filebuf::underflow error reading
+        // the file: Is a directory" -- a true sentence about a question nobody asked.
+        std::error_code error;
+        return extension == ".contentproj" && std::filesystem::is_regular_file(source, error);
     }
 
     /**
@@ -2479,6 +2513,17 @@ namespace
                 merged.xmaEncoderLauncher = selected.xmaEncoderLauncher;
                 merged.xmaEncoderArguments = selected.xmaEncoderArguments;
                 merged.fontDirectories = selected.fontDirectories;
+                // The project's own `Configuration` is what the inner command line carries, and
+                // it is the one XNA's `DebugMode.Auto` follows; the outer one wins only where it
+                // named a configuration, which is what `--build-configuration` is for.
+                if (!inner.buildConfiguration.empty() && inner.buildConfiguration != "Release")
+                {
+                    merged.buildConfiguration = inner.buildConfiguration;
+                }
+                else
+                {
+                    merged.buildConfiguration = selected.buildConfiguration;
+                }
                 return createRegistry(merged);
             });
         const bool built = task.Execute();
@@ -2718,6 +2763,7 @@ namespace
                 ? Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef
                 : Microsoft::Xna::Framework::Graphics::GraphicsProfile::Reach;
         buildEnvironment.outputDirectory = outputRoot;
+        buildEnvironment.buildConfiguration = command.buildConfiguration;
         buildEnvironment.strictness = command.strictness;
 
         std::vector<BuildNodePlan> plans(builds.size());
@@ -3180,7 +3226,8 @@ namespace CNA::Content::Pipeline
         ExternalEffectCompilerOptions compiler;
         compiler.executable = options.effectCompilerExecutable;
         compiler.launcher = options.effectCompilerLauncher;
-        RegisterEffectSourceContentPipeline(registry, MakeExternalEffectCompiler(compiler));
+        RegisterEffectSourceContentPipeline(registry, MakeExternalEffectCompiler(compiler),
+                                            options.buildConfiguration == "Debug");
 
         // The XMA encoder this process's builds use, attached before any source is discovered.
         // Nothing here needs one -- the built-in `.wav` route writes PCM for every target -- but

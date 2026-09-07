@@ -135,8 +135,14 @@ namespace CNA::Content::Pipeline
          * @brief Creates a processor bound to one compiler backend.
          *
          * @param compiler The compiler to use; must not be null.
+         * @param debugByDefault What the `debug` parameter means when an asset does not set it.
+         *        XNA's `EffectProcessor.DebugMode` defaults to `Auto`, which follows the build
+         *        configuration, so this is "the build configuration is Debug". It is part of the
+         *        processor's identity, because the same source compiles to different bytes under
+         *        it (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-108`).
          */
-        explicit EffectSourceProcessor(std::shared_ptr<const EffectCompilerService> compiler);
+        explicit EffectSourceProcessor(std::shared_ptr<const EffectCompilerService> compiler,
+                                       bool debugByDefault = false);
 
         /** @brief Returns the identity, with the compiler's identity folded into the version. */
         [[nodiscard]] ContentComponentIdentity Identity() const override;
@@ -166,6 +172,7 @@ namespace CNA::Content::Pipeline
 
     private:
         std::shared_ptr<const EffectCompilerService> compiler_;
+        bool debugByDefault_ = false;
     };
 
     /**
@@ -184,5 +191,6 @@ namespace CNA::Content::Pipeline
      */
     void RegisterEffectSourceContentPipeline(
         ContentPipelineRegistry& registry,
-        std::shared_ptr<const EffectCompilerService> compiler = nullptr);
+        std::shared_ptr<const EffectCompilerService> compiler = nullptr,
+        bool debugByDefault = false);
 }

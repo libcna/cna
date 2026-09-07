@@ -134,11 +134,25 @@ namespace CNA::Content::Pipeline
             return profile;
         }
 
-        /** @brief Reads the `debug` parameter, defaulting to false. */
-        [[nodiscard]] bool ReadDebug(const ContentProcessorParameters& parameters)
+        /**
+         * @brief Reads the `debug` parameter, defaulting to what the build configuration says.
+         *
+         * XNA's `EffectProcessor.DebugMode` defaults to `Auto`, which is documented as following
+         * the build configuration, and a content project's own default `Configuration` is `Debug`.
+         * Defaulting to false here meant every effect in the sample corpus was compiled optimized
+         * against a reference that was not: the ParticleEffect of the Particles3D sample is 7,624
+         * bytes in XNA's own build and was 4,604 here (plans/plan_xna_sample_xnb_sweep.md
+         * `XNASWEEP-108`).
+         *
+         * @param parameters The processor's parameters.
+         * @param configurationIsDebug Whether the build configuration is `Debug`.
+         * @return Whether to compile with debug information and without optimization.
+         */
+        [[nodiscard]] bool ReadDebug(const ContentProcessorParameters& parameters,
+                                     const bool configurationIsDebug)
         {
             const ContentProcessorParameterValue* value = parameters.Find(EffectDebugParameter);
-            if (value == nullptr) { return false; }
+            if (value == nullptr) { return configurationIsDebug; }
             if (const bool* boolean = std::get_if<bool>(value); boolean != nullptr)
             {
                 return *boolean;
@@ -401,8 +415,8 @@ namespace CNA::Content::Pipeline
     }
 
     EffectSourceProcessor::EffectSourceProcessor(
-        std::shared_ptr<const EffectCompilerService> compiler)
-        : compiler_(std::move(compiler))
+        std::shared_ptr<const EffectCompilerService> compiler, const bool debugByDefault)
+        : compiler_(std::move(compiler)), debugByDefault_(debugByDefault)
     {
         if (compiler_ == nullptr)
         {
@@ -415,7 +429,11 @@ namespace CNA::Content::Pipeline
         // The compiler's identity is part of the processor's version, because the manifest
         // fingerprints the processor identity and the same source legitimately compiles to
         // different bytes under a different compiler. Changing compilers therefore rebuilds.
-        return {kProcessorName, "1+" + compiler_->Identity().ToString()};
+        // The default the build configuration decides is part of it for the same reason: an
+        // asset that names no `debug` compiles to different bytes under `Debug` and `Release`,
+        // and a build that switched configuration must not keep the other one's output.
+        return {kProcessorName, "1+" + compiler_->Identity().ToString() +
+                                    (debugByDefault_ ? "+debug" : "")};
     }
 
     std::string EffectSourceProcessor::InputType() const { return ImportedEffectSourceType; }
@@ -438,7 +456,7 @@ namespace CNA::Content::Pipeline
         }
         static_cast<void>(ReadProfile(parameters));
         static_cast<void>(ReadDefines(parameters));
-        static_cast<void>(ReadDebug(parameters));
+        static_cast<void>(ReadDebug(parameters, false));
     }
 
     ContentValue EffectSourceProcessor::Process(const ContentValue& input,
@@ -475,7 +493,7 @@ namespace CNA::Content::Pipeline
                 ? EffectSourceProfile::HiDef
                 : EffectSourceProfile::Reach);
         request.defines = ReadDefines(parameters);
-        request.debugInformation = ReadDebug(parameters);
+        request.debugInformation = ReadDebug(parameters, debugByDefault_);
         // The source's own directory, so `#include "Common.fxh"` beside the effect works without
         // configuration. Nothing else is added: an include the importer did not resolve is an
         // include the incremental build does not know about, and the two must agree.
@@ -548,11 +566,13 @@ namespace CNA::Content::Pipeline
     }
 
     void RegisterEffectSourceContentPipeline(
-        ContentPipelineRegistry& registry, std::shared_ptr<const EffectCompilerService> compiler)
+        ContentPipelineRegistry& registry, std::shared_ptr<const EffectCompilerService> compiler,
+        const bool debugByDefault)
     {
         if (compiler == nullptr) { compiler = MakeExternalEffectCompiler(); }
         registry.RegisterImporter(std::make_shared<EffectSourceImporter>());
-        registry.RegisterProcessor(std::make_shared<EffectSourceProcessor>(std::move(compiler)));
+        registry.RegisterProcessor(
+            std::make_shared<EffectSourceProcessor>(std::move(compiler), debugByDefault));
         // The same processed type the `.fxb` route produces, so the same documented absence --
         // registered here too because either route may be the only one a registry has.
         if (registry.AbsentWriterReason(ContentOutputFormat::Cnb,

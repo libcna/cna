@@ -841,3 +841,54 @@ TEST(EffectSourceCommandLineTest, NoConfigureTimeCompilerDefaultIsBakedIntoThisB
            "compiler. Re-configure with both empty to run these tests.\n"
         << run.output;
 }
+
+// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-108. XNA's `EffectProcessor.DebugMode` defaults to
+// `Auto`, which follows the build configuration, and a content project's own default
+// `Configuration` is `Debug`. CNA defaulted to "no debug information" whatever the configuration
+// said, and had no way to say which configuration a build was: every effect in the sample corpus
+// came out optimized against a reference that was not. `Debug` is debug information *and*
+// optimizations disabled, which is what XNA's own documentation says and what the corpus measures
+// -- four of the five sample effects whose reference is uncompressed come out at exactly the
+// length XNA wrote under `/Zi /Od`, and at a quite different one under `/Zi` alone.
+TEST(EffectSourceCommandLineTest, TheBuildConfigurationDecidesWhetherAnEffectCarriesDebugInformation)
+{
+    ScratchDirectory scratch("debugmode");
+    const std::filesystem::path record = scratch.Path() / "argv.txt";
+    WriteEffectProject(scratch, "//FAKE: record=" + record.string() + "\n");
+
+    const Invocation release = RunCli({"build", scratch.Source(), "-o", scratch.Output(),
+                                       "--format", "xnb", "--fx-compiler", FakeCompiler()});
+    ASSERT_EQ(release.exitCode, 0) << release.output;
+    const std::string optimized = ReadText(record);
+    EXPECT_NE(optimized.find("arg\t/Qstrip_debug\n"), std::string::npos) << optimized;
+    EXPECT_EQ(optimized.find("arg\t/Zi\n"), std::string::npos) << optimized;
+
+    // The recorder appends, so each run is read from where the previous one ended: what is being
+    // asserted is what *this* invocation passed.
+    const std::size_t afterRelease = optimized.size();
+    const Invocation debug = RunCli({"build", scratch.Source(), "-o", scratch.Output(),
+                                     "--format", "xnb", "--fx-compiler", FakeCompiler(),
+                                     "--build-configuration", "Debug"});
+    ASSERT_EQ(debug.exitCode, 0) << debug.output;
+    const std::string debugged = ReadText(record).substr(afterRelease);
+    ASSERT_FALSE(debugged.empty())
+        << "the configuration is part of the processor's identity, so this is not a cached no-op";
+    EXPECT_NE(debugged.find("arg\t/Zi\narg\t/Od\n"), std::string::npos) << debugged;
+    EXPECT_EQ(debugged.find("arg\t/Qstrip_debug\n"), std::string::npos) << debugged;
+
+    // And the parameter still overrides the configuration, which is what `DebugMode.Optimize` is.
+    const std::filesystem::path configuration = scratch.Source() / ".cna-content.json";
+    {
+        std::ofstream stream(configuration);
+        stream << "{\"format\":\"CNA.ContentPipeline.Config\",\"version\":1,\"assets\":{"
+                  "\"shader.fx\":{\"parameters\":{\"debug\":{\"type\":\"bool\",\"value\":false}}}}}";
+    }
+    const std::size_t afterDebug = ReadText(record).size();
+    const Invocation overridden = RunCli({"build", scratch.Source(), "-o", scratch.Output(),
+                                          "--format", "xnb", "--fx-compiler", FakeCompiler(),
+                                          "--build-configuration", "Debug"});
+    ASSERT_EQ(overridden.exitCode, 0) << overridden.output;
+    const std::string forced = ReadText(record).substr(afterDebug);
+    ASSERT_FALSE(forced.empty()) << "the parameter changed, so this is not a cached no-op";
+    EXPECT_NE(forced.find("arg\t/Qstrip_debug\n"), std::string::npos) << forced;
+}
