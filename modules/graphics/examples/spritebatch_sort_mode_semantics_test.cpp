@@ -62,6 +62,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -231,8 +232,13 @@ protected:
 
             // The measurement itself, printed rather than asserted: asserting XNA's answer here
             // would fail on every CNA renderer, and asserting CNA's would cement the divergence.
+            // VULKAN-057 closed on the second arm of its acceptance -- the divergence is REFUSED
+            // and recorded, in docs/vulkan-renderer.md and docs/xna-4-api-coverage.md, with the
+            // cost leg D below as its evidence. If this line ever prints red/blue, the refusal was
+            // reversed: move those two documents, do not adjust this print.
             std::printf("[INFO] mid-batch texture mutation under Immediate: left=%s right=%s "
-                        "(XNA would give red/blue; VULKAN-057) -- Deferred gave %s/%s\n",
+                        "(XNA would give red/blue; refused and documented, VULKAN-057) -- "
+                        "Deferred gave %s/%s\n",
                         Text(immediate[0]).c_str(), Text(immediate[2]).c_str(),
                         Text(deferred[0]).c_str(), Text(deferred[2]).c_str());
             std::fflush(stdout);
@@ -306,6 +312,61 @@ protected:
             check(Is(pixels[0], kBlue),
                   "C2 Texture: sprites sharing a texture keep issue order, got=" +
                       Text(pixels[0]) + " (want blue, the one issued second)");
+        }
+
+        // D. VULKAN-057's cost, measured rather than asserted. Honouring Immediate means
+        //    submitting the recorded work before Draw returns. Neither renderer has a per-sprite
+        //    submission, but both have a "force the queued work to the GPU now" path that a
+        //    readback takes -- Vulkan's FlushDeferredRenderTarget (record, submit, device wait),
+        //    EasyGL's glReadPixels. Timing M one-sprite batches with ONE readback at the end
+        //    against the same M with a readback after each therefore prices the per-sprite
+        //    submission on the machinery that would have to carry it.
+        //
+        //    Printed, never asserted: this machine runs several build agents at once and a wall
+        //    clock threshold here would be a flake generator (the lesson VULKAN-182 paid for).
+        //    The number belongs in the docs with its date and device, not in an exit code.
+        {
+            constexpr int kM = 64;
+            RenderTarget2D rt(dev, 2, 2, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                              RenderTargetUsage::PreserveContents);
+            Texture2D white(dev, 2, 2, false, SurfaceFormat::Color);
+            Fill(white, Color(255, 255, 255, 255));   // white, so the vertex tint is what shows
+            std::vector<Color> sink(4, Color(0, 0, 0, 0));
+
+            auto run = [&](bool readbackEachBatch) {
+                const auto t0 = std::chrono::steady_clock::now();
+                for (int i = 0; i < kM; ++i) {
+                    dev.SetRenderTarget(&rt);
+                    {
+                        SamplerState point = SamplerState::PointClamp;
+                        SpriteBatch batch(dev);
+                        batch.Begin(SpriteSortMode::Immediate, BlendState::Opaque, &point, nullptr,
+                                    nullptr);
+                        batch.Draw(white, Rectangle(0, 0, 2, 2), Rectangle(0, 0, 2, 2), kBlue);
+                        batch.End();
+                    }
+                    dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+                    if (readbackEachBatch) rt.GetData(sink.data(), 0, 4);
+                }
+                if (!readbackEachBatch) rt.GetData(sink.data(), 0, 4);
+                return std::chrono::duration<double, std::micro>(
+                           std::chrono::steady_clock::now() - t0).count();
+            };
+
+            run(false);                            // warm the pipeline; the first cycle allocates
+            const double batched = run(false);
+            const double perSprite = run(true);
+            std::printf("[INFO] VULKAN-057 cost of forcing a submission per sprite: %d sprites in "
+                        "%.0f us with one flush, %.0f us with one flush each -- %.1f us per sprite "
+                        "added, x%.1f\n",
+                        kM, batched, perSprite, (perSprite - batched) / kM,
+                        batched > 0.0 ? perSprite / batched : 0.0);
+            std::fflush(stdout);
+            // The one thing worth asserting here is that the two routes agree on the PIXEL: a
+            // cost comparison between two routes that draw different things prices nothing.
+            check(Is(sink[0], kBlue),
+                  "D both submission routes draw the same sprite, got=" + Text(sink[0]) +
+                      " (want blue)");
         }
 
         std::printf("=== %d/%d PASS ===\n", pass_, pass_ + fail_);

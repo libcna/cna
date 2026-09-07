@@ -409,3 +409,52 @@ raised here.
 `DebugSimulateContextLoss` and `DebugRestoreContext` describe an OpenGL context loss, which is a
 different event with a different recovery model. Implementing them by analogy would be inventing a
 state machine Vulkan does not have; the row that decided this named that as its explicit non-goal.
+
+---
+
+## `SpriteSortMode::Immediate` does not submit per sprite, and will not
+
+`VULKAN-057`, opened by `VULKAN-050` and closed on the second arm of its acceptance — the
+divergence is refused, and here is what it is, what it costs and why. **Test:**
+`Vulkan_SpriteBatch_SortModeSemantics`, whose `[INFO]` lines carry both measurements.
+
+XNA defines `Immediate` as *"each sprite is drawing at individual draw call, instead of
+`SpriteBatch.End`"* (`SpriteSortMode.cs`), so a texture mutated in place between two `Draw` calls
+must leave the first sprite showing the **old** contents. On this renderer both sprites show the
+new contents, exactly as they do under `Deferred`. `SpriteBatch::flushSingle` does forward each
+`Immediate` sprite straight through; `VulkanSpriteBatchRenderer::Draw` then records it into
+`activeBatches_` for replay at `Present`, while `Texture2D::SetDataRGBA` reaches the image through
+`UpdatePixels`, which submits and waits **immediately**. The upload therefore always wins the race,
+and every sprite of the batch rasterizes against the texture's final contents.
+
+**This is not a Vulkan-vs-EasyGL gap.** EasyGL does the same thing for its own reason — its sprite
+renderer appends to a vertex batch flushed only on a texture change or at `End()` — so the two
+renderers agree and the divergence is CNA-wide. Fixing it here alone would not fix CNA; it would
+only make the two renderers disagree.
+
+**What honouring it would cost here**, which is the half a refusal owes a reader:
+
+- **On an off-screen target** the machinery exists — `FlushDeferredRenderTarget` records, submits
+  and waits — but it opens with a full `vkDeviceWaitIdle`, then a `vkQueueSubmit` and a
+  `vkQueueWaitIdle`. That is a complete pipeline stall per sprite, not a draw call per sprite.
+  Measured on llvmpipe under Xvfb `:99` on 2026-09-07, at 64 one-sprite batches:
+  three runs gave **443, 505 and 525 µs added per sprite**, making the
+  forced-submission route **2.7× to 3.4×** the cost of the batched one. On real hardware it is
+  far worse, not better: on RADV (AMD Radeon 780M, Xwayland `:150`) the same 64 sprites cost
+  7.9 ms batched and 91.6 ms forced — **1.31 ms added per sprite, ×11.6** — because a device
+  wait is cheap only when there is no real pipeline to drain.
+- **On the backbuffer** — where a `SpriteBatch` normally draws — there is no such path at all, and
+  its absence is deliberate: `FlushDeferredRenderTarget` excludes backbuffer cycles because they
+  need a swapchain image and `REMED-GFX-144`'s one-acquire-one-submit-one-present-per-frame
+  contract must not change. Honouring `Immediate` there is not a cost question but a contract
+  question, and the contract was written to fix a real defect.
+
+The same leg runs on any renderer the test is registered for, so EasyGL's own figure is one
+`ctest` away — it has not been taken here, because `cmake-build-easygl/` belongs to another session
+on this machine and this campaign does not run in it.
+
+**What a game can rely on instead.** `Immediate` still draws every sprite, in issue order, each
+into its own destination rectangle — leg B of the test asserts exactly that and nothing more. What
+it does not buy on CNA is a read-back of resource state between two `Draw` calls of one batch. A
+game that needs the old contents must `End()` the batch before mutating the texture; that is one
+submission boundary instead of one per sprite, and it is what the deferred model can honour.

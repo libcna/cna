@@ -657,6 +657,36 @@ implemented and exercised by the `demo_*` avatar/net examples and their own test
 
 ---
 
+### `Microsoft::Xna::Framework::Graphics::SpriteBatch` — `SpriteSortMode::Immediate`
+
+*Added 2026-09-07, `plans/plan_vulkan.md` VULKAN-057.*
+
+- **Present and correct:** every sort mode is accepted, every sprite is drawn, in issue order, each
+  into its own destination rectangle. `Immediate` is what gates `SpriteBatch::DrawMeshEXT`, and
+  `Begin()` carries the mode to the renderer seam.
+- **Divergent:** `Immediate` does **not** submit each sprite as it is issued. XNA defines it as
+  *"each sprite is drawing at individual draw call, instead of `SpriteBatch.End`"*
+  (`SpriteSortMode.cs`), so a texture mutated in place between two `Draw` calls leaves the first
+  sprite showing the **old** contents. On CNA both sprites show the new contents, exactly as under
+  `Deferred`.
+- **CNA-wide, not renderer-specific.** Measured on EasyGL and Vulkan, which agree for two different
+  reasons: EasyGL's sprite renderer appends to a vertex batch flushed only on a texture change or
+  at `End()`, and Vulkan's records into `activeBatches_` for replay at `Present`, while the texture
+  upload submits immediately either way.
+- **Refused rather than scheduled**, with the cost written down: on Vulkan, honouring it means a
+  `vkDeviceWaitIdle` + submit + `vkQueueWaitIdle` per sprite on an off-screen target, and on the
+  backbuffer it means undoing `REMED-GFX-144`'s one-acquire-one-submit-one-present-per-frame
+  contract, which exists to fix a real defect. `docs/vulkan-renderer.md` carries the measured
+  number. The equivalent figure for EasyGL has **not** been taken: its build directory belongs to
+  another session on this machine, and the test's cost leg runs on whichever renderer hosts it, so
+  the number is one `ctest` away for whoever owns that tree.
+- **What a game does instead:** `End()` the batch before mutating the texture. That is one
+  submission boundary rather than one per sprite, and it is what the deferred model can honour.
+- **Guarded by** `*_SpriteBatch_SortModeSemantics`, registered on both EasyGL and Vulkan; its
+  `[INFO]` lines print the divergence and its cost on every run, so a change here is visible
+  without anyone remembering to look.
+- **Status:** Partial (divergent by decision)
+
 ## 5. XNA 4.0 API Not Present in FNA
 
 These classes were part of XNA 4.0 but FNA does not implement them, because FNA targets PC XNA
