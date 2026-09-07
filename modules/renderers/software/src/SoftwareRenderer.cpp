@@ -239,7 +239,7 @@ namespace CNA::Internal::Renderers::Software
 
 #ifndef CNA_SOFTWARE_2D_ONLY
         /// One vertex in clip space (before the perspective divide), attributes NOT premultiplied
-        /// by W (SOFTWARE-83). Clip space is still linear -- position and attributes can both be
+        /// by W (SOFTWARE-83/106). Clip space is still linear -- position and attributes can both be
         /// interpolated with a plain lerp here, unlike the post-divide RasterVertex above.
         struct ClipVertex
         {
@@ -265,7 +265,7 @@ namespace CNA::Internal::Renderers::Software
         /// Transforms a VertexPositionColor vertex (Position at offset 0, Color at offset 12 --
         /// DrawColoredPrimitives/DrawIndexedColoredPrimitives's own fixed layout, matching the
         /// interface's documented "equivalent to BasicEffect with VertexColorEnabled = true")
-        /// into clip space. Attributes are left un-premultiplied -- near-plane clipping (SOFTWARE-83)
+        /// into clip space. Attributes are left un-premultiplied -- frustum clipping (SOFTWARE-106)
         /// happens on ClipVertex, before the perspective divide.
         ClipVertex BuildPositionColorClipVertex(const std::uint8_t* raw, const Matrix& combined)
         {
@@ -304,49 +304,128 @@ namespace CNA::Internal::Renderers::Software
             return out;
         }
 
-        /// SOFTWARE-83: clips a triangle against the single near-plane half-space `w > kNearEpsilon`
-        /// using Sutherland-Hodgman, writing up to 4 output vertices to `out` and returning the
-        /// count (0 = triangle entirely behind the near plane and fully discarded; 3 = no clipping
-        /// needed or one corner clipped off; 4 = two corners clipped off, forming a quad). Preserves
-        /// the input winding order, so backface culling (SOFTWARE-81) on the result stays correct.
-        int ClipTriangleNearPlane(const ClipVertex verts[3], ClipVertex out[4])
+        /// SOFTWARE-106: XNA uses the Direct3D homogeneous clip volume: -W <= X,Y <= W and
+        /// 0 <= Z <= W. A non-negative signed distance therefore means that the vertex is on the
+        /// visible side of the selected plane. Clipping happens before the perspective divide.
+        enum class HomogeneousClipPlane
         {
-            constexpr float kNearEpsilon = 1e-5f;
-            int count = 0;
-            for (int i = 0; i < 3; ++i)
+            Left,
+            Right,
+            Bottom,
+            Top,
+            Near,
+            Far
+        };
+
+        constexpr std::array<HomogeneousClipPlane, 6> kHomogeneousClipPlanes = {
+            HomogeneousClipPlane::Left,
+            HomogeneousClipPlane::Right,
+            HomogeneousClipPlane::Bottom,
+            HomogeneousClipPlane::Top,
+            HomogeneousClipPlane::Near,
+            HomogeneousClipPlane::Far,
+        };
+
+        constexpr int kMaxClippedTriangleVertices = 9;
+
+        float ClipPlaneDistance(const ClipVertex& vertex, HomogeneousClipPlane plane)
+        {
+            switch (plane)
             {
-                const ClipVertex& cur = verts[i];
-                const ClipVertex& prev = verts[(i + 2) % 3];
-                const bool curIn = cur.w > kNearEpsilon;
-                const bool prevIn = prev.w > kNearEpsilon;
-                if (curIn != prevIn)
-                {
-                    const float t = (kNearEpsilon - prev.w) / (cur.w - prev.w);
-                    out[count++] = LerpClipVertex(prev, cur, t);
-                }
-                if (curIn)
-                    out[count++] = cur;
+                case HomogeneousClipPlane::Left:   return vertex.x + vertex.w;
+                case HomogeneousClipPlane::Right:  return vertex.w - vertex.x;
+                case HomogeneousClipPlane::Bottom: return vertex.y + vertex.w;
+                case HomogeneousClipPlane::Top:    return vertex.w - vertex.y;
+                case HomogeneousClipPlane::Near:   return vertex.z;
+                case HomogeneousClipPlane::Far:    return vertex.w - vertex.z;
             }
-            return count;
+            return -1.0f;
         }
 
-        /// Clips a line segment against the same near-plane half-space as triangles.  A point is
-        /// accepted by checking its W against this boundary directly in the draw path.
-        bool ClipLineNearPlane(ClipVertex& a, ClipVertex& b)
+        bool IsInsideClipVolume(const ClipVertex& vertex)
         {
-            constexpr float kNearEpsilon = 1e-5f;
-            const bool aIn = a.w > kNearEpsilon;
-            const bool bIn = b.w > kNearEpsilon;
-            if (!aIn && !bIn)
-                return false;
-            if (aIn && bIn)
-                return true;
+            for (const HomogeneousClipPlane plane : kHomogeneousClipPlanes)
+            {
+                if (!(ClipPlaneDistance(vertex, plane) >= 0.0f))
+                    return false;
+            }
+            // The six D3D inequalities imply W >= 0. At the singular W=0 apex the perspective
+            // divide is undefined, so a point exactly there has no rasterizable sample.
+            return vertex.w > 0.0f;
+        }
 
-            const float t = (kNearEpsilon - a.w) / (b.w - a.w);
-            const ClipVertex intersection = LerpClipVertex(a, b, t);
-            if (!aIn) a = intersection;
-            else      b = intersection;
-            return true;
+        /// Clips a triangle against all six XNA/D3D clip planes using Sutherland-Hodgman. A convex
+        /// triangle can gain at most one vertex per plane, hence the nine-vertex bound. Every
+        /// varying is interpolated in homogeneous space and polygon order is retained.
+        int ClipTriangleToFrustum(
+            const ClipVertex verts[3],
+            std::array<ClipVertex, kMaxClippedTriangleVertices>& out)
+        {
+            std::array<ClipVertex, kMaxClippedTriangleVertices> input{};
+            input[0] = verts[0];
+            input[1] = verts[1];
+            input[2] = verts[2];
+            int inputCount = 3;
+
+            for (const HomogeneousClipPlane plane : kHomogeneousClipPlanes)
+            {
+                int outputCount = 0;
+                ClipVertex previous = input[static_cast<std::size_t>(inputCount - 1)];
+                float previousDistance = ClipPlaneDistance(previous, plane);
+                bool previousInside = previousDistance >= 0.0f;
+
+                for (int i = 0; i < inputCount; ++i)
+                {
+                    const ClipVertex current = input[static_cast<std::size_t>(i)];
+                    const float currentDistance = ClipPlaneDistance(current, plane);
+                    const bool currentInside = currentDistance >= 0.0f;
+                    if (currentInside != previousInside)
+                    {
+                        const float t = previousDistance / (previousDistance - currentDistance);
+                        out[static_cast<std::size_t>(outputCount++)] =
+                            LerpClipVertex(previous, current, t);
+                    }
+                    if (currentInside)
+                        out[static_cast<std::size_t>(outputCount++)] = current;
+
+                    previous = current;
+                    previousDistance = currentDistance;
+                    previousInside = currentInside;
+                }
+
+                if (outputCount == 0)
+                    return 0;
+                input = out;
+                inputCount = outputCount;
+            }
+
+            out = input;
+            return inputCount;
+        }
+
+        /// Clips a segment against the complete homogeneous frustum. Updating the outside endpoint
+        /// at each plane is the segment equivalent of the polygon clip and preserves all varyings.
+        bool ClipLineToFrustum(ClipVertex& a, ClipVertex& b)
+        {
+            for (const HomogeneousClipPlane plane : kHomogeneousClipPlanes)
+            {
+                const float aDistance = ClipPlaneDistance(a, plane);
+                const float bDistance = ClipPlaneDistance(b, plane);
+                const bool aInside = aDistance >= 0.0f;
+                const bool bInside = bDistance >= 0.0f;
+                if (!aInside && !bInside)
+                    return false;
+                if (aInside && bInside)
+                    continue;
+
+                const float t = aDistance / (aDistance - bDistance);
+                const ClipVertex intersection = LerpClipVertex(a, b, t);
+                if (!aInside)
+                    a = intersection;
+                else
+                    b = intersection;
+            }
+            return a.w > 0.0f && b.w > 0.0f;
         }
 
         /// REMED-GFX-079: the XNA/FNA viewport transform parameters used to map a post-perspective-
@@ -1595,7 +1674,7 @@ namespace CNA::Internal::Renderers::Software
         /// stride with no Color field at all), vertex color is treated as opaque white so it
         /// doesn't affect the eventual texture/diffuse modulation, matching a real Effect's own
         /// VertexColorEnabled=false behavior. Attributes are left un-premultiplied; near-plane
-        /// clipping (SOFTWARE-83) happens on ClipVertex, before the perspective divide.
+        /// clipping (SOFTWARE-106) happens on ClipVertex, before the perspective divide.
         /// REMED-GFX-201: reads one combined vertex whose bytes may live in several bound streams.
         ///
         /// The layout above is expressed in COMBINED byte offsets, and a multi-stream draw stores
@@ -3225,26 +3304,33 @@ namespace CNA::Internal::Renderers::Software
                 cv[k] = BuildPositionColorClipVertex(raw, combined);
             }
 
-            ClipVertex clipped[4];
-            const int clippedCount = ClipTriangleNearPlane(cv, clipped);  // SOFTWARE-83
+            std::array<ClipVertex, kMaxClippedTriangleVertices> clipped{};
+            const int clippedCount = ClipTriangleToFrustum(cv, clipped);  // SOFTWARE-106
             if (clippedCount == 0)
                 continue;
 
-            RasterVertex rv[4];
+            std::array<RasterVertex, kMaxClippedTriangleVertices> rv{};
             for (int k = 0; k < clippedCount; ++k)
-                rv[k] = ClipVertexToRasterVertex(clipped[k], vpT);
+                rv[static_cast<std::size_t>(k)] =
+                    ClipVertexToRasterVertex(clipped[static_cast<std::size_t>(k)], vpT);
 
-            // REMED-GFX-082: FillMode.WireFrame outlines the visible clipped polygon. For a near-plane
-            // clipped quad (clippedCount==4) the two fan triangles share the diagonal rv0-rv2, so each
-            // masks that shared edge -- only the real polygon boundary rv0-rv1-rv2-rv3 is drawn.
+            // SOFTWARE-106: fan-triangulate the visible polygon. Wireframe exposes only polygon
+            // boundary edges, while solid fill excludes each fan diagonal from one adjacent
+            // triangle until SOFTWARE-107 replaces the inclusive-edge fill rule.
             const bool wire = (fillMode_ == 1);
-            const unsigned mask0 = (clippedCount == 4) ? (kEdgeV0V1 | kEdgeV1V2) : kEdgeAll;
-            RasterizeTriangle(fb, depthState, cullMode_, depthBias_, slopeScaleDepthBias_, clip,
-                              rv[0], rv[1], rv[2], colorWriteMask_, multiSampleMask_, wire, mask0,
-                              clippedCount == 4 ? kEdgeV2V0 : 0u);
-            if (clippedCount == 4)
+            for (int fan = 1; fan + 1 < clippedCount; ++fan)
+            {
+                unsigned edgeMask = kEdgeV1V2;
+                if (fan == 1) edgeMask |= kEdgeV0V1;
+                if (fan + 1 == clippedCount - 1) edgeMask |= kEdgeV2V0;
+                const unsigned excludedFillEdge =
+                    (fan + 1 < clippedCount - 1) ? kEdgeV2V0 : 0u;
                 RasterizeTriangle(fb, depthState, cullMode_, depthBias_, slopeScaleDepthBias_, clip,
-                                  rv[0], rv[2], rv[3], colorWriteMask_, multiSampleMask_, wire, kEdgeV1V2 | kEdgeV2V0);
+                                  rv[0], rv[static_cast<std::size_t>(fan)],
+                                  rv[static_cast<std::size_t>(fan + 1)],
+                                  colorWriteMask_, multiSampleMask_, wire, edgeMask,
+                                  excludedFillEdge);
+            }
         }
     }
 
@@ -3311,26 +3397,30 @@ namespace CNA::Internal::Renderers::Software
                 cv[k] = BuildPositionColorClipVertex(raw, combined);
             }
 
-            ClipVertex clipped[4];
-            const int clippedCount = ClipTriangleNearPlane(cv, clipped);  // SOFTWARE-83
+            std::array<ClipVertex, kMaxClippedTriangleVertices> clipped{};
+            const int clippedCount = ClipTriangleToFrustum(cv, clipped);  // SOFTWARE-106
             if (clippedCount == 0)
                 continue;
 
-            RasterVertex rv[4];
+            std::array<RasterVertex, kMaxClippedTriangleVertices> rv{};
             for (int k = 0; k < clippedCount; ++k)
-                rv[k] = ClipVertexToRasterVertex(clipped[k], vpT);
+                rv[static_cast<std::size_t>(k)] =
+                    ClipVertexToRasterVertex(clipped[static_cast<std::size_t>(k)], vpT);
 
-            // REMED-GFX-082: FillMode.WireFrame outlines the visible clipped polygon. For a near-plane
-            // clipped quad (clippedCount==4) the two fan triangles share the diagonal rv0-rv2, so each
-            // masks that shared edge -- only the real polygon boundary rv0-rv1-rv2-rv3 is drawn.
             const bool wire = (fillMode_ == 1);
-            const unsigned mask0 = (clippedCount == 4) ? (kEdgeV0V1 | kEdgeV1V2) : kEdgeAll;
-            RasterizeTriangle(fb, depthState, cullMode_, depthBias_, slopeScaleDepthBias_, clip,
-                              rv[0], rv[1], rv[2], colorWriteMask_, multiSampleMask_, wire, mask0,
-                              clippedCount == 4 ? kEdgeV2V0 : 0u);
-            if (clippedCount == 4)
+            for (int fan = 1; fan + 1 < clippedCount; ++fan)
+            {
+                unsigned edgeMask = kEdgeV1V2;
+                if (fan == 1) edgeMask |= kEdgeV0V1;
+                if (fan + 1 == clippedCount - 1) edgeMask |= kEdgeV2V0;
+                const unsigned excludedFillEdge =
+                    (fan + 1 < clippedCount - 1) ? kEdgeV2V0 : 0u;
                 RasterizeTriangle(fb, depthState, cullMode_, depthBias_, slopeScaleDepthBias_, clip,
-                                  rv[0], rv[2], rv[3], colorWriteMask_, multiSampleMask_, wire, kEdgeV1V2 | kEdgeV2V0);
+                                  rv[0], rv[static_cast<std::size_t>(fan)],
+                                  rv[static_cast<std::size_t>(fan + 1)],
+                                  colorWriteMask_, multiSampleMask_, wire, edgeMask,
+                                  excludedFillEdge);
+            }
         }
     }
 
@@ -3442,7 +3532,7 @@ namespace CNA::Internal::Renderers::Software
             {
                 const CombinedVertexReader raw = fetchVertex(i);
                 const ClipVertex cv = BuildGenericClipVertex(raw, stride, combined, params);
-                if (cv.w > 1e-5f)
+                if (IsInsideClipVolume(cv))
                     RasterizePointShaded(
                         fb, depthState, RasterStencilState{}, blendState, blendFactor, params,
                         clip, ClipVertexToRasterVertex(cv, vpT), colorWriteMask_, multiSampleMask_,
@@ -3457,7 +3547,7 @@ namespace CNA::Internal::Renderers::Software
                     fetchVertex(first), stride, combined, params);
                 ClipVertex b = BuildGenericClipVertex(
                     fetchVertex(first + 1), stride, combined, params);
-                if (ClipLineNearPlane(a, b))
+                if (ClipLineToFrustum(a, b))
                     RasterizeLineShaded(
                         fb, depthState, RasterStencilState{}, blendState, blendFactor, params, clip,
                         ClipVertexToRasterVertex(a, vpT), ClipVertexToRasterVertex(b, vpT),
@@ -3473,33 +3563,36 @@ namespace CNA::Internal::Renderers::Software
                 cv[k] = BuildGenericClipVertex(raw, stride, combined, params);
             }
 
-            ClipVertex clipped[4];
-            const int clippedCount = ClipTriangleNearPlane(cv, clipped);  // SOFTWARE-83
+            std::array<ClipVertex, kMaxClippedTriangleVertices> clipped{};
+            const int clippedCount = ClipTriangleToFrustum(cv, clipped);  // SOFTWARE-106
             if (clippedCount == 0)
                 continue;
 
-            RasterVertex rv[4];
+            std::array<RasterVertex, kMaxClippedTriangleVertices> rv{};
             for (int k = 0; k < clippedCount; ++k)
-                rv[k] = ClipVertexToRasterVertex(clipped[k], vpT);
+                rv[static_cast<std::size_t>(k)] =
+                    ClipVertexToRasterVertex(clipped[static_cast<std::size_t>(k)], vpT);
 
             // REMED-GFX-079: clip 3D rasterization to framebuffer ∩ active Viewport (was the full
             // framebuffer). A default full-target viewport yields the same clip byte-for-byte.
-            // REMED-GFX-082: FillMode.WireFrame outlines the visible clipped polygon; the two fan
-            // triangles of a near-plane clipped quad mask their shared rv0-rv2 diagonal edge.
+            // SOFTWARE-106: preserve only the clipped polygon boundary in wireframe and suppress
+            // one copy of every internal fan diagonal in solid fill.
             const bool wire = (fillMode_ == 1);
-            const unsigned mask0 = (clippedCount == 4) ? (kEdgeV0V1 | kEdgeV1V2) : kEdgeAll;
-            RasterizeTriangleShaded(fb, depthState, RasterStencilState{}, blendState, blendFactor,
-                                    cullMode_,
-                                    depthBias_, slopeScaleDepthBias_, params,
-                                    clip, rv[0], rv[1], rv[2], colorWriteMask_, multiSampleMask_,
-                                    GetSamplerState(0), GetSamplerState(1), wire, mask0,
-                                    clippedCount == 4 ? kEdgeV2V0 : 0u);
-            if (clippedCount == 4)
+            for (int fan = 1; fan + 1 < clippedCount; ++fan)
+            {
+                unsigned edgeMask = kEdgeV1V2;
+                if (fan == 1) edgeMask |= kEdgeV0V1;
+                if (fan + 1 == clippedCount - 1) edgeMask |= kEdgeV2V0;
+                const unsigned excludedFillEdge =
+                    (fan + 1 < clippedCount - 1) ? kEdgeV2V0 : 0u;
                 RasterizeTriangleShaded(fb, depthState, RasterStencilState{}, blendState, blendFactor,
                                         cullMode_,
                                         depthBias_, slopeScaleDepthBias_, params,
-                                        clip, rv[0], rv[2], rv[3], colorWriteMask_, multiSampleMask_,
-                                        GetSamplerState(0), GetSamplerState(1), wire, kEdgeV1V2 | kEdgeV2V0);
+                                        clip, rv[0], rv[static_cast<std::size_t>(fan)],
+                                        rv[static_cast<std::size_t>(fan + 1)],
+                                        colorWriteMask_, multiSampleMask_, GetSamplerState(0),
+                                        GetSamplerState(1), wire, edgeMask, excludedFillEdge);
+            }
         }
     }
 
@@ -3608,7 +3701,7 @@ namespace CNA::Internal::Renderers::Software
             {
                 const CombinedVertexReader raw = fetchVertex(i);
                 const ClipVertex cv = BuildGenericClipVertex(raw, stride, combined, params);
-                if (cv.w > 1e-5f)
+                if (IsInsideClipVolume(cv))
                     RasterizePointShaded(
                         fb, depthState, RasterStencilState{}, blendState, blendFactor, params,
                         clip, ClipVertexToRasterVertex(cv, vpT), colorWriteMask_, multiSampleMask_,
@@ -3623,7 +3716,7 @@ namespace CNA::Internal::Renderers::Software
                     fetchVertex(first), stride, combined, params);
                 ClipVertex b = BuildGenericClipVertex(
                     fetchVertex(first + 1), stride, combined, params);
-                if (ClipLineNearPlane(a, b))
+                if (ClipLineToFrustum(a, b))
                     RasterizeLineShaded(
                         fb, depthState, RasterStencilState{}, blendState, blendFactor, params, clip,
                         ClipVertexToRasterVertex(a, vpT), ClipVertexToRasterVertex(b, vpT),
@@ -3639,33 +3732,36 @@ namespace CNA::Internal::Renderers::Software
                 cv[k] = BuildGenericClipVertex(raw, stride, combined, params);
             }
 
-            ClipVertex clipped[4];
-            const int clippedCount = ClipTriangleNearPlane(cv, clipped);  // SOFTWARE-83
+            std::array<ClipVertex, kMaxClippedTriangleVertices> clipped{};
+            const int clippedCount = ClipTriangleToFrustum(cv, clipped);  // SOFTWARE-106
             if (clippedCount == 0)
                 continue;
 
-            RasterVertex rv[4];
+            std::array<RasterVertex, kMaxClippedTriangleVertices> rv{};
             for (int k = 0; k < clippedCount; ++k)
-                rv[k] = ClipVertexToRasterVertex(clipped[k], vpT);
+                rv[static_cast<std::size_t>(k)] =
+                    ClipVertexToRasterVertex(clipped[static_cast<std::size_t>(k)], vpT);
 
             // REMED-GFX-079: clip 3D rasterization to framebuffer ∩ active Viewport (was the full
             // framebuffer). A default full-target viewport yields the same clip byte-for-byte.
-            // REMED-GFX-082: FillMode.WireFrame outlines the visible clipped polygon; the two fan
-            // triangles of a near-plane clipped quad mask their shared rv0-rv2 diagonal edge.
+            // SOFTWARE-106: preserve only the clipped polygon boundary in wireframe and suppress
+            // one copy of every internal fan diagonal in solid fill.
             const bool wire = (fillMode_ == 1);
-            const unsigned mask0 = (clippedCount == 4) ? (kEdgeV0V1 | kEdgeV1V2) : kEdgeAll;
-            RasterizeTriangleShaded(fb, depthState, RasterStencilState{}, blendState, blendFactor,
-                                    cullMode_,
-                                    depthBias_, slopeScaleDepthBias_, params,
-                                    clip, rv[0], rv[1], rv[2], colorWriteMask_, multiSampleMask_,
-                                    GetSamplerState(0), GetSamplerState(1), wire, mask0,
-                                    clippedCount == 4 ? kEdgeV2V0 : 0u);
-            if (clippedCount == 4)
+            for (int fan = 1; fan + 1 < clippedCount; ++fan)
+            {
+                unsigned edgeMask = kEdgeV1V2;
+                if (fan == 1) edgeMask |= kEdgeV0V1;
+                if (fan + 1 == clippedCount - 1) edgeMask |= kEdgeV2V0;
+                const unsigned excludedFillEdge =
+                    (fan + 1 < clippedCount - 1) ? kEdgeV2V0 : 0u;
                 RasterizeTriangleShaded(fb, depthState, RasterStencilState{}, blendState, blendFactor,
                                         cullMode_,
                                         depthBias_, slopeScaleDepthBias_, params,
-                                        clip, rv[0], rv[2], rv[3], colorWriteMask_, multiSampleMask_,
-                                        GetSamplerState(0), GetSamplerState(1), wire, kEdgeV1V2 | kEdgeV2V0);
+                                        clip, rv[0], rv[static_cast<std::size_t>(fan)],
+                                        rv[static_cast<std::size_t>(fan + 1)],
+                                        colorWriteMask_, multiSampleMask_, GetSamplerState(0),
+                                        GetSamplerState(1), wire, edgeMask, excludedFillEdge);
+            }
         }
     }
 #else

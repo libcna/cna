@@ -175,21 +175,18 @@ rather than always passing.
   `CullClockwiseFace`/`CullCounterClockwiseFace` are all honored, including by
   `SpriteBatch`'s own quads (matching real FNA, whose `SpriteBatch` defaults to
   `CullCounterClockwise` rather than `CullNone`).
-- **Real near-plane polygon clipping** (`SOFTWARE-83`) — a triangle crossing the near plane
-  (`clip.W <= ~0`) is split into 1-2 new triangles at the clip plane (interpolating position and
-  color/UV together), rather than the whole triangle being discarded. Clipping still happens at
-  the camera's eye plane specifically (`clip.W <= ~0`), not at the projection's configured near
-  clip distance — a vertex clipped there necessarily lands at an enormous (but finite, correct)
-  screen position after the perspective divide.
+- **Complete homogeneous frustum clipping** (`SOFTWARE-106`) — points, lines and triangles are
+  clipped before perspective divide against XNA/Direct3D's six clip planes
+  (`-W <= X,Y <= W`, `0 <= Z <= W`). Polygon clipping interpolates all active varyings, preserves
+  winding, supports multi-plane results larger than the old near-only quad, and keeps internal fan
+  diagonals out of wireframe output.
 - **`SpriteBatch` honors a custom `GraphicsDevice.Viewport`** (`REMED-GFX-073`) — sprite
   coordinates are viewport-local (sprite `(0,0)` = the viewport's top-left), the result is placed at
   `Viewport.X/Y`, and pixels outside the viewport rectangle are clipped, matching real XNA/FNA and
   the GPU renderers' GFX-072 contract. The **3D** path also honors X/Y, Width/Height, raster clipping
   and `MinDepth/MaxDepth` (`REMED-GFX-079`, 25/25 focused checks), and an enabled
   `ScissorRectangle` intersects both paths in target space (`REMED-GFX-080`). The default
-  full-target viewport remains byte-identical to the earlier behavior. SOFTWARE's homogeneous
-  clipping is still limited to the eye plane described above; viewport clipping does not turn that
-  into a complete six-plane frustum clip.
+  full-target viewport remains byte-identical to the earlier behavior.
 - **Custom `ShaderEffect` (arbitrary GLSL/HLSL/WGSL source) compiles but doesn't actually execute**
   — mirrors `HEADLESS-16`'s own precedent exactly: the source is accepted without compiling, and
   only effects whose `FillGpuDrawParams()` output matches this renderer's fixed `BasicEffect`-subset

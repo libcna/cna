@@ -1,36 +1,8 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_software.md Phase S9 (SOFTWARE-83): near-plane polygon clipping, replacing the old
-// whole-triangle culling (SOFTWARE-34's own acknowledged v1 gap).
-//
-// A real perspective projection is required to exercise this (with an identity World/View/
-// Projection, clip.W is always exactly 1 and no vertex can ever cross the near plane) --
-// Matrix::CreatePerspectiveFieldOfView(PI/2, 1, ...) with World=View=identity gives
-// clip.W = -position.Z directly (see Matrix::CreatePerspectiveFieldOfView's M34=-1, M44=0), so a
-// vertex at Z<0 is in front of the camera (clip.W>0) and Z>=0 is behind/at the camera (clipped).
-//
-// This renderer clips at clip.W <= ~0 -- i.e. at the camera's eye plane, not at the projection's
-// configured near-plane distance. A vertex clipped there necessarily lands at an enormous (but
-// finite) screen position after the perspective divide (dividing by a value forced to be near
-// zero) -- this is correct, unavoidable perspective-projection math for a point that close to the
-// eye, not a bug. So these checks deliberately avoid asserting exact pixel colors far from a
-// stable (unclipped) vertex, and instead check: (1) a small pixel neighborhood around each
-// surviving (non-clipped) vertex's own exact screen projection is red -- proving clipping
-// preserved the correct geometry near real vertices, not corrupted it; and (2) the total red
-// pixel count is bounded, i.e. neither 0 (would mean nothing rendered -- old whole-triangle-cull
-// behavior) nor the full framebuffer (would mean a clipping-direction sign bug painted everything).
-//
-// Check A -- 2 vertices in front + 1 behind (near-plane crossing splits the triangle into a quad,
-//   rendered as 2 triangles): both front vertices' own screen neighborhoods are red, and the
-//   total red pixel count is bounded (>0, <full framebuffer).
-// Check B -- 1 vertex in front + 2 behind (crossing produces a single smaller triangle): the sole
-//   surviving vertex's own screen neighborhood is red, count is bounded.
-// Check C -- all 3 vertices in front (no clipping needed): renders normally, a basic regression
-//   guard that the refactor from cull-the-whole-triangle to real clipping didn't break the
-//   already-working no-clipping-needed path.
-// Check D -- all 3 vertices behind (fully outside the near plane): produces exactly zero red
-//   pixels -- the whole-triangle-discarded case still works after the refactor.
-//
-// Exit code 0 = all checks PASS, 1 = any FAILs.
+// SOFTWARE-106: deterministic public-API proof for the complete XNA/D3D homogeneous clip volume.
+// Identity WVP makes each submitted Position equal to clip XYZ with W=1, so the six boundaries are
+// directly observable: -1 <= X,Y <= 1 and 0 <= Z <= 1. Depth is disabled deliberately; otherwise
+// its comparison could hide missing near/far geometry clipping and make a broken implementation pass.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
@@ -39,15 +11,20 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/FillMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
-#include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
+#include <algorithm>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <limits>
 #include <memory>
+#include <string>
 #include <vector>
 
 using namespace Microsoft::Xna::Framework;
@@ -55,136 +32,229 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
-    int g_passCount = 0;
-
-    void Check(bool ok, const char* label)
-    {
-        std::printf("[%s] %s\n", ok ? "PASS" : "FAIL", label);
-        if (ok) ++g_passCount;
-    }
-
     constexpr int kSize = 64;
 
-    bool IsRed(const Color& c)
+    bool IsRed(const Color& color)
     {
-        return c.getRProperty() > 200 && c.getGProperty() < 60 && c.getBProperty() < 60;
+        return color.getRProperty() > 200 &&
+               color.getGProperty() < 60 &&
+               color.getBProperty() < 60;
     }
 
-    // Whether any pixel in the (2*radius+1)^2 neighborhood around (cx,cy) is red -- used to check
-    // "clipping preserved this real, unclipped vertex's own projection" without depending on
-    // exactly which diagonal direction the rest of the (possibly near-plane-clipped, hence
-    // arbitrarily positioned) triangle extends in.
-    bool AnyRedNear(GraphicsDevice& dev, int cx, int cy, int radius)
+    struct Snapshot
     {
-        for (int y = std::max(0, cy - radius); y <= std::min(kSize - 1, cy + radius); ++y)
+        std::vector<Color> pixels;
+        int redCount = 0;
+        int minX = std::numeric_limits<int>::max();
+        int minY = std::numeric_limits<int>::max();
+        int maxX = std::numeric_limits<int>::min();
+        int maxY = std::numeric_limits<int>::min();
+
+        bool RedAt(int x, int y) const
         {
-            for (int x = std::max(0, cx - radius); x <= std::min(kSize - 1, cx + radius); ++x)
-            {
-                const Rectangle region(x, y, 1, 1);
-                Color pixel(0, 0, 0, 0);
-                dev.GetBackBufferData(&region, &pixel, 0, 1);
-                if (IsRed(pixel))
-                    return true;
-            }
+            return IsRed(pixels[static_cast<std::size_t>(y * kSize + x)]);
         }
-        return false;
-    }
+    };
 
-    int CountRedPixels(GraphicsDevice& dev)
+    Snapshot ReadSnapshot(GraphicsDevice& device)
     {
-        int count = 0;
+        Snapshot result;
+        result.pixels.resize(static_cast<std::size_t>(kSize * kSize));
+        const Rectangle whole(0, 0, kSize, kSize);
+        device.GetBackBufferData(&whole, result.pixels.data(), 0,
+                                 static_cast<int>(result.pixels.size()));
         for (int y = 0; y < kSize; ++y)
         {
             for (int x = 0; x < kSize; ++x)
             {
-                const Rectangle region(x, y, 1, 1);
-                Color pixel(0, 0, 0, 0);
-                dev.GetBackBufferData(&region, &pixel, 0, 1);
-                if (IsRed(pixel))
-                    ++count;
+                if (!result.RedAt(x, y))
+                    continue;
+                ++result.redCount;
+                result.minX = std::min(result.minX, x);
+                result.minY = std::min(result.minY, y);
+                result.maxX = std::max(result.maxX, x);
+                result.maxY = std::max(result.maxY, y);
             }
         }
-        return count;
+        return result;
     }
 }
 
 class SoftwareClippingTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
+    int passCount_ = 0;
+    int totalCount_ = 0;
     int result_ = 1;
 
-    void DrawTriangle(GraphicsDevice& dev, const Matrix& projection,
+    void Check(bool ok, const std::string& label)
+    {
+        std::printf("[%s] %s\n", ok ? "PASS" : "FAIL", label.c_str());
+        std::fflush(stdout);
+        ++totalCount_;
+        if (ok)
+            ++passCount_;
+    }
+
+    void DrawTriangle(GraphicsDevice& device,
                       const Vector3& a, const Vector3& b, const Vector3& c)
     {
-        const VertexPositionColor verts[3] = { {a, Color::Red}, {b, Color::Red}, {c, Color::Red} };
-        VertexBuffer vb(dev, 3);
-        vb.SetData(verts, 3);
-        BasicEffect fx(dev);
-        fx.VertexColorEnabled = true;
-        fx.setProjectionProperty(projection);
-        fx.Apply();
-        dev.SetVertexBuffer(&vb);
-        dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
-        dev.SetVertexBuffer(nullptr);
+        const VertexPositionColor vertices[3] = {
+            {a, Color::Red}, {b, Color::Red}, {c, Color::Red},
+        };
+        BasicEffect effect(device);
+        effect.VertexColorEnabled = true;
+        effect.Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList, vertices, 0, 1);
+    }
+
+    void DrawIndexedTriangle(GraphicsDevice& device,
+                             const Vector3& a, const Vector3& b, const Vector3& c)
+    {
+        const VertexPositionColor vertices[3] = {
+            {a, Color::Red}, {b, Color::Red}, {c, Color::Red},
+        };
+        const std::uint16_t indices[3] = {0, 1, 2};
+        BasicEffect effect(device);
+        effect.VertexColorEnabled = true;
+        effect.Apply();
+        device.DrawUserIndexedPrimitives(
+            PrimitiveType::TriangleList, vertices, 0, 3, indices, 0, 1);
+    }
+
+    void SetFill(GraphicsDevice& device, FillMode fillMode)
+    {
+        RasterizerState state;
+        state.setCullModeProperty(CullMode::None);
+        state.setFillModeProperty(fillMode);
+        device.setRasterizerStateProperty(state);
     }
 
 protected:
     void Draw(const GameTime&) override
     {
-        auto& dev = getGraphicsDeviceProperty();
-        dev.setRasterizerStateProperty(RasterizerState::CullNone);  // isolate from SOFTWARE-81
+        auto& device = getGraphicsDeviceProperty();
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        SetFill(device, FillMode::Solid);
 
-        const Matrix projection = Matrix::CreatePerspectiveFieldOfView(
-            1.5707963f /* pi/2 */, 1.0f, 0.1f, 100.0f);
+        // Each triangle has one vertex outside one plane and two inside. The visible bounds and a
+        // stable interior probe prove that the crossing was clipped rather than wholly discarded.
+        device.Clear(Color::Black, 1.0f);
+        DrawTriangle(device, Vector3(-1.5f, 0.0f, 0.5f), Vector3(0.0f, 0.75f, 0.5f),
+                     Vector3(0.0f, -0.75f, 0.5f));
+        Snapshot shot = ReadSnapshot(device);
+        Check(shot.redCount > 0 && shot.maxX <= 32 && shot.RedAt(16, 32),
+              "left plane: crossing polygon survives only at X >= -W");
 
-        // clip.W = -Z (World=View=identity, see Matrix::CreatePerspectiveFieldOfView: M34=-1,
-        // M44=0). Z<0 -> in front of the camera (W>0); Z>=0 -> behind/at the camera (clipped).
+        device.Clear(Color::Black, 1.0f);
+        DrawIndexedTriangle(device, Vector3(1.5f, 0.0f, 0.5f), Vector3(0.0f, -0.75f, 0.5f),
+                            Vector3(0.0f, 0.75f, 0.5f));
+        shot = ReadSnapshot(device);
+        Check(shot.redCount > 0 && shot.minX >= 31 && shot.RedAt(48, 32),
+              "right plane: indexed crossing polygon survives only at X <= W");
 
-        // Check A: v0=(0,0,-2) on-axis (screen center, 32,32) and v1=(1,0,-2) (screen (48,32)),
-        // both in front; v2=(0.5,2,5) behind -- the near-plane crossing splits this into a quad.
-        {
-            dev.Clear(Color::Black, 1.0f);
-            DrawTriangle(dev, projection, Vector3(0.0f, 0.0f, -2.0f), Vector3(1.0f, 0.0f, -2.0f),
-                        Vector3(0.5f, 2.0f, 5.0f));
-            const bool v0Ok = AnyRedNear(dev, 32, 32, 2);
-            const bool v1Ok = AnyRedNear(dev, 48, 32, 2);
-            const int redCount = CountRedPixels(dev);
-            Check(v0Ok && v1Ok && redCount > 0 && redCount < kSize * kSize,
-                  "2-in/1-out (quad): both surviving vertices' own projections are red, output is bounded");
-        }
+        device.Clear(Color::Black, 1.0f);
+        DrawTriangle(device, Vector3(0.0f, -1.5f, 0.5f), Vector3(-0.75f, 0.0f, 0.5f),
+                     Vector3(0.75f, 0.0f, 0.5f));
+        shot = ReadSnapshot(device);
+        Check(shot.redCount > 0 && shot.minY >= 31 && shot.RedAt(32, 48),
+              "bottom plane: crossing polygon survives only at Y >= -W");
 
-        // Check B: v0=(0,0,-2) on-axis in front (screen center); v1/v2 behind (asymmetric, to
-        // avoid a degenerate/canceling triangle) -- crosses into a single smaller triangle.
-        {
-            dev.Clear(Color::Black, 1.0f);
-            DrawTriangle(dev, projection, Vector3(0.0f, 0.0f, -2.0f), Vector3(1.3f, 1.0f, 3.0f),
-                        Vector3(-0.6f, 1.1f, 3.2f));
-            const bool v0Ok = AnyRedNear(dev, 32, 32, 2);
-            const int redCount = CountRedPixels(dev);
-            Check(v0Ok && redCount > 0 && redCount < kSize * kSize,
-                  "1-in/2-out (single triangle): the surviving vertex's own projection is red, output is bounded");
-        }
+        device.Clear(Color::Black, 1.0f);
+        DrawTriangle(device, Vector3(0.0f, 1.5f, 0.5f), Vector3(0.75f, 0.0f, 0.5f),
+                     Vector3(-0.75f, 0.0f, 0.5f));
+        shot = ReadSnapshot(device);
+        Check(shot.redCount > 0 && shot.maxY <= 32 && shot.RedAt(32, 16),
+              "top plane: crossing polygon survives only at Y <= W");
 
-        // Check C: all 3 vertices in front -- no clipping needed, must still render normally.
-        {
-            dev.Clear(Color::Black, 1.0f);
-            DrawTriangle(dev, projection, Vector3(-1.0f, 1.0f, -2.0f), Vector3(-1.0f, -1.0f, -2.0f),
-                        Vector3(1.0f, 0.0f, -2.0f));
-            const int redCount = CountRedPixels(dev);
-            Check(redCount > 0, "all vertices in front: renders normally (no clipping needed)");
-        }
+        device.Clear(Color::Black, 1.0f);
+        DrawTriangle(device, Vector3(0.0f, 0.75f, -0.5f), Vector3(0.75f, -0.75f, 0.5f),
+                     Vector3(-0.75f, -0.75f, 0.5f));
+        shot = ReadSnapshot(device);
+        Check(shot.redCount > 0 && shot.minY >= 31 && shot.RedAt(32, 48),
+              "near plane: Z < 0 is clipped even when depth testing is disabled");
 
-        // Check D: all 3 vertices behind -- the whole triangle is discarded, same as before.
-        {
-            dev.Clear(Color::Black, 1.0f);
-            DrawTriangle(dev, projection, Vector3(-1.0f, 1.0f, 2.0f), Vector3(-1.0f, -1.0f, 2.0f),
-                        Vector3(1.0f, 0.0f, 2.0f));
-            const int redCount = CountRedPixels(dev);
-            Check(redCount == 0, "all vertices behind: the whole triangle is discarded, nothing renders");
-        }
+        device.Clear(Color::Black, 1.0f);
+        DrawIndexedTriangle(device, Vector3(0.0f, 0.75f, 1.5f),
+                            Vector3(0.75f, -0.75f, 0.5f),
+                            Vector3(-0.75f, -0.75f, 0.5f));
+        shot = ReadSnapshot(device);
+        Check(shot.redCount > 0 && shot.minY >= 31 && shot.RedAt(32, 48),
+              "far plane: Z > W is clipped even when depth testing is disabled");
 
-        std::printf("=== %d/%d PASS ===\n", g_passCount, 4);
-        result_ = (g_passCount == 4) ? 0 : 1;
+        // Six fully outside triangles submitted together must all be rejected.
+        device.Clear(Color::Black, 1.0f);
+        DrawTriangle(device, Vector3(-2.0f, -0.4f, 0.5f), Vector3(-1.2f, 0.4f, 0.5f),
+                     Vector3(-1.2f, -0.4f, 0.5f));
+        DrawTriangle(device, Vector3(2.0f, -0.4f, 0.5f), Vector3(1.2f, -0.4f, 0.5f),
+                     Vector3(1.2f, 0.4f, 0.5f));
+        DrawTriangle(device, Vector3(-0.4f, -2.0f, 0.5f), Vector3(0.4f, -1.2f, 0.5f),
+                     Vector3(-0.4f, -1.2f, 0.5f));
+        DrawTriangle(device, Vector3(-0.4f, 2.0f, 0.5f), Vector3(-0.4f, 1.2f, 0.5f),
+                     Vector3(0.4f, 1.2f, 0.5f));
+        DrawTriangle(device, Vector3(-0.4f, -0.4f, -0.5f), Vector3(0.4f, -0.4f, -0.5f),
+                     Vector3(0.0f, 0.4f, -0.5f));
+        DrawTriangle(device, Vector3(-0.4f, -0.4f, 1.5f), Vector3(0.0f, 0.4f, 1.5f),
+                     Vector3(0.4f, -0.4f, 1.5f));
+        Check(ReadSnapshot(device).redCount == 0,
+              "fully outside geometry is rejected by every frustum plane");
+
+        // This triangle intersects several planes and requires repeated polygon clipping.
+        device.Clear(Color::Black, 1.0f);
+        DrawTriangle(device, Vector3(0.0f, -0.4f, 0.5f), Vector3(-2.5f, 2.0f, -0.5f),
+                     Vector3(2.5f, 2.0f, 1.5f));
+        shot = ReadSnapshot(device);
+        Check(shot.redCount > 0 && shot.redCount < kSize * kSize && shot.RedAt(32, 38),
+              "multi-plane polygon clipping produces bounded finite output");
+
+        // Lines use the same six planes. With depth disabled the old W-only path painted the upper
+        // half too; the real near-plane intersection begins at screen Y=32.
+        device.Clear(Color::Black, 1.0f);
+        const VertexPositionColor line[2] = {
+            {Vector3(-0.5f, 0.8f, -0.5f), Color::Red},
+            {Vector3(-0.5f, -0.8f, 0.5f), Color::Red},
+        };
+        BasicEffect lineEffect(device);
+        lineEffect.VertexColorEnabled = true;
+        lineEffect.Apply();
+        device.DrawUserPrimitives(PrimitiveType::LineList, line, 0, 1);
+        shot = ReadSnapshot(device);
+        Check(!shot.RedAt(16, 16) && shot.RedAt(16, 48) && shot.minY >= 31,
+              "line segment is clipped against the near plane before rasterization");
+
+        // PointListEXT is outside this campaign's completion scope, but the existing Software path
+        // shares this primitive clip decision and must not regress while the common code changes.
+        device.Clear(Color::Black, 1.0f);
+        const VertexPositionColor points[2] = {
+            {Vector3(0.0f, 0.0f, 0.5f), Color::Red},
+            {Vector3(0.5f, 0.0f, -0.5f), Color::Red},
+        };
+        BasicEffect pointEffect(device);
+        pointEffect.VertexColorEnabled = true;
+        pointEffect.Apply();
+        device.DrawUserPrimitives(PrimitiveType::PointListEXT, points, 0, 2);
+        shot = ReadSnapshot(device);
+        Check(shot.RedAt(32, 32) && !shot.RedAt(48, 32) && shot.redCount == 1,
+              "point coverage accepts only positions inside all six planes");
+
+        // A clipped quad is fan-triangulated. Its internal fan diagonal must remain absent from
+        // WireFrame, while the same location is covered under Solid.
+        device.Clear(Color::Black, 1.0f);
+        SetFill(device, FillMode::Solid);
+        DrawTriangle(device, Vector3(-1.5f, 0.0f, 0.5f), Vector3(0.0f, 0.75f, 0.5f),
+                     Vector3(0.0f, -0.75f, 0.5f));
+        const bool solidInterior = ReadSnapshot(device).RedAt(16, 24);
+
+        device.Clear(Color::Black, 1.0f);
+        SetFill(device, FillMode::WireFrame);
+        DrawTriangle(device, Vector3(-1.5f, 0.0f, 0.5f), Vector3(0.0f, 0.75f, 0.5f),
+                     Vector3(0.0f, -0.75f, 0.5f));
+        shot = ReadSnapshot(device);
+        Check(solidInterior && !shot.RedAt(16, 24) && shot.redCount > 0,
+              "wireframe exposes the clipped polygon boundary without fan diagonals");
+
+        std::printf("=== %d/%d PASS ===\n", passCount_, totalCount_);
+        result_ = (passCount_ == totalCount_) ? 0 : 1;
         Exit();
     }
 
