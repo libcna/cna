@@ -313,13 +313,39 @@ By source extension, run 3 (`identical / differing / missing`):
   blob (`XNASWEEP-108`), and XNA's is a D3DX9 this machine has not got.
 * **`.jpg`, 88 differing** -- GDI+'s JPEG decoder against stb_image's.
 
-### 11.4 Next
+### 11.4 The read-only roots, re-audited 2026-09-08
 
-1. Re-run the sweep on the current binary: the four fixes after run 3 each move
-   a category, and `.spritefont`'s 17 remaining "missing" are Tahoma, which the
-   Wine prefix has not got.
-2. Run `classify.py` and split `differs` into `payload-identical` (LZX) and the
-   rest.
-3. The `.jpg` and `.fbx` families are unmeasured; the `.x` one is now measured
-   and green except for a bone whose name is empty rather than absent, which
-   needs `ContentItem::Name` to be able to say "no name" at all.
+`build/xna-sample-sweep/audit/` holds the `find . -printf '%y %s %T@ %p'`
+baseline of both roots, taken before any work at 17:54 on 2026-09-07, and the
+audit re-takes and diffs it. **Take it from inside each root**, as the baseline
+was: an absolute-path re-take differs from it on every line and says nothing.
+
+| root | result |
+|---|---|
+| `/rv/tmp/XNAGameStudio/Samples` | **0 differing lines.** Every type, size, modification time and path identical. |
+| `/rv/tmp/samples` | Changed, and none of it by this campaign. |
+
+The second row needs its evidence rather than an assurance, because this machine
+runs many sessions at once and that tree is not only this campaign's.
+
+Every file that changed outside the `cna-*` and `CNA_BUILD` build trees -- 1,028
+of them -- is under **`SAMPLE-070-RolePlayingGame_4_0_Win_Xbox` (1,027)** and
+`SAMPLE-068-CatapultWarsTrainingKit_4_0` (1), and they arrive with an
+`evidence/space-key-probe/` directory holding a `chrome.log` and a `server.log`,
+a `scripts/probe-space.sh`, and a new `MANIFEST.md`: another session's browser
+probe, regenerating that sample's own `xna4-build` outputs. Nothing this campaign
+does writes into either root -- the sweep builds into
+`build/xna-sample-sweep/out/units/`, the model oracle into
+`build/xna-sample-sweep/model-probe*/`, and the differential oracle into
+`build/xna-pipeline-oracle/`. The one path that ever did was `BuildContent`'s own
+configuration file, which `XNASWEEP-110` moved into the intermediate directory;
+`find` over both roots now returns no `cna-buildcontent.json` at all.
+
+### 11.5 Next
+
+1. Re-run the sweep on the current binary after each batch of fixes; every fix
+   from `XNASWEEP-118` on moves a category.
+2. Run `classify.py` and split `differs` into `payload-identical` (LZX), the
+   float-tolerance rows and the rest.
+3. `.jpg` is measured and accepted; `.fbx` is measured through the genuine
+   importer (`XNASWEEP-121`) and `.x` through it too (`XNASWEEP-122`).
