@@ -141,7 +141,8 @@ rather than always passing.
   `DualTextureEffect`, `EnvironmentMapEffect` and `SkinnedEffect` use FNA's view-space fog vector,
   including transformed World/View matrices, the degenerate start=end case and SkinnedEffect's
   post-bone position. The per-vertex factor is clipped and perspective-interpolated, and fog mixes
-  final RGB after the stock effect's texture/environment work and alpha test but before blending.
+  final RGB toward `FogColor * outputAlpha` after the stock effect's texture/environment work and
+  alpha test but before blending.
 - **`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect` are supported** (`SOFTWARE-82`),
   minus the lighting caveat above:
   - `DualTextureEffect`: real second-texture sampling, FNA's own

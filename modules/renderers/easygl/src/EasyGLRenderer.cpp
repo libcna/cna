@@ -7788,7 +7788,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 // REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
 // column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
-// "keep" (mix(uFogColor,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
+// "keep" (mix(uFogColor*alpha,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
 // uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
 // degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
 "    vFogFactor=1.0-clamp(dot(cnaPos,uFogVector),0.0,1.0);\n"
@@ -7808,7 +7808,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "    FragColor=vc*uDiffuseColor;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
-"    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
+"    FragColor.rgb=mix(uFogColor*FragColor.a,FragColor.rgb,vFogFactor);\n"
 "}\n";
 
         CompileAndLink(prog_colored_.prog, vsrc, fsrc, "colored");
@@ -7844,7 +7844,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 // REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
 // column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
-// "keep" (mix(uFogColor,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
+// "keep" (mix(uFogColor*alpha,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
 // uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
 // degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
 "    vFogFactor=1.0-clamp(dot(cnaPos,uFogVector),0.0,1.0);\n"
@@ -7864,7 +7864,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    FragColor=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x))*uDiffuseColor;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
-"    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
+"    FragColor.rgb=mix(uFogColor*FragColor.a,FragColor.rgb,vFogFactor);\n"
 "}\n";
 
         CompileAndLink(prog_textured_.prog, vsrc, fsrc, "textured");
@@ -7903,7 +7903,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 // REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
 // column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
-// "keep" (mix(uFogColor,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
+// "keep" (mix(uFogColor*alpha,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
 // uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
 // degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
 "    vFogFactor=1.0-clamp(dot(cnaPos,uFogVector),0.0,1.0);\n"
@@ -7926,7 +7926,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    FragColor=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x))*vc*uDiffuseColor;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
-"    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
+"    FragColor.rgb=mix(uFogColor*FragColor.a,FragColor.rgb,vFogFactor);\n"
 "}\n";
 
         CompileAndLink(prog_col_textured_.prog, vsrc, fsrc, "col+textured");
@@ -7982,7 +7982,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 // REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
 // column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
-// "keep" (mix(uFogColor,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
+// "keep" (mix(uFogColor*alpha,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
 // uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
 // degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
 "    vFogFactor=1.0-clamp(dot(cnaPos,uFogVector),0.0,1.0);\n"
@@ -8063,7 +8063,7 @@ CNA_GL_PUNCTUAL_DECL
 "    FragColor.rgb+=specularRGB*FragColor.a;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
-"    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
+"    FragColor.rgb=mix(uFogColor*FragColor.a,FragColor.rgb,vFogFactor);\n"
 "}\n";
 
         CompileAndLink(prog_lit_textured_.prog, vsrc, fsrc, "lit+textured");
@@ -8183,7 +8183,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 // REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
 // column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
-// "keep" (mix(uFogColor,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
+// "keep" (mix(uFogColor*alpha,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
 // uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
 // degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
 "    vFogFactor=1.0-clamp(dot(cnaPos,uFogVector),0.0,1.0);\n"
@@ -8240,7 +8240,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    FragColor.rgb+=vSpecularRGB*FragColor.a;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
-"    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
+"    FragColor.rgb=mix(uFogColor*FragColor.a,FragColor.rgb,vFogFactor);\n"
 "}\n";
 
         CompileAndLink(prog_lit_textured_vertexlit_.prog, vsrc, fsrc, "lit+textured (vertex-lit)");
@@ -8296,7 +8296,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 // REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
 // column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
-// "keep" (mix(uFogColor,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
+// "keep" (mix(uFogColor*alpha,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
 // uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
 // degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
 "    vFogFactor=1.0-clamp(dot(cnaPos,uFogVector),0.0,1.0);\n"
@@ -8320,7 +8320,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    FragColor=base*texture(uTexture2,cnaSampleUV(vUV1,uRtFlipV.y))*uDiffuseColor;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
-"    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
+"    FragColor.rgb=mix(uFogColor*FragColor.a,FragColor.rgb,vFogFactor);\n"
 "}\n";
 
         CompileAndLink(prog_dual_textured_.prog, vsrc, fsrc, "dual+textured");
@@ -8366,7 +8366,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 // REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
 // column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
-// "keep" (mix(uFogColor,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
+// "keep" (mix(uFogColor*alpha,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
 // uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
 // degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
 "    vFogFactor=1.0-clamp(dot(cnaPos,uFogVector),0.0,1.0);\n"
@@ -8393,7 +8393,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    FragColor=base*texture(uTexture2,cnaSampleUV(vUV1,uRtFlipV.y))*vc*uDiffuseColor;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
-"    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
+"    FragColor.rgb=mix(uFogColor*FragColor.a,FragColor.rgb,vFogFactor);\n"
 "}\n";
 
         CompileAndLink(prog_dual_textured_colored_.prog, vsrc, fsrc, "dual+textured+colored");
@@ -8466,7 +8466,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 // REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
 // column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
-// "keep" (mix(uFogColor,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
+// "keep" (mix(uFogColor*alpha,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
 // uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
 // degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
 "    vFogFactor=1.0-clamp(dot(cnaPos,uFogVector),0.0,1.0);\n"
@@ -8515,7 +8515,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    FragColor=vec4(rgb,combinedAlpha);\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
-"    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
+"    FragColor.rgb=mix(uFogColor*FragColor.a,FragColor.rgb,vFogFactor);\n"
 "}\n";
 
         CompileAndLink(prog_env_mapped_.prog, vsrc, fsrc, "env+mapped");
@@ -8609,7 +8609,7 @@ CNA_GL_SKIN_NORMAL_DECL
 // REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
 // column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
-// "keep" (mix(uFogColor,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
+// "keep" (mix(uFogColor*alpha,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
 // uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
 // degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
 // Skinned: dot the POST-skin position (FNA Skin() mutates vin.Position before ComputeFogFactor).
@@ -8697,7 +8697,7 @@ CNA_GL_PUNCTUAL_DECL
 "    FragColor.rgb*=vc.rgb;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
-"    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
+"    FragColor.rgb=mix(uFogColor*FragColor.a,FragColor.rgb,vFogFactor);\n"
 "}\n";
 
         CompileAndLink(prog_skinned_.prog, vsrc, fsrc, "skinned");
@@ -8804,7 +8804,7 @@ CNA_GL_SKIN_NORMAL_DECL
 // REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
 // column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
-// "keep" (mix(uFogColor,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
+// "keep" (mix(uFogColor*alpha,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
 // uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
 // degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
 "    vFogFactor=1.0-clamp(dot(cnaPos,uFogVector),0.0,1.0);\n"
@@ -8869,7 +8869,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    FragColor.rgb*=vc.rgb;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
-"    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
+"    FragColor.rgb=mix(uFogColor*FragColor.a,FragColor.rgb,vFogFactor);\n"
 "}\n";
 
         CompileAndLink(prog_skinned_vertexlit_.prog, vsrc, fsrc, "skinned (vertex-lit)");

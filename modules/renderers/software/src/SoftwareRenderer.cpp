@@ -2580,10 +2580,11 @@ namespace CNA::Internal::Renderers::Software
             // SOFTWARE-112: FNA computes this factor per vertex from the post-skin object
             // position, then the rasterizer perspective-interpolates it. Fog affects RGB only and
             // follows texture/material/env-map and alpha-test processing, immediately before the
-            // ordinary BlendState equation, matching all five classic stock-effect shaders.
-            r = ctx.params.fogColor[0] * (1.0f - fogKeep) + r * fogKeep;
-            g = ctx.params.fogColor[1] * (1.0f - fogKeep) + g * fogKeep;
-            b = ctx.params.fogColor[2] * (1.0f - fogKeep) + b * fogKeep;
+            // ordinary BlendState equation. FNA premultiplies FogColor by the completed output
+            // alpha before this mix, matching all five classic stock-effect shaders.
+            r = ctx.params.fogColor[0] * a * (1.0f - fogKeep) + r * fogKeep;
+            g = ctx.params.fogColor[1] * a * (1.0f - fogKeep) + g * fogKeep;
+            b = ctx.params.fogColor[2] * a * (1.0f - fogKeep) + b * fogKeep;
 
             // REMED-GFX-077: final colour channels (opaque store or exact XNA blend result). Each channel is
             // gated by BlendState.ColorWriteChannels — a masked-off channel keeps its existing

@@ -104,7 +104,7 @@ namespace
         return CloseChannel(actual.getRProperty(), expected.getRProperty()) &&
                CloseChannel(actual.getGProperty(), expected.getGProperty()) &&
                CloseChannel(actual.getBProperty(), expected.getBProperty()) &&
-               actual.getAProperty() == expected.getAProperty();
+               CloseChannel(actual.getAProperty(), expected.getAProperty());
     }
 
     std::string ColorText(const Color& color)
@@ -157,7 +157,7 @@ class StockEffectFogContractTest final : public Game
     }
 
     Color RenderBasic(GraphicsDevice& device, RenderTarget2D& target,
-                      const FogCase& testCase)
+                      const FogCase& testCase, float alpha = 1.0f)
     {
         Begin(device, target);
         BasicEffect effect(device);
@@ -166,6 +166,7 @@ class StockEffectFogContractTest final : public Game
         effect.setTextureEnabledProperty(false);
         effect.VertexColorEnabled = false;
         effect.setDiffuseColorProperty(FogRef::kGeomRGB);
+        effect.setAlphaProperty(alpha);
         effect.Apply();
         const Color ignored(0, 255, 0, 255);
         const float z = testCase.objectZ;
@@ -357,6 +358,21 @@ protected:
         Check("EnvironmentMapEffect final-stage ordering",
               RenderEnvironment(device, target, blue, cube, finalStage, 1.0f),
               FogRef::ColorFor(0.5f, Vector3(0, 1, 0), FogRef::kFogRGB));
+
+        // FNA Common.fxh applies fog toward FogColor * the completed output alpha. This is
+        // observably different from mixing toward the unscaled fog colour on an opaque target.
+        const float transparentAlpha = 0.25f;
+        const auto scaledChannel = [&](float geometry, float fog)
+        {
+            return static_cast<int>(std::lround(
+                transparentAlpha * (fog * 0.5f + geometry * 0.5f) * 255.0f));
+        };
+        Check("BasicEffect transparent fog premultiplies FogColor by output alpha",
+              RenderBasic(device, target, finalStage, transparentAlpha),
+              Color(scaledChannel(FogRef::kGeomRGB.X, FogRef::kFogRGB.X),
+                    scaledChannel(FogRef::kGeomRGB.Y, FogRef::kFogRGB.Y),
+                    scaledChannel(FogRef::kGeomRGB.Z, FogRef::kFogRGB.Z),
+                    static_cast<int>(std::lround(transparentAlpha * 255.0f))));
 
         std::printf("=== %d/%d PASS ===\n", passed_, total_);
         result_ = passed_ == total_ ? 0 : 1;
