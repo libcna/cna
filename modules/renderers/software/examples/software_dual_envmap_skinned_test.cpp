@@ -135,8 +135,9 @@ protected:
                   "DualTextureEffect: (tex0*2)*tex1*diffuse matches the hand-computed color");
         }
 
-        // Checks B/C: EnvironmentMapEffect. World=View=identity -> eye at (0,0,0). A quad at
-        // Z=-2 facing the camera (Normal=(0,0,1)) has eyeVector=(0,0,1)=Normal, so
+        // Checks B/C: EnvironmentMapEffect. World=View=identity -> eye at (0,0,0), with a real
+        // perspective projection so Z=-2 lies inside XNA/D3D's 0 <= clip.Z <= clip.W volume. A quad
+        // at Z=-2 facing the camera (Normal=(0,0,1)) has eyeVector=(0,0,1)=Normal, so
         // reflect(-E,N)=(0,0,1) -- must sample the cube's PositiveZ face exactly.
         {
             TextureCube cube(dev, 4, false, SurfaceFormat::Color);
@@ -172,6 +173,8 @@ protected:
                 fx.setEnvironmentMapProperty(&cube);
                 fx.setEnvironmentMapAmountProperty(1.0f);
                 fx.setFresnelFactorProperty(0.0f);
+                fx.setProjectionProperty(Matrix::CreatePerspectiveFieldOfView(
+                    1.5707963f, 1.0f, 0.1f, 100.0f));
                 fx.Apply();
                 dev.SetVertexBuffer(&vb);
                 dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
@@ -191,6 +194,8 @@ protected:
                 fx.setEnvironmentMapProperty(&cube);
                 fx.setEnvironmentMapAmountProperty(0.0f);
                 fx.setFresnelFactorProperty(0.0f);
+                fx.setProjectionProperty(Matrix::CreatePerspectiveFieldOfView(
+                    1.5707963f, 1.0f, 0.1f, 100.0f));
                 fx.Apply();
                 dev.SetVertexBuffer(&vb);
                 dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
@@ -223,6 +228,8 @@ protected:
             SkinnedEffect fx(dev);
             fx.setTextureProperty(&white);
             fx.setDiffuseColorProperty(Vector3(1.0f, 0.0f, 0.0f));
+            fx.setProjectionProperty(Matrix::CreatePerspectiveFieldOfView(
+                1.5707963f, 1.0f, 0.1f, 100.0f));
             std::vector<Matrix> bones(2, Matrix::getIdentityProperty());
             bones[1] = Matrix::CreateTranslation(0.5f, 0.0f, 0.0f);
             fx.SetBoneTransforms(bones);
