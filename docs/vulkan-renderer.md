@@ -342,7 +342,9 @@ lit, dual-texture, env-map or alpha-test instanced program, and no fog on any of
 is a second descriptor binding, and the instanced route uses the single-binding pipeline layout it
 shares with 2D `SpriteBatch`. A declaration carrying **both** a colour and a texture coordinate
 takes the textured program, so the colour is not applied. `LightingEnabled` on an instanced draw is
-ignored. Tracked as `VULKAN-218`; EasyGL has none of these limits, because its per-instance matrix
+ignored — measured, not inferred: a quad at `N·L = 0.5` reads `(128,128,128)` non-instanced
+and `(255,255,255)` instanced here, where EasyGL reads `(128,128,128)` both ways. Tracked as
+`VULKAN-218`; EasyGL has none of these limits, because its per-instance matrix
 composes with every stock program.
   Set `SamplerStates[1..15]` **before** `Begin()`. Setting them afterwards reaches a `Deferred`
   batch, whose flush publishes them, but not an `Immediate` one, whose only publication point is
