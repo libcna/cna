@@ -989,6 +989,7 @@ namespace CNA::Content::Pipeline
             {
                 Xnb::XnbModelBoneData converted;
                 converted.name = bone.name;
+                converted.nameIsNull = bone.nameIsNull;
                 converted.transform = ConvertTransform(bone.transform);
                 converted.parent = bone.parent;
                 result.bones.push_back(std::move(converted));

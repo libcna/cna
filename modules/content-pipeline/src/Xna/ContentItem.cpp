@@ -19,13 +19,18 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
 
     const std::string& ContentItem::getNameProperty() const noexcept
     {
-        return name_;
+        static const std::string unnamed;
+        return name_.has_value() ? *name_ : unnamed;
     }
 
     void ContentItem::setNameProperty(std::string value)
     {
         name_ = std::move(value);
     }
+
+    bool ContentItem::getNameIsNullEXT() const noexcept { return !name_.has_value(); }
+
+    void ContentItem::setNameNullEXT() noexcept { name_.reset(); }
 
     OpaqueDataDictionary& ContentItem::getOpaqueDataProperty() noexcept
     {

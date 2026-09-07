@@ -1738,6 +1738,35 @@ TEST(XnaProcessorOverriding, ATextureProcessorSubclassKeepsTheColourTheBaseWould
               Expected("textureprocessor/color_key_disabled"));
 }
 
+// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-122: a node with no name at all and a node whose name
+// is the empty string are different values, and the difference survives into the bone table.
+TEST(XnaModelProcessor, ABoneKeepsWhetherItsNodeHadNoNameOrAnEmptyOne)
+{
+    auto root = std::make_shared<Graphics::NodeContent>();          // no name at all
+    auto named = std::make_shared<Graphics::NodeContent>();
+    named->setNameProperty("");                                      // a name that is empty
+    root->getChildrenProperty().Add(named);
+    auto mesh = std::make_shared<Graphics::MeshContent>();
+    mesh->setNameProperty("Mesh");
+    mesh->getPositionsProperty().Add(Vector3(0, 0, 0));
+    mesh->getPositionsProperty().Add(Vector3(1, 0, 0));
+    mesh->getPositionsProperty().Add(Vector3(0, 1, 0));
+    auto geometry = std::make_shared<Graphics::GeometryContent>();
+    mesh->getGeometryProperty().Add(geometry);
+    geometry->getVerticesProperty().AddRange({0, 1, 2});
+    geometry->getIndicesProperty().AddRange({0, 1, 2});
+    named->getChildrenProperty().Add(mesh);
+
+    Processors::ModelProcessor processor;
+    RecordingContext context;
+    const std::shared_ptr<Processors::ModelContent> model = processor.Process(root, context);
+    ASSERT_NE(model, nullptr);
+    ASSERT_GE(model->getBonesProperty().size(), 2u);
+    EXPECT_TRUE(model->getBonesProperty()[0]->getNameIsNullEXT());
+    EXPECT_FALSE(model->getBonesProperty()[1]->getNameIsNullEXT());
+    EXPECT_TRUE(model->getBonesProperty()[1]->getNameProperty().empty());
+}
+
 TEST(XnaVertexBufferContent, WritesAndSizesAsXnaDoes)
 {
     Processors::VertexBufferContent buffer(24);

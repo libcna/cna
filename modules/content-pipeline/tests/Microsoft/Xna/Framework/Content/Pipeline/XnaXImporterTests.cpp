@@ -464,6 +464,28 @@ TEST(XnaXImporter, SkinningAndAnimationAnswerWhatXnaAnswers)
 }
 
 // Every refusal, including the D3DX code the genuine reader appends and which one it picks.
+// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-122: `Name` is a nullable string in XNA and the two
+// empty values reach a built `.xnb` differently -- a null object against a zero-length string. The
+// `.x` importer has both: a file with no enclosing frame gets a synthesized root that carries no
+// name, while `Frame {` declares one that happens to be empty. Measured on the genuine importer,
+// which answers `/<null>` for `bare_mesh.x`'s root and `/glass/` -- a path ending in nothing -- for
+// SAMPLE-028 `Car.x`'s unnamed frames.
+TEST(XnaXImporter, AnUnnamedFrameAndAnAbsentOneAreDifferentNames)
+{
+    ImporterContext context;
+    Xna::XImporter importer;
+    const std::shared_ptr<Graphics::NodeContent> root =
+        importer.Import(Fixture("bare_mesh.x").string(), context);
+    ASSERT_NE(root, nullptr);
+    EXPECT_TRUE(root->getNameIsNullEXT()) << "the synthesized root carries no name";
+    EXPECT_TRUE(root->getNameProperty().empty());
+
+    ASSERT_EQ(root->getChildrenProperty().getCountProperty(), 1);
+    const std::shared_ptr<Graphics::NodeContent> mesh = root->getChildrenProperty()[0];
+    EXPECT_FALSE(mesh->getNameIsNullEXT());
+    EXPECT_EQ(mesh->getNameProperty(), "Loose");
+}
+
 TEST(XnaXImporter, RefusalsMatchXna)
 {
     for (const std::string& fixture :

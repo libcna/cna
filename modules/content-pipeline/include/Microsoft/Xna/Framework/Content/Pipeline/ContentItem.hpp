@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -52,16 +53,33 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         /**
          * @brief Gets the name of the content item.
          *
-         * @return The name, or empty when the item is unnamed.
+         * @return The name; empty both when the item is unnamed and when its name is the empty
+         *         string. `getNameIsNullEXT()` separates the two.
          */
         [[nodiscard]] const std::string& getNameProperty() const noexcept;
 
         /**
          * @brief Sets the name of the content item.
          *
-         * @param value The name.
+         * @param value The name. The empty string is a name, not the absence of one.
          */
         void setNameProperty(std::string value);
+
+        /**
+         * @brief Gets whether this item has no name at all, which C# spells `Name == null`.
+         *
+         * XNA's `Name` is a nullable string and the two empty values are different in a built
+         * `.xnb`: a `.x` file's synthesized root frame has no name and XNA writes a null object for
+         * it, while a `Frame {` that declares an empty one is written as a zero-length string.
+         * C++ has no null `std::string`, so the distinction is carried here
+         * (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-122).
+         *
+         * @return True when no name has been set.
+         */
+        CNAEXT [[nodiscard]] bool getNameIsNullEXT() const noexcept;
+
+        /** @brief Removes the item's name, which C# spells `Name = null`. */
+        CNAEXT void setNameNullEXT() noexcept;
 
         /**
          * @brief Gets the opaque data of the content item.
@@ -95,7 +113,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
 
     private:
         ContentIdentity identity_;
-        std::string name_;
+        std::optional<std::string> name_;
         OpaqueDataDictionary opaqueData_;
     };
 }

@@ -122,6 +122,7 @@ namespace CNA::Content::Pipeline
         {
             Internal::Xnb::XnbModelBoneData written;
             written.name = bone->getNameProperty();
+            written.nameIsNull = bone->getNameIsNullEXT();
             written.transform = bone->getTransformProperty();
             const auto parent = boneIndices.find(bone->getParentProperty().get());
             written.parent = parent == boneIndices.end() ? -1 : parent->second;

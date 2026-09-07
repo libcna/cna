@@ -2,6 +2,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -49,7 +50,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
          * @param transform The bone's transform, relative to its parent.
          * @param parent The bone above this one, or null for the root.
          */
-        CNAEXT ModelBoneContent(std::string name, SharpRuntime::intcs index, Matrix transform,
+        CNAEXT ModelBoneContent(std::optional<std::string> name, SharpRuntime::intcs index,
+                                Matrix transform,
                                 std::shared_ptr<ModelBoneContent> parent);
 
         /**
@@ -66,9 +68,20 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
 
         /**
          * @brief Gets the bone's name.
-         * @return The name.
+         * @return The name; empty both when the bone is unnamed and when its name is empty.
          */
         [[nodiscard]] const std::string& getNameProperty() const noexcept;
+
+        /**
+         * @brief Gets whether the bone has no name at all, which C# spells `Name == null`.
+         *
+         * A `.x` file's synthesized root frame has none, and XNA writes a null object for it where
+         * a frame declaring an empty name is written as a zero-length string
+         * (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-122).
+         *
+         * @return True when the bone is unnamed.
+         */
+        CNAEXT [[nodiscard]] bool getNameIsNullEXT() const noexcept;
 
         /**
          * @brief Gets the bone above this one.
@@ -98,7 +111,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
         CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
     private:
-        std::string name_;
+        std::optional<std::string> name_;
         SharpRuntime::intcs index_ = 0;
         Matrix transform_;
         std::weak_ptr<ModelBoneContent> parent_;

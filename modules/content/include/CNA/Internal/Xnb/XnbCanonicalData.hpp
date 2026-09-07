@@ -294,8 +294,13 @@ namespace CNA::Internal::Xnb
     /** @brief One bone in the canonical XNB Model graph. */
     struct XnbModelBoneData
     {
-        /** @brief Bone name. */
+        /** @brief Bone name; empty both when the bone is unnamed and when its name is empty. */
         std::string name;
+        /**
+         * @brief Whether the bone has no name at all, written as a null object rather than as a
+         *        zero-length string (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-122).
+         */
+        bool nameIsNull = false;
         /** @brief Bone-local transform. */
         Microsoft::Xna::Framework::Matrix transform;
         /** @brief Parent bone index, or -1. */

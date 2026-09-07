@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/ModelProcessor.hpp"
 
+#include <optional>
 #include <algorithm>
 #include <limits>
 #include <vector>
@@ -209,7 +210,11 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
                        const std::shared_ptr<ModelBoneContent>& parent) -> std::shared_ptr<ModelBoneContent>
         {
             const Matrix transform = node->getTransformProperty();
-            auto bone = std::make_shared<ModelBoneContent>(node->getNameProperty(),
+            // A node with no name at all keeps having none; only a node that carries one, the
+            // empty string included, gives its bone a name (XNASWEEP-122).
+            std::optional<std::string> name;
+            if (!node->getNameIsNullEXT()) { name = node->getNameProperty(); }
+            auto bone = std::make_shared<ModelBoneContent>(std::move(name),
                                                            static_cast<SharpRuntime::intcs>(bones.size()),
                                                            transform, parent);
             bones.push_back(bone);

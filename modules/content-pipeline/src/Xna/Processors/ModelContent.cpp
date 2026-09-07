@@ -9,8 +9,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
     // ModelBoneContent
     // ------------------------------------------------------------------------------------------
 
-    ModelBoneContent::ModelBoneContent(std::string name, SharpRuntime::intcs index, Matrix transform,
-                                       std::shared_ptr<ModelBoneContent> parent)
+    ModelBoneContent::ModelBoneContent(std::optional<std::string> name, SharpRuntime::intcs index,
+                                       Matrix transform, std::shared_ptr<ModelBoneContent> parent)
         : name_(std::move(name)), index_(index), transform_(transform), parent_(parent)
     {
     }
@@ -19,7 +19,13 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
 
     SharpRuntime::intcs ModelBoneContent::getIndexProperty() const noexcept { return index_; }
 
-    const std::string& ModelBoneContent::getNameProperty() const noexcept { return name_; }
+    const std::string& ModelBoneContent::getNameProperty() const noexcept
+    {
+        static const std::string unnamed;
+        return name_.has_value() ? *name_ : unnamed;
+    }
+
+    bool ModelBoneContent::getNameIsNullEXT() const noexcept { return !name_.has_value(); }
 
     std::shared_ptr<ModelBoneContent> ModelBoneContent::getParentProperty() const noexcept { return parent_.lock(); }
 
