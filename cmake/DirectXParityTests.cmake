@@ -471,6 +471,27 @@ function(cna_register_d3d_parity_tests)
         NAME SpriteBatch_RenderTargetSize TARGET spritebatch_rendertarget_size DIRECTX12_ORDER 1550
         SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritebatch_rendertarget_size_test.cpp")
     cna_d3d_parity_fixture(
+        NAME SpriteFont_Properties TARGET sprite_font DIRECTX12_ORDER 1560
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/sprite_font_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME SpriteFont_SingleGlyph TARGET spritefont_single_glyph DIRECTX12_ORDER 1570
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritefont_single_glyph_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME SpriteFont_MultiGlyphSpacing TARGET spritefont_multiglyph_spacing DIRECTX12_ORDER 1580
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritefont_multiglyph_spacing_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME SpriteFont_Newline TARGET spritefont_newline DIRECTX12_ORDER 1590
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritefont_newline_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME SpriteFont_DefaultChar TARGET spritefont_default_char DIRECTX12_ORDER 1600
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritefont_default_char_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME SpriteFont_EffectsFlip TARGET spritefont_effects_flip DIRECTX12_ORDER 1610
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritefont_effects_flip_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME SpriteFont_EffectsRotationScale TARGET spritefont_effects_rotation_scale DIRECTX12_ORDER 1620
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritefont_effects_rotation_scale_test.cpp")
+    cna_d3d_parity_fixture(
         NAME SpriteBatch_CustomViewport TARGET spritebatch_custom_viewport
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_custom_viewport_test.cpp"
         DIRECTX11_ONLY REASON "D3D12 presentation-corpus adoption is tracked by DX-234 and DX-236")
