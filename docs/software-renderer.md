@@ -180,6 +180,11 @@ rather than always passing.
   (`-W <= X,Y <= W`, `0 <= Z <= W`). Polygon clipping interpolates all active varyings, preserves
   winding, supports multi-plane results larger than the old near-only quad, and keeps internal fan
   diagonals out of wireframe output.
+- **XNA/D3D raster coverage** (`SOFTWARE-107`, `SOFTWARE-131`) — 3D viewport mapping reproduces
+  Direct3D 9's integer pixel-center convention, and exact triangle boundaries use the top-left fill
+  rule. Adjacent triangles therefore own a shared edge exactly once regardless of draw order or
+  submitted winding, including the Software renderer's four coverage samples; manual diagonal
+  exceptions are no longer part of solid rasterization.
 - **`SpriteBatch` honors a custom `GraphicsDevice.Viewport`** (`REMED-GFX-073`) — sprite
   coordinates are viewport-local (sprite `(0,0)` = the viewport's top-left), the result is placed at
   `Viewport.X/Y`, and pixels outside the viewport rectangle are clipped, matching real XNA/FNA and

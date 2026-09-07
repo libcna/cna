@@ -451,14 +451,20 @@ namespace CNA::Internal::Renderers::Software
         /// depth-range-remaps 3D geometry, instead of the old mapping over the full framebuffer.
         RasterVertex ClipVertexToRasterVertex(const ClipVertex& cv, const ViewportTransform& vp)
         {
+            // SOFTWARE-131: XNA 4.0's Direct3D 9 raster coordinates place pixel centers at integer
+            // screen coordinates. This CPU rasterizer samples in the conventional corner-origin
+            // space at pixel + 0.5, so translate geometry by Wine/MonoGame/EasyGL's established
+            // 63/128-pixel amount. Staying just below one half selects the XNA side of exact fill
+            // edges after finite subpixel precision instead of leaving the result on the tie.
+            constexpr float kXnaPixelCenterOffset = 63.0f / 128.0f;
             const float invW = 1.0f / cv.w;
             const float ndcX = cv.x * invW;
             const float ndcY = cv.y * invW;
             const float ndcZ = cv.z * invW;
 
             RasterVertex out;
-            out.x = (ndcX * 0.5f + 0.5f) * vp.width + vp.x;
-            out.y = (1.0f - (ndcY * 0.5f + 0.5f)) * vp.height + vp.y;
+            out.x = (ndcX * 0.5f + 0.5f) * vp.width + vp.x + kXnaPixelCenterOffset;
+            out.y = (1.0f - (ndcY * 0.5f + 0.5f)) * vp.height + vp.y + kXnaPixelCenterOffset;
             out.depth = vp.minDepth + ndcZ * (vp.maxDepth - vp.minDepth);
             out.invW = invW;
             out.r = cv.r * invW;
@@ -1431,22 +1437,40 @@ namespace CNA::Internal::Renderers::Software
         /// sprite shows its split diagonal -- real submitted geometry, matching D3D11/FNA.
         enum : unsigned { kEdgeV0V1 = 1u, kEdgeV1V2 = 2u, kEdgeV2V0 = 4u, kEdgeAll = 7u };
 
-        /// A filled polygon split into two triangles must give its shared diagonal to exactly one
-        /// triangle.  The edge-function fill is intentionally inclusive on all three edges for an
-        /// individual triangle; without this narrow exclusion, an alpha-blended quad draws every
-        /// pixel on an exactly representable diagonal twice.  `edgeValues` map to edges V1-V2,
-        /// V2-V0 and V0-V1 respectively (the barycentric convention used below).
-        [[nodiscard]] bool IsExcludedFillEdge(unsigned excludedEdges, float edgeV1V2,
-                                              float edgeV2V0, float edgeV0V1, float area)
+        /// SOFTWARE-107: D3D's top-left rule includes a sample on an exact boundary only when the
+        /// boundary is the triangle's top or left edge. Normalize every triangle to clockwise
+        /// screen-space edge direction first, so reversing the submitted winding changes culling
+        /// but not coverage when CullMode::None keeps both orientations.
+        [[nodiscard]] bool IsTopLeftEdge(float ax, float ay, float bx, float by, float area)
         {
-            if (excludedEdges == 0u)
+            float dx = bx - ax;
+            float dy = by - ay;
+            if (area > 0.0f)
+            {
+                dx = -dx;
+                dy = -dy;
+            }
+            return dy < 0.0f || (dy == 0.0f && dx > 0.0f);
+        }
+
+        [[nodiscard]] bool EdgeContainsSample(float value, float area,
+                                              float ax, float ay, float bx, float by)
+        {
+            const float normalized = area > 0.0f ? value : -value;
+            if (normalized > 0.0f)
+                return true;
+            if (normalized < 0.0f)
                 return false;
-            // The scale keeps this a boundary test after transformations rather than a thin
-            // interior strip, while accepting harmless arithmetic noise on a shared edge.
-            const float tolerance = std::max(1.0e-6f, std::fabs(area) * 1.0e-6f);
-            return ((excludedEdges & kEdgeV1V2) != 0u && std::fabs(edgeV1V2) <= tolerance) ||
-                   ((excludedEdges & kEdgeV2V0) != 0u && std::fabs(edgeV2V0) <= tolerance) ||
-                   ((excludedEdges & kEdgeV0V1) != 0u && std::fabs(edgeV0V1) <= tolerance);
+            return IsTopLeftEdge(ax, ay, bx, by, area);
+        }
+
+        [[nodiscard]] bool TriangleContainsSample(
+            const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2,
+            float area, float edgeV1V2, float edgeV2V0, float edgeV0V1)
+        {
+            return EdgeContainsSample(edgeV1V2, area, v1.x, v1.y, v2.x, v2.y) &&
+                   EdgeContainsSample(edgeV2V0, area, v2.x, v2.y, v0.x, v0.y) &&
+                   EdgeContainsSample(edgeV0V1, area, v0.x, v0.y, v1.x, v1.y);
         }
 
         /// REMED-GFX-082: Liang-Barsky clip of the parametric segment P(t) = a + t*(b - a), t in
@@ -1569,8 +1593,7 @@ namespace CNA::Internal::Renderers::Software
                                const RasterClipRect& clip,
                                const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2,
                                int colorWriteMask, unsigned int multiSampleMask,
-                               bool wireframe = false, unsigned edgeMask = kEdgeAll,
-                               unsigned fillExcludedEdges = 0u)
+                               bool wireframe = false, unsigned edgeMask = kEdgeAll)
         {
             const float area = EdgeFunction(v0.x, v0.y, v1.x, v1.y, v2.x, v2.y);
             if (area == 0.0f)
@@ -1630,11 +1653,7 @@ namespace CNA::Internal::Renderers::Software
                     const float w1 = EdgeFunction(v2.x, v2.y, v0.x, v0.y, px, py);
                     const float w2 = EdgeFunction(v0.x, v0.y, v1.x, v1.y, px, py);
 
-                    const bool inside = (w0 >= 0.0f && w1 >= 0.0f && w2 >= 0.0f) ||
-                                        (w0 <= 0.0f && w1 <= 0.0f && w2 <= 0.0f);
-                    if (!inside)
-                        continue;
-                    if (IsExcludedFillEdge(fillExcludedEdges, w0, w1, w2, area))
+                    if (!TriangleContainsSample(v0, v1, v2, area, w0, w1, w2))
                         continue;
 
                     const float lambda0 = w0 / area;
@@ -2518,8 +2537,7 @@ namespace CNA::Internal::Renderers::Software
                                      int colorWriteMask, unsigned int multiSampleMask,
                                      const SoftwareSamplerState& sampler0,
                                      const SoftwareSamplerState& sampler1,
-                                     bool wireframe = false, unsigned edgeMask = kEdgeAll,
-                                     unsigned fillExcludedEdges = 0u)
+                                     bool wireframe = false, unsigned edgeMask = kEdgeAll)
         {
             // REMED-GFX-124: the cast target is the colour-storage capability, not a concrete
             // renderer class, so both a SoftwareTextureRenderer and a SoftwareRenderTargetRenderer
@@ -2651,9 +2669,7 @@ namespace CNA::Internal::Renderers::Software
                     unsigned int coverageMask = 1u;
                     if (!fb.HasMultiSampleColor())
                     {
-                        const bool inside = (w0 >= 0.0f && w1 >= 0.0f && w2 >= 0.0f) ||
-                                            (w0 <= 0.0f && w1 <= 0.0f && w2 <= 0.0f);
-                        if (!inside || IsExcludedFillEdge(fillExcludedEdges, w0, w1, w2, area))
+                        if (!TriangleContainsSample(v0, v1, v2, area, w0, w1, w2))
                             continue;
                     }
                     else
@@ -2674,11 +2690,8 @@ namespace CNA::Internal::Renderers::Software
                                                                 sampleX, sampleY);
                             const float sampleW2 = EdgeFunction(v0.x, v0.y, v1.x, v1.y,
                                                                 sampleX, sampleY);
-                            const bool sampleInside =
-                                (sampleW0 >= 0.0f && sampleW1 >= 0.0f && sampleW2 >= 0.0f) ||
-                                (sampleW0 <= 0.0f && sampleW1 <= 0.0f && sampleW2 <= 0.0f);
-                            if (sampleInside && !IsExcludedFillEdge(fillExcludedEdges, sampleW0,
-                                                                    sampleW1, sampleW2, area))
+                            if (TriangleContainsSample(v0, v1, v2, area,
+                                                       sampleW0, sampleW1, sampleW2))
                                 coverageMask |= 1u << sample;
                         }
                         if (coverageMask == 0u)
@@ -3171,7 +3184,7 @@ namespace CNA::Internal::Renderers::Software
                                 cullMode, depthBias, slopeScaleDepthBias,
                                 spriteParams, clip, rv0, rv1, rv2,
                                 GetColorWriteMask(), GetMultiSampleMask(),
-                                spriteSampler, spriteSampler, wire, kEdgeAll, kEdgeV2V0);
+                                spriteSampler, spriteSampler, wire, kEdgeAll);
         RasterizeTriangleShaded(fb, depthState, stencilState, blendState, blendFactor,
                                 cullMode, depthBias, slopeScaleDepthBias,
                                 spriteParams, clip, rv2, rv3, rv0,
@@ -3314,22 +3327,18 @@ namespace CNA::Internal::Renderers::Software
                 rv[static_cast<std::size_t>(k)] =
                     ClipVertexToRasterVertex(clipped[static_cast<std::size_t>(k)], vpT);
 
-            // SOFTWARE-106: fan-triangulate the visible polygon. Wireframe exposes only polygon
-            // boundary edges, while solid fill excludes each fan diagonal from one adjacent
-            // triangle until SOFTWARE-107 replaces the inclusive-edge fill rule.
+            // SOFTWARE-106/107: fan-triangulate the visible polygon. Wireframe exposes only
+            // polygon boundary edges; the top-left fill rule owns every internal diagonal once.
             const bool wire = (fillMode_ == 1);
             for (int fan = 1; fan + 1 < clippedCount; ++fan)
             {
                 unsigned edgeMask = kEdgeV1V2;
                 if (fan == 1) edgeMask |= kEdgeV0V1;
                 if (fan + 1 == clippedCount - 1) edgeMask |= kEdgeV2V0;
-                const unsigned excludedFillEdge =
-                    (fan + 1 < clippedCount - 1) ? kEdgeV2V0 : 0u;
                 RasterizeTriangle(fb, depthState, cullMode_, depthBias_, slopeScaleDepthBias_, clip,
                                   rv[0], rv[static_cast<std::size_t>(fan)],
                                   rv[static_cast<std::size_t>(fan + 1)],
-                                  colorWriteMask_, multiSampleMask_, wire, edgeMask,
-                                  excludedFillEdge);
+                                  colorWriteMask_, multiSampleMask_, wire, edgeMask);
             }
         }
     }
@@ -3413,13 +3422,10 @@ namespace CNA::Internal::Renderers::Software
                 unsigned edgeMask = kEdgeV1V2;
                 if (fan == 1) edgeMask |= kEdgeV0V1;
                 if (fan + 1 == clippedCount - 1) edgeMask |= kEdgeV2V0;
-                const unsigned excludedFillEdge =
-                    (fan + 1 < clippedCount - 1) ? kEdgeV2V0 : 0u;
                 RasterizeTriangle(fb, depthState, cullMode_, depthBias_, slopeScaleDepthBias_, clip,
                                   rv[0], rv[static_cast<std::size_t>(fan)],
                                   rv[static_cast<std::size_t>(fan + 1)],
-                                  colorWriteMask_, multiSampleMask_, wire, edgeMask,
-                                  excludedFillEdge);
+                                  colorWriteMask_, multiSampleMask_, wire, edgeMask);
             }
         }
     }
@@ -3575,23 +3581,21 @@ namespace CNA::Internal::Renderers::Software
 
             // REMED-GFX-079: clip 3D rasterization to framebuffer ∩ active Viewport (was the full
             // framebuffer). A default full-target viewport yields the same clip byte-for-byte.
-            // SOFTWARE-106: preserve only the clipped polygon boundary in wireframe and suppress
-            // one copy of every internal fan diagonal in solid fill.
+            // SOFTWARE-106/107: preserve only the clipped polygon boundary in wireframe; top-left
+            // coverage gives every internal fan diagonal to exactly one triangle in solid fill.
             const bool wire = (fillMode_ == 1);
             for (int fan = 1; fan + 1 < clippedCount; ++fan)
             {
                 unsigned edgeMask = kEdgeV1V2;
                 if (fan == 1) edgeMask |= kEdgeV0V1;
                 if (fan + 1 == clippedCount - 1) edgeMask |= kEdgeV2V0;
-                const unsigned excludedFillEdge =
-                    (fan + 1 < clippedCount - 1) ? kEdgeV2V0 : 0u;
                 RasterizeTriangleShaded(fb, depthState, RasterStencilState{}, blendState, blendFactor,
                                         cullMode_,
                                         depthBias_, slopeScaleDepthBias_, params,
                                         clip, rv[0], rv[static_cast<std::size_t>(fan)],
                                         rv[static_cast<std::size_t>(fan + 1)],
                                         colorWriteMask_, multiSampleMask_, GetSamplerState(0),
-                                        GetSamplerState(1), wire, edgeMask, excludedFillEdge);
+                                        GetSamplerState(1), wire, edgeMask);
             }
         }
     }
@@ -3744,23 +3748,21 @@ namespace CNA::Internal::Renderers::Software
 
             // REMED-GFX-079: clip 3D rasterization to framebuffer ∩ active Viewport (was the full
             // framebuffer). A default full-target viewport yields the same clip byte-for-byte.
-            // SOFTWARE-106: preserve only the clipped polygon boundary in wireframe and suppress
-            // one copy of every internal fan diagonal in solid fill.
+            // SOFTWARE-106/107: preserve only the clipped polygon boundary in wireframe; top-left
+            // coverage gives every internal fan diagonal to exactly one triangle in solid fill.
             const bool wire = (fillMode_ == 1);
             for (int fan = 1; fan + 1 < clippedCount; ++fan)
             {
                 unsigned edgeMask = kEdgeV1V2;
                 if (fan == 1) edgeMask |= kEdgeV0V1;
                 if (fan + 1 == clippedCount - 1) edgeMask |= kEdgeV2V0;
-                const unsigned excludedFillEdge =
-                    (fan + 1 < clippedCount - 1) ? kEdgeV2V0 : 0u;
                 RasterizeTriangleShaded(fb, depthState, RasterStencilState{}, blendState, blendFactor,
                                         cullMode_,
                                         depthBias_, slopeScaleDepthBias_, params,
                                         clip, rv[0], rv[static_cast<std::size_t>(fan)],
                                         rv[static_cast<std::size_t>(fan + 1)],
                                         colorWriteMask_, multiSampleMask_, GetSamplerState(0),
-                                        GetSamplerState(1), wire, edgeMask, excludedFillEdge);
+                                        GetSamplerState(1), wire, edgeMask);
             }
         }
     }

@@ -1811,6 +1811,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_XnaPixelCenter COMMAND cna_test_easygl_xna_pixel_center
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # SOFTWARE-107: renderer-independent XNA/D3D shared-edge ownership contract, paired with
+        # Software_TopLeftFill for differential coverage of order, winding and four samples.
+        cna_easygl_test(cna_test_easygl_top_left_fill
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/top_left_fill_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_TopLeftFill COMMAND cna_test_easygl_top_left_fill
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # XNA culling-compatibility audit (docs/xna_culling_compatibility_audit.md): extends the
         # identity-only CullMode test above with a real Matrix::CreateLookAt camera and
         # perspective/orthographic projection -- verbatim reuse of the shared renderer-agnostic

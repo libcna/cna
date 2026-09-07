@@ -69,6 +69,21 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_Clipping COMMAND cna_test_software_clipping
         TIMEOUT 30 LABELS "Software")
 
+    # SOFTWARE-131: XNA/D3D9 addresses integer screen coordinates as pixel centers. Reuse the
+    # measured shared contract already required of EasyGL; Software must render the original XNA
+    # sample's one-pixel triangle rather than relying on an all-edges-inclusive accident.
+    cna_software_test(cna_test_software_xna_pixel_center
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/xna_pixel_center_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_XnaPixelCenter COMMAND cna_test_software_xna_pixel_center
+        TIMEOUT 30 LABELS "Software")
+
+    # SOFTWARE-107: shared XNA/D3D top-left fill contract. Additive adjacent triangles expose both
+    # a crack and a double-owned edge, including reversed order/winding and 4x sample coverage.
+    cna_software_test(cna_test_software_top_left_fill
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/top_left_fill_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_TopLeftFill COMMAND cna_test_software_top_left_fill
+        TIMEOUT 30 LABELS "Software")
+
     cna_software_test(cna_test_software_dual_envmap_skinned software_dual_envmap_skinned_test.cpp)
     cna_register_renderer_test(NAME Software_DualEnvmapSkinned COMMAND cna_test_software_dual_envmap_skinned
         TIMEOUT 30 LABELS "Software")
