@@ -522,19 +522,34 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             // them. SAMPLE-030's `tank.fbx` is the case that shows it: `DiffuseColor` is (1,1,1)
             // with a `DiffuseFactor` of 0.8, the file's own `Diffuse` is (0.8,0.8,0.8), and the
             // genuine importer answers 0.8 (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-127).
-            const auto scaled = [&object](const std::string& name)
+            //
+            // Two property tables exist and a material carries one or the other. The newer one
+            // names `DiffuseColor` beside a `DiffuseFactor`, and its shininess is
+            // `ShininessExponent`; the older one names a bare `Diffuse` and its shininess is
+            // `Shininess`. Which table a file uses is what decides, not which properties happen to
+            // be present: `fbx_two_materials.fbx` is a newer material that *also* carries
+            // `Shininess: 2`, and the genuine importer answers 20 for it -- the newer table's
+            // default -- while SAMPLE-033's `Ship.fbx`, an older one, answers its `Shininess` of
+            // 29.54 exactly.
+            const bool newTable = FindProperty(*object.node, "DiffuseColor") != nullptr;
+            const auto colour = [&object, newTable](const std::string& name)
             {
-                const Vector3 colour = PropertyVector(*object.node, name + "Color",
-                                                      Vector3(0.0f, 0.0f, 0.0f));
+                if (!newTable)
+                {
+                    return PropertyVector(*object.node, name, Vector3(0.0f, 0.0f, 0.0f));
+                }
+                const Vector3 base = PropertyVector(*object.node, name + "Color",
+                                                    Vector3(0.0f, 0.0f, 0.0f));
                 const auto factor =
                     static_cast<float>(PropertyNumber(*object.node, name + "Factor", 1.0));
-                return Vector3(colour.X * factor, colour.Y * factor, colour.Z * factor);
+                return Vector3(base.X * factor, base.Y * factor, base.Z * factor);
             };
-            material->setDiffuseColorProperty(scaled("Diffuse"));
-            material->setEmissiveColorProperty(scaled("Emissive"));
+            material->setDiffuseColorProperty(colour("Diffuse"));
+            material->setEmissiveColorProperty(colour("Emissive"));
             material->setAlphaProperty(1.0f);
-            material->setSpecularColorProperty(scaled("Specular"));
-            material->setSpecularPowerProperty(20.0f);
+            material->setSpecularColorProperty(colour("Specular"));
+            material->setSpecularPowerProperty(static_cast<float>(PropertyNumber(
+                *object.node, newTable ? "ShininessExponent" : "Shininess", 20.0)));
             materials.emplace(identity, std::move(material));
         }
 
@@ -743,11 +758,15 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                             // through a layer element. The same fixture built without a
                             // `LayerElementTexture` answers a material with no texture at all
                             // (measured, fbx/fbx_material_factor_texture.fbx, XNASWEEP-127).
+                            // Texture i belongs to batch i, and a batch past the last texture gets
+                            // none: SAMPLE-033's `Ship.fbx` has three materials and one texture,
+                            // and the genuine importer puts that texture on the first batch and
+                            // leaves the other two without one.
                             const std::int64_t texture =
-                                geometry->Find("LayerElementTexture") == nullptr || object.textures.empty()
-                                    ? 0
-                                    : (batch < object.textures.size() ? object.textures[batch]
-                                                                      : object.textures.front());
+                                geometry->Find("LayerElementTexture") != nullptr &&
+                                        batch < object.textures.size()
+                                    ? object.textures[batch]
+                                    : 0;
                             batchContent->setMaterialProperty(
                                 withTexture(material->second, batchMaterials[batch], texture));
                         }

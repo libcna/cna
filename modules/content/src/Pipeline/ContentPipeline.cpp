@@ -1590,8 +1590,28 @@ namespace CNA::Content::Pipeline
                 }
                 if (!outputNames.insert(nested.logicalName).second)
                 {
-                    throw std::logic_error("nested build output '" + nested.logicalName +
-                                           "' collides with another output of this node.");
+                    // Two of this node's batches asked for the same nested asset. A model whose
+                    // meshes share a material shares that material's texture with them, so a
+                    // twelve-mesh tank names one `.tga` nine times; XNA builds it once and lets
+                    // every mesh reference it. That is a repeat, not a collision -- as long as the
+                    // two really are the same output. Two different assets under one name still
+                    // refuse, which is the case this check exists for
+                    // (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-117).
+                    const auto existing = std::find_if(
+                        output.additionalOutputs.begin(), output.additionalOutputs.end(),
+                        [&nested](const ContentAdditionalWriteOutput& one)
+                        { return one.logicalName == nested.logicalName; });
+                    const bool same = existing != output.additionalOutputs.end() &&
+                                      existing->assetTypeId == nested.assetTypeId &&
+                                      existing->assetSchemaVersion == nested.assetSchemaVersion &&
+                                      existing->rootReaderName == nested.rootReaderName &&
+                                      existing->bytes == nested.bytes;
+                    if (!same)
+                    {
+                        throw std::logic_error("nested build output '" + nested.logicalName +
+                                               "' collides with another output of this node.");
+                    }
+                    continue;
                 }
                 output.additionalOutputs.push_back(std::move(nested));
             }
