@@ -544,6 +544,22 @@ function(cna_register_d3d_parity_tests)
         NAME TextureAddressMode_Mirror_DualTextureEffect TARGET texture_address_mode_mirror_effect DIRECTX12_ORDER 1790
         SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_texture_address_mode_mirror_effect_test.cpp")
     cna_d3d_parity_fixture(
+        NAME Texture2D_AnisotropicSingleLevel TARGET texture2d_anisotropic_singlelevel DIRECTX12_ORDER 1800
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_texture2d_anisotropic_singlelevel_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME TextureAnisotropic_DualTextureEffect TARGET texture_anisotropic_effect DIRECTX12_ORDER 1810
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_texture_anisotropic_effect_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME TextureFilter_PointVsLinear TARGET texture_filter_point_vs_linear DIRECTX12_ORDER 1820
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_texture_filter_point_vs_linear_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME TextureFilter_Linear_Golden TARGET texture_filter_linear_golden DIRECTX12_ORDER 1830
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_texture_filter_linear_golden_test.cpp"
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    cna_d3d_parity_fixture(
+        NAME TexturedQuad_Readback TARGET textured_quad DIRECTX12_ORDER 1840
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_textured_quad_test.cpp")
+    cna_d3d_parity_fixture(
         NAME SpriteBatch_CustomViewport TARGET spritebatch_custom_viewport
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_custom_viewport_test.cpp"
         DIRECTX11_ONLY REASON "D3D12 presentation-corpus adoption is tracked by DX-234 and DX-236")
