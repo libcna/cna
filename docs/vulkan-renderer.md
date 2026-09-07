@@ -458,3 +458,40 @@ into its own destination rectangle — leg B of the test asserts exactly that an
 it does not buy on CNA is a read-back of resource state between two `Draw` calls of one batch. A
 game that needs the old contents must `End()` the batch before mutating the texture; that is one
 submission boundary instead of one per sprite, and it is what the deferred model can honour.
+
+---
+
+## `RasterizerState.MultiSampleAntiAlias` is not carried, and XNA does carry it
+
+`VULKAN-099`, opened by `VULKAN-096`. **Test:** `Vulkan_PipelineKeyStateCoverage`. **Probe:**
+`spikes/xna-multisample-antialias-spike/`.
+
+`IGraphicsRenderer::ApplyRasterizerState` takes `(cullMode, fillMode, scissorTestEnable, depthBias,
+slopeScaleDepthBias)`. There is no sixth parameter, so `RasterizerState.MultiSampleAntiAlias`
+reaches this renderer — and every other one — not at all.
+
+**XNA does not drop it.** Measured on the XNA 4.0 runtime in `~/.wine-cna-xna40`: setting the
+property to `false` makes the D3D9 layer write render state **161**, which `d3d9types.h` names
+`D3DRS_MULTISAMPLEANTIALIAS`, and re-running the probe with `PROBE_SKIP_FALSE=1` — no leg setting
+it false — produces that write **zero** times. The property is live upstream; CNA is where it
+stops.
+
+**What it does to a rendered edge is unmeasured**, and deliberately reported as unmeasured: this
+machine reaches D3D9 only through DXVK, which logs state 161 as *unhandled*, so the probe's edge
+counts are identical with the flag true and false (151 blended pixels either way on a 4×
+multisampled triangle, against 0 on an unmultisampled one — multisampling itself worked, which is
+what rules out the "MSAA never happened" reading). A native D3D9 stack would be needed to answer it.
+
+**Why it stays dropped here.** A Vulkan graphics pipeline's `rasterizationSamples` must match the
+render pass attachment's sample count, so "do not multisample this draw" is not a per-draw property
+in this API: honouring it would mean changing the attachment, and `pSampleMask` restricts which
+samples are *written* rather than reproducing a D3D9 rasterizer mode. The alternative — a sixth
+parameter on an interface twelve renderer families implement, so that all twelve can refuse it — is
+cost without a behaviour. And it is **not a parity gap**: no renderer receives the field, so no two
+renderers disagree, and the campaign's gate is unaffected.
+
+**The refusal is guarded rather than described.** `Vulkan_PipelineKeyStateCoverage` asserts that the
+field does not fragment the pipeline cache *and* that `ApplyRasterizerState` has exactly five
+parameters, with a `void_t` detector and a positive control so a renamed method cannot make the
+negative assertion pass vacuously. Adding the sixth argument fails the build with a message naming
+this section and `docs/rasterizerstate-support.md` §8.

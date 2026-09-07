@@ -34,6 +34,14 @@
 // the D3D11 state cache says so in its own comment. It is asserted here as DROPPED rather than
 // silently omitted, so that the day it starts fragmenting the cache this test says so.
 //
+// VULKAN-099 measured what that field does on the real XNA 4.0 runtime and closed on a documented
+// refusal, so DROPPED is now a DECISION rather than an unanswered question. XNA does carry the
+// property down -- it writes D3D9 render state 161, `D3DRS_MULTISAMPLEANTIALIAS`, and writes it
+// only when the value is false -- so the field is not inert upstream. It stays dropped here
+// because Vulkan fixes a pipeline's rasterization sample count to the render pass attachment's,
+// which makes "do not multisample THIS draw" inexpressible without changing the attachment. See
+// docs/vulkan-renderer.md and spikes/xna-multisample-antialias-spike/.
+//
 // Exit code 0 = all PASS, 1 = any FAIL.
 
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -124,7 +132,8 @@ static_assert(TakesFiveRasterizerArgs<RendererBase>::value,
 static_assert(!TakesSixRasterizerArgs<RendererBase>::value,
               "ApplyRasterizerState now accepts a sixth argument. If that is "
               "RasterizerState.MultiSampleAntiAlias, plan_vulkan.md VULKAN-096's DROPPED verdict "
-              "and the row it opened are out of date and must be re-measured.");
+              "and VULKAN-099's documented refusal are both out of date: re-measure, and move "
+              "docs/vulkan-renderer.md and docs/rasterizerstate-support.md with them.");
 
 const char* Name(Verdict v)
 {
@@ -401,18 +410,19 @@ protected:
                       [](RasterizerState& r) { r.setSlopeScaleDepthBiasProperty(0.5f); });
         MeasureRaster("RasterizerState.ScissorTestEnable", Verdict::Dynamic,
                       [](RasterizerState& r) { r.setScissorTestEnableProperty(true); });
-        // The audit's one DROPPED field. IGraphicsRenderer::ApplyRasterizerState carries no
-        // parameter for it, so no renderer -- Vulkan, EasyGL or any other -- can see it. The
-        // cardinality below shows it does not reach the key; the static_asserts at the top of this
-        // file are what show it does not reach the renderer either, which is the part that makes
-        // this DROPPED rather than DYNAMIC.
+        // The audit's one DROPPED field, and since VULKAN-099 a deliberate one.
+        // IGraphicsRenderer::ApplyRasterizerState carries no parameter for it, so no renderer --
+        // Vulkan, EasyGL or any other -- can see it. The cardinality below shows it does not reach
+        // the key; the static_asserts at the top of this file are what show it does not reach the
+        // renderer either, which is the part that makes this DROPPED rather than DYNAMIC.
         MeasureRaster("RasterizerState.MultiSampleAntiAlias", Verdict::Dropped,
                       [](RasterizerState& r) { r.setMultiSampleAntiAliasProperty(false); });
         check(TakesFiveRasterizerArgs<RendererBase>::value &&
                   !TakesSixRasterizerArgs<RendererBase>::value,
-              "RasterizerState.MultiSampleAntiAlias                DROPPED at the interface -- "
-              "IGraphicsRenderer::ApplyRasterizerState takes five arguments and none of them is "
-              "this flag, so no renderer receives it (detector positive control included)");
+              "RasterizerState.MultiSampleAntiAlias                DROPPED at the interface, by "
+              "decision (VULKAN-099) -- IGraphicsRenderer::ApplyRasterizerState takes five "
+              "arguments and none of them is this flag, so no renderer receives it (detector "
+              "positive control included)");
 
         std::printf("=== %d/%d PASS ===\n", pass_, pass_ + fail_);
         std::fflush(stdout);
