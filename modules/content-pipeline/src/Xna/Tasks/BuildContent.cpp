@@ -43,6 +43,25 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
         }
 
         /**
+         * @brief One MSBuild item spec as a path this host can open.
+         *
+         * An `Include` in a `.contentproj` is a Windows relative path -- `Textures\\hero.png` --
+         * because MSBuild's separator is the backslash and every project a game actually has was
+         * written on Windows. `std::filesystem` on a POSIX host reads that as one file name
+         * containing a backslash and reports that the asset does not exist, which is an accurate
+         * statement about a path nobody meant. XNA resolves it as a separator, so this does too;
+         * the diagnostics keep the project's own spelling.
+         *
+         * @param spec The item spec or `Link` metadata as the project spelled it.
+         * @return The same path with MSBuild's separator replaced by the portable one.
+         */
+        [[nodiscard]] std::string HostPath(std::string spec)
+        {
+            std::replace(spec.begin(), spec.end(), '\\', '/');
+            return spec;
+        }
+
+        /**
          * @brief Redirects the two standard streams into a buffer for as long as it lives.
          *
          * MSBuild's own `BuildContent` reports what the build said through the engine, and a
@@ -136,6 +155,37 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
             }
             std::string text = relative.generic_string();
             return text;
+        }
+
+        /**
+         * @brief The content name one project item is built under.
+         *
+         * An item's `Name` metadata is MSBuild's `%(Filename)`, which the XNA project system writes
+         * into every item: 8790 of the 8795 `Compile` items in the sample corpus have a `Name` that
+         * is exactly the source file's stem. It is not the asset's content name, and reading it as
+         * one flattens every asset in a subdirectory into the output root -- and refuses outright a
+         * project with two same-named files in two folders, which the Platformer sample has five
+         * times over.
+         *
+         * XNA's own build answers what the rule is. `Sprites\\MonsterA\\Idle.png` with
+         * `Name` `Idle` was built to `Content/Sprites/MonsterA/Idle.xnb`, so the directory is kept;
+         * `cat_depth.jpg` with `Name` `cat_normalmap` was built to `Content/cat_normalmap.xnb`, so
+         * the name is honoured; and `Textures\\Backgrounds\\honeycombRush_instructions.png` with
+         * `Name` `instructions` was built to `Content/Textures/Backgrounds/instructions.xnb`, which
+         * is both at once. The content name is therefore the item's relative **directory** plus its
+         * `Name`, and `Link` -- which moves the item within the content tree -- supplies that
+         * directory when it is present.
+         *
+         * @param key The item's root-relative path, `Link` already applied.
+         * @param name The item's `Name` metadata, empty if the project wrote none.
+         * @return The content name to build the asset under.
+         */
+        [[nodiscard]] std::string ContentName(const std::string& key, const std::string& name)
+        {
+            const std::filesystem::path path(key);
+            const std::string stem = name.empty() ? path.stem().string() : name;
+            const std::filesystem::path directory = path.parent_path();
+            return directory.empty() ? stem : (directory / stem).generic_string();
         }
 
         /**
@@ -401,7 +451,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
         bool firstAsset = true;
         for (const TaskItem& asset : sourceAssets_)
         {
-            const std::filesystem::path spec(asset.getItemSpecProperty());
+            const std::filesystem::path spec(TaskDetail::HostPath(asset.getItemSpecProperty()));
             const std::filesystem::path absolute = spec.is_absolute() ? spec : (root / spec);
             if (!std::filesystem::exists(absolute, error) || error)
             {
@@ -411,7 +461,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
             }
             // Link is what a project uses when the file lives outside the project directory; it
             // names where the asset belongs in the content tree.
-            const std::string link = asset.GetMetadata("Link");
+            const std::string link = TaskDetail::HostPath(asset.GetMetadata("Link"));
             const std::string key =
                 TaskDetail::RootRelative(root, link.empty() ? absolute : (root / link));
             if (!firstAsset)
@@ -435,7 +485,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
                 firstField = false;
                 configuration << "\"" << name << "\": \"" << TaskDetail::Escape(value) << "\"";
             };
-            field("logicalName", asset.GetMetadata("Name"));
+            field("logicalName", TaskDetail::ContentName(key, asset.GetMetadata("Name")));
             // A project names Microsoft's components; the canonical engine has its own. The
             // translation lives in one place so this task and the .contentproj reader cannot
             // disagree about what a name means.
@@ -682,9 +732,16 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
         // characters the font has no glyphs for, builds there with a warning. The canonical tool
         // refuses all three, which is right for it and wrong for a façade standing in for XNA
         // (plans/plan_xnapipeline_parity.md XNAPP-267).
+        // `--only-configured-assets`: the configuration this task just wrote names exactly the
+        // project's `Compile` items, and a project *is* its item list -- a source file sitting in
+        // the same folder that the project does not name is not part of it. Without this the build
+        // discovers the whole directory, which produces assets XNA never built and, where two
+        // unlisted neighbours share a name, refuses a project XNA builds: the Platformer sample's
+        // `Sounds/ExitReached.wav` beside the `Sounds/ExitReached.wma` the project actually lists
+        // (plans/plan_xnapipeline_parity.md XNAPP-330).
         std::vector<std::filesystem::path> arguments{
             "build",    root,              "-o",  output, "--format", "xnb",
-            "--config", configurationFile, "--xna-compatible"};
+            "--config", configurationFile, "--xna-compatible", "--only-configured-assets"};
         if (!targetPlatform_.empty())
         {
             std::string platform(targetPlatform_);

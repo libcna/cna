@@ -156,11 +156,99 @@ TEST(XnaContentProjectCommandLine, AProjectIsBuiltWithItsOwnImportersProcessorsA
     const Invocation invocation = Build(project);
     ASSERT_EQ(invocation.exitCode, 0) << invocation.output;
 
-    // Named by the project's own `Name`, not by the file's stem, and written as `.xnb` because a
-    // content project is an XNA project whatever the tool's own default container is.
+    // Named by the item's own directory plus its `Name`, which for these two is the source stem
+    // at the project root, and written as `.xnb` because a content project is an XNA project
+    // whatever the tool's own default container is. The rule itself is
+    // `TheContentNameIsTheItemsDirectoryPlusItsName` below.
     EXPECT_TRUE(std::filesystem::is_regular_file(project.Output() / "probe.xnb")) << invocation.output;
     EXPECT_TRUE(std::filesystem::is_regular_file(project.Output() / "tone.xnb")) << invocation.output;
     EXPECT_NE(invocation.output.find("Assets: 2"), std::string::npos) << invocation.output;
+}
+
+// plans/plan_xnapipeline_parity.md XNAPP-320. Every `.contentproj` a game actually has spells its
+// item paths the way MSBuild does, with a backslash, because every one of them was written on
+// Windows. The copy path had always resolved that; the *build* path had not, so on a POSIX host a
+// real project failed with "the source asset \"Textures\\hero.png\" does not exist" -- a true
+// statement about a path nobody meant, and one that made the whole route unusable for the input it
+// exists to accept. Both halves resolve it now: the item spec, and the `Link` that redirects one.
+TEST(XnaContentProjectCommandLine, AnItemPathSpelledTheWayMsBuildSpellsItResolves)
+{
+    const Project project("separator");
+    std::filesystem::copy_file(project.Source() / "probe.png",
+                               project.Source() / "nested" / "probe.png");
+    project.Write("    <Compile Include=\"nested\\probe.png\">\n"
+                  "      <Importer>TextureImporter</Importer>\n"
+                  "      <Processor>TextureProcessor</Processor>\n"
+                  "    </Compile>\n");
+    const Invocation invocation = Build(project);
+    ASSERT_EQ(invocation.exitCode, 0) << invocation.output;
+
+    // The asset lands where the project's own directory structure says it does, whichever
+    // separator the project used to say it.
+    EXPECT_TRUE(std::filesystem::is_regular_file(project.Output() / "nested" / "probe.xnb"))
+        << invocation.output;
+}
+
+// plans/plan_xnapipeline_parity.md XNAPP-330. An item's `Name` metadata is MSBuild's `%(Filename)`:
+// 8790 of the 8795 `Compile` items in the sample corpus carry a `Name` that is exactly the source
+// file's stem, and the five that differ are what settles what it means. Reading it as the asset's
+// content name flattened every asset in a subdirectory into the output root, and refused outright a
+// project with two same-named files in two folders -- which the Platformer sample has five times
+// over, five `Sprites\<Monster>\Idle.png` items all named `Idle`. XNA's own builds answer the rule:
+// `Sprites\MonsterA\Idle.png` was built to `Content/Sprites/MonsterA/Idle.xnb` (directory kept),
+// `cat_depth.jpg` with `Name` `cat_normalmap` to `Content/cat_normalmap.xnb` (name honoured), and
+// `Textures\Backgrounds\honeycombRush_instructions.png` with `Name` `instructions` to
+// `Content/Textures/Backgrounds/instructions.xnb`, which is both at once.
+TEST(XnaContentProjectCommandLine, TheContentNameIsTheItemsDirectoryPlusItsName)
+{
+    const Project project("contentname");
+    std::filesystem::create_directories(project.Source() / "nested" / "deeper");
+    std::filesystem::copy_file(project.Source() / "probe.png",
+                               project.Source() / "nested" / "deeper" / "probe.png");
+    project.Write("    <Compile Include=\"nested\\deeper\\probe.png\">\n"
+                  "      <Name>probe</Name>\n"
+                  "      <Importer>TextureImporter</Importer>\n"
+                  "      <Processor>TextureProcessor</Processor>\n"
+                  "    </Compile>\n"
+                  "    <Compile Include=\"probe.png\">\n"
+                  "      <Name>renamed</Name>\n"
+                  "      <Importer>TextureImporter</Importer>\n"
+                  "      <Processor>TextureProcessor</Processor>\n"
+                  "    </Compile>\n");
+    const Invocation invocation = Build(project);
+    ASSERT_EQ(invocation.exitCode, 0) << invocation.output;
+
+    // The directory is kept, and two files of the same name in two directories do not collide.
+    EXPECT_TRUE(std::filesystem::is_regular_file(project.Output() / "nested" / "deeper" /
+                                                 "probe.xnb")) << invocation.output;
+    // And a `Name` that is not the file's stem is honoured, at the item's own directory.
+    EXPECT_TRUE(std::filesystem::is_regular_file(project.Output() / "renamed.xnb"))
+        << invocation.output;
+    EXPECT_FALSE(std::filesystem::exists(project.Output() / "probe.xnb"));
+}
+
+// plans/plan_xnapipeline_parity.md XNAPP-330. A project is its item list. A source file sitting in
+// the same folder that the project does not name is not part of it: XNA never built it, and
+// building it here produces an asset XNA has not got -- or, when the unlisted neighbour shares a
+// name with a listed one, refuses a project XNA builds. The Platformer sample is exactly that:
+// `Sounds/ExitReached.wav` sits beside the `Sounds/ExitReached.wma` the project lists.
+TEST(XnaContentProjectCommandLine, AFileTheProjectDoesNotListIsNotBuilt)
+{
+    const Project project("unlisted");
+    project.Write("    <Compile Include=\"probe.png\">\n"
+                  "      <Name>probe</Name>\n"
+                  "      <Importer>TextureImporter</Importer>\n"
+                  "      <Processor>TextureProcessor</Processor>\n"
+                  "    </Compile>\n");
+    const Invocation invocation = Build(project);
+    ASSERT_EQ(invocation.exitCode, 0) << invocation.output;
+
+    // `tone.wav` is in the project's own directory and has a perfectly good route; the project
+    // does not name it, so it is not an asset of this project.
+    EXPECT_TRUE(std::filesystem::is_regular_file(project.Output() / "probe.xnb"))
+        << invocation.output;
+    EXPECT_FALSE(std::filesystem::exists(project.Output() / "tone.xnb")) << invocation.output;
+    EXPECT_NE(invocation.output.find("Assets: 1"), std::string::npos) << invocation.output;
 }
 
 // The items XNA's targets copy rather than build.

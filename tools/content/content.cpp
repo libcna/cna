@@ -70,6 +70,18 @@ namespace
         /** @brief How strictly this invocation refuses what XNA would only warn about. */
         Pipeline::ContentStrictness strictness = Pipeline::ContentStrictness::Strict;
 
+        /**
+         * @brief Whether the configuration is the asset list rather than a set of overrides.
+         *
+         * A directory build discovers every source under its root, which is what a convention-only
+         * build means. An XNA content project is the other thing: it names its assets, and a file
+         * sitting in the same folder that the project does not list is not part of it -- XNA never
+         * built it, and building it here produces outputs XNA has not got and, when two unlisted
+         * neighbours share a name, refuses a project XNA builds
+         * (plans/plan_xnapipeline_parity.md XNAPP-330).
+         */
+        bool onlyConfiguredAssets = false;
+
         /** @brief Default compiled container for every asset this invocation builds. */
         Pipeline::ContentOutputFormat format = Pipeline::ContentOutputFormat::Cnb;
 
@@ -257,11 +269,16 @@ namespace
                "         [--xma-encoder <path>] [--xma-encoder-launcher <program>]\n"
                "         [--xma-encoder-arg <argument>]...\n"
                "         [--explain] [--quiet] [--xna-compatible]\n"
+               "         [--only-configured-assets]\n"
             << "       cna-content clean <output-directory> [--quiet]\n\n"
             << "Builds source content through Importer -> Processor -> Content Type Writer.\n"
             << "--format selects the compiled container: CNA's native .cnb (the default) or the\n"
             << "XNA-compatible .xnb. Importers and processors are the same either way; only the\n"
             << "writer differs, so every source route reaches both containers.\n\n"
+            << "--only-configured-assets makes the configuration the asset list rather than a\n"
+            << "set of overrides: a discovered source the configuration does not name is left\n"
+            << "alone. A .contentproj build selects it, because a project names its assets and a\n"
+            << "file beside them that it does not list is not part of it.\n\n"
             << "A single source file requires an output path whose extension matches --format.\n"
             << "A source directory requires an output directory; relative paths and logical\n"
             << "content names are preserved. Clean removes only unchanged files proven to be\n"
@@ -400,6 +417,10 @@ namespace
                 // that nothing else in the build will notice
                 // (plans/plan_xnapipeline_parity.md XNAPP-267).
                 command.strictness = Pipeline::ContentStrictness::XnaCompatible;
+            }
+            else if (IsOption(argument, "--only-configured-assets"))
+            {
+                command.onlyConfiguredAssets = true;
             }
             else if (IsOption(argument, "--quiet"))
             {
@@ -2483,6 +2504,17 @@ namespace
             externalSourceRoots = Pipeline::ResolveContentSourceRootCapabilities(
                 sourceRoot, configuration.SourceRoots());
             RequireExternalRootsSeparateFromOutput(outputRoot, externalSourceRoots);
+            if (command.onlyConfiguredAssets && directoryBuild)
+            {
+                const auto& named = configuration.Entries();
+                builds.erase(std::remove_if(builds.begin(), builds.end(),
+                                            [&named](const BuildItem& item)
+                                            {
+                                                return named.find(item.relativeSource) ==
+                                                       named.end();
+                                            }),
+                             builds.end());
+            }
             ApplyConfiguration(builds, configuration, *registry, sourceRoot, outputRoot,
                                directoryBuild);
             std::sort(builds.begin(), builds.end(), [](const BuildItem& left,

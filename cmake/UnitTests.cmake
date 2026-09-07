@@ -819,6 +819,57 @@ if(CNA_BUILD_TESTS)
             unset(_cna_content_cmake_fixture_workers)
             unset(_cna_content_cmake_fixture_output)
 
+            # plans/plan_xnapipeline_parity.md XNAPP-320: the two inputs a ported XNA game has.
+            # A `.contentproj` is what the developer already owns, and `.xnb` is the container that
+            # project means; both were reachable only from the command line until the helper learned
+            # CONTENT_PROJECT and FORMAT, so both are built here the way a game would build them.
+            set(_cna_contentproj_cmake_fixture_output
+                "${CMAKE_CURRENT_BINARY_DIR}/contentproj-cmake-fixture")
+            cna_add_content(
+                TARGET cna_contentproj_cmake_fixture
+                CONTENT_PROJECT
+                    "${CNA_SOURCE_DIR}/tests/assets/content_pipeline_contentproj/Game.contentproj"
+                OUTPUT_DIR "${_cna_contentproj_cmake_fixture_output}"
+                QUIET
+            )
+            add_dependencies(${CNA_TEST_OBJECT_TARGET_content} cna_contentproj_cmake_fixture)
+            file(TO_CMAKE_PATH "${_cna_contentproj_cmake_fixture_output}"
+                _cna_contentproj_cmake_fixture_output_definition)
+            set_property(SOURCE
+                "${CNA_SOURCE_DIR}/modules/content/tests/CNA/Content/Pipeline/ContentPipelineCMakeIntegrationTests.cpp"
+                APPEND PROPERTY COMPILE_DEFINITIONS
+                    "CNA_CONTENTPROJ_CMAKE_FIXTURE_OUTPUT=\"${_cna_contentproj_cmake_fixture_output_definition}\"")
+            unset(_cna_contentproj_cmake_fixture_output_definition)
+            unset(_cna_contentproj_cmake_fixture_output)
+
+            set(_cna_xnb_cmake_fixture_output
+                "${CMAKE_CURRENT_BINARY_DIR}/xnb-content-pipeline-cmake-fixture")
+            cna_add_content(
+                TARGET cna_xnb_content_cmake_fixture
+                SOURCE_DIR "${CNA_SOURCE_DIR}/tests/assets/content_pipeline_cmake"
+                OUTPUT_DIR "${_cna_xnb_cmake_fixture_output}"
+                FORMAT xnb
+                XNB_PLATFORM windows
+                XNB_PROFILE reach
+                XNB_COMPRESS none
+                QUIET
+            )
+            get_property(_cna_xnb_cmake_fixture_format
+                TARGET cna_xnb_content_cmake_fixture PROPERTY CNA_CONTENT_FORMAT)
+            if(NOT _cna_xnb_cmake_fixture_format STREQUAL "xnb")
+                message(FATAL_ERROR "cna_add_content did not retain FORMAT")
+            endif()
+            add_dependencies(${CNA_TEST_OBJECT_TARGET_content} cna_xnb_content_cmake_fixture)
+            file(TO_CMAKE_PATH "${_cna_xnb_cmake_fixture_output}"
+                _cna_xnb_cmake_fixture_output_definition)
+            set_property(SOURCE
+                "${CNA_SOURCE_DIR}/modules/content/tests/CNA/Content/Pipeline/ContentPipelineCMakeIntegrationTests.cpp"
+                APPEND PROPERTY COMPILE_DEFINITIONS
+                    "CNA_XNB_CONTENT_CMAKE_FIXTURE_OUTPUT=\"${_cna_xnb_cmake_fixture_output_definition}\"")
+            unset(_cna_xnb_cmake_fixture_output_definition)
+            unset(_cna_xnb_cmake_fixture_format)
+            unset(_cna_xnb_cmake_fixture_output)
+
             if(TARGET cna_custom_content_compiler_example)
                 set(_cna_custom_content_cmake_fixture_output
                     "${CMAKE_CURRENT_BINARY_DIR}/custom-content-pipeline-cmake-fixture")
