@@ -496,6 +496,15 @@ function(cna_register_d3d_parity_tests)
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/source_rectangle_orientation_test.cpp"
         DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 600)
     cna_d3d_parity_fixture(
+        NAME Texture2D_PartialRect_RoundTrip TARGET texture2d_partial_rect DIRECTX12_ORDER 1640
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_texture2d_partial_rect_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME Texture2D_Mip_RoundTrip TARGET texture2d_mip DIRECTX12_ORDER 1650
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_texture2d_mip_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME NpotTexture TARGET npot_texture DIRECTX12_ORDER 1660
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_npot_texture_test.cpp")
+    cna_d3d_parity_fixture(
         NAME SpriteBatch_CustomViewport TARGET spritebatch_custom_viewport
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_custom_viewport_test.cpp"
         DIRECTX11_ONLY REASON "D3D12 presentation-corpus adoption is tracked by DX-234 and DX-236")
