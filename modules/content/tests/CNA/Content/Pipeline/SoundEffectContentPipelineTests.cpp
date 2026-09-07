@@ -270,7 +270,9 @@ TEST(SoundEffectContentPipelineTest, IsDeterministicAndByteIdenticalToTheExistin
     EXPECT_EQ(decoded.channels, 2u);
     EXPECT_EQ(decoded.frameCount, 250u);
     EXPECT_EQ(decoded.loopStart, 20u);
-    EXPECT_EQ(decoded.loopLength, 80u);
+    // RIFF's loop End names the last frame played, so 20..100 is 81 frames rather than 80
+    // (measured against XNA's own build of Spacewar's Menu_Loop.wav, XNASWEEP-124).
+    EXPECT_EQ(decoded.loopLength, 81u);
     EXPECT_EQ(decoded.samples, pcm);
 }
 
@@ -505,7 +507,8 @@ TEST(SoundEffectSourcePcmTest, StereoAndLoopMetadataSurviveAWiderSource)
     EXPECT_EQ(sound.channels, 2u);
     EXPECT_EQ(sound.frameCount, 4u);
     EXPECT_EQ(sound.loopStart, 1u);
-    EXPECT_EQ(sound.loopLength, 2u);
+    // Frames 1..3 inclusive, which is three of the four (XNASWEEP-124).
+    EXPECT_EQ(sound.loopLength, 3u);
     EXPECT_EQ(sound.samples.size(), 4u * 2u * 2u);
 }
 

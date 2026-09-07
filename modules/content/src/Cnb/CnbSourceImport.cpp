@@ -363,8 +363,13 @@ namespace CNA::Content::Cnb
                         const std::uint32_t last = ReadU32(wavBytes, start + 36u + 12u);
                         if (last > first)
                         {
+                            // RIFF's loop End is the last frame *played*, so the region is
+                            // inclusive and one frame longer than the difference. Measured on
+                            // Spacewar's `Menu_Loop.wav`, whose `smpl` names 67693-859611 and
+                            // whose genuine `.xnb` carries a loop length of 791919
+                            // (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-124).
                             loopStart = first;
-                            loopLength = last - first;
+                            loopLength = last - first + 1u;
                         }
                     }
                 }
