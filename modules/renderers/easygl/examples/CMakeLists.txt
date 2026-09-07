@@ -82,6 +82,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
         # plan_vulkan.md VULKAN-137: the control for Vulkan's zero-length buffer run. Vulkan pads
         # the allocation and EasyGL does not, so agreement between the two is the whole claim.
+        # plan_vulkan.md VULKAN-169 (finding F-32): SaveAsPng/SaveAsJpeg read a render target back
+        # instead of refusing. Shared-layer, so the reference renderer answers for it too.
+        cna_easygl_test(cna_test_easygl_texture2d_saveas_rendertarget
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/texture2d_saveas_rendertarget_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_Texture2D_SaveAsRenderTarget
+            COMMAND cna_test_easygl_texture2d_saveas_rendertarget
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         cna_easygl_test(cna_test_easygl_zero_length_buffers
                         ${CNA_GRAPHICS_EXAMPLES_DIR}/zero_length_buffer_test.cpp)
         cna_register_renderer_test(NAME EasyGL_ZeroLengthBuffers

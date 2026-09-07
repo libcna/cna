@@ -586,6 +586,11 @@ namespace Microsoft::Xna::Framework::Graphics
         std::shared_ptr<ITextureRenderer> renderer_;
         int width  = 0;
         int height = 0;
+        /// plan_vulkan.md VULKAN-169 (F-32): the pixels the four save routines encode --
+        /// the renderer's readback for a render target, the CPU shadow otherwise, and
+        /// nullptr when there is neither. @p scratch owns the readback if one happened.
+        [[nodiscard]] const std::uint8_t* gatherPixelsForEncode(
+            std::vector<std::uint8_t>& scratch) const;
         std::shared_ptr<std::vector<uint8_t>> cpuPixels_;
         std::shared_ptr<std::vector<std::vector<uint8_t>>> extraMipLevels_;
 

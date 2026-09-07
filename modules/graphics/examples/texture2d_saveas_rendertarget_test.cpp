@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_vulkan.md VULKAN-178 -- what `SaveAsPng`/`SaveAsJpeg` actually read, measured rather than
-// assumed.
+// plan_vulkan.md VULKAN-178 (the measurement) and VULKAN-169 (the fix) -- what
+// `SaveAsPng`/`SaveAsJpeg` actually read.
+//
+// Renderer-agnostic and registered on Vulkan and EasyGL, because everything it asserts is
+// `Texture2D`'s own behaviour in the shared layer: a one-renderer result could not tell a shared
+// fix from a Vulkan-shaped one.
 //
 // The row was written expecting these to "go through readback and upload paths that differ per
 // renderer". They do not: `Texture2D::SaveAsPng` encodes `cpuPixels_`, a CPU-side shadow the
@@ -13,11 +17,15 @@
 //   A  Control: a Texture2D that was SetData'd saves, and the bytes decode back to its texels.
 //      Without this leg, leg B's answer could be "saving is broken here" rather than "there is
 //      nothing to save".
-//   B  A RenderTarget2D drawn into and never SetData'd: what does SaveAsPng do? Recorded as a
-//      measurement, whatever it is.
-//   C  ...and after `GetData` has read the target back into the game's own array, does the answer
-//      change? That is the idiom a game would reach for next, so whether it works decides
-//      whether the gap has a workaround or not.
+//   B  A RenderTarget2D drawn into and never SetData'd SAVES, and the PNG decodes back to the
+//      colour that was drawn. `VULKAN-178` measured this throwing -- *"no CPU-side pixel data
+//      available"* -- which is finding F-32; `VULKAN-169` made the save read the target back the
+//      way `GetData` already does, and this leg is the assertion that replaced the measurement.
+//   C  The same after `GetData` has been called, because a game that reads its target back and
+//      then saves must not get a different answer from one that only saves.
+//   D  A plain `Texture2D` that was never uploaded is still refused BY NAME. The fix is for
+//      pixels that exist on the GPU, not a licence to invent content: there is nothing to read
+//      back from a texture no renderer holds anything for.
 //
 // Exit code 0 = all PASS, 1 = any FAIL.
 
@@ -50,7 +58,7 @@ constexpr int kN = 4;
 const Color kFill(20, 180, 90, 255);
 }  // namespace
 
-class VulkanTexture2DSaveAsRenderTargetTest final : public Game
+class Texture2DSaveAsRenderTargetTest final : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int pass_ = 0;
@@ -61,6 +69,19 @@ class VulkanTexture2DSaveAsRenderTargetTest final : public Game
         std::printf("[%s] %s\n", ok ? "PASS" : "FAIL", label.c_str());
         std::fflush(stdout);
         ok ? ++pass_ : ++fail_;
+    }
+
+    static bool Is(const Color& got, const Color& want)
+    {
+        return got.getRProperty() == want.getRProperty() &&
+               got.getGProperty() == want.getGProperty() &&
+               got.getBProperty() == want.getBProperty();
+    }
+
+    static std::string Text(const Color& c)
+    {
+        return "(" + std::to_string(c.getRProperty()) + "," + std::to_string(c.getGProperty()) +
+               "," + std::to_string(c.getBProperty()) + ")";
     }
 
     /// Saves through the stream overload and reports what happened, without deciding whether that
@@ -107,9 +128,26 @@ protected:
         dev.Clear(kFill);
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
-        std::size_t rtBytes = 0;
-        const std::string rtWhat = TrySave(rt, rtBytes);
-        check(true, "B MEASUREMENT: a RenderTarget2D drawn into and never SetData'd -- " + rtWhat);
+        {
+            System::IO::MemoryStream png;
+            std::string what = "saved";
+            try { rt.SaveAsPng(&png, kN, kN); }
+            catch (const std::exception& e) { what = std::string("threw: ") + e.what(); }
+            const auto bytes = png.GetBuffer();
+            Color decoded(0, 0, 0, 0);
+            if (!bytes.empty()) {
+                System::IO::MemoryStream read(bytes.data(),
+                                              static_cast<System::IO::intcs>(bytes.size()));
+                Texture2D back = Texture2D::FromStream(dev, read);
+                std::vector<Color> texels(static_cast<std::size_t>(kN * kN), Color(0, 0, 0, 0));
+                back.GetData(texels.data(), 0, kN * kN);
+                decoded = texels[0];
+            }
+            check(!bytes.empty() && Is(decoded, kFill),
+                  "B a RenderTarget2D drawn into and never SetData'd saves, and the PNG decodes "
+                  "back to what was drawn: " + what + ", decoded " + Text(decoded) + " (want " +
+                      Text(kFill) + ")");
+        }
 
         std::vector<Color> readback(static_cast<std::size_t>(kN * kN), Color(0, 0, 0, 0));
         rt.GetData(readback.data(), 0, kN * kN);
@@ -123,7 +161,34 @@ protected:
                   std::to_string(readback[0].getRProperty()) + "," +
                   std::to_string(readback[0].getGProperty()) + "," +
                   std::to_string(readback[0].getBProperty()) + ")");
-        check(true, "C MEASUREMENT: SaveAsPng after GetData -- " + afterWhat);
+        check(afterBytes > 0, "C saving after GetData gives the same answer: " + afterWhat);
+
+        {
+            // What a texture that is neither uploaded nor drawn into saves, asked rather than
+            // assumed -- the row that made this change named it as an open question. The answer:
+            // a fresh Texture2D carries a zero-filled shadow, so it saves transparent black, which
+            // is what XNA's zero-initialised texture holds. Nothing here is the fix's doing; the
+            // leg exists so that if the constructor ever stops allocating that shadow, the change
+            // is caught here rather than in a game's screenshot.
+            Texture2D fresh(dev, 2, 2, false, SurfaceFormat::Color);
+            System::IO::MemoryStream png;
+            std::string what = "saved";
+            try { fresh.SaveAsPng(&png, 2, 2); }
+            catch (const std::exception& e) { what = std::string("threw: ") + e.what(); }
+            const auto bytes = png.GetBuffer();
+            Color decoded(1, 2, 3, 4);
+            if (!bytes.empty()) {
+                System::IO::MemoryStream read(bytes.data(),
+                                              static_cast<System::IO::intcs>(bytes.size()));
+                Texture2D back = Texture2D::FromStream(dev, read);
+                std::vector<Color> texels(4, Color(1, 2, 3, 4));
+                back.GetData(texels.data(), 0, 4);
+                decoded = texels[0];
+            }
+            check(!bytes.empty() && Is(decoded, Color(0, 0, 0, 0)),
+                  "D a Texture2D neither uploaded nor drawn into saves its zero-initialised "
+                  "contents: " + what + ", decoded " + Text(decoded) + " (want (0,0,0))");
+        }
 
         std::printf("=== %d/%d PASS ===\n", pass_, pass_ + fail_);
         std::fflush(stdout);
@@ -131,7 +196,7 @@ protected:
     }
 
 public:
-    VulkanTexture2DSaveAsRenderTargetTest()
+    Texture2DSaveAsRenderTargetTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(64);
@@ -143,7 +208,7 @@ public:
 
 int main()
 {
-    VulkanTexture2DSaveAsRenderTargetTest game;
+    Texture2DSaveAsRenderTargetTest game;
     game.Run();
     return game.getResult();
 }

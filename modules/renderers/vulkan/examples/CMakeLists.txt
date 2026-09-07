@@ -2400,7 +2400,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_vulkan_test(cna_test_vulkan_texture2d_saveas_rendertarget
-                        vulkan_texture2d_saveas_rendertarget_test.cpp)
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/texture2d_saveas_rendertarget_test.cpp)
         cna_register_renderer_test(NAME Vulkan_Texture2D_SaveAsRenderTarget
             COMMAND cna_test_vulkan_texture2d_saveas_rendertarget
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
