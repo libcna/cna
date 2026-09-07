@@ -121,7 +121,7 @@ real rendering discrepancy. The comparator was also checked against a deliberate
 (one channel of one pixel flipped) to confirm it actually fails when the images genuinely differ,
 rather than always passing.
 
-## Known limitations (2026-08-15)
+## Known limitations (2026-09-08)
 
 - **Vertex input is declaration-driven.** `VertexElementUsage`/usage index selects attributes
   across one or multiple streams, and all 12 XNA `VertexElementFormat` values are decoded at their
@@ -133,10 +133,15 @@ rather than always passing.
   `SkinnedEffect` deliberately keep their textured program selected with no base map; SOFTWARE
   preserves the vertex/factor colour in that case, matching the white fallback used by native
   shader renderers. A missing second DualTexture map or environment cube remains a clear error.
-- **No per-light diffuse lighting yet.** `BasicEffect`'s `EnableDefaultLighting()` and the
-  equivalent lighting inputs on `EnvironmentMapEffect`/`SkinnedEffect` have no effect on this
-  renderer's lighting output. The current "lit" base color is still just
-  `vertexColor*diffuseColor*texture0`, with no per-light `NdotL` sum, ambient, or emissive term.
+- **`BasicEffect` lighting is complete** (`SOFTWARE-113`). Software evaluates FNA's three-light
+  Blinn–Phong equation with ambient, diffuse, emissive and specular material terms, including
+  `EnableDefaultLighting`, per-light enable/colour/direction, `SpecularPower`, texture, vertex
+  colour and alpha ordering. The XNA-default per-vertex path saturates and perspective-interpolates
+  its diffuse/specular outputs; `PreferPerPixelLighting=true` re-evaluates normalized world-space
+  inputs per fragment. Normals use inverse-transpose `World`, including non-uniform scale.
+- **`EnvironmentMapEffect` and `SkinnedEffect` lighting remains pending.** Their current base
+  colour still omits the classic directional/ambient/emissive/specular calculation; this is
+  tracked by `SOFTWARE-114` and `SOFTWARE-115`, independently of their completed fog support.
 - **Classic stock-effect fog is complete** (`SOFTWARE-112`). `BasicEffect`, `AlphaTestEffect`,
   `DualTextureEffect`, `EnvironmentMapEffect` and `SkinnedEffect` use FNA's view-space fog vector,
   including transformed World/View matrices, the degenerate start=end case and SkinnedEffect's
@@ -144,7 +149,7 @@ rather than always passing.
   final RGB toward `FogColor * outputAlpha` after the stock effect's texture/environment work and
   alpha test but before blending.
 - **`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect` are supported** (`SOFTWARE-82`),
-  minus the lighting caveat above:
+  with the EnvironmentMapEffect/SkinnedEffect lighting caveat above:
   - `DualTextureEffect`: real second-texture sampling, FNA's own
     `color.rgb*=2; color *= overlay*diffuse` formula. Both textures reuse the same UV (this
     renderer has no genuine 2-UV vertex format — an established simplification, matching this
@@ -213,8 +218,8 @@ rather than always passing.
   full-target viewport remains byte-identical to the earlier behavior.
 - **Custom `ShaderEffect` (arbitrary GLSL/HLSL/WGSL source) compiles but doesn't actually execute**
   — mirrors `HEADLESS-16`'s own precedent exactly: the source is accepted without compiling, and
-  only effects whose `FillGpuDrawParams()` output matches this renderer's fixed `BasicEffect`-subset
-  pixel-shading path will render correctly.
+  only effects whose `FillGpuDrawParams()` output matches one of this renderer's fixed stock-effect
+  CPU paths will render correctly.
 - **`Present()` is a no-op**; there is no way to visually inspect a Software-rendered frame on
   screen in this renderer's current form. An opt-in "blit the CPU framebuffer to a real window"
   mode is a reasonable future addition (`plans/plan_software.md` design decision 3) but isn't needed for

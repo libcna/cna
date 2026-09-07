@@ -50,7 +50,9 @@ namespace CNA::Internal::Renderers::Software
             float r = 0.0f, g = 0.0f, b = 0.0f, a = 0.0f;  ///< Vertex color * invW, 0..1 range.
             float u = 0.0f, v = 0.0f;   ///< Texture coordinate * invW (Phase S5).
             float fogKeep = 1.0f;       ///< XNA stock-effect fog keep factor * invW.
-            /// World-space position/normal * invW (SOFTWARE-82, EnvironmentMapEffect only) --
+            /// Per-vertex BasicEffect specular result * invW (SOFTWARE-113).
+            float sr = 0.0f, sg = 0.0f, sb = 0.0f;
+            /// World-space position/normal * invW (SOFTWARE-82/113) --
             /// same premultiply-then-divide perspective-correct interpolation treatment as color/uv.
             float wpx = 0.0f, wpy = 0.0f, wpz = 0.0f;
             float nx = 0.0f, ny = 0.0f, nz = 1.0f;
@@ -379,7 +381,9 @@ namespace CNA::Internal::Renderers::Software
             float r = 1.0f, g = 1.0f, b = 1.0f, a = 1.0f;
             float u = 0.0f, v = 0.0f;
             float fogKeep = 1.0f;
-            /// World-space position/normal (SOFTWARE-82, EnvironmentMapEffect only).
+            /// Per-vertex BasicEffect specular result (SOFTWARE-113).
+            float sr = 0.0f, sg = 0.0f, sb = 0.0f;
+            /// World-space position/normal (SOFTWARE-82/113).
             float wpx = 0.0f, wpy = 0.0f, wpz = 0.0f;
             float nx = 0.0f, ny = 0.0f, nz = 1.0f;
         };
@@ -429,6 +433,9 @@ namespace CNA::Internal::Renderers::Software
             out.u = a.u + t * (b.u - a.u);
             out.v = a.v + t * (b.v - a.v);
             out.fogKeep = a.fogKeep + t * (b.fogKeep - a.fogKeep);
+            out.sr = a.sr + t * (b.sr - a.sr);
+            out.sg = a.sg + t * (b.sg - a.sg);
+            out.sb = a.sb + t * (b.sb - a.sb);
             out.wpx = a.wpx + t * (b.wpx - a.wpx);
             out.wpy = a.wpy + t * (b.wpy - a.wpy);
             out.wpz = a.wpz + t * (b.wpz - a.wpz);
@@ -608,6 +615,9 @@ namespace CNA::Internal::Renderers::Software
             out.u = cv.u * invW;
             out.v = cv.v * invW;
             out.fogKeep = cv.fogKeep * invW;
+            out.sr = cv.sr * invW;
+            out.sg = cv.sg * invW;
+            out.sb = cv.sb * invW;
             out.wpx = cv.wpx * invW;
             out.wpy = cv.wpy * invW;
             out.wpz = cv.wpz * invW;
@@ -1259,6 +1269,150 @@ namespace CNA::Internal::Renderers::Software
                 m[0] * v.X + m[4] * v.Y + m[8]  * v.Z + m[12] * w,
                 m[1] * v.X + m[5] * v.Y + m[9]  * v.Z + m[13] * w,
                 m[2] * v.X + m[6] * v.Y + m[10] * v.Z + m[14] * w);
+        }
+
+        [[nodiscard]] Vector3 NormalizeOrZero(const Vector3& value)
+        {
+            const float lengthSquared = value.X * value.X + value.Y * value.Y +
+                                        value.Z * value.Z;
+            if (!(lengthSquared > 0.0f))
+                return Vector3::Zero;
+            const float inverseLength = 1.0f / std::sqrt(lengthSquared);
+            return Vector3(value.X * inverseLength, value.Y * inverseLength,
+                           value.Z * inverseLength);
+        }
+
+        /// SOFTWARE-113: transforms a normal with transpose(inverse(World3x3)). The cofactor
+        /// layout is the same column-major representation EasyGL uploads to its stock shaders.
+        [[nodiscard]] Vector3 TransformWorldNormal(const float* world, const Vector3& normal)
+        {
+            const float a = world[0], d = world[1], g = world[2];
+            const float b = world[4], e = world[5], h = world[6];
+            const float c = world[8], f = world[9], i = world[10];
+            const float determinant =
+                a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+            const float inverseDeterminant = determinant != 0.0f ? 1.0f / determinant : 0.0f;
+            const float normalMatrix[9] = {
+                (e * i - f * h) * inverseDeterminant,
+                -(b * i - c * h) * inverseDeterminant,
+                (b * f - c * e) * inverseDeterminant,
+                -(d * i - f * g) * inverseDeterminant,
+                (a * i - c * g) * inverseDeterminant,
+                -(a * f - c * d) * inverseDeterminant,
+                (d * h - e * g) * inverseDeterminant,
+                -(a * h - b * g) * inverseDeterminant,
+                (a * e - b * d) * inverseDeterminant,
+            };
+            return NormalizeOrZero(Vector3(
+                normalMatrix[0] * normal.X + normalMatrix[3] * normal.Y +
+                    normalMatrix[6] * normal.Z,
+                normalMatrix[1] * normal.X + normalMatrix[4] * normal.Y +
+                    normalMatrix[7] * normal.Z,
+                normalMatrix[2] * normal.X + normalMatrix[5] * normal.Y +
+                    normalMatrix[8] * normal.Z));
+        }
+
+        [[nodiscard]] bool UsesBasicEffectLighting(const GpuDrawParams& params)
+        {
+            return params.lightingEnabled && !params.envMapping && !params.skinned && !params.pbr;
+        }
+
+        struct BasicLightingResult
+        {
+            float diffuse[3] = {0.0f, 0.0f, 0.0f};
+            float specular[3] = {0.0f, 0.0f, 0.0f};
+        };
+
+        /// SOFTWARE-113: FNA StockEffects/HLSL/Lighting.fxh ComputeLights. Material diffuse and
+        /// emissive already include BasicEffect.Alpha in GpuDrawParams, while the material and
+        /// per-light specular colours do not; AddSpecular applies the completed output alpha later.
+        [[nodiscard]] BasicLightingResult ComputeBasicLighting(
+            const Vector3& worldPosition, const Vector3& worldNormal,
+            const GpuDrawParams& params)
+        {
+            const Vector3 eye = NormalizeOrZero(Vector3(
+                params.eyePositionWorld[0] - worldPosition.X,
+                params.eyePositionWorld[1] - worldPosition.Y,
+                params.eyePositionWorld[2] - worldPosition.Z));
+            const float* directions[3] = {
+                params.light0Dir, params.light1Dir, params.light2Dir};
+            const float* diffuseColors[3] = {
+                params.light0Diffuse, params.light1Diffuse, params.light2Diffuse};
+            const float* specularColors[3] = {
+                params.light0Specular, params.light1Specular, params.light2Specular};
+
+            float diffuseSum[3] = {params.ambientColor[0], params.ambientColor[1],
+                                   params.ambientColor[2]};
+            float specularSum[3] = {0.0f, 0.0f, 0.0f};
+            for (int light = 0; light < 3; ++light)
+            {
+                const float dotLight = -(directions[light][0] * worldNormal.X +
+                                         directions[light][1] * worldNormal.Y +
+                                         directions[light][2] * worldNormal.Z);
+                const float diffuseWeight = std::max(dotLight, 0.0f);
+                const Vector3 halfVector = NormalizeOrZero(Vector3(
+                    eye.X - directions[light][0], eye.Y - directions[light][1],
+                    eye.Z - directions[light][2]));
+                const float dotHalf = std::max(
+                    halfVector.X * worldNormal.X + halfVector.Y * worldNormal.Y +
+                        halfVector.Z * worldNormal.Z,
+                    0.0f);
+                const float specularWeight = dotLight >= 0.0f
+                    ? std::pow(dotHalf, params.specularPower)
+                    : 0.0f;
+                for (int channel = 0; channel < 3; ++channel)
+                {
+                    diffuseSum[channel] +=
+                        diffuseWeight * diffuseColors[light][channel];
+                    specularSum[channel] +=
+                        specularWeight * specularColors[light][channel];
+                }
+            }
+
+            BasicLightingResult result;
+            for (int channel = 0; channel < 3; ++channel)
+            {
+                result.diffuse[channel] =
+                    diffuseSum[channel] * params.diffuseColor[channel] +
+                    params.emissiveColor[channel];
+                result.specular[channel] =
+                    specularSum[channel] * params.specularColor[channel];
+            }
+            return result;
+        }
+
+        void PrepareBasicLightingVertex(ClipVertex& vertex, const Vector3& position,
+                                        const Vector3& normal, bool haveNormal,
+                                        const GpuDrawParams& params)
+        {
+            if (!UsesBasicEffectLighting(params))
+                return;
+
+            const Vector3 worldPosition =
+                ApplyAffineColumnMajor(params.worldColMajor, position, 1.0f);
+            const Vector3 worldNormal = haveNormal
+                ? TransformWorldNormal(params.worldColMajor, normal)
+                : Vector3::Zero;
+            vertex.wpx = worldPosition.X;
+            vertex.wpy = worldPosition.Y;
+            vertex.wpz = worldPosition.Z;
+            vertex.nx = worldNormal.X;
+            vertex.ny = worldNormal.Y;
+            vertex.nz = worldNormal.Z;
+
+            if (params.preferPerPixelLighting)
+                return;
+
+            const BasicLightingResult lighting =
+                ComputeBasicLighting(worldPosition, worldNormal, params);
+            // D3D9/XNA saturates COLOR0/COLOR1 vertex outputs before interpolation.
+            vertex.r = std::clamp(vertex.r * lighting.diffuse[0], 0.0f, 1.0f);
+            vertex.g = std::clamp(vertex.g * lighting.diffuse[1], 0.0f, 1.0f);
+            vertex.b = std::clamp(vertex.b * lighting.diffuse[2], 0.0f, 1.0f);
+            vertex.a = std::clamp(vertex.a * params.diffuseColor[3], 0.0f, 1.0f);
+            vertex.sr = std::clamp(lighting.specular[0], 0.0f, 1.0f);
+            vertex.sg = std::clamp(lighting.specular[1], 0.0f, 1.0f);
+            vertex.sb = std::clamp(lighting.specular[2], 0.0f, 1.0f);
         }
 
         /// SOFTWARE-112: the five classic XNA stock effects compute this vertex output from the
@@ -2208,6 +2362,7 @@ namespace CNA::Internal::Renderers::Software
             {
                 out.r = out.g = out.b = out.a = 1.0f;
             }
+            PrepareBasicLightingVertex(out, position, normal, haveNormal, params);
             return out;
         }
 
@@ -2308,6 +2463,7 @@ namespace CNA::Internal::Renderers::Software
 
             if (!params.vertexColorEnabled)
                 out.r = out.g = out.b = out.a = 1.0f;
+            PrepareBasicLightingVertex(out, position, normal, haveNormal, params);
             return out;
         }
 #endif
@@ -2436,6 +2592,7 @@ namespace CNA::Internal::Renderers::Software
                                         const RasterClipRect& clip, int x, int y, float depth, float invW,
                                         float pr, float pg, float pb, float pa, float pu, float pv,
                                         float pfogKeep,
+                                        float psr, float psg, float psb,
                                         float pwpx, float pwpy, float pwpz, float pnx, float pny, float pnz,
                                         unsigned int coverageMask = 0xFFFFFFFFu,
                                         const std::array<float, 4>* sampleDepths = nullptr)
@@ -2495,10 +2652,48 @@ namespace CNA::Internal::Renderers::Software
                 a *= texA;
             }
 
-            r *= ctx.params.diffuseColor[0];
-            g *= ctx.params.diffuseColor[1];
-            b *= ctx.params.diffuseColor[2];
-            a *= ctx.params.diffuseColor[3];
+            if (UsesBasicEffectLighting(ctx.params))
+            {
+                float specularR;
+                float specularG;
+                float specularB;
+                if (ctx.params.preferPerPixelLighting)
+                {
+                    const Vector3 worldPosition(
+                        pwpx / invW, pwpy / invW, pwpz / invW);
+                    const Vector3 worldNormal = NormalizeOrZero(Vector3(
+                        pnx / invW, pny / invW, pnz / invW));
+                    const BasicLightingResult lighting =
+                        ComputeBasicLighting(worldPosition, worldNormal, ctx.params);
+                    r *= lighting.diffuse[0];
+                    g *= lighting.diffuse[1];
+                    b *= lighting.diffuse[2];
+                    a *= ctx.params.diffuseColor[3];
+                    specularR = lighting.specular[0];
+                    specularG = lighting.specular[1];
+                    specularB = lighting.specular[2];
+                }
+                else
+                {
+                    // The diffuse/alpha result was evaluated, saturated and multiplied by
+                    // vertex colour at each vertex, exactly like VSBasicVertexLighting*.
+                    specularR = psr / invW;
+                    specularG = psg / invW;
+                    specularB = psb / invW;
+                }
+                // FNA Common.fxh AddSpecular: the light/material result is scaled by the
+                // completed texture/effect/vertex alpha, but not by texture or vertex RGB.
+                r += specularR * a;
+                g += specularG * a;
+                b += specularB * a;
+            }
+            else
+            {
+                r *= ctx.params.diffuseColor[0];
+                g *= ctx.params.diffuseColor[1];
+                b *= ctx.params.diffuseColor[2];
+                a *= ctx.params.diffuseColor[3];
+            }
 
             // FNA's AlphaTestEffect pixel shader evaluates texture * vertex colour * diffuse/alpha,
             // then clip(), and only afterward applies fog. A discarded fragment must not update
@@ -2693,6 +2888,8 @@ namespace CNA::Internal::Renderers::Software
                     a.b + t * (b.b - a.b), a.a + t * (b.a - a.a),
                     a.u + t * (b.u - a.u), a.v + t * (b.v - a.v),
                     a.fogKeep + t * (b.fogKeep - a.fogKeep),
+                    a.sr + t * (b.sr - a.sr), a.sg + t * (b.sg - a.sg),
+                    a.sb + t * (b.sb - a.sb),
                     a.wpx + t * (b.wpx - a.wpx), a.wpy + t * (b.wpy - a.wpy),
                     a.wpz + t * (b.wpz - a.wpz), a.nx + t * (b.nx - a.nx),
                     a.ny + t * (b.ny - a.ny), a.nz + t * (b.nz - a.nz));
@@ -2720,6 +2917,7 @@ namespace CNA::Internal::Renderers::Software
                                 point.depth, point.invW,
                                 point.r, point.g, point.b, point.a, point.u, point.v,
                                 point.fogKeep,
+                                point.sr, point.sg, point.sb,
                                 point.wpx, point.wpy, point.wpz,
                                 point.nx, point.ny, point.nz);
         }
@@ -2730,10 +2928,9 @@ namespace CNA::Internal::Renderers::Software
         /// depth-tested, perspective-correct color interpolation. Backface culling per `cullMode`
         /// (SOFTWARE-81; raw ordinal, see ShouldCullTriangle()). `params.dualTexture`/`envMapping`
         /// (SOFTWARE-82) select DualTextureEffect's second-texture blend or EnvironmentMapEffect's
-        /// cube-map reflection on top of the same base texture/diffuse/vertex-color path -- no
-        /// per-light diffuse lighting is computed for either (design decision 6: no lighting
-        /// engine in v1), so the "lit" base color is just vertexColor*diffuseColor*texture0, the
-        /// same simplification already used for the plain BasicEffect path.
+        /// cube-map reflection on top of the same base texture/diffuse/vertex-color path.
+        /// SOFTWARE-113 adds FNA-accurate BasicEffect lighting; the corresponding
+        /// EnvironmentMapEffect and SkinnedEffect lighting paths remain SOFTWARE-114/115.
         void RasterizeTriangleShaded(SoftwareFramebuffer& fb, const RasterDepthState& depthState,
                                      const RasterStencilState& stencilState,
                                      const SoftwareBlendState& blendState,
@@ -2842,6 +3039,9 @@ namespace CNA::Internal::Renderers::Software
                                             A.b + t * (B.b - A.b), A.a + t * (B.a - A.a),
                                             A.u + t * (B.u - A.u), A.v + t * (B.v - A.v),
                                             A.fogKeep + t * (B.fogKeep - A.fogKeep),
+                                            A.sr + t * (B.sr - A.sr),
+                                            A.sg + t * (B.sg - A.sg),
+                                            A.sb + t * (B.sb - A.sb),
                                             A.wpx + t * (B.wpx - A.wpx), A.wpy + t * (B.wpy - A.wpy),
                                             A.wpz + t * (B.wpz - A.wpz), A.nx + t * (B.nx - A.nx),
                                             A.ny + t * (B.ny - A.ny), A.nz + t * (B.nz - A.nz));
@@ -2935,6 +3135,9 @@ namespace CNA::Internal::Renderers::Software
                                         lambda0 * v0.v + lambda1 * v1.v + lambda2 * v2.v,
                                         lambda0 * v0.fogKeep + lambda1 * v1.fogKeep +
                                             lambda2 * v2.fogKeep,
+                                        lambda0 * v0.sr + lambda1 * v1.sr + lambda2 * v2.sr,
+                                        lambda0 * v0.sg + lambda1 * v1.sg + lambda2 * v2.sg,
+                                        lambda0 * v0.sb + lambda1 * v1.sb + lambda2 * v2.sb,
                                         lambda0 * v0.wpx + lambda1 * v1.wpx + lambda2 * v2.wpx,
                                         lambda0 * v0.wpy + lambda1 * v1.wpy + lambda2 * v2.wpy,
                                         lambda0 * v0.wpz + lambda1 * v1.wpz + lambda2 * v2.wpz,

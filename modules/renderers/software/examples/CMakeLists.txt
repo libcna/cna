@@ -136,6 +136,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_StockEffectFogContract
         COMMAND cna_test_software_stock_effect_fog_contract TIMEOUT 30 LABELS "Software")
 
+    # SOFTWARE-113: renderer-neutral FNA/XNA BasicEffect lighting equations and dispatch.
+    cna_software_test(cna_test_software_basic_effect_lighting_contract
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/basic_effect_lighting_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_BasicEffectLightingContract
+        COMMAND cna_test_software_basic_effect_lighting_contract TIMEOUT 30 LABELS "Software")
+
     cna_software_test(cna_test_software_dual_envmap_skinned software_dual_envmap_skinned_test.cpp)
     cna_register_renderer_test(NAME Software_DualEnvmapSkinned COMMAND cna_test_software_dual_envmap_skinned
         TIMEOUT 30 LABELS "Software")
