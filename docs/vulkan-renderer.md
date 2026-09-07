@@ -335,6 +335,7 @@ EasyGL — an optional per-instance matrix added to every stock program. Three s
 | Position + Colour + TextureCoordinate, same conditions | `instanced_colored_textured3d` |
 | Any of the above under an `AlphaTestEffect` | `instanced_alpha_test3d` (the ordinary alpha-test family, made instanceable) |
 | Position + Normal + TextureCoordinate with `LightingEnabled` | `instanced_lit_textured3d`, or its `_vertexlit` sibling when `PreferPerPixelLighting` is false (the ordinary lit family, made instanceable) |
+| Position + 2×TextureCoordinate under a `DualTextureEffect` | `instanced_dual_texture3d` (the ordinary dual-texture family, made instanceable) |
 
 **The per-instance matrix composes with `BasicEffect.World`** — the shader computes
 `World × View × Projection × instanceMatrix × position`, so an instance transform is applied
@@ -347,11 +348,12 @@ declaration must supply the coordinate. Either alone selects a program the draw 
 either alone is ignored.
 
 **What an instanced draw does not do here, and it is a limit rather than an omission.** There is no
-dual-texture or env-map instanced program; the lit family is instanceable only in its **textured**
+env-map instanced program; the lit family is instanceable only in its **textured**
 shape (a lit declaration that is untextured, or that also carries a Colour, falls back to the
 colour-only instanced family); there is no **coloured** alpha-test one (a
 `Position+Colour+TextureCoordinate` alpha-test draw takes the uncoloured module and loses its
-colour); and there is no fog on the colour-only instanced programs — the fog UBO is a second
+colour, and the same holds for a coloured dual-texture one); and there is no fog on the colour-only
+instanced programs — the fog UBO is a second
 descriptor binding, and that family uses the single-binding pipeline layout it shares with 2D
 `SpriteBatch`. The lit and alpha-test instanced draws carry their own family's fog, because they
 carry their own family's whole pipeline layout. Tracked as `VULKAN-218`; EasyGL has none of these limits, because its per-instance matrix

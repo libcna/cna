@@ -7536,7 +7536,7 @@ namespace CNA::Internal::Renderers::Vulkan
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
         const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt,
-        const VulkanVertexInputLayoutEXT& vertexLayout)
+        const VulkanVertexInputLayoutEXT& vertexLayout, bool instanced)
     {
         EnsureDualTexResources();
 
@@ -7557,6 +7557,9 @@ namespace CNA::Internal::Renderers::Vulkan
         // stride cannot share a pipeline. Folded only when the layout is complete, which leaves
         // every stride-derived key exactly as it was.
         if (vertexLayout.IsComplete()) key.a = FoldPerVertexStrideIntoKey(key.a, recordStride);
+        // VULKAN-225: the instanced variant is a different pipeline -- own module, second
+        // binding, four more attributes -- so it needs its own identity.
+        if (instanced) key.vl ^= 0x9E3779B97F4A7C15ull;
         auto it = pipelinesDualTex3D_.find(key);
         if (it != pipelinesDualTex3D_.end()) return it->second;
 
@@ -7568,13 +7571,23 @@ namespace CNA::Internal::Renderers::Vulkan
         // the color attribute and gates it by VertexColorEnabled, mirroring Task 887's
         // alpha_test_colored3d.vert.glsl pattern; both variants share the unchanged fragment shader.
         const bool colored = (dualStride == 24);
-        VkShaderModule vert = colored
+        // VULKAN-225: the instanced module has no coloured sibling yet -- a
+        // Position+Colour+2xUV instanced dual-texture draw takes the uncoloured one and
+        // loses its colour, which is VULKAN-218's rather than silently accepted.
+        VkShaderModule vert = instanced
+            ? CreateShaderModule(kInstancedDualTexture3dVertSpv, kInstancedDualTexture3dVertSpv_size)
+            : (colored
             ? CreateShaderModule(kDualTextureColored3dVertSpv, kDualTextureColored3dVertSpv_size)
-            : CreateShaderModule(kDualTexture3dVertSpv,        kDualTexture3dVertSpv_size);
+            : CreateShaderModule(kDualTexture3dVertSpv,        kDualTexture3dVertSpv_size));
         VkShaderModule frag = CreateShaderModule(kDualTexture3dFragSpv,  kDualTexture3dFragSpv_size);
 
-        VkVertexInputBindingDescription bind{ 0, recordStride, VK_VERTEX_INPUT_RATE_VERTEX };
-        VkVertexInputAttributeDescription attrs[4]{};
+        // VULKAN-225: two bindings when instanced -- 0 per-vertex, 1 per-instance at 64 bytes.
+        constexpr uint32_t kInstStride = 64;
+        VkVertexInputBindingDescription binds[2]{};
+        binds[0] = { 0, recordStride, VK_VERTEX_INPUT_RATE_VERTEX   };
+        binds[1] = { 1, kInstStride,  VK_VERTEX_INPUT_RATE_INSTANCE };
+        // Eight: at most four per-vertex, then the four matrix columns.
+        VkVertexInputAttributeDescription attrs[8]{};
         uint32_t attrCount;
         if (colored) {
             // float3 pos + ubyte4 color + float2 uv (mirrors colored_textured3d's layout).
@@ -7594,11 +7607,21 @@ namespace CNA::Internal::Renderers::Vulkan
         }
         // VULKAN-150: and the declaration's own offsets replace all of them when it supplied every
         // input -- including a genuinely independent TextureCoordinate1.
-        ApplyDeclaredVertexLayoutEXT(vertexLayout, attrs, std::size(attrs), attrCount);
+        // The capacity is the PER-VERTEX one, 4 -- not std::size(attrs), which is now 8. The
+        // applicator overwrites from index 0 and resets the count, so the whole array would let a
+        // declaration claim the slots the instance columns are about to use (VULKAN-222).
+        ApplyDeclaredVertexLayoutEXT(vertexLayout, attrs, 4u, attrCount);
+        if (instanced) {
+            attrs[attrCount++] = { 4, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0  }; // aInstCol0
+            attrs[attrCount++] = { 5, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 16 }; // aInstCol1
+            attrs[attrCount++] = { 6, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 32 }; // aInstCol2
+            attrs[attrCount++] = { 7, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 48 }; // aInstCol3
+        }
 
         VkPipelineVertexInputStateCreateInfo vis{};
         vis.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-        vis.vertexBindingDescriptionCount   = 1; vis.pVertexBindingDescriptions   = &bind;
+        vis.vertexBindingDescriptionCount   = instanced ? 2u : 1u;
+        vis.pVertexBindingDescriptions      = binds;
         vis.vertexAttributeDescriptionCount = attrCount; vis.pVertexAttributeDescriptions = attrs;
 
         VkPipelineShaderStageCreateInfo stages[2]{};
@@ -11812,7 +11835,7 @@ namespace CNA::Internal::Renderers::Vulkan
                 } else if (draw.useDualTexture) {
                     pipe = GetOrCreatePipelineDualTex3D(draw.stride, draw.topology,
                                                         draw.depthTest, draw.depthWrite,
-                                                        draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt, draw.vertexLayout);
+                                                        draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt, draw.vertexLayout, draw.useInstanced);
                 } else if (draw.useEnvMap) {
                     pipe = GetOrCreatePipelineEnvMap3D(draw.stride, draw.topology,
                                                        draw.depthTest, draw.depthWrite,
@@ -14969,7 +14992,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // untextured and coloured lit shapes keep that row.
         const auto& declaredForLit = vbForLayout.GetDeclarationEXT();
         const bool instancedLit =
-            !instancedAlphaTest && params.lightingEnabled &&
+            !instancedAlphaTest && !params.dualTexture && params.lightingEnabled &&
             !params.dualTexture && !params.envMapping && !params.skinned && !params.pbr &&
             !declaredForLit.IsEmpty() &&
             DeclarationNamesUsageEXT(
@@ -14979,6 +15002,15 @@ namespace CNA::Internal::Renderers::Vulkan
                 Microsoft::Xna::Framework::Graphics::VertexElementUsage::TextureCoordinate) &&
             !DeclarationNamesUsageEXT(
                 declaredForLit, Microsoft::Xna::Framework::Graphics::VertexElementUsage::Color);
+        // VULKAN-225: the dual-texture family, on the same principle. Unlike the lit one this
+        // needs no chain guard -- `useDualTexture` is already tested BEFORE `useInstanced` in both
+        // the pipeline and descriptor chains, as `useAlphaTest` is.
+        const bool instancedDualTex = !instancedAlphaTest && params.dualTexture;
+        VulkanVertexInputLayoutEXT instancedDualTexLayout;
+        if (instancedDualTex)
+            instancedDualTexLayout = BuildVulkanVertexInputLayoutEXT(
+                vbForLayout.GetDeclarationEXT(), StockInputs::kDualTexture,
+                std::size(StockInputs::kDualTexture));
         VulkanVertexInputLayoutEXT instancedLitLayout;
         if (instancedLit)
             instancedLitLayout = BuildVulkanVertexInputLayoutEXT(
@@ -15070,6 +15102,14 @@ namespace CNA::Internal::Renderers::Vulkan
         // instanced lit draw cannot drift from a non-instanced one. The push constant needs no
         // special case at all: since VULKAN-219 `FillInstancedPushConst` writes exactly what
         // `FillExtPushConst` writes -- WVP in [0..15] and the same sixteen floats after it.
+        if (instancedDualTex) {
+            d.vertexLayout = instancedDualTexLayout;
+            FillStockFamilyRecordEXT(d, params, /*needsPbr=*/false, /*needsSkinned=*/false,
+                                     /*needsEnvMap=*/false, /*needsDualTex=*/true,
+                                     /*needsLitTextured=*/false, /*needsLitUntextured=*/false,
+                                     /*needsLitColored=*/false);
+            d.useDualTexture = true;
+        }
         if (instancedLit) {
             d.useLitTextured  = true;
             d.litUntextured   = false;

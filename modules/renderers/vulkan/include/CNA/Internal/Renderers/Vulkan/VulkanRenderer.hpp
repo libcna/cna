@@ -3988,7 +3988,8 @@ namespace CNA::Internal::Renderers::Vulkan
                                                 bool msaa, const DepthStencilKeyParams& dsParams = {},
                                          const BlendKeyParams& blendParams = {},
                                          VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
-                                         const VulkanVertexInputLayoutEXT& vertexLayout = {});
+                                         const VulkanVertexInputLayoutEXT& vertexLayout = {},
+                                         bool instanced = false);
         // EnvironmentMapEffect
         void       EnsureEnvMapResources();
         /// REMED-GFX-169: `sampler2D`/`samplerCube` are the SamplerStates of slots 0 and 1, the

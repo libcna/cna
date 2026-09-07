@@ -47,6 +47,7 @@
 #include "Microsoft/Xna/Framework/Graphics/AlphaTestEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -541,6 +542,76 @@ protected:
                   "K an INSTANCED lit draw shades the same way: " + Text(li) +
                       " (want ~(128,128,128); (255,255,255) is an unlit full-bright quad, which is "
                       "what a draw routed to a program with no Normal input looks like)");
+        }
+
+        // ---- L/M: DualTextureEffect on an instanced draw ------------------------------------
+        // FNA/XNA double the product: colour = tex0 * tex2 * 2. With tex0 = blue(255) and
+        // tex2 = quarter-grey(64), that is 255 * 0.25 * 2 = 128 -> (0,0,128). If the SECOND
+        // texture is dropped the result is (0,0,255), and if the whole effect is ignored it is
+        // whatever the fallback draws -- three distinguishable answers.
+        {
+            Texture2D quarter(dev, 1, 1, false, SurfaceFormat::Color);
+            const std::uint8_t qpx[4] = { 64, 64, 64, 255 };
+            quarter.SetDataRGBA(qpx, 1);
+            struct PTT { float x, y, z, u0, v0, u1, v1; };
+            static_assert(sizeof(PTT) == 28);
+            const PTT dq[4] = {
+                { -0.12f,  0.12f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f },
+                { -0.12f, -0.12f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f },
+                {  0.12f, -0.12f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f },
+                {  0.12f,  0.12f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f },
+            };
+            const VertexDeclaration dqDecl(28, {
+                VertexElement(0,  VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+                VertexElement(12, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+                VertexElement(20, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 1),
+            });
+            VertexBuffer dvb(dev, dqDecl, 4, BufferUsage::None);
+            dvb.SetDataRaw(dq, 4, static_cast<int>(sizeof(PTT)));
+
+            auto dual = [&](bool instanced) {
+                dev.Clear(Color(0, 255, 0, 255));
+                dev.SetDepthTestEnabled(false);
+                dev.setBlendStateProperty(BlendState::Opaque);
+                dev.setRasterizerStateProperty(RasterizerState::CullNone);
+                dev.getSamplerStatesProperty()[0] = SamplerState::PointClamp;
+                dev.getSamplerStatesProperty()[1] = SamplerState::PointClamp;
+                DualTextureEffect fx(dev);
+                fx.setWorldProperty(Matrix::getIdentityProperty());
+                fx.setViewProperty(Matrix::getIdentityProperty());
+                fx.setProjectionProperty(Matrix::getIdentityProperty());
+                fx.setTextureProperty(blue_.get());
+                fx.setTexture2Property(&quarter);
+                fx.setVertexColorEnabledProperty(false);
+                fx.Apply();
+                dev.SetVertexBuffer(&dvb);
+                dev.SetIndexBuffer(ib_.get());
+                if (instanced) {
+                    std::vector<VertexBufferBinding> bd = {
+                        VertexBufferBinding(&dvb,          0, 0),
+                        VertexBufferBinding(instVb_.get(), 0, 1),
+                    };
+                    dev.SetVertexBuffers(bd);
+                    dev.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2, 3);
+                } else {
+                    dev.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2);
+                }
+                return ReadPixel(dev, kN / 2, kN / 2);
+            };
+            const Color dn = dual(false);
+            const Color di = dual(true);
+            auto doubled = [](const Color& c) {
+                return c.getRProperty() <= 40 && c.getGProperty() <= 40 &&
+                       c.getBProperty() >= 100 && c.getBProperty() <= 160;
+            };
+            auto why = [](const Color& c) {
+                return c.getBProperty() > 200 ? " -- the SECOND texture was dropped" : "";
+            };
+            check(doubled(dn),
+                  "L control: a NON-instanced DualTextureEffect draw multiplies both textures and "
+                  "doubles: " + Text(dn) + " (want ~(0,0,128))" + why(dn));
+            check(doubled(di),
+                  "M an INSTANCED one does too: " + Text(di) + " (want ~(0,0,128))" + why(di));
         }
 
         check(IsBlue(a) == IsBlue(b) && IsBlack(a2) == IsBlack(b2),
