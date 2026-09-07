@@ -159,6 +159,59 @@ varying would make it *more* clamped than XNA.
 Guarded by `modules/graphics/examples/basiceffect_diffuse_color_clamp_test.cpp`, registered as
 `Vulkan_BasicEffect_DiffuseColorClamp`.
 
+## 7. Vertex layouts a lit `BasicEffect` accepts (`plans/plan_vulkan.md` VULKAN-198/199/200, 2026-09-07)
+
+XNA selects a stock `BasicEffect` shader from what the vertex *declaration* says, not from the
+buffer's stride — and the two disagree more often than they look like they would. Two ordinary XNA
+layouts are 24 and 36 bytes:
+
+| Declaration | Bytes | Where it comes from |
+|---|---|---|
+| Position + Normal | 24 | Microsoft's Primitives3D sample (`SAMPLE-002`) — the **same stride** as `VertexPositionColorTexture` |
+| Position + Normal + Colour + TexCoord | 36 | what the stock `ModelProcessor` emits for a mesh with a colour channel (`plans/plan_fx.md` `FX-125`) |
+
+**EasyGL** renders both: `SelectStockProgramShape` matches the first as a declaration test and the
+second as a stride case, and its lit programs carry a colour attribute. `FX-125` is the record of
+what it cost to find out — a mesh with a colour channel fell onto the *unlit* program and
+`SAMPLE-047`'s sphere rendered as a flat green disc.
+
+**Vulkan** refused both outright until `VULKAN-199`/`VULKAN-200`: its lit family was selected by
+`stride == 32` and existed for exactly one layout, so the declaration-fidelity guard refused the
+draw rather than reading a normal's twelve bytes as a packed colour and a UV. Refusing is the right
+failure — but a game using either layout could not draw at all. Both now render, and the selection
+is set-exact: a declaration is matched as a whole element set, because a renderer's "is this layout
+complete" test asks whether every input the *shader* consumes was supplied and cannot notice a
+declared element the shader ignores.
+
+**The vertex-colour ordering is the part that is easy to get subtly wrong**, and it differs between
+the two lighting families:
+
+* **per-vertex** (XNA's default): `VSBasicVertexLightingTxVc` does `vout.Diffuse *= vin.Color`
+  **before** the value reaches `oD0`, so the colour is *inside* Direct3D 9's saturate. Clamping the
+  lit sum first and scaling by the colour afterwards is a different picture, not a rounding
+  difference — a lit sum of 1.8 with a colour of 0.5 gives 0.9 the right way and 0.5 the wrong way.
+* **per-pixel**: `VSBasicPixelLightingTxVc` carries the colour to the fragment stage, where
+  `PSBasicPixelLightingTx` multiplies it into the **whole** lit bracket, emissive included, before
+  `AddSpecular` scales by the resulting alpha.
+
+**One implementation note that cost a debugging round**, kept here because the next renderer to
+grow a colour input will meet it: a stock program's input table is written in the **shader's
+location order**, not the record's byte order, and for this layout the two differ — the colour sits
+at byte 24 and the UV at 28, while `aUV` is location 2 (inherited from the colourless sibling) and
+`aColor` is location 3. Listing them the record's way binds the UV's two floats to `aColor`, and
+`vec4(uv, 0, 1)` at the centre of the quad is `(0.5, 0.5, 0, 1)` — half of which is a perfectly
+plausible `(64,64,0)` that is *neither* the unlit vertex colour *nor* lit-but-colourless. It passes
+both negative checks. That is why the test asserts the exact value the arithmetic predicts.
+
+Guarded by `Vulkan_BasicEffect_PositionNormal` (EasyGL's `SAMPLE-002` source),
+`Vulkan_BasicEffectLitVertexColor` (EasyGL's `FX-125` source) and
+`modules/graphics/examples/basiceffect_lit_vertex_color_perpixel_test.cpp`. The last exists because
+the `FX-125` source sets `PreferPerPixelLighting(false)` in its own body, so registering it alone
+would leave the per-pixel half of the fix untested.
+
+**Still refused on Vulkan:** an **unlit** 36-byte record, and any lit declaration outside the two
+sets above. `plans/plan_vulkan.md` VULKAN-201 owns the first.
+
 ## Support matrix
 
 | Feature | EasyGL | Vulkan | Bgfx |

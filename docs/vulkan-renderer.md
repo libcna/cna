@@ -514,14 +514,15 @@ the right failure, but a game using one of those layouts could not draw at all.
 |---|---|
 | Position + Normal + TexCoord (32 bytes) | ✅ always |
 | Position + Normal (24 bytes) | ✅ since `VULKAN-199` |
-| Position + Normal + Colour + TexCoord (36 bytes) | ❌ refused — `VULKAN-200` |
+| Position + Normal + Colour + TexCoord (36 bytes) | ✅ since `VULKAN-200`, **when lighting is on** |
+| the same 36 bytes with lighting **off** | ❌ refused — `VULKAN-201` |
 | Position + Normal + anything else | ❌ refused |
 | no declaration at all | the stride decides, as before |
 
 The 24-byte case is XNA's own Primitives3D sample, and it is 24 bytes *exactly as
 `VertexPositionColorTexture` is* — which is why the stride cannot decide it and the declaration
 must. The 36-byte case is what the stock `ModelProcessor` emits for a mesh carrying a colour
-channel; no lit program here has a colour input yet.
+channel; `VULKAN-200` gave the lit family a colour input for it. Its **unlit** twin is still refused, and deliberately: the coloured shaders' unlit branch does not clamp `inColor * DiffuseColor` at the vertex the way `colored_textured3d` does since `VULKAN-197`, so routing it there would trade a loud refusal for two unlit coloured draws that disagree about the D3D9 `oD0` saturate purely by stride.
 
 **The rule is set-exact, not "has a Normal".** The layout builder reports a declaration complete
 when every input the *shader consumes* was supplied — it says nothing about a declared element the

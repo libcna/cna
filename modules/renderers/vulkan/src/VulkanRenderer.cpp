@@ -6123,6 +6123,17 @@ namespace CNA::Internal::Renderers::Vulkan
         /// plan_vulkan.md VULKAN-199: lit_untextured3d and its vertex-lit sibling -- float3
         /// position + float3 normal, no uv. XNA's Primitives3D declaration, 24 bytes.
         constexpr StockProgramInput kLitUntextured[] = { kPos, kNormal };
+        /// plan_vulkan.md VULKAN-200: lit_textured3d_color and its vertex-lit sibling -- the
+        /// stock ModelProcessor's colour-carrying mesh, 36 bytes.
+        ///
+        /// The ORDER is the shader's location order, not the record's byte order, and the two
+        /// differ here: the colour sits at byte 24 and the UV at byte 28, while `aUV` is
+        /// location 2 (inherited from the colourless sibling) and `aColor` is location 3.
+        /// `BuildVulkanVertexInputLayoutEXT` assigns `location = index in this table`, so listing
+        /// them the record's way binds the UV's two floats to `aColor` -- measured: the drawn
+        /// pixel became `0.5 * vec4(uv, 0, 1)` at the centre, `(64,64,0)`, which is a plausible
+        /// enough colour to pass a "not lit-but-colourless" check and fail only the exact one.
+        constexpr StockProgramInput kLitColTextured[] = { kPos, kNormal, kUv, kColor };
 
         // VULKAN-147.
         constexpr StockProgramInput kWeights{
@@ -6285,6 +6296,27 @@ namespace CNA::Internal::Renderers::Vulkan
         return sawPosition && sawNormal;
     }
 
+    /// plan_vulkan.md VULKAN-200: is this declaration EXACTLY Position + Normal + Colour +
+    /// TextureCoordinate? Set-exact for the reason DeclarationIsPositionNormalOnlyEXT states --
+    /// `IsComplete()` cannot notice a declared element the shader ignores, so anything looser
+    /// would render a fifth element's worth of meaning away in silence.
+    static bool DeclarationIsPositionNormalColorTextureOnlyEXT(
+        const CNA::Internal::Graphics::DeclaredVertexLayout& declared)
+    {
+        using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+        bool sawPosition = false, sawNormal = false, sawColor = false, sawUv = false;
+        for (const auto& e : declared.GetElements()) {
+            const auto usage = e.getVertexElementUsageProperty();
+            if (e.getUsageIndexProperty() != 0) return false;
+            if (usage == VertexElementUsage::Position)          { sawPosition = true; continue; }
+            if (usage == VertexElementUsage::Normal)            { sawNormal   = true; continue; }
+            if (usage == VertexElementUsage::Color)             { sawColor    = true; continue; }
+            if (usage == VertexElementUsage::TextureCoordinate) { sawUv       = true; continue; }
+            return false;
+        }
+        return sawPosition && sawNormal && sawColor && sawUv;
+    }
+
     // VULKAN-146: which BasicEffect-family program this draw runs, from the stride AND the
     // declaration.
     //
@@ -6296,13 +6328,15 @@ namespace CNA::Internal::Renderers::Vulkan
     // whatever its stride, so ask it. An ABSENT declaration keeps the stride's answer, which is
     // the only thing there is to go on and is what every VertexBuffer(device, count) relies on.
     static BasicProgramShapeEXT SelectBasicProgramShapeEXT(
-        bool useFogTex3D, bool useLitTextured, bool useLitUntextured, std::size_t stride,
+        bool useFogTex3D, bool useLitTextured, bool useLitUntextured, bool useLitColored,
+        std::size_t stride,
         const CNA::Internal::Graphics::DeclaredVertexLayout& declared)
     {
         using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
         // plan_vulkan.md VULKAN-199: asked BEFORE the textured shape, because the two are decided
         // by the caller's own flags and only one of them can be set.
         if (useLitUntextured) return BasicProgramShapeEXT::LitUntextured;
+        if (useLitColored)  return BasicProgramShapeEXT::LitColoredTextured;
         if (useLitTextured) return BasicProgramShapeEXT::LitTextured;
         if (!useFogTex3D)   return BasicProgramShapeEXT::None;
         switch (stride) {
@@ -6396,6 +6430,9 @@ namespace CNA::Internal::Renderers::Vulkan
             case BasicProgramShapeEXT::LitUntextured:
                 countOut = std::size(StockInputs::kLitUntextured);
                 return StockInputs::kLitUntextured;
+            case BasicProgramShapeEXT::LitColoredTextured:
+                countOut = std::size(StockInputs::kLitColTextured);
+                return StockInputs::kLitColTextured;
             case BasicProgramShapeEXT::None:
                 break;
         }
@@ -8095,7 +8132,7 @@ namespace CNA::Internal::Renderers::Vulkan
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
         const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt, const VulkanVertexInputLayoutEXT& vertexLayout,
-        bool untextured, std::size_t recordStride)
+        bool untextured, std::size_t recordStride, bool colored)
     {
         EnsureLitTexturedResources();
 
@@ -8115,15 +8152,26 @@ namespace CNA::Internal::Renderers::Vulkan
         // pc.textureEnabled -- and a vertex stage that either reads a UV or writes zero.
         VkShaderModule vert = untextured
             ? CreateShaderModule(kLitUntextured3dVertSpv, kLitUntextured3dVertSpv_size)
+            : colored
+            ? CreateShaderModule(kLitTextured3dColorVertSpv, kLitTextured3dColorVertSpv_size)
             : CreateShaderModule(kLitTextured3dVertSpv,   kLitTextured3dVertSpv_size);
-        VkShaderModule frag = CreateShaderModule(kLitTextured3dFragSpv, kLitTextured3dFragSpv_size);
+        // plan_vulkan.md VULKAN-200: the per-pixel family needs its own FRAGMENT stage too. FNA
+        // applies the vertex colour to the whole lit bracket, emissive included, and this renderer
+        // carries the material diffuse in fragTint -- so the colour cannot be folded into it.
+        VkShaderModule frag = colored
+            ? CreateShaderModule(kLitTextured3dColorFragSpv, kLitTextured3dColorFragSpv_size)
+            : CreateShaderModule(kLitTextured3dFragSpv,      kLitTextured3dFragSpv_size);
 
         VkVertexInputBindingDescription bind{ 0, static_cast<uint32_t>(kLitStride), VK_VERTEX_INPUT_RATE_VERTEX };
-        VkVertexInputAttributeDescription attrs[3]{};
+        VkVertexInputAttributeDescription attrs[4]{};
         attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0  };   // aPos
         attrs[1] = { 1, 0, VK_FORMAT_R32G32B32_SFLOAT, 12 };   // aNormal
-        attrs[2] = { 2, 0, VK_FORMAT_R32G32_SFLOAT,    24 };   // aUV
-        uint32_t attrCount = untextured ? 2 : 3;
+        // plan_vulkan.md VULKAN-200: the coloured record puts the colour before the UV, so the
+        // UV's canonical offset moves. Only the no-declaration case reads these, and a coloured
+        // lit draw always carries one -- they are the honest default rather than the live answer.
+        attrs[2] = { 2, 0, VK_FORMAT_R32G32_SFLOAT,   colored ? 28u : 24u };   // aUV
+        attrs[3] = { 3, 0, VK_FORMAT_R8G8B8A8_UNORM,  24 };                    // aColor
+        uint32_t attrCount = untextured ? 2u : (colored ? 4u : 3u);
         ApplyDeclaredVertexLayoutEXT(vertexLayout, attrs, attrCount, attrCount);
 
         VkPipelineVertexInputStateCreateInfo vis{};
@@ -8236,7 +8284,7 @@ namespace CNA::Internal::Renderers::Vulkan
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
         const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt, const VulkanVertexInputLayoutEXT& vertexLayout,
-        bool untextured, std::size_t recordStride)
+        bool untextured, std::size_t recordStride, bool colored)
     {
         EnsureLitTexturedResources();
 
@@ -8256,15 +8304,22 @@ namespace CNA::Internal::Renderers::Vulkan
         // vertex stage.
         VkShaderModule vert = untextured
             ? CreateShaderModule(kLitUntextured3dVertexLitVertSpv, kLitUntextured3dVertexLitVertSpv_size)
+            : colored
+            ? CreateShaderModule(kLitTextured3dVertexLitColorVertSpv,
+                                 kLitTextured3dVertexLitColorVertSpv_size)
             : CreateShaderModule(kLitTextured3dVertexLitVertSpv,   kLitTextured3dVertexLitVertSpv_size);
         VkShaderModule frag = CreateShaderModule(kLitTextured3dVertexLitFragSpv, kLitTextured3dVertexLitFragSpv_size);
 
         VkVertexInputBindingDescription bind{ 0, static_cast<uint32_t>(kLitStride), VK_VERTEX_INPUT_RATE_VERTEX };
-        VkVertexInputAttributeDescription attrs[3]{};
+        VkVertexInputAttributeDescription attrs[4]{};
         attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0  };   // aPos
         attrs[1] = { 1, 0, VK_FORMAT_R32G32B32_SFLOAT, 12 };   // aNormal
-        attrs[2] = { 2, 0, VK_FORMAT_R32G32_SFLOAT,    24 };   // aUV
-        uint32_t attrCount = untextured ? 2 : 3;
+        // plan_vulkan.md VULKAN-200: the coloured record puts the colour before the UV, so the
+        // UV's canonical offset moves. Only the no-declaration case reads these, and a coloured
+        // lit draw always carries one -- they are the honest default rather than the live answer.
+        attrs[2] = { 2, 0, VK_FORMAT_R32G32_SFLOAT,   colored ? 28u : 24u };   // aUV
+        attrs[3] = { 3, 0, VK_FORMAT_R8G8B8A8_UNORM,  24 };                    // aColor
+        uint32_t attrCount = untextured ? 2u : (colored ? 4u : 3u);
         ApplyDeclaredVertexLayoutEXT(vertexLayout, attrs, attrCount, attrCount);
 
         VkPipelineVertexInputStateCreateInfo vis{};
@@ -11635,11 +11690,13 @@ namespace CNA::Internal::Renderers::Vulkan
                            ? GetOrCreatePipelineLitTextured3DVertexLit(draw.topology,
                                                             draw.depthTest, draw.depthWrite,
                                                             draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt, draw.vertexLayout,
-                                                            draw.litUntextured, draw.litUntextured ? draw.stride : 0)
+                                                            draw.litUntextured, (draw.litUntextured || draw.litColored) ? draw.stride : 0,
+                                                            draw.litColored)
                            : GetOrCreatePipelineLitTextured3D(draw.topology,
                                                             draw.depthTest, draw.depthWrite,
                                                             draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt, draw.vertexLayout,
-                                                            draw.litUntextured, draw.litUntextured ? draw.stride : 0);
+                                                            draw.litUntextured, (draw.litUntextured || draw.litColored) ? draw.stride : 0,
+                                                            draw.litColored);
                 } else if (draw.useFogTex3D) {
                     // Task 899: colored3d / textured3d / colored_textured3d fog-capable bundle.
                     // VULKAN-146: which of the three is `draw.basicShape`, decided at draw time
@@ -14038,12 +14095,21 @@ namespace CNA::Internal::Renderers::Vulkan
         // DeclarationIsPositionNormalOnlyEXT for the silent drop the loose form would allow.
         const bool needsLitUntextured = !vb.GetDeclarationEXT().IsEmpty() && !otherFamily
                                       && DeclarationIsPositionNormalOnlyEXT(vb.GetDeclarationEXT());
+        // plan_vulkan.md VULKAN-200 (F-37): the stock ModelProcessor's colour-carrying mesh --
+        // Position+Normal+Colour+TexCoord, 36 bytes -- which no lit program here could bind, so
+        // the draw was refused outright. Set-exact for the same reason as its sibling above.
+        const bool needsLitColored = !vb.GetDeclarationEXT().IsEmpty() && !otherFamily
+                                   && !needsLitUntextured && params.lightingEnabled
+                                   && DeclarationIsPositionNormalColorTextureOnlyEXT(
+                                          vb.GetDeclarationEXT());
         const bool needsLitTextured = (stride == 32) && declaresNormal && !otherFamily
-                                     && !needsLitUntextured;
-        const bool usesFogTex3D = !otherFamily && !needsLitTextured && !needsLitUntextured;
+                                     && !needsLitUntextured && !needsLitColored;
+        const bool usesFogTex3D = !otherFamily && !needsLitTextured && !needsLitUntextured
+                                && !needsLitColored;
 
         const BasicProgramShapeEXT basicShape = SelectBasicProgramShapeEXT(
-            usesFogTex3D, needsLitTextured, needsLitUntextured, stride, vb.GetDeclarationEXT());
+            usesFogTex3D, needsLitTextured, needsLitUntextured, needsLitColored, stride,
+            vb.GetDeclarationEXT());
         VulkanVertexInputLayoutEXT declaredLayout;
         {
             std::size_t inputCount = 0;
@@ -14147,8 +14213,9 @@ namespace CNA::Internal::Renderers::Vulkan
             RequireBoneIndexFormatEXT();
         // plan_vulkan.md VULKAN-199: one family, two vertex stages. The replay asks
         // `litUntextured` for which module to bind and which attributes to describe.
-        d.useLitTextured = needsLitTextured || needsLitUntextured;
+        d.useLitTextured = needsLitTextured || needsLitUntextured || needsLitColored;
         d.litUntextured  = needsLitUntextured;
+        d.litColored     = needsLitColored;
         // VULKAN-146: taken at DRAW time, above, because the record is replayed at Present(), by
         // which point the buffer may carry a different declaration entirely.
         d.vertexLayout = declaredLayout;
@@ -14295,7 +14362,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // descriptor set, same UBO, same fragment stage -- so it takes this arm too. Gating
         // it on needsLitTextured alone bound a pipeline that statically uses set 0 with no
         // set bound at all, which the validation layer named at the first draw.
-        } else if (needsLitTextured || needsLitUntextured) {
+        } else if (needsLitTextured || needsLitUntextured || needsLitColored) {
             EnsureLitTexturedResources();
             const auto* vs = dynamic_cast<const IVulkanSamplable*>(params.texture0);
             VkImageView view = vs ? vs->GetVkImageView() : defaultWhiteView_;
@@ -14414,12 +14481,21 @@ namespace CNA::Internal::Renderers::Vulkan
         // DeclarationIsPositionNormalOnlyEXT for the silent drop the loose form would allow.
         const bool needsLitUntextured = !vb.GetDeclarationEXT().IsEmpty() && !otherFamily
                                       && DeclarationIsPositionNormalOnlyEXT(vb.GetDeclarationEXT());
+        // plan_vulkan.md VULKAN-200 (F-37): the stock ModelProcessor's colour-carrying mesh --
+        // Position+Normal+Colour+TexCoord, 36 bytes -- which no lit program here could bind, so
+        // the draw was refused outright. Set-exact for the same reason as its sibling above.
+        const bool needsLitColored = !vb.GetDeclarationEXT().IsEmpty() && !otherFamily
+                                   && !needsLitUntextured && params.lightingEnabled
+                                   && DeclarationIsPositionNormalColorTextureOnlyEXT(
+                                          vb.GetDeclarationEXT());
         const bool needsLitTextured = (stride == 32) && declaresNormal && !otherFamily
-                                     && !needsLitUntextured;
-        const bool usesFogTex3D = !otherFamily && !needsLitTextured && !needsLitUntextured;
+                                     && !needsLitUntextured && !needsLitColored;
+        const bool usesFogTex3D = !otherFamily && !needsLitTextured && !needsLitUntextured
+                                && !needsLitColored;
 
         const BasicProgramShapeEXT basicShape = SelectBasicProgramShapeEXT(
-            usesFogTex3D, needsLitTextured, needsLitUntextured, stride, vb.GetDeclarationEXT());
+            usesFogTex3D, needsLitTextured, needsLitUntextured, needsLitColored, stride,
+            vb.GetDeclarationEXT());
         VulkanVertexInputLayoutEXT declaredLayout;
         {
             std::size_t inputCount = 0;
@@ -14524,8 +14600,9 @@ namespace CNA::Internal::Renderers::Vulkan
             RequireBoneIndexFormatEXT();
         // plan_vulkan.md VULKAN-199: one family, two vertex stages. The replay asks
         // `litUntextured` for which module to bind and which attributes to describe.
-        d.useLitTextured = needsLitTextured || needsLitUntextured;
+        d.useLitTextured = needsLitTextured || needsLitUntextured || needsLitColored;
         d.litUntextured  = needsLitUntextured;
+        d.litColored     = needsLitColored;
         // VULKAN-146: taken at DRAW time, above, because the record is replayed at Present(), by
         // which point the buffer may carry a different declaration entirely.
         d.vertexLayout = declaredLayout;
@@ -14671,7 +14748,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // descriptor set, same UBO, same fragment stage -- so it takes this arm too. Gating
         // it on needsLitTextured alone bound a pipeline that statically uses set 0 with no
         // set bound at all, which the validation layer named at the first draw.
-        } else if (needsLitTextured || needsLitUntextured) {
+        } else if (needsLitTextured || needsLitUntextured || needsLitColored) {
             EnsureLitTexturedResources();
             const auto* vs = dynamic_cast<const IVulkanSamplable*>(params.texture0);
             VkImageView view = vs ? vs->GetVkImageView() : defaultWhiteView_;

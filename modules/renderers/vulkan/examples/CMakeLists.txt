@@ -252,6 +252,23 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_basiceffect_default_lighting
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-200 (F-37): the stock ModelProcessor's colour-carrying mesh --
+        # Position+Normal+Colour+TexCoord, 36 bytes -- which no lit program here could bind. The
+        # second registration is not a duplicate: EasyGL's source sets PreferPerPixelLighting(false)
+        # in its own body, so it exercises one of the two lit families and says nothing about the
+        # other, whose vertex-colour handling is a different shape rather than the same one moved.
+        cna_vulkan_test(cna_test_vulkan_basiceffect_lit_vertex_color
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_basiceffect_lit_vertex_color_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_BasicEffectLitVertexColor
+            COMMAND cna_test_vulkan_basiceffect_lit_vertex_color
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_basiceffect_lit_vertex_color_perpixel
+                        ${CMAKE_SOURCE_DIR}/modules/graphics/examples/basiceffect_lit_vertex_color_perpixel_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_BasicEffect_LitVertexColorPerPixel
+            COMMAND cna_test_vulkan_basiceffect_lit_vertex_color_perpixel
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-199 (F-37): XNA's Primitives3D vertex is Position+Normal, 24 bytes
         # -- the same stride as VertexPositionColorTexture -- and BasicEffect must light it. This
         # renderer refused it outright until the lit family gained a UV-less vertex stage.

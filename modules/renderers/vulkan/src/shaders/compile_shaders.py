@@ -169,6 +169,14 @@ def main():
         # zero fragUV. Vulkan cannot default an absent vertex attribute, which is why they exist.
         ("lit_untextured3d.vert.glsl",           VERTEX_SHADER, "kLitUntextured3dVertSpv"),
         ("lit_untextured3d_vertexlit.vert.glsl", VERTEX_SHADER, "kLitUntextured3dVertexLitVertSpv"),
+        # plan_vulkan.md VULKAN-200: the vertex-colour variants. The per-VERTEX one needs no new
+        # fragment stage -- FNA multiplies the colour into vout.Diffuse ahead of oD0, so fragLitRGB
+        # already carries what the existing fragment stage expects. The per-PIXEL one does, because
+        # FNA applies the colour to the whole lit bracket in the pixel shader instead.
+        ("lit_textured3d_vertexlit_color.vert.glsl", VERTEX_SHADER,
+         "kLitTextured3dVertexLitColorVertSpv"),
+        ("lit_textured3d_color.vert.glsl",       VERTEX_SHADER,   "kLitTextured3dColorVertSpv"),
+        ("lit_textured3d_color.frag.glsl",       FRAGMENT_SHADER, "kLitTextured3dColorFragSpv"),
         # AlphaTestEffect pipeline — single VS handles stride 20/32 via attribute remapping
         ("alpha_test3d.vert.glsl",       VERTEX_SHADER,   "kAlphaTest3dVertSpv"),
         ("alpha_test3d.frag.glsl",       FRAGMENT_SHADER, "kAlphaTest3dFragSpv"),
