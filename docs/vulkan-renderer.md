@@ -140,7 +140,7 @@ zero and the honest expectation is that it stays zero.
 lighting term in a different order will differ in the last bits, and a policy that forbade it would
 be a policy against having the test.
 
-**The open half**, which `VULKAN-170` owns: nothing measures how much of each tolerance is actually
+**The open half**, which `VULKAN-185` owns: nothing measures how much of each tolerance is actually
 being *used*. The diagnostic script proves its own tolerance is idle by re-running at `--tolerance
 2`; a golden CTest prints only pass or fail, so a scene that quietly drifted from a max difference
 of 2 to 59 under a tolerance of 60 would still say `[PASS]`.

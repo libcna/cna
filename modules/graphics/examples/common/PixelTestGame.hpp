@@ -220,7 +220,7 @@ namespace CNA::Examples
                 return std::abs(a - b) <= tolerance;
             };
 
-            // plans/plan_vulkan.md VULKAN-170: how much of the tolerance this comparison actually
+            // plans/plan_vulkan.md VULKAN-185: how much of the tolerance this comparison actually
             // used. A golden CTest that prints only pass or fail cannot tell "identical" from "one
             // step inside the limit", so a scene that drifts from a max difference of 2 to 59 under
             // a tolerance of 60 goes on saying [PASS] until the day it does not. The number is on
