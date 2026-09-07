@@ -2383,6 +2383,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_presentation_parameters
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-190: GetData on a multisampled target that is STILL BOUND -- every
+        # other MSAA test here reads after the unbind, which is the case that cannot fail this way.
+        cna_vulkan_test(cna_test_vulkan_bound_msaa_readback
+                        vulkan_bound_msaa_readback_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_BoundMsaaReadback
+            COMMAND cna_test_vulkan_bound_msaa_readback
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-189: how EmissiveColor composes into the lit result. Renderer-
         # agnostic source; this renderer had emissive tests but nothing pinning the composition.
         cna_vulkan_test(cna_test_vulkan_emissive_ambient_composition
