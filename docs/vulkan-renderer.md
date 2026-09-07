@@ -179,9 +179,10 @@ SPIR-V payloads that exercise the same capabilities:
 | A 3D draw with the caller's own vertex layout | `Vulkan_ShaderEffect_3D` — a 48-byte five-element declaration |
 | Multiple render targets from a custom shader | `Vulkan_MRT_MsaaResolve` — a four-output `ShaderEffect` |
 
-Two capabilities in that family are **not** available here and say so rather than approximating:
-an instanced draw with a custom effect is refused by name (`VULKAN-168`), and the shader source
-itself is never translated (`plans/plan_csl.md`).
+One capability in that family is **not** available here and says so rather than approximating: the
+shader source itself is never translated (`plans/plan_csl.md`). An instanced draw with a custom
+effect was refused by name until `VULKAN-168`; it works now, and `Vulkan_ShaderEffect_3D` leg E
+covers it.
 
 ### Writing a `ShaderEffect` for this renderer
 
@@ -199,7 +200,12 @@ itself is never translated (`plans/plan_csl.md`).
   writes them the same way, so `float uWeights[72]` reads element *i* where it was written.
 - **A 3D draw** binds the buffer's own `VertexDeclaration`, with attribute location = the
   element's index in that declaration (EasyGL's convention for a custom program). A buffer with no
-  declaration is refused: a custom shader's inputs cannot be inferred from a stride.
+  declaration is refused: a custom shader's inputs cannot be inferred from a stride. A
+  **per-instance** stream continues at the locations after the mesh declaration's element count,
+  from binding 1 — the same rule EasyGL's own instanced custom-shader path states. Note that every
+  element the declaration carries becomes an attribute, so a shader that *ignores* one makes the
+  validation layer warn that it is not consumed: only SPIR-V reflection could tell which elements
+  a shader reads, and this renderer does not do it.
 - **The transform** arrives in `uMatrix`, column-major, from the effect's `IEffectMatrices`
   properties — unless the game called `SetUniformMat4` itself, in which case the game's matrix
   stands.

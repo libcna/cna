@@ -5774,11 +5774,13 @@ namespace CNA::Internal::Renderers::Vulkan
         // VULKAN-255: a 3D draw brings four more things a sprite batch never varies. They stay
         // zero for a sprite pipeline, so the two families cannot collide in this one cache.
         if (three != nullptr) {
-            key.vertexStride     = three->stride;
-            key.vertexLayoutHash = three->layout.Hash();
-            key.topology         = static_cast<uint32_t>(three->topology);
-            key.cullMode         = three->cullMode;
-            key.wireframe        = three->wireframe;
+            key.vertexStride       = three->stride;
+            key.vertexLayoutHash   = three->layout.Hash();
+            key.topology           = static_cast<uint32_t>(three->topology);
+            key.cullMode           = three->cullMode;
+            key.wireframe          = three->wireframe;
+            key.instanceStride     = three->instanceStride;
+            key.instanceLayoutHash = three->instanceLayout.Hash();
         }
         auto cached = pipelines_.find(key);
         if (cached != pipelines_.end()) return cached->second;
@@ -5815,10 +5817,27 @@ namespace CNA::Internal::Renderers::Vulkan
         vertexInput.pVertexAttributeDescriptions = attributes;
         // VULKAN-255: the caller's own declaration, one attribute per element, location = the
         // element's index in it -- the convention EasyGL's custom-program path established.
+        // VULKAN-168: and the per-instance stream at binding 1, whose attributes continue at the
+        // locations after the per-vertex ones -- EasyGL's own convention for a custom shader.
+        std::array<VkVertexInputBindingDescription, 2> bindings{};
+        std::vector<VkVertexInputAttributeDescription> attrs3D;
         if (three != nullptr) {
-            binding = { 0, three->stride, VK_VERTEX_INPUT_RATE_VERTEX };
-            vertexInput.vertexAttributeDescriptionCount = three->layout.attributeCount;
-            vertexInput.pVertexAttributeDescriptions = three->layout.attributes.data();
+            bindings[0] = { 0, three->stride, VK_VERTEX_INPUT_RATE_VERTEX };
+            uint32_t bindingCount = 1;
+            attrs3D.assign(three->layout.attributes.begin(),
+                           three->layout.attributes.begin() + three->layout.attributeCount);
+            if (three->instanceStride > 0 && three->instanceLayout.attributeCount > 0) {
+                bindings[1] = { 1, three->instanceStride, VK_VERTEX_INPUT_RATE_INSTANCE };
+                bindingCount = 2;
+                attrs3D.insert(attrs3D.end(), three->instanceLayout.attributes.begin(),
+                               three->instanceLayout.attributes.begin() +
+                                   three->instanceLayout.attributeCount);
+            }
+            vertexInput.vertexBindingDescriptionCount = bindingCount;
+            vertexInput.pVertexBindingDescriptions = bindings.data();
+            vertexInput.vertexAttributeDescriptionCount =
+                static_cast<uint32_t>(attrs3D.size());
+            vertexInput.pVertexAttributeDescriptions = attrs3D.data();
         }
 
         VkPipelineInputAssemblyStateCreateInfo assembly{};
@@ -13634,7 +13653,9 @@ namespace CNA::Internal::Renderers::Vulkan
         const IVertexBufferRenderer& vb_in,
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
-        const void* indexData, std::size_t indexBytes, VkIndexType indexType)
+        const void* indexData, std::size_t indexBytes, VkIndexType indexType,
+        const IVertexBufferRenderer* instVb_in, int instanceVertexOffset,
+        int instanceFrequency, int instanceCount)
     {
         const auto& vb = static_cast<const VulkanVertexBufferRenderer&>(vb_in);
         const std::size_t stride = vb.GetStride();
@@ -13671,6 +13692,33 @@ namespace CNA::Internal::Renderers::Vulkan
             throw System::NotSupportedException(
                 "CNA Vulkan: the VertexDeclaration driving a ShaderEffect declares no elements. "
                 "Refused rather than drawing with no vertex input.");
+
+        // VULKAN-168: the per-instance stream, when there is one. Its locations continue after the
+        // per-vertex declaration's element count -- EasyGL's convention, so one shader source can
+        // describe both renderers' inputs -- and it is fetched from binding 1 at instance rate.
+        VulkanVertexInputLayoutEXT instanceLayout;
+        std::size_t instanceStride = 0;
+        const VulkanVertexBufferRenderer* instVb = nullptr;
+        if (instVb_in != nullptr) {
+            instVb = static_cast<const VulkanVertexBufferRenderer*>(instVb_in);
+            instanceStride = instVb->GetStride();
+            const CNA::Internal::Graphics::DeclaredVertexLayout& instDeclared =
+                instVb->GetDeclarationEXT();
+            if (instDeclared.IsEmpty())
+                throw System::NotSupportedException(
+                    "CNA Vulkan: the per-instance VertexBuffer driving a ShaderEffect carries no "
+                    "VertexDeclaration, so there is nothing to say where its attributes are. "
+                    "Refused rather than guessing from its stride.");
+            instanceLayout = BuildCustomEffectVertexInputLayoutEXT(
+                instDeclared,
+                static_cast<std::uint32_t>(declared.GetElements().size()), 1u);
+            if (instanceLayout.unrepresentableInputMask != 0 ||
+                instanceLayout.attributeCount == 0)
+                throw System::NotSupportedException(
+                    "CNA Vulkan: the per-instance VertexDeclaration driving a ShaderEffect names an "
+                    "element format this renderer has no VkFormat for, or no elements at all. "
+                    "Refused rather than dropping the attribute.");
+        }
 
         Pending3DDraw d{};
         d.rt        = currentRT_;
@@ -13717,6 +13765,35 @@ namespace CNA::Internal::Renderers::Vulkan
         // them: a matrix set through SetUniformMat4 lands at floats [4..19] in both. This path
         // deliberately does NOT write the stock MVP into it -- a custom shader owns its own
         // transform, and overwriting a slot the game set would be the silent kind of surprise.
+        // VULKAN-168: one destination record per instance, expanding InstanceFrequency here the
+        // way the stock instanced route does -- Vulkan 1.1 with no divisor extension keeps binding
+        // 1 at the implicit divisor of 1, so the grouping is a data-copy concern.
+        if (instVb != nullptr && instanceStride > 0) {
+            const int count = std::max(1, instanceCount);
+            const int frequency = std::max(1, instanceFrequency);
+            const int lastRecord = instanceVertexOffset + (count - 1) / frequency;
+            if (instanceVertexOffset < 0 || lastRecord >= instVb->GetVertexCount())
+                throw System::NotSupportedException(
+                    "CNA Vulkan: an instanced ShaderEffect draw needs per-instance record " +
+                    std::to_string(lastRecord) + ", and its buffer holds " +
+                    std::to_string(instVb->GetVertexCount()) +
+                    ". Refused rather than reading past the buffer.");
+            d.useInstanced   = true;
+            d.instVbStride   = instanceStride;
+            d.instanceCount  = static_cast<uint32_t>(count);
+            d.instVbData.resize(static_cast<std::size_t>(count) * instanceStride);
+            const auto* src = static_cast<const uint8_t*>(instVb->GetMappedPtr()) +
+                              static_cast<std::size_t>(instanceVertexOffset) * instanceStride;
+            if (frequency == 1) {
+                std::memcpy(d.instVbData.data(), src, d.instVbData.size());
+            } else {
+                for (int i = 0; i < count; ++i)
+                    std::memcpy(d.instVbData.data() + static_cast<std::size_t>(i) * instanceStride,
+                                src + static_cast<std::size_t>(i / frequency) * instanceStride,
+                                instanceStride);
+            }
+        }
+
         std::memcpy(d.pushConst, fx->GetPushConst(), sizeof(d.pushConst));
         // A 3D draw arrives with the world, view and projection the effect's own IEffectMatrices
         // properties carry. EasyGL delivers them to a custom shader by NAME, which needs
@@ -13758,6 +13835,8 @@ namespace CNA::Internal::Renderers::Vulkan
         three.topology  = d.topology;
         three.cullMode  = d.cullMode;
         three.wireframe = d.wireframe;
+        three.instanceLayout = instanceLayout;
+        three.instanceStride = static_cast<uint32_t>(instanceStride);
         d.customPipeline = fx->GetOrCreatePipeline3DEXT(three, nColor, samples, depthFmt,
                                                         d.blend, d.blendParams, d.dsParams,
                                                         d.depthTest, d.depthWrite);
@@ -14547,16 +14626,21 @@ namespace CNA::Internal::Renderers::Vulkan
         const std::size_t pvStride   = vb.GetStride() > 0 ? vb.GetStride() : 20;
         const std::size_t instStride = instVb.GetStride() > 0 ? instVb.GetStride() : 64;
         const uint32_t indexCount    = static_cast<uint32_t>(VertexCountForPrimitives(primitive, primitiveCount));
-        // plan_vulkan.md VULKAN-255: the instanced route is NOT covered by that row's custom-effect
-        // support -- an instanced draw brings a second vertex binding at a per-instance rate, which
-        // the custom pipeline's single binding cannot describe. Refused by name, because the
-        // alternative is drawing a game's own shader's geometry with a stock program.
-        if (params.customEffectRequested)
-            throw System::NotSupportedException(
-                "CNA Vulkan: DrawInstancedPrimitives with a ShaderEffect is not supported by this "
-                "renderer. A custom effect drives an ordinary or indexed 3D draw (VULKAN-255); the "
-                "instanced route needs a per-instance vertex binding the custom pipeline does not "
-                "declare. Refused rather than drawing with a stock shader instead.");
+        // plan_vulkan.md VULKAN-168: `VULKAN-255` refused this combination because the custom
+        // pipeline declared one vertex binding; it declares two now, the second at instance rate
+        // with its own declaration's attributes continuing after the mesh's. Same hook position and
+        // same reason as the other two routes -- before the stock declaration guard.
+        if (params.customEffectRequested) {
+            const int indexSize2 = ib.IsThirtyTwoBit() ? 4 : 2;
+            QueueCustomEffect3DDrawEXT(
+                vb_in, world, view, projection, primitive, primitiveCount, params,
+                static_cast<const uint8_t*>(ib.GetMappedPtr()) + params.startIndex * indexSize2,
+                static_cast<std::size_t>(indexCount) * static_cast<std::size_t>(indexSize2),
+                ib.IsThirtyTwoBit() ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16,
+                instanceStream->buffer, instanceStream->vertexOffset,
+                instanceStream->instanceFrequency, instanceCount);
+            return;
+        }
         const int vertexCount        = vb.GetVertexCount();
         const int instCountClamped   = std::max(1, instanceCount);
 

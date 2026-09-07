@@ -539,6 +539,11 @@ namespace CNA::Internal::Renderers::Vulkan
             VkPrimitiveTopology topology  = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
             int                 cullMode  = 0;
             bool                wireframe = false;
+            /// plan_vulkan.md VULKAN-168: the per-instance stream, at binding 1 with
+            /// VK_VERTEX_INPUT_RATE_INSTANCE. `instanceStride` of 0 means there is none, which is
+            /// every ordinary and indexed draw.
+            VulkanVertexInputLayoutEXT instanceLayout{};
+            uint32_t            instanceStride = 0;
         };
         VkPipeline GetOrCreatePipeline(uint32_t colorAttachmentCount,
                                        VkSampleCountFlagBits sampleCount,
@@ -707,6 +712,9 @@ namespace CNA::Internal::Renderers::Vulkan
             /// pipeline, so the two families cannot collide in one cache.
             uint32_t vertexStride = 0;
             uint64_t vertexLayoutHash = 0;
+            /// VULKAN-168: the per-instance stream's stride and attribute set, zero without one.
+            uint32_t instanceStride = 0;
+            uint64_t instanceLayoutHash = 0;
             uint32_t topology = 0;
             int32_t  cullMode = 0;
             bool     wireframe = false;
@@ -725,6 +733,8 @@ namespace CNA::Internal::Renderers::Vulkan
                 h ^= std::hash<uint32_t>{}(key.sampleMask) + (h << 6) + (h >> 2);
                 h ^= std::hash<uint32_t>{}(key.vertexStride) + (h << 6) + (h >> 2);
                 h ^= std::hash<uint64_t>{}(key.vertexLayoutHash) + (h << 6) + (h >> 2);
+                h ^= std::hash<uint32_t>{}(key.instanceStride) + (h << 6) + (h >> 2);
+                h ^= std::hash<uint64_t>{}(key.instanceLayoutHash) + (h << 6) + (h >> 2);
                 h ^= std::hash<uint32_t>{}(key.topology) + (h << 6) + (h >> 2);
                 h ^= std::hash<int32_t>{}(key.cullMode) + (h << 6) + (h >> 2);
                 return h;
@@ -3434,7 +3444,11 @@ namespace CNA::Internal::Renderers::Vulkan
                                         PrimitiveType primitive, int primitiveCount,
                                         const GpuDrawParams& params,
                                         const void* indexData, std::size_t indexBytes,
-                                        VkIndexType indexType);
+                                        VkIndexType indexType,
+                                        const IVertexBufferRenderer* instVb_in = nullptr,
+                                        int instanceVertexOffset = 0,
+                                        int instanceFrequency = 1,
+                                        int instanceCount = 1);
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
         [[nodiscard]] VkPipeline GetOrCreateCompiledEffectPipelineEXT(
             const Pending3DDraw& draw, uint32_t colorAttachmentCount, bool msaa,

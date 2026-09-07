@@ -179,11 +179,20 @@ namespace CNA::Internal::Renderers::Vulkan
      * zero here -- a custom shader's inputs are not enumerable, so "the declaration did not supply
      * input N" is not a question this can ask.
      *
-     * @param declared The declaration the buffer carries; an empty one yields an empty layout.
+     * plans/plan_vulkan.md `VULKAN-168` adds the second stream: a per-instance declaration is
+     * built with @p firstLocation set past the per-vertex stream's element count and @p binding 1,
+     * because EasyGL's own instanced custom-shader path continues the locations *"immediately
+     * after the mesh declaration"*. One convention, two renderers.
+     *
+     * @param declared      The declaration the buffer carries; an empty one yields an empty layout.
+     * @param firstLocation Location of the declaration's first element.
+     * @param binding       Vertex binding these attributes are fetched from.
      * @return The layout.
      */
     [[nodiscard]] inline VulkanVertexInputLayoutEXT BuildCustomEffectVertexInputLayoutEXT(
-        const CNA::Internal::Graphics::DeclaredVertexLayout& declared)
+        const CNA::Internal::Graphics::DeclaredVertexLayout& declared,
+        std::uint32_t firstLocation = 0,
+        std::uint32_t binding = 0)
     {
         using Microsoft::Xna::Framework::Graphics::VertexElement;
 
@@ -191,21 +200,22 @@ namespace CNA::Internal::Renderers::Vulkan
         if (declared.IsEmpty()) return layout;
         layout.empty = false;
 
-        std::uint32_t location = 0;
+        std::uint32_t index = 0;
         for (const VertexElement& e : declared.GetElements())
         {
+            const std::uint32_t location = firstLocation + index;
             if (location >= VulkanVertexInputLayoutEXT::kMaxAttributes) break;
             const VkFormat format = VertexElementFormatToVk(e.getVertexElementFormatProperty());
             if (format == VK_FORMAT_UNDEFINED) {
                 layout.unrepresentableInputMask |= (1u << location);
-                ++location;
+                ++index;
                 continue;
             }
             layout.attributes[layout.attributeCount++] = {
-                location, 0, format,
+                location, binding, format,
                 static_cast<std::uint32_t>(e.getOffsetProperty())
             };
-            ++location;
+            ++index;
         }
         return layout;
     }
