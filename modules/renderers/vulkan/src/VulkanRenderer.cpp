@@ -6194,6 +6194,8 @@ namespace CNA::Internal::Renderers::Vulkan
         constexpr StockProgramInput kInstanced[]        = { kPos };
         /// instanced_colored3d, REMED-GFX-212's position+colour sibling.
         constexpr StockProgramInput kInstancedColored[] = { kPos, kColor };
+        /// VULKAN-217. instanced_textured3d: the one instanced variant that samples.
+        constexpr StockProgramInput kInstancedTextured[] = { kPos, kUv };
     }
 
     // VULKAN-146: swap a factory's baked attribute array for the declaration-derived one when the
@@ -6564,7 +6566,8 @@ namespace CNA::Internal::Renderers::Vulkan
     // separate stream at locations 4..7 on binding 1, appended by the factory afterwards, and
     // `MultiStreamVertexInput` stays false.
     static VulkanVertexInputLayoutEXT BuildInstancedVertexLayoutEXT(
-        const CNA::Internal::Graphics::DeclaredVertexLayout& declared)
+        const CNA::Internal::Graphics::DeclaredVertexLayout& declared,
+        bool wantTextured)
     {
         if (declared.IsEmpty()) return {};
         const bool wantColored = DeclarationNamesUsageEXT(
@@ -6574,6 +6577,13 @@ namespace CNA::Internal::Renderers::Vulkan
         if (wantColored) {
             inputs     = StockInputs::kInstancedColored;
             inputCount = std::size(StockInputs::kInstancedColored);
+        } else if (wantTextured) {
+            // VULKAN-217: `wantTextured` is the EFFECT's TextureEnabled ANDed with the declaration
+            // naming a TextureCoordinate, decided by the caller. Both halves are load-bearing: a
+            // declaration alone would multiply an unwanted texture into a draw that asked for none,
+            // and TextureEnabled alone would bind a UV attribute the buffer does not supply.
+            inputs     = StockInputs::kInstancedTextured;
+            inputCount = std::size(StockInputs::kInstancedTextured);
         } else {
             inputs     = StockInputs::kInstanced;
             inputCount = std::size(StockInputs::kInstanced);
@@ -10684,7 +10694,7 @@ namespace CNA::Internal::Renderers::Vulkan
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
         const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt,
-        const VulkanVertexInputLayoutEXT& vertexLayout)
+        const VulkanVertexInputLayoutEXT& vertexLayout, bool textured)
     {
         // Ensure pipelineLayoutExt3D_ exists (128-byte PC + 1 descriptor set for future texture use).
         if (pipelineLayoutExt3D_ == VK_NULL_HANDLE) {
@@ -10704,6 +10714,12 @@ namespace CNA::Internal::Renderers::Vulkan
         PipelineKey key = { FoldPerVertexStrideIntoKey(FoldDepthFormatIntoKey(MakeExt3DKey(pvStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), pvStride), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), NarrowSampleMaskEXT(blendParams.sampleMask, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa))), vertexLayout.Hash() };
         // VULKAN-216: the sample count is part of this pipeline's identity, not just of its render pass.
         key.ms = static_cast<uint32_t>(RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
+        // VULKAN-217: the textured variant is a DIFFERENT pipeline -- different shaders and a
+        // different attribute set -- so it needs its own identity. Folded into the layout hash,
+        // which is already part of the key, rather than widening PipelineKey: a textured draw
+        // always carries a UV attribute the plain one does not, so the two hashes differ anyway;
+        // this makes that explicit instead of relying on it.
+        if (textured) key.vl ^= 0x9E3779B97F4A7C15ull;
         auto it = pipelinesInstanced3D_.find(key);
         if (it != pipelinesInstanced3D_.end()) return it->second;
 
@@ -10715,17 +10731,26 @@ namespace CNA::Internal::Renderers::Vulkan
         // programs, and the shape is read back off the layout it produced -- one attribute is
         // instanced3d, two is instanced_colored3d. There is no third shape, so nothing else can
         // be meant. Without a usable declaration the stride table answers, exactly as before.
-        const bool hasPackedColor = vertexLayout.IsComplete()
+        const bool hasPackedColor = !textured && (vertexLayout.IsComplete()
             ? vertexLayout.attributeCount == std::size(StockInputs::kInstancedColored)
-            : PackedColorOffsetForStride(pvStride, packedColorOffset);
-        VkShaderModule vert = hasPackedColor
-            ? CreateShaderModule(kInstancedColored3dVertSpv, kInstancedColored3dVertSpv_size)
-            : CreateShaderModule(kInstanced3dVertSpv, kInstanced3dVertSpv_size);
+            : PackedColorOffsetForStride(pvStride, packedColorOffset));
+        // VULKAN-217: `textured` wins over the colour shape rather than combining with it. There is
+        // no instanced_colored_textured3d program, so a declaration carrying both would otherwise
+        // pick the coloured shader and drop the texture again -- the very defect this row closes.
+        // BuildInstancedVertexLayoutEXT makes the same choice in the same order, so the attribute
+        // set and the shader cannot disagree.
+        VkShaderModule vert = textured
+            ? CreateShaderModule(kInstancedTextured3dVertSpv, kInstancedTextured3dVertSpv_size)
+            : (hasPackedColor
+                ? CreateShaderModule(kInstancedColored3dVertSpv, kInstancedColored3dVertSpv_size)
+                : CreateShaderModule(kInstanced3dVertSpv, kInstanced3dVertSpv_size));
         // Task 899: dedicated FS (was: reuse kColored3dFragSpv) -- colored3d.frag.glsl now
         // declares a 2nd descriptor binding (fog UBO) as part of the shared colored3d/textured3d/
         // colored_textured3d bundle, incompatible with Instanced3D's unmodified 1-binding layout.
         // Both VS variants emit the same single `location = 0` vec4, so they share it unchanged.
-        VkShaderModule frag = CreateShaderModule(kInstanced3dFragSpv, kInstanced3dFragSpv_size);
+        VkShaderModule frag = textured
+            ? CreateShaderModule(kInstancedTextured3dFragSpv, kInstancedTextured3dFragSpv_size)
+            : CreateShaderModule(kInstanced3dFragSpv, kInstanced3dFragSpv_size);
 
         // Two vertex bindings: binding=0 per-vertex (VERTEX rate), binding=1 per-instance (INSTANCE rate).
         constexpr uint32_t kInstStride = 64; // sizeof(mat4)
@@ -10740,6 +10765,13 @@ namespace CNA::Internal::Renderers::Vulkan
         // per-instance columns keep locations 4..7, so this can never collide with them.
         if (hasPackedColor)
             attrs[attrCount++] = { 1, 0, VK_FORMAT_R8G8B8A8_UNORM, packedColorOffset }; // aColor
+        // VULKAN-217: the textured variant's aUV, at location 1 for the same reason aColor is --
+        // it is index 1 of StockInputs::kInstancedTextured. The offset below is the fallback for a
+        // draw with no usable declaration; when there IS one, ApplyDeclaredLayout overwrites every
+        // per-vertex attribute from index 0 a few lines down, so this value is never the one used
+        // on the path this row's test exercises.
+        else if (textured)
+            attrs[attrCount++] = { 1, 0, VK_FORMAT_R32G32_SFLOAT, 12 }; // aUV
         // VULKAN-149: and the declaration's own offsets and formats replace the two above when it
         // supplied them. Applied here, before the per-instance columns are appended, because the
         // applicator overwrites from index 0 and resets the count -- binding 1's attributes are
@@ -11696,7 +11728,8 @@ namespace CNA::Internal::Renderers::Vulkan
                 } else if (draw.useInstanced) {
                     pipe = GetOrCreatePipelineInstanced3D(draw.stride, draw.topology,
                                                           draw.depthTest, draw.depthWrite,
-                                                          draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt, draw.vertexLayout);
+                                                          draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt, draw.vertexLayout,
+                                                          draw.instancedTextured);
                 } else if (draw.useLitTextured) {
                     // Task 1103: same rationale as useSkinned above.
                     pipe = draw.preferVertexLit
@@ -11904,6 +11937,21 @@ namespace CNA::Internal::Renderers::Vulkan
                     vkCmdPushConstants(cb, pipelineLayoutExt3D_,
                                        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
                                        0, 128, draw.pushConst);
+                    // VULKAN-217: this branch pushed constants and bound nothing, which was
+                    // consistent while every instanced fragment shader declared no descriptor --
+                    // instanced_textured3d.frag.glsl does, and the layer said so by name
+                    // ("statically uses descriptor set 0, but set 0 is not compatible ... 0x0").
+                    // Bound unconditionally rather than under `instancedTextured`, because
+                    // pipelineLayoutExt3D_ has always declared this one set layout and a shader
+                    // that ignores it is unaffected -- the same 1-binding descriptorSetLayout_ the
+                    // useAlphaTest branch below binds, with the same white fallback.
+                    {
+                        VkDescriptorSet ds = (draw.descSet != VK_NULL_HANDLE)
+                                             ? draw.descSet : defaultWhiteDescSet_;
+                        if (ds != VK_NULL_HANDLE)
+                            vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                                    pipelineLayoutExt3D_, 0, 1, &ds, 0, nullptr);
+                    }
                 } else if (draw.useLitTextured) {
                     vkCmdPushConstants(cb, pipelineLayoutLitTextured3D_,
                                        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -14862,8 +14910,17 @@ namespace CNA::Internal::Renderers::Vulkan
         // declarations rather than from the stride, so any declaration it can satisfy is faithful
         // by construction.
         const auto& vbForLayout = static_cast<const VulkanVertexBufferRenderer&>(vb_in);
+        // VULKAN-217: whether this instanced draw samples. BOTH halves are required, and the row's
+        // test has a leg for each: the effect must have asked for a texture (otherwise a mesh whose
+        // declaration happens to carry a UV would have one multiplied in), and the declaration must
+        // supply the coordinate (otherwise the textured program binds an attribute nothing feeds).
+        const bool instancedTextured =
+            params.textureEnabled && params.texture0 != nullptr &&
+            DeclarationNamesUsageEXT(
+                vbForLayout.GetDeclarationEXT(),
+                Microsoft::Xna::Framework::Graphics::VertexElementUsage::TextureCoordinate);
         const VulkanVertexInputLayoutEXT instancedLayout =
-            BuildInstancedVertexLayoutEXT(vbForLayout.GetDeclarationEXT());
+            BuildInstancedVertexLayoutEXT(vbForLayout.GetDeclarationEXT(), instancedTextured);
         // VULKAN-149: as on the ordinary routes -- the guard is for a route that infers its input
         // from the stride, and a declaration that supplied every per-vertex input of the program
         // it selected means this one no longer does. Everything else still goes through it
@@ -15012,7 +15069,17 @@ namespace CNA::Internal::Renderers::Vulkan
         // VULKAN-149: taken at DRAW time, like every other route's, because the record is replayed
         // at Present() by which time the buffer's declaration may have been replaced.
         d.vertexLayout = instancedLayout;
-        d.descSet      = defaultWhiteDescSet_;  // no per-draw texture for now
+        // VULKAN-217: was `defaultWhiteDescSet_` unconditionally, with the comment "no per-draw
+        // texture for now" -- so a `DrawInstancedPrimitives` draw with `BasicEffect.TextureEnabled`
+        // sampled a 1x1 white image and drew the material colour, while EasyGL drew the texture.
+        // Same two lines the ordinary indexed route uses, so the sampler is slot 0's, as there.
+        d.instancedTextured = instancedTextured;
+        {
+            const auto* vs = params.texture0
+                ? dynamic_cast<const IVulkanSamplable*>(params.texture0) : nullptr;
+            const VkImageView view = vs ? vs->GetVkImageView() : defaultWhiteView_;
+            d.descSet = GetOrCreateTexSamplerDescSet(view, slotSamplers_[0]);
+        }
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
         // plans/plan_fx.md FX-112: two streams, per-vertex first, so binding 0 is the geometry and
         // binding 1 the per-instance records this route has already expanded to divisor 1 (see the

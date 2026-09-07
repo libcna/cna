@@ -1933,6 +1933,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_FullscreenSpriteThen3D COMMAND cna_test_easygl_fullscreen_sprite_then_3d
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-217: does a TEXTURED instanced draw sample its texture? The two
+        # renderers implement instancing differently -- EasyGL adds an optional per-instance matrix to
+        # every stock program, Vulkan selects a separate colour-only program pair -- so this is
+        # registered on both or it measures nothing.
+        cna_easygl_test(cna_test_easygl_instanced_textured
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/instanced_textured_draw_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_InstancedTexturedDraw COMMAND cna_test_easygl_instanced_textured
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-167 (EasyGL half): a SpriteBatch's SamplerState.AddressW must reach
         # a sampler3D a custom effect bound. ApplySamplerState derived WrapR from addressU, which is
         # right for every XNA preset and wrong for a state that set W on its own; the sibling proof

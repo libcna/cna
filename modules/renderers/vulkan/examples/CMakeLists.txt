@@ -195,6 +195,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_BasicEffectWorldScalePrecision COMMAND cna_test_vulkan_basiceffect_world_scale_precision
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-217: does a TEXTURED instanced draw sample its texture? The two
+        # renderers implement instancing differently -- EasyGL adds an optional per-instance matrix to
+        # every stock program, Vulkan selects a separate colour-only program pair -- so this is
+        # registered on both or it measures nothing.
+        cna_vulkan_test(cna_test_vulkan_instanced_textured
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/instanced_textured_draw_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_InstancedTexturedDraw COMMAND cna_test_vulkan_instanced_textured
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-194: XNA's PrepRenderState assigns the batch's SamplerState into
         # GraphicsDevice.SamplerStates[0], so it outlives End() and the next 3D draw samples with
         # it. Timing measured on the shipped runtime (spikes/xna-spritebatch-sampler0-spike):

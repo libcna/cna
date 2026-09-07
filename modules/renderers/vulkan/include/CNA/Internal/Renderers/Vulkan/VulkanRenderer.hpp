@@ -3440,6 +3440,10 @@ namespace CNA::Internal::Renderers::Vulkan
             VkDescriptorSet         litTexturedDescSet = VK_NULL_HANDLE;
             int32_t                 baseVertex        = 0;     // vertexOffset for vkCmdDrawIndexed
             bool                    useInstanced      = false; // true = Instanced3D pipeline
+            /// plan_vulkan.md VULKAN-217: this instanced draw samples a texture. The effect's
+            /// TextureEnabled ANDed with the geometry declaration naming a TextureCoordinate --
+            /// both halves, because either alone selects a program the draw cannot feed.
+            bool                    instancedTextured = false;
             std::vector<uint8_t>    instVbData;                // per-instance bytes (instanceCount × stride)
             std::size_t             instVbStride      = 64;    // bytes per instance (default = mat4)
             uint32_t                instanceCount     = 1;     // number of instances
@@ -4138,7 +4142,8 @@ namespace CNA::Internal::Renderers::Vulkan
                                                    bool msaa, const DepthStencilKeyParams& dsParams = {},
                                          const BlendKeyParams& blendParams = {},
                                          VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
-                                         const VulkanVertexInputLayoutEXT& vertexLayout = {});
+                                         const VulkanVertexInputLayoutEXT& vertexLayout = {},
+                                         bool textured = false);
         void FillInstancedPushConst(float (&pc)[32], const Matrix& view, const Matrix& proj,
                                     const GpuDrawParams& p);
         void CreateFrame3DInstBuffers();

@@ -321,6 +321,29 @@ covers it.
   when the batch began. Since `VULKAN-194` the batch also *assigns* its sampler into
   `SamplerStates[0]` at the same publication points, matching XNA, so the value the collection
   holds after `End()` is the batch's and the **next 3D draw** samples with it.
+
+### Instancing (`plans/plan_vulkan.md` VULKAN-217, 2026-09-07)
+
+`DrawInstancedPrimitives` selects a **separate program family** on this renderer, not — as on
+EasyGL — an optional per-instance matrix added to every stock program. Three shapes exist:
+
+| Geometry declaration + effect | Program |
+|---|---|
+| Position only | `instanced3d` |
+| Position + Colour | `instanced_colored3d` |
+| Position + TextureCoordinate, with `TextureEnabled` and a bound texture | `instanced_textured3d` |
+
+The textured variant needs **both** halves: the effect must have asked for a texture, and the
+declaration must supply the coordinate. Either alone selects a program the draw cannot feed, so
+either alone is ignored.
+
+**What an instanced draw does not do here, and it is a limit rather than an omission.** There is no
+lit, dual-texture, env-map or alpha-test instanced program, and no fog on any of them — the fog UBO
+is a second descriptor binding, and the instanced route uses the single-binding pipeline layout it
+shares with 2D `SpriteBatch`. A declaration carrying **both** a colour and a texture coordinate
+takes the textured program, so the colour is not applied. `LightingEnabled` on an instanced draw is
+ignored. Tracked as `VULKAN-218`; EasyGL has none of these limits, because its per-instance matrix
+composes with every stock program.
   Set `SamplerStates[1..15]` **before** `Begin()`. Setting them afterwards reaches a `Deferred`
   batch, whose flush publishes them, but not an `Immediate` one, whose only publication point is
   `Begin()` — XNA re-applies device state per draw call and CNA's sprite path does not go through

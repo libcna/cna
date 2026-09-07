@@ -239,6 +239,11 @@ def main():
         # packed layout carries a COLOR0 element (16/24). Shares instanced3d's FS and its
         # 1-binding pipeline layout; only the vertex input set and the diffuse mixing differ.
         ("instanced_colored3d.vert.glsl", VERTEX_SHADER,  "kInstancedColored3dVertSpv"),
+        # plans/plan_vulkan.md VULKAN-217: the textured Instanced3D pair. Its own FS, because it is
+        # the one instanced variant that samples; still ONE descriptor binding, so it keeps the
+        # shared pipelineLayoutExt3D_.
+        ("instanced_textured3d.vert.glsl", VERTEX_SHADER,   "kInstancedTextured3dVertSpv"),
+        ("instanced_textured3d.frag.glsl", FRAGMENT_SHADER, "kInstancedTextured3dFragSpv"),
     ]
 
     # plans/plan_gltf.md GLTF-465: the PBR variants whose vertex record carries a packed COLOR_0 slot.
