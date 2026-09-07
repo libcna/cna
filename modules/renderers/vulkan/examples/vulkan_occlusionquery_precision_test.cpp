@@ -45,6 +45,7 @@
 
 #include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
 
+#include <chrono>
 #include <cstdio>
 #include <memory>
 #include <string>
@@ -59,7 +60,14 @@ namespace
     // The right half of the frame: the occluder takes the left half, and the queried quad covers
     // everything at a farther depth, so exactly this many fragments survive the LESS test.
     constexpr int kExpectedVisible = kSize * (kSize / 2);
-    constexpr int kMaxPollFrames   = 60;
+    // plan_vulkan.md VULKAN-182, second reading. The budget is a DEADLINE, not an iteration
+    // count, because this loop is not frame-paced: measured on RADV, 150 iterations of it go by in
+    // under a millisecond, so the old fixed 60 was a sub-millisecond wait dressed up as sixty
+    // frames. llvmpipe answered on iteration 0 -- a software rasterizer has finished by the time
+    // the submit returns -- and real hardware, needing a fraction of a millisecond, was reported
+    // as "never completed". The iteration cap stays as a stop for a genuinely stuck query.
+    constexpr int  kMaxPollFrames = 200000;
+    constexpr auto kPollDeadline  = std::chrono::seconds(5);
 
     // XNA depth range: z in [0,1] with 0 at the near plane. Both quads sit well inside it so
     // neither is clipped and the occluder is unambiguously nearer.
@@ -137,13 +145,17 @@ protected:
             EndDraw();          // submit the frame the query was recorded in
         }
 
+        const auto pollStart = std::chrono::steady_clock::now();
+        int polls = 0;
         for (int frame = 0; frame < kMaxPollFrames; ++frame)
         {
+            polls = frame + 1;
             if (query->getIsCompleteProperty()) {
                 complete = true;
                 counted  = query->getPixelCountProperty();
                 break;
             }
+            if (std::chrono::steady_clock::now() - pollStart > kPollDeadline) break;
             // An ordinary frame, with nothing tagged for the query: the renderer resets only the
             // pools of queries tagged on a pending draw, so this keeps the device advancing
             // without disturbing the result being waited for.
@@ -151,10 +163,14 @@ protected:
             EndDraw();
         }
 
+        const auto pollMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - pollStart).count();
         check(complete, "A the query completes and the renderer states its precision",
               complete ? (std::string("precise=") + (precise ? "true" : "false")
-                          + ", PixelCount=" + std::to_string(counted))
-                       : ("never completed within " + std::to_string(kMaxPollFrames) + " frames"));
+                          + ", PixelCount=" + std::to_string(counted) + ", after "
+                          + std::to_string(polls) + " polls / " + std::to_string(pollMs) + " ms")
+                       : ("never completed: " + std::to_string(polls) + " polls over "
+                          + std::to_string(pollMs) + " ms"));
 
         if (!complete) { Finish(); return; }
 
