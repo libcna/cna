@@ -35,6 +35,12 @@ SCRIPT_NAMES = ("XnaPipelineRunner.cs", "XnaPipelineRunnerWin7.cs", "XnaPipeline
                 "DiagPipelineRunner.cs", "Xna4DiagnosticPipeline.cs")
 
 _METADATA = re.compile(r'SetMetadata\(\s*"ProcessorParameters_([A-Za-z0-9_]+)"\s*,\s*"([^"]*)"\s*\)')
+# The same call in either spelling: the parameter named by a literal, or built as
+# `"ProcessorParameters_" + parameterName`, with the value a literal or an argument.
+_METADATA_ANY = re.compile(
+    r'SetMetadata\(\s*(?:"ProcessorParameters_(?P<literal>[A-Za-z0-9_]+)"'
+    r'|"ProcessorParameters_"\s*\+\s*(?P<built>[A-Za-z_][A-Za-z0-9_]*(?:\s*\[[^\]]*\])?))'
+    r'\s*,\s*(?P<value>[^;]*?)\s*\)')
 _STRING = re.compile(r'"([^"\\]*(?:\\.[^"\\]*)*)"')
 _SOURCE_LIKE = re.compile(r'^[^"]*\.[A-Za-z0-9]{1,10}$')
 
@@ -48,24 +54,207 @@ def classify(text):
     return "explicit"
 
 
+def _methods(text):
+    """Every `{ ... }` method body, as (name, parameters, start, end, declarations) over @p text."""
+    found = []
+    for signature in re.finditer(
+            r'\b([A-Za-z_][A-Za-z0-9_]*)\s*\(([^;{)]*)\)\s*\{', text):
+        if signature.group(1) in ("if", "for", "foreach", "while", "switch", "catch", "using",
+                                  "lock", "return", "new"):
+            continue
+        depth = 0
+        index = signature.end() - 1
+        while index < len(text):
+            if text[index] == "{":
+                depth += 1
+            elif text[index] == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+            index += 1
+        raw = [part.strip() for part in signature.group(2).split(",") if part.strip()]
+        parameters = [part.split()[-1] for part in raw]
+        found.append((signature.group(1), parameters, signature.end(), index, raw))
+    return found
+
+
+def _split_arguments(text):
+    """Splits a call's argument list on its top-level commas."""
+    parts, depth, quoted, current = [], 0, False, ""
+    index = 0
+    while index < len(text):
+        character = text[index]
+        if quoted:
+            current += character
+            if character == "\\":
+                index += 1
+                if index < len(text):
+                    current += text[index]
+            elif character == '"':
+                quoted = False
+        elif character == '"':
+            quoted = True
+            current += character
+        elif character in "([{":
+            depth += 1
+            current += character
+        elif character in ")]}":
+            depth -= 1
+            current += character
+        elif character == "," and depth == 0:
+            parts.append(current.strip())
+            current = ""
+        else:
+            current += character
+        index += 1
+    if current.strip():
+        parts.append(current.strip())
+    return parts
+
+
+def _call_sites(text, name, definitions):
+    """Every call of @p name that is not inside one of @p name's own definitions."""
+    sites = []
+    for call in re.finditer(r'\b%s\s*\(' % re.escape(name), text):
+        if any(start <= call.start() < end for _, _, start, end, _ in definitions):
+            continue
+        depth, index = 0, call.end() - 1
+        while index < len(text):
+            if text[index] == "(":
+                depth += 1
+            elif text[index] == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+            index += 1
+        sites.append(_split_arguments(text[call.end():index]))
+    return sites
+
+
+def _normalize(value):
+    """A C# path literal as the sweep spells one: its escaped separators become `/`."""
+    return value.replace("\\\\", "/").replace("\\", "/")
+
+
+def _literal(expression):
+    """The string a literal argument holds, or None when the argument is not one."""
+    match = re.fullmatch(r'\s*"([^"\\]*(?:\\.[^"\\]*)*)"\s*', expression)
+    return match.group(1) if match else None
+
+
+def _asset_of(arguments):
+    """The source file a call's arguments name: its first literal that looks like a file name."""
+    for argument in arguments:
+        value = _literal(argument)
+        if value is not None and _SOURCE_LIKE.match(value) and "\\n" not in value:
+            return _normalize(value)
+    return None
+
+
 def overrides(text):
-    """`ProcessorParameters_*` a runner sets, keyed by the source file the nearest literal names."""
+    """`ProcessorParameters_*` a runner sets, keyed by the source file it sets them on.
+
+    Two shapes occur, and both have to be read or the reconstruction blames CNA for a parameter the
+    genuine build was given and this one was not.
+
+    The first sets metadata on an item a nearby literal already named -- `ground.SetMetadata(...)`
+    a few lines under `Asset("ground.fbx", ...)` -- and the nearest preceding file-like literal in
+    the same method is the asset.
+
+    The second sets it inside a *helper*, where there is no literal to find: Audio3D's
+    `Asset(file, name, importer, processor, bool generateMipmaps)` sets
+    `ProcessorParameters_GenerateMipmaps` only when its flag argument is `true`, RimLighting's
+    six-argument overload takes the parameter's name and value as arguments, and ShadowMapping's
+    takes `params string[]` and walks it two at a time. Those are attributed through the helper's
+    call sites, binding arguments to parameters by position, which is how the genuine build decided
+    them too.
+    """
     found = {}
-    for match in _METADATA.finditer(text):
-        # The asset a metadata call belongs to is the last source-looking string literal before it,
-        # which is how every one of these runners is written: a helper takes the file name and then
-        # sets the metadata on the item it made.
-        before = text[:match.start()]
-        source = None
-        for literal in _STRING.finditer(before):
+    methods = _methods(text)
+    for match in _METADATA_ANY.finditer(text):
+        enclosing = None
+        for method in methods:
+            if method[2] <= match.start() < method[3]:
+                if enclosing is None or method[2] > enclosing[2]:
+                    enclosing = method
+        body_start = enclosing[2] if enclosing else 0
+        direct = None
+        for literal in _STRING.finditer(text[body_start:match.start()]):
             value = literal.group(1)
             if _SOURCE_LIKE.match(value) and "\\n" not in value:
-                source = value
-        if source is None:
+                direct = value
+        literal_name = match.group("literal")
+        name_expression = literal_name if literal_name else match.group("built")
+        value_expression = match.group("value")
+        if direct is not None:
+            name = literal_name if literal_name else None
+            value = _literal(value_expression)
+            if name is None or value is None:
+                continue
+            found.setdefault(_normalize(direct), {})[name] = value
             continue
-        key = source.replace("\\\\", "/").replace("\\", "/")
-        found.setdefault(key, {})[match.group(1)] = match.group(2)
+        if enclosing is None:
+            continue
+        # A helper: read it at each of its call sites instead.
+        guard = _guard_of(text, body_start, match.start())
+        definitions = [m for m in methods if m[0] == enclosing[0]]
+        variadic = _variadic_of(enclosing, name_expression, value_expression)
+        for arguments in _call_sites(text, enclosing[0], definitions):
+            binding = dict(zip(enclosing[1], arguments))
+            asset = _asset_of(arguments)
+            if asset is None:
+                continue
+            if variadic is not None:
+                # `params string[]` walked two at a time: the call's trailing arguments are the
+                # parameter names and values, in pairs, exactly as the loop reads them.
+                rest = arguments[len(enclosing[1]) - 1:]
+                for index in range(0, len(rest) - 1, 2):
+                    name = _literal(rest[index])
+                    value = _literal(rest[index + 1])
+                    if name is not None and value is not None:
+                        found.setdefault(asset, {})[name] = value
+                continue
+            if guard is not None and binding.get(guard, "").strip().lower() != "true":
+                continue
+            name = literal_name if literal_name else _resolve(name_expression, binding)
+            value = _resolve(value_expression, binding)
+            if name is None or value is None:
+                continue
+            found.setdefault(asset, {})[name] = value
     return found
+
+
+def _variadic_of(method, name_expression, value_expression):
+    """The `params` array this metadata call indexes, or None when it names no array."""
+    declarations = method[4]
+    if not declarations or not declarations[-1].startswith("params "):
+        return None
+    array = declarations[-1].split()[-1]
+    indexed = re.compile(r'\b%s\s*\[' % re.escape(array))
+    if indexed.search(name_expression or "") or indexed.search(value_expression or ""):
+        return array
+    return None
+
+
+def _guard_of(text, body_start, position):
+    """The parameter an `if (parameter)` guards this metadata call with, or None."""
+    body = text[body_start:position]
+    match = None
+    for candidate in re.finditer(r'if\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)\s*$',
+                                 body.rstrip(), re.M):
+        match = candidate
+    return match.group(1) if match else None
+
+
+def _resolve(expression, binding):
+    """A literal, or a parameter bound to a literal at the call site."""
+    value = _literal(expression)
+    if value is not None:
+        return value
+    name = expression.strip()
+    if name in binding:
+        return _literal(binding[name])
+    return None
 
 
 def main(argv=None):
