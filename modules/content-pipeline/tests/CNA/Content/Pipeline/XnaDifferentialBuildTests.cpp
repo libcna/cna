@@ -133,6 +133,14 @@ TEST(XnaDifferentialBuildTest, CnaAcceptsAndRefusesTheSameSourcesXnaDoes)
          "the .xml route has no canonical importer; the built-in subset is XNAPP-260 work"},
         {"xbox/xml_passthrough",
          "the same .xml gap, recorded for the Xbox target too because XNA builds one there"},
+        // XNA's TextureImporter reads all three shapes out of a DDS; CNA reads them too
+        // (XNAPP-165) and has no route that carries a cube or a volume from a source file to a
+        // TextureCube or Texture3D output. The cases stay in the corpus because what XNA does
+        // with them is worth having measured (XNAPP-255).
+        {"texture/dds_cube", "no route carries a cube DDS to a TextureCube output (XNAPP-255)"},
+        {"texture/dds_volume", "no route carries a volume DDS to a Texture3D output (XNAPP-255)"},
+        {"xbox/dds_cube", "no route carries a cube DDS to a TextureCube output (XNAPP-255)"},
+        {"xbox/dds_volume", "no route carries a volume DDS to a Texture3D output (XNAPP-255)"},
     };
 
     // The `.fx` cases need the compiler XNA used. If the caller named one, that is the one; if not

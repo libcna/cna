@@ -847,6 +847,12 @@ namespace CNA::Internal::Xnb
             [](XnbWriter& output, const XnbTexture3DContent& value)
             {
                 const XnbTextureData& texture = value.texture;
+                // The level payloads would be swapped correctly -- they go through the same
+                // WriteTextureLevels() the Texture2D writer uses -- but no fixture proves
+                // it end to end, because no route in this build turns a cube or volume
+                // source into one of these. The plan lifts this guard per type only as a
+                // fixture proves it, and that route is XNAPP-255
+                // (plans/plan_xnapipeline_parity.md XNAPP-252).
                 output.RequireVerifiedPlatformPayload("Texture3DWriter");
                 RequireTextureShape(output, texture, "Texture3DWriter");
                 if (texture.kind != XnbTextureKind::Texture3D || texture.faceCount != 1u)
@@ -868,6 +874,12 @@ namespace CNA::Internal::Xnb
             [](XnbWriter& output, const XnbTextureCubeContent& value)
             {
                 const XnbTextureData& texture = value.texture;
+                // The level payloads would be swapped correctly -- they go through the same
+                // WriteTextureLevels() the Texture2D writer uses -- but no fixture proves
+                // it end to end, because no route in this build turns a cube or volume
+                // source into one of these. The plan lifts this guard per type only as a
+                // fixture proves it, and that route is XNAPP-255
+                // (plans/plan_xnapipeline_parity.md XNAPP-252).
                 output.RequireVerifiedPlatformPayload("TextureCubeWriter");
                 RequireTextureShape(output, texture, "TextureCubeWriter");
                 if (texture.kind != XnbTextureKind::TextureCube || texture.faceCount != 6u ||
@@ -891,7 +903,22 @@ namespace CNA::Internal::Xnb
             true,
             [](XnbWriter& output, const XnbSpriteFontData& value)
             {
-                output.RequireVerifiedPlatformPayload("SpriteFontWriter");
+                // Converted rather than refused. The atlas is a texture and goes through
+                // WriteTextureLevels(), which swaps it; everything else a SpriteFont holds --
+                // the glyph, cropping and kerning lists -- is written through the container's
+                // own object protocol, which stays little-endian on every platform. Both
+                // halves are measured: `xbox/font_description`'s kerning triples read
+                // little-endian and equal CNA's, and the DXT swap unit comes from XNA's own
+                // two builds of the same texture (plans/plan_xnapipeline_parity.md XNAPP-252).
+                if (output.IsXboxTarget() &&
+                    XboxByteSwapUnit(value.atlas.surfaceFormat) == 0u)
+                {
+                    throw XnbWriteException(
+                        "'" + output.AssetName() +
+                        "': SpriteFontWriter has no measured Xbox 360 byte order for its "
+                        "atlas's surface format " +
+                        std::to_string(static_cast<int>(value.atlas.surfaceFormat)) + ".");
+                }
                 if (value.glyphs.size() != value.cropping.size() ||
                     value.glyphs.size() != value.characters.size() ||
                     value.glyphs.size() != value.kerning.size())

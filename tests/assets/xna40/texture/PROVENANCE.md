@@ -40,3 +40,15 @@ They straddle three boundaries at once: 2048 is Reach's largest texture and HiDe
 ratio, and 4096 is HiDef's largest texture. So 2048x1 builds under both profiles, 2049x1 is refused
 by each for a different reason, 4096x1 is refused by HiDef for its shape rather than its size, and
 4097x1 for its size.
+
+## The cube and the volume
+
+`plans/plan_xnapipeline_parity.md` `XNAPP-252`/`XNAPP-255` added `probe_cube.dds` (six 4x4 faces)
+and `probe_volume.dds` (a 4x4x4 volume), both written by the DDS-header snippet recorded in that
+task log: an uncompressed A8R8G8B8 surface per face or slice, with `DDSCAPS2_CUBEMAP` and all six
+face bits for the one and `DDSCAPS2_VOLUME` plus `DDSD_DEPTH` for the other. Four hundred to five
+hundred bytes each.
+
+They exist to ask what XNA's `TextureImporter` does with a shape that is not a plain 2D image, and
+the answer is that it routes them to `TextureCubeReader` and `Texture3DReader` on Windows and on
+the Xbox alike.

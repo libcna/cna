@@ -793,6 +793,38 @@
       "profile": "HiDef"
     },
     {
+      "case": "texture/dds_cube",
+      "source": "texture/probe_cube.dds",
+      "importer": "TextureImporter",
+      "processor": "TextureProcessor",
+      "platform": "Windows",
+      "profile": "HiDef"
+    },
+    {
+      "case": "texture/dds_volume",
+      "source": "texture/probe_volume.dds",
+      "importer": "TextureImporter",
+      "processor": "TextureProcessor",
+      "platform": "Windows",
+      "profile": "HiDef"
+    },
+    {
+      "case": "xbox/dds_cube",
+      "source": "texture/probe_cube.dds",
+      "importer": "TextureImporter",
+      "processor": "TextureProcessor",
+      "platform": "Xbox360",
+      "profile": "HiDef"
+    },
+    {
+      "case": "xbox/dds_volume",
+      "source": "texture/probe_volume.dds",
+      "importer": "TextureImporter",
+      "processor": "TextureProcessor",
+      "platform": "Xbox360",
+      "profile": "HiDef"
+    },
+    {
       "case": "xml/intermediate_passthrough",
       "source": "source/probe.xml",
       "importer": "XmlImporter",
