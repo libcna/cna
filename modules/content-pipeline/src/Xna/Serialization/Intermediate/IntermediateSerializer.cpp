@@ -1555,7 +1555,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
         // in an XNA document is spelled with; the values are the element types the serializer
         // already knows.
         const auto map = []<typename K>() {
-            const auto pair = []<typename V>() { (void)IntermediateSerializer::TypeSerializerFor<std::map<K, V>>(); };
+            const auto pair = []<typename V>() {
+                (void)IntermediateSerializer::TypeSerializerFor<
+                    System::Collections::Generic::OrderedDictionary<K, V>>();
+            };
             pair.template operator()<bool>();
             pair.template operator()<std::int8_t>();
             pair.template operator()<std::uint8_t>();

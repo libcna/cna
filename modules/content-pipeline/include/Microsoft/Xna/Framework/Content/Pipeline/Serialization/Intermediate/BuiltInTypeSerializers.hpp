@@ -285,15 +285,25 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
     };
 
     /**
-     * @brief Serializes `std::map<K, V>` as XNA serializes `Dictionary<K, V>`:
-     *        `<Item><Key>…</Key><Value>…</Value></Item>` per entry, in key order.
+     * @brief Serializes a dictionary as XNA serializes `Dictionary<K, V>`:
+     *        `<Item><Key>…</Key><Value>…</Value></Item>` per entry, in the order the entries were
+     *        added -- which for a document is the order it lists them.
+     *
+     * The order is the contract, not a detail. A .NET `Dictionary<K,V>` that has only ever been
+     * added to enumerates in insertion order, and XNA writes what enumeration gives it, so a
+     * genuine `.xnb` carries the document's own order (measured against Movipa's `App.config.xnb`,
+     * plans/plan_xna_sample_xnb_sweep.md XNASWEEP-119). That is why the container is
+     * `OrderedDictionary` rather than `std::map`, whose key order is a different file.
      *
      * @tparam K The key type.
      * @tparam V The value type.
      */
     template<typename K, typename V>
-    class CNAEXT DictionarySerializer final : public ContentTypeSerializer<std::map<K, V>>
+    class CNAEXT DictionarySerializer final
+        : public ContentTypeSerializer<System::Collections::Generic::OrderedDictionary<K, V>>
     {
+        using Dictionary = System::Collections::Generic::OrderedDictionary<K, V>;
+
         using Key = detail::DeclaredContentType<K>;
         using Value = detail::DeclaredContentType<V>;
         using ChildCallback = ContentTypeSerializerBase::ChildCallback;
@@ -306,10 +316,13 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
         [[nodiscard]] bool getCanDeserializeIntoExistingObjectProperty() const override { return true; }
 
         /** @brief An empty collection has nothing to write. */
-        [[nodiscard]] bool ObjectIsEmpty(const std::map<K, V>& value) const override { return value.empty(); }
+        [[nodiscard]] bool ObjectIsEmpty(const Dictionary& value) const override
+        {
+            return value.getCountProperty() == 0;
+        }
 
     protected:
-        void Serialize(IntermediateWriter& output, const std::map<K, V>& value,
+        void Serialize(IntermediateWriter& output, const Dictionary& value,
                        const ContentSerializerAttribute& format) override
         {
             ContentTypeSerializerBase& keySerializer = IntermediateSerializer::TypeSerializerFor<Key>();
@@ -327,8 +340,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
             }
         }
 
-        [[nodiscard]] std::map<K, V> Deserialize(IntermediateReader& input, const ContentSerializerAttribute& format,
-                                                 std::map<K, V> existingInstance) override
+        [[nodiscard]] Dictionary Deserialize(IntermediateReader& input,
+                                             const ContentSerializerAttribute& format,
+                                             Dictionary existingInstance) override
         {
             ContentTypeSerializerBase& keySerializer = IntermediateSerializer::TypeSerializerFor<Key>();
             ContentTypeSerializerBase& valueSerializer = IntermediateSerializer::TypeSerializerFor<Value>();
@@ -348,16 +362,13 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
                 K key = FromContentObject<Key>(input.ReadObjectCore(keyFormat, keySerializer, ContentObject{}));
                 V item = FromContentObject<Value>(input.ReadObjectCore(valueFormat, valueSerializer, ContentObject{}));
                 input.ReadEndElement();
-                if (!existingInstance.emplace(std::move(key), std::move(item)).second)
-                {
-                    ThrowDuplicateDictionaryKey();
-                }
+                if (!existingInstance.TryAdd(key, item)) { ThrowDuplicateDictionaryKey(); }
             }
             return existingInstance;
         }
 
         void ScanChildren(IntermediateSerializer& serializer, const ChildCallback& callback,
-                          const std::map<K, V>& value) override
+                          const Dictionary& value) override
         {
             (void)serializer;
             ContentTypeSerializerBase& keySerializer = IntermediateSerializer::TypeSerializerFor<Key>();
@@ -591,7 +602,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
         };
 
         template<typename K, typename V>
-        struct TypeSerializerFactory<std::map<K, V>>
+        struct TypeSerializerFactory<System::Collections::Generic::OrderedDictionary<K, V>>
         {
             static ContentTypeSerializerBase& Create()
             {

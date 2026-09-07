@@ -12,6 +12,7 @@
 
 #include "CNA/CNAHelper.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
+#include "System/Collections/Generic/OrderedDictionary.hpp"
 
 namespace Microsoft::Xna::Framework
 {
@@ -109,9 +110,20 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         }
     };
 
-    /** @brief `System.Collections.Generic.Dictionary`2[[K],[V]]`. */
+    /**
+     * @brief `System.Collections.Generic.Dictionary`2[[K],[V]]`, which CNA holds in an
+     *        insertion-ordered container.
+     *
+     * A .NET `Dictionary<K,V>` that has only ever been added to enumerates in insertion order, and
+     * XNA's `DictionaryWriter` writes what enumeration gives it -- so the entries of a built
+     * dictionary asset stand in the order its `.xml` document lists them. Neither `std::map` (key
+     * order) nor `std::unordered_map` (no order) can express that, which is why the pipeline's
+     * dictionary is `System::Collections::Generic::OrderedDictionary`
+     * (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-119). The serialized identity is unchanged: this
+     * is still a `Dictionary`2` on both sides of the file.
+     */
     template<typename K, typename V>
-    struct CNAEXT ContentTypeName<std::map<K, V>>
+    struct CNAEXT ContentTypeName<System::Collections::Generic::OrderedDictionary<K, V>>
     {
         /** @brief Returns the generic dictionary name with both arguments spelled by their traits. */
         [[nodiscard]] static std::string Name()

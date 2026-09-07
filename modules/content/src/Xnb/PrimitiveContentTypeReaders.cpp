@@ -74,5 +74,18 @@ namespace CNA::Internal::Xnb
                     "Microsoft.Xna.Framework.Content.StringReader",
                     "Microsoft.Xna.Framework.Content.Int32Reader");
             });
+
+        // The same shape with string values, which is how a game keeps a table of localized or
+        // configured strings in an `.xml` asset. Movipa's `App.config.xml` (SAMPLE-133) is one:
+        // `Generic:Dictionary[string,string]`, built by the genuine pipeline into an `.xnb` whose
+        // root reader is this one (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-119).
+        ContentTypeReaderManager::AddTypeCreator(
+            "Microsoft.Xna.Framework.Content.DictionaryReader`2[[System.String],[System.String]]",
+            [] {
+                return std::make_unique<DictionaryReader<std::string, std::string>>(
+                    "System.Collections.Generic.Dictionary`2[[System.String],[System.String]]",
+                    "Microsoft.Xna.Framework.Content.StringReader",
+                    "Microsoft.Xna.Framework.Content.StringReader");
+            });
     }
 }

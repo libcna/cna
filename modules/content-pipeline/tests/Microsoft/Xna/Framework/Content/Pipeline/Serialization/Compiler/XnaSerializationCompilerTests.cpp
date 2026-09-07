@@ -358,6 +358,7 @@ namespace
             "System.Collections.Generic.List`1[[Microsoft.Xna.Framework.Vector3]]",
             "System.Collections.Generic.List`1[[Microsoft.Xna.Framework.Matrix]]",
             "System.Collections.Generic.Dictionary`2[[System.String],[System.Int32]]",
+            "System.Collections.Generic.Dictionary`2[[System.String],[System.String]]",
             "Microsoft.Xna.Framework.Content.Pipeline.Processors.ModelContent",
         };
         std::sort(names.begin(), names.end());

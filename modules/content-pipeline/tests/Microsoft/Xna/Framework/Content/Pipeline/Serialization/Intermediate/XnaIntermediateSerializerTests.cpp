@@ -42,6 +42,7 @@
 #include "System/DateTime.hpp"
 #include "System/DateTimeKind.hpp"
 #include "System/Decimal.hpp"
+#include "System/Collections/Generic/OrderedDictionary.hpp"
 #include "System/Object.hpp"
 #include "System/TimeSpan.hpp"
 #include "System/Xml/XmlReader.hpp"
@@ -49,6 +50,21 @@
 #include "System/Xml/XmlWriterSettings.hpp"
 
 namespace Intermediate = Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermediate;
+
+/// The container the pipeline holds an XNA `Dictionary<K,V>` in: insertion-ordered, because that is
+/// the order a built asset's entries stand in (XNASWEEP-119).
+template<typename K, typename V>
+using Dictionary = System::Collections::Generic::OrderedDictionary<K, V>;
+
+/// Fills one, in the listed order -- the container has no initializer-list constructor, and the
+/// order is the point.
+template<typename K, typename V>
+Dictionary<K, V> Dict(std::initializer_list<std::pair<K, V>> items)
+{
+    Dictionary<K, V> dictionary;
+    for (const auto& [key, value] : items) { dictionary.Add(key, value); }
+    return dictionary;
+}
 using Microsoft::Xna::Framework::BoundingBox;
 using Microsoft::Xna::Framework::BoundingSphere;
 using Microsoft::Xna::Framework::Color;
@@ -318,11 +334,14 @@ namespace Cna::Xna40::IntermediateOracle
         std::vector<Vector3> Vector3List{Vector3(7, 8, 9)};
         std::vector<std::shared_ptr<Nested>> NestedList{std::make_shared<Nested>(), Second()};
         std::vector<Vertex> StructList{Vertex{Vector3(1, 1, 1), 0.25f}};
-        std::map<std::string, std::int32_t> StringIntMap{{"one", 1}, {"two", 2}};
-        std::map<std::int32_t, std::string> IntStringMap{{10, "ten"}};
-        std::map<std::string, std::shared_ptr<Nested>> NestedMap{{"k", std::make_shared<Nested>()}};
+        Dictionary<std::string, std::int32_t> StringIntMap =
+            Dict<std::string, std::int32_t>({{"one", 1}, {"two", 2}});
+        Dictionary<std::int32_t, std::string> IntStringMap = Dict<std::int32_t, std::string>({{10, "ten"}});
+        Dictionary<std::string, std::shared_ptr<Nested>> NestedMap =
+            Dict<std::string, std::shared_ptr<Nested>>({{"k", std::make_shared<Nested>()}});
         std::vector<std::vector<std::int32_t>> ListOfLists{{1}, {2, 3}};
-        std::map<std::string, std::vector<std::int32_t>> MapOfLists{{"a", {9}}};
+        Dictionary<std::string, std::vector<std::int32_t>> MapOfLists =
+            Dict<std::string, std::vector<std::int32_t>>({{"a", {9}}});
         std::vector<std::int32_t> EmptyArray;
         std::vector<std::int32_t> EmptyList;
         std::vector<std::optional<std::string>> ListWithNull{std::string("present"), std::nullopt};
@@ -567,8 +586,8 @@ namespace Cna::Xna40::IntermediateOracle
             Box<System::Decimal>(ParseDecimal("1.5")), Box<double>(2.5), Box<bool>(true), Box<Mood>(Mood::Sad),
             Box<System::TimeSpan>(System::TimeSpan::FromSeconds(1)), Box<std::uint64_t>(4), Box<std::uint16_t>(5),
             Box<std::int8_t>(6), Box<std::uint32_t>(7), Box<float>(8.0f)};
-        std::map<std::int32_t, std::int32_t> IntIntMap{{1, 2}};
-        std::map<Mood, Vector3> EnumVectorMap{{Mood::Happy, Vector3::One}};
+        Dictionary<std::int32_t, std::int32_t> IntIntMap = Dict<std::int32_t, std::int32_t>({{1, 2}});
+        Dictionary<Mood, Vector3> EnumVectorMap = Dict<Mood, Vector3>({{Mood::Happy, Vector3::One}});
         std::vector<bool> BoolArray{false, true};
         std::vector<char16_t> CharArray{u'a', u'b'};
         std::vector<std::string> StringWithSpaces{"a b", " c "};
@@ -953,9 +972,9 @@ namespace
         add("System.Collections.Generic.List`1[[System.Object]]", MakeRoundTrip<std::vector<ContentObject>>());
         add("System.Collections.Generic.List`1[[Microsoft.Xna.Framework.Vector3]]", MakeRoundTrip<std::vector<Vector3>>());
         add("System.Collections.Generic.Dictionary`2[[System.String],[Microsoft.Xna.Framework.Vector2]]",
-            MakeRoundTrip<std::map<std::string, Vector2>>());
+            MakeRoundTrip<Dictionary<std::string, Vector2>>());
         add("System.Collections.Generic.Dictionary`2[[System.String],[System.Int32]]",
-            MakeRoundTrip<std::map<std::string, std::int32_t>>());
+            MakeRoundTrip<Dictionary<std::string, std::int32_t>>());
         return map;
     }
 
@@ -1001,7 +1020,11 @@ namespace
         map["root_string"] = [] { return SerializeToString<std::string>("just a string"); };
         map["root_vector3"] = [] { return SerializeToString<Vector3>(Vector3(1, 2, 3)); };
         map["root_list_int"] = [] { return SerializeToString<std::vector<std::int32_t>>({1, 2, 3}); };
-        map["root_dictionary"] = [] { return SerializeToString<std::map<std::string, Vector2>>({{"a", Vector2(1, 2)}}); };
+        map["root_dictionary"] = []
+        {
+            return SerializeToString<Dictionary<std::string, Vector2>>(
+                Dict<std::string, Vector2>({{"a", Vector2(1, 2)}}));
+        };
         map["root_nested"] = [] { return SerializeToString<Nested>(std::make_shared<Nested>()); };
         map["root_struct"] = [] { return SerializeToString<Vertex>(Vertex{Vector3(1, 2, 3), 1}); };
         map["root_enum"] = [] { return SerializeToString<Mood>(Mood::Happy); };

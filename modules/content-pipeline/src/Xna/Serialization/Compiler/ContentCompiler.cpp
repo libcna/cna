@@ -223,7 +223,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
         add.template operator()<std::vector<Microsoft::Xna::Framework::Rectangle>>();
         add.template operator()<std::vector<Microsoft::Xna::Framework::Vector3>>();
         add.template operator()<std::vector<Microsoft::Xna::Framework::Matrix>>();
-        add.template operator()<std::map<std::string, std::int32_t>>();
+        add.template operator()<System::Collections::Generic::OrderedDictionary<std::string,
+                                                                                std::int32_t>>();
+        add.template operator()<System::Collections::Generic::OrderedDictionary<std::string,
+                                                                                std::string>>();
 
         // The processed model graph is a built-in too: it reaches the same canonical model writer
         // the rest of the engine writes through (plans/plan_xnapipeline_parity.md XNAPP-152).

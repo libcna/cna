@@ -323,32 +323,34 @@ namespace CNA::Internal::Xnb
 
     protected:
         /**
-         * @brief Writes the pair count and every pair in deterministic key order.
+         * @brief Writes the pair count and every pair in the order the container holds them.
+         *
+         * XNA's `DictionaryWriter` writes what enumerating the dictionary gives it, and a .NET
+         * `Dictionary<K,V>` that has only ever been added to enumerates in insertion order -- so a
+         * genuine `.xnb` carries the order its source listed, not the keys sorted (measured against
+         * Movipa's `App.config.xnb`, plans/plan_xna_sample_xnb_sweep.md XNASWEEP-119). A container
+         * that carries an order is therefore written in it. `std::unordered_map` has none to carry,
+         * and is sorted instead so that the same input still produces the same file.
          *
          * @param output Per-file object-graph writer.
          * @param value The dictionary to serialize.
          */
         void Write(XnbWriter& output, const TMap& value) const override
         {
-            output.RequireCollectionCount(value.size(), "DictionaryWriter");
-            std::vector<const TKey*> keys;
-            keys.reserve(value.size());
-            for (const auto& entry : value) { keys.push_back(&entry.first); }
-            std::sort(keys.begin(), keys.end(),
-                      [](const TKey* left, const TKey* right) { return *left < *right; });
+            const std::size_t count = Count(value);
+            output.RequireCollectionCount(count, "DictionaryWriter");
+            output.WriteInt32(static_cast<std::int32_t>(count));
 
-            output.WriteInt32(static_cast<std::int32_t>(value.size()));
-            for (const TKey* key : keys)
+            const auto writePair = [&output](const TKey& key, const TValue& entry)
             {
                 if constexpr (Detail::IsSerializedReferenceType<TKey>::value)
                 {
-                    output.WriteObject(*key);
+                    output.WriteObject(key);
                 }
                 else
                 {
-                    output.WriteRawObject(*key);
+                    output.WriteRawObject(key);
                 }
-                const TValue& entry = value.at(*key);
                 if constexpr (Detail::IsSerializedReferenceType<TValue>::value)
                 {
                     output.WriteObject(entry);
@@ -357,8 +359,39 @@ namespace CNA::Internal::Xnb
                 {
                     output.WriteRawObject(entry);
                 }
+            };
+
+            if constexpr (std::is_same_v<TMap, std::unordered_map<TKey, TValue>>)
+            {
+                std::vector<const std::pair<const TKey, TValue>*> entries;
+                entries.reserve(count);
+                for (const auto& entry : value) { entries.push_back(&entry); }
+                std::sort(entries.begin(), entries.end(),
+                          [](const auto* left, const auto* right)
+                          { return left->first < right->first; });
+                for (const auto* entry : entries) { writePair(entry->first, entry->second); }
+            }
+            else
+            {
+                for (const auto& entry : value) { writePair(entry.first, entry.second); }
             }
         }
+
+    private:
+        /** @brief The pair count, however the container spells it. */
+        [[nodiscard]] static std::size_t Count(const TMap& value)
+        {
+            if constexpr (requires { value.size(); })
+            {
+                return value.size();
+            }
+            else
+            {
+                return static_cast<std::size_t>(value.getCountProperty());
+            }
+        }
+
+    protected:
 
     private:
         XnbReaderIdentity keyIdentity_;

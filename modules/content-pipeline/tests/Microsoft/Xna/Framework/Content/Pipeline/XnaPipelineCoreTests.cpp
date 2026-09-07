@@ -38,6 +38,7 @@
 #include "Microsoft/Xna/Framework/Content/Pipeline/ProcessorParameter.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/TargetPlatform.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "System/Collections/Generic/OrderedDictionary.hpp"
 #include "System/FormatException.hpp"
 #include "System/InvalidCastException.hpp"
 
@@ -382,7 +383,8 @@ namespace
         EXPECT_EQ(Xna::ContentTypeName<Vector3>::Name(), "Microsoft.Xna.Framework.Vector3");
         EXPECT_EQ(Xna::ContentTypeName<std::vector<std::string>>::Name(), "System.Collections.Generic.List`1[[System.String]]");
         EXPECT_EQ(Xna::ContentTypeName<std::optional<float>>::Name(), "System.Nullable`1[[System.Single]]");
-        EXPECT_EQ((Xna::ContentTypeName<std::map<std::string, std::int32_t>>::Name()),
+        EXPECT_EQ((Xna::ContentTypeName<
+                      System::Collections::Generic::OrderedDictionary<std::string, std::int32_t>>::Name()),
                   "System.Collections.Generic.Dictionary`2[[System.String],[System.Int32]]");
         EXPECT_EQ(Xna::ContentTypeName<std::shared_ptr<GreetingContent>>::Name(), "TestGame.Pipeline.GreetingContent");
         static_assert(std::is_same_v<Xna::Carrier<GreetingContent>, std::shared_ptr<GreetingContent>>);

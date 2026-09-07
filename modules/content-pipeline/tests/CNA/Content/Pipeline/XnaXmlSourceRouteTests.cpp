@@ -65,6 +65,13 @@ namespace
             {"xml_dictionary.xml",
              "System.Collections.Generic.Dictionary`2[[System.String],[System.Int32]]",
              "xml_generic_dictionary.xnb"},
+            // The same type, listed in an order that is not its keys' order. XNA writes a
+            // dictionary in the order enumerating it gives, which for an add-only .NET
+            // `Dictionary` is the order the document listed -- the genuine file here carries
+            // `zulu, mike, alpha, tango` (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-119).
+            {"xml_dictionary_order.xml",
+             "System.Collections.Generic.Dictionary`2[[System.String],[System.Int32]]",
+             "xml_generic_dictionary_order.xnb"},
             {"xml_rectangles.xml",
              "System.Collections.Generic.List`1[[Microsoft.Xna.Framework.Rectangle]]",
              "xml_generic_rectangle_list.xnb"},
