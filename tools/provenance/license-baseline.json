@@ -1,0 +1,5 @@
+{
+  "format": "cna.provenance.license-baseline/1",
+  "comment": "plans/plan_xnapipeline_parity.md XNAPP-008/XNAPP-315: a production source with no SPDX identifier is licence hygiene rather than provenance -- it says nothing about where the file came from -- and there were 361 of them before this gate existed, almost all in modules/renderers. Ratcheted rather than ignored: tools/provenance/provenance_gate.py fails when the count rises, so a new file must carry a header, and lowering this number is the way the backlog is worked off.",
+  "sourcesWithoutSpdx": 361
+}

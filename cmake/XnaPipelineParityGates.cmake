@@ -54,3 +54,65 @@ add_test(NAME XnaPipelineInputParityMatrixIsCurrent
 
 set_tests_properties(XnaPipelineParityReportIsCurrent XnaPipelineInputParityMatrixIsCurrent
                      PROPERTIES LABELS "parity;xnapipeline")
+
+# =====================================================================================
+# The rest of the plan's §29 gates, as ctests (plans/plan_xnapipeline_parity.md XNAPP-310).
+#
+# `--check` above answers "is the committed report a regeneration?". This one answers the other
+# question -- "is the parity itself complete?" -- and fails on any MISSING type, member or enum
+# value, on a status without its required note, and on a map entry the inventory does not have. It
+# was run by hand while MISSING was still non-zero; it is zero now, so it is a test.
+# =====================================================================================
+add_test(NAME XnaPipelineParityGateIsGreen
+         COMMAND "${Python3_EXECUTABLE}" "${_xnapp_oracle}/parity_report.py"
+                 --inventory "${_xnapp_reference}/content-pipeline-api.json"
+                 --map "${_xnapp_reference}/content-pipeline-parity-map.json"
+                 --inputs "${_xnapp_reference}/content-pipeline-inputs.json"
+                 --output "${CMAKE_CURRENT_SOURCE_DIR}/docs/xna-content-pipeline-parity-report.md"
+                 --gate)
+
+# The provenance gate: nothing Microsoft owns is in the tree, no font that is not licensed for it,
+# no production source carrying someone else's copyright header, every vendored third party
+# declared, and the directory the oracle copies Microsoft's assemblies into really is ignored.
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tools/provenance/provenance_gate.py")
+    add_test(NAME CnaProvenanceGate
+             COMMAND "${Python3_EXECUTABLE}"
+                     "${CMAKE_CURRENT_SOURCE_DIR}/tools/provenance/provenance_gate.py"
+                     --repo "${CMAKE_CURRENT_SOURCE_DIR}")
+    # A gate that has never failed is a gate nobody has tested. This plants one of each thing the
+    # gate exists to find in a throwaway repository and checks that it finds exactly that, so the
+    # green run above means the tree is clean rather than that the gate is asleep.
+    add_test(NAME CnaProvenanceGateSelfTest
+             COMMAND "${Python3_EXECUTABLE}"
+                     "${CMAKE_CURRENT_SOURCE_DIR}/tools/provenance/provenance_gate_selftest.py"
+                     --gate "${CMAKE_CURRENT_SOURCE_DIR}/tools/provenance/provenance_gate.py")
+    set_tests_properties(CnaProvenanceGate CnaProvenanceGateSelfTest
+                         PROPERTIES LABELS "parity;xnapipeline;provenance")
+endif()
+
+# `git diff --check` over everything this plan owns, against the empty tree, so it reads the
+# committed content rather than only an uncommitted change. Deliberately scoped: the repository has
+# thousands of whitespace complaints in prose written long before this plan, and a gate that can
+# never be green is a gate somebody turns off.
+find_package(Git QUIET)
+if(GIT_FOUND AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git")
+    add_test(NAME XnaPipelineWhitespaceIsClean
+             COMMAND "${CMAKE_COMMAND}"
+                     "-DGIT=${GIT_EXECUTABLE}" "-DREPO=${CMAKE_CURRENT_SOURCE_DIR}"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/XnaPipelineWhitespaceCheck.cmake")
+    set_tests_properties(XnaPipelineWhitespaceIsClean
+                         PROPERTIES LABELS "parity;xnapipeline")
+endif()
+
+# The genuine-runtime harness. It needs mono, Wine, a display and a legally installed XNA 4.0, and
+# says so by exiting 3, which ctest reports as a skip rather than a failure -- the difference
+# between "this machine cannot answer" and "the answer was wrong".
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/interop/xna40/run-interop-harness.sh")
+    add_test(NAME XnaPipelineGenuineRuntimeInterop
+             COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/tests/interop/xna40/run-interop-harness.sh")
+    set_tests_properties(XnaPipelineGenuineRuntimeInterop
+                         PROPERTIES LABELS "parity;xnapipeline;interop"
+                                    SKIP_RETURN_CODE 3 TIMEOUT 900)
+endif()
+
+set_tests_properties(XnaPipelineParityGateIsGreen PROPERTIES LABELS "parity;xnapipeline")

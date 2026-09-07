@@ -1,0 +1,14 @@
+{
+  "format": "cna.provenance.third-party/1",
+  "comment": "plans/plan_xnapipeline_parity.md XNAPP-008: every directory under vendor/ has a row here, and every row here has a directory. tools/provenance/provenance_gate.py checks both directions and that the licence file it names is in the tree.",
+  "vendored": [
+    {
+      "directory": "googletest",
+      "name": "GoogleTest",
+      "upstream": "https://github.com/google/googletest",
+      "license": "BSD-3-Clause",
+      "licenseFile": "vendor/googletest/LICENSE",
+      "whyItIsHere": "The unit-test framework every CNA suite is written against. Test-only: no CNA library links it and nothing it contains is installed."
+    }
+  ]
+}
