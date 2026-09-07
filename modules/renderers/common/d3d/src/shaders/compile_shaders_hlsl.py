@@ -50,6 +50,7 @@ SHADERS = [
     ("lit_textured3d_vertexlit.vert.hlsl", "main", "vs_5_0", "kLitUntextured3dVertexLitVertDxbc", "CNA_LIT_UNTEXTURED_INPUT"),
     ("lit_textured3d_vertexlit.frag.hlsl", "main", "ps_5_0", "kLitTextured3dVertexLitFragDxbc"),
     ("alpha_test3d.vert.hlsl",       "main", "vs_5_0", "kAlphaTest3dVertDxbc"),
+    ("alpha_test3d.vert.hlsl",       "main", "vs_5_0", "kAlphaTestUntextured3dVertDxbc", "CNA_ALPHA_TEST_UNTEXTURED_INPUT"),
     ("alpha_test3d.frag.hlsl",       "main", "ps_5_0", "kAlphaTest3dFragDxbc"),
     ("dual_texture3d.vert.hlsl",     "main", "vs_5_0", "kDualTexture3dVertDxbc"),
     ("dual_texture3d.frag.hlsl",     "main", "ps_5_0", "kDualTexture3dFragDxbc"),
@@ -64,6 +65,7 @@ SHADERS = [
     ("instanced3d.vert.hlsl",        "main", "vs_5_0", "kInstanced3dVertDxbc"),
     ("instanced3d.frag.hlsl",        "main", "ps_5_0", "kInstanced3dFragDxbc"),
     ("alpha_test_colored3d.vert.hlsl", "main", "vs_5_0", "kAlphaTestColored3dVertDxbc"),
+    ("alpha_test_colored3d.vert.hlsl", "main", "vs_5_0", "kAlphaTestUntexturedColored3dVertDxbc", "CNA_ALPHA_TEST_UNTEXTURED_INPUT"),
     ("alpha_test_colored3d.frag.hlsl", "main", "ps_5_0", "kAlphaTestColored3dFragDxbc"),
     # plans/plan_cnj.md CNB-58/CNB-67 follow-up: PbrEffect/SkinnedPbrEffect + SkinnedEffect vertex-color
     # (stride 56) D3D11 shader variants.

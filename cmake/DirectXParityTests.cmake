@@ -199,6 +199,30 @@ function(cna_register_d3d_parity_tests)
         NAME BasicEffect_LitVertexColor TARGET basiceffect_lit_vertex_color DIRECTX12_ORDER 720
         SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_basiceffect_lit_vertex_color_test.cpp")
     cna_d3d_parity_fixture(
+        NAME AlphaTestEffect_Properties TARGET alphatesteffect_properties DIRECTX12_ORDER 730
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/alpha_test_effect_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME AlphaTestEffect_AlphaCutout TARGET alphatesteffect_alpha_cutout DIRECTX12_ORDER 740
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/alpha_test_integration_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME AlphaTestEffect_Golden TARGET alphatesteffect_golden DIRECTX12_ORDER 750
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_alphatesteffect_golden_test.cpp"
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    cna_d3d_parity_fixture(
+        NAME AlphaTestEffect_Modes TARGET alphatest_modes DIRECTX12_ORDER 760
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_alphatest_modes_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME AlphaTestEffect_CompareFunctionSweep TARGET alphatest_comparefunction_sweep
+        DIRECTX12_ORDER 770
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_alphatest_comparefunction_sweep_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME AlphaTestEffect_VertexColorDiffuse TARGET alphatest_vertexcolor_diffuse
+        DIRECTX12_ORDER 780
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_alphatest_vertexcolor_diffuse_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME AlphaTestEffect_NullTexture TARGET alphatest_null_texture DIRECTX12_ORDER 790
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_alphatest_null_texture_test.cpp")
+    cna_d3d_parity_fixture(
         NAME Pbr_VertexColor TARGET pbr_vertexcolor SOURCE directx11_pbr_vertexcolor_test.cpp
         DIRECTX11_ONLY REASON "The fixture directly exercises the D3D11 PBR frontend")
     cna_d3d_parity_fixture(
@@ -224,9 +248,8 @@ function(cna_register_d3d_parity_tests)
         SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/vulkan/examples/vulkan_viewspace_fog_test.cpp"
         DIRECTX11_ONLY REASON "D3D12 stock-effect corpus adoption is tracked by DX-230 and DX-236")
     cna_d3d_parity_fixture(
-        NAME AlphaTest_Fog TARGET alphatest_fog
-        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/vulkan/examples/vulkan_alphatest_fog_test.cpp"
-        DIRECTX11_ONLY REASON "D3D12 stock-effect corpus adoption is tracked by DX-230 and DX-236")
+        NAME AlphaTest_Fog TARGET alphatest_fog DIRECTX12_ORDER 800
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_alphatest_fog_test.cpp")
     cna_d3d_parity_fixture(
         NAME DualTextureEffect_Fog TARGET dualtexture_fog
         SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/vulkan/examples/vulkan_dualtextureeffect_fog_test.cpp"

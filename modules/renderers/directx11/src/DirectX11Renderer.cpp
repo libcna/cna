@@ -1404,8 +1404,7 @@ namespace CNA::Internal::Renderers::DirectX11
         const bool hasTexCoord = hasDeclaration ? hasElement(VertexElementUsage::TextureCoordinate)
                                                 : stride == 20 || stride == 24 || stride == 32;
 
-        // A PBR MASK draw keeps the PBR shader and evaluates alpha coverage there. The standalone
-        // AlphaTestEffect path only accepts stride 20/24 and cannot carry a tangent-space basis.
+        // A PBR MASK draw keeps the PBR shader and evaluates alpha coverage there.
         const bool needsPbr         = params.pbr;
         const bool needsAlphaTest   = !needsPbr &&
                                       (params.alphaTest[3] < 0.0f || params.alphaTest[2] < 0.0f);
@@ -1423,15 +1422,10 @@ namespace CNA::Internal::Renderers::DirectX11
         const bool needsLitTextured = hasNormal && !needsAlphaTest && !needsDualTex
                                      && !needsEnvMap && !needsPbr && !needsSkinned;
 
-        // DX-136: alpha_test3d.vert.hlsl (stride 20, Position+UV) and its sibling
-        // alpha_test_colored3d.vert.hlsl (stride 24, Position+Color+UV -- gives
-        // AlphaTestEffect.VertexColorEnabled a real vertex-color attribute) are the only two
-        // strides this effect supports.
-        if (needsAlphaTest && stride != 20 && stride != 24)
+        if (needsAlphaTest && params.texture0 != nullptr && !hasTexCoord)
             throw std::runtime_error(
-                "DirectX11Renderer::DrawPrimitivesEx: AlphaTestEffect (alpha_test3d) only "
-                "supports stride 20 (VertexPositionTexture) or 24 "
-                "(VertexPositionColorTexture, plans/plan_dx.md DX-136)");
+                "DirectX11Renderer::DrawPrimitivesEx: AlphaTestEffect requires TEXCOORD0 when "
+                "a real texture is bound");
         // DX-65: dual_texture3d.vert.hlsl's VSInput is Position+UV only (20 bytes) -- the 24-byte
         // dual_texture_colored3d variant was deliberately not ported (DX-13-hlsl's own row notes).
         if (needsDualTex && stride != 20)
@@ -1466,8 +1460,11 @@ namespace CNA::Internal::Renderers::DirectX11
 
         D3DCommon::D3DShaderVariant variant;
         if (needsAlphaTest)
-            variant = (stride == 24) ? D3DCommon::D3DShaderVariant::AlphaTestColored3d
-                                      : D3DCommon::D3DShaderVariant::AlphaTest3d;
+            variant = hasColor
+                ? (hasTexCoord ? D3DCommon::D3DShaderVariant::AlphaTestColored3d
+                               : D3DCommon::D3DShaderVariant::AlphaTestUntexturedColored3d)
+                : (hasTexCoord ? D3DCommon::D3DShaderVariant::AlphaTest3d
+                               : D3DCommon::D3DShaderVariant::AlphaTestUntextured3d);
         else if (needsDualTex)
             variant = D3DCommon::D3DShaderVariant::DualTexture3d;
         else if (needsEnvMap)
@@ -1584,7 +1581,8 @@ namespace CNA::Internal::Renderers::DirectX11
         }
         else
         {
-            srvs[0] = GetSrvForTextureEXT(params.texture0);
+            srvs[0] = params.texture0 ? GetSrvForTextureEXT(params.texture0)
+                                      : GetOrCreateDefaultWhiteSrvEXT();
         }
 
         // 3 contiguous slots (b0/b1/b2) always fully rebound below (unused slots explicitly null)

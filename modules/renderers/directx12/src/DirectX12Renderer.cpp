@@ -2167,8 +2167,7 @@ namespace CNA::Internal::Renderers::DirectX12
         const bool hasTexCoord = hasDeclaration ? hasElement(VertexElementUsage::TextureCoordinate)
                                                 : stride == 20 || stride == 24 || stride == 32;
 
-        // A PBR MASK draw keeps the PBR shader and evaluates alpha coverage there. The standalone
-        // AlphaTestEffect path only accepts stride 20/24 and cannot carry a tangent-space basis.
+        // A PBR MASK draw keeps the PBR shader and evaluates alpha coverage there.
         const bool needsPbr = params.pbr;
         const bool needsAlphaTest = !needsPbr &&
                                     (params.alphaTest[3] < 0.0f || params.alphaTest[2] < 0.0f);
@@ -2207,15 +2206,10 @@ namespace CNA::Internal::Renderers::DirectX12
                 "DirectX12Renderer::DrawPrimitivesEx: SkinnedEffect (skinned3d) requires stride "
                 "52 (VertexPositionNormalTextureSkinned) or 56 (skinned + per-vertex Color, "
                 "plans/plan_cnj.md CNB-67)");
-        // DX-136: alpha_test3d.vert.hlsl (stride 20, Position+UV) and its sibling
-        // alpha_test_colored3d.vert.hlsl (stride 24, Position+Color+UV -- gives
-        // AlphaTestEffect.VertexColorEnabled a real vertex-color attribute) are the only two
-        // strides this effect supports, same as D3D11's own DrawPrimitivesExImpl.
-        if (needsAlphaTest && stride != 20 && stride != 24)
+        if (needsAlphaTest && params.texture0 != nullptr && !hasTexCoord)
             throw std::runtime_error(
-                "DirectX12Renderer::DrawPrimitivesEx: AlphaTestEffect (alpha_test3d) only "
-                "supports stride 20 (VertexPositionTexture) or 24 "
-                "(VertexPositionColorTexture, plans/plan_dx.md DX-136)");
+                "DirectX12Renderer::DrawPrimitivesEx: AlphaTestEffect requires TEXCOORD0 when "
+                "a real texture is bound");
         // plans/plan_cnj.md CNB-58/GLTF-386 follow-up: PBR accepts the canonical single-UV layouts and
         // their TEXCOORD_1 suffix variants, mirroring D3D11's DrawPrimitivesExImpl exactly.
         if (needsPbr && !params.skinned && stride != 48 && stride != 60)
@@ -2234,7 +2228,11 @@ namespace CNA::Internal::Renderers::DirectX12
         int numSrvs = 0;
         if (needsAlphaTest)
         {
-            variant = (stride == 24) ? D3DShaderVariant::AlphaTestColored3d : D3DShaderVariant::AlphaTest3d;
+            variant = hasColor
+                ? (hasTexCoord ? D3DShaderVariant::AlphaTestColored3d
+                               : D3DShaderVariant::AlphaTestUntexturedColored3d)
+                : (hasTexCoord ? D3DShaderVariant::AlphaTest3d
+                               : D3DShaderVariant::AlphaTestUntextured3d);
             hasTexture = true;
             numCbvs = 1; // alpha_test3d's own single combined PerDraw (b0) -- no separate FogParams cbuffer.
             numSrvs = 1;
@@ -2389,6 +2387,10 @@ namespace CNA::Internal::Renderers::DirectX12
             c.FogColor[0] = params.fogColor[0];
             c.FogColor[1] = params.fogColor[1];
             c.FogColor[2] = params.fogColor[2];
+
+            srvTextures[0] = params.texture0 != nullptr
+                ? params.texture0
+                : GetOrCreateDefaultWhiteTextureEXT();
 
             ID3D12Resource* cb = GetOrCreateAlphaTestConstantBufferEXT();
             std::memcpy(alphaTestConstantBufferMapped_, &c, sizeof(c));

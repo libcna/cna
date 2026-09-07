@@ -32,6 +32,8 @@ namespace CNA::Internal::Renderers::D3DCommon
         /// does not require UV or Color inputs from the caller's declaration.
         LitUntextured3d,
         AlphaTest3d,
+        /// AlphaTestEffect with a white fallback texture and Position-only input.
+        AlphaTestUntextured3d,
         DualTexture3d,
         EnvMap3d,
         Skinned3d,
@@ -41,6 +43,8 @@ namespace CNA::Internal::Renderers::D3DCommon
         /// gives AlphaTestEffect.VertexColorEnabled a real vertex-color attribute to multiply
         /// against, which plain AlphaTest3d (stride 20, Position+UV only) never carries.
         AlphaTestColored3d,
+        /// AlphaTestEffect with a white fallback texture and Position+Color input.
+        AlphaTestUntexturedColored3d,
         /// plans/plan_graphics.md Phase 80 (Task 1106/1107): real per-vertex-lit siblings of
         /// LitTextured3d/Skinned3d, selected when GpuDrawParams::preferPerPixelLighting is false
         /// (XNA's real default) -- identical Blinn-Phong math, evaluated in the vertex stage.
