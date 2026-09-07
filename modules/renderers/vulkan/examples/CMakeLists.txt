@@ -238,6 +238,20 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_texture3d_addressw
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-198: three EasyGL BasicEffect sources with no Vulkan equivalent,
+        # run here to find out what this renderer does with them rather than to assert that it
+        # already agrees. VULKAN-257 closed only the combination sweep. Two of the three are NOT
+        # registered, and that is the finding rather than an omission: `PositionNormal` (stride 24,
+        # Position+Normal) and `LitVertexColor` (stride 36, +Colour+UV) are both REFUSED by this
+        # renderer's declaration guard -- it has no native lit layout for either stride -- so
+        # registering them would register a known refusal as a test. VULKAN-199 and VULKAN-200 own
+        # the two layouts and each registers its own source when it lands.
+        cna_vulkan_test(cna_test_vulkan_basiceffect_default_lighting
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_basiceffect_default_lighting_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_BasicEffectDefaultLighting
+            COMMAND cna_test_vulkan_basiceffect_default_lighting
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-197 (F-36): D3D9 saturates oD0, so an unlit DiffuseColor above 1
         # blends as 1 -- and, across a colour gradient, is saturated per vertex before interpolation.
         cna_vulkan_test(cna_test_vulkan_basiceffect_diffuse_color_clamp
