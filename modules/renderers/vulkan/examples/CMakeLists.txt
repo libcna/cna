@@ -2383,6 +2383,28 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_presentation_parameters
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-178: Texture2D::FromStream and SaveAsPng/SaveAsJpeg, both of which
+        # go through this renderer's own upload and readback paths. The sources are SDL_Renderer's
+        # (Tasks 682/683) and contain nothing renderer-specific but the presentation mode they
+        # request, which this renderer implements too.
+        cna_vulkan_test(cna_test_vulkan_texture2d_fromstream
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/sdl-renderer/examples/sdlrenderer_texture2d_fromstream_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Texture2D_FromStream
+            COMMAND cna_test_vulkan_texture2d_fromstream
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_texture2d_saveas_roundtrip
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/sdl-renderer/examples/sdlrenderer_texture2d_saveas_roundtrip_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Texture2D_SaveAsRoundTrip
+            COMMAND cna_test_vulkan_texture2d_saveas_roundtrip
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_texture2d_saveas_rendertarget
+                        vulkan_texture2d_saveas_rendertarget_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Texture2D_SaveAsRenderTarget
+            COMMAND cna_test_vulkan_texture2d_saveas_rendertarget
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-165: unknown-stride rejection -- the other half of VULKAN-144's declaration-driven layout.
         cna_vulkan_test(cna_test_vulkan_unknown_stride_rejection
                         ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_unknown_stride_rejection_test.cpp)
