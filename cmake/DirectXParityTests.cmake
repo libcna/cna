@@ -122,9 +122,23 @@ function(cna_register_d3d_parity_tests)
         NAME GraphicsDevice_ClearDepth TARGET graphicsdevice_clear_depth DIRECTX12_ORDER 480
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/graphicsdevice_clear_depth_test.cpp")
     cna_d3d_parity_fixture(
-        NAME RasterizerState_CullMode TARGET rasterizerstate_cullmode
-        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_rasterizerstate_cullmode_test.cpp"
-        DIRECTX11_ONLY REASON "D3D12 state-corpus adoption is tracked by DX-227 and DX-236")
+        NAME RasterizerState_CullMode TARGET rasterizerstate_cullmode DIRECTX12_ORDER 490
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_rasterizerstate_cullmode_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME RasterizerState_CullModeCamera TARGET rasterizerstate_cullmode_camera DIRECTX12_ORDER 500
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/rasterizerstate_cullmode_camera_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME RasterizerState_CullModeIndexedBasicEffect
+        TARGET rasterizerstate_cullmode_indexed_basiceffect DIRECTX12_ORDER 510
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/rasterizerstate_cullmode_indexed_basiceffect_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME FrontFaceWinding TARGET frontface_winding DIRECTX12_ORDER 520
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/frontface_winding_test.cpp"
+        DIRECTX11_TIMEOUT 600 DIRECTX12_TIMEOUT 900)
+    cna_d3d_parity_fixture(
+        NAME TriangleStripWinding TARGET triangle_strip_winding DIRECTX12_ORDER 530
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/triangle_strip_winding_test.cpp"
+        DIRECTX11_TIMEOUT 600 DIRECTX12_TIMEOUT 900)
     cna_d3d_parity_fixture(
         NAME Pbr_VertexColor TARGET pbr_vertexcolor SOURCE directx11_pbr_vertexcolor_test.cpp
         DIRECTX11_ONLY REASON "The fixture directly exercises the D3D11 PBR frontend")
