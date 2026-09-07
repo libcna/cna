@@ -381,6 +381,9 @@ namespace CNA::Internal::Renderers::DirectX12
         owner_->ApplySamplerState(0, pendingFilter_, pendingAddressU_, pendingAddressV_, 1);
         owner_->ApplySamplerMipState(0, pendingMaxMipLevel_, pendingLodBias_);
         owner_->ApplySamplerAddressW(0, pendingAddressW_);
+        // GetSamplerGpuHandleEXT may grow and replace the shader-visible sampler heap. Resolve the
+        // descriptor before capturing the heap object that this command list will actually bind.
+        const D3D12_GPU_DESCRIPTOR_HANDLE samplerHandle = owner_->GetSamplerGpuHandleEXT(0);
 
         // DX-119: SpriteBatch always samples XNA texture slot 0 (GraphicsDevice.Textures[0]/
         // SamplerStates[0]) -- real, runtime-settable SamplerState, not a hardcoded default,
@@ -396,7 +399,7 @@ namespace CNA::Internal::Renderers::DirectX12
             if (customTexture.ptr != 0) textureHandle = customTexture;
         }
         cmdList->SetGraphicsRootDescriptorTable(1, textureHandle);
-        cmdList->SetGraphicsRootDescriptorTable(2, owner_->GetSamplerGpuHandleEXT(0));
+        cmdList->SetGraphicsRootDescriptorTable(2, samplerHandle);
 
         cmdList->DrawIndexedInstanced(static_cast<UINT>(pendingIndices_.size()), 1, 0, 0, 0);
 

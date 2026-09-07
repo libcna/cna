@@ -2949,14 +2949,21 @@ namespace CNA::Internal::Renderers::DirectX12
             // (GraphicsDevice.SamplerStates[i]), not a hardcoded default. Both the CBV_SRV_UAV heap
             // and the SAMPLER heap are bound together -- D3D12 allows up to 2 shader-visible heaps
             // simultaneously, one per heap type.
-            // REMED-GFX-177: resolved per draw, so a heap that grew between draws is picked up
-            // here and every root table below points into the heap actually being bound.
+            // Resolve once to create every missing descriptor before reading the heap object. A
+            // later slot can grow and replace the heap, invalidating both its old object and every
+            // GPU handle obtained from it, so resolve all handles again after allocation settles.
+            D3D12_GPU_DESCRIPTOR_HANDLE samplerHandles[7]{};
+            for (int i = 0; i < numSrvs; ++i)
+                (void)GetSamplerGpuHandleEXT(i);
+            for (int i = 0; i < numSrvs; ++i)
+                samplerHandles[i] = GetSamplerGpuHandleEXT(i);
+
             ID3D12DescriptorHeap* heaps[] = {GetCbvSrvUavHeapEXT(), GetSamplerHeapEXT()};
             cmdList->SetDescriptorHeaps(2, heaps);
             for (int i = 0; i < numSrvs; ++i)
                 cmdList->SetGraphicsRootDescriptorTable(numCbvs + i, srvHandles[i]);
             for (int i = 0; i < numSrvs; ++i)
-                cmdList->SetGraphicsRootDescriptorTable(numCbvs + numSrvs + i, GetSamplerGpuHandleEXT(i));
+                cmdList->SetGraphicsRootDescriptorTable(numCbvs + numSrvs + i, samplerHandles[i]);
         }
 
         if (ib != nullptr)
