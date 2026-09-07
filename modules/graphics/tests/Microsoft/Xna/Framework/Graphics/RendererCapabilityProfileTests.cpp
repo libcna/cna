@@ -18,7 +18,8 @@ using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 
 static_assert(static_cast<std::uint32_t>(CNA::RendererFeature::ThreeDimensionalPipeline) == 0);
 static_assert(static_cast<std::uint32_t>(CNA::RendererFeature::ShaderDialectWgsl) == 29);
-static_assert(static_cast<std::uint32_t>(CNA::RendererFeature::Count) == 30);
+static_assert(static_cast<std::uint32_t>(CNA::RendererFeature::Texture3DSampling) == 30);
+static_assert(static_cast<std::uint32_t>(CNA::RendererFeature::Count) == 31);
 static_assert(static_cast<std::uint8_t>(CNA::RendererFeatureSupport::Unknown) == 0);
 static_assert(static_cast<std::uint8_t>(CNA::RendererFeatureSupport::Restricted) == 3);
 static_assert(static_cast<std::uint32_t>(CNA::RendererLimit::MaxTextureDimension) == 0);

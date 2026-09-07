@@ -582,6 +582,10 @@ namespace CNA::Internal::Renderers::Vulkan
         VkDescriptorSet       boundSet_       = VK_NULL_HANDLE;
         VkDescriptorPool      boundSetPool_   = VK_NULL_HANDLE;
         bool                  boundSetDirty_  = false;
+        /// plan_vulkan.md VULKAN-164: the sampler the current set was built with. The set is
+        /// rebuilt when it changes, because two batches can bind the same textures with
+        /// different SamplerStates and the second must not reuse the first one's sampler.
+        VkSampler             boundSetSampler_ = VK_NULL_HANDLE;
         VkShaderModule   vertModule_     = VK_NULL_HANDLE;
         VkShaderModule   fragModule_     = VK_NULL_HANDLE;
         VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
@@ -698,6 +702,10 @@ namespace CNA::Internal::Renderers::Vulkan
             pendingAddressU_ = addressU;
             pendingAddressV_ = addressV;
         }
+        /// VULKAN-164: -1 means "the batch supplied no W", which keeps ApplySamplerState's
+        /// W-follows-U default for any caller that flushes sprites without going through
+        /// SpriteBatch::Begin.
+        void SetSamplerAddressModeWEXT(int addressW) override { pendingAddressW_ = addressW; }
 
         void Draw(const ITextureRenderer& texture, float x, float y) override;
         void Draw(const ITextureRenderer& texture,
@@ -834,6 +842,7 @@ namespace CNA::Internal::Renderers::Vulkan
         int                              pendingFilter_       = 0; // TextureFilter::Linear
         int                              pendingAddressU_     = 1; // TextureAddressMode::Clamp
         int                              pendingAddressV_     = 1; // TextureAddressMode::Clamp
+        int                              pendingAddressW_     = -1; // -1: follow U (see setter)
 
         void FlushTexture();
     };
@@ -1575,6 +1584,18 @@ namespace CNA::Internal::Renderers::Vulkan
          */
         [[nodiscard]] CNA::Internal::Renderers::ShaderDialectEXT
             GetShaderDialectEXT() const override;
+
+        /**
+         * @brief CNAEXT. A `Texture3D` bound to a `ShaderEffect` is sampled by that shader here.
+         *
+         * plan_vulkan.md VULKAN-164. `VulkanEffectRenderer::BindTexture3D` writes the volume into
+         * descriptor set 1 at `kEffectVolumeBindingBase + unit`, and the batch's own `SamplerState`
+         * -- W axis included -- governs it. Proved by `Vulkan_Texture3DAddressW`, which reads two
+         * different pixels from one volume by changing nothing but `AddressW`.
+         *
+         * @return `true`.
+         */
+        [[nodiscard]] bool SupportsTexture3DSamplingEXT() const override { return true; }
 
         /**
          * @brief CNAEXT. Whether a `RenderTarget2D` of @p format can really be created here.

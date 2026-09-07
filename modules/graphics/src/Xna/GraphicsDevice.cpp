@@ -2518,6 +2518,12 @@ namespace Microsoft::Xna::Framework::Graphics
         setLegacy(CNA::RendererFeature::Texture3DStorage,
                   CNA::GraphicsCapability::Texture3D,
                   "Storage and transfer only; general shader sampling is not implied.");
+        profile.SetFeature(
+            CNA::RendererFeature::Texture3DSampling,
+            FeatureSupport(SupportsCapability(CNA::GraphicsCapability::Texture3D) &&
+                           renderer.SupportsTexture3DSamplingEXT()),
+            "A volume bound to a custom effect is read by that shader. Separate from storage "
+            "because a renderer can carry Texture3D data faithfully and have no sampler3D path.");
         setLegacy(CNA::RendererFeature::MultiStreamVertexInput,
                   CNA::GraphicsCapability::MultiStreamVertexInput);
         setLegacy(CNA::RendererFeature::InstancedDrawing,

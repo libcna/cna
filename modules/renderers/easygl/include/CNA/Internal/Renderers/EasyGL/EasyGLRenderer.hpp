@@ -1608,6 +1608,10 @@ namespace CNA::Internal::Renderers::EasyGL
         [[nodiscard]] bool ExecutesShaderEffectSourceEXT() const override { return true; }
         [[nodiscard]] bool SupportsShadowSamplingEXT() const override { return true; }
         [[nodiscard]] bool SupportsImageBasedLightingEXT() const override { return true; }
+        /// plan_vulkan.md VULKAN-164: plans/plan_graphics.md Task 863 gave this renderer
+        /// `BindTexture3D`, and `EasyGL_ShaderEffect_Texture3D` reads two different slices of one
+        /// bound volume through a `sampler3D`.
+        [[nodiscard]] bool SupportsTexture3DSamplingEXT() const override { return true; }
         [[nodiscard]] bool SupportsComputeShadersEXT() const override;
         /// plans/plan_modern.md MOD-2090: glDrawArraysIndirect/glDrawElementsIndirect, which arrive in
         /// the same API generation as compute (GL ES 3.1, desktop GL 4.0) -- so the probe is the

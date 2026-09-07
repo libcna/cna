@@ -364,8 +364,17 @@ typedef uint32_t CNA_RendererFeature;
 #define CNA_RENDERER_FEATURE_SHADER_DIALECT_MSL UINT32_C(28)
 /** @brief Source-based effects consume WebGPU Shading Language. */
 #define CNA_RENDERER_FEATURE_SHADER_DIALECT_WGSL UINT32_C(29)
+/**
+ * @brief A Texture3D bound to a custom effect is sampled by the shader.
+ *
+ * Distinct from @ref CNA_RENDERER_FEATURE_TEXTURE_3D_STORAGE, which promises only that a volume
+ * survives upload and readback.
+ *
+ * @since ABI 0.24.0
+ */
+#define CNA_RENDERER_FEATURE_TEXTURE_3D_SAMPLING UINT32_C(30)
 /** @brief Largest currently defined detailed renderer-feature identity. */
-#define CNA_RENDERER_FEATURE_MAXIMUM CNA_RENDERER_FEATURE_SHADER_DIALECT_WGSL
+#define CNA_RENDERER_FEATURE_MAXIMUM CNA_RENDERER_FEATURE_TEXTURE_3D_SAMPLING
 
 /** @brief Fixed-width classified answer for one detailed renderer feature. */
 typedef uint32_t CNA_RendererFeatureSupport;

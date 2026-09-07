@@ -1007,6 +1007,22 @@ namespace CNA::Internal::Renderers
          */
         virtual void SetSamplerAddressMode(int /*addressU*/, int /*addressV*/) {}
         /**
+         * @brief CNAEXT. Sets the W texture address mode of the batch's SamplerState.
+         *
+         * Separate from `SetSamplerAddressMode` because that method's two-argument signature is
+         * implemented by every renderer and widening it would break them all. XNA's SpriteBatch
+         * assigns the WHOLE SamplerState to `GraphicsDevice.SamplerStates[0]`, W included; CNA
+         * forwarded only the filter and the U/V axes, so a state that differed from a preset only
+         * in `AddressW` reached no renderer at all. That is invisible to 2D sampling -- which is
+         * why it went unnoticed -- and decides what a `sampler3D` reads outside [0,1].
+         *
+         * Default: no-op, which is exactly the old behaviour for a renderer that has no volume
+         * sampling path and nothing else that consults the W axis.
+         *
+         * @param addressW The batch SamplerState's `TextureAddressMode` ordinal for W.
+         */
+        virtual void SetSamplerAddressModeWEXT(int /*addressW*/) {}
+        /**
          * @brief CNAEXT. Tells the renderer whether the batch SpriteBatch::Begin() just started is
          *        SpriteSortMode::Immediate.
          *
@@ -2370,6 +2386,15 @@ namespace CNA::Internal::Renderers
         /// supports compute still cannot bind one. Desktop GL accepts a mutable texture. False by
         /// default, like every other promise here.
         [[nodiscard]] virtual bool SupportsComputeImageBindingEXT() const { return false; }
+
+        /// plan_vulkan.md VULKAN-164: whether a `Texture3D` bound through
+        /// `IEffectRenderer::BindTexture3D` is actually SAMPLED by the shader, as distinct from
+        /// `GraphicsCapability::Texture3D`, which only promises that a volume can be uploaded and
+        /// read back. The two were conflated until a renderer grew the second without the first.
+        ///
+        /// Defaults to false, the conservative answer: a renderer that samples volumes says so
+        /// here, and one that has not been measured under-claims rather than over-claims.
+        [[nodiscard]] virtual bool SupportsTexture3DSamplingEXT() const { return false; }
 
         /// plans/plan_modern.md MOD-2092: the colour space the swap chain is currently presenting in.
         /// `Srgb` by default and for every CNA renderer today -- an HDR swap chain is a property of

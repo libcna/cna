@@ -280,6 +280,8 @@ static_assert(
     static_cast<uint32_t>(CNA::RendererFeature::ComputeImageBinding) ==
         CNA_RENDERER_FEATURE_COMPUTE_IMAGE_BINDING &&
     static_cast<uint32_t>(CNA::RendererFeature::ShaderDialectWgsl) ==
+        CNA_RENDERER_FEATURE_SHADER_DIALECT_WGSL &&
+    static_cast<uint32_t>(CNA::RendererFeature::Texture3DSampling) ==
         CNA_RENDERER_FEATURE_MAXIMUM &&
     static_cast<uint32_t>(CNA::RendererFeature::Count) ==
         CNA_RENDERER_FEATURE_MAXIMUM + UINT32_C(1));

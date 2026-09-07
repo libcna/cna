@@ -84,8 +84,10 @@ namespace CNA
         ShaderDialectMsl = 28,
         /** @brief Source-based effects consume WebGPU Shading Language. */
         ShaderDialectWgsl = 29,
+        /** @brief A `Texture3D` bound to a custom effect is sampled by the shader. */
+        Texture3DSampling = 30,
         /** @brief Number of declared feature identities; not itself a queryable feature. */
-        Count = 30
+        Count = 31
     };
 
     /** @brief The renderer's classified answer for one detailed feature. */

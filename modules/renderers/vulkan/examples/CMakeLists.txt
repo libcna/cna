@@ -230,6 +230,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_effect_bound_texture
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-164: SamplerState.AddressW decides what a bound Texture3D reads
+        # outside [0,1] -- the test VULKAN-094 proposed and could not write.
+        cna_vulkan_test(cna_test_vulkan_texture3d_addressw
+                        vulkan_texture3d_addressw_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Texture3DAddressW
+            COMMAND cna_test_vulkan_texture3d_addressw
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         cna_vulkan_test(cna_test_vulkan_shader_effect
                         vulkan_shader_effect_test.cpp)
         cna_register_renderer_test(NAME Vulkan_ShaderEffect_SpirV COMMAND cna_test_vulkan_shader_effect

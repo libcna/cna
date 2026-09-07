@@ -42,7 +42,8 @@ namespace CNA
             RendererFeature::ShaderDialectGlslVulkan,
             RendererFeature::ShaderDialectHlsl,
             RendererFeature::ShaderDialectMsl,
-            RendererFeature::ShaderDialectWgsl
+            RendererFeature::ShaderDialectWgsl,
+            RendererFeature::Texture3DSampling
         };
 
         constexpr std::array<RendererLimit, LimitCount> Limits = {
@@ -278,6 +279,7 @@ namespace CNA
             case RendererFeature::ShaderDialectHlsl: return "ShaderDialectHlsl";
             case RendererFeature::ShaderDialectMsl: return "ShaderDialectMsl";
             case RendererFeature::ShaderDialectWgsl: return "ShaderDialectWgsl";
+            case RendererFeature::Texture3DSampling: return "Texture3DSampling";
             case RendererFeature::Count: break;
         }
         return "UnknownRendererFeature";
@@ -347,6 +349,9 @@ namespace CNA
                 return "ShaderEffect consumes Metal Shading Language source.";
             case RendererFeature::ShaderDialectWgsl:
                 return "ShaderEffect consumes WebGPU Shading Language source.";
+            case RendererFeature::Texture3DSampling:
+                return "A Texture3D bound to a custom effect is read by that shader, with the "
+                       "slot's SamplerState governing it.";
             case RendererFeature::Count: break;
         }
         return "Invalid detailed renderer feature identity.";

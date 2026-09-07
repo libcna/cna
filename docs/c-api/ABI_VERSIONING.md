@@ -2,7 +2,21 @@
 
 ## ABI identity
 
-The ABI is `0.23.0`. It adds **one route**, `cna_decal_pass_is_supported`, and is otherwise
+The ABI is `0.24.0`. It adds **one detailed renderer-feature identity**,
+`CNA_RENDERER_FEATURE_TEXTURE_3D_SAMPLING` (`30`), which asks whether a `Texture3D` bound to a
+custom effect is actually **sampled** by that shader. `CNA_RENDERER_FEATURE_TEXTURE_3D_STORAGE`
+answers only that a volume can be uploaded and read back, and the two came apart in practice: the
+Vulkan renderer carried `Texture3D` data faithfully for a long time with no `sampler3D` path at
+all, so a caller asking the storage question got `supported` and a shader reading the volume got
+nothing (`plans/plan_vulkan.md` `VULKAN-164`, finding `F-31`). No existing identity changes
+meaning; appending this one moves `CNA_RENDERER_FEATURE_MAXIMUM` from `29` to `30`, which is why
+the minor increments rather than the patch -- the same reason `0.8.0` gives for the five
+engine-layer capability identities it appended.
+
+A caller that iterates `0 .. CNA_RENDERER_FEATURE_MAXIMUM` sees one more entry than it did under
+`0.23.0`; one that names the identities it asks about sees no change at all.
+
+`0.23.0` added **one route**, `cna_decal_pass_is_supported`, and is otherwise
 identical to `0.22.0`. The addition closes a gap the language bindings recorded as
 `BINDFIX-018` in [`plans/plan_bindings_upstream.md`](../../plans/plan_bindings_upstream.md): a
 decal pass is its own handle kind, so `cna_post_process_pass_is_supported` refuses it with

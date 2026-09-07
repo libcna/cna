@@ -231,6 +231,12 @@ namespace Microsoft::Xna::Framework::Graphics
                 renderer_->SetSamplerFilter(static_cast<int>(effectiveSampler.getFilterProperty()));
                 renderer_->SetSamplerAddressMode(static_cast<int>(effectiveSampler.getAddressUProperty()),
                                                 static_cast<int>(effectiveSampler.getAddressVProperty()));
+                // plan_vulkan.md VULKAN-164: XNA assigns the whole SamplerState to
+                // GraphicsDevice.SamplerStates[0]; this layer forwarded the filter and two axes and
+                // dropped the third. Harmless for 2D sampling, decisive for a custom effect's
+                // sampler3D, whose W coordinate can leave [0,1].
+                renderer_->SetSamplerAddressModeWEXT(
+                    static_cast<int>(effectiveSampler.getAddressWProperty()));
                 renderer_->SetImmediateMode(sortMode_ == SpriteSortMode::Immediate);
                 renderer_->Begin();
             }

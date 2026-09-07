@@ -1380,6 +1380,9 @@ namespace CNA::Internal::Renderers::Vulkan
         // the pending SamplerState to slot 0 (Task 118's existing per-slot VkSampler cache) and
         // build a fresh descriptor set combining the texture's own image view with THAT sampler.
         renderer_->ApplySamplerState(0, pendingFilter_, pendingAddressU_, pendingAddressV_, 1);
+        // VULKAN-164: ApplySamplerState sets W = U, which is right for every XNA preset and wrong
+        // for a state that set W on its own. The batch's own W, when it supplied one, wins.
+        if (pendingAddressW_ >= 0) renderer_->ApplySamplerAddressW(0, pendingAddressW_);
         // REMED-GFX-151: if this run of sprites samples a RENDER TARGET, the bind cycle being
         // recorded depends on that target's earlier cycles, and a mid-frame readback flush has to
         // replay them first. `activeSegment_` (not currentSegment_) is the cycle this batch belongs
@@ -4690,7 +4693,11 @@ namespace CNA::Internal::Renderers::Vulkan
         // mutation-testing this row: `vkCmdDrawIndexed(): The VkPipeline ... statically uses
         // descriptor set 1, but all sets 0 to 1 [were not bound]`, followed by a segfault. Making
         // the set unconditional costs one descriptor set per effect and removes the whole class.
-        if (!boundSetDirty_ && boundSet_ != VK_NULL_HANDLE) return boundSet_;
+        const VkSampler wantSampler = owner_->slotSamplers_[0] != VK_NULL_HANDLE
+                                          ? owner_->slotSamplers_[0]
+                                          : owner_->defaultSampler_;
+        if (!boundSetDirty_ && boundSet_ != VK_NULL_HANDLE && boundSetSampler_ == wantSampler)
+            return boundSet_;
 
         EnsureBoundTextureLayoutEXT();
 
@@ -4737,7 +4744,12 @@ namespace CNA::Internal::Renderers::Vulkan
                 view = (vk != nullptr) ? vk->GetVkVolumeImageView()
                                        : owner_->defaultWhiteVolumeView_;
             }
-            infos[static_cast<std::size_t>(i)] = { owner_->defaultSampler_, view,
+            // plan_vulkan.md VULKAN-164: the BATCH's sampler, not the renderer's default one. A
+            // game that sets `SamplerState.AddressW` before `SpriteBatch::Begin` expects its bound
+            // volume to be sampled with it; taking `defaultSampler_` here would have made every
+            // sampler-state property invisible to a ShaderEffect's own textures, which is the same
+            // silent-discard shape VULKAN-163 removed from the bindings themselves.
+            infos[static_cast<std::size_t>(i)] = { wantSampler, view,
                                                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
             auto& w = writes[static_cast<std::size_t>(i)];
             w.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -4757,9 +4769,10 @@ namespace CNA::Internal::Renderers::Vulkan
             r.poolDescriptorSets.emplace_back(boundSetPool_, boundSet_);
             owner_->RetireResources(std::move(r));
         }
-        boundSet_      = set;
-        boundSetPool_  = pool;
-        boundSetDirty_ = false;
+        boundSet_        = set;
+        boundSetPool_    = pool;
+        boundSetSampler_ = wantSampler;
+        boundSetDirty_   = false;
         return boundSet_;
     }
 
