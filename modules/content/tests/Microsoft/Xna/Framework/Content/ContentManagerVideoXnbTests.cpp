@@ -19,6 +19,7 @@
 #include <fstream>
 #include <gtest/gtest.h>
 
+#include "CNA/Internal/Xnb/PrimitiveContentTypeReaders.hpp"
 #include "CNA/Internal/Xnb/VideoContentTypeReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
@@ -139,6 +140,9 @@ namespace
         {
             ContentTypeReaderManager::ClearTypeCreators();
             CNA::Internal::Xnb::RegisterVideoXnbReader();
+            /// The object-referenced fixture dispatches the file name through the object protocol,
+            /// so its type-reader table names StringReader as well as VideoReader.
+            CNA::Internal::Xnb::RegisterPrimitiveXnbReaders();
         }
 
         void TearDown() override { ContentTypeReaderManager::ClearTypeCreators(); }
