@@ -210,6 +210,18 @@ namespace CNA::Internal::Xnb
                                             bool handlesXboxByteOrder = false) const;
 
         /**
+         * @brief Whether this file is being written for the big-endian Xbox 360.
+         *
+         * A writer that converts its own raw payload asks this instead of calling
+         * RequireVerifiedPlatformPayload(): the guard exists to refuse a payload nobody has
+         * converted, and a writer that converts one has nothing to refuse
+         * (plans/plan_xnapipeline_parity.md XNAPP-252).
+         *
+         * @return true for the `x` platform byte.
+         */
+        [[nodiscard]] bool IsXboxTarget() const noexcept;
+
+        /**
          * @brief Interns one reader identity into the type-reader table.
          *
          * @param writer The type writer whose reader must appear in the table.

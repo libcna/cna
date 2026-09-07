@@ -140,6 +140,165 @@ namespace CNA::Internal::Xnb
             return static_cast<std::uint64_t>(width) * height * depth * unit;
         }
 
+        /**
+         * @brief The width, in bytes, of the unit the Xbox 360 swaps a texture payload by.
+         *
+         * The Xbox 360 is big-endian and its texture memory is byte-swapped per component, not per
+         * texel and not per level: a 32-bit `Color` texel arrives with its four bytes reversed and
+         * a DXT block with each of its 16-bit words reversed. Both are measured against the
+         * genuine pipeline -- `xbox/png_texture` reverses `00FF00FF` to `FF00FF00` while leaving
+         * the texel order alone, and `xbox/png_texture_dxt` turns `0aca ff79 fdfe` into
+         * `ca0a 79ff fefd` (plans/plan_xnapipeline_parity.md XNAPP-252).
+         *
+         * A format whose components are single bytes needs no swap and answers 1. A format this
+         * build has not measured or derived answers 0, and the caller then refuses the platform
+         * rather than writing a payload it cannot vouch for.
+         *
+         * @param format The surface format.
+         * @return 1, 2 or 4 for a format that can be converted; 0 for one that cannot.
+         */
+        [[nodiscard]] std::uint32_t XboxByteSwapUnit(const SurfaceFormat format)
+        {
+            namespace XnaGraphics = Microsoft::Xna::Framework::Graphics;
+            switch (format)
+            {
+            // Single-byte components: nothing to reverse.
+            case SurfaceFormat::Alpha8:
+                return 1u;
+            // Four bytes per texel, reversed as one unit.
+            case SurfaceFormat::Color:
+            case SurfaceFormat::Rgba1010102:
+            case SurfaceFormat::Rg32:
+            case SurfaceFormat::NormalizedByte4:
+            case SurfaceFormat::Single:
+                return 4u;
+            // Two bytes per component or per texel.
+            case SurfaceFormat::Bgr565:
+            case SurfaceFormat::Bgra5551:
+            case SurfaceFormat::Bgra4444:
+            case SurfaceFormat::NormalizedByte2:
+            case SurfaceFormat::HalfSingle:
+            case SurfaceFormat::HalfVector2:
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::Rgba64:
+            case SurfaceFormat::Vector2:
+            case SurfaceFormat::Vector4:
+            // A block-compressed level is a stream of 16-bit words, and that is the unit.
+            case SurfaceFormat::Dxt1:
+            case SurfaceFormat::Dxt3:
+            case SurfaceFormat::Dxt5:
+                return 2u;
+            default:
+                return 0u;
+            }
+        }
+
+        /**
+         * @brief Reverses each swap unit of one texture level in place.
+         *
+         * @param level The level's bytes.
+         * @param unit 1, 2 or 4; 1 leaves the level untouched.
+         */
+        void SwapTextureLevelForXbox(std::vector<std::uint8_t>& level, const std::uint32_t unit)
+        {
+            if (unit < 2u) { return; }
+            for (std::size_t at = 0u; at + unit <= level.size(); at += unit)
+            {
+                std::reverse(level.begin() + static_cast<std::ptrdiff_t>(at),
+                             level.begin() + static_cast<std::ptrdiff_t>(at + unit));
+            }
+        }
+
+        /**
+         * @brief The component width one vertex element is byte-swapped by on the Xbox 360.
+         *
+         * The same rule as a texture payload: the console reads its buffers big-endian, and the
+         * unit is the element's own component, not the element. A `Vector3` is three four-byte
+         * reversals, a `Color` one, a `Byte4` none, a `Short2` two of two bytes. Measured on the
+         * genuine pipeline, which turns the eight `1.0f` and eight `-1.0f` of a model's vertex
+         * buffer into their big-endian spellings and leaves the nine floats the container itself
+         * writes alone (plans/plan_xnapipeline_parity.md XNAPP-252).
+         *
+         * @param format The declared element format.
+         * @param componentBytes Receives the width; 1 means the element needs no swap.
+         * @return false for a format this build has not derived a rule for.
+         */
+        [[nodiscard]] bool XboxVertexElementSwap(
+            const Microsoft::Xna::Framework::Graphics::VertexElementFormat format,
+            std::uint32_t& componentBytes, std::size_t& elementBytes)
+        {
+            using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+            switch (format)
+            {
+            case VertexElementFormat::Single: componentBytes = 4u; elementBytes = 4u; return true;
+            case VertexElementFormat::Vector2: componentBytes = 4u; elementBytes = 8u; return true;
+            case VertexElementFormat::Vector3: componentBytes = 4u; elementBytes = 12u; return true;
+            case VertexElementFormat::Vector4: componentBytes = 4u; elementBytes = 16u; return true;
+            case VertexElementFormat::Color: componentBytes = 4u; elementBytes = 4u; return true;
+            case VertexElementFormat::Short2:
+            case VertexElementFormat::NormalizedShort2:
+            case VertexElementFormat::HalfVector2:
+                componentBytes = 2u; elementBytes = 4u; return true;
+            case VertexElementFormat::Short4:
+            case VertexElementFormat::NormalizedShort4:
+            case VertexElementFormat::HalfVector4:
+                componentBytes = 2u; elementBytes = 8u; return true;
+            case VertexElementFormat::Byte4:
+                // Four separate bytes: the console reads them in the order they are written.
+                componentBytes = 1u; elementBytes = 4u; return true;
+            default:
+                return false;
+            }
+        }
+
+        /**
+         * @brief Reverses every component of every vertex in place, for the Xbox 360.
+         *
+         * @param bytes The whole buffer.
+         * @param declaration The declaration that describes it.
+         * @return false when an element's format has no derived rule, leaving @p bytes untouched.
+         */
+        [[nodiscard]] bool SwapVertexBufferForXbox(std::vector<std::uint8_t>& bytes,
+                                                   const XnbVertexDeclarationData& declaration)
+        {
+            const auto stride = static_cast<std::size_t>(declaration.stride);
+            if (stride == 0u) { return false; }
+            struct Span
+            {
+                std::size_t offset;
+                std::size_t length;
+                std::uint32_t unit;
+            };
+            std::vector<Span> spans;
+            for (const Microsoft::Xna::Framework::Graphics::VertexElement& element :
+                 declaration.elements)
+            {
+                std::uint32_t unit = 1u;
+                std::size_t length = 0u;
+                if (!XboxVertexElementSwap(element.getVertexElementFormatProperty(), unit, length))
+                {
+                    return false;
+                }
+                const auto offset = static_cast<std::size_t>(element.getOffsetProperty());
+                if (offset + length > stride) { return false; }
+                if (unit > 1u) { spans.push_back({offset, length, unit}); }
+            }
+            for (std::size_t base = 0u; base + stride <= bytes.size(); base += stride)
+            {
+                for (const Span& span : spans)
+                {
+                    for (std::size_t at = 0u; at + span.unit <= span.length; at += span.unit)
+                    {
+                        const auto from =
+                            static_cast<std::ptrdiff_t>(base + span.offset + at);
+                        std::reverse(bytes.begin() + from,
+                                     bytes.begin() + from + static_cast<std::ptrdiff_t>(span.unit));
+                    }
+                }
+            }
+            return true;
+        }
+
         void WriteTextureLevels(XnbWriter& output, const XnbTextureData& texture,
                                 const char* readerName)
         {
@@ -178,7 +337,23 @@ namespace CNA::Internal::Xnb
                         std::to_string(static_cast<int>(texture.surfaceFormat)) + " needs " +
                         std::to_string(needed) + ".");
                 }
-                output.WriteLengthPrefixedBytes(texture.levels[index]);
+                // The Xbox 360 reads texture memory big-endian, so the payload is reversed by
+                // the format's own component width on the way out. Every other field in the file
+                // stays little-endian: the container is little-endian on every platform and only
+                // the raw payloads are swapped.
+                const std::uint32_t unit = output.IsXboxTarget()
+                                               ? XboxByteSwapUnit(texture.surfaceFormat)
+                                               : 1u;
+                if (unit > 1u)
+                {
+                    std::vector<std::uint8_t> swapped = texture.levels[index];
+                    SwapTextureLevelForXbox(swapped, unit);
+                    output.WriteLengthPrefixedBytes(swapped);
+                }
+                else
+                {
+                    output.WriteLengthPrefixedBytes(texture.levels[index]);
+                }
             }
         }
 
@@ -638,7 +813,20 @@ namespace CNA::Internal::Xnb
             [](XnbWriter& output, const XnbTexture2DContent& value)
             {
                 const XnbTextureData& texture = value.texture;
-                output.RequireVerifiedPlatformPayload("Texture2DWriter");
+                // No platform guard: this writer converts its payload for the Xbox 360, and the
+                // conversion is measured against the genuine pipeline rather than assumed
+                // (plans/plan_xnapipeline_parity.md XNAPP-252). A format whose swap unit is
+                // unknown is still refused, below, where the unit is asked for.
+                if (output.IsXboxTarget() && XboxByteSwapUnit(texture.surfaceFormat) == 0u)
+                {
+                    throw XnbWriteException(
+                        "'" + output.AssetName() +
+                        "': Texture2DWriter has no measured Xbox 360 byte order for surface "
+                        "format " +
+                        std::to_string(static_cast<int>(texture.surfaceFormat)) +
+                        ", and the Xbox 360 is big-endian, so writing the 'x' platform byte over "
+                        "this payload would claim a compatibility this build cannot deliver.");
+                }
                 RequireTextureShape(output, texture, "Texture2DWriter");
                 if (texture.kind != XnbTextureKind::Texture2D || texture.faceCount != 1u ||
                     texture.depth != 1u)
@@ -843,7 +1031,18 @@ namespace CNA::Internal::Xnb
             true,
             [](XnbWriter& output, const XnbVertexBufferData& value)
             {
-                output.RequireVerifiedPlatformPayload("VertexBufferWriter");
+                // No platform guard: this writer converts its own payload for the Xbox 360, and
+                // refuses only a declaration whose element formats it has no measured rule for.
+                std::vector<std::uint8_t> vertexBytes = value.bytes;
+                if (output.IsXboxTarget() && !SwapVertexBufferForXbox(vertexBytes, value.declaration))
+                {
+                    throw XnbWriteException(
+                        "'" + output.AssetName() +
+                        "': VertexBufferWriter has no measured Xbox 360 byte order for one of "
+                        "this declaration's element formats, and the Xbox 360 is big-endian, so "
+                        "writing the 'x' platform byte over this buffer would claim a "
+                        "compatibility this build cannot deliver.");
+                }
                 // The declaration is written inline, but WriteRawObject still interns
                 // VertexDeclarationReader: that is exactly why a real Model .xnb lists a reader it
                 // never dispatches to.
@@ -860,7 +1059,7 @@ namespace CNA::Internal::Xnb
                         std::to_string(expected) + ".");
                 }
                 output.WriteUInt32(value.vertexCount);
-                output.WriteBytes(value.bytes);
+                output.WriteBytes(vertexBytes);
             });
 
         AddWriter<XnbIndexBufferData>(registry,
@@ -870,7 +1069,6 @@ namespace CNA::Internal::Xnb
             true,
             [](XnbWriter& output, const XnbIndexBufferData& value)
             {
-                output.RequireVerifiedPlatformPayload("IndexBufferWriter");
                 if (value.indexElementSize != 2u && value.indexElementSize != 4u)
                 {
                     throw XnbWriteException(
@@ -886,7 +1084,17 @@ namespace CNA::Internal::Xnb
                         std::to_string(value.indexElementSize) + "-byte indices.");
                 }
                 output.WriteBoolean(value.indexElementSize == 2u);
-                output.WriteLengthPrefixedBytes(value.bytes);
+                // Indices are whole integers, so the swap unit is the index itself.
+                if (output.IsXboxTarget())
+                {
+                    std::vector<std::uint8_t> swapped = value.bytes;
+                    SwapTextureLevelForXbox(swapped, value.indexElementSize);
+                    output.WriteLengthPrefixedBytes(swapped);
+                }
+                else
+                {
+                    output.WriteLengthPrefixedBytes(value.bytes);
+                }
             });
 
         AddWriter<XnbBasicEffectData>(registry,

@@ -723,6 +723,76 @@
       "profile": "Reach"
     },
     {
+      "case": "xbox/png_texture",
+      "source": "texture/probe_4x4.png",
+      "importer": "TextureImporter",
+      "processor": "TextureProcessor",
+      "platform": "Xbox360",
+      "profile": "HiDef"
+    },
+    {
+      "case": "xbox/png_texture_dxt",
+      "source": "texture/probe_4x4.png",
+      "importer": "TextureImporter",
+      "processor": "TextureProcessor",
+      "parameters": {
+        "TextureFormat": "DxtCompressed"
+      },
+      "platform": "Xbox360",
+      "profile": "HiDef"
+    },
+    {
+      "case": "xbox/png_texture_mipmaps",
+      "source": "texture/probe_4x4.png",
+      "importer": "TextureImporter",
+      "processor": "TextureProcessor",
+      "parameters": {
+        "GenerateMipmaps": "True"
+      },
+      "platform": "Xbox360",
+      "profile": "HiDef"
+    },
+    {
+      "case": "xbox/x_model",
+      "source": "model/quad_textured.x",
+      "importer": "XImporter",
+      "processor": "ModelProcessor",
+      "platform": "Xbox360",
+      "profile": "HiDef"
+    },
+    {
+      "case": "xbox/fbx_model",
+      "source": "model/fbx_bare_mesh.fbx",
+      "importer": "FbxImporter",
+      "processor": "ModelProcessor",
+      "platform": "Xbox360",
+      "profile": "HiDef"
+    },
+    {
+      "case": "xbox/fx_minimal",
+      "source": "source/fx_minimal.fx",
+      "importer": "EffectImporter",
+      "processor": "EffectProcessor",
+      "platform": "Xbox360",
+      "profile": "HiDef"
+    },
+    {
+      "case": "xbox/font_description",
+      "source": "source/control_font.spritefont",
+      "importer": "FontDescriptionImporter",
+      "processor": "FontDescriptionProcessor",
+      "platform": "Xbox360",
+      "profile": "HiDef"
+    },
+    {
+      "case": "xbox/xml_passthrough",
+      "source": "source/probe.xml",
+      "importer": "XmlImporter",
+      "processor": "PassThroughProcessor",
+      "platform": "Xbox360",
+      "profile": "HiDef"
+    },
+    {
       "case": "xml/intermediate_passthrough",
       "source": "source/probe.xml",
       "importer": "XmlImporter",

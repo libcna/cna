@@ -274,6 +274,11 @@ namespace CNA::Internal::Xnb
         }
     }
 
+    bool XnbWriter::IsXboxTarget() const noexcept
+    {
+        return options_.platform == XnbTargetPlatform::Xbox360;
+    }
+
     void XnbWriter::RequireVerifiedPlatformPayload(const std::string& readerName,
                                                    const bool handlesXboxByteOrder) const
     {

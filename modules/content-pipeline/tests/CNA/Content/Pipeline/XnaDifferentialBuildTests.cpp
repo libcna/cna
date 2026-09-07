@@ -131,6 +131,8 @@ TEST(XnaDifferentialBuildTest, CnaAcceptsAndRefusesTheSameSourcesXnaDoes)
         {"phone/wmv_video", "constructing a VideoContent needs Media Foundation, which Wine lacks"},
         {"xml/intermediate_passthrough",
          "the .xml route has no canonical importer; the built-in subset is XNAPP-260 work"},
+        {"xbox/xml_passthrough",
+         "the same .xml gap, recorded for the Xbox target too because XNA builds one there"},
     };
 
     // The `.fx` cases need the compiler XNA used. If the caller named one, that is the one; if not

@@ -421,7 +421,54 @@ TEST(XnbAssetWriterTest, ASoundEffectTargetingXbox360ByteSwapsItsWaveFormat)
     EXPECT_EQ(read.bitsPerSample, 16u);
 }
 
-TEST(XnbAssetWriterTest, EveryOtherAssetTypeRefusesAnXbox360TargetOutright)
+// A Texture2D is converted for the Xbox 360 rather than refused: its payload is reversed by the
+// format's component width, which is measured against the genuine pipeline
+// (plans/plan_xnapipeline_parity.md XNAPP-252). The types nobody has converted still refuse, which
+// is what plans/plan_xnapipeline.md XNAP-82 asks for and why the refusal lives in code.
+TEST(XnbAssetWriterTest, ATextureIsByteSwappedForXbox360RatherThanRefused)
+{
+    XnbFileOptions windows;
+    XnbFileOptions xbox;
+    xbox.platform = XnbTargetPlatform::Xbox360;
+
+    const std::vector<std::uint8_t> onWindows =
+        WriteXnbAsset(XnbTexture2DContent{MakeTexture2D()}, windows, "windows");
+    const std::vector<std::uint8_t> onXbox =
+        WriteXnbAsset(XnbTexture2DContent{MakeTexture2D()}, xbox, "windows");
+    ASSERT_EQ(onWindows.size(), onXbox.size());
+
+    // Same length, same header except the platform byte, and every four-byte texel reversed. The
+    // container's own fields stay little-endian on both, which is why this compares the payload
+    // rather than the file: a whole-file comparison would also catch the header.
+    std::size_t reversedTexels = 0u;
+    std::size_t identicalBytes = 0u;
+    for (std::size_t at = 0u; at + 4u <= onWindows.size(); ++at)
+    {
+        if (onWindows[at] == onXbox[at]) { ++identicalBytes; }
+    }
+    // Every offset, not every fourth: where the payload begins in the file is the container's
+    // business and not this test's.
+    for (std::size_t at = 0u; at + 4u <= onWindows.size(); ++at)
+    {
+        if (onWindows[at] == onXbox[at + 3u] && onWindows[at + 1u] == onXbox[at + 2u] &&
+            onWindows[at + 2u] == onXbox[at + 1u] && onWindows[at + 3u] == onXbox[at] &&
+            onWindows[at] != onWindows[at + 3u])
+        {
+            ++reversedTexels;
+        }
+    }
+    EXPECT_GT(reversedTexels, 0u) << "no texel was reversed, so nothing was converted";
+    EXPECT_GT(identicalBytes, onWindows.size() / 2u)
+        << "the whole file changed, so more than the payload was swapped";
+
+    // Windows Phone is little-endian and has no known payload difference from Windows.
+    XnbFileOptions phone;
+    phone.platform = XnbTargetPlatform::WindowsPhone;
+    EXPECT_EQ(WriteXnbAsset(XnbTexture2DContent{MakeTexture2D()}, phone, "windows").size(),
+              onWindows.size());
+}
+
+TEST(XnbAssetWriterTest, AnUnconvertedAssetTypeStillRefusesAnXbox360TargetOutright)
 {
     // plans/plan_xnapipeline.md XNAP-82. Writing 'x' into the header over Windows-layout payloads
     // would claim a compatibility this build cannot deliver, so the refusal is in code rather
@@ -429,10 +476,14 @@ TEST(XnbAssetWriterTest, EveryOtherAssetTypeRefusesAnXbox360TargetOutright)
     XnbFileOptions options;
     options.platform = XnbTargetPlatform::Xbox360;
 
+    XnbTextureData volume = MakeTexture2D();
+    volume.kind = XnbTextureKind::Texture3D;
+    volume.mipCount = 1u;
+    volume.levels = {ColorLevel(4u, 2u, 1u)};
     try
     {
-        (void)WriteXnbAsset(XnbTexture2DContent{MakeTexture2D()}, options, "xbox");
-        FAIL() << "a texture targeting Xbox 360 must be refused";
+        (void)WriteXnbAsset(XnbTexture3DContent{volume}, options, "xbox");
+        FAIL() << "a Texture3D targeting Xbox 360 must be refused";
     }
     catch (const XnbWriteException& error)
     {
@@ -441,15 +492,8 @@ TEST(XnbAssetWriterTest, EveryOtherAssetTypeRefusesAnXbox360TargetOutright)
         EXPECT_NE(message.find("XNAP-82"), std::string::npos) << message;
     }
 
-    // Windows Phone is little-endian and has no known payload difference from Windows, so it is
-    // not refused. That it is unverified is a documentation claim, not a byte-order one.
-    options.platform = XnbTargetPlatform::WindowsPhone;
-    EXPECT_NO_THROW(
-        (void)WriteXnbAsset(XnbTexture2DContent{MakeTexture2D()}, options, "phone"));
-
-    options.platform = XnbTargetPlatform::Xbox360;
     options.allowUnverifiedXboxPayloads = true;
-    EXPECT_NO_THROW((void)WriteXnbAsset(XnbTexture2DContent{MakeTexture2D()}, options, "opted"));
+    EXPECT_NO_THROW((void)WriteXnbAsset(XnbTexture3DContent{volume}, options, "opted"));
 }
 
 TEST(XnbAssetWriterTest, ASongRoundTripsWithItsDurationDispatchedThroughInt32Reader)
