@@ -1977,6 +1977,7 @@ namespace CNA::Internal::Renderers::Vulkan
         , virtualWidth_(args.virtualWidth)
         , virtualHeight_(args.virtualHeight)
         , swapInterval_(args.swapInterval)
+        , deviceEventCallback_(args.deviceEventCallback)
     {
         if (surfaceInfo_.windowId == 0)
             throw std::runtime_error("VulkanRenderer: missing platform window id");
@@ -10736,6 +10737,27 @@ namespace CNA::Internal::Renderers::Vulkan
         throw std::runtime_error("Vulkan: FindMemoryType failed");
     }
 
+    bool VulkanRenderer::CheckDeviceLostEXT(const char* where, VkResult result)
+    {
+        const bool injected = injectDeviceLost_ > 0;
+        if (injected) --injectDeviceLost_;
+        if (!injected && result != VK_ERROR_DEVICE_LOST) return false;
+
+        // Once. A lost VkDevice stays lost -- every later call fails the same way, and a game that
+        // handled the first event must not be told again on each of them.
+        if (!deviceLost_) {
+            deviceLost_ = true;
+            if (deviceEventCallback_)
+                deviceEventCallback_(CNA::Internal::Renderers::RendererDeviceEvent::Lost);
+        }
+        throw std::runtime_error(
+            std::string("CNA Vulkan: the device was lost (VK_ERROR_DEVICE_LOST from ") + where +
+            "). This renderer reports the loss -- GraphicsDevice.DeviceLost has been raised and "
+            "GraphicsDeviceStatus is Lost -- and does not attempt a reset: a lost VkDevice cannot "
+            "be recovered, and recreating one under live Texture2D/RenderTarget2D/Effect wrappers "
+            "is a feature this renderer does not have. See docs/vulkan-renderer.md.");
+    }
+
     void VulkanRenderer::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
                                               VkMemoryPropertyFlags props,
                                               VkBuffer& buf, VkDeviceMemory& mem, void** mapped)
@@ -12307,7 +12329,11 @@ namespace CNA::Internal::Renderers::Vulkan
     {
         if (!initialized_) return false;
 
-        vkWaitForFences(device_, 1, &inFlightFences_[currentFrame_], VK_TRUE, UINT64_MAX);
+        // VULKAN-334: a fence wait is the other call that reports a lost device, and the one a
+        // hung GPU reaches first.
+        CheckDeviceLostEXT("vkWaitForFences",
+                           vkWaitForFences(device_, 1, &inFlightFences_[currentFrame_], VK_TRUE,
+                                           UINT64_MAX));
         ++frameFenceWaitCountEXT_;
 
         // REMED-GFX-075: the current frame slot's fence just signalled, so free any retired
@@ -12329,6 +12355,7 @@ namespace CNA::Internal::Renderers::Vulkan
             result = vkAcquireNextImageKHR(device_, swapchain_, UINT64_MAX,
                 imageAvailableSemaphores_[currentFrame_], VK_NULL_HANDLE, &imageIndex);
         }
+        CheckDeviceLostEXT("vkAcquireNextImageKHR", result);   // VULKAN-334
         if (result == VK_ERROR_OUT_OF_DATE_KHR) { RecreateSwapchain(); return false; }
         if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
             throw std::runtime_error("vkAcquireNextImageKHR failed");
@@ -12351,8 +12378,14 @@ namespace CNA::Internal::Renderers::Vulkan
         si.pWaitDstStageMask    = waitStages;
         si.commandBufferCount   = 1; si.pCommandBuffers   = &commandBuffers_[currentFrame_];
         si.signalSemaphoreCount = 1; si.pSignalSemaphores = signalSems;
-        if (vkQueueSubmit(graphicsQueue_, 1, &si, inFlightFences_[currentFrame_]) != VK_SUCCESS)
-            throw std::runtime_error("vkQueueSubmit failed");
+        {
+            // VULKAN-334: a submit is where a lost device is most likely to surface.
+            const VkResult submitResult =
+                vkQueueSubmit(graphicsQueue_, 1, &si, inFlightFences_[currentFrame_]);
+            CheckDeviceLostEXT("vkQueueSubmit", submitResult);
+            if (submitResult != VK_SUCCESS)
+                throw std::runtime_error("vkQueueSubmit failed");
+        }
         ++frameSubmitCountEXT_;
         if (currentFrame_ < 32) usedFrameSlotMaskEXT_ |= (1u << currentFrame_);
 
@@ -12368,7 +12401,11 @@ namespace CNA::Internal::Renderers::Vulkan
             // Wait for render + readback copy to complete, but hold the image. The caller
             // (ReadBackbuffer) reads the staging buffer before the image is presented, so
             // presentation-engine timing can never corrupt the captured pixels.
-            vkWaitForFences(device_, 1, &inFlightFences_[currentFrame_], VK_TRUE, UINT64_MAX);
+            // VULKAN-334: a fence wait is the other call that reports a lost device, and the one a
+        // hung GPU reaches first.
+        CheckDeviceLostEXT("vkWaitForFences",
+                           vkWaitForFences(device_, 1, &inFlightFences_[currentFrame_], VK_TRUE,
+                                           UINT64_MAX));
             ++frameFenceWaitCountEXT_;
             deferredPresentImageIndex_ = imageIndex;
             hasDeferredPresent_        = true;
@@ -12410,6 +12447,7 @@ namespace CNA::Internal::Renderers::Vulkan
         pi.pImageIndices      = &imageIndex;
         VkResult result = vkQueuePresentKHR(presentQueue_, &pi);
         ++presentCountEXT_;
+        CheckDeviceLostEXT("vkQueuePresentKHR", result);   // VULKAN-334
         if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
             RecreateSwapchain();
         else if (result != VK_SUCCESS)

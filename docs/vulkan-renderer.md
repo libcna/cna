@@ -253,3 +253,33 @@ covers it.
   stands.
 - **Clip space is Vulkan's**, not OpenGL's or D3D9's: the shader is written for this renderer, so
   nothing flips Y for it. See the depth-range section above for the other half of that.
+
+---
+
+## Device loss: reported, never reset
+
+`VULKAN-334`. **Test:** `Vulkan_DeviceLostContract`
+
+XNA gives a game three events — `DeviceLost`, `DeviceResetting`, `DeviceReset` — plus
+`GraphicsDeviceStatus` and `ContentLost` on its resources. CNA delivers them from the renderer
+through `GraphicsRendererCreateArgs::deviceEventCallback`, and before `VULKAN-334` this renderer
+never called it: `VK_ERROR_DEVICE_LOST` appeared nowhere in it, so a lost device surfaced as
+whichever generic failure the next call raised.
+
+**What happens now.** Every call that can report the loss — `vkQueueSubmit`, `vkQueuePresentKHR`,
+`vkAcquireNextImageKHR`, and the two fence waits — is checked. On a loss the renderer reports
+`RendererDeviceEvent::Lost` to the shared layer **once**, so the game's own `DeviceLost` handler
+runs and `GraphicsDeviceStatus` becomes `Lost`, and the call then fails with a message naming the
+entry point.
+
+**What does not happen, and why.** There is no reset. A lost `VkDevice` is unrecoverable by
+specification: the device and every object created from it must be destroyed and rebuilt. Doing
+that under live `Texture2D`, `RenderTarget2D`, `Effect` and buffer wrappers is a different feature
+from D3D9's `Reset` — the one XNA's event pair was designed around — and this renderer does not
+have it. It says so in the failure rather than pretending, and `DeviceReset` is therefore never
+raised here.
+
+**The three GL entry points stay unimplemented.** `SetContextRecoveryEnabled`,
+`DebugSimulateContextLoss` and `DebugRestoreContext` describe an OpenGL context loss, which is a
+different event with a different recovery model. Implementing them by analogy would be inventing a
+state machine Vulkan does not have; the row that decided this named that as its explicit non-goal.

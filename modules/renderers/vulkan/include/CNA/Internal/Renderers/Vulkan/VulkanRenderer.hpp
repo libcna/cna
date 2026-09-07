@@ -2454,6 +2454,41 @@ namespace CNA::Internal::Renderers::Vulkan
         /** @brief Number of completed swapchain recreations. */
         CNAEXT [[nodiscard]] uint64_t GetSwapchainRecreateCountEXT() const noexcept { return swapchainRecreateCountEXT_; }
         /**
+         * @brief CNAEXT. Whether this renderer has seen `VK_ERROR_DEVICE_LOST`.
+         *
+         * plan_vulkan.md `VULKAN-334`. Sticky: a lost Vulkan device stays lost, because the spec
+         * gives no way back inside the same `VkDevice`.
+         *
+         * @return True once a submit, present, acquire or wait has reported the loss.
+         */
+        CNAEXT [[nodiscard]] bool IsDeviceLostEXT() const noexcept { return deviceLost_; }
+        /**
+         * @brief CNAEXT. Test hook: treat the next device-loss check as if the device were lost.
+         *
+         * A real `VK_ERROR_DEVICE_LOST` cannot be provoked from inside the process on any driver
+         * here, and this renderer's own rule is that an error path with no test is a claim. The
+         * hook injects the RESULT, not a state machine: everything after the check runs exactly as
+         * it would on a real loss.
+         *
+         * @param count How many upcoming checks report a lost device.
+         */
+        CNAEXT void InjectDeviceLostForTestEXT(int count) noexcept { injectDeviceLost_ = count; }
+        /**
+         * @brief plan_vulkan.md VULKAN-334: the one place a lost device is turned into an answer.
+         *
+         * Reports `RendererDeviceEvent::Lost` to the shared layer the first time only -- so a
+         * game's `GraphicsDevice.DeviceLost` runs and `GraphicsDeviceStatus` becomes `Lost` -- and
+         * then throws, naming the call that failed. It never attempts a reset: see
+         * `docs/vulkan-renderer.md` for why recreating a `VkDevice` under live wrappers is a
+         * different feature from D3D9's.
+         *
+         * @param where  The Vulkan entry point that returned the error.
+         * @param result Its `VkResult`, for the message.
+         * @return True if @p result (or the test hook) means the device is lost; it throws in that
+         *         case, so the return exists only to make the call sites read as a guard.
+         */
+        bool CheckDeviceLostEXT(const char* where, VkResult result);
+        /**
          * @brief plan_vulkan.md VULKAN-338: the surface description this renderer is currently
          *        working from, read-only.
          *
@@ -2660,6 +2695,11 @@ namespace CNA::Internal::Renderers::Vulkan
         uint64_t presentCountEXT_          = 0;
         uint64_t frameFenceWaitCountEXT_   = 0;
         uint64_t swapchainRecreateCountEXT_ = 0;
+        /// plan_vulkan.md VULKAN-334: sticky device-loss state and the callback that tells the
+        /// shared layer, so a game's own GraphicsDevice.DeviceLost handler runs.
+        bool     deviceLost_ = false;
+        int      injectDeviceLost_ = 0;
+        std::function<void(CNA::Internal::Renderers::RendererDeviceEvent)> deviceEventCallback_;
         /// Bit i set once swapchain image index i has been returned by an acquire.
         uint32_t acquiredImageMaskEXT_     = 0;
         /// Bit i set once frame slot i has been used by a submit.
