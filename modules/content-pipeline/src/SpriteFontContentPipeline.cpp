@@ -4,7 +4,9 @@
 #include <algorithm>
 #include <cmath>
 #include <cctype>
+#include <cstdlib>
 #include <cstring>
+#include <tuple>
 #include <fstream>
 #include <memory>
 #include <set>
@@ -797,13 +799,71 @@ namespace CNA::Content::Pipeline
 {
     namespace
     {
-        /** @brief Directories searched when a description opts in to system fonts. */
-        [[nodiscard]] std::vector<std::filesystem::path> SystemFontDirectories()
+        /** @brief Case, space, hyphen and underscore removed; the key both lookups compare on. */
+        [[nodiscard]] std::string NormalizeFontName(const std::string& text)
         {
-            return {
-                "/usr/share/fonts", "/usr/local/share/fonts",
-                "C:/Windows/Fonts", "/Library/Fonts", "/System/Library/Fonts",
-            };
+            std::string normalized;
+            for (const char character : text)
+            {
+                if (character != ' ' && character != '-' && character != '_')
+                {
+                    normalized += static_cast<char>(
+                        std::tolower(static_cast<unsigned char>(character)));
+                }
+            }
+            return normalized;
+        }
+
+        /** @brief The directories a build may add to the search, in the order it named them. */
+        [[nodiscard]] std::vector<std::filesystem::path>& ConfiguredFontDirectories()
+        {
+            static std::vector<std::filesystem::path> directories;
+            return directories;
+        }
+
+        /**
+         * @brief Directories searched when a description opts in to system fonts.
+         *
+         * The directories a build configured come first, then `CNA_FONT_PATH` from the
+         * environment, then the platform's own. A game whose fonts are the XNA redistributable
+         * pack rather than anything installed has no other way to be built here, and installing
+         * them machine-wide is not something a content build may ask of its host.
+         */
+        [[nodiscard]] std::vector<std::filesystem::path> SystemFontDirectories(
+            std::size_t* configuredCount = nullptr)
+        {
+            std::vector<std::filesystem::path> directories = ConfiguredFontDirectories();
+            if (const char* const configured = std::getenv("CNA_FONT_PATH"); configured != nullptr)
+            {
+#if defined(_WIN32)
+                constexpr char kSeparator = ';';
+#else
+                constexpr char kSeparator = ':';
+#endif
+                std::string text(configured);
+                std::size_t start = 0u;
+                while (start <= text.size())
+                {
+                    const std::size_t end = text.find(kSeparator, start);
+                    const std::string piece =
+                        text.substr(start, end == std::string::npos ? std::string::npos
+                                                                    : end - start);
+                    if (!piece.empty())
+                    {
+                        directories.emplace_back(CNA::Internal::ContentPathFromUtf8(piece));
+                    }
+                    if (end == std::string::npos) { break; }
+                    start = end + 1u;
+                }
+            }
+            if (configuredCount != nullptr) { *configuredCount = directories.size(); }
+            for (const char* const builtin : {"/usr/share/fonts", "/usr/local/share/fonts",
+                                              "C:/Windows/Fonts", "/Library/Fonts",
+                                              "/System/Library/Fonts"})
+            {
+                directories.emplace_back(builtin);
+            }
+            return directories;
         }
 
         /** @brief The file extensions a font file may carry. */
@@ -814,70 +874,239 @@ namespace CNA::Content::Pipeline
             return extensions;
         }
 
-        /**
-         * @brief Searches the system font directories for a file whose stem matches a name.
-         *
-         * Deliberately a filename match rather than a family-name lookup: reading a font's
-         * internal family table would need the rasterizer, which an unconfigured build does not
-         * have, and a lookup that only sometimes works is worse than one whose rule is stated.
-         *
-         * @param fontName The authored `<FontName>`.
-         * @return The first matching path in a deterministic walk, or an empty path.
-         */
-        [[nodiscard]] std::filesystem::path FindSystemFont(const std::string& fontName)
+        /** @brief Every font file under one directory, in a deterministic order. */
+        [[nodiscard]] std::vector<std::filesystem::path> FontFilesUnder(
+            const std::filesystem::path& directory, const bool recursive)
         {
-            // The exported spelling below forwards here, so the XNA façade resolves a font the
-            // same way the canonical importer does rather than inventing a second rule.
-            std::string wanted;
-            for (const char character : fontName)
+            std::vector<std::filesystem::path> files;
+            std::error_code error;
+            if (!std::filesystem::is_directory(directory, error)) { return files; }
+            const auto consider = [&files](const std::filesystem::path& path)
             {
-                if (character != ' ' && character != '-' && character != '_')
+                const std::string extension = path.extension().string();
+                const std::vector<std::string>& allowed = FontExtensions();
+                if (std::find(allowed.begin(), allowed.end(), extension) != allowed.end())
                 {
-                    wanted += static_cast<char>(
-                        std::tolower(static_cast<unsigned char>(character)));
+                    files.push_back(path);
                 }
-            }
-            std::vector<std::filesystem::path> candidates;
-            for (const std::filesystem::path& directory : SystemFontDirectories())
+            };
+            if (recursive)
             {
-                std::error_code error;
-                if (!std::filesystem::is_directory(directory, error)) { continue; }
                 for (std::filesystem::recursive_directory_iterator
                          entry(directory, std::filesystem::directory_options::skip_permission_denied,
                                error), end;
                      entry != end; entry.increment(error))
                 {
                     if (error) { break; }
-                    if (!entry->is_regular_file(error)) { continue; }
-                    std::string stem = entry->path().stem().string();
-                    std::string normalized;
-                    for (const char character : stem)
+                    if (entry->is_regular_file(error)) { consider(entry->path()); }
+                }
+            }
+            else
+            {
+                for (std::filesystem::directory_iterator
+                         entry(directory, std::filesystem::directory_options::skip_permission_denied,
+                               error), end;
+                     entry != end; entry.increment(error))
+                {
+                    if (error) { break; }
+                    if (entry->is_regular_file(error)) { consider(entry->path()); }
+                }
+            }
+            std::sort(files.begin(), files.end());
+            return files;
+        }
+
+        /** @brief One face of one font file: what a family lookup has to compare and choose on. */
+        struct FontFaceIdentity
+        {
+            std::filesystem::path path;
+            long index = 0;
+            std::string family;
+            bool bold = false;
+            bool italic = false;
+        };
+
+        /**
+         * @brief Every face of one font file, with the family name it declares.
+         *
+         * Empty where this build has no rasterizer, which is what makes the family lookup an
+         * addition to the file-name one rather than a replacement for it.
+         */
+        [[nodiscard]] std::vector<FontFaceIdentity> FacesOf(const std::filesystem::path& path)
+        {
+            std::vector<FontFaceIdentity> faces;
+#if defined(CNA_HAVE_FREETYPE)
+            FT_Library library = nullptr;
+            if (FT_Init_FreeType(&library) != 0) { return faces; }
+            const std::string native = CNA::Internal::ContentPathToUtf8(path);
+            long count = 1;
+            for (long index = 0; index < count; ++index)
+            {
+                FT_Face face = nullptr;
+                if (FT_New_Face(library, native.c_str(), index, &face) != 0) { break; }
+                count = face->num_faces > 0 ? face->num_faces : 1;
+                if (face->family_name != nullptr)
+                {
+                    faces.push_back({path, index, face->family_name,
+                                     (face->style_flags & FT_STYLE_FLAG_BOLD) != 0,
+                                     (face->style_flags & FT_STYLE_FLAG_ITALIC) != 0});
+                }
+                FT_Done_Face(face);
+            }
+            FT_Done_FreeType(library);
+#else
+            (void)path;
+#endif
+            return faces;
+        }
+
+        /**
+         * @brief The face of a family that best answers a requested style.
+         *
+         * XNA asks Windows for a family and a style and gets the real styled face; the emphasis is
+         * synthesized only where the family has not got one. Exact match first, then the regular
+         * face, then whatever the family has, so that the answer never depends on the order a
+         * directory happened to be walked in.
+         *
+         * @param faces Candidate faces, already restricted to one family.
+         * @param style The `<Style>` the description asked for.
+         * @return The chosen path, or empty when there are no candidates.
+         */
+        [[nodiscard]] std::filesystem::path SelectStyledFace(std::vector<FontFaceIdentity> faces,
+                                                             const FontDescriptionStyle style)
+        {
+            if (faces.empty()) { return {}; }
+            std::sort(faces.begin(), faces.end(),
+                      [](const FontFaceIdentity& left, const FontFaceIdentity& right)
+                      {
+                          return std::tie(left.path, left.index) <
+                                 std::tie(right.path, right.index);
+                      });
+            const bool wantsBold = style == FontDescriptionStyle::Bold ||
+                                   style == FontDescriptionStyle::BoldItalic;
+            const bool wantsItalic = style == FontDescriptionStyle::Italic ||
+                                     style == FontDescriptionStyle::BoldItalic;
+            for (const FontFaceIdentity& face : faces)
+            {
+                if (face.bold == wantsBold && face.italic == wantsItalic) { return face.path; }
+            }
+            for (const FontFaceIdentity& face : faces)
+            {
+                if (!face.bold && !face.italic) { return face.path; }
+            }
+            return faces.front().path;
+        }
+
+        /**
+         * @brief Looks for a font family among a set of font files.
+         *
+         * `<FontName>` is a font *family* name: XNA resolves it through Windows, and the families
+         * the public samples name -- Pericles, Segoe UI Mono, Moire ExtraBold, Kootenay, Wasco
+         * Sans -- live in files called `Peric.ttf`, `SegoeUIMono-Regular.ttf`,
+         * `Moire-ExtraBold.ttf`, `kooten.ttf` and `wscsnrg.ttf`. A file-name match cannot find one
+         * of them, which is why this exists beside it.
+         *
+         * @param files The font files to consider.
+         * @param wanted The normalized family name.
+         * @param style The requested style.
+         * @return The chosen file, or empty.
+         */
+        [[nodiscard]] std::filesystem::path FindFontFamilyAmong(
+            const std::vector<std::filesystem::path>& files, const std::string& wanted,
+            const FontDescriptionStyle style)
+        {
+            std::vector<FontFaceIdentity> matches;
+            for (const std::filesystem::path& file : files)
+            {
+                for (FontFaceIdentity& face : FacesOf(file))
+                {
+                    if (NormalizeFontName(face.family) == wanted)
                     {
-                        if (character != ' ' && character != '-' && character != '_')
-                        {
-                            normalized += static_cast<char>(
-                                std::tolower(static_cast<unsigned char>(character)));
-                        }
+                        matches.push_back(std::move(face));
                     }
-                    if (normalized != wanted) { continue; }
-                    const std::string extension = entry->path().extension().string();
-                    const std::vector<std::string>& allowed = FontExtensions();
-                    if (std::find(allowed.begin(), allowed.end(), extension) == allowed.end())
-                    {
-                        continue;
-                    }
-                    candidates.push_back(entry->path());
+                }
+            }
+            return SelectStyledFace(std::move(matches), style);
+        }
+
+        /**
+         * @brief Searches the font directories for the family, then for a file of that name.
+         *
+         * The family lookup is XNA's own rule and comes first; the file-name match is CNA's, kept
+         * because it is what a build with no rasterizer can still do and what a font file named
+         * after its family answers to either way.
+         *
+         * @param fontName The authored `<FontName>`.
+         * @param style The authored `<Style>`.
+         * @return The chosen path in a deterministic walk, or an empty path.
+         */
+        [[nodiscard]] std::filesystem::path FindSystemFont(const std::string& fontName,
+                                                           const FontDescriptionStyle style,
+                                                           bool* fromConfiguredDirectory = nullptr)
+        {
+            // The exported spelling below forwards here, so the XNA façade resolves a font the
+            // same way the canonical importer does rather than inventing a second rule.
+            const std::string wanted = NormalizeFontName(fontName);
+            std::size_t configured = 0u;
+            std::vector<std::filesystem::path> files;
+            std::size_t configuredFiles = 0u;
+            const std::vector<std::filesystem::path> directories = SystemFontDirectories(&configured);
+            for (std::size_t index = 0u; index < directories.size(); ++index)
+            {
+                for (std::filesystem::path& file : FontFilesUnder(directories[index], true))
+                {
+                    files.push_back(std::move(file));
+                }
+                if (index + 1u == configured) { configuredFiles = files.size(); }
+            }
+            const auto answer = [&](const std::filesystem::path& chosen)
+            {
+                if (fromConfiguredDirectory != nullptr)
+                {
+                    *fromConfiguredDirectory =
+                        std::find(files.begin(), files.begin() + static_cast<std::ptrdiff_t>(
+                                                     configuredFiles),
+                                  chosen) != files.begin() + static_cast<std::ptrdiff_t>(
+                                                 configuredFiles);
+                }
+                return chosen;
+            };
+            if (const std::filesystem::path family = FindFontFamilyAmong(files, wanted, style);
+                !family.empty())
+            {
+                return answer(family);
+            }
+            std::vector<std::filesystem::path> candidates;
+            for (const std::filesystem::path& file : files)
+            {
+                if (NormalizeFontName(file.stem().string()) == wanted)
+                {
+                    candidates.push_back(file);
                 }
             }
             // A deterministic build cannot depend on directory-iteration order.
             std::sort(candidates.begin(), candidates.end());
-            return candidates.empty() ? std::filesystem::path{} : candidates.front();
+            return candidates.empty() ? std::filesystem::path{} : answer(candidates.front());
         }
     }
 
     ContentComponentIdentity FontDescriptionImporter::Identity() const
     {
-        return {kImporterName, "1"};
+        // The font search is part of the importer's version for the reason the effect route's
+        // compiler is part of its processor's: the manifest fingerprints the component identity,
+        // and the same description legitimately resolves to a different font file when the build
+        // is told to look somewhere else. Without this, changing --font-directory left the
+        // previous build's output in place as unchanged. An unconfigured build keeps the bare
+        // version, so nothing that never used the option changes fingerprint
+        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-100`).
+        const std::vector<std::filesystem::path>& directories = ConfiguredFontDirectories();
+        if (directories.empty()) { return {kImporterName, "1"}; }
+        std::string version = "1+fonts";
+        for (const std::filesystem::path& directory : directories)
+        {
+            version += ":" + CNA::Internal::ContentPathToUtf8(directory);
+        }
+        return {kImporterName, version};
     }
 
     std::vector<std::string> FontDescriptionImporter::SourceExtensions() const
@@ -885,9 +1114,28 @@ namespace CNA::Content::Pipeline
         return {".spritefont"};
     }
 
-    std::filesystem::path FindSystemFontFile(const std::string& fontName)
+    std::filesystem::path FindSystemFontFile(const std::string& fontName,
+                                             const FontDescriptionStyle style)
     {
-        return FindSystemFont(fontName);
+        return FindSystemFont(fontName, style);
+    }
+
+    std::filesystem::path FindFontFamilyBeside(const std::filesystem::path& directory,
+                                               const std::string& fontName,
+                                               const FontDescriptionStyle style)
+    {
+        return FindFontFamilyAmong(FontFilesUnder(directory, false), NormalizeFontName(fontName),
+                                   style);
+    }
+
+    void SetFontSearchDirectoriesEXT(std::vector<std::filesystem::path> directories)
+    {
+        ConfiguredFontDirectories() = std::move(directories);
+    }
+
+    const std::vector<std::filesystem::path>& FontSearchDirectoriesEXT() noexcept
+    {
+        return ConfiguredFontDirectories();
     }
 
     std::vector<std::string> FontDescriptionImporter::OutputTypes() const
@@ -952,21 +1200,53 @@ namespace CNA::Content::Pipeline
             }
         }
 
+        // A font file beside the description whose own family table answers `<FontName>` is still
+        // the reproducible route -- `Peric.ttf` *is* the Pericles family -- so it is looked for
+        // before anything installed on the machine.
         if (!resolved)
         {
-            const std::filesystem::path systemFont = FindSystemFont(description.fontName);
+            const std::filesystem::path beside = FindFontFamilyBeside(
+                context.SourcePath().parent_path(), description.fontName, description.style);
+            if (!beside.empty())
+            {
+                try
+                {
+                    description.resolvedFontFile = context.ResolveSourceDependency(
+                        CNA::Internal::ContentPathToUtf8(beside.filename()));
+                    resolved = true;
+                }
+                catch (const std::invalid_argument&)
+                {
+                    // Not a spelling this build may depend on; the search below still may find it.
+                }
+            }
+        }
+
+        if (!resolved)
+        {
+            bool configured = false;
+            const std::filesystem::path systemFont =
+                FindSystemFont(description.fontName, description.style, &configured);
             if (!systemFont.empty())
             {
                 description.resolvedFontFile = systemFont;
                 description.resolvedFromSystemFonts = true;
                 resolved = true;
+                // A directory this build was told to search is part of the build's own
+                // description of itself and repeats on any machine that passes it; the
+                // platform's own font directories are not, and that is what the warning is
+                // about, so it says which one this was.
                 context.LogWarning(
-                    "<FontName> '" + description.fontName +
-                    "' was resolved to the installed font '" +
-                    CNA::Internal::ContentPathToUtf8(systemFont) +
-                    "'. That makes this build depend on what is installed on this machine; put "
-                    "the font file beside the .spritefont and name it there for a reproducible "
-                    "build.");
+                    configured
+                        ? "<FontName> '" + description.fontName + "' was resolved to '" +
+                              CNA::Internal::ContentPathToUtf8(systemFont) +
+                              "', in a font directory this build was told to search."
+                        : "<FontName> '" + description.fontName +
+                              "' was resolved to the installed font '" +
+                              CNA::Internal::ContentPathToUtf8(systemFont) +
+                              "'. That makes this build depend on what is installed on this "
+                              "machine; put the font file beside the .spritefont and name it "
+                              "there, or pass --font-directory, for a reproducible build.");
             }
         }
 

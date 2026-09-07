@@ -128,16 +128,45 @@ namespace CNA::Content::Pipeline
      *         would exceed the maximum texture size, or this build has no rasterizer.
      */
     /**
-     * @brief Searches the system font directories for a file whose stem matches a name.
+     * @brief Searches the font directories for a family, then for a file of that name.
      *
-     * Deliberately a filename match rather than a family-name lookup, for the reason the
-     * importer's own use of it states: reading a font's internal family table would need the
-     * rasterizer, which an unconfigured build does not have.
+     * `<FontName>` is a font *family* name -- XNA resolves it through Windows -- and the family is
+     * looked for first, by reading each candidate's own family table and choosing the face whose
+     * style answers @p style. The file-name match remains as the fallback, and is all a build with
+     * no rasterizer can do.
      *
      * @param fontName The font name as authored.
-     * @return The first matching path in a deterministic walk, or an empty path.
+     * @param style The style the description asked for.
+     * @return The chosen path in a deterministic walk, or an empty path.
      */
-    [[nodiscard]] std::filesystem::path FindSystemFontFile(const std::string& fontName);
+    [[nodiscard]] std::filesystem::path FindSystemFontFile(
+        const std::string& fontName, FontDescriptionStyle style = FontDescriptionStyle::Regular);
+
+    /**
+     * @brief Looks for a font family among the font files directly inside one directory.
+     *
+     * @param directory The directory to look in; not searched recursively.
+     * @param fontName The family name as authored.
+     * @param style The style the description asked for.
+     * @return The chosen path, or an empty path.
+     */
+    [[nodiscard]] std::filesystem::path FindFontFamilyBeside(
+        const std::filesystem::path& directory, const std::string& fontName,
+        FontDescriptionStyle style = FontDescriptionStyle::Regular);
+
+    /**
+     * @brief Sets the directories a build adds to the font search, ahead of the platform's own.
+     *
+     * A game whose fonts ship with it rather than being installed -- which is every game built on
+     * a machine that is not the artist's -- needs a way to say where they are. `CNA_FONT_PATH` in
+     * the environment says the same thing, and is read after these.
+     *
+     * @param directories The directories, in the order they are to be searched.
+     */
+    void SetFontSearchDirectoriesEXT(std::vector<std::filesystem::path> directories);
+
+    /** @brief The directories a build added to the font search. */
+    [[nodiscard]] const std::vector<std::filesystem::path>& FontSearchDirectoriesEXT() noexcept;
 
     /**
      * @brief Rasterizes a resolved font description into a sprite-font atlas.

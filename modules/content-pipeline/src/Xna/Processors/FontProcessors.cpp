@@ -17,13 +17,18 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
     {
         namespace Canonical = CNA::Content::Pipeline;
 
-        /** @brief The description's own font file, or the system font of that name. */
+        /** @brief The canonical style of an XNA one; the two enumerations share their members. */
+        [[nodiscard]] Canonical::FontDescriptionStyle CanonicalStyle(Graphics::FontDescriptionStyle style);
+
+        /** @brief The description's own font file, the family beside it, or the system font. */
         [[nodiscard]] std::filesystem::path ResolveFontFile(const Graphics::FontDescription& description)
         {
             const std::string& name = description.getFontNameProperty();
             const std::string& identity = description.getIdentityProperty().getSourceFilenameProperty();
             const std::filesystem::path directory =
                 identity.empty() ? std::filesystem::path() : std::filesystem::path(identity).parent_path();
+            const Canonical::FontDescriptionStyle style =
+                CanonicalStyle(description.getStyleProperty());
             std::error_code error;
             for (const std::string& candidate : {name, name + ".ttf", name + ".otf", name + ".ttc"})
             {
@@ -33,7 +38,13 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
                     return probe;
                 }
             }
-            return Canonical::FindSystemFontFile(name);
+            if (!directory.empty())
+            {
+                const std::filesystem::path beside =
+                    Canonical::FindFontFamilyBeside(directory, name, style);
+                if (!beside.empty()) { return beside; }
+            }
+            return Canonical::FindSystemFontFile(name, style);
         }
 
         /** @brief The canonical style of an XNA one; the two enumerations share their members. */
