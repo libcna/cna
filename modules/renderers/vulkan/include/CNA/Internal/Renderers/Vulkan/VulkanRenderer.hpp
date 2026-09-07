@@ -4098,7 +4098,7 @@ namespace CNA::Internal::Renderers::Vulkan
                                          VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
                                          const VulkanVertexInputLayoutEXT& vertexLayout = {},
                                          bool untextured = false, std::size_t recordStride = 0,
-                                         bool colored = false);
+                                         bool colored = false, bool instanced = false);
         // Task 1103: PreferPerPixelLighting=false sibling of GetOrCreatePipelineLitTextured3D
         // above (real per-vertex/Gouraud lighting, XNA's own default) — same signature/layout,
         // different shader modules and pipeline cache only.
@@ -4111,7 +4111,7 @@ namespace CNA::Internal::Renderers::Vulkan
                                          VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
                                          const VulkanVertexInputLayoutEXT& vertexLayout = {},
                                          bool untextured = false, std::size_t recordStride = 0,
-                                         bool colored = false);
+                                         bool colored = false, bool instanced = false);
         // BasicEffect fog bundle (Task 899) — shared by colored3d/textured3d/colored_textured3d.
         void       EnsureFogTex3DResources();
         /// REMED-GFX-169: @p sampler is slot 0's SamplerState, keyed as well as written. This is

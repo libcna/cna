@@ -252,6 +252,13 @@ def main():
         # alpha_test3d's push-constant layout and pipeline layout, so it shares that family's
         # fragment stage and needs no new descriptor plumbing.
         ("instanced_alpha_test3d.vert.glsl", VERTEX_SHADER, "kInstancedAlphaTest3dVertSpv"),
+        # plans/plan_vulkan.md VULKAN-224: the lit family made instanceable. Both variants,
+        # because XNA's real default is PreferPerPixelLighting=false and an instanced draw must
+        # not silently switch a game to the other one. Same UBO, layout and fragment stages as
+        # their non-instanced originals.
+        ("instanced_lit_textured3d.vert.glsl", VERTEX_SHADER, "kInstancedLitTextured3dVertSpv"),
+        ("instanced_lit_textured3d_vertexlit.vert.glsl", VERTEX_SHADER,
+         "kInstancedLitTextured3dVertexLitVertSpv"),
     ]
 
     # plans/plan_gltf.md GLTF-465: the PBR variants whose vertex record carries a packed COLOR_0 slot.

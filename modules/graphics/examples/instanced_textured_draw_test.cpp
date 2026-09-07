@@ -61,6 +61,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 
+#include <cmath>
 #include <cstdio>
 #include <cstdint>
 #include <memory>
@@ -461,6 +462,85 @@ protected:
                       Text(ai.second) +
                       " (a blue right half means the alpha test never ran, which is what a draw "
                       "routed to a program without one looks like)");
+        }
+
+        // ---- J/K: LIGHTING on an instanced draw ---------------------------------------------
+        // One directional light at N.L = 0.5 over a white texture with a white DiffuseColor, so the
+        // correct answer is mid-grey and an unlit (255,255,255) quad is unmistakable.
+        {
+            struct PNT { float x, y, z, nx, ny, nz, u, v; };
+            static_assert(sizeof(PNT) == 32);
+            const PNT lq[4] = {
+                { -0.12f,  0.12f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f },
+                { -0.12f, -0.12f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f },
+                {  0.12f, -0.12f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f },
+                {  0.12f,  0.12f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f },
+            };
+            const VertexDeclaration lqDecl(32, {
+                VertexElement(0,  VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+                VertexElement(12, VertexElementFormat::Vector3, VertexElementUsage::Normal, 0),
+                VertexElement(24, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+            });
+            VertexBuffer lvb(dev, lqDecl, 4, BufferUsage::None);
+            lvb.SetDataRaw(lq, 4, static_cast<int>(sizeof(PNT)));
+            Texture2D white(dev, 1, 1, false, SurfaceFormat::Color);
+            const std::uint8_t wpx[4] = { 255, 255, 255, 255 };
+            white.SetDataRGBA(wpx, 1);
+
+            auto lit = [&](bool instanced) {
+                dev.Clear(Color(0, 255, 0, 255));
+                dev.SetDepthTestEnabled(false);
+                dev.setBlendStateProperty(BlendState::Opaque);
+                dev.setRasterizerStateProperty(RasterizerState::CullNone);
+                dev.getSamplerStatesProperty()[0] = SamplerState::PointClamp;
+                BasicEffect fx(dev);
+                fx.setWorldProperty(Matrix::getIdentityProperty());
+                fx.setViewProperty(Matrix::getIdentityProperty());
+                fx.setProjectionProperty(Matrix::getIdentityProperty());
+                fx.setLightingEnabledProperty(true);
+                fx.setAmbientLightColorProperty(Vector3(0.0f, 0.0f, 0.0f));
+                fx.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+                fx.setSpecularColorProperty(Vector3(0.0f, 0.0f, 0.0f));
+                fx.setTextureEnabledProperty(true);
+                fx.setTextureProperty(&white);
+                fx.setVertexColorEnabledProperty(false);
+                fx.setAlphaProperty(1.0f);
+                auto& l0 = fx.getDirectionalLight0Property();
+                l0.setEnabledProperty(true);
+                l0.setDirectionProperty(Vector3(0.0f, -0.866f, -0.5f));  // N.L = 0.5
+                l0.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+                l0.setSpecularColorProperty(Vector3(0.0f, 0.0f, 0.0f));
+                fx.getDirectionalLight1Property().setEnabledProperty(false);
+                fx.getDirectionalLight2Property().setEnabledProperty(false);
+                fx.Apply();
+                dev.SetVertexBuffer(&lvb);
+                dev.SetIndexBuffer(ib_.get());
+                if (instanced) {
+                    std::vector<VertexBufferBinding> bd = {
+                        VertexBufferBinding(&lvb,          0, 0),
+                        VertexBufferBinding(instVb_.get(), 0, 1),
+                    };
+                    dev.SetVertexBuffers(bd);
+                    dev.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2, 3);
+                } else {
+                    dev.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2);
+                }
+                return ReadPixel(dev, kN / 2, kN / 2);
+            };
+            const Color ln = lit(false);
+            const Color li = lit(true);
+            auto midGrey = [](const Color& c) {
+                const int r = c.getRProperty();
+                return r >= 100 && r <= 155 && std::abs(r - c.getGProperty()) <= 6 &&
+                       std::abs(r - c.getBProperty()) <= 6;
+            };
+            check(midGrey(ln),
+                  "J control: a NON-instanced lit draw shades by N.L: " + Text(ln) +
+                      " (want ~(128,128,128); (255,255,255) would mean lighting never ran)");
+            check(midGrey(li),
+                  "K an INSTANCED lit draw shades the same way: " + Text(li) +
+                      " (want ~(128,128,128); (255,255,255) is an unlit full-bright quad, which is "
+                      "what a draw routed to a program with no Normal input looks like)");
         }
 
         check(IsBlue(a) == IsBlue(b) && IsBlack(a2) == IsBlack(b2),

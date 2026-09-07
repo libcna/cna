@@ -8202,7 +8202,7 @@ namespace CNA::Internal::Renderers::Vulkan
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
         const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt, const VulkanVertexInputLayoutEXT& vertexLayout,
-        bool untextured, std::size_t recordStride, bool colored)
+        bool untextured, std::size_t recordStride, bool colored, bool instanced)
     {
         EnsureLitTexturedResources();
 
@@ -8214,17 +8214,25 @@ namespace CNA::Internal::Renderers::Vulkan
         PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kLitStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), NarrowSampleMaskEXT(blendParams.sampleMask, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa))), vertexLayout.Hash() };
         // VULKAN-216: the sample count is part of this pipeline's identity, not just of its render pass.
         key.ms = static_cast<uint32_t>(RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
+        // VULKAN-224: the instanced variant is a different pipeline -- a second binding, four
+        // more attributes and its own vertex module -- so it needs its own identity.
+        if (instanced) key.vl ^= 0x9E3779B97F4A7C15ull;
         auto it = pipelinesLitTextured3D_.find(key);
         if (it != pipelinesLitTextured3D_.end()) return it->second;
 
         using namespace Shaders;
         // plan_vulkan.md VULKAN-199: same FRAGMENT stage either way -- it gates its sample on
         // pc.textureEnabled -- and a vertex stage that either reads a UV or writes zero.
-        VkShaderModule vert = untextured
+        // VULKAN-224: the instanced module carries the same outputs and the same UBO, so
+        // the fragment stage below and the pipeline layout are unchanged. It has no
+        // untextured or coloured sibling yet -- those shapes stay with VULKAN-218.
+        VkShaderModule vert = instanced
+            ? CreateShaderModule(kInstancedLitTextured3dVertSpv, kInstancedLitTextured3dVertSpv_size)
+            : (untextured
             ? CreateShaderModule(kLitUntextured3dVertSpv, kLitUntextured3dVertSpv_size)
             : colored
             ? CreateShaderModule(kLitTextured3dColorVertSpv, kLitTextured3dColorVertSpv_size)
-            : CreateShaderModule(kLitTextured3dVertSpv,   kLitTextured3dVertSpv_size);
+            : CreateShaderModule(kLitTextured3dVertSpv,   kLitTextured3dVertSpv_size));
         // plan_vulkan.md VULKAN-200: the per-pixel family needs its own FRAGMENT stage too. FNA
         // applies the vertex colour to the whole lit bracket, emissive included, and this renderer
         // carries the material diffuse in fragTint -- so the colour cannot be folded into it.
@@ -8232,8 +8240,14 @@ namespace CNA::Internal::Renderers::Vulkan
             ? CreateShaderModule(kLitTextured3dColorFragSpv, kLitTextured3dColorFragSpv_size)
             : CreateShaderModule(kLitTextured3dFragSpv,      kLitTextured3dFragSpv_size);
 
-        VkVertexInputBindingDescription bind{ 0, static_cast<uint32_t>(kLitStride), VK_VERTEX_INPUT_RATE_VERTEX };
-        VkVertexInputAttributeDescription attrs[4]{};
+        // VULKAN-224: two bindings when instanced -- 0 per-vertex, 1 per-instance at 64 bytes.
+        constexpr uint32_t kInstStride = 64;
+        VkVertexInputBindingDescription binds[2]{};
+        binds[0] = { 0, static_cast<uint32_t>(kLitStride), VK_VERTEX_INPUT_RATE_VERTEX   };
+        binds[1] = { 1, kInstStride,                       VK_VERTEX_INPUT_RATE_INSTANCE };
+        // Eight: at most four per-vertex, then the four matrix columns appended after the
+        // declared-layout applicator has finished with the per-vertex prefix.
+        VkVertexInputAttributeDescription attrs[8]{};
         attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0  };   // aPos
         attrs[1] = { 1, 0, VK_FORMAT_R32G32B32_SFLOAT, 12 };   // aNormal
         // plan_vulkan.md VULKAN-200: the coloured record puts the colour before the UV, so the
@@ -8243,10 +8257,17 @@ namespace CNA::Internal::Renderers::Vulkan
         attrs[3] = { 3, 0, VK_FORMAT_R8G8B8A8_UNORM,  24 };                    // aColor
         uint32_t attrCount = untextured ? 2u : (colored ? 4u : 3u);
         ApplyDeclaredVertexLayoutEXT(vertexLayout, attrs, attrCount, attrCount);
+        if (instanced) {
+            attrs[attrCount++] = { 4, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0  }; // aInstCol0
+            attrs[attrCount++] = { 5, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 16 }; // aInstCol1
+            attrs[attrCount++] = { 6, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 32 }; // aInstCol2
+            attrs[attrCount++] = { 7, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 48 }; // aInstCol3
+        }
 
         VkPipelineVertexInputStateCreateInfo vis{};
         vis.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-        vis.vertexBindingDescriptionCount   = 1; vis.pVertexBindingDescriptions   = &bind;
+        vis.vertexBindingDescriptionCount   = instanced ? 2u : 1u;
+        vis.pVertexBindingDescriptions      = binds;
         vis.vertexAttributeDescriptionCount = attrCount; vis.pVertexAttributeDescriptions = attrs;
 
         VkPipelineShaderStageCreateInfo stages[2]{};
@@ -8354,7 +8375,7 @@ namespace CNA::Internal::Renderers::Vulkan
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
         const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt, const VulkanVertexInputLayoutEXT& vertexLayout,
-        bool untextured, std::size_t recordStride, bool colored)
+        bool untextured, std::size_t recordStride, bool colored, bool instanced)
     {
         EnsureLitTexturedResources();
 
@@ -8366,22 +8387,36 @@ namespace CNA::Internal::Renderers::Vulkan
         PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kLitStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), NarrowSampleMaskEXT(blendParams.sampleMask, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa))), vertexLayout.Hash() };
         // VULKAN-216: the sample count is part of this pipeline's identity, not just of its render pass.
         key.ms = static_cast<uint32_t>(RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
+        // VULKAN-224: the instanced variant is a different pipeline -- a second binding, four
+        // more attributes and its own vertex module -- so it needs its own identity.
+        if (instanced) key.vl ^= 0x9E3779B97F4A7C15ull;
         auto it = pipelinesLitTextured3DVertexLit_.find(key);
         if (it != pipelinesLitTextured3DVertexLit_.end()) return it->second;
 
         using namespace Shaders;
         // plan_vulkan.md VULKAN-199: see the per-pixel sibling -- same fragment stage, UV-less
         // vertex stage.
-        VkShaderModule vert = untextured
+        // VULKAN-224: the instanced module carries the same outputs and the same UBO, so
+        // the fragment stage below and the pipeline layout are unchanged. It has no
+        // untextured or coloured sibling yet -- those shapes stay with VULKAN-218.
+        VkShaderModule vert = instanced
+            ? CreateShaderModule(kInstancedLitTextured3dVertexLitVertSpv, kInstancedLitTextured3dVertexLitVertSpv_size)
+            : (untextured
             ? CreateShaderModule(kLitUntextured3dVertexLitVertSpv, kLitUntextured3dVertexLitVertSpv_size)
             : colored
             ? CreateShaderModule(kLitTextured3dVertexLitColorVertSpv,
                                  kLitTextured3dVertexLitColorVertSpv_size)
-            : CreateShaderModule(kLitTextured3dVertexLitVertSpv,   kLitTextured3dVertexLitVertSpv_size);
+            : CreateShaderModule(kLitTextured3dVertexLitVertSpv,   kLitTextured3dVertexLitVertSpv_size));
         VkShaderModule frag = CreateShaderModule(kLitTextured3dVertexLitFragSpv, kLitTextured3dVertexLitFragSpv_size);
 
-        VkVertexInputBindingDescription bind{ 0, static_cast<uint32_t>(kLitStride), VK_VERTEX_INPUT_RATE_VERTEX };
-        VkVertexInputAttributeDescription attrs[4]{};
+        // VULKAN-224: two bindings when instanced -- 0 per-vertex, 1 per-instance at 64 bytes.
+        constexpr uint32_t kInstStride = 64;
+        VkVertexInputBindingDescription binds[2]{};
+        binds[0] = { 0, static_cast<uint32_t>(kLitStride), VK_VERTEX_INPUT_RATE_VERTEX   };
+        binds[1] = { 1, kInstStride,                       VK_VERTEX_INPUT_RATE_INSTANCE };
+        // Eight: at most four per-vertex, then the four matrix columns appended after the
+        // declared-layout applicator has finished with the per-vertex prefix.
+        VkVertexInputAttributeDescription attrs[8]{};
         attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0  };   // aPos
         attrs[1] = { 1, 0, VK_FORMAT_R32G32B32_SFLOAT, 12 };   // aNormal
         // plan_vulkan.md VULKAN-200: the coloured record puts the colour before the UV, so the
@@ -8391,10 +8426,17 @@ namespace CNA::Internal::Renderers::Vulkan
         attrs[3] = { 3, 0, VK_FORMAT_R8G8B8A8_UNORM,  24 };                    // aColor
         uint32_t attrCount = untextured ? 2u : (colored ? 4u : 3u);
         ApplyDeclaredVertexLayoutEXT(vertexLayout, attrs, attrCount, attrCount);
+        if (instanced) {
+            attrs[attrCount++] = { 4, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0  }; // aInstCol0
+            attrs[attrCount++] = { 5, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 16 }; // aInstCol1
+            attrs[attrCount++] = { 6, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 32 }; // aInstCol2
+            attrs[attrCount++] = { 7, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 48 }; // aInstCol3
+        }
 
         VkPipelineVertexInputStateCreateInfo vis{};
         vis.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-        vis.vertexBindingDescriptionCount   = 1; vis.pVertexBindingDescriptions   = &bind;
+        vis.vertexBindingDescriptionCount   = instanced ? 2u : 1u;
+        vis.pVertexBindingDescriptions      = binds;
         vis.vertexAttributeDescriptionCount = attrCount; vis.pVertexAttributeDescriptions = attrs;
 
         VkPipelineShaderStageCreateInfo stages[2]{};
@@ -11795,7 +11837,11 @@ namespace CNA::Internal::Renderers::Vulkan
                     pipe = GetOrCreatePipelinePbr3D(draw.stride, draw.topology,
                                                         draw.depthTest, draw.depthWrite,
                                                         draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt, draw.vertexLayout);
-                } else if (draw.useInstanced) {
+                } else if (draw.useInstanced && !draw.useLitTextured) {
+                    // VULKAN-224: a lit instanced draw falls through to the lit arm below, which
+                    // now takes an `instanced` flag. This chain tests `useInstanced` BEFORE
+                    // `useLitTextured`, so without this guard the lit draw would take the
+                    // colour-only instanced pipeline -- which is exactly the bug that row fixes.
                     pipe = GetOrCreatePipelineInstanced3D(draw.stride, draw.topology,
                                                           draw.depthTest, draw.depthWrite,
                                                           draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt, draw.vertexLayout,
@@ -11807,12 +11853,12 @@ namespace CNA::Internal::Renderers::Vulkan
                                                             draw.depthTest, draw.depthWrite,
                                                             draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt, draw.vertexLayout,
                                                             draw.litUntextured, (draw.litUntextured || draw.litColored) ? draw.stride : 0,
-                                                            draw.litColored)
+                                                            draw.litColored, draw.useInstanced)
                            : GetOrCreatePipelineLitTextured3D(draw.topology,
                                                             draw.depthTest, draw.depthWrite,
                                                             draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt, draw.vertexLayout,
                                                             draw.litUntextured, (draw.litUntextured || draw.litColored) ? draw.stride : 0,
-                                                            draw.litColored);
+                                                            draw.litColored, draw.useInstanced);
                 } else if (draw.useFogTex3D) {
                     // Task 899: colored3d / textured3d / colored_textured3d fog-capable bundle.
                     // VULKAN-146: which of the three is `draw.basicShape`, decided at draw time
@@ -12003,7 +12049,10 @@ namespace CNA::Internal::Renderers::Vulkan
                                                 pipelineLayoutPbr3D_, 0, 1,
                                                 &draw.pbrDescSet, 1, &uboOff);
                     }
-                } else if (draw.useInstanced) {
+                } else if (draw.useInstanced && !draw.useLitTextured) {
+                    // VULKAN-224: as in the pipeline chain above -- a lit instanced draw needs the
+                    // lit arm's push-constant layout, descriptor set and dynamic UBO offset, not
+                    // this one's.
                     vkCmdPushConstants(cb, pipelineLayoutExt3D_,
                                        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
                                        0, 128, draw.pushConst);
@@ -14913,6 +14962,27 @@ namespace CNA::Internal::Renderers::Vulkan
         // new plumbing where the lit one would (VULKAN-218).
         const bool instancedAlphaTest =
             params.alphaTest[3] < 0.0f || params.alphaTest[2] < 0.0f;
+        // VULKAN-224: and the lit family, on the same principle -- an instanced draw takes the
+        // ORDINARY family's programs and adds a per-instance binding, rather than needing an
+        // instanced program of its own. Scoped to the textured lit shape (`kLitTextured`,
+        // Position+Normal+TextureCoordinate), which is the one `VULKAN-218` measured broken; the
+        // untextured and coloured lit shapes keep that row.
+        const auto& declaredForLit = vbForLayout.GetDeclarationEXT();
+        const bool instancedLit =
+            !instancedAlphaTest && params.lightingEnabled &&
+            !params.dualTexture && !params.envMapping && !params.skinned && !params.pbr &&
+            !declaredForLit.IsEmpty() &&
+            DeclarationNamesUsageEXT(
+                declaredForLit, Microsoft::Xna::Framework::Graphics::VertexElementUsage::Normal) &&
+            DeclarationNamesUsageEXT(
+                declaredForLit,
+                Microsoft::Xna::Framework::Graphics::VertexElementUsage::TextureCoordinate) &&
+            !DeclarationNamesUsageEXT(
+                declaredForLit, Microsoft::Xna::Framework::Graphics::VertexElementUsage::Color);
+        VulkanVertexInputLayoutEXT instancedLitLayout;
+        if (instancedLit)
+            instancedLitLayout = BuildVulkanVertexInputLayoutEXT(
+                declaredForLit, StockInputs::kLitTextured, std::size(StockInputs::kLitTextured));
         // VULKAN-097: the correction rides on the projection half of the product. VULKAN-219: the
         // world half is now the effect's own `World`, with the per-instance matrix applied inside
         // it by the shader.
@@ -14995,6 +15065,24 @@ namespace CNA::Internal::Renderers::Vulkan
         // Same two lines the ordinary indexed route uses, so the sampler is slot 0's, as there.
         d.instancedTextured = instancedTextured;
         d.useAlphaTest      = instancedAlphaTest;
+        // VULKAN-224: the lit family's descriptor set and its 64-float UBO come from the very
+        // helper VULKAN-223 extracted for this -- the same code the two ordinary routes run, so an
+        // instanced lit draw cannot drift from a non-instanced one. The push constant needs no
+        // special case at all: since VULKAN-219 `FillInstancedPushConst` writes exactly what
+        // `FillExtPushConst` writes -- WVP in [0..15] and the same sixteen floats after it.
+        if (instancedLit) {
+            d.useLitTextured  = true;
+            d.litUntextured   = false;
+            d.litColored      = false;
+            // Task 1103: XNA's real default is PreferPerPixelLighting=false, and an instanced draw
+            // must not silently move a game to the other variant.
+            d.preferVertexLit = !params.preferPerPixelLighting;
+            d.vertexLayout    = instancedLitLayout;
+            FillStockFamilyRecordEXT(d, params, /*needsPbr=*/false, /*needsSkinned=*/false,
+                                     /*needsEnvMap=*/false, /*needsDualTex=*/false,
+                                     /*needsLitTextured=*/true, /*needsLitUntextured=*/false,
+                                     /*needsLitColored=*/false);
+        }
         {
             const auto* vs = params.texture0
                 ? dynamic_cast<const IVulkanSamplable*>(params.texture0) : nullptr;

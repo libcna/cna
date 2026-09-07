@@ -334,6 +334,7 @@ EasyGL — an optional per-instance matrix added to every stock program. Three s
 | Position + TextureCoordinate, with `TextureEnabled` and a bound texture | `instanced_textured3d` |
 | Position + Colour + TextureCoordinate, same conditions | `instanced_colored_textured3d` |
 | Any of the above under an `AlphaTestEffect` | `instanced_alpha_test3d` (the ordinary alpha-test family, made instanceable) |
+| Position + Normal + TextureCoordinate with `LightingEnabled` | `instanced_lit_textured3d`, or its `_vertexlit` sibling when `PreferPerPixelLighting` is false (the ordinary lit family, made instanceable) |
 
 **The per-instance matrix composes with `BasicEffect.World`** — the shader computes
 `World × View × Projection × instanceMatrix × position`, so an instance transform is applied
@@ -346,13 +347,14 @@ declaration must supply the coordinate. Either alone selects a program the draw 
 either alone is ignored.
 
 **What an instanced draw does not do here, and it is a limit rather than an omission.** There is no
-lit, dual-texture or env-map instanced program, no **coloured** alpha-test one (a
+dual-texture or env-map instanced program; the lit family is instanceable only in its **textured**
+shape (a lit declaration that is untextured, or that also carries a Colour, falls back to the
+colour-only instanced family); there is no **coloured** alpha-test one (a
 `Position+Colour+TextureCoordinate` alpha-test draw takes the uncoloured module and loses its
-colour), and no fog on any of them — the fog UBO is a second descriptor binding, and the instanced
-family uses the single-binding pipeline layout it shares with 2D `SpriteBatch`. `LightingEnabled` on an instanced draw is
-ignored — measured, not inferred: a quad at `N·L = 0.5` reads `(128,128,128)` non-instanced
-and `(255,255,255)` instanced here, where EasyGL reads `(128,128,128)` both ways. Tracked as
-`VULKAN-218`; EasyGL has none of these limits, because its per-instance matrix
+colour); and there is no fog on the colour-only instanced programs — the fog UBO is a second
+descriptor binding, and that family uses the single-binding pipeline layout it shares with 2D
+`SpriteBatch`. The lit and alpha-test instanced draws carry their own family's fog, because they
+carry their own family's whole pipeline layout. Tracked as `VULKAN-218`; EasyGL has none of these limits, because its per-instance matrix
 composes with every stock program.
   Set `SamplerStates[1..15]` **before** `Begin()`. Setting them afterwards reaches a `Deferred`
   batch, whose flush publishes them, but not an `Immediate` one, whose only publication point is
