@@ -254,7 +254,7 @@
     },
     {
       "case": "phone_png_texture_mipmaps",
-      "reason": "Every level below the first differs, and only those: the two builds agree texel for texel on level 0 and on the whole of a 2x2 source's chain, so the source, the colour key and the premultiplication all agree and what is left is the filter that halves an image. XNA reduces a 4x4 to 2x2 as (80, 71, 17, 211) where an area average of the four texels underneath is (72, 72, 8, 207), which is what CNA writes -- so XNA's kernel reaches beyond the block it is producing, and one 4x4 image is far too little to say what it is. Identifying it needs a fixture built for the purpose (plans/plan_xnapipeline_parity.md XNAPP-254).",
+      "reason": "XNA's own mip kernel, and the last unit of it. The filter is measured rather than guessed: a single white texel on black reduces to a 2x2 of 48, 7, 7, 1 out of 255, which is the outer product of the separable four-tap {1/16, 7/16, 7/16, 1/16}, and a step edge confirms both that and the edge rule -- taps that fall outside are clamped, where wrapping is wrong by up to 24 units at a border. An odd dimension has no such alignment and XNA area-averages there instead, exactly, on a 3x2's alpha channel. CNA does all of that now (XNAPP-254), and what is left over the six mipmapped cases is 61 bytes of 2944 differing by exactly one, never more. No symmetric four-tap does better: sweeping the tap weight finds no value that beats 1/16, and the residual sits in both directions, which is what a dither looks like. Before the kernel was implemented these levels differed by up to 29 units.",
       "paths": [
         "root/levelDigests"
       ]
@@ -268,7 +268,7 @@
     },
     {
       "case": "profile_mipmaps_npot_hidef",
-      "reason": "Every level below the first differs, and only those: the two builds agree texel for texel on level 0 and on the whole of a 2x2 source's chain, so the source, the colour key and the premultiplication all agree and what is left is the filter that halves an image. XNA reduces a 4x4 to 2x2 as (80, 71, 17, 211) where an area average of the four texels underneath is (72, 72, 8, 207), which is what CNA writes -- so XNA's kernel reaches beyond the block it is producing, and one 4x4 image is far too little to say what it is. Identifying it needs a fixture built for the purpose (plans/plan_xnapipeline_parity.md XNAPP-254).",
+      "reason": "XNA's own mip kernel, and the last unit of it. The filter is measured rather than guessed: a single white texel on black reduces to a 2x2 of 48, 7, 7, 1 out of 255, which is the outer product of the separable four-tap {1/16, 7/16, 7/16, 1/16}, and a step edge confirms both that and the edge rule -- taps that fall outside are clamped, where wrapping is wrong by up to 24 units at a border. An odd dimension has no such alignment and XNA area-averages there instead, exactly, on a 3x2's alpha channel. CNA does all of that now (XNAPP-254), and what is left over the six mipmapped cases is 61 bytes of 2944 differing by exactly one, never more. No symmetric four-tap does better: sweeping the tap weight finds no value that beats 1/16, and the residual sits in both directions, which is what a dither looks like. Before the kernel was implemented these levels differed by up to 29 units.",
       "paths": [
         "root/levelDigests"
       ]
@@ -291,7 +291,7 @@
     },
     {
       "case": "xbox_png_texture_mipmaps",
-      "reason": "Every level below the first differs, and only those: the two builds agree texel for texel on level 0 and on the whole of a 2x2 source's chain, so the source, the colour key and the premultiplication all agree and what is left is the filter that halves an image. XNA reduces a 4x4 to 2x2 as (80, 71, 17, 211) where an area average of the four texels underneath is (72, 72, 8, 207), which is what CNA writes -- so XNA's kernel reaches beyond the block it is producing, and one 4x4 image is far too little to say what it is. Identifying it needs a fixture built for the purpose (plans/plan_xnapipeline_parity.md XNAPP-254).",
+      "reason": "XNA's own mip kernel, and the last unit of it. The filter is measured rather than guessed: a single white texel on black reduces to a 2x2 of 48, 7, 7, 1 out of 255, which is the outer product of the separable four-tap {1/16, 7/16, 7/16, 1/16}, and a step edge confirms both that and the edge rule -- taps that fall outside are clamped, where wrapping is wrong by up to 24 units at a border. An odd dimension has no such alignment and XNA area-averages there instead, exactly, on a 3x2's alpha channel. CNA does all of that now (XNAPP-254), and what is left over the six mipmapped cases is 61 bytes of 2944 differing by exactly one, never more. No symmetric four-tap does better: sweeping the tap weight finds no value that beats 1/16, and the residual sits in both directions, which is what a dither looks like. Before the kernel was implemented these levels differed by up to 29 units.",
       "paths": [
         "root/levelDigests"
       ]
@@ -307,6 +307,27 @@
     {
       "case": "xbox_xml_passthrough",
       "reason": "CNA has no canonical .xml route. Of the 1466 .xml assets in the public sample corpus, almost all declare game-defined types, which only a game's own pipeline assembly can build (XNAPP-260); a built-in route could cover the handful the framework itself defines and would be XNB-only. The decision to build that subset has not been taken."
+    },
+    {
+      "case": "texture_png_texture_mipmaps",
+      "reason": "XNA's own mip kernel, and the last unit of it. The filter is measured rather than guessed: a single white texel on black reduces to a 2x2 of 48, 7, 7, 1 out of 255, which is the outer product of the separable four-tap {1/16, 7/16, 7/16, 1/16}, and a step edge confirms both that and the edge rule -- taps that fall outside are clamped, where wrapping is wrong by up to 24 units at a border. An odd dimension has no such alignment and XNA area-averages there instead, exactly, on a 3x2's alpha channel. CNA does all of that now (XNAPP-254), and what is left over the six mipmapped cases is 61 bytes of 2944 differing by exactly one, never more. No symmetric four-tap does better: sweeping the tap weight finds no value that beats 1/16, and the residual sits in both directions, which is what a dither looks like. Before the kernel was implemented these levels differed by up to 29 units.",
+      "paths": [
+        "root/levelDigests"
+      ]
+    },
+    {
+      "case": "mip_impulse16",
+      "reason": "XNA's own mip kernel, and the last unit of it. The filter is measured rather than guessed: a single white texel on black reduces to a 2x2 of 48, 7, 7, 1 out of 255, which is the outer product of the separable four-tap {1/16, 7/16, 7/16, 1/16}, and a step edge confirms both that and the edge rule -- taps that fall outside are clamped, where wrapping is wrong by up to 24 units at a border. An odd dimension has no such alignment and XNA area-averages there instead, exactly, on a 3x2's alpha channel. CNA does all of that now (XNAPP-254), and what is left over the six mipmapped cases is 61 bytes of 2944 differing by exactly one, never more. No symmetric four-tap does better: sweeping the tap weight finds no value that beats 1/16, and the residual sits in both directions, which is what a dither looks like. Before the kernel was implemented these levels differed by up to 29 units.",
+      "paths": [
+        "root/levelDigests"
+      ]
+    },
+    {
+      "case": "mip_step16",
+      "reason": "XNA's own mip kernel, and the last unit of it. The filter is measured rather than guessed: a single white texel on black reduces to a 2x2 of 48, 7, 7, 1 out of 255, which is the outer product of the separable four-tap {1/16, 7/16, 7/16, 1/16}, and a step edge confirms both that and the edge rule -- taps that fall outside are clamped, where wrapping is wrong by up to 24 units at a border. An odd dimension has no such alignment and XNA area-averages there instead, exactly, on a 3x2's alpha channel. CNA does all of that now (XNAPP-254), and what is left over the six mipmapped cases is 61 bytes of 2944 differing by exactly one, never more. No symmetric four-tap does better: sweeping the tap weight finds no value that beats 1/16, and the residual sits in both directions, which is what a dither looks like. Before the kernel was implemented these levels differed by up to 29 units.",
+      "paths": [
+        "root/levelDigests"
+      ]
     }
   ]
 }

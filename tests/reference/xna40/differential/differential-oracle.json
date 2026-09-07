@@ -100,6 +100,8 @@
     {"case": "texture/dds_volume", "built": true, "bytes": 447, "sha256": "C08EA87EAA71F8B250838D7430D699FA78A5D72A2BD3AF202215E306AF6A3FA0", "outputs": ["texture/probe_volume.xnb"], "intermediates": ["ContentPipeline-{7C1D0F4E-5B2A-4E97-9E3C-1B7A2D6F4E80}.xml"], "errors": [], "warnings": []},
     {"case": "xbox/dds_cube", "built": true, "bytes": 589, "sha256": "C535BF637333259A1EA4B2126D6A235465119FD5AF46F877DFD4B4623B84D7AA", "outputs": ["texture/probe_cube.xnb"], "intermediates": ["ContentPipeline-{7C1D0F4E-5B2A-4E97-9E3C-1B7A2D6F4E80}.xml"], "errors": [], "warnings": []},
     {"case": "xbox/dds_volume", "built": true, "bytes": 447, "sha256": "AA6812FC42BE354F243132572ABF242096EED8C75E047702CA966909D5C0E04C", "outputs": ["texture/probe_volume.xnb"], "intermediates": ["ContentPipeline-{7C1D0F4E-5B2A-4E97-9E3C-1B7A2D6F4E80}.xml"], "errors": [], "warnings": []},
+    {"case": "mip/impulse16", "built": true, "bytes": 1567, "sha256": "37BB7114D791A04EE181A8D01CB1859643E00A8E23925780F6ED77A270BD4948", "outputs": ["texture/probe_impulse16.xnb"], "intermediates": ["ContentPipeline-{7C1D0F4E-5B2A-4E97-9E3C-1B7A2D6F4E80}.xml"], "errors": [], "warnings": []},
+    {"case": "mip/step16", "built": true, "bytes": 1567, "sha256": "A6D95320703435C2C44BBE5962A0261BC2B972446BF5185621D65306E424C61C", "outputs": ["texture/probe_step16.xnb"], "intermediates": ["ContentPipeline-{7C1D0F4E-5B2A-4E97-9E3C-1B7A2D6F4E80}.xml"], "errors": [], "warnings": []},
     {"case": "xml/intermediate_passthrough", "built": true, "bytes": 232, "sha256": "D5193C3C7752C205BD8BC14C4C2618FFAF5D301B23CD17B60A4EBAEBD67C291A", "outputs": ["source/probe.xnb"], "intermediates": ["ContentPipeline-{7C1D0F4E-5B2A-4E97-9E3C-1B7A2D6F4E80}.xml"], "errors": [], "warnings": []}
   ]
 }

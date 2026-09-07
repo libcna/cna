@@ -52,3 +52,14 @@ hundred bytes each.
 They exist to ask what XNA's `TextureImporter` does with a shape that is not a plain 2D image, and
 the answer is that it routes them to `TextureCubeReader` and `Texture3DReader` on Windows and on
 the Xbox alike.
+
+## The two that read a filter
+
+`plans/plan_xnapipeline_parity.md` `XNAPP-254`. `probe_impulse16.png` is 16x16 black with four
+white texels at (2,2), (2,11), (11,2) and (11,11) -- far enough apart that no reasonable kernel's
+support can overlap, so each one's reduced neighbourhood *is* the kernel, read off directly.
+`probe_step16.png` is the same size with its left half black and its right half white, which turns
+the kernel into a cumulative sum and shows small tails the impulse rounds away.
+
+Ninety-one and eighty-four bytes. A filter is not something to infer from a photograph of a wall:
+these two say what it is in one build each.

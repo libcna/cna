@@ -701,6 +701,67 @@ namespace CNA::Content::Pipeline
         }
     }
 
+    std::vector<std::uint8_t> HalveRgbaImage(const std::vector<std::uint8_t>& pixels,
+                                             const std::uint32_t width,
+                                             const std::uint32_t height)
+    {
+        // XNA's mip filter, read off its own impulse response. A single white texel on black
+        // reduces to a 2x2 of 48, 7, 7, 1 out of 255, which is the outer product of the separable
+        // four-tap {1/16, 7/16, 7/16, 1/16} -- not the 2x2 area average this used to take, which
+        // answers 64, 0, 0, 0. A step edge confirms it and confirms the edge rule: taps that fall
+        // outside are clamped, and wrapping is wrong by up to 24 units at a border
+        // (plans/plan_xnapipeline_parity.md XNAPP-254).
+        //
+        // The kernel reaches one texel beyond the pair it is reducing, which is why an area
+        // average is not merely a different rounding of the same thing.
+        static constexpr std::array<int, 4> kWeights{1, 7, 7, 1};
+        static constexpr int kWeightTotal = 16 * 16;
+        const std::uint32_t nextWidth = std::max(1u, width / 2u);
+        const std::uint32_t nextHeight = std::max(1u, height / 2u);
+        // The kernel above describes an exact halving, where every output texel sits over the same
+        // two source texels. An odd dimension has no such alignment, and XNA answers the area
+        // average there: a 3x2 reduces to the mean of all six texels, exactly on the alpha channel
+        // (plans/plan_xnapipeline_parity.md XNAPP-254).
+        if ((width % 2u) != 0u || (height % 2u) != 0u)
+        {
+            return ResampleRgbaImage(pixels, width, height, nextWidth, nextHeight);
+        }
+        std::vector<std::uint8_t> out(static_cast<std::size_t>(nextWidth) * nextHeight * 4u);
+        for (std::uint32_t y = 0u; y < nextHeight; ++y)
+        {
+            for (std::uint32_t x = 0u; x < nextWidth; ++x)
+            {
+                for (std::uint32_t channel = 0u; channel < 4u; ++channel)
+                {
+                    int accumulated = 0;
+                    for (std::size_t ty = 0u; ty < kWeights.size(); ++ty)
+                    {
+                        const int sampleY = std::clamp(
+                            static_cast<int>(2u * y) - 1 + static_cast<int>(ty), 0,
+                            static_cast<int>(height) - 1);
+                        for (std::size_t tx = 0u; tx < kWeights.size(); ++tx)
+                        {
+                            const int sampleX = std::clamp(
+                                static_cast<int>(2u * x) - 1 + static_cast<int>(tx), 0,
+                                static_cast<int>(width) - 1);
+                            const std::size_t at =
+                                ((static_cast<std::size_t>(sampleY) * width) + sampleX) * 4u +
+                                channel;
+                            accumulated += kWeights[ty] * kWeights[tx] *
+                                           static_cast<int>(pixels[at]);
+                        }
+                    }
+                    // Rounded, not truncated: the impulse's outermost texel is 1 where truncation
+                    // would answer 0.
+                    const int value = (accumulated + kWeightTotal / 2) / kWeightTotal;
+                    out[((static_cast<std::size_t>(y) * nextWidth) + x) * 4u + channel] =
+                        static_cast<std::uint8_t>(std::clamp(value, 0, 255));
+                }
+            }
+        }
+        return out;
+    }
+
     std::vector<std::vector<std::uint8_t>> GenerateRgbaMipChain(
         std::span<const std::uint8_t> level0, const std::uint32_t width,
         const std::uint32_t height)
@@ -711,12 +772,9 @@ namespace CNA::Content::Pipeline
         std::uint32_t currentHeight = height;
         while (currentWidth > 1u || currentHeight > 1u)
         {
-            const std::uint32_t nextWidth = std::max(1u, currentWidth / 2u);
-            const std::uint32_t nextHeight = std::max(1u, currentHeight / 2u);
-            current = ResampleRgbaImage(current, currentWidth, currentHeight, nextWidth,
-                                        nextHeight);
-            currentWidth = nextWidth;
-            currentHeight = nextHeight;
+            current = HalveRgbaImage(current, currentWidth, currentHeight);
+            currentWidth = std::max(1u, currentWidth / 2u);
+            currentHeight = std::max(1u, currentHeight / 2u);
             levels.push_back(current);
         }
         return levels;

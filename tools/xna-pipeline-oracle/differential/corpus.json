@@ -825,6 +825,28 @@
       "profile": "HiDef"
     },
     {
+      "case": "mip/impulse16",
+      "source": "texture/probe_impulse16.png",
+      "importer": "TextureImporter",
+      "processor": "TextureProcessor",
+      "parameters": {
+        "GenerateMipmaps": "True"
+      },
+      "platform": "Windows",
+      "profile": "HiDef"
+    },
+    {
+      "case": "mip/step16",
+      "source": "texture/probe_step16.png",
+      "importer": "TextureImporter",
+      "processor": "TextureProcessor",
+      "parameters": {
+        "GenerateMipmaps": "True"
+      },
+      "platform": "Windows",
+      "profile": "HiDef"
+    },
+    {
       "case": "xml/intermediate_passthrough",
       "source": "source/probe.xml",
       "importer": "XmlImporter",
