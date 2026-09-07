@@ -94,7 +94,7 @@ namespace
 #elif defined(CNA_RENDERER_SOFTWARE)
     constexpr const char* kRendererName = "SOFTWARE";
     constexpr bool kRasterizes = true;
-    constexpr bool kKnownStripBoundary = true; // Software v1 accepts TriangleList only.
+    constexpr bool kKnownStripBoundary = false;
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr const char* kRendererName = "EASYGL";
     constexpr bool kRasterizes = true;
@@ -120,7 +120,7 @@ namespace
 #endif
 
     constexpr bool kEveryPathRequired =
-#if defined(CNA_RENDERER_WEBGPU)
+#if defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_SOFTWARE)
         true;
 #else
         false;
@@ -638,7 +638,8 @@ class TriangleStripWindingTest : public Game
 
         if (kEveryPathRequired)
             check(matrixCasesRun_ == 36,
-                  "M0 WebGPU executed the complete 6-path x 2-count x 3-cull matrix (" +
+                  std::string("M0 ") + kRendererName +
+                  " executed the complete 6-path x 2-count x 3-cull matrix (" +
                   std::to_string(matrixCasesRun_) + "/36 cases)");
         else if (!kKnownStripBoundary)
             check(matrixCasesRun_ > 0,

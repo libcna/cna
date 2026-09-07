@@ -27,7 +27,9 @@ Software is different: it actually **rasterizes real triangles** into a CPU-owne
 framebuffer, entirely in software (a real edge-function rasterizer, real perspective-correct
 attribute interpolation, a real per-pixel depth test). `GraphicsDevice::GetBackBufferData()`/
 `ReadBackbuffer()` return genuinely correct pixels — no GPU, window, or display server involved at
-any point. That makes it useful for:
+any point. Triangle lists and strips, line lists and strips, and the existing `PointListEXT` path
+all use the CPU rasterizer; triangle strips preserve XNA's alternating winding across indexed and
+non-indexed user/buffer draws. That makes it useful for:
 
 - **Deterministic pixel tests** that need no GPU driver, display server, or Xvfb at all — unlike
   the existing EasyGL/BGFX/Vulkan golden-image tests (see `docs/graphics-renderer-feature-matrix.md`),
@@ -121,11 +123,6 @@ rather than always passing.
 
 ## Known limitations (2026-08-15)
 
-- **`TriangleStrip` remains unsupported.** The effect-aware indexed and non-indexed paths render
-  `TriangleList`, `LineList`, `LineStrip` and `PointListEXT`; points and clipped line segments use
-  the same depth, blend and fragment-shading path as triangles. A strip still throws a clear
-  "only TriangleList is supported in v1" compatibility error rather than being silently
-  reinterpreted. The older coloured-draw convenience paths remain triangle-list-only too.
 - **Vertex strides 16/20/24/32/48/52/56/60/68/76.** These are the complete canonical CNA table,
   including dual-UV rigid/skinned PBR records. The reduced PBR fallback selects UV0 or UV1 for the
   base-colour map and applies that map's affine transform. Tangents are consumed at their declared

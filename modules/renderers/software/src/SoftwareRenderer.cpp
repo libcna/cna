@@ -2428,6 +2428,20 @@ namespace CNA::Internal::Renderers::Software
             }
         }
 
+        /// Returns the local vertex/index element for one corner of one triangle. XNA triangle
+        /// strips reverse their first two vertices on every odd primitive so every assembled
+        /// triangle keeps the strip's declared front-face winding.
+        std::int64_t TriangleElementOffset(PrimitiveType primitive, int triangle, int corner)
+        {
+            if (primitive == PrimitiveType::TriangleStrip)
+            {
+                if ((triangle & 1) != 0 && corner < 2)
+                    return static_cast<std::int64_t>(triangle) + (1 - corner);
+                return static_cast<std::int64_t>(triangle) + corner;
+            }
+            return static_cast<std::int64_t>(triangle) * 3 + corner;
+        }
+
         /// Reads one index element at its own declared width. `element` is an element ordinal,
         /// never a byte offset -- the byte position is derived from the width here and nowhere else.
         std::uint32_t DecodeIndexElement(const std::uint8_t* indexBase, bool thirtyTwoBit,
@@ -2914,9 +2928,9 @@ namespace CNA::Internal::Renderers::Software
 #endif
     }
 
-    // Phase S4 (SOFTWARE-30..34): real transform/rasterize/depth-test pipeline. TriangleList only
-    // in v1 (the owner's own stated minimal first-version scope) -- other PrimitiveType values
-    // throw rather than silently misrendering.
+    // Phase S4 (SOFTWARE-30..34) plus SOFTWARE-105: real transform/rasterize/depth-test pipeline
+    // for triangle lists and strips. Effect-aware paths below additionally support line and point
+    // topologies.
 #ifndef CNA_SOFTWARE_2D_ONLY
     void SoftwareRenderer::DrawColoredPrimitives(const IVertexBufferRenderer& vb, const Matrix& world,
                                                         const Matrix& view, const Matrix& projection,
@@ -2924,8 +2938,9 @@ namespace CNA::Internal::Renderers::Software
     {
         if (primitiveCount <= 0)
             throw std::runtime_error("SoftwareRenderer::DrawColoredPrimitives: primitiveCount must be > 0");
-        if (primitive != PrimitiveType::TriangleList)
-            throw std::runtime_error("SoftwareRenderer::DrawColoredPrimitives: only TriangleList is supported in v1");
+        if (primitive != PrimitiveType::TriangleList && primitive != PrimitiveType::TriangleStrip)
+            throw std::runtime_error(
+                "SoftwareRenderer::DrawColoredPrimitives: unsupported primitive topology");
 
         // REMED-GFX-119: this entry point carries no GpuDrawParams, so its contract is a complete
         // buffer draw -- first element zero, no offset. It still validates the exact
@@ -2972,7 +2987,7 @@ namespace CNA::Internal::Renderers::Software
             ClipVertex cv[3];
             for (int k = 0; k < 3; ++k)
             {
-                const std::uint8_t* raw = fetchVertex(static_cast<std::int64_t>(i) * 3 + k);
+                const std::uint8_t* raw = fetchVertex(TriangleElementOffset(primitive, i, k));
                 cv[k] = BuildPositionColorClipVertex(raw, combined);
             }
 
@@ -3005,8 +3020,9 @@ namespace CNA::Internal::Renderers::Software
     {
         if (primitiveCount <= 0)
             throw std::runtime_error("SoftwareRenderer::DrawIndexedColoredPrimitives: primitiveCount must be > 0");
-        if (primitive != PrimitiveType::TriangleList)
-            throw std::runtime_error("SoftwareRenderer::DrawIndexedColoredPrimitives: only TriangleList is supported in v1");
+        if (primitive != PrimitiveType::TriangleList && primitive != PrimitiveType::TriangleStrip)
+            throw std::runtime_error(
+                "SoftwareRenderer::DrawIndexedColoredPrimitives: unsupported primitive topology");
 
         const auto& swVb = static_cast<const SoftwareVertexBufferRenderer&>(vb);
         const auto& swIb = static_cast<const SoftwareIndexBufferRenderer&>(ib);
@@ -3057,7 +3073,7 @@ namespace CNA::Internal::Renderers::Software
             ClipVertex cv[3];
             for (int k = 0; k < 3; ++k)
             {
-                const std::uint8_t* raw = fetchVertex(static_cast<std::int64_t>(i) * 3 + k);
+                const std::uint8_t* raw = fetchVertex(TriangleElementOffset(primitive, i, k));
                 cv[k] = BuildPositionColorClipVertex(raw, combined);
             }
 
@@ -3111,7 +3127,8 @@ namespace CNA::Internal::Renderers::Software
         RequireFaithfulDeclarationEXT(vb, "ordinary-nonindexed");
         if (primitiveCount <= 0)
             throw std::runtime_error("SoftwareRenderer::DrawPrimitivesEx: primitiveCount must be > 0");
-        if (primitive != PrimitiveType::TriangleList && primitive != PrimitiveType::LineList &&
+        if (primitive != PrimitiveType::TriangleList && primitive != PrimitiveType::TriangleStrip &&
+            primitive != PrimitiveType::LineList &&
             primitive != PrimitiveType::LineStrip && primitive != PrimitiveType::PointListEXT)
             throw std::runtime_error(
                 "SoftwareRenderer::DrawPrimitivesEx: unsupported primitive topology");
@@ -3232,7 +3249,7 @@ namespace CNA::Internal::Renderers::Software
             for (int k = 0; k < 3; ++k)
             {
                 const CombinedVertexReader raw =
-                    fetchVertex(static_cast<std::int64_t>(i) * 3 + k);
+                    fetchVertex(TriangleElementOffset(primitive, i, k));
                 cv[k] = BuildGenericClipVertex(raw, stride, combined, params);
             }
 
@@ -3274,7 +3291,8 @@ namespace CNA::Internal::Renderers::Software
         RequireFaithfulDeclarationEXT(vb, "ordinary-indexed");
         if (primitiveCount <= 0)
             throw std::runtime_error("SoftwareRenderer::DrawIndexedPrimitivesEx: primitiveCount must be > 0");
-        if (primitive != PrimitiveType::TriangleList && primitive != PrimitiveType::LineList &&
+        if (primitive != PrimitiveType::TriangleList && primitive != PrimitiveType::TriangleStrip &&
+            primitive != PrimitiveType::LineList &&
             primitive != PrimitiveType::LineStrip && primitive != PrimitiveType::PointListEXT)
             throw std::runtime_error(
                 "SoftwareRenderer::DrawIndexedPrimitivesEx: unsupported primitive topology");
@@ -3396,7 +3414,7 @@ namespace CNA::Internal::Renderers::Software
             for (int k = 0; k < 3; ++k)
             {
                 const CombinedVertexReader raw =
-                    fetchVertex(static_cast<std::int64_t>(i) * 3 + k);
+                    fetchVertex(TriangleElementOffset(primitive, i, k));
                 cv[k] = BuildGenericClipVertex(raw, stride, combined, params);
             }
 

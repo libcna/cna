@@ -349,7 +349,9 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
         COMMAND cna_test_software_frontface_winding
         TIMEOUT 300 LABELS "Software")
 
-    # REMED-GFX-183 control: TriangleStrip remains an explicit unsupported 3D boundary.
+    # SOFTWARE-105 promotes REMED-GFX-183's shared control into a required Software contract:
+    # all six user/buffer, indexed/non-indexed and Uint16/Uint32 paths must preserve alternating
+    # strip winding under every CullMode, including nonzero offsets and baseVertex.
     cna_software_test(cna_test_software_triangle_strip_winding
         ${CNA_GRAPHICS_EXAMPLES_DIR}/triangle_strip_winding_test.cpp)
     cna_register_renderer_test(NAME Software_TriangleStripWinding

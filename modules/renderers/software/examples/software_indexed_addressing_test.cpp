@@ -7,7 +7,8 @@
 //     element offset -- never a byte offset, a vertex offset, or a source-array offset.
 //   * `baseVertex` is added to every decoded index exactly once before the vertex fetch.
 //   * `primitiveCount` determines the exact topology-derived consumed index count
-//     (3 * primitiveCount for the only indexed topology Software v1 supports, TriangleList).
+//     (3 * primitiveCount for TriangleList, primitiveCount + 2 for TriangleStrip, and the
+//     corresponding line/point formulas).
 //   * The declared index width decides 16-bit or 32-bit decoding and never changes any of the
 //     three values above.
 //   * `minVertexIndex` / `numVertices` are validation/range hints. They never add to a decoded
@@ -499,7 +500,7 @@ protected:
                        "J2: the backbuffer keeps its own earlier indexed range");
         }
 
-        // ---- K: unsupported indexed topologies stay explicit capability rejections ------------
+        // ---- K: every implemented indexed topology uses the validated addressing path ---------
         {
             dev.Clear(Color::Black);
             fx.Apply();
@@ -512,21 +513,23 @@ protected:
                 {PrimitiveType::LineStrip, 11, "LineStrip"},
                 {PrimitiveType::PointListEXT, 12, "PointListEXT"},
             }};
-            bool allRejected = true;
+            bool allAccepted = true;
             for (const auto& topology : cases)
             {
-                allRejected &= Throws<std::runtime_error>([&] {
+                try
+                {
                     dev.DrawIndexedPrimitives(topology.primitive, 0, 0, 12, 0,
                                               topology.primitiveCount);
-                });
+                }
+                catch (const std::exception&)
+                {
+                    allAccepted = false;
+                }
             }
             dev.SetVertexBuffer(nullptr);
             dev.SetIndexBuffer(nullptr);
-            check(allRejected,
-                  "K1: TriangleStrip/LineList/LineStrip/PointListEXT are rejected, not approximated");
-            CheckScene(dev, kBBW, kBBH,
-                       {Color::Black, Color::Black, Color::Black, Color::Black},
-                       "K2: a rejected topology rasterizes nothing");
+            check(allAccepted,
+                  "K1: TriangleStrip/LineList/LineStrip/PointListEXT all use the validated indexed path");
         }
 
         // ---- L: invalid public ranges are rejected deterministically before any storage read --
