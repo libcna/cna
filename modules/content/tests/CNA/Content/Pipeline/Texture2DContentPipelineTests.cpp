@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -63,6 +64,24 @@ namespace
     private:
         std::filesystem::path path_;
     };
+
+    /** @brief Walks up from the working directory, then from this file, to a repository path. */
+    std::filesystem::path Locate(const std::filesystem::path& relative)
+    {
+        for (std::filesystem::path dir = std::filesystem::current_path(); !dir.empty();
+             dir = dir.parent_path())
+        {
+            if (std::filesystem::exists(dir / relative)) { return dir / relative; }
+            if (dir == dir.root_path()) { break; }
+        }
+        for (std::filesystem::path dir = std::filesystem::path(__FILE__).parent_path();
+             !dir.empty(); dir = dir.parent_path())
+        {
+            if (std::filesystem::exists(dir / relative)) { return dir / relative; }
+            if (dir == dir.root_path()) { break; }
+        }
+        return relative;
+    }
 
     void WriteBytes(const std::filesystem::path& path, const std::vector<std::uint8_t>& bytes)
     {
@@ -850,4 +869,49 @@ TEST(Texture2DContentPipelineTest, ADdsCubeIsImportedAsACubeRatherThanRefused)
     const Pipeline::ContentBuildResult result = BuildNamed(scratch.Path(), "wall.dds");
     EXPECT_EQ(result.importer.name, "CNA.ImageImporter");
     EXPECT_EQ(result.processor.name, "CNA.TextureCubeProcessor");
+}
+
+// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-109. XNA's `TextureImporter` loads an image through
+// `System.Drawing`, and GDI+ honours a PNG's own `gAMA` chunk: a file that declares a gamma of
+// 0.45 rather than the standard 0.45455 is corrected on load. The correction is one unit over most
+// of the range and none at either end, but it reaches every texel, and 103 of the 2,267 distinct
+// PNG sources in the public XNA sample corpus declare exactly 0.45000. CNA decoded through
+// stb_image, which ignores the chunk, so those textures were wrong in every texel of the middle of
+// their range: NetRumble's `barrierPurple.png` had 35,340 of 65,536 bytes differing from XNA's own
+// build, all of them by one. An `sRGB` chunk declares the standard gamma and so corrects nothing,
+// which is the other half of the rule.
+TEST(Texture2DContentPipelineTest, APngsOwnGammaChunkIsAppliedTheWayGdiPlusAppliesIt)
+{
+    const std::filesystem::path corrected = Locate("tests/assets/xna40/texture/gamma_45000.png");
+    const std::filesystem::path plain = Locate("tests/assets/xna40/texture/gamma_srgb.png");
+    if (!std::filesystem::exists(corrected) || !std::filesystem::exists(plain))
+    {
+        GTEST_SKIP() << "the gamma fixtures are missing";
+    }
+
+    const Pipeline::ImportedImage withGamma = Pipeline::DecodeImportedImage(corrected);
+    const Pipeline::ImportedImage withSrgb = Pipeline::DecodeImportedImage(plain);
+    ASSERT_EQ(withGamma.width, 16u);
+    ASSERT_EQ(withSrgb.width, 16u);
+
+    // The ramp is 8, 24, 40, ... 248 in every channel, and `sRGB` leaves it exactly there.
+    for (std::uint32_t step = 0; step < 16u; ++step)
+    {
+        const std::uint8_t authored = static_cast<std::uint8_t>(step * 16u + 8u);
+        EXPECT_EQ(withSrgb.rgbaPixels[step * 4u], authored) << step;
+        EXPECT_EQ(withSrgb.rgbaPixels[step * 4u + 3u], 255u) << step;
+    }
+
+    // `gAMA` 0.45000 corrects towards a display gamma of 2.2: `round(255 * (c/255)^(1/(0.45*2.2)))`.
+    for (std::uint32_t step = 0; step < 16u; ++step)
+    {
+        const double authored = static_cast<double>(step * 16u + 8u);
+        const auto expected = static_cast<std::uint8_t>(
+            std::floor(255.0 * std::pow(authored / 255.0, 1.0 / (0.45 * 2.2)) + 0.5));
+        EXPECT_EQ(withGamma.rgbaPixels[step * 4u], expected) << step;
+        // Alpha is not a colour and is left alone.
+        EXPECT_EQ(withGamma.rgbaPixels[step * 4u + 3u], 255u) << step;
+    }
+    // And the correction is not a no-op: the middle of the ramp moves.
+    EXPECT_NE(withGamma.rgbaPixels[8u * 4u], withSrgb.rgbaPixels[8u * 4u]);
 }

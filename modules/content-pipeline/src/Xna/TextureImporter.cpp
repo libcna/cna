@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "CNA/Content/Cnb/CnbSourceImport.hpp"
+#include "CNA/Content/Pipeline/Texture2DContentPipeline.hpp"
 #include "CNA/Internal/Graphics/DdsSurfaceReader.hpp"
 #include "CNA/Internal/Graphics/PfmDecoder.hpp"
 #include "CNA/Internal/Graphics/RadianceHdrDecoder.hpp"
@@ -208,6 +209,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         {
             throw InvalidContentException(UnreadableTextureMessage(bytes.empty()));
         }
+        // The same rule the canonical route applies: GDI+ honours a PNG's own `gAMA`, and the
+        // genuine importer is GDI+ (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-109`).
+        CNA::Content::Pipeline::ApplyPngFileGammaEXT(bytes, decoded.representations[0].levels[0]);
         auto bitmap = std::make_shared<Graphics::PixelBitmapContent<Color>>(
             static_cast<SharpRuntime::intcs>(decoded.width), static_cast<SharpRuntime::intcs>(decoded.height));
         bitmap->SetPixelData(std::vector<SharpRuntime::bytecs>(decoded.representations[0].levels[0].begin(),

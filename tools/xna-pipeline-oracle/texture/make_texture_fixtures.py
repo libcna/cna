@@ -44,6 +44,32 @@ def png(path):
     write(path, data)
 
 
+def png_with_colour_chunk(path, chunk_tag, chunk_payload):
+    """A 16x1 grey ramp carrying one colour chunk, so what that chunk means can be measured.
+
+    XNA's `TextureImporter` loads through `System.Drawing`, and GDI+ honours a PNG's `gAMA`:
+    a file gamma of 0.45 rather than the standard 0.45455 shifts every mid-range channel by one
+    (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-109`). An `sRGB` chunk declares the standard
+    gamma and so corrects nothing, which is the other half of the rule and the reason the two
+    fixtures differ only in the chunk.
+    """
+    raw = b""
+    raw += b"\x00"
+    for column in range(16):
+        value = column * 16 + 8
+        raw += bytes((value, value, value, 255))
+
+    def chunk(tag, payload):
+        return (struct.pack(">I", len(payload)) + tag + payload +
+                struct.pack(">I", zlib.crc32(tag + payload) & 0xFFFFFFFF))
+
+    header = struct.pack(">IIBBBBB", 16, 1, 8, 6, 0, 0, 0)
+    data = (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) +
+            chunk(chunk_tag, chunk_payload) +
+            chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b""))
+    write(path, data)
+
+
 def bmp_body():
     """The BITMAPINFOHEADER and the 32-bit bottom-up pixels a .bmp and a .dib share."""
     body = struct.pack("<IiiHHIIiiII", 40, WIDTH, HEIGHT, 1, 32, 0, WIDTH * HEIGHT * 4, 0, 0, 0, 0)
@@ -150,6 +176,16 @@ def jpg(path):
     write(path, process.stdout)
 
 
+def png_gamma(path):
+    """The ramp with `gAMA` 0.45000, the value 103 of the sample corpus's PNGs carry."""
+    png_with_colour_chunk(path, b"gAMA", struct.pack(">I", 45000))
+
+
+def png_srgb(path):
+    """The same ramp with an `sRGB` chunk, which declares the standard gamma and changes nothing."""
+    png_with_colour_chunk(path, b"sRGB", b"\x00")
+
+
 def png_3x2(path):
     """Three by two: the one source whose size ResizeToPowerOfTwo actually changes."""
     pixels = PIXELS + [(0, 0, 0, 255), (128, 128, 128, 64)]
@@ -219,6 +255,8 @@ def main():
     hdr_flat(os.path.join(out, "probe_flat.hdr"))
     dds(os.path.join(out, "probe.dds"))
     jpg(os.path.join(out, "probe.jpg"))
+    png_gamma(os.path.join(out, "gamma_45000.png"))
+    png_srgb(os.path.join(out, "gamma_srgb.png"))
     png_3x2(os.path.join(out, "probe_3x2.png"))
     png_4x4(os.path.join(out, "probe_4x4.png"))
     # The same PNG bytes under an extension no importer declares: the importer must read the file

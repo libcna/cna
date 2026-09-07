@@ -11,6 +11,8 @@ the same raw pixels.
 | File | Bytes |
 |---|---:|
 | `empty.png` | 0 |
+| `gamma_45000.png` | 146 |
+| `gamma_srgb.png` | 143 |
 | `garbage.tga` | 25 |
 | `probe.bmp` | 70 |
 | `probe.dds` | 144 |
@@ -79,3 +81,13 @@ others cannot -- three equal cells for the glyph table and the atlas, three uneq
 order glyphs come out in and the order they are packed in, ten for where a row wraps and what the
 padding is, and one bordered in transparent black rather than magenta, which is what settles that
 the separator colour is fixed rather than read from the image.
+
+## The gamma probes
+
+`gamma_45000.png` and `gamma_srgb.png` are the same sixteen-step grey ramp; they differ only in
+the colour chunk they carry. XNA's `TextureImporter` loads an image through `System.Drawing`, and
+GDI+ honours a PNG's `gAMA`: a declared file gamma of 0.45 rather than the standard 0.45455 shifts
+every mid-range channel by one, while an `sRGB` chunk declares the standard gamma and corrects
+nothing. 103 of the 2,267 distinct PNG sources in the public XNA sample corpus declare exactly
+0.45000, and the rule was measured against XNA's own build of NetRumble's `barrierPurple.png`
+(plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-109`).

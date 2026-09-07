@@ -9,6 +9,7 @@
 #include <array>
 #include <cctype>
 #include <charconv>
+#include <cmath>
 #include <fstream>
 #include <iterator>
 #include <limits>
@@ -578,6 +579,80 @@ namespace CNA::Content::Pipeline
         return ContentValue::Create(ImportedImageType, std::move(imported));
     }
 
+    /**
+     * @brief Applies a PNG's own `gAMA` chunk to the decoded texels, as GDI+ does.
+     *
+     * XNA's `TextureImporter` loads an image through `System.Drawing`, and GDI+ honours a
+     * PNG's gamma chunk: an image that declares a file gamma of 0.45 rather than the standard
+     * 0.45455 is corrected on load. The correction is small -- one unit over most of the range
+     * and none at either end -- but it reaches every texel, and 103 of the 2,267 distinct PNG
+     * sources in the public XNA sample corpus declare exactly that. Measured against XNA's own
+     * build of NetRumble's `barrierPurple.png`: `round(255 * (c/255) ^ (1/(gamma*2.2)))`
+     * followed by the truncating premultiply reproduces all 49,152 channel values, and every
+     * other candidate rule misses thousands (plans/plan_xna_sample_xnb_sweep.md
+     * `XNASWEEP-109`).
+     *
+     * An `sRGB` chunk *defines* the gamma as the standard one, so it corrects nothing; an
+     * `iCCP` profile is ignored, which is measured rather than assumed -- 770 of the corpus's
+     * 788 references whose source carries one are byte-identical without touching it.
+     *
+     * @param file The source file's bytes.
+     * @param pixels The decoded RGBA8 texels, corrected in place.
+     */
+    void ApplyPngFileGammaEXT(const std::vector<std::uint8_t>& file,
+                          std::vector<std::uint8_t>& pixels)
+    {
+        static constexpr std::uint8_t kSignature[8] = {0x89u, 'P', 'N', 'G', '\r', '\n',
+                                                       0x1Au, '\n'};
+        if (file.size() < 8u || !std::equal(std::begin(kSignature), std::end(kSignature),
+                                            file.begin()))
+        {
+            return;
+        }
+        const auto big32 = [&file](const std::size_t at)
+        {
+            return (static_cast<std::uint32_t>(file[at]) << 24) |
+                   (static_cast<std::uint32_t>(file[at + 1u]) << 16) |
+                   (static_cast<std::uint32_t>(file[at + 2u]) << 8) |
+                   static_cast<std::uint32_t>(file[at + 3u]);
+        };
+        std::optional<std::uint32_t> gamma;
+        for (std::size_t at = 8u; at + 12u <= file.size();)
+        {
+            const std::uint32_t length = big32(at);
+            const std::string type(file.begin() + static_cast<std::ptrdiff_t>(at) + 4,
+                                   file.begin() + static_cast<std::ptrdiff_t>(at) + 8);
+            if (type == "IDAT" || type == "IEND") { break; }
+            if (type == "sRGB" || type == "iCCP") { return; }
+            if (type == "gAMA" && length == 4u && at + 12u + 4u <= file.size() + 4u)
+            {
+                gamma = big32(at + 8u);
+            }
+            if (length > file.size()) { break; }
+            at += 12u + length;
+        }
+        if (!gamma.has_value() || *gamma == 0u) { return; }
+        // GDI+ corrects the image to a display gamma of 2.2, so a file gamma of exactly
+        // 1/2.2 is already correct and the exponent is one.
+        const double exponent = 1.0 / ((static_cast<double>(*gamma) / 100000.0) * 2.2);
+        if (std::abs(exponent - 1.0) < 1.0e-5) { return; }
+        std::array<std::uint8_t, 256> lookup{};
+        for (std::size_t value = 0; value < lookup.size(); ++value)
+        {
+            const double corrected =
+                255.0 * std::pow(static_cast<double>(value) / 255.0, exponent);
+            lookup[value] = static_cast<std::uint8_t>(
+                std::min(255.0, std::max(0.0, std::floor(corrected + 0.5))));
+        }
+        for (std::size_t texel = 0; texel + 3u < pixels.size(); texel += 4u)
+        {
+            // Alpha is not a colour and is not corrected; GDI+ leaves it alone.
+            pixels[texel] = lookup[pixels[texel]];
+            pixels[texel + 1u] = lookup[pixels[texel + 1u]];
+            pixels[texel + 2u] = lookup[pixels[texel + 2u]];
+        }
+    }
+
     ImportedImage DecodeImportedImage(const std::filesystem::path& source)
     {
         std::ifstream stream(source, std::ios::binary);
@@ -588,6 +663,7 @@ namespace CNA::Content::Pipeline
         const std::vector<std::uint8_t> bytes{std::istreambuf_iterator<char>(stream),
                                               std::istreambuf_iterator<char>()};
         CNA::Internal::Graphics::ImageData image = DecodeToRgba8(bytes, source);
+        ApplyPngFileGammaEXT(bytes, image.pixels);
         if (image.width <= 0 || image.height <= 0)
         {
             throw ContentLoadException(

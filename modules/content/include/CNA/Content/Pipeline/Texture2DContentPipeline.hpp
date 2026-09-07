@@ -206,6 +206,19 @@ namespace CNA::Content::Pipeline
     [[nodiscard]] ImportedImage DecodeImportedImage(const std::filesystem::path& source);
 
     /**
+     * @brief Applies a PNG's own `gAMA` chunk to already-decoded RGBA8 texels, as GDI+ does.
+     *
+     * XNA's `TextureImporter` loads through `System.Drawing`, and GDI+ honours a PNG's gamma
+     * chunk. Exported because the XNA façade's own `TextureImporter` decodes through a different
+     * route and has to apply the same rule (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-109`).
+     *
+     * @param file The source file's bytes; anything that is not a PNG is left alone.
+     * @param pixels The decoded RGBA8 texels, corrected in place.
+     */
+    void ApplyPngFileGammaEXT(const std::vector<std::uint8_t>& file,
+                              std::vector<std::uint8_t>& pixels);
+
+    /**
      * @brief Converts validated source-oriented pixels into canonical Texture2D CNB data.
      *
      * This is the parameter-free core used by TextureProcessor and generated glTF texture
