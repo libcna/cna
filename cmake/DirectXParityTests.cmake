@@ -366,6 +366,12 @@ function(cna_register_d3d_parity_tests)
         NAME SkinnedEffect_Vector4BoneIndices TARGET skinnedeffect_vector4_bone_indices DIRECTX12_ORDER 1210
         SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_skinnedeffect_vector4_bone_indices_test.cpp")
     cna_d3d_parity_fixture(
+        NAME Effect_Clone TARGET effect_clone DIRECTX12_ORDER 1220
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_effect_clone_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME Effect_CurrentTechnique TARGET effect_current_technique DIRECTX12_ORDER 1230
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_effect_current_technique_test.cpp")
+    cna_d3d_parity_fixture(
         NAME SpriteBatch_CustomViewport TARGET spritebatch_custom_viewport
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_custom_viewport_test.cpp"
         DIRECTX11_ONLY REASON "D3D12 presentation-corpus adoption is tracked by DX-234 and DX-236")
