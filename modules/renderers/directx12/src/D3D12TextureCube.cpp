@@ -23,6 +23,18 @@ namespace CNA::Internal::Renderers::DirectX12
             return (value + alignment - 1) & ~(alignment - 1);
         }
 
+        /// Mirrors D3D11TextureCubeRenderer and the public TextureCube level-count contract.
+        int CalculateMipLevels(int size)
+        {
+            int levels = 1;
+            while (size > 1)
+            {
+                size = std::max(1, size / 2);
+                ++levels;
+            }
+            return levels;
+        }
+
         // Same combined "shader-readable, any stage" resting state D3D12Textures.cpp's own
         // kTextureShaderReadableState already documents and uses -- duplicated locally rather than
         // shared, matching this renderer's own established per-file small-helper-duplication
@@ -35,14 +47,7 @@ namespace CNA::Internal::Renderers::DirectX12
 
     D3D12TextureCubeRenderer::D3D12TextureCubeRenderer(
         DirectX12Renderer* renderer, int size, bool mipMap, int /*surfaceFormat*/)
-        : renderer_(renderer), size_(size), mipLevels_(mipMap ? 1 : 1) // mip-chain generation not yet
-                                                                      // implemented for this renderer
-                                                                      // (matches D3D12TextureRenderer's
-                                                                      // own level-0-only default when
-                                                                      // no further levels are
-                                                                      // explicitly uploaded) -- an
-                                                                      // honest scope note, not a claim
-                                                                      // of full mipMap support.
+        : renderer_(renderer), size_(size), mipLevels_(mipMap ? CalculateMipLevels(size) : 1)
     {
         D3D12_HEAP_PROPERTIES heapProps{};
         heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
@@ -110,8 +115,7 @@ namespace CNA::Internal::Renderers::DirectX12
                                           const void* data, int dataLength)
     {
         // REMED-GFX-135: this used to be a silent `return` the shared layer read as a completed
-        // upload -- reachable for every mip level above 0, since this renderer's constructor pins
-        // mipLevels_ to 1 whatever `mipMap` says.
+        // upload.
         if (level < 0 || level >= mipLevels_ || face < 0 || face >= 6 || w <= 0 || h <= 0) return false;
         if (data == nullptr) return false;
         const int levelSize = std::max(1, size_ >> level);
@@ -198,6 +202,8 @@ namespace CNA::Internal::Renderers::DirectX12
         // REMED-GFX-130: see D3D12Texture3DRenderer::GetData -- silent returns fabricated a face.
         if (level < 0 || level >= mipLevels_ || face < 0 || face >= 6 || w <= 0 || h <= 0) return false;
         if (data == nullptr || dataLength < w * h * 4) return false;
+        const int levelSize = std::max(1, size_ >> level);
+        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
 
         const UINT rowPitch = AlignUp(static_cast<UINT>(w) * 4, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
         const UINT64 readbackBufferSize = static_cast<UINT64>(rowPitch) * static_cast<UINT64>(h);
