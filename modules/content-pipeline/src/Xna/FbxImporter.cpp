@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Content/Pipeline/ModelImporters.hpp"
 
+#include <array>
+#include <cmath>
 #include <algorithm>
 #include <exception>
 #include <filesystem>
@@ -176,15 +178,94 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          */
         [[nodiscard]] Matrix LocalTransform(const Object& object)
         {
-            const float toRadians = 0.017453292519943295f;
-            const auto euler = [toRadians](const Vector3& degrees)
+            // Composed in double and narrowed once at the end, because the genuine importer's is.
+            // A quarter turn is the case that shows it: `cos` of a float pi/2 is -4.371e-08, of a
+            // double pi/2 it is 6.123e-17, and `Cube.fbx`'s `PreRotation -90` reaches XNA's own
+            // `Cube.xnb` as 2.54 * 6.123e-17 = 1.5553e-16 -- so a float rotation lands seven orders
+            // of magnitude away from XNA's on the two entries a quarter turn zeroes
+            // (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-121).
+            using Rows = std::array<std::array<double, 4>, 4>;
+            const auto multiply = [](const Rows& left, const Rows& right)
             {
-                return Matrix::CreateRotationX(degrees.X * toRadians) *
-                       Matrix::CreateRotationY(degrees.Y * toRadians) *
-                       Matrix::CreateRotationZ(degrees.Z * toRadians);
+                Rows product{};
+                for (std::size_t row = 0; row < 4; ++row)
+                {
+                    for (std::size_t column = 0; column < 4; ++column)
+                    {
+                        double sum = 0.0;
+                        for (std::size_t k = 0; k < 4; ++k) { sum += left[row][k] * right[k][column]; }
+                        product[row][column] = sum;
+                    }
+                }
+                return product;
             };
-            return Matrix::CreateScale(object.scaling) * euler(object.preRotation) *
-                   euler(object.rotation) * Matrix::CreateTranslation(object.translation);
+            const Rows identity{{{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}}};
+            // The three axis rotations XNA's own `Matrix::CreateRotation*` write, in double.
+            const auto rotationX = [&identity](double radians)
+            {
+                Rows m = identity;
+                m[1][1] = std::cos(radians);
+                m[1][2] = std::sin(radians);
+                m[2][1] = -m[1][2];
+                m[2][2] = m[1][1];
+                return m;
+            };
+            const auto rotationY = [&identity](double radians)
+            {
+                Rows m = identity;
+                m[0][0] = std::cos(radians);
+                m[0][2] = -std::sin(radians);
+                m[2][0] = -m[0][2];
+                m[2][2] = m[0][0];
+                return m;
+            };
+            const auto rotationZ = [&identity](double radians)
+            {
+                Rows m = identity;
+                m[0][0] = std::cos(radians);
+                m[0][1] = std::sin(radians);
+                m[1][0] = -m[0][1];
+                m[1][1] = m[0][0];
+                return m;
+            };
+            const double toRadians = 0.017453292519943295;
+            const auto euler = [&](const Vector3& degrees)
+            {
+                return multiply(multiply(rotationX(static_cast<double>(degrees.X) * toRadians),
+                                         rotationY(static_cast<double>(degrees.Y) * toRadians)),
+                                rotationZ(static_cast<double>(degrees.Z) * toRadians));
+            };
+            Rows scale = identity;
+            scale[0][0] = object.scaling.X;
+            scale[1][1] = object.scaling.Y;
+            scale[2][2] = object.scaling.Z;
+            Rows translation = identity;
+            translation[3][0] = object.translation.X;
+            translation[3][1] = object.translation.Y;
+            translation[3][2] = object.translation.Z;
+
+            const Rows composed = multiply(
+                multiply(multiply(scale, euler(object.preRotation)), euler(object.rotation)),
+                translation);
+
+            Matrix result;
+            result.M11 = static_cast<float>(composed[0][0]);
+            result.M12 = static_cast<float>(composed[0][1]);
+            result.M13 = static_cast<float>(composed[0][2]);
+            result.M14 = static_cast<float>(composed[0][3]);
+            result.M21 = static_cast<float>(composed[1][0]);
+            result.M22 = static_cast<float>(composed[1][1]);
+            result.M23 = static_cast<float>(composed[1][2]);
+            result.M24 = static_cast<float>(composed[1][3]);
+            result.M31 = static_cast<float>(composed[2][0]);
+            result.M32 = static_cast<float>(composed[2][1]);
+            result.M33 = static_cast<float>(composed[2][2]);
+            result.M34 = static_cast<float>(composed[2][3]);
+            result.M41 = static_cast<float>(composed[3][0]);
+            result.M42 = static_cast<float>(composed[3][1]);
+            result.M43 = static_cast<float>(composed[3][2]);
+            result.M44 = static_cast<float>(composed[3][3]);
+            return result;
         }
 
         /** @brief Whatever a layer element holds, resolved through its mapping and reference. */

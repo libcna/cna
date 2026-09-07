@@ -595,6 +595,31 @@ TEST(XnaFbxImporter, EveryFileAnswersTheGraphXnaAnswers)
     }
 }
 
+// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-121: the oracle's own record prints a transform
+// rounded, so `EveryFileAnswersTheGraphXnaAnswers` above cannot tell -4.4e-08 from 6.1e-17 -- both
+// print as `0`. This is the one that can. A quarter turn is where a float and a double `cos` part
+// company, and XNA's `Cube.xnb` (SAMPLE-003, `PreRotation -90` under `UnitScaleFactor 2.54`)
+// carries 2.54 * 6.123233995736766e-17 = 1.555301383669155e-16 on the two entries the turn zeroes.
+// A float rotation puts -1.11e-07 there instead, seven orders of magnitude away, and every model
+// standing on a Z-up exporter's -90 carried it.
+TEST(XnaFbxImporter, AQuarterTurnIsComposedTheWayXnasIsAndNotInFloat)
+{
+    ImporterContext context;
+    Xna::FbxImporter importer;
+    const std::shared_ptr<Graphics::NodeContent> node =
+        importer.Import(Fixture("fbx_prerotation_units.fbx").string(), context);
+    ASSERT_NE(node, nullptr);
+    const Matrix transform = node->getTransformProperty();
+
+    // The scale is exact in both, and it is what the near-zero entries carry.
+    EXPECT_FLOAT_EQ(transform.M11, 2.54f);
+    // cos(pi/2) in double, times that scale. Written as the literal XNA's own file holds.
+    EXPECT_EQ(transform.M22, 1.555301383669155e-16f);
+    EXPECT_EQ(transform.M33, 1.555301383669155e-16f);
+    // And not what a float `cos` answers, which is where this used to be.
+    EXPECT_NE(transform.M22, 2.54f * std::cos(1.5707964f));
+}
+
 TEST(XnaFbxImporter, RefusalsMatchXna)
 {
     for (const std::string& fixture : {"fbx_empty.fbx", "fbx_not_fbx.fbx", "fbx_not_fbx_large.fbx"})

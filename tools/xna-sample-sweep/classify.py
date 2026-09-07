@@ -56,6 +56,33 @@ def body(path):
     return data[10:]
 
 
+_NUMBERS = re.compile(r"^(.*): (-?[0-9][0-9.eE+-]*) vs (-?[0-9][0-9.eE+-]*)$")
+
+
+def float_distance(found):
+    """The worst distance over a difference list, or None if any entry is not numeric.
+
+    Relative alone is the wrong measure near zero: a bounding sphere whose centre is on the axis
+    comes out as `-2.1e-07` on one side and `1.4e-07` on the other, which is a *relative* distance
+    of 1.67 and an absolute one of 3.5e-07. Both are the same rounding. So the two are combined the
+    way a float comparison normally is -- the difference against the larger of the two magnitudes
+    and one -- which keeps a genuine disagreement between small numbers visible while not calling
+    two ways of computing zero a difference.
+    """
+    worst = 0.0
+    for entry in found:
+        match = _NUMBERS.match(entry)
+        if match is None:
+            return None
+        try:
+            left, right = float(match.group(2)), float(match.group(3))
+        except ValueError:
+            return None
+        scale = max(abs(left), abs(right), 1.0)
+        worst = max(worst, abs(left - right) / scale)
+    return worst
+
+
 def explain(job):
     reference, mine = job
     answer = {"reference": reference, "cna": mine}
@@ -90,6 +117,19 @@ def explain(job):
     if not found:
         answer["classification"] = "semantically-identical"
         answer["detail"] = "the independent parser reads both to the same values"
+        return answer
+    # A difference every one of whose numbers agrees to within a few parts in ten million is one
+    # side's float arithmetic taking a different order, not a different answer: a bounding sphere
+    # computed over the same positions in a different order lands within a couple of ULPs. It is
+    # reported as its own class rather than hidden -- the numbers and the worst relative distance
+    # are in the record -- because "the same value" and "a value near it" are not the same claim.
+    worst = float_distance(found)
+    if worst is not None and worst < 1.0e-6:
+        answer["classification"] = "float-tolerance"
+        answer["detail"] = "every differing number agrees to %.3g of the larger magnitude" % worst
+        answer["differences"] = found[:12]
+        answer["differenceCount"] = len(found)
+        answer["worstRelative"] = worst
         return answer
     answer["classification"] = "differs"
     answer["differences"] = found[:12]
