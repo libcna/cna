@@ -310,6 +310,77 @@ protected:
                       "World is identity, so this is a transform test and not a coverage one)");
         }
 
+        // ---- F/G: colour AND texture on the same instanced draw ----------------------------
+        // A grey(128) vertex colour over the blue texture: the product is (0,0,128), which is
+        // distinct from (0,0,255) -- the colour dropped -- and from (128,128,128) -- the texture
+        // dropped. Three outcomes, so a failure says which half went missing.
+        {
+            struct PCT { float x, y, z; std::uint8_t r, g, b, a; float u, v; };
+            static_assert(sizeof(PCT) == 24);
+            const std::uint8_t G = 128;
+            const PCT cq[4] = {
+                { -0.12f,  0.12f, 0.0f, G, G, G, 255, 0.0f, 0.0f },
+                { -0.12f, -0.12f, 0.0f, G, G, G, 255, 0.0f, 1.0f },
+                {  0.12f, -0.12f, 0.0f, G, G, G, 255, 1.0f, 1.0f },
+                {  0.12f,  0.12f, 0.0f, G, G, G, 255, 1.0f, 0.0f },
+            };
+            const VertexDeclaration cqDecl(24, {
+                VertexElement(0,  VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+                VertexElement(12, VertexElementFormat::Color,   VertexElementUsage::Color, 0),
+                VertexElement(16, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+            });
+            VertexBuffer cvb(dev, cqDecl, 4, BufferUsage::None);
+            cvb.SetDataRaw(cq, 4, static_cast<int>(sizeof(PCT)));
+
+            auto colTex = [&](bool instanced) {
+                dev.Clear(Color(0, 255, 0, 255));
+                dev.SetDepthTestEnabled(false);
+                dev.setBlendStateProperty(BlendState::Opaque);
+                dev.setRasterizerStateProperty(RasterizerState::CullNone);
+                dev.getSamplerStatesProperty()[0] = SamplerState::PointClamp;
+                BasicEffect fx(dev);
+                fx.setWorldProperty(Matrix::getIdentityProperty());
+                fx.setViewProperty(Matrix::getIdentityProperty());
+                fx.setProjectionProperty(Matrix::getIdentityProperty());
+                fx.setLightingEnabledProperty(false);
+                fx.setVertexColorEnabledProperty(true);
+                fx.setTextureEnabledProperty(true);
+                fx.setTextureProperty(blue_.get());
+                fx.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+                fx.setAlphaProperty(1.0f);
+                fx.Apply();
+                dev.SetVertexBuffer(&cvb);
+                dev.SetIndexBuffer(ib_.get());
+                if (instanced) {
+                    std::vector<VertexBufferBinding> bd = {
+                        VertexBufferBinding(&cvb,          0, 0),
+                        VertexBufferBinding(instVb_.get(), 0, 1),
+                    };
+                    dev.SetVertexBuffers(bd);
+                    dev.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2, 3);
+                } else {
+                    dev.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2);
+                }
+                return ReadPixel(dev, kN / 2, kN / 2);
+            };
+            auto isProduct = [](const Color& c) {
+                return c.getRProperty() <= 40 && c.getGProperty() <= 40 &&
+                       c.getBProperty() >= 100 && c.getBProperty() <= 160;
+            };
+            auto why = [](const Color& c) {
+                if (c.getBProperty() > 200) return " -- the vertex COLOUR was dropped";
+                if (c.getRProperty() > 100) return " -- the TEXTURE was dropped";
+                return "";
+            };
+            const Color cn = colTex(false);
+            const Color ci = colTex(true);
+            check(isProduct(cn),
+                  "F control: a NON-instanced draw multiplies the vertex colour AND the texture: " +
+                      Text(cn) + " (want ~(0,0,128))" + why(cn));
+            check(isProduct(ci),
+                  "G an INSTANCED draw does too: " + Text(ci) + " (want ~(0,0,128))" + why(ci));
+        }
+
         check(IsBlue(a) == IsBlue(b) && IsBlack(a2) == IsBlack(b2),
               "C what the texture contributes does not depend on whether the draw was instanced: "
               "non-instanced " + Text(a) + "/" + Text(a2) + " vs instanced " + Text(b) + "/" +

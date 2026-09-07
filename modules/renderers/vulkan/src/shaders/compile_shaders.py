@@ -244,6 +244,10 @@ def main():
         # shared pipelineLayoutExt3D_.
         ("instanced_textured3d.vert.glsl", VERTEX_SHADER,   "kInstancedTextured3dVertSpv"),
         ("instanced_textured3d.frag.glsl", FRAGMENT_SHADER, "kInstancedTextured3dFragSpv"),
+        # plans/plan_vulkan.md VULKAN-220: colour AND texture together. Shares
+        # instanced_textured3d's FS, which already multiplies the sample by the interpolated colour.
+        ("instanced_colored_textured3d.vert.glsl", VERTEX_SHADER,
+         "kInstancedColoredTextured3dVertSpv"),
     ]
 
     # plans/plan_gltf.md GLTF-465: the PBR variants whose vertex record carries a packed COLOR_0 slot.

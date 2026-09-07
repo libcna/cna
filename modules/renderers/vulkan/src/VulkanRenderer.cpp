@@ -6196,6 +6196,9 @@ namespace CNA::Internal::Renderers::Vulkan
         constexpr StockProgramInput kInstancedColored[] = { kPos, kColor };
         /// VULKAN-217. instanced_textured3d: the one instanced variant that samples.
         constexpr StockProgramInput kInstancedTextured[] = { kPos, kUv };
+        /// VULKAN-220. instanced_colored_textured3d: colour AND texture, in colored_textured3d's
+        /// own input order so the two families spell the same record the same way.
+        constexpr StockProgramInput kInstancedColoredTextured[] = { kPos, kColor, kUv };
     }
 
     // VULKAN-146: swap a factory's baked attribute array for the declaration-derived one when the
@@ -6574,7 +6577,13 @@ namespace CNA::Internal::Renderers::Vulkan
             declared, Microsoft::Xna::Framework::Graphics::VertexElementUsage::Color);
         std::size_t inputCount = 0;
         const CNA::Internal::Graphics::StockProgramInput* inputs = nullptr;
-        if (wantColored) {
+        if (wantColored && wantTextured) {
+            // VULKAN-220: the shape VULKAN-217 could not express. Checked first, because both of
+            // the single-feature tables below would also match a declaration carrying both and
+            // would silently drop the other half -- which is exactly the defect this closes.
+            inputs     = StockInputs::kInstancedColoredTextured;
+            inputCount = std::size(StockInputs::kInstancedColoredTextured);
+        } else if (wantColored) {
             inputs     = StockInputs::kInstancedColored;
             inputCount = std::size(StockInputs::kInstancedColored);
         } else if (wantTextured) {
@@ -10741,19 +10750,32 @@ namespace CNA::Internal::Renderers::Vulkan
         // programs, and the shape is read back off the layout it produced -- one attribute is
         // instanced3d, two is instanced_colored3d. There is no third shape, so nothing else can
         // be meant. Without a usable declaration the stride table answers, exactly as before.
-        const bool hasPackedColor = !textured && (vertexLayout.IsComplete()
-            ? vertexLayout.attributeCount == std::size(StockInputs::kInstancedColored)
-            : PackedColorOffsetForStride(pvStride, packedColorOffset));
-        // VULKAN-217: `textured` wins over the colour shape rather than combining with it. There is
-        // no instanced_colored_textured3d program, so a declaration carrying both would otherwise
-        // pick the coloured shader and drop the texture again -- the very defect this row closes.
-        // BuildInstancedVertexLayoutEXT makes the same choice in the same order, so the attribute
-        // set and the shader cannot disagree.
-        VkShaderModule vert = textured
-            ? CreateShaderModule(kInstancedTextured3dVertSpv, kInstancedTextured3dVertSpv_size)
-            : (hasPackedColor
+        // The count alone cannot answer this: kInstancedColored and kInstancedTextured BOTH have
+        // two inputs, so `attributeCount == 2` means "coloured" only when the caller did not ask
+        // for a texture. Reading it without `textured` selects the three-input shader for a
+        // two-input layout, and the layer says exactly that -- "does not have a Location 2 but
+        // vertex shader has an input variable at that Location". Measured, in this row's own first
+        // build.
+        const std::size_t kColoredCount = textured
+            ? std::size(StockInputs::kInstancedColoredTextured)
+            : std::size(StockInputs::kInstancedColored);
+        const bool hasPackedColor = vertexLayout.IsComplete()
+            ? vertexLayout.attributeCount == kColoredCount
+            : PackedColorOffsetForStride(pvStride, packedColorOffset);
+        // VULKAN-220: four shapes now, and `textured` no longer suppresses the colour. VULKAN-217
+        // had to make it win because no program could do both; this one can, so the two flags are
+        // independent again. BuildInstancedVertexLayoutEXT tests them in the same order, so the
+        // attribute set and the shader cannot disagree.
+        //
+        VkShaderModule vert =
+            (textured && hasPackedColor)
+                ? CreateShaderModule(kInstancedColoredTextured3dVertSpv,
+                                     kInstancedColoredTextured3dVertSpv_size)
+            : textured
+                ? CreateShaderModule(kInstancedTextured3dVertSpv, kInstancedTextured3dVertSpv_size)
+            : hasPackedColor
                 ? CreateShaderModule(kInstancedColored3dVertSpv, kInstancedColored3dVertSpv_size)
-                : CreateShaderModule(kInstanced3dVertSpv, kInstanced3dVertSpv_size));
+                : CreateShaderModule(kInstanced3dVertSpv, kInstanced3dVertSpv_size);
         // Task 899: dedicated FS (was: reuse kColored3dFragSpv) -- colored3d.frag.glsl now
         // declares a 2nd descriptor binding (fog UBO) as part of the shared colored3d/textured3d/
         // colored_textured3d bundle, incompatible with Instanced3D's unmodified 1-binding layout.
@@ -10768,20 +10790,29 @@ namespace CNA::Internal::Renderers::Vulkan
         binds[0] = { 0, static_cast<uint32_t>(pvStride), VK_VERTEX_INPUT_RATE_VERTEX   };
         binds[1] = { 1, kInstStride,                      VK_VERTEX_INPUT_RATE_INSTANCE };
 
-        VkVertexInputAttributeDescription attrs[6]{};
+        // VULKAN-220: EIGHT, not six. The per-vertex set can now be three wide
+        // (position, colour, UV) and the four per-instance matrix columns are appended
+        // after it, so the old six overflowed into `binds` -- the layer reported an
+        // `inputRate` of 109 and a binding of 48, which is what a stomped
+        // VkVertexInputBindingDescription looks like.
+        VkVertexInputAttributeDescription attrs[8]{};
         uint32_t attrCount = 0;
         attrs[attrCount++] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0 }; // aPos (per-vertex)
         // REMED-GFX-212: the geometry stream's own COLOR0, at its own stride's offset. The
         // per-instance columns keep locations 4..7, so this can never collide with them.
-        if (hasPackedColor)
+        // VULKAN-217/220: each shape's own locations, which are the indices in its StockInputs
+        // table. The offsets here are the fallback for a draw with no usable declaration; when
+        // there IS one, ApplyDeclaredVertexLayoutEXT overwrites every per-vertex attribute from
+        // index 0 a few lines down, so these values are never the ones used on the path either
+        // row's test exercises.
+        if (textured && hasPackedColor) {
             attrs[attrCount++] = { 1, 0, VK_FORMAT_R8G8B8A8_UNORM, packedColorOffset }; // aColor
-        // VULKAN-217: the textured variant's aUV, at location 1 for the same reason aColor is --
-        // it is index 1 of StockInputs::kInstancedTextured. The offset below is the fallback for a
-        // draw with no usable declaration; when there IS one, ApplyDeclaredLayout overwrites every
-        // per-vertex attribute from index 0 a few lines down, so this value is never the one used
-        // on the path this row's test exercises.
-        else if (textured)
+            attrs[attrCount++] = { 2, 0, VK_FORMAT_R32G32_SFLOAT,  packedColorOffset + 4u }; // aUV
+        } else if (hasPackedColor) {
+            attrs[attrCount++] = { 1, 0, VK_FORMAT_R8G8B8A8_UNORM, packedColorOffset }; // aColor
+        } else if (textured) {
             attrs[attrCount++] = { 1, 0, VK_FORMAT_R32G32_SFLOAT, 12 }; // aUV
+        }
         // VULKAN-149: and the declaration's own offsets and formats replace the two above when it
         // supplied them. Applied here, before the per-instance columns are appended, because the
         // applicator overwrites from index 0 and resets the count -- binding 1's attributes are
