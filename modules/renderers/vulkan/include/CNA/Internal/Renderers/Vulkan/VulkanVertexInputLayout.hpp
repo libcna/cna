@@ -163,6 +163,53 @@ namespace CNA::Internal::Renderers::Vulkan
         }
     }
 
+    /**
+     * @brief Builds the attribute set for a shader this renderer knows nothing about.
+     *
+     * plans/plan_vulkan.md `VULKAN-255`. The stock builder below matches by **semantic**, because
+     * it knows what each stock program reads. A `ShaderEffect` brings its own shader, so there is
+     * no such table and nothing to match against: the location is the element's **own index in the
+     * declaration**, which is the convention EasyGL's custom-program path established (Task 1080,
+     * *"GLSL attribute location = the element's own index within the declaration"*) and the one a
+     * game porting a shader is already following.
+     *
+     * Every element gets a description; none is skipped. An element whose format this renderer has
+     * no `VkFormat` for sets a bit in `unrepresentableInputMask`, exactly as the stock builder
+     * does, so the caller refuses rather than binding the wrong bytes. `missingInputMask` is always
+     * zero here -- a custom shader's inputs are not enumerable, so "the declaration did not supply
+     * input N" is not a question this can ask.
+     *
+     * @param declared The declaration the buffer carries; an empty one yields an empty layout.
+     * @return The layout.
+     */
+    [[nodiscard]] inline VulkanVertexInputLayoutEXT BuildCustomEffectVertexInputLayoutEXT(
+        const CNA::Internal::Graphics::DeclaredVertexLayout& declared)
+    {
+        using Microsoft::Xna::Framework::Graphics::VertexElement;
+
+        VulkanVertexInputLayoutEXT layout;
+        if (declared.IsEmpty()) return layout;
+        layout.empty = false;
+
+        std::uint32_t location = 0;
+        for (const VertexElement& e : declared.GetElements())
+        {
+            if (location >= VulkanVertexInputLayoutEXT::kMaxAttributes) break;
+            const VkFormat format = VertexElementFormatToVk(e.getVertexElementFormatProperty());
+            if (format == VK_FORMAT_UNDEFINED) {
+                layout.unrepresentableInputMask |= (1u << location);
+                ++location;
+                continue;
+            }
+            layout.attributes[layout.attributeCount++] = {
+                location, 0, format,
+                static_cast<std::uint32_t>(e.getOffsetProperty())
+            };
+            ++location;
+        }
+        return layout;
+    }
+
     [[nodiscard]] inline VulkanVertexInputLayoutEXT BuildVulkanVertexInputLayoutEXT(
         const CNA::Internal::Graphics::DeclaredVertexLayout& declared,
         const CNA::Internal::Graphics::StockProgramInput* inputs,

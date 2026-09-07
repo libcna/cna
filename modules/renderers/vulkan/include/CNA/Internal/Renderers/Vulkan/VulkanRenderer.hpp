@@ -529,14 +529,54 @@ namespace CNA::Internal::Renderers::Vulkan
         ///                   three stencil dynamic states are set before every sprite draw.
         /// @param depthTest  DepthStencilState.DepthBufferEnable for this batch.
         /// @param depthWrite DepthStencilState.DepthBufferWriteEnable for this batch.
+        /// plan_vulkan.md VULKAN-255: everything a 3D draw varies that a sprite batch does not.
+        /// Null for a sprite pipeline, which keeps the baked SpriteBatch vertex input and a
+        /// triangle list.
+        struct Pipeline3DDescEXT
+        {
+            VulkanVertexInputLayoutEXT layout{};
+            uint32_t            stride    = 0;
+            VkPrimitiveTopology topology  = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+            int                 cullMode  = 0;
+            bool                wireframe = false;
+        };
         VkPipeline GetOrCreatePipeline(uint32_t colorAttachmentCount,
                                        VkSampleCountFlagBits sampleCount,
                                        VkFormat depthFormat,
                                        bool blend,
                                        const BlendKeyParams& blendParams,
                                        const DepthStencilKeyParams& dsParams = {},
-                                       bool depthTest = false, bool depthWrite = false);
+                                       bool depthTest = false, bool depthWrite = false,
+                                       const Pipeline3DDescEXT* three = nullptr);
         VkPipelineLayout GetPipelineLayout() const { return pipelineLayout_; }
+        /**
+         * @brief plan_vulkan.md VULKAN-255: a pipeline for a 3D draw this effect owns.
+         *
+         * The sprite variant above bakes the `SpriteBatch` vertex input and a triangle list. A 3D
+         * draw brings its own stride, attribute set, topology and rasterizer state, so those join
+         * the cache key; everything else -- the render-pass shape, the blend and depth/stencil
+         * state -- is decided exactly as it is for a sprite batch.
+         *
+         * Unlike the sprite path, the pipeline is created at DRAW time rather than deferred: a 3D
+         * draw already knows its render target, so there is nothing left to wait for, and the
+         * deferred replay must not have to reach back into an effect the game may have disposed.
+         *
+         * @param layout   The attribute set, built from the buffer's own declaration.
+         * @param stride   Vertex stride in bytes.
+         * @param topology The draw's primitive topology.
+         * @param cullMode XNA `CullMode` ordinal: 0 None, 1 CullClockwiseFace, 2 counter-clockwise.
+         * @param wireframe Whether the rasterizer fills or outlines.
+         * @return The pipeline, or `VK_NULL_HANDLE` if this effect never compiled.
+         */
+        VkPipeline GetOrCreatePipeline3DEXT(
+            const Pipeline3DDescEXT& three,
+            uint32_t colorAttachmentCount, VkSampleCountFlagBits sampleCount,
+            VkFormat depthFormat, bool blend, const BlendKeyParams& blendParams,
+            const DepthStencilKeyParams& dsParams, bool depthTest, bool depthWrite)
+        {
+            return GetOrCreatePipeline(colorAttachmentCount, sampleCount, depthFormat, blend,
+                                       blendParams, dsParams, depthTest, depthWrite, &three);
+        }
         /// VULKAN-253: how many sampler units `BindTexture` accepts, and how many bindings the
         /// set-1 layout declares. Four, because that is what the stock effects use at most and a
         /// wider set costs a descriptor per unit per effect for nothing.
@@ -591,6 +631,18 @@ namespace CNA::Internal::Renderers::Vulkan
         [[nodiscard]] VkDescriptorSetLayout GetBoundTextureLayoutEXT() const { return boundLayout_; }
         // Returns pointer to 128-byte push-constant staging area (floats 2..31 = user uniforms).
         const float*     GetPushConst()      const { return pushConst_;      }
+        /**
+         * @brief plan_vulkan.md VULKAN-255: whether the game ever set the `uMatrix` slot itself.
+         *
+         * A 3D draw arrives with the world, view and projection the effect's own `IEffectMatrices`
+         * properties carry, and this renderer has no shader reflection to deliver them by name the
+         * way EasyGL does. It writes their product into the one matrix slot the push-constant block
+         * has -- but only when the game left that slot alone, so `SetUniformMat4` always wins and
+         * the two ways of supplying a transform cannot fight.
+         *
+         * @return True once `SetUniformMat4` has been called on this effect.
+         */
+        [[nodiscard]] bool HasGameSuppliedMatrixEXT() const { return matrixSetByGame_; }
 
     private:
         VulkanRenderer* owner_;
@@ -650,6 +702,14 @@ namespace CNA::Internal::Renderers::Vulkan
             uint64_t depthStencilBits = 0;
             bool depthTestEnable = false;
             bool depthWriteEnable = false;
+            /// plan_vulkan.md VULKAN-255: a 3D draw brings its own vertex layout, topology and
+            /// rasterizer state, none of which a sprite pipeline varies. Zero on every sprite
+            /// pipeline, so the two families cannot collide in one cache.
+            uint32_t vertexStride = 0;
+            uint64_t vertexLayoutHash = 0;
+            uint32_t topology = 0;
+            int32_t  cullMode = 0;
+            bool     wireframe = false;
             bool operator==(const PipelineVariantKey&) const noexcept = default;
         };
         struct PipelineVariantKeyHash
@@ -663,6 +723,10 @@ namespace CNA::Internal::Renderers::Vulkan
                 h ^= std::hash<uint32_t>{}(key.blendBits) + (h << 6) + (h >> 2);
                 h ^= std::hash<uint32_t>{}(key.colorWriteBits) + (h << 6) + (h >> 2);
                 h ^= std::hash<uint32_t>{}(key.sampleMask) + (h << 6) + (h >> 2);
+                h ^= std::hash<uint32_t>{}(key.vertexStride) + (h << 6) + (h >> 2);
+                h ^= std::hash<uint64_t>{}(key.vertexLayoutHash) + (h << 6) + (h >> 2);
+                h ^= std::hash<uint32_t>{}(key.topology) + (h << 6) + (h >> 2);
+                h ^= std::hash<int32_t>{}(key.cullMode) + (h << 6) + (h >> 2);
                 return h;
             }
         };
@@ -677,6 +741,8 @@ namespace CNA::Internal::Renderers::Vulkan
         // [20..23] = uColor     (bytes 80-95) — set via SetUniformVec4 / Vec3 / Vec2.
         // [24..31] = uFloats×8  (bytes 96-127)— set via SetUniformFloat / Int.
         float            pushConst_[32]  = {};
+        /// VULKAN-255: set by SetUniformMat4; see HasGameSuppliedMatrixEXT.
+        bool             matrixSetByGame_ = false;
     };
 
     // Task 868: the real per-channel Blend/BlendFunction values a BlendState requests, mirrors
@@ -3187,6 +3253,17 @@ namespace CNA::Internal::Renderers::Vulkan
             /// colour input at all (REMED-GFX-234).
             BasicProgramShapeEXT basicShape = BasicProgramShapeEXT::None;
             VkDescriptorSet         descSet = VK_NULL_HANDLE; // texture (or null)
+            /// plan_vulkan.md VULKAN-255: a `ShaderEffect` driving this draw. Everything the
+            /// replay needs is captured BY VALUE at draw time -- the pipeline included, unlike the
+            /// stock families whose pipelines are chosen at record time -- because the game may
+            /// dispose the effect before `Present()`. The handles stay valid past that: the
+            /// effect's destructor RETIRES its pipeline and layout on the frame fence rather than
+            /// destroying them, which is the same guarantee the sprite path's snapshot relies on.
+            bool                    useCustomEffect = false;
+            VkPipeline              customPipeline  = VK_NULL_HANDLE;
+            VkPipelineLayout        customLayout    = VK_NULL_HANDLE;
+            /// The effect's set-1 descriptor set: bound textures and the array uniforms.
+            VkDescriptorSet         customBoundSet  = VK_NULL_HANDLE;
             // Task 899: true for BasicEffect draws with no alpha-test/dual-tex/env-map/skinned/
             // lit-textured override (stride 16/20/24) -- routes to the new fog-capable
             // colored3d/textured3d/colored_textured3d bundle. Left false (default) by the legacy
@@ -3332,6 +3409,32 @@ namespace CNA::Internal::Renderers::Vulkan
             uint64_t                order   = 0;
         };
         std::vector<Pending3DDraw>  pending3D_;
+        /**
+         * @brief plan_vulkan.md VULKAN-255: queues one 3D draw that a `ShaderEffect` owns.
+         *
+         * A custom effect replaces the stock stride-dispatched program entirely, so this runs
+         * BEFORE the declaration guard and the family selection rather than after them: that guard
+         * judges whether the stock attribute table can represent the buffer's declaration, which is
+         * not a question about a shader this renderer did not write.
+         *
+         * Refuses by name -- never silently -- when the effect cannot drive the draw: a buffer with
+         * no `VertexDeclaration` (a custom shader's inputs cannot be inferred from a stride), an
+         * element format with no `VkFormat`, or a pipeline that will not build.
+         *
+         * @param world      The draw's world matrix, for the pixel-centre correction only.
+         * @param view       The view matrix.
+         * @param projection The projection matrix.
+         * @param indexData  Index bytes, or nullptr for a non-indexed draw.
+         * @param indexBytes Size of @p indexData in bytes.
+         * @param indexType  Index width, meaningful only with @p indexData.
+         */
+        void QueueCustomEffect3DDrawEXT(const IVertexBufferRenderer& vb_in,
+                                        const Matrix& world, const Matrix& view,
+                                        const Matrix& projection,
+                                        PrimitiveType primitive, int primitiveCount,
+                                        const GpuDrawParams& params,
+                                        const void* indexData, std::size_t indexBytes,
+                                        VkIndexType indexType);
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
         [[nodiscard]] VkPipeline GetOrCreateCompiledEffectPipelineEXT(
             const Pending3DDraw& draw, uint32_t colorAttachmentCount, bool msaa,

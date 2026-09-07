@@ -238,6 +238,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_texture3d_addressw
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-255: a ShaderEffect driving a 3D draw with a custom vertex layout.
+        cna_vulkan_test(cna_test_vulkan_shader_effect_3d
+                        vulkan_shader_effect_3d_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_ShaderEffect_3D
+            COMMAND cna_test_vulkan_shader_effect_3d
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-252: array uniforms through set 1's four uniform-buffer ranges.
         cna_vulkan_test(cna_test_vulkan_shader_effect_uniform_arrays
                         vulkan_shader_effect_uniform_arrays_test.cpp)
