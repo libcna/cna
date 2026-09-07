@@ -317,11 +317,22 @@ def build_report(inventory, pmap, inputs):
         w("| Extension | XNA importer | CNA importer | Processor | Windows | Phone | Xbox | Tests | Status | Note |")
         w("|---|---|---|---|---|---|---|---|---|---|")
         for extname, e in inputs.get("extensions", {}).items():
-            tests = e.get("tests", {})
+            # Both halves of the row, read where the matrix actually keeps them. The XNA facts sit
+            # under `xna` and everything a human maintains sits under `cna`; reading them from the
+            # row itself rendered every column empty and every status MISSING while the summary
+            # line above -- which had already been corrected for exactly this -- said 17/18. A
+            # generated report that contradicts itself is worse than no report, so the two are now
+            # checked against each other below.
+            xna = e.get("xna", {})
+            cna = e.get("cna", {})
+            tests = cna.get("tests", {})
+            named = sum(1 for v in tests.values() if v)
             w("| `%s` | `%s` | %s | `%s` | %s | %s | %s | %d/%d | %s | %s |" % (
-                extname, e.get("xnaImporter", ""), ("`%s`" % e["cnaImporter"]) if e.get("cnaImporter") else "",
-                e.get("processor", ""), e.get("windows", ""), e.get("windowsPhone", ""), e.get("xbox360", ""),
-                sum(1 for v in tests.values() if v), len(tests), e.get("status", "MISSING"), e.get("note", "").replace("|", "\\|")))
+                extname, xna.get("importer", ""),
+                ("`%s`" % cna["importer"]) if cna.get("importer") else "",
+                cna.get("processor", ""), cna.get("windows", ""), cna.get("windowsPhone", ""),
+                cna.get("xbox360", ""), named, len(tests),
+                cna.get("status", "MISSING"), cna.get("note", "").replace("|", "\\|")))
         w("")
     w("## 7. Members")
     w("")
@@ -337,6 +348,52 @@ def build_report(inventory, pmap, inputs):
     for disp, sig, why in plumbing:
         w("| `%s` | `%s` | %s |" % (disp.rsplit(".", 1)[-1], sig, why))
     w("")
+    # The report has to agree with itself. The summary line and the detail table are rendered by
+    # two different pieces of code from two different readings of the same matrix, and they have
+    # disagreed before: the summary said 17/18 while every row of the table below it rendered
+    # empty and MISSING, because only the summary had been corrected for the matrix's nesting.
+    # Neither `--check` nor the committed-file comparison could catch that, since both halves of
+    # the comparison come from this generator. So the *rendered* table is read back and checked
+    # against the *rendered* summary -- a rendering fault fails the gate rather than being
+    # published (plans/plan_xnapipeline_parity.md XNAPP-020).
+    extension_total = 0
+    extension_done = 0
+    extension_blocked = 0
+    if inputs is not None:
+        in_table = False
+        for line in lines:
+            if line.startswith("## 6. Source extensions"):
+                in_table = True
+                continue
+            if in_table and line.startswith("## "):
+                break
+            if not in_table or not line.startswith("| `."):
+                continue
+            cells = [c.strip() for c in line.strip().strip("|").split("|")]
+            if len(cells) < 10:
+                problems.append("source-extension table row is malformed: " + line)
+                continue
+            name, xna_importer, cna_importer, status = cells[0], cells[1], cells[2], cells[8]
+            extension_total += 1
+            if status == "IMPLEMENTED+TESTED":
+                extension_done += 1
+            elif status == "EXTERNAL_BLOCKED":
+                extension_blocked += 1
+            if xna_importer in ("", "``"):
+                problems.append("source-extension row %s renders no XNA importer" % name)
+            if cna_importer in ("", "``") and status != "MISSING":
+                problems.append("source-extension row %s renders no CNA importer" % name)
+        declared = len(inputs.get("extensions", {}))
+        if extension_total != declared:
+            problems.append(
+                "the source-extension table rendered %d row(s) for %d declared extension(s)"
+                % (extension_total, declared))
+        counted = sum(1 for e in inputs.get("extensions", {}).values()
+                      if e.get("cna", {}).get("status") == "IMPLEMENTED+TESTED")
+        if extension_done != counted:
+            problems.append(
+                "the source-extension table shows %d IMPLEMENTED+TESTED row(s) where the summary "
+                "counts %d" % (extension_done, counted))
     if problems:
         w("## 8. Gate problems")
         w("")
@@ -354,6 +411,9 @@ def build_report(inventory, pmap, inputs):
         ("missingMembers", member_counts["MISSING"]),
         ("missingEnumValues", enum_value_counts["MISSING"]),
     ])
+    if inputs is not None:
+        summary["sourceExtensions"] = (extension_done, extension_total)
+        summary["sourceExtensionsBlocked"] = extension_blocked
     while lines and lines[-1] == "":
         lines.pop()
     return "\n".join(lines) + "\n", problems, summary
