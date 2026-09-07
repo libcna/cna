@@ -326,6 +326,8 @@ if(CNA_BUILD_TESTS)
     # SAMPLE-066: XmlSerializationEXT.hpp opts the math value types into
     # System::Xml::Serialization, so the group that tests it links that component too.
     set(CNA_TEST_GROUP_DEPENDENCY_math cna_math SharpRuntime::Xml.Serialization)
+    # The phone service adapts Game's lifecycle events, so its tests construct a Game.
+    set(CNA_TEST_GROUP_DEPENDENCY_phone cna_phone cna_runtime)
     set(CNA_TEST_GROUP_DEPENDENCY_media cna_media)
     set(CNA_TEST_GROUP_DEPENDENCY_net CNA_Net)
     set(CNA_TEST_GROUP_DEPENDENCY_platform cna_platform)
@@ -347,6 +349,7 @@ if(CNA_BUILD_TESTS)
     set(CNA_TEST_FOCUSED_TARGET_math CnaMathTests)
     set(CNA_TEST_FOCUSED_TARGET_media CnaMediaTests)
     set(CNA_TEST_FOCUSED_TARGET_net CnaNetTests)
+    set(CNA_TEST_FOCUSED_TARGET_phone CnaPhoneTests)
     set(CNA_TEST_FOCUSED_TARGET_platform CnaPlatformModuleTests)
     set(CNA_TEST_FOCUSED_TARGET_renderers CnaRendererTests)
     set(CNA_TEST_FOCUSED_TARGET_runtime CnaRuntimeTests)
