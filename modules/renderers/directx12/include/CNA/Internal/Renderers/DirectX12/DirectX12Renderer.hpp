@@ -485,6 +485,15 @@ namespace CNA::Internal::Renderers::DirectX12
          *  D3D12RenderTargetCubeRenderer's own UnbindAsRenderTarget(), mirroring
          *  DirectX11Renderer::RestoreBackBufferRenderTargetEXT(). CNAEXT. */
         void RestoreBackBufferRenderTargetEXT();
+        /** @brief Detaches a dying 2D target from every non-owning current-binding slot. */
+        void NotifyRenderTargetDestroyedEXT(IRenderTargetRenderer* target) noexcept;
+        /** @brief Detaches a dying cube target from the non-owning current cube binding. */
+        void NotifyRenderTargetCubeDestroyedEXT(IRenderTargetCubeRenderer* target) noexcept;
+        /** @brief Returns a weak token that expires before this renderer can be dereferenced. */
+        [[nodiscard]] std::weak_ptr<void> GetLifetimeTokenEXT() const noexcept
+        {
+            return lifetimeToken_;
+        }
         /** @brief Whether an off-screen color target is currently bound (CNAEXT diagnostics/tests). */
         [[nodiscard]] bool HasBoundColorTargetEXT() const { return boundColorResource_ != nullptr; }
         /** @brief The currently bound off-screen color resource, or nullptr (CNAEXT --
@@ -520,6 +529,8 @@ namespace CNA::Internal::Renderers::DirectX12
         void SetActiveOcclusionQueryEXT(ID3D12QueryHeap* heap) { activeOcclusionQueryHeap_ = heap; }
 
     private:
+        std::shared_ptr<void> lifetimeToken_ = std::make_shared<int>(0);
+
         friend class D3D12SpriteBatchRenderer;
 
         [[noreturn]] static void NotYetImplemented(const char* what);

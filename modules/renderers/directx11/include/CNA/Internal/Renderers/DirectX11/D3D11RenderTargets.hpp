@@ -13,6 +13,8 @@
 #include <d3d11.h>
 #include <wrl/client.h>
 
+#include <memory>
+
 namespace CNA::Internal::Renderers::DirectX11
 {
     using Microsoft::WRL::ComPtr;
@@ -35,6 +37,8 @@ namespace CNA::Internal::Renderers::DirectX11
     public:
         D3D11RenderTargetRenderer(DirectX11Renderer* owner, ID3D11Device* device, ID3D11DeviceContext* context,
                                  int w, int h, int depthFormat, bool mipMap, int multiSampleCount);
+        /** @brief Releases the target and detaches any live renderer binding that references it. */
+        ~D3D11RenderTargetRenderer() override;
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
@@ -105,6 +109,7 @@ namespace CNA::Internal::Renderers::DirectX11
 
     private:
         DirectX11Renderer* owner_ = nullptr;
+        std::weak_ptr<void> ownerLifetime_;
         ComPtr<ID3D11Device> device_;
         ComPtr<ID3D11DeviceContext> context_;
 
@@ -147,6 +152,8 @@ namespace CNA::Internal::Renderers::DirectX11
     public:
         D3D11RenderTargetCubeRenderer(DirectX11Renderer* owner, ID3D11Device* device, ID3D11DeviceContext* context,
                                      int size, int depthFormat, bool mipMap, int multiSampleCount = 0);
+        /** @brief Releases the cube and detaches any live renderer binding that references it. */
+        ~D3D11RenderTargetCubeRenderer() override;
 
         [[nodiscard]] int GetSize() const override { return size_; }
         void BindAsRenderTargetFace(int face) override;
@@ -208,6 +215,7 @@ namespace CNA::Internal::Renderers::DirectX11
         void ResolveMsaaEXT();
 
         DirectX11Renderer* owner_ = nullptr;
+        std::weak_ptr<void> ownerLifetime_;
         ComPtr<ID3D11Device> device_;
         ComPtr<ID3D11DeviceContext> context_;
 

@@ -120,7 +120,10 @@ namespace CNA::Internal::Renderers::DirectX11
             CNA::LogCategory::RENDER);
     }
 
-    DirectX11Renderer::~DirectX11Renderer() = default;
+    DirectX11Renderer::~DirectX11Renderer()
+    {
+        lifetimeToken_.reset();
+    }
 
     void DirectX11Renderer::CreateDeviceResources()
     {
@@ -930,6 +933,45 @@ namespace CNA::Internal::Renderers::DirectX11
         for (int i = 1; i < D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT; ++i) currentColorRTVs_[i] = nullptr;
         currentDSV_ = depthStencilView_.Get();
         RebindRasterizerState();
+    }
+
+    void DirectX11Renderer::NotifyRenderTargetDestroyedEXT(
+        D3D11RenderTargetRenderer* target) noexcept
+    {
+        bool wasBound = currentCustomRT_ == target;
+        if (wasBound) currentCustomRT_ = nullptr;
+        for (int i = 0; i < currentMRTCount_; ++i)
+        {
+            if (currentMRTTargets_[i] == target)
+            {
+                currentMRTTargets_[i] = nullptr;
+                wasBound = true;
+            }
+        }
+        if (wasBound)
+        {
+            try { RestoreBackBufferRenderTargetEXT(); }
+            catch (...)
+            {
+                currentRTVCount_ = 0;
+                for (auto& rtv : currentColorRTVs_) rtv = nullptr;
+                currentDSV_ = nullptr;
+            }
+        }
+    }
+
+    void DirectX11Renderer::NotifyRenderTargetCubeDestroyedEXT(
+        D3D11RenderTargetCubeRenderer* target) noexcept
+    {
+        if (currentCubeRT_ != target) return;
+        currentCubeRT_ = nullptr;
+        try { RestoreBackBufferRenderTargetEXT(); }
+        catch (...)
+        {
+            currentRTVCount_ = 0;
+            for (auto& rtv : currentColorRTVs_) rtv = nullptr;
+            currentDSV_ = nullptr;
+        }
     }
 
     std::unique_ptr<ISpriteBatchRenderer> DirectX11Renderer::CreateSpriteBatch()

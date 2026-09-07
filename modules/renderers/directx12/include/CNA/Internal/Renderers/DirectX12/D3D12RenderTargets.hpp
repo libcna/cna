@@ -167,6 +167,7 @@ namespace CNA::Internal::Renderers::DirectX12
         void ResolveMsaaEXT();
 
         DirectX12Renderer* owner_ = nullptr;
+        std::weak_ptr<void> ownerLifetime_;
         ComPtr<ID3D12Device> device_;
 
         /// Kept alive independently of owner_ so the destructor can always free the descriptors.
@@ -279,6 +280,7 @@ namespace CNA::Internal::Renderers::DirectX12
         void ResolveMsaaEXT();
 
         DirectX12Renderer* owner_ = nullptr;
+        std::weak_ptr<void> ownerLifetime_;
         ComPtr<ID3D12Device> device_;
 
         /// Kept alive independently of owner_ so the destructor can always free the descriptors.

@@ -190,7 +190,11 @@ namespace CNA::Internal::Renderers::DirectX12
     D3D12RenderTargetRenderer::D3D12RenderTargetRenderer(
         DirectX12Renderer* owner, ID3D12Device* device, int w, int h, int depthFormat, bool mipMap,
         int multiSampleCount)
-        : owner_(owner), device_(device), width_(w), height_(h)
+        : owner_(owner)
+        , ownerLifetime_(owner ? owner->GetLifetimeTokenEXT() : std::weak_ptr<void>{})
+        , device_(device)
+        , width_(w)
+        , height_(h)
         , appliedMultiSampleCount_(ClampMultiSampleCount(device, DXGI_FORMAT_R8G8B8A8_UNORM, multiSampleCount))
     {
         isMsaa_ = appliedMultiSampleCount_ > 0;
@@ -309,6 +313,7 @@ namespace CNA::Internal::Renderers::DirectX12
 
     D3D12RenderTargetRenderer::~D3D12RenderTargetRenderer()
     {
+        if (owner_ && !ownerLifetime_.expired()) owner_->NotifyRenderTargetDestroyedEXT(this);
         if (!heaps_) return;
         heaps_->cbvSrvUav.Free(srvIndex_);
         heaps_->rtv.Free(rtv_);
@@ -455,7 +460,10 @@ namespace CNA::Internal::Renderers::DirectX12
     D3D12RenderTargetCubeRenderer::D3D12RenderTargetCubeRenderer(
         DirectX12Renderer* owner, ID3D12Device* device, int size, int depthFormat, bool mipMap,
         int multiSampleCount)
-        : owner_(owner), device_(device), size_(size)
+        : owner_(owner)
+        , ownerLifetime_(owner ? owner->GetLifetimeTokenEXT() : std::weak_ptr<void>{})
+        , device_(device)
+        , size_(size)
         , appliedMultiSampleCount_(ClampMultiSampleCount(device, DXGI_FORMAT_R8G8B8A8_UNORM, multiSampleCount))
     {
         isMsaa_ = appliedMultiSampleCount_ > 0;
@@ -577,6 +585,7 @@ namespace CNA::Internal::Renderers::DirectX12
 
     D3D12RenderTargetCubeRenderer::~D3D12RenderTargetCubeRenderer()
     {
+        if (owner_ && !ownerLifetime_.expired()) owner_->NotifyRenderTargetCubeDestroyedEXT(this);
         if (!heaps_) return;
         heaps_->cbvSrvUav.Free(srvIndex_);
         for (D3D12_CPU_DESCRIPTOR_HANDLE face : rtv_) heaps_->rtv.Free(face);

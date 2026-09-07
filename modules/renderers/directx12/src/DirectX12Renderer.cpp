@@ -206,6 +206,7 @@ namespace CNA::Internal::Renderers::DirectX12
 
     DirectX12Renderer::~DirectX12Renderer()
     {
+        lifetimeToken_.reset();
         if (fence_ && fenceEvent_)
         {
             // Best-effort drain so the device isn't torn down mid-flight-GPU-work.
@@ -983,6 +984,30 @@ namespace CNA::Internal::Renderers::DirectX12
         BindOffscreenColorTargetEXT(backBufferResources_[idx].Get(), backBufferRtvs_[idx],
                                     DXGI_FORMAT_R8G8B8A8_UNORM, width_, height_,
                                     depthStencilViewEXT_, DXGI_FORMAT_D24_UNORM_S8_UINT);
+    }
+
+    void DirectX12Renderer::NotifyRenderTargetDestroyedEXT(
+        IRenderTargetRenderer* target) noexcept
+    {
+        bool wasBound = currentCustomRT_ == target;
+        if (wasBound) currentCustomRT_ = nullptr;
+        for (int i = 0; i < currentMrtCount_; ++i)
+        {
+            if (currentMrtTargets_[i] == target)
+            {
+                currentMrtTargets_[i] = nullptr;
+                wasBound = true;
+            }
+        }
+        if (wasBound) UnbindOffscreenColorTargetEXT();
+    }
+
+    void DirectX12Renderer::NotifyRenderTargetCubeDestroyedEXT(
+        IRenderTargetCubeRenderer* target) noexcept
+    {
+        if (currentCubeRT_ != target) return;
+        currentCubeRT_ = nullptr;
+        UnbindOffscreenColorTargetEXT();
     }
 
     void DirectX12Renderer::CreateUploadConstantBuffer(UINT byteWidth, ComPtr<ID3D12Resource>& outResource,

@@ -14,6 +14,7 @@
 #include <wrl/client.h>
 
 #include <cstddef>
+#include <memory>
 #include <unordered_map>
 
 namespace CNA::Internal::Renderers::DirectX11
@@ -174,6 +175,15 @@ namespace CNA::Internal::Renderers::DirectX11
         /// to do), and internally whenever SetRenderTarget2D(nullptr)/SetRenderTargets(nullptr, 0)
         /// is used to go straight back to the back buffer.
         void RestoreBackBufferRenderTargetEXT();
+        /** @brief Detaches a dying 2D target from every non-owning current-binding slot. */
+        void NotifyRenderTargetDestroyedEXT(D3D11RenderTargetRenderer* target) noexcept;
+        /** @brief Detaches a dying cube target from the non-owning current cube binding. */
+        void NotifyRenderTargetCubeDestroyedEXT(D3D11RenderTargetCubeRenderer* target) noexcept;
+        /** @brief Returns a weak token that expires before this renderer can be dereferenced. */
+        [[nodiscard]] std::weak_ptr<void> GetLifetimeTokenEXT() const noexcept
+        {
+            return lifetimeToken_;
+        }
 
         // ---- IGraphicsRenderer: real (Phase DIRECTX8, DX-61) ----
         void DrawColoredPrimitives(const IVertexBufferRenderer& vb,
@@ -207,6 +217,8 @@ namespace CNA::Internal::Renderers::DirectX11
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;
 
     private:
+        std::shared_ptr<void> lifetimeToken_ = std::make_shared<int>(0);
+
         void CreateDeviceResources();
         void CreateSwapChainResources();
         void CreateWindowSizeDependentViews();

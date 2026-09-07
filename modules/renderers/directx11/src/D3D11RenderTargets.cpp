@@ -59,7 +59,10 @@ namespace CNA::Internal::Renderers::DirectX11
     D3D11RenderTargetRenderer::D3D11RenderTargetRenderer(
         DirectX11Renderer* owner, ID3D11Device* device, ID3D11DeviceContext* context,
         int w, int h, int depthFormat, bool mipMap, int multiSampleCount)
-        : owner_(owner), device_(device), context_(context)
+        : owner_(owner)
+        , ownerLifetime_(owner ? owner->GetLifetimeTokenEXT() : std::weak_ptr<void>{})
+        , device_(device)
+        , context_(context)
         , width_(w), height_(h)
     {
         appliedMultiSampleCount_ = ClampMultiSampleCount(device_.Get(), DXGI_FORMAT_R8G8B8A8_UNORM, multiSampleCount);
@@ -131,6 +134,11 @@ namespace CNA::Internal::Renderers::DirectX11
             if (FAILED(hr))
                 throw std::runtime_error("D3D11RenderTargetRenderer: CreateDepthStencilView failed, hr=" + FormatHr(hr));
         }
+    }
+
+    D3D11RenderTargetRenderer::~D3D11RenderTargetRenderer()
+    {
+        if (owner_ && !ownerLifetime_.expired()) owner_->NotifyRenderTargetDestroyedEXT(this);
     }
 
     void D3D11RenderTargetRenderer::BindAsRenderTarget()
@@ -249,7 +257,10 @@ namespace CNA::Internal::Renderers::DirectX11
     D3D11RenderTargetCubeRenderer::D3D11RenderTargetCubeRenderer(
         DirectX11Renderer* owner, ID3D11Device* device, ID3D11DeviceContext* context,
         int size, int depthFormat, bool mipMap, int multiSampleCount)
-        : owner_(owner), device_(device), context_(context)
+        : owner_(owner)
+        , ownerLifetime_(owner ? owner->GetLifetimeTokenEXT() : std::weak_ptr<void>{})
+        , device_(device)
+        , context_(context)
         , size_(size)
     {
         appliedMultiSampleCount_ = ClampMultiSampleCount(device_.Get(), DXGI_FORMAT_R8G8B8A8_UNORM, multiSampleCount);
@@ -348,6 +359,11 @@ namespace CNA::Internal::Renderers::DirectX11
             if (FAILED(hr))
                 throw std::runtime_error("D3D11RenderTargetCubeRenderer: CreateDepthStencilView failed, hr=" + FormatHr(hr));
         }
+    }
+
+    D3D11RenderTargetCubeRenderer::~D3D11RenderTargetCubeRenderer()
+    {
+        if (owner_ && !ownerLifetime_.expired()) owner_->NotifyRenderTargetCubeDestroyedEXT(this);
     }
 
     void D3D11RenderTargetCubeRenderer::BindAsRenderTargetFace(int face)

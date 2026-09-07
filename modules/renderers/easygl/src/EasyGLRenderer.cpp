@@ -579,6 +579,19 @@ namespace CNA::Internal::Renderers::EasyGL
         CNA::Platform::GlContextHandle context_ = nullptr;
     };
 
+    class EasyGLThreadContextLeaseControl
+    {
+    public:
+        explicit EasyGLThreadContextLeaseControl(
+            std::shared_ptr<EasyGLPlatformContext> platformContext)
+            : platformContext(std::move(platformContext))
+        {
+        }
+
+        std::shared_ptr<EasyGLPlatformContext> platformContext;
+        std::recursive_mutex mutex;
+    };
+
     namespace
     {
         class EasyGLThreadContextLease final : public IRendererThreadContextLease
@@ -606,12 +619,44 @@ namespace CNA::Internal::Renderers::EasyGL
                 RendererThreadContextLeaseRelease::RestorePreviousBinding;
         };
 
-        std::unordered_map<const EasyGLRenderer*, EasyGLThreadContextLeaseState>&
+        std::unordered_map<const EasyGLThreadContextLeaseControl*, EasyGLThreadContextLeaseState>&
         ThreadContextLeaseStates()
         {
-            static thread_local std::unordered_map<const EasyGLRenderer*,
+            static thread_local std::unordered_map<const EasyGLThreadContextLeaseControl*,
                                                    EasyGLThreadContextLeaseState> states;
             return states;
+        }
+
+        void ReleaseThreadContextLease(
+            const std::shared_ptr<EasyGLThreadContextLeaseControl>& control) noexcept
+        {
+            auto& states = ThreadContextLeaseStates();
+            const auto it = states.find(control.get());
+            if (it == states.end() || it->second.depth == 0)
+            {
+                CNA::Logger::Error(
+                    "EasyGL renderer context lease released without matching acquisition",
+                    CNA::LogCategory::RENDER);
+                return;
+            }
+
+            --it->second.depth;
+            if (it->second.depth == 0)
+            {
+                try
+                {
+                    control->platformContext->RestoreBinding(
+                        it->second.previousBinding, it->second.release);
+                }
+                catch (const std::exception& error)
+                {
+                    CNA::Logger::Error(
+                        std::string("Failed to release EasyGL context ownership: ") + error.what(),
+                        CNA::LogCategory::RENDER);
+                }
+                states.erase(it);
+            }
+            control->mutex.unlock();
         }
     }
 
@@ -4718,8 +4763,10 @@ if (ProfileUsesGlslEs100())
         const int virtualWidth, const int virtualHeight, const CnaPresentationMode mode,
         const bool contextRecoveryEnabled, const int multiSampleCount, const int swapInterval,
         const GlProfile profile)
-        : platformContext_(std::make_unique<EasyGLPlatformContext>(
+        : platformContext_(std::make_shared<EasyGLPlatformContext>(
               glContext, RequireEasyGlWindowId(surface), RequestedGlContext(profile)))
+        , threadContextLeaseControl_(
+              std::make_shared<EasyGLThreadContextLeaseControl>(platformContext_))
         , surfaceState_(surface, virtualWidth, virtualHeight, mode)
         , contextRecoveryEnabled_(contextRecoveryEnabled)
         , sampleCount_(multiSampleCount > 1 ? multiSampleCount : 1)
@@ -5396,13 +5443,14 @@ if (!ProfileIsEs2ApiGeneration())
         // not expose native thread-affine context ownership that can be released here.
         return nullptr;
 #else
-        threadContextMutex_.lock();
+        const auto control = threadContextLeaseControl_;
+        control->mutex.lock();
         try
         {
-            auto& state = ThreadContextLeaseStates()[this];
+            auto& state = ThreadContextLeaseStates()[control.get()];
             if (state.depth == 0)
             {
-                state.previousBinding = platformContext_->GetCurrentBinding();
+                state.previousBinding = control->platformContext->GetCurrentBinding();
                 state.release = release;
                 EnsureCallingThreadContext();
             }
@@ -5410,54 +5458,21 @@ if (!ProfileIsEs2ApiGeneration())
         }
         catch (...)
         {
-            ThreadContextLeaseStates().erase(this);
-            threadContextMutex_.unlock();
+            ThreadContextLeaseStates().erase(control.get());
+            control->mutex.unlock();
             throw;
         }
 
         try
         {
             return std::make_unique<EasyGLThreadContextLease>(
-                [this]() { ReleaseCallingThreadContextLease(); });
+                [control]() { ReleaseThreadContextLease(control); });
         }
         catch (...)
         {
-            ReleaseCallingThreadContextLease();
+            ReleaseThreadContextLease(control);
             throw;
         }
-#endif
-    }
-
-    void EasyGLRenderer::ReleaseCallingThreadContextLease() noexcept
-    {
-#if !defined(__EMSCRIPTEN__)
-        auto& states = ThreadContextLeaseStates();
-        const auto it = states.find(this);
-        if (it == states.end() || it->second.depth == 0)
-        {
-            CNA::Logger::Error(
-                "EasyGL renderer context lease released without matching acquisition",
-                CNA::LogCategory::RENDER);
-            return;
-        }
-
-        --it->second.depth;
-        if (it->second.depth == 0)
-        {
-            try
-            {
-                platformContext_->RestoreBinding(
-                    it->second.previousBinding, it->second.release);
-            }
-            catch (const std::exception& error)
-            {
-                CNA::Logger::Error(
-                    std::string("Failed to release EasyGL context ownership: ") + error.what(),
-                    CNA::LogCategory::RENDER);
-            }
-            states.erase(it);
-        }
-        threadContextMutex_.unlock();
 #endif
     }
 

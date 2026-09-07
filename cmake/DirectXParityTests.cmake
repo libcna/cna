@@ -399,6 +399,57 @@ function(cna_register_d3d_parity_tests)
         NAME Model_TwoMeshesEffects TARGET model_two_meshes_effects DIRECTX12_ORDER 1320
         SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_model_two_meshes_effects_test.cpp")
     cna_d3d_parity_fixture(
+        NAME Resource_Disposed TARGET disposed_resource DIRECTX12_ORDER 1330
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_disposed_resource_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME Resource_DoubleDispose TARGET double_dispose DIRECTX12_ORDER 1340
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_double_dispose_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME Resource_BoundDispose TARGET bound_resource_dispose DIRECTX12_ORDER 1350
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_bound_resource_dispose_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME Resource_HandleRelease TARGET handle_release DIRECTX12_ORDER 1360
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_handle_release_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME Resource_MoveSemantics TARGET move_semantics DIRECTX12_ORDER 1370
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_move_semantics_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME Resource_Events TARGET resource_events DIRECTX12_ORDER 1380
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_resource_events_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME Resource_DeviceDisposeOrder TARGET device_dispose_order DIRECTX12_ORDER 1390
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_device_dispose_order_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME Resource_Leak TARGET resource_leak DIRECTX12_ORDER 1400
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_resource_leak_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME Resource_DeferredSourceLifetime TARGET deferred_source_lifetime DIRECTX12_ORDER 1410
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/deferred_source_lifetime_test.cpp"
+        DIRECTX11_TIMEOUT 900 DIRECTX12_TIMEOUT 1200)
+    cna_d3d_parity_fixture(
+        NAME Resource_BoundTargetLifetime TARGET bound_target_lifetime DIRECTX12_ORDER 1420
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/bound_target_lifetime_test.cpp"
+        DIRECTX11_TIMEOUT 900 DIRECTX12_TIMEOUT 1200)
+    cna_d3d_parity_fixture(
+        NAME Resource_PresentLifecycle TARGET present_lifecycle DIRECTX12_ORDER 1430
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/present_lifecycle_contract_test.cpp"
+        DIRECTX11_TIMEOUT 1200 DIRECTX12_TIMEOUT 1800)
+    cna_d3d_parity_fixture(
+        NAME Buffer_Disposed TARGET disposed_buffer DIRECTX12_ORDER 1440
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_disposed_buffer_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME Buffer_Usage TARGET buffer_usage DIRECTX12_ORDER 1450
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_buffer_usage_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME Buffer_DynamicStress TARGET dynamic_buffer_stress DIRECTX12_ORDER 1460
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_dynamic_buffer_stress_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME Buffer_SetData TARGET vertexbuffer_setdata DIRECTX12_ORDER 1470
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_vertexbuffer_setdata_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME Buffer_GetData TARGET vertexbuffer_indexbuffer_getdata DIRECTX12_ORDER 1480
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_vertexbuffer_indexbuffer_getdata_test.cpp")
+    cna_d3d_parity_fixture(
         NAME SpriteBatch_CustomViewport TARGET spritebatch_custom_viewport
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_custom_viewport_test.cpp"
         DIRECTX11_ONLY REASON "D3D12 presentation-corpus adoption is tracked by DX-234 and DX-236")
