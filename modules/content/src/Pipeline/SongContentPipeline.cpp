@@ -17,6 +17,7 @@ namespace CNA::Content::Pipeline
         constexpr const char* kSongImporterName = "CNA.SongImporter";
         constexpr const char* kSongProcessorName = "CNA.SongProcessor";
         constexpr const char* kSongWriterName = "CNA.SongContentWriter";
+        constexpr const char* kWavSongImporterName = "CNA.WavSongImporter";
         constexpr std::uint64_t kMaxMediaDurationMs = 0x7FFFFFFFu;
 
         const std::string* OptionalString(const ContentProcessorParameters& parameters,
@@ -141,6 +142,29 @@ namespace CNA::Content::Pipeline
         return ContentValue::Create(ImportedSongSourceType, std::move(imported));
     }
 
+    WavSongImporter::WavSongImporter(SongDurationProbe probe) : inner_(std::move(probe)) {}
+
+    ContentComponentIdentity WavSongImporter::Identity() const
+    {
+        return {kWavSongImporterName, "1"};
+    }
+
+    std::vector<std::string> WavSongImporter::SourceExtensions() const { return {".wav"}; }
+
+    std::vector<std::string> WavSongImporter::OutputTypes() const
+    {
+        return {ImportedSongSourceType};
+    }
+
+    bool WavSongImporter::SelectedByNameOnly() const { return true; }
+
+    ContentValue WavSongImporter::Import(ContentImporterContext& context) const
+    {
+        // A song is the source file, streamed: the same recording `SongImporter` does, for an
+        // extension whose default reading is a sound effect.
+        return inner_.Import(context);
+    }
+
     ContentComponentIdentity SongProcessor::Identity() const
     {
         return {kSongProcessorName, "2"};
@@ -236,7 +260,10 @@ namespace CNA::Content::Pipeline
 
     void RegisterSongContentPipeline(ContentPipelineRegistry& registry, SongDurationProbe probe)
     {
-        registry.RegisterImporter(std::make_shared<SongImporter>(std::move(probe)));
+        registry.RegisterImporter(std::make_shared<SongImporter>(probe));
+        // The `.wav`-as-song reading a project may ask for by name; it never competes with the
+        // sound-effect route that owns the extension by convention (XNAPP-332).
+        registry.RegisterImporter(std::make_shared<WavSongImporter>(std::move(probe)));
         registry.RegisterProcessor(std::make_shared<SongProcessor>());
         registry.RegisterWriter(std::make_shared<SongContentWriter>());
     }

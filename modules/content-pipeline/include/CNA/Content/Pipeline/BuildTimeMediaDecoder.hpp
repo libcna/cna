@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "CNA/Content/Pipeline/SongContentPipeline.hpp"
+#include "CNA/Content/Pipeline/SoundEffectContentPipeline.hpp"
 #include "CNA/Content/Pipeline/VideoContentPipeline.hpp"
 
 namespace CNA::Content::Pipeline
@@ -151,6 +152,20 @@ namespace CNA::Content::Pipeline
          * @return The probe, or an empty function when this build has no media decoder.
          */
         [[nodiscard]] SongDurationProbe MakeSongDurationProbe();
+
+        /**
+         * @brief Creates the build-time compressed-sound decoder, or an empty one.
+         *
+         * The same arrangement again: `cna_content` owns no decoder, so the importer that reads a
+         * `.mp3` or `.wma` as a sound effect takes this from whoever registers it. The samples
+         * come back at 44100 Hz with the channel count preserved, which is the rate the genuine
+         * importer reports for this route (measured, `tests/reference/xna40/media`, cases `mp3/*`;
+         * `docs/xna-content-pipeline-media.md` section 2), and with no loop region, which is what
+         * the same measurement answers (plans/plan_xnapipeline_parity.md `XNAPP-332`).
+         *
+         * @return The decoder, or an empty function when this build has no media decoder.
+         */
+        [[nodiscard]] CompressedSoundDecoder MakeCompressedSoundDecoder();
 
         /**
          * @brief Encodes PCM samples to Windows Media audio in an ASF container.

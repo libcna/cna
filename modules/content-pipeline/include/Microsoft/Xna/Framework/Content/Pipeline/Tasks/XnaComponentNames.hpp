@@ -107,7 +107,24 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
     };
 
     /**
-     * @brief Translates an XNA importer name.
+     * @brief Translates an XNA importer name, given the processor the same item names.
+     *
+     * XNA has one `AudioContent` and CNA has two imported types, so an audio importer's canonical
+     * counterpart depends on what the item asks for next: a `.wma` read for `SongProcessor` is a
+     * streaming source and the same file read for `SoundEffectProcessor` is decoded PCM. The pair
+     * is what decides, so the pair is what this takes -- 14 of the sample corpus's `.wma` items
+     * ask for a sound effect and 14 of its `.wav` items ask for a song
+     * (plans/plan_xnapipeline_parity.md `XNAPP-332`).
+     *
+     * @param xnaName The class name a content project wrote, with or without its namespace.
+     * @param processorName The processor the same item names, empty when it names none.
+     * @return The mapping; `canonicalName` is empty and `reason` says why when there is none.
+     */
+    CNAEXT [[nodiscard]] XnaComponentMapping MapXnaImporterName(const std::string& xnaName,
+                                                                const std::string& processorName);
+
+    /**
+     * @brief Translates an XNA importer name with no processor named beside it.
      *
      * @param xnaName The class name a content project wrote, with or without its namespace.
      * @return The mapping; `canonicalName` is empty and `reason` says why when there is none.

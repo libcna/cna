@@ -494,7 +494,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
             const std::string importerName = asset.GetMetadata("Importer");
             if (!importerName.empty())
             {
-                const XnaComponentMapping mapping = MapXnaImporterName(importerName);
+                // With the processor beside it: an audio importer's canonical counterpart depends
+                // on which of CNA's two imported audio types the item is asking for (XNAPP-332).
+                const XnaComponentMapping mapping =
+                    MapXnaImporterName(importerName, asset.GetMetadata("Processor"));
                 if (!mapping.known)
                 {
                     // XNA's own words, because the situation is XNA's: a project naming an importer

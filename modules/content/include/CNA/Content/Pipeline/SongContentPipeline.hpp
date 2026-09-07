@@ -102,6 +102,51 @@ namespace CNA::Content::Pipeline
         SongDurationProbe probe_;
     };
 
+    /**
+     * @brief Reads a `.wav` as a streaming song source, when a build asks for one.
+     *
+     * The counterpart of `CompressedSoundImporter`: XNA's one `AudioContent` lets `WavImporter`
+     * feed `SongProcessor` as readily as `SoundEffectProcessor`, and 14 of the sample corpus's
+     * `.wav` items ask for the song. It is @ref SelectedByNameOnly, so a convention build of a
+     * `.wav` still reaches the sound-effect route (plans/plan_xnapipeline_parity.md `XNAPP-332`).
+     */
+    class WavSongImporter final : public ContentImporter
+    {
+    public:
+        /** @brief Creates an importer that reads no duration. */
+        WavSongImporter() = default;
+
+        /**
+         * @brief Creates an importer that asks @p probe how long the source is.
+         *
+         * @param probe The build-time probe; an empty one behaves as the default constructor.
+         */
+        explicit WavSongImporter(SongDurationProbe probe);
+
+        /** @brief Returns the stable built-in importer identity. */
+        [[nodiscard]] ContentComponentIdentity Identity() const override;
+
+        /** @brief Returns `.wav`, the one extension this reading covers. */
+        [[nodiscard]] std::vector<std::string> SourceExtensions() const override;
+
+        /** @brief Returns the only imported type this component can produce. */
+        [[nodiscard]] std::vector<std::string> OutputTypes() const override;
+
+        /** @brief Answers true: this reading of `.wav` is selected by name. */
+        [[nodiscard]] bool SelectedByNameOnly() const override;
+
+        /**
+         * @brief Records the source as external streaming media, exactly as `SongImporter` does.
+         *
+         * @param context Call-scoped importer context.
+         * @return Root-relative stream identity and checked source size.
+         */
+        [[nodiscard]] ContentValue Import(ContentImporterContext& context) const override;
+
+    private:
+        SongImporter inner_;
+    };
+
     /** @brief Produces canonical Song metadata and its separate runtime media XREF. */
     class SongProcessor final : public ContentProcessor
     {

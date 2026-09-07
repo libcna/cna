@@ -1025,6 +1025,24 @@ namespace CNA::Content::Pipeline
         [[nodiscard]] virtual std::vector<std::string> OutputTypes() const = 0;
 
         /**
+         * @brief Whether this importer takes part in choosing a route for a source extension.
+         *
+         * An importer that answers true is left out of default resolution: it still runs when a
+         * build names it, and it never becomes the answer to "which importer reads this extension"
+         * on its own.
+         *
+         * This exists because XNA has one `AudioContent` where CNA has two imported types, so an
+         * extension can legitimately be read two ways. A `.wma` is a song by convention and a
+         * sound effect when a project asks for one -- XNA's `WmaImporter` feeds either processor,
+         * and 14 of the sample corpus's `.wma` items ask for `SoundEffectProcessor`. Registering
+         * the second reader as an ordinary importer would make every convention build of a `.wma`
+         * ambiguous instead (plans/plan_xnapipeline_parity.md `XNAPP-332`).
+         *
+         * @return false for every ordinary importer.
+         */
+        [[nodiscard]] virtual bool SelectedByNameOnly() const { return false; }
+
+        /**
          * @brief Imports the context's primary source into a source-oriented value.
          *
          * @param context Call-scoped importer services.

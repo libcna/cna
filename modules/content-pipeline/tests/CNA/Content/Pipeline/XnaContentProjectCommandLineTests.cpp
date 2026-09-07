@@ -251,6 +251,114 @@ TEST(XnaContentProjectCommandLine, AFileTheProjectDoesNotListIsNotBuilt)
     EXPECT_NE(invocation.output.find("Assets: 1"), std::string::npos) << invocation.output;
 }
 
+// plans/plan_xnapipeline_parity.md XNAPP-332. XNA has one `AudioContent`, so its audio importers
+// feed either processor: 14 of the sample corpus's `.wma` items ask for `SoundEffectProcessor` and
+// 14 of its `.wav` items ask for `SongProcessor`. CNA has two imported types, so both crossings
+// used to be refused with "processor 'CNA.SoundEffectProcessor' does not accept imported type
+// 'CNA.Content.Pipeline.ImportedSongSource'" -- which broke the Platformer sample's seven sound
+// effects. The pair of names now selects the reading, and a convention build of either extension is
+// unchanged.
+TEST(XnaContentProjectCommandLine, TheProcessorDecidesWhichReadingOfAnAudioSourceIsBuilt)
+{
+    const Project project("audiopair");
+    std::filesystem::copy_file(Locate("tests/assets/xna40/media/wma_mono_44100.wma"),
+                               project.Source() / "music.wma");
+    project.Write("    <Compile Include=\"music.wma\">\n"
+                  "      <Name>music</Name>\n"
+                  "      <Importer>WmaImporter</Importer>\n"
+                  "      <Processor>SoundEffectProcessor</Processor>\n"
+                  "    </Compile>\n"
+                  "    <Compile Include=\"tone.wav\">\n"
+                  "      <Name>tone</Name>\n"
+                  "      <Importer>WavImporter</Importer>\n"
+                  "      <Processor>SongProcessor</Processor>\n"
+                  "    </Compile>\n");
+    const Invocation invocation = Build(project);
+    ASSERT_EQ(invocation.exitCode, 0) << invocation.output;
+
+    ASSERT_TRUE(std::filesystem::is_regular_file(project.Output() / "music.xnb"))
+        << invocation.output;
+    ASSERT_TRUE(std::filesystem::is_regular_file(project.Output() / "tone.xnb"))
+        << invocation.output;
+
+    // Each is the asset the *processor* names, whatever the source extension usually means: the
+    // compressed source became a SoundEffect and the WAV became a Song.
+    const auto reader = [](const std::filesystem::path& asset)
+    {
+        std::ifstream stream(asset, std::ios::binary);
+        const std::string bytes{std::istreambuf_iterator<char>(stream),
+                                std::istreambuf_iterator<char>()};
+        return bytes;
+    };
+    EXPECT_NE(reader(project.Output() / "music.xnb")
+                  .find("Microsoft.Xna.Framework.Content.SoundEffectReader"),
+              std::string::npos);
+    EXPECT_NE(reader(project.Output() / "tone.xnb")
+                  .find("Microsoft.Xna.Framework.Content.SongReader"),
+              std::string::npos);
+}
+
+// plans/plan_xnapipeline_parity.md XNAPP-332. An `.xnb` carries the media file's path relative to
+// the `.xnb` that names it, not to the content root: XNA's own `Content/Sounds/Music.xnb` names
+// `Music.wma`, `Content-phone/Sounds/NinjAcademy.xnb` names `NinjAcademy_Music.wma`, and
+// NetRumble's root-level song names `One Step Beyond.wma`. CNA's own reader resolves it that way
+// too, so a root-relative spelling was wrong on both sides at once -- a song in a subdirectory
+// resolved to `Content/Sounds/Sounds/Music.wma`, and only a song at the content root worked.
+TEST(XnaContentProjectCommandLine, ASongsMediaPathIsRelativeToTheAssetThatNamesIt)
+{
+    const Project project("songpath");
+    std::filesystem::create_directories(project.Source() / "Music");
+    std::filesystem::copy_file(Locate("tests/assets/xna40/media/wma_mono_44100.wma"),
+                               project.Source() / "Music" / "theme.wma");
+    project.Write("    <Compile Include=\"Music\\theme.wma\">\n"
+                  "      <Name>theme</Name>\n"
+                  "      <Importer>WmaImporter</Importer>\n"
+                  "      <Processor>SongProcessor</Processor>\n"
+                  "    </Compile>\n");
+    const Invocation invocation = Build(project);
+    ASSERT_EQ(invocation.exitCode, 0) << invocation.output;
+
+    const std::filesystem::path asset = project.Output() / "Music" / "theme.xnb";
+    ASSERT_TRUE(std::filesystem::is_regular_file(asset)) << invocation.output;
+    std::ifstream stream(asset, std::ios::binary);
+    const std::string bytes{std::istreambuf_iterator<char>(stream),
+                            std::istreambuf_iterator<char>()};
+    EXPECT_NE(bytes.find("theme.wma"), std::string::npos);
+    EXPECT_EQ(bytes.find("Music/theme.wma"), std::string::npos) << "the path is root-relative";
+}
+
+// The other half of the same rule: nothing about a directory build changes. A `.wma` with no
+// project to name a processor is still a song and a `.wav` is still a sound effect, because the
+// second reading of each extension is registered to be asked for by name and takes no part in
+// choosing a route.
+TEST(XnaContentProjectCommandLine, AConventionBuildStillReadsEachAudioExtensionOneWay)
+{
+    const Project project("audioconvention");
+    std::filesystem::copy_file(Locate("tests/assets/xna40/media/wma_mono_44100.wma"),
+                               project.Source() / "music.wma");
+    project.Write("    <Compile Include=\"music.wma\">\n"
+                  "      <Name>music</Name>\n"
+                  "    </Compile>\n"
+                  "    <Compile Include=\"tone.wav\">\n"
+                  "      <Name>tone</Name>\n"
+                  "    </Compile>\n");
+    const Invocation invocation = Build(project);
+    ASSERT_EQ(invocation.exitCode, 0) << invocation.output;
+
+    const auto reader = [](const std::filesystem::path& asset)
+    {
+        std::ifstream stream(asset, std::ios::binary);
+        return std::string{std::istreambuf_iterator<char>(stream),
+                           std::istreambuf_iterator<char>()};
+    };
+    EXPECT_NE(reader(project.Output() / "music.xnb")
+                  .find("Microsoft.Xna.Framework.Content.SongReader"),
+              std::string::npos);
+    EXPECT_NE(reader(project.Output() / "tone.xnb")
+                  .find("Microsoft.Xna.Framework.Content.SoundEffectReader"),
+              std::string::npos);
+}
+
 // The items XNA's targets copy rather than build.
 TEST(XnaContentProjectCommandLine, ContentAndNoneItemsAreCopiedAsTheirMetadataSays)
 {

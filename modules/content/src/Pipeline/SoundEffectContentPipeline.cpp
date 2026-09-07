@@ -16,6 +16,7 @@ namespace CNA::Content::Pipeline
         constexpr const char* kWavImporterName = "CNA.WavImporter";
         constexpr const char* kSoundEffectProcessorName = "CNA.SoundEffectProcessor";
         constexpr const char* kSoundEffectWriterName = "CNA.SoundEffectContentWriter";
+        constexpr const char* kCompressedSoundImporterName = "CNA.CompressedSoundImporter";
     }
 
     ContentComponentIdentity WavImporter::Identity() const
@@ -124,10 +125,70 @@ namespace CNA::Content::Pipeline
                 Cnb::CnbSoundEffectSchemaVersion};
     }
 
+    CompressedSoundImporter::CompressedSoundImporter(CompressedSoundDecoder decoder)
+        : decoder_(std::move(decoder))
+    {
+    }
+
+    ContentComponentIdentity CompressedSoundImporter::Identity() const
+    {
+        return {kCompressedSoundImporterName, "1"};
+    }
+
+    std::vector<std::string> CompressedSoundImporter::SourceExtensions() const
+    {
+        // Exactly the two XNA's own audio importers declare. The song route reads more formats
+        // than these, but a project can only ask for this reading with a name XNA has, and XNA has
+        // only `Mp3Importer` and `WmaImporter`.
+        return {".mp3", ".wma"};
+    }
+
+    std::vector<std::string> CompressedSoundImporter::OutputTypes() const
+    {
+        return {ImportedSoundType};
+    }
+
+    bool CompressedSoundImporter::SelectedByNameOnly() const { return true; }
+
+    ContentValue CompressedSoundImporter::Import(ContentImporterContext& context) const
+    {
+        if (!decoder_)
+        {
+            throw std::runtime_error(
+                "this build has no audio decoder, so a compressed source cannot be read as a "
+                "sound effect; build it as a song, or use a build with a decoder.");
+        }
+        std::optional<CNA::Content::Import::ImportedSound> decoded =
+            decoder_(context.SourcePath());
+        if (!decoded.has_value())
+        {
+            throw std::runtime_error("the audio decoder could not read this source.");
+        }
+        if (decoded->channels == 0u || decoded->sampleRate == 0u || decoded->frameCount == 0u)
+        {
+            throw std::runtime_error("the decoded audio has no frames.");
+        }
+        context.LogInfo("decoded " +
+                        std::string(CNA::Content::Import::ImportedPcmEncodingName(
+                            decoded->encoding)) +
+                        " with " + std::to_string(decoded->frameCount) + " frames, " +
+                        std::to_string(decoded->channels) + " channel(s), and " +
+                        std::to_string(decoded->sampleRate) + " Hz sample rate.");
+        return ContentValue::Create(ImportedSoundType, std::move(*decoded));
+    }
+
     void RegisterSoundEffectContentPipeline(ContentPipelineRegistry& registry)
     {
         registry.RegisterImporter(std::make_shared<WavImporter>());
         registry.RegisterProcessor(std::make_shared<SoundEffectProcessor>());
         registry.RegisterWriter(std::make_shared<SoundEffectContentWriter>());
+    }
+
+    void RegisterSoundEffectContentPipeline(ContentPipelineRegistry& registry,
+                                            CompressedSoundDecoder decoder)
+    {
+        RegisterSoundEffectContentPipeline(registry);
+        registry.RegisterImporter(
+            std::make_shared<CompressedSoundImporter>(std::move(decoder)));
     }
 }

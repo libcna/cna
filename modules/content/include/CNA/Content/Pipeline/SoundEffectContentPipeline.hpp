@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <filesystem>
+#include <functional>
+#include <optional>
 #include <string>
 #include <vector>
 
+#include "CNA/Content/Import/ImportedSound.hpp"
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
 
 namespace CNA::Content::Pipeline
@@ -99,9 +103,76 @@ namespace CNA::Content::Pipeline
     };
 
     /**
+     * @brief Decodes a compressed audio source to PCM, or answers nothing when it cannot.
+     *
+     * The decoder lives in the build-time module, which is the only place a media decoder is
+     * linked; the canonical route takes it as a value so that a build without one behaves exactly
+     * as it did before rather than growing a dependency (plans/plan_xnapipeline_parity.md
+     * `XNAPP-332`, and `SongDurationProbe`'s own precedent).
+     *
+     * @param source The file to decode.
+     * @return The decoded sound, or `std::nullopt` when this build cannot read the format.
+     */
+    using CompressedSoundDecoder = std::function<std::optional<CNA::Content::Import::ImportedSound>(
+        const std::filesystem::path& source)>;
+
+    /**
+     * @brief Reads a compressed audio source as a sound effect, when a build asks for one.
+     *
+     * XNA has one `AudioContent`, so its `Mp3Importer` and `WmaImporter` feed `SongProcessor` and
+     * `SoundEffectProcessor` alike; 14 of the sample corpus's `.wma` items ask for the second. CNA
+     * has two imported types, so the second reading is this importer -- registered for the same
+     * extensions and @ref SelectedByNameOnly, so a convention build of a `.mp3` still reaches the
+     * song route and only a project that names a sound effect gets one.
+     */
+    class CompressedSoundImporter final : public ContentImporter
+    {
+    public:
+        /**
+         * @brief Creates an importer that decodes through @p decoder.
+         *
+         * @param decoder The build-time decoder; an empty one refuses every source by name.
+         */
+        explicit CompressedSoundImporter(CompressedSoundDecoder decoder);
+
+        /** @brief Returns the stable built-in importer identity. */
+        [[nodiscard]] ContentComponentIdentity Identity() const override;
+
+        /** @brief Returns the compressed source extensions XNA's own audio importers declare. */
+        [[nodiscard]] std::vector<std::string> SourceExtensions() const override;
+
+        /** @brief Returns the one imported type this component produces. */
+        [[nodiscard]] std::vector<std::string> OutputTypes() const override;
+
+        /** @brief Answers true: this reading of the extension is selected by name. */
+        [[nodiscard]] bool SelectedByNameOnly() const override;
+
+        /**
+         * @brief Decodes the source to linear PCM.
+         *
+         * @param context Call-scoped importer context.
+         * @return The decoded sound.
+         * @throws std::runtime_error when this build has no decoder or cannot read the source.
+         */
+        [[nodiscard]] ContentValue Import(ContentImporterContext& context) const override;
+
+    private:
+        CompressedSoundDecoder decoder_;
+    };
+
+    /**
      * @brief Registers the built-in WAV importer, SoundEffect processor and writer.
      *
      * @param registry Explicit registry to configure before builds begin.
      */
     void RegisterSoundEffectContentPipeline(ContentPipelineRegistry& registry);
+
+    /**
+     * @brief Registers the same, plus the compressed-source reading a project may ask for.
+     *
+     * @param registry Explicit registry to configure before builds begin.
+     * @param decoder The build-time decoder the compressed importer reads through.
+     */
+    void RegisterSoundEffectContentPipeline(ContentPipelineRegistry& registry,
+                                            CompressedSoundDecoder decoder);
 }

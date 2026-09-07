@@ -308,10 +308,14 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
         for (const Item& asset : SourceAssets())
         {
             const std::string importer = asset.Get("Importer");
-            if (!importer.empty() && MapXnaImporterName(importer).canonicalName.empty() &&
+            // The processor is part of what an importer name means for audio, so it is passed
+            // here too -- this answers the same question the build will ask (XNAPP-332).
+            if (!importer.empty() &&
+                MapXnaImporterName(importer, asset.Get("Processor")).canonicalName.empty() &&
                 Fold(importer) != "xmlimporter")
             {
-                reasons.push_back(asset.include + ": " + MapXnaImporterName(importer).reason);
+                reasons.push_back(asset.include + ": " +
+                                  MapXnaImporterName(importer, asset.Get("Processor")).reason);
             }
             const std::string processor = asset.Get("Processor");
             if (!processor.empty() && MapXnaProcessorName(processor).canonicalName.empty() &&

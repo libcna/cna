@@ -139,9 +139,32 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
         }
     }
 
+    XnaComponentMapping MapXnaImporterName(const std::string& xnaName,
+                                           const std::string& processorName)
+    {
+        XnaComponentMapping mapping = Look(Importers(), xnaName, "importer");
+        if (!mapping.known || processorName.empty()) { return mapping; }
+
+        // The one place a name does not decide on its own. Everything else in these tables is a
+        // rename; this is a genuine fork, because XNA's single AudioContent is two imported types
+        // here and only the processor says which one the project meant.
+        const std::string processor = Bare(processorName);
+        const std::string importer = Bare(xnaName);
+        if (processor == "SoundEffectProcessor" &&
+            (importer == "Mp3Importer" || importer == "WmaImporter"))
+        {
+            mapping.canonicalName = "CNA.CompressedSoundImporter";
+        }
+        else if (processor == "SongProcessor" && importer == "WavImporter")
+        {
+            mapping.canonicalName = "CNA.WavSongImporter";
+        }
+        return mapping;
+    }
+
     XnaComponentMapping MapXnaImporterName(const std::string& xnaName)
     {
-        return Look(Importers(), xnaName, "importer");
+        return MapXnaImporterName(xnaName, {});
     }
 
     XnaComponentMapping MapXnaProcessorName(const std::string& xnaName)

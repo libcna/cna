@@ -17,6 +17,8 @@
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 #include "Microsoft/Xna/Framework/BoundingSphere.hpp"
 #include "CNA/Content/Cnb/CnbTextureFormat.hpp"
+#include <filesystem>
+
 #include "CNA/Content/Pipeline/CnjContentPipeline.hpp"
 #include "CNA/Content/Pipeline/ModelContentPipeline.hpp"
 #include "CNA/Content/Pipeline/SongContentPipeline.hpp"
@@ -37,6 +39,38 @@ namespace CNA::Content::Pipeline
     {
         /** @brief The stable codec identity every XNB writer shares. */
         constexpr const char* kXnbCodecName = "CNA.XnbSerializer";
+
+        /**
+         * @brief The streaming-media reference as XNA writes it: relative to the asset itself.
+         *
+         * The canonical pipeline carries a media reference relative to the content root, because
+         * that is the identity the build graph and the manifest need. An `.xnb` carries something
+         * else: XNA writes the media file's path **relative to the `.xnb` that names it**, which
+         * is what its `SongReader` then resolves against. Three genuine files say so and no
+         * counter-example does -- `Content/Sounds/Music.xnb` names `Music.wma`,
+         * `Content-phone/Sounds/NinjAcademy.xnb` names `NinjAcademy_Music.wma`, and NetRumble's
+         * root-level song names `One Step Beyond.wma`. CNA's own reader resolves it the same way
+         * (`ResolveContainedPathRelativeToFile`), so a root-relative spelling was wrong on both
+         * sides at once: a song in a subdirectory resolved to `Content/Sounds/Sounds/Music.wma`
+         * and only a song at the content root happened to work
+         * (plans/plan_xnapipeline_parity.md `XNAPP-332`).
+         *
+         * @param rootRelative The media reference relative to the content root.
+         * @param logicalName The asset's own content name, whose directory this is relative to.
+         * @return The reference relative to the asset's directory.
+         */
+        [[nodiscard]] std::string MediaPathRelativeToAsset(const std::string& rootRelative,
+                                                           const std::string& logicalName)
+        {
+            const std::size_t slash = logicalName.find_last_of('/');
+            if (slash == std::string::npos) { return rootRelative; }
+            const std::filesystem::path directory(logicalName.substr(0, slash));
+            const std::filesystem::path relative =
+                std::filesystem::path(rootRelative).lexically_relative(directory);
+            // An empty answer means the two share no prefix at all, which a content root and one
+            // of its own assets always do; keeping the original is the safe reading either way.
+            return relative.empty() ? rootRelative : relative.generic_string();
+        }
 
         /** @brief Bumped whenever the serializer's byte output changes for unchanged inputs. */
         constexpr const char* kXnbCodecVersion = "1";
@@ -293,7 +327,7 @@ namespace CNA::Content::Pipeline
             {
                 const Cnb::CnbSongData& song = input.Get<Cnb::CnbSongData>();
                 Xnb::XnbSongData converted;
-                converted.mediaPath = song.streamReference;
+                converted.mediaPath = MediaPathRelativeToAsset(song.streamReference, logicalName);
                 converted.durationMs = static_cast<std::int32_t>(song.durationMs);
                 return MakeResult(
                     Xnb::WriteXnbAssetWithIdentity(converted, Options(), logicalName));
@@ -317,7 +351,7 @@ namespace CNA::Content::Pipeline
             {
                 const Cnb::CnbVideoData& video = input.Get<Cnb::CnbVideoData>();
                 Xnb::XnbVideoData converted;
-                converted.mediaPath = video.streamReference;
+                converted.mediaPath = MediaPathRelativeToAsset(video.streamReference, logicalName);
                 converted.durationMs = static_cast<std::int32_t>(video.durationMs);
                 converted.width = static_cast<std::int32_t>(video.width);
                 converted.height = static_cast<std::int32_t>(video.height);

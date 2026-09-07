@@ -174,7 +174,20 @@ namespace CNA::Content::Pipeline::BuildTimeMedia
         // (measured, tests/reference/xna40/media cases mp3/mp3_mono_44100_tagged.mp3 and
         // mp3/mp3_mono_44100_vbr.mp3). SKIP_MANUAL makes the decoder report the skip as side data
         // instead of applying it, which is what leaves those frames in.
-        decoder->flags2 |= AV_CODEC_FLAG2_SKIP_MANUAL;
+        //
+        // Windows Media is the exception, and the difference is what the skip *is*. An MP3's is
+        // the encoder's, declared in a Xing/LAME header the file carries, and XNA's decoder does
+        // not read it. A WMA's is the decoder's own priming, which no decoder's output ever
+        // contains: XNA's seven Platformer sound effects are each exactly 4096 frames shorter
+        // than this decoder's output with the skip left in, and byte-identical to it once those
+        // frames are dropped (measured against the sample's own genuine build,
+        // plans/plan_xnapipeline_parity.md XNAPP-332).
+        const AVCodecID skipCodecId = stream->codecpar->codec_id;
+        const bool decoderPriming =
+            skipCodecId == AV_CODEC_ID_WMAV1 || skipCodecId == AV_CODEC_ID_WMAV2 ||
+            skipCodecId == AV_CODEC_ID_WMAPRO || skipCodecId == AV_CODEC_ID_WMALOSSLESS ||
+            skipCodecId == AV_CODEC_ID_WMAVOICE;
+        if (!decoderPriming) { decoder->flags2 |= AV_CODEC_FLAG2_SKIP_MANUAL; }
         if (avcodec_open2(decoder.get(), codec, nullptr) < 0)
         {
             throw std::runtime_error("the audio stream could not be decoded");
@@ -473,6 +486,53 @@ namespace CNA::Content::Pipeline::BuildTimeMedia
                 const std::int64_t milliseconds = ticks / 10000;
                 if (milliseconds <= 0 || milliseconds > 2147483647) { return std::nullopt; }
                 return static_cast<std::uint32_t>(milliseconds);
+            };
+        }
+
+        CompressedSoundDecoder MakeCompressedSoundDecoder()
+        {
+            if (!IsAvailable()) { return {}; }
+            return [](const std::filesystem::path& source)
+                -> std::optional<CNA::Content::Import::ImportedSound>
+            {
+                DecodedAudio decoded;
+                try
+                {
+                    // 44100 whatever the source carries, with the channel count preserved: the
+                    // rate the genuine importer reports for every MPEG version and every source
+                    // rate it was measured at (tests/reference/xna40/media, cases mp3/*).
+                    decoded = DecodeAudio(CNA::Internal::ContentPathToUtf8(source), 44100);
+                }
+                catch (const std::exception&)
+                {
+                    // The importer turns an empty answer into its own refusal, which names the
+                    // source; a decoder failure is not this function's sentence to write.
+                    return std::nullopt;
+                }
+                if (decoded.channels <= 0 || decoded.sampleRate <= 0 || decoded.pcm.empty())
+                {
+                    return std::nullopt;
+                }
+                const std::size_t frameBytes =
+                    static_cast<std::size_t>(decoded.channels) * 2u;
+                if (frameBytes == 0u || decoded.pcm.size() < frameBytes) { return std::nullopt; }
+                CNA::Content::Import::ImportedSound imported;
+                imported.encoding =
+                    CNA::Content::Import::ImportedPcmEncoding::Signed16LittleEndian;
+                imported.sampleRate = static_cast<std::uint32_t>(decoded.sampleRate);
+                imported.channels = static_cast<std::uint32_t>(decoded.channels);
+                imported.frameCount =
+                    static_cast<std::uint32_t>(decoded.pcm.size() / frameBytes);
+                // Both zero, which is what the same measurement answers for this route: a
+                // compressed source declares no loop region.
+                imported.loopStart = 0u;
+                imported.loopLength = 0u;
+                imported.samples.assign(decoded.pcm.begin(),
+                                        decoded.pcm.begin() +
+                                            static_cast<std::ptrdiff_t>(
+                                                static_cast<std::size_t>(imported.frameCount) *
+                                                frameBytes));
+                return imported;
             };
         }
 

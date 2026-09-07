@@ -3057,7 +3057,8 @@ namespace CNA::Content::Pipeline
                                         const ContentCompilerOptions& options)
     {
         RegisterTexture2DContentPipeline(registry, MakeBlockCompressionTextureEncoder());
-        RegisterSoundEffectContentPipeline(registry);
+        RegisterSoundEffectContentPipeline(registry,
+                                           BuildTimeMedia::MakeCompressedSoundDecoder());
         RegisterSongContentPipeline(registry, BuildTimeMedia::MakeSongDurationProbe());
         RegisterVideoContentPipeline(registry, BuildTimeMedia::MakeVideoMetadataProbe());
         RegisterModelContentPipeline(registry);

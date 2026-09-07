@@ -244,7 +244,7 @@
         "windowsPhone": "UNVERIFIED",
         "xbox360": "UNVERIFIED",
         "status": "IMPLEMENTED+TESTED",
-        "note": "Twelve MP3 sources across all three MPEG versions and every rate from 8000 to 48000 answer the format and duration the genuine importer answered for the same files. The processor, source-to-XNB, source-to-CNB and target legs are all named. XNA's own SongProcessor cannot be measured in this environment at all -- both recorded cases are Windows Media refusals under Wine -- so the target leg holds CNA's own half only: the same answer for every target."
+        "note": "Twelve MP3 sources across all three MPEG versions and every rate from 8000 to 48000 answer the format and duration the genuine importer answered for the same files. The processor, source-to-XNB, source-to-CNB and target legs are all named. XNA's own SongProcessor cannot be measured in this environment at all -- both recorded cases are Windows Media refusals under Wine -- so the target leg holds CNA's own half only: the same answer for every target. The same crossing exists for MP3: a project pairing Mp3Importer with SoundEffectProcessor reaches CNA.CompressedSoundImporter (XNAPP-332)."
       }
     },
     ".pfm": {
@@ -424,7 +424,7 @@
         "windowsPhone": "SUPPORTED",
         "xbox360": "XMA ENCODER EXTERNALLY UNAVAILABLE",
         "status": "IMPLEMENTED+TESTED",
-        "note": "Every WAV variant the genuine importer accepts is accepted with the same fields; the source-to-XNB, source-to-CNB and per-target legs are all named. The three targets are measured: XNA converts a sound effect to XMA for the Xbox 360 -- format tag 0x6601, different loop points, a quarter of the data and a big-endian XMA2WAVEFORMATEX -- and keeps PCM for Windows and Windows Phone (soundeffectprofile/*). CNA reproduces the two PCM targets exactly and cannot produce XMA, which the test asserts as a divergence rather than hiding. The blocker is the encoder and nothing else: XMA has no public specification sufficient to implement a conforming one, no licensable one, and none in FFmpeg, which decodes xma1 and xma2 and encodes neither. Everything around it is built and tested -- the XMA2WAVEFORMATEX byte order and every field of it, the 128-sample quantization of the loop region against an exact PlayLength, the container, and a build-time codec interface an encoder attaches to with --xma-encoder and no change to any public pipeline API. The audit and the measurements are docs/xma-encoder-backend.md."
+        "note": "Every WAV variant the genuine importer accepts is accepted with the same fields; the source-to-XNB, source-to-CNB and per-target legs are all named. The three targets are measured: XNA converts a sound effect to XMA for the Xbox 360 -- format tag 0x6601, different loop points, a quarter of the data and a big-endian XMA2WAVEFORMATEX -- and keeps PCM for Windows and Windows Phone (soundeffectprofile/*). CNA reproduces the two PCM targets exactly and cannot produce XMA, which the test asserts as a divergence rather than hiding. The blocker is the encoder and nothing else: XMA has no public specification sufficient to implement a conforming one, no licensable one, and none in FFmpeg, which decodes xma1 and xma2 and encodes neither. Everything around it is built and tested -- the XMA2WAVEFORMATEX byte order and every field of it, the 128-sample quantization of the loop region against an exact PlayLength, the container, and a build-time codec interface an encoder attaches to with --xma-encoder and no change to any public pipeline API. The audit and the measurements are docs/xma-encoder-backend.md. A project may also pair this importer with SongProcessor, as 14 of the sample corpus's .wav items do; that reading is CNA.WavSongImporter (XNAPP-332)."
       }
     },
     ".wma": {
@@ -454,7 +454,7 @@
         "windowsPhone": "UNVERIFIED",
         "xbox360": "UNVERIFIED",
         "status": "IMPLEMENTED+TESTED",
-        "note": "The route is implemented and tested; the genuine importer could not be measured in this environment (docs/xna-content-pipeline-media.md section 6), so the successful path is held to the format and to the shape the MP3 measurement settled for the same SongProcessor input rather than to a measurement of its own. XNA's own SongProcessor cannot be measured in this environment at all -- both recorded cases are Windows Media refusals under Wine -- so the target leg holds CNA's own half only: the same answer for every target."
+        "note": "The route is implemented and tested; the genuine importer could not be measured in this environment (docs/xna-content-pipeline-media.md section 6), so the successful path is held to the format and to the shape the MP3 measurement settled for the same SongProcessor input rather than to a measurement of its own. XNA's own SongProcessor cannot be measured in this environment at all -- both recorded cases are Windows Media refusals under Wine -- so the target leg holds CNA's own half only: the same answer for every target. A project may also pair this importer with SoundEffectProcessor, as 14 of the sample corpus's .wma items do; that reading is CNA.CompressedSoundImporter and is proved against the genuine build of the Platformer sample, whose seven .wma sound effects CNA now reproduces byte for byte (XNAPP-332)."
       }
     },
     ".wmv": {

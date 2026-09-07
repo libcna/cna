@@ -1056,8 +1056,30 @@ namespace CNA::Content::Pipeline
     {
         const std::shared_lock lock(configurationMutex_);
         const std::string extension = LowerExtension(source);
+        std::string selected = explicitName;
+        if (selected.empty())
+        {
+            // The same rule the processors have: an importer registered to be asked for by name
+            // does not compete for an extension's default route, so a `.wma` stays a song unless a
+            // project asks for the sound-effect reading of it (XNAPP-332).
+            const auto route = importersByExtension_.find(extension);
+            if (route != importersByExtension_.end() && route->second.size() > 1u)
+            {
+                std::vector<std::string> candidates;
+                for (const std::string& name : route->second)
+                {
+                    const auto component = importers_.find(name);
+                    if (component != importers_.end() &&
+                        !component->second->SelectedByNameOnly())
+                    {
+                        candidates.push_back(name);
+                    }
+                }
+                if (candidates.size() == 1u) { selected = candidates.front(); }
+            }
+        }
         return ResolveByRoute(importers_, importersByExtension_, extension, extension,
-                              explicitName, "importer", "source extension");
+                              selected, "importer", "source extension");
     }
 
     bool ContentPipelineRegistry::HasImporterForSource(
