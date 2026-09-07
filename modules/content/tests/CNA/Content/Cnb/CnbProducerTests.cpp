@@ -276,7 +276,9 @@ TEST(CnbProducerTest, ASmplChunkBecomesTheSoundsLoopRegion)
     const auto sound = CNA::Content::Cnb::DecodeWavAsCnbSoundEffect(
         MakeWav(1u, 44100u, 16u, Pcm16(1000u, 1u), true, 100u, 400u), "loop.wav");
     EXPECT_EQ(sound.loopStart, 100u);
-    EXPECT_EQ(sound.loopLength, 300u);
+    // RIFF's loop End names the last frame played, so 100..400 is 301 frames
+    // (measured against XNA's own build of Spacewar's Menu_Loop.wav, XNASWEEP-124).
+    EXPECT_EQ(sound.loopLength, 301u);
 }
 
 TEST(CnbProducerTest, MalformedAndUnsupportedWavsAreRefusedByReason)
@@ -801,7 +803,9 @@ TEST(CnbProducerTest, ATruncatedSmplLoopEntryIsRefusedRatherThanReadPast)
         WavBuilder{}.Fmt(1u, 1u, 44100u, 16u).Smpl(60u, 1u, 100u, 400u).Data(pcm).Build();
     const auto sound = CNA::Content::Cnb::DecodeWavAsCnbSoundEffect(whole, "loop.wav");
     EXPECT_EQ(sound.loopStart, 100u);
-    EXPECT_EQ(sound.loopLength, 300u);
+    // RIFF's loop End names the last frame played, so 100..400 is 301 frames
+    // (measured against XNA's own build of Spacewar's Menu_Loop.wav, XNASWEEP-124).
+    EXPECT_EQ(sound.loopLength, 301u);
 }
 
 TEST(CnbProducerTest, OddSizedChunksAreWalkedThroughTheirRiffPadByte)
@@ -965,7 +969,7 @@ TEST(CnbProducerTest, ADeclaredSmplLoopTableMustFitTheSmplChunk)
         WavBuilder{}.Fmt(1u, 1u, 44100u, 16u).Smpl(84u, 2u, 100u, 400u).Data(pcm).Build(),
         "twoloops.wav");
     EXPECT_EQ(exact.loopStart, 100u);
-    EXPECT_EQ(exact.loopLength, 300u);
+    EXPECT_EQ(exact.loopLength, 301u);
 
     // One entry short of what it declares -- the first entry still fits, so the OLD check passed.
     ExpectWavRefused(
