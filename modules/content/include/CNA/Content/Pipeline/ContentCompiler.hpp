@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
@@ -45,6 +46,32 @@ namespace CNA::Content::Pipeline
         std::filesystem::path effectCompilerLauncher;
 
         /**
+         * @brief Explicit XMA encoder executable, or empty for none.
+         *
+         * Discovery order, first hit wins: this field; the `CNA_XMA_ENCODER` environment variable;
+         * the path baked in by CMake's `CNA_XMA_ENCODER_EXECUTABLE`. There is deliberately no
+         * search of `PATH` -- an encoder for the Xbox 360's codec is something a user attaches on
+         * purpose (plans/plan_xnapipeline_parity.md `XNAPP-262`).
+         */
+        std::filesystem::path xmaEncoderExecutable;
+
+        /**
+         * @brief Program to run the XMA encoder *through* (`wine`), or empty to run it directly.
+         *
+         * Discovery order matches @ref xmaEncoderExecutable: this field, then
+         * `CNA_XMA_ENCODER_LAUNCHER`, then CMake's `CNA_XMA_ENCODER_LAUNCHER`.
+         */
+        std::filesystem::path xmaEncoderLauncher;
+
+        /**
+         * @brief The encoder's argument template, or empty for `{input} {output}`.
+         *
+         * Each entry is one argument, with `{input}`, `{output}`, `{quality}`, `{loopStart}` and
+         * `{loopLength}` substituted.
+         */
+        std::vector<std::string> xmaEncoderArguments;
+
+        /**
          * @brief The container options this invocation selected.
          *
          * Informational, and the reason it exists is a third party's writers. A caller's registry
@@ -63,12 +90,15 @@ namespace CNA::Content::Pipeline
          * Deliberately not the container options: those are something the coordinator applies to
          * its own writers whatever the factory did, so a registry that was built before this
          * command line existed is still usable with them. What such a registry cannot apply is an
-         * effect compiler, and that is what the inequality is asked about.
+         * effect compiler or an XMA encoder, and that is what the inequality is asked about.
          */
         bool operator==(const ContentCompilerOptions& other) const
         {
             return effectCompilerExecutable == other.effectCompilerExecutable &&
-                   effectCompilerLauncher == other.effectCompilerLauncher;
+                   effectCompilerLauncher == other.effectCompilerLauncher &&
+                   xmaEncoderExecutable == other.xmaEncoderExecutable &&
+                   xmaEncoderLauncher == other.xmaEncoderLauncher &&
+                   xmaEncoderArguments == other.xmaEncoderArguments;
         }
     };
 

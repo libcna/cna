@@ -10,6 +10,7 @@
 #include <span>
 
 #include "CNA/Content/Pipeline/BuildTimeMediaDecoder.hpp"
+#include "CNA/Content/Pipeline/XmaEncoderService.hpp"
 #include "CNA/Internal/Audio/MsAdpcmEncoder.hpp"
 #include "CNA/Internal/Audio/WavFormatReader.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
@@ -210,11 +211,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Audio
         (void)targetFileName;
         if (formatType == ConversionFormat::Xma)
         {
-            // The one encoder that stays out of reach: XMA is an Xbox 360 codec, it exists only in
-            // the console's own toolchain, and its behaviour could not be measured either.
-            throw InvalidContentException(
-                "AudioContent::ConvertFormat cannot produce XMA audio: that encoder is not "
-                "available outside the platform that owns it.");
+            EncodeXma(quality);
+            return;
         }
         if (formatType == ConversionFormat::WindowsMedia)
         {
@@ -343,6 +341,80 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Audio
                                                         static_cast<std::uint16_t>(data_[i + 1] << 8)));
         }
         return samples;
+    }
+
+    void AudioContent::EncodeXma(const ConversionQuality quality)
+    {
+        namespace Build = CNA::Content::Pipeline;
+        const std::shared_ptr<const Build::XmaEncoderService> encoder = Build::BuildXmaEncoder();
+        if (!encoder->Available())
+        {
+            // The sentence begins with the exact phrase the parity matrix and the plan carry, so
+            // the one unresolved item in this plan reads the same wherever it is quoted.
+            throw InvalidContentException("AudioContent::ConvertFormat cannot produce XMA audio. " +
+                                          encoder->UnavailableReason());
+        }
+        if (format_ == nullptr || data_.empty())
+        {
+            return;
+        }
+
+        Build::XmaEncodeRequest request;
+        request.pcm.assign(data_.begin(), data_.end());
+        request.channelCount = format_->getChannelCountProperty();
+        request.sampleRate = format_->getSampleRateProperty();
+        request.bitsPerSample = format_->getBitsPerSampleProperty();
+        request.loopStart = loopStart_;
+        request.loopLength = loopLength_;
+        switch (quality)
+        {
+            case ConversionQuality::Low: request.quality = Build::XmaEncodeQuality::Low; break;
+            case ConversionQuality::Medium: request.quality = Build::XmaEncodeQuality::Medium; break;
+            case ConversionQuality::Best: request.quality = Build::XmaEncodeQuality::Best; break;
+        }
+
+        const Build::XmaEncodeResult encoded = encoder->Encode(request);
+        if (!encoded.succeeded)
+        {
+            std::string message = "AudioContent::ConvertFormat: the attached XMA encoder (" +
+                                  encoder->Identity().ToString() + ") did not produce a stream";
+            if (encoded.diagnostics.empty()) { message += " and said nothing about why."; }
+            else
+            {
+                message += ":";
+                for (const std::string& line : encoded.diagnostics) { message += "\n  " + line; }
+            }
+            throw InvalidContentException(message);
+        }
+
+        // The encoder's own XMA2WAVEFORMATEX becomes this content's format, base fields and
+        // extension alike. Everything after the sixteen WAVEFORMATEX bytes is the extension, which
+        // is what AudioFormat carries and what the writer byte-swaps for the Xbox 360.
+        const std::vector<SharpRuntime::bytecs> block(encoded.formatBlock.begin(),
+                                                      encoded.formatBlock.end());
+        const auto field16 = [&block](const std::size_t at) -> SharpRuntime::intcs {
+            return at + 1u < block.size()
+                       ? static_cast<SharpRuntime::intcs>(block[at] | (block[at + 1u] << 8))
+                       : 0;
+        };
+        const auto field32 = [&block](const std::size_t at) -> SharpRuntime::intcs {
+            if (at + 3u >= block.size()) { return 0; }
+            return static_cast<SharpRuntime::intcs>(
+                static_cast<std::uint32_t>(block[at]) | (static_cast<std::uint32_t>(block[at + 1u]) << 8) |
+                (static_cast<std::uint32_t>(block[at + 2u]) << 16) |
+                (static_cast<std::uint32_t>(block[at + 3u]) << 24));
+        };
+        std::vector<SharpRuntime::bytecs> extension;
+        if (block.size() > 18u)
+        {
+            extension.assign(block.begin() + 18, block.end());
+        }
+        format_ = std::make_shared<AudioFormat>(field16(0), field16(2), field32(4), field32(8),
+                                                field16(12), field16(14), std::move(extension));
+        data_.assign(encoded.data.begin(), encoded.data.end());
+        loopStart_ = static_cast<SharpRuntime::intcs>(encoded.loopStart);
+        loopLength_ = static_cast<SharpRuntime::intcs>(encoded.loopLength);
+        RecomputeDuration();
     }
 
     void AudioContent::RecomputeDuration()

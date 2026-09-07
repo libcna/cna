@@ -45,7 +45,13 @@ STATUSES = (
     "MISSING",              # no route
 )
 
-TARGET_STATES = ("SUPPORTED", "UNSUPPORTED", "UNVERIFIED", "N/A")
+# A target state names the blocker rather than saying "unsupported" when the reason a target
+# cannot be produced is a component outside this project. There is exactly one such reason today,
+# and it is spelled here exactly as `CNA::Content::Pipeline::XmaEncoderUnavailableSentence` spells
+# it, because the matrix, the plan, the diagnostics and the command-line help all quote it.
+XMA_BLOCKER = "XMA ENCODER EXTERNALLY UNAVAILABLE"
+
+TARGET_STATES = ("SUPPORTED", "UNSUPPORTED", "UNVERIFIED", "N/A", XMA_BLOCKER)
 
 TEST_PATTERN = re.compile(r"^\s*TEST(?:_F|_P)?\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*,\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)",
                           re.MULTILINE)
@@ -177,6 +183,11 @@ def check(document, inventory, repo):
         for target in ("windows", "windowsPhone", "xbox360"):
             if cna.get(target) not in TARGET_STATES:
                 problems.append("%s: %s is %r, outside %s" % (extension, target, cna.get(target), list(TARGET_STATES)))
+            elif cna.get(target) == XMA_BLOCKER and "docs/xma-encoder-backend.md" not in cna.get("note", ""):
+                # A row that names an external blocker has to say where the audit for it is, or the
+                # phrase is an assertion rather than a finding.
+                problems.append("%s: %s reads %r and the note does not point at "
+                                "docs/xma-encoder-backend.md" % (extension, target, XMA_BLOCKER))
         if status in ("EXTERNAL_BLOCKED", "IMPLEMENTED") and not cna.get("note"):
             problems.append("%s: status %s needs a note saying what is missing" % (extension, status))
         for role, test in cna.get("tests", {}).items():

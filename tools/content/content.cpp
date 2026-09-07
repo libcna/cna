@@ -37,6 +37,7 @@
 #include "CNA/Content/Pipeline/VideoContentPipeline.hpp"
 #include "CNA/Content/Pipeline/XnbContentPipeline.hpp"
 #include "CNA/Content/Pipeline/XnbOutputContentPipeline.hpp"
+#include "CNA/Content/Pipeline/XmaEncoderService.hpp"
 #include "CNA/Content/Pipeline/XnaXmlSourceContentPipeline.hpp"
 #include "CNA/Internal/Xnb/XnbFileOptions.hpp"
 #include "CNA/Internal/ContentPath.hpp"
@@ -250,6 +251,8 @@ namespace
                "         [--xnb-reader-names xna40|portable]\n"
                "         [--xnb-allow-unverified-xbox]\n"
                "         [--fx-compiler <path>] [--fx-compiler-launcher <program>]\n"
+               "         [--xma-encoder <path>] [--xma-encoder-launcher <program>]\n"
+               "         [--xma-encoder-arg <argument>]...\n"
                "         [--explain] [--quiet] [--xna-compatible]\n"
             << "       cna-content clean <output-directory> [--quiet]\n\n"
             << "Builds source content through Importer -> Processor -> Content Type Writer.\n"
@@ -285,7 +288,18 @@ namespace
                "--fx-compiler-launcher a program to run it through, such as wine. Each has the\n"
                "highest precedence in its own order: the option, then CNA_FXC / CNA_FXC_LAUNCHER\n"
                "in the environment, then the path baked in by CMake, then fxc on PATH.\n"
-;
+               "\n"
+               "XMA is the Xbox 360's audio codec. It has no public specification sufficient to\n"
+               "implement a conforming encoder, no licensable encoder, and none in FFmpeg, which\n"
+               "decodes xma1 and xma2 and encodes neither, so CNA ships no XMA encoder and asking\n"
+               "for one refuses with XMA ENCODER EXTERNALLY UNAVAILABLE. --xma-encoder attaches\n"
+               "your own: a program handed a RIFF WAVE that writes a .xma (a RIFF whose fmt chunk\n"
+               "is the XMA2WAVEFORMATEX and whose data chunk is the payload).\n"
+               "--xma-encoder-launcher runs it through another program, such as wine, and\n"
+               "--xma-encoder-arg supplies one command-line argument at a time, with {input},\n"
+               "{output}, {quality}, {loopStart} and {loopLength} substituted; the default is\n"
+               "{input} {output}. CNA_XMA_ENCODER, CNA_XMA_ENCODER_LAUNCHER and\n"
+               "CNA_XMA_ENCODER_ARGS are the environment forms. See docs/xma-encoder-backend.md.\n";
     }
 
     std::size_t ParseWorkerCount(const std::filesystem::path& argument)
@@ -555,6 +569,44 @@ namespace
                     throw std::invalid_argument("--fx-compiler-launcher path must not be empty.");
                 }
                 command.services.effectCompilerLauncher = arguments[index];
+            }
+            else if (IsOption(argument, "--xma-encoder"))
+            {
+                if (++index >= arguments.size())
+                {
+                    throw std::invalid_argument(
+                        "--xma-encoder requires a path to a program that reads a RIFF WAVE and "
+                        "writes a .xma.");
+                }
+                if (arguments[index].empty())
+                {
+                    throw std::invalid_argument("--xma-encoder path must not be empty.");
+                }
+                command.services.xmaEncoderExecutable = arguments[index];
+            }
+            else if (IsOption(argument, "--xma-encoder-launcher"))
+            {
+                if (++index >= arguments.size())
+                {
+                    throw std::invalid_argument(
+                        "--xma-encoder-launcher requires a program to run the encoder through, "
+                        "such as 'wine'.");
+                }
+                if (arguments[index].empty())
+                {
+                    throw std::invalid_argument("--xma-encoder-launcher path must not be empty.");
+                }
+                command.services.xmaEncoderLauncher = arguments[index];
+            }
+            else if (IsOption(argument, "--xma-encoder-arg"))
+            {
+                if (++index >= arguments.size())
+                {
+                    throw std::invalid_argument(
+                        "--xma-encoder-arg requires one argument for the encoder's command line; "
+                        "repeat the option once per argument.");
+                }
+                command.services.xmaEncoderArguments.push_back(arguments[index].string());
             }
             else if (IsOption(argument, "--xnb-reader-names"))
             {
@@ -2775,6 +2827,16 @@ namespace CNA::Content::Pipeline
         compiler.executable = options.effectCompilerExecutable;
         compiler.launcher = options.effectCompilerLauncher;
         RegisterEffectSourceContentPipeline(registry, MakeExternalEffectCompiler(compiler));
+
+        // The XMA encoder this process's builds use, attached before any source is discovered.
+        // Nothing here needs one -- the built-in `.wav` route writes PCM for every target -- but
+        // `AudioContent::ConvertFormat(Xma, ...)` is XNA's own API for asking, and a game's own
+        // processor may call it (plans/plan_xnapipeline_parity.md XNAPP-262).
+        ExternalXmaEncoderOptions xma;
+        xma.executable = options.xmaEncoderExecutable;
+        xma.launcher = options.xmaEncoderLauncher;
+        xma.arguments = options.xmaEncoderArguments;
+        SetBuildXmaEncoder(MakeExternalXmaEncoder(xma));
 
         // The `.xml` route, and with it every `.xnb` writer for a type XNA's own ContentCompiler
         // knows. A compiler is made here rather than shared with a caller because this is the

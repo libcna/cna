@@ -422,9 +422,9 @@
         "differentialEvidence": "tests/reference/xna40/audio/audio-content-oracle.json",
         "windows": "SUPPORTED",
         "windowsPhone": "SUPPORTED",
-        "xbox360": "UNSUPPORTED",
+        "xbox360": "XMA ENCODER EXTERNALLY UNAVAILABLE",
         "status": "IMPLEMENTED+TESTED",
-        "note": "Every WAV variant the genuine importer accepts is accepted with the same fields; the source-to-XNB, source-to-CNB and per-target legs are all named. The three targets are measured: XNA converts a sound effect to XMA for the Xbox 360 -- format tag 0x6601, different loop points, a quarter of the data and a big-endian XMA2WAVEFORMATEX -- and keeps PCM for Windows and Windows Phone (soundeffectprofile/*). CNA reproduces the two PCM targets exactly and cannot produce XMA, which the test asserts as a divergence rather than hiding."
+        "note": "Every WAV variant the genuine importer accepts is accepted with the same fields; the source-to-XNB, source-to-CNB and per-target legs are all named. The three targets are measured: XNA converts a sound effect to XMA for the Xbox 360 -- format tag 0x6601, different loop points, a quarter of the data and a big-endian XMA2WAVEFORMATEX -- and keeps PCM for Windows and Windows Phone (soundeffectprofile/*). CNA reproduces the two PCM targets exactly and cannot produce XMA, which the test asserts as a divergence rather than hiding. The blocker is the encoder and nothing else: XMA has no public specification sufficient to implement a conforming one, no licensable one, and none in FFmpeg, which decodes xma1 and xma2 and encodes neither. Everything around it is built and tested -- the XMA2WAVEFORMATEX byte order and every field of it, the 128-sample quantization of the loop region against an exact PlayLength, the container, and a build-time codec interface an encoder attaches to with --xma-encoder and no change to any public pipeline API. The audit and the measurements are docs/xma-encoder-backend.md."
       }
     },
     ".wma": {

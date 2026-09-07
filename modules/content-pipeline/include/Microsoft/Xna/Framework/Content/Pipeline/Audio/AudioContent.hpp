@@ -163,6 +163,17 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Audio
         void EncodeAdpcm();
 
         /**
+         * @brief Rewrites the samples as XMA2 through the attached build-time encoder.
+         *
+         * There is no encoder for this codec that CNA may ship, so with none attached this refuses
+         * with a sentence beginning `XMA ENCODER EXTERNALLY UNAVAILABLE`
+         * (`CNA::Content::Pipeline::SetBuildXmaEncoder`, docs/xma-encoder-backend.md).
+         *
+         * @param quality How much of the source to keep.
+         */
+        void EncodeXma(ConversionQuality quality);
+
+        /**
          * @brief The samples as signed PCM16, whatever depth they are stored in.
          *
          * @return The interleaved frames.

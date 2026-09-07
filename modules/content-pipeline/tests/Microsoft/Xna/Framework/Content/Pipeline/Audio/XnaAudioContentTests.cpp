@@ -599,8 +599,10 @@ TEST(XnaAudioConvertFormat, XmaIsRefusedByNameAndWindowsMediaNeedsAFileToWriteTo
     ScratchDirectory scratch("blocked");
     const std::string mono = WriteWav(scratch.Path(), "mono8k.wav", 8000, 1, 16, 800);
     AudioContent audio(mono, AudioFileType::Wav);
-    // XMA is the one encoder still out of reach: it ships only with the Xbox 360 tools, and its
-    // behaviour could not be measured either.
+    // XMA is the one encoder still out of reach: it ships only with the Xbox 360 tools, and no
+    // encoder for the codec can be shipped here. Its *behaviour* was measured -- the format block,
+    // its byte order and the loop quantization are all in docs/xma-encoder-backend.md -- and this
+    // is what asking for it does with none attached (XNAPP-262).
     EXPECT_THROW(audio.ConvertFormat(ConversionFormat::Xma, ConversionQuality::Best, ""),
                  InvalidContentException);
     // Windows Media is no longer refused for want of an encoder -- it is written, and a song is a
