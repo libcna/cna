@@ -4,6 +4,7 @@
 #include "CNA/Internal/Xnb/XnbAssetTypeWriters.hpp"
 
 #include <algorithm>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <utility>
@@ -467,6 +468,16 @@ namespace CNA::Internal::Xnb
                 XnbBuiltInReaderIdentity<Microsoft::Xna::Framework::Matrix>()));
         registry.Register(
             std::make_shared<const XnbDictionaryTypeWriter<std::string, std::int32_t>>(
+                XnbBuiltInReaderIdentity<std::string>(),
+                XnbBuiltInReaderIdentity<std::int32_t>()));
+        // The same `Dictionary<string,int>`, spelled the way the content pipeline holds it. An
+        // `.xml` asset naming that type is read by the intermediate serializer into
+        // `std::map<std::string, std::int32_t>` -- the container `ContentTypeName` is specialized
+        // for -- and a registry keyed by C++ type cannot reach the writer above from it
+        // (plans/plan_xnapipeline_parity.md XNAPP-260).
+        registry.Register(
+            std::make_shared<const XnbDictionaryTypeWriter<std::string, std::int32_t,
+                                                           std::map<std::string, std::int32_t>>>(
                 XnbBuiltInReaderIdentity<std::string>(),
                 XnbBuiltInReaderIdentity<std::int32_t>()));
 

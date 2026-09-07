@@ -45,6 +45,12 @@ COMPARED = (
     "compression",
     "rootReader",
     "typeReaders",
+    # The verbatim table entries, assembly qualifiers and all. `typeReaders` above is the
+    # normalized spelling, which is the right key for identity and blind to exactly the thing an
+    # assembly identity is: the Compact Framework's own `mscorlib` on the Xbox 360 and Windows
+    # Phone was written into every genuine console build in this corpus and into none of CNA's
+    # until it was compared here.
+    "typeReaderNames",
     "sharedResourceCount",
     "root",
     "sharedResources",

@@ -11,6 +11,15 @@ namespace CNA::Internal::Xnb
         // .xnb and in the assembly references of any XNA project file.
         constexpr const char* kMscorlib =
             ", mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089";
+        // The Xbox 360 and Windows Phone run the .NET Compact Framework, whose mscorlib is 3.7.0.0
+        // and signed with a different key on each. Read out of the genuine builds of the same
+        // sources for the three targets (tests/reference/xna40/differential: font_description,
+        // xbox_font_description, phone_font_description all name List`1[[System.Char, mscorlib
+        // ...]] and disagree only here).
+        constexpr const char* kMscorlibXbox360 =
+            ", mscorlib, Version=3.7.0.0, Culture=neutral, PublicKeyToken=1c9e259686f921e0";
+        constexpr const char* kMscorlibWindowsPhone =
+            ", mscorlib, Version=3.7.0.0, Culture=neutral, PublicKeyToken=969db8053d3322ac";
         constexpr const char* kFramework =
             ", Microsoft.Xna.Framework, Version=4.0.0.0, Culture=neutral, "
             "PublicKeyToken=842cf8be1de50553";
@@ -20,7 +29,7 @@ namespace CNA::Internal::Xnb
 
         void AppendGenericArgumentList(
             std::string& text, const std::vector<XnbReaderIdentity>& arguments,
-            const bool qualify)
+            const bool qualify, const XnbTargetPlatform platform)
         {
             if (arguments.empty()) { return; }
             text += '[';
@@ -31,20 +40,30 @@ namespace CNA::Internal::Xnb
                 text += arguments[index].targetBaseName;
                 if (arguments[index].targetSharesGenericArguments)
                 {
-                    AppendGenericArgumentList(text, arguments[index].genericArguments, qualify);
+                    AppendGenericArgumentList(text, arguments[index].genericArguments, qualify,
+                                              platform);
                 }
-                if (qualify) { text += XnbAssemblyQualifier(arguments[index].targetAssembly); }
+                if (qualify)
+                {
+                    text += XnbAssemblyQualifier(arguments[index].targetAssembly, platform);
+                }
                 text += ']';
             }
             text += ']';
         }
     }
 
-    std::string XnbAssemblyQualifier(const XnbAssembly assembly)
+    std::string XnbAssemblyQualifier(const XnbAssembly assembly, const XnbTargetPlatform platform)
     {
         switch (assembly)
         {
-            case XnbAssembly::Mscorlib: return kMscorlib;
+            case XnbAssembly::Mscorlib:
+                switch (platform)
+                {
+                    case XnbTargetPlatform::Xbox360: return kMscorlibXbox360;
+                    case XnbTargetPlatform::WindowsPhone: return kMscorlibWindowsPhone;
+                    default: return kMscorlib;
+                }
             case XnbAssembly::Framework: return kFramework;
             case XnbAssembly::FrameworkGraphics: return kFrameworkGraphics;
             case XnbAssembly::None: break;
@@ -53,19 +72,20 @@ namespace CNA::Internal::Xnb
     }
 
     std::string FormatXnbReaderName(const XnbReaderIdentity& identity,
-                                     const XnbReaderNameStyle style)
+                                     const XnbReaderNameStyle style,
+                                     const XnbTargetPlatform platform)
     {
         const bool qualify = style == XnbReaderNameStyle::Xna40;
         std::string text = identity.readerBaseName;
-        AppendGenericArgumentList(text, identity.genericArguments, qualify);
-        if (qualify) { text += XnbAssemblyQualifier(identity.readerAssembly); }
+        AppendGenericArgumentList(text, identity.genericArguments, qualify, platform);
+        if (qualify) { text += XnbAssemblyQualifier(identity.readerAssembly, platform); }
         return text;
     }
 
     std::string XnbCanonicalReaderName(const XnbReaderIdentity& identity)
     {
         std::string text = identity.readerBaseName;
-        AppendGenericArgumentList(text, identity.genericArguments, false);
+        AppendGenericArgumentList(text, identity.genericArguments, false, XnbTargetPlatform::Windows);
         return text;
     }
 
@@ -74,7 +94,8 @@ namespace CNA::Internal::Xnb
         std::string text = identity.targetBaseName;
         if (identity.targetSharesGenericArguments)
         {
-            AppendGenericArgumentList(text, identity.genericArguments, false);
+            AppendGenericArgumentList(text, identity.genericArguments, false,
+                                      XnbTargetPlatform::Windows);
         }
         return text;
     }

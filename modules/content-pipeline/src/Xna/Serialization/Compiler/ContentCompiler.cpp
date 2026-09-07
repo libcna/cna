@@ -33,6 +33,19 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
         namespace Xnb = CNA::Internal::Xnb;
         namespace Processors = Microsoft::Xna::Framework::Content::Pipeline::Processors;
 
+        /// The container's spelling of a target platform. `GetRuntimeReader` answers a per-platform
+        /// name because one part of it is per-platform: the Compact Framework's `mscorlib` identity.
+        [[nodiscard]] Xnb::XnbTargetPlatform ContainerPlatform(const TargetPlatform platform) noexcept
+        {
+            switch (platform)
+            {
+                case TargetPlatform::Xbox360: return Xnb::XnbTargetPlatform::Xbox360;
+                case TargetPlatform::WindowsPhone: return Xnb::XnbTargetPlatform::WindowsPhone;
+                case TargetPlatform::Windows: break;
+            }
+            return Xnb::XnbTargetPlatform::Windows;
+        }
+
         /// The façade view of a built-in canonical type writer, so GetTypeWriter answers for
         /// primitives and framework value types as it does for user writers.
         template<typename T>
@@ -48,8 +61,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
 
             [[nodiscard]] std::string GetRuntimeReader(TargetPlatform targetPlatform) const override
             {
-                (void)targetPlatform;
-                return Xnb::FormatXnbReaderName(canonical_->ReaderIdentity(), Xnb::XnbReaderNameStyle::Xna40);
+                return Xnb::FormatXnbReaderName(canonical_->ReaderIdentity(),
+                                                Xnb::XnbReaderNameStyle::Xna40,
+                                                ContainerPlatform(targetPlatform));
             }
 
         protected:
@@ -77,8 +91,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
 
             [[nodiscard]] std::string GetRuntimeReader(TargetPlatform targetPlatform) const override
             {
-                (void)targetPlatform;
-                return Xnb::FormatXnbReaderName(canonical_->ReaderIdentity(), Xnb::XnbReaderNameStyle::Xna40);
+                return Xnb::FormatXnbReaderName(canonical_->ReaderIdentity(),
+                                                Xnb::XnbReaderNameStyle::Xna40,
+                                                ContainerPlatform(targetPlatform));
             }
 
             [[nodiscard]] std::string GetRuntimeType(TargetPlatform targetPlatform) const override

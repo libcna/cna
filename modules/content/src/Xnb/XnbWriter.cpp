@@ -308,7 +308,8 @@ namespace CNA::Internal::Xnb
     std::int32_t XnbWriter::InternTypeWriter(const XnbTypeWriterBase& writer)
     {
         const XnbReaderIdentity identity = writer.ReaderIdentity();
-        const std::string name = FormatXnbReaderName(identity, options_.readerNameStyle);
+        const std::string name =
+            FormatXnbReaderName(identity, options_.readerNameStyle, options_.platform);
         const auto existing = typeTableIndices_.find(name);
         if (existing != typeTableIndices_.end()) { return existing->second; }
 

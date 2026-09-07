@@ -15,6 +15,13 @@
 // start nested builds, share a resource between two references, take processor parameters, log
 // diagnostics and take part in incremental rebuilds, and every one of those is exercised here so
 // that a change which quietly breaks one of them fails a test rather than a user's project.
+//
+// The second half of the file is the other way a game supplies content: not its own source
+// extension at all, but XNA's built-in `.xml` one, with the game's own type named in the document
+// and read by the intermediate serializer. That route needs three things from the game and nothing
+// else -- a `DescribeContent` saying what the type's members are, a `ContentTypeName` (here the
+// type's own `XnaTypeName`), and a `ContentTypeWriter<T>` -- and then `.xml` reaches the game's
+// type the same way it reaches `Vector3`.
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -25,8 +32,10 @@
 
 #include "CNA/Content/Pipeline/ContentCompiler.hpp"
 #include "CNA/Content/Pipeline/XnaPipelineBridge.hpp"
+#include "CNA/Content/Pipeline/XnaXmlSourceContentPipeline.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/PipelineException.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Serialization/Intermediate/IntermediateSerializer.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 
 namespace
@@ -34,6 +43,7 @@ namespace
     namespace Canon = CNA::Content::Pipeline;
     namespace Xna = Microsoft::Xna::Framework::Content::Pipeline;
     namespace Compiler = Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler;
+    namespace Intermediate = Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermediate;
     using Microsoft::Xna::Framework::Vector3;
 
     /** @brief One step of a quest: the game's own intermediate and runtime type. */
@@ -54,6 +64,67 @@ namespace
         {
             static const std::string name{XnaTypeName};
             return name;
+        }
+
+        /**
+         * @brief Declares the members an XNA-style `.xml` document may set, the C++ equivalent of
+         *        the reflection XNA's `IntermediateSerializer` does over a game's type.
+         *
+         * @param d The descriptor to add members to.
+         */
+        static void DescribeContent(Intermediate::ContentTypeDescriptor<QuestStep>& d)
+        {
+            d.Field("Position", &QuestStep::position);
+            d.Field("Label", &QuestStep::label);
+        }
+    };
+
+    /**
+     * @brief A book of quests, supplied as an XNA-style `.xml` document rather than in the game's
+     *        own source format.
+     *
+     * Nothing here is registered as an importer: the document names this type, XNA's own
+     * `XmlImporter` reads it, `PassThroughProcessor` carries it, and the writer below turns it into
+     * an `.xnb`. The nested step proves the serializer reaches a second game type from inside the
+     * first, and the optional cover proves an omitted member stays at its C++ default.
+     */
+    class QuestBook final : public Xna::ContentItem
+    {
+    public:
+        /** @brief .NET full name, as the game's own assembly spells it. */
+        static constexpr std::string_view XnaTypeName = "QuestGame.QuestBook";
+
+        /** @brief The chapters, in reading order. */
+        std::vector<std::string> chapters;
+
+        /** @brief Where the book says the player should begin. */
+        std::shared_ptr<QuestStep> opening;
+
+        /** @brief The level the book is written for. */
+        std::int32_t recommendedLevel = 1;
+
+        /** @brief Whether the book may be read more than once; omitted by the fixture on purpose. */
+        bool reusable = true;
+
+        /** @brief Returns the type's stable name. */
+        [[nodiscard]] const std::string& GetTypeName() const override
+        {
+            static const std::string name{XnaTypeName};
+            return name;
+        }
+
+        /**
+         * @brief Declares the members an XNA-style `.xml` document may set.
+         *
+         * @param d The descriptor to add members to.
+         */
+        static void DescribeContent(Intermediate::ContentTypeDescriptor<QuestBook>& d)
+        {
+            d.BaseType<Xna::ContentItem>();
+            d.Field("Chapters", &QuestBook::chapters);
+            d.Field("Opening", &QuestBook::opening);
+            d.Field("RecommendedLevel", &QuestBook::recommendedLevel);
+            d.Field("Reusable", &QuestBook::reusable).Optional();
         }
     };
 
@@ -253,6 +324,27 @@ namespace
         }
     };
 
+    /** @brief Writes a quest book; the type the `.xml` route carries. */
+    class QuestBookWriter final : public Compiler::ContentTypeWriter<QuestBook>
+    {
+    public:
+        [[nodiscard]] std::string GetRuntimeReader(Xna::TargetPlatform) const override
+        {
+            return "QuestGame.QuestBookReader, QuestGame";
+        }
+
+    protected:
+        void Write(Compiler::ContentWriter& output, const std::shared_ptr<QuestBook>& value) override
+        {
+            output.Write(value->getNameProperty());
+            output.Write(static_cast<std::int32_t>(value->chapters.size()));
+            for (const std::string& chapter : value->chapters) { output.Write(chapter); }
+            output.WriteObject<QuestStep>(value->opening);
+            output.Write(value->recommendedLevel);
+            output.Write(value->reusable);
+        }
+    };
+
     template<typename Character>
     int Run(int argc, Character** argv)
     {
@@ -279,7 +371,18 @@ namespace
                 auto compiler = std::make_shared<Compiler::ContentCompiler>();
                 compiler->AddTypeWriter<QuestStepWriter>();
                 compiler->AddTypeWriter<QuestWriter>();
+                compiler->AddTypeWriter<QuestBookWriter>();
                 Canon::RegisterXnaXnbOutput(*registry, compiler, options.xnbContainer);
+
+                // The `.xml` route, extended with this game's own types. The serializers have to
+                // exist before a document can name them -- an untyped read resolves a type by
+                // name, and a name nothing has registered is a refusal -- and the second
+                // registration extends the one `.xml` importer that the built-ins already put in
+                // this registry rather than competing with it.
+                (void)Intermediate::IntermediateSerializer::TypeSerializerFor<QuestStep>();
+                (void)Intermediate::IntermediateSerializer::TypeSerializerFor<QuestBook>();
+                Canon::RegisterXnaXmlSourceContentPipeline(*registry, compiler,
+                                                           options.xnbContainer);
                 return registry;
             });
     }

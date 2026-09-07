@@ -5,6 +5,7 @@
 // ContentCompiler resolving writers by type -- proven by writing a user type and reading the
 // bytes back through CNA's independent XNB reader.
 
+#include <algorithm>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -322,6 +323,46 @@ namespace
         // Once compiled, the registries are frozen.
         (void)compiler.Compile<std::int32_t>(5, Options());
         EXPECT_THROW(compiler.AddTypeWriter<RouteWriter>(), Xna::PipelineException);
+    }
+
+    TEST(XnaContentWriter, EveryBuiltInTypeTheCompilerIntendsToKnowIsActuallyKnown)
+    {
+        // RegisterBuiltIns() adds each built-in by looking its canonical `.xnb` writer up by C++
+        // type and returning silently when nothing answers, so a built-in can stop being
+        // registered without any line of code being removed. That is exactly what happened to
+        // `Dictionary<string,int>`, whose canonical writer is over `std::unordered_map` while the
+        // pipeline holds the type as `std::map`: the line was there, the type was not
+        // (plans/plan_xnapipeline_parity.md XNAPP-260). Spelling the whole set out is what keeps a
+        // silent drop from being silent.
+        const Compiler::ContentCompiler compiler;
+        std::vector<std::string> names = compiler.KnownTypeNames();
+
+        std::vector<std::string> expected = {
+            "System.Boolean", "System.SByte", "System.Byte", "System.Int16", "System.UInt16",
+            "System.Int32", "System.UInt32", "System.Int64", "System.UInt64", "System.Single",
+            "System.Double", "System.Char", "System.String", "System.TimeSpan", "System.DateTime",
+#if SHARP_RUNTIME_HAS_NATIVE_INT128
+            "System.Decimal",
+#endif
+            "Microsoft.Xna.Framework.Vector2", "Microsoft.Xna.Framework.Vector3",
+            "Microsoft.Xna.Framework.Vector4", "Microsoft.Xna.Framework.Matrix",
+            "Microsoft.Xna.Framework.Quaternion", "Microsoft.Xna.Framework.Color",
+            "Microsoft.Xna.Framework.Point", "Microsoft.Xna.Framework.Rectangle",
+            "Microsoft.Xna.Framework.Plane", "Microsoft.Xna.Framework.BoundingBox",
+            "Microsoft.Xna.Framework.BoundingSphere", "Microsoft.Xna.Framework.BoundingFrustum",
+            "Microsoft.Xna.Framework.Ray", "Microsoft.Xna.Framework.Curve",
+            "System.Collections.Generic.List`1[[System.String]]",
+            "System.Collections.Generic.List`1[[System.Int32]]",
+            "System.Collections.Generic.List`1[[System.Char]]",
+            "System.Collections.Generic.List`1[[Microsoft.Xna.Framework.Rectangle]]",
+            "System.Collections.Generic.List`1[[Microsoft.Xna.Framework.Vector3]]",
+            "System.Collections.Generic.List`1[[Microsoft.Xna.Framework.Matrix]]",
+            "System.Collections.Generic.Dictionary`2[[System.String],[System.Int32]]",
+            "Microsoft.Xna.Framework.Content.Pipeline.Processors.ModelContent",
+        };
+        std::sort(names.begin(), names.end());
+        std::sort(expected.begin(), expected.end());
+        EXPECT_EQ(names, expected);
     }
 
     TEST(XnaContentWriter, UserWritersProduceAnXnbCnaReadsBackWithEveryValue)

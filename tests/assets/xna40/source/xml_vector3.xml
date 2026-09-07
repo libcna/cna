@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- plans/plan_xnapipeline_parity.md XNAPP-260: a framework-defined value type. -->
+<XnaContent xmlns:Framework="Microsoft.Xna.Framework">
+  <Asset Type="Framework:Vector3">1.5 -2.25 3</Asset>
+</XnaContent>

@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <format>
 #include <limits>
+#include <map>
 #include <mutex>
 #include <typeindex>
 #include <unordered_map>
@@ -1547,6 +1548,41 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
         list.template operator()<Color>();
         list.template operator()<System::TimeSpan>();
         list.template operator()<System::DateTime>();
+        // The same reflective reach for `Dictionary<K, V>`, which XNA resolves from a document the
+        // same way it resolves a list. `Dictionary<string, int>` is one of the types the content
+        // compiler can write, so without this an untyped read refuses a document XNA builds
+        // (measured, differential corpus xml/generic_dictionary). The keys are the two a dictionary
+        // in an XNA document is spelled with; the values are the element types the serializer
+        // already knows.
+        const auto map = []<typename K>() {
+            const auto pair = []<typename V>() { (void)IntermediateSerializer::TypeSerializerFor<std::map<K, V>>(); };
+            pair.template operator()<bool>();
+            pair.template operator()<std::int8_t>();
+            pair.template operator()<std::uint8_t>();
+            pair.template operator()<std::int16_t>();
+            pair.template operator()<std::uint16_t>();
+            pair.template operator()<std::int32_t>();
+            pair.template operator()<std::uint32_t>();
+            pair.template operator()<std::int64_t>();
+            pair.template operator()<std::uint64_t>();
+            pair.template operator()<float>();
+            pair.template operator()<double>();
+            pair.template operator()<std::string>();
+            pair.template operator()<char16_t>();
+            pair.template operator()<Vector2>();
+            pair.template operator()<Vector3>();
+            pair.template operator()<Vector4>();
+            pair.template operator()<Quaternion>();
+            pair.template operator()<Matrix>();
+            pair.template operator()<Plane>();
+            pair.template operator()<Rectangle>();
+            pair.template operator()<Point>();
+            pair.template operator()<Color>();
+            pair.template operator()<System::TimeSpan>();
+            pair.template operator()<System::DateTime>();
+        };
+        map.template operator()<std::string>();
+        map.template operator()<std::int32_t>();
         IntermediateSerializer::TypeSerializerFor<Graphics::VertexContent>();
         // A geometry batch names its material through a MaterialContent reference, and the writer
         // dispatches on the dynamic type, so every stock material has to be known already.

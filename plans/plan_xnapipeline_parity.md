@@ -25,9 +25,9 @@
 > `parity_report.py --gate` exiting zero. Every percentage in this file is read off
 > `tools/xna-pipeline-oracle/parity_report.py` and never hand-counted, and two ctests now make
 > that mechanical: the report must be byte for byte a regeneration, and the eighteen-extension
-> matrix must still name every extension the genuine importer attributes declare. What remains is
-> not API but behaviour: §31 says which legs of the input matrix are still unnamed, and §19's
-> targets stand at 1 of 3.
+> matrix must still name every extension the genuine importer attributes declare. The input
+> matrix is closed as well: **18/18 `IMPLEMENTED+TESTED`**, every one of the six legs named per
+> extension. What remains is not API but behaviour: §19's targets stand at 1 of 3.
 
 ---
 
@@ -561,10 +561,14 @@ and routed, `MISSING` 0 and `EXTERNAL_BLOCKED` 0.** `parity_report.py --gate`, w
 What that number does and does not say. It says every public type and member of the seven
 assemblies has a named, tested C++ counterpart, that every extension the genuine importer
 attributes declare is read by an importer of CNA's own, and that no row is hiding behind
-`EXTERNAL_BLOCKED`. It does **not** say the input matrix is finished: the eighteen extensions
-stand at `IMPLEMENTED`, not `IMPLEMENTED+TESTED`, because that bar additionally requires a
-source-to-XNB and a source-to-CNB test *for that extension*, and those legs are named in the
-matrix as the work they are. Targets verified stay at 1 of 3 (Windows), and the black-box-verified
+`EXTERNAL_BLOCKED`. The input matrix is finished too: all eighteen extensions now stand at
+`IMPLEMENTED+TESTED`, which additionally requires a source-to-XNB and a source-to-CNB test *for
+that extension*, both named in the matrix. Two of those source-to-CNB legs are documented refusals
+rather than builds -- `.fx` because a `.cnb` carrying Direct3D 9 bytecode is unloadable on every
+CNA renderer that is not Direct3D 9, and `.xml` because an `.xnb` is what an XNA object graph is
+while `.cnb` carries CNA's own per-asset-type schemas -- and both are recorded with
+`ContentPipelineRegistry::DocumentAbsentWriter()` so the refusal says which of omission and
+decision it is. Targets verified stay at 1 of 3 (Windows), and the black-box-verified
 families are now seven: the intermediate XML byte for byte including the genuine `XmlImporter`;
 the graphics content object model against 553 measurements; the framework's float packing against
 68; the audio content model against 35; the texture importer, its three processors, every
@@ -891,6 +895,8 @@ and run under Wine -- `d3dx9_43.dll` is present, so this is work rather than a b
 | ID | Task | State |
 |---|---|---|
 | `XNAPP-260` | External CMake project with a custom intermediate type, importer for a custom extension, processor, `ContentTypeWriter<T>` with a custom runtime reader name, dependencies, nested `BuildAsset`, shared resources, fingerprints, diagnostics; run as a ctest. | [x] `modules/content-pipeline/examples/xna-custom-pipeline.cpp` is a game's own pipeline -- its own types, its own `.quest` extension, an importer and processor derived from XNA's bases, a `ContentTypeWriter<T>` naming readers in `QuestGame`, a sidecar dependency, a nested `BuildAsset`, a shared hub step written once for two references, declared processor parameters and its own diagnostics. It links into its own executable, includes only the two headers a consumer is meant to include, and nothing in CNA knows it exists; `XnaCustomPipelineAcceptanceTests.cpp` runs it the way a user would and reads the container back. Acceptance found two gaps, both now closed. **A factory could not see the container options**: a caller registering its own XNB writers had to bind them to defaults, so a `--xnb-platform windowsphone` build would have sent the game's own types to a Windows container while everything else went where it was asked -- `ContentCompilerOptions` now carries them, deliberately excluded from the equality that decides whether a pre-built registry can be used. **`LogImportantMessage` was indistinguishable from `LogMessage`**: both mapped to `Info`, which the tool suppresses, so the one XNA documents as reaching the user even at low verbosity reached nobody. There is now a `ContentLogLevel::Important` between `Info` and `Warning`, printed as `message` rather than dressed up as a warning it is not. |
+
+| `XNAPP-261` | The built-in `.xml` source route: register it on the canonical graph, build framework-defined, primitive and generic documents, carry a game-defined C++ type from an XNA-style document through its own registered writer, and take the last source extension to `IMPLEMENTED+TESTED`. | [x] The pieces were all here and the route joining them was not, so `.xml` was the one declared source extension a build could not take. `XnaXmlSourceContentPipeline.cpp` registers three things on the canonical graph -- the `XmlImporter`, one `PassThroughProcessor` per type the content compiler can write, and the `.xnb` writers -- and a second call **extends** that registration rather than duplicating it, because a game registers its own compiler after the built-ins and there is only one `.xml` extension. Six committed documents (a primitive, `Vector3`, `Curve`, `Dictionary<string,int>`, `List<Rectangle>`, `List<string>`) are **byte-identical to what genuine XNA built from the same files**, on Windows and on the Xbox 360. A game's own type reaches the same route with nothing but a `DescribeContent`, a `ContentTypeName` and a `ContentTypeWriter<T>`: `xna-custom-pipeline.cpp`'s `QuestBook` is loaded from `library.xml` and written under `QuestGame.QuestBookReader`. Writing the route found four defects. **`Dictionary<string,int>` was not in `KnownTypeNames()` at all**, although the line adding it has been there since XNAPP-060: `RegisterBuiltIns` looks a built-in's canonical writer up by C++ type and returns silently when nothing answers, and the canonical writer is over `std::unordered_map` where the pipeline holds the type as `std::map` -- the line was there, the type was not. The writer is container-generic now and the whole expected set is spelled out in a test, so a silent drop cannot be silent again. **An untyped read could not resolve a `Dictionary<K,V>` by name**, the same gap XNAPP-230 closed for `List<T>`. **The `.xml` route had no recorded reason for having no `.cnb` half**, which `ProcessedTypeCoverageTest` is exactly the test for; it is `DocumentAbsentWriter`ed now and the refusal names the type and says `--format xnb`. And the largest: **the Xbox 360's and Windows Phone's type-reader tables name the .NET Compact Framework's own `mscorlib`** -- `Version=3.7.0.0` under `PublicKeyToken=1c9e259686f921e0` and `969db8053d3322ac` respectively, against the desktop's `4.0.0.0`/`b77a5c561934e089` -- while `Microsoft.Xna.Framework` and `.Graphics` stay `4.0.0.0` on all three. CNA wrote the desktop identity everywhere. The differential could not see it because `xnb_conformance.py` reports the *normalized* reader names and `compare.py` compared only those; it compares the verbatim ones now, and the parser grew a `DictionaryReader` decoder so the dictionary case is compared rather than skipped. |
 
 ### Phase 21 — black-box XNA differential harness
 

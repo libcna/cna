@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <string>
 #include <type_traits>
@@ -273,16 +274,24 @@ namespace CNA::Internal::Xnb
      * @brief Writer for `Dictionary<TKey,TValue>`, serialized as an `Int32` count then key/value
      *        pairs.
      *
-     * Entries are emitted in a deterministic key order rather than in `std::unordered_map`
+     * Entries are emitted in a deterministic key order rather than in the container's own
      * iteration order: a content build must be byte-reproducible, and `Dictionary<,>` itself
      * promises no ordering to the consuming game.
      *
+     * `TMap` is the C++ container one build layer spells a `Dictionary<,>` with. The runtime
+     * reader produces `std::unordered_map`, which is what a game holds; the content pipeline's
+     * intermediate serializer produces `std::map`, because an XNA `.xml` document is read into the
+     * type the pipeline's own `ContentTypeName` names. Both are the same .NET type and are written
+     * by the same rule, so both are registered rather than one being converted into the other on
+     * every write.
+     *
      * @tparam TKey The key type.
      * @tparam TValue The value type.
+     * @tparam TMap The C++ container, keyed and iterated as a dictionary.
      */
-    template<typename TKey, typename TValue>
+    template<typename TKey, typename TValue, typename TMap = std::unordered_map<TKey, TValue>>
     class XnbDictionaryTypeWriter final
-        : public XnbTypeWriter<std::unordered_map<TKey, TValue>>
+        : public XnbTypeWriter<TMap>
     {
     public:
         /**
@@ -319,8 +328,7 @@ namespace CNA::Internal::Xnb
          * @param output Per-file object-graph writer.
          * @param value The dictionary to serialize.
          */
-        void Write(XnbWriter& output,
-                   const std::unordered_map<TKey, TValue>& value) const override
+        void Write(XnbWriter& output, const TMap& value) const override
         {
             output.RequireCollectionCount(value.size(), "DictionaryWriter");
             std::vector<const TKey*> keys;

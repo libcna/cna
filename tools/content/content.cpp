@@ -37,6 +37,7 @@
 #include "CNA/Content/Pipeline/VideoContentPipeline.hpp"
 #include "CNA/Content/Pipeline/XnbContentPipeline.hpp"
 #include "CNA/Content/Pipeline/XnbOutputContentPipeline.hpp"
+#include "CNA/Content/Pipeline/XnaXmlSourceContentPipeline.hpp"
 #include "CNA/Internal/Xnb/XnbFileOptions.hpp"
 #include "CNA/Internal/ContentPath.hpp"
 #include "CNA/Internal/Json.hpp"
@@ -283,7 +284,8 @@ namespace
                "already-compiled bytecode and needs none. --fx-compiler names the compiler and\n"
                "--fx-compiler-launcher a program to run it through, such as wine. Each has the\n"
                "highest precedence in its own order: the option, then CNA_FXC / CNA_FXC_LAUNCHER\n"
-               "in the environment, then the path baked in by CMake, then fxc on PATH.\n";
+               "in the environment, then the path baked in by CMake, then fxc on PATH.\n"
+;
     }
 
     std::size_t ParseWorkerCount(const std::filesystem::path& argument)
@@ -2773,6 +2775,17 @@ namespace CNA::Content::Pipeline
         compiler.executable = options.effectCompilerExecutable;
         compiler.launcher = options.effectCompilerLauncher;
         RegisterEffectSourceContentPipeline(registry, MakeExternalEffectCompiler(compiler));
+
+        // The `.xml` route, and with it every `.xnb` writer for a type XNA's own ContentCompiler
+        // knows. A compiler is made here rather than shared with a caller because this is the
+        // built-in registration: a program that wants its own types in an `.xml` document builds
+        // its own compiler, adds its type writers to it, and calls
+        // RegisterXnaXmlSourceContentPipeline itself (see the custom-pipeline example).
+        RegisterXnaXmlSourceContentPipeline(
+            registry,
+            std::make_shared<const Microsoft::Xna::Framework::Content::Pipeline::
+                                 Serialization::Compiler::ContentCompiler>(),
+            options.xnbContainer);
     }
 
     int RunContentCompiler(const std::vector<std::filesystem::path>& arguments,

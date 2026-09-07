@@ -149,6 +149,20 @@ namespace
         return shape;
     }
 
+    /** @brief The committed `.xml` fixture, with the title a test wants. */
+    std::string Library(const std::string& title)
+    {
+        return "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+               "<XnaContent xmlns:Quest=\"QuestGame\">\n"
+               "  <Asset Type=\"Quest:QuestBook\">\n"
+               "    <Name>" + title + "</Name>\n"
+               "    <Chapters><Item>The Gate</Item></Chapters>\n"
+               "    <Opening><Position>0 0 0</Position><Label>gate</Label></Opening>\n"
+               "    <RecommendedLevel>7</RecommendedLevel>\n"
+               "  </Asset>\n"
+               "</XnaContent>\n";
+    }
+
     /** @brief A scratch copy of the committed fixture, removed when the test ends. */
     class QuestSource
     {
@@ -246,6 +260,13 @@ TEST(XnaCustomPipelineAcceptanceTest, DependenciesParametersAndReferencesAreAllR
     // The processor's own parameters, by the names it declared.
     EXPECT_NE(text.find("Repeats"), std::string::npos) << text;
     EXPECT_NE(text.find("QuestGame.QuestReader, QuestGame"), std::string::npos) << text;
+
+    // The `.xml` route is bookkept the same way, under the names it actually ran with: the
+    // built-in importer, the pass-through for the game's type, and the game's own reader.
+    EXPECT_NE(text.find("\"name\":\"XmlImporter\""), std::string::npos) << text;
+    EXPECT_NE(text.find("PassThroughProcessor(QuestGame.QuestBook)"), std::string::npos) << text;
+    EXPECT_NE(text.find("QuestGame.QuestBookReader, QuestGame"), std::string::npos) << text;
+    EXPECT_NE(text.find("library.xml"), std::string::npos) << text;
 }
 
 // Incremental rebuilds work for a user's route, and the dependency the *importer* declared is what
@@ -255,11 +276,11 @@ TEST(XnaCustomPipelineAcceptanceTest, ARepeatBuildSkipsAndAChangedDependencyRebu
     const QuestSource source("incremental");
     std::string first;
     ASSERT_EQ(RunCompiler(source.Arguments(), first), 0) << first;
-    EXPECT_NE(first.find("Built: 2"), std::string::npos) << first;
+    EXPECT_NE(first.find("Built: 3"), std::string::npos) << first;
 
     std::string second;
     ASSERT_EQ(RunCompiler(source.Arguments(), second), 0) << second;
-    EXPECT_NE(second.find("Built: 0  Skipped: 2"), std::string::npos) << second;
+    EXPECT_NE(second.find("Built: 0  Skipped: 3"), std::string::npos) << second;
 
     { std::ofstream(source.Source() / "dawn.notes") << "chapter two\n"; }
     std::string third;
@@ -268,6 +289,74 @@ TEST(XnaCustomPipelineAcceptanceTest, ARepeatBuildSkipsAndAChangedDependencyRebu
         << "a changed sidecar must rebuild the quest that reads it\n" << third;
     EXPECT_NE(third.find("[SKIP] reward"), std::string::npos)
         << "and must not rebuild the asset that does not\n" << third;
+    EXPECT_NE(third.find("[SKIP] library"), std::string::npos)
+        << "nor the `.xml` asset that does not\n" << third;
+
+    // Editing the `.xml` source rebuilds it and nothing else, which is the fingerprint working for
+    // a route whose importer and processor are both built-in and whose type is the game's.
+    { std::ofstream(source.Source() / "library.xml") << Library("The Dawn Errand, Revised"); }
+    std::string fourth;
+    ASSERT_EQ(RunCompiler(source.Arguments(), fourth), 0) << fourth;
+    EXPECT_NE(fourth.find("[BUILD] library"), std::string::npos) << fourth;
+    EXPECT_NE(fourth.find("[SKIP] dawn"), std::string::npos) << fourth;
+}
+
+// The other way a game supplies content: XNA's own `.xml` source extension, with the game's type
+// named in the document. Nothing in CNA knows what a QuestBook is -- the document says, the game's
+// DescribeContent says what its members are, and the game's ContentTypeWriter names the reader.
+TEST(XnaCustomPipelineAcceptanceTest, AGameDefinedTypeArrivesFromXnaStyleXmlUnderItsOwnNames)
+{
+    const QuestSource source("xml");
+    std::string log;
+    ASSERT_EQ(RunCompiler(source.Arguments(), log), 0) << log;
+
+    // The built-in `.xml` importer, the built-in pass-through for the game's own type, and the
+    // game's own writer -- the chain XNA documents for an `.xml` asset.
+    EXPECT_NE(log.find("XmlImporter -> PassThroughProcessor(QuestGame.QuestBook) -> "
+                       "CNA.XnaObjectXnbWriter[QuestGame.QuestBook]"),
+              std::string::npos)
+        << log;
+
+    const std::filesystem::path built = source.Output() / "library.xnb";
+    ASSERT_TRUE(std::filesystem::is_regular_file(built)) << log;
+    const std::vector<std::uint8_t> bytes = ReadBytes(built);
+    const XnbShape shape = ReadXnbShape(bytes);
+
+    // Both readers are the game's: the book and the step nested inside it.
+    ASSERT_EQ(shape.readers.size(), 2u);
+    EXPECT_EQ(shape.readers.front(), "QuestGame.QuestBookReader, QuestGame");
+    EXPECT_EQ(shape.readers.back(), "QuestGame.QuestStepReader, QuestGame");
+    EXPECT_EQ(shape.sharedResources, 0);
+
+    // The values the document set, written by the game's own writer.
+    const std::string text(bytes.begin(), bytes.end());
+    EXPECT_NE(text.find("The Dawn Errand, Annotated"), std::string::npos);
+    EXPECT_NE(text.find("The Tower"), std::string::npos);
+    EXPECT_NE(text.find("gate"), std::string::npos);
+    // `RecommendedLevel` is 7 and the omitted `Reusable` kept its C++ default: the last five bytes
+    // are the level and the boolean.
+    ASSERT_GE(bytes.size(), 5u);
+    EXPECT_EQ(bytes[bytes.size() - 5u], 7u);
+    EXPECT_EQ(bytes.back(), 1u);
+}
+
+// A type no one registered is a refusal naming the type, not a crash and not an empty asset.
+TEST(XnaCustomPipelineAcceptanceTest, AnXmlDocumentNamingAnUnregisteredTypeIsRefusedByName)
+{
+    const QuestSource source("xml_unknown");
+    {
+        std::ofstream bad(source.Source() / "ledger.xml");
+        bad << "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+            << "<XnaContent xmlns:Quest=\"QuestGame\">\n"
+            << "  <Asset Type=\"Quest:QuestLedger\"><Entries /></Asset>\n"
+            << "</XnaContent>\n";
+    }
+
+    std::string log;
+    EXPECT_NE(RunCompiler(source.Arguments(), log), 0) << log;
+    EXPECT_NE(log.find("QuestGame.QuestLedger"), std::string::npos) << log;
+    EXPECT_NE(log.find("XmlImporter"), std::string::npos) << log;
+    EXPECT_FALSE(std::filesystem::exists(source.Output() / "ledger.xnb"));
 }
 
 // A user's own refusal is a build failure with the user's own sentence, not a crash and not a

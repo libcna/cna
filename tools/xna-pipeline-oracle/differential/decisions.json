@@ -53,10 +53,6 @@
       ]
     },
     {
-      "case": "xml_intermediate_passthrough",
-      "reason": "CNA has no canonical .xml route. Of the 1466 .xml assets in the public sample corpus, almost all declare game-defined types, which only a game's own pipeline assembly can build (XNAPP-260); a built-in route could cover the handful the framework itself defines and would be XNB-only. The decision to build that subset has not been taken."
-    },
-    {
       "case": "font_description",
       "reason": "Two rasterizers disagree about a glyph's ink by a pixel. XNA draws through GDI+ and CNA through FreeType, and over the 95 glyphs of this font 40 boxes are identical, 50 are one pixel wider, four are two wider and one is a pixel wider and taller -- never narrower. Everything derived from a glyph's box follows it: its rectangle in the sheet, the cropping rectangle's width, and the compressed pixels. The metrics that decide where text lands do not: the ABC widths are identical for all 95 characters, the cropping origin for 94 of them, and the line spacing exactly (plans/plan_xnapipeline_parity.md XNAPP-182). The cropping rectangle's height is XNA's own and is between one and five pixels more than its line spacing, by an amount no metric in the face predicts: Courier New and Liberation Mono are metrically identical and answer 41 at size 24, where Arial -- whose line height is larger -- answers 40. Eleven builds over four faces were measured and no rule fits them, so CNA writes the line spacing itself. SpriteFont.MeasureString() reports the taller of that and the tallest glyph, so a measured string is up to five pixels shorter here. The space's cropping rectangle is XNA's degenerate one: it has no ink, and XNA's cropper answers a cell at an offset past the bottom of the line (6, 35 in a 24-pixel cell) where CNA answers the origin. Nothing draws it either way.",
       "paths": [
@@ -303,10 +299,6 @@
         "root/digest",
         "root/bytecodeByteCount"
       ]
-    },
-    {
-      "case": "xbox_xml_passthrough",
-      "reason": "CNA has no canonical .xml route. Of the 1466 .xml assets in the public sample corpus, almost all declare game-defined types, which only a game's own pipeline assembly can build (XNAPP-260); a built-in route could cover the handful the framework itself defines and would be XNB-only. The decision to build that subset has not been taken."
     },
     {
       "case": "texture_png_texture_mipmaps",

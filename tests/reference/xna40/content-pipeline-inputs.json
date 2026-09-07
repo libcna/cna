@@ -34,7 +34,7 @@
         "windowsPhone": "SUPPORTED",
         "xbox360": "SUPPORTED",
         "status": "IMPLEMENTED+TESTED",
-        "note": "Importer, the three processors, every TextureProcessor property and every target/profile leg are compared against the genuine importer over this committed fixture. What is not named yet is the source-to-XNB and source-to-CNB legs."
+        "note": "Importer, the three processors, every TextureProcessor property and every target/profile leg are compared against the genuine importer over this committed fixture. The source-to-XNB and source-to-CNB legs are named too, so all six are."
       }
     },
     ".dds": {
@@ -64,7 +64,7 @@
         "windowsPhone": "SUPPORTED",
         "xbox360": "SUPPORTED",
         "status": "IMPLEMENTED+TESTED",
-        "note": "Importer, the three processors, every TextureProcessor property and every target/profile leg are compared against the genuine importer over this committed fixture. What is not named yet is the source-to-XNB and source-to-CNB legs."
+        "note": "Importer, the three processors, every TextureProcessor property and every target/profile leg are compared against the genuine importer over this committed fixture. The source-to-XNB and source-to-CNB legs are named too, so all six are."
       }
     },
     ".dib": {
@@ -94,7 +94,7 @@
         "windowsPhone": "SUPPORTED",
         "xbox360": "SUPPORTED",
         "status": "IMPLEMENTED+TESTED",
-        "note": "Importer, the three processors, every TextureProcessor property and every target/profile leg are compared against the genuine importer over this committed fixture. What is not named yet is the source-to-XNB and source-to-CNB legs."
+        "note": "Importer, the three processors, every TextureProcessor property and every target/profile leg are compared against the genuine importer over this committed fixture. The source-to-XNB and source-to-CNB legs are named too, so all six are."
       }
     },
     ".fbx": {
@@ -154,7 +154,7 @@
         "windowsPhone": "UNVERIFIED",
         "xbox360": "UNVERIFIED",
         "status": "IMPLEMENTED+TESTED",
-        "note": "The route is measured against the genuine EffectProcessor with the compiler XNA itself used, Microsoft's legacy fxc at fx_2_0 from the June 2010 DirectX SDK, run through Wine. Two things came out of it. First, a real defect: a path handed to a compiler through a launcher was spelled the host's way, so fxc read '/tmp/.../effect.fxb' as an option and the whole .fx route was broken on every non-Windows machine; paths are now spelled the way the launcher's program reads them. Second, a measurement nothing in this repository had: XNA's compiled effect is a fixed sixteen-byte header -- magic 0xBCF00BCF, the offset of the inner token, two zero dwords -- in front of the Direct3D 9 Effect Framework binary, identical for two unrelated effects, and CNA now emits it. What still differs is the blob behind that header: XNA compiles from a memory buffer through d3dx9 and CNA runs the fxc command line, which embeds source information the memory path does not, so this effect is sixteen bytes longer and first differs at offset 50. A relative source name and a working directory do not close it; only calling D3DXCreateEffectCompiler on a buffer would, which needs a native helper (XNAPP-191/192). sourceToCnb is a documented refusal rather than a gap: a .cnb carrying Direct3D 9 bytecode would be unloadable on every CNA renderer that is not Direct3D 9. The differential skips on a machine with no fxc -- set CNA_FXC to one -- so this row's coverage is real here and conditional elsewhere, which no other row is."
+        "note": "The route is measured against the genuine EffectProcessor with the compiler XNA itself used, Microsoft's legacy fxc at fx_2_0 from the June 2010 DirectX SDK, run through Wine. Two things came out of it. First, a real defect: a path handed to a compiler through a launcher was spelled the host's way, so fxc read '/tmp/.../effect.fxb' as an option and the whole .fx route was broken on every non-Windows machine; paths are now spelled the way the launcher's program reads them. Second, a measurement nothing in this repository had: XNA's compiled effect is a 0xBCF00BCF header in front of the Direct3D 9 Effect Framework binary, and the header is not fixed -- it is one pair of dwords per pass, so 8 + 8 x passCount bytes. The first of each pair is a bitmask of the device state the pass assigns (1 blend, 2 depth-stencil, 4 rasterizer, with the second copy shifted up three places) and the second a bitmask of the sampler registers the pass binds. Measuring it from the processor called directly gave the sixteen bytes this row used to claim, which is what a single-pass effect happens to produce; a real build says otherwise, and CNA emits the per-pass form now (XNAPP-191). What still differs is the blob behind that header: XNA compiles from a memory buffer through d3dx9 and CNA runs the fxc command line. Over seventeen effects every differing byte is accounted for -- 195 inside the compiler's own version string and 54 of padding d3dx9 leaves as heap residue -- and neither is reproducible without running Microsoft's compiler in-process. A relative source name and a working directory do not close it; only calling D3DXCreateEffectCompiler on a buffer would, which needs a native helper (XNAPP-191/192). sourceToCnb is a documented refusal rather than a gap: a .cnb carrying Direct3D 9 bytecode would be unloadable on every CNA renderer that is not Direct3D 9. The differential skips on a machine with no fxc -- set CNA_FXC to one -- so this row's coverage is real here and conditional elsewhere, which no other row is."
       }
     },
     ".hdr": {
@@ -184,7 +184,7 @@
         "windowsPhone": "SUPPORTED",
         "xbox360": "SUPPORTED",
         "status": "IMPLEMENTED+TESTED",
-        "note": "The one texture extension with no measurement before this task, and the one that changed the importer: XNA answers a Vector4 bitmap for a Radiance picture, with the RGBE (mantissa + 0.5) / 256 * 2^(e - 128) convention. D3DX cannot read a flat scanline, which is a recorded divergence: CNA reads one. Source-to-XNB and source-to-CNB are not named yet."
+        "note": "The one texture extension with no measurement before this task, and the one that changed the importer: XNA answers a Vector4 bitmap for a Radiance picture, with the RGBE (mantissa + 0.5) / 256 * 2^(e - 128) convention. D3DX cannot read a flat scanline, which is a recorded divergence: CNA reads one. The source-to-XNB and source-to-CNB legs are named too, so all six are."
       }
     },
     ".jpg": {
@@ -214,7 +214,7 @@
         "windowsPhone": "SUPPORTED",
         "xbox360": "SUPPORTED",
         "status": "IMPLEMENTED+TESTED",
-        "note": "The one source two conformant decoders may legitimately disagree about: the shape is compared exactly and the pixels within an IDCT's tolerance. Source-to-XNB and source-to-CNB are not named yet."
+        "note": "The one source two conformant decoders may legitimately disagree about: the shape is compared exactly and the pixels within an IDCT's tolerance. The source-to-XNB and source-to-CNB legs are named too, so all six are."
       }
     },
     ".mp3": {
@@ -244,7 +244,7 @@
         "windowsPhone": "UNVERIFIED",
         "xbox360": "UNVERIFIED",
         "status": "IMPLEMENTED+TESTED",
-        "note": "Twelve MP3 sources across all three MPEG versions and every rate from 8000 to 48000 answer the format and duration the genuine importer answered for the same files. SongProcessor output and the source-to-XNB leg are not named yet. XNA's own SongProcessor cannot be measured in this environment at all -- both recorded cases are Windows Media refusals under Wine -- so the target leg holds CNA's own half only: the same answer for every target."
+        "note": "Twelve MP3 sources across all three MPEG versions and every rate from 8000 to 48000 answer the format and duration the genuine importer answered for the same files. The processor, source-to-XNB, source-to-CNB and target legs are all named. XNA's own SongProcessor cannot be measured in this environment at all -- both recorded cases are Windows Media refusals under Wine -- so the target leg holds CNA's own half only: the same answer for every target."
       }
     },
     ".pfm": {
@@ -274,7 +274,7 @@
         "windowsPhone": "SUPPORTED",
         "xbox360": "SUPPORTED",
         "status": "IMPLEMENTED+TESTED",
-        "note": "Importer, the three processors, every TextureProcessor property and every target/profile leg are compared against the genuine importer over this committed fixture. What is not named yet is the source-to-XNB and source-to-CNB legs."
+        "note": "Importer, the three processors, every TextureProcessor property and every target/profile leg are compared against the genuine importer over this committed fixture. The source-to-XNB and source-to-CNB legs are named too, so all six are."
       }
     },
     ".png": {
@@ -304,7 +304,7 @@
         "windowsPhone": "SUPPORTED",
         "xbox360": "SUPPORTED",
         "status": "IMPLEMENTED+TESTED",
-        "note": "Importer, the three processors, every TextureProcessor property and every target/profile leg are compared against the genuine importer over this committed fixture. What is not named yet is the source-to-XNB and source-to-CNB legs."
+        "note": "Importer, the three processors, every TextureProcessor property and every target/profile leg are compared against the genuine importer over this committed fixture. The source-to-XNB and source-to-CNB legs are named too, so all six are."
       }
     },
     ".ppm": {
@@ -334,7 +334,7 @@
         "windowsPhone": "SUPPORTED",
         "xbox360": "SUPPORTED",
         "status": "IMPLEMENTED+TESTED",
-        "note": "Importer, the three processors, every TextureProcessor property and every target/profile leg are compared against the genuine importer over this committed fixture. What is not named yet is the source-to-XNB and source-to-CNB legs."
+        "note": "Importer, the three processors, every TextureProcessor property and every target/profile leg are compared against the genuine importer over this committed fixture. The source-to-XNB and source-to-CNB legs are named too, so all six are."
       }
     },
     ".spritefont": {
@@ -394,7 +394,7 @@
         "windowsPhone": "SUPPORTED",
         "xbox360": "SUPPORTED",
         "status": "IMPLEMENTED+TESTED",
-        "note": "Importer, the three processors, every TextureProcessor property and every target/profile leg are compared against the genuine importer over this committed fixture. What is not named yet is the source-to-XNB and source-to-CNB legs."
+        "note": "Importer, the three processors, every TextureProcessor property and every target/profile leg are compared against the genuine importer over this committed fixture. The source-to-XNB and source-to-CNB legs are named too, so all six are."
       }
     },
     ".wav": {
@@ -424,7 +424,7 @@
         "windowsPhone": "SUPPORTED",
         "xbox360": "UNSUPPORTED",
         "status": "IMPLEMENTED+TESTED",
-        "note": "Every WAV variant the genuine importer accepts is accepted with the same fields; the source-to-XNB, source-to-CNB and per-target legs are not named yet. The three targets are measured: XNA converts a sound effect to XMA for the Xbox 360 -- format tag 0x6601, different loop points, a quarter of the data and a big-endian XMA2WAVEFORMATEX -- and keeps PCM for Windows and Windows Phone (soundeffectprofile/*). CNA reproduces the two PCM targets exactly and cannot produce XMA, which the test asserts as a divergence rather than hiding."
+        "note": "Every WAV variant the genuine importer accepts is accepted with the same fields; the source-to-XNB, source-to-CNB and per-target legs are all named. The three targets are measured: XNA converts a sound effect to XMA for the Xbox 360 -- format tag 0x6601, different loop points, a quarter of the data and a big-endian XMA2WAVEFORMATEX -- and keeps PCM for Windows and Windows Phone (soundeffectprofile/*). CNA reproduces the two PCM targets exactly and cannot produce XMA, which the test asserts as a divergence rather than hiding."
       }
     },
     ".wma": {
@@ -484,7 +484,7 @@
         "windowsPhone": "UNVERIFIED",
         "xbox360": "UNVERIFIED",
         "status": "IMPLEMENTED+TESTED",
-        "note": "Every refusal is the measured one, including the split that makes a missing file a FileNotFoundException through the importer and an InvalidContentException through VideoContent's own constructor. The successful path could not be measured (Wine 10.0 has no Media Foundation), so the shape read from the container is held to the format. The source-to-XNB leg is not named yet. The canonical route now reads the frame metadata from the file: `cna_content` has no decoder and must not grow one, so the importer takes a probe from whoever registers it and `cna_content_pipeline` supplies one over the build-time media decoder. Before that, `width`, `height` and `framesPerSecond` were required parameters, so a `.wmv` -- the one video format XNA itself accepts -- could not be built by naming it and nothing else. XNA's own per-target answer is not measurable here: constructing a VideoContent needs Media Foundation and Wine aborts on MFCreateVideoMediaType, so every videoprocessor/target_* case is an SEHException. The target leg holds CNA's own half only: the same answer for every target."
+        "note": "Every refusal is the measured one, including the split that makes a missing file a FileNotFoundException through the importer and an InvalidContentException through VideoContent's own constructor. The successful path could not be measured (Wine 10.0 has no Media Foundation), so the shape read from the container is held to the format. The source-to-XNB and source-to-CNB legs are named too, so all six are. The canonical route now reads the frame metadata from the file: `cna_content` has no decoder and must not grow one, so the importer takes a probe from whoever registers it and `cna_content_pipeline` supplies one over the build-time media decoder. Before that, `width`, `height` and `framesPerSecond` were required parameters, so a `.wmv` -- the one video format XNA itself accepts -- could not be built by naming it and nothing else. XNA's own per-target answer is not measurable here: constructing a VideoContent needs Media Foundation and Wine aborts on MFCreateVideoMediaType, so every videoprocessor/target_* case is an SEHException. The target leg holds CNA's own half only: the same answer for every target."
       }
     },
     ".x": {
@@ -529,22 +529,22 @@
       },
       "cna": {
         "importer": "Microsoft::Xna::Framework::Content::Pipeline::XmlImporter",
-        "processor": "(none: XNA declares no default processor)",
-        "fixture": "tests/assets/xna40/source/probe.xml",
+        "processor": "PassThroughProcessor(<the type the document declares>)",
+        "fixture": "tests/assets/xna40/source/probe.xml, tests/assets/xna40/source/xml_int.xml, tests/assets/xna40/source/xml_vector3.xml, tests/assets/xna40/source/xml_curve.xml, tests/assets/xna40/source/xml_dictionary.xml, tests/assets/xna40/source/xml_rectangles.xml",
         "tests": {
           "importer": "XnaSourceCorpus.TheCommittedXmlBuildsWhateverItsAssetTypeNames, XnaXmlImporter.ImportsWhateverTheDocumentNames",
-          "processor": "",
-          "sourceToXnb": "",
-          "sourceToCnb": "",
-          "malformed": "XnaXmlImporter.RefusalsMatchXna",
-          "target": ""
+          "processor": "XnaXmlSourceRoute.EveryDocumentBuildsUnderTheImporterPassThroughAndWriterItDeclares",
+          "sourceToXnb": "XnaXmlSourceRoute.EveryDocumentBuildsToTheBytesGenuineXnaWrote, XnaXmlSourceRoute.BuildingTheSameDocumentTwiceWritesTheSameBytes",
+          "sourceToCnb": "XnaXmlSourceRoute.TheCnbRefusalNamesTheTypeAndTheReason",
+          "malformed": "XnaXmlImporter.RefusalsMatchXna, XnaCustomPipelineAcceptanceTest.AnXmlDocumentNamingAnUnregisteredTypeIsRefusedByName",
+          "target": "XnaXmlSourceRoute.EveryTargetPlatformAnswersWhatXnaAnswers"
         },
-        "differentialEvidence": "tests/reference/xna40/intermediate/ importer_* cases",
+        "differentialEvidence": "tests/reference/xna40/differential xml/* and xbox/xml_passthrough (six documents, all byte-identical); tests/reference/xna40/intermediate/ importer_* cases",
         "windows": "SUPPORTED",
-        "windowsPhone": "UNVERIFIED",
-        "xbox360": "UNVERIFIED",
-        "status": "IMPLEMENTED",
-        "note": "The importer is measured against the genuine one over nine importer_* corpus cases; the source-to-XNB, source-to-CNB and per-target legs are not named yet."
+        "windowsPhone": "SUPPORTED",
+        "xbox360": "SUPPORTED",
+        "status": "IMPLEMENTED+TESTED",
+        "note": "The one source extension whose meaning is in the file: the document's Asset Type names the type, the intermediate serializer builds it, XNA's PassThroughProcessor carries it and the content compiler's writer for that type emits the .xnb. Six committed documents -- a primitive, a framework value type, a framework reference type with a nested collection, a generic dictionary and two generic lists -- are byte-identical to what genuine XNA built from the same files, on Windows and on the Xbox 360. A game's own type reaches the same route by registering its serializer and its ContentTypeWriter (modules/content-pipeline/examples/xna-custom-pipeline.cpp, QuestBook). There is deliberately no source-to-CNB half: an .xnb is what an XNA object graph is, and .cnb carries CNA's own per-asset-type schemas, so the absence is recorded with ContentPipelineRegistry::DocumentAbsentWriter() and the refusal names the type and says --format xnb."
       }
     }
   }

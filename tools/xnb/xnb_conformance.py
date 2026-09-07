@@ -1067,6 +1067,8 @@ class Reader:
             return {"bytecodeByteCount": len(payload), "digest": _digest(payload)}
         if name.startswith("Microsoft.Xna.Framework.Content.ListReader`1[["):
             return self.generic_list(name)
+        if name.startswith("Microsoft.Xna.Framework.Content.DictionaryReader`2[["):
+            return self.generic_dictionary(name)
         raise XnbError(f"{self.cursor.origin}: no decoder for root reader '{name}'")
 
     def generic_list(self, name: str):
@@ -1081,6 +1083,29 @@ class Reader:
                     argument.rsplit(".", 1)[-1] + "Reader")
             items.append(self.value_of(argument))
         return items
+
+    def generic_dictionary(self, name: str):
+        """``Dictionary<TKey,TValue>``: a count, then that many key/value pairs.
+
+        Entries come back sorted by key, because .NET's own ``Dictionary<,>`` promises no order
+        and two writers that disagree about it have not disagreed about the content.
+        """
+        inner = name[len("Microsoft.Xna.Framework.Content.DictionaryReader`2[["):-2]
+        key_type, value_type = [part.strip() for part in inner.split("],[", 1)]
+        count = self.cursor.collection_count("dictionary")
+        entries = []
+        for _ in range(count):
+            key = self.element(key_type)
+            entries.append((key, self.element(value_type)))
+        entries.sort(key=lambda pair: repr(pair[0]))
+        return [{"key": key, "value": value} for key, value in entries]
+
+    def element(self, type_name: str):
+        """One collection element: a reference type is preceded by its own reader reference."""
+        if type_name in ("System.String", "System.Object"):
+            self.reader_reference(
+                "Microsoft.Xna.Framework.Content." + type_name.rsplit(".", 1)[-1] + "Reader")
+        return self.value_of(type_name)
 
     def value_of(self, type_name: str):
         decoders = {

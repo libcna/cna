@@ -853,6 +853,46 @@
       "processor": "PassThroughProcessor",
       "platform": "Windows",
       "profile": "Reach"
+    },
+    {
+      "case": "xml/primitive_int",
+      "source": "source/xml_int.xml",
+      "importer": "XmlImporter",
+      "processor": "PassThroughProcessor",
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
+      "case": "xml/framework_vector3",
+      "source": "source/xml_vector3.xml",
+      "importer": "XmlImporter",
+      "processor": "PassThroughProcessor",
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
+      "case": "xml/framework_curve",
+      "source": "source/xml_curve.xml",
+      "importer": "XmlImporter",
+      "processor": "PassThroughProcessor",
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
+      "case": "xml/generic_dictionary",
+      "source": "source/xml_dictionary.xml",
+      "importer": "XmlImporter",
+      "processor": "PassThroughProcessor",
+      "platform": "Windows",
+      "profile": "Reach"
+    },
+    {
+      "case": "xml/generic_rectangle_list",
+      "source": "source/xml_rectangles.xml",
+      "importer": "XmlImporter",
+      "processor": "PassThroughProcessor",
+      "platform": "Windows",
+      "profile": "Reach"
     }
   ]
 }
