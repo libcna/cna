@@ -67,6 +67,10 @@ def main(argv):
         write(repo, "tools/provenance/third-party.json",
               json.dumps({"vendored": []}))
         write(repo, "modules/core/src/Clean.cpp", "// SPDX-License-Identifier: MS-PL\nint clean();\n")
+        write(repo, "tests/assets/xna40/source/probe.xml", "<XnaContent />\n")
+        write(repo, "tests/assets/xna40/source/PROVENANCE.json",
+              json.dumps({"files": [{"file": "probe.xml", "origin": "authored",
+                                     "thirdParty": False}]}))
         git(repo, "add", "-A")
         git(repo, "commit", "-qm", "clean")
 
@@ -89,6 +93,7 @@ def main(argv):
               "// SPDX-License-Identifier: GPL-3.0-only\nint foreign();\n")
         os.makedirs(os.path.join(repo, "vendor", "undeclared"), exist_ok=True)
         write(repo, "vendor/undeclared/README.md", "undeclared\n")
+        write(repo, "tests/assets/xna40/source/unexplained.xml", "<XnaContent />\n")
         git(repo, "add", "-A")
         git(repo, "commit", "-qm", "planted")
 
@@ -103,6 +108,7 @@ def main(argv):
             ("source", "modules/core/src/monogame_helpers.cpp"),
             ("source", "modules/core/src/Foreign.cpp"),
             ("vendor", "vendor/undeclared"),
+            ("corpus", "tests/assets/xna40/source/unexplained.xml"),
         ]
         for row in expected:
             if row not in found:

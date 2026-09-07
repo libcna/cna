@@ -62,3 +62,9 @@ default.
 missing-dependency case (`plans/plan_xnapipeline_parity.md` `XNAPP-267`): XNA answers
 `Missing asset "...absent_surface.png"`, and a build that skipped the material instead would
 produce a model referring to nothing.
+
+## The machine-readable half
+
+`PROVENANCE.json` beside this file lists every fixture in this directory with where it came from.
+`tools/provenance/provenance_gate.py` fails when a file here has no row, when a row names a file
+that is not here, and when a row claims third-party content with no licence.

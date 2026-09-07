@@ -41,3 +41,9 @@ ffmpeg version 7.1.5-0+deb13u1 Copyright (c) 2000-2026 the FFmpeg developers
 | `actually_wav.mp3` | `tone_mono_44100.wav` renamed: bytes that contradict the extension |
 | `actually_mp3.wav` | `mp3_mono_44100_128k.mp3` renamed |
 | `garbage.mp3` | seventeen bytes of text |
+
+## The machine-readable half
+
+`PROVENANCE.json` beside this file lists every fixture in this directory with where it came from.
+`tools/provenance/provenance_gate.py` fails when a file here has no row, when a row names a file
+that is not here, and when a row claims third-party content with no licence.

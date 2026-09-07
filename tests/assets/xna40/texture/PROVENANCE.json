@@ -1,0 +1,158 @@
+{
+  "format": "cna.xna40.corpus-provenance/1",
+  "comment": "plans/plan_xnapipeline_parity.md XNAPP-022: every black-box fixture in this directory, with where it came from. The prose beside this file explains what each one is for; this is the machine-readable half, and tools/provenance/provenance_gate.py fails when a file here has no row or a row names a file that is not here. `thirdParty` true would need a `license` beside it; nothing here is.",
+  "directory": "tests/assets/xna40/texture",
+  "summary": "Every fixture is 2x2 (or the size its own row says) and carries the same four pixels, so a format's own limits show up in what the importer answers rather than in the source. The bytes of every format but JPEG are written by the script itself, and the JPEG by the host FFmpeg from the same raw pixels.",
+  "files": [
+    {
+      "file": "empty.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "garbage.tga",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe.bmp",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe.dib",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe.hdr",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe.jpg",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe.pfm",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe.ppm",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe.tga",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe.xyz",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_2048x1.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_2049x1.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_3x2.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_4096x1.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_4097x1.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_4x4.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_cube.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_flat.hdr",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_impulse16.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_step16.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_volume.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "truncated.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "truncated.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    }
+  ]
+}

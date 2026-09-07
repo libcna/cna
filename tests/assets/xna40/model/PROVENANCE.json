@@ -1,0 +1,219 @@
+{
+  "format": "cna.xna40.corpus-provenance/1",
+  "comment": "plans/plan_xnapipeline_parity.md XNAPP-022: every black-box fixture in this directory, with where it came from. The prose beside this file explains what each one is for; this is the machine-readable half, and tools/provenance/provenance_gate.py fails when a file here has no row or a row names a file that is not here. `thirdParty` true would need a `license` beside it; nothing here is.",
+  "directory": "tests/assets/xna40/model",
+  "summary": "The DirectX .x corpus, written for this repository; the binary file is the same object model written through the script's own tokenizer.",
+  "files": [
+    {
+      "file": "anim_default_rate.x",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make-model-fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "bad_version.x",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make-model-fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "bare_mesh.x",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make-model-fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "binary_mesh.x",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make-model-fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "empty.x",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make-model-fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_bare_mesh.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "note": "FBX 6.1 ASCII, because XNA's importer carries FBX SDK 2011.3.1 and refuses 7400 and above.",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_binary_modern.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "note": "FBX 6.1 ASCII, because XNA's importer carries FBX SDK 2011.3.1 and refuses 7400 and above.",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_empty.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "note": "FBX 6.1 ASCII, because XNA's importer carries FBX SDK 2011.3.1 and refuses 7400 and above.",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_hierarchy.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "note": "FBX 6.1 ASCII, because XNA's importer carries FBX SDK 2011.3.1 and refuses 7400 and above.",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_not_fbx.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "note": "FBX 6.1 ASCII, because XNA's importer carries FBX SDK 2011.3.1 and refuses 7400 and above.",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_not_fbx_large.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "note": "FBX 6.1 ASCII, because XNA's importer carries FBX SDK 2011.3.1 and refuses 7400 and above.",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_oblique.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "note": "FBX 6.1 ASCII, because XNA's importer carries FBX SDK 2011.3.1 and refuses 7400 and above.",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_quad_polygon.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "note": "FBX 6.1 ASCII, because XNA's importer carries FBX SDK 2011.3.1 and refuses 7400 and above.",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_quad_textured.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "note": "FBX 6.1 ASCII, because XNA's importer carries FBX SDK 2011.3.1 and refuses 7400 and above.",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_truncated.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "note": "FBX 6.1 ASCII, because XNA's importer carries FBX SDK 2011.3.1 and refuses 7400 and above.",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_two_materials.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "note": "FBX 6.1 ASCII, because XNA's importer carries FBX SDK 2011.3.1 and refuses 7400 and above.",
+      "thirdParty": false
+    },
+    {
+      "file": "hierarchy.x",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make-model-fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "index_out_of_range.x",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make-model-fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "missing_texture.x",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make-model-fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "not_x.x",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make-model-fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "oblique_normals.x",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make-model-fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "quad_textured.x",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make-model-fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "second.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "note": "The 4x4 texture probe, beside the .x files that name it.",
+      "thirdParty": false
+    },
+    {
+      "file": "skinned_animated.x",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make-model-fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "skinned_two_animations.x",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make-model-fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "surface.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "note": "The 4x4 texture probe, beside the .x files that name it.",
+      "thirdParty": false
+    },
+    {
+      "file": "transform_z.x",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make-model-fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "truncated.x",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make-model-fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "two_animations.x",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make-model-fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "two_bones_animated.x",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make-model-fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "two_materials.x",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make-model-fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "two_textures.x",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make-model-fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "with_templates.x",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make-model-fixtures.py",
+      "thirdParty": false
+    }
+  ]
+}

@@ -26,7 +26,12 @@ What it checks, and what each check actually proves:
    turned off within a day. What it proves is that no file arrived carrying someone else's header,
    and what it cannot prove is that a file was not laundered; that is what review is for.
 
-4. **Every vendored third party is declared.** Every directory under `vendor/` needs a row in
+4. **Every black-box fixture is accounted for.** Each directory under `tests/assets/xna40/` must
+   carry a provenance document, and every file in it must be named there. This is the check that
+   notices a fixture arriving with no line saying who wrote it -- which is exactly what happened to
+   the five `.xml` documents added for XNAPP-261 before this check existed.
+
+5. **Every vendored third party is declared.** Every directory under `vendor/` needs a row in
    `tools/provenance/third-party.json` with an upstream, a licence and a licence file that exists,
    and the manifest may not name a directory that is not there.
 
@@ -181,7 +186,7 @@ def main(argv):
 
     findings = []
     notes = []
-    counts = {"tracked": 0, "sources": 0, "fonts": 0, "vendored": 0}
+    counts = {"tracked": 0, "sources": 0, "fonts": 0, "vendored": 0, "fixtures": 0}
     names = tracked_files(repo)
     counts["tracked"] = len(names)
 
@@ -271,7 +276,45 @@ def main(argv):
                                      "detail": "a production source whose path names %r" % marker})
                     break
 
-    # 4. Vendored third parties.
+    # 4. The black-box corpus: every fixture named in its directory's provenance document.
+    corpus_root = "tests/assets/xna40"
+    directories = {}
+    for name in names:
+        if name.startswith(corpus_root + "/"):
+            directories.setdefault(os.path.dirname(name), []).append(os.path.basename(name))
+    # A tree with no corpus at all is not this gate's finding -- the suites that read it would
+    # fail long before -- so the check applies to the directories that are there.
+    for directory, entries in sorted(directories.items()):
+        documents = [entry for entry in entries if "PROVENANCE" in entry.upper()]
+        if "PROVENANCE.json" not in documents:
+            findings.append({"check": "corpus", "path": directory,
+                             "detail": "a corpus directory with no PROVENANCE.json. The prose beside "
+                                       "it explains what the fixtures are for; this is the half a "
+                                       "gate can read."})
+            continue
+        record = json.loads(read(repo, os.path.join(directory, "PROVENANCE.json")).decode("utf-8"))
+        rows = {row["file"]: row for row in record["files"]}
+        counts["fixtures"] += len(entries) - len(documents)
+        for entry in sorted(entries):
+            if entry in documents:
+                continue
+            row = rows.get(entry)
+            if row is None:
+                findings.append({"check": "corpus", "path": os.path.join(directory, entry),
+                                 "detail": "has no row in %s/PROVENANCE.json" % directory})
+            elif row.get("origin") not in ("authored", "generated"):
+                findings.append({"check": "corpus", "path": os.path.join(directory, entry),
+                                 "detail": "its row's origin is %r, which is neither authored nor "
+                                           "generated" % row.get("origin")})
+            elif row.get("thirdParty") and not row.get("license"):
+                findings.append({"check": "corpus", "path": os.path.join(directory, entry),
+                                 "detail": "declared third-party with no licence row"})
+        for name in sorted(rows):
+            if name not in entries:
+                findings.append({"check": "corpus", "path": os.path.join(directory, name),
+                                 "detail": "named in PROVENANCE.json and not in the tree"})
+
+    # 5. Vendored third parties.
     manifest_path = os.path.join("tools", "provenance", "third-party.json")
     declared = {}
     if os.path.isfile(os.path.join(repo, manifest_path)):
@@ -331,9 +374,9 @@ def main(argv):
     for finding in findings:
         print("PROVENANCE %-8s %s: %s" % (finding["check"], finding["path"], finding["detail"]))
     print("provenance_gate: %d tracked file(s), %d production source(s), %d font(s), "
-          "%d vendored director(y|ies); %d finding(s)" %
-          (counts["tracked"], counts["sources"], counts["fonts"], counts["vendored"],
-           len(findings)))
+          "%d corpus fixture(s), %d vendored director(y|ies); %d finding(s)" %
+          (counts["tracked"], counts["sources"], counts["fonts"], counts["fixtures"],
+           counts["vendored"], len(findings)))
     if arguments.json:
         with open(arguments.json, "w", encoding="utf-8") as handle:
             json.dump(report, handle, indent=2, sort_keys=True)

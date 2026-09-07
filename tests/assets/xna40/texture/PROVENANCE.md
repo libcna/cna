@@ -63,3 +63,9 @@ the kernel into a cumulative sum and shows small tails the impulse rounds away.
 
 Ninety-one and eighty-four bytes. A filter is not something to infer from a photograph of a wall:
 these two say what it is in one build each.
+
+## The machine-readable half
+
+`PROVENANCE.json` beside this file lists every fixture in this directory with where it came from.
+`tools/provenance/provenance_gate.py` fails when a file here has no row, when a row names a file
+that is not here, and when a row claims third-party content with no licence.

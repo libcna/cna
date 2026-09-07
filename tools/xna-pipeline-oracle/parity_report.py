@@ -34,6 +34,7 @@ Usage:
 """
 import argparse
 import json
+import re
 import sys
 from collections import OrderedDict
 
@@ -419,6 +420,45 @@ def build_report(inventory, pmap, inputs):
     return "\n".join(lines) + "\n", problems, summary
 
 
+
+def plan_cross_references(plan_path, report_text):
+    """Every `report \u00a7N (Title)` the plan makes, checked against the report's own headings.
+
+    XNAPP-020's arrangement is that the plan does not duplicate the generated tables, it points at
+    them. A pointer nobody checks is how \u00a75 came to say "report \u00a72" while the report's \u00a72 was the
+    namespace counts and its members table had moved to \u00a77 -- three of the plan's four references
+    were wrong when this was written. Each reference carries the heading's own words so that being
+    wrong is mechanical rather than a matter of reading both documents.
+    """
+    headings = {}
+    for line in report_text.splitlines():
+        found = re.match(r"^## (\d+)\. (.+?)\s*$", line)
+        if found:
+            headings[int(found.group(1))] = found.group(2)
+    try:
+        with open(plan_path, encoding="utf-8") as handle:
+            plan = handle.read()
+    except OSError as error:
+        return ["cannot read %s: %s" % (plan_path, error)]
+
+    problems = []
+    seen = 0
+    # The title may wrap, so newlines inside it are collapsed before comparing.
+    for section, title in re.findall(r"report \u00a7(\d+) \(([^()]*(?:\([^()]*\)[^()]*)*)\)", plan):
+        seen += 1
+        number = int(section)
+        wanted = " ".join(title.split())
+        if number not in headings:
+            problems.append("the plan cites report \u00a7%d, which the report does not have" % number)
+        elif headings[number] != wanted:
+            problems.append("the plan cites report \u00a7%d as %r; the report calls it %r"
+                            % (number, wanted, headings[number]))
+    if seen == 0:
+        problems.append("%s makes no `report \u00a7N (Title)` reference at all, so XNAPP-020's "
+                        "arrangement is not being checked" % plan_path)
+    return problems
+
+
 def main(argv):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--inventory", required=True)
@@ -429,6 +469,7 @@ def main(argv):
     ap.add_argument("--check", action="store_true")
     ap.add_argument("--init", action="store_true")
     ap.add_argument("--summary-json", help="also write the summary counts as JSON")
+    ap.add_argument("--plan", help="the plan whose report section references must resolve")
     args = ap.parse_args(argv[1:])
 
     inventory = load(args.inventory)
@@ -444,6 +485,8 @@ def main(argv):
         print("init: added %d types and %d members/values as MISSING" % (added_types, added_members))
 
     report, problems, summary = build_report(inventory, pmap, inputs)
+    if args.plan:
+        problems = problems + plan_cross_references(args.plan, report)
     if args.check:
         try:
             with open(args.output, encoding="utf-8") as f:

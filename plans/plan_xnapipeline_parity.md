@@ -161,7 +161,9 @@ collection types, `OpaqueDataDictionary`'s protected overrides and `DefaultSeria
 
 ## 4. Public type parity matrix
 
-Generated — see `docs/xna-content-pipeline-parity-report.md` §1 (`XNAPP-020`). The statuses:
+Generated — see [`docs/xna-content-pipeline-parity-report.md`](../docs/xna-content-pipeline-parity-report.md)
+report §3 (Type matrix), with the counts in report §1 (Coverage summary) and report §2 (Types by
+namespace) (`XNAPP-020`). The statuses:
 
 | Status | Meaning |
 |---|---|
@@ -176,7 +178,7 @@ Types by namespace (denominator): `…Pipeline` 32 · `…Audio` 5 · `…Graphi
 
 ## 5. Public member parity matrix
 
-Generated — report §2. Denominator 708 members + 27 enum values. Two mechanical rules, stated in
+Generated — report §7 (Members). Denominator 708 members + 27 enum values. Two mechanical rules, stated in
 the report rather than applied silently: (a) a delegate type's `.ctor(Object, IntPtr)`,
 `BeginInvoke`, `EndInvoke` are CLR plumbing and count as one item, the `Invoke` signature, which
 maps to a C++ callable; (b) `System.Runtime.Serialization` members on the two exception types
@@ -205,6 +207,8 @@ says so.
 
 ## 7. Importer inventory
 
+Generated — report §4 (Importers) (`XNAPP-020`).
+
 Read from `ContentImporterAttribute` metadata (through the `Localized*` subclass, whose public
 properties resolve the resource-backed display name), 2026-09-05:
 
@@ -229,7 +233,7 @@ passed through unprocessed by the host.
 ## 8. Importer extension / input-format inventory
 
 **The input-parity denominator is 18 extensions**, one importer each (no extension is claimed by
-two built-in importers). Status per extension is generated (report §4) from
+two built-in importers). Status per extension is generated (report §6 (Source extensions)) from
 `tests/reference/xna40/content-pipeline-inputs.json` (`XNAPP-021`), which also records for each
 extension the fixture, the importer test, the processor test, the source→XNB test, the
 source→CNB test, the malformed-input tests and the target/profile tests §22 demands.
@@ -256,6 +260,8 @@ denominator.
 
 ## 9. Processor inventory
 
+Generated — report §5 (Processors and properties) (`XNAPP-020`).
+
 12 public concrete processors. Three of them (`MaterialProcessor`, `ModelTextureProcessor`,
 `SpriteTextureProcessor`) carry **no** `ContentProcessorAttribute` — they are public, derivable
 and named as defaults, but not "browsable" components.
@@ -276,6 +282,9 @@ and named as defaults, but not "browsable" components.
 | `VideoProcessor` | Video - XNA Framework | `VideoContent` → `VideoContent` | 1 |
 
 ## 10. Processor property / default inventory
+
+Generated — report §5 (Processors and properties), which lists every
+property with XNA's default and CNA's beside it (`XNAPP-020`).
 
 Black-box: each processor constructed with its parameterless constructor, each public property
 read back (`defaultValueSource` in the JSON). These are the values a `.contentproj` gets when it
@@ -609,17 +618,15 @@ named in the row). ID ranges: Phase 0 `001–009`, 1 `010–019`, 2 `020–029`,
 | `XNAPP-013` | Determinism: two oracle runs produce identical bytes. | [x] `cmp` identical. |
 | `XNAPP-014` | `parity_report.py` + `content-pipeline-parity-map.json`: per-type and per-member statuses joined to the inventory, coverage computed mechanically, `--gate` mode, generated `docs/xna-content-pipeline-parity-report.md`. Every inventory type and member must appear in the map; the map may not name anything the inventory lacks. | [x] `tools/xna-pipeline-oracle/parity_report.py` joins the two and writes `docs/xna-content-pipeline-parity-report.md`; `--check` proves the committed report is exactly what a regeneration writes, `--gate` is the completion check that also fails on `MISSING`, and `--init` fills the map from the inventory. Section 6 of the report is generated from the input matrix (`XNAPP-021`). |
 | `XNAPP-015` | ctest `CnaXnaPipelineParityInventoryConsistency`: the committed inventory's assembly SHA-256 set is the one this plan quotes; the map covers the inventory; this file's §31 numbers equal the report's. | [x] Two ctests rather than one, because they fail for different reasons and a reader should be told which: `XnaPipelineParityReportIsCurrent` (the report is byte for byte a regeneration, and no status lacks its required note or names a member the inventory does not have) and `XnaPipelineInputParityMatrixIsCurrent` (`XNAPP-021`). Wired in `cmake/XnaPipelineParityGates.cmake`; both skip cleanly without a Python 3 interpreter. Verified to fail: removing one extension from the matrix reports `.hdr is in the inventory and not in the matrix`. |
-| `XNAPP-016` | Inventory freeze: after `XNAPP-014`/`015`, declare the denominator frozen at the SHA-256 set in the JSON. Later regeneration is a recorded event, not a silent change. | [ ] |
-
+| `XNAPP-016` | Inventory freeze: after `XNAPP-014`/`015`, declare the denominator frozen at the SHA-256 set in the JSON. Later regeneration is a recorded event, not a silent change. | [x] `tests/reference/xna40/content-pipeline-api.freeze.json` holds the measurement the denominator was read from -- the seven assemblies by SHA-256, MVID and size, the CLR the oracle ran on, the seven counts (128 types, 708 members, 10 importers, 18 extension declarations, 18 distinct extensions, 12 processors, 47 properties) and the inventory file's own digest -- and `tools/xna-pipeline-oracle/inventory_freeze.py check` is the ctest `XnaPipelineInventoryIsFrozen`. It compares three things and each fails for a different reason: **the assemblies**, so reading a different build of the Content Pipeline says so rather than quietly changing what the plan is a fraction of; **the counts**, so the same assemblies answering differently means the reader changed; and **the inventory file itself**, which is the one thing that may change, and only by recording the new digest in `regenerations` with a date and a reason. That is what makes a regeneration a decision rather than a diff nobody read. Proved to bite on all three: a count edited to 127, an assembly digest replaced, and a single trailing newline added to the inventory are each reported. `record --reason` refuses without a reason, on purpose. |
 ### Phase 2 — importer / extension / processor inventory
 
 | ID | Task | State |
 |---|---|---|
-| `XNAPP-020` | Generate §4–§10 tables from the inventory into the report; this plan quotes them. | [ ] |
+| `XNAPP-020` | Generate §4–§10 tables from the inventory into the report; this plan quotes them. | [x] The plan does not duplicate the generated tables, it points at them, and the pointers are checked now. §4 cites report §3 (Type matrix) with the counts in §1 and §2, §5 cites report §7 (Members), §7 cites report §4 (Importers), §8 cites report §6 (Source extensions), and §9 and §10 cite report §5 (Processors and properties), which lists every property with XNA's default and CNA's beside it. **Three of the four references that existed were wrong** -- §5 said report §2, which is the namespace counts, because the members table had moved to §7 since the reference was written -- and nothing could have noticed, because both documents are generated or edited independently and neither gate read the other. Each reference now carries the heading's own words, and `parity_report.py --plan` resolves every `report §N (Title)` against the report's actual headings, failing on a number the report does not have, on a title that is not what the report calls that section, and on the plan making no such reference at all. It runs in `XnaPipelineParityReportIsCurrent`. §6 is the one section with no generated counterpart and says why: C++ has no CLR attributes, so there is no attribute inventory to generate -- each attribute becomes a descriptor of the same name and the mapping is the table in §6 itself. |
 | `XNAPP-021` | `tests/reference/xna40/content-pipeline-inputs.json`: the 18-extension matrix with, per extension, importer, default processor, fixture path, six test names, per-target status, and a status word; a checker that verifies every named test exists in the tree and every extension is present. | [x] `tools/xna-pipeline-oracle/inputs_matrix.py` with `sync` and `check`. Each entry has two halves: an `xna` half regenerated from the inventory's `extensionIndex` on every `sync` and never edited, and a `cna` half that is CNA's answer. `check` fails if an extension is absent, if the matrix names one the assemblies do not, if a status is outside the vocabulary, if a status that needs a note has none, or if a test name or a fixture path it claims does not exist in the tree -- test existence is decided by finding `TEST(Suite, Name)` in the sources, so "the test exists" is mechanical. Writing it immediately found five extensions with no committed source at all and one (`.hdr`) with no measurement at all, both now closed by `XNAPP-167`. The report's own `source extensions IMPLEMENTED+TESTED` row read the status off the wrong half of each entry and could therefore only ever print `0/18`; fixed, and it now reads 9/18. |
-| `XNAPP-022` | Black-box corpus plan: the synthetic fixture set per extension (§23), authored or generated by CNA, with provenance file; nothing third-party without a licence row. | [ ] |
-| `XNAPP-023` | Audit CNA's current routes against §7/§9/§10 and record every default that differs (`ColorKeyEnabled`, `SpriteTextureProcessor` defaulting, `FontDescriptionStyle.BoldItalic`, `.ppm`/`.dib` registration, …) as decisions to take in their phases. | [ ] |
-
+| `XNAPP-022` | Black-box corpus plan: the synthetic fixture set per extension (§23), authored or generated by CNA, with provenance file; nothing third-party without a licence row. | [x] The corpus is four directories under `tests/assets/xna40`, 127 fixtures, and every one of them is either written by a generator in `tools/xna-pipeline-oracle/` or authored here: the textures by `texture/make_texture_fixtures.py` (2x2, the same four pixels in every format, so a format's own limits show up in what the importer answers rather than in the source), the media by `media/make-media-fixtures.sh` from a mathematical signal through FFmpeg, the `.x` files by `model/make-model-fixtures.py` and the `.fbx` files by `model/make_fbx_fixtures.py` in FBX 6.1 ASCII, and the `.spritefont`/`.fx`/`.xml` sources by hand. Nothing was downloaded and nothing is third-party. Each directory already had a prose `PROVENANCE.md` explaining what its fixtures are *for*; what it did not have was a half a gate could read, so each now carries a `PROVENANCE.json` with one row per file -- origin, generator, and a `thirdParty` flag that would need a `license` beside it -- and `tools/provenance/provenance_gate.py` fails when a file has no row, when a row names a file that is not there, and when a row claims third-party content with no licence. The first thing it found was real: the five `.xml` documents added for `XNAPP-261` had arrived with nothing saying who wrote them, and the prose says so now. The check is proved to bite by `provenance_gate_selftest.py`, which plants an unexplained fixture among the others. |
+| `XNAPP-023` | Audit CNA's current routes against §7/§9/§10 and record every default that differs (`ColorKeyEnabled`, `SpriteTextureProcessor` defaulting, `FontDescriptionStyle.BoldItalic`, `.ppm`/`.dib` registration, …) as decisions to take in their phases. | [x] The audit is §10 -- every processor property with the default the black-box oracle read off a freshly constructed instance of Microsoft's own class -- and it is now a test rather than a reading. `XnaProcessorDefaultsTests.cpp` constructs all twelve processors CNA provides and asserts **all 47** properties against those values, and `tools/xna-pipeline-oracle/processor_defaults_gate.py` (ctest `XnaPipelineProcessorDefaultsMatchTheMeasurement`) reads the `XNA-DEFAULT:` comment beside each assertion back out of the file and compares it with the inventory, failing on a value that differs, on a property the inventory does not have, on one asserted twice, and on any of the 47 the test does not cover. **47 measured, 47 asserted, 0 problems.** That closes the loop this row asked for: the defaults this plan names as having differed -- `ColorKeyEnabled`, `SpriteTextureProcessor`'s `GenerateMipmaps` (`False`, where `MaterialProcessor` and `ModelProcessor` want `True`), the `.ppm`/`.dib` registrations and `FontDescriptionStyle`'s parsing -- were each found and fixed by hand in their own phases, and nothing now keeps them right except this check. It is proved to bite: an assertion changed to the wrong value and one deleted are both reported. |
 ### Phase 3 — C++ public compatibility façade: pipeline core
 
 Location: `modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/` (build-time

@@ -75,3 +75,24 @@ which is what makes a difference in the compiled container attributable to somet
 
 `broken.fx`, `cyclic_include.fx` and `shader_model_3.fx` from `XNAPP-267` belong to the same
 family and are described above.
+
+## The `.xml` documents
+
+`plans/plan_xnapipeline_parity.md` `XNAPP-261` added five more beside `probe.xml`, written here,
+each naming one shape the intermediate serializer has to resolve from a document rather than from a
+C++ caller: `xml_int.xml` a primitive, `xml_vector3.xml` a framework value type, `xml_curve.xml` a
+framework reference type with a nested collection of keys, `xml_dictionary.xml` a
+`Dictionary[string,int]`, and `xml_rectangles.xml` a `List[Rectangle]` in the packed text form a
+list of a space-separated element type takes. Two of them were wrong on the first attempt and the
+genuine build said so, which is why they are what they are: a curve key is five tokens and not six,
+and a list of `Rectangle` is packed text rather than `<Item>` elements.
+
+`tests/assets/xna_custom_pipeline/library.xml` is the sixth, and lives with the custom-pipeline
+project rather than here because the type it names is that project's own.
+
+## The machine-readable half
+
+`PROVENANCE.json` beside this file lists every fixture in this directory with where it came from.
+`tools/provenance/provenance_gate.py` fails when a file here has no row, when a row names a file
+that is not here, and when a row claims third-party content with no licence — which is what stops a
+fixture arriving with nothing saying who wrote it.

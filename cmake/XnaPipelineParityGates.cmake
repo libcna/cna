@@ -44,6 +44,7 @@ add_test(NAME XnaPipelineParityReportIsCurrent
                  --map "${_xnapp_reference}/content-pipeline-parity-map.json"
                  --inputs "${_xnapp_reference}/content-pipeline-inputs.json"
                  --output "${CMAKE_CURRENT_SOURCE_DIR}/docs/xna-content-pipeline-parity-report.md"
+                 --plan "${CMAKE_CURRENT_SOURCE_DIR}/plans/plan_xnapipeline_parity.md"
                  --check)
 
 add_test(NAME XnaPipelineInputParityMatrixIsCurrent
@@ -70,6 +71,26 @@ add_test(NAME XnaPipelineParityGateIsGreen
                  --inputs "${_xnapp_reference}/content-pipeline-inputs.json"
                  --output "${CMAKE_CURRENT_SOURCE_DIR}/docs/xna-content-pipeline-parity-report.md"
                  --gate)
+
+# The denominator is frozen at the measurement it was read from (XNAPP-016). Three things are
+# compared and each fails for a different reason: the assemblies by digest and MVID, the counts, and
+# the inventory file itself -- which may change only by recording the new digest as an event with a
+# date and a reason.
+add_test(NAME XnaPipelineInventoryIsFrozen
+         COMMAND "${Python3_EXECUTABLE}" "${_xnapp_oracle}/inventory_freeze.py" check
+                 --inventory "${_xnapp_reference}/content-pipeline-api.json"
+                 --freeze "${_xnapp_reference}/content-pipeline-api.freeze.json")
+set_tests_properties(XnaPipelineInventoryIsFrozen PROPERTIES LABELS "parity;xnapipeline")
+
+# Every processor property's default, asserted in C++ against the value Microsoft's own class
+# answered, with the assertions tied back to that measurement (XNAPP-023). A default is the most
+# quietly wrong thing a reimplementation can have: nothing fails, the content is just different.
+add_test(NAME XnaPipelineProcessorDefaultsMatchTheMeasurement
+         COMMAND "${Python3_EXECUTABLE}" "${_xnapp_oracle}/processor_defaults_gate.py"
+                 --inventory "${_xnapp_reference}/content-pipeline-api.json"
+                 --test "${CMAKE_CURRENT_SOURCE_DIR}/modules/content-pipeline/tests/Microsoft/Xna/Framework/Content/Pipeline/Processors/XnaProcessorDefaultsTests.cpp")
+set_tests_properties(XnaPipelineProcessorDefaultsMatchTheMeasurement
+                     PROPERTIES LABELS "parity;xnapipeline")
 
 # The provenance gate: nothing Microsoft owns is in the tree, no font that is not licensed for it,
 # no production source carrying someone else's copyright header, every vendored third party

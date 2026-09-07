@@ -1,0 +1,194 @@
+{
+  "format": "cna.xna40.corpus-provenance/1",
+  "comment": "plans/plan_xnapipeline_parity.md XNAPP-022: every black-box fixture in this directory, with where it came from. The prose beside this file explains what each one is for; this is the machine-readable half, and tools/provenance/provenance_gate.py fails when a file here has no row or a row names a file that is not here. `thirdParty` true would need a `license` beside it; nothing here is.",
+  "directory": "tests/assets/xna40/media",
+  "summary": "Every file is synthesized from a mathematical signal by FFmpeg 7.1.5; none is third-party content and none was downloaded.",
+  "files": [
+    {
+      "file": "actually_mp3.wav",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/media/make-media-fixtures.sh",
+      "thirdParty": false
+    },
+    {
+      "file": "actually_wav.mp3",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/media/make-media-fixtures.sh",
+      "thirdParty": false
+    },
+    {
+      "file": "empty.mp3",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/media/make-media-fixtures.sh",
+      "thirdParty": false
+    },
+    {
+      "file": "empty.wma",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/media/make-media-fixtures.sh",
+      "thirdParty": false
+    },
+    {
+      "file": "empty.wmv",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/media/make-media-fixtures.sh",
+      "thirdParty": false
+    },
+    {
+      "file": "garbage.mp3",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/media/make-media-fixtures.sh",
+      "thirdParty": false
+    },
+    {
+      "file": "mp3_mono_16000_64k.mp3",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/media/make-media-fixtures.sh",
+      "thirdParty": false
+    },
+    {
+      "file": "mp3_mono_22050_64k.mp3",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/media/make-media-fixtures.sh",
+      "thirdParty": false
+    },
+    {
+      "file": "mp3_mono_24000_64k.mp3",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/media/make-media-fixtures.sh",
+      "thirdParty": false
+    },
+    {
+      "file": "mp3_mono_32000_128k.mp3",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/media/make-media-fixtures.sh",
+      "thirdParty": false
+    },
+    {
+      "file": "mp3_mono_44100_128k.mp3",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/media/make-media-fixtures.sh",
+      "thirdParty": false
+    },
+    {
+      "file": "mp3_mono_44100_2s.mp3",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/media/make-media-fixtures.sh",
+      "thirdParty": false
+    },
+    {
+      "file": "mp3_mono_44100_tagged.mp3",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/media/make-media-fixtures.sh",
+      "thirdParty": false
+    },
+    {
+      "file": "mp3_mono_44100_vbr.mp3",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/media/make-media-fixtures.sh",
+      "thirdParty": false
+    },
+    {
+      "file": "mp3_mono_48000_128k.mp3",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/media/make-media-fixtures.sh",
+      "thirdParty": false
+    },
+    {
+      "file": "mp3_mono_8000_32k.mp3",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/media/make-media-fixtures.sh",
+      "thirdParty": false
+    },
+    {
+      "file": "mp3_stereo_22050_96k.mp3",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/media/make-media-fixtures.sh",
+      "thirdParty": false
+    },
+    {
+      "file": "mp3_stereo_44100_192k.mp3",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/media/make-media-fixtures.sh",
+      "thirdParty": false
+    },
+    {
+      "file": "tone_mono_22050.wav",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/media/make-media-fixtures.sh",
+      "thirdParty": false
+    },
+    {
+      "file": "tone_mono_44100.wav",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/media/make-media-fixtures.sh",
+      "thirdParty": false
+    },
+    {
+      "file": "tone_stereo_44100.wav",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/media/make-media-fixtures.sh",
+      "thirdParty": false
+    },
+    {
+      "file": "truncated.mp3",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/media/make-media-fixtures.sh",
+      "thirdParty": false
+    },
+    {
+      "file": "truncated.wma",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/media/make-media-fixtures.sh",
+      "thirdParty": false
+    },
+    {
+      "file": "truncated.wmv",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/media/make-media-fixtures.sh",
+      "thirdParty": false
+    },
+    {
+      "file": "wma_mono_22050.wma",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/media/make-media-fixtures.sh",
+      "thirdParty": false
+    },
+    {
+      "file": "wma_mono_44100.wma",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/media/make-media-fixtures.sh",
+      "thirdParty": false
+    },
+    {
+      "file": "wma_stereo_44100.wma",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/media/make-media-fixtures.sh",
+      "thirdParty": false
+    },
+    {
+      "file": "wma_v1_mono_44100.wma",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/media/make-media-fixtures.sh",
+      "thirdParty": false
+    },
+    {
+      "file": "wmv_320x240_30fps_stereo.wmv",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/media/make-media-fixtures.sh",
+      "thirdParty": false
+    },
+    {
+      "file": "wmv_64x48_15fps_silent.wmv",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/media/make-media-fixtures.sh",
+      "thirdParty": false
+    },
+    {
+      "file": "wmv_v1_64x48.wmv",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/media/make-media-fixtures.sh",
+      "thirdParty": false
+    }
+  ]
+}
