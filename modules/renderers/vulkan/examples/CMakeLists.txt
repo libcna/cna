@@ -252,6 +252,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_basiceffect_default_lighting
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-202 (F-38): the declaration guard's REFUSAL contract, which the
+        # shared DeclarationGuardTest skips here because TranslatesDeclarations() lists Vulkan --
+        # true of every declaration a stock input table can satisfy, false of the rest.
+        cna_vulkan_test(cna_test_vulkan_declaration_refusal_contract
+                        vulkan_declaration_refusal_contract_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DeclarationRefusalContract
+            COMMAND cna_test_vulkan_declaration_refusal_contract
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-201 (F-37): the same 36-byte record with lighting OFF, which
         # VULKAN-200 deliberately left refused. Its gradient leg is what pins the D3D9 oD0 clamp:
         # a flat quad cannot see the order because the output write saturates either way.
