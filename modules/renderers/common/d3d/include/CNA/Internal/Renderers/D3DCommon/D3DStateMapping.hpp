@@ -35,12 +35,9 @@ namespace CNA::Internal::Renderers::D3DCommon
     D3D11_COMPARISON_FUNC CompareFunctionToD3D11(int compareFunction);
 
     /// Maps an XNA CullMode ordinal to the corresponding D3D11_CULL_MODE. Assumes
-    /// D3D11_RASTERIZER_DESC::FrontCounterClockwise = FALSE (D3D11's own default, matching D3D's
-    /// native clockwise-is-front convention -- unlike this project's Vulkan renderer, which must
-    /// explicitly override VkPipelineRasterizationStateCreateInfo::frontFace to CLOCKWISE since
-    /// Vulkan/GL's own native default is counter-clockwise-is-front). With that default,
-    /// CullClockwiseFace culls the front (clockwise) faces -> D3D11_CULL_FRONT, and
-    /// CullCounterClockwiseFace culls the back (counter-clockwise) faces -> D3D11_CULL_BACK.
+    /// D3D11_RASTERIZER_DESC::FrontCounterClockwise = TRUE, matching FNA3D's D3D11 convention.
+    /// This keeps native FrontFace/BackFace aligned with XNA's ordinary/CounterClockwise stencil
+    /// operation sets instead of compensating only the cull mode and silently swapping stencil.
     D3D11_CULL_MODE CullModeToD3D11(int cullMode);
 
     /// Maps an XNA FillMode ordinal to the corresponding D3D11_FILL_MODE.

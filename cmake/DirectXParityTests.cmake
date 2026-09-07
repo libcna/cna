@@ -95,9 +95,32 @@ function(cna_register_d3d_parity_tests)
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/gfx077_colorwritechannels_3d_test.cpp"
         DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 600)
     cna_d3d_parity_fixture(
-        NAME DepthStencilState_StencilEnable TARGET depthstencilstate_stencil_enable
-        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_depthstencilstate_stencil_enable_test.cpp"
-        DIRECTX11_ONLY REASON "D3D12 state-corpus adoption is tracked by DX-227 and DX-236")
+        NAME DepthStencilState_StencilEnable TARGET depthstencilstate_stencil_enable DIRECTX12_ORDER 400
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_depthstencilstate_stencil_enable_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME DepthStencilState_CompareFunction TARGET depthstencilstate_compare_function DIRECTX12_ORDER 410
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_depthstencilstate_compare_function_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME DepthStencilState_StencilMask TARGET depthstencilstate_stencil_mask DIRECTX12_ORDER 420
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_depthstencilstate_stencil_mask_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME DepthStencilState_StencilOps TARGET depthstencilstate_stencil_ops DIRECTX12_ORDER 430
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_depthstencilstate_stencil_ops_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME DepthStencilState_StencilTwoSided TARGET depthstencilstate_stencil_twosided DIRECTX12_ORDER 440
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_depthstencilstate_stencil_twosided_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME DepthStencilState_WriteEnable TARGET depthstencilstate_write_enable DIRECTX12_ORDER 450
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_depthstencilstate_write_enable_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME GraphicsDevice_ClearStencil TARGET graphicsdevice_clear_stencil DIRECTX12_ORDER 460
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_graphicsdevice_clear_stencil_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME GraphicsDevice_ReferenceStencil TARGET graphicsdevice_reference_stencil DIRECTX12_ORDER 470
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_graphicsdevice_reference_stencil_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME GraphicsDevice_ClearDepth TARGET graphicsdevice_clear_depth DIRECTX12_ORDER 480
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/graphicsdevice_clear_depth_test.cpp")
     cna_d3d_parity_fixture(
         NAME RasterizerState_CullMode TARGET rasterizerstate_cullmode
         SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_rasterizerstate_cullmode_test.cpp"

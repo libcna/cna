@@ -144,8 +144,8 @@ namespace CNA::Internal::Renderers::DirectX11
         D3D11_RASTERIZER_DESC desc{};
         desc.FillMode = D3DCommon::FillModeToD3D11(fillMode);
         desc.CullMode = D3DCommon::CullModeToD3D11(cullMode);
-        // D3DCommon::CullModeToD3D11's own header doc: assumes FrontCounterClockwise = FALSE.
-        desc.FrontCounterClockwise = FALSE;
+        // FNA3D uses this convention so XNA's CounterClockwiseStencil* state maps to BackFace.
+        desc.FrontCounterClockwise = TRUE;
         desc.DepthBias = depthBias;
         desc.DepthBiasClamp = 0.0f;
         desc.SlopeScaledDepthBias = slopeScaleDepthBias;

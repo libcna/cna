@@ -71,7 +71,8 @@ namespace CNA::Internal::Renderers::DirectX12
         D3D12_RASTERIZER_DESC& rs = psoDesc.RasterizerState;
         rs.FillMode = static_cast<D3D12_FILL_MODE>(FillModeToD3D11(desc.fillMode));
         rs.CullMode = static_cast<D3D12_CULL_MODE>(CullModeToD3D11(desc.cullMode));
-        rs.FrontCounterClockwise = FALSE; // Matches D3DStateMapping::CullModeToD3D11's own documented D3D11 default.
+        // Match FNA3D and D3D11StateObjectCache so culling and two-sided stencil agree on faces.
+        rs.FrontCounterClockwise = TRUE;
         rs.DepthClipEnable = TRUE;
         // plans/plan_dx.md DX-207: deliberately left FALSE, matching D3D11RasterizerStateCache exactly.
         // Setting it from the sample count was tried while chasing the missing anti-aliasing and

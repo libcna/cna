@@ -69,13 +69,13 @@ namespace CNA::Internal::Renderers::D3DCommon
 
     D3D11_CULL_MODE CullModeToD3D11(int cullMode)
     {
-        // See this function's own header doc: FrontCounterClockwise = FALSE (D3D11's default,
-        // matching D3D's native clockwise-is-front convention) is assumed by the caller.
+        // See this function's own header doc: callers use FNA3D's FrontCounterClockwise = TRUE
+        // convention so rasterizer culling and two-sided stencil classify faces identically.
         switch (static_cast<CullMode>(cullMode))
         {
             case CullMode::None:                     return D3D11_CULL_NONE;
-            case CullMode::CullClockwiseFace:        return D3D11_CULL_FRONT;
-            case CullMode::CullCounterClockwiseFace: return D3D11_CULL_BACK;
+            case CullMode::CullClockwiseFace:        return D3D11_CULL_BACK;
+            case CullMode::CullCounterClockwiseFace: return D3D11_CULL_FRONT;
             default:                                   return D3D11_CULL_NONE;
         }
     }
