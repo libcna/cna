@@ -7140,12 +7140,22 @@ namespace CNA::Internal::Renderers::Vulkan
         out[121] = 0.f; out[122] = 0.f; out[123] = 0.f;
     }
 
-    void VulkanRenderer::FillInstancedPushConst(float (&pc)[32], const Matrix& view,
+    void VulkanRenderer::FillInstancedPushConst(float (&pc)[32], const Matrix& world,
+                                                        const Matrix& view,
                                                         const Matrix& proj, const GpuDrawParams& p)
     {
-        // [0..15]: VP matrix (view × projection, column-major); world comes from per-instance buffer
-        const Matrix vp = view * proj;
-        vp.ToColumnMajor(pc);
+        // plan_vulkan.md VULKAN-219: [0..15] is WORLD × view × projection, and the per-instance
+        // matrix multiplies INSIDE it in the vertex shader (`pc.vp * instWorld * pos`), so an
+        // instance transform composes with `BasicEffect.World` rather than replacing it.
+        //
+        // It used to be view × projection alone, with a comment saying "world comes from the
+        // per-instance buffer" -- which made `World` a no-op on an instanced draw. The strongest
+        // argument that this was a defect rather than a design is two lines up in this same entry
+        // point: when it finds no per-instance stream it falls back to `DrawIndexedPrimitivesEx`
+        // **with `world`**, so the identical draw honoured `World` or ignored it depending only on
+        // whether an instance buffer happened to be bound.
+        const Matrix wvp = world * view * proj;
+        wvp.ToColumnMajor(pc);
         // [16..31]: same layout as FillExtPushConst
         pc[16] = p.diffuseColor[0]; pc[17] = p.diffuseColor[1];
         pc[18] = p.diffuseColor[2]; pc[19] = p.diffuseColor[3];
@@ -14999,9 +15009,10 @@ namespace CNA::Internal::Renderers::Vulkan
         }
 
         Pending3DDraw d{};
-        // VULKAN-097: this route's world comes from the per-instance buffer, so the
-        // correction rides on the projection half of the view-projection product.
-        FillInstancedPushConst(d.pushConst, view,
+        // VULKAN-097: the correction rides on the projection half of the product. VULKAN-219: the
+        // world half is now the effect's own `World`, with the per-instance matrix applied inside
+        // it by the shader.
+        FillInstancedPushConst(d.pushConst, world, view,
                                projection * XnaPixelCenterCorrectionEXT(primitive), params);
 
         // Copy per-vertex data (all vertices)

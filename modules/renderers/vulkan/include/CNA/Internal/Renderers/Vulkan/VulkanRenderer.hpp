@@ -4144,7 +4144,7 @@ namespace CNA::Internal::Renderers::Vulkan
                                          VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
                                          const VulkanVertexInputLayoutEXT& vertexLayout = {},
                                          bool textured = false);
-        void FillInstancedPushConst(float (&pc)[32], const Matrix& view, const Matrix& proj,
+        void FillInstancedPushConst(float (&pc)[32], const Matrix& world, const Matrix& view, const Matrix& proj,
                                     const GpuDrawParams& p);
         void CreateFrame3DInstBuffers();
         void EnsureFrame3DInstBuffers();

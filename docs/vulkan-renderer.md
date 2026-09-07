@@ -333,6 +333,12 @@ EasyGL — an optional per-instance matrix added to every stock program. Three s
 | Position + Colour | `instanced_colored3d` |
 | Position + TextureCoordinate, with `TextureEnabled` and a bound texture | `instanced_textured3d` |
 
+**The per-instance matrix composes with `BasicEffect.World`** — the shader computes
+`World × View × Projection × instanceMatrix × position`, so an instance transform is applied
+inside the effect's own world transform, as on EasyGL. Before `VULKAN-219` this route passed
+only `View × Projection` and `World` was silently dropped on every instanced draw, while the
+same entry point's no-instance-stream fallback applied it.
+
 The textured variant needs **both** halves: the effect must have asked for a texture, and the
 declaration must supply the coordinate. Either alone selects a program the draw cannot feed, so
 either alone is ignored.

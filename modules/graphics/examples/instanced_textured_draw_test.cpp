@@ -260,6 +260,56 @@ protected:
               "B' INSTANCED, RED DiffuseColor: " + Text(b2) + " = " + Diagnose(b2) +
                   " (want black; RED here is the specific signature of a program that draws the "
                   "material colour and never samples the texture at all)");
+        // ---- D/E: does the per-instance matrix COMPOSE with BasicEffect.World, or replace it?
+        // The three instances sit at x = -0.5, 0, +0.5 and the quad is +/-0.12 wide, so a World
+        // translation of +0.3 moves the centre instance clear of the centre pixel if World is
+        // applied and leaves it covering the centre if it is not. Blue at the centre therefore
+        // means World was dropped; the clear colour means it was honoured.
+        {
+            auto worldShift = [&](bool instanced) {
+                dev.Clear(Color(0, 255, 0, 255));
+                dev.SetDepthTestEnabled(false);
+                dev.setBlendStateProperty(BlendState::Opaque);
+                dev.setRasterizerStateProperty(RasterizerState::CullNone);
+                BasicEffect fx(dev);
+                fx.setWorldProperty(Matrix::CreateTranslation(Vector3(0.3f, 0.0f, 0.0f)));
+                fx.setViewProperty(Matrix::getIdentityProperty());
+                fx.setProjectionProperty(Matrix::getIdentityProperty());
+                fx.setLightingEnabledProperty(false);
+                fx.setVertexColorEnabledProperty(false);
+                fx.setTextureEnabledProperty(true);
+                fx.setTextureProperty(blue_.get());
+                fx.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+                fx.setAlphaProperty(1.0f);
+                fx.Apply();
+                dev.SetVertexBuffer(vb_.get());
+                dev.SetIndexBuffer(ib_.get());
+                if (instanced) {
+                    std::vector<VertexBufferBinding> bd = {
+                        VertexBufferBinding(vb_.get(),     0, 0),
+                        VertexBufferBinding(instVb_.get(), 0, 1),
+                    };
+                    dev.SetVertexBuffers(bd);
+                    dev.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2, 3);
+                } else {
+                    dev.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2);
+                }
+                return ReadPixel(dev, kN / 2, kN / 2);
+            };
+            const Color wn = worldShift(false);
+            const Color wi = worldShift(true);
+            check(!IsBlue(wn),
+                  "D control: a NON-instanced draw honours BasicEffect.World -- with World=+0.3 the "
+                  "quad leaves the centre, which reads " + Text(wn) +
+                      " (blue would mean World never reached the draw at all)");
+            check(!IsBlue(wi),
+                  "E an INSTANCED draw honours it too -- the per-instance matrix COMPOSES with "
+                  "World rather than replacing it: " + Text(wi) +
+                      " (blue means the centre instance is still at the origin, i.e. World was "
+                      "dropped; leg B has already shown that this same draw covers the centre when "
+                      "World is identity, so this is a transform test and not a coverage one)");
+        }
+
         check(IsBlue(a) == IsBlue(b) && IsBlack(a2) == IsBlack(b2),
               "C what the texture contributes does not depend on whether the draw was instanced: "
               "non-instanced " + Text(a) + "/" + Text(a2) + " vs instanced " + Text(b) + "/" +
