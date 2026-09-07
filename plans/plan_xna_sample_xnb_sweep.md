@@ -197,6 +197,10 @@ final qualification.
 | `XNASWEEP-111` | An FBX camera is not a node, and what makes a scene's root is what the scene names. | [ ] |
 | `XNASWEEP-112` | An FBX vertex is a control point *and* its channel values. | [ ] |
 | `XNASWEEP-113` | `PreRotation` and the scene's own unit, both of which decide where a model stands. | [ ] |
+| `XNASWEEP-114` | A `.x` names its materials as often as it nests them, and its texture paths are Windows paths. | [ ] |
+| `XNASWEEP-115` | A path a source file names is matched the way Windows matches one; the *name* stays as authored. | [ ] |
+| `XNASWEEP-116` | An external reference is written relative to the asset that carries it, with Windows separators. | [ ] |
+| `XNASWEEP-117` | Two models that name the same texture are refused; XNA builds it once and lets both reference it. | [ ] Recorded, not fixed. `ReserveOutputs` in `tools/content/content.cpp` gives each output logical name exactly one owning node, so Spacewar's `p1_bfg` and `p1_dual`, which both name `textures/p1_back.tga`, collide on `textures/p1_back_0` and neither builds. XNA's own build produces that texture once and both models reference it; the coordinator needs nested nodes shared across parents by their `(source, processor, parameters)` key rather than owned by whichever parent reached them first. 85 of Spacewar's 154 references are still missing for this reason alone. |
 
 
 ---

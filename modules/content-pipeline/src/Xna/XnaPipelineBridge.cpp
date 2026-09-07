@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Content/Pipeline/XnaPipelineBridge.hpp"
 
+#include "Microsoft/Xna/Framework/Content/Pipeline/ExternalReference.hpp"
+
 #include <cmath>
 #include <locale>
 #include <optional>
@@ -587,11 +589,34 @@ namespace CNA::Content::Pipeline
             return filename;
         }
 
+        // The *name* is the authored spelling and the *file* is whatever the filesystem calls
+        // it: every `.x` and `.fbx` in the public XNA sample corpus was written on Windows, where
+        // a path is matched without regard to case. Spacewar's `asteroid1.x` names
+        // `..\textures\asteroid1.tga` beside a directory called `Textures`, and XNA's own build
+        // reads that file and writes the asset to `Content/textures/asteroid1_0.xnb` -- the
+        // authored case, not the disk's (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-115`).
+        std::string opened = sourceFilename;
+        {
+            std::error_code error;
+            if (!std::filesystem::is_regular_file(opened, error))
+            {
+                const std::filesystem::path root = context_->SourceRoot();
+                const std::filesystem::path relative =
+                    std::filesystem::path(sourceFilename).lexically_relative(root);
+                if (!relative.empty() && relative.begin()->string() != "..")
+                {
+                    const std::filesystem::path found =
+                        Xna::ResolveNamedSourceFileEXT(root, relative.generic_string());
+                    if (std::filesystem::is_regular_file(found, error)) { opened = found.string(); }
+                }
+            }
+        }
+
         ContentBuildResult nested;
         try
         {
             nested = pipeline->Build(
-                NestedRequest(*context_, sourceFilename, logicalName, processorName, processorParameters, importerName));
+                NestedRequest(*context_, opened, logicalName, processorName, processorParameters, importerName));
         }
         catch (...)
         {

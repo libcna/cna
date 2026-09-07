@@ -25,6 +25,27 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
      * @throws System::ArgumentException when @p filename is empty, or is relative while the
      *         identity has no source filename to resolve against.
      */
+    /**
+     * @brief Resolves a path a *source file* named, allowing for the case it was written in.
+     *
+     * Every `.x` and `.fbx` in the public XNA sample corpus was written on Windows, where a path
+     * is matched without regard to case: Spacewar's `asteroid1.x` names
+     * `..\textures\asteroid1.tga` and the directory beside it is called `Textures`. XNA's own
+     * build resolves that; on a case-sensitive filesystem the exact spelling is simply not there,
+     * and the model failed to build at all (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-115`).
+     *
+     * The fallback is deliberately narrow and deterministic: it applies only when the authored
+     * spelling does not exist, it matches one path component at a time, and a directory holding
+     * two entries that differ only in case resolves to neither -- the authored path comes back
+     * unchanged so the build refuses with the name the file actually gave.
+     *
+     * @param directory The directory the name is relative to.
+     * @param named The path as the source file spells it; a backslash is a separator.
+     * @return The resolved path, or the authored one when nothing matches.
+     */
+    CNAEXT [[nodiscard]] std::filesystem::path ResolveNamedSourceFileEXT(
+        const std::filesystem::path& directory, const std::string& named);
+
     CNAEXT [[nodiscard]] std::string ResolveExternalReferenceFilename(
         const std::string& filename, const ContentIdentity& relativeToContent);
 

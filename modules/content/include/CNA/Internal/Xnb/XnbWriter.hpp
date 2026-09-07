@@ -180,6 +180,19 @@ namespace CNA::Internal::Xnb
          */
         void WriteExternalReference(const std::string& relativePath);
 
+        /**
+         * @brief Appends a reference given as a content-root-relative logical name.
+         *
+         * `ContentReader::ReadExternalReference` resolves a reference against the *asset's own*
+         * directory, so a model in `Models/` that named `Textures/wall` would send its reader
+         * looking for `Models/Textures/wall`. XNA writes `..\textures\wall` for exactly that
+         * case, and the canonical model route handed this writer the logical name unchanged
+         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-116`).
+         *
+         * @param logicalName The referenced asset's logical content name, or empty for none.
+         */
+        void WriteExternalReferenceLogicalName(const std::string& logicalName);
+
         // -- object graph --
 
         /**

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Xnb/XnbWriter.hpp"
 
+#include <filesystem>
+
 #include "CNA/Internal/Xnb/LzxEncoder.hpp"
 #include "CNA/Internal/Xnb/XnbCompressionWriter.hpp"
 
@@ -240,6 +242,31 @@ namespace CNA::Internal::Xnb
     {
         WriteVector3(value.Center);
         body_.WriteSingle(value.Radius);
+    }
+
+    void XnbWriter::WriteExternalReferenceLogicalName(const std::string& logicalName)
+    {
+        if (logicalName.empty())
+        {
+            WriteExternalReference(logicalName);
+            return;
+        }
+        const std::filesystem::path referenced(logicalName);
+        const std::filesystem::path directory = std::filesystem::path(assetName_).parent_path();
+        if (directory.empty())
+        {
+            WriteExternalReference(referenced.generic_string());
+            return;
+        }
+        const std::filesystem::path relative = referenced.lexically_relative(directory);
+        // XNA writes a reference the way Windows spells a path. Of the 218 model texture
+        // references in the public XNA sample corpus, 178 have no separator at all and 40 use a
+        // backslash; not one uses a forward slash (plans/plan_xna_sample_xnb_sweep.md
+        // `XNASWEEP-116`). CNA's own reader normalizes either, so this changes only the bytes.
+        std::string spelled =
+            (relative.empty() ? referenced.generic_string() : relative.generic_string());
+        std::replace(spelled.begin(), spelled.end(), '/', '\\');
+        WriteExternalReference(spelled);
     }
 
     void XnbWriter::WriteExternalReference(const std::string& relativePath)

@@ -1165,7 +1165,7 @@ namespace CNA::Internal::Xnb
             [](XnbWriter& output, const XnbBasicEffectData& value)
             {
                 output.RequireVerifiedPlatformPayload("BasicEffectWriter");
-                output.WriteExternalReference(value.textureReference);
+                output.WriteExternalReferenceLogicalName(value.textureReference);
                 output.WriteVector3(value.diffuseColor);
                 output.WriteVector3(value.emissiveColor);
                 output.WriteVector3(value.specularColor);
@@ -1181,7 +1181,7 @@ namespace CNA::Internal::Xnb
             true,
             [](XnbWriter& output, const XnbAlphaTestEffectData& value)
             {
-                output.WriteExternalReference(value.textureReference);
+                output.WriteExternalReferenceLogicalName(value.textureReference);
                 output.WriteInt32(value.alphaFunction);
                 output.WriteUInt32(value.referenceAlpha);
                 output.WriteVector3(value.diffuseColor);
@@ -1196,8 +1196,8 @@ namespace CNA::Internal::Xnb
             true,
             [](XnbWriter& output, const XnbDualTextureEffectData& value)
             {
-                output.WriteExternalReference(value.textureReference);
-                output.WriteExternalReference(value.texture2Reference);
+                output.WriteExternalReferenceLogicalName(value.textureReference);
+                output.WriteExternalReferenceLogicalName(value.texture2Reference);
                 output.WriteVector3(value.diffuseColor);
                 output.WriteSingle(value.alpha);
                 output.WriteBoolean(value.vertexColorEnabled);
@@ -1210,8 +1210,8 @@ namespace CNA::Internal::Xnb
             true,
             [](XnbWriter& output, const XnbEnvironmentMapEffectData& value)
             {
-                output.WriteExternalReference(value.textureReference);
-                output.WriteExternalReference(value.environmentMapReference);
+                output.WriteExternalReferenceLogicalName(value.textureReference);
+                output.WriteExternalReferenceLogicalName(value.environmentMapReference);
                 output.WriteSingle(value.environmentMapAmount);
                 output.WriteVector3(value.environmentMapSpecular);
                 output.WriteSingle(value.fresnelFactor);
@@ -1227,7 +1227,7 @@ namespace CNA::Internal::Xnb
             true,
             [](XnbWriter& output, const XnbSkinnedEffectData& value)
             {
-                output.WriteExternalReference(value.textureReference);
+                output.WriteExternalReferenceLogicalName(value.textureReference);
                 output.WriteInt32(value.weightsPerVertex);
                 output.WriteVector3(value.diffuseColor);
                 output.WriteVector3(value.emissiveColor);
@@ -1263,7 +1263,7 @@ namespace CNA::Internal::Xnb
             true,
             [](XnbWriter& output, const XnbExternalAssetReference& value)
             {
-                output.WriteExternalReference(value.reference);
+                output.WriteExternalReferenceLogicalName(value.reference);
             });
 
         // XNAP-29: Dictionary<String, Object>. Its values are polymorphic -- each carries its own
@@ -1317,7 +1317,7 @@ namespace CNA::Internal::Xnb
                 }
                 // The effect reference sits inline in a field whose type the reader already
                 // knows, so it carries no dispatch index. The parameter table does.
-                output.WriteExternalReference(value.effectReference);
+                output.WriteExternalReferenceLogicalName(value.effectReference);
                 output.WriteObject(value.parameters);
             });
 

@@ -139,6 +139,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             double ticksPerSecond = DefaultTicksPerSecond;
             /** @brief Where the source lives, for an external texture reference. */
             std::filesystem::path directory;
+            /** @brief Every named `Material` in the file, for a `{Name}` reference to reach. */
+            std::map<std::string, const Canon::DirectXFileObject*> materialsByName;
         };
 
         /** @brief One vertex's worth of bone weights, gathered before the channel is built. */
@@ -167,9 +169,15 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             const Canon::DirectXFileObject* texture = Find(object, "TextureFilename");
             if (texture != nullptr && !texture->strings.empty())
             {
-                // The reference is the file beside the source, which is where a `.x` names it.
+                // The reference is the file beside the source, which is where a `.x` names it --
+                // spelled the way the tool that wrote the file spells a path. Every `.x` in the
+                // public sample corpus was written on Windows, so `..\textures\p1_dual.tga` is
+                // an ordinary relative path and not a filename with backslashes in it
+                // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-114`).
+                std::string named = texture->strings.front();
+                std::replace(named.begin(), named.end(), '\\', '/');
                 material.setTextureProperty(std::make_shared<ExternalReference<Graphics::TextureContent>>(
-                    (importing.directory / texture->strings.front()).string()));
+                    (importing.directory / named).lexically_normal().string()));
             }
         }
 
@@ -398,6 +406,20 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     }
                     auto material = std::make_shared<BasicMaterialContent>();
                     ReadMaterial(child, *material, importing);
+                    materials.push_back(std::move(material));
+                }
+                // A `.x` may name its materials rather than nest them -- `{phong1SG}` refers to a
+                // `Material` declared elsewhere in the file, which is what every model an
+                // exporter writes from Maya does. Reading only the nested ones left such a mesh
+                // with no material at all and so with one part where XNA has one per material:
+                // 18 of the 52 differing `.x` models in the public sample corpus are exactly that
+                // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-114`).
+                for (const std::string& named : list->references)
+                {
+                    const auto found = importing.materialsByName.find(named);
+                    if (found == importing.materialsByName.end()) { continue; }
+                    auto material = std::make_shared<BasicMaterialContent>();
+                    ReadMaterial(*found->second, *material, importing);
                     materials.push_back(std::move(material));
                 }
                 if (materials.size() != materialCount && !materials.empty())
@@ -877,6 +899,16 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 importing.ticksPerSecond = object.numbers.front();
             }
         }
+        // Every named object a `{Name}` reference can reach, wherever it is declared.
+        const auto index = [&importing](const Canon::DirectXFileObject& object, auto&& self) -> void
+        {
+            if (object.type == "Material" && !object.name.empty())
+            {
+                importing.materialsByName.emplace(object.name, &object);
+            }
+            for (const Canon::DirectXFileObject& child : object.children) { self(child, self); }
+        };
+        for (const Canon::DirectXFileObject& object : parsed.objects) { index(object, index); }
 
         // A file whose single top-level object is a Frame answers that frame as the root; any
         // other shape answers an unnamed root holding the objects (measured, x/quad_textured.x
