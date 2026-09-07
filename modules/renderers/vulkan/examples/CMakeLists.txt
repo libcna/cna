@@ -162,6 +162,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_FullscreenSpriteThen3D COMMAND cna_test_vulkan_fullscreen_sprite_then_3d
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-194: XNA's PrepRenderState assigns the batch's SamplerState into
+        # GraphicsDevice.SamplerStates[0], so it outlives End() and the next 3D draw samples with
+        # it. Timing measured on the shipped runtime (spikes/xna-spritebatch-sampler0-spike):
+        # published at the flush for Deferred, in Begin() for Immediate. Renderer-agnostic source.
+        cna_vulkan_test(cna_test_vulkan_spritebatch_sampler0_publication
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_sampler0_publication_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SpriteBatch_Sampler0Publication COMMAND cna_test_vulkan_spritebatch_sampler0_publication
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-055: a 3D draw after a SpriteBatch Begin()/End() pair inherits
         # whatever GraphicsDevice.BlendState currently is -- FNA's own lasting side effect, asserted
         # by pixel arithmetic (Additive: red(200,0,0) + gray(100,100,100) clamps to (255,100,100),

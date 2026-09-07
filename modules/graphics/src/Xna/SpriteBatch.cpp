@@ -228,6 +228,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 // Matches FNA: a null samplerState defaults to SamplerState.LinearClamp, and the
                 // resolved state is always (re-)applied — never left over from a previous Begin().
                 const SamplerState& effectiveSampler = samplerState ? *samplerState : SamplerState::LinearClamp;
+                effectiveSampler_ = effectiveSampler;
                 renderer_->SetSamplerFilter(static_cast<int>(effectiveSampler.getFilterProperty()));
                 renderer_->SetSamplerAddressMode(static_cast<int>(effectiveSampler.getAddressUProperty()),
                                                 static_cast<int>(effectiveSampler.getAddressVProperty()));
@@ -246,7 +247,10 @@ namespace Microsoft::Xna::Framework::Graphics
                 // it; slots 1 and up had no writer at all in a SpriteBatch-only frame, so a
                 // ShaderEffect's second texture unit was sampled with the first one's state.
                 if (graphicsDevice_ != nullptr && sortMode_ == SpriteSortMode::Immediate)
+                {
+                    graphicsDevice_->getSamplerStatesProperty()[0] = effectiveSampler_;
                     graphicsDevice_->applySamplerStatesToRenderer(1);
+                }
             }
             catch (...)
             {
@@ -375,8 +379,17 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         // plan_vulkan.md VULKAN-166: before the empty check, matching FNA's FlushBatch, which
         // calls PrepRenderState first and only then returns early on numSprites == 0.
+        // plan_vulkan.md VULKAN-194: PrepRenderState's first act is
+        // `GraphicsDevice.SamplerStates[0] = samplerState`, so the batch's sampler is left behind
+        // in the device collection and the next 3D draw inherits it. Measured on the XNA runtime
+        // (spikes/xna-spritebatch-sampler0-spike): the assignment is NOT visible after Begin() for
+        // a Deferred batch, only after the flush, and a following 3D draw really does sample with
+        // the batch's address mode.
         if (graphicsDevice_ != nullptr)
+        {
+            graphicsDevice_->getSamplerStatesProperty()[0] = effectiveSampler_;
             graphicsDevice_->applySamplerStatesToRenderer(1);
+        }
 
         if (spriteQueue_.empty()) return;
 

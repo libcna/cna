@@ -217,11 +217,38 @@ not an `Immediate` one.
 **It publishes from slot 1 upward, deliberately.** Slot 0 already has a writer — the batch's own
 sampler, down the `ISpriteBatchRenderer` path — and giving one slot two writers with no ordering
 between them across twelve renderer families is the exact shape of the bug Task 293 fixed and of
-VULKAN-164's second defect. The consequence is that `GraphicsDevice.SamplerStates[0]` still does
-**not** hold the batch's `SamplerState` after `Begin()`, where FNA's `PrepRenderState` assigns it
-(`SpriteBatch.cs:1426`); that remaining divergence is tracked as `plans/plan_vulkan.md`
-VULKAN-194 rather than folded in here, because assigning it changes what a 3D draw *after* a
-`SpriteBatch` samples with, on every renderer at once.
+VULKAN-164's second defect. That is still true, and it is still slot 1 upward that gets *pushed to
+the renderer* from the sprite path.
+
+## 9. What a `SpriteBatch` leaves behind in `SamplerStates[0]` (`plans/plan_vulkan.md` VULKAN-194, 2026-09-07)
+
+§8 left one divergence open on purpose: `GraphicsDevice.SamplerStates[0]` did not hold the batch's
+`SamplerState` afterwards, where XNA's `PrepRenderState` assigns it (`SpriteBatch.cs:1426`). It does
+now, and **when** it happens is not what FNA's source reads like.
+
+Measured on the shipped XNA 4.0 runtime (`spikes/xna-spritebatch-sampler0-spike/`), with
+`SamplerStates[0]` set to `PointClamp` and a `Deferred` batch begun with `PointWrap`:
+
+```
+before Begin: SamplerStates[0] = PointClamp
+after  Begin: SamplerStates[0] = PointClamp     <- not published yet
+after  End  : SamplerStates[0] = PointWrap      <- published at the flush
+3D draw after the batch, sampled at u = 1.25 -> red, i.e. the batch's Wrap
+```
+
+So the assignment happens where `PrepRenderState` runs, which for a `Deferred` batch is the
+**flush** and not `Begin()` — the same two points §8's publication already uses. CNA now assigns
+there, and only the *device collection* is written: the push to the renderer stays where it was,
+in `GraphicsDevice`'s draw entry points, so the batch's state reaches the sampler on the **next
+draw**. That is XNA's ordering, and it keeps slot 0 to one renderer-side writer.
+
+**What this changes for a game:** a 3D draw issued after a `SpriteBatch` now samples with the
+batch's `SamplerState`, not with whatever the game last assigned. This is XNA behaviour and it is
+CNA-wide, not renderer-specific. A game that relied on the old behaviour should assign
+`SamplerStates[0]` explicitly after `End()` — which is what it would have had to do on XNA too.
+
+Asserted by `modules/graphics/examples/spritebatch_sampler0_publication_test.cpp`, registered on
+Vulkan and EasyGL.
 
 Pixel-proven on Vulkan by `Vulkan_ShaderEffect_PerUnitSampler`
 (`modules/renderers/vulkan/examples/vulkan_shader_effect_per_unit_sampler_test.cpp`): two 1×1×2

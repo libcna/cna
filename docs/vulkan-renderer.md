@@ -317,7 +317,10 @@ covers it.
 - **Sampler state** for unit *u* is `GraphicsDevice.SamplerStates[u]`, as in XNA — so two bound
   textures in one batch can be filtered and addressed differently. Unit 0 is the exception, and it
   is a deliberate one: a `SpriteBatch` owns slot 0 and publishes the state passed to `Begin()`
-  there, so unit 0 always carries the batch's own sampler no matter what `SamplerStates[0]` holds.
+  there, so unit 0 always carries the batch's own sampler no matter what `SamplerStates[0]` held
+  when the batch began. Since `VULKAN-194` the batch also *assigns* its sampler into
+  `SamplerStates[0]` at the same publication points, matching XNA, so the value the collection
+  holds after `End()` is the batch's and the **next 3D draw** samples with it.
   Set `SamplerStates[1..15]` **before** `Begin()`. Setting them afterwards reaches a `Deferred`
   batch, whose flush publishes them, but not an `Immediate` one, whose only publication point is
   `Begin()` — XNA re-applies device state per draw call and CNA's sprite path does not go through
