@@ -143,3 +143,65 @@ substitutes so the two look alike there), and `VULKAN-173`/`VULKAN-172`, which r
 `#if defined(CNA_GL_PROFILE_*)` guards with the renderer's own `ClassifySurfaceFormatEXT` verdict
 in three shared sources. And one row changed this renderer because EasyGL was right and it was not:
 `VULKAN-260`.
+
+---
+
+## `ShaderEffect` takes SPIR-V, and the 37 GLSL tests are a divergence rather than a gap
+
+`VULKAN-256`, closing `VULKAN-250`–`VULKAN-255`.
+**Tests:** `Vulkan_ShaderDialectContract`, `Vulkan_ShaderEffect_SpirV`,
+`Vulkan_ShaderEffect_BoundTexture`, `Vulkan_ShaderEffect_UniformArrays`, `Vulkan_ShaderEffect_3D`,
+`Vulkan_Texture3DAddressW`
+
+`ShaderEffect` takes **renderer-specific** shader source by contract, and this renderer's is
+compiled **SPIR-V**. `GraphicsDevice::GetShaderDialectEXT()` reports `GlslVulkan`, which names the
+source language the bytecode was compiled *from* — it does not mean this renderer compiles that
+source. Hand it GLSL text and the effect is refused with a message that says so; the check is the
+SPIR-V magic word, not the payload's length. That distinction is not pedantry: until `VULKAN-256`
+the refusal was a *length* check, so GLSL whose byte count happened to be a multiple of four went
+to `vkCreateShaderModule` — which **accepted it** on llvmpipe, leaving an effect that reported
+itself valid and drew from text.
+
+EasyGL's suite carries 37 tests whose payload is GLSL (`*_Shader`, `Bloom_*`, `ShaderEffect_*`).
+They are **not** ported, and that is a decision rather than a backlog: the shader in each is the
+part that cannot cross renderers, and making one source serve both is `plans/plan_csl.md`'s whole
+purpose. What this renderer owes instead is an equally capable custom-effect surface, tested with
+SPIR-V payloads that exercise the same capabilities:
+
+| What the EasyGL family needs | Where this renderer proves it |
+|---|---|
+| A uniform reaches the shader and decides pixels | `Vulkan_ShaderEffect_SpirV` — two values, two colours |
+| A sprite drawn through a custom shader | the same test, and every bound-texture leg |
+| A texture bound explicitly, not the one the draw supplied | `Vulkan_ShaderEffect_BoundTexture` A/B — descriptor set 1, binding = unit |
+| A `TextureCube` and a `Texture3D` in a custom shader | the same test, legs E and F — bindings 4+unit and 8+unit |
+| Volume sampling that honours `SamplerState` | `Vulkan_Texture3DAddressW` — wrap vs clamp outside `[0,1]` |
+| Array uniforms: kernels, palettes, coefficient sets | `Vulkan_ShaderEffect_UniformArrays` — four uniform-buffer ranges, 72 elements each |
+| A 3D draw with the caller's own vertex layout | `Vulkan_ShaderEffect_3D` — a 48-byte five-element declaration |
+| Multiple render targets from a custom shader | `Vulkan_MRT_MsaaResolve` — a four-output `ShaderEffect` |
+
+Two capabilities in that family are **not** available here and say so rather than approximating:
+an instanced draw with a custom effect is refused by name (`VULKAN-168`), and the shader source
+itself is never translated (`plans/plan_csl.md`).
+
+### Writing a `ShaderEffect` for this renderer
+
+- **Uniforms** live in one 128-byte push-constant block with fixed slots, because there is no
+  shader reflection here: the setter's *type* selects the slot the way a name would elsewhere.
+  `vec2 vpSize` at bytes 0–7, `mat4 uMatrix` at 16–79 (`SetUniformMat4`), `vec4 uColor` at 80–95
+  (`SetUniformVec4`/`Vec3`/`Vec2`), eight floats at 96–127 (`SetUniformFloat`/`SetUniformInt`).
+- **Textures** are descriptor set 1: `sampler2D` at bindings 0–3, `samplerCube` at 4–7,
+  `sampler3D` at 8–11, by `SetTexture` unit. The `SpriteBatch` draw's own texture stays at set 0
+  binding 0. A unit nothing was bound to reads the renderer's white 1×1 rather than undefined
+  memory.
+- **Array uniforms** are four more bindings in set 1 — 12 `float`, 13 `vec2`, 14 `vec3`, 15 `mat4`
+  — each holding 72 elements, which is XNA's own `SkinnedEffect.MaxBones`. Declare only the one
+  you use. std140 pads a `float`, `vec2` or `vec3` array element to 16 bytes and this renderer
+  writes them the same way, so `float uWeights[72]` reads element *i* where it was written.
+- **A 3D draw** binds the buffer's own `VertexDeclaration`, with attribute location = the
+  element's index in that declaration (EasyGL's convention for a custom program). A buffer with no
+  declaration is refused: a custom shader's inputs cannot be inferred from a stride.
+- **The transform** arrives in `uMatrix`, column-major, from the effect's `IEffectMatrices`
+  properties — unless the game called `SetUniformMat4` itself, in which case the game's matrix
+  stands.
+- **Clip space is Vulkan's**, not OpenGL's or D3D9's: the shader is written for this renderer, so
+  nothing flips Y for it. See the depth-range section above for the other half of that.

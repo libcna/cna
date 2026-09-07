@@ -4530,10 +4530,37 @@ namespace CNA::Internal::Renderers::Vulkan
     bool VulkanEffectRenderer::CompileProgram(const std::string& vertSpv, const std::string& fragSpv)
     {
         compileError_.clear();
-        if (vertSpv.size() % 4 != 0 || fragSpv.size() % 4 != 0) {
-            compileError_ = "SPIR-V size must be a multiple of 4 bytes";
+        // plan_vulkan.md VULKAN-256: the dialect boundary is enforced HERE, and until this row it
+        // was enforced by luck. The size check below refuses GLSL source only when its length
+        // happens not to be a multiple of four -- which is how `Vulkan_ShaderDialectContract` leg B
+        // was passing. A payload one byte longer went straight to vkCreateShaderModule with a
+        // pointer to text, where a driver is free to accept it. The magic word is the actual test.
+        const auto refuseNonSpirv = [this](const std::string& blob, const char* stage) {
+            if (blob.size() < 4) {
+                compileError_ = std::string("the ") + stage +
+                    " shader is empty or shorter than one SPIR-V word. This renderer's ShaderEffect "
+                    "takes compiled SPIR-V, not GLSL source (GetShaderDialectEXT reports "
+                    "GlslVulkan, which names the SOURCE language the bytecode was compiled from).";
+                return true;
+            }
+            if (blob.size() % 4 != 0) {
+                compileError_ = std::string("the ") + stage +
+                    " shader's SPIR-V size must be a multiple of 4 bytes";
+                return true;
+            }
+            std::uint32_t magic = 0;
+            std::memcpy(&magic, blob.data(), sizeof(magic));
+            if (magic != 0x07230203u) {
+                compileError_ = std::string("the ") + stage +
+                    " shader does not begin with the SPIR-V magic word 0x07230203. This renderer's "
+                    "ShaderEffect takes compiled SPIR-V, not GLSL source -- compile it with "
+                    "glslangValidator, shaderc or spirv-tools first.";
+                return true;
+            }
             return false;
-        }
+        };
+        if (refuseNonSpirv(vertSpv, "vertex") || refuseNonSpirv(fragSpv, "fragment"))
+            return false;
 
         VkShaderModuleCreateInfo mci{};
         mci.sType    = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;

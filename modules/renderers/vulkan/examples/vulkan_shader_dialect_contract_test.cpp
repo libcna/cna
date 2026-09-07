@@ -96,6 +96,27 @@ protected:
         check(!accepted,
               "B Vulkan-flavoured GLSL source is refused, not accepted and drawn from nothing",
               accepted ? "accepted" : ("refused: " + (error.empty() ? "(no message)" : error)));
+        // plan_vulkan.md VULKAN-256: leg B was passing for the wrong reason. The refusal read
+        // "SPIR-V size must be a multiple of 4 bytes" -- an accident of THIS source's length, not
+        // a judgement about its content. One byte more and the same text went to
+        // vkCreateShaderModule as if it were bytecode. This leg pads the source to a multiple of
+        // four with a trailing comment, so the size check cannot fire and only a real check can.
+        {
+            std::string paddedVert(kVulkanGlslVert);
+            std::string paddedFrag(kVulkanGlslFrag);
+            while (paddedVert.size() % 4 != 0) paddedVert += ' ';
+            while (paddedFrag.size() % 4 != 0) paddedFrag += ' ';
+            ShaderEffect padded(dev, paddedVert, paddedFrag);
+            const bool paddedAccepted = padded.IsEffectValid();
+            const std::string paddedError = padded.GetCompileErrorEXT();
+            check(!paddedAccepted && paddedError.find("SPIR-V") != std::string::npos,
+                  "B2 GLSL source whose LENGTH is a multiple of four is refused too, and the "
+                  "message says what the payload has to be",
+                  paddedAccepted ? "accepted -- the refusal was an accident of length"
+                                 : ("refused: " + (paddedError.empty() ? "(no message)"
+                                                                      : paddedError)));
+        }
+
         check(!accepted,
               "C the GlslVulkan enumerator does not distinguish source from bytecode -- IGL's "
               "Vulkan backend reports the same value and compiles this exact source (VULKAN-264)",
