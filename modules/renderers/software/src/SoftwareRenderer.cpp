@@ -1,5 +1,6 @@
 #include "CNA/Internal/Renderers/Software/SoftwareRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ColorMatrixEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfTypeHelper.hpp"
 
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "System/ArgumentNullException.hpp"
@@ -1606,6 +1607,7 @@ namespace CNA::Internal::Renderers::Software
         struct CombinedVertexReader
         {
             const GpuDrawParams* params = nullptr;
+            const SoftwareVertexBufferRenderer* fallbackBuffer = nullptr;
             std::array<const std::uint8_t*, kMaxVertexStreams> recordBase{};
 
             [[nodiscard]] const std::uint8_t* At(int combinedByteOffset) const
@@ -1615,11 +1617,144 @@ namespace CNA::Internal::Renderers::Software
                 return recordBase[static_cast<std::size_t>(slot.streamIndex)] +
                        slot.byteOffsetInStream;
             }
+
+            struct Attribute
+            {
+                bool found = false;
+                std::array<float, 4> value{0.0f, 0.0f, 0.0f, 1.0f};
+            };
+
+            [[nodiscard]] static Attribute Decode(
+                const std::uint8_t* bytes,
+                Microsoft::Xna::Framework::Graphics::VertexElementFormat format)
+            {
+                using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+                using Microsoft::Xna::Framework::Graphics::PackedVector::HalfTypeHelper;
+
+                Attribute result;
+                result.found = true;
+                switch (format)
+                {
+                    case VertexElementFormat::Single:
+                        std::memcpy(&result.value[0], bytes, sizeof(float));
+                        break;
+                    case VertexElementFormat::Vector2:
+                        std::memcpy(result.value.data(), bytes, sizeof(float) * 2u);
+                        break;
+                    case VertexElementFormat::Vector3:
+                        std::memcpy(result.value.data(), bytes, sizeof(float) * 3u);
+                        break;
+                    case VertexElementFormat::Vector4:
+                        std::memcpy(result.value.data(), bytes, sizeof(float) * 4u);
+                        break;
+                    case VertexElementFormat::Color:
+                        for (int i = 0; i < 4; ++i)
+                            result.value[static_cast<std::size_t>(i)] = bytes[i] / 255.0f;
+                        break;
+                    case VertexElementFormat::Byte4:
+                        for (int i = 0; i < 4; ++i)
+                            result.value[static_cast<std::size_t>(i)] = bytes[i];
+                        break;
+                    case VertexElementFormat::Short2:
+                    case VertexElementFormat::Short4:
+                    case VertexElementFormat::NormalizedShort2:
+                    case VertexElementFormat::NormalizedShort4:
+                    {
+                        const int componentCount =
+                            (format == VertexElementFormat::Short2 ||
+                             format == VertexElementFormat::NormalizedShort2) ? 2 : 4;
+                        const bool normalized =
+                            format == VertexElementFormat::NormalizedShort2 ||
+                            format == VertexElementFormat::NormalizedShort4;
+                        for (int i = 0; i < componentCount; ++i)
+                        {
+                            std::int16_t component = 0;
+                            std::memcpy(&component, bytes + static_cast<std::size_t>(i) * 2u,
+                                        sizeof(component));
+                            result.value[static_cast<std::size_t>(i)] = normalized
+                                ? std::max(-1.0f, component / 32767.0f)
+                                : static_cast<float>(component);
+                        }
+                        break;
+                    }
+                    case VertexElementFormat::HalfVector2:
+                    case VertexElementFormat::HalfVector4:
+                    {
+                        const int componentCount =
+                            format == VertexElementFormat::HalfVector2 ? 2 : 4;
+                        for (int i = 0; i < componentCount; ++i)
+                        {
+                            std::uint16_t component = 0;
+                            std::memcpy(&component, bytes + static_cast<std::size_t>(i) * 2u,
+                                        sizeof(component));
+                            result.value[static_cast<std::size_t>(i)] =
+                                HalfTypeHelper::Convert(component);
+                        }
+                        break;
+                    }
+                }
+                return result;
+            }
+
+            [[nodiscard]] Attribute Read(
+                Microsoft::Xna::Framework::Graphics::VertexElementUsage usage,
+                int usageIndex) const
+            {
+                const auto readFrom = [&](const SoftwareVertexBufferRenderer& buffer,
+                                          const std::uint8_t* base) -> Attribute {
+                    for (const auto& element : buffer.Declaration().GetElements())
+                    {
+                        if (element.getVertexElementUsageProperty() == usage &&
+                            element.getUsageIndexProperty() == usageIndex)
+                        {
+                            return Decode(base + element.getOffsetProperty(),
+                                          element.getVertexElementFormatProperty());
+                        }
+                    }
+                    return {};
+                };
+
+                if (params->vertexStreamCount == 0)
+                {
+                    if (fallbackBuffer == nullptr || fallbackBuffer->Declaration().IsEmpty())
+                        return {};
+                    return readFrom(*fallbackBuffer, recordBase[0]);
+                }
+
+                for (int i = 0; i < params->vertexStreamCount; ++i)
+                {
+                    const auto& stream = params->vertexStreams[static_cast<std::size_t>(i)];
+                    if (stream.instanceFrequency != 0)
+                        continue;
+                    const auto* buffer =
+                        static_cast<const SoftwareVertexBufferRenderer*>(stream.buffer);
+                    const Attribute attribute = readFrom(
+                        *buffer, recordBase[static_cast<std::size_t>(i)]);
+                    if (attribute.found)
+                        return attribute;
+                }
+                return {};
+            }
+
+            [[nodiscard]] bool HasDeclaration() const
+            {
+                if (params->vertexStreamCount == 0)
+                    return fallbackBuffer != nullptr && !fallbackBuffer->Declaration().IsEmpty();
+                for (int i = 0; i < params->vertexStreamCount; ++i)
+                {
+                    const auto& stream = params->vertexStreams[static_cast<std::size_t>(i)];
+                    if (stream.instanceFrequency == 0 &&
+                        !static_cast<const SoftwareVertexBufferRenderer*>(stream.buffer)
+                             ->Declaration().IsEmpty())
+                        return true;
+                }
+                return false;
+            }
         };
 
-        ClipVertex BuildGenericClipVertex(const CombinedVertexReader& raw, std::size_t stride,
-                                          const Matrix& combined,
-                                          const GpuDrawParams& params)
+        ClipVertex BuildLegacyGenericClipVertex(const CombinedVertexReader& raw, std::size_t stride,
+                                                const Matrix& combined,
+                                                const GpuDrawParams& params)
         {
             Vector3 position;
             std::memcpy(&position, raw.At(0), sizeof(Vector3));
@@ -1775,6 +1910,105 @@ namespace CNA::Internal::Renderers::Software
             {
                 out.r = out.g = out.b = out.a = 1.0f;
             }
+            return out;
+        }
+
+        ClipVertex BuildGenericClipVertex(const CombinedVertexReader& raw, std::size_t stride,
+                                          const Matrix& combined,
+                                          const GpuDrawParams& params)
+        {
+            using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+
+            if (!raw.HasDeclaration())
+                return BuildLegacyGenericClipVertex(raw, stride, combined, params);
+
+            const auto positionAttribute = raw.Read(VertexElementUsage::Position, 0);
+            Vector3 position(positionAttribute.value[0], positionAttribute.value[1],
+                             positionAttribute.value[2]);
+
+            const auto normalAttribute = raw.Read(VertexElementUsage::Normal, 0);
+            Vector3 normal(normalAttribute.value[0], normalAttribute.value[1],
+                           normalAttribute.value[2]);
+            bool haveNormal = normalAttribute.found;
+
+            if (params.skinned)
+            {
+                const auto weightsAttribute = raw.Read(VertexElementUsage::BlendWeight, 0);
+                const auto indicesAttribute = raw.Read(VertexElementUsage::BlendIndices, 0);
+                float blended[16] = {};
+                const int n = std::clamp(params.weightsPerVertex, 1, 4);
+                for (int k = 0; k < n; ++k)
+                {
+                    const int boneIndex = std::clamp(
+                        static_cast<int>(indicesAttribute.value[static_cast<std::size_t>(k)]),
+                        0, 71);
+                    const float* bone =
+                        &params.boneTransforms[static_cast<std::size_t>(boneIndex) * 16u];
+                    const float weight = weightsAttribute.value[static_cast<std::size_t>(k)];
+                    for (int e = 0; e < 16; ++e)
+                        blended[e] += bone[e] * weight;
+                }
+                position = ApplyAffineColumnMajor(blended, position, 1.0f);
+                normal = ApplyAffineColumnMajor(blended, normal, 0.0f);
+            }
+
+            const Vector4 clip = Vector4::Transform(position, combined);
+            ClipVertex out;
+            out.x = clip.X; out.y = clip.Y; out.z = clip.Z; out.w = clip.W;
+
+            const auto colorAttribute = raw.Read(VertexElementUsage::Color, 0);
+            if (colorAttribute.found)
+            {
+                out.r = colorAttribute.value[0];
+                out.g = colorAttribute.value[1];
+                out.b = colorAttribute.value[2];
+                out.a = colorAttribute.value[3];
+            }
+
+            auto uvAttribute = raw.Read(VertexElementUsage::TextureCoordinate, 0);
+            if (params.pbr && (params.pbrTextureCoordinateSetMask & 1u) != 0u)
+            {
+                const auto uv1Attribute = raw.Read(VertexElementUsage::TextureCoordinate, 1);
+                if (uv1Attribute.found)
+                    uvAttribute = uv1Attribute;
+            }
+            if (uvAttribute.found)
+            {
+                out.u = uvAttribute.value[0];
+                out.v = uvAttribute.value[1];
+            }
+
+            if (params.pbr)
+            {
+                const float u = out.u;
+                const float v = out.v;
+                out.u = u * params.pbrTextureTransformRows[0][0] +
+                        v * params.pbrTextureTransformRows[0][1] +
+                        params.pbrTextureTransformRows[0][2];
+                out.v = u * params.pbrTextureTransformRows[1][0] +
+                        v * params.pbrTextureTransformRows[1][1] +
+                        params.pbrTextureTransformRows[1][2];
+            }
+
+            if (haveNormal && params.envMapping)
+            {
+                const Vector3 worldPos = ApplyAffineColumnMajor(params.worldColMajor, position, 1.0f);
+                Vector3 worldNormal = ApplyAffineColumnMajor(params.worldColMajor, normal, 0.0f);
+                const float len = std::sqrt(worldNormal.X * worldNormal.X +
+                                            worldNormal.Y * worldNormal.Y +
+                                            worldNormal.Z * worldNormal.Z);
+                if (len > 1e-8f)
+                {
+                    worldNormal.X /= len;
+                    worldNormal.Y /= len;
+                    worldNormal.Z /= len;
+                }
+                out.wpx = worldPos.X; out.wpy = worldPos.Y; out.wpz = worldPos.Z;
+                out.nx = worldNormal.X; out.ny = worldNormal.Y; out.nz = worldNormal.Z;
+            }
+
+            if (!params.vertexColorEnabled)
+                out.r = out.g = out.b = out.a = 1.0f;
             return out;
         }
 #endif
@@ -3100,31 +3334,16 @@ namespace CNA::Internal::Renderers::Software
         }
     }
 
-    // Phase S5/S6 (SOFTWARE-40..43, 50): the effect-aware draw path -- stride-inferred vertex
-    // layout (design decision 2), nearest-neighbor/bilinear texture sampling, diffuseColor
-    // modulation, and the complete colour/alpha BlendState equation.
-    // dualTexture/envMapping/skinned are supported (SOFTWARE-82; strides 32/52, see
-    // BuildGenericClipVertex/RasterizeTriangleShaded) but without any per-light diffuse lighting
-    // sum -- lightingEnabled/fogEnabled remain out of scope for v1 (design decision 6).
-    // REMED-GFX-DECL-GUARD: the declaration-fidelity boundary. BuildGenericClipVertex reads its
-    // attributes at byte offsets chosen by the stride alone (REMED-GFX-217), so a declaration
-    // those offsets cannot represent is refused before any vertex is fetched. A stride outside the
-    // canonical 16/20/24/32/48/52/56/60/68/76 set is left to this renderer's own established
-    // out-of-table rejection, which is already loud and deterministic.
-    static void RequireFaithfulDeclarationEXT(const IVertexBufferRenderer& vb, const char* route)
-    {
-        const auto& swVb = static_cast<const SoftwareVertexBufferRenderer&>(vb);
-        CNA::Internal::Graphics::RequireFaithfulVertexDeclaration(
-            swVb.Declaration(), static_cast<int>(swVb.Stride()),
-            CNA::Internal::Graphics::UnlistedStrideLayout::RendererRefusesIt, "Software", route);
-    }
+    // Phase S5/S6 (SOFTWARE-40..43, 50; SOFTWARE-108): the effect-aware draw path reads declared
+    // attributes by XNA semantic and usage index, across every per-vertex stream. Only the
+    // deliberately empty declaration of CNAEXT's legacy VertexBuffer(device,count) constructor
+    // retains the historical canonical-stride decoder.
 
     void SoftwareRenderer::DrawPrimitivesEx(const IVertexBufferRenderer& vb, const Matrix& world,
                                                    const Matrix& view, const Matrix& projection,
                                                    PrimitiveType primitive, int primitiveCount,
                                                    const GpuDrawParams& params)
     {
-        RequireFaithfulDeclarationEXT(vb, "ordinary-nonindexed");
         if (primitiveCount <= 0)
             throw std::runtime_error("SoftwareRenderer::DrawPrimitivesEx: primitiveCount must be > 0");
         if (primitive != PrimitiveType::TriangleList && primitive != PrimitiveType::TriangleStrip &&
@@ -3153,16 +3372,16 @@ namespace CNA::Internal::Renderers::Software
             consumedVertexCount, vertexStart);
 
         const auto& swVb = static_cast<const SoftwareVertexBufferRenderer&>(vb);
-        // REMED-GFX-201: the layout the shader sees spans every bound per-vertex stream, so the
-        // stride that selects it is their sum -- which is this one stream's own stride whenever a
-        // single buffer is bound.
+        // The combined stride remains relevant only to the empty-declaration compatibility path;
+        // declared streams below are resolved by semantic, never by this aggregate number.
         const std::size_t stride = CombinedVertexStrideOr(params, swVb.Stride());
-        if (stride != 16 && stride != 20 && stride != 24 && stride != 32 &&
-            stride != 48 && stride != 52 && stride != 56 && stride != 60 && stride != 80 &&
-            stride != 68 && stride != 76)
+        if (swVb.Declaration().IsEmpty() &&
+            stride != 16 && stride != 20 && stride != 24 && stride != 32 &&
+            stride != 48 && stride != 52 && stride != 56 && stride != 60 &&
+            stride != 68 && stride != 76 && stride != 80)
             throw std::runtime_error(
                 "SoftwareRenderer::DrawPrimitivesEx: unsupported vertex stride "
-                "(only 16/20/24/32/48/52/56/60/68/76 supported in v1)");
+                "for a buffer with no VertexDeclaration");
 
         const std::uint8_t* base = swVb.Data().data();
 
@@ -3193,6 +3412,7 @@ namespace CNA::Internal::Renderers::Software
         const auto fetchVertex = [&](std::int64_t local) -> CombinedVertexReader {
             CombinedVertexReader reader;
             reader.params = &params;
+            reader.fallbackBuffer = &swVb;
             const std::int64_t element = vertexStart + local;
             if (params.vertexStreamCount == 0)
             {
@@ -3288,7 +3508,6 @@ namespace CNA::Internal::Renderers::Software
                                                           const Matrix& projection, PrimitiveType primitive,
                                                           int primitiveCount, const GpuDrawParams& params)
     {
-        RequireFaithfulDeclarationEXT(vb, "ordinary-indexed");
         if (primitiveCount <= 0)
             throw std::runtime_error("SoftwareRenderer::DrawIndexedPrimitivesEx: primitiveCount must be > 0");
         if (primitive != PrimitiveType::TriangleList && primitive != PrimitiveType::TriangleStrip &&
@@ -3304,15 +3523,16 @@ namespace CNA::Internal::Renderers::Software
 
         const auto& swVb = static_cast<const SoftwareVertexBufferRenderer&>(vb);
         const auto& swIb = static_cast<const SoftwareIndexBufferRenderer&>(ib);
-        // REMED-GFX-201: see DrawPrimitivesEx -- the selecting stride is the sum of the bound
-        // per-vertex streams' strides, identical to this one stream's whenever one is bound.
+        // See DrawPrimitivesEx: declared streams are semantic-driven; this aggregate is only the
+        // legacy empty-declaration fallback key.
         const std::size_t stride = CombinedVertexStrideOr(params, swVb.Stride());
-        if (stride != 16 && stride != 20 && stride != 24 && stride != 32 &&
-            stride != 48 && stride != 52 && stride != 56 && stride != 60 && stride != 80 &&
-            stride != 68 && stride != 76)
+        if (swVb.Declaration().IsEmpty() &&
+            stride != 16 && stride != 20 && stride != 24 && stride != 32 &&
+            stride != 48 && stride != 52 && stride != 56 && stride != 60 &&
+            stride != 68 && stride != 76 && stride != 80)
             throw std::runtime_error(
                 "SoftwareRenderer::DrawIndexedPrimitivesEx: unsupported vertex stride "
-                "(only 16/20/24/32/48/52/56/60/68/76 supported in v1)");
+                "for a buffer with no VertexDeclaration");
 
         if (g_cubeTrace.enabled) { ++g_cubeTrace.drawId; g_cubeTrace.family = "DrawIndexedPrimitives"; }
 
@@ -3359,6 +3579,7 @@ namespace CNA::Internal::Renderers::Software
                     DecodeIndexElement(ibBase, thirtyTwoBit, startIndex + local)) + baseVertex;
             CombinedVertexReader reader;
             reader.params = &params;
+            reader.fallbackBuffer = &swVb;
             if (params.vertexStreamCount == 0)
             {
                 reader.recordBase[0] =

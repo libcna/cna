@@ -123,11 +123,12 @@ rather than always passing.
 
 ## Known limitations (2026-08-15)
 
-- **Vertex strides 16/20/24/32/48/52/56/60/68/76.** These are the complete canonical CNA table,
-  including dual-UV rigid/skinned PBR records. The reduced PBR fallback selects UV0 or UV1 for the
-  base-colour map and applies that map's affine transform. Tangents are consumed at their declared
-  offsets but remain shading-inert, and the normal/MR/emissive/occlusion maps are not evaluated by
-  this CPU renderer. Any other stride throws a clear "unsupported vertex stride" error.
+- **Vertex input is declaration-driven.** `VertexElementUsage`/usage index selects attributes
+  across one or multiple streams, and all 12 XNA `VertexElementFormat` values are decoded at their
+  declared offsets. Reordered, padded, application-defined and non-canonical-stride layouts,
+  binding offsets and 16/32-bit indexed user draws are covered by deterministic pixel tests. Only
+  CNAEXT's old empty-declaration `VertexBuffer(device,count)` convenience path retains canonical
+  stride inference for compatibility. Hardware instancing is still pending.
 - **An unbound optional base texture is white.** `PbrEffect`, `SkinnedPbrEffect` and
   `SkinnedEffect` deliberately keep their textured program selected with no base map; SOFTWARE
   preserves the vertex/factor colour in that case, matching the white fallback used by native

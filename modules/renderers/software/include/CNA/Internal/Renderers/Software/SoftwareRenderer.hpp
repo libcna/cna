@@ -65,9 +65,9 @@ namespace CNA::Internal::Renderers::Software
         explicit SoftwareVertexBufferRenderer(int vertexCapacity);
 
         void SetData(const void* data, int vertex_count, std::size_t stride_in_bytes) override;
-        // REMED-GFX-DECL-GUARD: the rasterizer still infers its attribute offsets from the byte
-        // stride (REMED-GFX-217), but the declaration is remembered rather than discarded so a
-        // draw can refuse a declaration those offsets would silently reinterpret.
+        // SOFTWARE-108: the CPU vertex reader resolves elements by declaration semantic/index,
+        // format and stream-local offset; retaining the declaration here avoids widening the
+        // renderer-neutral draw contract with Software-only convenience data.
         void SetVertexDeclaration(const VertexDeclaration& vertexDeclaration) override
         {
             declaration_.Remember(vertexDeclaration);
@@ -78,14 +78,13 @@ namespace CNA::Internal::Renderers::Software
 
         [[nodiscard]] int Capacity() const { return capacity_; }
         [[nodiscard]] std::size_t Stride() const { return stride_; }
-        /// The declaration this buffer carries, for REMED-GFX-DECL-GUARD's fidelity check.
+        /// The declaration this buffer carries for Software's semantic vertex decoder.
         [[nodiscard]] const CNA::Internal::Graphics::DeclaredVertexLayout& Declaration() const
         {
             return declaration_;
         }
-        /// Raw vertex bytes from the most recent SetData() call -- the rasterizer (Phase S4)
-        /// reads vertex attributes directly from here, keyed by Stride() (plans/plan_software.md
-        /// design decision 2: stride-based format inference).
+        /// Raw vertex bytes from the most recent SetData() call. Declared buffers are interpreted
+        /// by their elements; only the legacy empty-declaration CNAEXT buffer uses Stride().
         [[nodiscard]] const std::vector<std::uint8_t>& Data() const { return data_; }
 
     private:
