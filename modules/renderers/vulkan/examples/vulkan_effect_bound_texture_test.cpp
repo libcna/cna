@@ -22,6 +22,12 @@
 //   C  A unit outside the supported range is refused by name rather than silently dropped.
 //   D  No validation message -- the set must be fully written before it is bound, and a shader
 //      reading a unit nothing was bound to must still get a real descriptor.
+//   E  plan_vulkan.md VULKAN-254: the same for a TextureCube, read through `samplerCube` at
+//      binding 4 + unit.
+//   F  ...and for a Texture3D, through `sampler3D` at binding 8 + unit. Each sampler kind gets its
+//      own binding range because a descriptor's view type has to match the dimensionality the
+//      shader declares -- a 2D filler cannot stand in for an unbound `samplerCube`, so sharing one
+//      range of four would have made every unused unit a usage error rather than a white texel.
 //
 // Exit code 0 = all PASS, 1 = any FAIL.
 
@@ -40,6 +46,9 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
+#include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
@@ -130,6 +139,49 @@ static const uint32_t kBoundFragSpv[] = {
     0x0000000b, 0x0000000e, 0x0000000d, 0x0004003d, 0x0000000f, 0x00000012,
     0x00000011, 0x00050057, 0x00000007, 0x00000013, 0x0000000e, 0x00000012,
     0x0003003e, 0x00000009, 0x00000013, 0x000100fd, 0x00010038,
+};
+static const uint32_t kCubeFragSpv[] = {
+    0x07230203, 0x00010000, 0x000d000b, 0x00000014, 0x00000000, 0x00020011,
+    0x00000001, 0x0006000b, 0x00000001, 0x4c534c47, 0x6474732e, 0x3035342e,
+    0x00000000, 0x0003000e, 0x00000000, 0x00000001, 0x0006000f, 0x00000004,
+    0x00000004, 0x6e69616d, 0x00000000, 0x00000009, 0x00030010, 0x00000004,
+    0x00000007, 0x00040047, 0x00000009, 0x0000001e, 0x00000000, 0x00040047,
+    0x0000000d, 0x00000021, 0x00000004, 0x00040047, 0x0000000d, 0x00000022,
+    0x00000001, 0x00020013, 0x00000002, 0x00030021, 0x00000003, 0x00000002,
+    0x00030016, 0x00000006, 0x00000020, 0x00040017, 0x00000007, 0x00000006,
+    0x00000004, 0x00040020, 0x00000008, 0x00000003, 0x00000007, 0x0004003b,
+    0x00000008, 0x00000009, 0x00000003, 0x00090019, 0x0000000a, 0x00000006,
+    0x00000003, 0x00000000, 0x00000000, 0x00000000, 0x00000001, 0x00000000,
+    0x0003001b, 0x0000000b, 0x0000000a, 0x00040020, 0x0000000c, 0x00000000,
+    0x0000000b, 0x0004003b, 0x0000000c, 0x0000000d, 0x00000000, 0x00040017,
+    0x0000000f, 0x00000006, 0x00000003, 0x0004002b, 0x00000006, 0x00000010,
+    0x00000000, 0x0004002b, 0x00000006, 0x00000011, 0x3f800000, 0x0006002c,
+    0x0000000f, 0x00000012, 0x00000010, 0x00000010, 0x00000011, 0x00050036,
+    0x00000002, 0x00000004, 0x00000000, 0x00000003, 0x000200f8, 0x00000005,
+    0x0004003d, 0x0000000b, 0x0000000e, 0x0000000d, 0x00050057, 0x00000007,
+    0x00000013, 0x0000000e, 0x00000012, 0x0003003e, 0x00000009, 0x00000013,
+    0x000100fd, 0x00010038,
+};
+static const uint32_t kVolumeFragSpv[] = {
+    0x07230203, 0x00010000, 0x000d000b, 0x00000013, 0x00000000, 0x00020011,
+    0x00000001, 0x0006000b, 0x00000001, 0x4c534c47, 0x6474732e, 0x3035342e,
+    0x00000000, 0x0003000e, 0x00000000, 0x00000001, 0x0006000f, 0x00000004,
+    0x00000004, 0x6e69616d, 0x00000000, 0x00000009, 0x00030010, 0x00000004,
+    0x00000007, 0x00040047, 0x00000009, 0x0000001e, 0x00000000, 0x00040047,
+    0x0000000d, 0x00000021, 0x00000008, 0x00040047, 0x0000000d, 0x00000022,
+    0x00000001, 0x00020013, 0x00000002, 0x00030021, 0x00000003, 0x00000002,
+    0x00030016, 0x00000006, 0x00000020, 0x00040017, 0x00000007, 0x00000006,
+    0x00000004, 0x00040020, 0x00000008, 0x00000003, 0x00000007, 0x0004003b,
+    0x00000008, 0x00000009, 0x00000003, 0x00090019, 0x0000000a, 0x00000006,
+    0x00000002, 0x00000000, 0x00000000, 0x00000000, 0x00000001, 0x00000000,
+    0x0003001b, 0x0000000b, 0x0000000a, 0x00040020, 0x0000000c, 0x00000000,
+    0x0000000b, 0x0004003b, 0x0000000c, 0x0000000d, 0x00000000, 0x00040017,
+    0x0000000f, 0x00000006, 0x00000003, 0x0004002b, 0x00000006, 0x00000010,
+    0x3f000000, 0x0006002c, 0x0000000f, 0x00000011, 0x00000010, 0x00000010,
+    0x00000010, 0x00050036, 0x00000002, 0x00000004, 0x00000000, 0x00000003,
+    0x000200f8, 0x00000005, 0x0004003d, 0x0000000b, 0x0000000e, 0x0000000d,
+    0x00050057, 0x00000007, 0x00000012, 0x0000000e, 0x00000011, 0x0003003e,
+    0x00000009, 0x00000012, 0x000100fd, 0x00010038,
 };
 
 namespace
@@ -253,6 +305,37 @@ protected:
             check(threw && what.find("64") != std::string::npos,
                   "C a sampler unit outside the supported range is refused by name: " +
                       (threw ? what : std::string("NOT REFUSED")));
+        }
+
+        // E. VULKAN-254: a TextureCube through samplerCube at binding 4.
+        {
+            const std::string cubeFrag(reinterpret_cast<const char*>(kCubeFragSpv),
+                                       sizeof(kCubeFragSpv));
+            ShaderEffect cubeEffect(dev, vert, cubeFrag);
+            TextureCube cube(dev, 2, false, SurfaceFormat::Color);
+            const std::array<Color, 4> face{kBlue, kBlue, kBlue, kBlue};
+            for (int f = 0; f < 6; ++f)
+                cube.SetData(static_cast<CubeMapFace>(f), face.data(), 4);
+            cubeEffect.SetTexture(0, cube);
+            const Color got = DrawThrough(dev, cubeEffect, *white);
+            check(Is(got, kBlue),
+                  "E a bound TextureCube reaches samplerCube at binding 4: " + Text(got) +
+                      " (want " + Text(kBlue) + ")");
+        }
+
+        // F. VULKAN-254: a Texture3D through sampler3D at binding 8.
+        {
+            const std::string volFrag(reinterpret_cast<const char*>(kVolumeFragSpv),
+                                      sizeof(kVolumeFragSpv));
+            ShaderEffect volEffect(dev, vert, volFrag);
+            Texture3D volume(dev, 2, 2, 2, false, SurfaceFormat::Color);
+            std::vector<Color> voxels(8, kBlue);
+            volume.SetData(voxels.data(), static_cast<int>(voxels.size()));
+            volEffect.SetTexture(0, volume);
+            const Color got = DrawThrough(dev, volEffect, *white);
+            check(Is(got, kBlue),
+                  "F a bound Texture3D reaches sampler3D at binding 8: " + Text(got) +
+                      " (want " + Text(kBlue) + ")");
         }
 
         {

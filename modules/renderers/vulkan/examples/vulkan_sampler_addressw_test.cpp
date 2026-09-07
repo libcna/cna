@@ -228,11 +228,17 @@ protected:
                 try { call(); } catch (const std::exception& e) { return std::string(e.what()); }
                 return std::string("accepted and ignored");
             };
+            // plan_vulkan.md VULKAN-254 replaced this refusal too, one row after `VULKAN-253`
+            // replaced the 2D one. A bound Texture3D now reaches `sampler3D` at set 1 binding
+            // 8 + unit, which `Vulkan_ShaderEffect_BoundTexture` leg F proves by pixel. What this
+            // leg keeps is the property it was really written for: the binding is ACKNOWLEDGED
+            // rather than silently discarded -- `VULKAN-163`'s subject -- and acknowledgement now
+            // means accepting it instead of naming a refusal.
             const std::string vol = refusal([&] { effect.SetTexture(0, volume); });
-            check(vol.find("cannot be given a Texture3D") != std::string::npos
-                      && vol.find("Refused rather than silently ignored") != std::string::npos,
-                  "C VULKAN-163: binding a Texture3D to a ShaderEffect is refused BY NAME, not "
-                  "accepted and discarded", vol);
+            check(vol == "accepted and ignored",
+                  "C VULKAN-163/VULKAN-254: binding a Texture3D to a ShaderEffect is acknowledged "
+                  "-- it was a named refusal, it is now a real binding, and what it must never be "
+                  "is silently dropped", vol);
 
             // plan_vulkan.md VULKAN-253 changed this half deliberately, and the leg changes with
             // it rather than being deleted. The same missing override once covered all three
@@ -247,8 +253,9 @@ protected:
             flat.SetData(&one, 1);
             const std::string tex2d = refusal([&] { effect.SetTexture(0, flat); });
             check(tex2d == "accepted and ignored",
-                  "C and a Texture2D is now ACCEPTED (VULKAN-253), while the volume above is still "
-                  "refused -- the two overloads have different answers and both are checked",
+                  "C and a Texture2D is accepted the same way (VULKAN-253) -- all three overloads "
+                  "reach the shader now, and this leg's job is that none of them is dropped in "
+                  "silence",
                   tex2d);
         }
 

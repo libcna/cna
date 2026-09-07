@@ -2648,6 +2648,10 @@ namespace CNA::Internal::Renderers::Vulkan
         if (defaultFlatNormalView_   != VK_NULL_HANDLE) { vkDestroyImageView(device_, defaultFlatNormalView_, nullptr);  defaultFlatNormalView_   = VK_NULL_HANDLE; }
         if (defaultFlatNormalImage_  != VK_NULL_HANDLE) { vkDestroyImage(device_, defaultFlatNormalImage_, nullptr);     defaultFlatNormalImage_  = VK_NULL_HANDLE; }
         if (defaultFlatNormalMemory_ != VK_NULL_HANDLE) { vkFreeMemory(device_, defaultFlatNormalMemory_, nullptr);       defaultFlatNormalMemory_ = VK_NULL_HANDLE; }
+        // VULKAN-254: the volume filler, alongside its cube twin.
+        if (defaultWhiteVolumeView_  != VK_NULL_HANDLE) { vkDestroyImageView(device_, defaultWhiteVolumeView_, nullptr); defaultWhiteVolumeView_  = VK_NULL_HANDLE; }
+        if (defaultWhiteVolumeImage_ != VK_NULL_HANDLE) { vkDestroyImage(device_, defaultWhiteVolumeImage_, nullptr);   defaultWhiteVolumeImage_ = VK_NULL_HANDLE; }
+        if (defaultWhiteVolumeMem_   != VK_NULL_HANDLE) { vkFreeMemory(device_, defaultWhiteVolumeMem_, nullptr);       defaultWhiteVolumeMem_   = VK_NULL_HANDLE; }
         if (defaultWhiteCubeView_ != VK_NULL_HANDLE) { vkDestroyImageView(device_, defaultWhiteCubeView_, nullptr); defaultWhiteCubeView_ = VK_NULL_HANDLE; }
         if (defaultWhiteCubeImage_ != VK_NULL_HANDLE) { vkDestroyImage(device_, defaultWhiteCubeImage_, nullptr);   defaultWhiteCubeImage_ = VK_NULL_HANDLE; }
         if (defaultWhiteCubeMem_  != VK_NULL_HANDLE) { vkFreeMemory(device_, defaultWhiteCubeMem_, nullptr);       defaultWhiteCubeMem_  = VK_NULL_HANDLE; }
@@ -4614,18 +4618,19 @@ namespace CNA::Internal::Renderers::Vulkan
         pushConst_[24] = value;
     }
 
-    // VULKAN-163 (F-31). One refusal for the whole family, because it is one cause: `IEffectRenderer`
-    // declares three `Bind*` methods with `{}` bodies, EasyGL overrides all three, and this renderer
-    // overrode none -- so every `ShaderEffect::SetTexture` overload was accepted and discarded.
+    // VULKAN-163 (F-31) found that `IEffectRenderer`'s three `Bind*` methods had `{}` bodies here
+    // while EasyGL overrode all three, so every `ShaderEffect::SetTexture` overload was accepted
+    // and discarded; it replaced the silence with one named refusal for the whole family.
     //
-    // The row's own note wondered whether a sibling hole deserved its own row. It does not: the
-    // siblings are not separate defects, they are the same missing override, and one fix closes all
-    // three. Splitting them would have produced three rows describing one line of code.
+    // VULKAN-253 and VULKAN-254 then replaced the refusal with the feature: all three overloads
+    // reach the shader now, through descriptor set 1. The refusal helper is gone with them -- what
+    // survives from VULKAN-163 is the rule it established, that a binding is never dropped in
+    // silence, and `Vulkan_SamplerAddressW`'s leg C still asserts exactly that.
     namespace {
-        /// plan_vulkan.md VULKAN-265: the array counterpart of RefuseEffectTextureBindEXT.
-        /// Named separately because the reason differs -- a texture has no per-unit path here,
-        /// an array has no room in a fixed 128-byte push-constant block -- and a caller who
-        /// reads only the message should still learn which limit it hit.
+        /// plan_vulkan.md VULKAN-265: the array refusal, which is NOT gone -- an array still has
+        /// nowhere to live in a fixed 128-byte push-constant block, and that is `VULKAN-252`'s row
+        /// to close, not this one's. Named for its own reason so a caller who reads only the
+        /// message learns which limit it hit.
         [[noreturn]] void RefuseEffectUniformArrayEXT(const char* setter,
                                                       const char* name,
                                                       int count)
@@ -4637,15 +4642,6 @@ namespace CNA::Internal::Renderers::Vulkan
                 "128-byte push-constant block with fixed slots -- one mat4, one vec4 and eight "
                 "floats -- and no shader reflection, so an array of arbitrary length has nowhere "
                 "to go. Refused rather than silently ignored.");
-        }
-
-        [[noreturn]] void RefuseEffectTextureBindEXT(const char* kind, int unit)
-        {
-            throw System::NotSupportedException(
-                std::string("CNA Vulkan: a ShaderEffect cannot be given a ") + kind +
-                " for sampler unit " + std::to_string(unit) + " on this renderer. It supplies a "
-                "custom effect's texture from the SpriteBatch draw that uses it; there is no "
-                "per-unit binding path. Refused rather than silently ignored.");
         }
     }
 
@@ -4667,8 +4663,8 @@ namespace CNA::Internal::Renderers::Vulkan
     void VulkanEffectRenderer::EnsureBoundTextureLayoutEXT()
     {
         if (boundLayout_ != VK_NULL_HANDLE || !owner_ || owner_->device_ == VK_NULL_HANDLE) return;
-        std::array<VkDescriptorSetLayoutBinding, kMaxEffectBoundTextures> lb{};
-        for (int i = 0; i < kMaxEffectBoundTextures; ++i) {
+        std::array<VkDescriptorSetLayoutBinding, kEffectBoundBindingCount> lb{};
+        for (int i = 0; i < kEffectBoundBindingCount; ++i) {
             lb[static_cast<std::size_t>(i)].binding         = static_cast<uint32_t>(i);
             lb[static_cast<std::size_t>(i)].descriptorType  =
                 VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -4677,7 +4673,7 @@ namespace CNA::Internal::Renderers::Vulkan
         }
         VkDescriptorSetLayoutCreateInfo lci{};
         lci.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        lci.bindingCount = kMaxEffectBoundTextures;
+        lci.bindingCount = kEffectBoundBindingCount;
         lci.pBindings    = lb.data();
         if (vkCreateDescriptorSetLayout(owner_->device_, &lci, nullptr, &boundLayout_) != VK_SUCCESS)
             throw std::runtime_error(
@@ -4701,7 +4697,8 @@ namespace CNA::Internal::Renderers::Vulkan
         // VULKAN-181's growing allocator, so a game with many effects does not hit a fixed bound.
         const VkDescriptorPoolSize sizes[] = {
             { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-              static_cast<uint32_t>(VulkanRenderer::kEffectPoolMaxSets * kMaxEffectBoundTextures) },
+              static_cast<uint32_t>(VulkanRenderer::kEffectPoolMaxSets
+                                    * kEffectBoundBindingCount) },
         };
         VkDescriptorSet set = VK_NULL_HANDLE;
         VkDescriptorPool pool = VK_NULL_HANDLE;
@@ -4719,13 +4716,27 @@ namespace CNA::Internal::Renderers::Vulkan
         // this path had ever needed it -- measured: without this the layer reported three
         // `pImageInfo[0].imageView is VK_NULL_HANDLE` writes per set, one per unbound unit.
         owner_->EnsureDefaultWhiteTexture();
-        std::array<VkDescriptorImageInfo, kMaxEffectBoundTextures> infos{};
-        std::array<VkWriteDescriptorSet, kMaxEffectBoundTextures>  writes{};
-        for (int i = 0; i < kMaxEffectBoundTextures; ++i) {
-            auto* tex = boundTextures_[static_cast<std::size_t>(i)];
-            auto* vk  = dynamic_cast<VulkanTextureRenderer*>(tex);
-            const VkImageView view = (vk != nullptr) ? vk->GetVkImageView()
-                                                     : owner_->defaultWhiteView_;
+        owner_->EnsureEnvMapResources();            // VULKAN-254: creates defaultWhiteCubeView_
+        owner_->EnsureDefaultWhiteVolumeTexture();
+        std::array<VkDescriptorImageInfo, kEffectBoundBindingCount> infos{};
+        std::array<VkWriteDescriptorSet, kEffectBoundBindingCount>  writes{};
+        for (int i = 0; i < kEffectBoundBindingCount; ++i) {
+            const int unit = i % kMaxEffectBoundTextures;
+            VkImageView view = VK_NULL_HANDLE;
+            if (i < kEffectCubeBindingBase) {
+                auto* vk = dynamic_cast<VulkanTextureRenderer*>(
+                    boundTextures_[static_cast<std::size_t>(unit)]);
+                view = (vk != nullptr) ? vk->GetVkImageView() : owner_->defaultWhiteView_;
+            } else if (i < kEffectVolumeBindingBase) {
+                auto* vk = dynamic_cast<IVulkanCubeSamplable*>(
+                    boundCubes_[static_cast<std::size_t>(unit)]);
+                view = (vk != nullptr) ? vk->GetVkCubeImageView() : owner_->defaultWhiteCubeView_;
+            } else {
+                auto* vk = dynamic_cast<IVulkanVolumeSamplable*>(
+                    boundVolumes_[static_cast<std::size_t>(unit)]);
+                view = (vk != nullptr) ? vk->GetVkVolumeImageView()
+                                       : owner_->defaultWhiteVolumeView_;
+            }
             infos[static_cast<std::size_t>(i)] = { owner_->defaultSampler_, view,
                                                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
             auto& w = writes[static_cast<std::size_t>(i)];
@@ -4736,7 +4747,8 @@ namespace CNA::Internal::Renderers::Vulkan
             w.descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             w.pImageInfo      = &infos[static_cast<std::size_t>(i)];
         }
-        vkUpdateDescriptorSets(owner_->device_, kMaxEffectBoundTextures, writes.data(), 0, nullptr);
+        vkUpdateDescriptorSets(owner_->device_, kEffectBoundBindingCount, writes.data(), 0,
+                               nullptr);
 
         // The previous set is retired rather than freed: a frame already recorded may still name
         // it. REMED-GFX-076's (pool, set) queue is exactly this case.
@@ -4751,16 +4763,32 @@ namespace CNA::Internal::Renderers::Vulkan
         return boundSet_;
     }
 
-    void VulkanEffectRenderer::BindTextureCube(int unit,
-                                               CNA::Internal::Renderers::ITextureCubeRenderer*)
+    void VulkanEffectRenderer::BindTextureCube(
+        int unit, CNA::Internal::Renderers::ITextureCubeRenderer* texture)
     {
-        RefuseEffectTextureBindEXT("TextureCube", unit);
+        // plan_vulkan.md VULKAN-254: set 1, binding kEffectCubeBindingBase + unit.
+        if (unit < 0 || unit >= kMaxEffectBoundTextures)
+            throw System::NotSupportedException(
+                "The Vulkan renderer accepts sampler units 0.." +
+                std::to_string(kMaxEffectBoundTextures - 1) +
+                " for a ShaderEffect; unit " + std::to_string(unit) +
+                " was asked for. Refused rather than binding it somewhere else.");
+        boundCubes_[static_cast<std::size_t>(unit)] = texture;
+        boundSetDirty_ = true;
     }
 
-    void VulkanEffectRenderer::BindTexture3D(int unit,
-                                             CNA::Internal::Renderers::ITexture3DRenderer*)
+    void VulkanEffectRenderer::BindTexture3D(
+        int unit, CNA::Internal::Renderers::ITexture3DRenderer* texture)
     {
-        RefuseEffectTextureBindEXT("Texture3D", unit);
+        // plan_vulkan.md VULKAN-254: set 1, binding kEffectVolumeBindingBase + unit.
+        if (unit < 0 || unit >= kMaxEffectBoundTextures)
+            throw System::NotSupportedException(
+                "The Vulkan renderer accepts sampler units 0.." +
+                std::to_string(kMaxEffectBoundTextures - 1) +
+                " for a ShaderEffect; unit " + std::to_string(unit) +
+                " was asked for. Refused rather than binding it somewhere else.");
+        boundVolumes_[static_cast<std::size_t>(unit)] = texture;
+        boundSetDirty_ = true;
     }
 
     void VulkanEffectRenderer::SetUniformInt(const char* /*name*/, int value)
@@ -6458,6 +6486,93 @@ namespace CNA::Internal::Renderers::Vulkan
              | (wireframe ? (1ull<<14) : 0)
              | (msaa      ? (1ull<<15) : 0)
              | (PackDepthStencilBits(ds) << 16);
+    }
+
+    void VulkanRenderer::EnsureDefaultWhiteVolumeTexture()
+    {
+        // plan_vulkan.md VULKAN-254. A 1x1x1 white VK_IMAGE_TYPE_3D, so a `sampler3D` binding that
+        // the game never bound still has a descriptor of the RIGHT dimensionality -- the 2D white
+        // above cannot stand in, because a view type mismatch is a usage error, not a wrong colour.
+        if (defaultWhiteVolumeImage_ != VK_NULL_HANDLE) return;
+        VkDevice dev = device_;
+
+        VkImageCreateInfo info{};
+        info.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        info.imageType     = VK_IMAGE_TYPE_3D;
+        info.format        = VK_FORMAT_R8G8B8A8_UNORM;
+        info.extent        = {1, 1, 1};
+        info.mipLevels     = 1;
+        info.arrayLayers   = 1;
+        info.samples       = VK_SAMPLE_COUNT_1_BIT;
+        info.tiling        = VK_IMAGE_TILING_OPTIMAL;
+        info.usage         = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        info.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
+        info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        if (vkCreateImage(dev, &info, nullptr, &defaultWhiteVolumeImage_) != VK_SUCCESS)
+            throw std::runtime_error("vkCreateImage (default white volume) failed");
+
+        VkMemoryRequirements req;
+        vkGetImageMemoryRequirements(dev, defaultWhiteVolumeImage_, &req);
+        VkMemoryAllocateInfo ai{};
+        ai.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        ai.allocationSize  = req.size;
+        ai.memoryTypeIndex = FindMemoryType(req.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        if (vkAllocateMemory(dev, &ai, nullptr, &defaultWhiteVolumeMem_) != VK_SUCCESS) {
+            vkDestroyImage(dev, defaultWhiteVolumeImage_, nullptr);
+            defaultWhiteVolumeImage_ = VK_NULL_HANDLE;
+            throw std::runtime_error("vkAllocateMemory (default white volume) failed");
+        }
+        if (vkBindImageMemory(dev, defaultWhiteVolumeImage_, defaultWhiteVolumeMem_, 0) != VK_SUCCESS)
+            throw std::runtime_error("vkBindImageMemory (default white volume) failed");
+
+        const uint32_t whitePixel = 0xFFFFFFFFu;
+        VkBuffer       stageBuf = VK_NULL_HANDLE;
+        VkDeviceMemory stageMem = VK_NULL_HANDLE;
+        CreateBuffer(sizeof(whitePixel), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                     stageBuf, stageMem);
+        void* mapped = nullptr;
+        vkMapMemory(dev, stageMem, 0, sizeof(whitePixel), 0, &mapped);
+        std::memcpy(mapped, &whitePixel, sizeof(whitePixel));
+        vkUnmapMemory(dev, stageMem);
+
+        VkCommandBuffer cb = BeginOneTimeCommands();
+        VkImageMemoryBarrier barr{};
+        barr.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barr.oldLayout           = VK_IMAGE_LAYOUT_UNDEFINED;
+        barr.newLayout           = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barr.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barr.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barr.image               = defaultWhiteVolumeImage_;
+        barr.subresourceRange    = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+        barr.srcAccessMask       = 0;
+        barr.dstAccessMask       = VK_ACCESS_TRANSFER_WRITE_BIT;
+        vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             0, 0, nullptr, 0, nullptr, 1, &barr);
+        VkBufferImageCopy region{};
+        region.imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
+        region.imageExtent      = { 1, 1, 1 };
+        vkCmdCopyBufferToImage(cb, stageBuf, defaultWhiteVolumeImage_,
+                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+        barr.oldLayout     = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barr.newLayout     = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barr.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barr.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                             0, 0, nullptr, 0, nullptr, 1, &barr);
+        EndOneTimeCommands(cb);
+        vkDestroyBuffer(dev, stageBuf, nullptr);
+        vkFreeMemory(dev, stageMem, nullptr);
+
+        VkImageViewCreateInfo vi{};
+        vi.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        vi.image    = defaultWhiteVolumeImage_;
+        vi.viewType = VK_IMAGE_VIEW_TYPE_3D;
+        vi.format   = VK_FORMAT_R8G8B8A8_UNORM;
+        vi.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+        if (vkCreateImageView(dev, &vi, nullptr, &defaultWhiteVolumeView_) != VK_SUCCESS)
+            throw std::runtime_error("vkCreateImageView (default white volume) failed");
     }
 
     void VulkanRenderer::EnsureDefaultWhiteTexture()

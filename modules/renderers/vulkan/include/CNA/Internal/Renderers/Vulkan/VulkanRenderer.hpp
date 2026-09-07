@@ -536,6 +536,17 @@ namespace CNA::Internal::Renderers::Vulkan
         /// set-1 layout declares. Four, because that is what the stock effects use at most and a
         /// wider set costs a descriptor per unit per effect for nothing.
         static constexpr int kMaxEffectBoundTextures = 4;
+        /// plan_vulkan.md VULKAN-254: set 1 gives each sampler KIND its own binding range, because
+        /// a descriptor's view type must match the dimensionality the shader declares -- a 2D
+        /// filler cannot stand in for an unbound `samplerCube`. So:
+        ///   bindings  0.. 3  `sampler2D`   units 0..3
+        ///   bindings  4.. 7  `samplerCube` units 0..3
+        ///   bindings  8..11  `sampler3D`   units 0..3
+        /// A shader reaches cube unit `u` at `binding = kEffectCubeBindingBase + u`, and a volume
+        /// at `kEffectVolumeBindingBase + u`.
+        static constexpr int kEffectCubeBindingBase   = kMaxEffectBoundTextures;
+        static constexpr int kEffectVolumeBindingBase = kMaxEffectBoundTextures * 2;
+        static constexpr int kEffectBoundBindingCount = kMaxEffectBoundTextures * 3;
         /**
          * @brief VULKAN-253: the set-1 descriptor set holding this effect's bound textures.
          *
@@ -562,6 +573,11 @@ namespace CNA::Internal::Renderers::Vulkan
         /// these is captured by value into the batch snapshot before the batch is recorded.
         std::array<CNA::Internal::Renderers::ITextureRenderer*, kMaxEffectBoundTextures>
                          boundTextures_{};
+        /// VULKAN-254: the cube and volume halves of the same idea.
+        std::array<CNA::Internal::Renderers::ITextureCubeRenderer*, kMaxEffectBoundTextures>
+                         boundCubes_{};
+        std::array<CNA::Internal::Renderers::ITexture3DRenderer*, kMaxEffectBoundTextures>
+                         boundVolumes_{};
         VkDescriptorSetLayout boundLayout_    = VK_NULL_HANDLE;
         VkDescriptorSet       boundSet_       = VK_NULL_HANDLE;
         VkDescriptorPool      boundSetPool_   = VK_NULL_HANDLE;
@@ -2840,6 +2856,13 @@ namespace CNA::Internal::Renderers::Vulkan
         std::array<VkDeviceMemory, MaxFramesInFlight> envMapUBOMem_ = {};
         std::array<void*,          MaxFramesInFlight> envMapUBOPtr_ = {};
         // Default 1×1 white cube image for fallback when env map texture is null
+        /// plan_vulkan.md VULKAN-254: the 1x1x1 white volume that fills a set-1 `sampler3D` binding
+        /// nothing was bound to. A `sampler2D` filler cannot stand in for one: a descriptor's view
+        /// type must match the dimensionality the shader declares, which is exactly why set 1 gives
+        /// each sampler kind its own binding range rather than sharing four.
+        VkImage               defaultWhiteVolumeImage_ = VK_NULL_HANDLE;
+        VkDeviceMemory        defaultWhiteVolumeMem_   = VK_NULL_HANDLE;
+        VkImageView           defaultWhiteVolumeView_  = VK_NULL_HANDLE;
         VkImage               defaultWhiteCubeImage_  = VK_NULL_HANDLE;
         VkDeviceMemory        defaultWhiteCubeMem_    = VK_NULL_HANDLE;
         VkImageView           defaultWhiteCubeView_   = VK_NULL_HANDLE;
@@ -3778,6 +3801,8 @@ namespace CNA::Internal::Renderers::Vulkan
                                          VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
                                          const VulkanVertexInputLayoutEXT& vertexLayout = {});
         void       EnsureDefaultWhiteTexture();
+        /// VULKAN-254: creates @ref defaultWhiteVolumeImage_ and its view, once.
+        void       EnsureDefaultWhiteVolumeTexture();
         void       EnsureDefaultFlatNormalTexture();
         void       FillExtPushConst(float (&pc)[32], const Matrix& wvp, const GpuDrawParams& p);
         void       FillAlphaTestPushConst(float (&pc)[32], const Matrix& wvp, const GpuDrawParams& p);
