@@ -142,6 +142,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_BasicEffectLightingContract
         COMMAND cna_test_software_basic_effect_lighting_contract TIMEOUT 30 LABELS "Software")
 
+    # SOFTWARE-114: renderer-neutral FNA/XNA EnvironmentMapEffect vertex-lighting contract.
+    cna_software_test(cna_test_software_environment_map_effect_contract
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/environment_map_effect_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_EnvironmentMapEffectContract
+        COMMAND cna_test_software_environment_map_effect_contract TIMEOUT 30 LABELS "Software")
+
     cna_software_test(cna_test_software_dual_envmap_skinned software_dual_envmap_skinned_test.cpp)
     cna_register_renderer_test(NAME Software_DualEnvmapSkinned COMMAND cna_test_software_dual_envmap_skinned
         TIMEOUT 30 LABELS "Software")

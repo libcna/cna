@@ -2,7 +2,7 @@
 
 ## Status
 
-The Software renderer is a **CPU-only rasterizer graphics renderer**, verified 2026-07-13. Select it
+The Software renderer is a **CPU-only rasterizer graphics renderer**, verified 2026-09-08. Select it
 with:
 
 ```bash
@@ -139,9 +139,16 @@ rather than always passing.
   colour and alpha ordering. The XNA-default per-vertex path saturates and perspective-interpolates
   its diffuse/specular outputs; `PreferPerPixelLighting=true` re-evaluates normalized world-space
   inputs per fragment. Normals use inverse-transpose `World`, including non-uniform scale.
-- **`EnvironmentMapEffect` and `SkinnedEffect` lighting remains pending.** Their current base
-  colour still omits the classic directional/ambient/emissive/specular calculation; this is
-  tracked by `SOFTWARE-114` and `SOFTWARE-115`, independently of their completed fog support.
+- **`EnvironmentMapEffect` lighting and reflection semantics are complete** (`SOFTWARE-114`).
+  Its ambient/emissive/material colour and all three directional diffuse lights use FNA's vertex
+  equation. Inverse-transpose normals drive both lighting and reflection under non-uniform World
+  transforms; eye-relative reflection and Fresnel are evaluated per vertex, clipped and
+  perspective-interpolated. D3D9 COLOR saturation bounds material and environment-amount outputs
+  before interpolation. Texture/effect alpha scales the cube lerp target and environment-specular
+  term. The shared Software/EasyGL contract passes 14/14 with a two-byte tolerance.
+- **`SkinnedEffect` lighting remains pending.** Bone-transformed positions and fog work, but the
+  classic directional/ambient/emissive/specular calculation and complete normal handling remain
+  tracked by `SOFTWARE-115`.
 - **Classic stock-effect fog is complete** (`SOFTWARE-112`). `BasicEffect`, `AlphaTestEffect`,
   `DualTextureEffect`, `EnvironmentMapEffect` and `SkinnedEffect` use FNA's view-space fog vector,
   including transformed World/View matrices, the degenerate start=end case and SkinnedEffect's
@@ -149,22 +156,19 @@ rather than always passing.
   final RGB toward `FogColor * outputAlpha` after the stock effect's texture/environment work and
   alpha test but before blending.
 - **`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect` are supported** (`SOFTWARE-82`),
-  with the EnvironmentMapEffect/SkinnedEffect lighting caveat above:
+  with the remaining DualTexture/SkinnedEffect caveats below:
   - `DualTextureEffect`: real second-texture sampling, FNA's own
     `color.rgb*=2; color *= overlay*diffuse` formula. Both textures reuse the same UV (this
     renderer has no genuine 2-UV vertex format — an established simplification, matching this
     codebase's own Vulkan `dual_texture3d` shaders' precedent).
-  - `EnvironmentMapEffect`: real 6-face RGBA8 cube map storage (`CreateTextureCube` now returns a
-    working renderer, no mipmaps) and a real reflection vector (`reflect(-eyeVector, worldNormal)`)
-    sampled against it, with Fresnel edge-weighting and the specular-tint term. The normal is
-    transformed by `World` directly rather than the mathematically-correct
-    `WorldInverseTranspose` — exact for uniform-scale/no-shear `World` matrices, a real
-    simplification for non-uniform scale. Cube sampling is nearest-neighbor only (no cross-face
-    bilinear filtering at cube seams), unlike the bilinear 2D texture sampling below.
+  - `EnvironmentMapEffect`: real six-face RGBA8 cube storage and mip chains, sampler-slot-1
+    point/linear/min/mag/mip and address behavior, FNA vertex lighting, inverse-transpose normals,
+    reflection/Fresnel, alpha-scaled lerp/specular and final fog semantics.
   - `SkinnedEffect`: real per-vertex bone-transform blending (up to 4 weighted bones,
     `WeightsPerVertex`-gated) applied to the vertex position before the standard
     World\*View\*Projection transform.
-- **No MRT, no ordinary-texture mipmapping, no 3D textures, no render-target cube maps.**
+- **No MRT, no 3D textures, and no render-target cube maps.** Ordinary `Texture2D` and
+  `TextureCube` mip storage and sampling are real.
   `RenderTarget2D` does implement an actual four-sample CPU colour plane and generated mip levels.
   Unbind resolves the samples before mip generation; a level-zero `GetData` while the target is
   active snapshots the live samples without unbinding it, while generated levels remain unavailable
@@ -172,15 +176,13 @@ rather than always passing.
   `CreateRenderTargetCube`/`CreateTexture3D` still return `nullptr` (the shared `IGraphicsRenderer`
   default — this renderer doesn't override them); only plain (non-render-target) `TextureCube`s are
   real.
-- **Only two blend modes are distinguished**: `Opaque` (exact preset match: `colorSrcBlend=One`,
-  `colorDstBlend=Zero`) and a single simplified "over" alpha-composite formula for everything else
-  (`AlphaBlend`/`NonPremultiplied`/`Additive`-ish presets all get treated the same way). This is a
-  real, deliberate v1 simplification (`plans/plan_software.md` design decision 7), not a full
-  blend-equation interpreter.
-- **Bilinear texture sampling always on** (`SOFTWARE-80`) — standard half-texel-offset bilinear
-  with clamp-to-edge at the boundaries, but no mipmapping and no real texture address modes
-  (`Wrap`/`Clamp`/`Mirror` all behave the same: UVs are simply clamped to the texture's own
-  bounds). Not gated by `SamplerState.Filter`.
+- **Complete classic `BlendState` equations are applied.** RGB and alpha source/destination
+  factors and functions are independent; `BlendFactor`, `ColorWriteChannels` and
+  `MultiSampleMask` are honored. Per-target write channels remain coupled to the pending MRT task.
+- **Classic 2D/cube sampler state is applied.** Point/linear minification and magnification,
+  point/linear mip selection, independent U/V Wrap/Clamp/Mirror and per-slot state are covered by
+  shared contracts. `TextureFilter::Anisotropic` still follows the isotropic linear path and is
+  truthfully reported unsupported pending `SOFTWARE-117`.
 - **Backface culling respects `RasterizerState.CullMode`** (`SOFTWARE-81`) — `None`/
   `CullClockwiseFace`/`CullCounterClockwiseFace` are all honored, including by
   `SpriteBatch`'s own quads (matching real FNA, whose `SpriteBatch` defaults to

@@ -2,11 +2,10 @@
 // plans/plan_software.md Phase S9 (SOFTWARE-82): DualTextureEffect, EnvironmentMapEffect, and
 // SkinnedEffect support in the Software renderer.
 //
-// None of these compute per-light diffuse lighting (design decision 6: no lighting engine in
-// v1) -- their "lit" base color is just vertexColor*diffuseColor*texture0, the same
-// simplification already used for the plain BasicEffect path. What IS genuinely new and tested
-// here: DualTextureEffect's second-texture blend, EnvironmentMapEffect's real cube-map storage +
-// reflection-vector sampling, and SkinnedEffect's real per-vertex bone-transform skinning.
+// This historical combined probe now isolates each effect's original purpose from the completed
+// classic lighting implementation: DualTextureEffect's second-texture blend,
+// EnvironmentMapEffect's real cube-map storage + reflection-vector sampling, and SkinnedEffect's
+// real per-vertex bone-transform skinning.
 //
 // Check A -- DualTextureEffect: two solid-color textures combine as
 //   `(tex0*2) * tex1 * diffuse` (FNA's own PSDualTexture formula), verified against a
@@ -164,11 +163,22 @@ protected:
             VertexBuffer vb(dev, VertexPositionNormalTexture::getVertexDeclarationStatic(), 6, BufferUsage::None);
             vb.SetData(verts, 6);
 
+            const auto configureWhiteBase = [](EnvironmentMapEffect& effect)
+            {
+                effect.setDiffuseColorProperty(Vector3::One);
+                effect.setAmbientLightColorProperty(Vector3::Zero);
+                effect.setEmissiveColorProperty(Vector3::One);
+                effect.getDirectionalLight0Property().setEnabledProperty(false);
+                effect.getDirectionalLight1Property().setEnabledProperty(false);
+                effect.getDirectionalLight2Property().setEnabledProperty(false);
+            };
+
             // Check B: full env-map override, no Fresnel view-angle weighting (FresnelFactor=0),
             // so blendFactor==EnvironmentMapAmount exactly regardless of view angle.
             {
                 dev.Clear(Color::Black, 1.0f);
                 EnvironmentMapEffect fx(dev);
+                configureWhiteBase(fx);
                 fx.setTextureProperty(&white);
                 fx.setEnvironmentMapProperty(&cube);
                 fx.setEnvironmentMapAmountProperty(1.0f);
@@ -190,6 +200,7 @@ protected:
             {
                 dev.Clear(Color::Black, 1.0f);
                 EnvironmentMapEffect fx(dev);
+                configureWhiteBase(fx);
                 fx.setTextureProperty(&white);
                 fx.setEnvironmentMapProperty(&cube);
                 fx.setEnvironmentMapAmountProperty(0.0f);

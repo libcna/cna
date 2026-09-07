@@ -838,6 +838,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_easygl_basic_effect_lighting_contract
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # SOFTWARE-114: renderer-neutral FNA/XNA EnvironmentMapEffect vertex-lighting contract.
+        cna_easygl_test(cna_test_easygl_environment_map_effect_contract
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/environment_map_effect_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_EnvironmentMapEffectContract
+            COMMAND cna_test_easygl_environment_map_effect_contract
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 893: SkinnedEffect DirectionalLight1/DirectionalLight2 forwarding
         cna_easygl_test(cna_test_easygl_skinnedeffect_multilight
                         easygl_skinnedeffect_multilight_test.cpp)
