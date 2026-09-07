@@ -1756,6 +1756,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_easygl_stencil_matrix
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # SOFTWARE-110: shared per-sample coverage/mask/depth/stencil contract.
+        cna_easygl_test(cna_test_easygl_msaa_fragment_contract
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/msaa_fragment_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_MsaaFragmentContract
+            COMMAND cna_test_easygl_msaa_fragment_contract
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 871: GraphicsDevice::Clear() now actually clears the stencil buffer to the
         # requested value on ClearOptions combinations that include ClearOptions::Stencil.
         cna_easygl_test(cna_test_easygl_graphicsdevice_clear_stencil

@@ -121,6 +121,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_DepthStencilState_StencilMatrix
         COMMAND cna_test_software_stencil_matrix TIMEOUT 30 LABELS "Software")
 
+    # SOFTWARE-110: shared per-sample coverage/mask/depth/stencil contract.
+    cna_software_test(cna_test_software_msaa_fragment_contract
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/msaa_fragment_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_MsaaFragmentContract
+        COMMAND cna_test_software_msaa_fragment_contract TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_msaa_storage software_msaa_storage_test.cpp)
+    cna_register_renderer_test(NAME Software_MsaaStorage
+        COMMAND cna_test_software_msaa_storage TIMEOUT 30 LABELS "Software")
+
     cna_software_test(cna_test_software_dual_envmap_skinned software_dual_envmap_skinned_test.cpp)
     cna_register_renderer_test(NAME Software_DualEnvmapSkinned COMMAND cna_test_software_dual_envmap_skinned
         TIMEOUT 30 LABELS "Software")

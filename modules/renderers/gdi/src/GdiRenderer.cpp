@@ -786,6 +786,8 @@ namespace CNA::Internal::Renderers::Gdi
             framebuffer.depthBuffer.size() * sizeof(float),
             framebuffer.stencilBuffer.size(),
             framebuffer.multiSampleColor.size(),
+            framebuffer.multiSampleDepthBuffer.size() * sizeof(float),
+            framebuffer.multiSampleStencilBuffer.size(),
         };
     }
 

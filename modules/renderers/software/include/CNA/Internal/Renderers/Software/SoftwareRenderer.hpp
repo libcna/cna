@@ -34,21 +34,32 @@ namespace CNA::Internal::Renderers::Software
         /// a const readback may refresh it from `multiSampleColor` without changing the rendered
         /// image or the active render-pass state.
         mutable std::vector<std::uint8_t> color;
-        std::vector<float> depthBuffer;   ///< width*height floats, 0..1.
-        /// One 8-bit stencil value per pixel. It remains per-pixel when the optional four-sample
-        /// colour plane is active; it is deliberately not a per-sample depth/stencil attachment.
+        std::vector<float> depthBuffer;   ///< Single-sample/resolved width*height depths, 0..1.
+        /// Single-sample/resolved 8-bit stencil value per pixel.
         std::vector<std::uint8_t> stencilBuffer;
         /// Four RGBA8 samples per pixel when 4x CPU MSAA is enabled; empty otherwise. `color`
         /// remains the resolved presentation/readback image, so existing consumers never see an
         /// unresolved sample plane.
         std::vector<std::uint8_t> multiSampleColor;
+        /// Four independent float depth samples per pixel when 4x CPU MSAA is enabled.
+        std::vector<float> multiSampleDepthBuffer;
+        /// Four independent 8-bit stencil samples per pixel when 4x CPU MSAA is enabled.
+        std::vector<std::uint8_t> multiSampleStencilBuffer;
         int multiSampleCount = 0; ///< 0 = single sampled; the CPU implementation supports 4 only.
         bool allocateDepthStorage = true;
         bool allocateStencilStorage = true;
 
         void Resize(int w, int h);
         void SetMultiSampleCount(int sampleCount);
+        /** @brief Returns whether four-sample color storage is active. */
         [[nodiscard]] bool HasMultiSampleColor() const { return multiSampleCount == 4; }
+        /** @brief Returns whether four-sample depth storage is active. */
+        [[nodiscard]] bool HasMultiSampleDepth() const
+        { return HasMultiSampleColor() && allocateDepthStorage; }
+        /** @brief Returns whether four-sample stencil storage is active. */
+        [[nodiscard]] bool HasMultiSampleStencil() const
+        { return HasMultiSampleColor() && allocateStencilStorage; }
+        /** @brief Returns the number of raster samples stored per pixel. */
         [[nodiscard]] int EffectiveSampleCount() const { return HasMultiSampleColor() ? 4 : 1; }
         /// Copies every resolved RGBA pixel into all active samples. A no-op when MSAA is off.
         void CopyResolvedColorToMultiSample();

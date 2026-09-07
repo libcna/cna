@@ -25,7 +25,7 @@ pixel; `ReadBackbuffer()` just reports the last `Clear()` color for every pixel.
 
 Software is different: it actually **rasterizes real triangles** into a CPU-owned RGBA8
 framebuffer, entirely in software (a real edge-function rasterizer, real perspective-correct
-attribute interpolation, a real per-pixel depth test). `GraphicsDevice::GetBackBufferData()`/
+attribute interpolation, and real per-sample depth/stencil tests). `GraphicsDevice::GetBackBufferData()`/
 `ReadBackbuffer()` return genuinely correct pixels — no GPU, window, or display server involved at
 any point. Triangle lists and strips, line lists and strips, and the existing `PointListEXT` path
 all use the CPU rasterizer; triangle strips preserve XNA's alternating winding across indexed and
@@ -193,8 +193,12 @@ rather than always passing.
   comparisons and operations, read/write masks, `GraphicsDevice.ReferenceStencil`, the distinct
   counter-clockwise tuple, and the stencil-fail/depth-fail/pass ordering. This applies to colored
   and stock-effect triangles, strips, lines, points, wireframe and SpriteBatch, with alpha discard
-  occurring first. The current 4x MSAA target still owns one depth/stencil value per pixel rather
-  than per sample; converting that attachment is tracked separately by `SOFTWARE-110`.
+  occurring first.
+- **Sample-correct 4x MSAA** (`SOFTWARE-110`) — color, depth and stencil are stored and tested
+  independently at four rotated 2x2 coverage locations. `MultiSampleMask` gates those same samples,
+  triangle depth is evaluated at each covered location, and resolve deterministically averages the
+  surviving colors. The renderer-neutral mask/depth/stencil contract also exposed and repaired
+  EasyGL's former silent omission of non-default sample masks.
 - **`SpriteBatch` honors a custom `GraphicsDevice.Viewport`** (`REMED-GFX-073`) — sprite
   coordinates are viewport-local (sprite `(0,0)` = the viewport's top-left), the result is placed at
   `Viewport.X/Y`, and pixels outside the viewport rectangle are clipped, matching real XNA/FNA and

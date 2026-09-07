@@ -127,9 +127,10 @@ namespace CNA::Internal::Renderers::Software
             return std::clamp(ApplyBlendFunction(function, sourceTerm, destinationTerm), 0.0f, 1.0f);
         }
 
-        /// One CPU stencil state snapshot.  The shared framebuffer stores one unsigned 8-bit
-        /// stencil value per pixel.  GDI uses this through SpriteBatch for 2D masking; retaining
-        /// it in the shared rasterizer also keeps a target switch from losing its stencil image.
+        /// One CPU stencil state snapshot. The shared framebuffer stores one unsigned 8-bit value
+        /// per sample (one per pixel without MSAA). GDI uses this through SpriteBatch for 2D
+        /// masking; retaining it in the shared rasterizer also keeps a target switch from losing
+        /// its stencil image.
         struct RasterStencilState
         {
             bool testEnabled = false;
@@ -174,18 +175,12 @@ namespace CNA::Internal::Renderers::Software
                    DepthComparisonPasses(incoming, stored, state.compareFunction);
         }
 
-        void WritePassingDepth(SoftwareFramebuffer& fb, const RasterDepthState& state,
-                               std::size_t pixelIndex, float depth)
+        void WritePassingDepth(float& storedDepth, const RasterDepthState& state, float depth)
         {
             // As on the correct EasyGL/D3D paths, disabling the depth test disables the complete
             // depth operation even if a custom state happens to retain writeEnable=true.
             if (state.testEnabled && state.writeEnabled)
-            {
-                if (fb.depthBuffer.empty())
-                    throw std::logic_error(
-                        "Software rasterizer received enabled depth state without depth storage.");
-                fb.depthBuffer[pixelIndex] = depth;
-            }
+                storedDepth = depth;
         }
 
         bool StencilComparisonPasses(std::uint8_t reference, std::uint8_t stored,
@@ -228,16 +223,13 @@ namespace CNA::Internal::Renderers::Software
             }
         }
 
-        void WriteStencil(SoftwareFramebuffer& fb, const RasterStencilState& state,
-                          std::size_t pixelIndex, int operation)
+        void WriteStencil(std::uint8_t& storedValue, const RasterStencilState& state,
+                          int operation)
         {
-            if (fb.stencilBuffer.empty())
-                throw std::logic_error(
-                    "Software rasterizer received enabled stencil state without stencil storage.");
-            const std::uint8_t oldValue = fb.stencilBuffer[pixelIndex];
+            const std::uint8_t oldValue = storedValue;
             const std::uint8_t operationValue =
                 ApplyStencilOperation(oldValue, state.reference, operation);
-            fb.stencilBuffer[pixelIndex] = static_cast<std::uint8_t>(
+            storedValue = static_cast<std::uint8_t>(
                 (oldValue & static_cast<std::uint8_t>(~state.writeMask)) |
                 (operationValue & state.writeMask));
         }
@@ -275,6 +267,105 @@ namespace CNA::Internal::Renderers::Software
                 selected.depthFailOperation = state.ccwDepthFailOperation;
             }
             return selected;
+        }
+
+        /// SOFTWARE-110: applies depth and stencil independently to each covered sample and
+        /// returns the subset that survives. Single-sample storage keeps its original bit-0 path;
+        /// the optional depth array supplies plane-evaluated depths at the four coverage locations.
+        unsigned int ApplyFragmentTests(
+            SoftwareFramebuffer& fb, const RasterDepthState& depthState,
+            const RasterStencilState& stencilState, std::size_t pixelIndex,
+            unsigned int activeSamples, float centerDepth,
+            const std::array<float, 4>* sampleDepths = nullptr)
+        {
+            if (!fb.HasMultiSampleColor())
+            {
+                if ((activeSamples & 1u) == 0u)
+                    return 0u;
+                if (stencilState.testEnabled)
+                {
+                    if (fb.stencilBuffer.empty())
+                        throw std::logic_error(
+                            "Software rasterizer received enabled stencil state without stencil storage.");
+                    std::uint8_t& stencil = fb.stencilBuffer[pixelIndex];
+                    if (!StencilComparisonPasses(stencilState.reference, stencil,
+                                                 stencilState.readMask,
+                                                 stencilState.compareFunction))
+                    {
+                        WriteStencil(stencil, stencilState, stencilState.failOperation);
+                        return 0u;
+                    }
+                }
+                if (depthState.testEnabled)
+                {
+                    if (fb.depthBuffer.empty())
+                        throw std::logic_error(
+                            "Software rasterizer received enabled depth state without depth storage.");
+                    if (!DepthFragmentPasses(depthState, centerDepth,
+                                             fb.depthBuffer[pixelIndex]))
+                    {
+                        if (stencilState.testEnabled)
+                            WriteStencil(fb.stencilBuffer[pixelIndex], stencilState,
+                                         stencilState.depthFailOperation);
+                        return 0u;
+                    }
+                }
+                if (stencilState.testEnabled)
+                    WriteStencil(fb.stencilBuffer[pixelIndex], stencilState,
+                                 stencilState.passOperation);
+                if (depthState.testEnabled)
+                    WritePassingDepth(fb.depthBuffer[pixelIndex], depthState, centerDepth);
+                return 1u;
+            }
+
+            activeSamples &= 0xFu;
+            if (activeSamples == 0u)
+                return 0u;
+            if (stencilState.testEnabled && fb.multiSampleStencilBuffer.empty())
+                throw std::logic_error(
+                    "Software rasterizer received enabled 4x stencil state without per-sample stencil storage.");
+            if (depthState.testEnabled && fb.multiSampleDepthBuffer.empty())
+                throw std::logic_error(
+                    "Software rasterizer received enabled 4x depth state without per-sample depth storage.");
+
+            unsigned int passingSamples = 0u;
+            for (int sample = 0; sample < 4; ++sample)
+            {
+                const unsigned int sampleBit = 1u << sample;
+                if ((activeSamples & sampleBit) == 0u)
+                    continue;
+                const std::size_t sampleIndex = pixelIndex * 4u +
+                                                static_cast<std::size_t>(sample);
+                if (stencilState.testEnabled)
+                {
+                    std::uint8_t& stencil = fb.multiSampleStencilBuffer[sampleIndex];
+                    if (!StencilComparisonPasses(stencilState.reference, stencil,
+                                                 stencilState.readMask,
+                                                 stencilState.compareFunction))
+                    {
+                        WriteStencil(stencil, stencilState, stencilState.failOperation);
+                        continue;
+                    }
+                }
+                const float sampleDepth = sampleDepths != nullptr
+                    ? (*sampleDepths)[static_cast<std::size_t>(sample)] : centerDepth;
+                if (depthState.testEnabled && !DepthFragmentPasses(
+                        depthState, sampleDepth, fb.multiSampleDepthBuffer[sampleIndex]))
+                {
+                    if (stencilState.testEnabled)
+                        WriteStencil(fb.multiSampleStencilBuffer[sampleIndex], stencilState,
+                                     stencilState.depthFailOperation);
+                    continue;
+                }
+                if (stencilState.testEnabled)
+                    WriteStencil(fb.multiSampleStencilBuffer[sampleIndex], stencilState,
+                                 stencilState.passOperation);
+                if (depthState.testEnabled)
+                    WritePassingDepth(fb.multiSampleDepthBuffer[sampleIndex], depthState,
+                                      sampleDepth);
+                passingSamples |= sampleBit;
+            }
+            return passingSamples;
         }
 
 #ifndef CNA_SOFTWARE_2D_ONLY
@@ -1588,60 +1679,55 @@ namespace CNA::Internal::Renderers::Software
                                          const RasterStencilState& stencilState,
                                          const RasterClipRect& clip, int x, int y,
                                          float depth, float invW, float pr, float pg, float pb, float pa,
-                                         int colorWriteMask, unsigned int multiSampleMask)
+                                         int colorWriteMask, unsigned int multiSampleMask,
+                                         unsigned int coverageMask = 0xFFFFFFFFu,
+                                         const std::array<float, 4>* sampleDepths = nullptr)
         {
             if (x < clip.minX || x > clip.maxX || y < clip.minY || y > clip.maxY)
                 return;
-            // REMED-GFX-077: Software is single-sample, so only MultiSampleMask bit 0 is meaningful.
-            // Bit 0 clear ⇒ the one sample is not covered ⇒ nothing is written (neither colour nor
-            // depth), matching XNA "no samples written". Default (0xFFFFFFFF) keeps bit 0 set.
-            if ((multiSampleMask & 1u) == 0u)
+            const unsigned int availableSamples = fb.HasMultiSampleColor() ? 0xFu : 0x1u;
+            const unsigned int activeSamples =
+                multiSampleMask & coverageMask & availableSamples;
+            if (activeSamples == 0u)
                 return;
             if (g_samplerTrace.enabled) { g_samplerTrace.fragX = x; g_samplerTrace.fragY = y; }
             const std::size_t pixelIndex = static_cast<std::size_t>(y) * static_cast<std::size_t>(fb.width) +
                                            static_cast<std::size_t>(x);
-            if (stencilState.testEnabled && fb.stencilBuffer.empty())
-                throw std::logic_error(
-                    "Software rasterizer received enabled stencil state without stencil storage.");
-            if (stencilState.testEnabled && !StencilComparisonPasses(
-                    stencilState.reference, fb.stencilBuffer[pixelIndex],
-                    stencilState.readMask, stencilState.compareFunction))
+            const unsigned int passingSamples = ApplyFragmentTests(
+                fb, depthState, stencilState, pixelIndex, activeSamples, depth, sampleDepths);
+            if (passingSamples == 0u)
+                return;
+            const float r = pr / invW, g = pg / invW, b = pb / invW, a = pa / invW;
+            const auto writeColor = [&](std::uint8_t* destination) {
+                if (ColorWriteHasRed(colorWriteMask))
+                    destination[0] = static_cast<std::uint8_t>(
+                        std::clamp(r, 0.0f, 1.0f) * 255.0f);
+                if (ColorWriteHasGreen(colorWriteMask))
+                    destination[1] = static_cast<std::uint8_t>(
+                        std::clamp(g, 0.0f, 1.0f) * 255.0f);
+                if (ColorWriteHasBlue(colorWriteMask))
+                    destination[2] = static_cast<std::uint8_t>(
+                        std::clamp(b, 0.0f, 1.0f) * 255.0f);
+                if (ColorWriteHasAlpha(colorWriteMask))
+                    destination[3] = static_cast<std::uint8_t>(
+                        std::clamp(a, 0.0f, 1.0f) * 255.0f);
+            };
+            if (!fb.HasMultiSampleColor())
             {
-                WriteStencil(fb, stencilState, pixelIndex, stencilState.failOperation);
+                writeColor(fb.color.data() + pixelIndex * 4u);
                 return;
             }
-            // REMED-GFX-030: comparison precedes every color/depth write.
-            if (depthState.testEnabled)
+            for (int sample = 0; sample < 4; ++sample)
             {
-                if (fb.depthBuffer.empty())
-                    throw std::logic_error(
-                        "Software rasterizer received enabled depth state without depth storage.");
-                if (!DepthFragmentPasses(depthState, depth, fb.depthBuffer[pixelIndex]))
-                {
-                    if (stencilState.testEnabled)
-                        WriteStencil(fb, stencilState, pixelIndex,
-                                     stencilState.depthFailOperation);
-                    return;
-                }
+                if ((passingSamples & (1u << sample)) == 0u)
+                    continue;
+                writeColor(fb.multiSampleColor.data() +
+                           (pixelIndex * 4u + static_cast<std::size_t>(sample)) * 4u);
             }
-            if (stencilState.testEnabled)
-                WriteStencil(fb, stencilState, pixelIndex, stencilState.passOperation);
-            const float r = pr / invW, g = pg / invW, b = pb / invW, a = pa / invW;
-            // Depth is written independently of the colour write mask (REMED-GFX-077 Phase 11:
-            // ColorWriteChannels controls only colour writes, never depth). REMED-GFX-030: a
-            // passing fragment updates depth only when DepthBufferWriteEnable is true.
-            WritePassingDepth(fb, depthState, pixelIndex, depth);
-            const std::size_t colorIndex = pixelIndex * 4;
-            // REMED-GFX-077: gate each channel by BlendState.ColorWriteChannels — a masked-off channel
-            // keeps its existing destination byte (identity), the XNA semantic.
-            if (ColorWriteHasRed  (colorWriteMask)) fb.color[colorIndex + 0] = static_cast<std::uint8_t>(std::clamp(r, 0.0f, 1.0f) * 255.0f);
-            if (ColorWriteHasGreen(colorWriteMask)) fb.color[colorIndex + 1] = static_cast<std::uint8_t>(std::clamp(g, 0.0f, 1.0f) * 255.0f);
-            if (ColorWriteHasBlue (colorWriteMask)) fb.color[colorIndex + 2] = static_cast<std::uint8_t>(std::clamp(b, 0.0f, 1.0f) * 255.0f);
-            if (ColorWriteHasAlpha(colorWriteMask)) fb.color[colorIndex + 3] = static_cast<std::uint8_t>(std::clamp(a, 0.0f, 1.0f) * 255.0f);
         }
 
         /// Fills one triangle into `fb` using a standard edge-function/barycentric rasterizer,
-        /// with a per-pixel depth test/write against `fb.depthBuffer` per `depthState` and
+        /// with a per-sample depth test/write (one sample per pixel without MSAA) and
         /// backface culling per `cullMode` (SOFTWARE-81; raw ordinal, see ShouldCullTriangle()).
         /// REMED-GFX-082: when `wireframe`, only the edges selected by `edgeMask` are rasterized
         /// (line walk) instead of the interior fill -- culling and the zero-area reject are shared, so
@@ -1714,8 +1800,43 @@ namespace CNA::Internal::Renderers::Software
                     const float w1 = EdgeFunction(v2.x, v2.y, v0.x, v0.y, px, py);
                     const float w2 = EdgeFunction(v0.x, v0.y, v1.x, v1.y, px, py);
 
-                    if (!TriangleContainsSample(v0, v1, v2, area, w0, w1, w2))
-                        continue;
+                    unsigned int coverageMask = 1u;
+                    std::array<float, 4> sampleDepths{};
+                    if (!fb.HasMultiSampleColor())
+                    {
+                        if (!TriangleContainsSample(v0, v1, v2, area, w0, w1, w2))
+                            continue;
+                    }
+                    else
+                    {
+                        coverageMask = 0u;
+                        for (int sample = 0; sample < 4; ++sample)
+                        {
+                            const float sampleX = static_cast<float>(x) +
+                                ((sample & 1) == 0 ? 0.25f : 0.75f);
+                            const float sampleY = static_cast<float>(y) +
+                                (sample < 2 ? 0.25f : 0.75f);
+                            const float sampleW0 = EdgeFunction(
+                                v1.x, v1.y, v2.x, v2.y, sampleX, sampleY);
+                            const float sampleW1 = EdgeFunction(
+                                v2.x, v2.y, v0.x, v0.y, sampleX, sampleY);
+                            const float sampleW2 = EdgeFunction(
+                                v0.x, v0.y, v1.x, v1.y, sampleX, sampleY);
+                            if (!TriangleContainsSample(v0, v1, v2, area,
+                                                        sampleW0, sampleW1, sampleW2))
+                                continue;
+                            coverageMask |= 1u << sample;
+                            float sampleDepth = (sampleW0 * v0.depth +
+                                                 sampleW1 * v1.depth +
+                                                 sampleW2 * v2.depth) / area;
+                            if (hasBias)
+                                sampleDepth = std::clamp(sampleDepth + biasOffset,
+                                                         0.0f, 1.0f);
+                            sampleDepths[static_cast<std::size_t>(sample)] = sampleDepth;
+                        }
+                        if (coverageMask == 0u)
+                            continue;
+                    }
 
                     const float lambda0 = w0 / area;
                     const float lambda1 = w1 / area;
@@ -1732,7 +1853,8 @@ namespace CNA::Internal::Renderers::Software
                                          lambda0 * v0.g + lambda1 * v1.g + lambda2 * v2.g,
                                          lambda0 * v0.b + lambda1 * v1.b + lambda2 * v2.b,
                                          lambda0 * v0.a + lambda1 * v1.a + lambda2 * v2.a,
-                                         colorWriteMask, multiSampleMask);
+                                         colorWriteMask, multiSampleMask, coverageMask,
+                                         fb.HasMultiSampleColor() ? &sampleDepths : nullptr);
                 }
             }
         }
@@ -2296,7 +2418,8 @@ namespace CNA::Internal::Renderers::Software
                                         const RasterClipRect& clip, int x, int y, float depth, float invW,
                                         float pr, float pg, float pb, float pa, float pu, float pv,
                                         float pwpx, float pwpy, float pwpz, float pnx, float pny, float pnz,
-                                        unsigned int coverageMask = 0xFFFFFFFFu)
+                                        unsigned int coverageMask = 0xFFFFFFFFu,
+                                        const std::array<float, 4>* sampleDepths = nullptr)
         {
             if (x < clip.minX || x > clip.maxX || y < clip.minY || y > clip.maxY)
                 return;
@@ -2314,12 +2437,6 @@ namespace CNA::Internal::Renderers::Software
             { g_samplerTrace.fragX = x; g_samplerTrace.fragY = y; }
             const std::size_t pixelIndex = static_cast<std::size_t>(y) * static_cast<std::size_t>(fb.width) +
                                            static_cast<std::size_t>(x);
-            if (ctx.stencilState.testEnabled && fb.stencilBuffer.empty())
-                throw std::logic_error(
-                    "Software rasterizer received enabled stencil state without stencil storage.");
-            if (ctx.depthState.testEnabled && fb.depthBuffer.empty())
-                throw std::logic_error(
-                    "Software rasterizer received enabled depth state without depth storage.");
 
             float r = pr / invW, g = pg / invW, b = pb / invW, a = pa / invW;
 
@@ -2370,30 +2487,13 @@ namespace CNA::Internal::Renderers::Software
             if (!AlphaTestPasses(ctx.params, a))
                 return;
 
-            // SOFTWARE-111: alpha-test discard precedes every observable depth/stencil operation.
-            // GDI-073 deliberately keeps one stencil byte per PIXEL: after sample-mask/coverage and
-            // alpha rejection, this comparison/operation runs once and gates the complete active
-            // colour-sample set. It does not claim a per-sample depth/stencil attachment.
-            if (ctx.stencilState.testEnabled && !StencilComparisonPasses(
-                    ctx.stencilState.reference, fb.stencilBuffer[pixelIndex],
-                    ctx.stencilState.readMask, ctx.stencilState.compareFunction))
-            {
-                WriteStencil(fb, ctx.stencilState, pixelIndex, ctx.stencilState.failOperation);
+            // SOFTWARE-111/110: alpha-test discard precedes every observable per-sample
+            // depth/stencil operation. Only samples surviving those operations reach colour.
+            const unsigned int passingSamples = ApplyFragmentTests(
+                fb, ctx.depthState, ctx.stencilState, pixelIndex, activeSamples, depth,
+                sampleDepths);
+            if (passingSamples == 0u)
                 return;
-            }
-            // REMED-GFX-030: comparison precedes every color/depth write. A depth failure performs
-            // only the configured stencil depth-fail operation.
-            if (ctx.depthState.testEnabled &&
-                !DepthFragmentPasses(ctx.depthState, depth, fb.depthBuffer[pixelIndex]))
-            {
-                if (ctx.stencilState.testEnabled)
-                    WriteStencil(fb, ctx.stencilState, pixelIndex,
-                                 ctx.stencilState.depthFailOperation);
-                return;
-            }
-
-            if (ctx.stencilState.testEnabled)
-                WriteStencil(fb, ctx.stencilState, pixelIndex, ctx.stencilState.passOperation);
 
             // GDI-022: ColorMatrixEffect is intentionally a small fixed CPU SpriteBatch effect,
             // not a shader language. It acts after the ordinary texture/tint calculation and
@@ -2457,11 +2557,6 @@ namespace CNA::Internal::Renderers::Software
             }
 #endif
 
-            // Depth is written independently of the colour write mask (REMED-GFX-077 Phase 11:
-            // ColorWriteChannels never gates depth — only the colour channels below).
-            // REMED-GFX-030: DepthRead reaches this point but leaves stored depth untouched.
-            WritePassingDepth(fb, ctx.depthState, pixelIndex, depth);
-
             // REMED-GFX-077: final colour channels (opaque store or exact XNA blend result). Each channel is
             // gated by BlendState.ColorWriteChannels — a masked-off channel keeps its existing
             // destination byte (identity), applied AFTER blending (Phase 10). The common All(15)
@@ -2510,7 +2605,7 @@ namespace CNA::Internal::Renderers::Software
             }
             for (int sample = 0; sample < 4; ++sample)
             {
-                if ((activeSamples & (1u << sample)) == 0u)
+                if ((passingSamples & (1u << sample)) == 0u)
                     continue;
                 writeBlendedColor(fb.multiSampleColor.data() +
                                   (pixelIndex * 4u + static_cast<std::size_t>(sample)) * 4u);
@@ -2751,6 +2846,7 @@ namespace CNA::Internal::Renderers::Software
                     const float w2 = EdgeFunction(v0.x, v0.y, v1.x, v1.y, px, py);
 
                     unsigned int coverageMask = 1u;
+                    std::array<float, 4> sampleDepths{};
                     if (!fb.HasMultiSampleColor())
                     {
                         if (!TriangleContainsSample(v0, v1, v2, area, w0, w1, w2))
@@ -2776,7 +2872,16 @@ namespace CNA::Internal::Renderers::Software
                                                                 sampleX, sampleY);
                             if (TriangleContainsSample(v0, v1, v2, area,
                                                        sampleW0, sampleW1, sampleW2))
+                            {
                                 coverageMask |= 1u << sample;
+                                float sampleDepth = (sampleW0 * v0.depth +
+                                                     sampleW1 * v1.depth +
+                                                     sampleW2 * v2.depth) / area;
+                                if (hasBias)
+                                    sampleDepth = std::clamp(sampleDepth + biasOffset,
+                                                             0.0f, 1.0f);
+                                sampleDepths[static_cast<std::size_t>(sample)] = sampleDepth;
+                            }
                         }
                         if (coverageMask == 0u)
                             continue;
@@ -2802,7 +2907,8 @@ namespace CNA::Internal::Renderers::Software
                                         lambda0 * v0.nx + lambda1 * v1.nx + lambda2 * v2.nx,
                                         lambda0 * v0.ny + lambda1 * v1.ny + lambda2 * v2.ny,
                                         lambda0 * v0.nz + lambda1 * v1.nz + lambda2 * v2.nz,
-                                        coverageMask);
+                                        coverageMask,
+                                        fb.HasMultiSampleColor() ? &sampleDepths : nullptr);
                 }
             }
         }

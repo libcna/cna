@@ -24,12 +24,16 @@ namespace CNA::Internal::Renderers::Software
         std::vector<float> newDepth;
         std::vector<std::uint8_t> newStencil;
         std::vector<std::uint8_t> newMultiSampleColor;
+        std::vector<float> newMultiSampleDepth;
+        std::vector<std::uint8_t> newMultiSampleStencil;
         try
         {
             newColor.assign(layout.colorBytes, 0u);
             newDepth.assign(layout.depthElementCount, 1.0f);
             newStencil.assign(layout.stencilBytes, 0u);
             newMultiSampleColor.assign(layout.multiSampleBytes, 0u);
+            newMultiSampleDepth.assign(layout.multiSampleDepthElementCount, 1.0f);
+            newMultiSampleStencil.assign(layout.multiSampleStencilBytes, 0u);
         }
         catch (const std::bad_alloc&)
         {
@@ -46,6 +50,8 @@ namespace CNA::Internal::Renderers::Software
         depthBuffer = std::move(newDepth);
         stencilBuffer = std::move(newStencil);
         multiSampleColor = std::move(newMultiSampleColor);
+        multiSampleDepthBuffer = std::move(newMultiSampleDepth);
+        multiSampleStencilBuffer = std::move(newMultiSampleStencil);
     }
 
     void SoftwareFramebuffer::SetMultiSampleCount(int sampleCount)
@@ -62,8 +68,22 @@ namespace CNA::Internal::Renderers::Software
             // Preserve the last rendered image when an application turns the optional feature
             // back off at reset time; otherwise the unresolved colour plane would be discarded.
             ResolveColor();
+            const std::size_t pixelCount = static_cast<std::size_t>(width) *
+                                           static_cast<std::size_t>(height);
+            if (!multiSampleDepthBuffer.empty())
+            {
+                for (std::size_t pixel = 0; pixel < pixelCount; ++pixel)
+                    depthBuffer[pixel] = multiSampleDepthBuffer[pixel * 4u];
+            }
+            if (!multiSampleStencilBuffer.empty())
+            {
+                for (std::size_t pixel = 0; pixel < pixelCount; ++pixel)
+                    stencilBuffer[pixel] = multiSampleStencilBuffer[pixel * 4u];
+            }
             multiSampleCount = 0;
             std::vector<std::uint8_t>().swap(multiSampleColor);
+            std::vector<float>().swap(multiSampleDepthBuffer);
+            std::vector<std::uint8_t>().swap(multiSampleStencilBuffer);
             return;
         }
 
@@ -75,9 +95,13 @@ namespace CNA::Internal::Renderers::Software
             ThrowInvalidFramebufferLayout(request, layout.error);
 
         std::vector<std::uint8_t> newMultiSampleColor;
+        std::vector<float> newMultiSampleDepth;
+        std::vector<std::uint8_t> newMultiSampleStencil;
         try
         {
             newMultiSampleColor.resize(layout.multiSampleBytes);
+            newMultiSampleDepth.resize(layout.multiSampleDepthElementCount);
+            newMultiSampleStencil.resize(layout.multiSampleStencilBytes);
         }
         catch (const std::bad_alloc&)
         {
@@ -89,8 +113,24 @@ namespace CNA::Internal::Renderers::Software
         }
 
         multiSampleColor = std::move(newMultiSampleColor);
+        multiSampleDepthBuffer = std::move(newMultiSampleDepth);
+        multiSampleStencilBuffer = std::move(newMultiSampleStencil);
         multiSampleCount = appliedCount;
         CopyResolvedColorToMultiSample();
+        const std::size_t pixelCount = static_cast<std::size_t>(width) *
+                                       static_cast<std::size_t>(height);
+        for (std::size_t pixel = 0; pixel < pixelCount; ++pixel)
+        {
+            for (int sample = 0; sample < 4; ++sample)
+            {
+                const std::size_t sampleIndex = pixel * 4u +
+                                                static_cast<std::size_t>(sample);
+                if (!multiSampleDepthBuffer.empty())
+                    multiSampleDepthBuffer[sampleIndex] = depthBuffer[pixel];
+                if (!multiSampleStencilBuffer.empty())
+                    multiSampleStencilBuffer[sampleIndex] = stencilBuffer[pixel];
+            }
+        }
     }
 
     void SoftwareFramebuffer::CopyResolvedColorToMultiSample()
@@ -166,11 +206,14 @@ namespace CNA::Internal::Renderers::Software
     void SoftwareFramebuffer::ClearDepthValue(float depthValue)
     {
         std::fill(depthBuffer.begin(), depthBuffer.end(), depthValue);
+        std::fill(multiSampleDepthBuffer.begin(), multiSampleDepthBuffer.end(), depthValue);
     }
 
     void SoftwareFramebuffer::ClearStencilValue(int stencilValue)
     {
         std::fill(stencilBuffer.begin(), stencilBuffer.end(),
+                  static_cast<std::uint8_t>(std::clamp(stencilValue, 0, 255)));
+        std::fill(multiSampleStencilBuffer.begin(), multiSampleStencilBuffer.end(),
                   static_cast<std::uint8_t>(std::clamp(stencilValue, 0, 255)));
     }
 }

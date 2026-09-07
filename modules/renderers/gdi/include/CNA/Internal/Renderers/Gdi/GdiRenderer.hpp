@@ -20,10 +20,13 @@ namespace CNA::Internal::Renderers::Gdi
         std::size_t depthBytes = 0;
         std::size_t stencilBytes = 0;
         std::size_t multiSampleBytes = 0;
+        std::size_t multiSampleDepthBytes = 0;
+        std::size_t multiSampleStencilBytes = 0;
 
         [[nodiscard]] std::size_t TotalBytes() const
         {
-            return colorBytes + depthBytes + stencilBytes + multiSampleBytes;
+            return colorBytes + depthBytes + stencilBytes + multiSampleBytes +
+                   multiSampleDepthBytes + multiSampleStencilBytes;
         }
     };
 

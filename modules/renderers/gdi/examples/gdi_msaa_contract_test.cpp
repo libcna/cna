@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// GDI-073: exact contract for GDI's deliberately narrow backbuffer-only 4x CPU MSAA.
+// GDI-073/SOFTWARE-110: exact contract for GDI's backbuffer-only 4x CPU MSAA.
 
 #include "CNA/GraphicsRendererType.hpp"
 #include "CNA/GraphicsCapability.hpp"
@@ -190,9 +190,9 @@ namespace
                           "wireframe pixels still honor MultiSampleMask", 1);
         renderer.ApplyRasterizerState(/*CullCounterClockwise*/ 2, /*Solid*/ 0, false);
 
-        // Stencil storage is intentionally one byte per pixel, not four values per sample. An
-        // Increment pass therefore runs once for this off-diagonal triangle fragment even though
-        // it covers all four colour samples; Equal(1) passes and Equal(4) fails afterward.
+        // SOFTWARE-110 gives the shared 2D core one stencil value per sample. A full-coverage
+        // Increment therefore changes every sample from zero to one; Equal(1) passes everywhere
+        // and Equal(4) fails everywhere afterward.
         renderer.ClearStencil(0);
         SetOpaqueMask(renderer, 0xFu);
         SetStencil(renderer, /*Always*/ 0, /*Increment*/ 3, /*Keep*/ 0, 0);
@@ -202,13 +202,13 @@ namespace
         SetStencil(renderer, /*Equal*/ 4, /*Keep*/ 0, /*Keep*/ 0, 1);
         Draw(renderer, *atlas, full, greenSource);
         ok &= ExpectPixel(ReadPixel(renderer, 1, 5), green,
-                          "4x coverage applies one per-pixel stencil operation, not four");
+                          "4x coverage applies the stencil operation independently to every sample");
 
         renderer.Clear(0.0f, 0.0f, 0.0f, 1.0f);
         SetStencil(renderer, /*Equal*/ 4, /*Keep*/ 0, /*Keep*/ 0, 4);
         Draw(renderer, *atlas, full, blueSource);
         ok &= ExpectPixel(ReadPixel(renderer, 1, 5), black,
-                          "the standalone stencil plane does not pretend to be per-sample");
+                          "all four stencil samples retain the exact operation result");
 
         // Sample-mask rejection happens before stencil. With no active colour samples, a Replace
         // operation cannot mutate the pixel's stencil value.
@@ -224,8 +224,7 @@ namespace
         ok &= ExpectPixel(ReadPixel(renderer, 1, 5), green,
                           "zero active samples suppress stencil operations as well as colour");
 
-        // One per-pixel comparison gates the complete active colour-sample set. This is useful for
-        // crisp 2D masks but intentionally cannot represent different stencil values per sample.
+        // A geometric half-mask still gates all samples of fully covered pixels consistently.
         renderer.ClearStencil(0);
         renderer.Clear(0.0f, 0.0f, 0.0f, 1.0f);
         SetStencil(renderer, /*Always*/ 0, /*Replace*/ 2, /*Keep*/ 0, 1);
@@ -234,15 +233,30 @@ namespace
         SetStencil(renderer, /*Equal*/ 4, /*Keep*/ 0, /*Keep*/ 0, 1);
         Draw(renderer, *atlas, full, blueSource);
         ok &= ExpectPixel(ReadPixel(renderer, 1, 5), blue,
-                          "matching per-pixel stencil admits all four active colour samples");
+                          "matching stencil samples admit all four active colour samples");
         ok &= ExpectPixel(ReadPixel(renderer, 6, 5), black,
-                          "failing per-pixel stencil rejects all four active colour samples");
+                          "failing stencil samples reject all four active colour samples");
+
+        // A sample mask can create distinct stencil values inside one pixel. Only sample 0 is
+        // stamped to one; Equal(0) then admits the other three samples and resolves to 3/4 blue.
+        renderer.ClearStencil(0);
+        renderer.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        SetOpaqueMask(renderer, 0x1u);
+        SetStencil(renderer, /*Always*/ 0, /*Replace*/ 2, /*Keep*/ 0, 1);
+        Draw(renderer, *atlas, full, redSource);
+        renderer.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        SetOpaqueMask(renderer, 0xFu);
+        SetStencil(renderer, /*Equal*/ 4, /*Keep*/ 0, /*Keep*/ 0, 0);
+        Draw(renderer, *atlas, full, blueSource);
+        ok &= ExpectPixel(ReadPixel(renderer, 1, 5), Pixel{0, 0, 191, 255},
+                          "one stamped stencil sample leaves the other three independently writable",
+                          1);
 
         DisableStencil(renderer);
         SetOpaqueMask(renderer, 0xFFFFFFFFu);
         ok &= Expect(renderer.ApplyMultiSampleCount(0) == 0 &&
                          renderer.GetMultiSampleCount() == 0,
-                     "disabling MSAA releases the optional four-sample colour plane");
+                     "disabling MSAA releases the optional color and stencil sample planes");
         return ok;
     }
 }

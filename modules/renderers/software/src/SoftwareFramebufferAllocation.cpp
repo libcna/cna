@@ -67,11 +67,31 @@ namespace CNA::Internal::Renderers::Software
         }
         if (request.allocateStencil)
             layout.stencilBytes = layout.pixelCount;
-        if (request.multiSampleCount == 4 &&
-            !CheckedMultiply(layout.pixelCount, 16u, layout.multiSampleBytes))
+        if (request.multiSampleCount == 4)
         {
-            layout.error = SoftwareFramebufferAllocationError::ArithmeticOverflow;
-            return layout;
+            if (!CheckedMultiply(layout.pixelCount, 16u, layout.multiSampleBytes))
+            {
+                layout.error = SoftwareFramebufferAllocationError::ArithmeticOverflow;
+                return layout;
+            }
+            if (request.allocateDepth)
+            {
+                if (!CheckedMultiply(layout.pixelCount, 4u,
+                                     layout.multiSampleDepthElementCount) ||
+                    !CheckedMultiply(layout.multiSampleDepthElementCount, sizeof(float),
+                                     layout.multiSampleDepthBytes))
+                {
+                    layout.error = SoftwareFramebufferAllocationError::ArithmeticOverflow;
+                    return layout;
+                }
+            }
+            if (request.allocateStencil &&
+                !CheckedMultiply(layout.pixelCount, 4u,
+                                 layout.multiSampleStencilBytes))
+            {
+                layout.error = SoftwareFramebufferAllocationError::ArithmeticOverflow;
+                return layout;
+            }
         }
 
         if (request.mipMap)
@@ -98,6 +118,8 @@ namespace CNA::Internal::Renderers::Software
         if (!CheckedAdd(layout.colorBytes, layout.depthBytes, layout.totalBytes) ||
             !CheckedAdd(layout.totalBytes, layout.stencilBytes, layout.totalBytes) ||
             !CheckedAdd(layout.totalBytes, layout.multiSampleBytes, layout.totalBytes) ||
+            !CheckedAdd(layout.totalBytes, layout.multiSampleDepthBytes, layout.totalBytes) ||
+            !CheckedAdd(layout.totalBytes, layout.multiSampleStencilBytes, layout.totalBytes) ||
             !CheckedAdd(layout.totalBytes, layout.mipBytes, layout.totalBytes))
         {
             layout.error = SoftwareFramebufferAllocationError::ArithmeticOverflow;

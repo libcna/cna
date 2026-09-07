@@ -70,6 +70,7 @@ namespace CNA::Internal::Renderers::EasyGL
 #include <metagl/ContextEvents.hpp>
 #include <metagl/EnumNames.hpp>
 #include <metagl/Functions.hpp>
+#include <metagl/Loader.hpp>
 
 // Verbose 3D rendering trace. Define `CNA_DEBUG_RENDERING` (e.g. via
 // -DCNA_DEBUG_RENDERING) to enable. By default these logs are silent so the
@@ -6300,11 +6301,21 @@ if (!ProfileIsEs2ApiGeneration())
         for (int i = 0; i < 4; ++i)
             currentColorWriteMasks_[i] = writeState.colorWriteChannels[i];
         ApplyCurrentColorWriteMasks();
-        // BlendState.MultiSampleMask: EasyGL could express a coverage mask via glSampleMaski
-        // (GL ES 3.1+, requires GL_SAMPLE_MASK enable). It is left at the all-ones default here —
-        // a non-default coverage mask on the GL/GLES profile is a documented capability gap, not
-        // silently dropped: the value reaches the renderer and only the (rare) non-default path is
-        // unimplemented.
+        // SOFTWARE-110: XNA/FNA applies this 32-bit mask to sample coverage. Desktop GL 3.2+ and
+        // GLES 3.1+ expose the exact operation; enable it even for all-ones so a later state change
+        // cannot inherit an external/default mask. Older ES/WebGL profiles reject the
+        // inexpressible non-default state instead of silently rendering every sample.
+        if (metagl::IsFunctionAvailable("glSampleMaski"))
+        {
+            metagl::glEnable(metagl::Capability::SampleMask);
+            metagl::glSampleMaski(
+                0u, static_cast<metagl::SampleMaskValue>(writeState.multiSampleMask));
+        }
+        else if (writeState.multiSampleMask != 0xFFFFFFFFu)
+        {
+            throw System::NotSupportedException(
+                "EasyGL: BlendState.MultiSampleMask requires desktop GL 3.2 or OpenGL ES 3.1.");
+        }
     }
 
     void EasyGLRenderer::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,

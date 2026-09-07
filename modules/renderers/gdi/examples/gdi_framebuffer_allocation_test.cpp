@@ -57,6 +57,8 @@ namespace
         ok &= Expect(single.IsValid() && single.pixelCount == 480000u &&
                          single.colorBytes == 1920000u && single.depthBytes == 0u &&
                          single.stencilBytes == 480000u && single.multiSampleBytes == 0u &&
+                         single.multiSampleDepthBytes == 0u &&
+                         single.multiSampleStencilBytes == 0u &&
                          single.totalBytes == 2400000u,
                      "single-sample GDI layout commits exactly five bytes per pixel");
 
@@ -64,14 +66,18 @@ namespace
             PlanSoftwareFramebufferAllocation({800, 600, false, true, 4});
         ok &= Expect(multisampled.IsValid() && multisampled.depthBytes == 0u &&
                          multisampled.multiSampleBytes == 7680000u &&
-                         multisampled.totalBytes == 10080000u,
-                     "4x GDI layout commits exactly twenty-one bytes per pixel");
+                         multisampled.multiSampleDepthBytes == 0u &&
+                         multisampled.multiSampleStencilBytes == 1920000u &&
+                         multisampled.totalBytes == 12000000u,
+                     "4x GDI layout commits exactly twenty-five bytes per pixel");
 
         const SoftwareFramebufferAllocationLayout fullSoftware =
             PlanSoftwareFramebufferAllocation({800, 600, true, true, 4});
         ok &= Expect(fullSoftware.IsValid() && fullSoftware.depthBytes == 1920000u &&
-                         fullSoftware.totalBytes == 12000000u,
-                     "full Software layout still accounts for depth, stencil and 4x color");
+                         fullSoftware.multiSampleDepthBytes == 7680000u &&
+                         fullSoftware.multiSampleStencilBytes == 1920000u &&
+                         fullSoftware.totalBytes == 21600000u,
+                     "full Software layout accounts for per-sample color, depth and stencil");
 
         const SoftwareFramebufferAllocationLayout mipmapped =
             PlanSoftwareFramebufferAllocation({800, 600, false, true, 0, true});
@@ -123,6 +129,8 @@ namespace
         GdiFramebufferStorageTelemetry storage = renderer.DebugGetBackbufferStorage();
         ok &= Expect(storage.colorBytes == 8u * 6u * 4u && storage.depthBytes == 0u &&
                          storage.stencilBytes == 8u * 6u && storage.multiSampleBytes == 0u &&
+                         storage.multiSampleDepthBytes == 0u &&
+                         storage.multiSampleStencilBytes == 0u &&
                          storage.TotalBytes() == 8u * 6u * 5u,
                      "live GDI backbuffer allocates RGBA8 plus stencil and no depth");
 
@@ -131,8 +139,10 @@ namespace
         storage = renderer.DebugGetBackbufferStorage();
         ok &= Expect(storage.depthBytes == 0u &&
                          storage.multiSampleBytes == 8u * 6u * 16u &&
-                         storage.TotalBytes() == 8u * 6u * 21u,
-                     "live 4x GDI backbuffer matches the twenty-one-byte layout");
+                         storage.multiSampleDepthBytes == 0u &&
+                         storage.multiSampleStencilBytes == 8u * 6u * 4u &&
+                         storage.TotalBytes() == 8u * 6u * 25u,
+                     "live 4x GDI backbuffer matches the twenty-five-byte layout");
         ok &= Expect(renderer.ApplyMultiSampleCount(2) == 0 &&
                          renderer.DebugGetBackbufferStorage().multiSampleBytes == 0u,
                      "unsupported MSAA disables and releases optional sample storage");
@@ -144,7 +154,9 @@ namespace
                          softwareTarget->Framebuffer().color.size() == 7u * 5u * 4u &&
                          softwareTarget->Framebuffer().depthBuffer.empty() &&
                          softwareTarget->Framebuffer().stencilBuffer.size() == 7u * 5u &&
-                         softwareTarget->Framebuffer().multiSampleColor.empty(),
+                         softwareTarget->Framebuffer().multiSampleColor.empty() &&
+                         softwareTarget->Framebuffer().multiSampleDepthBuffer.empty() &&
+                         softwareTarget->Framebuffer().multiSampleStencilBuffer.empty(),
                      "GDI render target follows its RGBA8/stencil-only/single-sample contract");
 
         ok &= ExpectArgumentOutOfRange(
