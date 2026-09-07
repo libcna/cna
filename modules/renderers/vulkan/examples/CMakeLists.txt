@@ -162,6 +162,39 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_FullscreenSpriteThen3D COMMAND cna_test_vulkan_fullscreen_sprite_then_3d
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-208: seven EasyGL sources whose SUBJECT this renderer had no test for
+        # at all -- not by name and not by source. Each is renderer-agnostic already (no EasyGL, GL or
+        # metagl include); registering is the whole change. A red one is a finding, not a failure.
+        cna_vulkan_test(cna_test_vulkan_basiceffect_properties
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/basic_effect_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_BasicEffect_Properties COMMAND cna_test_vulkan_basiceffect_properties
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_skinnedeffect_properties
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/skinned_effect_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SkinnedEffect_Properties COMMAND cna_test_vulkan_skinnedeffect_properties
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_spritefont_properties
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/sprite_font_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SpriteFont_Properties COMMAND cna_test_vulkan_spritefont_properties
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_rendertarget_golden
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget2d_golden_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_RenderTarget2D_Golden COMMAND cna_test_vulkan_rendertarget_golden
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_alphatest_vertexcolor_diffuse
+            ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_alphatest_vertexcolor_diffuse_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_AlphaTest_VertexColorDiffuse COMMAND cna_test_vulkan_alphatest_vertexcolor_diffuse
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_basiceffect_world_scale_precision
+            ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_basiceffect_world_scale_precision_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_BasicEffectWorldScalePrecision COMMAND cna_test_vulkan_basiceffect_world_scale_precision
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-194: XNA's PrepRenderState assigns the batch's SamplerState into
         # GraphicsDevice.SamplerStates[0], so it outlives End() and the next 3D draw samples with
         # it. Timing measured on the shipped runtime (spikes/xna-spritebatch-sampler0-spike):

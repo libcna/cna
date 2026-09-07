@@ -16,6 +16,17 @@ miss every registration made the other way round.
 Non-goal, stated in the row and honoured here: this is not a CTest.  It reads text and prints; it
 builds nothing, configures nothing, and has no side effects.
 
+READ THE "no Vulkan equivalent" NUMBER CAREFULLY (plan_vulkan.md VULKAN-208, 2026-09-07).  It is a
+count of SOURCES, and it is an UPPER BOUND on the coverage gap, not the gap.  This campaign often
+wrote a Vulkan-native test of the same subject rather than registering EasyGL's source -- so
+`EasyGL_BasicEffect_OneLight` and `Vulkan_BasicEffect_OneLight` are two sources and count as a gap
+here while measuring the same behaviour.  The complementary sweep is by NAME, which has the opposite
+bias (`EasyGL_VertexFormats_AllStrides` vs `Vulkan_VertexFormat_AllStrides` are the same subject
+under two spellings, and count as a gap by name).  The real set is the intersection of the two,
+minus the GLSL `*_shader_test.cpp` sources this renderer cannot take by contract -- 30 rows when
+VULKAN-208 computed it, of which 6 were genuine and are now registered.  Neither sweep alone is a
+finding; §10's parity matrix is what says which residual is accepted and why.
+
 Usage:
     tools/vulkan/renderer_coverage_delta.py            # summary counts
     tools/vulkan/renderer_coverage_delta.py --list easygl-only
