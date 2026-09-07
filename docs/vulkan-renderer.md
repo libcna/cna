@@ -336,6 +336,7 @@ EasyGL — an optional per-instance matrix added to every stock program. Three s
 | Any of the above under an `AlphaTestEffect` | `instanced_alpha_test3d` (the ordinary alpha-test family, made instanceable) |
 | Position + Normal + TextureCoordinate with `LightingEnabled` | `instanced_lit_textured3d`, or its `_vertexlit` sibling when `PreferPerPixelLighting` is false (the ordinary lit family, made instanceable) |
 | Position + 2×TextureCoordinate under a `DualTextureEffect` | `instanced_dual_texture3d` (the ordinary dual-texture family, made instanceable) |
+| Position + Normal + TextureCoordinate under an `EnvironmentMapEffect` | `instanced_env_map3d` (the ordinary env-map family, made instanceable) |
 
 **The per-instance matrix composes with `BasicEffect.World`** — the shader computes
 `World × View × Projection × instanceMatrix × position`, so an instance transform is applied
@@ -347,8 +348,9 @@ The textured variant needs **both** halves: the effect must have asked for a tex
 declaration must supply the coordinate. Either alone selects a program the draw cannot feed, so
 either alone is ignored.
 
-**What an instanced draw does not do here, and it is a limit rather than an omission.** There is no
-env-map instanced program; the lit family is instanceable only in its **textured**
+**What an instanced draw does not do here, and it is a limit rather than an omission.** Every
+remaining gap is a narrow variant rather than a whole family. The lit family is instanceable only in
+its **textured**
 shape (a lit declaration that is untextured, or that also carries a Colour, falls back to the
 colour-only instanced family); there is no **coloured** alpha-test one (a
 `Position+Colour+TextureCoordinate` alpha-test draw takes the uncoloured module and loses its
@@ -356,8 +358,9 @@ colour, and the same holds for a coloured dual-texture one); and there is no fog
 instanced programs — the fog UBO is a second
 descriptor binding, and that family uses the single-binding pipeline layout it shares with 2D
 `SpriteBatch`. The lit and alpha-test instanced draws carry their own family's fog, because they
-carry their own family's whole pipeline layout. Tracked as `VULKAN-218`; EasyGL has none of these limits, because its per-instance matrix
-composes with every stock program.
+carry their own family's whole pipeline layout. Skinned and PBR draws are not instanceable either.
+Tracked as `VULKAN-218`; EasyGL has none of these limits, because its per-instance matrix composes
+with every stock program.
   Set `SamplerStates[1..15]` **before** `Begin()`. Setting them afterwards reaches a `Deferred`
   batch, whose flush publishes them, but not an `Immediate` one, whose only publication point is
   `Begin()` — XNA re-applies device state per draw call and CNA's sprite path does not go through
