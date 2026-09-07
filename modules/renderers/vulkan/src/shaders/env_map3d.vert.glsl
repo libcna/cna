@@ -67,7 +67,15 @@ void main() {
     vec3  fresnelEye  = normalize(vEyeDir);
     vec3  fresnelNorm = normalize(vWorldNormal);
     float viewAngle   = dot(fresnelEye, fresnelNorm);
-    vFresnel = (ep.light0Diff_pad.w > 0.5)
+    // plan_vulkan.md VULKAN-196 (F-36). XNA writes this factor to `vout.Specular.rgb`, and
+    // Structures.fxh declares `Specular : COLOR1` -- so Direct3D 9 saturates it to [0,1] BEFORE
+    // interpolation (plans/plan_fx.md FX-123 measured that semantic against real XNA frames).
+    // `EnvironmentMapAmount` is not clamped by the property setter, so a game may hand this shader
+    // a value above 1; without the clamp the fragment stage extrapolates past the environment map
+    // instead of replacing with it. Clamping here rather than in the fragment stage is the whole
+    // point: clamping after interpolation would interpolate the unclamped value first and give a
+    // different gradient, which is the same distinction EasyGL's own env-map program records.
+    vFresnel = clamp((ep.light0Diff_pad.w > 0.5)
         ? pow(max(1.0 - abs(viewAngle), 0.0), ep.envMapSpec_pad.w) * ep.emissive_em.w
-        : ep.emissive_em.w;
+        : ep.emissive_em.w, 0.0, 1.0);
 }

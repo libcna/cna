@@ -238,6 +238,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_texture3d_addressw
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-196 (F-36): D3D9 saturates oD1, so EnvironmentMapAmount above 1
+        # blends as 1. Renderer-agnostic source -- EasyGL already clamps, this renderer did not.
+        cna_vulkan_test(cna_test_vulkan_environmentmapeffect_amount_clamp
+                        ${CMAKE_SOURCE_DIR}/modules/graphics/examples/environmentmapeffect_amount_clamp_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_EnvironmentMapEffect_AmountClamp
+            COMMAND cna_test_vulkan_environmentmapeffect_amount_clamp
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-166: a ShaderEffect's texture unit u takes SamplerStates[u], so
         # two bound volumes in one batch can be addressed differently.
         cna_vulkan_test(cna_test_vulkan_shader_effect_per_unit_sampler
