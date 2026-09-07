@@ -505,6 +505,18 @@ function(cna_register_d3d_parity_tests)
         NAME NpotTexture TARGET npot_texture DIRECTX12_ORDER 1660
         SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_npot_texture_test.cpp")
     cna_d3d_parity_fixture(
+        NAME Texture3D_Slices_RoundTrip TARGET texture3d_slices DIRECTX12_ORDER 1670
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_texture3d_slices_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME Texture3D_Mip_RoundTrip TARGET texture3d_mip DIRECTX12_ORDER 1680
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_texture3d_mip_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME Texture3D_PartialBox_RoundTrip TARGET texture3d_partial_box DIRECTX12_ORDER 1690
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_texture3d_partial_box_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME Texture3D_PartialBox_Readback TARGET texture3d_partial_box_readback DIRECTX12_ORDER 1700
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_texture3d_partial_box_readback_test.cpp")
+    cna_d3d_parity_fixture(
         NAME SpriteBatch_CustomViewport TARGET spritebatch_custom_viewport
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_custom_viewport_test.cpp"
         DIRECTX11_ONLY REASON "D3D12 presentation-corpus adoption is tracked by DX-234 and DX-236")
