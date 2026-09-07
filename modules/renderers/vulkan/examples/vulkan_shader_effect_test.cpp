@@ -266,36 +266,48 @@ protected:
         // Kept for the refusal legs below, which need one live effect that demonstrably works.
         const Color centPx = leftPx;
 
-        // plan_vulkan.md VULKAN-265: the four array uniform setters must REFUSE, not fall
-        // silent. The centre-pixel check above is this leg's control: it proves the very same
-        // `fx` still reaches the shader through SetUniformVec4, so four throws cannot be
-        // explained away by an effect that is broken end to end.
+        // plan_vulkan.md VULKAN-252: the four array uniform setters used to REFUSE here
+        // (`VULKAN-265`), because a fixed 128-byte push-constant block has nowhere to put an
+        // array. They accept now, through set 1's uniform-buffer ranges. What must never come back
+        // is silence, so this leg pins both ends of the new contract: a call within capacity
+        // succeeds, and one past it is refused BY NAME rather than truncated. The pixels an array
+        // actually produces are `Vulkan_ShaderEffect_UniformArrays`' job, not this file's.
+        // The centre-pixel check above is still this leg's control: it proves the same `fx`
+        // reaches the shader, so an acceptance cannot be explained by an inert effect.
         const float payload[16] = {};
-        bool refusalsOk = true;
-        auto expectRefusal = [&refusalsOk](const char* setter, auto&& call) {
+        bool arraysOk = true;
+        auto expectAccepted = [&arraysOk](const char* setter, auto&& call) {
             try {
                 call();
-                std::printf("[FAIL] VulkanShaderEffect: %s was accepted and silently ignored\n",
-                            setter);
-                refusalsOk = false;
-            } catch (const System::NotSupportedException& e) {
-                std::printf("[ok]   %s refused: %s\n", setter, e.what());
-            } catch (...) {
-                std::printf("[FAIL] VulkanShaderEffect: %s threw the wrong exception type\n",
-                            setter);
-                refusalsOk = false;
+                std::printf("[ok]   %s accepted\n", setter);
+            } catch (const std::exception& e) {
+                std::printf("[FAIL] VulkanShaderEffect: %s was refused: %s\n", setter, e.what());
+                arraysOk = false;
             }
         };
-        expectRefusal("SetUniformFloatArray",
-                      [&] { fx.SetUniformFloatArray("uWeights", payload, 4); });
-        expectRefusal("SetUniformVec2Array",
-                      [&] { fx.SetUniformVec2Array("uOffsets", payload, 2); });
-        expectRefusal("SetUniformVec3Array",
-                      [&] { fx.SetUniformVec3Array("uLightDirs", payload, 2); });
-        expectRefusal("SetUniformMat4Array",
-                      [&] { fx.SetUniformMat4Array("uBones", payload, 1); });
+        expectAccepted("SetUniformFloatArray",
+                       [&] { fx.SetUniformFloatArray("uWeights", payload, 4); });
+        expectAccepted("SetUniformVec2Array",
+                       [&] { fx.SetUniformVec2Array("uOffsets", payload, 2); });
+        expectAccepted("SetUniformVec3Array",
+                       [&] { fx.SetUniformVec3Array("uLightDirs", payload, 2); });
+        expectAccepted("SetUniformMat4Array",
+                       [&] { fx.SetUniformMat4Array("uBones", payload, 1); });
+        {
+            // Past the block's capacity. A renderer that quietly wrote 72 of the 1000 would pass
+            // every leg above and corrupt whatever followed the array.
+            bool refused = false;
+            std::string what;
+            try { fx.SetUniformMat4Array("uBones", payload, 1000); }
+            catch (const System::NotSupportedException& e) { refused = true; what = e.what(); }
+            catch (...) { what = "the wrong exception type"; }
+            const bool namesIt = refused && what.find("1000") != std::string::npos;
+            std::printf("[%s]   an array past the capacity is refused by name: %s\n",
+                        namesIt ? "ok" : "FAIL", refused ? what.c_str() : "NOT REFUSED");
+            if (!namesIt) arraysOk = false;
+        }
 
-        if (centOk && bgOk && refusalsOk)
+        if (centOk && bgOk && arraysOk)
         {
             std::printf("[PASS] VulkanShaderEffect: centre=(%d,%d,%d) bg=(%d,%d,%d)\n",
                         centPx.getRProperty(), centPx.getGProperty(), centPx.getBProperty(),
@@ -305,11 +317,12 @@ protected:
         else
         {
             std::printf("[FAIL] VulkanShaderEffect: centre=(%d,%d,%d) bg=(%d,%d,%d)"
-                        " refusals=%s\n"
-                        "       expected: centre=red, bg=green, all four array setters refused\n",
+                        " arrays=%s\n"
+                        "       expected: centre=red, bg=green, all four array setters accepted "
+                        "and an over-capacity one refused\n",
                         centPx.getRProperty(), centPx.getGProperty(), centPx.getBProperty(),
                         bgPx.getRProperty(),   bgPx.getGProperty(),   bgPx.getBProperty(),
-                        refusalsOk ? "ok" : "FAILED");
+                        arraysOk ? "ok" : "FAILED");
         }
         Exit();
     }

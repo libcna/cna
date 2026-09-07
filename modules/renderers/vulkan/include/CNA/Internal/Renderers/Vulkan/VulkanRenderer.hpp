@@ -463,30 +463,35 @@ namespace CNA::Internal::Renderers::Vulkan
         void SetUniformInt(const char* name, int value) override;
 
         /**
-         * @brief Refuses an array uniform upload, by name.
+         * @brief Uploads an array of `float` uniforms into this effect's own uniform buffer.
          *
-         * plans/plan_vulkan.md `VULKAN-265`, opened by `VULKAN-027`'s interface contract table.
-         * `IEffectRenderer`'s four array setters have `{}` bodies and EasyGL overrides all four,
-         * so before this they were accepted here and discarded without a word -- reachable from
-         * ordinary game code, because `ShaderEffect` carries the `CNAEXT` marker but no
-         * `CNA_CNAEXT` build guard.
+         * plans/plan_vulkan.md `VULKAN-252`. `VULKAN-265` refused all four array setters here,
+         * because the fixed 128-byte push-constant block a `ShaderEffect`'s scalars live in has
+         * nowhere to put an array; this renderer now gives them somewhere -- four uniform-buffer
+         * ranges in descriptor set 1, one per element type, at bindings
+         * @ref kEffectFloatArrayBinding .. @ref kEffectMat4ArrayBinding.
          *
-         * A `ShaderEffect` on this renderer is driven by a fixed 128-byte push-constant block
-         * with fixed slots -- one `mat4`, one `vec4` and eight floats -- and no shader
-         * reflection, so an array of arbitrary length has nowhere to go. That is a real limit,
-         * not an oversight, which is why it is stated rather than papered over.
+         * The `name` is not consulted, for the same reason the scalar setters do not consult
+         * theirs: there is no shader reflection here, so an array's **type** selects its slot the
+         * way a scalar's type selects its push-constant offset. A shader reads this one as
+         * `layout(set = 1, binding = 12) uniform FloatArray { float uFloats[72]; };`.
          *
-         * @param name   The uniform the caller asked for; used only in the message.
-         * @param values Ignored; the call never succeeds.
-         * @param count  Number of elements the caller offered; used only in the message.
-         * @throws System::NotSupportedException always.
+         * The contents are captured into a buffer at `SpriteBatch::End()`, alongside the bound
+         * textures and the push constants, so a later write cannot change what an already
+         * recorded batch reads.
+         *
+         * @param name   The uniform the caller asked for; not consulted (see above).
+         * @param values `count` elements, tightly packed.
+         * @param count  Elements to write, 0 .. @ref kEffectUniformArrayCapacity.
+         * @throws System::NotSupportedException if @p count exceeds the capacity, or if @p values
+         *         is null with a non-zero @p count.
          */
         void SetUniformFloatArray(const char* name, const float* values, int count) override;
-        /** @brief As @ref SetUniformFloatArray, for `vec2` elements. @throws System::NotSupportedException always. */
+        /** @brief As @ref SetUniformFloatArray, for `vec2` elements. */
         void SetUniformVec2Array(const char* name, const float* values, int count) override;
-        /** @brief As @ref SetUniformFloatArray, for `vec3` elements. @throws System::NotSupportedException always. */
+        /** @brief As @ref SetUniformFloatArray, for `vec3` elements. */
         void SetUniformVec3Array(const char* name, const float* values, int count) override;
-        /** @brief As @ref SetUniformFloatArray, for `mat4` elements. @throws System::NotSupportedException always. */
+        /** @brief As @ref SetUniformFloatArray, for `mat4` elements. */
         void SetUniformMat4Array(const char* name, const float* matrices, int count) override;
 
         /**
@@ -546,7 +551,28 @@ namespace CNA::Internal::Renderers::Vulkan
         /// at `kEffectVolumeBindingBase + u`.
         static constexpr int kEffectCubeBindingBase   = kMaxEffectBoundTextures;
         static constexpr int kEffectVolumeBindingBase = kMaxEffectBoundTextures * 2;
-        static constexpr int kEffectBoundBindingCount = kMaxEffectBoundTextures * 3;
+        /// plan_vulkan.md VULKAN-252: set 1 continues past the samplers with FOUR uniform-buffer
+        /// bindings, one per array element type, rather than one block holding all four. A shader
+        /// that wants a bone palette then declares only
+        /// `layout(set = 1, binding = 15) uniform Mat4Array { mat4 uMat4Array[72]; };` and reads
+        /// the right bytes; with one shared block it would have had to declare the three arrays it
+        /// does not use, in the right order, or silently read the wrong offset. All four are ranges
+        /// of ONE buffer, so the cost of the split is descriptors, not allocations.
+        ///   binding 12  `float` array
+        ///   binding 13  `vec2`  array
+        ///   binding 14  `vec3`  array
+        ///   binding 15  `mat4`  array
+        static constexpr int kEffectFloatArrayBinding = kMaxEffectBoundTextures * 3;
+        static constexpr int kEffectVec2ArrayBinding  = kEffectFloatArrayBinding + 1;
+        static constexpr int kEffectVec3ArrayBinding  = kEffectFloatArrayBinding + 2;
+        static constexpr int kEffectMat4ArrayBinding  = kEffectFloatArrayBinding + 3;
+        static constexpr int kEffectArrayBindingCount = 4;
+        static constexpr int kEffectBoundBindingCount =
+            kEffectFloatArrayBinding + kEffectArrayBindingCount;
+        /// VULKAN-252: elements per array, all four kinds. 72 is XNA's own `SkinnedEffect.MaxBones`,
+        /// so the array a custom effect most plausibly wants -- a bone palette -- fits exactly, and
+        /// the whole block is 8448 bytes against the 16384 every Vulkan device must allow.
+        static constexpr int kEffectUniformArrayCapacity = 72;
         /**
          * @brief VULKAN-253: the set-1 descriptor set holding this effect's bound textures.
          *
@@ -586,6 +612,26 @@ namespace CNA::Internal::Renderers::Vulkan
         /// rebuilt when it changes, because two batches can bind the same textures with
         /// different SamplerStates and the second must not reuse the first one's sampler.
         VkSampler             boundSetSampler_ = VK_NULL_HANDLE;
+        /// VULKAN-252: the CPU-side copy of the four arrays, in the layout the buffer holds. Each
+        /// element occupies 16 bytes for `float`, `vec2` and `vec3` alike, which is what std140
+        /// does to an array of any of them -- so a shader declaring `float uFloats[72]` reads
+        /// element `i` at offset `16 * i`, exactly where this writes it.
+        std::vector<float>    arrayBlock_;
+        /// VULKAN-252: byte offsets of the four sub-ranges inside `uniformBuffer_`, each aligned up
+        /// to the device's `minUniformBufferOffsetAlignment`.
+        std::array<VkDeviceSize, 4> arrayOffsets_{};
+        VkDeviceSize          arrayBlockSize_  = 0;
+        bool                  arraysDirty_     = false;
+        VkBuffer              uniformBuffer_   = VK_NULL_HANDLE;
+        VkDeviceMemory        uniformMemory_   = VK_NULL_HANDLE;
+        /// VULKAN-252: fills `arrayBlock_`/`arrayOffsets_` on first use and refuses by name if the
+        /// device cannot hold the block. Separate from the buffer so the sizes are known before
+        /// any allocation happens.
+        void EnsureUniformArrayStorageEXT();
+        /// VULKAN-252: the one place a setter writes. `elementFloats` is 1, 2, 3 or 16; every
+        /// element is padded to four floats except `mat4`, which is already sixteen.
+        void WriteUniformArrayEXT(const char* setter, const char* name, int slot,
+                                  int elementFloats, const float* values, int count);
         VkShaderModule   vertModule_     = VK_NULL_HANDLE;
         VkShaderModule   fragModule_     = VK_NULL_HANDLE;
         VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
