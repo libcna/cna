@@ -758,7 +758,13 @@ TEST(ContentPipelineCliTest, ConfigurationRejectsUnknownAssetsComponentsAndOptio
     }
 }
 
-TEST(ContentPipelineCliTest, ConfigurationPathMustRemainInsideTheSourceRoot)
+// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-110. The containment rule is about what a *source
+// tree* may carry, so the configuration this build discovers under its root has to be inside it,
+// like every other file it reads. A configuration the command line names is not a discovered
+// source -- it is the instruction -- and requiring it inside the root made a read-only source tree
+// unbuildable, because `BuildContent` had to write its own configuration into the sources it was
+// reading. The assets a configuration names are still root-relative and still contained.
+TEST(ContentPipelineCliTest, ADiscoveredConfigurationMustBeInsideTheSourceRootAndANamedOneNeedNotBe)
 {
     ScratchDirectory scratch("config_containment");
     const std::filesystem::path source = scratch.Path() / "ContentSource";
@@ -766,14 +772,28 @@ TEST(ContentPipelineCliTest, ConfigurationPathMustRemainInsideTheSourceRoot)
     const std::filesystem::path outside = scratch.Path() / "outside.json";
     WriteBytes(source / "wall.png", MakePng(3, 2));
     WriteText(outside,
-              R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{}})json");
+              R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{
+                       "wall.png":{"logicalName":"Walls/wall"}}})json");
 
     std::string log;
-    EXPECT_NE(RunTool({"build", source.string(), "-o", output.string(), "--config",
+    EXPECT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--config",
                        outside.string()},
                       log),
+              0)
+        << log;
+    // It was read, not merely tolerated: the name it gives is the one the asset was built under.
+    EXPECT_TRUE(std::filesystem::is_regular_file(output / "Walls" / "wall.cnb")) << log;
+
+    // A configuration that names an asset *outside* the root is still refused, which is the rule
+    // this check exists for.
+    WriteText(outside,
+              R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{
+                       "../escape.png":{"logicalName":"escape"}}})json");
+    std::string escaped;
+    EXPECT_NE(RunTool({"build", source.string(), "-o", output.string(), "--config",
+                       outside.string()},
+                      escaped),
               0);
-    EXPECT_NE(log.find("must remain inside source root"), std::string::npos) << log;
 }
 
 TEST(ContentPipelineCliTest, NonAsciiDirectoryBuildPreservesUtf8LogicalNamesAndSkips)

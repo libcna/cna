@@ -1787,10 +1787,29 @@ namespace
         std::string existingOwner_;
     };
 
+    /**
+     * @brief Claims a node's outputs, refusing two nodes that own *different* things under one name.
+     *
+     * Two nodes owning the same name is not by itself a collision: a nested build is keyed by its
+     * source and its processing, so two models that name the same texture describe one asset, and
+     * XNA's own build produces it once and lets both reference it. Spacewar's `p1_bfg` and
+     * `p1_dual` are exactly that -- both name `textures/p1_back.tga` -- and refusing them cost 85
+     * of that sample's 154 assets. What is still refused is two nodes whose outputs *differ*
+     * under one name, which is the case this check exists for
+     * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-117`).
+     *
+     * @param entry The node's manifest entry.
+     * @param owner The node's logical name.
+     * @param outputRoot Where the build publishes.
+     * @param logicalOwners Receives the owner of each logical name.
+     * @param pathOwners Receives the owner of each published path.
+     * @param claimed Receives each claimed output, so a second claim can be compared with it.
+     */
     void ReserveOutputs(const Pipeline::ContentBuildManifestEntry& entry,
                         const std::string& owner, const std::filesystem::path& outputRoot,
                         std::map<std::string, std::string>& logicalOwners,
-                        std::map<std::string, std::string>& pathOwners)
+                        std::map<std::string, std::string>& pathOwners,
+                        std::map<std::string, Pipeline::ContentBuildManifestOutput>& claimed)
     {
         std::set<std::string> entryLogicalNames;
         std::set<std::string> entryPaths;
@@ -1806,11 +1825,20 @@ namespace
             const auto logical = logicalOwners.find(output.logicalName);
             if (logical != logicalOwners.end() && logical->second != owner)
             {
-                throw OutputReservationConflict(
-                    "content build nodes '" + logical->second + "' and '" + owner +
-                        "' both own output logical name '" + output.logicalName + "'.",
-                    logical->second);
+                const auto previous = claimed.find(output.logicalName);
+                if (previous == claimed.end() || !(previous->second == output))
+                {
+                    throw OutputReservationConflict(
+                        "content build nodes '" + logical->second + "' and '" + owner +
+                            "' both own output logical name '" + output.logicalName +
+                            "', and the two are not the same asset.",
+                        logical->second);
+                }
+                // The same asset under the same name: one of the two publishes it and the other
+                // refers to it, which is what XNA's own build does.
+                continue;
             }
+            claimed[output.logicalName] = output;
 
             const std::filesystem::path path = WeaklyCanonical(
                 outputRoot / CNA::Internal::ContentPathFromUtf8(output.path));
@@ -2710,6 +2738,7 @@ namespace
         std::size_t skipped = 0u;
         std::size_t failed = 0u;
         std::map<std::string, std::string> logicalOwners;
+        std::map<std::string, Pipeline::ContentBuildManifestOutput> claimedOutputs;
         std::map<std::string, std::string> pathOwners;
         std::map<std::string, std::size_t> plansByNode;
         for (const BuildItem& item : builds)
@@ -2829,7 +2858,7 @@ namespace
             try
             {
                 ReserveOutputs(plans[index].manifest, plans[index].item->logicalName,
-                               outputRoot, logicalOwners, pathOwners);
+                               outputRoot, logicalOwners, pathOwners, claimedOutputs);
             }
             catch (const OutputReservationConflict& error)
             {
