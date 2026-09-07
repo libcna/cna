@@ -492,6 +492,10 @@ function(cna_register_d3d_parity_tests)
         NAME SpriteFont_EffectsRotationScale TARGET spritefont_effects_rotation_scale DIRECTX12_ORDER 1620
         SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritefont_effects_rotation_scale_test.cpp")
     cna_d3d_parity_fixture(
+        NAME SourceRectangleOrientation TARGET source_rectangle_orientation DIRECTX12_ORDER 1630
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/source_rectangle_orientation_test.cpp"
+        DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 600)
+    cna_d3d_parity_fixture(
         NAME SpriteBatch_CustomViewport TARGET spritebatch_custom_viewport
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_custom_viewport_test.cpp"
         DIRECTX11_ONLY REASON "D3D12 presentation-corpus adoption is tracked by DX-234 and DX-236")
@@ -614,8 +618,7 @@ function(cna_register_d3d_parity_tests)
         SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_depth_bias_test.cpp")
     cna_d3d_parity_fixture(
         NAME SpriteBatch_Scissor TARGET spritebatch_scissor DIRECTX12_ORDER 280
-        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_begin_rasterizerstate_scissor_test.cpp"
-        DIRECTX12_ONLY REASON "D3D11 state-corpus adoption is tracked by DX-227")
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_begin_rasterizerstate_scissor_test.cpp")
     cna_d3d_parity_fixture(
         NAME RenderTarget_ViewportScissorReset TARGET rt_viewport_scissor_reset DIRECTX12_ORDER 290
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_viewport_scissor_reset_test.cpp"
