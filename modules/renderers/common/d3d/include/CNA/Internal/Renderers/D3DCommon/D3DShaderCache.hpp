@@ -17,8 +17,7 @@ namespace CNA::Internal::Renderers::D3DCommon
 {
     using Microsoft::WRL::ComPtr;
 
-    /// Identifies one of the stock HLSL shader variants ported in DX-13-hlsl and compiled to DXBC
-    /// in DX-14-compile (hlsl_shaders.hpp) -- originally 10, plus AlphaTestColored3d (DX-136).
+    /// Identifies one of the stock HLSL shader variants compiled into hlsl_shaders.hpp.
     /// Mirrors the .hlsl source filenames.
     enum class D3DShaderVariant
     {
@@ -35,6 +34,12 @@ namespace CNA::Internal::Renderers::D3DCommon
         /// AlphaTestEffect with a white fallback texture and Position-only input.
         AlphaTestUntextured3d,
         DualTexture3d,
+        /// DualTextureEffect with independent TEXCOORD0 and TEXCOORD1 inputs.
+        DualTextureDualUv3d,
+        /// DualTextureEffect with a packed COLOR0 input and one shared texture coordinate.
+        DualTextureColored3d,
+        /// DualTextureEffect with packed COLOR0 and independent TEXCOORD0/TEXCOORD1 inputs.
+        DualTextureColoredDualUv3d,
         EnvMap3d,
         Skinned3d,
         Sprite2d,

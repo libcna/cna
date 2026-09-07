@@ -27,6 +27,9 @@ namespace CNA::Internal::Renderers::D3DCommon
                 case D3DShaderVariant::AlphaTest3d:       return {kAlphaTest3dVertDxbc, kAlphaTest3dVertDxbc_size};
                 case D3DShaderVariant::AlphaTestUntextured3d: return {kAlphaTestUntextured3dVertDxbc, kAlphaTestUntextured3dVertDxbc_size};
                 case D3DShaderVariant::DualTexture3d:     return {kDualTexture3dVertDxbc, kDualTexture3dVertDxbc_size};
+                case D3DShaderVariant::DualTextureDualUv3d: return {kDualTextureDualUv3dVertDxbc, kDualTextureDualUv3dVertDxbc_size};
+                case D3DShaderVariant::DualTextureColored3d: return {kDualTextureColored3dVertDxbc, kDualTextureColored3dVertDxbc_size};
+                case D3DShaderVariant::DualTextureColoredDualUv3d: return {kDualTextureColoredDualUv3dVertDxbc, kDualTextureColoredDualUv3dVertDxbc_size};
                 case D3DShaderVariant::EnvMap3d:          return {kEnvMap3dVertDxbc, kEnvMap3dVertDxbc_size};
                 case D3DShaderVariant::Skinned3d:         return {kSkinned3dVertDxbc, kSkinned3dVertDxbc_size};
                 case D3DShaderVariant::Sprite2d:          return {kSprite2dVertDxbc, kSprite2dVertDxbc_size};
@@ -62,6 +65,10 @@ namespace CNA::Internal::Renderers::D3DCommon
                 case D3DShaderVariant::AlphaTest3d:       return {kAlphaTest3dFragDxbc, kAlphaTest3dFragDxbc_size};
                 case D3DShaderVariant::AlphaTestUntextured3d: return {kAlphaTest3dFragDxbc, kAlphaTest3dFragDxbc_size};
                 case D3DShaderVariant::DualTexture3d:     return {kDualTexture3dFragDxbc, kDualTexture3dFragDxbc_size};
+                case D3DShaderVariant::DualTextureDualUv3d:
+                case D3DShaderVariant::DualTextureColored3d:
+                case D3DShaderVariant::DualTextureColoredDualUv3d:
+                    return {kDualTexture3dFragDxbc, kDualTexture3dFragDxbc_size};
                 case D3DShaderVariant::EnvMap3d:          return {kEnvMap3dFragDxbc, kEnvMap3dFragDxbc_size};
                 case D3DShaderVariant::Skinned3d:         return {kSkinned3dFragDxbc, kSkinned3dFragDxbc_size};
                 case D3DShaderVariant::Sprite2d:          return {kSprite2dFragDxbc, kSprite2dFragDxbc_size};

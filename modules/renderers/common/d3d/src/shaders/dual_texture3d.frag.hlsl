@@ -28,15 +28,16 @@ cbuffer FogParams : register(b2)
 struct PSInput
 {
     float4 Position  : SV_Position;
-    float2 UV        : TEXCOORD0;
-    float4 Tint      : TEXCOORD1;
-    float  FogFactor : TEXCOORD2;
+    float2 UV0       : TEXCOORD0;
+    float2 UV1       : TEXCOORD1;
+    float4 Tint      : TEXCOORD2;
+    float  FogFactor : TEXCOORD3;
 };
 
 float4 main(PSInput input) : SV_Target
 {
-    float4 tex1 = uTexture.Sample(uTextureSampler, input.UV);
-    float4 tex2 = uTexture2.Sample(uTexture2Sampler, input.UV);
+    float4 tex1 = uTexture.Sample(uTextureSampler, input.UV0);
+    float4 tex2 = uTexture2.Sample(uTexture2Sampler, input.UV1);
     tex1.rgb *= 2.0;
     float4 outColor = tex1 * tex2 * input.Tint;
     // Task 899: mix toward FogColor as FogFactor -> 0 (matches the established Task 888 formula).

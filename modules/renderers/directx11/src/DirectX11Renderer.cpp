@@ -1403,6 +1403,8 @@ namespace CNA::Internal::Renderers::DirectX11
                                              : stride == 16 || stride == 24;
         const bool hasTexCoord = hasDeclaration ? hasElement(VertexElementUsage::TextureCoordinate)
                                                 : stride == 20 || stride == 24 || stride == 32;
+        const bool hasTexCoord1 = hasDeclaration &&
+                                  hasElement(VertexElementUsage::TextureCoordinate, 1);
 
         // A PBR MASK draw keeps the PBR shader and evaluates alpha coverage there.
         const bool needsPbr         = params.pbr;
@@ -1426,13 +1428,9 @@ namespace CNA::Internal::Renderers::DirectX11
             throw std::runtime_error(
                 "DirectX11Renderer::DrawPrimitivesEx: AlphaTestEffect requires TEXCOORD0 when "
                 "a real texture is bound");
-        // DX-65: dual_texture3d.vert.hlsl's VSInput is Position+UV only (20 bytes) -- the 24-byte
-        // dual_texture_colored3d variant was deliberately not ported (DX-13-hlsl's own row notes).
-        if (needsDualTex && stride != 20)
+        if (needsDualTex && !hasTexCoord)
             throw std::runtime_error(
-                "DirectX11Renderer::DrawPrimitivesEx: DualTextureEffect (dual_texture3d) only "
-                "supports stride 20 (VertexPositionTexture); dual_texture_colored3d was not ported "
-                "(plans/plan_dx.md DX-13-hlsl)");
+                "DirectX11Renderer::DrawPrimitivesEx: DualTextureEffect requires TEXCOORD0");
         // DX-66: env_map3d.vert.hlsl's VSInput is Position+Normal+UV (32 bytes).
         if (needsEnvMap && stride != 32)
             throw std::runtime_error(
@@ -1466,7 +1464,11 @@ namespace CNA::Internal::Renderers::DirectX11
                 : (hasTexCoord ? D3DCommon::D3DShaderVariant::AlphaTest3d
                                : D3DCommon::D3DShaderVariant::AlphaTestUntextured3d);
         else if (needsDualTex)
-            variant = D3DCommon::D3DShaderVariant::DualTexture3d;
+            variant = hasColor
+                ? (hasTexCoord1 ? D3DCommon::D3DShaderVariant::DualTextureColoredDualUv3d
+                                : D3DCommon::D3DShaderVariant::DualTextureColored3d)
+                : (hasTexCoord1 ? D3DCommon::D3DShaderVariant::DualTextureDualUv3d
+                                : D3DCommon::D3DShaderVariant::DualTexture3d);
         else if (needsEnvMap)
             variant = D3DCommon::D3DShaderVariant::EnvMap3d;
         else if (needsPbr)
@@ -1541,8 +1543,10 @@ namespace CNA::Internal::Renderers::DirectX11
             nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
         if (needsDualTex)
         {
-            srvs[0] = GetSrvForTextureEXT(params.texture0);
-            srvs[1] = GetSrvForTextureEXT(params.texture1);
+            srvs[0] = params.texture0 ? GetSrvForTextureEXT(params.texture0)
+                                      : GetOrCreateDefaultWhiteSrvEXT();
+            srvs[1] = params.texture1 ? GetSrvForTextureEXT(params.texture1)
+                                      : GetOrCreateDefaultWhiteSrvEXT();
         }
         else if (needsEnvMap)
         {

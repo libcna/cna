@@ -251,9 +251,39 @@ function(cna_register_d3d_parity_tests)
         NAME AlphaTest_Fog TARGET alphatest_fog DIRECTX12_ORDER 800
         SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_alphatest_fog_test.cpp")
     cna_d3d_parity_fixture(
-        NAME DualTextureEffect_Fog TARGET dualtexture_fog
-        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/vulkan/examples/vulkan_dualtextureeffect_fog_test.cpp"
-        DIRECTX11_ONLY REASON "D3D12 stock-effect corpus adoption is tracked by DX-230 and DX-236")
+        NAME DualTextureEffect_Fog TARGET dualtextureeffect_fog DIRECTX12_ORDER 810
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_dualtextureeffect_fog_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME DualTextureEffect_Golden TARGET dualtextureeffect_golden DIRECTX12_ORDER 820
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_dualtextureeffect_golden_test.cpp"
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    cna_d3d_parity_fixture(
+        NAME DualTextureEffect_Blend TARGET dual_texture DIRECTX12_ORDER 830
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_dual_texture_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME DualTextureEffect_Doubling TARGET dualtextureeffect_doubling DIRECTX12_ORDER 840
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_dualtextureeffect_doubling_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME DualTextureEffect_Alpha TARGET dualtextureeffect_alpha DIRECTX12_ORDER 850
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_dualtextureeffect_alpha_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME DualTextureEffect_NullTexture0 TARGET dualtextureeffect_null_texture0 DIRECTX12_ORDER 860
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_dualtextureeffect_null_texture0_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME DualTextureEffect_NullTexture2 TARGET dualtextureeffect_null_texture2 DIRECTX12_ORDER 870
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_dualtextureeffect_null_texture2_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME DualTextureEffect_Combined TARGET dualtextureeffect_combined DIRECTX12_ORDER 880
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_dualtextureeffect_combined_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME DualTextureEffect_Integration TARGET dualtexture DIRECTX12_ORDER 890
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_dualtexture_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME DualTextureEffect_IndependentUV TARGET dualtextureeffect_independent_uv DIRECTX12_ORDER 900
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_dualtextureeffect_independent_uv_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME DualTextureEffect_VertexColor TARGET dualtextureeffect_vertexcolor DIRECTX12_ORDER 910
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/dualtextureeffect_vertexcolor_test.cpp")
     cna_d3d_parity_fixture(
         NAME EnvironmentMapEffect_Fog TARGET environmentmap_fog
         SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/vulkan/examples/vulkan_environmentmapeffect_fog_test.cpp"

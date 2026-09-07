@@ -2166,6 +2166,8 @@ namespace CNA::Internal::Renderers::DirectX12
                                              : stride == 16 || stride == 24;
         const bool hasTexCoord = hasDeclaration ? hasElement(VertexElementUsage::TextureCoordinate)
                                                 : stride == 20 || stride == 24 || stride == 32;
+        const bool hasTexCoord1 = hasDeclaration &&
+                                  hasElement(VertexElementUsage::TextureCoordinate, 1);
 
         // A PBR MASK draw keeps the PBR shader and evaluates alpha coverage there.
         const bool needsPbr = params.pbr;
@@ -2191,13 +2193,9 @@ namespace CNA::Internal::Renderers::DirectX12
             throw std::runtime_error(
                 "DirectX12Renderer::DrawPrimitivesEx: EnvironmentMapEffect (env_map3d) requires "
                 "stride 32 (VertexPositionNormalTexture)");
-        // dual_texture3d.vert.hlsl's VSInput is Position+UV only (20 bytes), same as D3D11's own
-        // DX-65 finding -- dual_texture_colored3d was never ported (DX-13-hlsl's own row notes).
-        if (needsDualTex && stride != 20)
+        if (needsDualTex && !hasTexCoord)
             throw std::runtime_error(
-                "DirectX12Renderer::DrawPrimitivesEx: DualTextureEffect (dual_texture3d) only "
-                "supports stride 20 (VertexPositionTexture); dual_texture_colored3d was not ported "
-                "(plans/plan_dx.md DX-13-hlsl)");
+                "DirectX12Renderer::DrawPrimitivesEx: DualTextureEffect requires TEXCOORD0");
         // skinned3d.vert.hlsl's VSInput is Position+Normal+UV+BoneWeights+BoneIndices (52 bytes);
         // plans/plan_cnj.md CNB-67 follow-up's own stride-56 sibling (skinned_colored3d) appends a
         // per-vertex Color, mirrors D3D11's own DrawPrimitivesExImpl exactly.
@@ -2239,7 +2237,11 @@ namespace CNA::Internal::Renderers::DirectX12
         }
         else if (needsDualTex)
         {
-            variant = D3DShaderVariant::DualTexture3d;
+            variant = hasColor
+                ? (hasTexCoord1 ? D3DShaderVariant::DualTextureColoredDualUv3d
+                                : D3DShaderVariant::DualTextureColored3d)
+                : (hasTexCoord1 ? D3DShaderVariant::DualTextureDualUv3d
+                                : D3DShaderVariant::DualTexture3d);
             hasTexture = true;
             // DX-13-hlsl's own note: dual_texture3d's FogParams cbuffer lives at register(b2), not
             // (b1) -- t0/s0 and t1/s1 already occupy the "next free slot" a single-texture variant
@@ -2432,8 +2434,12 @@ namespace CNA::Internal::Renderers::DirectX12
             cbAddresses[1] = perDrawCB->GetGPUVirtualAddress();
             cbAddresses[2] = fogCB->GetGPUVirtualAddress();
 
-            srvTextures[0] = params.texture0;
-            srvTextures[1] = params.texture1;
+            srvTextures[0] = params.texture0 != nullptr
+                ? params.texture0
+                : GetOrCreateDefaultWhiteTextureEXT();
+            srvTextures[1] = params.texture1 != nullptr
+                ? params.texture1
+                : GetOrCreateDefaultWhiteTextureEXT();
         }
         else if (needsEnvMap)
         {
