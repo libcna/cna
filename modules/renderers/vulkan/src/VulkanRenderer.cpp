@@ -16,6 +16,7 @@ namespace {
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #endif
+#include <atomic>
 #include <bit>
 #include <algorithm>
 #include <cassert>
@@ -269,6 +270,10 @@ namespace CNA::Internal::Renderers::Vulkan
     /// plan_vulkan.md VULKAN-216: declared here because the render-target constructors below now
     /// pick their OWN sample count, and the definition sits further down next to the device setup
     /// that was its only caller before this row.
+    // plan_vulkan.md VULKAN-187 (F-34): what a device told us, kept for the adapter query that runs
+    // before any device exists. A plain atomic because the query has no renderer instance to reach.
+    static std::atomic<uint32_t> sAdapterSampleCountsEXT{0};
+
     static VkSampleCountFlagBits PickSampleCount(VkPhysicalDevice pd, int requested);
 
     static int SampleCountToInt(VkSampleCountFlagBits s)
@@ -1988,6 +1993,16 @@ namespace CNA::Internal::Renderers::Vulkan
         CreateSurface();
         PickPhysicalDevice();
         CreateLogicalDevice();
+        {
+            // VULKAN-187 (F-34): publish what this physical device can do, so the adapter-level
+            // query that runs before any device exists has a real answer once one has.
+            VkPhysicalDeviceProperties adapterProps;
+            vkGetPhysicalDeviceProperties(physicalDevice_, &adapterProps);
+            sAdapterSampleCountsEXT.store(
+                static_cast<uint32_t>(adapterProps.limits.framebufferColorSampleCounts &
+                                      adapterProps.limits.framebufferDepthSampleCounts),
+                std::memory_order_relaxed);
+        }
         sampleCount_ = PickSampleCount(physicalDevice_, args.multiSampleCount);
         if (sampleCount_ > VK_SAMPLE_COUNT_1_BIT)
             std::clog << "[Vulkan] MSAA: " << static_cast<int>(sampleCount_) << "x\n";
@@ -10735,6 +10750,33 @@ namespace CNA::Internal::Renderers::Vulkan
                 (mp.memoryTypes[i].propertyFlags & props) == props)
                 return i;
         throw std::runtime_error("Vulkan: FindMemoryType failed");
+    }
+
+    uint32_t VulkanRenderer::GetPublishedAdapterSampleCountsEXT() noexcept
+    {
+        return sAdapterSampleCountsEXT.load(std::memory_order_relaxed);
+    }
+
+    int VulkanRenderer::ClampAdapterMultiSampleCountEXT(int surfaceFormat,
+                                                        int requestedMultiSampleCount) noexcept
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        // Only Color is a render-target format here (VULKAN-171/VULKAN-020), so any other format
+        // has no sample count to report rather than a clamped one.
+        if (surfaceFormat != static_cast<int>(SurfaceFormat::Color)) return 0;
+        const uint32_t mask = sAdapterSampleCountsEXT.load(std::memory_order_relaxed);
+        if (mask == 0) return 0;                       // no device has existed yet
+        if (requestedMultiSampleCount <= 1) return requestedMultiSampleCount > 0
+                                                       ? requestedMultiSampleCount : 0;
+        const VkSampleCountFlagBits bits[] = {
+            VK_SAMPLE_COUNT_64_BIT, VK_SAMPLE_COUNT_32_BIT, VK_SAMPLE_COUNT_16_BIT,
+            VK_SAMPLE_COUNT_8_BIT,  VK_SAMPLE_COUNT_4_BIT,  VK_SAMPLE_COUNT_2_BIT };
+        const int counts[] = { 64, 32, 16, 8, 4, 2 };
+        for (int i = 0; i < 6; ++i) {
+            if (counts[i] > requestedMultiSampleCount) continue;
+            if (mask & static_cast<uint32_t>(bits[i])) return counts[i];
+        }
+        return 1;
     }
 
     bool VulkanRenderer::CheckDeviceLostEXT(const char* where, VkResult result)

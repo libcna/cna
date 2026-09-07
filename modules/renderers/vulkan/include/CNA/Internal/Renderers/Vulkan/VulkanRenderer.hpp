@@ -2463,6 +2463,29 @@ namespace CNA::Internal::Renderers::Vulkan
          */
         CNAEXT [[nodiscard]] bool IsDeviceLostEXT() const noexcept { return deviceLost_; }
         /**
+         * @brief CNAEXT. The adapter-level MSAA clamp, answered from a real device when there is one.
+         *
+         * plan_vulkan.md `VULKAN-187`, finding F-34. `GraphicsAdapter::QueryRenderTargetFormat` runs
+         * **before** any `GraphicsDevice` exists, so it reaches a renderer through a plain function
+         * pointer rather than a virtual — and with no hook it reported `0`, telling a game this
+         * renderer has no MSAA on a device with 4× or 8×.
+         *
+         * The honest answer to a pre-device question is what a device already told us: the first
+         * `VulkanRenderer` constructed publishes its physical device's colour+depth sample-count
+         * mask here, and this clamps against that. Before any renderer exists there is still no
+         * answer, and it returns 0 exactly as the shared fallback did — a Vulkan instance created
+         * just to answer a query would be a different, and much larger, promise.
+         *
+         * @param surfaceFormat            `SurfaceFormat` ordinal; only `Color` is a render-target
+         *                                 format on this renderer, so anything else answers 0.
+         * @param requestedMultiSampleCount What the game asked for.
+         * @return The largest supported count not exceeding the request, or 0 when unanswerable.
+         */
+        CNAEXT static int ClampAdapterMultiSampleCountEXT(int surfaceFormat,
+                                                          int requestedMultiSampleCount) noexcept;
+        /// VULKAN-187: published by the constructor; 0 until a device has existed.
+        CNAEXT static uint32_t GetPublishedAdapterSampleCountsEXT() noexcept;
+        /**
          * @brief CNAEXT. Test hook: treat the next device-loss check as if the device were lost.
          *
          * A real `VK_ERROR_DEVICE_LOST` cannot be provoked from inside the process on any driver

@@ -99,16 +99,15 @@ protected:
             const bool exact = adapter.QueryRenderTargetFormat(
                 GraphicsProfile::HiDef, SurfaceFormat::Color, DepthFormat::Depth24Stencil8, 4,
                 selected, selectedDepth, selectedSamples);
-            // MEASUREMENT, not an assertion: this renderer registers no `adapterQueries` hooks, so
-            // `clampMultiSampleCount` is null and the shared fallback writes 0 whatever the device
-            // can do. That is finding F-34 and `VULKAN-187` owns turning this leg into the
-            // assertion it wants to be; asserting it today would only paint the defect green.
-            check(true,
-                  "C MEASUREMENT: the adapter's answer for 4x MSAA on a device that supports it: "
-                  "exact=" +
+            // Was a MEASUREMENT under `VULKAN-372`, which found it reporting 0 on a device with
+            // 4x or 8x (F-34); `VULKAN-187` registered this renderer's clamp and it is an
+            // assertion now. Four rather than the device maximum on purpose: llvmpipe offers 4x
+            // and RADV 8x, and this leg has to mean the same thing on both.
+            check(selectedSamples == 4 && exact,
+                  "C the adapter reports the 4x MSAA this device supports: exact=" +
                       std::string(exact ? "true" : "false") + " selectedMultiSampleCount=" +
                       std::to_string(static_cast<int>(selectedSamples)) +
-                      " (0 means no adapter hook answered -- F-34)");
+                      " (0 would mean no adapter hook answered -- F-34)");
         }
 
         // D. Recorded, not judged.
