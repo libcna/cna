@@ -74,6 +74,7 @@
 #include "Microsoft/Xna/Framework/Graphics/AlphaTestEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp"
@@ -94,6 +95,10 @@
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "System/Exception.hpp"
 
@@ -161,6 +166,9 @@ namespace
     /// Stride-20 VertexPositionTexture.
     struct VtxPT { float px, py, pz; float u, v; };
     static_assert(sizeof(VtxPT) == 20, "stride 20");
+    /// DualTextureEffect vertex with equal, independently declared texture-coordinate channels.
+    struct VtxDualPT { float px, py, pz; float u, v; float u1, v1; };
+    static_assert(sizeof(VtxDualPT) == 28, "stride 28");
     /// Stride-32 VertexPositionNormalTexture.
     struct VtxPNT { float px, py, pz; float nx, ny, nz; float u, v; };
     static_assert(sizeof(VtxPNT) == 32, "stride 32");
@@ -176,6 +184,16 @@ namespace
                      float w0, w1, w2, w3; std::uint8_t i0, i1, i2, i3; };
     static_assert(sizeof(VtxPbrS) == 68, "stride 68");
 
+    const VertexDeclaration kDualDeclaration(
+        28,
+        {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector2,
+                          VertexElementUsage::TextureCoordinate, 0),
+            VertexElement(20, VertexElementFormat::Vector2,
+                          VertexElementUsage::TextureCoordinate, 1),
+        });
+
     /// A full-viewport quad in NDC with identity matrices, so destination pixel (x,y) reads texture
     /// coordinate ((x+0.5)/kRT * uvMax, (y+0.5)/kRT * uvMax) with no projection to reason about.
     template <typename V>
@@ -190,6 +208,17 @@ namespace
         place(br,  1.0f, -1.0f); br.u = uvMax; br.v = uvMax;
         place(tr,  1.0f,  1.0f); tr.u = uvMax; tr.v = 0.0f;
         return { tl, bl, br, tl, br, tr };
+    }
+
+    std::vector<VtxDualPT> MakeDualQuad(float uvMax)
+    {
+        auto vertices = MakeQuad<VtxDualPT>(uvMax);
+        for (auto& vertex : vertices)
+        {
+            vertex.u1 = vertex.u;
+            vertex.v1 = vertex.v;
+        }
+        return vertices;
     }
 
     template <typename V>
@@ -416,6 +445,17 @@ class StockEffectSamplerContractTest : public Game
         dev.SetVertexBuffer(nullptr);
     }
 
+    template <typename V>
+    static void DrawQuad(GraphicsDevice& dev, const std::vector<V>& verts,
+                         const VertexDeclaration& declaration)
+    {
+        VertexBuffer vb(dev, declaration, static_cast<int>(verts.size()), BufferUsage::None);
+        vb.SetData(verts.data(), static_cast<int>(verts.size()));
+        dev.SetVertexBuffer(&vb);
+        dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+        dev.SetVertexBuffer(nullptr);
+    }
+
     void DrawBasicPlain(GraphicsDevice& dev, float uvMax)
     {
         BasicEffect fx(dev);
@@ -457,7 +497,7 @@ class StockEffectSamplerContractTest : public Game
         fx.setTextureProperty(&tex_);
         fx.setTexture2Property(&white_);
         fx.Apply();
-        DrawQuad(dev, MakeQuad<VtxPT>(uvMax));
+        DrawQuad(dev, MakeDualQuad(uvMax), kDualDeclaration);
     }
 
     void DrawEnvMapBase(GraphicsDevice& dev, float uvMax)
@@ -814,7 +854,7 @@ private:
             fx.setTextureProperty(&tex_);
             fx.setTexture2Property(&tex2_);
             fx.Apply();
-            DrawQuad(d, MakeQuad<VtxPT>(1.0f));
+            DrawQuad(d, MakeDualQuad(1.0f), kDualDeclaration);
         };
 
         SetSlot(dev, 0, TextureFilter::Point, TextureAddressMode::Clamp);
@@ -826,8 +866,8 @@ private:
         }
         catch (const std::exception& e)
         {
-            // D3D9 declares stride 20 with vertexColor=false unsupported for DualTextureEffect
-            // (plans/plan_dx9.md D9-82d), so it has no two-slot stock family to measure here.
+            // Renderer families without a two-slot stock-effect path have no multi-slot behavior
+            // for this fixture to measure.
             std::printf("[SKIP] M: this renderer does not implement DualTextureEffect (%s)\n", e.what());
             std::fflush(stdout);
             return;

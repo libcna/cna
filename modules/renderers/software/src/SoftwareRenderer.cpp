@@ -48,7 +48,8 @@ namespace CNA::Internal::Renderers::Software
             float depth = 0.0f;         ///< Post-divide Z, 0..1 (D3D/XNA convention).
             float invW = 1.0f;          ///< 1 / clip.W, used to un-premultiply interpolated attributes.
             float r = 0.0f, g = 0.0f, b = 0.0f, a = 0.0f;  ///< Vertex color * invW, 0..1 range.
-            float u = 0.0f, v = 0.0f;   ///< Texture coordinate * invW (Phase S5).
+            float u = 0.0f, v = 0.0f;   ///< TextureCoordinate0 * invW (Phase S5).
+            float u1 = 0.0f, v1 = 0.0f; ///< TextureCoordinate1 * invW (SOFTWARE-116).
             float fogKeep = 1.0f;       ///< XNA stock-effect fog keep factor * invW.
             /// Per-vertex BasicEffect specular result * invW (SOFTWARE-113).
             float sr = 0.0f, sg = 0.0f, sb = 0.0f;
@@ -382,6 +383,7 @@ namespace CNA::Internal::Renderers::Software
             float x = 0.0f, y = 0.0f, z = 0.0f, w = 1.0f;
             float r = 1.0f, g = 1.0f, b = 1.0f, a = 1.0f;
             float u = 0.0f, v = 0.0f;
+            float u1 = 0.0f, v1 = 0.0f;
             float fogKeep = 1.0f;
             /// Per-vertex BasicEffect specular result (SOFTWARE-113).
             float sr = 0.0f, sg = 0.0f, sb = 0.0f;
@@ -436,6 +438,8 @@ namespace CNA::Internal::Renderers::Software
             out.a = a.a + t * (b.a - a.a);
             out.u = a.u + t * (b.u - a.u);
             out.v = a.v + t * (b.v - a.v);
+            out.u1 = a.u1 + t * (b.u1 - a.u1);
+            out.v1 = a.v1 + t * (b.v1 - a.v1);
             out.fogKeep = a.fogKeep + t * (b.fogKeep - a.fogKeep);
             out.sr = a.sr + t * (b.sr - a.sr);
             out.sg = a.sg + t * (b.sg - a.sg);
@@ -622,6 +626,8 @@ namespace CNA::Internal::Renderers::Software
             out.a = cv.a * invW;
             out.u = cv.u * invW;
             out.v = cv.v * invW;
+            out.u1 = cv.u1 * invW;
+            out.v1 = cv.v1 * invW;
             out.fogKeep = cv.fogKeep * invW;
             out.sr = cv.sr * invW;
             out.sg = cv.sg * invW;
@@ -1244,19 +1250,26 @@ namespace CNA::Internal::Renderers::Software
             return !(rho > 1.0f) ? 1.0f : rho;
         }
 
-        float TriangleTexelRate(const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2,
-                                int texW, int texH)
+        float TriangleTexelRate(const RasterVertex& v0, const RasterVertex& v1,
+                                const RasterVertex& v2, int texW, int texH,
+                                bool secondCoordinate = false)
         {
             const float w0 = (v0.invW != 0.0f) ? v0.invW : 1.0f;
             const float w1 = (v1.invW != 0.0f) ? v1.invW : 1.0f;
             const float w2 = (v2.invW != 0.0f) ? v2.invW : 1.0f;
+            const float u0 = secondCoordinate ? v0.u1 : v0.u;
+            const float u1 = secondCoordinate ? v1.u1 : v1.u;
+            const float u2 = secondCoordinate ? v2.u1 : v2.u;
+            const float t0 = secondCoordinate ? v0.v1 : v0.v;
+            const float t1 = secondCoordinate ? v1.v1 : v1.v;
+            const float t2 = secondCoordinate ? v2.v1 : v2.v;
             return ScreenSpaceTexelRate(v0, v1, v2,
-                                        v0.u / w0 * static_cast<float>(texW),
-                                        v1.u / w1 * static_cast<float>(texW),
-                                        v2.u / w2 * static_cast<float>(texW),
-                                        v0.v / w0 * static_cast<float>(texH),
-                                        v1.v / w1 * static_cast<float>(texH),
-                                        v2.v / w2 * static_cast<float>(texH));
+                                        u0 / w0 * static_cast<float>(texW),
+                                        u1 / w1 * static_cast<float>(texW),
+                                        u2 / w2 * static_cast<float>(texW),
+                                        t0 / w0 * static_cast<float>(texH),
+                                        t1 / w1 * static_cast<float>(texH),
+                                        t2 / w2 * static_cast<float>(texH));
         }
 
         /// REMED-GFX-175: the level-of-detail a texel rate implies. rho <= 1 is magnification, which
@@ -2330,8 +2343,10 @@ namespace CNA::Internal::Renderers::Software
                 std::memcpy(&out.v, raw.At(44), sizeof(float));
                 if (stride == 60 && (params.pbrTextureCoordinateSetMask & 1u) != 0u)
                 {
-                    std::memcpy(&out.u, raw.At(48), sizeof(float));
-                    std::memcpy(&out.v, raw.At(52), sizeof(float));
+                    std::memcpy(&out.u1, raw.At(48), sizeof(float));
+                    std::memcpy(&out.v1, raw.At(52), sizeof(float));
+                    out.u = out.u1;
+                    out.v = out.v1;
                 }
                 // plans/plan_gltf.md GLTF-462: stride 60's last four bytes were reserved padding and are
                 // the packed COLOR_0 now. §3.7.2.1 makes it "an additional linear multiplier to base
@@ -2356,8 +2371,10 @@ namespace CNA::Internal::Renderers::Software
                 if ((stride == 76 || stride == 80) &&
                     (params.pbrTextureCoordinateSetMask & 1u) != 0u)
                 {
-                    std::memcpy(&out.u, raw.At(68), sizeof(float));
-                    std::memcpy(&out.v, raw.At(72), sizeof(float));
+                    std::memcpy(&out.u1, raw.At(68), sizeof(float));
+                    std::memcpy(&out.v1, raw.At(72), sizeof(float));
+                    out.u = out.u1;
+                    out.v = out.v1;
                 }
                 // plans/plan_gltf.md GLTF-463: stride 80 is the stride-76 skinned PBR record with a packed
                 // COLOR_0 appended. This raster path already multiplies out.r/g/b/a into the sampled
@@ -2445,9 +2462,14 @@ namespace CNA::Internal::Renderers::Software
             }
 
             auto uvAttribute = raw.Read(VertexElementUsage::TextureCoordinate, 0);
+            const auto uv1Attribute = raw.Read(VertexElementUsage::TextureCoordinate, 1);
+            if (uv1Attribute.found)
+            {
+                out.u1 = uv1Attribute.value[0];
+                out.v1 = uv1Attribute.value[1];
+            }
             if (params.pbr && (params.pbrTextureCoordinateSetMask & 1u) != 0u)
             {
-                const auto uv1Attribute = raw.Read(VertexElementUsage::TextureCoordinate, 1);
                 if (uv1Attribute.found)
                     uvAttribute = uv1Attribute;
             }
@@ -2490,6 +2512,7 @@ namespace CNA::Internal::Renderers::Software
             out.invW = 1.0f;
             out.r = r; out.g = g; out.b = b; out.a = a;
             out.u = u; out.v = v;
+            out.u1 = u; out.v1 = v;
             return out;
         }
 
@@ -2599,7 +2622,8 @@ namespace CNA::Internal::Renderers::Software
         /// walk gets the identical shading along its edges.
         inline void WriteShadedFragment(SoftwareFramebuffer& fb, const ShadedContext& ctx,
                                         const RasterClipRect& clip, int x, int y, float depth, float invW,
-                                        float pr, float pg, float pb, float pa, float pu, float pv,
+                                        float pr, float pg, float pb, float pa,
+                                        float pu, float pv, float pu1, float pv1,
                                         float pfogKeep,
                                         float psr, float psg, float psb,
                                         float penvx, float penvy, float penvz, float penvBlend,
@@ -2628,23 +2652,25 @@ namespace CNA::Internal::Renderers::Software
             const float fogKeep = pfogKeep / invW;
 
             float u = 0.0f, v = 0.0f;
+            float u1 = 0.0f, v1 = 0.0f;
             if (ctx.needUV)
             {
                 u = pu / invW;
                 v = pv / invW;
+                u1 = pu1 / invW;
+                v1 = pv1 / invW;
             }
 
             if (ctx.useDualTexture)
             {
-                // DualTextureEffect (SOFTWARE-82): color.rgb*=2; color *= overlay*diffuse
-                // (FNA's PSDualTexture) -- both textures reuse the SAME uv (this renderer has no
-                // genuine 2-UV vertex format; established precedent already set by this codebase's own
-                // Vulkan dual_texture3d shaders).
+                // DualTextureEffect (SOFTWARE-82/116): color.rgb*=2; color *= overlay*diffuse
+                // (FNA's PSDualTexture). Texture and Texture2 consume TEXCOORD0 and TEXCOORD1
+                // independently, with their corresponding sampler slots and footprints.
                 float t0r, t0g, t0b, t0a;
                 SampleTexture(*ctx.texture0, ctx.sampler0, ctx.magnify0, ctx.lambda0, u, v,
                               t0r, t0g, t0b, t0a);
                 float t1r, t1g, t1b, t1a;
-                SampleTexture(*ctx.texture1, ctx.sampler1, ctx.magnify1, ctx.lambda1, u, v,
+                SampleTexture(*ctx.texture1, ctx.sampler1, ctx.magnify1, ctx.lambda1, u1, v1,
                               t1r, t1g, t1b, t1a);
                 r *= (t0r * 2.0f) * t1r;
                 g *= (t0g * 2.0f) * t1g;
@@ -2876,6 +2902,7 @@ namespace CNA::Internal::Renderers::Software
                     a.r + t * (b.r - a.r), a.g + t * (b.g - a.g),
                     a.b + t * (b.b - a.b), a.a + t * (b.a - a.a),
                     a.u + t * (b.u - a.u), a.v + t * (b.v - a.v),
+                    a.u1 + t * (b.u1 - a.u1), a.v1 + t * (b.v1 - a.v1),
                     a.fogKeep + t * (b.fogKeep - a.fogKeep),
                     a.sr + t * (b.sr - a.sr), a.sg + t * (b.sg - a.sg),
                     a.sb + t * (b.sb - a.sb),
@@ -2907,7 +2934,8 @@ namespace CNA::Internal::Renderers::Software
                                 static_cast<int>(std::floor(point.x)),
                                 static_cast<int>(std::floor(point.y)),
                                 point.depth, point.invW,
-                                point.r, point.g, point.b, point.a, point.u, point.v,
+                                point.r, point.g, point.b, point.a,
+                                point.u, point.v, point.u1, point.v1,
                                 point.fogKeep,
                                 point.sr, point.sg, point.sb,
                                 point.envx, point.envy, point.envz, point.envBlend,
@@ -2922,8 +2950,8 @@ namespace CNA::Internal::Renderers::Software
         /// (SOFTWARE-81; raw ordinal, see ShouldCullTriangle()). `params.dualTexture`/`envMapping`
         /// (SOFTWARE-82) select DualTextureEffect's second-texture blend or EnvironmentMapEffect's
         /// cube-map reflection on top of the same base texture/diffuse/vertex-color path.
-        /// SOFTWARE-113 adds FNA-accurate BasicEffect lighting; the corresponding
-        /// EnvironmentMapEffect and SkinnedEffect lighting paths remain SOFTWARE-114/115.
+        /// SOFTWARE-113..115 add FNA-accurate BasicEffect, EnvironmentMapEffect and
+        /// SkinnedEffect lighting; SOFTWARE-116 adds the independent second texture coordinate.
         void RasterizeTriangleShaded(SoftwareFramebuffer& fb, const RasterDepthState& depthState,
                                      const RasterStencilState& stencilState,
                                      const SoftwareBlendState& blendState,
@@ -2973,7 +3001,7 @@ namespace CNA::Internal::Renderers::Software
                 : 1.0f;
             const float rho1 = (texture1 != nullptr)
                 ? TriangleTexelRate(v0, v1, v2, std::max(1, texture1->ColorWidth()),
-                                    std::max(1, texture1->ColorHeight()))
+                                    std::max(1, texture1->ColorHeight()), true)
                 : 1.0f;
             const bool magnify0 = !(rho0 > 1.0f);
             const bool magnify1 = !(rho1 > 1.0f);
@@ -3030,6 +3058,8 @@ namespace CNA::Internal::Renderers::Software
                                             A.r + t * (B.r - A.r), A.g + t * (B.g - A.g),
                                             A.b + t * (B.b - A.b), A.a + t * (B.a - A.a),
                                             A.u + t * (B.u - A.u), A.v + t * (B.v - A.v),
+                                            A.u1 + t * (B.u1 - A.u1),
+                                            A.v1 + t * (B.v1 - A.v1),
                                             A.fogKeep + t * (B.fogKeep - A.fogKeep),
                                             A.sr + t * (B.sr - A.sr),
                                             A.sg + t * (B.sg - A.sg),
@@ -3129,6 +3159,8 @@ namespace CNA::Internal::Renderers::Software
                                         lambda0 * v0.a + lambda1 * v1.a + lambda2 * v2.a,
                                         lambda0 * v0.u + lambda1 * v1.u + lambda2 * v2.u,
                                         lambda0 * v0.v + lambda1 * v1.v + lambda2 * v2.v,
+                                        lambda0 * v0.u1 + lambda1 * v1.u1 + lambda2 * v2.u1,
+                                        lambda0 * v0.v1 + lambda1 * v1.v1 + lambda2 * v2.v1,
                                         lambda0 * v0.fogKeep + lambda1 * v1.fogKeep +
                                             lambda2 * v2.fogKeep,
                                         lambda0 * v0.sr + lambda1 * v1.sr + lambda2 * v2.sr,

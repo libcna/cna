@@ -159,12 +159,13 @@ rather than always passing.
   post-bone position. The per-vertex factor is clipped and perspective-interpolated, and fog mixes
   final RGB toward `FogColor * outputAlpha` after the stock effect's texture/environment work and
   alpha test but before blending.
-- **`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect` are supported** (`SOFTWARE-82`),
-  with DualTexture's remaining coordinate caveat below:
+- **`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect` are supported** (`SOFTWARE-82`,
+  completed by `SOFTWARE-114..116`):
   - `DualTextureEffect`: real second-texture sampling, FNA's own
-    `color.rgb*=2; color *= overlay*diffuse` formula. Both textures reuse the same UV (this
-    renderer has no genuine 2-UV vertex format — an established simplification, matching this
-    codebase's own Vulkan `dual_texture3d` shaders' precedent).
+    `color.rgb*=2; color *= overlay*diffuse` formula. Declaration-driven `TextureCoordinate0/1`
+    remain independent through clipping and perspective interpolation; each texture also has its
+    own sampler and mip footprint. The shared Software/EasyGL contract passes 122/122 across every
+    static/dynamic, indexed/non-indexed and user/buffer draw path.
   - `EnvironmentMapEffect`: real six-face RGBA8 cube storage and mip chains, sampler-slot-1
     point/linear/min/mag/mip and address behavior, FNA vertex lighting, inverse-transpose normals,
     reflection/Fresnel, alpha-scaled lerp/specular and final fog semantics.

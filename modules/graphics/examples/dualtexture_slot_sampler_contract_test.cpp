@@ -61,6 +61,7 @@
 //   K   address modes                    Clamp/Wrap/Mirror per slot, independently
 //   L   vertex-colour variant            stride 24 is a SECOND shader module and pipeline
 //   M   device default                   an unset slot 1 keeps the documented default
+//   N   texture-coordinate channels      Texture samples UV0 and Texture2 samples UV1 on every path
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -603,13 +604,25 @@ class DualTextureSlotSamplerContractTest : public Game
 
     /// UV span. 1.0 covers the texture exactly once (the magnifying default); larger values are
     /// what leg K uses to push the sample outside [0,1] and make the address mode decide.
-    static std::vector<VtxDualPT> Quad(float uvMax = 1.0f)
+    static std::vector<VtxDualPT> Quad(float uvMax = 1.0f,
+                                       bool independentCoordinates = false)
     {
-        auto v = [](float x, float y, float u, float w) {
+        auto v = [independentCoordinates](float x, float y, float u, float w) {
             VtxDualPT r{};
             r.px = x; r.py = y; r.pz = 0.0f;
-            r.u0 = u; r.v0 = w;
-            r.u1 = u; r.v1 = w;
+            if (independentCoordinates)
+            {
+                // Exact texel centres for a 4x4 texture: UV0 selects texel (0,0), while UV1
+                // selects (3,3). Keeping them constant makes the oracle independent of raster
+                // interpolation and lets every draw path share one byte-exact expected value.
+                r.u0 = r.v0 = 0.125f;
+                r.u1 = r.v1 = 0.875f;
+            }
+            else
+            {
+                r.u0 = u; r.v0 = w;
+                r.u1 = u; r.v1 = w;
+            }
             return r;
         };
         const VtxDualPT tl = v(-1.0f,  1.0f, 0.0f,   0.0f);
@@ -619,10 +632,11 @@ class DualTextureSlotSamplerContractTest : public Game
         return { tl, bl, br, tl, br, tr };
     }
 
-    static std::vector<VtxDualPCT> QuadColored(float uvMax = 1.0f)
+    static std::vector<VtxDualPCT> QuadColored(float uvMax = 1.0f,
+                                               bool independentCoordinates = false)
     {
         std::vector<VtxDualPCT> out;
-        for (const VtxDualPT& s : Quad(uvMax))
+        for (const VtxDualPT& s : Quad(uvMax, independentCoordinates))
         {
             VtxDualPCT r{};
             r.px = s.px; r.py = s.py; r.pz = s.pz;
@@ -676,6 +690,7 @@ class DualTextureSlotSamplerContractTest : public Game
         Texture2D* tex0 = nullptr;   ///< DualTextureEffect.Texture  -- SamplerStates[0]
         Texture2D* tex1 = nullptr;   ///< DualTextureEffect.Texture2 -- SamplerStates[1]
         float uvMax = 1.0f;
+        bool independentCoordinates = false;
         bool vertexColor = false;    ///< the second, vertex-colour DualTexture shader module
         Path path = Path::StaticNonIndexed;
     };
@@ -703,7 +718,8 @@ class DualTextureSlotSamplerContractTest : public Game
 
         if (cfg.vertexColor)
         {
-            const std::vector<VtxDualPCT> quad = QuadColored(cfg.uvMax);
+            const std::vector<VtxDualPCT> quad =
+                QuadColored(cfg.uvMax, cfg.independentCoordinates);
             VertexBuffer vb(dev, kDualColorDeclaration, static_cast<int>(quad.size()), BufferUsage::None);
             vb.SetDataRaw(quad.data(), static_cast<int>(quad.size()), static_cast<int>(sizeof(VtxDualPCT)));
             dev.SetVertexBuffer(&vb);
@@ -712,7 +728,7 @@ class DualTextureSlotSamplerContractTest : public Game
             return;
         }
 
-        const std::vector<VtxDualPT> quad = Quad(cfg.uvMax);
+        const std::vector<VtxDualPT> quad = Quad(cfg.uvMax, cfg.independentCoordinates);
         switch (cfg.path)
         {
             case Path::StaticNonIndexed:
@@ -1512,6 +1528,46 @@ class DualTextureSlotSamplerContractTest : public Game
         SetPair(dev, 0, 0);
     }
 
+    // ----------------------------------------------------------------------------------------
+    // N -- FNA/XNA TextureCoordinate0 and TextureCoordinate1 are independent shader inputs
+    // ----------------------------------------------------------------------------------------
+
+    void RunN(GraphicsDevice& dev)
+    {
+        const Path paths[] = {
+            Path::StaticNonIndexed, Path::StaticIndexed16, Path::StaticIndexed32,
+            Path::StaticIndexedRange, Path::UserNonIndexed, Path::UserIndexed16,
+            Path::UserIndexed32, Path::DynamicNonIndexed,
+        };
+        SetPair(dev, 1, 1, TextureAddressMode::Clamp);
+        for (Path path : paths)
+        {
+            Cfg only0 = OnlySlot0(gridA_.get());
+            only0.path = path;
+            only0.independentCoordinates = true;
+            Cfg only1 = OnlySlot1(gridB_.get());
+            only1.path = path;
+            only1.independentCoordinates = true;
+
+            const std::vector<Color> pixels0 = Render(dev, only0);
+            const std::vector<Color> pixels1 = Render(dev, only1);
+            const Color& got0 = pixels0[static_cast<std::size_t>(kRT / 2) * kRT + kRT / 2];
+            const Color& got1 = pixels1[static_cast<std::size_t>(kRT / 2) * kRT + kRT / 2];
+            const Color& want0 = GridATexel(0);
+            const Color& want1 = GridBTexel(kGridColors - 1);
+
+            check(SameColor(got0, want0),
+                  std::string("N1[") + PathName(path) +
+                  "] Texture samples TextureCoordinate0 texel (0,0): got=" + Str(got0) +
+                  " expected=" + Str(want0));
+            check(SameColor(got1, want1),
+                  std::string("N2[") + PathName(path) +
+                  "] Texture2 samples TextureCoordinate1 texel (3,3): got=" + Str(got1) +
+                  " expected=" + Str(want1));
+        }
+        SetPair(dev, 0, 0);
+    }
+
 public:
     DualTextureSlotSamplerContractTest()
     {
@@ -1569,7 +1625,7 @@ protected:
         }
         catch (const std::exception& e)
         {
-            skip(std::string("A..M: this renderer does not implement DualTextureEffect (") +
+            skip(std::string("A..N: this renderer does not implement DualTextureEffect (") +
                  e.what() + ")");
             Finish();
             return;
@@ -1590,6 +1646,7 @@ protected:
             RunK(dev);
             RunL(dev);
             RunM(dev);
+            RunN(dev);
         }
         catch (const System::Exception& e)
         {
