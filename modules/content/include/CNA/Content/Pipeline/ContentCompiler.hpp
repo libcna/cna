@@ -72,6 +72,16 @@ namespace CNA::Content::Pipeline
         std::vector<std::string> xmaEncoderArguments;
 
         /**
+         * @brief Directories added to the `.spritefont` font search, ahead of the platform's own.
+         *
+         * `<FontName>` names a font *family*, which XNA resolves through Windows. A build machine
+         * that is not the artist's has neither those families installed nor any way to say where
+         * they are, so this is that way; `CNA_FONT_PATH` in the environment says the same thing
+         * and is read after these (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-100`).
+         */
+        std::vector<std::filesystem::path> fontDirectories;
+
+        /**
          * @brief The container options this invocation selected.
          *
          * Informational, and the reason it exists is a third party's writers. A caller's registry
@@ -98,7 +108,8 @@ namespace CNA::Content::Pipeline
                    effectCompilerLauncher == other.effectCompilerLauncher &&
                    xmaEncoderExecutable == other.xmaEncoderExecutable &&
                    xmaEncoderLauncher == other.xmaEncoderLauncher &&
-                   xmaEncoderArguments == other.xmaEncoderArguments;
+                   xmaEncoderArguments == other.xmaEncoderArguments &&
+                   fontDirectories == other.fontDirectories;
         }
     };
 

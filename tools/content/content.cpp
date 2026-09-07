@@ -91,6 +91,18 @@ namespace
         /** @brief Build-tool service selection this invocation registers its routes with. */
         Pipeline::ContentCompilerOptions services;
 
+        /**
+         * @brief Whether the command line named the target platform, profile or compression.
+         *
+         * A `.contentproj` carries its own, and a command line that names one overrides it -- the
+         * way an MSBuild property given on a command line overrides the one in the file. Knowing
+         * whether one was *named* is what tells that apart from the default
+         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-102`).
+         */
+        bool selectedXnbPlatform = false;
+        bool selectedXnbProfile = false;
+        bool selectedXnbCompression = false;
+
         /** @brief Whether the command line named an effect compiler or launcher explicitly. */
         [[nodiscard]] bool SelectsEffectCompiler() const
         {
@@ -268,6 +280,7 @@ namespace
                "         [--fx-compiler <path>] [--fx-compiler-launcher <program>]\n"
                "         [--xma-encoder <path>] [--xma-encoder-launcher <program>]\n"
                "         [--xma-encoder-arg <argument>]...\n"
+               "         [--font-directory <dir>]...\n"
                "         [--explain] [--quiet] [--xna-compatible]\n"
                "         [--only-configured-assets]\n"
             << "       cna-content clean <output-directory> [--quiet]\n\n"
@@ -311,10 +324,14 @@ namespace
                "\n"
                "A .contentproj is an XNA content project and is built as one: its own platform,\n"
                "profile, compression and per-asset Importer/Processor/ProcessorParameters, through\n"
-               "the same coordinator every other build uses, with XNA's own leniency. Its Content\n"
-               "and None items are copied rather than built, as XNA's targets copy them, honouring\n"
-               "CopyToOutputDirectory and Link. A project naming a component this build has not got\n"
-               "is refused with all of them named at once rather than one build at a time.\n"
+               "the same coordinator every other build uses, with XNA's own leniency. Naming\n"
+               "--xnb-platform, --xnb-profile or --xnb-compress overrides the project's own, the\n"
+               "way an MSBuild property given on a command line overrides the one in the file;\n"
+               "--fx-compiler, --xma-encoder and --font-directory reach a project build too. Its\n"
+               "Content and None items are copied rather than built, as XNA's targets copy them,\n"
+               "honouring CopyToOutputDirectory and Link. A project naming a component this build\n"
+               "has not got is refused with all of them named at once, rather than one build at\n"
+               "a time.\n"
                "\n"
                "XMA is the Xbox 360's audio codec. It has no public specification sufficient to\n"
                "implement a conforming encoder, no licensable encoder, and none in FFmpeg, which\n"
@@ -326,7 +343,14 @@ namespace
                "--xma-encoder-arg supplies one command-line argument at a time, with {input},\n"
                "{output}, {quality}, {loopStart} and {loopLength} substituted; the default is\n"
                "{input} {output}. CNA_XMA_ENCODER, CNA_XMA_ENCODER_LAUNCHER and\n"
-               "CNA_XMA_ENCODER_ARGS are the environment forms. See docs/xma-encoder-backend.md.\n";
+               "CNA_XMA_ENCODER_ARGS are the environment forms. See docs/xma-encoder-backend.md.\n"
+               "\n"
+               "--font-directory adds a directory to the .spritefont font search, ahead of the\n"
+               "platform's own; repeat it per directory. CNA_FONT_PATH in the environment says\n"
+               "the same thing and is read after these. <FontName> names a font family, which is\n"
+               "read from each candidate's own family table, so 'Pericles' finds Peric.ttf and\n"
+               "'Segoe UI Mono' finds SegoeUIMono-Regular.ttf, which is what XNA resolves through\n"
+               "Windows. <Style> then selects the real styled face where the family has one.\n";
     }
 
     std::size_t ParseWorkerCount(const std::filesystem::path& argument)
@@ -501,6 +525,7 @@ namespace
                                                 "' is not a known target; expected one of: " +
                                                 known + ".");
                 }
+                command.selectedXnbPlatform = true;
             }
             else if (IsOption(argument, "--xnb-version"))
             {
@@ -546,6 +571,7 @@ namespace
                     throw std::invalid_argument("--xnb-profile must be 'reach' or 'hidef', not '" +
                                                 name + "'.");
                 }
+                command.selectedXnbProfile = true;
             }
             else if (IsOption(argument, "--xnb-compress"))
             {
@@ -573,6 +599,7 @@ namespace
                     throw std::invalid_argument(
                         "--xnb-compress must be 'none', 'lzx' or 'lz4', not '" + name + "'.");
                 }
+                command.selectedXnbCompression = true;
             }
             else if (IsOption(argument, "--fx-compiler"))
             {
@@ -638,6 +665,20 @@ namespace
                         "repeat the option once per argument.");
                 }
                 command.services.xmaEncoderArguments.push_back(arguments[index].string());
+            }
+            else if (IsOption(argument, "--font-directory"))
+            {
+                if (++index >= arguments.size())
+                {
+                    throw std::invalid_argument(
+                        "--font-directory requires a directory holding font files; repeat the "
+                        "option once per directory.");
+                }
+                if (arguments[index].empty())
+                {
+                    throw std::invalid_argument("--font-directory path must not be empty.");
+                }
+                command.services.fontDirectories.push_back(arguments[index]);
             }
             else if (IsOption(argument, "--xnb-reader-names"))
             {
@@ -2357,15 +2398,22 @@ namespace
         Tasks::ContentProject project = Tasks::ContentProject::Load(
             CNA::Internal::ContentPathToUtf8(command.source));
 
+        // Named all at once rather than one per run: a project that needs three custom processors
+        // should say so once, not three builds in a row. The build then goes ahead with the rest,
+        // which is what XNA's own does -- `BuildContent` fails the items whose processor it cannot
+        // find, keeps the ones it can and returns false. Refusing the project outright meant one
+        // game-defined processor cost every other asset in the project: across the public sample
+        // corpus that is 93 of 328 content projects producing nothing at all, most of them over
+        // three or four assets out of dozens (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-103`).
         const std::vector<std::string> unroutable = project.UnroutableEXT();
+        for (const std::string& reason : unroutable)
+        {
+            std::cerr << "error: " << reason << "\n";
+        }
         if (!unroutable.empty())
         {
-            // Named all at once rather than one per run: a project that needs three custom
-            // processors should say so once, not three builds in a row.
-            std::cerr << "error: this build has no component for "
-                      << unroutable.size() << " of the project's assets:\n";
-            for (const std::string& reason : unroutable) { std::cerr << "  " << reason << "\n"; }
-            return 1;
+            std::cerr << "error: this build has no component for " << unroutable.size()
+                      << " of the project's assets, listed above; the rest are built.\n";
         }
 
         const std::filesystem::path outputRoot = WeaklyCanonical(command.output);
@@ -2376,7 +2424,63 @@ namespace
         Tasks::BuildContent task = project.ToBuildContentEXT(
             CNA::Internal::ContentPathToUtf8(outputRoot),
             CNA::Internal::ContentPathToUtf8(intermediate));
-        task.setRegistryFactoryEXT(createRegistry);
+        // A project carries its own target, and a command line that names one overrides it -- the
+        // way `msbuild /p:XnaPlatform=...` overrides the property in the file. Without this the
+        // options were accepted and ignored: every `.contentproj` built Windows/HiDef whatever
+        // `--xnb-platform` said, so a Windows Phone or Xbox project could not be built at all
+        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-102`).
+        if (command.selectedXnbPlatform)
+        {
+            // `TargetPlatform` is XNA's property and carries XNA's own spelling; the command
+            // line's is lowercase.
+            const char* xnaSpelling = nullptr;
+            switch (command.xnbOptions.platform)
+            {
+            case CNA::Internal::Xnb::XnbTargetPlatform::Windows: xnaSpelling = "Windows"; break;
+            case CNA::Internal::Xnb::XnbTargetPlatform::WindowsPhone:
+                xnaSpelling = "WindowsPhone";
+                break;
+            case CNA::Internal::Xnb::XnbTargetPlatform::Xbox360: xnaSpelling = "Xbox360"; break;
+            default:
+                // An extended ecosystem identifier is not an XNA target and a project cannot ask
+                // for one; the coordinator's own refusal is the right one and it is reached below.
+                xnaSpelling = CNA::Internal::Xnb::XnbTargetPlatformName(command.xnbOptions.platform);
+                break;
+            }
+            task.setTargetPlatformProperty(xnaSpelling);
+        }
+        if (command.selectedXnbProfile)
+        {
+            task.setTargetProfileProperty(
+                command.xnbOptions.graphicsProfile == CNA::Internal::Xnb::XnbGraphicsProfile::HiDef
+                    ? "HiDef"
+                    : "Reach");
+        }
+        if (command.selectedXnbCompression)
+        {
+            task.setCompressContentProperty(command.xnbOptions.compression ==
+                                            CNA::Internal::Xnb::XnbOutputCompression::Lzx);
+        }
+        // The task writes its own command line for the coordinator -- the project's platform,
+        // profile, compression and per-asset metadata -- and that command line is not this one,
+        // so nothing this one selected reaches the factory unless it is put there. Without this,
+        // `--fx-compiler`, `--xma-encoder` and `--font-directory` were accepted on a
+        // `.contentproj` build and then silently ignored, which is worse than refusing them: a
+        // project with a `.fx` asset cannot be built at all with a compiler that was named
+        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-101`).
+        const Pipeline::ContentCompilerOptions& selected = command.services;
+        task.setRegistryFactoryEXT(
+            [&createRegistry, &selected](const Pipeline::ContentCompilerOptions& inner)
+            {
+                Pipeline::ContentCompilerOptions merged = inner;
+                merged.effectCompilerExecutable = selected.effectCompilerExecutable;
+                merged.effectCompilerLauncher = selected.effectCompilerLauncher;
+                merged.xmaEncoderExecutable = selected.xmaEncoderExecutable;
+                merged.xmaEncoderLauncher = selected.xmaEncoderLauncher;
+                merged.xmaEncoderArguments = selected.xmaEncoderArguments;
+                merged.fontDirectories = selected.fontDirectories;
+                return createRegistry(merged);
+            });
         const bool built = task.Execute();
 
         if (!command.quiet)
@@ -2385,7 +2489,7 @@ namespace
         }
         for (const std::string& line : task.WarningsEXT()) { std::cerr << "warning: " << line << "\n"; }
         for (const std::string& line : task.ErrorsEXT()) { std::cerr << "error: " << line << "\n"; }
-        if (!built) { return 1; }
+        if (!built || !unroutable.empty()) { return 1; }
 
         std::size_t copied = 0u;
         try
@@ -3064,6 +3168,11 @@ namespace CNA::Content::Pipeline
         RegisterModelContentPipeline(registry);
         RegisterCnjContentPipeline(registry);
         RegisterXnbContentPipeline(registry);
+        // The font search this process's `.spritefont` builds use, set before any source is
+        // discovered. `<FontName>` is a family name and the families the XNA samples name are not
+        // installed on a build machine, so a build has to be able to say where they are
+        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-100`).
+        SetFontSearchDirectoriesEXT(options.fontDirectories);
         RegisterSpriteFontSourceContentPipeline(registry);
         RegisterXnaModelSourceContentPipeline(registry);
         RegisterCompiledEffectContentPipeline(registry);

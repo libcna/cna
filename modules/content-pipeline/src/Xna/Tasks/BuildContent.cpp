@@ -405,17 +405,24 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
             LogError("BuildContent needs both RootDirectory and OutputDirectory before it can run.");
             return false;
         }
-        if (!pipelineAssemblies_.empty())
+        // Refusing beats ignoring. A project naming its own pipeline assembly expects its own
+        // importers to run, and a C++ build has no assembly to load; accepting the list silently
+        // would let the project believe they did. The task therefore fails -- but it fails the way
+        // XNA's own does, after building what it can, rather than instead of building anything: an
+        // assembly's components are named per asset by that asset's own metadata, so every asset
+        // whose importer and processor are built-in is one this build produces correctly. Stopping
+        // here cost the whole project for one game-defined processor, and in the public sample
+        // corpus that is 107 of 328 content projects producing nothing
+        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-103`).
+        const bool assembliesRefused = !pipelineAssemblies_.empty();
+        if (assembliesRefused)
         {
-            // Refusing beats ignoring. A project naming its own pipeline assembly expects its own
-            // importers to run, and a C++ build has no assembly to load; accepting the list
-            // silently would let the project believe they did.
             LogError("BuildContent cannot load pipeline assemblies: C++ has no assembly loading, so "
                      "a custom importer, processor or writer is registered in code with "
                      "RegisterXnaImporter/RegisterXnaProcessor before the build runs, and the "
                      "PipelineAssemblies item has no counterpart. " +
-                     std::to_string(pipelineAssemblies_.size()) + " were named.");
-            return false;
+                     std::to_string(pipelineAssemblies_.size()) +
+                     " were named; every asset whose components are built-in is still built.");
         }
         if (sourceAssets_.empty())
         {
@@ -424,7 +431,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
             // because a project that names its own pipeline assembly is wrong whether or not it
             // also lists assets.
             LogMessage("BuildContent: no source assets, so nothing was built.");
-            return true;
+            return !assembliesRefused;
         }
 
         const std::filesystem::path root(rootDirectory_);
@@ -449,29 +456,31 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
         configuration << "{\n \"format\": \"CNA.ContentPipeline.Config\",\n \"version\": "
                       << Canon::ContentBuildConfigurationVersion << ",\n \"assets\": {\n";
         bool firstAsset = true;
+        // One asset's entry is composed on its own before it joins the document, so an asset this
+        // build has no component for can be reported and left out instead of ending the build. A
+        // project *is* its item list and XNA builds every item it can, failing the ones it cannot
+        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-103`).
+        bool refusedAnAsset = false;
         for (const TaskItem& asset : sourceAssets_)
         {
+            std::ostringstream assetJson;
             const std::filesystem::path spec(TaskDetail::HostPath(asset.getItemSpecProperty()));
             const std::filesystem::path absolute = spec.is_absolute() ? spec : (root / spec);
             if (!std::filesystem::exists(absolute, error) || error)
             {
                 LogError("BuildContent: the source asset \"" + asset.getItemSpecProperty() +
                          "\" does not exist.");
-                return false;
+                refusedAnAsset = true;
+                continue;
             }
             // Link is what a project uses when the file lives outside the project directory; it
             // names where the asset belongs in the content tree.
             const std::string link = TaskDetail::HostPath(asset.GetMetadata("Link"));
             const std::string key =
                 TaskDetail::RootRelative(root, link.empty() ? absolute : (root / link));
-            if (!firstAsset)
-            {
-                configuration << ",\n";
-            }
-            firstAsset = false;
-            configuration << "  \"" << TaskDetail::Escape(key) << "\": {";
+            assetJson << "  \"" << TaskDetail::Escape(key) << "\": {";
             bool firstField = true;
-            const auto field = [&configuration, &firstField](const std::string& name,
+            const auto field = [&assetJson, &firstField](const std::string& name,
                                                              const std::string& value)
             {
                 if (value.empty())
@@ -480,10 +489,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
                 }
                 if (!firstField)
                 {
-                    configuration << ", ";
+                    assetJson << ", ";
                 }
                 firstField = false;
-                configuration << "\"" << name << "\": \"" << TaskDetail::Escape(value) << "\"";
+                assetJson << "\"" << name << "\": \"" << TaskDetail::Escape(value) << "\"";
             };
             field("logicalName", TaskDetail::ContentName(key, asset.GetMetadata("Name")));
             // A project names Microsoft's components; the canonical engine has its own. The
@@ -505,7 +514,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
                     // whatever route its extension suggests would hide that until the project
                     // reached a real toolchain (plans/plan_xnapipeline_parity.md XNAPP-267).
                     LogError("Cannot find importer \"" + importerName + "\". " + mapping.reason);
-                    return false;
+                    refusedAnAsset = true;
+                    continue;
                 }
                 if (mapping.canonicalName.empty())
                 {
@@ -527,7 +537,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
                 {
                     LogError("Cannot find content processor \"" + processorName + "\". " +
                              mapping.reason);
-                    return false;
+                    refusedAnAsset = true;
+                    continue;
                 }
                 if (!mapping.obsoleteMessage.empty())
                 {
@@ -645,39 +656,42 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
                 for (const auto& [name, value] : effectiveOrder) { effective[name] = value; }
                 if (!firstField)
                 {
-                    configuration << ", ";
+                    assetJson << ", ";
                 }
                 firstField = false;
-                configuration << "\"parameters\": {";
+                assetJson << "\"parameters\": {";
                 bool firstParameter = true;
                 for (const auto& [name, value] : effective)
                 {
                     if (!firstParameter)
                     {
-                        configuration << ", ";
+                        assetJson << ", ";
                     }
                     firstParameter = false;
                     const std::string type = TaskDetail::ParameterType(value);
-                    configuration << "\"" << TaskDetail::Escape(name) << "\": {\"type\": \"" << type
+                    assetJson << "\"" << TaskDetail::Escape(name) << "\": {\"type\": \"" << type
                                   << "\", \"value\": ";
                     if (type == "bool")
                     {
                         std::string lowered(value);
                         std::transform(lowered.begin(), lowered.end(), lowered.begin(),
                                        [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
-                        configuration << lowered;
+                        assetJson << lowered;
                     }
                     else
                     {
                         // Every other type persists as a string, so its exact written value is
                         // stable across hosts.
-                        configuration << "\"" << TaskDetail::Escape(value) << "\"";
+                        assetJson << "\"" << TaskDetail::Escape(value) << "\"";
                     }
-                    configuration << "}";
+                    assetJson << "}";
                 }
-                configuration << "}";
+                assetJson << "}";
             }
-            configuration << "}";
+            assetJson << "}";
+            if (!firstAsset) { configuration << ",\n"; }
+            firstAsset = false;
+            configuration << assetJson.str();
         }
         configuration << "\n }\n}\n";
 
@@ -824,11 +838,17 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
             LogError(std::string("BuildContent failed: ") + threw);
             return false;
         }
+        // A non-zero status means at least one asset failed, not that none was built: the
+        // coordinator builds every asset it can and reports the ones it could not. The failure is
+        // remembered and answered at the end, so `OutputContentFiles` still names what a partly
+        // failed build produced -- which is what XNA's own task leaves behind
+        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-103`).
+        bool failed = assembliesRefused || refusedAnAsset;
         if (status != 0)
         {
             LogError("BuildContent failed: the content build reported status " +
                      std::to_string(status) + ".");
-            return false;
+            failed = true;
         }
 
         // What was built, and which of it was new, both come from the manifest the coordinator
@@ -891,7 +911,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
         }
         LogMessage("BuildContent: " + std::to_string(outputContentFiles_.size()) + " output file(s), " +
                    std::to_string(rebuiltContentFiles_.size()) + " rebuilt.");
-        return true;
+        return !failed;
     }
 
     void BuildContent::setRegistryFactoryEXT(Canon::ContentPipelineRegistryFactory value)

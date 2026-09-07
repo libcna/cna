@@ -451,3 +451,187 @@ TEST(XnaContentProjectCommandLine, AProjectBuildTakesXnasLeniencyWhereTheToolWou
     EXPECT_NE(invocation.output.find("NoSuchProperty"), std::string::npos)
         << "the parameter is dropped with a warning, not in silence\n" << invocation.output;
 }
+
+// -- what a command line selects reaches a project build (plan_xna_sample_xnb_sweep.md) ---------
+
+namespace
+{
+    /** @brief The container header a `.xnb` carries: platform byte, version, flags. */
+    struct XnbHeader
+    {
+        char platform = '\0';
+        unsigned version = 0u;
+        unsigned flags = 0u;
+    };
+
+    XnbHeader ReadXnbHeader(const std::filesystem::path& path)
+    {
+        std::ifstream stream(path, std::ios::binary);
+        char bytes[6] = {};
+        stream.read(bytes, sizeof(bytes));
+        XnbHeader header;
+        if (stream.gcount() == static_cast<std::streamsize>(sizeof(bytes)) && bytes[0] == 'X' &&
+            bytes[1] == 'N' && bytes[2] == 'B')
+        {
+            header.platform = bytes[3];
+            header.version = static_cast<unsigned char>(bytes[4]);
+            header.flags = static_cast<unsigned char>(bytes[5]);
+        }
+        return header;
+    }
+}
+
+// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-102. A project carries its own target, and a command
+// line that names one overrides it -- the way `msbuild /p:XnaPlatform=...` overrides the property
+// in the file. Before this the options were parsed, accepted and then dropped: `BuildContent`
+// writes its own command line for the coordinator and nothing the outer one selected was in it, so
+// every `.contentproj` built Windows/HiDef whatever was asked for. The sample corpus is 1690
+// Windows Phone and 238 Xbox 360 references against 5800 Windows ones, none of which could be
+// reproduced through the project route at all.
+TEST(XnaContentProjectCommandLine, TheTargetOnTheCommandLineOverridesTheProjectsOwn)
+{
+    const Project project("target_override");
+    project.Write("    <Compile Include=\"probe.png\">\n"
+                  "      <Importer>TextureImporter</Importer>\n"
+                  "      <Processor>TextureProcessor</Processor>\n"
+                  "    </Compile>\n");
+
+    const Invocation defaulted = Build(project);
+    ASSERT_EQ(defaulted.exitCode, 0) << defaulted.output;
+    const XnbHeader before = ReadXnbHeader(project.Output() / "probe.xnb");
+    EXPECT_EQ(before.platform, 'w');
+    EXPECT_EQ(before.version, 5u);
+    EXPECT_EQ(before.flags & 0x01u, 0x01u) << "a project with no XnaProfile is HiDef";
+
+    const Invocation selected =
+        Build(project, {"--xnb-platform", "windowsphone", "--xnb-profile", "reach"});
+    ASSERT_EQ(selected.exitCode, 0) << selected.output;
+    const XnbHeader after = ReadXnbHeader(project.Output() / "probe.xnb");
+    EXPECT_EQ(after.platform, 'm');
+    EXPECT_EQ(after.version, 5u);
+    EXPECT_EQ(after.flags & 0x01u, 0x00u);
+}
+
+// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-102, the compression half of the same defect.
+TEST(XnaContentProjectCommandLine, CompressionOnTheCommandLineOverridesTheProjectsOwn)
+{
+    const Project project("compress_override");
+    project.Write("    <Compile Include=\"probe.png\">\n"
+                  "      <Importer>TextureImporter</Importer>\n"
+                  "      <Processor>TextureProcessor</Processor>\n"
+                  "    </Compile>\n");
+
+    const Invocation compressed = Build(project, {"--xnb-compress", "lzx"});
+    ASSERT_EQ(compressed.exitCode, 0) << compressed.output;
+    EXPECT_EQ(ReadXnbHeader(project.Output() / "probe.xnb").flags & 0x80u, 0x80u);
+
+    const Invocation plain = Build(project, {"--xnb-compress", "none"});
+    ASSERT_EQ(plain.exitCode, 0) << plain.output;
+    EXPECT_EQ(ReadXnbHeader(project.Output() / "probe.xnb").flags & 0x80u, 0x00u);
+}
+
+// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-101. `BuildContent` writes its own command line, so
+// the build-tool *services* the outer one selected -- the effect compiler, the XMA encoder, the
+// font search -- reached nothing. A project with a `.spritefont` naming a family that is not
+// installed on the build machine could not be built at all, however the machine was told where the
+// font was, and that is 260 of the sample corpus's assets.
+TEST(XnaContentProjectCommandLine, AFontDirectoryOnTheCommandLineReachesAProjectBuild)
+{
+    const Project project("font_directory");
+    const std::filesystem::path font = Locate("tests/assets/fonts/LiberationMono-Regular.ttf");
+    if (!std::filesystem::exists(font)) { GTEST_SKIP() << "the vendored test font is missing"; }
+    // Deliberately *not* beside the description: this is the case a build machine has, where the
+    // fonts a game ships are in a directory of their own.
+    const std::filesystem::path fonts = project.Source().parent_path() / "fonts";
+    std::filesystem::create_directories(fonts);
+    std::filesystem::copy_file(font, fonts / font.filename(),
+                               std::filesystem::copy_options::overwrite_existing);
+    {
+        std::ofstream stream(project.Source() / "Hud.spritefont");
+        stream << "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+               << "<XnaContent xmlns:Graphics=\"Microsoft.Xna.Framework.Content.Pipeline.Graphics\">\n"
+               << "  <Asset Type=\"Graphics:FontDescription\">\n"
+               << "    <FontName>Liberation Mono</FontName>\n"
+               << "    <Size>12</Size>\n"
+               << "    <Spacing>0</Spacing>\n"
+               << "    <UseKerning>true</UseKerning>\n"
+               << "    <Style>Regular</Style>\n"
+               << "    <CharacterRegions>\n"
+               << "      <CharacterRegion><Start>&#32;</Start><End>&#64;</End></CharacterRegion>\n"
+               << "    </CharacterRegions>\n"
+               << "  </Asset>\n"
+               << "</XnaContent>\n";
+    }
+    project.Write("    <Compile Include=\"Hud.spritefont\">\n"
+                  "      <Importer>FontDescriptionImporter</Importer>\n"
+                  "      <Processor>FontDescriptionProcessor</Processor>\n"
+                  "    </Compile>\n");
+
+    // Asserted on where the font came from rather than on the build failing without the option:
+    // this machine may well have the family installed, and then the build succeeds either way and
+    // the only observable difference is which file it read.
+    const Invocation without = Build(project);
+    EXPECT_EQ(without.output.find(fonts.string()), std::string::npos)
+        << "nothing told this build about that directory: " << without.output;
+
+    const Invocation with = Build(project, {"--font-directory", fonts.string()});
+    ASSERT_EQ(with.exitCode, 0) << with.output;
+    EXPECT_TRUE(std::filesystem::is_regular_file(project.Output() / "Hud.xnb")) << with.output;
+    EXPECT_NE(with.output.find((fonts / font.filename()).string()), std::string::npos)
+        << "the configured directory is searched ahead of the platform's own: " << with.output;
+    EXPECT_NE(with.output.find("told to search"), std::string::npos) << with.output;
+}
+
+// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-103. A project is its item list, and XNA builds every
+// item it can: `BuildContent` fails the ones whose processor it cannot find, keeps the ones it
+// can, and returns false. CNA refused the whole project instead -- once for the aggregate
+// diagnostic, once for the `PipelineAssemblies` item, and once more inside the task at the first
+// asset it could not route -- so one game-defined processor cost every other asset. Across the
+// public XNA sample corpus that was 107 of 328 content projects producing nothing at all, most of
+// them over three or four assets out of dozens.
+TEST(XnaContentProjectCommandLine, AnAssetWithNoComponentFailsWithoutTakingTheProjectWithIt)
+{
+    const Project project("partial_build");
+    std::filesystem::copy_file(project.Source() / "probe.png",
+                               project.Source() / "nested" / "probe.png");
+    project.Write("    <Compile Include=\"probe.png\">\n"
+                  "      <Importer>TextureImporter</Importer>\n"
+                  "      <Processor>TextureProcessor</Processor>\n"
+                  "    </Compile>\n"
+                  "    <Compile Include=\"nested\\probe.png\">\n"
+                  "      <Name>custom</Name>\n"
+                  "      <Importer>TextureImporter</Importer>\n"
+                  "      <Processor>SkyProcessor</Processor>\n"
+                  "    </Compile>\n");
+
+    const Invocation invocation = Build(project);
+    EXPECT_NE(invocation.exitCode, 0) << "the project did not build completely: "
+                                      << invocation.output;
+    EXPECT_NE(invocation.output.find("SkyProcessor"), std::string::npos) << invocation.output;
+    EXPECT_TRUE(std::filesystem::is_regular_file(project.Output() / "probe.xnb"))
+        << "the asset whose components are built-in is still built: " << invocation.output;
+    EXPECT_FALSE(std::filesystem::exists(project.Output() / "nested" / "custom.xnb"))
+        << invocation.output;
+}
+
+// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-103, the `PipelineAssemblies` half. Refusing beats
+// ignoring -- a project naming its own pipeline assembly expects its own components to run and
+// this build has no assembly to load -- but the refusal belongs after building what it can, not
+// instead of it. 162 of the corpus's 328 build units reference a pipeline assembly, and most of
+// their assets route to built-in components.
+TEST(XnaContentProjectCommandLine, APipelineAssemblyFailsTheBuildAfterItProducesWhatItCan)
+{
+    const Project project("pipeline_assembly");
+    project.Write("    <Compile Include=\"probe.png\">\n"
+                  "      <Importer>TextureImporter</Importer>\n"
+                  "      <Processor>TextureProcessor</Processor>\n"
+                  "    </Compile>\n"
+                  "    <ProjectReference Include=\"..\\Pipeline\\Pipeline.csproj\">\n"
+                  "      <Name>Pipeline</Name>\n"
+                  "    </ProjectReference>\n");
+
+    const Invocation invocation = Build(project);
+    EXPECT_NE(invocation.exitCode, 0) << invocation.output;
+    EXPECT_NE(invocation.output.find("pipeline assemblies"), std::string::npos) << invocation.output;
+    EXPECT_TRUE(std::filesystem::is_regular_file(project.Output() / "probe.xnb")) << invocation.output;
+}
