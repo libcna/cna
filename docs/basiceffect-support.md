@@ -209,8 +209,13 @@ Guarded by `Vulkan_BasicEffect_PositionNormal` (EasyGL's `SAMPLE-002` source),
 the `FX-125` source sets `PreferPerPixelLighting(false)` in its own body, so registering it alone
 would leave the per-pixel half of the fix untested.
 
-**Still refused on Vulkan:** an **unlit** 36-byte record, and any lit declaration outside the two
-sets above. `plans/plan_vulkan.md` VULKAN-201 owns the first.
+The **unlit** 36-byte record draws too, since `VULKAN-201` — routed to the ordinary unlit
+colour-and-texture program, so it reaches the same D3D9 `oD0` saturate every other unlit coloured
+record reaches. Sending it to the coloured *lit* shaders' unlit branch would have been a smaller
+change and a worse one: that branch does not clamp at the vertex, and the two answers differ by
+**77 levels** across a colour gradient at `DiffuseColor = 2` (midpoint 178 against 255).
+
+**Still refused on Vulkan:** any lit declaration outside the sets above.
 
 ## Support matrix
 

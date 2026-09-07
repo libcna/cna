@@ -6339,6 +6339,19 @@ namespace CNA::Internal::Renderers::Vulkan
         if (useLitColored)  return BasicProgramShapeEXT::LitColoredTextured;
         if (useLitTextured) return BasicProgramShapeEXT::LitTextured;
         if (!useFogTex3D)   return BasicProgramShapeEXT::None;
+        // plan_vulkan.md VULKAN-201: an UNLIT draw whose declaration is exactly
+        // Position+Normal+Colour+TexCoord takes the colour-and-texture program, whose input table
+        // (`kColTextured`) names no Normal -- so that element is bound by nothing and ignored.
+        //
+        // Ignoring a declared element is precisely what `VULKAN-199` refused to do, and this is the
+        // case where it is right rather than silent: reaching here means no lit shape claimed the
+        // draw, which for this declaration means lighting is OFF, and with lighting off there is no
+        // lighting for a normal to feed. The element carries no meaning the program could have
+        // used. `VULKAN-199`'s refusal was of a dropped **Colour**, which the program would have had
+        // every reason to use. Stated here rather than only in the plan, because the next reader of
+        // `kColTextured` against a four-element declaration should see a decision, not an oversight.
+        if (DeclarationIsPositionNormalColorTextureOnlyEXT(declared))
+            return BasicProgramShapeEXT::ColoredTextured;
         switch (stride) {
             case 16: return BasicProgramShapeEXT::Colored;
             case 20: return BasicProgramShapeEXT::Textured;

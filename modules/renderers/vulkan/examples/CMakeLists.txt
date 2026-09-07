@@ -252,6 +252,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_basiceffect_default_lighting
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-201 (F-37): the same 36-byte record with lighting OFF, which
+        # VULKAN-200 deliberately left refused. Its gradient leg is what pins the D3D9 oD0 clamp:
+        # a flat quad cannot see the order because the output write saturates either way.
+        cna_vulkan_test(cna_test_vulkan_basiceffect_unlit_vertex_color_36byte
+                        ${CMAKE_SOURCE_DIR}/modules/graphics/examples/basiceffect_unlit_vertex_color_36byte_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_BasicEffect_UnlitVertexColor36Byte
+            COMMAND cna_test_vulkan_basiceffect_unlit_vertex_color_36byte
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-200 (F-37): the stock ModelProcessor's colour-carrying mesh --
         # Position+Normal+Colour+TexCoord, 36 bytes -- which no lit program here could bind. The
         # second registration is not a duplicate: EasyGL's source sets PreferPerPixelLighting(false)

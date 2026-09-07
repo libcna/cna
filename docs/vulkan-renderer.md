@@ -515,14 +515,19 @@ the right failure, but a game using one of those layouts could not draw at all.
 | Position + Normal + TexCoord (32 bytes) | ✅ always |
 | Position + Normal (24 bytes) | ✅ since `VULKAN-199` |
 | Position + Normal + Colour + TexCoord (36 bytes) | ✅ since `VULKAN-200`, **when lighting is on** |
-| the same 36 bytes with lighting **off** | ❌ refused — `VULKAN-201` |
+| the same 36 bytes with lighting **off** | ✅ since `VULKAN-201` — routed to the unlit colour+texture program, whose input table has no `Normal` |
 | Position + Normal + anything else | ❌ refused |
 | no declaration at all | the stride decides, as before |
 
 The 24-byte case is XNA's own Primitives3D sample, and it is 24 bytes *exactly as
 `VertexPositionColorTexture` is* — which is why the stride cannot decide it and the declaration
 must. The 36-byte case is what the stock `ModelProcessor` emits for a mesh carrying a colour
-channel; `VULKAN-200` gave the lit family a colour input for it. Its **unlit** twin is still refused, and deliberately: the coloured shaders' unlit branch does not clamp `inColor * DiffuseColor` at the vertex the way `colored_textured3d` does since `VULKAN-197`, so routing it there would trade a loud refusal for two unlit coloured draws that disagree about the D3D9 `oD0` saturate purely by stride.
+channel; `VULKAN-200` gave the lit family a colour input for it. Its **unlit** twin is still drawn too, since `VULKAN-201` — but by the **unlit** colour+texture program rather than the coloured lit shaders' unlit branch. That branch does not clamp `inColor * DiffuseColor` at the vertex the way `colored_textured3d` has since `VULKAN-197`, so the easy route would have made two unlit coloured draws disagree about the D3D9 `oD0` saturate purely by stride — measured at **77 levels** by removing that clamp and watching the gradient midpoint move from 178 to 255.
+
+**One element is ignored, and that is a decision.** The unlit route binds Position, Colour and
+TexCoord and leaves the declared `Normal` bound by nothing — because with lighting off there is no
+lighting for it to feed. The rule elsewhere is that no element is dropped without a nameable reason;
+this is the case where the reason is nameable, and the lit routes above refuse rather than drop.
 
 **The rule is set-exact, not "has a Normal".** The layout builder reports a declaration complete
 when every input the *shader consumes* was supplied — it says nothing about a declared element the
