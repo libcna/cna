@@ -48,6 +48,8 @@
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -55,6 +57,7 @@
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
@@ -612,6 +615,78 @@ protected:
                   "doubles: " + Text(dn) + " (want ~(0,0,128))" + why(dn));
             check(doubled(di),
                   "M an INSTANCED one does too: " + Text(di) + " (want ~(0,0,128))" + why(di));
+        }
+
+        // ---- N/O: EnvironmentMapEffect on an instanced draw ---------------------------------
+        // A cube map whose every face is RED over a blue base texture, with
+        // EnvironmentMapAmount = 1: the reflection wins outright, so the answer is red. If the
+        // cube never reaches the draw the base texture shows through as blue instead, and if the
+        // whole effect is ignored the fallback draws something else again.
+        {
+            TextureCube cube(dev, 2, false, SurfaceFormat::Color);
+            std::vector<Color> face(4, Color(255, 0, 0, 255));
+            for (int f = 0; f < 6; ++f)
+                cube.SetData(static_cast<CubeMapFace>(f), face.data(), 0, 4);
+            struct PNT { float x, y, z, nx, ny, nz, u, v; };
+            static_assert(sizeof(PNT) == 32);
+            const PNT eq[4] = {
+                { -0.12f,  0.12f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f },
+                { -0.12f, -0.12f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f },
+                {  0.12f, -0.12f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f },
+                {  0.12f,  0.12f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f },
+            };
+            const VertexDeclaration eqDecl(32, {
+                VertexElement(0,  VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+                VertexElement(12, VertexElementFormat::Vector3, VertexElementUsage::Normal, 0),
+                VertexElement(24, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+            });
+            VertexBuffer evb(dev, eqDecl, 4, BufferUsage::None);
+            evb.SetDataRaw(eq, 4, static_cast<int>(sizeof(PNT)));
+
+            auto env = [&](bool instanced) {
+                dev.Clear(Color(0, 255, 0, 255));
+                dev.SetDepthTestEnabled(false);
+                dev.setBlendStateProperty(BlendState::Opaque);
+                dev.setRasterizerStateProperty(RasterizerState::CullNone);
+                dev.getSamplerStatesProperty()[0] = SamplerState::PointClamp;
+                dev.getSamplerStatesProperty()[1] = SamplerState::PointClamp;
+                EnvironmentMapEffect fx(dev);
+                fx.setWorldProperty(Matrix::getIdentityProperty());
+                fx.setViewProperty(Matrix::getIdentityProperty());
+                fx.setProjectionProperty(Matrix::getIdentityProperty());
+                fx.setTextureProperty(blue_.get());
+                fx.setEnvironmentMapProperty(&cube);
+                fx.setEnvironmentMapAmountProperty(1.0f);
+                fx.setFresnelFactorProperty(0.0f);
+                fx.setEnvironmentMapSpecularProperty(Vector3::Zero);
+                fx.Apply();
+                dev.SetVertexBuffer(&evb);
+                dev.SetIndexBuffer(ib_.get());
+                if (instanced) {
+                    std::vector<VertexBufferBinding> bd = {
+                        VertexBufferBinding(&evb,          0, 0),
+                        VertexBufferBinding(instVb_.get(), 0, 1),
+                    };
+                    dev.SetVertexBuffers(bd);
+                    dev.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2, 3);
+                } else {
+                    dev.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2);
+                }
+                return ReadPixel(dev, kN / 2, kN / 2);
+            };
+            const Color en = env(false);
+            const Color ei = env(true);
+            auto reflects = [](const Color& c) {
+                return c.getRProperty() >= 150 && c.getBProperty() <= 110;
+            };
+            auto why = [](const Color& c) {
+                return c.getBProperty() > 150 ? " -- the cube map never reached the draw" : "";
+            };
+            check(reflects(en),
+                  "N control: a NON-instanced EnvironmentMapEffect draw samples its cube map: " +
+                      Text(en) + " (want red)" + why(en));
+            check(reflects(ei),
+                  "O an INSTANCED one does too: " + Text(ei) + " (want red)" + why(ei));
         }
 
         check(IsBlue(a) == IsBlue(b) && IsBlack(a2) == IsBlack(b2),

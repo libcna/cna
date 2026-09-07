@@ -262,6 +262,8 @@ def main():
         # plans/plan_vulkan.md VULKAN-225: the dual-texture family made instanceable. Same UBO,
         # layout and fragment stage as its non-instanced original.
         ("instanced_dual_texture3d.vert.glsl", VERTEX_SHADER, "kInstancedDualTexture3dVertSpv"),
+        # plans/plan_vulkan.md VULKAN-226: the env-map family made instanceable.
+        ("instanced_env_map3d.vert.glsl", VERTEX_SHADER, "kInstancedEnvMap3dVertSpv"),
     ]
 
     # plans/plan_gltf.md GLTF-465: the PBR variants whose vertex record carries a packed COLOR_0 slot.

@@ -4008,7 +4008,8 @@ namespace CNA::Internal::Renderers::Vulkan
                                                 bool msaa, const DepthStencilKeyParams& dsParams = {},
                                          const BlendKeyParams& blendParams = {},
                                          VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
-                                         const VulkanVertexInputLayoutEXT& vertexLayout = {});
+                                         const VulkanVertexInputLayoutEXT& vertexLayout = {},
+                                         bool instanced = false);
         void       FillEnvMapPushConst(float (&pc)[32], const Matrix& wvp, const Matrix& world);
         // SkinnedEffect
         void       EnsureSkinnedResources();

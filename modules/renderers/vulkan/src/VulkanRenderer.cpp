@@ -7946,7 +7946,7 @@ namespace CNA::Internal::Renderers::Vulkan
         VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
-        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt, const VulkanVertexInputLayoutEXT& vertexLayout)
+        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt, const VulkanVertexInputLayoutEXT& vertexLayout, bool instanced)
     {
         EnsureEnvMapResources();
 
@@ -7966,24 +7966,42 @@ namespace CNA::Internal::Renderers::Vulkan
         // stride cannot share a pipeline. Folded only when the layout is complete, which leaves
         // every stride-derived key exactly as it was.
         if (vertexLayout.IsComplete()) key.a = FoldPerVertexStrideIntoKey(key.a, recordStride);
+        // VULKAN-226: the instanced variant is a different pipeline -- own module, second
+        // binding, four more attributes -- so it needs its own identity.
+        if (instanced) key.vl ^= 0x9E3779B97F4A7C15ull;
         auto it = pipelinesEnvMap3D_.find(key);
         if (it != pipelinesEnvMap3D_.end()) return it->second;
 
         using namespace Shaders;
-        VkShaderModule vert = CreateShaderModule(kEnvMap3dVertSpv, kEnvMap3dVertSpv_size);
+        VkShaderModule vert = instanced
+            ? CreateShaderModule(kInstancedEnvMap3dVertSpv, kInstancedEnvMap3dVertSpv_size)
+            : CreateShaderModule(kEnvMap3dVertSpv, kEnvMap3dVertSpv_size);
         VkShaderModule frag = CreateShaderModule(kEnvMap3dFragSpv, kEnvMap3dFragSpv_size);
 
-        VkVertexInputBindingDescription bind{ 0, recordStride, VK_VERTEX_INPUT_RATE_VERTEX };
-        VkVertexInputAttributeDescription attrs[3]{};
+        // VULKAN-226: two bindings when instanced -- 0 per-vertex, 1 per-instance at 64 bytes.
+        constexpr uint32_t kInstStride = 64;
+        VkVertexInputBindingDescription binds[2]{};
+        binds[0] = { 0, recordStride, VK_VERTEX_INPUT_RATE_VERTEX   };
+        binds[1] = { 1, kInstStride,  VK_VERTEX_INPUT_RATE_INSTANCE };
+        // Seven: three per-vertex, then the four matrix columns.
+        VkVertexInputAttributeDescription attrs[7]{};
         attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0  };   // aPos
         attrs[1] = { 1, 0, VK_FORMAT_R32G32B32_SFLOAT, 12 };   // aNormal
         attrs[2] = { 2, 0, VK_FORMAT_R32G32_SFLOAT,    24 };   // aUV
         uint32_t attrCount = 3;
-        ApplyDeclaredVertexLayoutEXT(vertexLayout, attrs, std::size(attrs), attrCount);
+        // Per-vertex capacity, 3 -- not std::size(attrs), which is now 7 (VULKAN-222).
+        ApplyDeclaredVertexLayoutEXT(vertexLayout, attrs, 3u, attrCount);
+        if (instanced) {
+            attrs[attrCount++] = { 4, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0  }; // aInstCol0
+            attrs[attrCount++] = { 5, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 16 }; // aInstCol1
+            attrs[attrCount++] = { 6, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 32 }; // aInstCol2
+            attrs[attrCount++] = { 7, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 48 }; // aInstCol3
+        }
 
         VkPipelineVertexInputStateCreateInfo vis{};
         vis.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-        vis.vertexBindingDescriptionCount   = 1; vis.pVertexBindingDescriptions   = &bind;
+        vis.vertexBindingDescriptionCount   = instanced ? 2u : 1u;
+        vis.pVertexBindingDescriptions      = binds;
         vis.vertexAttributeDescriptionCount = attrCount; vis.pVertexAttributeDescriptions = attrs;
 
         VkPipelineShaderStageCreateInfo stages[2]{};
@@ -11839,7 +11857,7 @@ namespace CNA::Internal::Renderers::Vulkan
                 } else if (draw.useEnvMap) {
                     pipe = GetOrCreatePipelineEnvMap3D(draw.stride, draw.topology,
                                                        draw.depthTest, draw.depthWrite,
-                                                       draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt, draw.vertexLayout);
+                                                       draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt, draw.vertexLayout, draw.useInstanced);
                 } else if (draw.useSkinned) {
                     // Task 1103: real XNA default is PreferPerPixelLighting=false (per-vertex/
                     // Gouraud lighting) -- select that sibling pipeline unless the effect asked
@@ -14992,7 +15010,8 @@ namespace CNA::Internal::Renderers::Vulkan
         // untextured and coloured lit shapes keep that row.
         const auto& declaredForLit = vbForLayout.GetDeclarationEXT();
         const bool instancedLit =
-            !instancedAlphaTest && !params.dualTexture && params.lightingEnabled &&
+            !instancedAlphaTest && !params.dualTexture && !params.envMapping &&
+            params.lightingEnabled &&
             !params.dualTexture && !params.envMapping && !params.skinned && !params.pbr &&
             !declaredForLit.IsEmpty() &&
             DeclarationNamesUsageEXT(
@@ -15006,6 +15025,14 @@ namespace CNA::Internal::Renderers::Vulkan
         // needs no chain guard -- `useDualTexture` is already tested BEFORE `useInstanced` in both
         // the pipeline and descriptor chains, as `useAlphaTest` is.
         const bool instancedDualTex = !instancedAlphaTest && params.dualTexture;
+        // VULKAN-226: env-map, the last full family. Same cascade order as the ordinary route's.
+        const bool instancedEnvMap =
+            !instancedAlphaTest && !instancedDualTex && params.envMapping;
+        VulkanVertexInputLayoutEXT instancedEnvMapLayout;
+        if (instancedEnvMap)
+            instancedEnvMapLayout = BuildVulkanVertexInputLayoutEXT(
+                vbForLayout.GetDeclarationEXT(), StockInputs::kEnvMapped,
+                std::size(StockInputs::kEnvMapped));
         VulkanVertexInputLayoutEXT instancedDualTexLayout;
         if (instancedDualTex)
             instancedDualTexLayout = BuildVulkanVertexInputLayoutEXT(
@@ -15102,6 +15129,20 @@ namespace CNA::Internal::Renderers::Vulkan
         // instanced lit draw cannot drift from a non-instanced one. The push constant needs no
         // special case at all: since VULKAN-219 `FillInstancedPushConst` writes exactly what
         // `FillExtPushConst` writes -- WVP in [0..15] and the same sixteen floats after it.
+        if (instancedEnvMap) {
+            d.vertexLayout = instancedEnvMapLayout;
+            FillStockFamilyRecordEXT(d, params, /*needsPbr=*/false, /*needsSkinned=*/false,
+                                     /*needsEnvMap=*/true, /*needsDualTex=*/false,
+                                     /*needsLitTextured=*/false, /*needsLitUntextured=*/false,
+                                     /*needsLitColored=*/false);
+            // The env-map family carries its own push constant, which the helper above fills into
+            // d.envMapPC -- it needs the world matrix, so it is the one family whose transform is
+            // not already in d.pushConst.
+            FillEnvMapPushConst(d.envMapPC,
+                                world * view * (projection * XnaPixelCenterCorrectionEXT(primitive)),
+                                world);
+            d.useEnvMap = true;
+        }
         if (instancedDualTex) {
             d.vertexLayout = instancedDualTexLayout;
             FillStockFamilyRecordEXT(d, params, /*needsPbr=*/false, /*needsSkinned=*/false,
