@@ -49,6 +49,7 @@ namespace CNA::Internal::Renderers::Software
             float invW = 1.0f;          ///< 1 / clip.W, used to un-premultiply interpolated attributes.
             float r = 0.0f, g = 0.0f, b = 0.0f, a = 0.0f;  ///< Vertex color * invW, 0..1 range.
             float u = 0.0f, v = 0.0f;   ///< Texture coordinate * invW (Phase S5).
+            float fogKeep = 1.0f;       ///< XNA stock-effect fog keep factor * invW.
             /// World-space position/normal * invW (SOFTWARE-82, EnvironmentMapEffect only) --
             /// same premultiply-then-divide perspective-correct interpolation treatment as color/uv.
             float wpx = 0.0f, wpy = 0.0f, wpz = 0.0f;
@@ -377,6 +378,7 @@ namespace CNA::Internal::Renderers::Software
             float x = 0.0f, y = 0.0f, z = 0.0f, w = 1.0f;
             float r = 1.0f, g = 1.0f, b = 1.0f, a = 1.0f;
             float u = 0.0f, v = 0.0f;
+            float fogKeep = 1.0f;
             /// World-space position/normal (SOFTWARE-82, EnvironmentMapEffect only).
             float wpx = 0.0f, wpy = 0.0f, wpz = 0.0f;
             float nx = 0.0f, ny = 0.0f, nz = 1.0f;
@@ -426,6 +428,7 @@ namespace CNA::Internal::Renderers::Software
             out.a = a.a + t * (b.a - a.a);
             out.u = a.u + t * (b.u - a.u);
             out.v = a.v + t * (b.v - a.v);
+            out.fogKeep = a.fogKeep + t * (b.fogKeep - a.fogKeep);
             out.wpx = a.wpx + t * (b.wpx - a.wpx);
             out.wpy = a.wpy + t * (b.wpy - a.wpy);
             out.wpz = a.wpz + t * (b.wpz - a.wpz);
@@ -604,6 +607,7 @@ namespace CNA::Internal::Renderers::Software
             out.a = cv.a * invW;
             out.u = cv.u * invW;
             out.v = cv.v * invW;
+            out.fogKeep = cv.fogKeep * invW;
             out.wpx = cv.wpx * invW;
             out.wpy = cv.wpy * invW;
             out.wpz = cv.wpz * invW;
@@ -1255,6 +1259,18 @@ namespace CNA::Internal::Renderers::Software
                 m[0] * v.X + m[4] * v.Y + m[8]  * v.Z + m[12] * w,
                 m[1] * v.X + m[5] * v.Y + m[9]  * v.Z + m[13] * w,
                 m[2] * v.X + m[6] * v.Y + m[10] * v.Z + m[14] * w);
+        }
+
+        /// SOFTWARE-112: the five classic XNA stock effects compute this vertex output from the
+        /// object-space position after skinning. CNAEXT PBR remains outside this campaign and
+        /// deliberately retains Software's previous no-fog behavior.
+        float ComputeClassicFogKeep(const Vector3& position, const GpuDrawParams& params)
+        {
+            if (params.pbr)
+                return 1.0f;
+            return 1.0f - std::clamp(
+                position.X * params.fogVector[0] + position.Y * params.fogVector[1] +
+                position.Z * params.fogVector[2] + params.fogVector[3], 0.0f, 1.0f);
         }
 
         /// SOFTWARE-82: this renderer's cube-map addressing convention, in ONE place.
@@ -2081,6 +2097,7 @@ namespace CNA::Internal::Renderers::Software
 
             ClipVertex out;
             out.x = clip.X; out.y = clip.Y; out.z = clip.Z; out.w = clip.W;
+            out.fogKeep = ComputeClassicFogKeep(position, params);
 
             if (stride == 16)
             {
@@ -2236,6 +2253,7 @@ namespace CNA::Internal::Renderers::Software
             const Vector4 clip = Vector4::Transform(position, combined);
             ClipVertex out;
             out.x = clip.X; out.y = clip.Y; out.z = clip.Z; out.w = clip.W;
+            out.fogKeep = ComputeClassicFogKeep(position, params);
 
             const auto colorAttribute = raw.Read(VertexElementUsage::Color, 0);
             if (colorAttribute.found)
@@ -2417,6 +2435,7 @@ namespace CNA::Internal::Renderers::Software
         inline void WriteShadedFragment(SoftwareFramebuffer& fb, const ShadedContext& ctx,
                                         const RasterClipRect& clip, int x, int y, float depth, float invW,
                                         float pr, float pg, float pb, float pa, float pu, float pv,
+                                        float pfogKeep,
                                         float pwpx, float pwpy, float pwpz, float pnx, float pny, float pnz,
                                         unsigned int coverageMask = 0xFFFFFFFFu,
                                         const std::array<float, 4>* sampleDepths = nullptr)
@@ -2439,6 +2458,7 @@ namespace CNA::Internal::Renderers::Software
                                            static_cast<std::size_t>(x);
 
             float r = pr / invW, g = pg / invW, b = pb / invW, a = pa / invW;
+            const float fogKeep = pfogKeep / invW;
 
             float u = 0.0f, v = 0.0f;
             if (ctx.needUV)
@@ -2557,6 +2577,14 @@ namespace CNA::Internal::Renderers::Software
             }
 #endif
 
+            // SOFTWARE-112: FNA computes this factor per vertex from the post-skin object
+            // position, then the rasterizer perspective-interpolates it. Fog affects RGB only and
+            // follows texture/material/env-map and alpha-test processing, immediately before the
+            // ordinary BlendState equation, matching all five classic stock-effect shaders.
+            r = ctx.params.fogColor[0] * (1.0f - fogKeep) + r * fogKeep;
+            g = ctx.params.fogColor[1] * (1.0f - fogKeep) + g * fogKeep;
+            b = ctx.params.fogColor[2] * (1.0f - fogKeep) + b * fogKeep;
+
             // REMED-GFX-077: final colour channels (opaque store or exact XNA blend result). Each channel is
             // gated by BlendState.ColorWriteChannels — a masked-off channel keeps its existing
             // destination byte (identity), applied AFTER blending (Phase 10). The common All(15)
@@ -2663,6 +2691,7 @@ namespace CNA::Internal::Renderers::Software
                     a.r + t * (b.r - a.r), a.g + t * (b.g - a.g),
                     a.b + t * (b.b - a.b), a.a + t * (b.a - a.a),
                     a.u + t * (b.u - a.u), a.v + t * (b.v - a.v),
+                    a.fogKeep + t * (b.fogKeep - a.fogKeep),
                     a.wpx + t * (b.wpx - a.wpx), a.wpy + t * (b.wpy - a.wpy),
                     a.wpz + t * (b.wpz - a.wpz), a.nx + t * (b.nx - a.nx),
                     a.ny + t * (b.ny - a.ny), a.nz + t * (b.nz - a.nz));
@@ -2689,6 +2718,7 @@ namespace CNA::Internal::Renderers::Software
                                 static_cast<int>(std::floor(point.y)),
                                 point.depth, point.invW,
                                 point.r, point.g, point.b, point.a, point.u, point.v,
+                                point.fogKeep,
                                 point.wpx, point.wpy, point.wpz,
                                 point.nx, point.ny, point.nz);
         }
@@ -2810,6 +2840,7 @@ namespace CNA::Internal::Renderers::Software
                                             A.r + t * (B.r - A.r), A.g + t * (B.g - A.g),
                                             A.b + t * (B.b - A.b), A.a + t * (B.a - A.a),
                                             A.u + t * (B.u - A.u), A.v + t * (B.v - A.v),
+                                            A.fogKeep + t * (B.fogKeep - A.fogKeep),
                                             A.wpx + t * (B.wpx - A.wpx), A.wpy + t * (B.wpy - A.wpy),
                                             A.wpz + t * (B.wpz - A.wpz), A.nx + t * (B.nx - A.nx),
                                             A.ny + t * (B.ny - A.ny), A.nz + t * (B.nz - A.nz));
@@ -2901,6 +2932,8 @@ namespace CNA::Internal::Renderers::Software
                                         lambda0 * v0.a + lambda1 * v1.a + lambda2 * v2.a,
                                         lambda0 * v0.u + lambda1 * v1.u + lambda2 * v2.u,
                                         lambda0 * v0.v + lambda1 * v1.v + lambda2 * v2.v,
+                                        lambda0 * v0.fogKeep + lambda1 * v1.fogKeep +
+                                            lambda2 * v2.fogKeep,
                                         lambda0 * v0.wpx + lambda1 * v1.wpx + lambda2 * v2.wpx,
                                         lambda0 * v0.wpy + lambda1 * v1.wpy + lambda2 * v2.wpy,
                                         lambda0 * v0.wpz + lambda1 * v1.wpz + lambda2 * v2.wpz,

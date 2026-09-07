@@ -824,6 +824,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_ViewSpace_Fog COMMAND cna_test_easygl_viewspace_fog
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # SOFTWARE-112: all five classic fog-capable stock effects share one public contract.
+        cna_easygl_test(cna_test_easygl_stock_effect_fog_contract
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/stock_effect_fog_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_StockEffectFogContract
+            COMMAND cna_test_easygl_stock_effect_fog_contract
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 893: SkinnedEffect DirectionalLight1/DirectionalLight2 forwarding
         cna_easygl_test(cna_test_easygl_skinnedeffect_multilight
                         easygl_skinnedeffect_multilight_test.cpp)

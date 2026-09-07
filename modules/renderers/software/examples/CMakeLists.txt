@@ -130,6 +130,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_MsaaStorage
         COMMAND cna_test_software_msaa_storage TIMEOUT 30 LABELS "Software")
 
+    # SOFTWARE-112: all five classic fog-capable stock effects share one public contract.
+    cna_software_test(cna_test_software_stock_effect_fog_contract
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/stock_effect_fog_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_StockEffectFogContract
+        COMMAND cna_test_software_stock_effect_fog_contract TIMEOUT 30 LABELS "Software")
+
     cna_software_test(cna_test_software_dual_envmap_skinned software_dual_envmap_skinned_test.cpp)
     cna_register_renderer_test(NAME Software_DualEnvmapSkinned COMMAND cna_test_software_dual_envmap_skinned
         TIMEOUT 30 LABELS "Software")

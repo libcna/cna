@@ -133,11 +133,15 @@ rather than always passing.
   `SkinnedEffect` deliberately keep their textured program selected with no base map; SOFTWARE
   preserves the vertex/factor colour in that case, matching the white fallback used by native
   shader renderers. A missing second DualTexture map or environment cube remains a clear error.
-- **No per-light diffuse lighting, no fog.** `BasicEffect`'s `EnableDefaultLighting()`/fog
-  properties (and the equivalent lighting inputs on `EnvironmentMapEffect`/`SkinnedEffect`) have no
-  effect on this renderer's output — only `VertexColorEnabled`, `TextureEnabled`/`Texture`, and
-  `DiffuseColor`/`Alpha` are read; the "lit" base color is always just
+- **No per-light diffuse lighting yet.** `BasicEffect`'s `EnableDefaultLighting()` and the
+  equivalent lighting inputs on `EnvironmentMapEffect`/`SkinnedEffect` have no effect on this
+  renderer's lighting output. The current "lit" base color is still just
   `vertexColor*diffuseColor*texture0`, with no per-light `NdotL` sum, ambient, or emissive term.
+- **Classic stock-effect fog is complete** (`SOFTWARE-112`). `BasicEffect`, `AlphaTestEffect`,
+  `DualTextureEffect`, `EnvironmentMapEffect` and `SkinnedEffect` use FNA's view-space fog vector,
+  including transformed World/View matrices, the degenerate start=end case and SkinnedEffect's
+  post-bone position. The per-vertex factor is clipped and perspective-interpolated, and fog mixes
+  final RGB after the stock effect's texture/environment work and alpha test but before blending.
 - **`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect` are supported** (`SOFTWARE-82`),
   minus the lighting caveat above:
   - `DualTextureEffect`: real second-texture sampling, FNA's own

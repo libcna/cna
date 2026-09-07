@@ -14,7 +14,7 @@
 > storage, viewport/scissor, wireframe, depth bias, 16/32-bit indexed addressing, dynamic buffer
 > updates, and ordinary multi-stream vertex input all have implementation and focused tests.
 > Conversely, similarly named methods do not establish parity: verified real gaps include
-> classic lighting/fog, Texture3D,
+> classic lighting, Texture3D,
 > RenderTargetCube, MRT, and OcclusionQuery. The executable task table is in the new parity campaign
 > section below; the evidence ledger is `docs/software-easygl-parity-ledger.md`.
 >
@@ -62,15 +62,16 @@ classification and evidence is in `docs/software-easygl-parity-ledger.md`.
   POSIX `poll.h` from `System/Diagnostics/Process.cpp`. Software's shared 2D state source is still
   covered by the native Software build; this external GDI cross-build blocker is recorded rather
   than misreported as a stencil regression.
-- After `SOFTWARE-110`, the complete `Software` label run is 68 passed, four existing MSAA/
+- After `SOFTWARE-112`, the complete `Software` label run is 69 passed, four existing MSAA/
   invalid-mip fixtures skipped by their own environment gates, and only the known display-dependent
   `Software_PresentLifecycle` supervisor failure (21/22 child legs skipped cleanly; its one
   abort-required leg sees the same unavailable-video exit instead). The new shared 4x fragment
   contract passes 8/8 on both Software and Mesa EasyGL; storage transitions pass 5/5. The focused
   Software MSAA/depth/stencil/raster set passes 12/12 CTests. EasyGL's related color-write,
   stencil, top-left and RenderTarget2D MSAA binaries pass 61/61 checks when run directly under
-  Xvfb. CTest's configured `DISPLAY=:0` overrides the outer Xvfb display and is recorded as a
-  harness/environment failure, not a renderer failure.
+  Xvfb. The shared five-family stock-effect fog contract passes 32/32 on each renderer and its
+  nine-test Software regression set is green. CTest's configured `DISPLAY=:0` overrides the outer
+  Xvfb display and is recorded as a harness/environment failure, not a renderer failure.
 
 ### Executable backlog
 
@@ -92,7 +93,7 @@ its own tests and plan evidence in the same commit.
 | SOFTWARE-109 | Complete vertex/index buffer mutation and draw validation parity | 🟨 | Audit `SetDataOptions`, partial/dynamic updates, user primitive lifetime, buffer readback, 16/32-bit indices and exception behavior against shared/EasyGL fixtures. Existing REMED-GFX addressing and multi-stream coverage is retained; every remaining mismatch gets an implementation split before closure. |
 | SOFTWARE-110 | Make 4x MSAA depth/stencil and coverage sample-correct | ✅ | Completed 2026-09-07. Software now allocates four independent color, float-depth and 8-bit-stencil samples per pixel, clears every sample, evaluates triangle coverage and plane depth at the same rotated 2x2 locations, applies `MultiSampleMask` before depth/stencil, and executes the full stencil tuple independently on each active sample. Resolve stays deterministic and switching back to one sample preserves sample zero while releasing all optional planes. The renderer-neutral `MsaaFragmentContract` passes 8/8 on Software and Mesa EasyGL: each individual mask bit resolves to one quarter, a near write to sample 0 leaves farther samples 1..3 writable, a geometric edge retains independent depth, and one stamped stencil sample leaves the other three writable. The storage fixture passes 5/5 and the focused Software set passes 12/12 CTests. The same audit found that EasyGL silently ignored `MultiSampleMask`; it now uses `glSampleMaski` when available and rejects non-default masks on incapable profiles. Direct EasyGL regressions pass 61/61 checks. GDI telemetry/tests were updated for the shared per-sample stencil plane; its MinGW build remains externally blocked before CNA compilation by sharp-runtime's POSIX-only `poll.h` include. |
 | SOFTWARE-111 | Implement complete `AlphaTestEffect` comparison semantics | ✅ | Completed 2026-09-07. Software now evaluates FNA's encoded four-value alpha-test expression after texture × vertex × effect alpha and before every depth/stencil operation, colour write, blend or fog-stage work. The renderer-neutral `AlphaTestEffectContract` passes 30/30 on both Software and Mesa EasyGL: all eight `CompareFunction` values at below/equal/above byte-reference alpha, half-byte equality tolerance, texture/effect/vertex composition, disabled vertex colour, implicit opaque-white null texture, and discarded-near-fragment depth preservation. Full observable stencil-state coverage remains correctly owned by `SOFTWARE-121`; the shared fragment ordering already places discard before that state path. |
-| SOFTWARE-112 | Implement classic stock-effect fog | ⬜ | `BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect` and `SkinnedEffect` honor their FNA/XNA fog vectors and ordering; start/end/disabled/degenerate and view-space probes compare against EasyGL within a justified tight tolerance. |
+| SOFTWARE-112 | Implement classic stock-effect fog | ✅ | Completed 2026-09-07. Software now computes FNA's saturated fog dot product once per vertex from the post-skin object-space position, carries the keep factor through homogeneous clipping and perspective-correct interpolation, then mixes `FogColor` into the final stock-effect RGB after texture/material/environment-map and alpha-test processing but before blending. `BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect` and `SkinnedEffect` share the renderer-neutral `StockEffectFogContract`: 32/32 on Software and 32/32 on Mesa EasyGL, covering disabled fog, start/end boundaries, identity and transformed `World`/`View` midpoints, `FogStart == FogEnd`, SkinnedEffect's post-bone position and final-stage environment-map ordering. Software differs from Mesa by at most one byte from RGBA8 truncation versus rounding; the asserted tolerance is two, not a broad image tolerance. CNAEXT PBR remains deliberately unchanged. Nine affected Software CTests pass. The GDI 2D subset receives only the default no-op factor; its cross-build remains blocked in sharp-runtime before CNA compilation as recorded above. |
 | SOFTWARE-113 | Implement full `BasicEffect` lighting | ⬜ | Lighting disabled/default lighting/all three directional lights, ambient/diffuse/emissive/specular/specular power, alpha, vertex color, texture and per-vertex/per-pixel preference behave per XNA/FNA; non-uniform World uses the correct normal transform. |
 | SOFTWARE-114 | Complete `EnvironmentMapEffect` classic lighting and normal semantics | ⬜ | Directional/ambient/diffuse/emissive/specular, environment amount/fresnel/eye position, texture/cube sampling, fog and inverse-transpose normal handling match XNA/FNA/EasyGL probes. |
 | SOFTWARE-115 | Complete `SkinnedEffect` classic lighting and normal semantics | ⬜ | Bone position/normal transforms, 1/2/4 weights, directional/ambient/diffuse/emissive/specular, per-pixel preference, vertex color, texture, alpha and fog pass focused and model-level probes. |
