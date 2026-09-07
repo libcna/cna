@@ -85,12 +85,19 @@ void main() {
     vec3 lightSum = pc.light0Diffuse * NdotL0
                    + fog.light1Diff_pad.xyz * NdotL1
                    + fog.light2Diff_pad.xyz * NdotL2;
-    vLitRGB = lightSum * pc.diffuseColor.rgb + fog.emissiveColor.rgb;
+    // plan_vulkan.md VULKAN-188 (finding F-35): Direct3D 9 saturates a vertex shader's colour
+    // output registers (oD0/oD1) to [0,1] BEFORE the rasterizer interpolates them, so real XNA
+    // hands a clamped colour to the rasterizer even though Lighting.fxh never writes a
+    // saturate(). These are plain varyings, which nothing clamps -- so an unclamped per-vertex
+    // sum interpolated between two vertices and the triangle came out brighter than D3D9's,
+    // with a different GRADIENT rather than a rounding difference. plans/plan_fx.md FX-122 is
+    // the same semantic in MojoShader's path and FX-123 is EasyGL's; this is Vulkan's.
+    vLitRGB = clamp(lightSum * pc.diffuseColor.rgb + fog.emissiveColor.rgb, 0.0, 1.0);
 
     float specularPower = fog.specularColor_power.w;
     vec3 h0 = normalize(E - normalize(pc.light0Dir));          float spec0 = pow(max(dot(h0, N), 0.0) * zeroL0, specularPower);
     vec3 h1 = normalize(E - normalize(fog.light1Dir_pad.xyz)); float spec1 = pow(max(dot(h1, N), 0.0) * zeroL1, specularPower);
     vec3 h2 = normalize(E - normalize(fog.light2Dir_pad.xyz)); float spec2 = pow(max(dot(h2, N), 0.0) * zeroL2, specularPower);
-    vSpecularRGB = (spec0 * fog.light0Spec_pad.xyz + spec1 * fog.light1Spec_pad.xyz
-                   + spec2 * fog.light2Spec_pad.xyz) * fog.specularColor_power.xyz;
+    vSpecularRGB = clamp((spec0 * fog.light0Spec_pad.xyz + spec1 * fog.light1Spec_pad.xyz
+                   + spec2 * fog.light2Spec_pad.xyz) * fog.specularColor_power.xyz, 0.0, 1.0);
 }

@@ -2383,6 +2383,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_presentation_parameters
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-188 (finding F-35): D3D9 saturates a vertex shader's colour output
+        # before the rasterizer interpolates it. EasyGL's own FX-123 test is renderer-agnostic, so
+        # it is registered here rather than rewritten.
+        cna_vulkan_test(cna_test_vulkan_basiceffect_vertex_color_clamp
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_basiceffect_vertex_color_clamp_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_BasicEffectVertexColorClamp
+            COMMAND cna_test_vulkan_basiceffect_vertex_color_clamp
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-372: does GraphicsAdapter tell a game what the device will do?
         cna_vulkan_test(cna_test_vulkan_adapter_query_contract
                         vulkan_adapter_query_contract_test.cpp)
