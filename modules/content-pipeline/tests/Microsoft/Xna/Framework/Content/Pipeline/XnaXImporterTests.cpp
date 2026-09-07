@@ -440,8 +440,9 @@ TEST(XnaXImporter, TheAttributeMatchesXna)
 TEST(XnaXImporter, EveryFileAnswersTheGraphXnaAnswers)
 {
     for (const std::string& fixture :
-         {"bare_mesh.x", "binary_mesh.x", "hierarchy.x", "oblique_normals.x", "quad_textured.x",
-          "transform_z.x", "two_materials.x", "with_templates.x"})
+         {"bare_mesh.x", "binary_mesh.x", "generated_normals.x", "hierarchy.x", "missing_texture.x",
+          "oblique_normals.x", "quad_textured.x", "transform_z.x", "two_materials.x",
+          "with_templates.x", "zero_power.x"})
     {
         ImporterContext context;
         ExpectSame(SortAnimations(Import(fixture, context)),

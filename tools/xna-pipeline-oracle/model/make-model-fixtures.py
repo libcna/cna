@@ -307,6 +307,58 @@ Frame Root {
 }
 """
 
+# A material whose specular power is zero, which is what an exporter writes when the artist set no
+# specular at all and is what 3 of the sample corpus's 14 `.x` materials carry. XNA's own build
+# answers a `SpecularPower` of 16 -- the `BasicEffect` default -- for exactly those, and the value
+# the file gives for every other one, so what this fixture settles is whether the *importer* is
+# where a zero stops being a value (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-106`).
+ZERO_POWER = HEADER + """
+Frame Root {
+  Mesh Flat {
+    3;
+    0.000000; 0.000000; 0.000000;,
+    1.000000; 0.000000; 0.000000;,
+    0.000000; 1.000000; 0.000000;;
+    1;
+    3; 0, 1, 2;;
+    MeshMaterialList {
+      1;
+      1;
+      0;;
+      Material Plain {
+        1.000000; 1.000000; 1.000000; 1.000000;;
+        0.000000;
+        0.000000; 0.000000; 0.000000;;
+        0.000000; 0.000000; 0.000000;;
+      }
+    }
+  }
+}
+"""
+
+# Two triangles sharing an edge, in planes at right angles and with deliberately different areas,
+# and no `MeshNormals` block. A file with none still answers a normal channel, and this is what
+# says how the generated one is built: the shared vertices' normals separate an area-weighted sum
+# of face normals from an average of unit ones, and the sign separates the winding the cross
+# product is taken in. `bare_mesh.x`, the only fixture that covered this before, is a single
+# triangle in the XY plane and answers `(0,0,-1)` under every one of those rules -- which is why
+# CNA generated that constant, and why the ReachGraphicsDemo sample's ground plane came out facing
+# the camera (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-107`).
+GENERATED_NORMALS = HEADER + """
+Frame Root {
+  Mesh Fold {
+    4;
+    0.000000; 0.000000; 0.000000;,
+    4.000000; 0.000000; 0.000000;,
+    0.000000; 4.000000; 0.000000;,
+    0.000000; 0.000000; 1.000000;;
+    2;
+    3; 0, 1, 2;,
+    3; 0, 1, 3;;
+  }
+}
+"""
+
 # An animation set that names its own tick rate, and a second set, so how a .x tick becomes a
 # TimeSpan and where an animation is attached are both measured rather than inferred.
 TWO_ANIMATIONS = HEADER + """
@@ -550,6 +602,8 @@ def main():
     write(os.path.join(out, "bare_mesh.x"), BARE_MESH)
     write(os.path.join(out, "oblique_normals.x"), OBLIQUE)
     write(os.path.join(out, "two_materials.x"), TWO_MATERIALS)
+    write(os.path.join(out, "zero_power.x"), ZERO_POWER)
+    write(os.path.join(out, "generated_normals.x"), GENERATED_NORMALS)
     write(os.path.join(out, "two_animations.x"), TWO_ANIMATIONS)
     write(os.path.join(out, "transform_z.x"), TRANSFORM_Z)
     write(os.path.join(out, "anim_default_rate.x"), DEFAULT_RATE)

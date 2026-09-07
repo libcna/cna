@@ -27,6 +27,8 @@ tokenizer. Nothing here was downloaded and nothing is third-party content.
 | `two_animations.x` | 675 |
 | `two_bones_animated.x` | 1589 |
 | `two_materials.x` | 713 |
+| `generated_normals.x` | 239 |
+| `zero_power.x` | 420 |
 | `with_templates.x` | 581 |
 
 ## The texture a fixture names

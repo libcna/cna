@@ -154,7 +154,16 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             material.setSpecularColorProperty(Vector3(At(object, 5), At(object, 6), At(object, 7)));
             material.setEmissiveColorProperty(Vector3(At(object, 8), At(object, 9), At(object, 10)));
             material.setAlphaProperty(At(object, 3));
-            material.setSpecularPowerProperty(At(object, 4));
+            // A power of zero is not a value: the genuine importer writes no `SpecularPower` at
+            // all for it, and the material then carries `BasicEffect`'s own default of 16 into the
+            // `.xnb` (measured, `x/zero_power.x`; and 3 of the sample corpus's `.x` materials are
+            // exactly that -- ReachGraphicsDemo's `grid.x` and ColorReplacement's `Car.x` both
+            // answer 16 in XNA's own build where CNA wrote 0,
+            // plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-106`).
+            if (At(object, 4) != 0.0f)
+            {
+                material.setSpecularPowerProperty(At(object, 4));
+            }
             const Canon::DirectXFileObject* texture = Find(object, "TextureFilename");
             if (texture != nullptr && !texture->strings.empty())
             {
@@ -210,6 +219,69 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 faces.push_back(std::move(face));
             }
 
+            /**
+             * @brief The normal a mesh with no `MeshNormals` block answers, per vertex.
+             *
+             * Measured (`x/generated_normals.x`): a vertex's normal is the **average of the unit
+             * normals of the faces that use it**, and a face's normal is the opposite of its own
+             * winding's -- `-normalize(cross(p1 - p0, p2 - p0))` over the positions as imported,
+             * which is to say after the Z negation. Two triangles sharing an edge, in planes at
+             * right angles and with areas of 8 and 2, answer `(0,-0.707107,-0.707107)` at the
+             * shared vertices: the unit average, not the area-weighted sum, which would be
+             * `(0,-0.2425,-0.9701)`.
+             *
+             * The only fixture that covered this before was a single triangle in the XY plane,
+             * which answers `(0,0,-1)` under every candidate rule -- so that constant was what CNA
+             * emitted for every unnormalled `.x`, and the ReachGraphicsDemo sample's ground plane,
+             * four vertices in the XZ plane, came out with its normal pointing along -Z instead of
+             * +Y (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-107`).
+             *
+             * @param positions The mesh's positions, as imported.
+             * @param faces The mesh's faces, as vertex indices.
+             * @return One normal per position.
+             */
+            const auto generateNormals =
+                [](const std::vector<Vector3>& positions,
+                   const std::vector<std::vector<std::size_t>>& faces)
+            {
+                std::vector<Vector3> generated(positions.size(), Vector3(0.0f, 0.0f, 0.0f));
+                for (const std::vector<std::size_t>& face : faces)
+                {
+                    // Newell's method, which is the polygon's own plane normal and equals
+                    // cross(p1 - p0, p2 - p0) for a triangle.
+                    Vector3 plane(0.0f, 0.0f, 0.0f);
+                    for (std::size_t corner = 0; corner < face.size(); ++corner)
+                    {
+                        const Vector3& a = positions[face[corner]];
+                        const Vector3& b = positions[face[(corner + 1u) % face.size()]];
+                        plane.X += (a.Y - b.Y) * (a.Z + b.Z);
+                        plane.Y += (a.Z - b.Z) * (a.X + b.X);
+                        plane.Z += (a.X - b.X) * (a.Y + b.Y);
+                    }
+                    const float length = std::sqrt(plane.X * plane.X + plane.Y * plane.Y +
+                                                   plane.Z * plane.Z);
+                    if (length <= 0.0f) { continue; }
+                    const Vector3 unit(-plane.X / length, -plane.Y / length, -plane.Z / length);
+                    for (const std::size_t vertex : face)
+                    {
+                        generated[vertex].X += unit.X;
+                        generated[vertex].Y += unit.Y;
+                        generated[vertex].Z += unit.Z;
+                    }
+                }
+                for (Vector3& normal : generated)
+                {
+                    const float length = std::sqrt(normal.X * normal.X + normal.Y * normal.Y +
+                                                   normal.Z * normal.Z);
+                    // A vertex whose faces cancel out has no answer this has measured; the
+                    // constant is what CNA answered everywhere before and is kept for it alone.
+                    normal = length > 0.0f
+                                 ? Vector3(normal.X / length, normal.Y / length, normal.Z / length)
+                                 : Vector3(0.0f, 0.0f, -1.0f);
+                }
+                return generated;
+            };
+
             // The optional channels, each indexed by the mesh's own vertices.
             std::vector<Vector3> normals;
             if (const Canon::DirectXFileObject* object2 = Find(object, "MeshNormals"); object2 != nullptr)
@@ -223,6 +295,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     normalAt += 3u;
                 }
             }
+            const std::vector<Vector3> generated =
+                normals.empty() ? generateNormals(positions, faces) : std::vector<Vector3>{};
             std::vector<Vector2> textureCoordinates;
             if (const Canon::DirectXFileObject* object2 = Find(object, "MeshTextureCoords");
                 object2 != nullptr)
@@ -424,9 +498,11 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     for (const std::size_t vertex : used)
                     {
                         // A file with no MeshNormals still answers a normal channel: the genuine
-                        // importer generates one (measured, x/bare_mesh.x).
-                        channel.push_back(vertex < normals.size() ? normals[vertex]
-                                                                  : Vector3(0.0f, 0.0f, -1.0f));
+                        // importer generates one from the geometry (measured, x/bare_mesh.x and
+                        // x/generated_normals.x).
+                        channel.push_back(vertex < normals.size()   ? normals[vertex]
+                                          : vertex < generated.size() ? generated[vertex]
+                                                                      : Vector3(0.0f, 0.0f, -1.0f));
                     }
                     geometry->getVerticesProperty().getChannelsProperty().Add<Vector3>(
                         VertexChannelNames::Normal(), channel);
