@@ -66,13 +66,34 @@ function(cna_register_d3d_parity_tests)
         DIRECTX11_TIMEOUT 30 DIRECTX11_ENVIRONMENT "CNA_D3D11_SKIP_DXVK_GATE=1"
         DIRECTX11_ONLY REASON "This pure mapping-table executable tests D3D11-native enums")
     cna_d3d_parity_fixture(
-        NAME BlendState_Opaque TARGET blendstate_opaque
-        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_blendstate_opaque_test.cpp"
-        DIRECTX11_ONLY REASON "D3D12 state-corpus adoption is tracked by DX-227 and DX-236")
+        NAME BlendState_Opaque TARGET blendstate_opaque DIRECTX12_ORDER 310
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_blendstate_opaque_test.cpp")
     cna_d3d_parity_fixture(
-        NAME BlendState_AlphaBlend TARGET blendstate_alphablend
-        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_blendstate_alphablend_test.cpp"
-        DIRECTX11_ONLY REASON "D3D12 state-corpus adoption is tracked by DX-227 and DX-236")
+        NAME BlendState_AlphaBlend TARGET blendstate_alphablend DIRECTX12_ORDER 320
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_blendstate_alphablend_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME BlendState_Additive TARGET blendstate_additive DIRECTX12_ORDER 330
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_blendstate_additive_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME BlendState_NonPremultiplied TARGET blendstate_nonpremultiplied DIRECTX12_ORDER 340
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_blendstate_nonpremultiplied_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME BlendState_SeparateFactors TARGET blendstate_separate_factors DIRECTX12_ORDER 350
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_blendstate_separate_factors_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME BlendState_SeparateFunctions TARGET blendstate_separate_functions DIRECTX12_ORDER 360
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_blendstate_separate_functions_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME ColorWriteChannels TARGET colorwritechannels DIRECTX12_ORDER 370
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_colorwritechannels_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME AdditiveBlendContract TARGET additive_blend_contract DIRECTX12_ORDER 380
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/additive_blend_contract_test.cpp"
+        DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 600)
+    cna_d3d_parity_fixture(
+        NAME ColorWriteChannels3D TARGET colorwritechannels_3d DIRECTX12_ORDER 390
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/gfx077_colorwritechannels_3d_test.cpp"
+        DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 600)
     cna_d3d_parity_fixture(
         NAME DepthStencilState_StencilEnable TARGET depthstencilstate_stencil_enable
         SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_depthstencilstate_stencil_enable_test.cpp"
