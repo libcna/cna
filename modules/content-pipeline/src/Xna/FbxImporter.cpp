@@ -71,9 +71,33 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             std::vector<std::int64_t> materials;
             Vector3 translation{0.0f, 0.0f, 0.0f};
             Vector3 rotation{0.0f, 0.0f, 0.0f};
+            Vector3 preRotation{0.0f, 0.0f, 0.0f};
             Vector3 scaling{1.0f, 1.0f, 1.0f};
             bool attached = false;
+            /** @brief Whether a `Connect` names this object as a child of the scene root. */
+            bool inScene = false;
         };
+
+        /**
+         * @brief Whether an FBX object of this class becomes a node in the imported graph.
+         *
+         * A camera is not one, and neither is the camera switcher. Every FBX an exporter writes
+         * carries the producer camera set -- 833 `Camera` models and 106 `CameraSwitcher` ones
+         * over the 132 FBX sources of the public XNA sample corpus -- and none of them ever
+         * appears in what the genuine importer answers: `Cone.fbx` has nine models, eight of them
+         * cameras, and XNA answers a single `MeshContent` node. CNA answered ten bones for it
+         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-111`).
+         *
+         * `Light` is deliberately not in this list: no source in the corpus carries one, so what
+         * XNA does with it has not been measured here and is left alone rather than guessed at.
+         *
+         * @param kind The object's FBX class.
+         * @return Whether it is part of the node graph.
+         */
+        [[nodiscard]] bool IsSceneNode(const std::string& kind)
+        {
+            return kind != "Material" && kind != "Camera" && kind != "CameraSwitcher";
+        }
 
         /** @brief One `Properties60`/`Properties70` entry, by its name. */
         [[nodiscard]] const Canon::FbxNode* FindProperty(const Canon::FbxNode& object,
@@ -93,6 +117,22 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 }
             }
             return nullptr;
+        }
+
+        /** @brief The one number a scalar property carries, or a fallback. */
+        [[nodiscard]] double PropertyNumber(const Canon::FbxNode& object, const std::string& name,
+                                            const double fallback)
+        {
+            const Canon::FbxNode* property = FindProperty(object, name);
+            if (property == nullptr) { return fallback; }
+            for (const Canon::FbxProperty& one : property->properties)
+            {
+                if (const double* value = std::get_if<double>(&one); value != nullptr)
+                {
+                    return *value;
+                }
+            }
+            return fallback;
         }
 
         /** @brief The three numbers a transform property carries, or a fallback. */
@@ -121,14 +161,30 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                            static_cast<float>(numbers[numbers.size() - 1u]));
         }
 
+        /**
+         * @brief One node's local transform: scaling, then `PreRotation`, then `Lcl Rotation`.
+         *
+         * `PreRotation` is part of FBX's own transform formula and every model an exporter writes
+         * from a Z-up tool carries one: the public XNA sample corpus's `Cone.fbx`, `Handgun.FBX`
+         * and `AircraftCarrier.FBX` all name (-90, 0, 0) on their top-level nodes, and the genuine
+         * importer answers a basis of `[1 0 0][0 0 -1][0 1 0]` for exactly that. Leaving it out
+         * gave every such model a near-identity transform and stood it on the wrong axis
+         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-113`).
+         *
+         * @param object The FBX object.
+         * @return The local transform.
+         */
         [[nodiscard]] Matrix LocalTransform(const Object& object)
         {
             const float toRadians = 0.017453292519943295f;
-            return Matrix::CreateScale(object.scaling) *
-                   Matrix::CreateRotationX(object.rotation.X * toRadians) *
-                   Matrix::CreateRotationY(object.rotation.Y * toRadians) *
-                   Matrix::CreateRotationZ(object.rotation.Z * toRadians) *
-                   Matrix::CreateTranslation(object.translation);
+            const auto euler = [toRadians](const Vector3& degrees)
+            {
+                return Matrix::CreateRotationX(degrees.X * toRadians) *
+                       Matrix::CreateRotationY(degrees.Y * toRadians) *
+                       Matrix::CreateRotationZ(degrees.Z * toRadians);
+            };
+            return Matrix::CreateScale(object.scaling) * euler(object.preRotation) *
+                   euler(object.rotation) * Matrix::CreateTranslation(object.translation);
         }
 
         /** @brief Whatever a layer element holds, resolved through its mapping and reference. */
@@ -288,6 +344,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 }
                 object.translation = PropertyVector(node, "Lcl Translation", Vector3(0.0f, 0.0f, 0.0f));
                 object.rotation = PropertyVector(node, "Lcl Rotation", Vector3(0.0f, 0.0f, 0.0f));
+                object.preRotation = PropertyVector(node, "PreRotation", Vector3(0.0f, 0.0f, 0.0f));
                 object.scaling = PropertyVector(node, "Lcl Scaling", Vector3(1.0f, 1.0f, 1.0f));
                 byName[object.name] = identity;
                 objects.emplace(identity, std::move(object));
@@ -319,7 +376,14 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 const auto parentObject = objects.find(parent);
                 if (parentObject == objects.end())
                 {
-                    continue;                        // connected to the scene root
+                    // Connected to the scene root, which is not one of the objects. An object no
+                    // `Connect` names at all is in the file but not in the scene, and the two are
+                    // not the same thing: an exporter writes the producer cameras as objects and
+                    // connects none of them, which is why `Cone.fbx` answers its mesh as the root
+                    // where `fbx_cameras.fbx`, whose cameras *are* connected, answers a
+                    // `RootNode` (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-111`).
+                    childObject->second.inScene = true;
+                    continue;
                 }
                 if (childObject->second.kind == "Material")
                 {
@@ -438,7 +502,17 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 for (std::size_t batch = 0; batch < batches; ++batch)
                 {
                     std::vector<std::size_t> used;
-                    std::map<std::size_t, SharpRuntime::intcs> local;
+                    // A vertex is a control point *and* the channel values the corner carries, not
+                    // a control point alone. FBX writes normals, texture coordinates and colours
+                    // per polygon vertex, so a cube's eight corners are three vertices each: the
+                    // genuine importer answers 8 positions and 24 vertices for `Cube.fbx`, 122 and
+                    // 168 for `Cone.fbx`, 362 and 387 for `marble.FBX`. Keying on the control
+                    // point alone gave one vertex per position and kept whichever corner happened
+                    // to be seen first, which is a hard edge drawn with a neighbour's normal
+                    // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-112`).
+                    using VertexKey = std::tuple<std::size_t, std::vector<double>,
+                                                 std::vector<double>, std::vector<double>>;
+                    std::map<VertexKey, SharpRuntime::intcs> local;
                     std::vector<SharpRuntime::intcs> indices;
                     std::vector<std::size_t> cornerOf;      // the polygon-vertex each local vertex came from
                     for (const Polygon& polygon : polygons)
@@ -451,13 +525,17 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                         for (std::size_t c = 0; c < polygon.controlPoints.size(); ++c)
                         {
                             const std::size_t controlPoint = polygon.controlPoints[c];
-                            const auto found = local.find(controlPoint);
+                            const std::size_t corner = polygon.corners[c];
+                            VertexKey key{controlPoint, normals.At(corner, controlPoint, 0u),
+                                          uvs.At(corner, controlPoint, 0u),
+                                          colors.At(corner, controlPoint, 0u)};
+                            const auto found = local.find(key);
                             if (found == local.end())
                             {
                                 const auto assigned = static_cast<SharpRuntime::intcs>(used.size());
-                                local.emplace(controlPoint, assigned);
+                                local.emplace(std::move(key), assigned);
                                 used.push_back(controlPoint);
-                                cornerOf.push_back(polygon.corners[c]);
+                                cornerOf.push_back(corner);
                                 corners.push_back(assigned);
                             }
                             else
@@ -556,7 +634,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             node->setTransformProperty(LocalTransform(object));
             for (const std::int64_t child : object.children)
             {
-                if (objects.count(child) == 0 || objects.at(child).kind == "Material")
+                if (objects.count(child) == 0 || !IsSceneNode(objects.at(child).kind))
                 {
                     continue;
                 }
@@ -565,15 +643,78 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             return node;
         };
 
-        std::vector<std::int64_t> roots;
-        for (const auto& [identity, object] : objects)
+        // The scene's own unit, applied where the FBX SDK applies it: a scene declaring
+        // `UnitScaleFactor` 2.54 is authored in inches and reaches the pipeline in centimetres.
+        // The corpus settles the value and the place it lands: `Cone.fbx` declares 2.54, and the
+        // genuine importer answers a basis of 2.54 with the node's own translation multiplied by
+        // it too -- -0.000101717 becoming -0.000258362. Every other model in the corpus declares
+        // 1, where this changes nothing (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-113`).
+        float unitScale = 1.0f;
+        // FBX 6 nests `GlobalSettings` inside `Objects`; FBX 7 has it at the top level.
+        const Canon::FbxNode* settings = parsed.Find("GlobalSettings");
+        if (settings == nullptr)
         {
-            if (!object.attached && object.kind != "Material")
+            if (const Canon::FbxNode* block = parsed.Find("Objects"); block != nullptr)
             {
-                roots.push_back(identity);
+                settings = block->Find("GlobalSettings");
             }
         }
-        if (roots.size() == 1u)
+        // ...and reads it only where `Definitions` declares the object type, which is how a 6.1
+        // reader decides what is in a file at all. Measured both ways on one fixture: the same
+        // GlobalSettings changes nothing undeclared and scales the scene by 2.54 declared.
+        bool globalsDeclared = false;
+        if (const Canon::FbxNode* definitions = parsed.Find("Definitions"); definitions != nullptr)
+        {
+            for (const Canon::FbxNode& kind : definitions->children)
+            {
+                if (kind.name == "ObjectType" && kind.Text(0) == "GlobalSettings")
+                {
+                    globalsDeclared = true;
+                }
+            }
+        }
+        if (settings != nullptr && globalsDeclared)
+        {
+            const double factor = PropertyNumber(*settings, "UnitScaleFactor", 1.0);
+            if (factor > 0.0) { unitScale = static_cast<float>(factor); }
+        }
+
+        // Whether the scene answers its single child directly or a synthesized `RootNode` is
+        // decided by how many top-level objects there are, cameras included -- a mesh alone
+        // answers itself, and the same mesh beside a producer camera and a camera switcher
+        // answers `/RootNode/Tri` (measured, `fbx_cameras.fbx`). Only the scene nodes are then
+        // converted (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-111`).
+        // A file with no `Connections` at all has no scene; then every unattached object is one,
+        // which is what this used to assume for every file.
+        bool anyInScene = false;
+        for (const auto& [identity, object] : objects)
+        {
+            if (object.inScene) { anyInScene = true; }
+        }
+        std::vector<std::int64_t> roots;
+        std::size_t topLevel = 0u;
+        for (const auto& [identity, object] : objects)
+        {
+            const bool top = anyInScene ? object.inScene : !object.attached;
+            if (!top || object.kind == "Material") { continue; }
+            ++topLevel;
+            if (IsSceneNode(object.kind)) { roots.push_back(identity); }
+        }
+        if (unitScale != 1.0f)
+        {
+            // Only the top-level nodes: a child's transform is already expressed in its parent's
+            // space, and scaling it again would compound the conversion down the chain.
+            for (const std::int64_t identity : roots)
+            {
+                Object& object = objects.at(identity);
+                object.scaling = Vector3(object.scaling.X * unitScale, object.scaling.Y * unitScale,
+                                         object.scaling.Z * unitScale);
+                object.translation =
+                    Vector3(object.translation.X * unitScale, object.translation.Y * unitScale,
+                            object.translation.Z * unitScale);
+            }
+        }
+        if (roots.size() == 1u && topLevel == 1u)
         {
             // One top-level model answers as the root itself, as the .x route's single frame does.
             return build(roots.front(), build);

@@ -20,7 +20,11 @@ out="${1:-$repo/tests/reference/xna40/model}"
 refs="${CNA_XNA40_REFERENCES:-/rv/tmp/samples/_tools/xna-game-studio-4-refresh/admin/Program Files/Microsoft XNA/XNA Game Studio/v4.0/References/Windows/x86}"
 prefix="${CNA_XNA40_WINEPREFIX:-$HOME/.wine-cna-xna40}"
 build="$repo/build/xna-pipeline-oracle/model"
-fixtures="$repo/tests/assets/xna40/model"
+# The corpus this runs over. Overridable so a *real* sample's model can be measured against the
+# genuine importer without joining the committed fixture set: an investigation reads what XNA
+# answers for a file it has, and only what that settles becomes a fixture
+# (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-111).
+fixtures="${CNA_MODEL_FIXTURES:-$repo/tests/assets/xna40/model}"
 
 for dll in Microsoft.Xna.Framework.dll Microsoft.Xna.Framework.Content.Pipeline.dll \
            Microsoft.Xna.Framework.Content.Pipeline.XImporter.dll \

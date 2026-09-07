@@ -47,7 +47,7 @@ Definitions:  {
 \tObjectType: "Deformer" {
 \t\tCount: %(deformers)d
 \t}
-}
+%(globals)s}
 
 Objects:  {
 """
@@ -84,12 +84,45 @@ def flatten(tuples):
     return out
 
 
-def properties(translation=(0, 0, 0), rotation=(0, 0, 0), scaling=(1, 1, 1)):
-    return ("\t\tProperties60:  {\n"
+def properties(translation=(0, 0, 0), rotation=(0, 0, 0), scaling=(1, 1, 1), pre_rotation=None):
+    text = ("\t\tProperties60:  {\n"
             '\t\t\tProperty: "Lcl Translation", "Lcl Translation", "A+",%s\n'
             '\t\t\tProperty: "Lcl Rotation", "Lcl Rotation", "A+",%s\n'
             '\t\t\tProperty: "Lcl Scaling", "Lcl Scaling", "A+",%s\n'
-            "\t\t}\n" % (numbers(translation), numbers(rotation), numbers(scaling)))
+            % (numbers(translation), numbers(rotation), numbers(scaling)))
+    if pre_rotation is not None:
+        # FBX's own transform formula puts PreRotation between the scale and Lcl Rotation, and
+        # every model an exporter writes from a Z-up tool carries one.
+        text += '\t\t\tProperty: "PreRotation", "Vector3D", "",%s\n' % numbers(pre_rotation)
+        text += '\t\t\tProperty: "RotationActive", "bool", "",1\n'
+    return text + "\t\t}\n"
+
+
+def camera_model(name):
+    """One of the producer cameras every exporter writes, which is not a node in the graph."""
+    return ('\tModel: "Model::%s", "Camera" {\n\t\tVersion: 232\n%s'
+            "\t\tMultiLayer: 0\n\t\tMultiTake: 0\n\t\tHidden: \"True\"\n\t\tShading: W\n"
+            "\t\tCulling: \"CullingOff\"\n\t}\n" % (name, properties()))
+
+
+def camera_switcher_model(name):
+    """The camera switcher, which is not a node either."""
+    return ('\tModel: "Model::%s", "CameraSwitcher" {\n\t\tVersion: 232\n%s'
+            "\t\tMultiLayer: 0\n\t\tMultiTake: 1\n\t\tHidden: \"True\"\n\t\tShading: W\n"
+            "\t\tCulling: \"CullingOff\"\n\t}\n" % (name, properties()))
+
+
+def global_settings(unit_scale):
+    """The scene's own unit, which the importer converts by."""
+    return ('\tGlobalSettings:  {\n\t\tVersion: 1000\n\t\tProperties60:  {\n'
+            '\t\t\tProperty: "UpAxis", "int", "",1\n'
+            '\t\t\tProperty: "UpAxisSign", "int", "",1\n'
+            '\t\t\tProperty: "FrontAxis", "int", "",2\n'
+            '\t\t\tProperty: "FrontAxisSign", "int", "",1\n'
+            '\t\t\tProperty: "CoordAxis", "int", "",0\n'
+            '\t\t\tProperty: "CoordAxisSign", "int", "",1\n'
+            '\t\t\tProperty: "UnitScaleFactor", "double", "",%g\n'
+            "\t\t}\n\t}\n" % unit_scale)
 
 
 def null_model(name, translation=(0, 0, 0), rotation=(0, 0, 0), scaling=(1, 1, 1)):
@@ -100,9 +133,10 @@ def null_model(name, translation=(0, 0, 0), rotation=(0, 0, 0), scaling=(1, 1, 1
 
 
 def mesh_model(name, vertices, polygons, normals=None, uvs=None, colors=None,
-               materials_per_polygon=None, translation=(0, 0, 0), scaling=(1, 1, 1)):
+               materials_per_polygon=None, translation=(0, 0, 0), scaling=(1, 1, 1),
+               pre_rotation=None, normal_mapping="ByVertice"):
     text = '\tModel: "Model::%s", "Mesh" {\n\t\tVersion: 232\n' % name
-    text += properties(translation, (0, 0, 0), scaling)
+    text += properties(translation, (0, 0, 0), scaling, pre_rotation)
     text += "\t\tMultiLayer: 0\n\t\tMultiTake: 1\n\t\tShading: Y\n\t\tCulling: \"CullingOff\"\n"
     text += "\t\tVertices: %s\n" % numbers(flatten(vertices))
     indices = []
@@ -114,9 +148,9 @@ def mesh_model(name, vertices, polygons, normals=None, uvs=None, colors=None,
     layers = []
     if normals:
         text += ('\t\tLayerElementNormal: 0 {\n\t\t\tVersion: 101\n\t\t\tName: ""\n'
-                 '\t\t\tMappingInformationType: "ByVertice"\n'
+                 '\t\t\tMappingInformationType: "%s"\n'
                  '\t\t\tReferenceInformationType: "Direct"\n'
-                 "\t\t\tNormals: %s\n\t\t}\n" % numbers(flatten(normals)))
+                 "\t\t\tNormals: %s\n\t\t}\n" % (normal_mapping, numbers(flatten(normals))))
         layers.append("LayerElementNormal")
     if colors:
         text += ('\t\tLayerElementColor: 0 {\n\t\t\tVersion: 101\n\t\t\tName: "Col"\n'
@@ -160,6 +194,11 @@ RECORD = []
 
 
 def write(path, header, body, relations, connections, take="", takes=""):
+    header = dict(header)
+    # A 6.1 reader takes its object types from `Definitions`, so a block it does not declare is a
+    # block nobody reads: the same GlobalSettings changes nothing without this and changes the
+    # scene's unit with it (measured, XNASWEEP-113).
+    header.setdefault("globals", "")
     text = HEADER % header + body + FOOTER % {"relations": relations, "connections": connections,
                                               "take": take, "takes": takes}
     with open(path, "w", newline="\n") as handle:
@@ -268,6 +307,47 @@ def main():
     with open(os.path.join(out, "fbx_truncated.fbx"), "wb") as handle:
         handle.write(whole[:400])
     RECORD.append(("fbx_truncated.fbx", 400))
+
+    # 7. What every exporter writes and no importer keeps: the producer camera set. The public
+    # sample corpus carries 833 `Camera` models and 106 `CameraSwitcher` ones over 132 files, and
+    # not one of them is a node in what the genuine importer answers -- `Cone.fbx` has nine models,
+    # eight of them cameras, and answers a single MeshContent (XNASWEEP-111).
+    write(os.path.join(out, "fbx_cameras.fbx"),
+          {"count": 3, "models": 3, "materials": 0, "deformers": 0},
+          mesh_model("Tri", [(0, 0, 0), (1, 0, 0), (0, 1, 0)], [[0, 1, 2]]) +
+          camera_model("Producer Perspective") + camera_switcher_model("Camera Switcher"),
+          '\tModel: "Model::Tri", "Mesh" {\n\t}\n'
+          '\tModel: "Model::Producer Perspective", "Camera" {\n\t}\n'
+          '\tModel: "Model::Camera Switcher", "CameraSwitcher" {\n\t}\n',
+          '\tConnect: "OO", "Model::Tri", "Model::Scene"\n'
+          '\tConnect: "OO", "Model::Producer Perspective", "Model::Scene"\n'
+          '\tConnect: "OO", "Model::Camera Switcher", "Model::Scene"\n')
+
+    # 8. A `PreRotation` and a scene unit of 2.54, the two things a 3ds Max export carries that
+    # decide where a model stands. `Cone.fbx` declares both and the genuine importer answers a
+    # basis of 2.54 turned -90 degrees about X, with its translation multiplied by 2.54 as well
+    # (XNASWEEP-113).
+    write(os.path.join(out, "fbx_prerotation_units.fbx"),
+          {"count": 2, "models": 1, "materials": 0, "deformers": 0,
+           "globals": '\tObjectType: "GlobalSettings" {\n\t\tCount: 1\n\t}\n'},
+          mesh_model("Tilted", [(0, 0, 0), (1, 0, 0), (0, 1, 0)], [[0, 1, 2]],
+                     translation=(0, 0, -0.5), pre_rotation=(-90, 0, 0)) +
+          global_settings(2.54),
+          '\tModel: "Model::Tilted", "Mesh" {\n\t}\n',
+          '\tConnect: "OO", "Model::Tilted", "Model::Scene"\n')
+
+    # 9. One control point carrying two different normals, which is what `ByPolygonVertex` is for
+    # and what decides how many vertices a geometry has. The genuine importer answers 8 positions
+    # and 24 vertices for the corpus's `Cube.fbx`, 122 and 168 for `Cone.fbx` (XNASWEEP-112).
+    write(os.path.join(out, "fbx_split_vertices.fbx"),
+          {"count": 2, "models": 1, "materials": 0, "deformers": 0},
+          mesh_model("Fold", [(0, 0, 0), (1, 0, 0), (0, 1, 0), (0, 0, 1)],
+                     [[0, 1, 2], [0, 1, 3]],
+                     normals=[(0, 0, 1), (0, 0, 1), (0, 0, 1),
+                              (0, -1, 0), (0, -1, 0), (0, -1, 0)],
+                     normal_mapping="ByPolygonVertex"),
+          '\tModel: "Model::Fold", "Mesh" {\n\t}\n',
+          '\tConnect: "OO", "Model::Fold", "Model::Scene"\n')
 
     with open(os.path.join(out, "FBX-PROVENANCE.md"), "w", encoding="utf-8") as handle:
         handle.write("# FBX corpus (authored)\n\n")

@@ -194,6 +194,9 @@ final qualification.
 | `XNASWEEP-108` | Every effect was compiled optimized, because nothing carried the build configuration. | [ ] |
 | `XNASWEEP-109` | A PNG's own `gAMA` chunk was ignored; GDI+, and therefore XNA, applies it. | [ ] |
 | `XNASWEEP-110` | A content build needed write access to the content it was reading. | [ ] |
+| `XNASWEEP-111` | An FBX camera is not a node, and what makes a scene's root is what the scene names. | [ ] |
+| `XNASWEEP-112` | An FBX vertex is a control point *and* its channel values. | [ ] |
+| `XNASWEEP-113` | `PreRotation` and the scene's own unit, both of which decide where a model stands. | [ ] |
 
 
 ---
