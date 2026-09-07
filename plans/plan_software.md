@@ -1,28 +1,104 @@
 # Software (CPU) Rasterizer Graphics Backend — Implementation Plan
 
-> **Status: Phases S1-S8 plus Phase S9 (SOFTWARE-80..84) landed and verified, 2026-07-13.**
-> `CNA_GRAPHICS_BACKEND=SOFTWARE` configures, builds, and `CnaTests` (the full pre-existing GTest
-> corpus) links and runs cleanly against it -- **4371/4373 pass with `DISPLAY`/`WAYLAND_DISPLAY`
-> unset and `SDL_VIDEODRIVER` empty** (2 skips are unrelated hardware-sensor tests that skip on
-> every backend). This backend renders a genuinely complete 2D/3D pipeline entirely on the CPU:
-> real triangle rasterization (`World*View*Projection` transform, perspective divide, edge-function
-> fill, per-pixel depth test, perspective-correct color/UV interpolation), real near-plane polygon
-> clipping, real backface culling (`RasterizerState.CullMode`), bilinear texture sampling,
-> `DiffuseColor` modulation and exact XNA 2D `BlendState` factors/equations, `DualTextureEffect`/
-> `EnvironmentMapEffect` (real cube-map reflection)/`SkinnedEffect` (real bone-transform skinning)
-> support, and a real pixel-correct `SpriteBatch` path reusing the same rasterizer core -- all
-> without any per-light diffuse lighting (design decision 6, still out of v1 scope for every
-> effect). The original six focused CTests now contain 34 checks: `Software_Smoke` (6/6), `Software_Rasterizer` (10/10,
-> **order-independent depth occlusion**), `Software_Effects` (5/5), `Software_Culling` (5/5),
-> `Software_Clipping` (4/4), `Software_DualEnvmapSkinned` (4/4) -- all with **no window, no GPU, no
-> display server**. Plus a manually-run cross-backend diagnostic (`SOFTWARE-84`) confirming this
-> backend's output matches `EASYGL`'s within a max per-channel diff of 1 on a canonical scene.
-> Effect-aware draws support `TriangleList`, `LineList`, `LineStrip` and `PointListEXT`;
-> `TriangleStrip` remains an explicit unsupported boundary. No per-light lighting/fog, no
-> MRT/cube-render-target/3D textures (see Boundaries).
+> **Current status (Software <-> EasyGL XNA/Core parity campaign, begun 2026-09-07): ACTIVE.**
+> The original `SOFTWARE-1..86` rows below remain the historical record of the deliberately small
+> v1 renderer. They are not the current completion boundary. The authorized target is now an
+> independent, deterministic CPU implementation of the classic XNA 4.0/core graphics behavior on
+> which an application can rely wherever it can rely on EasyGL, except for explicitly classified
+> non-applicable window/GPU behavior and deferred CNAEXT-modern facilities.
+>
+> A source-and-test reconciliation at start commit `cde325ecd4d771d50b7d8ec3ef99f1657ad217ac`
+> found that later `REMED-GFX-*` work had already made the implementation substantially stronger
+> than this plan's v1 prose: complete blend equations/factors, color write masks, multisample mask,
+> point/linear and mip filtering, independent Wrap/Clamp/Mirror U/V addressing, texture/cube mip
+> storage, viewport/scissor, wireframe, depth bias, 16/32-bit indexed addressing, dynamic buffer
+> updates, and ordinary multi-stream vertex input all have implementation and focused tests.
+> Conversely, similarly named methods do not establish parity: verified real gaps include
+> `TriangleStrip`, six-plane homogeneous clipping, declaration-driven arbitrary vertex layouts,
+> classic alpha test, classic lighting/fog, 3D/two-sided stencil application, Texture3D,
+> RenderTargetCube, MRT, and OcclusionQuery. The executable task table is in the new parity campaign
+> section below; the evidence ledger is `docs/software-easygl-parity-ledger.md`.
 >
 > **Status legend:** ✅ implemented *and verified against its stated acceptance criteria*;
 > 🟨 code or documentation exists but has not met those criteria; ⬜ not implemented.
+
+---
+
+## Software <-> EasyGL XNA/Core parity campaign
+
+### Scope and evidence rules
+
+This section is the current executable plan. It supersedes the old v1 authorization boundary while
+preserving `SOFTWARE-1..86` below as history. Classic XNA 4.0 behavior and renderer-agnostic CNA
+core plumbing are authorized. `CNA::Graphics`, `modules/graphics-ext`, arbitrary `ShaderEffect`
+execution, PBR effects, compute/storage buffers, HDR/post-processing, modern shadows/IBL and other
+CNAEXT engine features are explicitly deferred and must not be used to inflate the parity target.
+
+Evidence authority is Microsoft XNA 4.0 measurements/IL, then FNA, then EasyGL, then existing
+Software behavior, then prose. A green row requires behavioral proof; the existence of a method or
+a test that merely records an unsupported boundary is not parity. The durable family-by-family
+classification and evidence is in `docs/software-easygl-parity-ledger.md`.
+
+### Baseline record
+
+- Branch: `software`.
+- Start commit: `cde325ecd4d771d50b7d8ec3ef99f1657ad217ac`.
+- Starting tracked worktree: clean.
+- Build dependency note: CNA at this commit requires sharp-runtime's `Xml.Serialization`
+  component, which is absent from the sibling `develop` checkout (`df1b42ab`) but present in the
+  existing sibling `next` worktree (`7e9c58fd`). Baseline builds therefore use
+  `-DCNA_SHARP_RUNTIME_ROOT=/rv/data/development/github.com/openeggbert/sharp-runtimenext`.
+- The first configure also established that all pinned CNA submodules were absent; they were
+  initialized at the revisions recorded by this repository. This changes no tracked CNA file.
+- Baseline build/test results will be recorded in `SOFTWARE-100` after the clean configuration has
+  completed; failed environment bootstrap attempts are retained here so they are not mislabeled as
+  renderer regressions.
+
+### Executable backlog
+
+The order is dependency-led: truthful reporting, primitive/input foundations, raster correctness,
+classic effects/state, resources, then high-level orchestration. Each implementation row includes
+its own tests and plan evidence in the same commit.
+
+| # | Task | Status | Acceptance criteria / evidence |
+|---|---|---|---|
+| SOFTWARE-100 | Reconcile current Software implementation, documentation, build configuration and test baseline against repository reality | 🟨 | Record the start state above; complete a clean Software build, all `Software` CTests and `CnaTests`; configure/build/run the practical EasyGL baseline; replace every stale current-status limitation with measured truth without erasing the S1-S9 history. |
+| SOFTWARE-101 | Inventory EasyGL's classic XNA/core feature evidence independently of filenames | ✅ | Initial inventory completed 2026-09-07 across all 246 EasyGL example/test translation units, renderer interfaces and the public XNA graphics surface. Every family is classified in the ledger; modern custom-shader/PBR/glTF engine examples and physical GL/window behavior are separated from XNA/Core candidates instead of silently expanding scope. Keep verdicts current as probes refine them. |
+| SOFTWARE-102 | Maintain the Software-vs-EasyGL parity ledger | ✅ | `docs/software-easygl-parity-ledger.md` records EasyGL evidence, Software evidence, scope, verdict, task and verification for every renderer-contract/public-XNA family found in the initial three-way audit. It explicitly treats boundary-only fixtures as gap evidence. The ledger remains living evidence and must be updated with each task. |
+| SOFTWARE-103 | Generalize shared Software/EasyGL differential infrastructure beyond the one vertex-color triangle | ⬜ | Shared public-API scenes cover major deterministic families; build/run on both renderers; compare exact pixels where possible and documented tight tolerances otherwise; compare exceptions/properties/query values when pixels are not the contract. |
+| SOFTWARE-104 | Make capability reporting truthful during the campaign | ⬜ | Every reported capability has a working creation/execution path and behavioral test. Immediately stop advertising current false positives (notably OcclusionQuery and anisotropic filtering) until their implementation tasks land; add a renderer capability/factory consistency test. |
+| SOFTWARE-105 | Implement `TriangleStrip` for all indexed/non-indexed, user/buffer and colored/effect-aware paths | ⬜ | Assemble `primitiveCount + 2` elements; reverse the first two vertices for odd triangles so winding remains consistent; preserve vertexStart/startIndex/baseVertex and 16/32-bit indices; the existing shared `triangle_strip_winding_test.cpp` executes its full Software matrix with zero boundary reports. |
+| SOFTWARE-106 | Replace eye/near-W-only clipping with complete homogeneous frustum clipping | ⬜ | Clip points, lines and polygons against left/right/top/bottom/near/far clip planes before divide; interpolate every active attribute; preserve winding and wireframe boundary edges; deterministic probes cover each plane, multi-plane intersections, fully rejected geometry and finite output. |
+| SOFTWARE-107 | Implement the XNA/D3D top-left fill convention | ⬜ | Shared edges are owned by exactly one triangle independent of draw order; arbitrary adjacent geometry no longer relies on hard-coded quad-diagonal exclusion masks; solid/wireframe, culling, clipping and MSAA cases have pixel proof. |
+| SOFTWARE-108 | Replace stride-keyed vertex reinterpretation with declaration-driven vertex input | ⬜ | Consume arbitrary valid `VertexDeclaration` elements/offsets/usages/formats with validation matching XNA/FNA; valid custom layouts sharing a canonical stride are not reinterpreted; single/multiple stream, vertex offsets, indexed/user draws and stock-effect requirements are covered. |
+| SOFTWARE-109 | Complete vertex/index buffer mutation and draw validation parity | 🟨 | Audit `SetDataOptions`, partial/dynamic updates, user primitive lifetime, buffer readback, 16/32-bit indices and exception behavior against shared/EasyGL fixtures. Existing REMED-GFX addressing and multi-stream coverage is retained; every remaining mismatch gets an implementation split before closure. |
+| SOFTWARE-110 | Make 4x MSAA depth/stencil and coverage sample-correct | ⬜ | Coverage, depth and stencil are tracked/applied per sample, `MultiSampleMask` gates the same samples, resolve is deterministic, and single-sample behavior stays byte-identical. Add shared-edge, depth-intersection and stencil probes plus existing RT MSAA regressions. |
+| SOFTWARE-111 | Implement complete `AlphaTestEffect` comparison semantics | ⬜ | All eight `CompareFunction` values, equality tolerance encoding, vertex-color/diffuse/texture alpha composition, null/default texture behavior and discard-before-depth/stencil-write are verified against FNA/EasyGL public scenes. |
+| SOFTWARE-112 | Implement classic stock-effect fog | ⬜ | `BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect` and `SkinnedEffect` honor their FNA/XNA fog vectors and ordering; start/end/disabled/degenerate and view-space probes compare against EasyGL within a justified tight tolerance. |
+| SOFTWARE-113 | Implement full `BasicEffect` lighting | ⬜ | Lighting disabled/default lighting/all three directional lights, ambient/diffuse/emissive/specular/specular power, alpha, vertex color, texture and per-vertex/per-pixel preference behave per XNA/FNA; non-uniform World uses the correct normal transform. |
+| SOFTWARE-114 | Complete `EnvironmentMapEffect` classic lighting and normal semantics | ⬜ | Directional/ambient/diffuse/emissive/specular, environment amount/fresnel/eye position, texture/cube sampling, fog and inverse-transpose normal handling match XNA/FNA/EasyGL probes. |
+| SOFTWARE-115 | Complete `SkinnedEffect` classic lighting and normal semantics | ⬜ | Bone position/normal transforms, 1/2/4 weights, directional/ambient/diffuse/emissive/specular, per-pixel preference, vertex color, texture, alpha and fog pass focused and model-level probes. |
+| SOFTWARE-116 | Give `DualTextureEffect` two declaration-driven texture-coordinate channels | ⬜ | Texture0 uses `TextureCoordinate0`, Texture1 uses `TextureCoordinate1`; transforms, independent slot samplers, doubling/modulation, alpha and fog match FNA/EasyGL. |
+| SOFTWARE-117 | Implement or precisely emulate anisotropic filtering on the CPU | ⬜ | `TextureFilter::Anisotropic` uses `MaxAnisotropy` and differs from isotropic linear sampling on an oblique minified texture in the XNA-consistent direction; per-slot independence and mip/address interaction are tested. Do not claim the capability until this passes. |
+| SOFTWARE-118 | Implement classic `Texture3D` storage, transfer and sampling plumbing | ⬜ | Full mip storage, partial boxes, format/range validation, SetData/GetData and W addressing/filter/mip behavior pass the shared EasyGL corpus where it exercises XNA/core APIs. CNAEXT-only custom ShaderEffect sampling remains deferred. |
+| SOFTWARE-119 | Implement `RenderTargetCube` | ⬜ | Six isolated faces, mip chains, preservation/discard, depth/stencil formats, MSAA face-local resolve, sampling and GetData pass the already-registered shared cube-target tests with no unsupported boundary. Float CNAEXT formats are not required. |
+| SOFTWARE-120 | Implement multiple render targets | ⬜ | Up to XNA's four bindings are stored and written in a defined CPU fragment-output contract, with dimension/MSAA/depth validation, per-target color write masks, preservation and lifecycle parity. If the classic stock effects expose only color0, prove the remaining attachments' XNA-defined result rather than inventing shader outputs. |
+| SOFTWARE-121 | Apply complete stencil state to every 3D path, including two-sided stencil | ⬜ | Colored/effect-aware/indexed/non-indexed/line/point/strip paths honor read/write masks, every compare/op, `ReferenceStencil`, and clockwise vs counter-clockwise state; rejected alpha does not mutate depth/stencil. Reuse/extend EasyGL shared state fixtures. |
+| SOFTWARE-122 | Implement deterministic CPU `OcclusionQuery` | ⬜ | Begin/End/IsComplete/PixelCount count raster samples that survive clipping, coverage, alpha, scissor and depth/stencil tests without changing render results; visible/occluded and lifecycle/validation fixtures pass. |
+| SOFTWARE-123 | Close SpriteBatch and SpriteFont behavioral coverage | ⬜ | Audit every Draw/DrawString overload, rectangles, origin/scale/rotation/flips/layer depth/sort modes/transform/viewport/scissor/state interactions/RTs, font spacing/newline/fallback and disposal; convert reusable EasyGL fixtures to shared sources and repair every observed mismatch. |
+| SOFTWARE-124 | Close GraphicsDevice/resource lifecycle and validation parity | ⬜ | Resize/virtual resolution and meaningful presentation parameters, creation/disposal/double-dispose, bound-resource disposal, reset/device events where applicable, argument/range validation and exception types are tested. Physical-window/context-only behavior is classified `NOT-APPLICABLE-SOFTWARE`. |
+| SOFTWARE-125 | Prove classic `Model.Draw()` end to end on Software | ⬜ | Rigid and skinned model mesh/effect orchestration, hierarchy, multiple meshes/effects and 32-bit indices render through public `Model.Draw()`; low-level SkinnedEffect tests alone do not close this row. |
+| SOFTWARE-126 | Audit and complete classic texture/render-target formats | ⬜ | NPOT and every XNA-relevant supported packed/compressed format has correct validation, SetData/GetData and sampling; unsupported formats reject at construction/transfer instead of being silently treated as RGBA8. Modern HDR-only requirements remain deferred. |
+| SOFTWARE-127 | Reconcile meaningful Software presentation/reset behavior | ⬜ | Backbuffer resize, virtual-resolution viewport reset, applied MSAA/depth formats and target switching/restoration match public XNA/core semantics without inventing a physical window, swap chain or GPU context. |
+| SOFTWARE-128 | Reconcile current Software documentation and feature matrix | ⬜ | `docs/software-renderer.md`, the graphics renderer feature matrix and current plan summary agree with code/tests; old statements such as two blend modes, unconditional bilinear clamp, and permanently excluded classic lighting/fog are retained only as clearly labeled history. |
+
+### Current dependency order
+
+`SOFTWARE-104` and `SOFTWARE-105` are the first implementation tranche. `SOFTWARE-108` unlocks
+correct dual-UV and arbitrary input work. `SOFTWARE-106/107/110/121` establish fragment correctness
+before lighting/query conclusions. Resource tasks `SOFTWARE-118..120` precede the high-level
+SpriteBatch/Model closure. Independent lifecycle and documentation work continues around any
+blocked feature rather than waiting for it.
 
 ---
 
@@ -49,7 +125,7 @@ when run under Xvfb.
 
 ---
 
-## Design decisions (recorded before implementation, not left implicit)
+## Historical v1 design decisions (superseded where the parity campaign says so)
 
 1. **Correctness and determinism over performance.** This is explicitly not a real-time gameplay
    backend — no SIMD, no multithreading, no tiling/binning in v1. Plain scalar loops are fine; a
@@ -99,7 +175,7 @@ when run under Xvfb.
 
 ---
 
-## Active execution order — do this one phase at a time
+## Historical v1 execution order
 
 1. Phase S1 (CMake integration + skeleton) unblocks everything else, exactly as `plan_headless.md`
    Phase N1 did for that backend.
@@ -208,12 +284,13 @@ without both.
 
 ---
 
-## Phase S9 — v2 improvement candidates (proposed 2026-07-13, none authorized yet)
+## Historical Phase S9 — v2 improvement candidates proposed in 2026-07
 
 Every row below is a real, scoped-down v1 limitation from Phases S1-S8, listed here as concrete
-follow-up candidates rather than left as a vague "could be better later" note. **None of these are
-authorized for implementation** — each needs an explicit go-ahead before starting, one at a time or
-in an approved batch. Ordered roughly by value-for-effort, cheapest/highest-value first.
+follow-up candidates rather than left as a vague "could be better later" note. The original
+"none authorized" rule was superseded on 2026-09-07 by the owner-authorized XNA/Core parity
+campaign above. It remains historically useful only for understanding why the initial scope was
+small. Ordered roughly by value-for-effort, cheapest/highest-value first.
 
 | # | Task | Status | Notes |
 |---|---|---|---|
@@ -227,7 +304,12 @@ in an approved batch. Ordered roughly by value-for-effort, cheapest/highest-valu
 
 ---
 
-## Boundaries (stop and ask, don't improvise)
+## Historical v1 boundaries (not the current parity boundary)
+
+The bullets below record the decisions under which `SOFTWARE-1..86` landed. Any exclusion of a
+classic XNA/Core feature here is superseded by the campaign tasks above. The current hard boundary
+is modern CNAEXT engine work, plus behavior that is genuinely inapplicable without a physical
+window/GPU.
 
 - **GPU-init-failure fallback** (one of the owner's stated use cases) is a `Game`/
   `GraphicsDeviceManager`-level runtime policy decision (auto-switching the active backend when GPU
