@@ -29,6 +29,22 @@ defect: `gdb` (installed by the owner on 2026-09-05) showed that F-22's deadlock
 process-ending X error are the same thing seen twice — Xlib's default error handler calling
 `exit()` from inside a platform lock whose destructor then re-locks it (F-27).
 
+**Every remaining row is blocked outside this tree, and the block is named per row so the next
+reader does not have to re-derive it (measured 2026-09-07, after `VULKAN-205`):**
+
+| Row | What it needs that this campaign cannot provide |
+|---|---|
+| `VULKAN-167` | Magnum, IGL, OpenGL2, OpenGL4 and Sokol builds — the five renderers that bind a `Texture3D` and under-claim it. Each renderer's own plan owns its claim; reading their source is not measuring them. |
+| `VULKAN-186` | An `OPENGL2` build. The diagnosis is complete — the golden predates `FX-123`/`FX-124` and OpenGL2 still renders the pre-fix way — and re-capturing from EasyGL would move the defect to a renderer this tree cannot run. |
+| `VULKAN-194` | An EasyGL run. Assigning `SamplerStates[0]` in `SpriteBatch::Begin` changes what a 3D draw **after** a sprite batch samples with, on all twelve renderers at once; `VULKAN-057` declined exactly this shape of one-renderer verification and the same reasoning holds. |
+| `VULKAN-203` | A bgfx configuration and at least one GL profile. The change to `TranslatesDeclarations()` can only turn a skip into a run, but that is an argument rather than a measurement. |
+| `VULKAN-264` | Agreement with `plans/plan_binding.md`, which owns the C ABI. Not work — a decision. |
+| `VULKAN-266` | A `CNA_CNAEXT=ON` **Vulkan** configuration. `cmake-build-cnaext/` is EasyGL's and belongs to `plans/plan_modern.md`; repurposing it would take that campaign's directory. |
+| `VULKAN-472` 🟨 | `VULKAN-264`, and nothing else. Three of the four findings it counted have closed since. |
+
+Nothing on that list is waiting on Vulkan renderer work. The next person to move any of them needs
+a build this campaign does not own, or a decision another plan owns.
+
 **Still open from that list:** `VULKAN-264` (F-08's tail,
 `ShaderDialectEXT::GlslVulkan` does not distinguish GLSL source from SPIR-V bytecode),
 `VULKAN-266` (whether the
