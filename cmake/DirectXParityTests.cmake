@@ -560,6 +560,14 @@ function(cna_register_d3d_parity_tests)
         NAME TexturedQuad_Readback TARGET textured_quad DIRECTX12_ORDER 1840
         SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_textured_quad_test.cpp")
     cna_d3d_parity_fixture(
+        NAME SamplerComponentIsolation TARGET sampler_component_isolation DIRECTX12_ORDER 1850
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/sampler_component_isolation_contract_test.cpp"
+        DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 600)
+    cna_d3d_parity_fixture(
+        NAME EnvMapCubeSamplerState TARGET envmap_cube_sampler_state DIRECTX12_ORDER 1860
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/envmap_cube_sampler_state_test.cpp"
+        DIRECTX11_TIMEOUT 600 DIRECTX12_TIMEOUT 600)
+    cna_d3d_parity_fixture(
         NAME SpriteBatch_CustomViewport TARGET spritebatch_custom_viewport
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_custom_viewport_test.cpp"
         DIRECTX11_ONLY REASON "D3D12 presentation-corpus adoption is tracked by DX-234 and DX-236")

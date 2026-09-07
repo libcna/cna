@@ -2029,6 +2029,12 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_easygl_sampler_component_isolation
             TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        cna_easygl_test(cna_test_easygl_envmap_cube_sampler_state
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/envmap_cube_sampler_state_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_EnvMapCubeSamplerState
+            COMMAND cna_test_easygl_envmap_cube_sampler_state
+            TIMEOUT 600 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # REMED-GFX-175: a TextureFilter ordinal's MIPMAP component is a third, independent decision,
         # and ordinals 0 (Linear) and 1 (Point) were losing it -- both mapped onto a GL filter with no
         # mipmap term, so a texture that really owns a chain never mip-filtered under either, the

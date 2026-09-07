@@ -118,6 +118,15 @@ namespace
 #elif defined(CNA_RENDERER_SDL_GPU)
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "SDL_GPU";
+#elif defined(CNA_RENDERER_DIRECTX9)
+    constexpr bool kRasterizes = true;
+    constexpr const char* kRendererName = "DIRECTX9";
+#elif defined(CNA_RENDERER_DIRECTX11)
+    constexpr bool kRasterizes = true;
+    constexpr const char* kRendererName = "DIRECTX11";
+#elif defined(CNA_RENDERER_DIRECTX12)
+    constexpr bool kRasterizes = true;
+    constexpr const char* kRendererName = "DIRECTX12";
 #else
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "UNKNOWN";
@@ -897,8 +906,9 @@ protected:
         }
         else if (!cube_)
         {
-            skip("N1..N9: this renderer could not store a TextureCube, so EnvironmentMapEffect has "
-                 "no reflection source");
+            check(false,
+                  "N1..N9: this rasterizing renderer could not store a TextureCube, so the public "
+                  "EnvironmentMapEffect sampler contract cannot run");
         }
         else
         {
@@ -916,8 +926,9 @@ protected:
             }
             catch (const System::Exception& e)
             {
-                skip(std::string("N1..N9: this renderer does not implement EnvironmentMapEffect (") +
-                     e.what() + ")");
+                check(false,
+                      std::string("N1..N9: this rasterizing renderer does not implement the public "
+                                  "EnvironmentMapEffect contract (") + e.what() + ")");
             }
             catch (const std::exception& e)
             {
