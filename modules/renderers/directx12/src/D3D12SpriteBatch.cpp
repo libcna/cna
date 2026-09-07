@@ -2,6 +2,7 @@
 #include "CNA/Internal/Renderers/DirectX12/D3D12SpriteBatch.hpp"
 #include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12Textures.hpp"
+#include "CNA/Internal/Renderers/DirectX12/D3D12RenderTargets.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12EffectRenderer.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DShaderCache.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DConstantBuffers.hpp"
@@ -33,9 +34,9 @@ namespace CNA::Internal::Renderers::DirectX12
             return buf;
         }
 
-        /// Same single-concrete-type SRV resolution as DirectX12Renderer.cpp's own (private,
+        /// Same two-concrete-type SRV resolution as DirectX12Renderer.cpp's own (private,
         /// not exported) GetSrvGpuHandleForTextureEXT -- duplicated rather than factored into a
-        /// shared header for a few lines of logic, matching D3D11SpriteBatch.cpp's own established
+        /// shared header for a few lines of logic, matching D3D11SpriteBatch.cpp's established
         /// precedent of duplicating GetSrvForTextureEXT locally rather than sharing it.
         D3D12_GPU_DESCRIPTOR_HANDLE GetSrvGpuHandle(const ITextureRenderer* tex)
         {
@@ -43,6 +44,8 @@ namespace CNA::Internal::Renderers::DirectX12
             if (tex == nullptr) return handle;
             if (const auto* t = dynamic_cast<const D3D12TextureRenderer*>(tex))
                 return t->GetShaderResourceViewGpuHandleEXT();
+            if (const auto* rt = dynamic_cast<const D3D12RenderTargetRenderer*>(tex))
+                return rt->GetShaderResourceViewGpuHandleEXT();
             return handle;
         }
 
