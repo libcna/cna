@@ -213,8 +213,10 @@ namespace CNA::Internal::Renderers::Software
     void SoftwareRenderer::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
                                                          bool stencilEnable, int stencilFunc, int stencilPass,
                                                          int stencilFail, int stencilDepthFail, int stencilMask,
-                                                         int stencilWriteMask, int referenceStencil, bool,
-                                                         int, int, int, int)
+                                                         int stencilWriteMask, int referenceStencil,
+                                                         bool twoSidedStencilMode,
+                                                         int ccwStencilFunc, int ccwStencilPass,
+                                                         int ccwStencilFail, int ccwStencilDepthFail)
     {
         // REMED-GFX-030: every public CompareFunction has ordinal 0..7. Reject an invalid value at
         // state application rather than carrying it into the hot fragment path or approximating it.
@@ -235,6 +237,12 @@ namespace CNA::Internal::Renderers::Software
         validateStencilOperation(stencilPass);
         validateStencilOperation(stencilFail);
         validateStencilOperation(stencilDepthFail);
+        if (ccwStencilFunc < 0 || ccwStencilFunc > 7)
+            throw std::runtime_error(
+                "SoftwareRenderer::ApplyDepthStencilState: unsupported counter-clockwise stencil CompareFunction ordinal");
+        validateStencilOperation(ccwStencilPass);
+        validateStencilOperation(ccwStencilFail);
+        validateStencilOperation(ccwStencilDepthFail);
         stencilTestEnabled_ = stencilEnable;
         stencilCompareFunction_ = stencilFunc;
         stencilPassOperation_ = stencilPass;
@@ -243,6 +251,11 @@ namespace CNA::Internal::Renderers::Software
         stencilReadMask_ = stencilMask & 0xFF;
         stencilWriteMask_ = stencilWriteMask & 0xFF;
         referenceStencil_ = referenceStencil & 0xFF;
+        twoSidedStencilMode_ = twoSidedStencilMode;
+        counterClockwiseStencilCompareFunction_ = ccwStencilFunc;
+        counterClockwiseStencilPassOperation_ = ccwStencilPass;
+        counterClockwiseStencilFailOperation_ = ccwStencilFail;
+        counterClockwiseStencilDepthFailOperation_ = ccwStencilDepthFail;
     }
 
     void SoftwareRenderer::SetReferenceStencil(int value)

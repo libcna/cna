@@ -14,7 +14,7 @@
 > storage, viewport/scissor, wireframe, depth bias, 16/32-bit indexed addressing, dynamic buffer
 > updates, and ordinary multi-stream vertex input all have implementation and focused tests.
 > Conversely, similarly named methods do not establish parity: verified real gaps include
-> classic alpha test, classic lighting/fog, 3D/two-sided stencil application, Texture3D,
+> classic lighting/fog, sample-correct MSAA depth/stencil, Texture3D,
 > RenderTargetCube, MRT, and OcclusionQuery. The executable task table is in the new parity campaign
 > section below; the evidence ledger is `docs/software-easygl-parity-ledger.md`.
 >
@@ -56,6 +56,17 @@ classification and evidence is in `docs/software-easygl-parity-ledger.md`.
 - Baseline build/test results will be recorded in `SOFTWARE-100` after the clean configuration has
   completed; failed environment bootstrap attempts are retained here so they are not mislabeled as
   renderer regressions.
+- GDI cannot be configured natively on this Linux host. The supported MinGW configuration succeeds,
+  but both the focused stencil target and the renderer-only target are currently blocked before any
+  GDI/CNA source is compiled by sibling sharp-runtime commit `7e9c58fd` unconditionally including
+  POSIX `poll.h` from `System/Diagnostics/Process.cpp`. Software's shared 2D state source is still
+  covered by the native Software build; this external GDI cross-build blocker is recorded rather
+  than misreported as a stencil regression.
+- After `SOFTWARE-121`, the complete `Software` label run is 66 passed, four existing MSAA/
+  invalid-mip fixtures skipped by their own environment gates, and only the known display-dependent
+  `Software_PresentLifecycle` supervisor failure (21/22 child legs skipped cleanly; its one
+  abort-required leg sees the same unavailable-video exit instead). The focused stencil/raster set
+  passes 13/13, and the shared stencil matrix passes 39/39 on Mesa EasyGL under Xvfb.
 
 ### Executable backlog
 
@@ -86,7 +97,7 @@ its own tests and plan evidence in the same commit.
 | SOFTWARE-118 | Implement classic `Texture3D` storage, transfer and sampling plumbing | ⬜ | Full mip storage, partial boxes, format/range validation, SetData/GetData and W addressing/filter/mip behavior pass the shared EasyGL corpus where it exercises XNA/core APIs. CNAEXT-only custom ShaderEffect sampling remains deferred. |
 | SOFTWARE-119 | Implement `RenderTargetCube` | ⬜ | Six isolated faces, mip chains, preservation/discard, depth/stencil formats, MSAA face-local resolve, sampling and GetData pass the already-registered shared cube-target tests with no unsupported boundary. Float CNAEXT formats are not required. |
 | SOFTWARE-120 | Implement multiple render targets | ⬜ | Up to XNA's four bindings are stored and written in a defined CPU fragment-output contract, with dimension/MSAA/depth validation, per-target color write masks, preservation and lifecycle parity. If the classic stock effects expose only color0, prove the remaining attachments' XNA-defined result rather than inventing shader outputs. |
-| SOFTWARE-121 | Apply complete stencil state to every 3D path, including two-sided stencil | ⬜ | Colored/effect-aware/indexed/non-indexed/line/point/strip paths honor read/write masks, every compare/op, `ReferenceStencil`, and clockwise vs counter-clockwise state; rejected alpha does not mutate depth/stencil. Reuse/extend EasyGL shared state fixtures. |
+| SOFTWARE-121 | Apply complete stencil state to every 3D path, including two-sided stencil | ✅ | Completed 2026-09-07. Software now snapshots and applies both XNA face tuples, shared read/write masks and `GraphicsDevice.ReferenceStencil` in colored, effect-aware, indexed, non-indexed, triangle/list/strip, line, point, wireframe and SpriteBatch fragment paths. Stencil fail, depth-fail and pass operations execute in XNA order; alpha-test discard precedes all of them. Five existing renderer-neutral EasyGL public fixtures compile unchanged for Software and pass 13/13 checks. The new shared exhaustive matrix passes 39/39 on both Software and Mesa EasyGL: every compare relation, all eight operations including wrapping/saturation, all three write paths, two-sided selection, line/strip routes and alpha discard. Per-sample depth/stencil storage for 4x MSAA remains solely `SOFTWARE-110`; this row establishes the complete state semantics for the currently per-pixel attachment. GDI cross-validation is externally blocked before CNA compilation by sharp-runtime's unconditional POSIX `poll.h` include under MinGW, as recorded in the baseline. |
 | SOFTWARE-122 | Implement deterministic CPU `OcclusionQuery` | ⬜ | Begin/End/IsComplete/PixelCount count raster samples that survive clipping, coverage, alpha, scissor and depth/stencil tests without changing render results; visible/occluded and lifecycle/validation fixtures pass. |
 | SOFTWARE-123 | Close SpriteBatch and SpriteFont behavioral coverage | ⬜ | Audit every Draw/DrawString overload, rectangles, origin/scale/rotation/flips/layer depth/sort modes/transform/viewport/scissor/state interactions/RTs, font spacing/newline/fallback and disposal; convert reusable EasyGL fixtures to shared sources and repair every observed mismatch. |
 | SOFTWARE-124 | Close GraphicsDevice/resource lifecycle and validation parity | ⬜ | Resize/virtual resolution and meaningful presentation parameters, creation/disposal/double-dispose, bound-resource disposal, reset/device events where applicable, argument/range validation and exception types are tested. Physical-window/context-only behavior is classified `NOT-APPLICABLE-SOFTWARE`. |
@@ -102,8 +113,9 @@ its own tests and plan evidence in the same commit.
 
 `SOFTWARE-104` through `SOFTWARE-108` and `SOFTWARE-131` are complete foundations; `SOFTWARE-109`
 continues the independent buffer-mutation and validation audit.
-`SOFTWARE-108` unlocks correct dual-UV and arbitrary input work. `SOFTWARE-110/121` establish fragment correctness
-before lighting/query conclusions. Resource tasks `SOFTWARE-118..120` precede the high-level
+`SOFTWARE-108` unlocks correct dual-UV and arbitrary input work. `SOFTWARE-121` established complete
+stencil-state ordering; `SOFTWARE-110` now owns the remaining per-sample MSAA attachment work before
+query conclusions. Resource tasks `SOFTWARE-118..120` precede the high-level
 SpriteBatch/Model closure. Independent lifecycle and documentation work continues around any
 blocked feature rather than waiting for it.
 

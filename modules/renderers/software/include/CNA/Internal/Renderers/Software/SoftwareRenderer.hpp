@@ -742,6 +742,20 @@ namespace CNA::Internal::Renderers::Software
         [[nodiscard]] int GetStencilReadMask() const { return stencilReadMask_; }
         [[nodiscard]] int GetStencilWriteMask() const { return stencilWriteMask_; }
         [[nodiscard]] int GetReferenceStencil() const { return referenceStencil_; }
+        /** @brief Returns whether counter-clockwise faces use their separate stencil tuple. */
+        [[nodiscard]] bool IsTwoSidedStencilEnabled() const { return twoSidedStencilMode_; }
+        /** @brief Returns the raw counter-clockwise-face stencil comparison ordinal. */
+        [[nodiscard]] int GetCounterClockwiseStencilCompareFunction() const
+        { return counterClockwiseStencilCompareFunction_; }
+        /** @brief Returns the raw counter-clockwise-face stencil-pass operation ordinal. */
+        [[nodiscard]] int GetCounterClockwiseStencilPassOperation() const
+        { return counterClockwiseStencilPassOperation_; }
+        /** @brief Returns the raw counter-clockwise-face stencil-fail operation ordinal. */
+        [[nodiscard]] int GetCounterClockwiseStencilFailOperation() const
+        { return counterClockwiseStencilFailOperation_; }
+        /** @brief Returns the raw counter-clockwise-face depth-fail operation ordinal. */
+        [[nodiscard]] int GetCounterClockwiseStencilDepthFailOperation() const
+        { return counterClockwiseStencilDepthFailOperation_; }
 
         /// REMED-GFX-073: the active GraphicsDevice.Viewport rectangle in pixels of the currently
         /// bound target. When no custom viewport has been set (SetViewport never called), the full
@@ -889,6 +903,13 @@ namespace CNA::Internal::Renderers::Software
         int stencilReadMask_ = 0xFF;
         int stencilWriteMask_ = 0xFF;
         int referenceStencil_ = 0;
+        /// SOFTWARE-121: XNA's counter-clockwise/back-face stencil tuple. Read/write masks and
+        /// ReferenceStencil remain shared across faces, exactly as on the public state object.
+        bool twoSidedStencilMode_ = false;
+        int counterClockwiseStencilCompareFunction_ = 0;
+        int counterClockwiseStencilPassOperation_ = 0;
+        int counterClockwiseStencilFailOperation_ = 0;
+        int counterClockwiseStencilDepthFailOperation_ = 0;
 
         /// REMED-GFX-073: current GraphicsDevice.Viewport, stored by SetViewport() and consumed by
         /// the SpriteBatch path (GetActiveViewport()). GraphicsDevice pushes this on every viewport

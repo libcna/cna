@@ -140,6 +140,11 @@ namespace CNA::Internal::Renderers::Software
             std::uint8_t readMask = 0xFF;
             std::uint8_t writeMask = 0xFF;
             std::uint8_t reference = 0;
+            bool twoSided = false;
+            int ccwCompareFunction = 0;
+            int ccwPassOperation = 0;
+            int ccwFailOperation = 0;
+            int ccwDepthFailOperation = 0;
         };
 
         /// REMED-GFX-030: XNA/FNA compares the incoming fragment depth (left operand) with the
@@ -235,6 +240,41 @@ namespace CNA::Internal::Renderers::Software
             fb.stencilBuffer[pixelIndex] = static_cast<std::uint8_t>(
                 (oldValue & static_cast<std::uint8_t>(~state.writeMask)) |
                 (operationValue & state.writeMask));
+        }
+
+        /// SOFTWARE-121: snapshots both face-specific operation tuples once per public draw.
+        /// ReferenceStencil and both masks are device properties shared by the two faces.
+        RasterStencilState SnapshotStencilState(const SoftwareRenderer& renderer)
+        {
+            return RasterStencilState{
+                renderer.IsStencilTestEnabled(), renderer.GetStencilCompareFunction(),
+                renderer.GetStencilPassOperation(), renderer.GetStencilFailOperation(),
+                renderer.GetStencilDepthFailOperation(),
+                static_cast<std::uint8_t>(renderer.GetStencilReadMask()),
+                static_cast<std::uint8_t>(renderer.GetStencilWriteMask()),
+                static_cast<std::uint8_t>(renderer.GetReferenceStencil()),
+                renderer.IsTwoSidedStencilEnabled(),
+                renderer.GetCounterClockwiseStencilCompareFunction(),
+                renderer.GetCounterClockwiseStencilPassOperation(),
+                renderer.GetCounterClockwiseStencilFailOperation(),
+                renderer.GetCounterClockwiseStencilDepthFailOperation()};
+        }
+
+        /// The public CounterClockwiseStencil* tuple belongs to XNA back faces. In Software's
+        /// top-left framebuffer coordinates those have negative signed area (the same convention
+        /// used by ShouldCullTriangle); non-triangle primitives use the ordinary/front tuple.
+        RasterStencilState SelectStencilFace(const RasterStencilState& state,
+                                              bool counterClockwiseFace)
+        {
+            RasterStencilState selected = state;
+            if (state.twoSided && counterClockwiseFace)
+            {
+                selected.compareFunction = state.ccwCompareFunction;
+                selected.passOperation = state.ccwPassOperation;
+                selected.failOperation = state.ccwFailOperation;
+                selected.depthFailOperation = state.ccwDepthFailOperation;
+            }
+            return selected;
         }
 
 #ifndef CNA_SOFTWARE_2D_ONLY
@@ -1545,6 +1585,7 @@ namespace CNA::Internal::Renderers::Software
         /// safety net for the line walk.
 #ifndef CNA_SOFTWARE_2D_ONLY
         inline void WriteColoredFragment(SoftwareFramebuffer& fb, const RasterDepthState& depthState,
+                                         const RasterStencilState& stencilState,
                                          const RasterClipRect& clip, int x, int y,
                                          float depth, float invW, float pr, float pg, float pb, float pa,
                                          int colorWriteMask, unsigned int multiSampleMask)
@@ -1559,6 +1600,16 @@ namespace CNA::Internal::Renderers::Software
             if (g_samplerTrace.enabled) { g_samplerTrace.fragX = x; g_samplerTrace.fragY = y; }
             const std::size_t pixelIndex = static_cast<std::size_t>(y) * static_cast<std::size_t>(fb.width) +
                                            static_cast<std::size_t>(x);
+            if (stencilState.testEnabled && fb.stencilBuffer.empty())
+                throw std::logic_error(
+                    "Software rasterizer received enabled stencil state without stencil storage.");
+            if (stencilState.testEnabled && !StencilComparisonPasses(
+                    stencilState.reference, fb.stencilBuffer[pixelIndex],
+                    stencilState.readMask, stencilState.compareFunction))
+            {
+                WriteStencil(fb, stencilState, pixelIndex, stencilState.failOperation);
+                return;
+            }
             // REMED-GFX-030: comparison precedes every color/depth write.
             if (depthState.testEnabled)
             {
@@ -1566,8 +1617,15 @@ namespace CNA::Internal::Renderers::Software
                     throw std::logic_error(
                         "Software rasterizer received enabled depth state without depth storage.");
                 if (!DepthFragmentPasses(depthState, depth, fb.depthBuffer[pixelIndex]))
+                {
+                    if (stencilState.testEnabled)
+                        WriteStencil(fb, stencilState, pixelIndex,
+                                     stencilState.depthFailOperation);
                     return;
+                }
             }
+            if (stencilState.testEnabled)
+                WriteStencil(fb, stencilState, pixelIndex, stencilState.passOperation);
             const float r = pr / invW, g = pg / invW, b = pb / invW, a = pa / invW;
             // Depth is written independently of the colour write mask (REMED-GFX-077 Phase 11:
             // ColorWriteChannels controls only colour writes, never depth). REMED-GFX-030: a
@@ -1588,7 +1646,8 @@ namespace CNA::Internal::Renderers::Software
         /// REMED-GFX-082: when `wireframe`, only the edges selected by `edgeMask` are rasterized
         /// (line walk) instead of the interior fill -- culling and the zero-area reject are shared, so
         /// a culled/degenerate triangle emits no wire either.
-        void RasterizeTriangle(SoftwareFramebuffer& fb, const RasterDepthState& depthState, int cullMode,
+        void RasterizeTriangle(SoftwareFramebuffer& fb, const RasterDepthState& depthState,
+                               const RasterStencilState& stencilState, int cullMode,
                                float depthBias, float slopeScaleDepthBias,
                                const RasterClipRect& clip,
                                const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2,
@@ -1600,6 +1659,8 @@ namespace CNA::Internal::Renderers::Software
                 return;  // degenerate (zero-area) triangle
             if (ShouldCullTriangle(area, cullMode))
                 return;
+            const RasterStencilState faceStencil = SelectStencilFace(
+                stencilState, area < 0.0f);
 
             // REMED-GFX-083: one polygon-offset value for the whole triangle (after culling; a culled
             // triangle emits no fragments, biased or not). hasBias is 0 for the common zero-bias case, so
@@ -1616,7 +1677,7 @@ namespace CNA::Internal::Renderers::Software
                         const float invW  = A.invW  + t * (B.invW  - A.invW);
                         float depth = A.depth + t * (B.depth - A.depth);
                         if (hasBias) depth = std::clamp(depth + biasOffset, 0.0f, 1.0f);  // REMED-GFX-083
-                        WriteColoredFragment(fb, depthState, clip, x, y, depth, invW,
+                        WriteColoredFragment(fb, depthState, faceStencil, clip, x, y, depth, invW,
                                              A.r + t * (B.r - A.r), A.g + t * (B.g - A.g),
                                              A.b + t * (B.b - A.b), A.a + t * (B.a - A.a),
                                              colorWriteMask, multiSampleMask);
@@ -1666,7 +1727,7 @@ namespace CNA::Internal::Renderers::Software
                     float depth = lambda0 * v0.depth + lambda1 * v1.depth + lambda2 * v2.depth;
                     if (hasBias) depth = std::clamp(depth + biasOffset, 0.0f, 1.0f);  // REMED-GFX-083
                     const float invW = lambda0 * v0.invW + lambda1 * v1.invW + lambda2 * v2.invW;
-                    WriteColoredFragment(fb, depthState, clip, x, y, depth, invW,
+                    WriteColoredFragment(fb, depthState, faceStencil, clip, x, y, depth, invW,
                                          lambda0 * v0.r + lambda1 * v1.r + lambda2 * v2.r,
                                          lambda0 * v0.g + lambda1 * v1.g + lambda2 * v2.g,
                                          lambda0 * v0.b + lambda1 * v1.b + lambda2 * v2.b,
@@ -2559,6 +2620,14 @@ namespace CNA::Internal::Renderers::Software
                                      const SoftwareSamplerState& sampler1,
                                      bool wireframe = false, unsigned edgeMask = kEdgeAll)
         {
+            const float area = EdgeFunction(v0.x, v0.y, v1.x, v1.y, v2.x, v2.y);
+            if (area == 0.0f)
+                return;
+            if (ShouldCullTriangle(area, cullMode))
+                return;
+            const RasterStencilState faceStencil = SelectStencilFace(
+                stencilState, area < 0.0f);
+
             // REMED-GFX-124: the cast target is the colour-storage capability, not a concrete
             // renderer class, so both a SoftwareTextureRenderer and a SoftwareRenderTargetRenderer
             // resolve here. A foreign renderer still resolves to nullptr exactly as before.
@@ -2604,16 +2673,11 @@ namespace CNA::Internal::Renderers::Software
 #endif
             const ShadedContext ctx{params, texture0, texture1, envMap, useDualTexture, useEnvMap,
                                     needUV, blendState, blendFactor,
-                                    depthState, stencilState, colorWriteMask, multiSampleMask,
+                                    depthState, faceStencil, colorWriteMask, multiSampleMask,
                                     sampler0, sampler1, magnify0, magnify1,
                                     LodFromTexelRate(rho0), LodFromTexelRate(rho1),
                                     !(rhoCube > 1.0f), LodFromTexelRate(rhoCube)};
 
-            const float area = EdgeFunction(v0.x, v0.y, v1.x, v1.y, v2.x, v2.y);
-            if (area == 0.0f)
-                return;
-            if (ShouldCullTriangle(area, cullMode))
-                return;
             if (g_samplerTrace.enabled) ++g_samplerTrace.triangles;
             // REMED-GFX-182: stamp BOTH captured slot descriptions, so the cube trace can print the
             // public state this draw carried beside the description its cube sample really ran under.
@@ -3150,7 +3214,11 @@ namespace CNA::Internal::Renderers::Software
             GetStencilDepthFailOperation(),
             static_cast<std::uint8_t>(GetStencilReadMask()),
             static_cast<std::uint8_t>(GetStencilWriteMask()),
-            static_cast<std::uint8_t>(GetReferenceStencil())};
+            static_cast<std::uint8_t>(GetReferenceStencil()),
+            IsTwoSidedStencilEnabled(), GetCounterClockwiseStencilCompareFunction(),
+            GetCounterClockwiseStencilPassOperation(),
+            GetCounterClockwiseStencilFailOperation(),
+            GetCounterClockwiseStencilDepthFailOperation()};
         const SoftwareBlendState blendState = GetBlendState();
         const std::array<float, 4> blendFactor = GetBlendFactor();
         const int cullMode = GetCullMode();
@@ -3305,6 +3373,7 @@ namespace CNA::Internal::Renderers::Software
         SoftwareFramebuffer& fb = CurrentFramebuffer();
         const RasterDepthState depthState{
             depthTestEnabled_, depthWriteEnabled_, depthCompareFunction_}; // REMED-GFX-030 draw snapshot
+        const RasterStencilState stencilState = SnapshotStencilState(*this); // SOFTWARE-121
         // REMED-GFX-079: map NDC over the active GraphicsDevice.Viewport (X/Y offset, Width/Height
         // sub-scale, MinDepth/MaxDepth range) and clip rasterization to framebuffer ∩ Viewport --
         // a default full-target viewport reduces to the pre-GFX-079 full-framebuffer mapping.
@@ -3355,7 +3424,8 @@ namespace CNA::Internal::Renderers::Software
                 unsigned edgeMask = kEdgeV1V2;
                 if (fan == 1) edgeMask |= kEdgeV0V1;
                 if (fan + 1 == clippedCount - 1) edgeMask |= kEdgeV2V0;
-                RasterizeTriangle(fb, depthState, cullMode_, depthBias_, slopeScaleDepthBias_, clip,
+                RasterizeTriangle(fb, depthState, stencilState, cullMode_,
+                                  depthBias_, slopeScaleDepthBias_, clip,
                                   rv[0], rv[static_cast<std::size_t>(fan)],
                                   rv[static_cast<std::size_t>(fan + 1)],
                                   colorWriteMask_, multiSampleMask_, wire, edgeMask);
@@ -3393,6 +3463,7 @@ namespace CNA::Internal::Renderers::Software
         SoftwareFramebuffer& fb = CurrentFramebuffer();
         const RasterDepthState depthState{
             depthTestEnabled_, depthWriteEnabled_, depthCompareFunction_}; // REMED-GFX-030 draw snapshot
+        const RasterStencilState stencilState = SnapshotStencilState(*this); // SOFTWARE-121
         // REMED-GFX-079: see DrawColoredPrimitives -- the active viewport transform + clip.
         int vpX = 0, vpY = 0, vpW = 0, vpH = 0;
         float vpMinDepth = 0.0f, vpMaxDepth = 1.0f;
@@ -3442,7 +3513,8 @@ namespace CNA::Internal::Renderers::Software
                 unsigned edgeMask = kEdgeV1V2;
                 if (fan == 1) edgeMask |= kEdgeV0V1;
                 if (fan + 1 == clippedCount - 1) edgeMask |= kEdgeV2V0;
-                RasterizeTriangle(fb, depthState, cullMode_, depthBias_, slopeScaleDepthBias_, clip,
+                RasterizeTriangle(fb, depthState, stencilState, cullMode_,
+                                  depthBias_, slopeScaleDepthBias_, clip,
                                   rv[0], rv[static_cast<std::size_t>(fan)],
                                   rv[static_cast<std::size_t>(fan + 1)],
                                   colorWriteMask_, multiSampleMask_, wire, edgeMask);
@@ -3505,6 +3577,7 @@ namespace CNA::Internal::Renderers::Software
         SoftwareFramebuffer& fb = CurrentFramebuffer();
         const RasterDepthState depthState{
             depthTestEnabled_, depthWriteEnabled_, depthCompareFunction_}; // REMED-GFX-030 draw snapshot
+        const RasterStencilState stencilState = SnapshotStencilState(*this); // SOFTWARE-121
         // REMED-GFX-079: see DrawColoredPrimitives -- the active viewport transform + clip.
         int vpX = 0, vpY = 0, vpW = 0, vpH = 0;
         float vpMinDepth = 0.0f, vpMaxDepth = 1.0f;
@@ -3560,7 +3633,7 @@ namespace CNA::Internal::Renderers::Software
                 const ClipVertex cv = BuildGenericClipVertex(raw, stride, combined, params);
                 if (IsInsideClipVolume(cv))
                     RasterizePointShaded(
-                        fb, depthState, RasterStencilState{}, blendState, blendFactor, params,
+                        fb, depthState, stencilState, blendState, blendFactor, params,
                         clip, ClipVertexToRasterVertex(cv, vpT), colorWriteMask_, multiSampleMask_,
                         GetSamplerState(0), GetSamplerState(1));
                 continue;
@@ -3575,7 +3648,7 @@ namespace CNA::Internal::Renderers::Software
                     fetchVertex(first + 1), stride, combined, params);
                 if (ClipLineToFrustum(a, b))
                     RasterizeLineShaded(
-                        fb, depthState, RasterStencilState{}, blendState, blendFactor, params, clip,
+                        fb, depthState, stencilState, blendState, blendFactor, params, clip,
                         ClipVertexToRasterVertex(a, vpT), ClipVertexToRasterVertex(b, vpT),
                         colorWriteMask_, multiSampleMask_, GetSamplerState(0), GetSamplerState(1));
                 continue;
@@ -3609,7 +3682,7 @@ namespace CNA::Internal::Renderers::Software
                 unsigned edgeMask = kEdgeV1V2;
                 if (fan == 1) edgeMask |= kEdgeV0V1;
                 if (fan + 1 == clippedCount - 1) edgeMask |= kEdgeV2V0;
-                RasterizeTriangleShaded(fb, depthState, RasterStencilState{}, blendState, blendFactor,
+                RasterizeTriangleShaded(fb, depthState, stencilState, blendState, blendFactor,
                                         cullMode_,
                                         depthBias_, slopeScaleDepthBias_, params,
                                         clip, rv[0], rv[static_cast<std::size_t>(fan)],
@@ -3671,6 +3744,7 @@ namespace CNA::Internal::Renderers::Software
         SoftwareFramebuffer& fb = CurrentFramebuffer();
         const RasterDepthState depthState{
             depthTestEnabled_, depthWriteEnabled_, depthCompareFunction_}; // REMED-GFX-030 draw snapshot
+        const RasterStencilState stencilState = SnapshotStencilState(*this); // SOFTWARE-121
         // REMED-GFX-079: see DrawColoredPrimitives -- the active viewport transform + clip.
         int vpX = 0, vpY = 0, vpW = 0, vpH = 0;
         float vpMinDepth = 0.0f, vpMaxDepth = 1.0f;
@@ -3727,7 +3801,7 @@ namespace CNA::Internal::Renderers::Software
                 const ClipVertex cv = BuildGenericClipVertex(raw, stride, combined, params);
                 if (IsInsideClipVolume(cv))
                     RasterizePointShaded(
-                        fb, depthState, RasterStencilState{}, blendState, blendFactor, params,
+                        fb, depthState, stencilState, blendState, blendFactor, params,
                         clip, ClipVertexToRasterVertex(cv, vpT), colorWriteMask_, multiSampleMask_,
                         GetSamplerState(0), GetSamplerState(1));
                 continue;
@@ -3742,7 +3816,7 @@ namespace CNA::Internal::Renderers::Software
                     fetchVertex(first + 1), stride, combined, params);
                 if (ClipLineToFrustum(a, b))
                     RasterizeLineShaded(
-                        fb, depthState, RasterStencilState{}, blendState, blendFactor, params, clip,
+                        fb, depthState, stencilState, blendState, blendFactor, params, clip,
                         ClipVertexToRasterVertex(a, vpT), ClipVertexToRasterVertex(b, vpT),
                         colorWriteMask_, multiSampleMask_, GetSamplerState(0), GetSamplerState(1));
                 continue;
@@ -3776,7 +3850,7 @@ namespace CNA::Internal::Renderers::Software
                 unsigned edgeMask = kEdgeV1V2;
                 if (fan == 1) edgeMask |= kEdgeV0V1;
                 if (fan + 1 == clippedCount - 1) edgeMask |= kEdgeV2V0;
-                RasterizeTriangleShaded(fb, depthState, RasterStencilState{}, blendState, blendFactor,
+                RasterizeTriangleShaded(fb, depthState, stencilState, blendState, blendFactor,
                                         cullMode_,
                                         depthBias_, slopeScaleDepthBias_, params,
                                         clip, rv[0], rv[static_cast<std::size_t>(fan)],

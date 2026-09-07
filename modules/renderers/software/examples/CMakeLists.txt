@@ -91,6 +91,36 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_AlphaTestEffectContract
         COMMAND cna_test_software_alpha_test_effect_contract TIMEOUT 30 LABELS "Software")
 
+    # SOFTWARE-121: reuse EasyGL's renderer-neutral public stencil scenes unchanged. Although
+    # historically housed beside EasyGL, these sources use only XNA GraphicsDevice APIs and now
+    # serve as direct differential contracts for the CPU implementation.
+    set(CNA_EASYGL_PUBLIC_STENCIL_DIR
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples)
+    cna_software_test(cna_test_software_stencil_enable
+        ${CNA_EASYGL_PUBLIC_STENCIL_DIR}/easygl_depthstencilstate_stencil_enable_test.cpp)
+    cna_register_renderer_test(NAME Software_DepthStencilState_StencilEnable
+        COMMAND cna_test_software_stencil_enable TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_stencil_mask
+        ${CNA_EASYGL_PUBLIC_STENCIL_DIR}/easygl_depthstencilstate_stencil_mask_test.cpp)
+    cna_register_renderer_test(NAME Software_DepthStencilState_StencilMask
+        COMMAND cna_test_software_stencil_mask TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_stencil_ops
+        ${CNA_EASYGL_PUBLIC_STENCIL_DIR}/easygl_depthstencilstate_stencil_ops_test.cpp)
+    cna_register_renderer_test(NAME Software_DepthStencilState_StencilOps
+        COMMAND cna_test_software_stencil_ops TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_stencil_twosided
+        ${CNA_EASYGL_PUBLIC_STENCIL_DIR}/easygl_depthstencilstate_stencil_twosided_test.cpp)
+    cna_register_renderer_test(NAME Software_DepthStencilState_StencilTwoSided
+        COMMAND cna_test_software_stencil_twosided TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_reference_stencil
+        ${CNA_EASYGL_PUBLIC_STENCIL_DIR}/easygl_graphicsdevice_reference_stencil_test.cpp)
+    cna_register_renderer_test(NAME Software_GraphicsDevice_ReferenceStencil
+        COMMAND cna_test_software_reference_stencil TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_stencil_matrix
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/stencil_matrix_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_DepthStencilState_StencilMatrix
+        COMMAND cna_test_software_stencil_matrix TIMEOUT 30 LABELS "Software")
+
     cna_software_test(cna_test_software_dual_envmap_skinned software_dual_envmap_skinned_test.cpp)
     cna_register_renderer_test(NAME Software_DualEnvmapSkinned COMMAND cna_test_software_dual_envmap_skinned
         TIMEOUT 30 LABELS "Software")

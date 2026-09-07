@@ -1748,6 +1748,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_GraphicsDevice_ReferenceStencil COMMAND cna_test_easygl_graphicsdevice_reference_stencil
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # SOFTWARE-121: shared exhaustive comparison/operation/topology/alpha-discard stencil
+        # matrix, compiled unchanged beside the five historical public EasyGL stencil scenes.
+        cna_easygl_test(cna_test_easygl_stencil_matrix
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/stencil_matrix_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_DepthStencilState_StencilMatrix
+            COMMAND cna_test_easygl_stencil_matrix
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 871: GraphicsDevice::Clear() now actually clears the stencil buffer to the
         # requested value on ClearOptions combinations that include ClearOptions::Stencil.
         cna_easygl_test(cna_test_easygl_graphicsdevice_clear_stencil

@@ -10,7 +10,7 @@ cmake -S . -B cmake-build-software \
   -DCNA_GRAPHICS_RENDERER=SOFTWARE \
   -DCMAKE_BUILD_TYPE=Debug \
   -DCNA_BUILD_TESTS=ON
-cmake --build cmake-build-software -j
+cmake --build cmake-build-software --parallel 2
 ```
 
 No extra dependencies are needed — like `HEADLESS`, this renderer never touches SDL's video
@@ -189,6 +189,12 @@ rather than always passing.
   values use FNA's half-byte threshold encoding after texture, vertex and effect alpha are
   multiplied. A rejected fragment is discarded before colour, depth or stencil writes; a null
   texture contributes opaque white, matching the stock-effect path on EasyGL.
+- **Complete XNA stencil state** (`SOFTWARE-121`) — the CPU fragment paths honor all eight
+  comparisons and operations, read/write masks, `GraphicsDevice.ReferenceStencil`, the distinct
+  counter-clockwise tuple, and the stencil-fail/depth-fail/pass ordering. This applies to colored
+  and stock-effect triangles, strips, lines, points, wireframe and SpriteBatch, with alpha discard
+  occurring first. The current 4x MSAA target still owns one depth/stencil value per pixel rather
+  than per sample; converting that attachment is tracked separately by `SOFTWARE-110`.
 - **`SpriteBatch` honors a custom `GraphicsDevice.Viewport`** (`REMED-GFX-073`) — sprite
   coordinates are viewport-local (sprite `(0,0)` = the viewport's top-left), the result is placed at
   `Viewport.X/Y`, and pixels outside the viewport rectangle are clipped, matching real XNA/FNA and
