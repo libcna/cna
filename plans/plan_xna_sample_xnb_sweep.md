@@ -128,6 +128,21 @@ missing, that behaviour is implemented generally and the port stops being the fi
 
 ## 9. Read-only integrity
 
+**One violation, found by this audit and fixed.** `BuildContent` wrote its own build
+configuration into the *source root* and deleted it again, because the coordinator required a
+configuration to live inside the root it was reading. Nothing was added, removed or altered in the
+read-only tree -- but the modification time of ~130 project directories under
+`/rv/tmp/samples/*/xna4-original/` changed, which is a write the mission's boundary does not
+allow and which would make any read-only content tree unbuildable. It is `XNASWEEP-110`: the
+configuration goes to the task's own intermediate directory now and the coordinator is told about
+it rather than discovering it, and a test builds a source tree with the write bit removed.
+
+The remaining ~6,800 differences between the two baselines of `/rv/tmp/samples` are another
+session's CNA build trees under `SAMPLE-070/cna-web-webgl2/` and
+`SAMPLE-070/cna-native-opengles3-release/`, which this campaign never touched.
+`/rv/tmp/XNAGameStudio/Samples` is byte for byte and timestamp for timestamp unchanged.
+
+
 `build/xna-sample-sweep/audit/` holds a `find -printf '%y %s %T@ %p'` baseline of both read-only
 roots taken before any work, and the final audit re-takes it and diffs.
 
@@ -178,4 +193,118 @@ final qualification.
 | `XNASWEEP-107` | A `.x` mesh with no `MeshNormals` got a constant normal instead of a generated one. | [ ] |
 | `XNASWEEP-108` | Every effect was compiled optimized, because nothing carried the build configuration. | [ ] |
 | `XNASWEEP-109` | A PNG's own `gAMA` chunk was ignored; GDI+, and therefore XNA, applies it. | [ ] |
+| `XNASWEEP-110` | A content build needed write access to the content it was reading. | [ ] |
 
+
+---
+
+## 11. Where this stands
+
+Counts are read off the tools; nothing here is hand-counted. The commands that
+produce them, in order:
+
+```bash
+python3 tools/xna-sample-sweep/corpus_inventory.py \
+        --out build/xna-sample-sweep/manifest/sample-xnb-corpus.json
+python3 tools/xna-sample-sweep/runner_provenance.py \
+        --out build/xna-sample-sweep/manifest/runner-provenance.json
+python3 tools/xna-sample-sweep/map_sources.py \
+        --manifest build/xna-sample-sweep/manifest/sample-xnb-corpus.json \
+        --provenance build/xna-sample-sweep/manifest/runner-provenance.json \
+        --out build/xna-sample-sweep/manifest/sample-source-map.json
+cp cmake-build-debug/cna-content build/xna-sample-sweep/bin/cna-content   # freeze it
+python3 tools/xna-sample-sweep/sweep.py \
+        --map build/xna-sample-sweep/manifest/sample-source-map.json \
+        --out build/xna-sample-sweep/manifest/sweep-results.json \
+        --tool build/xna-sample-sweep/bin/cna-content --jobs 2
+python3 tools/xna-sample-sweep/report.py \
+        --map build/xna-sample-sweep/manifest/sample-source-map.json \
+        --results build/xna-sample-sweep/manifest/sweep-results.json \
+        --json build/xna-sample-sweep/manifest/sweep-report.json
+python3 tools/xna-sample-sweep/classify.py \
+        --map build/xna-sample-sweep/manifest/sample-source-map.json \
+        --results build/xna-sample-sweep/manifest/sweep-results.json \
+        --out build/xna-sample-sweep/manifest/sweep-classified.json --jobs 2
+```
+
+**Never rebuild `cna-content` while a sweep is running**: the sweep runs the
+frozen copy under `build/xna-sample-sweep/bin/` for exactly that reason, and the
+first run of this campaign was invalidated by a mid-run relink.
+
+### 11.1 The corpus
+
+| | |
+|---|---:|
+| genuine reference `.xnb` | **7,734** |
+| distinct contents | 5,285 |
+| samples represented | 129 |
+| build units (project x output root) | 328 |
+| references mapped to a project item | 6,578 |
+| references under a root but named by no item (model side outputs) | 746 |
+| references in a sample with no `.contentproj` | 359 |
+| references whose item names a source the tree has not got | 43 |
+
+### 11.2 The sweep, run 3 (2026-09-07)
+
+Run with the binary as of `34506a3f8`, so it does **not** carry the PNG gamma,
+`.x` normal, `.x` specular-power or effect debug-mode fixes committed after it.
+
+| | run 1 | run 2 | run 3 |
+|---|---:|---:|---:|
+| byte-identical | 922 | 3,524 | **3,619** |
+| differing | 343 | 1,444 | 1,547 |
+| missing (CNA produced nothing) | 6,102 | 2,399 | 2,201 |
+
+By source extension, run 3 (`identical / differing / missing`):
+
+| extension | identical | differing | missing | identical % |
+|---|---:|---:|---:|---:|
+| `.png` | 3,096 | 834 | 55 | 77.7 |
+| `.xml` | 1 | 0 | 1,219 | 0.1 |
+| (model side output) | 0 | 16 | 730 | 0.0 |
+| `.fbx` | 0 | 174 | 126 | 0.0 |
+| `.wav` | 279 | 9 | 7 | 94.6 |
+| `.spritefont` | 0 | 242 | 17 | 0.0 |
+| `.tga` | 167 | 7 | 0 | 96.0 |
+| `.fx` | 0 | 89 | 14 | 0.0 |
+| `.jpg` | 0 | 88 | 8 | 0.0 |
+| `.bmp` | 54 | 30 | 9 | 58.1 |
+| `.x` | 0 | 52 | 11 | 0.0 |
+| `.wma` | 14 | 1 | 0 | 93.3 |
+| `.dds` | 8 | 3 | 0 | 72.7 |
+
+### 11.3 What the categories are
+
+* **`.xml`, 1,219 missing** -- `CUSTOM_PIPELINE_GAP`. Every one names a
+  game-defined type (`RolePlayingGameData.Armor`, `ParticlesSettings.ParticleSystemSettings`,
+  `MovipaLibrary.LayoutInfo`), which is what the extension is *for*. XNA loads
+  the game's pipeline assembly; C++ has none, and the documented route is a C++
+  equivalent registered in code. `modules/content-pipeline/examples/xna-custom-pipeline.cpp`
+  is the shape one takes.
+* **730 model side outputs missing** -- a texture a `ModelProcessor` builds for a
+  material, named `<stem>_<n>`, which no project item names. They are missing
+  because their *model* is missing, which is mostly the custom-processor gap
+  above.
+* **LZX** -- 719 of the 862 differing `.png` references of run 2 are compressed,
+  and the first one examined has a byte-identical decompressed payload. Two
+  conforming LZX encoders do not agree on a byte; `classify.py` separates that
+  from a real difference.
+* **`.spritefont`, 242 differing** -- the atlas and the glyph boxes.
+  `decisions.json`'s `xbox_font_description` records the measurement: over 95
+  glyphs, 40 boxes identical, 50 one pixel wider, four two wider, never
+  narrower, while every ABC width and the line spacing agree exactly. XNA draws
+  through GDI+ and CNA through FreeType.
+* **`.fx`, 89 differing** -- the compiler's own version string is inside the
+  blob (`XNASWEEP-108`), and XNA's is a D3DX9 this machine has not got.
+* **`.jpg`, 88 differing** -- GDI+'s JPEG decoder against stb_image's.
+
+### 11.4 Next
+
+1. Re-run the sweep on the current binary: the four fixes after run 3 each move
+   a category, and `.spritefont`'s 17 remaining "missing" are Tahoma, which the
+   Wine prefix has not got.
+2. Run `classify.py` and split `differs` into `payload-identical` (LZX) and the
+   rest.
+3. The `.jpg` and `.fbx` families are unmeasured; the `.x` one is now measured
+   and green except for a bone whose name is empty rather than absent, which
+   needs `ContentItem::Name` to be able to say "no name" at all.

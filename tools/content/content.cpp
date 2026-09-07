@@ -948,7 +948,14 @@ namespace
         }
 
         const std::filesystem::path path = WeaklyCanonical(authored);
-        if (!IsWithin(WeaklyCanonical(sourceRoot), path))
+        // The containment rule is about what a *source tree* may carry: the configuration this
+        // build discovers under its root has to be inside it, like every other file it reads. A
+        // configuration the command line names is not a discovered source -- it is the
+        // instruction, and requiring it inside the root made a read-only source tree unbuildable,
+        // because `BuildContent` had to write its own configuration into the sources it was
+        // reading. The assets a configuration names are still root-relative and still contained
+        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-110`).
+        if (!explicitPath && !IsWithin(WeaklyCanonical(sourceRoot), path))
         {
             throw std::runtime_error("content configuration '" +
                                      CNA::Internal::ContentPathToUtf8(path) +

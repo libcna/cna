@@ -695,37 +695,26 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
         }
         configuration << "\n }\n}\n";
 
-        // The coordinator requires a configuration to live inside the source root it is reading,
-        // which is the same containment rule every source read obeys. So the file is written
-        // there under a name no project would choose and removed again whichever way this
-        // returns; a copy is kept under the intermediate directory, because that is where a
-        // project looks to see what its build was actually told.
-        const std::filesystem::path configurationFile =
-            root / (".cna-buildcontent-" +
-                    (contentProjectGuid_.empty() ? std::string("project") : TaskDetail::Sanitize(contentProjectGuid_)) +
-                    ".json");
-        const std::filesystem::path configurationCopy = intermediate / "cna-buildcontent.json";
-        struct Remover
+        // The configuration goes to the intermediate directory, which is the task's own, and the
+        // coordinator is *told* about it rather than discovering it. It used to be written into
+        // the source root and deleted again, because the coordinator required a configuration to
+        // live inside the root it was reading -- and that made a read-only source tree
+        // unbuildable and changed the modification time of every project directory a build
+        // touched. Vendored content, a checkout mounted read-only and somebody else's sample
+        // corpus are all ordinary things to build (plans/plan_xna_sample_xnb_sweep.md
+        // `XNASWEEP-110`).
+        const std::filesystem::path configurationFile = intermediate / "cna-buildcontent.json";
         {
-            std::filesystem::path path;
-            ~Remover()
-            {
-                std::error_code ignored;
-                std::filesystem::remove(path, ignored);
-            }
-        } remover{configurationFile};
-        for (const std::filesystem::path& target : {configurationFile, configurationCopy})
-        {
-            std::ofstream file(target, std::ios::binary | std::ios::trunc);
+            std::ofstream file(configurationFile, std::ios::binary | std::ios::trunc);
             if (!file)
             {
                 LogError("BuildContent could not write its build configuration to \"" +
-                         target.string() + "\".");
+                         configurationFile.string() + "\".");
                 return false;
             }
             file << configuration.str();
         }
-        intermediateFiles_.emplace_back(configurationCopy.string());
+        intermediateFiles_.emplace_back(configurationFile.string());
 
         if (rebuildAll_)
         {

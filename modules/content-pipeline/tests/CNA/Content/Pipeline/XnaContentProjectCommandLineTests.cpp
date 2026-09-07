@@ -635,3 +635,59 @@ TEST(XnaContentProjectCommandLine, APipelineAssemblyFailsTheBuildAfterItProduces
     EXPECT_NE(invocation.output.find("pipeline assemblies"), std::string::npos) << invocation.output;
     EXPECT_TRUE(std::filesystem::is_regular_file(project.Output() / "probe.xnb")) << invocation.output;
 }
+
+// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-110. A content build must not need write access to
+// the content it is reading. `BuildContent` wrote its own configuration into the source root and
+// deleted it again, because the coordinator required a configuration to live inside the root it
+// was reading -- so a read-only source tree could not be built at all, and every build that did
+// succeed changed the modification time of the project's directory. Vendored content, a checkout
+// mounted read-only and somebody else's sample corpus are all ordinary things to build; sweeping
+// the public XNA sample corpus changed the timestamp of 130 directories in it before this.
+TEST(XnaContentProjectCommandLine, AReadOnlySourceTreeBuildsAndIsNotWrittenTo)
+{
+    const Project project("read_only");
+    project.Write("    <Compile Include=\"probe.png\">\n"
+                  "      <Importer>TextureImporter</Importer>\n"
+                  "      <Processor>TextureProcessor</Processor>\n"
+                  "    </Compile>\n");
+
+    const auto contents = [&project]
+    {
+        std::vector<std::string> names;
+        for (const auto& entry : std::filesystem::directory_iterator(project.Source()))
+        {
+            names.push_back(entry.path().filename().string());
+        }
+        std::sort(names.begin(), names.end());
+        return names;
+    };
+    const std::vector<std::string> before = contents();
+
+    // Restored however the test ends, so a failure cannot leave a directory the harness cannot
+    // clean up.
+    struct Writable
+    {
+        std::filesystem::path path;
+        std::filesystem::perms original;
+        ~Writable()
+        {
+            std::error_code ignored;
+            std::filesystem::permissions(path, original, ignored);
+        }
+    };
+    std::error_code error;
+    const std::filesystem::perms original =
+        std::filesystem::status(project.Source(), error).permissions();
+    const Writable restore{project.Source(), original};
+    std::filesystem::permissions(project.Source(),
+                                 std::filesystem::perms::owner_write |
+                                     std::filesystem::perms::group_write |
+                                     std::filesystem::perms::others_write,
+                                 std::filesystem::perm_options::remove, error);
+    ASSERT_FALSE(error) << error.message();
+
+    const Invocation invocation = Build(project);
+    EXPECT_EQ(invocation.exitCode, 0) << invocation.output;
+    EXPECT_TRUE(std::filesystem::is_regular_file(project.Output() / "probe.xnb")) << invocation.output;
+    EXPECT_EQ(contents(), before) << "the build left something in the source tree";
+}
