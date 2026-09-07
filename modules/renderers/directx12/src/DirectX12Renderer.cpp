@@ -2154,6 +2154,7 @@ namespace CNA::Internal::Renderers::DirectX12
         const auto& d3dVb = static_cast<const D3D12VertexBufferRenderer&>(vb);
         const std::size_t stride = d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
         const auto& vertexElements = d3dVb.GetDeclarationEXT().GetElements();
+        using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
         using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
         const bool hasDeclaration = !vertexElements.empty();
         const auto hasElement = [&](VertexElementUsage usage, int usageIndex = 0)
@@ -2196,14 +2197,30 @@ namespace CNA::Internal::Renderers::DirectX12
         if (needsDualTex && !hasTexCoord)
             throw std::runtime_error(
                 "DirectX12Renderer::DrawPrimitivesEx: DualTextureEffect requires TEXCOORD0");
-        // skinned3d.vert.hlsl's VSInput is Position+Normal+UV+BoneWeights+BoneIndices (52 bytes);
-        // plans/plan_cnj.md CNB-67 follow-up's own stride-56 sibling (skinned_colored3d) appends a
-        // per-vertex Color, mirrors D3D11's own DrawPrimitivesExImpl exactly.
-        if (needsSkinned && stride != 52 && stride != 56)
+        // A declared skinned stream is identified by semantics, not by one packed record size:
+        // XNA content may legally spell BLENDINDICES as either Byte4 (stride 52) or Vector4
+        // (stride 64). Keep the legacy stride rule only for declaration-less internal buffers.
+        bool usesFloatBoneIndices = false;
+        bool hasSupportedBoneIndices = false;
+        for (const auto& element : vertexElements)
+        {
+            if (element.getVertexElementUsageProperty() != VertexElementUsage::BlendIndices
+                || element.getUsageIndexProperty() != 0)
+                continue;
+
+            const auto format = element.getVertexElementFormatProperty();
+            usesFloatBoneIndices = format == VertexElementFormat::Vector4;
+            hasSupportedBoneIndices = usesFloatBoneIndices || format == VertexElementFormat::Byte4;
+            break;
+        }
+        const bool hasSkinnedElements = hasElement(VertexElementUsage::Position) && hasNormal && hasTexCoord
+            && hasElement(VertexElementUsage::BlendWeight)
+            && hasSupportedBoneIndices;
+        if (needsSkinned && ((hasDeclaration && !hasSkinnedElements)
+                            || (!hasDeclaration && stride != 52 && stride != 56)))
             throw std::runtime_error(
-                "DirectX12Renderer::DrawPrimitivesEx: SkinnedEffect (skinned3d) requires stride "
-                "52 (VertexPositionNormalTextureSkinned) or 56 (skinned + per-vertex Color, "
-                "plans/plan_cnj.md CNB-67)");
+                "DirectX12Renderer::DrawPrimitivesEx: SkinnedEffect requires POSITION0, NORMAL0, "
+                "TEXCOORD0, BLENDWEIGHT0 and Byte4 or Vector4 BLENDINDICES0");
         if (needsAlphaTest && params.texture0 != nullptr && !hasTexCoord)
             throw std::runtime_error(
                 "DirectX12Renderer::DrawPrimitivesEx: AlphaTestEffect requires TEXCOORD0 when "
@@ -2287,15 +2304,22 @@ namespace CNA::Internal::Renderers::DirectX12
         {
             // plans/plan_graphics.md Phase 80 (Task 1107): real XNA renders SkinnedEffect's lit path
             // per-vertex by default (PreferPerPixelLighting == false), not per-pixel. plans/plan_cnj.md
-            // CNB-67 follow-up: stride 56 (per-vertex Color present) routes to the *Colored
-            // siblings instead, mirroring D3D11's own needsSkinned branch exactly.
-            variant = (stride == 56)
-                    ? ((params.lightingEnabled && !params.preferPerPixelLighting)
-                        ? D3DShaderVariant::Skinned3dVertexLitColored
-                        : D3DShaderVariant::Skinned3dColored)
-                    : ((params.lightingEnabled && !params.preferPerPixelLighting)
-                        ? D3DShaderVariant::Skinned3dVertexLit
-                        : D3DShaderVariant::Skinned3d);
+            // A COLOR0 declaration routes to the *Colored sibling independently of record stride.
+            // Declaration-less legacy buffers retain the canonical stride-56 fallback.
+            const bool colored = hasDeclaration ? hasColor : stride == 56;
+            const bool vertexLit = params.lightingEnabled && !params.preferPerPixelLighting;
+            if (usesFloatBoneIndices)
+                variant = colored
+                    ? (vertexLit ? D3DShaderVariant::Skinned3dVertexLitColoredFloatIndices
+                                 : D3DShaderVariant::Skinned3dColoredFloatIndices)
+                    : (vertexLit ? D3DShaderVariant::Skinned3dVertexLitFloatIndices
+                                 : D3DShaderVariant::Skinned3dFloatIndices);
+            else
+                variant = colored
+                    ? (vertexLit ? D3DShaderVariant::Skinned3dVertexLitColored
+                                 : D3DShaderVariant::Skinned3dColored)
+                    : (vertexLit ? D3DShaderVariant::Skinned3dVertexLit
+                                 : D3DShaderVariant::Skinned3d);
             hasTexture = true;
             numCbvs = 3; // PerDraw (b0) + BoneBlock (b1) + skinned3d's own FogParams-equivalent (b2).
             numSrvs = 1;

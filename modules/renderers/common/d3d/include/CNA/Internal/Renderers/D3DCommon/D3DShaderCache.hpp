@@ -42,6 +42,8 @@ namespace CNA::Internal::Renderers::D3DCommon
         DualTextureColoredDualUv3d,
         EnvMap3d,
         Skinned3d,
+        /// Skinned3d with a floating-point BLENDINDICES input.
+        Skinned3dFloatIndices,
         Sprite2d,
         Instanced3d,
         /// plans/plan_dx.md DX-136: alpha_test3d's stride-24 (VertexPositionColorTexture) sibling --
@@ -59,6 +61,8 @@ namespace CNA::Internal::Renderers::D3DCommon
         /// Per-vertex-lit counterpart of LitUntextured3d.
         LitUntextured3dVertexLit,
         Skinned3dVertexLit,
+        /// Skinned3dVertexLit with a floating-point BLENDINDICES input.
+        Skinned3dVertexLitFloatIndices,
         /// plans/plan_cnj.md CNB-58 follow-up: PbrEffect's metallic-roughness BRDF (unskinned), HLSL
         /// port of EasyGLRenderer::EnsurePbrProgram(). Stride 48
         /// (VertexPositionNormalTangentTexture).
@@ -78,9 +82,13 @@ namespace CNA::Internal::Renderers::D3DCommon
         /// Color attribute (SkinnedEffect::VertexColorEnabled), HLSL port of
         /// EasyGLRenderer::EnsureSkinnedProgram()'s vertex-color wiring.
         Skinned3dColored,
+        /// Skinned3dColored with a floating-point BLENDINDICES input.
+        Skinned3dColoredFloatIndices,
         /// plans/plan_cnj.md CNB-67 follow-up: Skinned3dVertexLit's own stride-56 vertex-color sibling,
         /// HLSL port of EasyGLRenderer::EnsureSkinnedVertexLitProgram()'s vertex-color wiring.
         Skinned3dVertexLitColored,
+        /// Skinned3dVertexLitColored with a floating-point BLENDINDICES input.
+        Skinned3dVertexLitColoredFloatIndices,
     };
 
     /// Returns the compiled DXBC bytecode (pointer + length) for a variant's vertex shader stage.

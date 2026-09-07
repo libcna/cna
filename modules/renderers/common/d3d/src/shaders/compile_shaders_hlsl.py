@@ -60,8 +60,10 @@ SHADERS = [
     ("env_map3d.vert.hlsl",          "main", "vs_5_0", "kEnvMap3dVertDxbc"),
     ("env_map3d.frag.hlsl",          "main", "ps_5_0", "kEnvMap3dFragDxbc"),
     ("skinned3d.vert.hlsl",          "main", "vs_5_0", "kSkinned3dVertDxbc"),
+    ("skinned3d.vert.hlsl",          "main", "vs_5_0", "kSkinned3dFloatIndicesVertDxbc", "CNA_SKINNED_FLOAT_INDICES"),
     ("skinned3d.frag.hlsl",          "main", "ps_5_0", "kSkinned3dFragDxbc"),
     ("skinned3d_vertexlit.vert.hlsl", "main", "vs_5_0", "kSkinned3dVertexLitVertDxbc"),
+    ("skinned3d_vertexlit.vert.hlsl", "main", "vs_5_0", "kSkinned3dVertexLitFloatIndicesVertDxbc", "CNA_SKINNED_FLOAT_INDICES"),
     ("skinned3d_vertexlit.frag.hlsl", "main", "ps_5_0", "kSkinned3dVertexLitFragDxbc"),
     ("sprite2d.vert.hlsl",           "main", "vs_5_0", "kSprite2dVertDxbc"),
     ("sprite2d.frag.hlsl",           "main", "ps_5_0", "kSprite2dFragDxbc"),
@@ -88,8 +90,10 @@ SHADERS = [
     ("pbr_skinned3d.vert.hlsl",                "main", "vs_5_0", "kPbrSkinned3dDualUvColorVertDxbc", "CNA_PBR_DUAL_UV", "CNA_PBR_VERTEX_COLOR"),
     ("pbr_skinned3d.frag.hlsl",                "main", "ps_5_0", "kPbrSkinned3dDualUvColorFragDxbc", "CNA_PBR_DUAL_UV", "CNA_PBR_VERTEX_COLOR"),
     ("skinned_colored3d.vert.hlsl",            "main", "vs_5_0", "kSkinned3dColoredVertDxbc"),
+    ("skinned_colored3d.vert.hlsl",            "main", "vs_5_0", "kSkinned3dColoredFloatIndicesVertDxbc", "CNA_SKINNED_FLOAT_INDICES"),
     ("skinned_colored3d.frag.hlsl",            "main", "ps_5_0", "kSkinned3dColoredFragDxbc"),
     ("skinned_colored3d_vertexlit.vert.hlsl",  "main", "vs_5_0", "kSkinned3dVertexLitColoredVertDxbc"),
+    ("skinned_colored3d_vertexlit.vert.hlsl",  "main", "vs_5_0", "kSkinned3dVertexLitColoredFloatIndicesVertDxbc", "CNA_SKINNED_FLOAT_INDICES"),
     ("skinned_colored3d_vertexlit.frag.hlsl",  "main", "ps_5_0", "kSkinned3dVertexLitColoredFragDxbc"),
 ]
 

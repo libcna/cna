@@ -235,13 +235,11 @@ function(cna_register_d3d_parity_tests)
         NAME EnvironmentMapAmountZero TARGET environmentmapeffect_amount_zero DIRECTX12_ORDER 920
         SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_environmentmapeffect_amount_zero_test.cpp")
     cna_d3d_parity_fixture(
-        NAME SkinnedEffect_WorldNormal TARGET skinnedeffect_world_normal
-        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/vulkan/examples/vulkan_skinnedeffect_world_normal_test.cpp"
-        DIRECTX11_ONLY REASON "D3D12 stock-effect corpus adoption is tracked by DX-230 and DX-236")
+        NAME SkinnedEffect_WorldNormal TARGET skinnedeffect_world_normal DIRECTX12_ORDER 1050
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_skinnedeffect_world_normal_test.cpp")
     cna_d3d_parity_fixture(
-        NAME SkinnedEffect_LightingConformance TARGET skinnedeffect_lighting_conformance
-        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/skinnedeffect_lighting_conformance_test.cpp"
-        DIRECTX11_ONLY REASON "D3D12 stock-effect corpus adoption is tracked by DX-230 and DX-236")
+        NAME SkinnedEffect_LightingConformance TARGET skinnedeffect_lighting_conformance DIRECTX12_ORDER 1060
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/skinnedeffect_lighting_conformance_test.cpp")
     cna_d3d_parity_fixture(
         NAME ViewSpaceFog TARGET viewspace_fog
         SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/vulkan/examples/vulkan_viewspace_fog_test.cpp"
@@ -321,9 +319,52 @@ function(cna_register_d3d_parity_tests)
         NAME EnvironmentMapEffect_MultiLight TARGET environmentmapeffect_multilight DIRECTX12_ORDER 1040
         SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_environmentmapeffect_multilight_test.cpp")
     cna_d3d_parity_fixture(
-        NAME SkinnedEffect_Fog TARGET skinnedeffect_fog
-        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/vulkan/examples/vulkan_skinnedeffect_fog_test.cpp"
-        DIRECTX11_ONLY REASON "D3D12 stock-effect corpus adoption is tracked by DX-230 and DX-236")
+        NAME SkinnedEffect_Fog TARGET skinnedeffect_fog DIRECTX12_ORDER 1070
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_skinnedeffect_fog_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME SkinnedEffect_Properties TARGET skinned_effect DIRECTX12_ORDER 1080
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/skinned_effect_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME SkinnedEffect_Golden TARGET skinnedeffect_golden DIRECTX12_ORDER 1090
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_skinnedeffect_golden_test.cpp"
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    cna_d3d_parity_fixture(
+        NAME SkinnedEffect_VertexColor TARGET skinnedeffect_vertexcolor DIRECTX12_ORDER 1100
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_skinnedeffect_vertexcolor_test.cpp"
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    cna_d3d_parity_fixture(
+        NAME SkinnedEffect_BoneDeformation TARGET skinned_integration DIRECTX12_ORDER 1110
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/skinned_effect_integration_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME SkinnedEffect_MultiLight TARGET skinnedeffect_multilight DIRECTX12_ORDER 1120
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_skinnedeffect_multilight_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME SkinnedEffect_Specular TARGET skinnedeffect_specular DIRECTX12_ORDER 1130
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_skinnedeffect_specular_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME SkinnedEffect_PreferPerPixelLighting TARGET skinnedeffect_preferperpixellighting DIRECTX12_ORDER 1140
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_skinnedeffect_preferperpixellighting_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME SkinnedEffect_WeightsPerVertex TARGET skinnedeffect_weightspervertex DIRECTX12_ORDER 1150
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_skinnedeffect_weightspervertex_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME SkinnedEffect_IdentityBones TARGET skinnedeffect_identity_bones DIRECTX12_ORDER 1160
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_skinnedeffect_identity_bones_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME SkinnedEffect_TranslationBone TARGET skinnedeffect_translation_bone DIRECTX12_ORDER 1170
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_skinnedeffect_translation_bone_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME SkinnedEffect_TwoBoneBlend TARGET skinnedeffect_twobone_blend DIRECTX12_ORDER 1180
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_skinnedeffect_twobone_blend_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME SkinnedEffect_Combined TARGET skinnedeffect_combined DIRECTX12_ORDER 1190
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_skinnedeffect_combined_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME SkinnedEffect_BoneCount TARGET skinned_effect_bones DIRECTX12_ORDER 1200
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_skinned_effect_bones_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME SkinnedEffect_Vector4BoneIndices TARGET skinnedeffect_vector4_bone_indices DIRECTX12_ORDER 1210
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_skinnedeffect_vector4_bone_indices_test.cpp")
     cna_d3d_parity_fixture(
         NAME SpriteBatch_CustomViewport TARGET spritebatch_custom_viewport
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_custom_viewport_test.cpp"
