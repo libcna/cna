@@ -707,6 +707,10 @@ namespace CNA::Internal::Renderers::EasyGL
         int pendingFilter_    = 0; // TextureFilter::Linear
         int pendingAddressU_  = 1; // TextureAddressMode::Clamp
         int pendingAddressV_  = 1; // TextureAddressMode::Clamp
+        // plans/plan_vulkan.md VULKAN-167: -1 means "the batch supplied no W", which keeps
+        // ApplySamplerState's W-follows-U default for any caller that flushes sprites without
+        // going through SpriteBatch::Begin.
+        int pendingAddressW_  = -1;
 
     public:
         explicit EasyGLSpriteBatchRenderer(::easygl::Device& device, std::shared_ptr<::easygl::ResourceRegistry> registry,
@@ -719,6 +723,7 @@ namespace CNA::Internal::Renderers::EasyGL
         void SetCustomEffect(Effect* effect) override;
         void SetSamplerFilter(int textureFilter) override;
         void SetSamplerAddressMode(int addressU, int addressV) override;
+        void SetSamplerAddressModeWEXT(int addressW) override;
         void Draw(const ITextureRenderer& texture, float x, float y) override;
         void Draw(const ITextureRenderer& texture,
                   const Rectangle& destinationRectangle,

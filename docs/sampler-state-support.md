@@ -250,6 +250,33 @@ CNA-wide, not renderer-specific. A game that relied on the old behaviour should 
 Asserted by `modules/graphics/examples/spritebatch_sampler0_publication_test.cpp`, registered on
 Vulkan and EasyGL.
 
+## 10. The W axis reaches EasyGL too (`plans/plan_vulkan.md` VULKAN-206, 2026-09-07)
+
+`VULKAN-164` gave `ISpriteBatchRenderer` a `SetSamplerAddressModeWEXT` hook, additive with a no-op
+default, because `SpriteBatch` was forwarding a batch sampler's filter and its U and V axes and
+dropping W — invisible to 2D sampling, which never consults W, and decisive for a `sampler3D`.
+Vulkan was the only renderer that took it.
+
+EasyGL takes it now. `EasyGLRenderer::ApplySamplerState` derives `WrapR` from `addressU`, which is
+correct for every XNA 4.0 preset — `PointClamp`, `LinearWrap` and the rest set all three axes alike
+— and wrong for a `SamplerState` that set W on its own. The sprite flush applies the batch's own W
+after it, at both flush sites (the stock one and the compiled-effect one), and only when the batch
+supplied one: `-1` keeps the old derivation for any caller that flushes sprites without going
+through `Begin()`.
+
+**Why one override is enough here.** On this renderer `ShaderEffect::SetTexture(0, volume)` binds
+`GL_TEXTURE_3D` on GL unit 0 while the sprite's own texture occupies `GL_TEXTURE_2D` on the same
+unit, and a single GL sampler object at that unit governs both — so the batch's slot-0 sampler is
+exactly what addresses the volume. Vulkan numbers this differently (a bound effect texture lives in
+descriptor set 1), which is why the two renderers have sibling tests rather than one shared file.
+
+Asserted by `modules/renderers/easygl/examples/easygl_texture3d_addressw_test.cpp`
+(`EasyGL_Texture3DAddressW`), the sibling of `Vulkan_Texture3DAddressW`.
+
+**Still unmeasured:** Magnum, IGL, OpenGL2, OpenGL4 and Sokol all implement `BindTexture3D` and all
+report `false` from `SupportsTexture3DSamplingEXT()`. They under-claim rather than over-claim until
+someone runs a volume through each; tracked as `plans/plan_vulkan.md` VULKAN-167.
+
 Pixel-proven on Vulkan by `Vulkan_ShaderEffect_PerUnitSampler`
 (`modules/renderers/vulkan/examples/vulkan_shader_effect_per_unit_sampler_test.cpp`): two 1×1×2
 volumes bound to units 0 and 1 of one `ShaderEffect`, sampled at `W = 1.25`, with `AddressW = Wrap`

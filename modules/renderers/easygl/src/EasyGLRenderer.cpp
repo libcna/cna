@@ -4229,6 +4229,16 @@ if (ProfileUsesGlslEs100())
         pendingAddressV_ = addressV;
     }
 
+    /// plans/plan_vulkan.md VULKAN-167: the second half of VULKAN-164's hook. XNA assigns the whole
+    /// SamplerState to GraphicsDevice.SamplerStates[0], W included; this renderer's sprite path was
+    /// given the filter and the U and V axes and derived W from U. Invisible to 2D sampling, which
+    /// never consults W -- and decisive for a `sampler3D` a custom effect binds to unit 0, where
+    /// the same GL sampler object governs both the sprite's 2D texture and the volume.
+    void EasyGLSpriteBatchRenderer::SetSamplerAddressModeWEXT(int addressW)
+    {
+        pendingAddressW_ = addressW;
+    }
+
     void EasyGLSpriteBatchRenderer::End()
     {
         FlushBatch();
@@ -4336,7 +4346,12 @@ if (ProfileUsesGlslEs100())
         current_texture_->BindGL();
         ApplyChannelExpansion(prog, current_texture_->GetSurfaceFormatEXT());
         if (graphicsRenderer_)
+        {
             graphicsRenderer_->ApplySamplerState(0, pendingFilter_, pendingAddressU_, pendingAddressV_, 1);
+            // VULKAN-167: ApplySamplerState sets W = U, which is right for every XNA preset and
+            // wrong for a state that set W on its own. The batch's own W, when it supplied one, wins.
+            if (pendingAddressW_ >= 0) graphicsRenderer_->ApplySamplerAddressW(0, pendingAddressW_);
+        }
 
         vbo_.bind(::easygl::BufferTarget::Array);
         vbo_.set_data(::easygl::BufferTarget::Array,
@@ -4505,6 +4520,9 @@ if (ProfileUsesGlslEs100())
         }
         graphicsRenderer_->ApplySamplerState(0, pendingFilter_, pendingAddressU_,
                                              pendingAddressV_, 1);
+        // VULKAN-167: same as the stock flush above -- the batch's W overrides the W-follows-U
+        // default. This is the compiled-effect path, which a custom `sampler3D` reaches too.
+        if (pendingAddressW_ >= 0) graphicsRenderer_->ApplySamplerAddressW(0, pendingAddressW_);
 
         EasyGLRenderer::CompiledEffectStreamEXT stream;
         stream.buffer = easyVertexBuffer;

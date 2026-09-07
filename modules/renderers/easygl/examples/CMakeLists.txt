@@ -1933,6 +1933,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_FullscreenSpriteThen3D COMMAND cna_test_easygl_fullscreen_sprite_then_3d
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-167 (EasyGL half): a SpriteBatch's SamplerState.AddressW must reach
+        # a sampler3D a custom effect bound. ApplySamplerState derived WrapR from addressU, which is
+        # right for every XNA preset and wrong for a state that set W on its own; the sibling proof
+        # on Vulkan is Vulkan_Texture3DAddressW.
+        cna_easygl_test(cna_test_easygl_texture3d_addressw
+                        easygl_texture3d_addressw_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_Texture3DAddressW COMMAND cna_test_easygl_texture3d_addressw
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-194: the second renderer for the SamplerStates[0] publication
         # contract. The change is in the shared SpriteBatch/GraphicsDevice layer, so a one-renderer
         # registration could not tell "correct" from "this renderer happens not to notice".
