@@ -114,6 +114,51 @@ formula (`TextureColor × VertexColor × (DiffuseColor+EmissiveColor)`) at all 4
 new bugs found — this was pure integration verification, and it passed cleanly on the first attempt
 thanks to Tasks 364–369's fixes already being in place.
 
+## 6. `DiffuseColor` above 1 is saturated per vertex (`plans/plan_vulkan.md` VULKAN-197, 2026-09-07)
+
+`BasicEffect.DiffuseColor` is a `Vector3` with no clamp in its setter (`BasicEffect.cs:117`), and
+`Alpha` is an unclamped `float`, so a game can hand the shader a value above 1. XNA still renders it
+as 1 — not because the effect clamps, but because the **unlit** path writes the value to
+`vout.Diffuse`, which `Structures.fxh` declares `COLOR0`, and **Direct3D 9 saturates a vertex
+shader's colour output registers before interpolation**. It is the same `oD0`/`oD1` rule
+`plans/plan_fx.md` FX-123 measured for the vertex-lit programs and `VULKAN-196` measured for
+`EnvironmentMapEffect`'s blend factor.
+
+**Measured on the real XNA 4.0 runtime** (`spikes/xna-diffuse-color-clamp-spike/`), with a **grey**
+`(100,100,100)` texture — never white, or both answers saturate at the output and the probe could
+not fail:
+
+| `DiffuseColor` | 0.5 | 1.0 | 2.0 | 3.0 |
+|---|---|---|---|---|
+| real XNA | `(50,50,50)` | `(100,100,100)` | `(100,100,100)` | `(100,100,100)` |
+
+**Where it stops being invisible: a colour gradient.** A flat, untextured quad cannot separate the
+two orders at all, because the render-target write saturates either way. Two vertices that disagree
+can — which is what FX-123's argument is actually about. Left edge white, right edge 20 % grey,
+sampled at the centre:
+
+| `DiffuseColor` | 1.0 | 2.0 |
+|---|---|---|
+| real XNA | `(153,153,153)` | `(178,178,178)` |
+
+`178` is the midpoint of `saturate(2.0) = 255` and `saturate(0.4) = 102`. Interpolating the raw
+product first gives `1.2` and clips to `255` — the two orders are **77 levels** apart there.
+
+**Renderer status.** The Vulkan renderer clamps ten vertex shaders at the vertex stage as of
+`VULKAN-197` and reproduces every number above. **EasyGL does not**, and its structure is different
+rather than merely unfixed: its unlit programs apply `uDiffuseColor` in the **fragment** stage
+(`FragColor = vc * uDiffuseColor`, `EasyGLRenderer.cpp:7768`), so there is no colour varying for the
+saturate to apply to. `FX-123` fixed only its two vertex-**lit** programs. That half belongs to
+`plans/plan_fx.md`, with the spike above as its oracle.
+
+**Not applied to the per-pixel lit path, on purpose.** FNA's `VSBasicPixelLightingTx` writes
+`vout.Diffuse = float4(1, 1, 1, DiffuseColor.a)` and applies the material colour in the **pixel**
+shader, unclamped, with only the render-target write saturating it. Clamping CNA's equivalent
+varying would make it *more* clamped than XNA.
+
+Guarded by `modules/graphics/examples/basiceffect_diffuse_color_clamp_test.cpp`, registered as
+`Vulkan_BasicEffect_DiffuseColorClamp`.
+
 ## Support matrix
 
 | Feature | EasyGL | Vulkan | Bgfx |

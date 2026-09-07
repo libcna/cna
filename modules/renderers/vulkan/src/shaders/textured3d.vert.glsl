@@ -32,7 +32,14 @@ void main() {
     gl_Position = pos;
     gl_PointSize = 1.0;
     fragUV   = inUV;
-    fragTint = pc.diffuseColor;
+    // plan_vulkan.md VULKAN-197 (F-36). Direct3D 9 saturates a vertex shader's colour output
+    // registers before interpolation, and FNA writes this value to `vout.Diffuse : COLOR0`.
+    // `BasicEffect.DiffuseColor` and `.Alpha` have no clamp in their setters, so a game can hand
+    // this shader a value above 1; measured on the real XNA 4.0 runtime, 2.0 and 3.0 both render
+    // exactly as 1.0 does (spikes/xna-diffuse-color-clamp-spike/). Clamping at the vertex stage is
+    // what oD0 does -- clamping per fragment would interpolate the raw value first and give a
+    // different gradient, the distinction plans/plan_fx.md FX-122/FX-123 settled.
+    fragTint = clamp(pc.diffuseColor, 0.0, 1.0);
     // Task 899: fog factor from raw object-space Z. REMED-GFX-005: corrected to FNA/EasyGL Task-1111
     // form (z+FogEnd)/(FogEnd-FogStart); the prior Task 888/899 (FogEnd-z) formula was the
     // mirror image and wrong. Zero-length range -> fully fogged, matching FNA SetFogVector.

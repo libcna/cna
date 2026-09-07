@@ -40,5 +40,13 @@ void main() {
     // REMED-GFX-011: renderer-wide Vulkan NDC Y-flip -- see pbr3d.vert.glsl.
     gl_Position.y = -gl_Position.y;
     gl_PointSize = 1.0;
-    fragColor   = (pc.vertexColorEnabled > 0.5) ? aColor * pc.diffuseColor : pc.diffuseColor;
+    // plan_vulkan.md VULKAN-197 (F-36). Direct3D 9 saturates a vertex shader's colour output
+    // registers before interpolation, and FNA writes this value to `vout.Diffuse : COLOR0`.
+    // `BasicEffect.DiffuseColor` and `.Alpha` have no clamp in their setters, so a game can hand
+    // this shader a value above 1; measured on the real XNA 4.0 runtime, 2.0 and 3.0 both render
+    // exactly as 1.0 does (spikes/xna-diffuse-color-clamp-spike/). Clamping at the vertex stage is
+    // what oD0 does -- clamping per fragment would interpolate the raw value first and give a
+    // different gradient, the distinction plans/plan_fx.md FX-122/FX-123 settled.
+    fragColor   = clamp((pc.vertexColorEnabled > 0.5) ? aColor * pc.diffuseColor
+                                                     : pc.diffuseColor, 0.0, 1.0);
 }

@@ -170,9 +170,11 @@ Guarded by `modules/graphics/examples/environmentmapeffect_amount_clamp_test.cpp
 `Vulkan_EnvironmentMapEffect_AmountClamp`. The source is renderer-agnostic and its legs are
 relational, so registering it for another renderer is one line in that family's `CMakeLists.txt`.
 
-**The unlit sibling is still open.** The same D3D9 rule applies to `vout.Diffuse : COLOR0`, and
-neither EasyGL nor Vulkan clamps it — `plans/plan_vulkan.md` VULKAN-197 owns that, and it is
-CNA-wide rather than a parity gap.
+**The unlit sibling was the same defect one effect over.** The same D3D9 rule applies to
+`vout.Diffuse : COLOR0`, and neither renderer clamped it; `plans/plan_vulkan.md` VULKAN-197 measured
+it on the real runtime and fixed the Vulkan half in ten vertex shaders. See §6 of
+`docs/basiceffect-support.md` — including the colour-gradient case, where the two orders are 77
+levels apart. EasyGL's half is still open and belongs to `plans/plan_fx.md`.
 
 ## Support matrix
 

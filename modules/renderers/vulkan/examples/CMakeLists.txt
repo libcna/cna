@@ -238,6 +238,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_texture3d_addressw
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-197 (F-36): D3D9 saturates oD0, so an unlit DiffuseColor above 1
+        # blends as 1 -- and, across a colour gradient, is saturated per vertex before interpolation.
+        cna_vulkan_test(cna_test_vulkan_basiceffect_diffuse_color_clamp
+                        ${CMAKE_SOURCE_DIR}/modules/graphics/examples/basiceffect_diffuse_color_clamp_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_BasicEffect_DiffuseColorClamp
+            COMMAND cna_test_vulkan_basiceffect_diffuse_color_clamp
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-196 (F-36): D3D9 saturates oD1, so EnvironmentMapAmount above 1
         # blends as 1. Renderer-agnostic source -- EasyGL already clamps, this renderer did not.
         cna_vulkan_test(cna_test_vulkan_environmentmapeffect_amount_clamp
