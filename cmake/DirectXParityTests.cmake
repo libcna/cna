@@ -158,6 +158,10 @@ function(cna_register_d3d_parity_tests)
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/texture_filter_mip_contract_test.cpp"
         DIRECTX11_TIMEOUT 300)
     cna_d3d_parity_fixture(
+        NAME SamplerLodAddressWContract TARGET sampler_lod_addressw DIRECTX12_ORDER 85
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/sampler_lod_addressw_contract_test.cpp"
+        DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 600)
+    cna_d3d_parity_fixture(
         NAME DescriptorCapacityContract TARGET descriptor_capacity DIRECTX12_ORDER 90
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/descriptor_capacity_contract_test.cpp"
         DIRECTX11_TIMEOUT 900 DIRECTX12_TIMEOUT 600)

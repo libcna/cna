@@ -4229,6 +4229,17 @@ if (ProfileUsesGlslEs100())
         pendingAddressV_ = addressV;
     }
 
+    void EasyGLSpriteBatchRenderer::SetSamplerMipState(int maxMipLevel, float lodBias)
+    {
+        pendingMaxMipLevel_ = maxMipLevel;
+        pendingLodBias_ = lodBias;
+    }
+
+    void EasyGLSpriteBatchRenderer::SetSamplerAddressW(int addressW)
+    {
+        pendingAddressW_ = addressW;
+    }
+
     void EasyGLSpriteBatchRenderer::End()
     {
         FlushBatch();
@@ -4336,7 +4347,11 @@ if (ProfileUsesGlslEs100())
         current_texture_->BindGL();
         ApplyChannelExpansion(prog, current_texture_->GetSurfaceFormatEXT());
         if (graphicsRenderer_)
+        {
             graphicsRenderer_->ApplySamplerState(0, pendingFilter_, pendingAddressU_, pendingAddressV_, 1);
+            graphicsRenderer_->ApplySamplerMipState(0, pendingMaxMipLevel_, pendingLodBias_);
+            graphicsRenderer_->ApplySamplerAddressW(0, pendingAddressW_);
+        }
 
         vbo_.bind(::easygl::BufferTarget::Array);
         vbo_.set_data(::easygl::BufferTarget::Array,
@@ -4505,6 +4520,8 @@ if (ProfileUsesGlslEs100())
         }
         graphicsRenderer_->ApplySamplerState(0, pendingFilter_, pendingAddressU_,
                                              pendingAddressV_, 1);
+        graphicsRenderer_->ApplySamplerMipState(0, pendingMaxMipLevel_, pendingLodBias_);
+        graphicsRenderer_->ApplySamplerAddressW(0, pendingAddressW_);
 
         EasyGLRenderer::CompiledEffectStreamEXT stream;
         stream.buffer = easyVertexBuffer;

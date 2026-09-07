@@ -1,6 +1,7 @@
 // plans/plan_dx.md Phase DX13 (DX-121).
 #include "CNA/Internal/Renderers/DirectX12/D3D12EffectRenderer.hpp"
 #include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
+#include "CNA/Internal/Renderers/DirectX12/D3D12Texture3D.hpp"
 
 #include <d3dcompiler.h>
 
@@ -208,6 +209,22 @@ namespace CNA::Internal::Renderers::DirectX12
     void D3D12EffectRenderer::SetUniformInt(const char* /*name*/, int value)
     {
         pushConst_[24] = static_cast<float>(value);
+    }
+
+    void D3D12EffectRenderer::BindTexture3D(int unit, ITexture3DRenderer* texture)
+    {
+        // This renderer's current custom-effect root signature exposes exactly t0. DX-223 owns
+        // reflected register counts and all wider binding layouts.
+        if (unit == 0) texture3d0_ = texture;
+    }
+
+    D3D12_GPU_DESCRIPTOR_HANDLE D3D12EffectRenderer::GetTexture3DGpuHandleEXT(int unit) const
+    {
+        if (unit != 0) return {};
+        const auto* d3dTexture = dynamic_cast<const D3D12Texture3DRenderer*>(texture3d0_);
+        return d3dTexture != nullptr
+            ? d3dTexture->GetShaderResourceViewGpuHandleEXT()
+            : D3D12_GPU_DESCRIPTOR_HANDLE{};
     }
 
     void D3D12EffectRenderer::SetViewportSizeEXT(float width, float height)

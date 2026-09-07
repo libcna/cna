@@ -1,5 +1,6 @@
 // plans/plan_dx.md Phase DIRECTX8 (DX-58).
 #include "CNA/Internal/Renderers/DirectX11/D3D11EffectRenderer.hpp"
+#include "CNA/Internal/Renderers/DirectX11/D3D11Textures.hpp"
 
 #include <d3dcompiler.h>
 
@@ -105,6 +106,11 @@ namespace CNA::Internal::Renderers::DirectX11
         ID3D11Buffer* cb = constantBuffer_.Get();
         context_->VSSetConstantBuffers(0, 1, &cb);
         context_->PSSetConstantBuffers(0, 1, &cb);
+        if (texture3dSrv0_)
+        {
+            ID3D11ShaderResourceView* srv = texture3dSrv0_.Get();
+            context_->PSSetShaderResources(0, 1, &srv);
+        }
     }
 
     void D3D11EffectRenderer::Unbind()
@@ -150,6 +156,16 @@ namespace CNA::Internal::Renderers::DirectX11
     void D3D11EffectRenderer::SetUniformInt(const char* /*name*/, int value)
     {
         pushConst_[24] = static_cast<float>(value);
+    }
+
+    void D3D11EffectRenderer::BindTexture3D(int unit, ITexture3DRenderer* texture)
+    {
+        // The current custom-effect root contract exposes only t0. DX-223 widens this using
+        // reflection; accepting another unit here would claim a binding the shader cannot see.
+        if (unit != 0)
+            return;
+        const auto* d3dTexture = dynamic_cast<const D3D11Texture3DRenderer*>(texture);
+        texture3dSrv0_ = d3dTexture != nullptr ? d3dTexture->GetShaderResourceViewEXT() : nullptr;
     }
 
     void D3D11EffectRenderer::SetViewportSizeEXT(float width, float height)

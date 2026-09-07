@@ -711,6 +711,9 @@ namespace CNA::Internal::Renderers::EasyGL
         int pendingFilter_    = 0; // TextureFilter::Linear
         int pendingAddressU_  = 1; // TextureAddressMode::Clamp
         int pendingAddressV_  = 1; // TextureAddressMode::Clamp
+        int pendingAddressW_  = 1; // TextureAddressMode::Clamp
+        int pendingMaxMipLevel_ = 0;
+        float pendingLodBias_ = 0.0f;
 
     public:
         explicit EasyGLSpriteBatchRenderer(::easygl::Device& device, std::shared_ptr<::easygl::ResourceRegistry> registry,
@@ -723,6 +726,8 @@ namespace CNA::Internal::Renderers::EasyGL
         void SetCustomEffect(Effect* effect) override;
         void SetSamplerFilter(int textureFilter) override;
         void SetSamplerAddressMode(int addressU, int addressV) override;
+        void SetSamplerMipState(int maxMipLevel, float lodBias) override;
+        void SetSamplerAddressW(int addressW) override;
         void Draw(const ITextureRenderer& texture, float x, float y) override;
         void Draw(const ITextureRenderer& texture,
                   const Rectangle& destinationRectangle,

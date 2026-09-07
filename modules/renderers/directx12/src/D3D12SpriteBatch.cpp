@@ -94,6 +94,17 @@ namespace CNA::Internal::Renderers::DirectX12
         pendingAddressV_ = addressV;
     }
 
+    void D3D12SpriteBatchRenderer::SetSamplerMipState(int maxMipLevel, float lodBias)
+    {
+        pendingMaxMipLevel_ = maxMipLevel;
+        pendingLodBias_ = lodBias;
+    }
+
+    void D3D12SpriteBatchRenderer::SetSamplerAddressW(int addressW)
+    {
+        pendingAddressW_ = addressW;
+    }
+
     ID3D12PipelineState* D3D12SpriteBatchRenderer::GetOrCreateSprite2DPso(ID3D12RootSignature* rootSig)
     {
         // plans/plan_dx.md DX-210: the whole tracked pipeline state, not a hand-copied subset of it. This
@@ -365,6 +376,8 @@ namespace CNA::Internal::Renderers::DirectX12
         // own pre-DX-119 LINEAR/WRAP fallback if nothing had ever called ApplySamplerState) instead
         // of the SamplerState the game's own SpriteBatch::Begin() call actually requested.
         owner_->ApplySamplerState(0, pendingFilter_, pendingAddressU_, pendingAddressV_, 1);
+        owner_->ApplySamplerMipState(0, pendingMaxMipLevel_, pendingLodBias_);
+        owner_->ApplySamplerAddressW(0, pendingAddressW_);
 
         // DX-119: SpriteBatch always samples XNA texture slot 0 (GraphicsDevice.Textures[0]/
         // SamplerStates[0]) -- real, runtime-settable SamplerState, not a hardcoded default,
@@ -372,7 +385,14 @@ namespace CNA::Internal::Renderers::DirectX12
         // table@2, D3D12RootSignatureCache's own real parameter ordering).
         ID3D12DescriptorHeap* heaps[] = {owner_->GetCbvSrvUavHeapEXT(), owner_->GetSamplerHeapEXT()};
         cmdList->SetDescriptorHeaps(2, heaps);
-        cmdList->SetGraphicsRootDescriptorTable(1, GetSrvGpuHandle(currentTexture_));
+        D3D12_GPU_DESCRIPTOR_HANDLE textureHandle = GetSrvGpuHandle(currentTexture_);
+        if (customRenderer)
+        {
+            const D3D12_GPU_DESCRIPTOR_HANDLE customTexture =
+                customRenderer->GetTexture3DGpuHandleEXT(0);
+            if (customTexture.ptr != 0) textureHandle = customTexture;
+        }
+        cmdList->SetGraphicsRootDescriptorTable(1, textureHandle);
         cmdList->SetGraphicsRootDescriptorTable(2, owner_->GetSamplerGpuHandleEXT(0));
 
         cmdList->DrawIndexedInstanced(static_cast<UINT>(pendingIndices_.size()), 1, 0, 0, 0);

@@ -64,6 +64,8 @@ namespace CNA::Internal::Renderers::DirectX12
         void SetCustomEffect(Microsoft::Xna::Framework::Graphics::Effect* effect) override;
         void SetSamplerFilter(int textureFilter) override;
         void SetSamplerAddressMode(int addressU, int addressV) override;
+        void SetSamplerMipState(int maxMipLevel, float lodBias) override;
+        void SetSamplerAddressW(int addressW) override;
 
         void Draw(const ITextureRenderer& texture, float x, float y) override;
         void Draw(const ITextureRenderer& texture,
@@ -110,10 +112,13 @@ namespace CNA::Internal::Renderers::DirectX12
         Matrix transform_ = Matrix::getIdentityProperty();
         Microsoft::Xna::Framework::Graphics::Effect* customEffect_ = nullptr;
 
-        // Defaults mirror D3D11SpriteBatchRenderer's own -- stored but not yet behaviorally real,
-        // see this file's own header comment for why (no D3D12 dynamic-sampler-state system yet).
+        // Defaults mirror D3D11SpriteBatchRenderer's own and describe the complete slot-zero
+        // sampler that FlushBatch applies before each draw.
         int pendingFilter_ = 0;   // TextureFilter::Linear
         int pendingAddressU_ = 1; // TextureAddressMode::Clamp
         int pendingAddressV_ = 1; // TextureAddressMode::Clamp
+        int pendingAddressW_ = 1; // TextureAddressMode::Clamp
+        int pendingMaxMipLevel_ = 0;
+        float pendingLodBias_ = 0.0f;
     };
 }

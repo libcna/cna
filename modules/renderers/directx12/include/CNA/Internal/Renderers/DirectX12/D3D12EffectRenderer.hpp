@@ -52,6 +52,7 @@ namespace CNA::Internal::Renderers::DirectX12
         void SetUniformVec2(const char* name, float x, float y) override;
         void SetUniformFloat(const char* name, float value) override;
         void SetUniformInt(const char* name, int value) override;
+        void BindTexture3D(int unit, ITexture3DRenderer* texture) override;
 
         /// DX-121: mirrors D3D11EffectRenderer::SetViewportSizeEXT -- writes the [0..15]-byte vpSize
         /// slot this class's own fixed-slot convention reserves for it. CNAEXT.
@@ -62,6 +63,9 @@ namespace CNA::Internal::Renderers::DirectX12
         [[nodiscard]] ID3D12PipelineState* GetPipelineStateEXT() const { return pso_.Get(); }
         /// CNAEXT: the real, mapped 128-byte constant buffer Bind() writes into.
         [[nodiscard]] ID3D12Resource* GetConstantBufferEXT() const { return constantBuffer_.Get(); }
+        /// CNAEXT: Texture3D bound to t0 by ShaderEffect::SetTexture. The fixed sprite root
+        /// signature has one SRV; reflected multi-register binding remains DX-223.
+        [[nodiscard]] D3D12_GPU_DESCRIPTOR_HANDLE GetTexture3DGpuHandleEXT(int unit) const;
 
     private:
         DirectX12Renderer* owner_;
@@ -72,5 +76,6 @@ namespace CNA::Internal::Renderers::DirectX12
         float pushConst_[32] = {};
         std::string compileError_;
         bool valid_ = false;
+        ITexture3DRenderer* texture3d0_ = nullptr;
     };
 }

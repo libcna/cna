@@ -54,6 +54,8 @@ namespace CNA::Internal::Renderers::DirectX11
         void SetCustomEffect(Microsoft::Xna::Framework::Graphics::Effect* effect) override;
         void SetSamplerFilter(int textureFilter) override;
         void SetSamplerAddressMode(int addressU, int addressV) override;
+        void SetSamplerMipState(int maxMipLevel, float lodBias) override;
+        void SetSamplerAddressW(int addressW) override;
 
         void Draw(const ITextureRenderer& texture, float x, float y) override;
         void Draw(const ITextureRenderer& texture,
@@ -98,5 +100,8 @@ namespace CNA::Internal::Renderers::DirectX11
         int pendingFilter_ = 0;   // TextureFilter::Linear
         int pendingAddressU_ = 1; // TextureAddressMode::Clamp
         int pendingAddressV_ = 1; // TextureAddressMode::Clamp
+        int pendingAddressW_ = 1; // TextureAddressMode::Clamp
+        int pendingMaxMipLevel_ = 0;
+        float pendingLodBias_ = 0.0f;
     };
 }

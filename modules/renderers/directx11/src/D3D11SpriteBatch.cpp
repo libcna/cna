@@ -85,6 +85,17 @@ namespace CNA::Internal::Renderers::DirectX11
         pendingAddressV_ = addressV;
     }
 
+    void D3D11SpriteBatchRenderer::SetSamplerMipState(int maxMipLevel, float lodBias)
+    {
+        pendingMaxMipLevel_ = maxMipLevel;
+        pendingLodBias_ = lodBias;
+    }
+
+    void D3D11SpriteBatchRenderer::SetSamplerAddressW(int addressW)
+    {
+        pendingAddressW_ = addressW;
+    }
+
     void D3D11SpriteBatchRenderer::GetCurrentViewportSize(float& width, float& height) const
     {
         UINT numViewports = 1;
@@ -147,6 +158,14 @@ namespace CNA::Internal::Renderers::DirectX11
         if (customEffect_)
             customRenderer = dynamic_cast<D3D11EffectRenderer*>(customEffect_->GetEffectRendererPtr());
 
+        // Bind the SpriteBatch source first. A custom ShaderEffect may deliberately replace t0
+        // with its own Texture3D in Bind(); doing this afterwards used to overwrite that resource.
+        ID3D11ShaderResourceView* srv = GetSrvForTextureEXT(currentTexture_);
+        context_->PSSetShaderResources(0, 1, &srv);
+        owner_->ApplySamplerState(0, pendingFilter_, pendingAddressU_, pendingAddressV_, 1);
+        owner_->ApplySamplerMipState(0, pendingMaxMipLevel_, pendingLodBias_);
+        owner_->ApplySamplerAddressW(0, pendingAddressW_);
+
         if (customRenderer && customRenderer->IsValid())
         {
             // DX-71: vpSize is set here, once per flush, mirroring VulkanEffectRenderer's own
@@ -154,7 +173,6 @@ namespace CNA::Internal::Renderers::DirectX11
             // author never calls SetViewportSizeEXT() itself.
             customRenderer->SetViewportSizeEXT(vpW, vpH);
             customEffect_->Apply();
-            customRenderer->Bind();
         }
         else
         {
@@ -183,12 +201,6 @@ namespace CNA::Internal::Renderers::DirectX11
             context_->PSSetShader(ps.Get(), nullptr, 0);
             context_->VSSetConstantBuffers(0, 1, &cb);
         }
-
-        // Texture unit 0 is always driven by the caller for both paths (IEffectRenderer::
-        // BindTexture()'s own doc comment; D3D11EffectRenderer deliberately doesn't override it).
-        ID3D11ShaderResourceView* srv = GetSrvForTextureEXT(currentTexture_);
-        context_->PSSetShaderResources(0, 1, &srv);
-        owner_->ApplySamplerState(0, pendingFilter_, pendingAddressU_, pendingAddressV_, 1);
 
         vb_.SetData(pendingVertices_.data(), static_cast<int>(pendingVertices_.size()), sizeof(Sprite2DVertex));
         ib_.SetData16(pendingIndices_.data(), static_cast<int>(pendingIndices_.size()));

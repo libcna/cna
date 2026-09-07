@@ -17,8 +17,9 @@
 // D3D11SpriteBatchRenderer's own per-sprite draw loop, and adds SetViewportSizeEXT() below to fill
 // the [0..15]-byte vpSize slot this file's push-constant-contract comment always reserved for it.
 // BindTexture() is not overridden (uses IEffectRenderer's own no-op default) -- texture unit 0 is
-// bound by the caller (SpriteBatch) for both the stock and custom-effect paths, per
-// IEffectRenderer::BindTexture()'s own doc comment.
+// bound by the caller (SpriteBatch) for both the stock and custom-effect paths. DX-257 adds the
+// narrower Texture3D-at-t0 route needed to prove volume-sampler addressing; general reflected
+// texture-register binding remains plans/plan_dx.md DX-223.
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
@@ -48,6 +49,7 @@ namespace CNA::Internal::Renderers::DirectX11
         void SetUniformVec2(const char* name, float x, float y) override;
         void SetUniformFloat(const char* name, float value) override;
         void SetUniformInt(const char* name, int value) override;
+        void BindTexture3D(int unit, ITexture3DRenderer* texture) override;
 
         /// DX-71 (Phase DX9): writes the [0..15]-byte vpSize slot this class's own header comment
         /// already reserved for it -- mirrors VulkanEffectRenderer's "set automatically by the
@@ -65,5 +67,6 @@ namespace CNA::Internal::Renderers::DirectX11
         float pushConst_[32] = {};
         std::string compileError_;
         bool valid_ = false;
+        ComPtr<ID3D11ShaderResourceView> texture3dSrv0_;
     };
 }

@@ -991,6 +991,19 @@ namespace CNA::Internal::Renderers
          */
         virtual void SetSamplerAddressMode(int /*addressU*/, int /*addressV*/) {}
         /**
+         * @brief Sets the mip-level clamp and bias applied to each Draw call.
+         *
+         * @param maxMipLevel Most detailed mip level the sampler may select.
+         * @param lodBias Bias added to the computed mip level.
+         */
+        virtual void SetSamplerMipState(int /*maxMipLevel*/, float /*lodBias*/) {}
+        /**
+         * @brief Sets the volume-texture W address mode applied to each Draw call.
+         *
+         * @param addressW Raw TextureAddressMode int value for W (0=Wrap, 1=Clamp, 2=Mirror).
+         */
+        virtual void SetSamplerAddressW(int /*addressW*/) {}
+        /**
          * @brief CNAEXT. Tells the renderer whether the batch SpriteBatch::Begin() just started is
          *        SpriteSortMode::Immediate.
          *

@@ -231,6 +231,9 @@ namespace Microsoft::Xna::Framework::Graphics
                 renderer_->SetSamplerFilter(static_cast<int>(effectiveSampler.getFilterProperty()));
                 renderer_->SetSamplerAddressMode(static_cast<int>(effectiveSampler.getAddressUProperty()),
                                                 static_cast<int>(effectiveSampler.getAddressVProperty()));
+                renderer_->SetSamplerMipState(effectiveSampler.getMaxMipLevelProperty(),
+                                              effectiveSampler.getMipMapLevelOfDetailBiasProperty());
+                renderer_->SetSamplerAddressW(static_cast<int>(effectiveSampler.getAddressWProperty()));
                 renderer_->SetImmediateMode(sortMode_ == SpriteSortMode::Immediate);
                 renderer_->Begin();
             }
