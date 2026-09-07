@@ -44,7 +44,9 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Graphics/AlphaTestEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -379,6 +381,86 @@ protected:
                       Text(cn) + " (want ~(0,0,128))" + why(cn));
             check(isProduct(ci),
                   "G an INSTANCED draw does too: " + Text(ci) + " (want ~(0,0,128))" + why(ci));
+        }
+
+        // ---- H/I: AlphaTestEffect on an instanced draw ------------------------------------
+        // Instancing plus alpha test is the canonical use of both together -- foliage. A 2x1
+        // texture, texel 0 opaque blue and texel 1 fully transparent, on a wide quad: with
+        // CompareFunction::Greater and ReferenceAlpha=128 the right half must be DISCARDED, so a
+        // pixel inside it reads the clear colour while the left half reads blue. Both halves are
+        // sampled, so "nothing drew at all" cannot pass for "the right half was discarded".
+        {
+            Texture2D at(dev, 2, 1, false, SurfaceFormat::Color);
+            const std::uint8_t apx[8] = { 0, 0, 255, 255,   0, 0, 255, 0 };
+            at.SetDataRGBA(apx, 2);
+            const PT wq[4] = {
+                { -0.6f,  0.3f, 0.0f, 0.0f, 0.0f },
+                { -0.6f, -0.3f, 0.0f, 0.0f, 1.0f },
+                {  0.6f, -0.3f, 0.0f, 1.0f, 1.0f },
+                {  0.6f,  0.3f, 0.0f, 1.0f, 0.0f },
+            };
+            const VertexDeclaration wqDecl(20, {
+                VertexElement(0,  VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+                VertexElement(12, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+            });
+            VertexBuffer wvb(dev, wqDecl, 4, BufferUsage::None);
+            wvb.SetDataRaw(wq, 4, static_cast<int>(sizeof(PT)));
+            // ONE instance at the origin, so the instanced and non-instanced legs cover exactly the
+            // same pixels and the only variable is which entry point drew them.
+            const InstMat4 one[1] = { TranslateMat(0.0f, 0.0f, 0.0f) };
+            const VertexDeclaration instDecl1(64, {
+                VertexElement(0,  VertexElementFormat::Vector4, VertexElementUsage::BlendWeight, 0),
+                VertexElement(16, VertexElementFormat::Vector4, VertexElementUsage::BlendWeight, 1),
+                VertexElement(32, VertexElementFormat::Vector4, VertexElementUsage::BlendWeight, 2),
+                VertexElement(48, VertexElementFormat::Vector4, VertexElementUsage::BlendWeight, 3),
+            });
+            VertexBuffer ivb1(dev, instDecl1, 1, BufferUsage::None);
+            ivb1.SetDataRaw(one, 1, static_cast<int>(sizeof(InstMat4)));
+
+            auto alphaLeg = [&](bool instanced) {
+                dev.Clear(Color(0, 255, 0, 255));
+                dev.SetDepthTestEnabled(false);
+                dev.setBlendStateProperty(BlendState::Opaque);
+                dev.setRasterizerStateProperty(RasterizerState::CullNone);
+                dev.getSamplerStatesProperty()[0] = SamplerState::PointClamp;
+                AlphaTestEffect fx(dev);
+                fx.setAlphaFunctionProperty(CompareFunction::Greater);
+                fx.setReferenceAlphaProperty(128);
+                fx.setWorldProperty(Matrix::getIdentityProperty());
+                fx.setViewProperty(Matrix::getIdentityProperty());
+                fx.setProjectionProperty(Matrix::getIdentityProperty());
+                fx.setTextureProperty(&at);
+                fx.setVertexColorEnabledProperty(false);
+                fx.Apply();
+                dev.SetVertexBuffer(&wvb);
+                dev.SetIndexBuffer(ib_.get());
+                if (instanced) {
+                    std::vector<VertexBufferBinding> bd = {
+                        VertexBufferBinding(&wvb,  0, 0),
+                        VertexBufferBinding(&ivb1, 0, 1),
+                    };
+                    dev.SetVertexBuffers(bd);
+                    dev.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2, 1);
+                } else {
+                    dev.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2);
+                }
+                return std::pair<Color, Color>{ ReadPixel(dev, kN / 4, kN / 2),
+                                                ReadPixel(dev, (kN * 3) / 4, kN / 2) };
+            };
+            auto ok = [&](const std::pair<Color, Color>& p) {
+                return IsBlue(p.first) && !IsBlue(p.second);
+            };
+            const auto an = alphaLeg(false);
+            const auto ai = alphaLeg(true);
+            check(ok(an),
+                  "H control: a NON-instanced AlphaTestEffect draw discards the transparent half -- "
+                  "left " + Text(an.first) + " (want blue), right " + Text(an.second) +
+                      " (want the clear colour)");
+            check(ok(ai),
+                  "I an INSTANCED one does too: left " + Text(ai.first) + ", right " +
+                      Text(ai.second) +
+                      " (a blue right half means the alpha test never ran, which is what a draw "
+                      "routed to a program without one looks like)");
         }
 
         check(IsBlue(a) == IsBlue(b) && IsBlack(a2) == IsBlack(b2),

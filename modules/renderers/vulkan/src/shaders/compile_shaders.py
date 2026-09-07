@@ -248,6 +248,10 @@ def main():
         # instanced_textured3d's FS, which already multiplies the sample by the interpolated colour.
         ("instanced_colored_textured3d.vert.glsl", VERTEX_SHADER,
          "kInstancedColoredTextured3dVertSpv"),
+        # plans/plan_vulkan.md VULKAN-222: AlphaTestEffect on an instanced draw. Keeps
+        # alpha_test3d's push-constant layout and pipeline layout, so it shares that family's
+        # fragment stage and needs no new descriptor plumbing.
+        ("instanced_alpha_test3d.vert.glsl", VERTEX_SHADER, "kInstancedAlphaTest3dVertSpv"),
     ]
 
     # plans/plan_gltf.md GLTF-465: the PBR variants whose vertex record carries a packed COLOR_0 slot.

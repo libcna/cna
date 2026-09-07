@@ -7200,7 +7200,8 @@ namespace CNA::Internal::Renderers::Vulkan
         std::size_t stride, VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
-        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt, const VulkanVertexInputLayoutEXT& vertexLayout)
+        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt, const VulkanVertexInputLayoutEXT& vertexLayout,
+        bool instanced)
     {
         if (pipelineLayoutAlphaTest3D_ == VK_NULL_HANDLE) {
             VkPushConstantRange pcRange{ VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, 128 };
@@ -7225,6 +7226,10 @@ namespace CNA::Internal::Renderers::Vulkan
         // stride cannot share a pipeline. Folded only when the layout is complete, which leaves
         // every stride-derived key exactly as it was.
         if (vertexLayout.IsComplete()) key.a = FoldPerVertexStrideIntoKey(key.a, recordStride);
+        // VULKAN-222: the instanced variant is a different pipeline -- a second vertex
+        // binding, four more attributes and its own vertex module -- so it needs its own
+        // identity. Folded into the layout hash, which is already part of the key.
+        if (instanced) key.vl ^= 0x9E3779B97F4A7C15ull;
         auto it = pipelinesAlphaTest3D_.find(key);
         if (it != pipelinesAlphaTest3D_.end()) return it->second;
 
@@ -7233,13 +7238,25 @@ namespace CNA::Internal::Renderers::Vulkan
         // the color attribute and gates it by VertexColorEnabled; strides 20/32 have no color data
         // and keep the original shared position+UV-only shader (UV offset remapped per stride).
         const bool colored = (stride == 24);
-        VkShaderModule vert = colored
+        // VULKAN-222: the instanced variant, which has no coloured sibling yet -- a
+        // Position+Colour+TexCoord instanced alpha-test draw still takes the uncoloured
+        // module and loses its colour, and that is VULKAN-218's, not silently accepted.
+        VkShaderModule vert = instanced
+            ? CreateShaderModule(kInstancedAlphaTest3dVertSpv, kInstancedAlphaTest3dVertSpv_size)
+            : (colored
             ? CreateShaderModule(kAlphaTestColored3dVertSpv, kAlphaTestColored3dVertSpv_size)
-            : CreateShaderModule(kAlphaTest3dVertSpv, kAlphaTest3dVertSpv_size);
+            : CreateShaderModule(kAlphaTest3dVertSpv, kAlphaTest3dVertSpv_size));
         VkShaderModule frag = CreateShaderModule(kAlphaTest3dFragSpv, kAlphaTest3dFragSpv_size);
 
-        VkVertexInputBindingDescription bind{ 0, static_cast<uint32_t>(stride), VK_VERTEX_INPUT_RATE_VERTEX };
-        VkVertexInputAttributeDescription attrs[3]{};
+        // VULKAN-222: two bindings when instanced -- 0 per-vertex, 1 per-instance at 64 bytes,
+        // the same shape every other instanced pipeline here uses.
+        constexpr uint32_t kInstStride = 64;
+        VkVertexInputBindingDescription binds[2]{};
+        binds[0] = { 0, static_cast<uint32_t>(stride), VK_VERTEX_INPUT_RATE_VERTEX   };
+        binds[1] = { 1, kInstStride,                   VK_VERTEX_INPUT_RATE_INSTANCE };
+        // Seven: at most three per-vertex, then the four matrix columns appended after the
+        // declared-layout applicator has finished with the per-vertex prefix.
+        VkVertexInputAttributeDescription attrs[7]{};
         uint32_t attrCount;
         if (colored) {
             // float3 pos + ubyte4 color + float2 uv (mirrors colored_textured3d's layout).
@@ -7258,11 +7275,22 @@ namespace CNA::Internal::Renderers::Vulkan
             attrCount = 2;
         }
 
-        ApplyDeclaredVertexLayoutEXT(vertexLayout, attrs, std::size(attrs), attrCount);
+        // The capacity passed here is the PER-VERTEX capacity, 3 -- not std::size(attrs), which is
+        // now 7. The applicator overwrites from index 0 and resets the count, so handing it the
+        // whole array would let a declaration claim the slots the instance columns are about to use.
+        ApplyDeclaredVertexLayoutEXT(vertexLayout, attrs, 3u, attrCount);
+
+        if (instanced) {
+            attrs[attrCount++] = { 4, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0  }; // aInstCol0
+            attrs[attrCount++] = { 5, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 16 }; // aInstCol1
+            attrs[attrCount++] = { 6, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 32 }; // aInstCol2
+            attrs[attrCount++] = { 7, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 48 }; // aInstCol3
+        }
 
         VkPipelineVertexInputStateCreateInfo vis{};
         vis.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-        vis.vertexBindingDescriptionCount   = 1; vis.pVertexBindingDescriptions   = &bind;
+        vis.vertexBindingDescriptionCount   = instanced ? 2u : 1u;
+        vis.pVertexBindingDescriptions      = binds;
         vis.vertexAttributeDescriptionCount = attrCount; vis.pVertexAttributeDescriptions = attrs;
 
         VkPipelineShaderStageCreateInfo stages[2]{};
@@ -11737,7 +11765,8 @@ namespace CNA::Internal::Renderers::Vulkan
                 if (draw.useAlphaTest) {
                     pipe = GetOrCreatePipelineAlphaTest3D(draw.stride, draw.topology,
                                                           draw.depthTest, draw.depthWrite,
-                                                          draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt, draw.vertexLayout);
+                                                          draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt, draw.vertexLayout,
+                                                          draw.useInstanced);
                 } else if (draw.useDualTexture) {
                     pipe = GetOrCreatePipelineDualTex3D(draw.stride, draw.topology,
                                                         draw.depthTest, draw.depthWrite,
@@ -15040,11 +15069,24 @@ namespace CNA::Internal::Renderers::Vulkan
         }
 
         Pending3DDraw d{};
+        // VULKAN-222: an AlphaTestEffect draw takes the alpha-test family here rather than the
+        // instanced one -- the same predicate the ordinary indexed route uses, so the two agree by
+        // construction. Only the vertex module and one extra binding differ from a non-instanced
+        // alpha-test draw; the push constant, the pipeline layout, the descriptor set, the fragment
+        // stage and the replay branch are all that family's own, which is why this shape needed no
+        // new plumbing where the lit one would (VULKAN-218).
+        const bool instancedAlphaTest =
+            params.alphaTest[3] < 0.0f || params.alphaTest[2] < 0.0f;
         // VULKAN-097: the correction rides on the projection half of the product. VULKAN-219: the
         // world half is now the effect's own `World`, with the per-instance matrix applied inside
         // it by the shader.
-        FillInstancedPushConst(d.pushConst, world, view,
-                               projection * XnaPixelCenterCorrectionEXT(primitive), params);
+        if (instancedAlphaTest)
+            FillAlphaTestPushConst(d.pushConst,
+                                   world * view * (projection * XnaPixelCenterCorrectionEXT(primitive)),
+                                   params);
+        else
+            FillInstancedPushConst(d.pushConst, world, view,
+                                   projection * XnaPixelCenterCorrectionEXT(primitive), params);
 
         // Copy per-vertex data (all vertices)
         d.vbData.resize(static_cast<std::size_t>(vertexCount) * pvStride);
@@ -15116,6 +15158,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // sampled a 1x1 white image and drew the material colour, while EasyGL drew the texture.
         // Same two lines the ordinary indexed route uses, so the sampler is slot 0's, as there.
         d.instancedTextured = instancedTextured;
+        d.useAlphaTest      = instancedAlphaTest;
         {
             const auto* vs = params.texture0
                 ? dynamic_cast<const IVulkanSamplable*>(params.texture0) : nullptr;
