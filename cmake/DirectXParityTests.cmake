@@ -450,6 +450,27 @@ function(cna_register_d3d_parity_tests)
         NAME Buffer_GetData TARGET vertexbuffer_indexbuffer_getdata DIRECTX12_ORDER 1480
         SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_vertexbuffer_indexbuffer_getdata_test.cpp")
     cna_d3d_parity_fixture(
+        NAME SpriteBatch_LayerDepth TARGET spritebatch_layerdepth DIRECTX12_ORDER 1490
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritebatch_layerdepth_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME SpriteBatch_Rotation TARGET spritebatch_rotation DIRECTX12_ORDER 1500
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritebatch_rotation_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME SpriteBatch_Scale TARGET spritebatch_scale DIRECTX12_ORDER 1510
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritebatch_scale_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME SpriteBatch_SourceRectangle TARGET spritebatch_sourcerect DIRECTX12_ORDER 1520
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritebatch_sourcerect_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME SpriteEffects_Flip TARGET sprite_effects DIRECTX12_ORDER 1530
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_sprite_effects_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME SpriteBatch_BlendStateLeak TARGET spritebatch_blendstate_leak DIRECTX12_ORDER 1540
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritebatch_blendstate_leak_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME SpriteBatch_RenderTargetSize TARGET spritebatch_rendertarget_size DIRECTX12_ORDER 1550
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritebatch_rendertarget_size_test.cpp")
+    cna_d3d_parity_fixture(
         NAME SpriteBatch_CustomViewport TARGET spritebatch_custom_viewport
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_custom_viewport_test.cpp"
         DIRECTX11_ONLY REASON "D3D12 presentation-corpus adoption is tracked by DX-234 and DX-236")
