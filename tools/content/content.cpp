@@ -1289,6 +1289,38 @@ namespace
         return result;
     }
 
+    /**
+     * @brief Whether every schema a writer declares is one the recorded entry already carried.
+     *
+     * Not equality, and the difference is a defect this replaced. A node whose build starts a
+     * *nested* one -- a model whose materials name textures -- records the nested output's schema
+     * alongside its own, so its entry carries two where the writer declares one. Comparing the two
+     * sets for equality can therefore never hold for such a node, and every one of them rebuilt on
+     * every build, for ever, reporting `direct fingerprint changed outside a persisted reason
+     * domain` because the fallback reason is what is left when nothing else explains it. What this
+     * check is actually asking is whether the *route* is still the recorded one, and the answer to
+     * that is whether the writer still emits what it emitted; anything extra in the record belongs
+     * to a nested build, whose own inputs are fingerprinted separately
+     * (plans/plan_xnapipeline_parity.md XNAPP-300).
+     *
+     * @param recorded The schemas the manifest entry carries, the node's own and its nested ones.
+     * @param declared The schemas this writer emits.
+     * @return True when every declared schema is in the recorded set.
+     */
+    [[nodiscard]] bool WriterSchemasStillCovered(
+        const std::vector<Pipeline::ContentWriterSchemaIdentity>& recorded,
+        const std::vector<Pipeline::ContentWriterSchemaIdentity>& declared)
+    {
+        for (const Pipeline::ContentWriterSchemaIdentity& one : declared)
+        {
+            if (std::find(recorded.begin(), recorded.end(), one) == recorded.end())
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
     bool IsCurrentRoute(const Pipeline::ContentBuildManifestEntry& entry,
                         const Pipeline::ContentPipelineRegistry& registry,
                         const BuildItem& item)
@@ -1317,7 +1349,8 @@ namespace
                             item.format);
                     if (entry.processor == processor->Identity() &&
                         entry.writer == writer->Identity() &&
-                        entry.writerSchemas == writer->OutputSchemaIdentities())
+                        WriterSchemasStillCovered(entry.writerSchemas,
+                                                  writer->OutputSchemaIdentities()))
                     {
                         return true;
                     }
