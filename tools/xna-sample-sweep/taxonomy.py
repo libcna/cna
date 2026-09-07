@@ -17,6 +17,9 @@ exactly one class, so that the campaign's question has an answer with no remaind
   * `CORPUS_GAP`            -- the reference is in the corpus but the sweep has no way to build it:
                                no project names it, no source is present, or the sample ships no
                                `.contentproj` at all.
+  * `ENVIRONMENT_GAP`       -- neither CNA nor the corpus, but this machine: a font Windows has and
+                               this one has not, or an effect the only D3DX9 available here refuses
+                               and XNA's own accepted.
   * `UNEXPLAINED`           -- everything else. The campaign's target for this class is zero.
 
 Every class but the first two carries the reason it was assigned, and the reasons are matched on
@@ -38,6 +41,11 @@ import sys
 # A processor no XNA 4.0 assembly defines is a sample's own, whatever it is called. The built-in
 # set is the twelve the metadata oracle read out of Microsoft's assemblies, plus the two names
 # CNA's own registry adds for the same components.
+BUILT_IN_IMPORTERS = {
+    "EffectImporter", "FbxImporter", "FontDescriptionImporter", "Mp3Importer", "TextureImporter",
+    "WavImporter", "WmaImporter", "WmvImporter", "XImporter", "XmlImporter",
+}
+
 BUILT_IN_PROCESSORS = {
     "EffectProcessor", "FontDescriptionProcessor", "FontTextureProcessor", "MaterialProcessor",
     "ModelProcessor", "ModelTextureProcessor", "PassThroughProcessor", "SongProcessor",
@@ -73,6 +81,23 @@ def WhyNothingWasBuilt(source):
     if known is not None:
         return known
     return ("UNEXPLAINED", "the build produced nothing for it")
+
+
+def refusedByCompiler(unit, source):
+    """Whether the unit's log says the effect compiler itself rejected this asset's source."""
+    name = os.path.basename(source.get("source") or "")
+    if not name or not name.lower().endswith(".fx"):
+        return False
+    log = (unit.get("stderrTail") or "") + (unit.get("stdoutTail") or "")
+    return ("\'%s\': the effect compiler" % name) in log
+
+
+def missingFont(unit, source):
+    """Whether the unit's log says the description's font is not on this machine."""
+    if not (source.get("source") or "").lower().endswith(".spritefont"):
+        return False
+    log = (unit.get("stderrTail") or "") + (unit.get("stdoutTail") or "")
+    return "no installed font of that name was found" in log
 
 
 def load(path):
@@ -122,7 +147,17 @@ def main(argv=None):
                 assign(reference, "IDENTICAL")
                 continue
             if row["result"] == "missing":
-                if processor and processor not in BUILT_IN_PROCESSORS:
+                importer = source.get("importer")
+                if importer and importer not in BUILT_IN_IMPORTERS:
+                    assign(reference, "CUSTOM_PIPELINE_GAP",
+                           "the project names '%s', which no XNA assembly defines" % importer)
+                elif refusedByCompiler(unit, source):
+                    assign(reference, "ENVIRONMENT_GAP",
+                           "the only D3DX9 here refuses source XNA's own compiler accepted")
+                elif missingFont(unit, source):
+                    assign(reference, "ENVIRONMENT_GAP",
+                           "the font the description names is not installed on this machine")
+                elif processor and processor not in BUILT_IN_PROCESSORS:
                     assign(reference, "CUSTOM_PIPELINE_GAP",
                            "the project names '%s', which no XNA assembly defines" % processor)
                 elif extension == ".xml":
@@ -180,7 +215,7 @@ def main(argv=None):
 
     totals = collections.Counter(verdict for verdict, _ in verdicts.values())
     order = ["IDENTICAL", "SEMANTICALLY_IDENTICAL", "ACCEPTED_DIFFERENCE", "CUSTOM_PIPELINE_GAP",
-             "CORPUS_GAP", "UNEXPLAINED"]
+             "ENVIRONMENT_GAP", "CORPUS_GAP", "UNEXPLAINED"]
     print("=== %d references classified ===" % len(verdicts))
     for name in order:
         print("  %-24s %6d" % (name, totals.get(name, 0)))
