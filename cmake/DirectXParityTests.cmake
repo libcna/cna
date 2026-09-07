@@ -372,6 +372,33 @@ function(cna_register_d3d_parity_tests)
         NAME Effect_CurrentTechnique TARGET effect_current_technique DIRECTX12_ORDER 1230
         SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_effect_current_technique_test.cpp")
     cna_d3d_parity_fixture(
+        NAME Model_Draw TARGET model_draw DIRECTX12_ORDER 1240
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_model_draw_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME Model_HierarchyChildMesh TARGET model_hierarchy_child_mesh DIRECTX12_ORDER 1250
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_model_hierarchy_child_mesh_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME Model_JsonReader TARGET model_json_reader DIRECTX12_ORDER 1260
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_model_json_reader_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME Model_JsonReader_Texture TARGET model_json_reader_texture DIRECTX12_ORDER 1270
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_model_json_reader_texture_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME Model_JsonReader_Skeleton TARGET model_json_reader_skeleton DIRECTX12_ORDER 1280
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_model_json_reader_skeleton_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME Model_JsonReader_BoneHierarchy TARGET model_json_reader_bone_hierarchy DIRECTX12_ORDER 1290
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_model_json_reader_bone_hierarchy_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME Model_JsonReader_32BitIndices TARGET model_json_reader_32bit_indices DIRECTX12_ORDER 1300
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_model_json_reader_32bit_indices_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME Model_SkinnedAnimationPlayback TARGET model_skinned_animation_playback DIRECTX12_ORDER 1310
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_model_skinned_animation_playback_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME Model_TwoMeshesEffects TARGET model_two_meshes_effects DIRECTX12_ORDER 1320
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_model_two_meshes_effects_test.cpp")
+    cna_d3d_parity_fixture(
         NAME SpriteBatch_CustomViewport TARGET spritebatch_custom_viewport
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_custom_viewport_test.cpp"
         DIRECTX11_ONLY REASON "D3D12 presentation-corpus adoption is tracked by DX-234 and DX-236")
