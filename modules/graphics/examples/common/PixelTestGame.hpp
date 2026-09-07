@@ -50,6 +50,7 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <algorithm>
 #include <cstdlib>
 #include <stdexcept>
 #include <string>
@@ -219,10 +220,22 @@ namespace CNA::Examples
                 return std::abs(a - b) <= tolerance;
             };
 
+            // plans/plan_vulkan.md VULKAN-170: how much of the tolerance this comparison actually
+            // used. A golden CTest that prints only pass or fail cannot tell "identical" from "one
+            // step inside the limit", so a scene that drifts from a max difference of 2 to 59 under
+            // a tolerance of 60 goes on saying [PASS] until the day it does not. The number is on
+            // the PASS line rather than behind an environment variable for the reason this plan
+            // applies to every other gate: a boundary that does not print its measurement is a
+            // claim, not a measurement.
+            int worst = 0;
             for (std::size_t i = 0; i < count; ++i)
             {
                 const Color& got = live[i];
                 const Color& want = expected[i];
+                worst = std::max({ worst,
+                                   std::abs(got.getRProperty() - want.getRProperty()),
+                                   std::abs(got.getGProperty() - want.getGProperty()),
+                                   std::abs(got.getBProperty() - want.getBProperty()) });
                 if (!closeEnough(got.getRProperty(), want.getRProperty()) ||
                     !closeEnough(got.getGProperty(), want.getGProperty()) ||
                     !closeEnough(got.getBProperty(), want.getBProperty()))
@@ -239,8 +252,9 @@ namespace CNA::Examples
                 }
             }
 
-            std::printf("[PASS] %s: %dx%d region matches golden image %s\n", label, w, h,
-                        goldenPath.c_str());
+            std::printf("[PASS] %s: %dx%d region matches golden image %s "
+                        "(max channel diff %d of %d allowed)\n", label, w, h,
+                        goldenPath.c_str(), worst, tolerance);
             return true;
         }
 
