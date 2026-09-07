@@ -75,6 +75,21 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
         std::vector<std::pair<std::string, std::string>> parameterNames;
 
         /**
+         * @brief Whether the imported type chooses the canonical component rather than the name.
+         *
+         * XNA's `TextureProcessor` is one processor over three content types -- a `.dds` is a 2D
+         * image, a cube map or a volume depending on its header, and XNA's own importer answers
+         * `Texture2DContent`, `TextureCubeContent` or `Texture3DContent` accordingly. CNA has one
+         * processor per type, so no single canonical name can stand in for the XNA one: naming
+         * `CNA.TextureProcessor` for a cube map resolves to a processor that does not accept it.
+         *
+         * A mapping that sets this contributes its defaults and its parameter names and leaves the
+         * processor unnamed, which is what makes the graph pick by the type the importer actually
+         * produced (plans/plan_xnapipeline_parity.md XNAPP-255).
+         */
+        bool chooseByImportedType = false;
+
+        /**
          * @brief Whether XNA itself defines a component of this name.
          *
          * Not the same question as whether @ref canonicalName is empty, and the difference is a

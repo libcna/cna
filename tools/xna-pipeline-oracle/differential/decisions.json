@@ -307,22 +307,6 @@
     {
       "case": "xbox_xml_passthrough",
       "reason": "CNA has no canonical .xml route. Of the 1466 .xml assets in the public sample corpus, almost all declare game-defined types, which only a game's own pipeline assembly can build (XNAPP-260); a built-in route could cover the handful the framework itself defines and would be XNB-only. The decision to build that subset has not been taken."
-    },
-    {
-      "case": "texture_dds_cube",
-      "reason": "XNA's TextureImporter reads all three shapes out of a DDS and routes a cube to TextureCubeContent and a volume to Texture3DContent. CNA reads them too -- `ReadDdsSurfaces` answers exactly those shapes (XNAPP-165) -- and has no route that carries either from a source file to a TextureCube or Texture3D output: the canonical image importer refuses with 'DDS source is a cube map; this route builds a Texture2D'. The cases stay in the corpus because what XNA does with them is worth having measured, and building the route is XNAPP-255."
-    },
-    {
-      "case": "texture_dds_volume",
-      "reason": "XNA's TextureImporter reads all three shapes out of a DDS and routes a cube to TextureCubeContent and a volume to Texture3DContent. CNA reads them too -- `ReadDdsSurfaces` answers exactly those shapes (XNAPP-165) -- and has no route that carries either from a source file to a TextureCube or Texture3D output: the canonical image importer refuses with 'DDS source is a cube map; this route builds a Texture2D'. The cases stay in the corpus because what XNA does with them is worth having measured, and building the route is XNAPP-255."
-    },
-    {
-      "case": "xbox_dds_cube",
-      "reason": "XNA's TextureImporter reads all three shapes out of a DDS and routes a cube to TextureCubeContent and a volume to Texture3DContent. CNA reads them too -- `ReadDdsSurfaces` answers exactly those shapes (XNAPP-165) -- and has no route that carries either from a source file to a TextureCube or Texture3D output: the canonical image importer refuses with 'DDS source is a cube map; this route builds a Texture2D'. The cases stay in the corpus because what XNA does with them is worth having measured, and building the route is XNAPP-255."
-    },
-    {
-      "case": "xbox_dds_volume",
-      "reason": "XNA's TextureImporter reads all three shapes out of a DDS and routes a cube to TextureCubeContent and a volume to Texture3DContent. CNA reads them too -- `ReadDdsSurfaces` answers exactly those shapes (XNAPP-165) -- and has no route that carries either from a source file to a TextureCube or Texture3D output: the canonical image importer refuses with 'DDS source is a cube map; this route builds a Texture2D'. The cases stay in the corpus because what XNA does with them is worth having measured, and building the route is XNAPP-255."
     }
   ]
 }

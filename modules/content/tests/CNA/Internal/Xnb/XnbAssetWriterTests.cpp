@@ -476,14 +476,13 @@ TEST(XnbAssetWriterTest, AnUnconvertedAssetTypeStillRefusesAnXbox360TargetOutrig
     XnbFileOptions options;
     options.platform = XnbTargetPlatform::Xbox360;
 
-    XnbTextureData volume = MakeTexture2D();
-    volume.kind = XnbTextureKind::Texture3D;
-    volume.mipCount = 1u;
-    volume.levels = {ColorLevel(4u, 2u, 1u)};
+    // A vertex *declaration* is one of the types nobody has converted: unlike the buffer beside
+    // it, no fixture proves what the console expects of its element table.
+    const XnbVertexDeclarationData declaration = MakePositionDeclaration();
     try
     {
-        (void)WriteXnbAsset(XnbTexture3DContent{volume}, options, "xbox");
-        FAIL() << "a Texture3D targeting Xbox 360 must be refused";
+        (void)WriteXnbAsset(XnbVertexDeclarationData{declaration}, options, "xbox");
+        FAIL() << "a vertex declaration targeting Xbox 360 must be refused";
     }
     catch (const XnbWriteException& error)
     {
@@ -493,7 +492,7 @@ TEST(XnbAssetWriterTest, AnUnconvertedAssetTypeStillRefusesAnXbox360TargetOutrig
     }
 
     options.allowUnverifiedXboxPayloads = true;
-    EXPECT_NO_THROW((void)WriteXnbAsset(XnbTexture3DContent{volume}, options, "opted"));
+    EXPECT_NO_THROW((void)WriteXnbAsset(XnbVertexDeclarationData{declaration}, options, "opted"));
 }
 
 TEST(XnbAssetWriterTest, ASongRoundTripsWithItsDurationDispatchedThroughInt32Reader)

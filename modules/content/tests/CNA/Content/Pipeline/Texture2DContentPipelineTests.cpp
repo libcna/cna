@@ -22,6 +22,7 @@ extern char** environ;
 #include "CNA/Content/Cnb/CnbDocument.hpp"
 #include "CNA/Content/Cnb/CnbSourceImport.hpp"
 #include "CNA/Content/Cnb/CnbTextureCodec.hpp"
+#include "CNA/Content/Pipeline/CnjContentPipeline.hpp"
 #include "CNA/Content/Pipeline/Texture2DContentPipeline.hpp"
 #include "CNA/Internal/ContentPath.hpp"
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
@@ -106,6 +107,10 @@ namespace
     {
         auto registry = std::make_shared<Pipeline::ContentPipelineRegistry>();
         Pipeline::RegisterTexture2DContentPipeline(*registry);
+        // The image importer answers a cube or a volume for a DDS that declares one
+        // (XNAPP-255), so a registry that can route only the 2D third of it is not a registry
+        // this importer can be measured in.
+        Pipeline::RegisterCnjContentPipeline(*registry);
         return registry;
     }
 
@@ -833,18 +838,16 @@ TEST(Texture2DContentPipelineTest, DecodesAPortablePixmapAndAHeaderlessBitmap)
     }
 }
 
-TEST(Texture2DContentPipelineTest, ADdsCubeOrVolumeSaysWhichRouteBuildsIt)
+// A `.dds` is three formats wearing one extension, and this importer answers whichever one the
+// header describes -- the same thing XNA's own TextureImporter does. It used to refuse a cube map
+// and name the route that would build it; there was no such route
+// (plans/plan_xnapipeline_parity.md XNAPP-255).
+TEST(Texture2DContentPipelineTest, ADdsCubeIsImportedAsACubeRatherThanRefused)
 {
     ScratchDirectory scratch("dds_cube");
     WriteBytes(scratch.Path() / "wall.dds", MakeUncompressedDds(true));
 
-    try
-    {
-        (void)BuildNamed(scratch.Path(), "wall.dds");
-        FAIL() << "a cube map is not a Texture2D";
-    }
-    catch (const std::exception& error)
-    {
-        EXPECT_NE(std::string(error.what()).find("cube map"), std::string::npos) << error.what();
-    }
+    const Pipeline::ContentBuildResult result = BuildNamed(scratch.Path(), "wall.dds");
+    EXPECT_EQ(result.importer.name, "CNA.ImageImporter");
+    EXPECT_EQ(result.processor.name, "CNA.TextureCubeProcessor");
 }

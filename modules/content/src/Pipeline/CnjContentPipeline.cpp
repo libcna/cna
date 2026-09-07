@@ -68,10 +68,19 @@ namespace CNA::Content::Pipeline
         void RejectParameters(const ContentProcessorParameters& parameters,
                               const char* component)
         {
-            if (!parameters.Empty())
+            // Named as the unknown-name refusal it is, so that a host which has chosen to be as
+            // lenient as XNA can drop the parameter with a warning instead of failing the build.
+            // It matters here because XNA has *one* texture processor over three content types and
+            // CNA has three: a `.contentproj` naming TextureProcessor for a cube map carries that
+            // processor's parameters, and the cube processor has none of them
+            // (plans/plan_xnapipeline_parity.md XNAPP-255).
+            for (const auto& [name, value] : parameters.Values())
             {
-                throw std::invalid_argument(std::string(component) +
-                                            " does not accept processor parameters.");
+                static_cast<void>(value);
+                throw ContentParameterError(
+                    ContentParameterFault::UnknownName, name,
+                    std::string(component) + " does not accept processor parameters, and was "
+                    "given '" + name + "'.");
             }
         }
 

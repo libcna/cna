@@ -1383,9 +1383,13 @@ namespace CNA::Content::Pipeline
             ContentProcessorParameters effective = request.parameters;
             if (request.environment.strictness == ContentStrictness::XnaCompatible)
             {
-                // Bounded by the parameter count: each pass removes exactly one, and a pass that
-                // removes none has either succeeded or thrown something leniency does not cover.
-                for (std::size_t attempt = 0; attempt <= effective.Values().size(); ++attempt)
+                // Bounded by the parameter count *as it was*: each pass removes exactly one, and
+                // a pass that removes none has either succeeded or thrown something leniency does
+                // not cover. Re-reading the count each time would shrink the bound along with the
+                // set and leave the last refusals unhandled, which is a failure that only appears
+                // once two parameters are wrong (plans/plan_xnapipeline_parity.md XNAPP-255).
+                const std::size_t attempts = effective.Values().size() + 1u;
+                for (std::size_t attempt = 0; attempt < attempts; ++attempt)
                 {
                     try
                     {

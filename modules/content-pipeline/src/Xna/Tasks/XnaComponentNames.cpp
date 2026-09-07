@@ -54,7 +54,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
                   .parameterNames = {{"ColorKeyColor", "colorKey"},
                                      {"PremultiplyAlpha", "premultiplyAlpha"},
                                      {"ResizeToPowerOfTwo", "resizeToPowerOfTwo"}},
-                  }},
+                  .chooseByImportedType = true}},
                 {"SpriteTextureProcessor",
                  {.canonicalName = "CNA.TextureProcessor",
                   .defaults = {{"generateMipmaps", "false"}, {"textureFormat", "Color"},
@@ -65,7 +65,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
                       "instead.",
                   .parameterNames = {{"ColorKeyColor", "colorKey"},
                                      {"PremultiplyAlpha", "premultiplyAlpha"},
-                                     {"ResizeToPowerOfTwo", "resizeToPowerOfTwo"}}}},
+                                     {"ResizeToPowerOfTwo", "resizeToPowerOfTwo"}},
+                  .chooseByImportedType = true}},
                 {"ModelTextureProcessor",
                  {.canonicalName = "CNA.TextureProcessor",
                   .defaults = {{"generateMipmaps", "true"}, {"textureFormat", "DxtCompressed"},
@@ -76,7 +77,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
                       "instead.",
                   .parameterNames = {{"ColorKeyColor", "colorKey"},
                                      {"PremultiplyAlpha", "premultiplyAlpha"},
-                                     {"ResizeToPowerOfTwo", "resizeToPowerOfTwo"}}}},
+                                     {"ResizeToPowerOfTwo", "resizeToPowerOfTwo"}},
+                  .chooseByImportedType = true}},
                 {"FontDescriptionProcessor", {"CNA.FontDescriptionProcessor", {}, ""}},
                 // The XNA model processor, not the glTF one: an XNA project's models are
                 // `.x` and `.fbx` files, and those import to XNA's own scene graph. The

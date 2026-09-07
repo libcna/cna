@@ -487,11 +487,16 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
                     LogMessage("BuildContent: processor \"" + processorName + "\" for \"" + key +
                                "\" is not named to the canonical build graph -- " + mapping.reason);
                 }
-                else
+                else if (!mapping.chooseByImportedType)
                 {
                     field("processor", mapping.canonicalName);
+                }
+                if (!mapping.canonicalName.empty())
+                {
                     // The defaults that make the canonical processor behave as the named XNA one;
-                    // the project's own ProcessorParameters are appended after and win.
+                    // the project's own ProcessorParameters are appended after and win. Written
+                    // whether or not the processor itself is named, because a mapping that lets
+                    // the imported type choose still carries the policy the XNA name stands for.
                     parameters = mapping.defaults;
                     parameterNames = mapping.parameterNames;
                 }

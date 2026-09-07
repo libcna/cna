@@ -2,6 +2,9 @@
 
 #include "CNA/Content/Pipeline/Texture2DContentPipeline.hpp"
 
+#include "CNA/Content/Cnb/CnbSourceImport.hpp"
+#include "CNA/Content/Pipeline/CnjContentPipeline.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -347,6 +350,117 @@ namespace CNA::Content::Pipeline
         }
 
         /**
+         * @brief One surface of a DDS, as Rgba8.
+         *
+         * @param surfaces The whole DDS as the shared reader answered it.
+         * @param payload The surface's own bytes.
+         * @return The decoded texels.
+         */
+        [[nodiscard]] std::vector<std::uint8_t> DdsSurfaceAsRgba8(
+            const CNA::Internal::Graphics::DdsSurfaces& surfaces,
+            const std::vector<std::uint8_t>& payload)
+        {
+            const int width = static_cast<int>(surfaces.width);
+            const int height = static_cast<int>(surfaces.height);
+            switch (surfaces.format)
+            {
+            case CNA::Internal::Graphics::DdsSurfaceFormat::Dxt1:
+                return CNA::Internal::Graphics::DxtUtil::DecompressDxt1(
+                    payload.data(), payload.size(), width, height);
+            case CNA::Internal::Graphics::DdsSurfaceFormat::Dxt3:
+                return CNA::Internal::Graphics::DxtUtil::DecompressDxt3(
+                    payload.data(), payload.size(), width, height);
+            case CNA::Internal::Graphics::DdsSurfaceFormat::Dxt5:
+                return CNA::Internal::Graphics::DxtUtil::DecompressDxt5(
+                    payload.data(), payload.size(), width, height);
+            case CNA::Internal::Graphics::DdsSurfaceFormat::Color:
+            default:
+                return payload;
+            }
+        }
+
+        /**
+         * @brief A DDS cube map's six faces as canonical texture data.
+         *
+         * Built from the shared surface reader rather than from the older cube decoder beside it,
+         * which accepts a narrower set of pixel formats: this route has to take whatever
+         * `XNAPP-165`'s reader takes, or a source XNA builds would be one CNA refuses
+         * (plans/plan_xnapipeline_parity.md XNAPP-255).
+         *
+         * @param surfaces The whole DDS as the shared reader answered it.
+         * @param origin Text naming the source in a diagnostic.
+         * @return The cube, one Rgba8 representation of six faces.
+         */
+        [[nodiscard]] Cnb::CnbTextureData DecodeDdsCube(
+            const CNA::Internal::Graphics::DdsSurfaces& surfaces, const std::string& origin)
+        {
+            if (surfaces.surfaces.size() < 6u)
+            {
+                throw ContentLoadException(
+                    "'" + origin + "' declares a cube map and carries " +
+                    std::to_string(surfaces.surfaces.size()) + " face(s).");
+            }
+            Cnb::CnbTextureData cube;
+            cube.width = surfaces.width;
+            cube.height = surfaces.height;
+            cube.depth = 1u;
+            cube.faceCount = 6u;
+            cube.mipCount = 1u;
+            Cnb::CnbTextureRepresentation representation;
+            representation.format = Cnb::CnbTextureFormat::Rgba8;
+            for (std::uint32_t face = 0u; face < 6u; ++face)
+            {
+                if (surfaces.surfaces[face].empty())
+                {
+                    throw ContentLoadException("'" + origin + "' has an empty cube face.");
+                }
+                representation.levels.push_back(
+                    DdsSurfaceAsRgba8(surfaces, surfaces.surfaces[face].front()));
+            }
+            cube.representations.push_back(std::move(representation));
+            return cube;
+        }
+
+        /**
+         * @brief Every slice of a DDS volume's level zero, as one tightly packed Rgba8 block.
+         *
+         * The same conversion DecodeDdsLevelZero() does, applied slice by slice: a volume's
+         * surfaces arrive as one entry per slice, and `ImportedTexture3D` wants them concatenated
+         * in slice order, which is the order the CNB and XNB writers store them in
+         * (plans/plan_xnapipeline_parity.md XNAPP-255).
+         *
+         * @param surfaces The whole DDS as the shared reader answered it.
+         * @param origin Text naming the source in a diagnostic.
+         * @return The volume.
+         */
+        [[nodiscard]] ImportedTexture3D DecodeDdsVolume(
+            const CNA::Internal::Graphics::DdsSurfaces& surfaces, const std::string& origin)
+        {
+            ImportedTexture3D volume;
+            volume.width = surfaces.width;
+            volume.height = surfaces.height;
+            volume.depth = surfaces.depth;
+            if (surfaces.surfaces.size() < surfaces.depth)
+            {
+                throw ContentLoadException(
+                    "'" + origin + "' declares a volume of depth " +
+                    std::to_string(surfaces.depth) + " and carries " +
+                    std::to_string(surfaces.surfaces.size()) + " surface(s).");
+            }
+            for (std::uint32_t slice = 0u; slice < surfaces.depth; ++slice)
+            {
+                if (surfaces.surfaces[slice].empty())
+                {
+                    throw ContentLoadException("'" + origin + "' has an empty volume slice.");
+                }
+                const std::vector<std::uint8_t> rgba =
+                    DdsSurfaceAsRgba8(surfaces, surfaces.surfaces[slice].front());
+                volume.rgbaPixels.insert(volume.rgbaPixels.end(), rgba.begin(), rgba.end());
+            }
+            return volume;
+        }
+
+        /**
          * @brief A portable float map, as RGBA8.
          *
          * The floats are packed with the same rule `Color(Vector4)` uses, so a PFM compiled here
@@ -422,11 +536,42 @@ namespace CNA::Content::Pipeline
 
     std::vector<std::string> ImageImporter::OutputTypes() const
     {
-        return {ImportedImageType};
+        // Three, because a DDS is three formats wearing one extension. XNA's own TextureImporter
+        // answers a Texture2DContent, a TextureCubeContent or a Texture3DContent depending on what
+        // the header says, and this importer does the same: the shape of the source decides, and
+        // the graph then resolves whichever processor takes what came out
+        // (plans/plan_xnapipeline_parity.md XNAPP-255).
+        return {ImportedImageType, ImportedTextureCubeType, ImportedTexture3DType};
     }
 
     ContentValue ImageImporter::Import(ContentImporterContext& context) const
     {
+        std::ifstream stream(context.SourcePath(), std::ios::binary);
+        if (!stream) { throw ContentLoadException("cannot open image source."); }
+        const std::vector<std::uint8_t> bytes{std::istreambuf_iterator<char>(stream),
+                                              std::istreambuf_iterator<char>()};
+        const std::string origin = context.SourcePath().filename().string();
+        if (CNA::Internal::Graphics::IsDds(bytes))
+        {
+            const CNA::Internal::Graphics::DdsSurfaces surfaces =
+                CNA::Internal::Graphics::ReadDdsSurfaces(bytes, origin);
+            if (surfaces.isCube)
+            {
+                ImportedTextureCube cube;
+                cube.sourceData = DecodeDdsCube(surfaces, origin);
+                context.LogInfo("decoded a " + std::to_string(surfaces.width) + "x" +
+                                std::to_string(surfaces.height) + " DDS cube map.");
+                return ContentValue::Create(ImportedTextureCubeType, std::move(cube));
+            }
+            if (surfaces.isVolume)
+            {
+                ImportedTexture3D volume = DecodeDdsVolume(surfaces, origin);
+                context.LogInfo("decoded a " + std::to_string(volume.width) + "x" +
+                                std::to_string(volume.height) + "x" +
+                                std::to_string(volume.depth) + " DDS volume.");
+                return ContentValue::Create(ImportedTexture3DType, std::move(volume));
+            }
+        }
         ImportedImage imported = DecodeImportedImage(context.SourcePath());
         context.LogInfo("decoded " + std::to_string(imported.width) + "x" +
                         std::to_string(imported.height) + " Rgba8 image.");

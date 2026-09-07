@@ -847,13 +847,21 @@ namespace CNA::Internal::Xnb
             [](XnbWriter& output, const XnbTexture3DContent& value)
             {
                 const XnbTextureData& texture = value.texture;
-                // The level payloads would be swapped correctly -- they go through the same
-                // WriteTextureLevels() the Texture2D writer uses -- but no fixture proves
-                // it end to end, because no route in this build turns a cube or volume
-                // source into one of these. The plan lifts this guard per type only as a
-                // fixture proves it, and that route is XNAPP-255
-                // (plans/plan_xnapipeline_parity.md XNAPP-252).
-                output.RequireVerifiedPlatformPayload("Texture3DWriter");
+                // Converted rather than refused, and proven: `xbox/dds_cube` and
+                // `xbox/dds_volume` are byte-identical to the genuine pipeline's output
+                // now that a route carries a cube and a volume DDS this far
+                // (plans/plan_xnapipeline_parity.md XNAPP-252, XNAPP-255). A surface
+                // format with no measured swap unit is still refused.
+                if (output.IsXboxTarget() && XboxByteSwapUnit(texture.surfaceFormat) == 0u)
+                {
+                    throw XnbWriteException(
+                        "'" + output.AssetName() +
+                        "': Texture3DWriter has no measured Xbox 360 byte order for surface format " +
+                        std::to_string(static_cast<int>(texture.surfaceFormat)) +
+                        ", and the Xbox 360 is big-endian, so writing the 'x' platform "
+                        "byte over this payload would claim a compatibility this build "
+                        "cannot deliver.");
+                }
                 RequireTextureShape(output, texture, "Texture3DWriter");
                 if (texture.kind != XnbTextureKind::Texture3D || texture.faceCount != 1u)
                 {
@@ -874,13 +882,21 @@ namespace CNA::Internal::Xnb
             [](XnbWriter& output, const XnbTextureCubeContent& value)
             {
                 const XnbTextureData& texture = value.texture;
-                // The level payloads would be swapped correctly -- they go through the same
-                // WriteTextureLevels() the Texture2D writer uses -- but no fixture proves
-                // it end to end, because no route in this build turns a cube or volume
-                // source into one of these. The plan lifts this guard per type only as a
-                // fixture proves it, and that route is XNAPP-255
-                // (plans/plan_xnapipeline_parity.md XNAPP-252).
-                output.RequireVerifiedPlatformPayload("TextureCubeWriter");
+                // Converted rather than refused, and proven: `xbox/dds_cube` and
+                // `xbox/dds_volume` are byte-identical to the genuine pipeline's output
+                // now that a route carries a cube and a volume DDS this far
+                // (plans/plan_xnapipeline_parity.md XNAPP-252, XNAPP-255). A surface
+                // format with no measured swap unit is still refused.
+                if (output.IsXboxTarget() && XboxByteSwapUnit(texture.surfaceFormat) == 0u)
+                {
+                    throw XnbWriteException(
+                        "'" + output.AssetName() +
+                        "': TextureCubeWriter has no measured Xbox 360 byte order for surface format " +
+                        std::to_string(static_cast<int>(texture.surfaceFormat)) +
+                        ", and the Xbox 360 is big-endian, so writing the 'x' platform "
+                        "byte over this payload would claim a compatibility this build "
+                        "cannot deliver.");
+                }
                 RequireTextureShape(output, texture, "TextureCubeWriter");
                 if (texture.kind != XnbTextureKind::TextureCube || texture.faceCount != 6u ||
                     texture.depth != 1u || texture.width != texture.height)
