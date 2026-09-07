@@ -72,12 +72,18 @@ number that was measured against it.
 
 ### What must match exactly
 
-**Golden images.** Seventeen scenes are compared against the *same* PNGs under
+**Golden images.** The golden scenes are compared against the *same* PNGs under
 `modules/renderers/easygl/examples/golden/` that EasyGL is compared against — the stock effects,
 `EnvironmentMapEffect` and `SkinnedEffect`, the blend/depth-write/cull state goldens, the 2D
-rotation and linear-filter goldens, and two golden-harness smoke tests. These are exact
-comparisons with the harness's own per-pixel rule; there is no Vulkan-specific golden and there
-must not be one. A golden that each renderer keeps its own copy of has stopped being a golden.
+rotation and linear-filter goldens, the two PBR families and the golden-harness smoke tests. There
+is no Vulkan-specific golden and there must not be one: a golden that each renderer keeps its own
+copy of has stopped being a golden.
+
+*Corrected 2026-09-07 by `VULKAN-014`, which counted them.* This paragraph used to say "seventeen
+scenes" and "exact comparisons". Thirteen CTests whose name ends in `_Golden` are registered on
+this renderer, and the comparison is **not** exact: `CompareGoldenImage` takes a per-channel
+tolerance and every one of the thirteen passes a non-zero one except the harness smoke test. The
+policy that actually governs them is the next section.
 
 **The 2D corpus.** `cross_renderer_2d_corpus.cpp` is built once per renderer and its dumps are
 compared byte for byte. Measured 2026-09-06: **max diff 0** between EasyGL and Vulkan. That is the
@@ -102,6 +108,42 @@ conformance corpus is for.
 `VULKAN-260` is the case in point — `EnvironmentMapEffect`'s Fresnel term was computed per fragment
 here instead of per vertex, and the honest resolution was to fix the shader, not to declare Fresnel
 a legitimate difference.
+
+### The golden-image policy
+
+`VULKAN-014`. **What is measured, as of 2026-09-07:** thirteen `*_Golden` CTests on this renderer,
+**all thirteen** comparing against an EasyGL-authored PNG, **zero** Vulkan-specific goldens. Their
+tolerances, per channel:
+
+| Tolerance | Scenes | What the number is paying for |
+|---|---|---|
+| 0 | `GoldenImage_Smoke` | flat, unblended colour: nothing may differ |
+| 8 | `BasicEffect`, `DualTextureEffect` | texture sampling and a single interpolated term |
+| 10 | `BlendState_Additive`, `TextureFilter_Linear` | one blend or one filter step per pixel |
+| 20–35 | `AlphaTestEffect`, `EnvironmentMapEffect`, `PbrEffect`, `SkinnedPbrEffect` | lit and PBR shading: several floating-point terms per pixel, evaluated in an order neither renderer promises |
+| 30–40 | `RasterizerState_CullMode`, `SkinnedEffect` | shading plus geometry that lands on the same pixels by a different route |
+| 60 | `DepthStencilState_WriteEnable`, `SpriteBatch_Rotation` | a rasterized *edge* moves: coverage of a diagonal is where two conforming pipelines are least alike |
+
+**The rule that makes this safe is not the ladder, it is where the number lives.** The tolerance is
+written in the **shared test source**, not in either renderer's registration — so a tolerance can
+never be widened *for Vulkan*. Widening it widens EasyGL's own gate by exactly the same amount, in
+the same commit, visible in the same diff. That is why "share the golden" and "share the tolerance"
+are one rule rather than two.
+
+**When a Vulkan-specific golden would be legitimate:** only for a difference this document already
+names as a *semantic* divergence — the clip-space depth range, or a pixel-centre convention — and
+the row that authors one must name that divergence and say why the scene cannot be written to avoid
+it. A numeric difference is never a reason; it is what the tolerance is for. Today the count is
+zero and the honest expectation is that it stays zero.
+
+**Non-goal:** bit-identical pixels for floating-point lighting. Two pipelines evaluating the same
+lighting term in a different order will differ in the last bits, and a policy that forbade it would
+be a policy against having the test.
+
+**The open half**, which `VULKAN-170` owns: nothing measures how much of each tolerance is actually
+being *used*. The diagnostic script proves its own tolerance is idle by re-running at `--tolerance
+2`; a golden CTest prints only pass or fail, so a scene that quietly drifted from a max difference
+of 2 to 59 under a tolerance of 60 would still say `[PASS]`.
 
 ### How a tolerance is chosen
 
