@@ -745,12 +745,28 @@ class Reader:
                         f"mip level {level} carries {len(payload)} bytes but {lw}x{lh}x{ld} "
                         f"{surface} needs {expected}")
                 levels.append(payload)
-        return {
+        report = {
             "kind": kind, "surfaceFormat": surface, "width": width, "height": height,
             "depth": depth, "faceCount": faces, "mipCount": mips,
             "levelByteSizes": [len(level) for level in levels],
             "levelDigests": [_digest(level) for level in levels],
         }
+        # A digest says two files differ; it does not say *how*, and for a cube or a volume the
+        # interesting way to be wrong is an ordering one -- faces read in another order, or a depth
+        # collapsed to one slice. So the first texel of each face, and of each slice, is reported
+        # too: it is the smallest thing that tells those apart, and it is what the interoperability
+        # expectations are written against (plans/plan_xnapipeline_parity.md XNAPP-281).
+        if surface == "Color":
+            if kind == "TextureCube":
+                report["size"] = width
+                report["faceFirstTexels"] = [list(level[0:4]) for level in levels[:faces]]
+            elif kind == "Texture3D" and mips >= 1 and levels:
+                sliceBytes = width * height * 4
+                first = levels[0]
+                report["firstTexel"] = list(first[0:4])
+                if depth > 1 and len(first) >= sliceBytes + 4:
+                    report["secondSliceFirstTexel"] = list(first[sliceBytes:sliceBytes + 4])
+        return report
 
     def value_list(self, expected_reader: str, element):
         self.reader_reference(expected_reader)

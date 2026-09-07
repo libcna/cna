@@ -1,0 +1,1 @@
+{"rootReader":"Microsoft.Xna.Framework.Content.Texture3DReader","root":{"kind":"Texture3D","surfaceFormat":"Color","width":4,"height":4,"depth":2,"mipCount":1,"firstTexel":[255,0,0,255],"secondSliceFirstTexel":[0,255,0,255]}}

@@ -53,6 +53,19 @@ namespace CNA::Internal::Xnb
          * @param evidence How this spelling was established.
          * @return The complete identity.
          */
+        /** @brief An identity whose reader and target both live in the Video assembly. */
+        [[nodiscard]] XnbReaderIdentity VideoIdentity(const char* readerBaseName,
+                                                       const char* targetBaseName)
+        {
+            XnbReaderIdentity identity;
+            identity.readerBaseName = readerBaseName;
+            identity.readerAssembly = XnbAssembly::FrameworkVideo;
+            identity.targetBaseName = targetBaseName;
+            identity.targetAssembly = XnbAssembly::FrameworkVideo;
+            identity.evidence = XnbNameEvidence::Xna40Fixture;
+            return identity;
+        }
+
         [[nodiscard]] XnbReaderIdentity CoreIdentity(
             const char* readerBaseName, const char* targetBaseName,
             const XnbAssembly targetAssembly, const XnbNameEvidence evidence)
@@ -1041,10 +1054,14 @@ namespace CNA::Internal::Xnb
                 output.WriteObject(value.durationMs);
             });
 
+        // `VideoReader` and `Video` both live in `Microsoft.Xna.Framework.Video.dll`, not in the
+        // core assembly, and the reader name must say so: a genuine XNA 4.0 runtime handed the
+        // unqualified name answers `Cannot find ContentTypeReader
+        // Microsoft.Xna.Framework.Content.VideoReader` and loads nothing. This was a derived guess
+        // until CNA's own `.xnb` was put in front of that runtime (XNAPP-281).
         AddWriter<XnbVideoData>(registry,
-            CoreIdentity("Microsoft.Xna.Framework.Content.VideoReader",
-                         "Microsoft.Xna.Framework.Media.Video", XnbAssembly::Framework,
-                         XnbNameEvidence::DerivedRule),
+            VideoIdentity("Microsoft.Xna.Framework.Content.VideoReader",
+                          "Microsoft.Xna.Framework.Media.Video"),
             true,
             [](XnbWriter& output, const XnbVideoData& value)
             {

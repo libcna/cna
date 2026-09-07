@@ -23,7 +23,7 @@ build="$repo/build/xna-interop"
 
 command -v mcs >/dev/null  || { echo "run-interop-harness: mcs not found" >&2; exit 3; }
 command -v wine >/dev/null || { echo "run-interop-harness: wine not found" >&2; exit 3; }
-for dll in Microsoft.Xna.Framework.dll Microsoft.Xna.Framework.Graphics.dll Microsoft.Xna.Framework.Game.dll; do
+for dll in Microsoft.Xna.Framework.dll Microsoft.Xna.Framework.Graphics.dll Microsoft.Xna.Framework.Game.dll Microsoft.Xna.Framework.Video.dll; do
     [ -f "$refs/$dll" ] || { echo "run-interop-harness: missing $refs/$dll" >&2; exit 3; }
 done
 [ -d "$fixtures" ] || { echo "run-interop-harness: no fixtures at $fixtures" >&2; exit 3; }
@@ -31,13 +31,15 @@ done
 # The Microsoft assemblies are copied only into the ignored build directory, beside the harness,
 # so the CLR finds them without a GAC; nothing Microsoft owns reaches the repository.
 rm -rf "$build"; mkdir -p "$build"
+cp "$refs/Microsoft.Xna.Framework.Video.dll" "$build/" 2>/dev/null || true
 cp "$refs/Microsoft.Xna.Framework.dll" "$refs/Microsoft.Xna.Framework.Graphics.dll" \
    "$refs/Microsoft.Xna.Framework.Game.dll" "$build/"
 cp "$fixtures"/* "$build/"
 
 mcs -sdk:4 -platform:x86 -target:exe -nologo -out:"$build/CnaXnbInterop.exe" \
     -r:"$build/Microsoft.Xna.Framework.dll" -r:"$build/Microsoft.Xna.Framework.Graphics.dll" \
-    -r:"$build/Microsoft.Xna.Framework.Game.dll" "$here/Program.cs"
+    -r:"$build/Microsoft.Xna.Framework.Game.dll" \
+    -r:"$build/Microsoft.Xna.Framework.Video.dll" "$here/Program.cs"
 
 win_fix="$(env WINEPREFIX="$prefix" WINEDEBUG=-all wine winepath -w "$build" 2>/dev/null)"
 env -u WAYLAND_DISPLAY DISPLAY="${CNA_XNA40_DISPLAY:-:99}" WINEPREFIX="$prefix" WINEDEBUG=-all \

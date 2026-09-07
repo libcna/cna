@@ -26,6 +26,9 @@ namespace CNA::Internal::Xnb
         constexpr const char* kFrameworkGraphics =
             ", Microsoft.Xna.Framework.Graphics, Version=4.0.0.0, Culture=neutral, "
             "PublicKeyToken=842cf8be1de50553";
+        constexpr const char* kFrameworkVideo =
+            ", Microsoft.Xna.Framework.Video, Version=4.0.0.0, Culture=neutral, "
+            "PublicKeyToken=842cf8be1de50553";
 
         void AppendGenericArgumentList(
             std::string& text, const std::vector<XnbReaderIdentity>& arguments,
@@ -66,6 +69,7 @@ namespace CNA::Internal::Xnb
                 }
             case XnbAssembly::Framework: return kFramework;
             case XnbAssembly::FrameworkGraphics: return kFrameworkGraphics;
+            case XnbAssembly::FrameworkVideo: return kFrameworkVideo;
             case XnbAssembly::None: break;
         }
         return {};

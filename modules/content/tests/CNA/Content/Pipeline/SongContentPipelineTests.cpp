@@ -128,7 +128,7 @@ TEST(SongContentPipelineTest, ComponentsDeclareStableUnambiguousRoutes)
 {
     const Pipeline::SongImporter importer;
     EXPECT_EQ(importer.Identity(),
-              (Pipeline::ContentComponentIdentity{"CNA.SongImporter", "2"}));
+              (Pipeline::ContentComponentIdentity{"CNA.SongImporter", "3"}));
     EXPECT_EQ(importer.OutputTypes(),
               std::vector<std::string>{Pipeline::ImportedSongSourceType});
     const std::vector<std::string> extensions = importer.SourceExtensions();
@@ -157,7 +157,7 @@ TEST(SongContentPipelineTest, IsDeterministicAndByteIdenticalToExistingProducers
     const Pipeline::ContentBuildResult second = BuildSong(scratch.Path());
     EXPECT_EQ(first.output.bytes, second.output.bytes);
     EXPECT_EQ(first.importer,
-              (Pipeline::ContentComponentIdentity{"CNA.SongImporter", "2"}));
+              (Pipeline::ContentComponentIdentity{"CNA.SongImporter", "3"}));
     EXPECT_EQ(first.processor,
               (Pipeline::ContentComponentIdentity{"CNA.SongProcessor", "2"}));
     EXPECT_EQ(first.writer,

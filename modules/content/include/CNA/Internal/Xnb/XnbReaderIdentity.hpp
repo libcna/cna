@@ -40,6 +40,16 @@ namespace CNA::Internal::Xnb
         Framework,
         /** @brief `Microsoft.Xna.Framework.Graphics`. */
         FrameworkGraphics,
+        /**
+         * @brief `Microsoft.Xna.Framework.Video` -- where `VideoReader` and `Video` actually live.
+         *
+         * A separate assembly from the core one, and the difference is not cosmetic: a genuine XNA
+         * 4.0 runtime handed an unqualified `Microsoft.Xna.Framework.Content.VideoReader` answers
+         * `Cannot find ContentTypeReader`, because it looks for the type in the core assembly and
+         * the type is not there. Measured by loading CNA's own `.xnb` in that runtime
+         * (plans/plan_xnapipeline_parity.md XNAPP-281).
+         */
+        FrameworkVideo,
     };
 
     /**

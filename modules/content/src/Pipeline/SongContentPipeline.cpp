@@ -70,9 +70,13 @@ namespace CNA::Content::Pipeline
         }
     }
 
+    SongImporter::SongImporter(SongDurationProbe probe) : probe_(std::move(probe)) {}
+
     ContentComponentIdentity SongImporter::Identity() const
     {
-        return {kSongImporterName, "2"};
+        // Version 3: the importer reads the source's duration when a probe is registered, so an
+        // asset built by version 2 carries a different value (XNAPP-281).
+        return {kSongImporterName, "3"};
     }
 
     std::vector<std::string> SongImporter::SourceExtensions() const
@@ -120,6 +124,12 @@ namespace CNA::Content::Pipeline
         imported.mediaSource = context.SourcePath();
         imported.streamReference = CNA::Internal::ContentPathToUtf8(relative);
         imported.byteSize = static_cast<std::uint64_t>(size);
+        // Part of the imported value, and therefore part of what the incremental build compares: a
+        // file whose length changed is a different import even when its size in bytes did not.
+        if (probe_)
+        {
+            imported.authoredDurationMs = probe_(context.SourcePath());
+        }
         if (const std::string problem = Cnb::CnbLogicalNameProblem(imported.streamReference);
             !problem.empty())
         {
@@ -224,9 +234,9 @@ namespace CNA::Content::Pipeline
                 "Microsoft.Xna.Framework.Media.Song", Cnb::CnbMediaSchemaVersion};
     }
 
-    void RegisterSongContentPipeline(ContentPipelineRegistry& registry)
+    void RegisterSongContentPipeline(ContentPipelineRegistry& registry, SongDurationProbe probe)
     {
-        registry.RegisterImporter(std::make_shared<SongImporter>());
+        registry.RegisterImporter(std::make_shared<SongImporter>(std::move(probe)));
         registry.RegisterProcessor(std::make_shared<SongProcessor>());
         registry.RegisterWriter(std::make_shared<SongContentWriter>());
     }

@@ -1,0 +1,1 @@
+{"rootReader":"Microsoft.Xna.Framework.Content.TextureCubeReader","root":{"kind":"TextureCube","surfaceFormat":"Color","size":4,"faceCount":6,"mipCount":1,"faceFirstTexels":[[255,0,0,255],[0,255,0,255],[0,0,255,255],[255,255,0,255],[255,0,255,255],[0,255,255,255]]}}

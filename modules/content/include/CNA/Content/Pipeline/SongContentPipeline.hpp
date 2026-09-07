@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <optional>
 #include <string>
 
@@ -25,6 +26,21 @@ namespace CNA::Content::Pipeline
 
     /** @brief SongProcessor u64 parameter containing duration in milliseconds, or zero. */
     inline constexpr const char* SongDurationMsParameter = "durationMs";
+
+    /**
+     * @brief Reads a streaming song's duration, or answers nothing.
+     *
+     * The same arrangement the video route has, and for the same reason: `cna_content` has no
+     * decoder and must not grow one, so the importer takes a probe from whoever registers it and
+     * the build-time layer supplies one over the media decoder. Without it a `Song` carries
+     * duration zero -- which a genuine XNA 4.0 runtime reports as `Song.Duration` of zero, where
+     * XNA's own build reports the real length (plans/plan_xnapipeline_parity.md XNAPP-281).
+     *
+     * @param source The native media file.
+     * @return The duration in milliseconds, or `std::nullopt` when this build cannot read it.
+     */
+    using SongDurationProbe =
+        std::function<std::optional<std::uint32_t>(const std::filesystem::path& source)>;
 
     /** @brief Source-oriented identity of a streaming song file without embedded media bytes. */
     struct ImportedSongSource
@@ -52,6 +68,16 @@ namespace CNA::Content::Pipeline
     class SongImporter final : public ContentImporter
     {
     public:
+        /** @brief Creates an importer that reads no duration. */
+        SongImporter() = default;
+
+        /**
+         * @brief Creates an importer that asks @p probe how long the source is.
+         *
+         * @param probe The build-time probe; an empty one behaves as the default constructor.
+         */
+        explicit SongImporter(SongDurationProbe probe);
+
         /** @brief Returns the stable built-in importer identity. */
         [[nodiscard]] ContentComponentIdentity Identity() const override;
 
@@ -71,6 +97,9 @@ namespace CNA::Content::Pipeline
          * @return Root-relative stream identity and checked source size.
          */
         [[nodiscard]] ContentValue Import(ContentImporterContext& context) const override;
+
+    private:
+        SongDurationProbe probe_;
     };
 
     /** @brief Produces canonical Song metadata and its separate runtime media XREF. */
@@ -137,5 +166,6 @@ namespace CNA::Content::Pipeline
      *
      * @param registry Explicit registry to configure before builds begin.
      */
-    void RegisterSongContentPipeline(ContentPipelineRegistry& registry);
+    void RegisterSongContentPipeline(ContentPipelineRegistry& registry,
+                                     SongDurationProbe probe = {});
 }

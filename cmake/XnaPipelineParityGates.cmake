@@ -136,4 +136,26 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/interop/xna40/run-interop-harness.s
                                     SKIP_RETURN_CODE 3 TIMEOUT 900)
 endif()
 
+# The three output families whose fixtures cannot be committed with the rest -- Effect, Song and
+# Video -- built from CNA's own sources and loaded in the same genuine runtime (XNAPP-281). Skips
+# the same way when the machine cannot answer.
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/interop/xna40/run-built-families-interop.sh")
+    add_test(NAME XnaPipelineGenuineRuntimeBuiltFamilies
+             COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/tests/interop/xna40/run-built-families-interop.sh")
+    set_tests_properties(XnaPipelineGenuineRuntimeBuiltFamilies
+                         PROPERTIES LABELS "parity;xnapipeline;interop"
+                                    SKIP_RETURN_CODE 3 TIMEOUT 900)
+endif()
+
+# And the LZX half of the committed corpus, which is the same assets through the compressor XNA
+# itself produced.
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/interop/xna40/run-interop-harness.sh")
+    add_test(NAME XnaPipelineGenuineRuntimeInteropLzx
+             COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/tests/interop/xna40/run-interop-harness.sh"
+                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/assets/xnb/cna/windows/lzx")
+    set_tests_properties(XnaPipelineGenuineRuntimeInteropLzx
+                         PROPERTIES LABELS "parity;xnapipeline;interop"
+                                    SKIP_RETURN_CODE 3 TIMEOUT 900)
+endif()
+
 set_tests_properties(XnaPipelineParityGateIsGreen PROPERTIES LABELS "parity;xnapipeline")

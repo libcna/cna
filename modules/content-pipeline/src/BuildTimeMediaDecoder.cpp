@@ -44,6 +44,11 @@ namespace CNA::Content::Pipeline::BuildTimeMedia
 
     ProbedVideo ProbeVideo(const std::string&) { throw std::runtime_error(UnavailableReason()); }
 
+    std::int64_t ProbeAudioDurationTicks(const std::string&)
+    {
+        throw std::runtime_error(UnavailableReason());
+    }
+
     void EncodeWindowsMediaAudio(const std::vector<std::uint8_t>&, int, int, int, const std::string&)
     {
         throw std::runtime_error(UnavailableReason());
@@ -293,6 +298,23 @@ namespace CNA::Content::Pipeline::BuildTimeMedia
         return probed;
     }
 
+    std::int64_t ProbeAudioDurationTicks(const std::string& filename)
+    {
+        FormatContext format = Open(filename);
+        const int index = av_find_best_stream(format.get(), AVMEDIA_TYPE_AUDIO, -1, -1, nullptr, 0);
+        if (index < 0)
+        {
+            throw std::runtime_error("the file carries no audio stream");
+        }
+        const AVStream* stream = format->streams[index];
+        std::int64_t ticks = Ticks(stream->duration, stream->time_base);
+        if (ticks == 0)
+        {
+            ticks = Ticks(format->duration, AVRational{1, AV_TIME_BASE});
+        }
+        return ticks;
+    }
+
     void EncodeWindowsMediaAudio(const std::vector<std::uint8_t>& pcm, const int channels,
                                  const int sampleRate, const int bitsPerSecond,
                                  const std::string& filename)
@@ -430,6 +452,29 @@ namespace CNA::Content::Pipeline::BuildTimeMedia
         avio_closep(&format->pb);
     }
 #endif
+
+        SongDurationProbe MakeSongDurationProbe()
+        {
+            if (!IsAvailable()) { return {}; }
+            return [](const std::filesystem::path& source) -> std::optional<std::uint32_t>
+            {
+                std::int64_t ticks = 0;
+                try
+                {
+                    ticks = ProbeAudioDurationTicks(CNA::Internal::ContentPathToUtf8(source));
+                }
+                catch (const std::exception&)
+                {
+                    // Not a refusal: the processor takes a `durationMs` parameter, and a build
+                    // that knows better than this decoder is entitled to say so.
+                    return std::nullopt;
+                }
+                if (ticks <= 0) { return std::nullopt; }
+                const std::int64_t milliseconds = ticks / 10000;
+                if (milliseconds <= 0 || milliseconds > 2147483647) { return std::nullopt; }
+                return static_cast<std::uint32_t>(milliseconds);
+            };
+        }
 
         VideoMetadataProbe MakeVideoMetadataProbe()
         {

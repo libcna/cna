@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "CNA/Content/Pipeline/SongContentPipeline.hpp"
 #include "CNA/Content/Pipeline/VideoContentPipeline.hpp"
 
 namespace CNA::Content::Pipeline
@@ -117,6 +118,15 @@ namespace CNA::Content::Pipeline
         [[nodiscard]] ProbedVideo ProbeVideo(const std::string& filename);
 
         /**
+         * @brief Reads an audio file's declared length without decoding a sample.
+         *
+         * @param filename Path to the source.
+         * @return The stream's length in 100-nanosecond ticks.
+         * @throws std::runtime_error when the file cannot be opened or has no audio stream.
+         */
+        [[nodiscard]] std::int64_t ProbeAudioDurationTicks(const std::string& filename);
+
+        /**
          * @brief The canonical video route's frame-metadata probe, backed by this decoder.
          *
          * `cna_content` cannot read a media file and must not learn how -- a game that loads a
@@ -129,6 +139,18 @@ namespace CNA::Content::Pipeline
          * @return A probe suitable for RegisterVideoContentPipeline().
          */
         [[nodiscard]] VideoMetadataProbe MakeVideoMetadataProbe();
+
+        /**
+         * @brief Creates the build-time song-duration probe, or an empty one.
+         *
+         * The same arrangement `MakeVideoMetadataProbe` has: `cna_content` owns no decoder, so the
+         * importer takes this from whoever registers it. Without it a `Song` carries duration
+         * zero, which is what a genuine XNA 4.0 runtime then reports
+         * (plans/plan_xnapipeline_parity.md `XNAPP-281`).
+         *
+         * @return The probe, or an empty function when this build has no media decoder.
+         */
+        [[nodiscard]] SongDurationProbe MakeSongDurationProbe();
 
         /**
          * @brief Encodes PCM samples to Windows Media audio in an ASF container.
