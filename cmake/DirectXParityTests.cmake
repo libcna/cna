@@ -232,9 +232,8 @@ function(cna_register_d3d_parity_tests)
         NAME Pbr_FresnelFactors TARGET pbr_fresnel_factors DIRECTX12_ORDER 20
         SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_fresnel_factors_test.cpp")
     cna_d3d_parity_fixture(
-        NAME EnvironmentMapAmountZero TARGET environmentmapeffect_amount_zero
-        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/vulkan/examples/vulkan_environmentmapeffect_amount_zero_test.cpp"
-        DIRECTX11_ONLY REASON "D3D12 stock-effect corpus adoption is tracked by DX-230 and DX-236")
+        NAME EnvironmentMapAmountZero TARGET environmentmapeffect_amount_zero DIRECTX12_ORDER 920
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_environmentmapeffect_amount_zero_test.cpp")
     cna_d3d_parity_fixture(
         NAME SkinnedEffect_WorldNormal TARGET skinnedeffect_world_normal
         SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/vulkan/examples/vulkan_skinnedeffect_world_normal_test.cpp"
@@ -285,9 +284,42 @@ function(cna_register_d3d_parity_tests)
         NAME DualTextureEffect_VertexColor TARGET dualtextureeffect_vertexcolor DIRECTX12_ORDER 910
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/dualtextureeffect_vertexcolor_test.cpp")
     cna_d3d_parity_fixture(
-        NAME EnvironmentMapEffect_Fog TARGET environmentmap_fog
-        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/vulkan/examples/vulkan_environmentmapeffect_fog_test.cpp"
-        DIRECTX11_ONLY REASON "D3D12 stock-effect corpus adoption is tracked by DX-230 and DX-236")
+        NAME EnvironmentMapEffect_Fog TARGET environmentmapeffect_fog DIRECTX12_ORDER 930
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_environmentmapeffect_fog_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME EnvironmentMapEffect_Golden TARGET environmentmapeffect_golden DIRECTX12_ORDER 940
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_environmentmapeffect_golden_test.cpp"
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    cna_d3d_parity_fixture(
+        NAME EnvironmentMapEffect_Readback TARGET env_map DIRECTX12_ORDER 950
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_env_map_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME EnvironmentMapEffect_AmountOne TARGET environmentmapeffect_amount_one DIRECTX12_ORDER 960
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_environmentmapeffect_amount_one_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME EnvironmentMapEffect_Specular TARGET environmentmapeffect_specular DIRECTX12_ORDER 970
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_environmentmapeffect_specular_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME EnvironmentMapEffect_AlphaScaledLerp TARGET environmentmapeffect_alphascaledlerp DIRECTX12_ORDER 980
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/environmentmapeffect_alphascaledlerp_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME EnvironmentMapEffect_Fresnel TARGET environmentmapeffect_fresnel DIRECTX12_ORDER 990
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_environmentmapeffect_fresnel_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME EnvironmentMapEffect_Fresnel_Gradient TARGET environmentmapeffect_fresnel_gradient DIRECTX12_ORDER 1000
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_environmentmapeffect_fresnel_gradient_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME EnvironmentMapEffect_EyePosition TARGET environmentmapeffect_eyeposition DIRECTX12_ORDER 1010
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_environmentmapeffect_eyeposition_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME EnvironmentMapEffect_WorldTransform TARGET environmentmapeffect_worldtransform DIRECTX12_ORDER 1020
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_environmentmapeffect_worldtransform_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME EnvironmentMapEffect_Combined TARGET environmentmapeffect_combined DIRECTX12_ORDER 1030
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_environmentmapeffect_combined_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME EnvironmentMapEffect_MultiLight TARGET environmentmapeffect_multilight DIRECTX12_ORDER 1040
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_environmentmapeffect_multilight_test.cpp")
     cna_d3d_parity_fixture(
         NAME SkinnedEffect_Fog TARGET skinnedeffect_fog
         SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/vulkan/examples/vulkan_skinnedeffect_fog_test.cpp"
