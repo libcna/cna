@@ -23,6 +23,8 @@
 #include <ft2build.h>
 #include FT_FREETYPE_H
 #include FT_OUTLINE_H
+#include FT_SFNT_NAMES_H
+#include FT_TRUETYPE_IDS_H
 #endif
 
 namespace CNA::Content::Pipeline
@@ -515,9 +517,10 @@ namespace CNA::Content::Pipeline
         }
     }
 
-    Cnb::CnbSpriteFontData RasterizeFontDescription(const FontDescription& description,
-                                                    std::vector<std::string>& warnings,
-                                                    const ContentStrictness strictness)
+    Cnb::CnbSpriteFontData RasterizeFontDescription(
+        const FontDescription& description, std::vector<std::string>& warnings,
+        const ContentStrictness strictness,
+        const Microsoft::Xna::Framework::Graphics::GraphicsProfile profile)
     {
         const std::vector<SharpRuntime::charcs> characters =
             ExpandCharacterRegions(description);
@@ -674,10 +677,19 @@ namespace CNA::Content::Pipeline
                 std::to_string(kMaximumAtlasSide) + "x" + std::to_string(kMaximumAtlasSide) +
                 " glyph atlas. Reduce <Size> or narrow <CharacterRegions>.");
         }
-        // The atlas is only as tall as it needs to be, rounded to a power of two: a font that
-        // fills two shelves should not carry a mostly-empty square. Not capped at the width any
-        // more -- a tall sheet is what a large font produces, and XNA's are 128x256 and 256x512.
-        const std::uint32_t atlasHeight = RoundUpToPowerOfTwo(usedHeight);
+        // How tall the sheet is, is the profile's rule and not the packer's. Measured over the
+        // 196 distinct sprite-font atlases the genuine pipeline produced for the public XNA
+        // samples: of the 186 whose two candidate answers differ, **every** Reach atlas is the
+        // packed height rounded up to a power of two and **every** HiDef one is it rounded up to
+        // four -- 119 and 67, with no exception either way. Rounding to a power of two whatever
+        // the profile is what CNA did, and it costs a Reach-shaped sheet on a HiDef target: the
+        // CardsStarterKit sample's three fonts are 256x144, 256x196 and 256x120 there against a
+        // 256x256 here, which is 70,830 bytes of `.xnb` where XNA writes 42,158
+        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-104`).
+        const std::uint32_t atlasHeight =
+            profile == Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef
+                ? ((usedHeight + 3u) & ~3u)
+                : RoundUpToPowerOfTwo(usedHeight);
 
         Cnb::CnbSpriteFontData font;
         font.atlas.width = side;
@@ -784,9 +796,9 @@ namespace CNA::Content::Pipeline
         return font;
     }
 #else
-    Cnb::CnbSpriteFontData RasterizeFontDescription(const FontDescription&,
-                                                    std::vector<std::string>&,
-                                                    const ContentStrictness)
+    Cnb::CnbSpriteFontData RasterizeFontDescription(
+        const FontDescription&, std::vector<std::string>&, const ContentStrictness,
+        const Microsoft::Xna::Framework::Graphics::GraphicsProfile)
     {
         throw std::runtime_error(
             "this build has no font rasterizer, so a .spritefont cannot be compiled. Configure "
@@ -926,8 +938,68 @@ namespace CNA::Content::Pipeline
             bool italic = false;
         };
 
+#if defined(CNA_HAVE_FREETYPE)
+        /**
+         * @brief One `name` table entry of a face, as UTF-8.
+         *
+         * @param face The opened face.
+         * @param nameId The `name` table identifier: 1 is the family, 2 the subfamily.
+         * @return The entry, or empty when the face has none this can read.
+         */
+        [[nodiscard]] std::string SfntName(const FT_Face face, const FT_UShort nameId)
+        {
+            std::string best;
+            int bestRank = -1;
+            const FT_UInt count = FT_Get_Sfnt_Name_Count(face);
+            for (FT_UInt index = 0; index < count; ++index)
+            {
+                FT_SfntName entry{};
+                if (FT_Get_Sfnt_Name(face, index, &entry) != 0) { continue; }
+                if (entry.name_id != nameId) { continue; }
+                int rank = -1;
+                std::string text;
+                if (entry.platform_id == TT_PLATFORM_MICROSOFT)
+                {
+                    // UTF-16BE. English (0x0409) first, then any other Windows language.
+                    rank = entry.language_id == TT_MS_LANGID_ENGLISH_UNITED_STATES ? 3 : 2;
+                    for (FT_UInt at = 0; at + 1u < entry.string_len; at += 2u)
+                    {
+                        const unsigned code = static_cast<unsigned>(entry.string[at]) << 8 |
+                                              entry.string[at + 1u];
+                        // The name table's family and subfamily are ASCII in every font this has
+                        // to read; anything above is left out rather than mangled.
+                        if (code != 0u && code < 0x80u) { text += static_cast<char>(code); }
+                    }
+                }
+                else if (entry.platform_id == TT_PLATFORM_MACINTOSH)
+                {
+                    rank = 1;
+                    for (FT_UInt at = 0; at < entry.string_len; ++at)
+                    {
+                        const unsigned char code = entry.string[at];
+                        if (code != 0u && code < 0x80u) { text += static_cast<char>(code); }
+                    }
+                }
+                if (rank > bestRank && !text.empty())
+                {
+                    best = text;
+                    bestRank = rank;
+                }
+            }
+            return best;
+        }
+#endif
+
         /**
          * @brief Every face of one font file, with the family name it declares.
+         *
+         * The family is the `name` table's entry 1 -- the one Windows matches a `LOGFONT` against,
+         * and therefore the one `<FontName>` names. It is read directly rather than taken from
+         * FreeType's own `family_name`, which prefers the *typographic* family (entry 16) where a
+         * font has one: `Moire-ExtraBold.ttf` declares family 'Moire ExtraBold' and typographic
+         * family 'Moire', so a lookup through `family_name` answers 'Moire' with the extra-bold
+         * face and the CardsStarterKit sample's regular font comes out extra bold
+         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-105`).
          *
          * Empty where this build has no rasterizer, which is what makes the family lookup an
          * addition to the file-name one rather than a replacement for it.
@@ -945,9 +1017,11 @@ namespace CNA::Content::Pipeline
                 FT_Face face = nullptr;
                 if (FT_New_Face(library, native.c_str(), index, &face) != 0) { break; }
                 count = face->num_faces > 0 ? face->num_faces : 1;
-                if (face->family_name != nullptr)
+                std::string family = SfntName(face, 1u);
+                if (family.empty() && face->family_name != nullptr) { family = face->family_name; }
+                if (!family.empty())
                 {
-                    faces.push_back({path, index, face->family_name,
+                    faces.push_back({path, index, family,
                                      (face->style_flags & FT_STYLE_FLAG_BOLD) != 0,
                                      (face->style_flags & FT_STYLE_FLAG_ITALIC) != 0});
                 }
@@ -1337,8 +1411,9 @@ namespace CNA::Content::Pipeline
     {
         const FontDescription& description = input.Get<FontDescription>();
         std::vector<std::string> warnings;
-        Cnb::CnbSpriteFontData font =
-            RasterizeFontDescription(description, warnings, context.Environment().strictness);
+        Cnb::CnbSpriteFontData font = RasterizeFontDescription(
+            description, warnings, context.Environment().strictness,
+            context.Environment().targetProfile);
         for (const std::string& warning : warnings) { context.LogWarning(warning); }
         context.LogInfo("rasterized " + std::to_string(font.characters.size()) +
                         " glyph(s) into a " + std::to_string(font.atlas.width) + "x" +

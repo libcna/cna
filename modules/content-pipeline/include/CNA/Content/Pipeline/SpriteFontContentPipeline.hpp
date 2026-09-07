@@ -176,11 +176,16 @@ namespace CNA::Content::Pipeline
      * @param strictness Whether a character the font has no glyph for refuses the build or is
      *        drawn with the font's own `.notdef` and warned about, which is what XNA does
      *        (plans/plan_xnapipeline_parity.md XNAPP-267).
+     * @param profile The graphics profile the atlas must suit: Reach rounds its height up to a
+     *        power of two, HiDef up to four (measured, plans/plan_xna_sample_xnb_sweep.md
+     *        XNASWEEP-104).
      * @return The atlas and its glyph table.
      */
     [[nodiscard]] Cnb::CnbSpriteFontData RasterizeFontDescription(
         const FontDescription& description, std::vector<std::string>& warnings,
-        ContentStrictness strictness = ContentStrictness::Strict);
+        ContentStrictness strictness = ContentStrictness::Strict,
+        Microsoft::Xna::Framework::Graphics::GraphicsProfile profile =
+            Microsoft::Xna::Framework::Graphics::GraphicsProfile::Reach);
 
     /** @brief Reads a `.spritefont` and resolves the font file it names. */
     class FontDescriptionImporter final : public ContentImporter

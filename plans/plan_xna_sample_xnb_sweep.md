@@ -172,4 +172,6 @@ final qualification.
 | `XNASWEEP-101` | The build-tool services a command line selects -- effect compiler, XMA encoder, font directories -- reached nothing on a `.contentproj` build. | [ ] |
 | `XNASWEEP-102` | `--xnb-platform`, `--xnb-profile` and `--xnb-compress` were accepted on a `.contentproj` build and ignored. | [ ] |
 | `XNASWEEP-103` | One asset with no component refused the whole project, three times over. | [ ] |
+| `XNASWEEP-104` | A sprite-font atlas's height is the graphics profile's rule, and CNA used Reach's for both. | [ ] |
+| `XNASWEEP-105` | A font family was matched against the typographic family, not the one Windows matches. | [ ] |
 
