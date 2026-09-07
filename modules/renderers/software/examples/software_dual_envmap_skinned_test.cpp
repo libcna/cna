@@ -238,7 +238,16 @@ protected:
 
             SkinnedEffect fx(dev);
             fx.setTextureProperty(&white);
-            fx.setDiffuseColorProperty(Vector3(1.0f, 0.0f, 0.0f));
+            // Isolate the bone translation from the now-complete lighting path. An emissive-only
+            // red material produces the historical solid probe colour without depending on the
+            // stock default light rig or the vertex normal.
+            fx.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+            fx.setAmbientLightColorProperty(Vector3::Zero);
+            fx.setEmissiveColorProperty(Vector3(1.0f, 0.0f, 0.0f));
+            fx.setSpecularColorProperty(Vector3::Zero);
+            fx.DirectionalLight0.setEnabledProperty(false);
+            fx.DirectionalLight1.setEnabledProperty(false);
+            fx.DirectionalLight2.setEnabledProperty(false);
             fx.setProjectionProperty(Matrix::CreatePerspectiveFieldOfView(
                 1.5707963f, 1.0f, 0.1f, 100.0f));
             std::vector<Matrix> bones(2, Matrix::getIdentityProperty());

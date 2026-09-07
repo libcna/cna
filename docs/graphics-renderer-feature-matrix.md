@@ -58,12 +58,14 @@ of pixel output. See `plans/plan_headless.md` for its own status.
 
 The **Software** renderer (`CNA_GRAPHICS_RENDERER=SOFTWARE`, tracked in `../plans/plan_software.md`) is
 also **not yet** a column here, but for a different reason than Headless: unlike Headless, it
-*does* render real pixels (a genuine CPU rasterizer), so it could plausibly become a real
-pixel-parity comparison column once its feature set is broad enough — v1 only covers `TriangleList`,
-a `BasicEffect` subset (no lighting/fog), nearest-neighbor texturing, and a simplified
-`Opaque`/`AlphaBlend` distinction, too narrow for a meaningful row-by-row comparison against the
-established renderers yet. Worth revisiting as `plans/plan_software.md`'s scope grows. See
-`docs/software-renderer.md` for its current capability boundary.
+*does* render real pixels (a genuine CPU rasterizer). Its historical v1 boundary was too narrow
+for a meaningful column, but the active XNA/Core parity campaign has since added triangle strips,
+declaration-driven vertex input, six-plane clipping, top-left rasterization, complete blend and
+stencil state, sample-correct 4x MSAA, mip/address filtering, classic stock-effect fog, and full
+BasicEffect/EnvironmentMapEffect/SkinnedEffect lighting. Texture3D, RenderTargetCube, MRT,
+OcclusionQuery and the broader SpriteBatch/Model audits remain open, so a project-wide column is
+still deferred until those rows close. See `docs/software-renderer.md` and the evidence ledger for
+the measured current boundary.
 
 The **Stub** renderer (`CNA_GRAPHICS_RENDERER=STUB`, tracked in `../plans/plan_stub.md`) is, like Headless,
 **not** a column in this matrix and for the same reason: it never renders a single pixel. Unlike
@@ -535,9 +537,9 @@ Fixed since this section was originally written (2026-07-15):
   `VSBasicPixelLighting`) remains permanently unreachable, blocked by the same missing Position-only
   vertex layout as the untextured vertex-lit bucket — unrelated to this fix. This was also the
   project-wide "Divergence 1" every other CNA renderer shared; `plans/plan_graphics.md` Phase 80 has since
-  fixed EasyGL/Vulkan/Bgfx/WebGPU(`BasicEffect`-only)/D3D11/D3D12 too — only the `Software` renderer
-  remains, deferred (no lighting engine of any kind exists there yet, a larger and differently-shaped
-  gap, see Phase 80's own Task 1108 row).
+  fixed EasyGL/Vulkan/Bgfx/WebGPU(`BasicEffect`-only)/D3D11/D3D12 too. Software subsequently gained
+  distinct per-vertex/per-pixel classic lighting in `SOFTWARE-113` and `SOFTWARE-115`; the old
+  no-lighting statement is retained here only as the historical state when this D3D9 note landed.
 - ~~`CnaTests` does not build under D3D9~~ — **fixed** (`D9-123`, 2026-07-15, same session `D9-130`
   was written in but not yet reflected here): all POSIX `::setenv()`/`::unsetenv()` call sites
   replaced with `System::Environment::SetEnvironmentVariable`; `CnaTests` compiles and the

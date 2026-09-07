@@ -146,9 +146,13 @@ rather than always passing.
   perspective-interpolated. D3D9 COLOR saturation bounds material and environment-amount outputs
   before interpolation. Texture/effect alpha scales the cube lerp target and environment-specular
   term. The shared Software/EasyGL contract passes 14/14 with a two-byte tolerance.
-- **`SkinnedEffect` lighting remains pending.** Bone-transformed positions and fog work, but the
-  classic directional/ambient/emissive/specular calculation and complete normal handling remain
-  tracked by `SOFTWARE-115`.
+- **`SkinnedEffect` lighting is complete** (`SOFTWARE-115`). Software applies 1/2/4 weighted bones
+  to positions and normals, then evaluates the same classic ambient/diffuse/emissive/specular
+  equation as FNA with all three lights, default lighting, `SpecularPower`, texture and alpha.
+  FNA's normal order is preserved exactly: direct weighted-bone 3x3 followed by inverse-transpose
+  `World`. Both XNA's default per-vertex path and `PreferPerPixelLighting=true` are implemented.
+  The shared Software/EasyGL contract passes 19/19 with a two-byte tolerance; the oracle also
+  corrected EasyGL's classic bone-normal path without changing its CNAEXT PBR/glTF shaders.
 - **Classic stock-effect fog is complete** (`SOFTWARE-112`). `BasicEffect`, `AlphaTestEffect`,
   `DualTextureEffect`, `EnvironmentMapEffect` and `SkinnedEffect` use FNA's view-space fog vector,
   including transformed World/View matrices, the degenerate start=end case and SkinnedEffect's
@@ -156,7 +160,7 @@ rather than always passing.
   final RGB toward `FogColor * outputAlpha` after the stock effect's texture/environment work and
   alpha test but before blending.
 - **`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect` are supported** (`SOFTWARE-82`),
-  with the remaining DualTexture/SkinnedEffect caveats below:
+  with DualTexture's remaining coordinate caveat below:
   - `DualTextureEffect`: real second-texture sampling, FNA's own
     `color.rgb*=2; color *= overlay*diffuse` formula. Both textures reuse the same UV (this
     renderer has no genuine 2-UV vertex format — an established simplification, matching this
@@ -164,9 +168,9 @@ rather than always passing.
   - `EnvironmentMapEffect`: real six-face RGBA8 cube storage and mip chains, sampler-slot-1
     point/linear/min/mag/mip and address behavior, FNA vertex lighting, inverse-transpose normals,
     reflection/Fresnel, alpha-scaled lerp/specular and final fog semantics.
-  - `SkinnedEffect`: real per-vertex bone-transform blending (up to 4 weighted bones,
-    `WeightsPerVertex`-gated) applied to the vertex position before the standard
-    World\*View\*Projection transform.
+  - `SkinnedEffect`: real `WeightsPerVertex`-gated 1/2/4-bone position and normal blending,
+    inverse-transpose World normals, full classic lighting in vertex/pixel modes, texture, alpha
+    and fog.
 - **No MRT, no 3D textures, and no render-target cube maps.** Ordinary `Texture2D` and
   `TextureCube` mip storage and sampling are real.
   `RenderTarget2D` does implement an actual four-sample CPU colour plane and generated mip levels.

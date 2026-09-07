@@ -4,10 +4,9 @@
 // FNA's stock path (SkinnedEffect.fx + Lighting.fxh):
 //   Skin():                        vin.Normal = mul(vin.Normal, (float3x3)skinning);
 //   ComputeCommonVSOutput...():    worldNormal = normalize(mul(normal, WorldInverseTranspose));
-// assumes the bone palette has no non-uniform scale. glTF does allow scale in joint transforms;
-// preserving a surface normal under that affine transform requires
-//   normalize( InverseTranspose(World3x3)
-//            * InverseTranspose(skinMatrix3x3) * objectNormal ).
+// assumes the bone palette has no non-uniform scale and therefore deliberately transforms the
+// normal directly by the weighted bone 3x3. Classic SkinnedEffect must retain that XNA contract;
+// CNAEXT PBR/glTF skinning may use a different normal policy for non-uniform joint transforms.
 //
 // EasyGL's three skinned vertex programs (EnsureSkinnedProgram/EnsureSkinnedVertexLitProgram --
 // audit Variant A, no world factor at all -- and EnsurePbrSkinnedProgram -- audit Variant B, raw
@@ -40,8 +39,8 @@
 //   4. World = RotationZ(90) * Scale(2,1,1): CPU-derived by the same formula, cross-checked.
 //   5. Bone = Scale(2,2,2), n0 = (0,.6,.8): uniform-scale control -> N.L=.6 -> ~153
 //   6. Bone = Scale(1,2,1), n0 = (0,.6,.8):
-//        correct inverse-transpose = norm(0,.3,.8) -> N.L=.351 -> ~90
-//        wrong direct joint matrix  = norm(0,1.2,.8) -> N.L=.832 -> ~212
+//        FNA/XNA direct joint matrix = norm(0,1.2,.8) -> N.L=.832 -> ~212
+//        inverse-transpose extension = norm(0,.3,.8) -> N.L=.351 -> ~90
 //
 // Exit code 0 = PASS, 1 = FAIL.
 
@@ -94,9 +93,19 @@ namespace
         return len > 0.0f ? Vector3(r.X / len, r.Y / len, r.Z / len) : r;
     }
 
+    Vector3 DirectNormal(const Matrix& transform, const Vector3& n)
+    {
+        Vector3 r(
+            transform.M11 * n.X + transform.M21 * n.Y + transform.M31 * n.Z,
+            transform.M12 * n.X + transform.M22 * n.Y + transform.M32 * n.Z,
+            transform.M13 * n.X + transform.M23 * n.Y + transform.M33 * n.Z);
+        const float len = std::sqrt(r.X * r.X + r.Y * r.Y + r.Z * r.Z);
+        return len > 0.0f ? Vector3(r.X / len, r.Y / len, r.Z / len) : r;
+    }
+
     Vector3 ExpectedNormal(const Matrix& world, const Matrix& bone, const Vector3& n)
     {
-        return InverseTransposeNormal(world, InverseTransposeNormal(bone, n));
+        return InverseTransposeNormal(world, DirectNormal(bone, n));
     }
 }
 
@@ -192,9 +201,8 @@ class EasyGLSkinnedEffectWorldNormalTest : public Game
         else
         {
             ++fail_;
-            std::printf("       expected InvTranspose(World3x3)*"
-                        "InvTranspose(Skin3x3)*normal; a direct skin 3x3 multiply is wrong under "
-                        "a non-uniform joint scale (GLTF-264)\n");
+            std::printf("       expected FNA/XNA InvTranspose(World3x3)*"
+                        "Skin3x3*normal\n");
         }
         std::fflush(stdout);
     }
@@ -221,9 +229,9 @@ class EasyGLSkinnedEffectWorldNormalTest : public Game
              Matrix::CreateScale(2.0f, 1.0f, 1.0f) * Matrix::CreateRotationZ(MathHelper::PiOver2),
              identity, nXY, preferPerPixel);
 
-        // GLTF-264 / skin-nonuniform-joint-scale: isolate the bone normal matrix with World=I.
-        // The uniform case is a control where direct and inverse-transpose point the same way;
-        // the non-uniform case separates them by 122 framebuffer levels.
+        // Isolate FNA/XNA's direct bone normal transform with World=I. The uniform case is a
+        // control where direct and inverse-transpose point the same way; the non-uniform case
+        // separates them by 122 framebuffer levels.
         const Vector3 nYZ(0.0f, 0.6f, 0.8f);
         Case(dev, "uniform bone scale(2,2,2)", identity,
              Matrix::CreateScale(2.0f, 2.0f, 2.0f), nYZ, preferPerPixel);

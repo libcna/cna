@@ -8592,16 +8592,19 @@ CNA_GL_SKIN_NORMAL_DECL
 // normal for just that vertex rather than propagating NaN; XNA/FNA's own Skin() was
 // never validated against this degenerate case, so this is a numerical-safety guard,
 // not a deviation from its intended per-vertex transform.
-"    vec3 skinnedNormal=cnaSkinNormal(mat3(skinMat),aNormal);\n"
+// FNA/XNA SkinnedEffect.fx transforms normals directly by the weighted bone 3x3. Bone palettes
+// are assumed to contain rigid/uniform transforms; only the outer World uses inverse-transpose.
+// Keep this classic stock-effect path exact even though the CNAEXT PBR skinning path deliberately
+// supports non-uniform glTF joint scale via cnaSkinNormal().
+"    vec3 skinnedNormal=mat3(skinMat)*aNormal;\n"
 "    float skinnedNormalLen=length(skinnedNormal);\n"
 "    vec3 boneNormal=(skinnedNormalLen>1e-6)?(skinnedNormal/skinnedNormalLen):aNormal;\n"
 // REMED-GFX-006: compose the bone-skin normal with the outer world normal matrix
 // (uNormalMatrix = transpose(inverse(World3x3)), CPU-precomputed in BindDrawParams() exactly as
 // every non-skinned lit program here already receives it). FNA's SkinnedEffect.fx establishes the
-// composition order; GLTF-264 strengthens its direct bone 3x3 to inverse-transpose because glTF
-// joints may carry non-uniform scale. This shader also used to drop the outer world factor entirely
-// (audit Variant A), so any rotated or non-uniformly-scaled skinned model was lit as if World were
-// identity. The fragment stage re-normalizes vNormal.
+// direct-bone then inverse-transpose-World composition order. This shader also used to drop the
+// outer world factor entirely (audit Variant A), so any rotated or non-uniformly-scaled skinned
+// model was lit as if World were identity. The fragment stage re-normalizes vNormal.
 "    vNormal=uNormalMatrix*cnaInstanceDirection(boneNormal);\n"
 "    vUV=aUV;\n"
 "    vWorldPos=(uWorld*cnaPos).xyz;\n"
@@ -8812,7 +8815,8 @@ CNA_GL_SKIN_NORMAL_DECL
 // Same degenerate-blend-normal guard as EnsureSkinnedProgram() above (see its own
 // comment for the root cause) -- this vertex-lit sibling does the identical skinning
 // and normal transform, just with lighting evaluated per-vertex instead of per-pixel.
-"    vec3 skinnedNormal=cnaSkinNormal(mat3(skinMat),aNormal);\n"
+// Match FNA/XNA Skin(): normal * weighted bone 3x3. See the per-pixel sibling above.
+"    vec3 skinnedNormal=mat3(skinMat)*aNormal;\n"
 "    float skinnedNormalLen=length(skinnedNormal);\n"
 "    vec3 boneNormal=(skinnedNormalLen>1e-6)?(skinnedNormal/skinnedNormalLen):aNormal;\n"
 // REMED-GFX-006: compose the bone-skin normal with the outer world normal matrix (uNormalMatrix =

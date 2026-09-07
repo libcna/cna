@@ -1324,9 +1324,9 @@ namespace CNA::Internal::Renderers::Software
                     normalMatrix[8] * normal.Z));
         }
 
-        [[nodiscard]] bool UsesBasicEffectLighting(const GpuDrawParams& params)
+        [[nodiscard]] bool UsesClassicEffectLighting(const GpuDrawParams& params)
         {
-            return params.lightingEnabled && !params.envMapping && !params.skinned && !params.pbr;
+            return params.lightingEnabled && !params.envMapping && !params.pbr;
         }
 
         struct ClassicLightingResult
@@ -1335,7 +1335,7 @@ namespace CNA::Internal::Renderers::Software
             float specular[3] = {0.0f, 0.0f, 0.0f};
         };
 
-        /// SOFTWARE-113/114: FNA StockEffects/HLSL/Lighting.fxh ComputeLights. Effect-specific
+        /// SOFTWARE-113/114/115: FNA StockEffects/HLSL/Lighting.fxh ComputeLights. Effect-specific
         /// FillGpuDrawParams prepares ambient/emissive consistently before this shared equation.
         [[nodiscard]] ClassicLightingResult ComputeClassicLighting(
             const Vector3& worldPosition, const Vector3& worldNormal,
@@ -1392,13 +1392,15 @@ namespace CNA::Internal::Renderers::Software
             return result;
         }
 
-        void PrepareBasicLightingVertex(ClipVertex& vertex, const Vector3& position,
-                                        const Vector3& normal, bool haveNormal,
-                                        const GpuDrawParams& params)
+        void PrepareClassicLightingVertex(ClipVertex& vertex, const Vector3& position,
+                                          const Vector3& normal, bool haveNormal,
+                                          const GpuDrawParams& params)
         {
-            if (!UsesBasicEffectLighting(params))
+            if (!UsesClassicEffectLighting(params))
                 return;
 
+            // SkinnedEffect's caller has already applied its weighted bone matrix to both inputs,
+            // matching FNA Skin() before this shared World-space lighting step.
             const Vector3 worldPosition =
                 ApplyAffineColumnMajor(params.worldColMajor, position, 1.0f);
             const Vector3 worldNormal = haveNormal
@@ -2385,7 +2387,7 @@ namespace CNA::Internal::Renderers::Software
                 out.r = out.g = out.b = out.a = 1.0f;
             }
             PrepareEnvironmentMapVertex(out, position, normal, haveNormal, params);
-            PrepareBasicLightingVertex(out, position, normal, haveNormal, params);
+            PrepareClassicLightingVertex(out, position, normal, haveNormal, params);
             return out;
         }
 
@@ -2470,7 +2472,7 @@ namespace CNA::Internal::Renderers::Software
             if (!params.vertexColorEnabled)
                 out.r = out.g = out.b = out.a = 1.0f;
             PrepareEnvironmentMapVertex(out, position, normal, haveNormal, params);
-            PrepareBasicLightingVertex(out, position, normal, haveNormal, params);
+            PrepareClassicLightingVertex(out, position, normal, haveNormal, params);
             return out;
         }
 #endif
@@ -2660,7 +2662,7 @@ namespace CNA::Internal::Renderers::Software
                 a *= texA;
             }
 
-            if (UsesBasicEffectLighting(ctx.params))
+            if (UsesClassicEffectLighting(ctx.params))
             {
                 float specularR;
                 float specularG;

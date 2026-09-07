@@ -857,6 +857,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_SkinnedEffect_LightingConformance COMMAND cna_test_easygl_skinnedeffect_lighting_conformance
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # SOFTWARE-115: renderer-neutral FNA/XNA skinning and lighting contract.
+        cna_easygl_test(cna_test_easygl_skinned_effect_contract
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/skinned_effect_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_SkinnedEffectContract
+            COMMAND cna_test_easygl_skinned_effect_contract
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 894: SkinnedEffect real specular highlights
         cna_easygl_test(cna_test_easygl_skinnedeffect_specular
                         easygl_skinnedeffect_specular_test.cpp)

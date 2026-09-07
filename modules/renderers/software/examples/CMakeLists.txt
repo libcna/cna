@@ -148,6 +148,17 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_EnvironmentMapEffectContract
         COMMAND cna_test_software_environment_map_effect_contract TIMEOUT 30 LABELS "Software")
 
+    # SOFTWARE-115: renderer-neutral FNA/XNA SkinnedEffect material and full lighting oracles.
+    cna_software_test(cna_test_software_skinnedeffect_lighting_conformance
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/skinnedeffect_lighting_conformance_test.cpp)
+    cna_register_renderer_test(NAME Software_SkinnedEffectLightingConformance
+        COMMAND cna_test_software_skinnedeffect_lighting_conformance TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_skinned_effect_contract
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/skinned_effect_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_SkinnedEffectContract
+        COMMAND cna_test_software_skinned_effect_contract TIMEOUT 30 LABELS "Software")
+
     cna_software_test(cna_test_software_dual_envmap_skinned software_dual_envmap_skinned_test.cpp)
     cna_register_renderer_test(NAME Software_DualEnvmapSkinned COMMAND cna_test_software_dual_envmap_skinned
         TIMEOUT 30 LABELS "Software")
