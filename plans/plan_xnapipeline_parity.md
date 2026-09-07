@@ -949,24 +949,36 @@ and run under Wine -- `d3dx9_43.dll` is present, so this is work rather than a b
 
 Build dir `cmake-build-debug/` (`Debug`, Ninja, `CNA_PLATFORM=SDL3`, `CNA_GRAPHICS_RENDERER=HEADLESS`,
 `CNA_AUDIO_PLATFORM=SDL3`, FreeType 2.13.3, FFmpeg, Zstandard, Draco off), both binaries run from
-the repository root with `env -u WAYLAND_DISPLAY DISPLAY=:99 SDL_VIDEODRIVER=x11`, 2026-09-05, at
-`92fb589f9` (after the one-line `XNAPP-006` test-compile fix, before any façade code):
+the repository root with `env -u WAYLAND_DISPLAY DISPLAY=:99 SDL_VIDEODRIVER=x11`.
+
+**Current, 2026-09-07 at `d086dd82c`:**
+
+```text
+CnaContentTests:          1803 run   1789 passed   9 skipped   5 failed
+CnaContentPipelineTests:   441 run    441 passed   0 skipped   0 failed
+```
+
+All 5 failures are environmental and reproduce on the unmodified tree: `HEADLESS` stores no
+`TextureCube` or `Texture3D` texels at all -- deliberately, since `REMED-GFX-130`/`135` removed the
+zero-filled buffers that made `SetData` look as though it had worked -- so `ContentManager::Load` of
+those two roots refuses. They are `CnbTextureContentManagerTest.ATextureCubeCnbLoadsAllSixFacesDistinctly`,
+`…ATexture3DCnbLoadsAsASharedPointerWithItsDepth`, `CnbTextureCubeProducerTest.ATextureCubeCnbLoadsThroughContentManager`,
+`CnjCapabilityMatrixTest.TextureCubeDelegatesViaSourceFile` and `CnjTexture3DTest.LoadsRealCnjFixture`.
+The 9 skips are the suite's own prerequisites (a >2 GiB file, an optional real-world glTF asset,
+renderer-gated readers). **Any new failure outside these 5 is a regression.**
+
+**The baseline this plan started from, 2026-09-05 at `92fb589f9`** (after the one-line `XNAPP-006`
+test-compile fix, before any façade code), kept for comparison:
 
 ```text
 CnaContentTests:          1794 run   1779 passed   19 skipped   6 failed
 CnaContentPipelineTests:   112 run    112 passed    0 skipped   0 failed
 ```
 
-All 6 failures are environmental and reproduce on the unmodified tree:
-
-| Failure group | Count | Cause |
-|---|---:|---|
-| `CnbTextureContentManagerTest.ATexture3DCnb…`, `…ATextureCubeCnb…`, `CnbTextureCubeProducerTest.…ThroughContentManager`, `CnjCapabilityMatrixTest.TextureCubeDelegatesViaSourceFile`, `CnjTexture3DTest.LoadsRealCnjFixture` | 5 | `HEADLESS` has no `TextureCube`/`Texture3D` storage, so `ContentManager::Load` of those roots refuses |
-| `ContentManagerVideoXnbTest.TheObjectReferencedFormLoadsToTheSameValuesAsTheInlineOne` | 1 | Video-fixture load through this configuration's FFmpeg backend; unrelated to content building |
-
-The 19 skips are the suite's own prerequisites (a >2 GiB file, an optional real-world glTF asset,
-renderer-gated readers). **Any new failure outside these 6 is a regression.** The audio-device
-failures `plan_xnapipeline.md` §0.4 recorded do not occur here: this machine has a sound device.
+Its sixth failure was `ContentManagerVideoXnbTest.TheObjectReferencedFormLoadsToTheSameValuesAsTheInlineOne`,
+which was not environmental after all: the fixture's own type-reader table names `StringReader`
+beside `VideoReader` and the test registered only the second, so it had never passed and left its
+`.xnb` in the working tree every run. Fixed under `XNAPP-281`.
 
 ### 33.2 Handoff
 
@@ -1027,3 +1039,64 @@ setting a basedir but no cache directory, so every build was landing in the spli
 `~/.cache/ccache` at a 75 % miss rate. Build parallelism is not capped; memory is the
 constraint. Nothing is built under `/tmp` or the session scratchpad, and no build directory
 outside the closed list was created.
+
+### 33.3 Final report (2026-09-07)
+
+The eighteen points the mission asks for, in its own order.
+
+1. **HEAD.** Started `b767f9d85`, ended `d086dd82c`, branch `xnapipeline`.
+2. **Commits.** 58, each one task, with the repository's configured identity.
+3. **Push.** Every commit is on `origin/xnapipeline`; nothing was rewritten and nothing was forced.
+4. **Task counts.** Before: 111 `[x]`, 4 `[!]`, 2 `[ ]` of 117 rows. After: **115 `[x]`, 4 `[!]`,
+   0 `[ ]`, 0 `[~]` of 119** -- the two open rows closed, and two new rows (`XNAPP-331`,
+   `XNAPP-332`) opened and closed for defects the final audit exposed.
+5. **API parity.** 128/128 types, 705/705 members, 27/27 enum values, 10/10 importers, 12/12
+   processors, 47/47 processor properties. `MISSING` 0, `EXTERNAL_BLOCKED` 0.
+6. **Source extensions.** 18/18 `IMPLEMENTED+TESTED`.
+7. **Processors.** 12/12 with all 47 properties, every default asserted against the value
+   Microsoft's own class answered and tied back to the inventory by a gate.
+8. **Differential corpus.** 112 cases; of the 91 both sides build, **49 identical, 42 accepted,
+   0 open, 0 absent**. Every accepted difference names its reason in `decisions.json`, and a
+   decision that stops explaining anything fails the comparison.
+9. **Genuine XNA 4.0 runtime.** Eleven output families load in a real `ContentManager` under Wine:
+   Texture2D, TextureCube, Texture3D, SpriteFont, SoundEffect, Song, Video, Effect, Model, Curve
+   and an intermediate-XML object -- uncompressed and LZX, as three ctests.
+10. **Fuzzing and sanitizers.** 1,159,999 mutated `.x`/FBX documents under ASAN+UBSAN with no
+    memory error, no undefined behaviour and no escaping exception; deterministic mutation passes
+    on every build over the DDS, PFM, Radiance and `.contentproj` readers. Two real defects found:
+    a DDS header claiming 1,929,379,840 mip levels, and the `.contentproj` reader's refusals.
+11. **Determinism.** 21 sources over 13 extensions, built four times in four separate processes at
+    1, 2, 4 and 8 workers, byte-identical every time, for `.xnb` and `.cnb` alike.
+12. **Performance.** Four routes measured at two sizes each: the three single-asset routes are
+    linear or better (3.3x, 2.8x and 3.6x for four times the input); the coordinator's per-asset
+    cost rises from 1.77 ms at 400 assets to 4.13 ms at 3200 and stays sub-quadratic. Every figure
+    and its recipe is in `docs/content-pipeline-benchmark.md`.
+13. **Provenance gate.** 0 findings over every tracked file, with a self-test that plants one of
+    each finding and asserts it is caught. Two ctests.
+14. **Parity gates as ctests.** Sixteen under `XnaPipeline*` plus two provenance gates: the report
+    and the component reference must be regenerations, the input matrix must still name every
+    extension and every test it claims, the gate itself must be green, the inventory must be
+    frozen, every processor default must match the measurement, the whitespace of the paths this
+    plan owns must be clean, the final audit must hold, and the three genuine-runtime harnesses
+    must load what CNA wrote.
+15. **Documentation.** `xna-content-pipeline-compat-api.md` (the C#-to-C++ contract),
+    `xna-content-pipeline-components.md` (generated: every importer, extension, processor and
+    property), `xna-content-pipeline-migration.md` (the porting guide, with before/after),
+    `xna-content-pipeline-parity-report.md` (generated: the matrix),
+    `xna-content-pipeline-final-audit.md` (generated: the 26 conditions),
+    `xna-intermediate-xml-format.md`, `xnb-interoperability.md`, `xma-encoder-backend.md`,
+    `content-pipeline-benchmark.md`, and the corrected `migration-guide.md`.
+16. **Remaining external blockers**, all four `[!]`, each naming what would close it:
+    `XNAPP-211` (no Media Foundation under this Wine, so XNA's *successful* WMV decode cannot be
+    measured), `XNAPP-256` (**XMA ENCODER EXTERNALLY UNAVAILABLE**), `XNAPP-257` (no compiler for
+    the Xbox 360's Xenos instruction set), `XNAPP-258` (no console to load Xbox output on).
+17. **`LOCAL_ACTIONABLE = 0`** -- proved by enumerating every row of §32 mechanically: 119 rows,
+    115 `[x]`, 4 `[!]`, and each of those four names a component or a machine that is not here.
+18. **Can CNA now truthfully claim complete locally implementable Microsoft XNA 4.0 Content
+    Pipeline API/input parity? YES.** Every public type, member and enum value of the seven
+    assemblies is implemented and tested; all ten importers, all eighteen declared source
+    extensions, all twelve processors and all forty-seven properties are implemented and tested;
+    CNA's output loads in a genuine XNA 4.0 runtime; and a real XNA content project from the
+    sample corpus builds, with 44 of its 46 assets byte-identical to what Microsoft's own pipeline
+    produced for the same sources. What is not claimed is anything needing hardware or a
+    proprietary component this machine cannot legally hold, and those four are named above.
