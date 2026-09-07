@@ -1767,6 +1767,71 @@ TEST(XnaModelProcessor, ABoneKeepsWhetherItsNodeHadNoNameOrAnEmptyOne)
     EXPECT_TRUE(model->getBonesProperty()[1]->getNameProperty().empty());
 }
 
+// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-126: the mesh list and the bone list are not the same
+// order, and the whole model shares one pair of buffers.
+//
+// SAMPLE-030's `tank.fbx` settles both. Its twelve meshes hang three deep under `tank_geo`, and
+// XNA's own `tank.xnb` lists them `r_back_wheel, r_front_wheel, r_steer, r_engine, ...`, ending
+// `turret, tank` -- every child before its parent -- while the bone table is the plain depth-first
+// order, parent first, which CNA already matched exactly. The same file has four shared resources:
+// one vertex buffer, one index buffer and the two distinct effects. One buffer pair per mesh would
+// be twenty-six.
+TEST(XnaModelProcessor, MeshesComeOutChildFirstAndShareOnePairOfBuffers)
+{
+    const auto meshNamed = [](const char* name, float x)
+    {
+        auto mesh = std::make_shared<Graphics::MeshContent>();
+        mesh->setNameProperty(name);
+        mesh->getPositionsProperty().Add(Vector3(x, 0, 0));
+        mesh->getPositionsProperty().Add(Vector3(x + 1, 0, 0));
+        mesh->getPositionsProperty().Add(Vector3(x, 1, 0));
+        auto geometry = std::make_shared<Graphics::GeometryContent>();
+        mesh->getGeometryProperty().Add(geometry);
+        geometry->getVerticesProperty().AddRange({0, 1, 2});
+        geometry->getIndicesProperty().AddRange({0, 1, 2});
+        return mesh;
+    };
+    const std::shared_ptr<Graphics::MeshContent> root = meshNamed("root", 0.0f);
+    const std::shared_ptr<Graphics::MeshContent> child = meshNamed("child", 10.0f);
+    const std::shared_ptr<Graphics::MeshContent> grandchild = meshNamed("grandchild", 20.0f);
+    root->getChildrenProperty().Add(child);
+    child->getChildrenProperty().Add(grandchild);
+
+    Processors::ModelProcessor processor;
+    RecordingContext context;
+    const std::shared_ptr<Processors::ModelContent> model = processor.Process(root, context);
+    ASSERT_NE(model, nullptr);
+
+    std::vector<std::string> meshNames;
+    for (const auto& mesh : model->getMeshesProperty()) { meshNames.push_back(mesh->getNameProperty()); }
+    EXPECT_EQ(meshNames, (std::vector<std::string>{"grandchild", "child", "root"}));
+
+    std::vector<std::string> boneNames;
+    for (const auto& bone : model->getBonesProperty()) { boneNames.push_back(bone->getNameProperty()); }
+    EXPECT_EQ(boneNames, (std::vector<std::string>{"root", "child", "grandchild"}));
+
+    // One vertex buffer and one index buffer for the whole model, addressed by offset.
+    std::vector<const void*> vertexBuffers;
+    std::vector<const void*> indexBuffers;
+    std::vector<SharpRuntime::intcs> offsets;
+    for (const auto& mesh : model->getMeshesProperty())
+    {
+        for (const auto& part : mesh->getMeshPartsProperty())
+        {
+            vertexBuffers.push_back(part->getVertexBufferProperty().get());
+            indexBuffers.push_back(part->getIndexBufferProperty().get());
+            offsets.push_back(part->getVertexOffsetProperty());
+        }
+    }
+    ASSERT_EQ(vertexBuffers.size(), 3u);
+    EXPECT_EQ(vertexBuffers[0], vertexBuffers[1]);
+    EXPECT_EQ(vertexBuffers[1], vertexBuffers[2]);
+    EXPECT_EQ(indexBuffers[0], indexBuffers[1]);
+    EXPECT_EQ(indexBuffers[1], indexBuffers[2]);
+    // And the offsets step through it in the order the meshes were added.
+    EXPECT_EQ(offsets, (std::vector<SharpRuntime::intcs>{0, 3, 6}));
+}
+
 TEST(XnaVertexBufferContent, WritesAndSizesAsXnaDoes)
 {
     Processors::VertexBufferContent buffer(24);

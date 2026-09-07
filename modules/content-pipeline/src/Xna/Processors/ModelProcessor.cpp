@@ -202,6 +202,14 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
 
         ModelBoneContentCollection bones;
         ModelMeshContentCollection meshes;
+        // One vertex buffer and one index buffer for the whole model, not one per mesh. XNA merges
+        // every batch whose declaration agrees into a single pair and lets each part address it
+        // with a vertex offset and a start index -- SAMPLE-030's twelve-mesh `tank.fbx` reaches
+        // XNA's own `tank.xnb` as four shared resources, one vertex buffer, one index buffer and
+        // the two distinct effects, where a buffer per mesh would be twenty-six
+        // (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-126).
+        std::shared_ptr<VertexBufferContent> vertexBuffer;
+        std::shared_ptr<Graphics::IndexCollection> indexBuffer;
         // Every node becomes a bone, in the order a depth-first walk reaches them (measured,
         // modelprocessor/bone_hierarchy).
         const std::function<std::shared_ptr<ModelBoneContent>(const std::shared_ptr<Graphics::NodeContent>&,
@@ -222,6 +230,15 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
             {
                 parent->AddChild(bone);
             }
+            // The descendants are walked first, so their geometry reaches the shared buffers
+            // before this node's and their meshes are listed before it (XNASWEEP-126). The bone
+            // above was made before this, so the two lists keep the orders XNA gives them: bones
+            // parent-first, meshes child-first.
+            for (const std::shared_ptr<Graphics::NodeContent>& child : ChildrenOf(*node))
+            {
+                (void)walk(child, bone);
+            }
+            std::shared_ptr<ModelMeshContent> made;
             if (const auto mesh = std::dynamic_pointer_cast<Graphics::MeshContent>(node))
             {
                 ModelMeshPartContentCollection parts;
@@ -281,8 +298,6 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
                 // normally share a channel layout, and what XNA does when they do not has not been
                 // measured -- so a differing batch starts a new buffer rather than being forced
                 // into one whose stride is not its own.
-                std::shared_ptr<VertexBufferContent> vertexBuffer;
-                std::shared_ptr<Graphics::IndexCollection> indexBuffer;
                 std::vector<std::shared_ptr<ModelMeshPartContent>> pending;
                 for (const std::shared_ptr<Graphics::GeometryContent>& geometry : batches)
                 {
@@ -336,13 +351,17 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
                 {
                     parts.push_back(part);
                 }
-                meshes.push_back(std::make_shared<ModelMeshContent>(mesh->getNameProperty(), mesh, bone,
-                                                                    BoundsOf(*mesh), std::move(parts)));
+                made = std::make_shared<ModelMeshContent>(mesh->getNameProperty(), mesh, bone,
+                                                          BoundsOf(*mesh), std::move(parts));
             }
-            for (const std::shared_ptr<Graphics::NodeContent>& child : ChildrenOf(*node))
-            {
-                (void)walk(child, bone);
-            }
+            // A node's own mesh is added *after* its descendants'. The bones are the other way
+            // round -- a node's bone is added before them -- so the two lists are not the same
+            // order, which is what XNA answers: SAMPLE-030's `tank.fbx` has twelve meshes under
+            // `tank_geo`, and its genuine `tank.xnb` lists them
+            // `r_back_wheel, r_front_wheel, r_steer, r_engine, ... , turret, tank` -- every child
+            // before its parent -- while its bone table is the plain depth-first order CNA already
+            // matched exactly (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-126).
+            if (made != nullptr) { meshes.push_back(std::move(made)); }
             return bone;
         };
         const std::shared_ptr<ModelBoneContent> root = walk(input, nullptr);
