@@ -163,6 +163,12 @@ def main():
         # XNA's real default) — same UBO/push-constant layout as lit_textured3d above.
         ("lit_textured3d_vertexlit.vert.glsl", VERTEX_SHADER,   "kLitTextured3dVertexLitVertSpv"),
         ("lit_textured3d_vertexlit.frag.glsl", FRAGMENT_SHADER, "kLitTextured3dVertexLitFragSpv"),
+        # plan_vulkan.md VULKAN-199: the untextured lit layouts (Position+Normal, no UV). Vertex
+        # stages only -- the fragment stages above already gate their sample on pc.textureEnabled,
+        # so these pair with them unchanged and differ in exactly two things: no aUV input and a
+        # zero fragUV. Vulkan cannot default an absent vertex attribute, which is why they exist.
+        ("lit_untextured3d.vert.glsl",           VERTEX_SHADER, "kLitUntextured3dVertSpv"),
+        ("lit_untextured3d_vertexlit.vert.glsl", VERTEX_SHADER, "kLitUntextured3dVertexLitVertSpv"),
         # AlphaTestEffect pipeline — single VS handles stride 20/32 via attribute remapping
         ("alpha_test3d.vert.glsl",       VERTEX_SHADER,   "kAlphaTest3dVertSpv"),
         ("alpha_test3d.frag.glsl",       FRAGMENT_SHADER, "kAlphaTest3dFragSpv"),

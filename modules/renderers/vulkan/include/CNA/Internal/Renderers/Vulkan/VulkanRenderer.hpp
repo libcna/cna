@@ -1562,6 +1562,10 @@ namespace CNA::Internal::Renderers::Vulkan
         Textured,         ///< textured3d: position + uv.
         ColoredTextured,  ///< colored_textured3d: position + colour + uv.
         LitTextured,      ///< lit_textured3d (and its vertex-lit sibling): position + normal + uv.
+        /// plan_vulkan.md VULKAN-199: lit_untextured3d (and its vertex-lit sibling):
+        /// position + normal, no uv. XNA's Primitives3D layout, which the lit family could not
+        /// bind at all before this shape existed.
+        LitUntextured,
     };
 
     struct PipelineKey {
@@ -3411,6 +3415,10 @@ namespace CNA::Internal::Renderers::Vulkan
             // 124 floats = 496 bytes; the dynamic UBO stride is padded to 512 bytes.
             float                   pbrUboData[124]   = {};
             bool                    useLitTextured    = false; // true = LitTextured3D pipeline (Task 897)
+            /// plan_vulkan.md VULKAN-199: with useLitTextured, selects the UV-less vertex stage --
+            /// XNA's Position+Normal layout, which has no texture coordinate to bind. The fragment
+            /// stage is the same one either way; it already gates its sample on textureEnabled.
+            bool                    litUntextured     = false;
             // Task 1103: true = select the PreferPerPixelLighting=false (XNA's real default)
             // per-vertex-lit pipeline sibling instead of the (historically always-selected)
             // per-pixel-lit one, for whichever of useLitTextured/useSkinned is set. Only
@@ -4075,7 +4083,8 @@ namespace CNA::Internal::Renderers::Vulkan
                                                      bool msaa, const DepthStencilKeyParams& dsParams = {},
                                          const BlendKeyParams& blendParams = {},
                                          VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
-                                         const VulkanVertexInputLayoutEXT& vertexLayout = {});
+                                         const VulkanVertexInputLayoutEXT& vertexLayout = {},
+                                         bool untextured = false, std::size_t recordStride = 0);
         // Task 1103: PreferPerPixelLighting=false sibling of GetOrCreatePipelineLitTextured3D
         // above (real per-vertex/Gouraud lighting, XNA's own default) — same signature/layout,
         // different shader modules and pipeline cache only.
@@ -4086,7 +4095,8 @@ namespace CNA::Internal::Renderers::Vulkan
                                                      bool msaa, const DepthStencilKeyParams& dsParams = {},
                                          const BlendKeyParams& blendParams = {},
                                          VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
-                                         const VulkanVertexInputLayoutEXT& vertexLayout = {});
+                                         const VulkanVertexInputLayoutEXT& vertexLayout = {},
+                                         bool untextured = false, std::size_t recordStride = 0);
         // BasicEffect fog bundle (Task 899) — shared by colored3d/textured3d/colored_textured3d.
         void       EnsureFogTex3DResources();
         /// REMED-GFX-169: @p sampler is slot 0's SamplerState, keyed as well as written. This is

@@ -252,6 +252,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_basiceffect_default_lighting
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-199 (F-37): XNA's Primitives3D vertex is Position+Normal, 24 bytes
+        # -- the same stride as VertexPositionColorTexture -- and BasicEffect must light it. This
+        # renderer refused it outright until the lit family gained a UV-less vertex stage.
+        cna_vulkan_test(cna_test_vulkan_basiceffect_position_normal
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_basiceffect_position_normal_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_BasicEffect_PositionNormal
+            COMMAND cna_test_vulkan_basiceffect_position_normal
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-197 (F-36): D3D9 saturates oD0, so an unlit DiffuseColor above 1
         # blends as 1 -- and, across a colour gradient, is saturated per vertex before interpolation.
         cna_vulkan_test(cna_test_vulkan_basiceffect_diffuse_color_clamp

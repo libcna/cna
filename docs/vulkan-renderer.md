@@ -495,3 +495,40 @@ field does not fragment the pipeline cache *and* that `ApplyRasterizerState` has
 parameters, with a `void_t` detector and a positive control so a renamed method cannot make the
 negative assertion pass vacuously. Adding the sixth argument fails the build with a message naming
 this section and `docs/rasterizerstate-support.md` §8.
+
+---
+
+## Which vertex layouts a lit `BasicEffect` can draw
+
+`VULKAN-198` (the measurement), `VULKAN-199` (the fix). **Tests:**
+`Vulkan_BasicEffect_PositionNormal`, `Vulkan_BasicEffectCombinations`.
+
+This renderer picks a stock program from the vertex buffer's **declaration**, falling back to its
+stride when there is none. For the lit `BasicEffect` family that rule used to be `stride == 32` and
+nothing else, so exactly one layout could be lit — `VertexPositionNormalTexture`. Any other
+declaration carrying a `Normal` reached no lit program, and the declaration-fidelity guard then
+**refused the draw by name** rather than reading the normal's bytes as something else. Refusing is
+the right failure, but a game using one of those layouts could not draw at all.
+
+| Declaration | Lit `BasicEffect` |
+|---|---|
+| Position + Normal + TexCoord (32 bytes) | ✅ always |
+| Position + Normal (24 bytes) | ✅ since `VULKAN-199` |
+| Position + Normal + Colour + TexCoord (36 bytes) | ❌ refused — `VULKAN-200` |
+| Position + Normal + anything else | ❌ refused |
+| no declaration at all | the stride decides, as before |
+
+The 24-byte case is XNA's own Primitives3D sample, and it is 24 bytes *exactly as
+`VertexPositionColorTexture` is* — which is why the stride cannot decide it and the declaration
+must. The 36-byte case is what the stock `ModelProcessor` emits for a mesh carrying a colour
+channel; no lit program here has a colour input yet.
+
+**The rule is set-exact, not "has a Normal".** The layout builder reports a declaration complete
+when every input the *shader consumes* was supplied — it says nothing about a declared element the
+shader ignores. So a looser rule would let Position+Normal+**Colour** satisfy the two-input
+untextured program and render with the vertex colour silently discarded. Every layout in the table
+above is matched as a whole set, and anything else is refused until a program exists for it.
+
+The rule does not pin the *offsets*, only the element set — the declaration carries the offsets and
+the pipeline is keyed on them. EasyGL's equivalent test additionally requires Position at 0 and
+Normal at 12; this one does not, though only the 0/12 record has actually been measured.
