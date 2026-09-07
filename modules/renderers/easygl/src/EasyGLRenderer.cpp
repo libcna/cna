@@ -5905,6 +5905,7 @@ if (!ProfileIsEs2ApiGeneration())
             bound_->height = 0;
             BindDefaultFramebuffer();
         }
+        ApplyDepthBiasForCurrentTargetEXT();
         TargetTrace("set2d.exit", rt, TraceBindingDetailEXT());
     }
 
@@ -5920,6 +5921,7 @@ if (!ProfileIsEs2ApiGeneration())
         bound_->width = rt->GetSize();
         bound_->height = rt->GetSize();
         rt->BindAsRenderTargetFace(face);
+        ApplyDepthBiasForCurrentTargetEXT();
         TargetTrace("setcube.exit", rt, TraceBindingDetailEXT());
     }
 
@@ -6107,6 +6109,7 @@ if (!ProfileIsEs2ApiGeneration())
         bound_->width = renderTargets[0].GetWidth();
         bound_->height = renderTargets[0].GetHeight();
         ApplyCurrentColorWriteMasks();
+        ApplyDepthBiasForCurrentTargetEXT();
         TargetTrace("mrt.set", this,
                     TraceBindingDetailEXT() + " mrtFbo=" + std::to_string(mrtFbo_.native_handle()));
     }
@@ -6380,13 +6383,51 @@ if (!ProfileIsEs2ApiGeneration())
         // OpenGL ES has no glPolygonMode; FillMode::WireFrame (1) is emulated at draw
         // time by re-expanding triangles into GL_LINES (see DrawWireframe).
         wireframe_ = (fillMode == 1);
-        // Task 767: DepthBias/SlopeScaleDepthBias map directly onto real GL polygon offset
-        // (matches this project's own already-established Vulkan convention, see
-        // VulkanRenderer::ApplyRasterizerState's comment: "matching FNA's
-        // glPolygonOffset(slopeScaleDepthBias, depthBias)"). Always enabled -- factor=0/units=0
-        // is a genuine no-op in GL, so there is no need to conditionally disable it.
+        normalizedDepthBias_ = depthBias;
+        slopeScaleDepthBias_ = slopeScaleDepthBias;
+        ApplyDepthBiasForCurrentTargetEXT();
+    }
+
+    void EasyGLRenderer::ApplyDepthBiasForCurrentTargetEXT()
+    {
+        if (metagl::IsContextLost()) return;
+
+        int depthFormat = static_cast<int>(DepthFormat::Depth24Stencil8);
+        if (bound_->rt2D)
+        {
+            const auto* target = dynamic_cast<const EasyGLRenderTargetRenderer*>(bound_->rt2D);
+            depthFormat = target ? target->GetDepthFormatEXT()
+                                 : static_cast<int>(DepthFormat::None);
+        }
+        else if (bound_->cube)
+        {
+            const auto* target = dynamic_cast<const EasyGLRenderTargetCubeRenderer*>(bound_->cube);
+            depthFormat = target ? target->GetDepthFormatEXT()
+                                 : static_cast<int>(DepthFormat::None);
+        }
+        else if (bound_->mrtCount > 0)
+        {
+            depthFormat = bound_->mrt[0]->GetDepthFormatEXT();
+        }
+
+        float scale = 0.0f;
+        switch (static_cast<DepthFormat>(depthFormat))
+        {
+        case DepthFormat::Depth16:
+            scale = static_cast<float>((1u << 16u) - 1u);
+            break;
+        case DepthFormat::Depth24:
+        case DepthFormat::Depth24Stencil8:
+            scale = static_cast<float>((1u << 24u) - 1u);
+            break;
+        case DepthFormat::None:
+            break;
+        }
+        const float nativeUnits = normalizedDepthBias_ * scale;
+
+        // Always enabled: factor=0/units=0 is a genuine no-op in GL.
         device.set_polygon_offset_fill_enabled(true);
-        device.set_polygon_offset(slopeScaleDepthBias, depthBias);
+        device.set_polygon_offset(slopeScaleDepthBias_, nativeUnits);
     }
 
     void EasyGLRenderer::SetScissorRect(int x, int y, int w, int h)

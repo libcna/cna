@@ -10,6 +10,7 @@
 #include "CNA/Internal/Renderers/D3DCommon/D3DShaderCache.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DConstantBuffers.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DRasterizationConvention.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DStateMapping.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <algorithm>
@@ -825,8 +826,31 @@ namespace CNA::Internal::Renderers::DirectX11
                                                     bool scissorTestEnable,
                                                     float depthBias, float slopeScaleDepthBias)
     {
+        rsCullMode_ = cullMode;
+        rsFillMode_ = fillMode;
+        rsScissorTestEnable_ = scissorTestEnable;
+        rsDepthBias_ = depthBias;
+        rsSlopeScaleDepthBias_ = slopeScaleDepthBias;
+        rasterizerStateApplied_ = true;
+        RebindRasterizerState();
+    }
+
+    void DirectX11Renderer::RebindRasterizerState()
+    {
+        if (!rasterizerStateApplied_)
+            return;
+
+        DXGI_FORMAT depthFormat = DXGI_FORMAT_UNKNOWN;
+        if (currentDSV_ != nullptr)
+        {
+            D3D11_DEPTH_STENCIL_VIEW_DESC desc{};
+            currentDSV_->GetDesc(&desc);
+            depthFormat = desc.Format;
+        }
+        const int nativeDepthBias = D3DCommon::XnaDepthBiasToD3D(rsDepthBias_, depthFormat);
         auto state = rasterizerStateCache_.GetOrCreate(
-            device_.Get(), cullMode, fillMode, scissorTestEnable, depthBias, slopeScaleDepthBias);
+            device_.Get(), rsCullMode_, rsFillMode_, rsScissorTestEnable_,
+            nativeDepthBias, rsSlopeScaleDepthBias_);
         context_->RSSetState(state.Get());
     }
 
@@ -884,6 +908,7 @@ namespace CNA::Internal::Renderers::DirectX11
         for (int i = 0; i < currentRTVCount_; ++i) currentColorRTVs_[i] = rtvs[i];
         for (int i = currentRTVCount_; i < D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT; ++i) currentColorRTVs_[i] = nullptr;
         currentDSV_ = dsv;
+        RebindRasterizerState();
     }
 
     void DirectX11Renderer::RestoreBackBufferRenderTargetEXT()
@@ -904,6 +929,7 @@ namespace CNA::Internal::Renderers::DirectX11
         currentRTVCount_ = 1;
         for (int i = 1; i < D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT; ++i) currentColorRTVs_[i] = nullptr;
         currentDSV_ = depthStencilView_.Get();
+        RebindRasterizerState();
     }
 
     std::unique_ptr<ISpriteBatchRenderer> DirectX11Renderer::CreateSpriteBatch()

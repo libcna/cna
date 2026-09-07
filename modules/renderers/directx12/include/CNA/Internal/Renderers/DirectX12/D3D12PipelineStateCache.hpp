@@ -99,12 +99,10 @@ namespace CNA::Internal::Renderers::DirectX12
         // Rasterizer (D3DStateMapping::CullModeToD3D11 / FillModeToD3D11 ordinals).
         int cullMode = 2;  // CullMode::CullCounterClockwiseFace (XNA's own RasterizerState.CullCounterClockwise default)
         int fillMode = 0;  // FillMode::Solid
-        // plans/plan_dx.md DX-206: RasterizerState.DepthBias / SlopeScaleDepthBias. XNA's DepthBias is
-        // already in units of "r" (the depth format's minimum resolvable difference), which is the
-        // same convention D3D12_RASTERIZER_DESC::DepthBias uses -- but as an INT rather than a
-        // float, so it is rounded, not truncated, exactly as D3D11RasterizerStateCache does. The
-        // integer form is what participates in the cache key, so two requests that round to the
-        // same bias share one pipeline state instead of thrashing it on float noise.
+        // plans/plan_dx.md DX-206/DX-256: RasterizerState.DepthBias / SlopeScaleDepthBias. The
+        // renderer converts XNA's normalized constant offset to the bound DSV format's native INT
+        // units before filling this descriptor. The converted integer participates in the key, so
+        // equivalent requests share a pipeline state instead of keying on float noise.
         int depthBias = 0;
         float slopeScaleDepthBias = 0.0f;
         // RasterizerState.ScissorTestEnable is deliberately NOT here: D3D12_RASTERIZER_DESC has no

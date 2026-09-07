@@ -109,6 +109,7 @@
 #include "CNA/Internal/Renderers/DirectX11/D3D11StateObjectCache.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11EffectRenderer.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DShaderCache.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DStateMapping.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
@@ -936,13 +937,23 @@ protected:
 
             // RasterizerState: cull-back/solid vs. cull-none/wireframe.
             auto& rsCache = renderer.GetRasterizerStateCacheEXT();
-            auto rsA1 = rsCache.GetOrCreate(device, 2 /*CullCounterClockwiseFace*/, 0 /*Solid*/, false, 0.0f, 0.0f);
-            auto rsA2 = rsCache.GetOrCreate(device, 2, 0, false, 0.0f, 0.0f);
-            auto rsB = rsCache.GetOrCreate(device, 0 /*None*/, 1 /*WireFrame*/, true, 1.0f, 2.0f);
+            auto rsA1 = rsCache.GetOrCreate(device, 2 /*CullCounterClockwiseFace*/, 0 /*Solid*/, false, 0, 0.0f);
+            auto rsA2 = rsCache.GetOrCreate(device, 2, 0, false, 0, 0.0f);
+            auto rsB = rsCache.GetOrCreate(device, 0 /*None*/, 1 /*WireFrame*/, true, 1, 2.0f);
             check(rsA1.Get() != nullptr && rsA1.Get() == rsA2.Get(),
-                  "D3D11RasterizerStateCache: identical XNA rasterizer params return the identical object");
+                  "D3D11RasterizerStateCache: identical native rasterizer fields return the identical object");
             check(rsA1.Get() != rsB.Get(),
-                  "D3D11RasterizerStateCache: different XNA rasterizer params return a different object");
+                  "D3D11RasterizerStateCache: different native rasterizer fields return a different object");
+
+            check(CNA::Internal::Renderers::D3DCommon::XnaDepthBiasToD3D(
+                      1.0f, DXGI_FORMAT_D16_UNORM) == 65535,
+                  "D3DCommon depth bias: XNA's normalized 1.0 maps to all 16 D16 UNORM bits");
+            check(CNA::Internal::Renderers::D3DCommon::XnaDepthBiasToD3D(
+                      -1.0f, DXGI_FORMAT_D24_UNORM_S8_UINT) == -16777215,
+                  "D3DCommon depth bias: XNA's normalized -1.0 maps to all 24 D24 UNORM bits with its sign intact");
+            check(CNA::Internal::Renderers::D3DCommon::XnaDepthBiasToD3D(
+                      1.0f, DXGI_FORMAT_UNKNOWN) == 0,
+                  "D3DCommon depth bias: no active depth format maps to zero native bias");
 
             renderer.ApplyRasterizerState(2, 0, false, 0.0f, 0.0f);
             ID3D11RasterizerState* boundRS = nullptr;
@@ -3784,7 +3795,8 @@ protected:
                                 + 9 /* REMED-GFX-077 ColorWriteChannels/MultiSampleMask */
                                 + 1 /* REMED-GFX-061 fog false->true->false */
                                 + 1 /* plans/plan_dx.md DX-212 ExecutesShaderEffectSourceEXT */
-                                + 2 /* plans/plan_dx.md DX-216 sampler mip/addressW */;
+                                + 2 /* plans/plan_dx.md DX-216 sampler mip/addressW */
+                                + 3 /* plans/plan_dx.md DX-256 normalized DepthBias conversion */;
         std::printf("=== %d/%d PASS ===\n", passCount_, totalChecks);
         result_ = (passCount_ == totalChecks) ? 0 : 1;
         Exit();

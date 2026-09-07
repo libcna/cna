@@ -18,6 +18,8 @@
 
 #include <d3d11.h>
 
+#include <cstdint>
+
 namespace CNA::Internal::Renderers::D3DCommon
 {
     /// Maps an XNA Blend ordinal (Microsoft::Xna::Framework::Graphics::Blend cast to int) to the
@@ -51,6 +53,18 @@ namespace CNA::Internal::Renderers::D3DCommon
     /// enumerator names were themselves modeled after D3D's min/mag/mip filter naming convention,
     /// so this is a direct, unambiguous one-to-one mapping (no derived/composed bit twiddling).
     D3D11_FILTER TextureFilterToD3D11(int textureFilter);
+
+    /**
+     * @brief Converts XNA's normalized constant depth bias to a native D3D integer bias.
+     *
+     * XNA/D3D9 stores `RasterizerState.DepthBias` as a normalized depth offset. D3D11 and
+     * D3D12 instead store an integer count of the active depth format's least-resolvable value.
+     *
+     * @param depthBias XNA normalized depth offset.
+     * @param depthFormat Native format of the active depth-stencil view.
+     * @return Native D3D depth-bias units, or zero when no depth format is active.
+     */
+    [[nodiscard]] std::int32_t XnaDepthBiasToD3D(float depthBias, DXGI_FORMAT depthFormat) noexcept;
 
     /// Maps an XNA StencilOperation ordinal (Microsoft::Xna::Framework::Graphics::StencilOperation
     /// cast to int) to the corresponding D3D11_STENCIL_OP. XNA's Increment/Decrement (wrapping) map

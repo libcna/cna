@@ -355,6 +355,16 @@ namespace CNA::Internal::Renderers::DirectX11
         /// ApplyDepthStencilState(), SetDepthTestEnabled() and SetDepthWriteEnabled().
         void RebindDepthStencilState();
 
+        // XNA DepthBias is normalized, while D3D11 stores depth-format-dependent integer units.
+        // Keep the XNA state so a D16/D24 target switch can rebuild the native rasterizer state.
+        int rsCullMode_ = 2;
+        int rsFillMode_ = 0;
+        bool rsScissorTestEnable_ = false;
+        float rsDepthBias_ = 0.0f;
+        float rsSlopeScaleDepthBias_ = 0.0f;
+        bool rasterizerStateApplied_ = false;
+        void RebindRasterizerState();
+
         // Presentation policy (plans/plan_dx.md design decision 13: capability vs. policy, kept separate).
         bool vsyncEnabled_ = true;
         bool allowTearingRequested_ = true;

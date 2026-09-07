@@ -13,6 +13,7 @@
 #include "CNA/Internal/Renderers/DirectX12/D3D12Texture3D.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DConstantBuffers.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DRasterizationConvention.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DStateMapping.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -1829,10 +1830,9 @@ namespace CNA::Internal::Renderers::DirectX12
         psoDesc.ccwStencilDepthFail = currentCcwStencilDepthFail_;
         psoDesc.cullMode = currentCullMode_;
         psoDesc.fillMode = currentFillMode_;
-        // DX-206: rounded, not truncated -- XNA's DepthBias is a float in units of "r" and
-        // D3D12_RASTERIZER_DESC::DepthBias is the same quantity as an INT, the same conversion
-        // D3D11RasterizerStateCache performs.
-        psoDesc.depthBias = static_cast<int>(std::lround(currentDepthBias_));
+        // DX-256: XNA/D3D9's float is a normalized depth offset. Modern D3D stores an integer
+        // count of the bound DSV format's least-resolvable value, so conversion is per PSO/draw.
+        psoDesc.depthBias = D3DCommon::XnaDepthBiasToD3D(currentDepthBias_, boundDsvFormat_);
         psoDesc.slopeScaleDepthBias = currentSlopeScaleDepthBias_;
         // plans/plan_dx.md DX-207: a pipeline state's sample count must MATCH the render target it is used
         // with -- D3D12 has no equivalent of D3D11's uncoupled model -- so it comes from the bound

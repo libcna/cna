@@ -78,8 +78,16 @@ opposite convention 100/100. D3D11 now post-multiplies every stock/instanced 3D 
 shared D3DCommon just-under-half-pixel translation derived from the active viewport; SpriteBatch
 is deliberately unchanged and MSAA keeps its native sample positions. The direct
 `DirectX11_XnaPixelCenter` one-pixel-triangle fixture passes, as do `DescriptorCapacity` 29/29,
-`PointSampling` 146/146 and `TextureFilterOrdinal` 70/70. The complete label is now **51 tests,
-50 passed, 1 failed**; the sole remaining failure is constant depth bias (`DX-256`).
+`PointSampling` 146/146 and `TextureFilterOrdinal` 70/70.
+
+**Measured update, 2026-09-07 (`DX-256`).** XNA 4.0 on D3D9 proves `DepthBias` is a normalized
+depth offset: at `z=0.5`, zero bias preserves the first coplanar draw, `-1e-4` pulls the second draw
+forward, and `+1e-4` pushes it back; at `z=0`, negative bias cannot move past the near plane. This
+matches FNA3D's D3D11 conversion, which multiplies by 65535 for D16 and 16777215 for D24/D24S8
+before assigning the native integer field. D3D11 now performs that conversion against the active
+DSV format and reapplies rasterizer state when switching targets. The shared fixture is 4/4 on
+D3D11, D3D12 and EasyGL. The freshly rebuilt complete label is **51/51**, and
+`DirectX11_Smoke` is **170/170**.
 
 ## Development environment: Wine + DXVK dev-loop
 

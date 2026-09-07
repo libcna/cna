@@ -243,6 +243,8 @@ namespace CNA::Internal::Renderers::EasyGL
         [[nodiscard]] unsigned int GetColorGLHandle() const override;
         [[nodiscard]] const ::easygl::Texture& GetEasyGLColorTexture() const { return colorTex_; }
         [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
+        /** @brief Returns the raw XNA `DepthFormat` ordinal backing this target. */
+        [[nodiscard]] int GetDepthFormatEXT() const noexcept { return depthFormat_; }
         /// plans/plan_modern.md MOD-115: the raw SurfaceFormat ordinal this target's colour storage was
         /// actually created with. Equal to what was requested -- an unsupported format is refused at
         /// creation rather than substituted, so this can never disagree with the caller's request.
@@ -314,6 +316,8 @@ namespace CNA::Internal::Renderers::EasyGL
         void UnbindAsRenderTarget() override;
         [[nodiscard]] unsigned int GetGLHandle() const override;
         [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
+        /** @brief Returns the raw XNA `DepthFormat` ordinal backing this target. */
+        [[nodiscard]] int GetDepthFormatEXT() const noexcept { return depthFormat_; }
 
         // ITextureCubeRenderer — bind and upload to the shared cube texture.
         void BindGL(int unit) const override;
@@ -1160,6 +1164,10 @@ namespace CNA::Internal::Renderers::EasyGL
         int  stencilCcwFunc_ = 0;
         int  stencilReadMask_ = 0;
         int  referenceStencil_ = 0;
+
+        float normalizedDepthBias_ = 0.0f;
+        float slopeScaleDepthBias_ = 0.0f;
+        void ApplyDepthBiasForCurrentTargetEXT();
 
         /// REMED-GFX-168: the binding record as pointer VALUES only, for `CNA_EASYGL_TARGET_TRACE`.
         /// Never dereferences a recorded target -- one of them may already be destroyed storage,

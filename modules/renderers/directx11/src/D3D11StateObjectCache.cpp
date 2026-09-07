@@ -2,7 +2,6 @@
 #include "CNA/Internal/Renderers/DirectX11/D3D11StateObjectCache.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DStateMapping.hpp"
 
-#include <cmath>
 #include <cstdio>
 #include <stdexcept>
 
@@ -136,18 +135,9 @@ namespace CNA::Internal::Renderers::DirectX11
         ID3D11Device* device,
         int cullMode, int fillMode,
         bool scissorTestEnable,
-        float depthBias, float slopeScaleDepthBias)
+        int depthBias, float slopeScaleDepthBias)
     {
-        // XNA's RasterizerState.DepthBias is a float already expressed in units of "r", the
-        // depth buffer format's minimum resolvable difference -- the exact same convention this
-        // project's own Vulkan renderer feeds unscaled into vkCmdSetDepthBias's depthBiasConstantFactor,
-        // and EasyGL feeds unscaled into glPolygonOffset's "units" parameter (see
-        // VulkanRenderer::ApplyRasterizerState / EasyGLRenderer::ApplyRasterizerState's
-        // own comments, Task 767). D3D11_RASTERIZER_DESC::DepthBias is the same "r"-scaled bias,
-        // but declared INT rather than FLOAT -- round to the nearest representable integer count
-        // rather than truncating.
-        const int depthBiasInt = static_cast<int>(std::lround(depthBias));
-        const Key key{cullMode, fillMode, scissorTestEnable, depthBiasInt, slopeScaleDepthBias};
+        const Key key{cullMode, fillMode, scissorTestEnable, depthBias, slopeScaleDepthBias};
         auto it = cache_.find(key);
         if (it != cache_.end()) return it->second;
 
@@ -156,7 +146,7 @@ namespace CNA::Internal::Renderers::DirectX11
         desc.CullMode = D3DCommon::CullModeToD3D11(cullMode);
         // D3DCommon::CullModeToD3D11's own header doc: assumes FrontCounterClockwise = FALSE.
         desc.FrontCounterClockwise = FALSE;
-        desc.DepthBias = depthBiasInt;
+        desc.DepthBias = depthBias;
         desc.DepthBiasClamp = 0.0f;
         desc.SlopeScaledDepthBias = slopeScaleDepthBias;
         desc.DepthClipEnable = TRUE;

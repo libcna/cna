@@ -172,9 +172,9 @@ significantly stale; re-derived from source, not copy-edited)
 > * The whole stencil half of `DepthStencilState` was discarded, and `GraphicsDevice.ReferenceStencil`
 >   was swallowed by an un-overridden virtual — both real now (`DX-202`, `DX-203`), and `SpriteBatch`
 >   honours them too (`DX-210`).
-> * `RasterizerState.DepthBias`/`SlopeScaleDepthBias` were dropped (`DX-206`). Slope-scale bias is
->   proven; constant bias has no observable effect on **either** D3D renderer here and is an open
->   question, `DX-256` — not a D3D12-specific defect.
+> * `RasterizerState.DepthBias`/`SlopeScaleDepthBias` were dropped (`DX-206`). Both are now
+>   pixel-proven. `DX-256` measured XNA's constant term as a normalized depth offset and added the
+>   target-format conversion required by D3D12's native integer `DepthBias` field.
 > * `GraphicsDevice.BlendFactor` had no operand at all, so `Blend::BlendFactor` sampled whatever the
 >   command list defaulted to (`DX-204`).
 > * **Every pipeline state hardcoded `SampleDesc.Count = 1`**, so no draw into the MSAA render
@@ -195,7 +195,7 @@ significantly stale; re-derived from source, not copy-edited)
 >   former U2/descriptor failures are green. The remaining SpriteBatch render-target-source and
 >   C7 ordinal failures are separately owned by `DX-258`/`DX-259`.
 >
-> The latest `ctest -L DIRECTX12` run has **32 registered tests, 26 passed and 6 failed**. The
+> The latest `ctest -L DIRECTX12` run has **32 registered tests, 27 passed and 5 failed**. The
 > remaining failures are listed in the plan per fixture, each owned by a task row.
 
 - **Swap-chain presentation under *plain* Wine does not work — but under a properly Proton-managed
