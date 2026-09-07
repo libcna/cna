@@ -639,6 +639,31 @@ TEST(XnaFbxImporter, RefusalsMatchXna)
 }
 
 // XNA's own SDK refuses a modern FBX; CNA reads one. The divergence is deliberate and measured.
+// The wrapping every Autodesk exporter uses and nothing written here did.
+TEST(XnaFbxImporter, AValueListWrappedAcrossLinesReadsAsTheSameMesh)
+{
+    // FBX 6 ASCII breaks a long value list across lines and writes the comma that separates the
+    // last value on one line from the first on the next at the *start* of the next line. A reader
+    // that ends a list at the newline reads every fixture written here and none of the 149 real
+    // ones in the public samples, which is exactly what happened until XNAPP-242 built them.
+    ImporterContext context;
+    Xna::FbxImporter importer;
+    const std::shared_ptr<Graphics::NodeContent> wrapped =
+        importer.Import(Fixture("fbx_wrapped_values.fbx").string(), context);
+    const std::shared_ptr<Graphics::NodeContent> plain =
+        importer.Import(Fixture("fbx_bare_mesh.fbx").string(), context);
+    ASSERT_NE(wrapped, nullptr);
+    ASSERT_NE(plain, nullptr);
+
+    // The two documents are the same mesh; only the line breaks differ, so the graphs must be
+    // identical rather than merely both readable.
+    std::string wrappedText;
+    std::string plainText;
+    Describe(wrappedText, wrapped, "");
+    Describe(plainText, plain, "");
+    EXPECT_EQ(wrappedText, plainText);
+}
+
 TEST(XnaFbxImporter, AModernBinaryFbxIsReadWhereXnasSdkRefusesIt)
 {
     // The genuine importer's answer for this exact file is recorded, and it is a refusal: its FBX

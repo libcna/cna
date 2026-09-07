@@ -112,6 +112,13 @@
       "thirdParty": false
     },
     {
+      "file": "fbx_wrapped_values.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "note": "FBX 6.1 ASCII with its value lists wrapped across lines the way an Autodesk exporter wraps them, which is the shape no fixture here had until the public samples were built.",
+      "thirdParty": false
+    },
+    {
       "file": "hierarchy.x",
       "origin": "generated",
       "generator": "tools/xna-pipeline-oracle/model/make-model-fixtures.py",

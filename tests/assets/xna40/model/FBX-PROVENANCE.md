@@ -19,3 +19,4 @@ is third-party content.
 | `fbx_quad_textured.fbx` | 2531 |
 | `fbx_truncated.fbx` | 400 |
 | `fbx_two_materials.fbx` | 2484 |
+| `fbx_wrapped_values.fbx` | 1278 |

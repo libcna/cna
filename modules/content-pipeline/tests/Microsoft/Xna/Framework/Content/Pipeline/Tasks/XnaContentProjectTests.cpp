@@ -20,6 +20,11 @@
 #include <string>
 #include <vector>
 
+#include <memory>
+#include <sstream>
+
+#include "CNA/Content/Pipeline/ContentCompiler.hpp"
+#include "CNA/Content/Pipeline/ContentPipeline.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Tasks/ContentProject.hpp"
 
@@ -356,5 +361,117 @@ TEST(XnaContentProject, ThePublicSamplesProjectsAreReadAndTheirRoutesReported)
     // sample that uses its own processor is not a defect in this reader.
     EXPECT_EQ(refused, 0u) << report;
     EXPECT_GT(assets, 0u) << report;
+    std::cout << "[  SAMPLES ] " << report << std::endl;
+}
+
+// Reading them is one thing; building one is the other, and it is what the row asked for.
+TEST(XnaContentProject, ThePublicSamplesProjectsAreBuiltEndToEnd)
+{
+    const std::filesystem::path samples("/rv/tmp/samples");
+    std::error_code error;
+    if (!std::filesystem::exists(samples, error) || error)
+    {
+        GTEST_SKIP() << "the public XNA samples are not on this machine";
+    }
+    std::vector<std::filesystem::path> projects;
+    for (std::filesystem::recursive_directory_iterator it(
+             samples, std::filesystem::directory_options::skip_permission_denied, error);
+         it != std::filesystem::recursive_directory_iterator(); it.increment(error))
+    {
+        if (error) { break; }
+        if (it->is_regular_file(error) && it->path().extension() == ".contentproj")
+        {
+            projects.push_back(it->path());
+        }
+    }
+    std::sort(projects.begin(), projects.end());
+    if (projects.empty())
+    {
+        GTEST_SKIP() << "no .contentproj files were found under " << samples;
+    }
+
+    // Bounded on purpose: the whole sweep is 170 projects and several minutes, and what a test
+    // has to hold is that the route works and stays working, not that every sample on this
+    // machine is rebuilt on every run. The full sweep's numbers are recorded in XNAPP-242.
+    constexpr std::size_t kHowManyToBuild = 24u;
+    const std::filesystem::path output =
+        std::filesystem::temp_directory_path() / "cna_xnapp242_build";
+
+    std::size_t built = 0u;
+    std::size_t attempted = 0u;
+    std::size_t excused = 0u;
+    std::vector<std::string> failures;
+    for (const std::filesystem::path& one : projects)
+    {
+        if (attempted >= kHowManyToBuild) { break; }
+        Tasks::ContentProject project = Tasks::ContentProject::Load(one.string());
+        if (!project.UnroutableEXT().empty()) { continue; }
+        ++attempted;
+        std::filesystem::remove_all(output, error);
+        std::filesystem::create_directories(output, error);
+        std::ostringstream captured;
+        std::streambuf* const previousOut = std::cout.rdbuf(captured.rdbuf());
+        std::streambuf* const previousErr = std::cerr.rdbuf(captured.rdbuf());
+        int status = 1;
+        try
+        {
+            status = CNA::Content::Pipeline::RunContentCompiler(
+                {"build", one, "-o", output, "--quiet"},
+                [](const CNA::Content::Pipeline::ContentCompilerOptions& options)
+                {
+                    auto registry =
+                        std::make_shared<CNA::Content::Pipeline::ContentPipelineRegistry>();
+                    CNA::Content::Pipeline::RegisterBuiltInContentPipeline(*registry, options);
+                    return registry;
+                });
+        }
+        catch (...)
+        {
+            std::cout.rdbuf(previousOut);
+            std::cerr.rdbuf(previousErr);
+            throw;
+        }
+        std::cout.rdbuf(previousOut);
+        std::cerr.rdbuf(previousErr);
+
+        if (status == 0)
+        {
+            ++built;
+            continue;
+        }
+        // A failure is either something this machine cannot do, or a defect. The classes below are
+        // the first; anything else is the second and fails this test, which is how the FBX value
+        // lists that every Autodesk exporter wraps and no fixture here did were found.
+        const std::string said = captured.str();
+        const bool environmental =
+            said.find("names no font file beside the description") != std::string::npos ||
+            said.find("no usable effect compiler") != std::string::npos ||
+            said.find("does not exist") != std::string::npos ||
+            said.find("both resolve to logical name") != std::string::npos ||
+            // A project that names a pipeline *assembly* is refused whatever its components are:
+            // C++ has no assembly loading, and a custom component is registered in code before the
+            // build runs. That is the architecture XNAPP-280 records, not a defect here.
+            said.find("cannot load pipeline assemblies") != std::string::npos;
+        if (environmental)
+        {
+            ++excused;
+            continue;
+        }
+        if (failures.size() < 4u)
+        {
+            failures.push_back(one.filename().string() + ": " + said.substr(0u, 400u));
+        }
+    }
+    std::filesystem::remove_all(output, error);
+
+    std::string report = "built " + std::to_string(built) + " of " + std::to_string(attempted) +
+                         " routable sample projects; " + std::to_string(excused) +
+                         " blocked by this machine (a Windows font family it has not got, no fxc, "
+                         "or a source the snapshot does not carry)";
+    for (const std::string& failure : failures) { report += "\n  " + failure; }
+    EXPECT_GT(attempted, 0u) << report;
+    EXPECT_GT(built, 0u) << report;
+    EXPECT_TRUE(failures.empty()) << "a sample failed for a reason that is not this machine's\n"
+                                  << report;
     std::cout << "[  SAMPLES ] " << report << std::endl;
 }

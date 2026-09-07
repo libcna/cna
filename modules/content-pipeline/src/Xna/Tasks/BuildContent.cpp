@@ -724,12 +724,16 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
             try
             {
                 status = Canon::RunContentCompiler(
-                    arguments, [](const Canon::ContentCompilerOptions& options)
-                    {
-                        auto registry = std::make_shared<Canon::ContentPipelineRegistry>();
-                        Canon::RegisterBuiltInContentPipeline(*registry, options);
-                        return registry;
-                    });
+                    arguments,
+                    registryFactory_ ? registryFactory_
+                                     : Canon::ContentPipelineRegistryFactory(
+                                           [](const Canon::ContentCompilerOptions& options)
+                                           {
+                                               auto registry =
+                                                   std::make_shared<Canon::ContentPipelineRegistry>();
+                                               Canon::RegisterBuiltInContentPipeline(*registry, options);
+                                               return registry;
+                                           }));
             }
             catch (const std::exception& failure)
             {
@@ -828,6 +832,11 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
         LogMessage("BuildContent: " + std::to_string(outputContentFiles_.size()) + " output file(s), " +
                    std::to_string(rebuiltContentFiles_.size()) + " rebuilt.");
         return true;
+    }
+
+    void BuildContent::setRegistryFactoryEXT(Canon::ContentPipelineRegistryFactory value)
+    {
+        registryFactory_ = std::move(value);
     }
 
     const std::string& BuildContent::GetTypeName() const

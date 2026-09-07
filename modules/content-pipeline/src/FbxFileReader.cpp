@@ -97,7 +97,31 @@ namespace CNA::Content::Pipeline
                         ++at_;
                     }
                     const char c = Peek();
-                    if (c == '\0' || c == '\n' || c == '\r' || c == '{' || c == '}')
+                    if (c == '\n' || c == '\r')
+                    {
+                        // FBX 6 ASCII wraps a long value list across lines, and writes the comma
+                        // that separates the last value on one line from the first on the next at
+                        // the *start* of the next line. A node name can never begin with a comma,
+                        // so a comma there is unambiguously this same list continuing. Every FBX
+                        // an Autodesk exporter wrote does this and the fixtures written here did
+                        // not, which is why it went unnoticed until the public samples were built
+                        // (plans/plan_xnapipeline_parity.md XNAPP-242).
+                        const std::size_t lineEnd = at_;
+                        while (at_ < bytes_.size() &&
+                               (bytes_[at_] == '\n' || bytes_[at_] == '\r' || bytes_[at_] == ' ' ||
+                                bytes_[at_] == '\t'))
+                        {
+                            ++at_;
+                        }
+                        if (Peek() == ',')
+                        {
+                            ++at_;
+                            continue;
+                        }
+                        at_ = lineEnd;
+                        break;
+                    }
+                    if (c == '\0' || c == '{' || c == '}')
                     {
                         break;
                     }

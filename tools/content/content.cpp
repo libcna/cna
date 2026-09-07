@@ -39,6 +39,8 @@
 #include "CNA/Content/Pipeline/XnbOutputContentPipeline.hpp"
 #include "CNA/Content/Pipeline/XmaEncoderService.hpp"
 #include "CNA/Content/Pipeline/XnaXmlSourceContentPipeline.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Tasks/BuildContent.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Tasks/ContentProject.hpp"
 #include "CNA/Internal/Xnb/XnbFileOptions.hpp"
 #include "CNA/Internal/ContentPath.hpp"
 #include "CNA/Internal/Json.hpp"
@@ -244,7 +246,8 @@ namespace
     void PrintUsage()
     {
         std::cerr
-            << "Usage: cna-content build <source-file-or-directory> -o|--output <output>\n"
+            << "Usage: cna-content build <source-file-or-directory-or-.contentproj>\n"
+               "         -o|--output <output>\n"
                "         [--format cnb|xnb] [--config <file>] [--workers <1..64>]\n"
                "         [--xnb-platform <name>] [--xnb-version 4|5]\n"
                "         [--xnb-profile reach|hidef] [--xnb-compress none|lzx|lz4]\n"
@@ -288,6 +291,13 @@ namespace
                "--fx-compiler-launcher a program to run it through, such as wine. Each has the\n"
                "highest precedence in its own order: the option, then CNA_FXC / CNA_FXC_LAUNCHER\n"
                "in the environment, then the path baked in by CMake, then fxc on PATH.\n"
+               "\n"
+               "A .contentproj is an XNA content project and is built as one: its own platform,\n"
+               "profile, compression and per-asset Importer/Processor/ProcessorParameters, through\n"
+               "the same coordinator every other build uses, with XNA's own leniency. Its Content\n"
+               "and None items are copied rather than built, as XNA's targets copy them, honouring\n"
+               "CopyToOutputDirectory and Link. A project naming a component this build has not got\n"
+               "is refused with all of them named at once rather than one build at a time.\n"
                "\n"
                "XMA is the Xbox 360's audio codec. It has no public specification sufficient to\n"
                "implement a conforming encoder, no licensable encoder, and none in FFmpeg, which\n"
@@ -2197,6 +2207,159 @@ namespace
         return outcome;
     }
 
+    namespace Tasks = Microsoft::Xna::Framework::Content::Pipeline::Tasks;
+
+    /** @brief Whether this source names an XNA content project rather than an asset or a tree. */
+    [[nodiscard]] bool IsContentProject(const std::filesystem::path& source)
+    {
+        std::string extension = CNA::Internal::ContentPathToUtf8(source.extension());
+        std::transform(extension.begin(), extension.end(), extension.begin(),
+                       [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        return extension == ".contentproj";
+    }
+
+    /**
+     * @brief Copies one `Content` or `None` item beside the compiled assets.
+     *
+     * XNA's targets copy these rather than building them -- a readme, a shader a game loads at run
+     * time, a `.txt` nothing has an importer for -- and `CopyToOutputDirectory` says whether and
+     * when. `PreserveNewest` is honoured as it is written: the copy happens when the source is
+     * newer than what is there, which is also what makes a repeated build quiet.
+     *
+     * @param item The project item.
+     * @param projectDirectory The directory the item's `Include` is relative to.
+     * @param outputRoot Where compiled assets are being written.
+     * @param quiet Whether to say what was copied.
+     * @return Whether a copy actually happened.
+     */
+    bool CopyProjectItem(const Tasks::ContentProject::Item& item,
+                         const std::filesystem::path& projectDirectory,
+                         const std::filesystem::path& outputRoot, const bool quiet)
+    {
+        std::string when = item.Get("CopyToOutputDirectory");
+        std::transform(when.begin(), when.end(), when.begin(),
+                       [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (when.empty() || when == "never" || when == "donotcopy") { return false; }
+
+        // The source is always where the project says the file is; `Link` decides only where the
+        // copy lands, which is what it means in MSBuild and what a project uses it for when the
+        // file lives outside the project's own directory.
+        std::string include = item.include;
+        std::replace(include.begin(), include.end(), '\\', '/');
+        std::string relative = item.Get("Link");
+        if (relative.empty()) { relative = include; }
+        std::replace(relative.begin(), relative.end(), '\\', '/');
+        const std::filesystem::path source =
+            projectDirectory / CNA::Internal::ContentPathFromUtf8(include);
+        const std::filesystem::path target =
+            outputRoot / CNA::Internal::ContentPathFromUtf8(relative);
+        std::error_code error;
+        if (!std::filesystem::is_regular_file(source, error) || error)
+        {
+            throw std::runtime_error("the project's copy item '" + item.include +
+                                     "' is not a file that exists.");
+        }
+        if (when == "preservenewest" && std::filesystem::exists(target, error) && !error &&
+            std::filesystem::last_write_time(target) >= std::filesystem::last_write_time(source))
+        {
+            if (!quiet) { std::cout << "[SKIP] " << relative << " (copy, up to date)\n"; }
+            return false;
+        }
+        std::filesystem::create_directories(target.parent_path(), error);
+        std::filesystem::copy_file(source, target,
+                                   std::filesystem::copy_options::overwrite_existing, error);
+        if (error)
+        {
+            throw std::runtime_error("could not copy the project's item '" + item.include +
+                                     "': " + error.message());
+        }
+        if (!quiet) { std::cout << "[COPY] " << relative << "\n"; }
+        return true;
+    }
+
+    /**
+     * @brief Builds an XNA `.contentproj` through the same coordinator every other build uses.
+     *
+     * There is no second build engine here and no second project format: the project is read by
+     * `Tasks::ContentProject`, handed to `Tasks::BuildContent` -- the task XNA's own `.targets`
+     * drives -- and that task runs this very coordinator with the project's own platform, profile,
+     * compression and per-asset metadata. What this function adds is the two things a command line
+     * has to do and a task does not: report what happened, and copy the `Content`/`None` items,
+     * which XNA's targets copy rather than build (plans/plan_xnapipeline_parity.md XNAPP-240).
+     *
+     * @param command The parsed command line.
+     * @param createRegistry The registry factory this invocation was given, passed on so a
+     *        user-owned compiler's own components are in the build rather than quietly absent.
+     * @return The process status.
+     */
+    int RunContentProject(const CommandLine& command,
+                          const Pipeline::ContentPipelineRegistryFactory& createRegistry)
+    {
+        if (command.output.empty())
+        {
+            std::cerr << "error: building a .contentproj requires an output directory.\n";
+            return 2;
+        }
+        Tasks::ContentProject project = Tasks::ContentProject::Load(
+            CNA::Internal::ContentPathToUtf8(command.source));
+
+        const std::vector<std::string> unroutable = project.UnroutableEXT();
+        if (!unroutable.empty())
+        {
+            // Named all at once rather than one per run: a project that needs three custom
+            // processors should say so once, not three builds in a row.
+            std::cerr << "error: this build has no component for "
+                      << unroutable.size() << " of the project's assets:\n";
+            for (const std::string& reason : unroutable) { std::cerr << "  " << reason << "\n"; }
+            return 1;
+        }
+
+        const std::filesystem::path outputRoot = WeaklyCanonical(command.output);
+        std::error_code error;
+        std::filesystem::create_directories(outputRoot, error);
+        const std::filesystem::path intermediate = outputRoot / ".cna-contentproj";
+
+        Tasks::BuildContent task = project.ToBuildContentEXT(
+            CNA::Internal::ContentPathToUtf8(outputRoot),
+            CNA::Internal::ContentPathToUtf8(intermediate));
+        task.setRegistryFactoryEXT(createRegistry);
+        const bool built = task.Execute();
+
+        if (!command.quiet)
+        {
+            for (const std::string& line : task.MessagesEXT()) { std::cout << line << "\n"; }
+        }
+        for (const std::string& line : task.WarningsEXT()) { std::cerr << "warning: " << line << "\n"; }
+        for (const std::string& line : task.ErrorsEXT()) { std::cerr << "error: " << line << "\n"; }
+        if (!built) { return 1; }
+
+        std::size_t copied = 0u;
+        try
+        {
+            for (const Tasks::ContentProject::Item& item : project.CopiedFiles())
+            {
+                if (CopyProjectItem(item, CNA::Internal::ContentPathFromUtf8(project.DirectoryEXT()),
+                                    outputRoot, command.quiet))
+                {
+                    ++copied;
+                }
+            }
+        }
+        catch (const std::exception& failure)
+        {
+            std::cerr << "error: " << failure.what() << "\n";
+            return 1;
+        }
+
+        if (!command.quiet)
+        {
+            std::cout << "Built: " << task.getRebuiltContentFilesProperty().size()
+                      << "  Assets: " << task.getOutputContentFilesProperty().size()
+                      << "  Copied: " << copied << "\n";
+        }
+        return 0;
+    }
+
     int Run(const std::vector<std::filesystem::path>& arguments,
             const Pipeline::ContentPipelineRegistryFactory& createRegistry)
     {
@@ -2212,6 +2375,22 @@ namespace
             return 2;
         }
         if (command.operation == ContentCommand::Clean) { return RunClean(command); }
+
+        // An XNA content project is a source this coordinator understands, not a second format
+        // with a second engine behind it: it is read, handed to the task XNA's own targets drive,
+        // and that task runs this coordinator (XNAPP-240).
+        if (IsContentProject(command.source))
+        {
+            try
+            {
+                return RunContentProject(command, createRegistry);
+            }
+            catch (const std::exception& failure)
+            {
+                std::cerr << "error: " << failure.what() << "\n";
+                return 1;
+            }
+        }
 
         // The registry is built here, after parsing, because a route whose backend is an external
         // program cannot be registered before that program has been chosen: the backend's identity

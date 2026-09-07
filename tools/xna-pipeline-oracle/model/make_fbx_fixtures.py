@@ -226,6 +226,23 @@ def main():
           '\tModel: "Model::Loose", "Mesh" {\n\t}\n',
           '\tConnect: "OO", "Model::Loose", "Model::Scene"\n')
 
+    # 5b. The same mesh with its value lists wrapped the way an Autodesk exporter wraps them:
+    # a long list is broken across lines with the comma that separates the last value on one line
+    # from the first on the next written at the *start* of the next line. Every FBX in the public
+    # samples is written that way and nothing written here was, which is why a reader that ended a
+    # list at the newline read all six fixtures and none of the 149 real ones
+    # (plans/plan_xnapipeline_parity.md XNAPP-242).
+    wrapped = mesh_model("Loose", [(0, 0, 0), (2, 0, 0), (0, 2, 0)], [[0, 1, 2]])
+    wrapped = wrapped.replace("Vertices: 0,0,0,2,0,0,0,2,0",
+                              "Vertices: 0,0,0,2,0,0\n\t\t\t,0,2,0")
+    wrapped = wrapped.replace("PolygonVertexIndex: 0,1,-3",
+                              "PolygonVertexIndex: 0\n\t\t\t,1,-3")
+    write(os.path.join(out, "fbx_wrapped_values.fbx"),
+          {"count": 1, "models": 1, "materials": 0, "deformers": 0},
+          wrapped,
+          '\tModel: "Model::Loose", "Mesh" {\n\t}\n',
+          '\tConnect: "OO", "Model::Loose", "Model::Scene"\n')
+
     # 6. A quad polygon rather than two triangles: how an n-gon is triangulated.
     write(os.path.join(out, "fbx_quad_polygon.fbx"),
           {"count": 1, "models": 1, "materials": 0, "deformers": 0},

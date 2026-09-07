@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "CNA/CNAHelper.hpp"
+#include "CNA/Content/Pipeline/ContentCompiler.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Tasks/ContentTask.hpp"
 
 namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
@@ -258,6 +259,18 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
         void setTargetProfileProperty(std::string value);
 
         /**
+         * @brief Replaces the registry this task's build is run with.
+         *
+         * The task drives the one canonical coordinator, and by default it hands that coordinator
+         * the built-in registry -- which is what a `.contentproj` built by XNA's own targets gets.
+         * A host that has registered components of its own has to pass its own factory, or the
+         * build would quietly run without them and refuse the project's assets as unroutable.
+         *
+         * @param value The factory, or an empty function to go back to the built-in registry.
+         */
+        CNAEXT void setRegistryFactoryEXT(CNA::Content::Pipeline::ContentPipelineRegistryFactory value);
+
+        /**
          * @brief Builds every source asset, filling the three output properties.
          *
          * @return true when every asset built; false when one failed, with the reason in
@@ -285,5 +298,6 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
         std::vector<TaskItem> sourceAssets_;
         std::string targetPlatform_;
         std::string targetProfile_;
+        CNA::Content::Pipeline::ContentPipelineRegistryFactory registryFactory_;
     };
 }
