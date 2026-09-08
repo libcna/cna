@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import random
 import sys
-from typing import Dict, List, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 Face = Tuple[int, int, int]
 
@@ -494,4 +494,41 @@ def build_rules() -> Probes:
         if sorted(order) == list(range(n2)):
             p.add("grid42_%s" % label, coords, [faces[i] for i in order])
 
+    return p
+
+
+def build_edges() -> Probes:
+    """Batch eight: an edge with three faces, and which of them the walk crosses to.
+
+    The pendant triangle batches four to seven glue to face `T` shares that face's first edge --
+    which a strip already gives two faces -- so those probes were measuring a three-face edge, not
+    the neighbour's index. These hold the neighbour's own index fixed and move only the two faces
+    that share its edge.  XNASWEEP-149.
+    """
+    p = Probes()
+    coords, faces = strip(8)
+    faces = list(faces)
+    n = len(faces)
+    target = 8
+    for here in (5, 10):
+        for before in (0, 15):
+            for after in (0, 15):
+                if before == after:
+                    continue
+                slots: List[Optional[int]] = [None] * n
+                slots[here] = target
+                slots[before] = target - 1
+                slots[after] = target + 1
+                rest = [i for i in range(n) if i not in (target, target - 1, target + 1)]
+                k = 0
+                for slot in range(n):
+                    if slots[slot] is None:
+                        slots[slot] = rest[k]
+                        k += 1
+                ordered = [faces[i] for i in slots]
+                at = slots.index(target)
+                extra = len(coords)
+                a, b, _ = ordered[at]
+                p.add("chain_j%d_a%d_b%d" % (here, before, after),
+                      list(coords) + [(0.0, -1.0, 0.0)], ordered + [(a, extra, b)])
     return p
