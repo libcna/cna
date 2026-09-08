@@ -298,86 +298,72 @@ first run of this campaign was invalidated by a mid-run relink.
 | references in a sample with no `.contentproj` | 359 |
 | references whose item names a source the tree has not got | 43 |
 
-### 11.2 The sweep, run 10 (2026-09-08)
+### 11.2 The sweep, run 16 (2026-09-08)
 
-Run with everything through `XNASWEEP-131`. Run 3 is kept because it is what
-`XNASWEEP-104`--`110` were measured against.
+Run with everything through `XNASWEEP-158`. Run 3 is kept because it is what
+`XNASWEEP-104`--`110` were measured against, and run 13 because it is the last
+one before this day's model work.
 
-| | run 1 | run 2 | run 3 | run 6 | run 8 | run 10 |
-|---|---:|---:|---:|---:|---:|---:|
-| byte-identical | 922 | 3,524 | 3,619 | 3,711 | 3,718 | **3,738** |
-| differing | 343 | 1,444 | 1,547 | 1,510 | 1,679 | 1,659 |
-| missing (CNA produced nothing) | 6,102 | 2,399 | 2,201 | 2,146 | 1,970 | **1,970** |
-| build units that finished | -- | -- | 156 | 156 | 156 | 156 |
+| | run 1 | run 3 | run 10 | run 13 | run 16 |
+|---|---:|---:|---:|---:|---:|
+| byte-identical | 922 | 3,619 | 3,738 | 3,771 | **3,771** |
+| differing | 343 | 1,547 | 1,659 | 1,639 | 1,639 |
+| missing (CNA produced nothing) | 6,102 | 2,201 | 1,970 | 1,949 | **1,949** |
+| build units that finished | -- | 156 | 156 | 155 | 155 |
 
-*Differing* going up while *missing* goes down is the shape of progress here: an
-asset that could not be built at all is now built and compared. 231 references
-moved out of "nothing was produced" between run 3 and run 10.
-
-By source extension, run 10 (`identical / differing / missing`):
-
-| extension | identical | differing | missing | identical % |
-|---|---:|---:|---:|---:|
-| `.png` | 3,171 | 781 | 33 | 79.6 |
-| `.xml` | 2 | 0 | 1,218 | 0.2 |
-| (model side output) | 0 | 204 | 542 | 0.0 |
-| `.fbx` | 0 | 175 | 125 | 0.0 |
-| `.wav` | 290 | 5 | 0 | 98.3 |
-| `.spritefont` | 0 | 250 | 9 | 0.0 |
-| `.tga` | 167 | 7 | 0 | 96.0 |
-| `.fx` | 0 | 92 | 11 | 0.0 |
-| `.jpg` | 0 | 88 | 8 | 0.0 |
-| `.bmp` | **71** | 14 | 8 | 76.3 |
-| `.x` | **15** | 37 | 11 | 23.8 |
-| `.wma` | 14 | 1 | 0 | 93.3 |
-| `.dds` | 8 | 3 | 0 | 72.7 |
-
-`.x` had no identical reference at all in run 3, and `.bmp` -- the font sheets --
-went from 54 to 71 when `XNASWEEP-131` landed.
+The identical count did not move between run 13 and run 16, and that is the
+honest shape of this day's work: every reference the model fixes touched is one
+that *also* differs in the buffers `MeshHelper.OptimizeForCache` permutes, so a
+fixed transform or a corrected batch order takes a reference from wrong in five
+ways to wrong in one. What moved is the number of ways. Over the 175 unexplained
+references the total count of differences ran 2,708 (run 13) -> 3,323 (run 14,
+where `XNASWEEP-145` was right about the reversal and wrong about what replaces
+it) -> 3,289 (run 15) -> **3,099** (run 16), and the two worst references in the
+corpus, `France.FBX` and `AircraftCarrier.FBX`, went from 150 and 65 differences
+to **3 and 22**. Not one reference got worse between run 15 and run 16.
 
 ### 11.3 Every reference, classified
 
-`taxonomy.py` puts all 7,734 into one class each, with the reason beside it.
+`taxonomy.py` puts all 7,726 into one class each, with the reason beside it.
 
 | class | count | what it means |
 |---|---:|---|
-| `IDENTICAL` | **3,738** | CNA's build is the reference, byte for byte. |
-| `SEMANTICALLY_IDENTICAL` | 735 | Everything a runtime reads is equal. 725 are LZX -- two conforming encoders, one payload -- and 10 are numbers agreeing to within 6e-08 of the larger magnitude. |
-| `ACCEPTED_DIFFERENCE` | 726 | Measured, understood, and not closable from here. |
+| `IDENTICAL` | **3,771** | CNA's build is the reference, byte for byte. |
+| `SEMANTICALLY_IDENTICAL` | 728 | Everything a runtime reads is equal; the LZX stream is not. |
+| `ACCEPTED_DIFFERENCE` | 736 | Measured, understood, and not closable from here. |
 | `CUSTOM_PIPELINE_GAP` | 1,370 | The asset needs a component the *sample* defines, in a .NET assembly C++ cannot load. |
 | `ENVIRONMENT_GAP` | 15 | This machine's, not CNA's: 10 effects the June-2010 fxc refuses and XNA's own D3DX9 accepted, and 5 fonts Windows has and this machine has not. |
-| `CORPUS_GAP` | 946 | The reference is in the corpus and the sweep has no way to build it. |
-| `UNEXPLAINED` | **204** | Everything else. |
+| `CORPUS_GAP` | 931 | The reference is in the corpus and the sweep has no way to build it (`XNASWEEP-158`). |
+| `UNEXPLAINED` | **175** | Everything else. |
 
 The accepted differences, by reason:
 
 | count | reason |
 |---:|---|
-| 250 | Two rasterizers disagree about a glyph's ink by a pixel: GDI+ against FreeType. |
-| 244 | Generated mip levels only, from the dither in XNA's own filter (`XNASWEEP-123`). |
-| 92 | The effect blob carries its compiler's version string (`XNASWEEP-108`). |
+| 256 | Generated mip levels only, from the dither in XNA's own filter (`XNASWEEP-123`). |
+| 249 | Two rasterizers disagree about a glyph's ink by a pixel: GDI+ against FreeType. |
+| 91 | The effect blob carries its compiler's version string (`XNASWEEP-108`). |
 | 88 | Two conformant JPEG decoders inside an IDCT's tolerance. |
 | 48 | An Xbox 360 target: XMA has no publicly implementable encoder. |
 | 4 | XNA re-encodes a song to WMA (`XNASWEEP-125`). |
 
-The custom-pipeline gap is 1,215 `.xml` documents naming a game's own type and
-155 assets whose project names one of 25 processors or importers no XNA assembly
-defines -- `NormalMappingModelProcessor` (26), `SkinnedModelProcessor` (20),
-`TrianglePickingProcessor` (20), `CustomEffectModelProcessor` (8) and twenty-one
-more. The corpus gap is 542 model side outputs whose model is itself missing,
-367 references under no build unit this run reaches, and 37 whose project item
-names a source file the tree has not got.
-
 ### 11.3.1 What is still unexplained
 
-All 204, by what produced them:
+All 175 are model assets -- **141 `.fbx` and 34 `.x`** -- and there is no
+unexplained reference outside those two extensions any more. By what differs:
 
-| count | processor | what differs |
-|---:|---|---|
-| 182 | `ModelProcessor` | `XNASWEEP-129`: bounding-sphere centres and bone translations at 1e-7, and the vertex-buffer digests that follow from 7% of one mesh's texture coordinates. |
-| 15 | `TextureProcessor` | `.png`, `.dds` pairs whose difference is neither the mip dither nor the payload. |
-| 6 | `FontTextureProcessor` | What is left of `XNASWEEP-131` after 34 of its 40 references became identical. |
-| 1 | `PassThroughProcessor` | One `.xml` asset. |
+| count | what differs |
+|---:|---|
+| 100 | The vertex or index buffer alone: `XNASWEEP-149`, and nothing else. |
+| 40 | A buffer *and* a bone transform. |
+| 21 | A buffer *and* the bounding sphere computed over it. |
+| 13 | A bone transform alone: `XNASWEEP-150` (fifteen SAMPLE-142 skeletons and `photograph.fbx`) and `XNASWEEP-153` (`tank.fbx`). |
+| 1 | A bone's child list. |
+
+161 of the 175 carry a buffer difference, which is one question:
+`MeshHelper.OptimizeForCache`. The 21 bounding spheres are downstream of it --
+the sphere is computed over the vertices in the order the optimiser leaves them
+-- and so are most of the 40.
 
 ### 11.4 The read-only roots, re-audited 2026-09-08 (second pass)
 
