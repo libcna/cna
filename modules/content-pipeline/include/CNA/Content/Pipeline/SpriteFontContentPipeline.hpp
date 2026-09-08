@@ -267,12 +267,16 @@ namespace CNA::Content::Pipeline
      * @param rgba Sheet pixels, R, G, B, A per texel.
      * @param firstCharacter The character the first glyph is.
      * @param origin Path named in a refusal.
+     * @param profile The graphics profile the atlas must suit: Reach rounds its height up to a
+     *        power of two, HiDef to a multiple of four.
      * @return The packed font.
      * @throws InvalidContentException when the sheet holds no glyph, in XNA's own words.
      */
     [[nodiscard]] Cnb::CnbSpriteFontData BuildFontFromTextureSheet(
         std::uint32_t width, std::uint32_t height, const std::vector<std::uint8_t>& rgba,
-        SharpRuntime::charcs firstCharacter, const std::string& origin);
+        SharpRuntime::charcs firstCharacter, const std::string& origin,
+        Microsoft::Xna::Framework::Graphics::GraphicsProfile profile =
+            Microsoft::Xna::Framework::Graphics::GraphicsProfile::Reach);
 
     /**
      * @brief Turns a sheet of glyph images into canonical SpriteFont data.

@@ -494,17 +494,23 @@ namespace CNA::Content::Pipeline
         }
 
         /**
-         * @brief Chooses the atlas width that wastes least, then packs into it.
+         * @brief The atlas width XNA chooses, and the placements that follow from it.
          *
-         * Every width the glyphs could go in, keeping the one that wastes least. Area first, then
-         * the squarer of two sheets of equal area, then the wider: a 16x1024 sheet holds the same
-         * 95 glyphs as a 128x128 one and is a poor texture on every renderer, so "smallest" alone
-         * is not the whole rule. XNA's own atlases are all within a factor of two of square, and
-         * none is narrower than 16.
+         * The width is not a search. XNA sums the glyphs' own areas, takes the *integer* square
+         * root of that sum and rounds it up to a power of two -- no margin, no gap, and the
+         * truncation matters: a sum of 16,900 answers 130 and so 256, and a sum of 16,384 answers
+         * 128 and so 128. Measured over every one of the 195 distinct sprite fonts in the sample
+         * corpus, `.spritefont` and font sheet alike: the rule answers the reference's own width
+         * on all 195, and with it the placement rule below reproduces every one of their glyph
+         * boxes exactly (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-137`).
+         *
+         * CNA used to try every width and keep the one that wasted least, which is a better packer
+         * and a different one: it put 95 glyphs of SAMPLE-070's `DamageFont` into a 256x64 sheet
+         * where XNA puts them into a 128x132.
          *
          * @param glyphs The glyphs to pack.
          * @param side Receives the chosen width.
-         * @param usedHeight Receives the rows actually occupied.
+         * @param usedHeight Receives the rows actually occupied, margin included.
          * @param placements Receives one placement per glyph.
          * @param gap Texels between two glyphs. One for the description route, whose packer is
          *        CNA's own and whose atlas is a recorded divergence either way; **two** for a font
@@ -518,47 +524,31 @@ namespace CNA::Content::Pipeline
                                        std::vector<PackedGlyph>& placements,
                                        const std::uint32_t gap)
         {
-            const auto squareness = [](const std::uint32_t width, const std::uint32_t height)
-            {
-                std::uint32_t larger = std::max(width, height);
-                std::uint32_t smaller = std::min(width, height);
-                std::uint32_t steps = 0u;
-                while (smaller < larger) { smaller <<= 1; ++steps; }
-                return steps;
-            };
+            std::uint64_t area = 0u;
             std::uint32_t widestGlyph = 1u;
             for (const RasterGlyph& glyph : glyphs)
             {
-                widestGlyph = std::max(widestGlyph, glyph.width + 1u);
+                area += static_cast<std::uint64_t>(glyph.width) * glyph.height;
+                widestGlyph = std::max(widestGlyph, glyph.width + 2u);
             }
-
-            std::vector<PackedGlyph> candidatePlacements;
+            std::uint32_t chosen = RoundUpToPowerOfTwo(static_cast<std::uint32_t>(
+                std::sqrt(static_cast<double>(area))));
+            // A glyph wider than the sheet cannot be placed at all, and no measured font is in
+            // that position; widening until it fits is the only answer that is not a refusal.
+            chosen = std::max(chosen, RoundUpToPowerOfTwo(widestGlyph));
             side = 0u;
             usedHeight = 0u;
-            std::uint64_t bestArea = 0u;
-            std::uint32_t bestSquareness = 0u;
-            for (std::uint32_t candidate = std::max(16u, RoundUpToPowerOfTwo(widestGlyph));
-                 candidate <= kMaximumAtlasSide; candidate <<= 1)
+            for (; chosen <= kMaximumAtlasSide; chosen <<= 1)
             {
                 std::uint32_t candidateHeight = 0u;
-                if (!PackGlyphs(glyphs, candidate, kMaximumAtlasSide, candidatePlacements,
-                                candidateHeight, gap))
+                if (!PackGlyphs(glyphs, chosen, kMaximumAtlasSide, placements, candidateHeight,
+                                gap))
                 {
                     continue;
                 }
-                const std::uint32_t rounded = RoundUpToPowerOfTwo(candidateHeight);
-                const std::uint64_t area = static_cast<std::uint64_t>(candidate) * rounded;
-                const std::uint32_t shape = squareness(candidate, rounded);
-                if (side != 0u && (area > bestArea ||
-                                   (area == bestArea && shape >= bestSquareness)))
-                {
-                    continue;
-                }
-                side = candidate;
+                side = chosen;
                 usedHeight = candidateHeight;
-                bestArea = area;
-                bestSquareness = shape;
-                placements = candidatePlacements;
+                break;
             }
             return side != 0u;
         }
@@ -1591,11 +1581,11 @@ namespace CNA::Content::Pipeline
         }
     }
 
-    Cnb::CnbSpriteFontData BuildFontFromTextureSheet(const std::uint32_t width,
-                                                     const std::uint32_t height,
-                                                     const std::vector<std::uint8_t>& rgba,
-                                                     const SharpRuntime::charcs firstCharacter,
-                                                     const std::string& origin)
+    Cnb::CnbSpriteFontData BuildFontFromTextureSheet(
+        const std::uint32_t width, const std::uint32_t height,
+        const std::vector<std::uint8_t>& rgba, const SharpRuntime::charcs firstCharacter,
+        const std::string& origin,
+        const Microsoft::Xna::Framework::Graphics::GraphicsProfile profile)
     {
         const std::vector<SheetGlyph> found = FindSheetGlyphs(width, height, rgba);
         if (found.empty())
@@ -1685,21 +1675,17 @@ namespace CNA::Content::Pipeline
 
         Cnb::CnbSpriteFontData font;
         font.atlas.width = side;
-        // The height is the rows used, rounded up to a multiple of four -- and then to a power of
-        // two while it is still no more than 32.
-        //
-        // Seventeen genuine builds say so and none disagrees. Thirteen real fonts in the sample
-        // corpus are *exactly* the used height rounded to a multiple of four and only one of them
-        // is a power of two at all: `DebugFont` 64x112 from 111 rows, `NetRumbleFont` 128x156 from
-        // 154, `LargeGameFont` 512x348 from 346. The four sheets in the differential corpus are
-        // small enough for the second half to show: 16 rows answer 16, and 18 and 30 both answer
-        // 32, where a multiple of four alone would answer 20 and 32
-        // (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-131).
-        //
-        // The threshold is where the evidence runs out: "no more than 32 rows" and "narrower than
-        // 64 texels" separate the same seventeen files, and nothing here distinguishes them.
-        font.atlas.height = (usedHeight + 3u) & ~3u;
-        if (font.atlas.height <= 32u) { font.atlas.height = RoundUpToPowerOfTwo(font.atlas.height); }
+        // How tall the sheet is, is the profile's rule and not the packer's, on this route exactly
+        // as on the description one: HiDef rounds the rows used up to a multiple of four, Reach up
+        // to a power of two. `XNASWEEP-131` read the first half off thirteen HiDef fonts and the
+        // second off four small Reach sheets and could not tell which of "no more than 32 rows" or
+        // "narrower than 64 texels" was the threshold, because both separate the same files. There
+        // is no threshold: measured over all 195 distinct sprite fonts in the sample corpus, the
+        // profile decides and gets every one of them right (`XNASWEEP-137`).
+        font.atlas.height =
+            profile == Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef
+                ? ((usedHeight + 3u) & ~3u)
+                : RoundUpToPowerOfTwo(usedHeight);
         font.atlas.depth = 1u;
         font.atlas.faceCount = 1u;
         font.atlas.mipCount = 1u;
@@ -1817,7 +1803,8 @@ namespace CNA::Content::Pipeline
 
         Cnb::CnbSpriteFontData font = BuildFontFromTextureSheet(
             sheet.width, sheet.height, sheet.rgbaPixels, firstCharacter,
-            CNA::Internal::ContentPathToUtf8(context.SourcePath()));
+            CNA::Internal::ContentPathToUtf8(context.SourcePath()),
+            context.Environment().targetProfile);
 
         // `PremultiplyAlpha` is this processor's own property and its default is True, which the
         // atlas shows: SAMPLE-062's `NetRumbleFont.png` pads its cells with *transparent white*
