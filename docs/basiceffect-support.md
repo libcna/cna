@@ -90,7 +90,7 @@ changes into a single task):
 
 - **Task 885** — the *lit*-path `+EmissiveColor` term, plus `DirectionalLight1`/`DirectionalLight2`
   forwarding (still completely unforwarded, unchanged since Task 361). EasyGL/Bgfx just need a new
-  uniform; **Vulkan needs to expand the shared 128-byte `pipelineLayoutExt3D_` push-constant
+  uniform; **Vulkan needs to expand the shared 128-byte stock-3D push-constant
   budget** (`FillExtPushConst()`'s `float[32]`), which is also reused byte-for-byte by
   `SkinnedEffect`'s draw path — a genuine shared-architecture change, not a Vulkan-shader-only
   tweak.

@@ -6183,14 +6183,14 @@ namespace CNA::Internal::Renderers::Vulkan
         /// dual_texture_colored3d, stride 24 (VertexPositionColorTexture).
         constexpr StockProgramInput kDualTextureColored[] = { kPos, kColor, kUv, kUv1 };
 
-        // VULKAN-149. The instanced route's PER-VERTEX input for the position-only fallback --
-        // location 0 of instanced3d.vert.glsl. Its per-instance matrix columns sit at 12..15 on
-        // binding 1, are not declaration-derived and are appended after this one.
+        // VULKAN-149. The instanced route's PER-VERTEX input for the position-only shape -- the
+        // one input of `colored3d` compiled with CNA_NO_VERTEX_COLOR. Its per-instance matrix
+        // columns sit at 12..15 on binding 1, are not declaration-derived and are appended after it.
         //
-        // VULKAN-233 removed its three siblings: the colour, textured and colour-and-texture
-        // shapes are the ORDINARY bundle's now, so they use `kColored`, `kTextured` and
-        // `kColTextured` above -- the very tables they had been copied from.
-        /// instanced3d, position-only.
+        // VULKAN-233/VULKAN-234 removed its three siblings: the colour, textured and
+        // colour-and-texture shapes are the ORDINARY bundle's now, so they use `kColored`,
+        // `kTextured` and `kColTextured` above -- the very tables they had been copied from.
+        /// The position-only instanced shape.
         constexpr StockProgramInput kInstanced[]        = { kPos };
     }
 
@@ -8133,8 +8133,8 @@ namespace CNA::Internal::Renderers::Vulkan
         if (vkCreateDescriptorPool(device_, &pi, nullptr, &descriptorPoolLitTextured_) != VK_SUCCESS)
             throw std::runtime_error("vkCreateDescriptorPool (LitTextured) failed");
 
-        // Pipeline layout: same 128-byte PC as pipelineLayoutExt3D_ (unchanged content/fill
-        // function) + the new lit-textured descriptor set.
+        // Pipeline layout: the same 128-byte PC every stock 3D family uses (unchanged content and
+        // fill function) + the new lit-textured descriptor set.
         VkPushConstantRange pcRange{ VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, 128 };
         VkPipelineLayoutCreateInfo pli{};
         pli.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -11015,9 +11015,10 @@ namespace CNA::Internal::Renderers::Vulkan
     // instead, so this function had become unreachable dead code, AND would have failed
     // vkCreateGraphicsPipelines validation if ever called (its shaders -- kTextured3dVertSpv/
     // kColoredTextured3dVertSpv -- now declare a 2nd descriptor binding for fog that
-    // pipelineLayoutExt3D_'s original 1-binding descriptorSetLayout_ does not provide).
-    // pipelineLayoutExt3D_/descriptorSetLayout_ themselves are unchanged and still used by
-    // Instanced3D and 2D SpriteBatch, per this task's explicit requirement.
+    // pipelineLayoutExt3D_'s original 1-binding descriptorSetLayout_ did not provide).
+    // VULKAN-234: `pipelineLayoutExt3D_` is gone too. Instanced3D was its last 3D user and no
+    // longer exists; 2D SpriteBatch uses `descriptorSetLayout_` through its own layout, which is
+    // untouched.
 
     // =========================================================================
     // Memory / resource helpers
@@ -15238,12 +15239,11 @@ namespace CNA::Internal::Renderers::Vulkan
         // VULKAN-233: a BasicEffect instanced draw takes the ordinary fog-capable bundle, which is
         // where instancing gets its fog. `useFogTex3D` is set on exactly the condition the ordinary
         // routes use -- no other family claimed the draw -- and the shape came from their own
-        // selector above. The position-only fallback (shape None) keeps the fog-less
-        // `instanced3d` program and is the one instanced draw that still has no fog.
-        // VULKAN-234: including the position-only shape, which is why `instancedShape == None` no
-        // longer excludes it. That record takes the colour program compiled without its colour
-        // input, so `instanced3d.vert/frag` -- the one instanced module that had no fog term -- is
-        // retired outright and every instanced BasicEffect draw is now fogged.
+        // selector above.
+        // VULKAN-234: including the position-only shape, which is why `instancedShape == None` does
+        // not exclude it. That record takes the colour program compiled without its colour input,
+        // so `instanced3d.vert/frag` -- the one instanced module that had no fog term -- is retired
+        // outright and EVERY instanced BasicEffect draw is fogged.
         d.useFogTex3D = instancedUsesFogTex3D;
         d.basicShape  = instancedShape == BasicProgramShapeEXT::None
                             ? BasicProgramShapeEXT::Colored : instancedShape;

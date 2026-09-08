@@ -322,45 +322,72 @@ covers it.
   `SamplerStates[0]` at the same publication points, matching XNA, so the value the collection
   holds after `End()` is the batch's and the **next 3D draw** samples with it.
 
-### Instancing (`plans/plan_vulkan.md` VULKAN-217, 2026-09-07)
+### Instancing (`plans/plan_vulkan.md` VULKAN-217…VULKAN-234, 2026-09-08)
 
-`DrawInstancedPrimitives` selects a **separate program family** on this renderer, not — as on
-EasyGL — an optional per-instance matrix added to every stock program. Three shapes exist:
+`DrawInstancedPrimitives` adds an **optional per-instance world matrix to every stock 3D program**,
+which is EasyGL's design (`CNA_GL_INSTANCE_TRANSFORM_DECL`) reached by the one route Vulkan allows:
+a declared vertex input cannot be left unbound, so where EasyGL toggles one program with a uniform,
+this renderer compiles **two SPIR-V modules from the one source**. `compile_shaders.py` injects the
+four columns at **locations 12..15** — EasyGL's own locations — and a family's instanced module is
+that family's `.glsl` compiled again with `CNA_INSTANCED`. Without the define every macro expands to
+the text that was there before, so each family's ordinary module is byte-identical SPIR-V.
 
-| Geometry declaration + effect | Program |
-|---|---|
-| Position only | `instanced3d` |
-| Position + Colour | `instanced_colored3d` |
-| Position + TextureCoordinate, with `TextureEnabled` and a bound texture | `instanced_textured3d` |
-| Position + Colour + TextureCoordinate, same conditions | `instanced_colored_textured3d` |
-| Any of the above under an `AlphaTestEffect` | `instanced_alpha_test3d` (the ordinary alpha-test family, made instanceable) |
-| Position + Normal + TextureCoordinate with `LightingEnabled` | `instanced_lit_textured3d`, or its `_vertexlit` sibling when `PreferPerPixelLighting` is false (the ordinary lit family, made instanceable) |
-| Position + 2×TextureCoordinate under a `DualTextureEffect` | `instanced_dual_texture3d` (the ordinary dual-texture family, made instanceable) |
-| Position + Normal + TextureCoordinate under an `EnvironmentMapEffect` | `instanced_env_map3d` (the ordinary env-map family, made instanceable) |
+`useInstanced` therefore selects **no program at all**. It adds binding 1, and the effect family a
+draw belongs to is decided by exactly the cascade a non-instanced draw uses:
+
+| Effect / declaration | Program family | Instanced module |
+|---|---|---|
+| `BasicEffect`, Position only (or a stride the table does not list) | `colored3d` | `colored3d` + `CNA_INSTANCED` + `CNA_NO_VERTEX_COLOR` |
+| `BasicEffect`, Position + Colour | `colored3d` | `colored3d` + `CNA_INSTANCED` |
+| `BasicEffect`, Position + TextureCoordinate | `textured3d` | `textured3d` + `CNA_INSTANCED` |
+| `BasicEffect`, Position + Colour + TextureCoordinate | `colored_textured3d` | same source + `CNA_INSTANCED` |
+| `BasicEffect` with `LightingEnabled` — all three lit shapes (textured, untextured, coloured), each in both `PreferPerPixelLighting` variants | `lit_textured3d` / `lit_untextured3d` / `lit_textured3d_color` and their `_vertexlit` siblings | same sources + `CNA_INSTANCED` |
+| `AlphaTestEffect`, both vertex shapes | `alpha_test3d`, `alpha_test_colored3d` | same sources + `CNA_INSTANCED` |
+| `DualTextureEffect`, both vertex shapes | `dual_texture3d`, `dual_texture_colored3d` | same sources + `CNA_INSTANCED` |
+| `EnvironmentMapEffect` | `env_map3d` | same source + `CNA_INSTANCED` |
+| `SkinnedEffect`, stride 52/56, both lighting variants | `skinned3d*` | same sources + `CNA_INSTANCED` |
+| `PbrEffect` / `SkinnedPbrEffect`, every vertex record (48/60, 68/76/80) | `pbr3d`, `pbr3d_skinned` | same sources + `CNA_INSTANCED` |
+
+**Fog works on all of them**, which it did not before `VULKAN-233`/`VULKAN-234`: the separate
+instanced family's fragment shaders had no fog term, because that family used the one-descriptor
+pipeline layout it shared with 2D `SpriteBatch` and the fog UBO is a second binding. Routing every
+instanced draw into its ordinary family removed the constraint rather than working around it, and
+`instanced3d.vert.glsl`, `GetOrCreatePipelineInstanced3D`, `pipelinesInstanced3D_` and
+`pipelineLayoutExt3D_` no longer exist.
+
+**Which shape a `BasicEffect` instanced draw takes is decided by the declaration** when there is
+one, and by the stride only when there is not — which is stricter than the ordinary routes, on
+purpose (`VULKAN-149`): a declaration naming only a `Position` binds no colour out of the four bytes
+after it, and a declared `Position+Colour` record binds its colour at whatever offset it declares
+rather than at the stride table's. The effect's `TextureEnabled` is **not** part of that choice; the
+shaders gate their own sample on it, exactly as they do for a non-instanced draw.
 
 **The per-instance matrix composes with `BasicEffect.World`** — the shader computes
 `World × View × Projection × instanceMatrix × position`, so an instance transform is applied
 inside the effect's own world transform, as on EasyGL. Before `VULKAN-219` this route passed
 only `View × Projection` and `World` was silently dropped on every instanced draw, while the
-same entry point's no-instance-stream fallback applied it.
+same entry point's no-instance-stream fallback applied it. For a **skinned** draw the instance
+matrix applies *after* the bone skin and before World/View/Projection — the bone poses the mesh in
+its own object space and the instance places the posed mesh — which is EasyGL's composition too.
 
-The textured variant needs **both** halves: the effect must have asked for a texture, and the
-declaration must supply the coordinate. Either alone selects a program the draw cannot feed, so
-either alone is ignored.
+**One deliberate divergence from EasyGL, and this renderer is the stricter one.** EasyGL rotates a
+skinned normal by `mat3(instanceMatrix)` directly; this renderer folds the instance matrix into the
+world normal matrix, `transpose(inverse(mat3(World × instance)))`. The two agree for any rigid or
+uniformly-scaled instance and differ only under a non-uniformly-scaled one, where the composed
+inverse-transpose is correct. For **PBR** the instance matrix is folded into the tangent matrix and
+into `cnaDirectionHandedness` as well, so a mirroring instance flips the bitangent exactly as a
+mirroring `World` does — the same value EasyGL computes as a separate `instanceHandedness` factor.
 
-**What an instanced draw does not do here, and it is a limit rather than an omission.** Every
-remaining gap is a narrow variant rather than a whole family. The lit family is instanceable only in
-its **textured**
-shape (a lit declaration that is untextured, or that also carries a Colour, falls back to the
-colour-only instanced family); there is no **coloured** alpha-test one (a
-`Position+Colour+TextureCoordinate` alpha-test draw takes the uncoloured module and loses its
-colour, and the same holds for a coloured dual-texture one); and there is no fog on the colour-only
-instanced programs — the fog UBO is a second
-descriptor binding, and that family uses the single-binding pipeline layout it shares with 2D
-`SpriteBatch`. The lit and alpha-test instanced draws carry their own family's fog, because they
-carry their own family's whole pipeline layout. Skinned and PBR draws are not instanceable either.
-Tracked as `VULKAN-218`; EasyGL has none of these limits, because its per-instance matrix composes
-with every stock program.
+**Pipeline-variant cost.** Every family's instanced pipeline is a distinct cache entry with its own
+identity, and there is exactly one per (family, vertex shape) — never one per runtime value.
+`BasicEffect.VertexColorEnabled` in particular travels in the push constant and creates no variant.
+`GraphicsDevice`'s `GetInstancedPipelineCacheSizeEXT()` diagnostic counts pipeline creations whose
+instanced flag was true, across every family.
+
+**What an instanced draw still cannot do here** is what a non-instanced one cannot: a
+`ShaderEffect` instanced draw takes the custom-effect route below rather than any of the above, and
+compiled `.fx` instancing is `plans/plan_fx.md`'s. There is no longer a stock-effect shape that
+instancing excludes.
   Set `SamplerStates[1..15]` **before** `Begin()`. Setting them afterwards reaches a `Deferred`
   batch, whose flush publishes them, but not an `Immediate` one, whose only publication point is
   `Begin()` — XNA re-applies device state per draw call and CNA's sprite path does not go through
