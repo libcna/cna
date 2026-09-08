@@ -123,6 +123,45 @@ def with_defines(source: str, defines: tuple[str, ...]) -> str:
     return source[:version_end] + "".join(f"#define {name} 1\n" for name in defines) + source[version_end:]
 
 
+# plans/plan_vulkan.md VULKAN-227: the per-instance world matrix, as an OPTIONAL input to every
+# stock 3D vertex shader rather than a program family of its own. This is the Vulkan counterpart of
+# EasyGL's CNA_GL_INSTANCE_TRANSFORM_DECL (EasyGLRenderer.cpp) -- the same four columns, at the same
+# four locations, behind the same idea that instancing composes with an effect instead of replacing
+# it. Vulkan cannot leave a declared vertex input unbound, so where EasyGL toggles one program with
+# a uniform this compiles two SPIR-V modules from the one source.
+#
+# Locations 12..15 for the same reason EasyGL picked them: the widest stock per-vertex input set
+# here is SkinnedPbrEffect's dual-UV+colour record, which reaches location 7, so 12..15 cannot
+# collide with an existing input and leaves room for a wider record later.
+#
+# The NON-instanced expansion is textually the identity, so every ordinary module's SPIR-V is
+# byte-identical to what it was before a family became instanceable -- checked by regenerating this
+# header and diffing, not assumed.
+_INSTANCE_PROLOGUE = """\
+#ifdef CNA_INSTANCED
+layout(location = 12) in vec4 aCnaInstCol0;
+layout(location = 13) in vec4 aCnaInstCol1;
+layout(location = 14) in vec4 aCnaInstCol2;
+layout(location = 15) in vec4 aCnaInstCol3;
+mat4 cnaInstanceMatrix() { return mat4(aCnaInstCol0, aCnaInstCol1, aCnaInstCol2, aCnaInstCol3); }
+#define CNA_INSTANCE_POSITION(p) (cnaInstanceMatrix() * (p))
+#define CNA_INSTANCE_WORLD(w) ((w) * cnaInstanceMatrix())
+#else
+#define CNA_INSTANCE_POSITION(p) (p)
+#define CNA_INSTANCE_WORLD(w) (w)
+#endif
+"""
+
+
+def with_instance_prologue(source: str) -> str:
+    """Insert the optional per-instance transform block after #version and any variant defines."""
+    lines = source.split("\n")
+    at = 1
+    while at < len(lines) and lines[at].startswith("#define "):
+        at += 1
+    return "\n".join(lines[:at]) + "\n" + _INSTANCE_PROLOGUE + "\n".join(lines[at:])
+
+
 def spv_to_cpp_array(name: str, spv: bytes) -> str:
     # SPIR-V is an array of uint32_t words
     assert len(spv) % 4 == 0, "SPIR-V size not a multiple of 4"
@@ -248,22 +287,19 @@ def main():
         # instanced_textured3d's FS, which already multiplies the sample by the interpolated colour.
         ("instanced_colored_textured3d.vert.glsl", VERTEX_SHADER,
          "kInstancedColoredTextured3dVertSpv"),
-        # plans/plan_vulkan.md VULKAN-222: AlphaTestEffect on an instanced draw. Keeps
-        # alpha_test3d's push-constant layout and pipeline layout, so it shares that family's
-        # fragment stage and needs no new descriptor plumbing.
-        ("instanced_alpha_test3d.vert.glsl", VERTEX_SHADER, "kInstancedAlphaTest3dVertSpv"),
-        # plans/plan_vulkan.md VULKAN-224: the lit family made instanceable. Both variants,
-        # because XNA's real default is PreferPerPixelLighting=false and an instanced draw must
-        # not silently switch a game to the other one. Same UBO, layout and fragment stages as
-        # their non-instanced originals.
-        ("instanced_lit_textured3d.vert.glsl", VERTEX_SHADER, "kInstancedLitTextured3dVertSpv"),
-        ("instanced_lit_textured3d_vertexlit.vert.glsl", VERTEX_SHADER,
+        # plans/plan_vulkan.md VULKAN-227: the instanced variants of the ordinary families are the
+        # ORDINARY sources compiled a second time with CNA_INSTANCED -- there is no separate
+        # instanced_*.vert.glsl copy to keep in step any more. VULKAN-222 (alpha test), VULKAN-224
+        # (both lit variants; XNA's real default is PreferPerPixelLighting=false, so an instanced
+        # draw must not silently switch a game to the other one), VULKAN-225 (dual texture) and
+        # VULKAN-226 (env map) each keep their family's push constant, UBO, pipeline layout,
+        # descriptor set and fragment stage; only the vertex module differs.
+        ("alpha_test3d.vert.glsl",  VERTEX_SHADER, "kInstancedAlphaTest3dVertSpv"),
+        ("lit_textured3d.vert.glsl", VERTEX_SHADER, "kInstancedLitTextured3dVertSpv"),
+        ("lit_textured3d_vertexlit.vert.glsl", VERTEX_SHADER,
          "kInstancedLitTextured3dVertexLitVertSpv"),
-        # plans/plan_vulkan.md VULKAN-225: the dual-texture family made instanceable. Same UBO,
-        # layout and fragment stage as its non-instanced original.
-        ("instanced_dual_texture3d.vert.glsl", VERTEX_SHADER, "kInstancedDualTexture3dVertSpv"),
-        # plans/plan_vulkan.md VULKAN-226: the env-map family made instanceable.
-        ("instanced_env_map3d.vert.glsl", VERTEX_SHADER, "kInstancedEnvMap3dVertSpv"),
+        ("dual_texture3d.vert.glsl", VERTEX_SHADER, "kInstancedDualTexture3dVertSpv"),
+        ("env_map3d.vert.glsl",      VERTEX_SHADER, "kInstancedEnvMap3dVertSpv"),
     ]
 
     # plans/plan_gltf.md GLTF-465: the PBR variants whose vertex record carries a packed COLOR_0 slot.
@@ -296,7 +332,13 @@ def main():
         defines = ("CNA_PBR_DUAL_UV",) if "DualUv" in cname else ()
         if cname in VERTEX_COLOR_VARIANTS:
             defines += ("CNA_PBR_VERTEX_COLOR",)
+        # VULKAN-227: the instanced variant of a stock family is the SAME source compiled with the
+        # per-instance columns declared. No cname of a non-instanced module contains "Instanced".
+        if "Instanced" in cname:
+            defines += ("CNA_INSTANCED",)
         source = with_defines(source, defines)
+        if kind == VERTEX_SHADER:
+            source = with_instance_prologue(source)
         print(f"Compiling {filename} ...", end=" ", flush=True)
         spv = compile_glsl(source, kind, filename)
         print(f"OK ({len(spv)} bytes, {len(spv)//4} words)")

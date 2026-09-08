@@ -12,6 +12,18 @@
 // unlit fallback branch.
 
 // Stride 32: VertexPositionNormalTexture — float3 pos + float3 normal + float2 uv
+
+// plans/plan_vulkan.md VULKAN-227: this source is compiled twice -- once plain and once with
+// CNA_INSTANCED, which declares the four per-instance matrix columns at locations 12..15 and
+// turns CNA_INSTANCE_POSITION()/CNA_INSTANCE_WORLD() from the identity into the per-instance
+// transform. Without the define each call expands to exactly the text that was here before,
+// so this family's ORDINARY module is byte-identical SPIR-V -- checked by diffing the
+// regenerated spirv_shaders.hpp, not assumed. See compile_shaders.py.
+//
+// VULKAN-219: the per-instance matrix applies INSIDE the effect's own world transform, which
+// this shader's mvp (and world, where it has one) already carries. Every term that consumed
+// the raw vertex position consumes the instance-transformed one, so an instance is lit,
+// reflected and fogged where it actually stands rather than where the un-instanced mesh would.
 layout(location = 0) in vec3 inPos;
 layout(location = 1) in vec3 inNormal;
 layout(location = 2) in vec2 inUV;
@@ -53,16 +65,16 @@ layout(set = 0, binding = 1) uniform LitLightParams {
 } lp;
 
 void main() {
-    vec4 pos = pc.mvp * vec4(inPos, 1.0);
+    vec4 pos = pc.mvp * CNA_INSTANCE_POSITION(vec4(inPos, 1.0));
     pos.y = -pos.y;
     gl_Position = pos;
     gl_PointSize = 1.0;
     fragUV = inUV;
-    fragFogFactor = 1.0 - clamp(dot(vec4(inPos, 1.0), lp.fogVector), 0.0, 1.0); // REMED-GFX-010: FNA view-space fog vector
+    fragFogFactor = 1.0 - clamp(dot(CNA_INSTANCE_POSITION(vec4(inPos, 1.0)), lp.fogVector), 0.0, 1.0); // REMED-GFX-010: FNA view-space fog vector
 
-    mat3 normalMatrix = transpose(inverse(mat3(lp.world)));
+    mat3 normalMatrix = transpose(inverse(mat3(CNA_INSTANCE_WORLD(lp.world))));
     vec3 N = normalize(normalMatrix * inNormal);
-    vec3 worldPos = (lp.world * vec4(inPos, 1.0)).xyz;
+    vec3 worldPos = (lp.world * CNA_INSTANCE_POSITION(vec4(inPos, 1.0))).xyz;
     vec3 E = normalize(lp.eyePos_pad.xyz - worldPos);
 
     vec3 nL0 = normalize(pc.light0Dir);

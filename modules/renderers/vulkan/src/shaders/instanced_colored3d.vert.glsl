@@ -15,12 +15,9 @@
 layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec4 aColor;   // normalized UNORM R8G8B8A8 at the stride's colour offset
 
-// Per-instance world matrix (binding = 1, VK_VERTEX_INPUT_RATE_INSTANCE, stride = 64)
-// Column-major mat4: one column per vec4.
-layout(location = 4) in vec4 aInstCol0;
-layout(location = 5) in vec4 aInstCol1;
-layout(location = 6) in vec4 aInstCol2;
-layout(location = 7) in vec4 aInstCol3;
+// plans/plan_vulkan.md VULKAN-227: the four per-instance matrix columns are no longer
+// declared here. compile_shaders.py injects them (locations 12..15) into every stock vertex
+// shader compiled with CNA_INSTANCED, and CNA_INSTANCE_POSITION() is the identity without it.
 
 layout(location = 0) out vec4 fragColor;
 
@@ -35,8 +32,7 @@ layout(push_constant) uniform PC {
 } pc;
 
 void main() {
-    mat4 world = mat4(aInstCol0, aInstCol1, aInstCol2, aInstCol3);
-    gl_Position = pc.vp * world * vec4(aPos, 1.0);
+    gl_Position = pc.vp * CNA_INSTANCE_POSITION(vec4(aPos, 1.0));
     // REMED-GFX-011: renderer-wide Vulkan NDC Y-flip -- see pbr3d.vert.glsl.
     gl_Position.y = -gl_Position.y;
     gl_PointSize = 1.0;

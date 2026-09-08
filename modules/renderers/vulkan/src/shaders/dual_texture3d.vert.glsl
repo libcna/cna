@@ -1,6 +1,18 @@
 #version 450
 
 // Stride 20: VertexPositionTexture — float3 pos + float2 uv
+
+// plans/plan_vulkan.md VULKAN-227: this source is compiled twice -- once plain and once with
+// CNA_INSTANCED, which declares the four per-instance matrix columns at locations 12..15 and
+// turns CNA_INSTANCE_POSITION()/CNA_INSTANCE_WORLD() from the identity into the per-instance
+// transform. Without the define each call expands to exactly the text that was here before,
+// so this family's ORDINARY module is byte-identical SPIR-V -- checked by diffing the
+// regenerated spirv_shaders.hpp, not assumed. See compile_shaders.py.
+//
+// VULKAN-219: the per-instance matrix applies INSIDE the effect's own world transform, which
+// this shader's mvp (and world, where it has one) already carries. Every term that consumed
+// the raw vertex position consumes the instance-transformed one, so an instance is lit,
+// reflected and fogged where it actually stands rather than where the un-instanced mesh would.
 //
 // Task 899: dedicated vertex shader (previously DualTextureEffect reused textured3d.vert.glsl's
 // compiled SPIR-V directly). textured3d.vert.glsl now declares its own fog UBO at binding=1
@@ -40,7 +52,7 @@ layout(set = 0, binding = 2) uniform FogParams {
 } fog;
 
 void main() {
-    vec4 pos = pc.mvp * vec4(inPos, 1.0);
+    vec4 pos = pc.mvp * CNA_INSTANCE_POSITION(vec4(inPos, 1.0));
     pos.y = -pos.y;
     gl_Position = pos;
     gl_PointSize = 1.0;
@@ -57,5 +69,5 @@ void main() {
     // Task 899: fog factor from raw object-space Z. REMED-GFX-005: corrected to FNA/EasyGL Task-1111
     // form (z+FogEnd)/(FogEnd-FogStart); the prior Task 888/899 (FogEnd-z) formula was the
     // mirror image and wrong. Zero-length range -> fully fogged, matching FNA SetFogVector.
-    fragFogFactor = 1.0 - clamp(dot(vec4(inPos, 1.0), fog.fogVector), 0.0, 1.0); // REMED-GFX-010: FNA view-space fog vector
+    fragFogFactor = 1.0 - clamp(dot(CNA_INSTANCE_POSITION(vec4(inPos, 1.0)), fog.fogVector), 0.0, 1.0); // REMED-GFX-010: FNA view-space fog vector
 }

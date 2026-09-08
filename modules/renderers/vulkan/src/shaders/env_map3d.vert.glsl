@@ -1,5 +1,17 @@
 #version 450
 
+// plans/plan_vulkan.md VULKAN-227: this source is compiled twice -- once plain and once with
+// CNA_INSTANCED, which declares the four per-instance matrix columns at locations 12..15 and
+// turns CNA_INSTANCE_POSITION()/CNA_INSTANCE_WORLD() from the identity into the per-instance
+// transform. Without the define each call expands to exactly the text that was here before,
+// so this family's ORDINARY module is byte-identical SPIR-V -- checked by diffing the
+// regenerated spirv_shaders.hpp, not assumed. See compile_shaders.py.
+//
+// VULKAN-219: the per-instance matrix applies INSIDE the effect's own world transform, which
+// this shader's mvp (and world, where it has one) already carries. Every term that consumed
+// the raw vertex position consumes the instance-transformed one, so an instance is lit,
+// reflected and fogged where it actually stands rather than where the un-instanced mesh would.
+
 layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec3 aNormal;
 layout(location = 2) in vec2 aUV;
@@ -35,19 +47,19 @@ layout(set = 0, binding = 2) uniform EnvMapParams {
 } ep;
 
 void main() {
-    gl_Position = pc.mvp * vec4(aPos, 1.0);
+    gl_Position = pc.mvp * CNA_INSTANCE_POSITION(vec4(aPos, 1.0));
     // REMED-GFX-011: renderer-wide Vulkan NDC Y-flip -- see pbr3d.vert.glsl.
     gl_Position.y = -gl_Position.y;
     gl_PointSize = 1.0;
-    vec3 worldPos    = (pc.world * vec4(aPos, 1.0)).xyz;
-    mat3 nm          = transpose(inverse(mat3(pc.world)));
+    vec3 worldPos    = (pc.world * CNA_INSTANCE_POSITION(vec4(aPos, 1.0))).xyz;
+    mat3 nm          = transpose(inverse(mat3(CNA_INSTANCE_WORLD(pc.world))));
     vWorldNormal     = normalize(nm * aNormal);
     vEyeDir          = ep.eyePos_pad.xyz - worldPos;
     vUV              = aUV;
     // Fog factor from raw object-space Z. REMED-GFX-005: corrected to FNA/EasyGL Task-1111
     // form (z+FogEnd)/(FogEnd-FogStart); the prior Task 888/899 (FogEnd-z) formula was the
     // mirror image and wrong. Zero-length range -> fully fogged, matching FNA SetFogVector.
-    vFogFactor = 1.0 - clamp(dot(vec4(aPos, 1.0), ep.fogVector), 0.0, 1.0); // REMED-GFX-010: FNA view-space fog vector
+    vFogFactor = 1.0 - clamp(dot(CNA_INSTANCE_POSITION(vec4(aPos, 1.0)), ep.fogVector), 0.0, 1.0); // REMED-GFX-010: FNA view-space fog vector
 
     // plan_vulkan.md VULKAN-260. XNA's EnvironmentMapEffect.fx computes ComputeFresnelFactor in
     // the VERTEX shader, from each vertex's OWN un-interpolated normal and eye vector, and writes

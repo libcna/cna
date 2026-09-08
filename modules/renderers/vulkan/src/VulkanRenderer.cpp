@@ -7281,10 +7281,10 @@ namespace CNA::Internal::Renderers::Vulkan
         ApplyDeclaredVertexLayoutEXT(vertexLayout, attrs, 3u, attrCount);
 
         if (instanced) {
-            attrs[attrCount++] = { 4, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0  }; // aInstCol0
-            attrs[attrCount++] = { 5, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 16 }; // aInstCol1
-            attrs[attrCount++] = { 6, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 32 }; // aInstCol2
-            attrs[attrCount++] = { 7, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 48 }; // aInstCol3
+            attrs[attrCount++] = { 12, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0  }; // aCnaInstCol0
+            attrs[attrCount++] = { 13, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 16 }; // aCnaInstCol1
+            attrs[attrCount++] = { 14, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 32 }; // aCnaInstCol2
+            attrs[attrCount++] = { 15, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 48 }; // aCnaInstCol3
         }
 
         VkPipelineVertexInputStateCreateInfo vis{};
@@ -7612,10 +7612,10 @@ namespace CNA::Internal::Renderers::Vulkan
         // declaration claim the slots the instance columns are about to use (VULKAN-222).
         ApplyDeclaredVertexLayoutEXT(vertexLayout, attrs, 4u, attrCount);
         if (instanced) {
-            attrs[attrCount++] = { 4, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0  }; // aInstCol0
-            attrs[attrCount++] = { 5, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 16 }; // aInstCol1
-            attrs[attrCount++] = { 6, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 32 }; // aInstCol2
-            attrs[attrCount++] = { 7, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 48 }; // aInstCol3
+            attrs[attrCount++] = { 12, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0  }; // aCnaInstCol0
+            attrs[attrCount++] = { 13, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 16 }; // aCnaInstCol1
+            attrs[attrCount++] = { 14, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 32 }; // aCnaInstCol2
+            attrs[attrCount++] = { 15, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 48 }; // aCnaInstCol3
         }
 
         VkPipelineVertexInputStateCreateInfo vis{};
@@ -7992,10 +7992,10 @@ namespace CNA::Internal::Renderers::Vulkan
         // Per-vertex capacity, 3 -- not std::size(attrs), which is now 7 (VULKAN-222).
         ApplyDeclaredVertexLayoutEXT(vertexLayout, attrs, 3u, attrCount);
         if (instanced) {
-            attrs[attrCount++] = { 4, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0  }; // aInstCol0
-            attrs[attrCount++] = { 5, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 16 }; // aInstCol1
-            attrs[attrCount++] = { 6, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 32 }; // aInstCol2
-            attrs[attrCount++] = { 7, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 48 }; // aInstCol3
+            attrs[attrCount++] = { 12, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0  }; // aCnaInstCol0
+            attrs[attrCount++] = { 13, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 16 }; // aCnaInstCol1
+            attrs[attrCount++] = { 14, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 32 }; // aCnaInstCol2
+            attrs[attrCount++] = { 15, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 48 }; // aCnaInstCol3
         }
 
         VkPipelineVertexInputStateCreateInfo vis{};
@@ -8299,10 +8299,10 @@ namespace CNA::Internal::Renderers::Vulkan
         uint32_t attrCount = untextured ? 2u : (colored ? 4u : 3u);
         ApplyDeclaredVertexLayoutEXT(vertexLayout, attrs, attrCount, attrCount);
         if (instanced) {
-            attrs[attrCount++] = { 4, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0  }; // aInstCol0
-            attrs[attrCount++] = { 5, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 16 }; // aInstCol1
-            attrs[attrCount++] = { 6, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 32 }; // aInstCol2
-            attrs[attrCount++] = { 7, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 48 }; // aInstCol3
+            attrs[attrCount++] = { 12, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0  }; // aCnaInstCol0
+            attrs[attrCount++] = { 13, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 16 }; // aCnaInstCol1
+            attrs[attrCount++] = { 14, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 32 }; // aCnaInstCol2
+            attrs[attrCount++] = { 15, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 48 }; // aCnaInstCol3
         }
 
         VkPipelineVertexInputStateCreateInfo vis{};
@@ -8468,10 +8468,10 @@ namespace CNA::Internal::Renderers::Vulkan
         uint32_t attrCount = untextured ? 2u : (colored ? 4u : 3u);
         ApplyDeclaredVertexLayoutEXT(vertexLayout, attrs, attrCount, attrCount);
         if (instanced) {
-            attrs[attrCount++] = { 4, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0  }; // aInstCol0
-            attrs[attrCount++] = { 5, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 16 }; // aInstCol1
-            attrs[attrCount++] = { 6, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 32 }; // aInstCol2
-            attrs[attrCount++] = { 7, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 48 }; // aInstCol3
+            attrs[attrCount++] = { 12, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0  }; // aCnaInstCol0
+            attrs[attrCount++] = { 13, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 16 }; // aCnaInstCol1
+            attrs[attrCount++] = { 14, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 32 }; // aCnaInstCol2
+            attrs[attrCount++] = { 15, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 48 }; // aCnaInstCol3
         }
 
         VkPipelineVertexInputStateCreateInfo vis{};
@@ -10929,10 +10929,10 @@ namespace CNA::Internal::Renderers::Vulkan
         // applicator overwrites from index 0 and resets the count -- binding 1's attributes are
         // not declaration-derived and must survive it.
         ApplyDeclaredVertexLayoutEXT(vertexLayout, attrs, std::size(attrs), attrCount);
-        attrs[attrCount++] = { 4, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0  }; // aInstCol0 (per-instance)
-        attrs[attrCount++] = { 5, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 16 }; // aInstCol1
-        attrs[attrCount++] = { 6, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 32 }; // aInstCol2
-        attrs[attrCount++] = { 7, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 48 }; // aInstCol3
+        attrs[attrCount++] = { 12, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0  }; // aCnaInstCol0 (per-instance)
+        attrs[attrCount++] = { 13, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 16 }; // aCnaInstCol1
+        attrs[attrCount++] = { 14, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 32 }; // aCnaInstCol2
+        attrs[attrCount++] = { 15, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 48 }; // aCnaInstCol3
 
         VkPipelineVertexInputStateCreateInfo vis{};
         vis.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
