@@ -33,6 +33,27 @@ namespace CNA::Internal::Renderers::DirectX11
             return buf;
         }
 
+        int ClampBackBufferMultiSampleCount(
+            ID3D11Device* device, DXGI_FORMAT format, int requestedCount)
+        {
+            if (device == nullptr || requestedCount <= 1) return 0;
+
+            int candidate = 1;
+            while (candidate <= requestedCount / 2) candidate *= 2;
+            while (candidate > 1)
+            {
+                UINT qualityLevels = 0;
+                if (SUCCEEDED(device->CheckMultisampleQualityLevels(
+                        format, static_cast<UINT>(candidate), &qualityLevels)) &&
+                    qualityLevels > 0)
+                {
+                    return candidate;
+                }
+                candidate >>= 1;
+            }
+            return 0;
+        }
+
         /// Same per-PrimitiveType vertex-count formula every other renderer duplicates locally
         /// (Vulkan/EasyGL's own VertexCountForPrimitives) -- not shared via a common header today,
         /// so this follows the existing precedent rather than introducing a new one.
@@ -97,6 +118,7 @@ namespace CNA::Internal::Renderers::DirectX11
         : surface_(args.surface, "DirectX11Renderer")
         , virtualWidth_(args.virtualWidth)
         , virtualHeight_(args.virtualHeight)
+        , requestedMultiSampleCount_(args.multiSampleCount)
     {
         presentationMode_ = args.presentationMode;
         swapInterval_ = args.swapInterval;
@@ -244,26 +266,76 @@ namespace CNA::Internal::Renderers::DirectX11
         if (FAILED(hr))
             throw std::runtime_error("CreateRenderTargetView failed, hr=" + FormatHr(hr));
 
+        RecreateDefaultRenderSurfaces(requestedMultiSampleCount_);
+    }
+
+    ID3D11RenderTargetView* DirectX11Renderer::GetBackBufferDrawRtv() const
+    {
+        return backBufferMsaaRTV_ ? backBufferMsaaRTV_.Get() : backBufferRTV_.Get();
+    }
+
+    void DirectX11Renderer::RecreateDefaultRenderSurfaces(int requestedMultiSampleCount)
+    {
+        const int newSampleCount = ClampBackBufferMultiSampleCount(
+            device_.Get(), DXGI_FORMAT_R8G8B8A8_UNORM, requestedMultiSampleCount);
+
+        ComPtr<ID3D11Texture2D> newMsaaTexture;
+        ComPtr<ID3D11RenderTargetView> newMsaaRtv;
+        if (newSampleCount > 0)
+        {
+            D3D11_TEXTURE2D_DESC colorDesc{};
+            colorDesc.Width = static_cast<UINT>(width_);
+            colorDesc.Height = static_cast<UINT>(height_);
+            colorDesc.MipLevels = 1;
+            colorDesc.ArraySize = 1;
+            colorDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            colorDesc.SampleDesc.Count = static_cast<UINT>(newSampleCount);
+            colorDesc.Usage = D3D11_USAGE_DEFAULT;
+            colorDesc.BindFlags = D3D11_BIND_RENDER_TARGET;
+
+            HRESULT hr = device_->CreateTexture2D(
+                &colorDesc, nullptr, newMsaaTexture.GetAddressOf());
+            if (FAILED(hr))
+                throw std::runtime_error(
+                    "DirectX11Renderer: back-buffer MSAA color creation failed, hr=" +
+                    FormatHr(hr));
+            hr = device_->CreateRenderTargetView(
+                newMsaaTexture.Get(), nullptr, newMsaaRtv.GetAddressOf());
+            if (FAILED(hr))
+                throw std::runtime_error(
+                    "DirectX11Renderer: back-buffer MSAA RTV creation failed, hr=" + FormatHr(hr));
+        }
+
         D3D11_TEXTURE2D_DESC depthDesc{};
         depthDesc.Width = static_cast<UINT>(width_);
         depthDesc.Height = static_cast<UINT>(height_);
         depthDesc.MipLevels = 1;
         depthDesc.ArraySize = 1;
         depthDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
-        depthDesc.SampleDesc.Count = 1;
+        depthDesc.SampleDesc.Count = newSampleCount > 0
+            ? static_cast<UINT>(newSampleCount)
+            : 1u;
         depthDesc.Usage = D3D11_USAGE_DEFAULT;
         depthDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
 
-        hr = device_->CreateTexture2D(&depthDesc, nullptr, depthStencilTexture_.ReleaseAndGetAddressOf());
+        ComPtr<ID3D11Texture2D> newDepthTexture;
+        HRESULT hr = device_->CreateTexture2D(&depthDesc, nullptr, newDepthTexture.GetAddressOf());
         if (FAILED(hr))
             throw std::runtime_error("CreateTexture2D(depth) failed, hr=" + FormatHr(hr));
 
-        hr = device_->CreateDepthStencilView(
-            depthStencilTexture_.Get(), nullptr, depthStencilView_.ReleaseAndGetAddressOf());
+        ComPtr<ID3D11DepthStencilView> newDepthView;
+        hr = device_->CreateDepthStencilView(newDepthTexture.Get(), nullptr, newDepthView.GetAddressOf());
         if (FAILED(hr))
             throw std::runtime_error("CreateDepthStencilView failed, hr=" + FormatHr(hr));
 
-        ID3D11RenderTargetView* rtv = backBufferRTV_.Get();
+        context_->OMSetRenderTargets(0, nullptr, nullptr);
+        backBufferMsaaTexture_ = std::move(newMsaaTexture);
+        backBufferMsaaRTV_ = std::move(newMsaaRtv);
+        depthStencilTexture_ = std::move(newDepthTexture);
+        depthStencilView_ = std::move(newDepthView);
+        appliedMultiSampleCount_ = newSampleCount;
+
+        ID3D11RenderTargetView* rtv = GetBackBufferDrawRtv();
         context_->OMSetRenderTargets(1, &rtv, depthStencilView_.Get());
 
         D3D11_VIEWPORT vp{};
@@ -277,9 +349,18 @@ namespace CNA::Internal::Renderers::DirectX11
 
         // Phase DIRECTX6: Clear()/ClearX target whatever's tracked here -- initialise/reset it to the
         // back buffer every time this is (re)created (construction, and DX-29 resize).
-        currentColorRTVs_[0] = backBufferRTV_.Get();
+        currentColorRTVs_[0] = rtv;
         currentRTVCount_ = 1;
         currentDSV_ = depthStencilView_.Get();
+        RebindRasterizerState();
+    }
+
+    void DirectX11Renderer::ResolveBackBufferMsaa()
+    {
+        if (!backBufferMsaaTexture_ || !backBufferTexture_) return;
+        context_->ResolveSubresource(
+            backBufferTexture_.Get(), 0, backBufferMsaaTexture_.Get(), 0,
+            DXGI_FORMAT_R8G8B8A8_UNORM);
     }
 
     void DirectX11Renderer::ReleaseWindowSizeDependentViews()
@@ -288,8 +369,11 @@ namespace CNA::Internal::Renderers::DirectX11
         context_->OMSetRenderTargets(1, nullRtv, nullptr);
         depthStencilView_.Reset();
         depthStencilTexture_.Reset();
+        backBufferMsaaRTV_.Reset();
+        backBufferMsaaTexture_.Reset();
         backBufferRTV_.Reset();
         backBufferTexture_.Reset();
+        appliedMultiSampleCount_ = 0;
     }
 
     void DirectX11Renderer::EnsureSwapChainSize()
@@ -347,6 +431,7 @@ namespace CNA::Internal::Renderers::DirectX11
     void DirectX11Renderer::Present()
     {
         EnsureSwapChainSize();
+        ResolveBackBufferMsaa();
 
         const bool mayTear =
             allowTearingSupported_ && allowTearingRequested_ && !vsyncEnabled_ && !exclusiveFullscreen_;
@@ -391,6 +476,17 @@ namespace CNA::Internal::Renderers::DirectX11
     {
         virtualWidth_ = width;
         virtualHeight_ = height;
+    }
+
+    int DirectX11Renderer::ApplyMultiSampleCount(int requestedMultiSampleCount)
+    {
+        requestedMultiSampleCount_ = requestedMultiSampleCount;
+        EnsureSwapChainSize();
+        const int clamped = ClampBackBufferMultiSampleCount(
+            device_.Get(), DXGI_FORMAT_R8G8B8A8_UNORM, requestedMultiSampleCount_);
+        if (clamped != appliedMultiSampleCount_ || !depthStencilTexture_)
+            RecreateDefaultRenderSurfaces(requestedMultiSampleCount_);
+        return appliedMultiSampleCount_;
     }
 
     void DirectX11Renderer::SetPresentationMode(int mode)
@@ -456,6 +552,8 @@ namespace CNA::Internal::Renderers::DirectX11
                 "did not complete; PresentationParameters::HeadlessEXT is not supported by this "
                 "renderer (see its own documentation).");
         }
+
+        ResolveBackBufferMsaa();
 
         D3D11_TEXTURE2D_DESC desc{};
         backBufferTexture_->GetDesc(&desc);
@@ -1036,7 +1134,7 @@ namespace CNA::Internal::Renderers::DirectX11
         height = viewport.Height;
 
         const bool backBufferBound = currentRTVCount_ == 1 &&
-            currentColorRTVs_[0] == backBufferRTV_.Get();
+            currentColorRTVs_[0] == GetBackBufferDrawRtv();
         if (!backBufferBound)
             return;
 
@@ -1080,7 +1178,7 @@ namespace CNA::Internal::Renderers::DirectX11
 
     void DirectX11Renderer::RestoreBackBufferRenderTargetEXT()
     {
-        ID3D11RenderTargetView* rtv = backBufferRTV_.Get();
+        ID3D11RenderTargetView* rtv = GetBackBufferDrawRtv();
         context_->OMSetRenderTargets(1, &rtv, depthStencilView_.Get());
 
         D3D11_VIEWPORT vp{};
@@ -1092,7 +1190,7 @@ namespace CNA::Internal::Renderers::DirectX11
         vp.MaxDepth = 1.0f;
         context_->RSSetViewports(1, &vp);
 
-        currentColorRTVs_[0] = backBufferRTV_.Get();
+        currentColorRTVs_[0] = rtv;
         currentRTVCount_ = 1;
         for (int i = 1; i < D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT; ++i) currentColorRTVs_[i] = nullptr;
         currentDSV_ = depthStencilView_.Get();

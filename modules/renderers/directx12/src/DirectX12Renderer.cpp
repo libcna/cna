@@ -57,6 +57,30 @@ namespace CNA::Internal::Renderers::DirectX12
             return buf;
         }
 
+        int ClampBackBufferMultiSampleCount(
+            ID3D12Device* device, DXGI_FORMAT format, int requestedCount)
+        {
+            if (device == nullptr || requestedCount <= 1) return 0;
+
+            int candidate = 1;
+            while (candidate <= requestedCount / 2) candidate *= 2;
+            while (candidate > 1)
+            {
+                D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS data{};
+                data.Format = format;
+                data.SampleCount = static_cast<UINT>(candidate);
+                data.Flags = D3D12_MULTISAMPLE_QUALITY_LEVELS_FLAG_NONE;
+                if (SUCCEEDED(device->CheckFeatureSupport(
+                        D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS, &data, sizeof(data))) &&
+                    data.NumQualityLevels > 0)
+                {
+                    return candidate;
+                }
+                candidate >>= 1;
+            }
+            return 0;
+        }
+
         /// DX-111: same per-PrimitiveType vertex-count formula DirectX11Renderer.cpp's own
         /// VertexCountForPrimitives (and Vulkan/EasyGL's) already duplicate locally -- not shared via
         /// a common header today, so this follows the existing precedent rather than introducing one.
@@ -146,6 +170,7 @@ namespace CNA::Internal::Renderers::DirectX12
     DirectX12Renderer::DirectX12Renderer(const GraphicsRendererCreateArgs& args)
         : virtualWidth_(args.virtualWidth)
         , virtualHeight_(args.virtualHeight)
+        , requestedMultiSampleCount_(args.multiSampleCount)
     {
         if (args.surface.windowId != 0 || CNA::Platform::HasNativeWindow(args.surface.nativeHandle))
         {
@@ -465,21 +490,54 @@ namespace CNA::Internal::Renderers::DirectX12
             resourceStates_.TrackResource(backBufferResources_[i].Get(), D3D12_RESOURCE_STATE_PRESENT);
         }
 
-        CreateDefaultDepthStencilResources();
-
-        // Bind the current back buffer as the default draw target -- mirrors D3D11's own
-        // CreateWindowSizeDependentViews() making the back buffer the default Clear()/draw target
-        // immediately after construction, before any custom render target is ever bound.
-        const UINT idx = swapChain_->GetCurrentBackBufferIndex();
-        BindOffscreenColorTargetEXT(backBufferResources_[idx].Get(), backBufferRtvs_[idx],
-                                    DXGI_FORMAT_R8G8B8A8_UNORM, width_, height_,
-                                    depthStencilViewEXT_, DXGI_FORMAT_D24_UNORM_S8_UINT);
+        RecreateDefaultRenderSurfaces(requestedMultiSampleCount_);
     }
 
-    void DirectX12Renderer::CreateDefaultDepthStencilResources()
+    ID3D12Resource* DirectX12Renderer::GetBackBufferDrawResourceEXT() const
     {
+        return backBufferMsaaResource_ ? backBufferMsaaResource_.Get()
+                                       : GetCurrentBackBufferResourceEXT();
+    }
+
+    D3D12_CPU_DESCRIPTOR_HANDLE DirectX12Renderer::GetBackBufferDrawRtvEXT() const
+    {
+        if (backBufferMsaaResource_) return backBufferMsaaRtv_;
+        if (swapChainAvailable_ && swapChain_)
+            return backBufferRtvs_[swapChain_->GetCurrentBackBufferIndex()];
+        return offscreenBackBufferRtv_;
+    }
+
+    void DirectX12Renderer::RecreateDefaultRenderSurfaces(int requestedMultiSampleCount)
+    {
+        const int newSampleCount = ClampBackBufferMultiSampleCount(
+            device_.Get(), DXGI_FORMAT_R8G8B8A8_UNORM, requestedMultiSampleCount);
         D3D12_HEAP_PROPERTIES heapProps{};
         heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+        ComPtr<ID3D12Resource> newMsaaResource;
+        if (newSampleCount > 0)
+        {
+            D3D12_RESOURCE_DESC colorDesc{};
+            colorDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+            colorDesc.Width = static_cast<UINT64>(width_);
+            colorDesc.Height = static_cast<UINT>(height_);
+            colorDesc.DepthOrArraySize = 1;
+            colorDesc.MipLevels = 1;
+            colorDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            colorDesc.SampleDesc.Count = static_cast<UINT>(newSampleCount);
+            colorDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+            D3D12_CLEAR_VALUE colorClear{};
+            colorClear.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            const HRESULT colorHr = device_->CreateCommittedResource(
+                &heapProps, D3D12_HEAP_FLAG_NONE, &colorDesc,
+                D3D12_RESOURCE_STATE_RENDER_TARGET, &colorClear,
+                IID_PPV_ARGS(newMsaaResource.GetAddressOf()));
+            if (FAILED(colorHr))
+                throw std::runtime_error(
+                    "DirectX12Renderer: back-buffer MSAA color CreateCommittedResource failed, hr=" +
+                    FormatHr(colorHr));
+        }
 
         D3D12_RESOURCE_DESC depthDesc{};
         depthDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -488,7 +546,9 @@ namespace CNA::Internal::Renderers::DirectX12
         depthDesc.DepthOrArraySize = 1;
         depthDesc.MipLevels = 1;
         depthDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT; // matches D3D11's own DX-24 default (DX-11-fmt)
-        depthDesc.SampleDesc.Count = 1;
+        depthDesc.SampleDesc.Count = newSampleCount > 0
+            ? static_cast<UINT>(newSampleCount)
+            : 1u;
         depthDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
 
         D3D12_CLEAR_VALUE depthClear{};
@@ -496,19 +556,76 @@ namespace CNA::Internal::Renderers::DirectX12
         depthClear.DepthStencil.Depth = 1.0f;
         depthClear.DepthStencil.Stencil = 0;
 
+        ComPtr<ID3D12Resource> newDepthResource;
         HRESULT hr = device_->CreateCommittedResource(
             &heapProps, D3D12_HEAP_FLAG_NONE, &depthDesc,
             D3D12_RESOURCE_STATE_DEPTH_WRITE, &depthClear,
-            IID_PPV_ARGS(depthStencilResource_.ReleaseAndGetAddressOf()));
+            IID_PPV_ARGS(newDepthResource.GetAddressOf()));
         if (FAILED(hr))
             throw std::runtime_error("DirectX12Renderer: back-buffer depth-stencil CreateCommittedResource failed, hr=" + FormatHr(hr));
 
-        depthStencilViewEXT_ = AllocateDsvDescriptorEXT();
+        D3D12_CPU_DESCRIPTOR_HANDLE newMsaaRtv{};
+        if (newMsaaResource)
+        {
+            newMsaaRtv = AllocateRtvDescriptorEXT();
+            device_->CreateRenderTargetView(newMsaaResource.Get(), nullptr, newMsaaRtv);
+        }
+        const D3D12_CPU_DESCRIPTOR_HANDLE newDepthView = AllocateDsvDescriptorEXT();
         D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
         dsvDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
-        dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
-        device_->CreateDepthStencilView(depthStencilResource_.Get(), &dsvDesc, depthStencilViewEXT_);
+        dsvDesc.ViewDimension = newSampleCount > 0
+            ? D3D12_DSV_DIMENSION_TEXTURE2DMS
+            : D3D12_DSV_DIMENSION_TEXTURE2D;
+        device_->CreateDepthStencilView(newDepthResource.Get(), &dsvDesc, newDepthView);
+
+        UnbindOffscreenColorTargetEXT();
+        FreeRtvDescriptorEXT(backBufferMsaaRtv_);
+        FreeDsvDescriptorEXT(depthStencilViewEXT_);
+        backBufferMsaaResource_ = std::move(newMsaaResource);
+        backBufferMsaaRtv_ = newMsaaRtv;
+        depthStencilResource_ = std::move(newDepthResource);
+        depthStencilViewEXT_ = newDepthView;
+        requestedMultiSampleCount_ = requestedMultiSampleCount;
+        appliedMultiSampleCount_ = newSampleCount;
+
+        if (backBufferMsaaResource_)
+            resourceStates_.TrackResource(
+                backBufferMsaaResource_.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
         resourceStates_.TrackResource(depthStencilResource_.Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE);
+        RestoreBackBufferRenderTargetEXT();
+    }
+
+    void DirectX12Renderer::ResolveBackBufferMsaaEXT()
+    {
+        if (!backBufferMsaaResource_) return;
+        ID3D12Resource* const destination = GetCurrentBackBufferResourceEXT();
+        if (destination == nullptr) return;
+
+        ID3D12CommandAllocator* allocator = GetCommandAllocatorEXT(0);
+        ID3D12GraphicsCommandList* cmdList = GetCommandListEXT();
+        allocator->Reset();
+        cmdList->Reset(allocator, nullptr);
+
+        const D3D12_RESOURCE_STATES sourcePrior =
+            resourceStates_.GetTrackedStateEXT(backBufferMsaaResource_.Get());
+        const D3D12_RESOURCE_STATES destinationPrior =
+            resourceStates_.GetTrackedStateEXT(destination);
+        resourceStates_.TransitionTo(
+            cmdList, backBufferMsaaResource_.Get(), D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
+        resourceStates_.TransitionTo(
+            cmdList, destination, D3D12_RESOURCE_STATE_RESOLVE_DEST);
+        cmdList->ResolveSubresource(
+            destination, 0, backBufferMsaaResource_.Get(), 0,
+            DXGI_FORMAT_R8G8B8A8_UNORM);
+        resourceStates_.TransitionTo(cmdList, backBufferMsaaResource_.Get(), sourcePrior);
+        resourceStates_.TransitionTo(cmdList, destination, destinationPrior);
+
+        const HRESULT hr = cmdList->Close();
+        if (FAILED(hr))
+            throw std::runtime_error(
+                "DirectX12Renderer: back-buffer MSAA resolve command-list Close failed, hr=" +
+                FormatHr(hr));
+        ExecuteCommandListAndWaitEXT(cmdList);
     }
 
     void DirectX12Renderer::CreateOffscreenBackBufferResources()
@@ -551,11 +668,7 @@ namespace CNA::Internal::Renderers::DirectX12
         device_->CreateRenderTargetView(offscreenBackBufferResource_.Get(), nullptr, offscreenBackBufferRtv_);
         resourceStates_.TrackResource(offscreenBackBufferResource_.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
 
-        CreateDefaultDepthStencilResources();
-
-        BindOffscreenColorTargetEXT(offscreenBackBufferResource_.Get(), offscreenBackBufferRtv_,
-                                    DXGI_FORMAT_R8G8B8A8_UNORM, width_, height_,
-                                    depthStencilViewEXT_, DXGI_FORMAT_D24_UNORM_S8_UINT);
+        RecreateDefaultRenderSurfaces(requestedMultiSampleCount_);
 
         CNA::Logger::Info(
             "D3D12: no swap chain, so this device uses an implicit off-screen back buffer (" +
@@ -579,6 +692,10 @@ namespace CNA::Internal::Renderers::DirectX12
         FreeDsvDescriptorEXT(depthStencilViewEXT_);
         depthStencilViewEXT_ = D3D12_CPU_DESCRIPTOR_HANDLE{};
         depthStencilResource_.Reset();
+        FreeRtvDescriptorEXT(backBufferMsaaRtv_);
+        backBufferMsaaRtv_ = D3D12_CPU_DESCRIPTOR_HANDLE{};
+        backBufferMsaaResource_.Reset();
+        appliedMultiSampleCount_ = 0;
         for (auto& res : backBufferResources_) res.Reset();
         // DX-241: the implicit off-screen back buffer is exactly as device-tied as the real one,
         // and shares the depth-stencil released just above.
@@ -941,7 +1058,7 @@ namespace CNA::Internal::Renderers::DirectX12
         const D3D12_VIEWPORT viewport = GetEffectiveViewportEXT();
         width = viewport.Width;
         height = viewport.Height;
-        if (boundColorResource_ != GetCurrentBackBufferResourceEXT())
+        if (boundColorResource_ != GetBackBufferDrawResourceEXT())
             return;
 
         const int physicalWidth = !surface_ && !windowlessPresentationExplicit_
@@ -999,24 +1116,12 @@ namespace CNA::Internal::Renderers::DirectX12
 
     void DirectX12Renderer::RestoreBackBufferRenderTargetEXT()
     {
-        if (!swapChainAvailable_)
-        {
-            // DX-241: SetRenderTarget2D(nullptr) returns to the back buffer, and on a device with
-            // no swap chain that is the implicit off-screen one -- not "nothing bound", which is
-            // what made Clear() and every draw throw afterwards. UnbindOffscreenColorTargetEXT()
-            // first, so extraMrtCount_/viewportSet_ are reset exactly as an ordinary target change
-            // resets them.
-            UnbindOffscreenColorTargetEXT();
-            if (offscreenBackBufferResource_)
-                BindOffscreenColorTargetEXT(offscreenBackBufferResource_.Get(), offscreenBackBufferRtv_,
-                                            DXGI_FORMAT_R8G8B8A8_UNORM, width_, height_,
-                                            depthStencilViewEXT_, DXGI_FORMAT_D24_UNORM_S8_UINT);
-            return;
-        }
-        const UINT idx = swapChain_->GetCurrentBackBufferIndex();
-        BindOffscreenColorTargetEXT(backBufferResources_[idx].Get(), backBufferRtvs_[idx],
-                                    DXGI_FORMAT_R8G8B8A8_UNORM, width_, height_,
-                                    depthStencilViewEXT_, DXGI_FORMAT_D24_UNORM_S8_UINT);
+        UnbindOffscreenColorTargetEXT();
+        ID3D12Resource* const drawResource = GetBackBufferDrawResourceEXT();
+        if (drawResource)
+            BindOffscreenColorTargetEXT(drawResource, GetBackBufferDrawRtvEXT(),
+                                        DXGI_FORMAT_R8G8B8A8_UNORM, width_, height_,
+                                        depthStencilViewEXT_, DXGI_FORMAT_D24_UNORM_S8_UINT);
     }
 
     bool DirectX12Renderer::IsRenderTargetActiveEXT(
@@ -1433,7 +1538,11 @@ namespace CNA::Internal::Renderers::DirectX12
             // returns void and promises nothing readable; what the frame drew is still there, in
             // the target GetBackBufferData() reads (DX-205).
             if (offscreenBackBufferResource_)
+            {
+                if (boundColorResource_ == GetBackBufferDrawResourceEXT())
+                    ResolveBackBufferMsaaEXT();
                 return;
+            }
             NotYetImplemented("Present (no swap chain and no implicit off-screen back buffer -- "
                               "the device was never fully constructed)");
         }
@@ -1446,8 +1555,9 @@ namespace CNA::Internal::Renderers::DirectX12
         // something outside this renderer's own scope to guess-correct for.
         ID3D12Resource* currentBackBuffer =
             backBufferResources_[swapChain_->GetCurrentBackBufferIndex()].Get();
-        if (boundColorResource_ == currentBackBuffer)
+        if (boundColorResource_ == GetBackBufferDrawResourceEXT())
         {
+            ResolveBackBufferMsaaEXT();
             ID3D12CommandAllocator* allocator = GetCommandAllocatorEXT(0);
             ID3D12GraphicsCommandList* cmdList = GetCommandListEXT();
             allocator->Reset();
@@ -1472,12 +1582,9 @@ namespace CNA::Internal::Renderers::DirectX12
             return; // DX-26's own convention: log, don't throw, on a Present() failure
         }
 
-        // Re-bind the new current back buffer as the default draw target for the next frame --
-        // mirrors D3D11's own "back buffer is the default target" behavior, just re-resolved every
-        // frame since D3D12's flip-model back-buffer INDEX changes on every Present(), unlike
-        // D3D11's single always-current backBufferRTV_.
-        const UINT idx = swapChain_->GetCurrentBackBufferIndex();
-        BindOffscreenColorTargetEXT(backBufferResources_[idx].Get(), backBufferRtvs_[idx],
+        // Re-bind the default draw surface for the next frame. With MSAA this remains the shared
+        // multisampled color resource; otherwise it is the newly-current flip-model back buffer.
+        BindOffscreenColorTargetEXT(GetBackBufferDrawResourceEXT(), GetBackBufferDrawRtvEXT(),
                                     DXGI_FORMAT_R8G8B8A8_UNORM, width_, height_,
                                     depthStencilViewEXT_, DXGI_FORMAT_D24_UNORM_S8_UINT);
     }
@@ -1571,6 +1678,8 @@ namespace CNA::Internal::Renderers::DirectX12
     {
         if (!pixels || w <= 0 || h <= 0)
             return;
+
+        ResolveBackBufferMsaaEXT();
 
         ID3D12Resource* const source = GetCurrentBackBufferResourceEXT();
         if (!source)
@@ -1682,6 +1791,16 @@ namespace CNA::Internal::Renderers::DirectX12
         virtualHeight_ = height;
         if (!surface_)
             windowlessPresentationExplicit_ = false;
+    }
+
+    int DirectX12Renderer::ApplyMultiSampleCount(int requestedMultiSampleCount)
+    {
+        requestedMultiSampleCount_ = requestedMultiSampleCount;
+        const int clamped = ClampBackBufferMultiSampleCount(
+            device_.Get(), DXGI_FORMAT_R8G8B8A8_UNORM, requestedMultiSampleCount_);
+        if (clamped != appliedMultiSampleCount_ || !depthStencilResource_)
+            RecreateDefaultRenderSurfaces(requestedMultiSampleCount_);
+        return appliedMultiSampleCount_;
     }
 
     void DirectX12Renderer::SetPresentationMode(int mode)

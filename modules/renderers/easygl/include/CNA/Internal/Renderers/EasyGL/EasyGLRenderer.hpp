@@ -1564,13 +1564,25 @@ namespace CNA::Internal::Renderers::EasyGL
 
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
-        // Task 902: EasyGL applies MultiSampleCount only at construction time (via the
-        // multiSampleCount ctor argument, clamped into sampleCount_ below) -- there is no way to
-        // resize the MSAA renderbuffers without recreating the whole GL context, so
-        // ApplyMultiSampleCount() uses IGraphicsRenderer's default (echoes back the current,
-        // already-applied value, ignoring the request). GetMultiSampleCount() reports that real
-        // value honestly instead of falling back to the interface default of 0.
+        /**
+         * @brief Reallocates the default-framebuffer MSAA attachments with a supported sample count.
+         * @param requestedMultiSampleCount Preferred number of samples; zero or one disables MSAA.
+         * @return The sample count actually applied, or zero when multisampling is disabled.
+         */
+        int ApplyMultiSampleCount(int requestedMultiSampleCount) override;
+        /** @brief Returns the sample count actually used by the default render surface. */
         [[nodiscard]] int GetMultiSampleCount() const override { return sampleCount_ > 1 ? sampleCount_ : 0; }
+        /**
+         * @brief Reports the sample count currently applied to the default render surface.
+         * @param requestedMultiSampleCount The caller's requested count.
+         * @return The current clamped sample count.
+         */
+        [[nodiscard]] int GetAppliedMultiSampleCountEXT(
+            int requestedMultiSampleCount) const override
+        {
+            (void) requestedMultiSampleCount;
+            return GetMultiSampleCount();
+        }
 
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;

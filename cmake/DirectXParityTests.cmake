@@ -887,6 +887,14 @@ function(cna_register_d3d_parity_tests)
         NAME SpriteBatch_ViewportSwitch TARGET spritebatch_viewport_switch DIRECTX12_ORDER 2290
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_viewport_switch_test.cpp")
     cna_d3d_parity_fixture(
+        NAME MSAA_4x_Readback TARGET backbuffer_msaa DIRECTX12_ORDER 2300
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_msaa_test.cpp"
+        DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 600)
+    cna_d3d_parity_fixture(
+        NAME MsaaChange TARGET backbuffer_msaa_change DIRECTX12_ORDER 2310
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_msaa_change_test.cpp"
+        DIRECTX11_TIMEOUT 600 DIRECTX12_TIMEOUT 900)
+    cna_d3d_parity_fixture(
         NAME ViewportResetAfterResize TARGET viewport_reset_after_resize
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/viewport_reset_after_resize_test.cpp"
         DIRECTX11_TIMEOUT 300 DIRECTX11_ONLY

@@ -118,6 +118,25 @@ namespace CNA::Internal::Renderers::DirectX12
          */
         void GetDefaultViewportRect(int& x, int& y, int& width, int& height) override;
         void SetVirtualResolution(int width, int height) override;
+        /**
+         * @brief Rebuilds the default back-buffer render surface with a device-supported sample count.
+         * @param requestedMultiSampleCount Preferred number of samples; zero or one disables MSAA.
+         * @return The sample count actually applied, or zero when multisampling is disabled.
+         */
+        int ApplyMultiSampleCount(int requestedMultiSampleCount) override;
+        /** @brief Returns the sample count actually used by the default render surface. */
+        [[nodiscard]] int GetMultiSampleCount() const override { return appliedMultiSampleCount_; }
+        /**
+         * @brief Maps a requested sample count to the count currently applied by this renderer.
+         * @param requestedMultiSampleCount The caller's requested count.
+         * @return The current device-clamped count.
+         */
+        [[nodiscard]] int GetAppliedMultiSampleCountEXT(
+            int requestedMultiSampleCount) const override
+        {
+            (void) requestedMultiSampleCount;
+            return appliedMultiSampleCount_;
+        }
         void SetPresentationMode(int mode) override;
         void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
         /// DX-116: mirrors DirectX11Renderer::SetSwapInterval exactly -- sync interval is
@@ -686,10 +705,14 @@ namespace CNA::Internal::Renderers::DirectX12
         /// mean. EasyGL always has framebuffer 0 and D3D11 always has a swap chain; this is D3D12's
         /// equivalent of the target that is simply always there.
         void CreateOffscreenBackBufferResources();
-        /// Shared by CreateWindowSizeDependentViews() and CreateOffscreenBackBufferResources():
-        /// the width_ x height_ D24_UNORM_S8_UINT depth-stencil resource plus its DSV, registered
-        /// with the resource-state tracker in D3D12_RESOURCE_STATE_DEPTH_WRITE.
-        void CreateDefaultDepthStencilResources();
+        /// Rebuilds the default multisampled colour surface and matching depth-stencil resource,
+        /// then binds that colour surface (or the single-sample destination when MSAA is off).
+        void RecreateDefaultRenderSurfaces(int requestedMultiSampleCount);
+        /// Resolves the multisampled default colour surface into the current single-sample
+        /// swap-chain/off-screen destination. A no-op when back-buffer MSAA is disabled.
+        void ResolveBackBufferMsaaEXT();
+        [[nodiscard]] ID3D12Resource* GetBackBufferDrawResourceEXT() const;
+        [[nodiscard]] D3D12_CPU_DESCRIPTOR_HANDLE GetBackBufferDrawRtvEXT() const;
 
         [[nodiscard]] Matrix ApplyXnaPixelCenterEXT(const Matrix& transform) const;
         /// DX-116: releases every window-size-dependent resource CreateWindowSizeDependentViews()
@@ -891,8 +914,12 @@ namespace CNA::Internal::Renderers::DirectX12
         // with a back buffer in every respect except putting pixels on a screen.
         ComPtr<ID3D12Resource> offscreenBackBufferResource_;
         D3D12_CPU_DESCRIPTOR_HANDLE offscreenBackBufferRtv_{};
+        ComPtr<ID3D12Resource> backBufferMsaaResource_;
+        D3D12_CPU_DESCRIPTOR_HANDLE backBufferMsaaRtv_{};
         ComPtr<ID3D12Resource> depthStencilResource_;
         D3D12_CPU_DESCRIPTOR_HANDLE depthStencilViewEXT_{};
+        int requestedMultiSampleCount_ = 0;
+        int appliedMultiSampleCount_ = 0;
 
         // DX-144: tracks the currently-bound custom (non-back-buffer) render target, mirroring
         // DirectX11Renderer's own currentCustomRT_ exactly -- SetRenderTarget2D(nullptr) needs

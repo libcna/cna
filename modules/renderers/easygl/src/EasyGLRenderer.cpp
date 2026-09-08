@@ -4991,6 +4991,37 @@ if (ProfileUsesGlslEs100())
                                       msaaDepthRbo_);
     }
 
+    int EasyGLRenderer::ApplyMultiSampleCount(int requestedMultiSampleCount)
+    {
+        EnsureCallingThreadContext();
+
+        int newSampleCount = 1;
+        if (!ProfileIsEs2ApiGeneration() && requestedMultiSampleCount > 1)
+        {
+            GLint maxSamples = 0;
+            metagl::glGetIntegerv(::metagl::GetParameter::MaxSamples, &maxSamples);
+            int candidate = 1;
+            while (candidate <= requestedMultiSampleCount / 2) candidate *= 2;
+            if (maxSamples > 1)
+                newSampleCount = std::min(candidate, static_cast<int>(maxSamples));
+        }
+
+        if (newSampleCount == sampleCount_)
+            return GetMultiSampleCount();
+
+        sampleCount_ = newSampleCount;
+        if (sampleCount_ > 1)
+        {
+            int physW = 0;
+            int physH = 0;
+            surfaceState_.GetDrawableSize(physW, physH);
+            CreateMsaaBuffers(physW, physH);
+        }
+        if (bound_->height == 0)
+            BindDefaultFramebuffer();
+        return GetMultiSampleCount();
+    }
+
     void EasyGLRenderer::BindDefaultFramebuffer()
     {
         if (sampleCount_ > 1)

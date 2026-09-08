@@ -62,6 +62,25 @@ namespace CNA::Internal::Renderers::DirectX11
          */
         void GetDefaultViewportRect(int& x, int& y, int& width, int& height) override;
         void SetVirtualResolution(int width, int height) override;
+        /**
+         * @brief Rebuilds the default back-buffer render surface with a device-supported sample count.
+         * @param requestedMultiSampleCount Preferred number of samples; zero or one disables MSAA.
+         * @return The sample count actually applied, or zero when multisampling is disabled.
+         */
+        int ApplyMultiSampleCount(int requestedMultiSampleCount) override;
+        /** @brief Returns the sample count actually used by the default render surface. */
+        [[nodiscard]] int GetMultiSampleCount() const override { return appliedMultiSampleCount_; }
+        /**
+         * @brief Maps a requested sample count to the count currently applied by this renderer.
+         * @param requestedMultiSampleCount The caller's requested count.
+         * @return The current device-clamped count.
+         */
+        [[nodiscard]] int GetAppliedMultiSampleCountEXT(
+            int requestedMultiSampleCount) const override
+        {
+            (void) requestedMultiSampleCount;
+            return appliedMultiSampleCount_;
+        }
         void SetPresentationMode(int mode) override;
         void SetSwapInterval(int interval) override;
         /**
@@ -322,6 +341,9 @@ namespace CNA::Internal::Renderers::DirectX11
         void CreateDeviceResources();
         void CreateSwapChainResources();
         void CreateWindowSizeDependentViews();
+        void RecreateDefaultRenderSurfaces(int requestedMultiSampleCount);
+        void ResolveBackBufferMsaa();
+        [[nodiscard]] ID3D11RenderTargetView* GetBackBufferDrawRtv() const;
         void ReleaseWindowSizeDependentViews();
         /// DX-29: resize handling -- touches ONLY the window-size group + ResizeBuffers() on the
         /// existing swap chain. Called lazily from Present() when the platform surface size no longer
@@ -361,6 +383,8 @@ namespace CNA::Internal::Renderers::DirectX11
         // Window-size lifetime.
         ComPtr<ID3D11Texture2D> backBufferTexture_;
         ComPtr<ID3D11RenderTargetView> backBufferRTV_;
+        ComPtr<ID3D11Texture2D> backBufferMsaaTexture_;
+        ComPtr<ID3D11RenderTargetView> backBufferMsaaRTV_;
         ComPtr<ID3D11Texture2D> depthStencilTexture_;
         ComPtr<ID3D11DepthStencilView> depthStencilView_;
 
@@ -485,6 +509,8 @@ namespace CNA::Internal::Renderers::DirectX11
 
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
+        int requestedMultiSampleCount_ = 0;
+        int appliedMultiSampleCount_ = 0;
         CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
 
         // Phase DIRECTX5 (DX-32): per-(shader,stride) ID3D11InputLayout cache.
