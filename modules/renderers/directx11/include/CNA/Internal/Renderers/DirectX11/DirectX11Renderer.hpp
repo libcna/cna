@@ -81,6 +81,18 @@ namespace CNA::Internal::Renderers::DirectX11
             (void) requestedMultiSampleCount;
             return appliedMultiSampleCount_;
         }
+        /**
+         * @brief Reports the fixed XNA surface format of the DXGI swap chain.
+         * @param requestedFormat The caller's requested SurfaceFormat ordinal.
+         * @return SurfaceFormat::Color, matching the actual R8G8B8A8_UNORM resource.
+         */
+        [[nodiscard]] int GetAppliedBackBufferFormatEXT(int requestedFormat) const override;
+        /**
+         * @brief Reports the fixed XNA depth format of the default D3D11 depth resource.
+         * @param requestedFormat The caller's requested DepthFormat ordinal.
+         * @return DepthFormat::Depth24Stencil8, matching the actual D24S8 resource.
+         */
+        [[nodiscard]] int GetAppliedDepthStencilFormatEXT(int requestedFormat) const override;
         void SetPresentationMode(int mode) override;
         void SetSwapInterval(int interval) override;
         /**

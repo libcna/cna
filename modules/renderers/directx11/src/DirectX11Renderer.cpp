@@ -13,6 +13,8 @@
 #include "CNA/Internal/Renderers/D3DCommon/D3DPresentation.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DRasterizationConvention.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DStateMapping.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <algorithm>
@@ -487,6 +489,18 @@ namespace CNA::Internal::Renderers::DirectX11
         if (clamped != appliedMultiSampleCount_ || !depthStencilTexture_)
             RecreateDefaultRenderSurfaces(requestedMultiSampleCount_);
         return appliedMultiSampleCount_;
+    }
+
+    int DirectX11Renderer::GetAppliedBackBufferFormatEXT(int requestedFormat) const
+    {
+        (void) requestedFormat;
+        return static_cast<int>(Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color);
+    }
+
+    int DirectX11Renderer::GetAppliedDepthStencilFormatEXT(int requestedFormat) const
+    {
+        (void) requestedFormat;
+        return static_cast<int>(Microsoft::Xna::Framework::Graphics::DepthFormat::Depth24Stencil8);
     }
 
     void DirectX11Renderer::SetPresentationMode(int mode)

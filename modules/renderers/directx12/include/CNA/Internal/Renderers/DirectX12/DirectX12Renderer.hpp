@@ -137,6 +137,18 @@ namespace CNA::Internal::Renderers::DirectX12
             (void) requestedMultiSampleCount;
             return appliedMultiSampleCount_;
         }
+        /**
+         * @brief Reports the fixed XNA surface format of the DXGI back-buffer destination.
+         * @param requestedFormat The caller's requested SurfaceFormat ordinal.
+         * @return SurfaceFormat::Color, matching the actual R8G8B8A8_UNORM resource.
+         */
+        [[nodiscard]] int GetAppliedBackBufferFormatEXT(int requestedFormat) const override;
+        /**
+         * @brief Reports the fixed XNA depth format of the default D3D12 depth resource.
+         * @param requestedFormat The caller's requested DepthFormat ordinal.
+         * @return DepthFormat::Depth24Stencil8, matching the actual D24S8 resource.
+         */
+        [[nodiscard]] int GetAppliedDepthStencilFormatEXT(int requestedFormat) const override;
         void SetPresentationMode(int mode) override;
         void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
         /// DX-116: mirrors DirectX11Renderer::SetSwapInterval exactly -- sync interval is
@@ -639,6 +651,11 @@ namespace CNA::Internal::Renderers::DirectX12
         /// zero/UNKNOWN when nothing with a depth buffer is bound.
         [[nodiscard]] D3D12_CPU_DESCRIPTOR_HANDLE GetBoundDsvEXT() const { return boundDsv_; }
         [[nodiscard]] DXGI_FORMAT GetBoundDsvFormatEXT() const { return boundDsvFormat_; }
+        /** @brief Returns the actual default depth-stencil resource for diagnostics and tests. */
+        [[nodiscard]] ID3D12Resource* GetDefaultDepthStencilResourceEXT() const
+        {
+            return depthStencilResource_.Get();
+        }
         /** @brief The currently bound off-screen color target's width/height in pixels (CNAEXT --
          *  D3D12SpriteBatchRenderer uses this as sprite2d's ViewportSize, and for the D3D12_VIEWPORT/
          *  D3D12_RECT it must set up itself, exactly mirroring how DrawPrimitivesExImpl does it). */

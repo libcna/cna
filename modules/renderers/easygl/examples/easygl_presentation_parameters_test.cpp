@@ -3,8 +3,8 @@
 //
 // GraphicsDeviceManager::ApplyChanges() (called implicitly at Game startup)
 // propagates the "preferred" settings into GraphicsDevice::PresentationParameters.
-// This test verifies that the five fields named in the task reflect the requested
-// values after the device is created:
+// This test verifies that the five fields named in the task reflect values the
+// renderer actually applied after the device is created:
 //   BackBufferWidth, BackBufferHeight, DepthStencilFormat,
 //   PresentInterval, MultiSampleCount.
 //
@@ -52,8 +52,8 @@ protected:
               "BackBufferWidth matches requested value");
         check(pp.getBackBufferHeightProperty() == kH,
               "BackBufferHeight matches requested value");
-        check(pp.getDepthStencilFormatProperty() == DepthFormat::Depth24,
-              "DepthStencilFormat matches requested value");
+        check(pp.getDepthStencilFormatProperty() == DepthFormat::Depth24Stencil8,
+              "DepthStencilFormat matches the applied D24S8 value");
         check(pp.getPresentationIntervalProperty() == PresentInterval::Immediate,
               "PresentInterval is Immediate (synchronizeWithVerticalRetrace=false)");
         check(pp.getMultiSampleCountProperty() == 0,
@@ -71,7 +71,7 @@ public:
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(kW);
         gdm_->setPreferredBackBufferHeightProperty(kH);
-        gdm_->setPreferredDepthStencilFormatProperty(DepthFormat::Depth24);
+        gdm_->setPreferredDepthStencilFormatProperty(DepthFormat::Depth24Stencil8);
         gdm_->setSynchronizeWithVerticalRetraceProperty(false);
         gdm_->setPreferMultiSamplingProperty(false);
         gdm_->ApplyChanges();
