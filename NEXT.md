@@ -12,6 +12,38 @@ The current C ABI backlog is measured at **663 planned rows** under open `CBIND-
 `CBIND-121`, and `CBIND-122`; the latter owns five untyped XNB loading seams exposed by this fresh
 regeneration. See `plans/plan_binding.md` for the authoritative current status.
 
+## Vulkan renderer parity reached (`plans/plan_vulkan.md` `VULKAN-239`, 2026-09-08)
+
+**The classic (non-CNAEXT) CNA Vulkan renderer has reached EasyGL parity.** The authoritative
+statement, with every measurement and every exclusion, is `plans/plan_vulkan.md` §28.1; this entry
+exists so a reader of `NEXT.md` sees the verdict and its boundary without having to find it.
+
+- Commit `49819d567`, branch `vulkan`. **`ctest -R '^Vulkan_'` → 371/371**, no skips, from 254/254
+  at the `VULKAN-482` entry below. Full `ctest` **9215/9232**; `--rerun-failed -j1` leaves the 16
+  that entry already names, and **none of them is a `Vulkan_*` test**.
+- **Vulkan validation: zero CNA-attributable messages, and it is gated rather than asserted.** Since
+  `VULKAN-393`/`VULKAN-408` every CTest in the configuration that can create a `VkDevice` fails on
+  any `[Vulkan Validation]` line, with an **empty** exemption list, and four tests refuse to pass if
+  the layer never loaded — so 371/371 is the evidence.
+- **228 tasks ✅, 5 ⛔, none ⬜ or 🟨.** The five are classified individually in §28.1 and none is a
+  classic Vulkan parity blocker: four need a renderer build or a CNAEXT configuration this tree does
+  not have, and one is a public C-ABI enumerator owned by `plans/plan_binding.md`. The Vulkan half of
+  every one is already closed and tested.
+- **The last implementation row was instancing** (`VULKAN-218`, closed through `VULKAN-227`–`-234`).
+  The renderer no longer has a separate instanced program family: as on EasyGL, the per-instance
+  matrix is an optional input to *every* stock program, so instancing composes with the whole effect
+  set — every family, every vertex shape, fog on all of them, and `World`/bone composition. The
+  shared corpus `instanced_textured_draw_test.cpp` went **17/17 → 37/37 on each renderer**.
+
+**What this does not say, and the boundary matters more than the headline.** The **CNAEXT /
+`graphics-ext` engine layer is out of scope entirely** and remains `plans/plan_modern.md`'s —
+`CNA_CNAEXT` is OFF in `cmake-build-vulkan/`, so none of it is compiled here. So are compiled XNA
+`.fx` bytecode (`plans/plan_fx.md`), the C ABI (`plans/plan_binding.md`) and every other renderer's
+own capability claims. And the numbers are **llvmpipe (LLVM 19.1.7)** under Xvfb `:99`, for the
+reason the entry below gives: under Xvfb, RADV reports no DRI3 and the renderer's own
+present-capable-queue check rejects it. A hardware run needs the real display and the owner's
+go-ahead.
+
 ## Vulkan renderer baseline, measured (`plans/plan_vulkan.md` `VULKAN-482`, 2026-09-06)
 
 The authoritative running record is `plans/plan_vulkan.md` §7.5, one row per completed task with
