@@ -274,18 +274,14 @@ def main():
         # descriptor binding for fog, incompatible with Instanced3D's unmodified 1-binding layout).
         ("instanced3d.vert.glsl",        VERTEX_SHADER,   "kInstanced3dVertSpv"),
         ("instanced3d.frag.glsl",        FRAGMENT_SHADER, "kInstanced3dFragSpv"),
-        # REMED-GFX-212: the position+colour Instanced3D VS, selected when the geometry stride's
-        # packed layout carries a COLOR0 element (16/24). Shares instanced3d's FS and its
-        # 1-binding pipeline layout; only the vertex input set and the diffuse mixing differ.
-        ("instanced_colored3d.vert.glsl", VERTEX_SHADER,  "kInstancedColored3dVertSpv"),
-        # plans/plan_vulkan.md VULKAN-217: the textured Instanced3D pair. Its own FS, because it is
-        # the one instanced variant that samples; still ONE descriptor binding, so it keeps the
-        # shared pipelineLayoutExt3D_.
-        ("instanced_textured3d.vert.glsl", VERTEX_SHADER,   "kInstancedTextured3dVertSpv"),
-        ("instanced_textured3d.frag.glsl", FRAGMENT_SHADER, "kInstancedTextured3dFragSpv"),
-        # plans/plan_vulkan.md VULKAN-220: colour AND texture together. Shares
-        # instanced_textured3d's FS, which already multiplies the sample by the interpolated colour.
-        ("instanced_colored_textured3d.vert.glsl", VERTEX_SHADER,
+        # plans/plan_vulkan.md VULKAN-233: the three BasicEffect shapes an instanced draw can take
+        # are the ORDINARY fog-capable bundle's own sources compiled again -- REMED-GFX-212's
+        # colour shape, VULKAN-217's textured one and VULKAN-220's colour-and-texture one, which
+        # used to be three separate fog-less copies. instanced3d above stays as the position-only
+        # fallback, which that bundle has no program for.
+        ("colored3d.vert.glsl",          VERTEX_SHADER, "kInstancedColored3dVertSpv"),
+        ("textured3d.vert.glsl",         VERTEX_SHADER, "kInstancedTextured3dVertSpv"),
+        ("colored_textured3d.vert.glsl", VERTEX_SHADER,
          "kInstancedColoredTextured3dVertSpv"),
         # plans/plan_vulkan.md VULKAN-227: the instanced variants of the ordinary families are the
         # ORDINARY sources compiled a second time with CNA_INSTANCED -- there is no separate

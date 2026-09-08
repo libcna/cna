@@ -2132,19 +2132,29 @@ namespace CNA::Internal::Renderers::Vulkan
                 + pipelinesInstanced3D_.size();
         }
         /// REMED-GFX-212 diagnostic, mirroring the WebGPU renderer's own accessor of the same name.
-        /// `BasicEffect.VertexColorEnabled` is NOT part of this cache's key -- it travels in the
+        /// `BasicEffect.VertexColorEnabled` is NOT part of any pipeline key -- it travels in the
         /// 128-byte push constant, so toggling it must reuse the variant an otherwise-identical
         /// draw already built, while a geometry declaration that carries a COLOR0 element must not
         /// share a pipeline with one that does not.
+        ///
+        /// plans/plan_vulkan.md VULKAN-233: this used to be `pipelinesInstanced3D_.size()`, when
+        /// the instanced route had a program family of its own. It does not any more -- an
+        /// instanced draw takes its effect family's programs with the four per-instance columns
+        /// added -- so the count is now of pipeline CREATIONS whose `instanced` flag was true,
+        /// across every family, plus the position-only fallback's. That answers the question the
+        /// name asks ("how many pipeline variants has instancing cost") more directly than any one
+        /// cache's size now can, and it is the number both cardinality tests assert on.
         CNAEXT [[nodiscard]] std::size_t GetInstancedPipelineCacheSizeEXT() const noexcept
         {
-            return pipelinesInstanced3D_.size();
+            return instancedPipelineVariantsEXT_;
         }
         /// plan_vulkan.md `VULKAN-395` diagnostic: live entries in the `VkSampler` cache.
         ///
         /// The key is not bounded by the XNA enumerations alone -- `MaxMipLevel` is an `int` and
         /// `MipMapLevelOfDetailBias` a `float`, both caller-supplied -- so "how many samplers has
         /// this renderer created" is a question a test has to be able to ask.
+        /// VULKAN-233: how many pipelines this renderer has created for an instanced draw.
+        std::size_t instancedPipelineVariantsEXT_ = 0;
         CNAEXT [[nodiscard]] std::size_t GetSamplerCacheSizeEXT() const noexcept
         {
             return samplerCache_.size();
@@ -3439,11 +3449,12 @@ namespace CNA::Internal::Renderers::Vulkan
             float                   litUboData[64]    = {};
             VkDescriptorSet         litTexturedDescSet = VK_NULL_HANDLE;
             int32_t                 baseVertex        = 0;     // vertexOffset for vkCmdDrawIndexed
-            bool                    useInstanced      = false; // true = Instanced3D pipeline
-            /// plan_vulkan.md VULKAN-217: this instanced draw samples a texture. The effect's
-            /// TextureEnabled ANDed with the geometry declaration naming a TextureCoordinate --
-            /// both halves, because either alone selects a program the draw cannot feed.
-            bool                    instancedTextured = false;
+            /// plan_vulkan.md VULKAN-233: this draw came in through DrawInstancedPrimitives. It
+            /// is no longer a family selector -- every stock family's own flag decides which
+            /// programs run, and this only adds the per-instance binding to whichever pipeline
+            /// that family builds. It still selects the position-only `instanced3d` fallback when
+            /// no family claimed the draw.
+            bool                    useInstanced      = false;
             std::vector<uint8_t>    instVbData;                // per-instance bytes (instanceCount × stride)
             std::size_t             instVbStride      = 64;    // bytes per instance (default = mat4)
             uint32_t                instanceCount     = 1;     // number of instances
@@ -4137,7 +4148,8 @@ namespace CNA::Internal::Renderers::Vulkan
                                                     bool msaa, const DepthStencilKeyParams& dsParams = {},
                                          const BlendKeyParams& blendParams = {},
                                          VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
-                                         const VulkanVertexInputLayoutEXT& vertexLayout = {});
+                                         const VulkanVertexInputLayoutEXT& vertexLayout = {},
+                                         bool instanced = false);
         VkPipeline GetOrCreatePipelineFogTex3D(std::size_t stride, bool colored, VkPrimitiveTopology,
                                                 bool depthTest, bool depthWrite,
                                                 bool blend, int cullMode,
@@ -4145,7 +4157,8 @@ namespace CNA::Internal::Renderers::Vulkan
                                                 bool msaa, const DepthStencilKeyParams& dsParams = {},
                                          const BlendKeyParams& blendParams = {},
                                          VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
-                                         const VulkanVertexInputLayoutEXT& vertexLayout = {});
+                                         const VulkanVertexInputLayoutEXT& vertexLayout = {},
+                                         bool instanced = false);
         // --- Instanced 3D pipeline ---
         VkPipeline GetOrCreatePipelineInstanced3D(std::size_t pvStride, VkPrimitiveTopology,
                                                    bool depthTest, bool depthWrite,
@@ -4154,8 +4167,7 @@ namespace CNA::Internal::Renderers::Vulkan
                                                    bool msaa, const DepthStencilKeyParams& dsParams = {},
                                          const BlendKeyParams& blendParams = {},
                                          VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
-                                         const VulkanVertexInputLayoutEXT& vertexLayout = {},
-                                         bool textured = false);
+                                         const VulkanVertexInputLayoutEXT& vertexLayout = {});
         /// plan_vulkan.md VULKAN-223: builds the stock-effect family half of a queued 3D draw --
         /// descriptor sets, UBO payloads and the per-family flags. Extracted from the two ordinary
         /// draw routes, which carried copies differing by one redundant statement, so that a third

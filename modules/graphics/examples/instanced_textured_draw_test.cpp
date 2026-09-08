@@ -1242,6 +1242,109 @@ protected:
                       "), at the origin " + Text(spi[2]) + " (want the clear colour)");
         }
 
+        // ---- AD..AG: FOG on the instanced BasicEffect shapes ---------------------------------
+        // plans/plan_vulkan.md VULKAN-233, the last item VULKAN-218 listed. The instanced route
+        // used a program family of its own whose fragment shaders say, in their own headers, "no
+        // fog" -- so BasicEffect.FogEnabled was silently ignored on any instanced draw.
+        //
+        // The recipe is the one this renderer's own colored3d/textured3d fog tests derive:
+        // fogFactor = clamp((Z + FogEnd) / (FogEnd - FogStart), 0, 1) over the raw object-space Z,
+        // so Z = 0.45 with FogStart = 0 and FogEnd = -0.9 is exactly half. Red fog over blue
+        // geometry gives (128,0,128); (0,0,255) is the unmistakable signature of a program with no
+        // fog term at all, and (255,0,0) of one that fogged completely.
+        {
+            const PT tq[4] = {
+                { -0.12f,  0.12f, 0.45f, 0.0f, 0.0f },
+                { -0.12f, -0.12f, 0.45f, 0.0f, 1.0f },
+                {  0.12f, -0.12f, 0.45f, 1.0f, 1.0f },
+                {  0.12f,  0.12f, 0.45f, 1.0f, 0.0f },
+            };
+            const VertexDeclaration tqDecl(20, {
+                VertexElement(0,  VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+                VertexElement(12, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+            });
+            VertexBuffer tvb(dev, tqDecl, 4, BufferUsage::None);
+            tvb.SetDataRaw(tq, 4, static_cast<int>(sizeof(PT)));
+
+            struct PC3 { float x, y, z; std::uint8_t r, g, b, a; };
+            static_assert(sizeof(PC3) == 16);
+            const PC3 cq3[4] = {
+                { -0.12f,  0.12f, 0.45f, 255, 255, 255, 255 },
+                { -0.12f, -0.12f, 0.45f, 255, 255, 255, 255 },
+                {  0.12f, -0.12f, 0.45f, 255, 255, 255, 255 },
+                {  0.12f,  0.12f, 0.45f, 255, 255, 255, 255 },
+            };
+            const VertexDeclaration cq3Decl(16, {
+                VertexElement(0,  VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+                VertexElement(12, VertexElementFormat::Color,   VertexElementUsage::Color, 0),
+            });
+            VertexBuffer cvb3(dev, cq3Decl, 4, BufferUsage::None);
+            cvb3.SetDataRaw(cq3, 4, static_cast<int>(sizeof(PC3)));
+
+            auto fogged = [&](bool instanced, bool textured) {
+                dev.Clear(Color(0, 255, 0, 255));
+                dev.SetDepthTestEnabled(false);
+                dev.setBlendStateProperty(BlendState::Opaque);
+                dev.setRasterizerStateProperty(RasterizerState::CullNone);
+                dev.getSamplerStatesProperty()[0] = SamplerState::PointClamp;
+                BasicEffect fx(dev);
+                fx.setWorldProperty(Matrix::getIdentityProperty());
+                fx.setViewProperty(Matrix::getIdentityProperty());
+                fx.setProjectionProperty(Matrix::getIdentityProperty());
+                fx.setLightingEnabledProperty(false);
+                fx.setVertexColorEnabledProperty(false);
+                fx.setTextureEnabledProperty(textured);
+                if (textured) fx.setTextureProperty(blue_.get());
+                fx.setDiffuseColorProperty(textured ? Vector3(1.0f, 1.0f, 1.0f)
+                                                    : Vector3(0.0f, 0.0f, 1.0f));
+                fx.setAlphaProperty(1.0f);
+                fx.setFogEnabledProperty(true);
+                fx.setFogColorProperty(Vector3(1.0f, 0.0f, 0.0f));
+                fx.setFogStartProperty(0.0f);
+                fx.setFogEndProperty(-0.9f);
+                fx.Apply();
+                VertexBuffer& geom = textured ? tvb : cvb3;
+                dev.SetVertexBuffer(&geom);
+                dev.SetIndexBuffer(ib_.get());
+                if (instanced) {
+                    std::vector<VertexBufferBinding> bd = {
+                        VertexBufferBinding(&geom,         0, 0),
+                        VertexBufferBinding(instVb_.get(), 0, 1),
+                    };
+                    dev.SetVertexBuffers(bd);
+                    dev.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2, 3);
+                } else {
+                    dev.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2);
+                }
+                return ReadPixel(dev, kN / 2, kN / 2);
+            };
+            auto halfFogged = [](const Color& c) {
+                return c.getRProperty() >= 100 && c.getRProperty() <= 160 &&
+                       c.getGProperty() <= 40 &&
+                       c.getBProperty() >= 100 && c.getBProperty() <= 160;
+            };
+            auto whyF = [](const Color& c) {
+                if (c.getBProperty() > 200 && c.getRProperty() < 60)
+                    return " -- the program has no fog term at all";
+                if (c.getRProperty() > 200 && c.getBProperty() < 60) return " -- fogged completely";
+                return "";
+            };
+            const Color ftn = fogged(false, true);
+            const Color fti = fogged(true,  true);
+            const Color fcn = fogged(false, false);
+            const Color fci = fogged(true,  false);
+            check(halfFogged(ftn),
+                  "AD control: a NON-instanced TEXTURED draw is half-fogged: " + Text(ftn) +
+                      " (want ~(128,0,128))" + whyF(ftn));
+            check(halfFogged(fti),
+                  "AE an INSTANCED one is too: " + Text(fti) + " (want ~(128,0,128))" + whyF(fti));
+            check(halfFogged(fcn),
+                  "AF control: a NON-instanced COLOUR-ONLY draw is half-fogged: " + Text(fcn) +
+                      " (want ~(128,0,128))" + whyF(fcn));
+            check(halfFogged(fci),
+                  "AG an INSTANCED one is too: " + Text(fci) + " (want ~(128,0,128))" + whyF(fci));
+        }
+
         // ---- N/O: EnvironmentMapEffect on an instanced draw ---------------------------------
         // A cube map whose every face is RED over a blue base texture, with
         // EnvironmentMapAmount = 1: the reflection wins outright, so the answer is red. If the
