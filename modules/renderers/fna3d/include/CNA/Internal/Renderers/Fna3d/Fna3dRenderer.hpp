@@ -1590,7 +1590,7 @@ namespace CNA::Internal::Renderers::Fna3d
         FNA3D_Device* device_ = nullptr;
         FNA3D_PresentationParameters presentation_{};
         PresentationLayout layout_{};
-        CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
+        CnaPresentationMode presentationMode_ = CnaPresentationMode::Letterbox;
 
         FNA3D_BlendState blendState_{};
         FNA3D_DepthStencilState depthStencilState_{};

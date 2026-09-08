@@ -2990,20 +2990,25 @@ namespace CNA::Internal::Renderers
      * @brief Presentation/scaling policy used when the virtual (game-logic)
      *        resolution differs from the physical surface size.
      *
-     * Matches XNA/Windows Phone semantics:
+     * Letterbox is the default, and the only one of the five that reproduces XNA: there
+     * GraphicsDevice.Viewport is the backbuffer whatever shape the window is, and the
+     * presentation scales it. The other four are CNA extensions.
+     *
      * - Letterbox            – scale = min(surfW/virtW, surfH/virtH); adds bars.
      * - Overscan             – scale = max(surfW/virtW, surfH/virtH); crops edges.
      * - Stretch              – stretches to fill without preserving aspect ratio.
      * - NativeBackBuffer     – no scaling; game draws at its requested size.
-     * - FixedHeightDynamicWidth – keeps the game's preferred height as the
-     *                            logical height and computes logical width from
-     *                            the actual surface aspect ratio:
+     * - FixedHeightDynamicWidth – keeps the game's preferred height as the logical
+     *                            height and computes logical width from the actual
+     *                            surface aspect ratio:
      *                              logicalW = round(outputW * preferredH / outputH)
-     *                            Then applies LETTERBOX so the computed canvas
-     *                            fills the surface perfectly (no bars, no crop).
-     *                            This matches XNA/Windows Phone behaviour where
-     *                            height=480 is fixed and wider devices simply
-     *                            show more horizontal content.
+     *                            so a wider window shows more horizontal content
+     *                            instead of bars. This CHANGES the logical coordinate
+     *                            space with the window, which XNA never does: a game
+     *                            that reads Viewport.Width gets a number the rest of
+     *                            its frame was not laid out against. Ask for it
+     *                            deliberately, for a game written to fill a resizable
+     *                            window.
      */
     enum class CnaPresentationMode
     {
@@ -3091,10 +3096,11 @@ namespace CNA::Internal::Renderers
         /// 0 means "unset"; the renderer should ignore logical presentation.
         int virtualWidth = 0;
         int virtualHeight = 0;
-        /// Presentation/scaling policy. Default is FixedHeightDynamicWidth:
-        /// keeps preferred height fixed and derives logical width from the
-        /// actual surface aspect ratio, matching XNA/Windows Phone behaviour.
-        CnaPresentationMode presentationMode = CnaPresentationMode::FixedHeightDynamicWidth;
+        /// Presentation/scaling policy. Default is Letterbox: the logical size stays the
+        /// game's requested virtual resolution, and the surface shows it scaled uniformly and
+        /// centred. That is what XNA and FNA do -- GraphicsDevice.Viewport is the backbuffer,
+        /// always -- and it is why the default is not FixedHeightDynamicWidth.
+        CnaPresentationMode presentationMode = CnaPresentationMode::Letterbox;
         /// When false, the EasyGL renderer will not keep CPU-side copies of
         /// texture pixels or vertex/index data and will not register resources
         /// with the ResourceRegistry. This eliminates the per-texture CPU

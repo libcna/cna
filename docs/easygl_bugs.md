@@ -79,6 +79,29 @@ constraint), **diverges** (differs from XNA/FNA, but may be intentional).
 
 ---
 
+## Browser fullscreen reports a drawable the browser does not present (found 2026-09-08)
+
+**Status: bug, open.** Under Emscripten, with the page in browser fullscreen, the drawable size
+EasyGL letterboxes into does not match what the browser actually puts on screen, so the picture is
+scaled for one rectangle and presented in another. Measured with SAMPLE-071 (Yacht, a 480x800
+backbuffer) on a headless Chrome whose screen is 800x600: the canvas reports `width`/`height`
+800x600 while its CSS box is 800x544, and the game came out covering about 71 % of its own logical
+area in both axes -- uniformly scaled, so the aspect is right, but the bottom and right of the
+frame are outside what the browser shows.
+
+It is not a Letterbox bug: `EasyGLSurfaceState` computes the rectangle correctly from whatever
+drawable it is given (`EasyGLSurfaceState.LetterboxKeepsTheLogicalSizeAtTheBackbufferAndCentresTheRect`
+pins the exact numbers). The wrong input is the drawable itself, which comes from
+`Sdl3Window::GetPixelSize()` and its `webDrawableOverride_` path -- the same code that already has
+a special case for leaving web fullscreen.
+
+The previous default presentation mode, `FixedHeightDynamicWidth`, hid this completely: its
+viewport rectangle is always the whole drawable, so a drawable that is the wrong size still
+covers whatever is presented. Letterbox became the default on 2026-09-08 and made it visible.
+
+Not reproducible natively here: X11 fullscreen needs a window manager to resize the window, and
+none is installed, so the window stays at the backbuffer size and the letterbox is the identity.
+
 ## Viewport / coordinate system notes
 
 - **`GetViewportSize` returns the LOGICAL size, not the physical framebuffer size.**

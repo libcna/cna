@@ -248,7 +248,7 @@ namespace CNA::Internal::Renderers::PixiJs
         RendererSurfaceInfo surface_;
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
-        CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
+        CnaPresentationMode presentationMode_ = CnaPresentationMode::Letterbox;
         std::shared_ptr<PixiJsRendererState> state_ = std::make_shared<PixiJsRendererState>();
     };
 }

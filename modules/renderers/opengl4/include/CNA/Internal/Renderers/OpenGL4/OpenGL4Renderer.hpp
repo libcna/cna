@@ -726,7 +726,7 @@ namespace CNA::Internal::Renderers::OpenGL4
         PlatformGlSurfaceState surface_;
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
-        CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
+        CnaPresentationMode presentationMode_ = CnaPresentationMode::Letterbox;
         int swapInterval_ = 1;
         bool depthWriteEnabled_ = true;
 

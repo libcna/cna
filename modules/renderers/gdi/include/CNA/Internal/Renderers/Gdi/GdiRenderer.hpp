@@ -208,7 +208,7 @@ namespace CNA::Internal::Renderers::Gdi
         int requestedVirtualHeight_ = 0;
         std::atomic<std::uint64_t> nativeInvalidationGeneration_{1};
         std::uint64_t presentedNativeInvalidationGeneration_ = 0;
-        CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
+        CnaPresentationMode presentationMode_ = CnaPresentationMode::Letterbox;
         const GdiConfiguration configuration_{};
         bool renderingToBackbuffer_ = true;
         bool backbufferFullyDirty_ = true;

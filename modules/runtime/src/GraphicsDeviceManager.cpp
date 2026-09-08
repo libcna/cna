@@ -54,7 +54,12 @@ namespace Microsoft::Xna::Framework
           preferredDepthStencilFormat_(Graphics::DepthFormat::Depth24),
           synchronizeWithVerticalRetrace_(true),
           supportedOrientations_(DisplayOrientation::Default),
-          preferredPresentationMode_(PresentationMode::FixedHeightDynamicWidth)
+          // Letterbox, because GraphicsDevice.Viewport must be the backbuffer. XNA and FNA
+          // both report (0, 0, BackBufferWidth, BackBufferHeight) and scale the backbuffer
+          // onto whatever shape the window is; FixedHeightDynamicWidth instead widens the
+          // LOGICAL width to the window's aspect, so a game that anchors anything to
+          // Viewport.Width lays it out somewhere the rest of its own frame does not reach.
+          preferredPresentationMode_(PresentationMode::Letterbox)
     {
     }
 

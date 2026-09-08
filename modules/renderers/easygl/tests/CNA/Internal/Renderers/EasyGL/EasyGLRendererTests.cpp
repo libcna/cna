@@ -243,8 +243,9 @@ TEST(EasyGLSurfaceState, ResizeAndDisplayScaleUseLogicalInputAndPhysicalFramebuf
 // thinks its resolution is, GetDefaultViewportRect() is which drawable pixels that lands on.
 // EasyGL used to have only the first and inherited IGraphicsRenderer's default for the second --
 // which returns the LOGICAL size as if it were physical pixels. Since GraphicsDevice::Reset()
-// gives this renderer a virtual resolution on every device creation and the default presentation
-// mode is FixedHeightDynamicWidth, that default was wrong on any window whose aspect differs from
+// gives this renderer a virtual resolution on every device creation, the inherited default was
+// wrong under every mode that scales -- including the FixedHeightDynamicWidth this case pins, and
+// the Letterbox that is the default today -- on any window whose aspect differs from
 // the virtual one: the game rendered into a sub-rectangle and the rest of the window kept the
 // clear colour (reported against galaxy-eggbert 2026-08-21 -- resizing or F11 did not enlarge it).
 TEST(EasyGLSurfaceState, FixedHeightDynamicWidthViewportRectCoversTheWholeDrawable)
@@ -367,3 +368,55 @@ TEST(EasyGLSurfaceState, InvalidScaleFallsBackToUnscaledClientCoordinates)
 
 } // namespace
 #endif
+
+// Letterbox is the default presentation mode since 2026-09-08, and it is the only one of the five
+// that reproduces XNA: GraphicsDevice.Viewport is the backbuffer whatever shape the window is.
+// The pair of numbers below is exactly what Yacht needs -- a 480x800 phone backbuffer presented
+// into an 800x600 window -- and under the previous FixedHeightDynamicWidth default the logical
+// width came back as 1067 instead of 480, which moved every Viewport.Width-anchored element
+// outside the frame the rest of the game drew.
+TEST(EasyGLSurfaceState, LetterboxKeepsTheLogicalSizeAtTheBackbufferAndCentresTheRect)
+{
+    EasyGLSurfaceState state(
+        Surface(81, 800, 600, 1.0f), 480, 800, CnaPresentationMode::Letterbox);
+
+    int width = 0;
+    int height = 0;
+    state.GetLogicalSize(width, height);
+    EXPECT_EQ(width, 480);
+    EXPECT_EQ(height, 800);
+
+    // scale = min(800/480, 600/800) = 0.75, so 360x600 centred horizontally in 800 wide.
+    int x = -1;
+    int y = -1;
+    state.GetDefaultViewportRect(x, y, width, height);
+    EXPECT_EQ(x, 220);
+    EXPECT_EQ(y, 0);
+    EXPECT_EQ(width, 360);
+    EXPECT_EQ(height, 600);
+}
+
+// The bars are the part a scaling mode without them cannot get wrong: a press inside the game has
+// to have the offset taken off before it is scaled, or every touch in a letterboxed window lands
+// to the right of where the player aimed.
+TEST(EasyGLSurfaceState, LetterboxInputMappingSubtractsTheBarsBeforeScaling)
+{
+    EasyGLSurfaceState state(
+        Surface(82, 800, 600, 1.0f), 480, 800, CnaPresentationMode::Letterbox);
+
+    float x = 0.0f;
+    float y = 0.0f;
+    // The centre of the drawable is the centre of the game.
+    ASSERT_TRUE(state.WindowToLogical(400.0f, 300.0f, x, y));
+    EXPECT_FLOAT_EQ(x, 240.0f);
+    EXPECT_FLOAT_EQ(y, 400.0f);
+
+    // The left edge of the picture, not the left edge of the window.
+    ASSERT_TRUE(state.WindowToLogical(220.0f, 0.0f, x, y));
+    EXPECT_FLOAT_EQ(x, 0.0f);
+    EXPECT_FLOAT_EQ(y, 0.0f);
+
+    ASSERT_TRUE(state.LogicalToWindow(480.0f, 800.0f, x, y));
+    EXPECT_FLOAT_EQ(x, 580.0f);
+    EXPECT_FLOAT_EQ(y, 600.0f);
+}

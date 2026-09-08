@@ -473,7 +473,7 @@ else in this section is FNA-required behavior, not CNA scope creep.
   `DisplayWidth/Height` (`round(x·W, y·H)` in `TouchPanel::INTERNAL_onTouchEvent`) — identical to FNA, which
   also scales normalized touch by the back-buffer size. The **touch-state** path (`to_touch_pixel_position`
   → `to_logical_position`) maps into that same logical space. For a **uniform** presentation (no letterbox
-  bars — e.g. EasyGL's `FixedHeightDynamicWidth` default, or any matched-aspect `SDL_Renderer`) the two
+  bars — e.g. an explicitly selected `FixedHeightDynamicWidth`, or any matched-aspect `SDL_Renderer`) the two
   coincide exactly; pinned by `GestureAndTouchStateShareTheLogicalCoordinateBasis` (gesturePos ÷ metric ==
   the normalized state position). **Known edge nuance:** under a true letterbox (logical aspect ≠ window
   aspect, centering bars) the gesture path stays linear (FNA-matching) while the touch-state path is

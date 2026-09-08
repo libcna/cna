@@ -1910,7 +1910,7 @@ namespace CNA::Internal::Renderers::Igl
         int virtualHeight_ = 0;
         int logicalWidth_ = 0;
         int logicalHeight_ = 0;
-        CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
+        CnaPresentationMode presentationMode_ = CnaPresentationMode::Letterbox;
         int presentX_ = 0, presentY_ = 0, presentWidth_ = 0, presentHeight_ = 0;
 
         // Bound targets.
