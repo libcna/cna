@@ -1,13 +1,17 @@
 // SPDX-License-Identifier: MS-PL
-// SOFTWARE-176: adversarial XNA constant-depth-bias contract.
+// SOFTWARE-176/177: adversarial XNA constant-depth-bias contract.
 //
 // RasterizerState.DepthBias is a normalized post-viewport depth offset. FNA3D converts that
 // public value into the active native depth format's minimum-resolvable units for GL/D3D11; a CPU
 // renderer that stores normalized depth applies it directly. The old Software and EasyGL paths
 // instead treated the public float as one native unit, so realistic values such as 0.02 had no
 // observable effect and only million-scale tests could move a polygon.
+// SOFTWARE-177 crosses that state with FillMode::WireFrame: native GL polygon offset for filled
+// triangles cannot bias EasyGL's former GL_LINES emulation, while XNA's rasterizer state applies
+// the bias regardless of fill mode.
 
 #include <array>
+#include <vector>
 #include <gtest/gtest.h>
 
 #include "CNA/RendererTestGate.hpp"
@@ -22,6 +26,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/CullMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/FillMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
@@ -38,6 +43,7 @@ using Microsoft::Xna::Framework::Graphics::BlendState;
 using Microsoft::Xna::Framework::Graphics::CullMode;
 using Microsoft::Xna::Framework::Graphics::DepthFormat;
 using Microsoft::Xna::Framework::Graphics::DepthStencilState;
+using Microsoft::Xna::Framework::Graphics::FillMode;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::PrimitiveType;
 using Microsoft::Xna::Framework::Graphics::RasterizerState;
@@ -106,6 +112,50 @@ namespace
         target.GetData(0, &centre, &pixel, 0, 1);
         return pixel;
     }
+
+    int DrawWireLayerAndCountGreen(GraphicsDevice& device, float wireBias)
+    {
+        RenderTarget2D target(
+            device, 32, 32, false, SurfaceFormat::Color,
+            DepthFormat::Depth24Stencil8, 0, RenderTargetUsage::PreserveContents);
+        BasicEffect effect(device);
+        effect.VertexColorEnabled = true;
+
+        RasterizerState solid;
+        solid.setCullModeProperty(CullMode::None);
+        device.setRasterizerStateProperty(solid);
+        device.setBlendStateProperty(BlendState::Opaque);
+        device.setDepthStencilStateProperty(DepthStencilState::Default);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Black);
+
+        auto background = FullTargetQuad(0.50f, Color::Red);
+        effect.Apply();
+        device.DrawUserPrimitives(
+            PrimitiveType::TriangleList, background.data(), 0, 2);
+
+        RasterizerState wire;
+        wire.setCullModeProperty(CullMode::None);
+        wire.setFillModeProperty(FillMode::WireFrame);
+        wire.setDepthBiasProperty(wireBias);
+        device.setRasterizerStateProperty(wire);
+        const std::array<VertexPositionColor, 3> triangle{{
+            {Vector3(-0.75f, -0.75f, 0.50f), Color::Lime},
+            {Vector3( 0.75f, -0.75f, 0.50f), Color::Lime},
+            {Vector3( 0.00f,  0.75f, 0.50f), Color::Lime},
+        }};
+        effect.Apply();
+        device.DrawUserPrimitives(
+            PrimitiveType::TriangleList, triangle.data(), 0, 1);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        std::vector<Color> pixels(32 * 32);
+        target.GetData(pixels.data(), static_cast<int>(pixels.size()));
+        int green = 0;
+        for (const Color& pixel : pixels)
+            if (pixel == Color::Lime) ++green;
+        return green;
+    }
 }
 
 TEST(RasterizerDepthBiasContractTest, ConstantBiasUsesNormalizedDepthAcrossDepthFormats)
@@ -138,4 +188,15 @@ TEST(RasterizerDepthBiasContractTest, ConstantBiasUsesNormalizedDepthAcrossDepth
             Color::Lime,
             DrawBiasedSecondLayer(device, format, 0.50f, 0.51f, -0.02f));
     }
+}
+
+TEST(RasterizerDepthBiasContractTest, ConstantBiasAlsoAppliesToWireFrameFragments)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33);
+
+    GraphicsDevice device;
+    EXPECT_GT(DrawWireLayerAndCountGreen(device, 0.0f), 0)
+        << "the zero-bias control produced no wireframe fragments";
+    EXPECT_EQ(DrawWireLayerAndCountGreen(device, 0.02f), 0)
+        << "positive bias did not push the coplanar wireframe behind the solid layer";
 }

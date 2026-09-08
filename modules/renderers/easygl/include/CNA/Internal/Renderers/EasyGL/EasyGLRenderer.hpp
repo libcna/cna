@@ -1334,9 +1334,12 @@ namespace CNA::Internal::Renderers::EasyGL
         mutable std::optional<bool> probedHalfFloatRenderable_;
         mutable std::array<std::optional<bool>, 3> probedNormalizedRenderTargets_{};
 
-        // FillMode::WireFrame emulation (OpenGL ES has no glPolygonMode):
-        // when active, triangle draws are re-expanded into GL_LINES.
+        // FillMode::WireFrame emulation for OpenGL ES/WebGL, which have no glPolygonMode:
+        // when active, triangle draws are re-expanded into GL_LINES. Desktop GL uses native
+        // polygon mode so rasterizer state reaches every draw path, including SpriteBatch and
+        // compiled effects, and native polygon-offset-line state can bias its fragments.
         bool wireframe_ = false;
+        bool desktopWireframe_ = false;
         ::easygl::Buffer wireframeIbo_;        ///< scratch element buffer of line indices
         bool wireframeIboCreated_ = false;
         std::vector<std::uint32_t> wireframeScratch_;  ///< CPU build buffer (32-bit line indices)

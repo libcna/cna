@@ -1299,6 +1299,19 @@ if (ProfileIsDesktopCore())
             constexpr unsigned int kGlVertexProgramPointSize = 0x8642;
             if (glEnableFn) glEnableFn(kGlVertexProgramPointSize);
         }
+
+        void SetDesktopPolygonMode(bool wireframe)
+        {
+            using GlPolygonModeFn = void (*)(unsigned int, unsigned int);
+            const auto glPolygonModeFn =
+                reinterpret_cast<GlPolygonModeFn>(LoadEasyGlProcAddress("glPolygonMode"));
+            if (glPolygonModeFn == nullptr)
+                throw std::runtime_error("desktop GL context exposes no glPolygonMode entry point");
+            constexpr unsigned int kGlFrontAndBack = 0x0408;
+            constexpr unsigned int kGlLine = 0x1B01;
+            constexpr unsigned int kGlFill = 0x1B02;
+            glPolygonModeFn(kGlFrontAndBack, wireframe ? kGlLine : kGlFill);
+        }
     }
 
     // --- EasyGLTexture3DRenderer ---
@@ -6074,7 +6087,10 @@ else
                 "meta-gl failed to reload GL entry points after debug context loss");
         }
         if (ProfileIsDesktopCore())
+        {
             EnableVertexProgramPointSize();
+            SetDesktopPolygonMode(desktopWireframe_);
+        }
         ApplyCurrentDepthBias();
 
         // 4. Notify listeners that context is restored. ResourceRegistry calls
@@ -7488,9 +7504,20 @@ if (!ProfileIsEs2ApiGeneration())
                                                 : ::easygl::CullFace::Front);
         }
         device.set_scissor_test_enabled(scissorTestEnable);
-        // OpenGL ES has no glPolygonMode; FillMode::WireFrame (1) is emulated at draw
-        // time by re-expanding triangles into GL_LINES (see DrawWireframe).
-        wireframe_ = (fillMode == 1);
+        // Desktop GL's native polygon mode is both more complete and more faithful: it affects
+        // every triangle path (including SpriteBatch and compiled effects), preserves native
+        // culling, and works with GL_POLYGON_OFFSET_LINE. ES/WebGL have no polygon mode, so they
+        // retain the explicit GL_LINES expansion in DrawWireframe.
+        desktopWireframe_ = (fillMode == 1);
+        if (ProfileIsDesktopCore())
+        {
+            SetDesktopPolygonMode(desktopWireframe_);
+            wireframe_ = false;
+        }
+        else
+        {
+            wireframe_ = desktopWireframe_;
+        }
         // FNA exposes constant DepthBias in normalized depth coordinates. GL instead defines the
         // polygon-offset `units` argument in minimum-resolvable depth increments, so the active
         // depth format determines the conversion. Preserve the public state and apply it through
@@ -7513,8 +7540,16 @@ if (!ProfileIsEs2ApiGeneration())
         default: break;                           // None / unknown
         }
 
-        device.set_polygon_offset_fill_enabled(
-            slopeScaleDepthBias_ != 0.0f || depthBias_ != 0.0f);
+        const bool enabled = slopeScaleDepthBias_ != 0.0f || depthBias_ != 0.0f;
+        device.set_polygon_offset_fill_enabled(enabled);
+        if (ProfileIsDesktopCore())
+        {
+            constexpr auto polygonOffsetLine = static_cast<metagl::Capability>(0x2A02);
+            if (enabled)
+                metagl::glEnable(polygonOffsetLine);
+            else
+                metagl::glDisable(polygonOffsetLine);
+        }
         device.set_polygon_offset(slopeScaleDepthBias_, depthBias_ * depthScale);
     }
 
