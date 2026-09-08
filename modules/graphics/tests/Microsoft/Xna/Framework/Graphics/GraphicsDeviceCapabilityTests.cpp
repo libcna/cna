@@ -191,10 +191,11 @@ struct CapabilityExpectation
         // throws for count > 1 and ApplyBlendState() applies slot-0's write mask only. It used to
         // take the default arm and claim MRT support, which
         // TheMultipleRenderTargetCapabilityMatchesWhatBindingActuallyDoes caught the moment that
-        // consistency check reached this renderer. Occlusion queries and custom effects are
-        // genuinely implemented, so those two keep the default's answer.
+        // consistency check reached this renderer. SOFTWARE-122 added deterministic CPU occlusion
+        // queries. Custom ShaderEffect compilation is still absent, so CustomEffects remains an
+        // honest false rather than inheriting the shared default.
         case GraphicsRendererType::Software:
-            return {false, true, true};
+            return {false, true, false};
 
         // plans/plan_igl.md IGL-61: IGL v1.1.1 exposes no occlusion-query object on any of its backends
         // -- there is no IDevice factory for one and no encoder call to begin or end one, verified

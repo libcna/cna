@@ -15,14 +15,14 @@
 // what separates real point topology from a triangle-list approximation covering thousands of
 // pixels.
 //
-// Renderer scope. Bgfx, D3D9, D3D10, D3D11, EasyGL, Vulkan and WebGPU render points and support
-// backbuffer readback, so they carry the permanent pixel coverage here. SDL_GPU maps PointListEXT
-// natively but implements no backbuffer readback, so it is covered by a separate practical
-// control. Software explicitly rejects every non-TriangleList topology (its documented v1
-// boundary) and is asserted as a rejection, never as approximate geometry. D3D12 is also an
-// explicit rejection while its PSO cache is fixed to triangle topology; its named source contract
-// is locked by GltfRendererPointTopologyPolicy. Vulkan joined this matrix with plans/plan_gltf.md
-// GLTF-393; the Direct3D disposition closes GLTF-394 / REMED-GFX-114.
+// Renderer scope. Bgfx, D3D9, D3D10, D3D11, EasyGL, Vulkan, WebGPU and Software render points and
+// support backbuffer readback, so they carry the permanent pixel coverage here. SDL_GPU maps
+// PointListEXT natively but implements no backbuffer readback, so it is covered by a separate
+// practical control. D3D12 is an explicit rejection while its PSO cache is fixed to triangle
+// topology; its named source contract is locked by GltfRendererPointTopologyPolicy. Vulkan joined
+// this matrix with plans/plan_gltf.md GLTF-393; the Direct3D disposition closes GLTF-394 /
+// REMED-GFX-114. SOFTWARE-133 reconciled the oracle after the CPU renderer gained a real point
+// raster path: it now runs the same exact pixel, addressing and graphics-state contract.
 
 #include <algorithm>
 #include <array>
@@ -412,7 +412,8 @@ namespace
 #if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_DIRECTX9) || \
     defined(CNA_RENDERER_DIRECTX10) || defined(CNA_RENDERER_DIRECTX11) || \
     defined(CNA_RENDERER_EASYGL) || \
-    defined(CNA_RENDERER_VULKAN) || defined(CNA_RENDERER_WEBGPU)
+    defined(CNA_RENDERER_VULKAN) || defined(CNA_RENDERER_WEBGPU) || \
+    defined(CNA_RENDERER_SOFTWARE)
 
 // The canonical depthless non-indexed case: four points at distinct pixel centres, four distinct
 // colours, one framebuffer snapshot. A triangle-list approximation of this draw fills the whole
@@ -1525,47 +1526,4 @@ TEST_F(PointListPrimitiveTest, SdlGpuPointListRendersExactRenderTargetPixels)
     ExpectColorAbsent(direct, Color::Magenta, "SDL_GPU non-indexed decoy points");
     ExpectPointCoverageBudget(
         direct, Color::Black, 3, "SDL_GPU non-indexed render-target point coverage");
-}
-
-// Software's documented v1 raster boundary is TriangleList only. It must keep rejecting
-// PointListEXT explicitly on every public entry point rather than approximating it.
-TEST_F(PointListPrimitiveTest, SoftwareExplicitlyRejectsPointListTopology)
-{
-    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
-    // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software);
-    RequirePointRendering();
-
-    const std::array<VertexPositionColor, 3> vertices{
-        VertexPositionColor(Vector3(-0.5f, -0.5f, 0.5f), Color::Red),
-        VertexPositionColor(Vector3(0.0f, 0.5f, 0.5f), Color::Lime),
-        VertexPositionColor(Vector3(0.5f, -0.5f, 0.5f), Color::Blue),
-    };
-    const std::array<std::uint16_t, 3> indices{0, 1, 2};
-
-    VertexBuffer vertexBuffer(
-        device, PositionColorDeclaration(), 3, BufferUsage::None);
-    IndexBuffer indexBuffer(
-        device, IndexElementSize::SixteenBits, 3, BufferUsage::None);
-    vertexBuffer.SetData(vertices.data(), 3);
-    indexBuffer.SetData(indices.data(), 3);
-
-    BasicEffect effect(device);
-    ApplyVertexColorEffect(effect);
-    device.Clear(Color::Black);
-    device.SetVertexBuffer(&vertexBuffer);
-    device.SetIndexBuffer(&indexBuffer);
-
-    EXPECT_THROW(
-        device.DrawPrimitives(PrimitiveType::PointListEXT, 0, 3), std::runtime_error);
-    EXPECT_THROW(
-        device.DrawIndexedPrimitives(PrimitiveType::PointListEXT, 0, 0, 3, 0, 3),
-        std::runtime_error);
-    EXPECT_THROW(
-        device.DrawUserPrimitives(PrimitiveType::PointListEXT, vertices.data(), 0, 3),
-        std::runtime_error);
-    EXPECT_THROW(
-        device.DrawUserIndexedPrimitives(
-            PrimitiveType::PointListEXT, vertices.data(), 0, 3, indices.data(), 0, 3),
-        std::runtime_error);
 }

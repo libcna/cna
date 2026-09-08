@@ -151,14 +151,15 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// every stock attribute at the declared element's own `getOffsetProperty()`, so a declaration
 /// whose element ORDER differs from the stock program's input order is read from its own bytes
 /// rather than reinterpreted. All five GL profiles share that one implementation; the reading was
-/// taken on OPENGLES3, and a profile that diverges fails its own run and says so.
+/// taken on OPENGLES3, and a profile that diverges fails its own run and says so. SOFTWARE-108
+/// likewise decodes the declaration's semantic, format, offset and stride directly on the CPU.
 ///
 /// This is not the same as "the stock program is chosen from the declaration". It is not --
 /// REMED-GFX-217 is still open, and the stride cases that can be ambiguous have to ask the
 /// declaration by hand (see REMED-GFX-234's stride-32 case).
 [[nodiscard]] inline bool TranslatesDeclarations()
 {
-    return CNA_RENDERER_IS(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2);
+    return CNA_RENDERER_IS(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Software);
 }
 
 
@@ -266,13 +267,10 @@ namespace
         int positionOffset;
         int colorOffset;
         int texCoordOffset;
-        /// True when this declaration collides with the byte-stride table every renderer other
-        /// than bgfx still infers its native layout from. bgfx translates the declaration and must
-        /// render the contract; the other nine must REFUSE the draw deterministically before any
-        /// native work (REMED-GFX-DECL-GUARD), because their inferred layout would read the
-        /// caller's bytes as something else. Accepting one and rendering is a regression of the
-        /// guard, and rendering it CORRECTLY is REMED-GFX-217/218's translator landing -- both
-        /// fail this arm, and the message says which.
+        /// True when this declaration deviates from the historical built-in byte-stride layouts.
+        /// A declaration-driven renderer must render its own contract; a renderer that still
+        /// infers one of those layouts must REFUSE the draw deterministically before native work
+        /// (REMED-GFX-DECL-GUARD), because accepting it would reinterpret the caller's bytes.
         bool deviatesElsewhere = false;
     };
 
@@ -855,15 +853,13 @@ TEST_F(VertexDeclarationLayoutTest, DeclarationTransitionsDoNotReuseAStaleLayout
 }
 
 // ---------------------------------------------------------------------------
-// REMED-GFX-DECL-GUARD. The legs above prove that a colliding declaration no longer renders. These
-// prove the rest of the boundary's contract: that refusing costs the caller nothing, that the
-// refusal happens before anything native is produced, and that every route into the renderer goes
-// through it -- not only the one the collision matrix happens to use.
+// REMED-GFX-DECL-GUARD. On renderers that still infer layouts, these legs prove the boundary's
+// contract: refusing costs the caller nothing, happens before anything native is produced, and
+// covers every route into the renderer -- not only the one the collision matrix happens to use.
 //
-// bgfx is excluded from the REFUSAL legs and only from those: it has a real declaration translator
-// (REMED-GFX-216), so the same declarations are representable there and must keep rendering. That
-// asymmetry is the point -- the guard is a per-renderer capability boundary, not a claim that these
-// declarations are globally invalid.
+// Declaration-driven renderers skip the refusal legs and run the positive translating control
+// below. The asymmetry is the point: the guard is a per-renderer capability boundary, not a claim
+// that these declarations are globally invalid.
 // ---------------------------------------------------------------------------
 
 class DeclarationGuardTest : public VertexDeclarationLayoutTest
@@ -1116,10 +1112,9 @@ TEST_F(DeclarationGuardTest, DrawUserPrimitivesReachesTheSameBoundary)
 }
 
 
-// The control. bgfx derives its native layout from the declaration (REMED-GFX-216), so the very
-// declarations the other renderers now refuse must still render their own contract here -- which is
-// what makes the refusals a per-renderer capability boundary rather than a claim that these
-// declarations are invalid.
+// The control. Every declaration-driven renderer must render the very declarations that inferred-
+// layout renderers refuse, which makes those refusals a per-renderer capability boundary rather
+// than a claim that the declarations are invalid.
 TEST_F(DeclarationGuardTest, TheTranslatingRendererStillRendersEveryCollidingDeclaration)
 {
     // plans/plan_runtimerenderer.md RTR-P9-6 / REMED-GFX-234: the contract of whichever renderer
@@ -1641,4 +1636,3 @@ TEST_F(BgfxVertexLayoutTest, ContentsOnlyRewriteCreatesNoNativeResource)
 }
 
 #endif   // CNA_TEST_BGFX_AVAILABLE
-
