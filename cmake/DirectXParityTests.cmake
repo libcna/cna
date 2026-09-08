@@ -843,6 +843,24 @@ function(cna_register_d3d_parity_tests)
         NAME DrawUserIndexedPrimitives_32 TARGET draw_user_indexed_primitives_32
         DIRECTX12_ORDER 2110
         SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_draw_user_indexed_primitives_32_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME ViewportState TARGET viewport_state DIRECTX12_ORDER 2170
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_viewport_state_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME Viewport_Subregion TARGET viewport_subregion DIRECTX12_ORDER 2180
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_viewport_subregion_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME Scissor TARGET scissor DIRECTX12_ORDER 2190
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_scissor_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME ClearOverloads TARGET clear_overloads DIRECTX12_ORDER 2200
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_clear_overloads_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME DeviceResetEvents TARGET device_reset_events DIRECTX12_ORDER 2210
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_device_reset_events_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME TransformMatrix_Translation TARGET transform_matrix DIRECTX12_ORDER 2220
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_transform_matrix_test.cpp")
 
     list(SORT _cna_d3d_fixture_keys)
     foreach(_cna_d3d_fixture_key IN LISTS _cna_d3d_fixture_keys)
