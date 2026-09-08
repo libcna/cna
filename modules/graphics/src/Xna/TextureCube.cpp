@@ -61,7 +61,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 "TextureCube: SurfaceFormat " + std::to_string(static_cast<int>(format)) +
                 " is not available for a cube on the selected GraphicsProfile.");
         }
-        switch (device.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(format)))
+        switch (device.GetRenderer().ClassifyTextureCubeFormatEXT(static_cast<int>(format)))
         {
             case CNA::Internal::Renderers::RendererFormatVerdict::Supported:
                 return;

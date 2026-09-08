@@ -1631,8 +1631,15 @@ namespace CNA::Internal::Renderers::EasyGL
          * @param surfaceFormat Raw XNA `SurfaceFormat` ordinal.
          * @return `Supported` for Color and ES 3-class `NormalizedByte4`, `Unsupported` for
          *         `NormalizedByte4` on ES 2-class profiles, or `Defer` for other formats.
-         */
+        */
         [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief Reports formats whose EasyGL cube allocation and face transfer path is complete.
+         * @param surfaceFormat Raw XNA `SurfaceFormat` ordinal.
+         * @return Supported for Color and DXT1/3/5, Unsupported for known unfinished cube formats.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyTextureCubeFormatEXT(
+            int surfaceFormat) const override;
         /**
          * @brief Reports whether Color transfers preserve the requested texture's texel meaning.
          *

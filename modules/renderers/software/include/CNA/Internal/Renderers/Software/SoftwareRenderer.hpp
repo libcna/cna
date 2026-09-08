@@ -1302,6 +1302,13 @@ namespace CNA::Internal::Renderers::Software
         [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(
             int surfaceFormat) const override;
         /**
+         * @brief Classifies formats whose complete six-face CPU cube path is implemented.
+         * @param surfaceFormat Raw SurfaceFormat ordinal.
+         * @return Supported for Color and DXT1/3/5, Unsupported for known unfinished formats.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyTextureCubeFormatEXT(
+            int surfaceFormat) const override;
+        /**
          * @brief Reports exactly the classic colour target formats backed by CPU storage.
          * @param surfaceFormat Raw SurfaceFormat ordinal.
          * @return Supported for implemented classic target formats, Unsupported for known gaps.

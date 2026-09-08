@@ -104,6 +104,8 @@ TEST(RendererCapabilityDefaultsTest, FormatClassifiersDefaultToDefer)
     {
         EXPECT_EQ(renderer.ClassifySurfaceFormatEXT(format), RendererFormatVerdict::Defer)
             << "format ordinal " << format;
+        EXPECT_EQ(renderer.ClassifyTextureCubeFormatEXT(format), RendererFormatVerdict::Defer)
+            << "format ordinal " << format;
         EXPECT_EQ(renderer.ClassifyRenderTargetFormatEXT(format), RendererFormatVerdict::Defer)
             << "format ordinal " << format;
         EXPECT_EQ(renderer.ClassifyColorTransferFormatEXT(format), RendererFormatVerdict::Defer)

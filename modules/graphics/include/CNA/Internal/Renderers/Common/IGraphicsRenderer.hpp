@@ -2064,6 +2064,24 @@ namespace CNA::Internal::Renderers
         }
 
         /**
+         * @brief Whether a plain TextureCube may be created with the given surface format.
+         *
+         * This is separate from ClassifySurfaceFormatEXT because implementing a Texture2D format
+         * does not prove that a renderer's cube allocation, face transfer and sampling paths retain
+         * that format. The default deliberately defers to the framework's Color-only baseline;
+         * renderers promote cube formats only after their complete cube path is implemented.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return This renderer's cube-specific verdict, or Defer to accept the framework rule.
+         */
+        [[nodiscard]] virtual RendererFormatVerdict ClassifyTextureCubeFormatEXT(
+            int surfaceFormat) const
+        {
+            (void)surfaceFormat;
+            return RendererFormatVerdict::Defer;
+        }
+
+        /**
          * @brief Whether a RenderTarget2D may be created with the given surface format.
          *
          * Deliberately separate from ClassifySurfaceFormatEXT: renderability is a strictly narrower

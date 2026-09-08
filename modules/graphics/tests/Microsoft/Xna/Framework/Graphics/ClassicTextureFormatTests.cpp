@@ -44,6 +44,7 @@
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
+#include "System/NotSupportedException.hpp"
 
 using namespace CNA::Testing::Renderers;
 using CNA::Internal::Renderers::RendererFormatVerdict;
@@ -367,4 +368,50 @@ TEST(ClassicTextureFormat, DxtCubeBlocksFeedThePublicEnvironmentMapSampler)
     EXPECT_NEAR(sampled.getGProperty(), 0, 2);
     EXPECT_NEAR(sampled.getBProperty(), 0, 2);
     EXPECT_NEAR(sampled.getAProperty(), 255, 2);
+}
+
+TEST(ClassicTextureFormat, PlainCubeCapabilityDoesNotInheritTexture2DFormatClaims)
+{
+    if (!CNA_RENDERER_IS(Software, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2))
+        GTEST_SKIP() << "the audited cube capability belongs to Software and EasyGL";
+
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    const SurfaceFormat unfinishedFormats[] = {
+        SurfaceFormat::Bgr565,
+        SurfaceFormat::Bgra5551,
+        SurfaceFormat::Bgra4444,
+        SurfaceFormat::NormalizedByte2,
+        SurfaceFormat::NormalizedByte4,
+        SurfaceFormat::Rgba1010102,
+        SurfaceFormat::Rg32,
+        SurfaceFormat::Rgba64,
+        SurfaceFormat::Alpha8,
+        SurfaceFormat::Single,
+        SurfaceFormat::Vector2,
+        SurfaceFormat::Vector4,
+        SurfaceFormat::HalfSingle,
+        SurfaceFormat::HalfVector2,
+        SurfaceFormat::HalfVector4,
+        SurfaceFormat::HdrBlendable,
+    };
+    for (const SurfaceFormat format : unfinishedFormats)
+    {
+        SCOPED_TRACE(static_cast<int>(format));
+        EXPECT_EQ(device.GetRenderer().ClassifyTextureCubeFormatEXT(
+                      static_cast<int>(format)),
+                  RendererFormatVerdict::Unsupported);
+        EXPECT_THROW(TextureCube(device, 4, false, format), System::NotSupportedException);
+    }
+
+    for (const SurfaceFormat format : {
+             SurfaceFormat::Color, SurfaceFormat::Dxt1,
+             SurfaceFormat::Dxt3, SurfaceFormat::Dxt5})
+    {
+        SCOPED_TRACE(static_cast<int>(format));
+        EXPECT_EQ(device.GetRenderer().ClassifyTextureCubeFormatEXT(
+                      static_cast<int>(format)),
+                  RendererFormatVerdict::Supported);
+        EXPECT_NO_THROW(TextureCube(device, 4, false, format));
+    }
 }
