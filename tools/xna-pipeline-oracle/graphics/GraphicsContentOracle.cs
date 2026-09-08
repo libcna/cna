@@ -2527,6 +2527,180 @@ namespace Cna.Xna40.GraphicsOracle
                 MeshHelper.MergeDuplicateVertices(geometry);
                 return DescribeMeshFull(mesh);
             });
+            // XNASWEEP-139: what MeshHelper.OptimizeForCache actually does. The two grids above
+            // come out as the exact reverse of the order they went in, which a real cache
+            // optimiser does for a mesh that regular; a sphere does not, so these hand the same
+            // method topologies whose answers separate the candidate rules. Every case prints the
+            // vertices' position indices, from which the triangle order is a permutation of the
+            // input's.
+            for (int caseIndex = 0; caseIndex < 12; caseIndex++)
+            {
+                int which = caseIndex;
+                string label;
+                MeshContent probe;
+                if (which < 4)
+                {
+                    int count = new int[] { 2, 4, 8, 20 }[which];
+                    label = "meshhelper/optimize_strip_" + count;
+                    var positions = new List<Vector3>();
+                    for (int i = 0; i <= count; i++)
+                    {
+                        positions.Add(new Vector3(i, 0, 0));
+                        positions.Add(new Vector3(i, 1, 0));
+                    }
+                    probe = SoupMesh("Strip", positions.ToArray(), StripTriangles(count));
+                }
+                else if (which < 8)
+                {
+                    int side = new int[] { 1, 2, 4, 6 }[which - 4];
+                    label = "meshhelper/optimize_grid_" + side;
+                    probe = Grid(side);
+                }
+                else
+                {
+                    int[] ringCounts = { 2, 3, 5, 6 };
+                    int[] segmentCounts = { 4, 6, 12, 12 };
+                    int rings = ringCounts[which - 8];
+                    int segments = segmentCounts[which - 8];
+                    label = "meshhelper/optimize_sphere_" + rings + "x" + segments;
+                    Vector3[] positions;
+                    int[][] triangles = SphereTriangles(rings, segments, out positions);
+                    probe = SoupMesh("Sphere", positions, triangles);
+                }
+                Record(label, () =>
+                {
+                    MeshHelper.OptimizeForCache(probe);
+                    return DescribeMeshFull(probe);
+                });
+            }
+
+            // XNASWEEP-139: the order the *processor* leaves, which is not the order
+            // MeshHelper.OptimizeForCache leaves. The sphere the sample corpus disagrees on comes
+            // out of the importer in the file's own polygon order and out of the build in neither
+            // that order nor its reverse, so what reorders it is somewhere in ModelProcessor.
+            // These print the built index buffer for topologies whose input order is known.
+            for (int caseIndex = 0; caseIndex < 4; caseIndex++)
+            {
+                int which = caseIndex;
+                string label;
+                MeshContent probe;
+                if (which < 2)
+                {
+                    int count = new int[] { 2, 8 }[which];
+                    label = "modelprocessor/order_strip_" + count;
+                    var positions = new List<Vector3>();
+                    for (int i = 0; i <= count; i++)
+                    {
+                        positions.Add(new Vector3(i, 0, 0));
+                        positions.Add(new Vector3(i, 1, 0));
+                    }
+                    probe = SoupMesh("Strip", positions.ToArray(), StripTriangles(count));
+                }
+                else
+                {
+                    int[] ringCounts = { 3, 5 };
+                    int[] segmentCounts = { 6, 12 };
+                    int rings = ringCounts[which - 2];
+                    int segments = segmentCounts[which - 2];
+                    label = "modelprocessor/order_sphere_" + rings + "x" + segments;
+                    Vector3[] positions;
+                    int[][] triangles = SphereTriangles(rings, segments, out positions);
+                    probe = SoupMesh("Sphere", positions, triangles);
+                }
+                Record(label, () =>
+                {
+                    var processor = new ModelProcessor();
+                    var root = new NodeContent();
+                    root.Name = "Root";
+                    root.Children.Add(probe);
+                    return DescribeModelFull(processor.Process(root, new RecordingProcessorContext()));
+                });
+            }
+
+            // XNASWEEP-139, second shape: vertices shared between triangles, the way an importer
+            // leaves them, and with a normal channel. The corpus's spheres come out of the genuine
+            // build in an order that is not the reverse, and one-vertex-per-corner probes do come
+            // out reversed, so whether the sharing is what changes it is the question.
+            for (int caseIndex = 0; caseIndex < 4; caseIndex++)
+            {
+                int which = caseIndex;
+                int[] ringCounts = { 3, 5, 3, 5 };
+                int[] segmentCounts = { 6, 12, 6, 12 };
+                bool normals = which >= 2;
+                int rings = ringCounts[which];
+                int segments = segmentCounts[which];
+                string label = "modelprocessor/order_shared_sphere_" + rings + "x" + segments +
+                               (normals ? "_normals" : "");
+                Vector3[] positions;
+                int[][] triangles = SphereTriangles(rings, segments, out positions);
+                MeshContent probe = SharedSoupMesh("Sphere", positions, triangles, normals);
+                Record(label, () =>
+                {
+                    var processor = new ModelProcessor();
+                    var root = new NodeContent();
+                    root.Name = "Root";
+                    root.Children.Add(probe);
+                    return DescribeModelFull(processor.Process(root, new RecordingProcessorContext()));
+                });
+            }
+
+            // XNASWEEP-139, the measurement that matters: OptimizeForCache over meshes whose
+            // vertices are *shared*. One vertex per corner leaves the optimiser nothing to gain and
+            // it answers the reverse, which is what CNA was fitted to; a shared mesh is what an
+            // importer actually hands it, and there the answer is a reordering.
+            for (int caseIndex = 0; caseIndex < 10; caseIndex++)
+            {
+                int which = caseIndex;
+                string label;
+                MeshContent probe;
+                if (which < 3)
+                {
+                    int count = new int[] { 2, 8, 20 }[which];
+                    label = "meshhelper/optimize_shared_strip_" + count;
+                    var positions = new List<Vector3>();
+                    for (int i = 0; i <= count; i++)
+                    {
+                        positions.Add(new Vector3(i, 0, 0));
+                        positions.Add(new Vector3(i, 1, 0));
+                    }
+                    probe = SharedSoupMesh("Strip", positions.ToArray(), StripTriangles(count), false);
+                }
+                else if (which < 6)
+                {
+                    int side = new int[] { 2, 4, 6 }[which - 3];
+                    label = "meshhelper/optimize_shared_grid_" + side;
+                    var positions = new List<Vector3>();
+                    for (int y = 0; y <= side; y++)
+                        for (int x = 0; x <= side; x++)
+                            positions.Add(new Vector3(x, y, 0));
+                    var triangles = new List<int[]>();
+                    for (int y = 0; y < side; y++)
+                        for (int x = 0; x < side; x++)
+                        {
+                            int a = y * (side + 1) + x, b = a + 1, c = a + side + 1, e = c + 1;
+                            triangles.Add(new int[] { a, b, e });
+                            triangles.Add(new int[] { a, e, c });
+                        }
+                    probe = SharedSoupMesh("Grid", positions.ToArray(), triangles.ToArray(), false);
+                }
+                else
+                {
+                    int[] ringCounts = { 2, 3, 5, 6 };
+                    int[] segmentCounts = { 4, 6, 12, 12 };
+                    int rings = ringCounts[which - 6];
+                    int segments = segmentCounts[which - 6];
+                    label = "meshhelper/optimize_shared_sphere_" + rings + "x" + segments;
+                    Vector3[] positions;
+                    int[][] triangles = SphereTriangles(rings, segments, out positions);
+                    probe = SharedSoupMesh("Sphere", positions, triangles, false);
+                }
+                Record(label, () =>
+                {
+                    MeshHelper.OptimizeForCache(probe);
+                    return DescribeMeshFull(probe);
+                });
+            }
+
             Record("meshhelper/optimize_for_cache_grid", () =>
             {
                 MeshContent mesh = Grid(3);
@@ -3745,6 +3919,118 @@ namespace Cna.Xna40.GraphicsOracle
         }
 
         /// A grid of quads, which is a mesh big enough for a cache optimizer to have a choice.
+        /**
+         * A mesh whose triangles are exactly the ones handed in, one vertex per corner, so the
+         * order OptimizeForCache produces can be read back as a permutation of the input.
+         * plans/plan_xna_sample_xnb_sweep.md XNASWEEP-139.
+         */
+        private static MeshContent SoupMesh(string name, Vector3[] positions, int[][] triangles)
+        {
+            var mesh = new MeshContent();
+            mesh.Name = name;
+            foreach (Vector3 position in positions) mesh.Positions.Add(position);
+            var geometry = new GeometryContent();
+            mesh.Geometry.Add(geometry);
+            var vertices = new List<int>();
+            var indices = new List<int>();
+            foreach (int[] triangle in triangles)
+                foreach (int corner in triangle)
+                {
+                    indices.Add(vertices.Count);
+                    vertices.Add(corner);
+                }
+            geometry.Vertices.AddRange(vertices.ToArray());
+            geometry.Indices.AddRange(indices.ToArray());
+            return mesh;
+        }
+
+        /**
+         * The same triangles, but with one vertex per *position* rather than one per corner --
+         * which is what an importer hands the processor once it has merged a file's polygon
+         * corners. XNASWEEP-139.
+         */
+        private static MeshContent SharedSoupMesh(string name, Vector3[] positions, int[][] triangles,
+                                                  bool withNormals)
+        {
+            var mesh = new MeshContent();
+            mesh.Name = name;
+            foreach (Vector3 position in positions) mesh.Positions.Add(position);
+            var geometry = new GeometryContent();
+            mesh.Geometry.Add(geometry);
+            var vertexOf = new Dictionary<int, int>();
+            var vertices = new List<int>();
+            var indices = new List<int>();
+            foreach (int[] triangle in triangles)
+                foreach (int corner in triangle)
+                {
+                    int vertex;
+                    if (!vertexOf.TryGetValue(corner, out vertex))
+                    {
+                        vertex = vertices.Count;
+                        vertexOf[corner] = vertex;
+                        vertices.Add(corner);
+                    }
+                    indices.Add(vertex);
+                }
+            geometry.Vertices.AddRange(vertices.ToArray());
+            geometry.Indices.AddRange(indices.ToArray());
+            if (withNormals)
+            {
+                var normals = new List<Vector3>();
+                foreach (int corner in vertices)
+                {
+                    Vector3 p = positions[corner];
+                    normals.Add(Vector3.Normalize(new Vector3(p.X + 1, p.Y + 2, p.Z + 3)));
+                }
+                geometry.Vertices.Channels.Add<Vector3>(VertexChannelNames.Normal(), normals);
+            }
+            return mesh;
+        }
+
+        /** The triangles of a strip of @p count quads laid along x, in file order. */
+        private static int[][] StripTriangles(int count)
+        {
+            var triangles = new List<int[]>();
+            for (int i = 0; i < count; i++)
+            {
+                int a = 2 * i, b = a + 1, c = a + 2, d = a + 3;
+                triangles.Add(new int[] { a, b, d });
+                triangles.Add(new int[] { a, d, c });
+            }
+            return triangles.ToArray();
+        }
+
+        /** A UV sphere's triangles: `rings` rings of `segments`, capped by two poles. */
+        private static int[][] SphereTriangles(int rings, int segments, out Vector3[] positions)
+        {
+            var points = new List<Vector3>();
+            for (int ring = 0; ring < rings; ring++)
+                for (int segment = 0; segment < segments; segment++)
+                    points.Add(new Vector3(segment, ring, 0));
+            int south = points.Count; points.Add(new Vector3(-1, -1, 0));
+            int north = points.Count; points.Add(new Vector3(-1, rings, 0));
+            var triangles = new List<int[]>();
+            for (int ring = 0; ring + 1 < rings; ring++)
+                for (int segment = 0; segment < segments; segment++)
+                {
+                    int a = ring * segments + segment;
+                    int b = ring * segments + (segment + 1) % segments;
+                    int c = (ring + 1) * segments + segment;
+                    int d = (ring + 1) * segments + (segment + 1) % segments;
+                    triangles.Add(new int[] { a, b, d });
+                    triangles.Add(new int[] { a, d, c });
+                }
+            for (int segment = 0; segment < segments; segment++)
+                triangles.Add(new int[] { segment, (segment + 1) % segments, south });
+            for (int segment = 0; segment < segments; segment++)
+            {
+                int b = (rings - 1) * segments;
+                triangles.Add(new int[] { b + segment, b + (segment + 1) % segments, north });
+            }
+            positions = points.ToArray();
+            return triangles.ToArray();
+        }
+
         private static MeshContent Grid(int side)
         {
             var mesh = new MeshContent();
