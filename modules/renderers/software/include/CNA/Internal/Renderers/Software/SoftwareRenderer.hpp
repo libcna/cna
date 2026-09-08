@@ -1345,6 +1345,12 @@ namespace CNA::Internal::Renderers::Software
         [[nodiscard]] int GetAppliedMultiSampleCountEXT(
             int requestedMultiSampleCount) const override;
         /**
+         * @brief Reports the fixed RGBA8 Color format used by the CPU backbuffer.
+         * @param requestedFormat Requested SurfaceFormat ordinal.
+         * @return SurfaceFormat::Color's ordinal.
+         */
+        [[nodiscard]] int GetAppliedBackBufferFormatEXT(int requestedFormat) const override;
+        /**
          * @brief Reconfigures CPU backbuffer sample storage at device reset time.
          * @param requestedMultiSampleCount Requested XNA presentation sample count.
          * @return Zero or four according to the storage actually allocated.

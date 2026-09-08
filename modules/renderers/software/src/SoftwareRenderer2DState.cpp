@@ -80,6 +80,11 @@ namespace CNA::Internal::Renderers::Software
         return backbuffer_.multiSampleCount;
     }
 
+    int SoftwareRenderer::GetAppliedBackBufferFormatEXT(int) const
+    {
+        return static_cast<int>(Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color);
+    }
+
     int SoftwareRenderer::ApplyMultiSampleCount(int requestedMultiSampleCount)
     {
         backbuffer_.SetMultiSampleCount(requestedMultiSampleCount);

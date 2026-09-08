@@ -1698,6 +1698,17 @@ namespace CNA::Internal::Renderers::EasyGL
         CNAEXT [[nodiscard]] int GetSwapIntervalEXT() const override { return swapInterval_; }
 
         /**
+         * @brief Reports the fixed RGBA8 Color format requested for the GL default framebuffer.
+         * @param requestedFormat Requested SurfaceFormat ordinal.
+         * @return SurfaceFormat::Color's ordinal.
+         */
+        [[nodiscard]] int GetAppliedBackBufferFormatEXT(int requestedFormat) const override
+        {
+            (void)requestedFormat;
+            return 0;
+        }
+
+        /**
          * @brief Whether SetData hands this renderer raw block-compressed data for a format.
          *
          * True for Dxt1, Dxt3 and Dxt5 on every profile: the blocks arrive as blocks, and this
