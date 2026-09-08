@@ -656,6 +656,15 @@ TEST(XnaFbxImporter, EveryFileAnswersTheGraphXnaAnswers)
           // polygons name them the other way round, and XNA answers `Second`'s batch first
           // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-155`).
           "fbx_material_order.fbx",
+          // A mesh that declares no normals gets them computed, per control point, as the
+          // normalized sum of the *unit* normals of the polygons that name it. These two are the
+          // same fold with one face four times the other's area and XNA answers the same normal on
+          // the shared edge for both, which rules area weighting out
+          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-156`).
+          "fbx_generated_normals.fbx", "fbx_generated_normals_area.fbx",
+          // A number written with too few digits to name a float: XNA rounds it to the nearest,
+          // not toward zero (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-153`).
+          "fbx_float_rounding.fbx",
           "fbx_split_vertices.fbx",
           // A `Texture` names its file twice and the two can name different directories; the
           // reference XNA writes is whichever one resolves. These two separate the branches:

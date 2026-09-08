@@ -1019,6 +1019,46 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     }
                 }
 
+                // A mesh that declares no normals gets them computed: each polygon's own unit
+                // normal, summed onto every control point it names, normalized once at the end.
+                // Not weighted by area -- `fbx_generated_normals.fbx` and
+                // `fbx_generated_normals_area.fbx` are the same fold with one face four times the
+                // other's area, and XNA answers `(0, -0.707107, 0.707107)` on the shared edge for
+                // both, which is the normalized sum of the two *unit* face normals
+                // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-156`). CNA used to write a constant
+                // `(0, 0, 1)`, which is right for a mesh in the XY plane and for nothing else.
+                std::vector<Vector3> generatedNormals(
+                    static_cast<std::size_t>(mesh->getPositionsProperty().getCountProperty()),
+                    Vector3(0.0f, 0.0f, 0.0f));
+                {
+                    const auto& positions = mesh->getPositionsProperty();
+                    for (const Polygon& polygon : polygons)
+                    {
+                        if (polygon.controlPoints.size() < 3u) { continue; }
+                        const Vector3 a = positions[static_cast<SharpRuntime::intcs>(polygon.controlPoints[0])];
+                        const Vector3 b = positions[static_cast<SharpRuntime::intcs>(polygon.controlPoints[1])];
+                        const Vector3 c = positions[static_cast<SharpRuntime::intcs>(polygon.controlPoints[2])];
+                        const Vector3 face = Vector3::Cross(b - a, c - a);
+                        const float length = face.Length();
+                        if (!(length > 0.0f)) { continue; }
+                        const Vector3 unit(face.X / length, face.Y / length, face.Z / length);
+                        for (const std::size_t point : polygon.controlPoints)
+                        {
+                            if (point < generatedNormals.size())
+                            {
+                                generatedNormals[point] = generatedNormals[point] + unit;
+                            }
+                        }
+                    }
+                    for (Vector3& normal : generatedNormals)
+                    {
+                        const float length = normal.Length();
+                        normal = length > 0.0f
+                                     ? Vector3(normal.X / length, normal.Y / length, normal.Z / length)
+                                     : Vector3(0.0f, 0.0f, 1.0f);
+                    }
+                }
+
                 std::vector<std::int64_t> batchMaterials = object.materials;
                 if (batchMaterials.empty() || materialLayer.stride == 0u)
                 {
@@ -1185,7 +1225,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                                                   ? Vector3(static_cast<float>(value[0]),
                                                             static_cast<float>(value[1]),
                                                             static_cast<float>(value[2]))
-                                                  : Vector3(0.0f, 0.0f, 1.0f));
+                                                  : (used[v] < generatedNormals.size()
+                                                         ? generatedNormals[used[v]]
+                                                         : Vector3(0.0f, 0.0f, 1.0f)));
                         }
                         batchContent->getVerticesProperty().getChannelsProperty().Add<Vector3>(
                             VertexChannelNames::Normal(), channel);
