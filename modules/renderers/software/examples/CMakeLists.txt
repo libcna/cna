@@ -270,6 +270,48 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_VertexIndexGetData
         COMMAND cna_test_software_vertex_index_getdata TIMEOUT 60 LABELS "Software")
 
+    # SOFTWARE-124: EasyGL's public lifecycle/validation sources are renderer-neutral despite
+    # their historical filenames. Compile the same programs unchanged against Software so CPU
+    # resources must obey the same disposal, binding, event, ownership and tracking contracts.
+    set(CNA_EASYGL_LIFECYCLE_DIR
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples)
+    cna_software_test(cna_test_software_device_validation
+        ${CNA_EASYGL_LIFECYCLE_DIR}/easygl_device_validation_test.cpp)
+    cna_register_renderer_test(NAME Software_DeviceValidation
+        COMMAND cna_test_software_device_validation TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_disposed_resource
+        ${CNA_EASYGL_LIFECYCLE_DIR}/easygl_disposed_resource_test.cpp)
+    cna_register_renderer_test(NAME Software_DisposedResource
+        COMMAND cna_test_software_disposed_resource TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_double_dispose
+        ${CNA_EASYGL_LIFECYCLE_DIR}/easygl_double_dispose_test.cpp)
+    cna_register_renderer_test(NAME Software_DoubleDispose
+        COMMAND cna_test_software_double_dispose TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_bound_resource_dispose
+        ${CNA_EASYGL_LIFECYCLE_DIR}/easygl_bound_resource_dispose_test.cpp)
+    cna_register_renderer_test(NAME Software_BoundResourceDispose
+        COMMAND cna_test_software_bound_resource_dispose TIMEOUT 60 LABELS "Software")
+    cna_software_test(cna_test_software_handle_release
+        ${CNA_EASYGL_LIFECYCLE_DIR}/easygl_handle_release_test.cpp)
+    cna_register_renderer_test(NAME Software_HandleRelease
+        COMMAND cna_test_software_handle_release TIMEOUT 60 LABELS "Software")
+    cna_software_test(cna_test_software_move_semantics
+        ${CNA_EASYGL_LIFECYCLE_DIR}/easygl_move_semantics_test.cpp)
+    cna_register_renderer_test(NAME Software_MoveSemantics
+        COMMAND cna_test_software_move_semantics TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_resource_events
+        ${CNA_EASYGL_LIFECYCLE_DIR}/easygl_resource_events_test.cpp)
+    cna_register_renderer_test(NAME Software_ResourceEvents
+        COMMAND cna_test_software_resource_events TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_device_dispose_order
+        ${CNA_EASYGL_LIFECYCLE_DIR}/easygl_device_dispose_order_test.cpp)
+    cna_register_renderer_test(NAME Software_DeviceDisposeOrder
+        COMMAND cna_test_software_device_dispose_order TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_resource_leak
+        ${CNA_EASYGL_LIFECYCLE_DIR}/easygl_resource_leak_test.cpp)
+    cna_register_renderer_test(NAME Software_ResourceLeak
+        COMMAND cna_test_software_resource_leak TIMEOUT 60 LABELS "Software")
+
     # REMED-GFX-124: a RenderTarget2D must be readable and sampleable once it is no longer active --
     # GetData returns the rendered colour attachment (full level, rectangle, destination start index)
     # and the finished target samples as an ordinary texture through both SpriteBatch and a textured

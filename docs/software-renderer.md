@@ -328,6 +328,12 @@ rather than always passing.
   Begin/End/Draw/DrawString calls fail with `ObjectDisposedException` rather than continuing to
   render through a resource that only claimed to be disposed. FNA's internal SpriteEffect contract
   (matrix-transformed texture × vertex color) is implemented directly by the same CPU quad path.
+- **Graphics resources share the reference renderer's complete public lifecycle contract**
+  (`SOFTWARE-124`). Nine unchanged EasyGL programs pass 126/126 checks on Software for validation,
+  disposed-use rejection, idempotent and bound-resource disposal, renderer-handle release, move
+  ownership, resource events, device-first cleanup and leak accounting. The shared device manager
+  also releases an active renderer-thread lease before device teardown and unsubscribes its event
+  callbacks, preventing a pending frame from touching an already-destroyed renderer.
 - **Classic `Model.Draw()` is end-to-end tested on the CPU** (`SOFTWARE-125`). Nine unchanged
   EasyGL fixtures pass through Software for rigid and skinned models, root/child mesh placement,
   per-mesh effects, texture materials, JSON/binary content loading, 16/32-bit indices, imported

@@ -38,6 +38,9 @@ namespace Microsoft::Xna::Framework
           graphicsDevice_(nullptr),
           ownsGraphicsDevice_(false),
           deviceEventsSubscribed_(false),
+          deviceDisposingToken_(0),
+          deviceResettingToken_(0),
+          deviceResetToken_(0),
           drawBegun_(false),
           disposed_(false),
           prefsChanged_(true),
@@ -325,10 +328,19 @@ namespace Microsoft::Xna::Framework
         // is public API) does not accumulate duplicate subscriptions and double-forward every event.
         if (!deviceEventsSubscribed_)
         {
-            graphicsDevice_->DeviceResetting +=
-                [this](System::Object* sender, const System::EventArgs& args) { OnDeviceResetting(sender, args); };
-            graphicsDevice_->DeviceReset +=
-                [this](System::Object* sender, const System::EventArgs& args) { OnDeviceReset(sender, args); };
+            deviceDisposingToken_ = graphicsDevice_->Disposing.Add(
+                [this](System::Object*, const System::EventArgs&)
+                {
+                    // A game may explicitly dispose its device from Draw(). Release the frame's
+                    // renderer-context lease while the renderer and its native context still
+                    // exist; EndDraw must then neither present nor release a dangling lease.
+                    frameContextLease_.reset();
+                    drawBegun_ = false;
+                });
+            deviceResettingToken_ = graphicsDevice_->DeviceResetting.Add(
+                [this](System::Object* sender, const System::EventArgs& args) { OnDeviceResetting(sender, args); });
+            deviceResetToken_ = graphicsDevice_->DeviceReset.Add(
+                [this](System::Object* sender, const System::EventArgs& args) { OnDeviceReset(sender, args); });
             deviceEventsSubscribed_ = true;
         }
 
@@ -389,6 +401,10 @@ namespace Microsoft::Xna::Framework
 
         unregisterServices();
 
+        frameContextLease_.reset();
+        drawBegun_ = false;
+        unsubscribeDeviceEvents();
+
         if (disposing && graphicsDevice_ != nullptr)
         {
             // REMED-CORE-014: this raise must not be gated on ownsGraphicsDevice_. CNA's Game
@@ -410,11 +426,23 @@ namespace Microsoft::Xna::Framework
             }
 
             graphicsDevice_ = nullptr;
-            deviceEventsSubscribed_ = false;
         }
 
         Disposed.Raise(this, System::EventArgs::Empty);
         disposed_ = true;
+    }
+
+    void GraphicsDeviceManager::unsubscribeDeviceEvents()
+    {
+        if (!deviceEventsSubscribed_ || graphicsDevice_ == nullptr)
+        {
+            return;
+        }
+
+        graphicsDevice_->Disposing.Remove(deviceDisposingToken_);
+        graphicsDevice_->DeviceResetting.Remove(deviceResettingToken_);
+        graphicsDevice_->DeviceReset.Remove(deviceResetToken_);
+        deviceEventsSubscribed_ = false;
     }
 
     System::EventHandler<System::EventArgs>& GraphicsDeviceManager::getDeviceCreatedEvent()
