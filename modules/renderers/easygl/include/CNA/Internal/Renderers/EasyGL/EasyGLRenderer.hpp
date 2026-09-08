@@ -175,6 +175,11 @@ namespace CNA::Internal::Renderers::EasyGL
         void BindGL(int unit) const override;
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
+        /** @brief Reports whether exact DXT bytes exist for a declared mip level. */
+        [[nodiscard]] bool HasDefinedMipLevel(int level) const noexcept override;
+        /** @brief Reads exact DXT block rows; uncompressed texture readback remains unsupported. */
+        [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
 
         void release_gl_handle_only() override;
         void recreate_gl_resource() override;
@@ -202,6 +207,8 @@ namespace CNA::Internal::Renderers::EasyGL
         void AllocateDeclaredLevels();
 
         std::shared_ptr<std::vector<uint8_t>> pixels_;
+        /** @brief Exact raw DXT block stream for each declared mip level. */
+        std::vector<std::vector<std::uint8_t>> compressedLevels_;
         std::weak_ptr<::easygl::ResourceRegistry> registry_;
         int surfaceFormat_ = 0;
         // Task 924: real mip level count this texture was created with -- GL_TEXTURE_MAX_LEVEL

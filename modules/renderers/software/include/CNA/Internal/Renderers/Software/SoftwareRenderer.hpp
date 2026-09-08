@@ -1073,6 +1073,10 @@ namespace CNA::Internal::Renderers::Software
         /** @brief Prevents packed texture bytes from entering the Color transfer overload. */
         [[nodiscard]] RendererFormatVerdict ClassifyColorTransferFormatEXT(
             int surfaceFormat) const override;
+        /** @brief Reports the DXT formats whose exact 4x4 blocks Software preserves and decodes. */
+        [[nodiscard]] bool IsCompressedTransferFormatEXT(int surfaceFormat) const override;
+        /** @brief Keeps loader-provided DXT blocks so the Software texture owns exact bytes. */
+        [[nodiscard]] bool LoadsCompressedContentNativelyEXT() const override { return true; }
 
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend, int colorDstBlend, int alphaDstBlend,
                              int colorBlendFunc, int alphaBlendFunc,

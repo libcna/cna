@@ -171,6 +171,61 @@ namespace
         }
     }
 
+    std::vector<std::uint8_t> DxtBytes(int blockCount, int blockBytes, std::uint8_t seed)
+    {
+        std::vector<std::uint8_t> result(
+            static_cast<std::size_t>(blockCount) * static_cast<std::size_t>(blockBytes));
+        for (std::size_t index = 0; index < result.size(); ++index)
+            result[index] = static_cast<std::uint8_t>(seed + index * 29u);
+        return result;
+    }
+
+    void ExpectDxtTransferContract(GraphicsDevice& device, SurfaceFormat format)
+    {
+        const int blockBytes = format == SurfaceFormat::Dxt1 ? 8 : 16;
+        Texture2D texture(device, 8, 8, true, format);
+
+        const std::vector<std::uint8_t> base = DxtBytes(4, blockBytes, 0x11u);
+        texture.SetData(base.data(), static_cast<int>(base.size()));
+
+        std::vector<std::uint8_t> fullReadback(base.size() + 5u, 0xCCu);
+        texture.GetData(fullReadback.data(), 3, static_cast<int>(base.size()));
+        EXPECT_TRUE(std::equal(base.begin(), base.end(), fullReadback.begin() + 3));
+
+        const Rectangle rightColumn(4, 0, 4, 8);
+        const std::vector<std::uint8_t> patch = DxtBytes(2, blockBytes, 0xA3u);
+        std::vector<std::uint8_t> patchSource(patch.size() + 2u, 0x5Au);
+        std::copy(patch.begin(), patch.end(), patchSource.begin() + 2);
+        texture.SetData(0, &rightColumn, patchSource.data(), 2, static_cast<int>(patch.size()));
+
+        std::vector<std::uint8_t> patchReadback(patch.size() + 4u, 0xC3u);
+        texture.GetData(0, &rightColumn, patchReadback.data(), 1,
+                        static_cast<int>(patch.size()));
+        EXPECT_TRUE(std::equal(patch.begin(), patch.end(), patchReadback.begin() + 1));
+
+        const std::vector<std::uint8_t> mip = DxtBytes(1, blockBytes, 0x47u);
+        texture.SetData(1, nullptr, mip.data(), 0, static_cast<int>(mip.size()));
+        std::vector<std::uint8_t> mipReadback(mip.size(), 0u);
+        texture.GetData(1, nullptr, mipReadback.data(), 0,
+                        static_cast<int>(mipReadback.size()));
+        EXPECT_EQ(mipReadback, mip);
+
+        Texture2D npot(device, 7, 5, false, format);
+        const std::vector<std::uint8_t> npotBase = DxtBytes(4, blockBytes, 0x25u);
+        npot.SetData(npotBase.data(), static_cast<int>(npotBase.size()));
+        std::vector<std::uint8_t> npotReadback(npotBase.size(), 0u);
+        npot.GetData(npotReadback.data(), static_cast<int>(npotReadback.size()));
+        EXPECT_EQ(npotReadback, npotBase);
+
+        const Rectangle npotTail(4, 0, 3, 5);
+        const std::vector<std::uint8_t> tail = DxtBytes(2, blockBytes, 0xE1u);
+        npot.SetData(0, &npotTail, tail.data(), 0, static_cast<int>(tail.size()));
+        std::vector<std::uint8_t> tailReadback(tail.size(), 0u);
+        npot.GetData(0, &npotTail, tailReadback.data(), 0,
+                     static_cast<int>(tailReadback.size()));
+        EXPECT_EQ(tailReadback, tail);
+    }
+
     std::vector<std::vector<Color>> PopulateEveryMip(Texture2D& texture, int width, int height)
     {
         constexpr int kSourceStart = 3;
@@ -513,6 +568,18 @@ TEST_F(UnsupportedFormatConstructionTest, Packed16FullPartialAndMipTransfersAreE
     ExpectPacked16TransferContract<Bgra4444>(gd, SurfaceFormat::Bgra4444);
 }
 
+TEST_F(UnsupportedFormatConstructionTest, DxtFullPartialMipAndNpotTailTransfersAreExact)
+{
+    if (!gd.GetRenderer().IsCompressedTransferFormatEXT(static_cast<int>(SurfaceFormat::Dxt1)) ||
+        !gd.GetRenderer().IsCompressedTransferFormatEXT(static_cast<int>(SurfaceFormat::Dxt3)) ||
+        !gd.GetRenderer().IsCompressedTransferFormatEXT(static_cast<int>(SurfaceFormat::Dxt5)))
+        GTEST_SKIP() << "The active renderer does not preserve DXT texture blocks";
+
+    ExpectDxtTransferContract(gd, SurfaceFormat::Dxt1);
+    ExpectDxtTransferContract(gd, SurfaceFormat::Dxt3);
+    ExpectDxtTransferContract(gd, SurfaceFormat::Dxt5);
+}
+
 TEST_F(UnsupportedFormatConstructionTest, SingleThrows)
 {
     // REMED-GFX-242: this fixture's device is GraphicsProfile.Reach, which excludes this
@@ -757,7 +824,7 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
             // REMED-GFX-244: block-compressed content is accepted on every EasyGL profile, since
             // the decode fallback needs no extension -- unlike the packed formats one line up,
             // whose sized storage is ES 3.
-            || (CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2)
+            || (CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Software)
                 && (format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3
                     || format == SurfaceFormat::Dxt5))
             || (igl && (format == SurfaceFormat::Rg32 || format == SurfaceFormat::Single))

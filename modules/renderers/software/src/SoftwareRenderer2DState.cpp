@@ -122,6 +122,9 @@ namespace CNA::Internal::Renderers::Software
             case SurfaceFormat::Bgr565:
             case SurfaceFormat::Bgra5551:
             case SurfaceFormat::Bgra4444:
+            case SurfaceFormat::Dxt1:
+            case SurfaceFormat::Dxt3:
+            case SurfaceFormat::Dxt5:
                 return RendererFormatVerdict::Supported;
             default:
                 return RendererFormatVerdict::Defer;
@@ -137,11 +140,23 @@ namespace CNA::Internal::Renderers::Software
             case SurfaceFormat::Bgr565:
             case SurfaceFormat::Bgra5551:
             case SurfaceFormat::Bgra4444:
+            case SurfaceFormat::Dxt1:
+            case SurfaceFormat::Dxt3:
+            case SurfaceFormat::Dxt5:
                 return RendererFormatVerdict::Unsupported;
             default:
                 return RendererFormatVerdict::Defer;
         }
     }
+
+    bool SoftwareRenderer::IsCompressedTransferFormatEXT(int surfaceFormat) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const auto format = static_cast<SurfaceFormat>(surfaceFormat);
+        return format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
+               format == SurfaceFormat::Dxt5;
+    }
+
     bool SoftwareRenderer::SupportsCapability(CNA::GraphicsCapability capability) const
     {
         switch (capability)

@@ -923,6 +923,18 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_Packed16Format
         COMMAND cna_test_software_packed16_format TIMEOUT 30 LABELS "Software")
 
+    # SOFTWARE-141: raw DXT1/3/5 blocks retained exactly and decoded into CPU sampling storage.
+    cna_software_test(cna_test_software_dxt_format
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_dxt_format_test.cpp)
+    cna_register_renderer_test(NAME Software_DxtFormat
+        COMMAND cna_test_software_dxt_format TIMEOUT 30 LABELS "Software")
+    # The WebGPU-named source is renderer-neutral: it checks the advertised loader policy, exact
+    # DXT format retention, a four-level DDS draw and the XNB Texture2DReader route.
+    cna_software_test(cna_test_software_dxt_content
+        ${CMAKE_SOURCE_DIR}/modules/renderers/webgpu/examples/webgpu_compressed_content_test.cpp)
+    cna_register_renderer_test(NAME Software_DxtContent
+        COMMAND cna_test_software_dxt_content TIMEOUT 30 LABELS "Software")
+
     # SOFTWARE-104: a capability is a usable public promise, not a statement about what a CPU
     # renderer might eventually implement. False entries are paired with the current factory/API
     # boundary so unsupported queries, volume textures and custom shaders cannot masquerade as

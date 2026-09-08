@@ -2721,10 +2721,25 @@ if (!ProfileIsEs2ApiGeneration())
         : registry_(registry), surfaceFormat_(data.surfaceFormat),
           mipLevels_(data.mipLevels > 0 ? data.mipLevels : 1)
     {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat_);
+        const bool dxt = format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
+                         format == SurfaceFormat::Dxt5;
         width = data.width;
         height = data.height;
+        if (dxt)
+        {
+            compressedLevels_.resize(static_cast<std::size_t>(mipLevels_));
+            const std::size_t levelBytes = static_cast<std::size_t>((width + 3) / 4)
+                * static_cast<std::size_t>((height + 3) / 4) * DxtBlockBytesEXT(format);
+            if (data.pixels.size() < levelBytes)
+                throw std::invalid_argument("EasyGL DXT texture level 0 has too few block bytes");
+            compressedLevels_[0].assign(data.pixels.begin(), data.pixels.begin() +
+                static_cast<std::ptrdiff_t>(levelBytes));
+        }
         texture.create();
-        UploadLevel(0, width, height, data.pixels.data());
+        UploadLevel(0, width, height,
+                    dxt ? compressedLevels_[0].data() : data.pixels.data());
         AllocateDeclaredLevels();
 if (ProfileIsEs2ApiGeneration())
 {
@@ -2767,9 +2782,26 @@ else
             const std::size_t blockCols = (static_cast<std::size_t>(levelWidth) + 3u) / 4u;
             const std::size_t blockRows = (static_cast<std::size_t>(levelHeight) + 3u) / 4u;
             const std::size_t imageBytes = blockCols * blockRows * blockBytes;
+            const void* levelPixels = pixels;
+            std::vector<std::uint8_t> uninitializedStorage;
+            if (levelPixels == nullptr && level >= 0 &&
+                level < static_cast<int>(compressedLevels_.size()))
+            {
+                const auto& stored = compressedLevels_[static_cast<std::size_t>(level)];
+                if (!stored.empty())
+                    levelPixels = stored.data();
+                else
+                {
+                    // GL requires actual bytes for the compressed allocation path. Keep these
+                    // deterministic allocation bytes transient so HasDefinedMipLevel still means
+                    // caller/content-authored data, just like the uncompressed path.
+                    uninitializedStorage.assign(imageBytes, 0u);
+                    levelPixels = uninitializedStorage.data();
+                }
+            }
 
             texture.bind(::easygl::TextureTarget::Texture2D);
-            if (pixels != nullptr && ContextHasS3tcEXT())
+            if (levelPixels != nullptr && ContextHasS3tcEXT())
             {
                 ::metagl::glCompressedTexImage2D(
                     ::metagl::TextureTarget::Texture2D, level,
@@ -2779,16 +2811,16 @@ else
                                ? ::metagl::CompressedInternalFormat::RgbaS3tcDxt3
                                : ::metagl::CompressedInternalFormat::RgbaS3tcDxt5),
                     levelWidth, levelHeight, 0,
-                    static_cast<GLsizei>(imageBytes), pixels);
+                    static_cast<GLsizei>(imageBytes), levelPixels);
             }
             else
             {
                 // Storage still has to exist when there are no pixels yet (a declared mip chain),
                 // so the decode path also covers the null case with an empty RGBA8 level.
                 std::vector<std::uint8_t> rgba;
-                if (pixels != nullptr)
+                if (levelPixels != nullptr)
                 {
-                    const auto* blocks = static_cast<const std::uint8_t*>(pixels);
+                    const auto* blocks = static_cast<const std::uint8_t*>(levelPixels);
                     using CNA::Internal::Graphics::DxtUtil;
                     rgba = uploadFormat == SurfaceFormat::Dxt1
                                ? DxtUtil::DecompressDxt1(blocks, imageBytes, levelWidth, levelHeight)
@@ -2952,7 +2984,15 @@ if (ProfileIsEs2ApiGeneration())
     void EasyGLTextureRenderer::recreate_gl_resource()
     {
         texture.create();
-        if (pixels_ && !pixels_->empty())
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat_);
+        const bool dxt = format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
+                         format == SurfaceFormat::Dxt5;
+        if (dxt)
+        {
+            UploadLevel(0, width, height, nullptr);
+        }
+        else if (pixels_ && !pixels_->empty())
         {
             UploadLevel(0, width, height, pixels_->data());
         }
@@ -2991,6 +3031,19 @@ else
 
     void EasyGLTextureRenderer::UpdatePixels(const uint8_t* rgba, int /*stride*/)
     {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat_);
+        if (format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
+            format == SurfaceFormat::Dxt5)
+        {
+            const std::size_t byteCount = static_cast<std::size_t>((width + 3) / 4)
+                * static_cast<std::size_t>((height + 3) / 4) * DxtBlockBytesEXT(format);
+            if (compressedLevels_.empty())
+                compressedLevels_.resize(static_cast<std::size_t>(mipLevels_));
+            compressedLevels_[0].assign(rgba, rgba + byteCount);
+            UploadLevel(0, width, height, compressedLevels_[0].data());
+            return;
+        }
         // pixels_ (shared with Texture2D::cpuPixels_) is already updated by the caller
         // before this method is invoked — no need to update it here.
         UploadLevel(0, width, height, rgba);
@@ -2998,7 +3051,76 @@ else
 
     void EasyGLTextureRenderer::UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH)
     {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat_);
+        if ((format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
+             format == SurfaceFormat::Dxt5) &&
+            level >= 0 && level < mipLevels_ && rgba != nullptr)
+        {
+            const std::size_t byteCount = static_cast<std::size_t>((levelW + 3) / 4)
+                * static_cast<std::size_t>((levelH + 3) / 4) * DxtBlockBytesEXT(format);
+            if (compressedLevels_.empty())
+                compressedLevels_.resize(static_cast<std::size_t>(mipLevels_));
+            auto& stored = compressedLevels_[static_cast<std::size_t>(level)];
+            stored.assign(rgba, rgba + byteCount);
+            UploadLevel(level, levelW, levelH, stored.data());
+            return;
+        }
         UploadLevel(level, levelW, levelH, rgba);
+    }
+
+    bool EasyGLTextureRenderer::HasDefinedMipLevel(int level) const noexcept
+    {
+        return level >= 0 && level < static_cast<int>(compressedLevels_.size()) &&
+               !compressedLevels_[static_cast<std::size_t>(level)].empty();
+    }
+
+    bool EasyGLTextureRenderer::GetData(int level, int x, int y, int w, int h,
+                                        void* data, int dataLength) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat_);
+        if (format != SurfaceFormat::Dxt1 && format != SurfaceFormat::Dxt3 &&
+            format != SurfaceFormat::Dxt5)
+            return false;
+        if (data == nullptr || level < 0 || level >= mipLevels_ ||
+            x < 0 || y < 0 || w <= 0 || h <= 0)
+            return false;
+
+        const int levelWidth = std::max(1, width >> level);
+        const int levelHeight = std::max(1, height >> level);
+        if (w > levelWidth || h > levelHeight || x > levelWidth - w || y > levelHeight - h)
+            return false;
+        const bool touchesRightEdge = x + w == levelWidth;
+        const bool touchesBottomEdge = y + h == levelHeight;
+        if ((x % 4) != 0 || (y % 4) != 0 ||
+            ((w % 4) != 0 && !touchesRightEdge) ||
+            ((h % 4) != 0 && !touchesBottomEdge))
+            return false;
+
+        if (level >= static_cast<int>(compressedLevels_.size())) return false;
+        const auto& source = compressedLevels_[static_cast<std::size_t>(level)];
+        const std::size_t blockBytes = DxtBlockBytesEXT(format);
+        const std::size_t fullBlockColumns = static_cast<std::size_t>((levelWidth + 3) / 4);
+        const std::size_t fullBlockRows = static_cast<std::size_t>((levelHeight + 3) / 4);
+        const std::size_t copyBlockColumns = static_cast<std::size_t>((w + 3) / 4);
+        const std::size_t copyBlockRows = static_cast<std::size_t>((h + 3) / 4);
+        const std::size_t required = copyBlockColumns * copyBlockRows * blockBytes;
+        if (source.size() < fullBlockColumns * fullBlockRows * blockBytes || dataLength < 0 ||
+            static_cast<std::size_t>(dataLength) < required)
+            return false;
+
+        const std::size_t blockX = static_cast<std::size_t>(x / 4);
+        const std::size_t blockY = static_cast<std::size_t>(y / 4);
+        const std::size_t copyBytes = copyBlockColumns * blockBytes;
+        auto* destination = static_cast<std::uint8_t*>(data);
+        for (std::size_t row = 0; row < copyBlockRows; ++row)
+        {
+            const std::size_t sourceOffset =
+                ((blockY + row) * fullBlockColumns + blockX) * blockBytes;
+            std::memcpy(destination + row * copyBytes, source.data() + sourceOffset, copyBytes);
+        }
+        return true;
     }
 
     // --- EasyGLRenderTargetRenderer ---
@@ -5644,7 +5766,9 @@ if (!ProfileIsEs2ApiGeneration())
     {
         using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
         const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat);
-        if (format == SurfaceFormat::NormalizedByte4 || format == SurfaceFormat::NormalizedByte2)
+        if (format == SurfaceFormat::NormalizedByte4 || format == SurfaceFormat::NormalizedByte2 ||
+            format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
+            format == SurfaceFormat::Dxt5)
             return RendererFormatVerdict::Unsupported;
         return RendererFormatVerdict::Defer;
     }

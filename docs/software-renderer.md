@@ -208,9 +208,15 @@ rather than always passing.
 - **Classic packed-16 `Texture2D` formats are real** (`SOFTWARE-140`). `Bgr565`, `Bgra5551`
   and `Bgra4444` retain their exact two-byte XNA layout for full, partial and mip transfers while
   each supplied level is decoded into a separate RGBA8 CPU sampling plane. The same public transfer
-  contract and exact sampled-draw oracle pass on Software and Mesa EasyGL. DXT and the remaining
-  classic uncompressed formats are tracked separately by `SOFTWARE-141/142`; they are not silently
-  advertised or reinterpreted as Color.
+  contract and exact sampled-draw oracle pass on Software and Mesa EasyGL.
+- **Classic DXT textures are real CPU resources** (`SOFTWARE-141`). DXT1, DXT3 and DXT5 retain
+  exact padded 4x4 block streams at every supplied mip for full and block-aligned partial readback,
+  including NPOT right/bottom tails, while `DxtUtil` produces the RGBA8 sampling planes. DDS/XNB
+  content keeps its compressed format and complete mip chain instead of being expanded by the
+  loader. Shared transfer and unchanged sampled-draw probes pass on Software and Mesa EasyGL; the
+  same evidence also repaired EasyGL's previously missing compressed readback/context-restoration
+  shadow. The remaining classic uncompressed formats are tracked by `SOFTWARE-142` and are not
+  silently advertised or reinterpreted as Color.
 - **Complete classic `BlendState` equations are applied.** RGB and alpha source/destination
   factors and functions are independent; `BlendFactor`, `ColorWriteChannels` and
   `MultiSampleMask` are honored. All four MRT write-channel masks are retained; the classic stock

@@ -551,9 +551,9 @@ namespace CNA::Internal::Renderers
         virtual ~ITextureRenderer() = default;
         virtual int GetWidth() const = 0;
         virtual int GetHeight() const = 0;
-        /// Replaces full level-0 texture pixels in-place. stride = row bytes (width * 4 for RGBA).
+        /// Replaces a full uncompressed level-0 image in its declared format; stride is row bytes.
         virtual void UpdatePixels(const uint8_t* rgba, int stride) {}
-        /// Uploads a specific mip level. levelW/levelH are the dimensions at that level.
+        /// Uploads a mip level in declared-format bytes (padded blocks for compressed formats).
         virtual void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) {}
         /**
          * Reports whether the renderer owns deterministic readable bytes for a mip level even when
@@ -579,7 +579,7 @@ namespace CNA::Internal::Renderers
         /// of keeping its own duplicate copy of the pixel data.
         virtual void ShareCpuPixels(std::shared_ptr<std::vector<uint8_t>> /*pixels*/) {}
         /**
-         * @brief Reads back raw RGBA8 pixels from a sub-rectangle of the given mip level.
+         * @brief Reads exact declared-format bytes from a sub-rectangle of the given mip level.
          *
          * REMED-GFX-127. Returns **true only when the complete requested region was written into
          * @p data**, and false when this renderer performed no readback at all. There is no third
@@ -595,16 +595,17 @@ namespace CNA::Internal::Renderers
          * only on `true` and raises `System::NotSupportedException` on `false`, so the one thing an
          * unimplemented renderer can never do is answer with content it never read.
          *
-         * `Texture2D::GetData` only calls this when its own CPU-side pixel shadow is unavailable
-         * (i.e. for a RenderTarget2D, whose content comes from GPU rendering rather than SetData())
-         * -- plain, SetData()-populated textures never reach this path.
+         * Uncompressed `Texture2D::GetData` calls this when its own CPU-side pixel shadow is
+         * unavailable (for example RenderTarget2D content). Block-compressed textures also use it
+         * as the authoritative exact-block store because their partial update path must preserve
+         * untouched blocks.
          *
          * @param level      Mip level to read.
          * @param x          Left edge of the requested region, in pixels.
          * @param y          Top edge of the requested region, in pixels.
          * @param w          Width of the requested region, in pixels.
          * @param h          Height of the requested region, in pixels.
-         * @param data       Destination for tightly packed RGBA8 rows, top row first.
+         * @param data       Destination for tightly packed declared-format rows or block rows.
          * @param dataLength Size of @p data in bytes.
          * @return True if the whole region was written; false if this renderer read nothing back.
          */
