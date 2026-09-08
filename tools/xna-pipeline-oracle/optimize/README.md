@@ -71,31 +71,39 @@ deterministic, so a re-run reproduces the probes byte for byte.
     number.** `cfan9_rot0`, `_rot2`, `_rot4`, `_rot6`, `_rot8`, `cfan9_centre0`, `_centre5` and
     `_centre9` all answer the identical index sequence.
 
-## The sharpest measurement, and what it rules out
+## The sharpest measurement, and what it turned out to be about
 
 Batches four to seven are one experiment repeated. A strip of `n` faces carries one extra triangle
 glued to face `T`; the strip's face list is then rewritten so that face `T` sits at index `j`, once
 by swapping it with the face at `j` and once by removing it and re-inserting it there, and `j` is
-swept over the whole list. Nothing else changes: the same positions, the same topology, the same
-attachment, the same seed (the pendant triangle, which always carries the mesh's only live-1
-vertex).
+swept over the whole list. Nothing else changes.
 
-The seed's first move flips at exactly `j = T`:
+The seed's first move flips at exactly `j = T`: it continues into the neighbour for every `j < T`
+and ends the run after one face for every `j >= T`, on a 16-face strip and a 24-face one, with `T`
+of 2, 8 and 14, and the swap and the insert agree at every `j`.
 
-| probe | `T` | continues into the neighbour for |
-|---|---:|---|
-| `ins_f2_at*`, `pos_f2_at*` | 2 | `j` = 0, 1 |
-| `ins_f8_at*`, `pos_f8_at*` | 8 | `j` = 0 .. 7 |
-| `ins_f14_at*` | 14 | `j` = 0 .. 13 |
-| `long_f2_at*` (a 24-face strip) | 2 | `j` = 0, 1 |
+**Batch eight says what that is about, and it is not the index.** The pendant triangle is
+`(a, extra, b)` with `(a, b)` the first two corners of face `T` -- and in a strip that edge already
+carries *two* faces, `T` and `T - 1`. 108 of these 112 probes hold an edge with three faces, and
+the walk's move across it is decided by which of the two candidates comes first in the input list:
 
-The swap and the insert agree at every `j`, so the face that changes places with it is irrelevant.
-This is the cleanest statement of the open question there is: **the index alone decides**, the
-threshold is the face's own place in the strip's chain, and no property of live counts, cache
-occupancy, valence, adjacency or vertex numbering that this campaign has been able to compute
-moves with it.
+| the first face on the edge, other than the current one | what the walk does |
+|---|---|
+| the one wound consistently with the current face | crosses to it |
+| the one wound the same way, which no strip walk can enter | ends the run, and does **not** look at the second |
 
-## What is not settled
+`ins_f8_at07` puts the consistently wound face at index 7 and the other at 8, and the walk crosses;
+`ins_f8_at08` swaps them and the walk restarts at the far end of the strip although the
+consistently wound face is still there, one index further on. `chain_j5_a15_b0` and
+`chain_j5_a0_b15` hold the neighbour's own index fixed at 5 and move only the two faces sharing its
+edge, and the answer follows them and not it. So an edge's faces are looked up in input order, the
+first is taken, and a wrongly wound first candidate ends the run rather than being skipped.
+
+That rule is exact on this family and changes nothing on a manifold mesh, where an edge has two
+faces and the other one is always the consistently wound one -- so it does not touch the two
+manifold decisions below.
+
+## What is not settled## What is not settled
 
 Two rules, both isolated to a single decision each:
 
