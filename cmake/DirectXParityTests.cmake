@@ -607,6 +607,14 @@ function(cna_register_d3d_parity_tests)
         SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_rendertargetcube_properties_test.cpp"
         DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 600)
     cna_d3d_parity_fixture(
+        NAME RenderTarget_BackbufferConsumer TARGET rendertarget_backbuffer_consumer DIRECTX12_ORDER 1980
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_backbuffer_consumer_test.cpp"
+        DIRECTX11_TIMEOUT 600 DIRECTX12_TIMEOUT 600)
+    cna_d3d_parity_fixture(
+        NAME RenderTargetCube_PluralBinding TARGET rendertargetcube_plural_binding DIRECTX12_ORDER 1990
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/rendertargetcube_plural_binding_test.cpp"
+        DIRECTX11_TIMEOUT 600 DIRECTX12_TIMEOUT 600)
+    cna_d3d_parity_fixture(
         NAME CompressedTexture_StorageContract TARGET compressed_texture_storage DIRECTX12_ORDER 1892
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/d3d_compressed_texture_contract_test.cpp"
         DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 600)
@@ -636,10 +644,9 @@ function(cna_register_d3d_parity_tests)
         NAME Texture2D_GetDataTransferRange TARGET texture2d_getdata_transfer_range DIRECTX12_ORDER 40
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/texture2d_getdata_transfer_range_test.cpp")
     cna_d3d_parity_fixture(
-        NAME RenderTarget_SamplingOrientation TARGET rt_sampling_orientation
+        NAME RenderTarget_SamplingOrientation TARGET rt_sampling_orientation DIRECTX12_ORDER 2000
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_sampling_orientation_test.cpp"
-        DIRECTX11_TIMEOUT 120 DIRECTX11_ONLY
-        REASON "D3D12 render-target corpus adoption is tracked by DX-232 and DX-236")
+        DIRECTX11_TIMEOUT 120 DIRECTX12_TIMEOUT 600)
     cna_d3d_parity_fixture(
         NAME StockEffectSamplerContract TARGET stock_effect_sampler DIRECTX12_ORDER 120
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/stock_effect_sampler_contract_test.cpp"
@@ -680,10 +687,9 @@ function(cna_register_d3d_parity_tests)
         NAME XnaPixelCenter TARGET xna_pixel_center DIRECTX12_ORDER 115
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/xna_pixel_center_contract_test.cpp")
     cna_d3d_parity_fixture(
-        NAME RenderTarget_ProducerConsumer TARGET rt_producer_consumer
+        NAME RenderTarget_ProducerConsumer TARGET rt_producer_consumer DIRECTX12_ORDER 2010
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_producer_consumer_test.cpp"
-        DIRECTX11_TIMEOUT 120 DIRECTX11_ONLY
-        REASON "D3D12 render-target corpus adoption is tracked by DX-232 and DX-236")
+        DIRECTX11_TIMEOUT 120 DIRECTX12_TIMEOUT 600)
     cna_d3d_parity_fixture(
         NAME RenderTarget_EffectSource TARGET rt_effect_source DIRECTX12_ORDER 140
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_effect_source_test.cpp"
@@ -708,10 +714,9 @@ function(cna_register_d3d_parity_tests)
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_pass_boundary_test.cpp"
         DIRECTX11_TIMEOUT 90)
     cna_d3d_parity_fixture(
-        NAME GraphicsDevice_OrderedClear TARGET ordered_clear
+        NAME GraphicsDevice_OrderedClear TARGET ordered_clear DIRECTX12_ORDER 2020
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/graphicsdevice_ordered_clear_test.cpp"
-        DIRECTX11_TIMEOUT 120 DIRECTX11_ONLY
-        REASON "D3D12 render-target corpus adoption is tracked by DX-232 and DX-236")
+        DIRECTX11_TIMEOUT 120 DIRECTX12_TIMEOUT 600)
     cna_d3d_parity_fixture(
         NAME Backbuffer_PassOrder TARGET backbuffer_pass_order DIRECTX12_ORDER 200
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/backbuffer_pass_order_test.cpp"
@@ -751,13 +756,11 @@ function(cna_register_d3d_parity_tests)
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_begin_rasterizerstate_scissor_test.cpp")
     cna_d3d_parity_fixture(
         NAME RenderTarget_ViewportScissorReset TARGET rt_viewport_scissor_reset DIRECTX12_ORDER 290
-        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_viewport_scissor_reset_test.cpp"
-        DIRECTX12_ONLY REASON "D3D11 render-target corpus adoption is tracked by DX-232")
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_viewport_scissor_reset_test.cpp")
     cna_d3d_parity_fixture(
-        NAME RenderTarget_FirstUse TARGET rt_first_use
+        NAME RenderTarget_FirstUse TARGET rt_first_use DIRECTX12_ORDER 2030
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_first_use_test.cpp"
-        DIRECTX11_TIMEOUT 180 DIRECTX11_ONLY
-        REASON "D3D12 render-target corpus adoption is tracked by DX-232 and DX-236")
+        DIRECTX11_TIMEOUT 180 DIRECTX12_TIMEOUT 600)
 
     list(SORT _cna_d3d_fixture_keys)
     foreach(_cna_d3d_fixture_key IN LISTS _cna_d3d_fixture_keys)
