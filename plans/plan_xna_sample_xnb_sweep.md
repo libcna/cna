@@ -382,3 +382,84 @@ configuration file, which `XNASWEEP-110` moved into the intermediate directory;
    float-tolerance rows and the rest.
 3. `.jpg` is measured and accepted; `.fbx` is measured through the genuine
    importer (`XNASWEEP-121`) and `.x` through it too (`XNASWEEP-122`).
+
+---
+
+## 12. What the campaign found
+
+**The denominator.** 7,734 genuine `.xnb` files, produced by Microsoft's own XNA
+4.0 Content Pipeline from public XNA samples, present on this machine. Frozen by
+`corpus_inventory.py` before any work; not one was generated, added or dropped
+for this campaign.
+
+**The answer.** 3,718 of them are byte for byte what CNA's product pipeline
+produces from the same source, up from 922 when the sweep first ran and 3,619 at
+the run the earlier fixes were measured against. Another 727 differ only in ways
+nothing a runtime does can see. 726 differ for a reason that is written down and
+cannot be closed from here. 1,370 need a component the *sample* defines and .NET
+loads from an assembly. 946 the sweep has no way to build at all, and 15 are this
+machine's fault rather than CNA's. **232 are unexplained**, and §11.3.1 says
+exactly which and what differs in each.
+
+### 12.1 What the corpus found that one project could not
+
+Fourteen framework defects, each fixed in the component that owns it, each with
+its own regression test. None of them is sample-specific and none of them was
+visible from the API surface, the differential corpus, or Platformer:
+
+| | |
+|---|---|
+| `XNASWEEP-104` | A sprite-font atlas's height followed Reach's rule on both profiles. |
+| `XNASWEEP-105` | A font family was matched against the typographic family, not the one Windows matches. |
+| `XNASWEEP-106/107` | A `.x` material's specular power of zero, and a `.x` mesh's generated normals. |
+| `XNASWEEP-108` | Every effect was compiled optimized, whatever the build configuration said. |
+| `XNASWEEP-109` | A PNG's own `gAMA` chunk, which GDI+ applies and CNA ignored. |
+| `XNASWEEP-110` | A content build needed write access to the content it was reading. |
+| `XNASWEEP-111/112/113` | What an FBX node is, what a vertex is, and where a model stands. |
+| `XNASWEEP-114/115/116` | A `.x`'s materials, its texture paths, and how an external reference is written. |
+| `XNASWEEP-117` | Two assets may name the same nested one, because it is the same asset. |
+| `XNASWEEP-118` | Every processor property XNA lets a game override was `final` in all but name. |
+| `XNASWEEP-119` | A `Dictionary<string,string>` asset, refused, and then written in the wrong order. |
+| `XNASWEEP-121` | The quarter turn every Z-up exporter writes, composed in `float`. |
+| `XNASWEEP-122` | A bone with no name and a bone whose name is empty are different bytes. |
+| `XNASWEEP-124` | A `.wav`'s loop was one frame short of the one RIFF describes. |
+| `XNASWEEP-126` | A model's meshes were listed parent-first and each carried its own buffers. |
+| `XNASWEEP-127/128` | An FBX material's colour factors, its two property tables, and the texture never read. |
+
+Two of the sweep's own findings were about the *measurement* rather than the
+thing measured, and both mattered: `XNASWEEP-021/041/042` established that 89 of
+114 sample runners hand-list their assets and pass no processor parameters at
+all, so the reference reflects the processor's defaults and not the project; and
+`XNASWEEP-120` found three runners that set parameters inside a helper the
+reconstruction could not see, which had the sweep blaming CNA for ten rows that
+were its own.
+
+### 12.2 What is accepted, and why
+
+726 references differ for a reason that is measured and recorded rather than
+assumed. The two largest are worth stating plainly because they bound what byte
+parity can ever mean here:
+
+* **250 sprite fonts.** XNA rasterizes through GDI+ and CNA through FreeType,
+  and two rasterizers disagree about a glyph's ink by a pixel. Everything that
+  decides where text lands -- every ABC width, the line spacing, the character
+  map -- agrees exactly.
+* **244 mipmapped textures.** XNA's own mip filter dithers before it quantizes.
+  `XNASWEEP-123` measures it: every differing byte differs by exactly one, the
+  sign is decided by the accumulator's fraction, and the disagreement rate rises
+  monotonically to 45% at the rounding tie. No kernel, precision, summation order
+  or rounding mode reaches it.
+
+### 12.3 What a next pass should do
+
+In the order the measurements suggest:
+
+1. `XNASWEEP-131` -- `FontTextureProcessor` does not trim a glyph or repack the
+   sheet. 34 unexplained references, a measured rule, and no rasterizer in the
+   way. The one closable group.
+2. `XNASWEEP-129` -- 7% of one FBX mesh's texture coordinates. 182 unexplained
+   references sit behind it, and the channel is already isolated.
+3. `XNASWEEP-130` -- the sprite-font packer grows tall where XNA grows wide, 74
+   times out of 74. It will not make a font identical while the rasterizer
+   differs, but it is the difference underneath that one.
+
