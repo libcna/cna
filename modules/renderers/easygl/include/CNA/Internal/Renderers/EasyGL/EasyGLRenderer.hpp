@@ -1234,24 +1234,20 @@ namespace CNA::Internal::Renderers::EasyGL
         void EnsurePbrSkinnedProgram(bool dualUv);
         void EnsureDefaultWhiteTexture();
         void EnsureDefaultFlatNormalTexture();
-        /// REMED-GFX-218: which stock program a draw gets. SelectProgram() and
-        /// RequireDeclarationFitsStockProgramEXT() both read this single cascade, so the program a
-        /// draw is bound to and the input shape it is checked against cannot drift apart.
+        /// REMED-GFX-218: which stock program a draw gets. SelectProgram(), declaration
+        /// conversion validation and semantic attribute binding all read this single cascade.
         enum class StockProgramShape
         {
             PbrSkinned, Pbr, SkinnedVertexLit, Skinned, EnvMapped,
             DualTexturedColored, DualTextured, Textured, ColoredTextured,
-            LitVertexLitUntextured, LitUntextured, LitVertexLit, Lit, Colored
+            LitVertexLit, Lit, Colored
         };
-        static StockProgramShape SelectStockProgramShape(std::size_t stride,
-                                                          const GpuDrawParams& params,
-                                                          const std::vector<VertexElement>& declaredElements);
-        Prog3D& SelectProgram(std::size_t stride, const GpuDrawParams& params,
-                              const std::vector<VertexElement>& declaredElements);
-        /// REMED-GFX-DECL-GUARD: throws `System::NotSupportedException` when @p declaredElements
-        /// would bind an element to a stock attribute location that means something else. Runs
-        /// before any program is selected, bound or drawn, and never touches a custom
-        /// `ShaderEffect` draw -- those keep their own documented element-index convention.
+        static StockProgramShape SelectStockProgramShape(const GpuDrawParams& params);
+        Prog3D& SelectProgram(std::size_t stride, const GpuDrawParams& params);
+        /// SOFTWARE-130: throws `System::NotSupportedException` when a consumed semantic in
+        /// @p declaredElements uses an unknown, non-convertible storage format. Every defined XNA
+        /// `VertexElementFormat` is accepted and converted by native vertex fetch. Runs before any
+        /// draw and never touches custom `ShaderEffect` input reflection.
         static void RequireDeclarationFitsStockProgramEXT(
             const std::vector<VertexElement>& declaredElements, std::size_t stride,
             const GpuDrawParams& params);

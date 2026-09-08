@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// SOFTWARE-108: public pixel contract for declaration-driven Software vertex input.
+// SOFTWARE-108 / SOFTWARE-130: renderer-independent public pixel contract for
+// declaration-driven vertex input, compiled against both Software and EasyGL.
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -109,7 +110,7 @@ namespace
     }
 }
 
-class SoftwareVertexDeclarationTest final : public Game
+class VertexDeclarationFormatContractTest final : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> manager_;
     bool done_ = false;
@@ -273,7 +274,7 @@ protected:
     }
 
 public:
-    SoftwareVertexDeclarationTest()
+    VertexDeclarationFormatContractTest()
     {
         manager_ = std::make_unique<GraphicsDeviceManager>(this);
     }
@@ -283,7 +284,7 @@ public:
 
 int main()
 {
-    SoftwareVertexDeclarationTest game;
+    VertexDeclarationFormatContractTest game;
     game.Run();
     return game.Result();
 }

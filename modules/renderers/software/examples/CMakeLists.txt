@@ -794,9 +794,10 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_OcclusionQuery_ExactContract
         COMMAND cna_test_software_occlusion_query_contract TIMEOUT 30 LABELS "Software")
 
-    # SOFTWARE-108: declarations, not byte stride, identify stock-effect vertex attributes.
-    # The fixture covers every XNA VertexElementFormat, reordered equal-stride records, a public
-    # VertexBufferBinding offset and two independent per-vertex streams through pixel readback.
+    # SOFTWARE-108 / SOFTWARE-130: declarations, not byte stride, identify stock-effect vertex
+    # attributes. The same source is compiled for EasyGL; it covers every XNA
+    # VertexElementFormat, reordered equal-stride records, a public VertexBufferBinding offset and
+    # two independent per-vertex streams through pixel readback.
     cna_software_test(cna_test_software_vertex_declaration software_vertex_declaration_test.cpp)
     cna_register_renderer_test(NAME Software_VertexDeclaration
         COMMAND cna_test_software_vertex_declaration

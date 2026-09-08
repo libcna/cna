@@ -360,14 +360,10 @@ TEST(VertexDeclarationFidelityTest, RememberingIsIdempotentAndRecoversAfterAReje
 
 namespace
 {
-    constexpr StockProgramInput kPos{VertexElementUsage::Position, 0,
-                                     VertexElementFormat::Vector3, "aPos"};
-    constexpr StockProgramInput kColor{VertexElementUsage::Color, 0, VertexElementFormat::Color,
-                                       "aColor"};
-    constexpr StockProgramInput kUv{VertexElementUsage::TextureCoordinate, 0,
-                                    VertexElementFormat::Vector2, "aUV"};
-    constexpr StockProgramInput kNormal{VertexElementUsage::Normal, 0,
-                                        VertexElementFormat::Vector3, "aNormal"};
+    constexpr StockProgramInput kPos{VertexElementUsage::Position, 0, "aPos"};
+    constexpr StockProgramInput kColor{VertexElementUsage::Color, 0, "aColor"};
+    constexpr StockProgramInput kUv{VertexElementUsage::TextureCoordinate, 0, "aUV"};
+    constexpr StockProgramInput kNormal{VertexElementUsage::Normal, 0, "aNormal"};
     constexpr StockProgramInput kColored[] = {kPos, kColor};
     constexpr StockProgramInput kLit[] = {kPos, kNormal, kUv};
 }
@@ -403,10 +399,22 @@ TEST(VertexDeclarationFidelityTest, StockProgramIgnoresUnusedSemantic)
         Elements({Pos(), Col(12)}), kLit, 3, "EasyGL", "lit_textured3d"));
 }
 
-TEST(VertexDeclarationFidelityTest, StockProgramRefusesWrongFormatForConsumedSemantic)
+TEST(VertexDeclarationFidelityTest, StockProgramAcceptsEveryXnaFormatForFloatInput)
+{
+    for (int ordinal = static_cast<int>(VertexElementFormat::Single);
+         ordinal <= static_cast<int>(VertexElementFormat::HalfVector4); ++ordinal)
+    {
+        EXPECT_NO_THROW(RequireDeclarationMatchesStockProgram(
+            Elements({Pos(), VertexElement(12, static_cast<VertexElementFormat>(ordinal),
+                                           VertexElementUsage::Normal, 0)}),
+            kLit, 3, "EasyGL", "lit_textured3d"));
+    }
+}
+
+TEST(VertexDeclarationFidelityTest, StockProgramRefusesUnknownFormatForConsumedSemantic)
 {
     EXPECT_THROW(RequireDeclarationMatchesStockProgram(
-                     Elements({Pos(), VertexElement(12, VertexElementFormat::Vector4,
+                     Elements({Pos(), VertexElement(12, static_cast<VertexElementFormat>(99),
                                                     VertexElementUsage::Normal, 0)}),
                      kLit, 3, "EasyGL", "lit_textured3d"),
                  System::NotSupportedException);

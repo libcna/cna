@@ -1551,6 +1551,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_VertexFormats_AllStrides COMMAND cna_test_easygl_vertex_formats
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # SOFTWARE-130: the same public declaration-driven draw must accept every XNA
+        # VertexElementFormat on both CPU Software and EasyGL. The source lives beside the
+        # original Software fixture but contains no renderer internals.
+        cna_easygl_test(cna_test_easygl_vertex_declaration_formats
+            ${CMAKE_SOURCE_DIR}/modules/renderers/software/examples/software_vertex_declaration_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_VertexDeclarationFormats
+            COMMAND cna_test_easygl_vertex_declaration_formats
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plans/plan_gltf.md GLTF-157: a raw upload whose stride has no fixed layout and no explicit
         # VertexDeclaration must fail by name instead of inheriting stale VAO attributes.
         cna_easygl_test(cna_test_easygl_unknown_stride_rejection

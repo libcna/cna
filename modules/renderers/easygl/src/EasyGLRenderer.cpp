@@ -7074,13 +7074,10 @@ else
             bool isInteger;
         };
 
-        // Task 1080: maps XNA's VertexElementFormat to the GL attribute shape needed to bind it
-        // -- component count, GL scalar type, whether values are normalized to [0,1]/[-1,1], and
-        // whether the attribute must be read as a true integer (glVertexAttribIPointer) rather
-        // than converted to float (glVertexAttribPointer). Byte4 is the one format needing the
-        // integer path -- XNA's own format for BLENDINDICES-style semantics (read as int4 in
-        // HLSL), matching the existing skinned-vertex BlendIndices precedent below (offset 48,
-        // case 52) that this table generalizes to arbitrary declarations.
+        // Task 1080 / SOFTWARE-130: maps XNA's VertexElementFormat to the GL attribute shape needed
+        // to bind it -- component count, GL scalar type, and whether values are normalized to
+        // [0,1]/[-1,1]. Stock inputs are floating-point shader registers, including Byte4-backed
+        // blend indices, so all XNA formats use GL's converting float attribute path.
         VertexAttribFormat DescribeVertexElementFormat(VertexElementFormat format)
         {
             switch (format)
@@ -7109,7 +7106,8 @@ else
             case VertexElementFormat::HalfVector2:     return { 2, ::easygl::DataType::HalfFloat,    false, false };
             case VertexElementFormat::HalfVector4:     return { 4, ::easygl::DataType::HalfFloat,    false, false };
             }
-            return { 3, ::easygl::DataType::Float, false, false };
+            throw System::NotSupportedException(
+                "EasyGL: the VertexDeclaration contains an unknown VertexElementFormat.");
         }
 
         /// Binds a BLENDINDICES-style Byte4 bone-index attribute for ApplyLayout's fixed-stride
@@ -9649,29 +9647,14 @@ CNA_GL_PUNCTUAL_DECL
         default_flat_normal_texture_ready_ = true;
     }
 
-    /// REMED-GFX-234: does the declaration name this usage at all?
-    ///
-    /// The stock program a draw gets is still chosen by byte stride (REMED-GFX-217 is open), while
-    /// its attributes are bound from the declaration's own offsets (REMED-GFX-218 landed). Where a
-    /// stride is ambiguous, that pair silently drops whatever the chosen program has no input for,
-    /// so the stride cases that can be ambiguous ask the declaration first.
-    [[nodiscard]] bool DeclarationNamesUsage(
-        const std::vector<VertexElement>& declaredElements,
-        Microsoft::Xna::Framework::Graphics::VertexElementUsage usage)
-    {
-        for (const VertexElement& element : declaredElements)
-        {
-            if (element.getVertexElementUsageProperty() == usage) { return true; }
-        }
-        return false;
-    }
-
-    // REMED-GFX-218 / REMED-GFX-DECL-GUARD: the ONE place that decides which stock program a draw
-    // gets. SelectProgram() below and StockProgramInputsEXT() both read this, so the program a
-    // draw is bound to and the input shape it is checked against can never drift apart.
+    // REMED-GFX-218 / SOFTWARE-130: the ONE place that decides which stock program a draw gets.
+    // XNA's stock effects select shader variants from effect properties; the declaration only
+    // tells the device how to convert bytes into those shader inputs. In particular, an arbitrary
+    // Color0 format can have the same byte stride as VertexPositionTexture without turning a
+    // vertex-colour BasicEffect into a textured one. PBR remains CNAEXT and retains its existing
+    // record variants in SelectProgram().
     EasyGLRenderer::StockProgramShape EasyGLRenderer::SelectStockProgramShape(
-        std::size_t stride, const GpuDrawParams& params,
-        const std::vector<VertexElement>& declaredElements)
+        const GpuDrawParams& params)
     {
         if (params.pbr && params.skinned) return StockProgramShape::PbrSkinned;
         if (params.pbr) return StockProgramShape::Pbr;
@@ -9695,75 +9678,27 @@ CNA_GL_PUNCTUAL_DECL
         if (params.envMapping) return StockProgramShape::EnvMapped;
         if (params.dualTexture)
         {
-            // Task 889: stride 24 (VertexPositionColorTexture) gets its own vertex-color-aware
-            // program; stride 20 (VertexPositionTexture) keeps the original color-less shader.
-            return stride == 24 ? StockProgramShape::DualTexturedColored
-                                : StockProgramShape::DualTextured;
+            return params.vertexColorEnabled ? StockProgramShape::DualTexturedColored
+                                             : StockProgramShape::DualTextured;
         }
-        // SAMPLE-002: XNA application-defined vertices are selected by their declaration, not
-        // merely by stride. Position+Normal is 24 bytes just like VertexPositionColorTexture,
-        // but BasicEffect must light it and must not reinterpret the normal as color/UV data.
-        const bool positionNormal =
-            stride == 24 && declaredElements.size() == 2 &&
-            declaredElements[0] == VertexElement(
-                0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0) &&
-            declaredElements[1] == VertexElement(
-                12, VertexElementFormat::Vector3, VertexElementUsage::Normal, 0);
-        if (positionNormal)
-        {
-            return (params.lightingEnabled && !params.preferPerPixelLighting && !receivesShadow)
-                       ? StockProgramShape::LitVertexLitUntextured
-                       : StockProgramShape::LitUntextured;
-        }
-        // plans/plan_fx.md FX-125: Position+Normal+Color+TextureCoordinate is 36 bytes, which is
-        // what the stock ModelProcessor emits for a mesh that carries a colour channel -- and it
-        // then sets BasicEffect.VertexColorEnabled, exactly as XNA does. No case matched 36, so
-        // such a mesh fell through to the unlit prog_colored_ below and lost all its lighting:
-        // SAMPLE-047's Sphere01 rendered as a flat green disc where the original has a shaded
-        // sphere with a specular highlight. The lit programs now carry the colour attribute, so
-        // this routes to the same family a stride-32 lit vertex takes.
-        if (stride == 36 && params.lightingEnabled)
+        if (params.lightingEnabled)
         {
             return (!params.preferPerPixelLighting && !receivesShadow)
                        ? StockProgramShape::LitVertexLit
                        : StockProgramShape::Lit;
         }
-        switch (stride)
+        if (params.textureEnabled)
         {
-        case 20: return StockProgramShape::Textured;
-        case 24: return StockProgramShape::ColoredTextured;
-        case 32:
-            // REMED-GFX-234: stride 32 is VertexPositionNormalTexture's, and this branch assumed
-            // that was the only way to reach it. A Position+Colour vertex padded to 32 reaches it
-            // too, and the lit programs take {aPos, aNormal, aUV} -- no colour input -- so the
-            // declared Colour element had nothing to bind to and the draw rendered correct
-            // geometry with its colour silently dropped. A declaration that names no normal cannot
-            // be a lit vertex whatever its stride, so ask it. An absent declaration keeps the
-            // stride's answer, which is the only thing there is to go on.
-            if (!declaredElements.empty() &&
-                !DeclarationNamesUsage(declaredElements, VertexElementUsage::Normal))
-            {
-                return StockProgramShape::Colored;
-            }
-            // Task 1102 (plans/plan_dx9.md Divergence 1): real XNA's BasicEffect defaults
-            // PreferPerPixelLighting=false (per-vertex/Gouraud-shaded lighting), the opposite of
-            // what this renderer rendered unconditionally before this task. Only meaningfully
-            // distinct while lighting is actually on -- with lighting disabled, both programs
-            // degenerate to the identical trivial ambient=(1,1,1) case (see BindDrawParams()'s
-            // own else-branch), so the existing pixel-lit program stays selected there to avoid
-            // an unnecessary program switch.
-            return (params.lightingEnabled && !params.preferPerPixelLighting && !receivesShadow)
-                       ? StockProgramShape::LitVertexLit
-                       : StockProgramShape::Lit;
-        default: return StockProgramShape::Colored;
+            return params.vertexColorEnabled ? StockProgramShape::ColoredTextured
+                                             : StockProgramShape::Textured;
         }
+        return StockProgramShape::Colored;
     }
 
     EasyGLRenderer::Prog3D& EasyGLRenderer::SelectProgram(
-        std::size_t stride, const GpuDrawParams& params,
-        const std::vector<VertexElement>& declaredElements)
+        std::size_t stride, const GpuDrawParams& params)
     {
-        switch (SelectStockProgramShape(stride, params, declaredElements))
+        switch (SelectStockProgramShape(params))
         {
         case StockProgramShape::PbrSkinned:
             // GLTF-463: stride 80 is stride 76 with a colour appended, so it takes the same
@@ -9788,10 +9723,8 @@ CNA_GL_PUNCTUAL_DECL
             EnsureTextured3DProgram();          return prog_textured_;
         case StockProgramShape::ColoredTextured:
             EnsureColoredTextured3DProgram();   return prog_col_textured_;
-        case StockProgramShape::LitVertexLitUntextured:
         case StockProgramShape::LitVertexLit:
             EnsureLit3DVertexLitProgram();      return prog_lit_textured_vertexlit_;
-        case StockProgramShape::LitUntextured:
         case StockProgramShape::Lit:
             EnsureLit3DProgram();               return prog_lit_textured_;
         case StockProgramShape::Colored:
@@ -9801,38 +9734,29 @@ CNA_GL_PUNCTUAL_DECL
         return prog_colored_;
     }
 
-    // REMED-GFX-218 / SAMPLE-005: what each stock program declares, in attribute-location order.
-    // The same location means different things in different programs, so validation and binding
-    // select this per-program table, then locate each input by XNA usage/index in the caller's
-    // declaration. Custom effects keep their separate declaration-order convention.
+    // REMED-GFX-218 / SAMPLE-005 / SOFTWARE-130: what each stock program declares, in
+    // attribute-location order. The same location means different things in different programs,
+    // so validation and binding select this per-program table, then locate each input by XNA
+    // usage/index in the caller's declaration. Every recognized XNA storage format is convertible
+    // to these floating-point inputs; only unknown formats are rejected. Custom effects keep their
+    // separate declaration-order convention.
     void EasyGLRenderer::RequireDeclarationFitsStockProgramEXT(
         const std::vector<VertexElement>& declaredElements, std::size_t stride,
         const GpuDrawParams& params)
     {
         using CNA::Internal::Graphics::StockProgramInput;
-        using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
         using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 
-        static constexpr StockProgramInput kPos{
-            VertexElementUsage::Position, 0, VertexElementFormat::Vector3, "aPos"};
-        static constexpr StockProgramInput kColor{
-            VertexElementUsage::Color, 0, VertexElementFormat::Color, "aColor"};
-        static constexpr StockProgramInput kUv{
-            VertexElementUsage::TextureCoordinate, 0, VertexElementFormat::Vector2, "aUV"};
-        static constexpr StockProgramInput kUv1{
-            VertexElementUsage::TextureCoordinate, 1, VertexElementFormat::Vector2, "aUV1"};
-        static constexpr StockProgramInput kNormal{
-            VertexElementUsage::Normal, 0, VertexElementFormat::Vector3, "aNormal"};
-        static constexpr StockProgramInput kTangent{
-            VertexElementUsage::Tangent, 0, VertexElementFormat::Vector4, "aTangent"};
+        static constexpr StockProgramInput kPos{VertexElementUsage::Position, 0, "aPos"};
+        static constexpr StockProgramInput kColor{VertexElementUsage::Color, 0, "aColor"};
+        static constexpr StockProgramInput kUv{VertexElementUsage::TextureCoordinate, 0, "aUV"};
+        static constexpr StockProgramInput kUv1{VertexElementUsage::TextureCoordinate, 1, "aUV1"};
+        static constexpr StockProgramInput kNormal{VertexElementUsage::Normal, 0, "aNormal"};
+        static constexpr StockProgramInput kTangent{VertexElementUsage::Tangent, 0, "aTangent"};
         static constexpr StockProgramInput kWeights{
-            VertexElementUsage::BlendWeight, 0, VertexElementFormat::Vector4, "aBoneWeights"};
-        // FX-127: Vector4 is as legal a spelling of BLENDINDICES as Byte4 -- the format describes
-        // the bytes, the shader register is a float4 either way -- and a content processor may
-        // write either. CustomModelAnimation's own SkinnedModelProcessor writes Vector4.
+            VertexElementUsage::BlendWeight, 0, "aBoneWeights"};
         static constexpr StockProgramInput kIndices{
-            VertexElementUsage::BlendIndices, 0, VertexElementFormat::Byte4, "aBoneIndices",
-            VertexElementFormat::Vector4};
+            VertexElementUsage::BlendIndices, 0, "aBoneIndices"};
 
         static constexpr StockProgramInput kColored[]        = {kPos, kColor};
         static constexpr StockProgramInput kTextured[]       = {kPos, kUv};
@@ -9840,7 +9764,6 @@ CNA_GL_PUNCTUAL_DECL
         static constexpr StockProgramInput kDualTextured[]   = {kPos, kUv, kUv1};
         static constexpr StockProgramInput kDualTexturedColored[] = {
             kPos, kColor, kUv, kUv1};
-        static constexpr StockProgramInput kLitUntextured[]  = {kPos, kNormal};
         static constexpr StockProgramInput kLit[]            = {kPos, kNormal, kUv};
         static constexpr StockProgramInput kLitColor[]            = {kPos, kNormal, kUv, kColor};
         static constexpr StockProgramInput kSkinned[]        = {kPos, kNormal, kUv, kWeights,
@@ -9858,7 +9781,7 @@ CNA_GL_PUNCTUAL_DECL
         const StockProgramInput* inputs = kColored;
         std::size_t count = std::size(kColored);
         const char* name = "colored3d";
-        switch (SelectStockProgramShape(stride, params, declaredElements))
+        switch (SelectStockProgramShape(params))
         {
         case StockProgramShape::PbrSkinned:
             if (stride == 80)
@@ -9902,20 +9825,11 @@ CNA_GL_PUNCTUAL_DECL
         case StockProgramShape::ColoredTextured:
             inputs = kColTextured; count = std::size(kColTextured);
             name = "colored_textured3d"; break;
-        case StockProgramShape::LitVertexLitUntextured:
-            inputs = kLitUntextured; count = std::size(kLitUntextured);
-            name = "lit_untextured3d_vertexlit"; break;
-        case StockProgramShape::LitUntextured:
-            inputs = kLitUntextured; count = std::size(kLitUntextured);
-            name = "lit_untextured3d"; break;
         case StockProgramShape::LitVertexLit:
-            // FX-125: a stride-36 lit vertex carries a colour element as well.
-            if (stride == 36) { inputs = kLitColor; count = std::size(kLitColor); }
-            else              { inputs = kLit;      count = std::size(kLit); }
+            inputs = kLitColor; count = std::size(kLitColor);
             name = "lit_textured3d_vertexlit"; break;
         case StockProgramShape::Lit:
-            if (stride == 36) { inputs = kLitColor; count = std::size(kLitColor); }
-            else              { inputs = kLit;      count = std::size(kLit); }
+            inputs = kLitColor; count = std::size(kLitColor);
             name = "lit_textured3d"; break;
         case StockProgramShape::Colored:
             break;
@@ -9929,32 +9843,21 @@ CNA_GL_PUNCTUAL_DECL
         const GpuDrawParams& params)
     {
         using CNA::Internal::Graphics::StockProgramInput;
-        using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
         using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 
         const std::vector<VertexElement>& primaryDeclaration = buffer.GetDeclarationElements();
         if (primaryDeclaration.empty()) return false;
 
-        static constexpr StockProgramInput kPos{
-            VertexElementUsage::Position, 0, VertexElementFormat::Vector3, "aPos"};
-        static constexpr StockProgramInput kColor{
-            VertexElementUsage::Color, 0, VertexElementFormat::Color, "aColor"};
-        static constexpr StockProgramInput kUv{
-            VertexElementUsage::TextureCoordinate, 0, VertexElementFormat::Vector2, "aUV"};
-        static constexpr StockProgramInput kUv1{
-            VertexElementUsage::TextureCoordinate, 1, VertexElementFormat::Vector2, "aUV1"};
-        static constexpr StockProgramInput kNormal{
-            VertexElementUsage::Normal, 0, VertexElementFormat::Vector3, "aNormal"};
-        static constexpr StockProgramInput kTangent{
-            VertexElementUsage::Tangent, 0, VertexElementFormat::Vector4, "aTangent"};
+        static constexpr StockProgramInput kPos{VertexElementUsage::Position, 0, "aPos"};
+        static constexpr StockProgramInput kColor{VertexElementUsage::Color, 0, "aColor"};
+        static constexpr StockProgramInput kUv{VertexElementUsage::TextureCoordinate, 0, "aUV"};
+        static constexpr StockProgramInput kUv1{VertexElementUsage::TextureCoordinate, 1, "aUV1"};
+        static constexpr StockProgramInput kNormal{VertexElementUsage::Normal, 0, "aNormal"};
+        static constexpr StockProgramInput kTangent{VertexElementUsage::Tangent, 0, "aTangent"};
         static constexpr StockProgramInput kWeights{
-            VertexElementUsage::BlendWeight, 0, VertexElementFormat::Vector4, "aBoneWeights"};
-        // FX-127: Vector4 is as legal a spelling of BLENDINDICES as Byte4 -- the format describes
-        // the bytes, the shader register is a float4 either way -- and a content processor may
-        // write either. CustomModelAnimation's own SkinnedModelProcessor writes Vector4.
+            VertexElementUsage::BlendWeight, 0, "aBoneWeights"};
         static constexpr StockProgramInput kIndices{
-            VertexElementUsage::BlendIndices, 0, VertexElementFormat::Byte4, "aBoneIndices",
-            VertexElementFormat::Vector4};
+            VertexElementUsage::BlendIndices, 0, "aBoneIndices"};
 
         static constexpr StockProgramInput kColored[] = {kPos, kColor};
         static constexpr StockProgramInput kTextured[] = {kPos, kUv};
@@ -9962,7 +9865,6 @@ CNA_GL_PUNCTUAL_DECL
         static constexpr StockProgramInput kDualTextured[] = {kPos, kUv, kUv1};
         static constexpr StockProgramInput kDualTexturedColored[] = {
             kPos, kColor, kUv, kUv1};
-        static constexpr StockProgramInput kLitUntextured[] = {kPos, kNormal};
         static constexpr StockProgramInput kLit[] = {kPos, kNormal, kUv};
         static constexpr StockProgramInput kLitColor[] = {kPos, kNormal, kUv, kColor};
         static constexpr StockProgramInput kSkinned[] = {
@@ -9979,7 +9881,7 @@ CNA_GL_PUNCTUAL_DECL
 
         const StockProgramInput* inputs = kColored;
         std::size_t count = std::size(kColored);
-        switch (SelectStockProgramShape(stride, params, primaryDeclaration))
+        switch (SelectStockProgramShape(params))
         {
         case StockProgramShape::PbrSkinned:
             if (stride == 80)
@@ -10014,12 +9916,10 @@ CNA_GL_PUNCTUAL_DECL
         case StockProgramShape::Skinned:
             inputs = kSkinned; count = std::size(kSkinned); break;
         case StockProgramShape::EnvMapped:
+            inputs = kLit; count = std::size(kLit); break;
         case StockProgramShape::LitVertexLit:
         case StockProgramShape::Lit:
-            // FX-125: a stride-36 lit vertex carries a colour element as well.
-            if (stride == 36) { inputs = kLitColor; count = std::size(kLitColor); }
-            else              { inputs = kLit;      count = std::size(kLit); }
-            break;
+            inputs = kLitColor; count = std::size(kLitColor); break;
         case StockProgramShape::DualTexturedColored:
             inputs = kDualTexturedColored; count = std::size(kDualTexturedColored); break;
         case StockProgramShape::DualTextured:
@@ -10028,9 +9928,6 @@ CNA_GL_PUNCTUAL_DECL
             inputs = kTextured; count = std::size(kTextured); break;
         case StockProgramShape::ColoredTextured:
             inputs = kColTextured; count = std::size(kColTextured); break;
-        case StockProgramShape::LitVertexLitUntextured:
-        case StockProgramShape::LitUntextured:
-            inputs = kLitUntextured; count = std::size(kLitUntextured); break;
         case StockProgramShape::Colored:
             break;
         }
@@ -10087,14 +9984,6 @@ CNA_GL_PUNCTUAL_DECL
             if (sourceElement == nullptr)
                 findInStream(buffer, buffer.GetStride(), 0);
             if (sourceElement == nullptr) continue;
-
-            if (sourceElement->getVertexElementFormatProperty() != input.format &&
-                sourceElement->getVertexElementFormatProperty() != input.alternateFormat)
-            {
-                throw System::NotSupportedException(
-                    std::string("EasyGL: vertex semantic '") + input.name +
-                    "' has a format incompatible with the selected stock program.");
-            }
 
             const VertexAttribFormat desc =
                 DescribeVertexElementFormat(sourceElement->getVertexElementFormatProperty());
@@ -11309,7 +11198,7 @@ else
         }
 
         const std::size_t layoutStride = CombinedVertexStrideOr(params, vb.GetStride());
-        Prog3D& p = SelectProgram(layoutStride, params, vb.GetDeclarationElements());
+        Prog3D& p = SelectProgram(layoutStride, params);
         p.prog.use();
         BindDrawParams(p, world, view, projection, params);
         const int vertex_count = VertexCountForPrimitives(primitive, primitiveCount);
@@ -11444,7 +11333,7 @@ else
         }
 
         const std::size_t layoutStride = CombinedVertexStrideOr(params, vb.GetStride());
-        Prog3D& p = SelectProgram(layoutStride, params, vb.GetDeclarationElements());
+        Prog3D& p = SelectProgram(layoutStride, params);
         p.prog.use();
         BindDrawParams(p, world, view, projection, params);
         const int index_count = VertexCountForPrimitives(primitive, primitiveCount);
@@ -11665,8 +11554,7 @@ else
             // REMED-GFX-201: the shader sees the CONCATENATION of the per-vertex streams, so the
             // program is selected by the combined stride -- which equals the one stream's own
             // stride whenever a single per-vertex buffer is bound.
-            Prog3D& p = SelectProgram(
-                CombinedVertexStrideOr(params, vb.GetStride()), params, meshDecl);
+            Prog3D& p = SelectProgram(CombinedVertexStrideOr(params, vb.GetStride()), params);
             p.prog.use();
             BindDrawParams(p, world, view, projection, params);
             ib.ibo.bind(::easygl::BufferTarget::ElementArray);
@@ -11709,8 +11597,7 @@ else
         }
         if (params.customEffectRenderer == nullptr)
         {
-            Prog3D& p = SelectProgram(
-                CombinedVertexStrideOr(params, vb.GetStride()), params, meshDecl);
+            Prog3D& p = SelectProgram(CombinedVertexStrideOr(params, vb.GetStride()), params);
             if (p.loc_instanced >= 0)
                 p.prog.set_uniform(p.loc_instanced, 0.0f);
         }
@@ -11819,8 +11706,7 @@ else
         }
         else
         {
-            Prog3D& p = SelectProgram(
-                CombinedVertexStrideOr(params, vb.GetStride()), params, meshDecl);
+            Prog3D& p = SelectProgram(CombinedVertexStrideOr(params, vb.GetStride()), params);
             p.prog.use();
             BindDrawParams(p, world, view, projection, params);
         }
@@ -11860,8 +11746,7 @@ else
             RestoreSingleStreamAttributes(vao, params);
         if (params.customEffectRenderer == nullptr)
         {
-            Prog3D& p = SelectProgram(
-                CombinedVertexStrideOr(params, vb.GetStride()), params, meshDecl);
+            Prog3D& p = SelectProgram(CombinedVertexStrideOr(params, vb.GetStride()), params);
             if (p.loc_instanced >= 0)
                 p.prog.set_uniform(p.loc_instanced, 0.0f);
         }

@@ -126,9 +126,12 @@ rather than always passing.
 - **Vertex input is declaration-driven.** `VertexElementUsage`/usage index selects attributes
   across one or multiple streams, and all 12 XNA `VertexElementFormat` values are decoded at their
   declared offsets. Reordered, padded, application-defined and non-canonical-stride layouts,
-  binding offsets and 16/32-bit indexed user draws are covered by deterministic pixel tests. Only
-  CNAEXT's old empty-declaration `VertexBuffer(device,count)` convenience path retains canonical
-  stride inference for compatibility.
+  binding offsets and 16/32-bit indexed user draws are covered by one deterministic public fixture
+  that passes 16/16 on both Software and EasyGL. EasyGL's stock path now supplies the matching
+  FNA3D-style native format conversion instead of requiring canonical byte formats or selecting an
+  effect variant from an accidentally colliding stride. Only CNAEXT's old empty-declaration
+  `VertexBuffer(device,count)` convenience path retains canonical stride inference for
+  compatibility.
 - **Classic indexed instancing runs entirely on the CPU** (`SOFTWARE-129`). Per-instance
   declarations concatenate into the same four-column stock-effect matrix contract as EasyGL. Each
   stream advances from its own binding offset by `floor(instanceIndex / InstanceFrequency)` while
