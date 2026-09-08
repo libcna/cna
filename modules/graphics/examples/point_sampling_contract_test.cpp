@@ -1066,6 +1066,20 @@ private:
         ExactLeg(dev, "M4 mixed address modes (U wraps, V clamps)", p4x4_, t4x4_, 16, 16, g,
                  TextureAddressMode::Wrap, TextureAddressMode::Clamp);
 
+        // Repeat every address branch with an NPOT dimension. A normalized-coordinate transform
+        // can look correct on a power-of-two texture even when its final integer reduction uses a
+        // bit mask; 3x3 makes that shortcut observably wrong for both positive axes.
+        const SpriteGeom npot =
+            Geom(Rectangle(0, 0, 15, 15), Rectangle(0, 0, 6, 6));
+        ExactLeg(dev, "M6 NPOT PointClamp with an oversized source rect", p3x3_, t3x3_,
+                 15, 15, npot, TextureAddressMode::Clamp, TextureAddressMode::Clamp, false);
+        ExactLeg(dev, "M7 NPOT PointWrap with an oversized source rect", p3x3_, t3x3_,
+                 15, 15, npot, TextureAddressMode::Wrap, TextureAddressMode::Wrap, false);
+        ExactLeg(dev, "M8 NPOT PointMirror with an oversized source rect", p3x3_, t3x3_,
+                 15, 15, npot, TextureAddressMode::Mirror, TextureAddressMode::Mirror, false);
+        ExactLeg(dev, "M9 NPOT mixed address modes (U wraps, V clamps)", p3x3_, t3x3_,
+                 15, 15, npot, TextureAddressMode::Wrap, TextureAddressMode::Clamp, false);
+
         // The three modes must genuinely differ, so "all three passed" cannot mean "all three were
         // clamped".
         RenderTarget2D rtC(dev, 16, 16, false, SurfaceFormat::Color, DepthFormat::None, 0,

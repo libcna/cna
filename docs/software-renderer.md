@@ -217,6 +217,11 @@ rather than always passing.
   same evidence also repaired EasyGL's previously missing compressed readback/context-restoration
   shadow. The remaining classic uncompressed formats are tracked by `SOFTWARE-142` and are not
   silently advertised or reinterpreted as Color.
+- **NPOT textures use the ordinary complete texture path** (`SOFTWARE-144`). Exact public transfer
+  coverage includes 3x5 full and partial-row updates plus the 1x2/1x1 mip tail. The unchanged 3x5
+  sampled-row scene passes on Software and EasyGL, while the shared sampler contracts cover NPOT
+  point/linear magnification, minification, per-resource dimensions and mip selection. There is no
+  power-of-two padding, row-alignment special case or alternate sampling rule in the CPU backend.
 - **Complete classic `BlendState` equations are applied.** RGB and alpha source/destination
   factors and functions are independent; `BlendFactor`, `ColorWriteChannels` and
   `MultiSampleMask` are honored. All four MRT write-channel masks are retained; the classic stock

@@ -935,6 +935,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_DxtContent
         COMMAND cna_test_software_dxt_content TIMEOUT 30 LABELS "Software")
 
+    # SOFTWARE-144: the unchanged EasyGL public scene proves a 3x5 row pitch survives upload and
+    # point sampling on the CPU renderer instead of relying only on common-layer readback.
+    cna_software_test(cna_test_software_npot_texture
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_npot_texture_test.cpp)
+    cna_register_renderer_test(NAME Software_NpotTexture
+        COMMAND cna_test_software_npot_texture TIMEOUT 30 LABELS "Software")
+
     # SOFTWARE-104: a capability is a usable public promise, not a statement about what a CPU
     # renderer might eventually implement. False entries are paired with the current factory/API
     # boundary so unsupported queries, volume textures and custom shaders cannot masquerade as

@@ -384,6 +384,78 @@ TEST_F(LevelCountTest, MipMapTrueNonPowerOfTwo)
 #endif
 }
 
+TEST_F(LevelCountTest, NpotFullPartialRowsAndEveryMipRoundTripExactly)
+{
+#if defined(CNA_RENDERER_TINYGL) || defined(CNA_RENDERER_NANOVG)
+    GTEST_SKIP() << "this renderer deliberately has no mipmapped Texture2D storage";
+#else
+    constexpr int width = 3;
+    constexpr int height = 5;
+    Texture2D texture(gd, width, height, true, SurfaceFormat::Color);
+    ASSERT_EQ(texture.getLevelCountProperty(), 3);
+
+    std::vector<Color> expected(static_cast<std::size_t>(width * height));
+    for (int index = 0; index < width * height; ++index)
+        expected[static_cast<std::size_t>(index)] = TestMipColor(0, index);
+    std::vector<Color> baseSource(expected.size() + 3u, Color(1, 2, 3, 4));
+    std::copy(expected.begin(), expected.end(), baseSource.begin() + 2);
+    texture.SetData(0, nullptr, baseSource.data(), 2, width * height);
+
+    const Rectangle patchRectangle(1, 1, 2, 3);
+    std::array<Color, 8> patchSource{};
+    for (int index = 0; index < 6; ++index)
+    {
+        patchSource[static_cast<std::size_t>(index + 1)] =
+            Color(180 + index, 90 + index * 2, 30 + index * 3, 255);
+        const int x = patchRectangle.X + index % patchRectangle.Width;
+        const int y = patchRectangle.Y + index / patchRectangle.Width;
+        expected[static_cast<std::size_t>(y * width + x)] =
+            patchSource[static_cast<std::size_t>(index + 1)];
+    }
+    texture.SetData(0, &patchRectangle, patchSource.data(), 1, 6);
+
+    const Color sentinel(7, 3, 11, 199);
+    std::vector<Color> fullReadback(expected.size() + 5u, sentinel);
+    texture.GetData(fullReadback.data(), 3, width * height);
+    for (std::size_t index = 0; index < expected.size(); ++index)
+        ExpectExactColor(fullReadback[index + 3u], expected[index]);
+    for (std::size_t index = 0; index < 3u; ++index)
+        ExpectExactColor(fullReadback[index], sentinel);
+    for (std::size_t index = expected.size() + 3u; index < fullReadback.size(); ++index)
+        ExpectExactColor(fullReadback[index], sentinel);
+
+    std::array<Color, 9> patchReadback{};
+    patchReadback.fill(sentinel);
+    texture.GetData(0, &patchRectangle, patchReadback.data(), 2, 6);
+    for (int index = 0; index < 6; ++index)
+    {
+        ExpectExactColor(patchReadback[static_cast<std::size_t>(index + 2)],
+                         patchSource[static_cast<std::size_t>(index + 1)]);
+    }
+    ExpectExactColor(patchReadback[0], sentinel);
+    ExpectExactColor(patchReadback[1], sentinel);
+    ExpectExactColor(patchReadback[8], sentinel);
+
+    const std::array<Color, 3> mipOneSource{{
+        sentinel, Color(21, 43, 65, 87), Color(123, 145, 167, 189),
+    }};
+    texture.SetData(1, nullptr, mipOneSource.data(), 1, 2);
+    std::array<Color, 4> mipOneReadback{};
+    mipOneReadback.fill(sentinel);
+    texture.GetData(1, nullptr, mipOneReadback.data(), 1, 2);
+    ExpectExactColor(mipOneReadback[0], sentinel);
+    ExpectExactColor(mipOneReadback[1], mipOneSource[1]);
+    ExpectExactColor(mipOneReadback[2], mipOneSource[2]);
+    ExpectExactColor(mipOneReadback[3], sentinel);
+
+    const Color mipTwoSource(9, 19, 29, 39);
+    texture.SetData(2, nullptr, &mipTwoSource, 0, 1);
+    Color mipTwoReadback(0, 0, 0, 0);
+    texture.GetData(2, nullptr, &mipTwoReadback, 0, 1);
+    ExpectExactColor(mipTwoReadback, mipTwoSource);
+#endif
+}
+
 // -----------------------------------------------------------------------
 // REMED-GFX-192 -- one shared [0, LevelCount) validation path must run before mip dimensions,
 // CPU shadows, allocation, or renderer dispatch. A real mipmapped Texture2D proves every valid
