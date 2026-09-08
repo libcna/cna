@@ -27,6 +27,32 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
 
     namespace TaskDetail
     {
+        /** @brief The class name without the namespace a project may have written in front. */
+        [[nodiscard]] std::string Bare(const std::string& name)
+        {
+            const std::size_t dot = name.rfind('.');
+            return dot == std::string::npos ? name : name.substr(dot + 1u);
+        }
+
+        /** @brief Whether a source path is one the canonical image importer reads. */
+        [[nodiscard]] bool IsImageSource(const std::string& path)
+        {
+            static const char* const kExtensions[] = {".bmp", ".dds", ".dib", ".hdr", ".jpg",
+                                                      ".jpeg", ".pfm", ".png", ".ppm", ".tga"};
+            const std::size_t dot = path.rfind('.');
+            if (dot == std::string::npos) { return false; }
+            std::string extension = path.substr(dot);
+            for (char& character : extension)
+            {
+                character = static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
+            }
+            for (const char* const candidate : kExtensions)
+            {
+                if (extension == candidate) { return true; }
+            }
+            return false;
+        }
+
         /** @brief MSBuild compares a metadata name without regard to case; so does this. */
         [[nodiscard]] bool EqualsIgnoringCase(const std::string& left, const std::string& right)
         {
@@ -563,6 +589,18 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
                     // the imported type choose still carries the policy the XNA name stands for.
                     parameters = mapping.defaults;
                     parameterNames = mapping.parameterNames;
+                }
+                // `PassThroughProcessor` writes its input unchanged, and for an image that is not
+                // what the canonical texture route does by default -- it keys the colour out and
+                // premultiplies. XNA's own pass-through of a DXT3 `.dds` writes the file's blocks
+                // verbatim (measured, plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-135`), so the
+                // route is told so. Only for a source the image importer reads: an `.xml` passing
+                // through takes a route these parameters would mean nothing to.
+                if (TaskDetail::EqualsIgnoringCase(TaskDetail::Bare(processorName),
+                                                   "PassThroughProcessor") &&
+                    TaskDetail::IsImageSource(key))
+                {
+                    parameters.emplace_back("passThrough", "true");
                 }
             }
             // Both spellings a content project uses: one packed metadata value, and one metadata

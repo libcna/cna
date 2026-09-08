@@ -132,56 +132,72 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
             {
                 continue;
             }
-            std::shared_ptr<Graphics::BitmapContent> level =
-                static_cast<const System::Collections::ObjectModel::Collection<std::shared_ptr<Graphics::BitmapContent>>&>(
-                    *chain)[0];
             if (!sawBitmap)
             {
-                originalType = System::Type::FromTypeInfo(typeid(*level));
+                originalType = System::Type::FromTypeInfo(typeid(*static_cast<
+                    const System::Collections::ObjectModel::Collection<std::shared_ptr<Graphics::BitmapContent>>&>(
+                        *chain)[0]));
                 sawBitmap = true;
             }
             if (!needsColor)
             {
                 continue;
             }
-            std::shared_ptr<Graphics::PixelBitmapContent<Color>> pixels = AsColor(level);
-            // The measured order: key the colour out, resize, then premultiply
-            // (tests/reference/xna40/graphics, textureprocessor/color_key and /premultiply).
-            if (getColorKeyEnabledProperty())
+            // Every level, not only the first. A source that brings its own mipmaps -- a `.dds`
+            // does -- keeps them, and each of them is keyed and premultiplied: measured over a
+            // four-level `.dds` whose every level carries the colour key at (0,0) and a
+            // half-transparent texel beside it, and XNA's four output levels each answer
+            // transparent black and a premultiplied texel
+            // (tests/reference/xna40/differential/texture_dds_mipchain_default.xnb,
+            // plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-135`). CNA kept level 0 and dropped the
+            // rest, so `Stripe2.dds` came out with one level against the reference's ten.
+            for (SharpRuntime::intcs level = 0; level < chain->getCountProperty(); ++level)
             {
-                pixels->ReplaceColor(getColorKeyColorProperty(), Color(0, 0, 0, 0));
-            }
-            if (getResizeToPowerOfTwoProperty())
-            {
-                const SharpRuntime::intcs width = NextPowerOfTwo(pixels->getWidthProperty());
-                const SharpRuntime::intcs height = NextPowerOfTwo(pixels->getHeightProperty());
-                if (width != pixels->getWidthProperty() || height != pixels->getHeightProperty())
+                std::shared_ptr<Graphics::BitmapContent> source =
+                    static_cast<const System::Collections::ObjectModel::Collection<
+                        std::shared_ptr<Graphics::BitmapContent>>&>(*chain)[level];
+                std::shared_ptr<Graphics::PixelBitmapContent<Color>> pixels = AsColor(source);
+                // The measured order: key the colour out, resize, then premultiply
+                // (tests/reference/xna40/graphics, textureprocessor/color_key and /premultiply).
+                if (getColorKeyEnabledProperty())
                 {
-                    auto resized = std::make_shared<Graphics::PixelBitmapContent<Color>>(width, height);
-                    Graphics::BitmapContent::Copy(pixels, resized);
-                    pixels = resized;
+                    pixels->ReplaceColor(getColorKeyColorProperty(), Color(0, 0, 0, 0));
                 }
-            }
-            if (getPremultiplyAlphaProperty())
-            {
-                for (SharpRuntime::intcs y = 0; y < pixels->getHeightProperty(); ++y)
+                if (getResizeToPowerOfTwoProperty())
                 {
-                    for (SharpRuntime::intcs x = 0; x < pixels->getWidthProperty(); ++x)
+                    const SharpRuntime::intcs width = NextPowerOfTwo(pixels->getWidthProperty());
+                    const SharpRuntime::intcs height = NextPowerOfTwo(pixels->getHeightProperty());
+                    if (width != pixels->getWidthProperty() || height != pixels->getHeightProperty())
                     {
-                        const Color pixel = pixels->GetPixel(x, y);
-                        pixels->SetPixel(x, y, Color::FromNonPremultiplied(static_cast<intcs>(pixel.getRProperty()),
-                                                                           static_cast<intcs>(pixel.getGProperty()),
-                                                                           static_cast<intcs>(pixel.getBProperty()),
-                                                                           static_cast<intcs>(pixel.getAProperty())));
+                        auto resized = std::make_shared<Graphics::PixelBitmapContent<Color>>(width, height);
+                        Graphics::BitmapContent::Copy(pixels, resized);
+                        pixels = resized;
                     }
                 }
+                if (getPremultiplyAlphaProperty())
+                {
+                    for (SharpRuntime::intcs y = 0; y < pixels->getHeightProperty(); ++y)
+                    {
+                        for (SharpRuntime::intcs x = 0; x < pixels->getWidthProperty(); ++x)
+                        {
+                            const Color pixel = pixels->GetPixel(x, y);
+                            pixels->SetPixel(x, y, Color::FromNonPremultiplied(static_cast<intcs>(pixel.getRProperty()),
+                                                                               static_cast<intcs>(pixel.getGProperty()),
+                                                                               static_cast<intcs>(pixel.getBProperty()),
+                                                                               static_cast<intcs>(pixel.getAProperty())));
+                        }
+                    }
+                }
+                chain->setItem(level, pixels);
             }
-            chain->Clear();
-            chain->Add(pixels);
         }
         if (getGenerateMipmapsProperty())
         {
-            input->GenerateMipmaps(true);
+            // Not an overwrite: a source that already carries a chain keeps it, and asking for
+            // mipmaps changes nothing. Measured -- the same four-level `.dds` built with
+            // GenerateMipmaps=True is byte for byte the one built without it
+            // (tests/reference/xna40/differential/texture_dds_mipchain_generate.xnb).
+            input->GenerateMipmaps(false);
         }
         if (getTextureFormatProperty() == TextureProcessorOutputFormat::NoChange && sawBitmap)
         {

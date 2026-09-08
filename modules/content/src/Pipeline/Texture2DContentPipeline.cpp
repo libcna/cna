@@ -32,6 +32,13 @@ namespace CNA::Content::Pipeline
     {
         using Microsoft::Xna::Framework::Content::ContentLoadException;
 
+        // A `.dds` this route decompresses is being *built*, and XNA builds one through D3DX,
+        // whose endpoint expansion rounds up where a GPU's replicates bits. Measured over every
+        // endpoint value (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-136`); the renderers keep
+        // the hardware rule, which is what the hardware beside them answers.
+        constexpr CNA::Internal::Graphics::DxtEndpointExpansion PipelineExpansion =
+            CNA::Internal::Graphics::DxtEndpointExpansion::D3dx;
+
         constexpr const char* kImageImporterName = "CNA.ImageImporter";
         constexpr const char* kTextureProcessorName = "CNA.TextureProcessor";
         constexpr const char* kTextureWriterName = "CNA.Texture2DContentWriter";
@@ -336,15 +343,15 @@ namespace CNA::Content::Pipeline
                     break;
                 case CNA::Internal::Graphics::DdsSurfaceFormat::Dxt1:
                     image.pixels = CNA::Internal::Graphics::DxtUtil::DecompressDxt1(
-                        payload.data(), payload.size(), width, height);
+                        payload.data(), payload.size(), width, height, PipelineExpansion);
                     break;
                 case CNA::Internal::Graphics::DdsSurfaceFormat::Dxt3:
                     image.pixels = CNA::Internal::Graphics::DxtUtil::DecompressDxt3(
-                        payload.data(), payload.size(), width, height);
+                        payload.data(), payload.size(), width, height, PipelineExpansion);
                     break;
                 case CNA::Internal::Graphics::DdsSurfaceFormat::Dxt5:
                     image.pixels = CNA::Internal::Graphics::DxtUtil::DecompressDxt5(
-                        payload.data(), payload.size(), width, height);
+                        payload.data(), payload.size(), width, height, PipelineExpansion);
                     break;
             }
             return image;
@@ -359,21 +366,22 @@ namespace CNA::Content::Pipeline
          */
         [[nodiscard]] std::vector<std::uint8_t> DdsSurfaceAsRgba8(
             const CNA::Internal::Graphics::DdsSurfaces& surfaces,
-            const std::vector<std::uint8_t>& payload)
+            const std::vector<std::uint8_t>& payload, const std::uint32_t levelWidth = 0u,
+            const std::uint32_t levelHeight = 0u)
         {
-            const int width = static_cast<int>(surfaces.width);
-            const int height = static_cast<int>(surfaces.height);
+            const int width = static_cast<int>(levelWidth != 0u ? levelWidth : surfaces.width);
+            const int height = static_cast<int>(levelHeight != 0u ? levelHeight : surfaces.height);
             switch (surfaces.format)
             {
             case CNA::Internal::Graphics::DdsSurfaceFormat::Dxt1:
                 return CNA::Internal::Graphics::DxtUtil::DecompressDxt1(
-                    payload.data(), payload.size(), width, height);
+                    payload.data(), payload.size(), width, height, PipelineExpansion);
             case CNA::Internal::Graphics::DdsSurfaceFormat::Dxt3:
                 return CNA::Internal::Graphics::DxtUtil::DecompressDxt3(
-                    payload.data(), payload.size(), width, height);
+                    payload.data(), payload.size(), width, height, PipelineExpansion);
             case CNA::Internal::Graphics::DdsSurfaceFormat::Dxt5:
                 return CNA::Internal::Graphics::DxtUtil::DecompressDxt5(
-                    payload.data(), payload.size(), width, height);
+                    payload.data(), payload.size(), width, height, PipelineExpansion);
             case CNA::Internal::Graphics::DdsSurfaceFormat::Color:
             default:
                 return payload;
@@ -490,12 +498,54 @@ namespace CNA::Content::Pipeline
             return image;
         }
 
-        /** @brief Every source this route reads, decoded to the RGBA8 the rest of it expects. */
+        /**
+         * @brief Every source this route reads, decoded to the RGBA8 the rest of it expects.
+         *
+         * @param extraLevels Filled with levels one and up where the source carries a mip chain of
+         *        its own -- only a `.dds` does. XNA keeps such a chain and converts every level of
+         *        it, so dropping it here would build a one-level texture against a reference with
+         *        ten (measured, tests/reference/xna40/differential/texture_dds_mipchain_default.xnb;
+         *        plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-135`).
+         */
         [[nodiscard]] CNA::Internal::Graphics::ImageData DecodeToRgba8(
-            const std::vector<std::uint8_t>& bytes, const std::filesystem::path& source)
+            const std::vector<std::uint8_t>& bytes, const std::filesystem::path& source,
+            std::vector<std::vector<std::uint8_t>>* extraLevels = nullptr,
+            std::vector<std::vector<std::uint8_t>>* compressed = nullptr,
+            std::optional<Cnb::CnbTextureFormat>* compressedFormat = nullptr)
         {
             const std::string origin = source.filename().string();
-            if (CNA::Internal::Graphics::IsDds(bytes)) { return DecodeDdsLevelZero(bytes, origin); }
+            if (CNA::Internal::Graphics::IsDds(bytes))
+            {
+                CNA::Internal::Graphics::ImageData level = DecodeDdsLevelZero(bytes, origin);
+                if (extraLevels != nullptr)
+                {
+                    const CNA::Internal::Graphics::DdsSurfaces surfaces =
+                        CNA::Internal::Graphics::ReadDdsSurfaces(bytes, origin);
+                    const std::vector<std::vector<std::uint8_t>>& chain = surfaces.surfaces.front();
+                    std::uint32_t width = surfaces.width;
+                    std::uint32_t height = surfaces.height;
+                    for (std::size_t index = 1u; index < chain.size(); ++index)
+                    {
+                        width = std::max(1u, width / 2u);
+                        height = std::max(1u, height / 2u);
+                        extraLevels->push_back(
+                            DdsSurfaceAsRgba8(surfaces, chain[index], width, height));
+                    }
+                    if (compressed != nullptr &&
+                        surfaces.format != CNA::Internal::Graphics::DdsSurfaceFormat::Color)
+                    {
+                        *compressed = chain;
+                        *compressedFormat =
+                            surfaces.format == CNA::Internal::Graphics::DdsSurfaceFormat::Dxt1
+                                ? Cnb::CnbTextureFormat::Bc1
+                                : (surfaces.format ==
+                                           CNA::Internal::Graphics::DdsSurfaceFormat::Dxt3
+                                       ? Cnb::CnbTextureFormat::Bc2
+                                       : Cnb::CnbTextureFormat::Bc3);
+                    }
+                }
+                return level;
+            }
             if (CNA::Internal::Graphics::IsPfm(bytes)) { return DecodePfmAsRgba8(bytes, origin); }
             // Everything else -- a `.dib` among them, which the shared decoder re-heads itself.
             return CNA::Internal::Graphics::ImageLoader::LoadFromMemory(bytes.data(), bytes.size());
@@ -662,7 +712,11 @@ namespace CNA::Content::Pipeline
         }
         const std::vector<std::uint8_t> bytes{std::istreambuf_iterator<char>(stream),
                                               std::istreambuf_iterator<char>()};
-        CNA::Internal::Graphics::ImageData image = DecodeToRgba8(bytes, source);
+        std::vector<std::vector<std::uint8_t>> extraLevels;
+        std::vector<std::vector<std::uint8_t>> compressed;
+        std::optional<Cnb::CnbTextureFormat> compressedFormat;
+        CNA::Internal::Graphics::ImageData image =
+            DecodeToRgba8(bytes, source, &extraLevels, &compressed, &compressedFormat);
         ApplyPngFileGammaEXT(bytes, image.pixels);
         if (image.width <= 0 || image.height <= 0)
         {
@@ -691,6 +745,9 @@ namespace CNA::Content::Pipeline
         imported.width = static_cast<std::uint32_t>(image.width);
         imported.height = static_cast<std::uint32_t>(image.height);
         imported.rgbaPixels = std::move(image.pixels);
+        imported.additionalRgbaMipLevels = std::move(extraLevels);
+        imported.sourceCompressedLevels = std::move(compressed);
+        imported.sourceCompressedFormat = compressedFormat;
         return imported;
     }
 
@@ -827,9 +884,22 @@ namespace CNA::Content::Pipeline
                                            static_cast<int>(pixels[at]);
                         }
                     }
-                    // Rounded, not truncated: the impulse's outermost texel is 1 where truncation
-                    // would answer 0.
-                    const int value = (accumulated + kWeightTotal / 2) / kWeightTotal;
+                    // Not rounded: dithered. The accumulator's fraction is compared against an
+                    // ordered 4x4 threshold that repeats over the destination, so a value halfway
+                    // between two bytes goes up in some texels and down in others, and the level
+                    // as a whole carries the fraction rather than losing it. This is what
+                    // `XNASWEEP-123` measured as "a dither of about half a least-significant bit"
+                    // without being able to name it; the matrix itself was then read straight off
+                    // D3DX by sweeping every 5- and 6-bit endpoint of a block-compressed source
+                    // through the genuine pipeline, where the same dither shows up in the
+                    // expansion (`XNASWEEP-136`). Applied here it takes SAMPLE-059's `CatTexture`
+                    // from 5,904 differing bytes in its first mip level to 9, and SAMPLE-059's
+                    // `checker` and SAMPLE-130's `Grid` to none at all, on every level.
+                    static constexpr std::array<std::array<int, 4>, 4> kDither{{
+                        {{0, 8, 2, 10}}, {{6, 14, 4, 12}}, {{3, 11, 1, 9}}, {{5, 13, 7, 15}}}};
+                    const int threshold = 16 * kDither[y % 4u][x % 4u] + 8;
+                    const int value = (accumulated / kWeightTotal) +
+                                      ((accumulated % kWeightTotal) >= threshold ? 1 : 0);
                     out[((static_cast<std::size_t>(y) * nextWidth) + x) * 4u + channel] =
                         static_cast<std::uint8_t>(std::clamp(value, 0, 255));
                 }
@@ -910,7 +980,8 @@ namespace CNA::Content::Pipeline
         {
             static_cast<void>(value);
             if (name != TextureColorKeyParameter && name != TextureFormatParameter &&
-                name != TextureGenerateMipmapsParameter &&
+                name != TexturePassThroughParameter &&
+            name != TextureGenerateMipmapsParameter &&
                 name != TexturePremultiplyAlphaParameter &&
                 name != TextureResizeToPowerOfTwoParameter)
             {
@@ -948,6 +1019,8 @@ namespace CNA::Content::Pipeline
     {
         ImportedImage image = input.Get<ImportedImage>();
         const ContentProcessorParameters& parameters = context.Parameters();
+        const bool passThrough =
+            ReadBooleanParameter(parameters, TexturePassThroughParameter, false);
 
         // The order below is the whole texture policy, and it is deliberate:
         //   colour key -> resize -> premultiply -> mip chain -> block compression.
@@ -960,9 +1033,10 @@ namespace CNA::Content::Pipeline
         // (`texture/png4x4_no_premultiply`, plans/plan_xnapipeline_parity.md XNAPP-251); the
         // authored one is what every existing `.cnj` already compiles to, and changing that would
         // change what a committed document means (plans/plan_xnapipeline.md XNAP-96).
-        std::optional<std::array<std::uint8_t, 4>> colorKey = ReadColorKey(parameters);
+        std::optional<std::array<std::uint8_t, 4>> colorKey =
+            passThrough ? std::nullopt : ReadColorKey(parameters);
         bool clearKeyedColor = colorKey.has_value();
-        if (!colorKey.has_value() && image.authoredColorKey.has_value())
+        if (!passThrough && !colorKey.has_value() && image.authoredColorKey.has_value())
         {
             const std::array<std::uint8_t, 3>& authored = *image.authoredColorKey;
             colorKey = std::array<std::uint8_t, 4>{authored[0], authored[1], authored[2], 255u};
@@ -1000,7 +1074,7 @@ namespace CNA::Content::Pipeline
             }
         }
 
-        if (ReadBooleanParameter(parameters, TextureResizeToPowerOfTwoParameter, false))
+        if (!passThrough && ReadBooleanParameter(parameters, TextureResizeToPowerOfTwoParameter, false))
         {
             const std::uint32_t width = NextPowerOfTwoDimension(image.width);
             const std::uint32_t height = NextPowerOfTwoDimension(image.height);
@@ -1008,22 +1082,53 @@ namespace CNA::Content::Pipeline
             {
                 image.rgbaPixels = ResampleRgbaImage(image.rgbaPixels, image.width, image.height,
                                                      width, height);
-                if (!image.additionalRgbaMipLevels.empty())
+                // Every level, each to its own next power of two -- and then the chain has to
+                // still be a chain. XNA resizes them all and lets the texture's own validation
+                // refuse what comes out: a 6x6 with levels 3x3 and 1x1 becomes 8x8, 4x4 and 1x1,
+                // and the build stops with *Invalid texture. Face 0 mip 2 is sized 1x1, but
+                // should be 2x2.* (measured, texture/dds_mipchain_npot_resize in the differential
+                // corpus; plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-135`).
+                std::uint32_t levelWidth = image.width;
+                std::uint32_t levelHeight = image.height;
+                for (std::vector<std::uint8_t>& pixels : image.additionalRgbaMipLevels)
                 {
-                    // The source's own mip chain described the original dimensions and no longer
-                    // describes anything; saying so is better than silently shipping levels that
-                    // do not match their own level zero.
-                    context.LogWarning(
-                        "resizeToPowerOfTwo replaced level zero, so the source's " +
-                        std::to_string(image.additionalRgbaMipLevels.size()) +
-                        " authored mip level(s) were discarded.");
-                    image.additionalRgbaMipLevels.clear();
+                    levelWidth = std::max(1u, levelWidth / 2u);
+                    levelHeight = std::max(1u, levelHeight / 2u);
+                    const std::uint32_t levelTargetWidth = NextPowerOfTwoDimension(levelWidth);
+                    const std::uint32_t levelTargetHeight = NextPowerOfTwoDimension(levelHeight);
+                    if (levelTargetWidth != levelWidth || levelTargetHeight != levelHeight)
+                    {
+                        pixels = ResampleRgbaImage(pixels, levelWidth, levelHeight,
+                                                   levelTargetWidth, levelTargetHeight);
+                    }
+                    levelWidth = levelTargetWidth;
+                    levelHeight = levelTargetHeight;
                 }
                 context.LogInfo("resized " + std::to_string(image.width) + "x" +
                                 std::to_string(image.height) + " to " + std::to_string(width) +
                                 "x" + std::to_string(height) + ".");
                 image.width = width;
                 image.height = height;
+                std::uint32_t expectedWidth = width;
+                std::uint32_t expectedHeight = height;
+                std::uint32_t actualWidth = width;
+                std::uint32_t actualHeight = height;
+                for (std::size_t level = 0u; level < image.additionalRgbaMipLevels.size(); ++level)
+                {
+                    expectedWidth = std::max(1u, expectedWidth / 2u);
+                    expectedHeight = std::max(1u, expectedHeight / 2u);
+                    actualWidth = NextPowerOfTwoDimension(std::max(1u, actualWidth / 2u));
+                    actualHeight = NextPowerOfTwoDimension(std::max(1u, actualHeight / 2u));
+                    if (actualWidth != expectedWidth || actualHeight != expectedHeight)
+                    {
+                        throw ContentLoadException(
+                            "Invalid texture. Face 0 mip " + std::to_string(level + 1u) +
+                            " is sized " + std::to_string(actualWidth) + "x" +
+                            std::to_string(actualHeight) + ", but should be " +
+                            std::to_string(expectedWidth) + "x" +
+                            std::to_string(expectedHeight) + ".");
+                    }
+                }
             }
         }
 
@@ -1083,9 +1188,12 @@ namespace CNA::Content::Pipeline
         // renders with dark fringes under the default blend state, which is a bug the author did
         // not write. A source that defines its own answer says so through
         // ImportedImage::authoredPremultiplyAlpha; an explicit parameter beats both.
-        const bool premultiply = ReadBooleanParameter(
-            parameters, TexturePremultiplyAlphaParameter,
-            image.authoredPremultiplyAlpha.value_or(true));
+        // A pass-through does none of the processor's own steps, which is what "unchanged" means:
+        // no colour key, no resize and no premultiply (measured, texture_dds_mipchain_passthrough
+        // against texture_dds_mipchain_default; plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-135`).
+        const bool premultiply = !passThrough &&
+            ReadBooleanParameter(parameters, TexturePremultiplyAlphaParameter,
+                                 image.authoredPremultiplyAlpha.value_or(true));
         if (premultiply)
         {
             PremultiplyRgbaAlpha(image.rgbaPixels);
@@ -1103,6 +1211,28 @@ namespace CNA::Content::Pipeline
         }
 
         const TextureBuildFormat requested = ReadFormatParameter(parameters);
+        // A pass-through writes the source's own blocks. XNA's `PassThroughProcessor` on a DXT3
+        // `.dds` writes exactly the 64 bytes the file holds, where `TextureFormat=NoChange` writes
+        // Dxt3 that has been through the colour key and the premultiply and been re-encoded -- the
+        // two answers are both Dxt3 and are different bytes (measured,
+        // tests/reference/xna40/differential/texture_dds_dxt3_passthrough.xnb against
+        // texture_dds_dxt3_nochange.xnb; plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-135`).
+        if (passThrough && image.sourceCompressedFormat.has_value() &&
+            !image.sourceCompressedLevels.empty())
+        {
+            Cnb::CnbTextureData verbatim;
+            verbatim.width = image.width;
+            verbatim.height = image.height;
+            verbatim.depth = 1u;
+            verbatim.faceCount = 1u;
+            verbatim.mipCount = static_cast<std::uint32_t>(image.sourceCompressedLevels.size());
+            Cnb::CnbTextureRepresentation representation;
+            representation.format = *image.sourceCompressedFormat;
+            representation.levels = image.sourceCompressedLevels;
+            verbatim.representations.push_back(std::move(representation));
+            return ContentValue::Create(ProcessedTexture2DType, std::move(verbatim));
+        }
+        const std::optional<Cnb::CnbTextureFormat> sourceFormat = image.sourceCompressedFormat;
         Cnb::CnbTextureData texture = BuildCnbTexture2DData(std::move(image));
 
         TextureBuildFormat resolved = requested;
@@ -1115,7 +1245,13 @@ namespace CNA::Content::Pipeline
                                                      : TextureBuildFormat::Dxt1;
         }
 
-        const Cnb::CnbTextureFormat target = CnbFormatFor(resolved);
+        // `NoChange` is the type the texture *arrived* as, which for a block-compressed `.dds`
+        // is that block format and not `Color`.
+        Cnb::CnbTextureFormat target = CnbFormatFor(resolved);
+        if (resolved == TextureBuildFormat::NoChange && sourceFormat.has_value())
+        {
+            target = *sourceFormat;
+        }
         if (target != Cnb::CnbTextureFormat::Rgba8)
         {
             if (context.OutputFormat() != ContentOutputFormat::Xnb)
