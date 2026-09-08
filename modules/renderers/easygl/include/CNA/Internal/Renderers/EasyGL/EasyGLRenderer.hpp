@@ -1567,8 +1567,9 @@ namespace CNA::Internal::Renderers::EasyGL
          * @param spriteBatchSlotZeroTexture When non-null, the texture that takes sampler slot 0
          *        regardless of what the effect assigned -- SpriteBatch's own rule (FNA sets
          *        `GraphicsDevice.Textures[0]` after the pass applies). Null for ordinary draws.
-         * @param spriteBatchTextures When non-null, the SpriteBatch effect's owning device texture
-         *        slots used for pixel samplers the pass itself did not assign.
+         * @param deviceTextures When non-null, the effect's owning device texture slots. These are
+         *        authoritative after pass application, including application overrides.
+         * @param deviceSamplerStates When non-null, the matching authoritative sampler states.
          * @throws std::runtime_error if the applied pass bound no shader pair, or @p runtime was
          *         not created by this renderer.
          * @throws System::NotSupportedException if no stream supplies an input the vertex shader
@@ -1604,7 +1605,9 @@ namespace CNA::Internal::Renderers::EasyGL
             ICompiledEffectRuntime& runtime,
             const ITextureRenderer* spriteBatchSlotZeroTexture = nullptr,
             const Microsoft::Xna::Framework::Graphics::TextureCollection*
-                spriteBatchTextures = nullptr);
+                deviceTextures = nullptr,
+            const Microsoft::Xna::Framework::Graphics::SamplerStateCollection*
+                deviceSamplerStates = nullptr);
 
         /**
          * @brief CNAEXT. The one vertex array object every compiled-effect draw binds.

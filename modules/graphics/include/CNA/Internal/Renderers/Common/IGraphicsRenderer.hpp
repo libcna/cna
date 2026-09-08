@@ -33,7 +33,12 @@
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/Renderers/Common/ICompiledEffectRuntime.hpp"
 
-namespace Microsoft::Xna::Framework::Graphics { class Effect; }
+namespace Microsoft::Xna::Framework::Graphics
+{
+    class Effect;
+    class SamplerStateCollection;
+    class TextureCollection;
+}
 namespace CNA::Platform
 {
     class IPlatformGlContext;
@@ -1446,6 +1451,13 @@ namespace CNA::Internal::Renderers
         /// from customEffectRenderer: ShaderEffect is a source pair, while a compiled effect owns
         /// reflection, techniques, passes, samplers, and state assignments.
         ICompiledEffectRuntime* compiledEffectRuntime = nullptr;
+        /// Current public pixel texture slots for a compiled Effect draw. EffectPass.Apply writes
+        /// its assignments here and an application may legally replace them before drawing.
+        const Microsoft::Xna::Framework::Graphics::TextureCollection*
+            compiledDeviceTextures = nullptr;
+        /// Current public pixel sampler slots paired with @ref compiledDeviceTextures.
+        const Microsoft::Xna::Framework::Graphics::SamplerStateCollection*
+            compiledDeviceSamplerStates = nullptr;
         /// True whenever the active effect is ShaderEffect, even when this renderer returned no
         /// IEffectRenderer. Backends without custom shaders use this to refuse the draw instead of
         /// mistaking a null renderer for an ordinary fixed-function stock effect.

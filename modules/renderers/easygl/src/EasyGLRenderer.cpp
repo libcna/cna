@@ -12457,7 +12457,9 @@ else
             compiledVao.bind();
             const CompiledEffectDepthRangeScope compiledDepthRange(*this);
             BindCompiledEffectForDrawEXT(compiledStreams.data(), compiledStreams.size(),
-                                         *params.compiledEffectRuntime);
+                                         *params.compiledEffectRuntime, nullptr,
+                                         params.compiledDeviceTextures,
+                                         params.compiledDeviceSamplerStates);
             const int compiledVertexCount = VertexCountForPrimitives(primitive, primitiveCount);
             // glDrawArrays' `first` advances every bound stream by that many of its own records,
             // which is the same rule the stock multi-stream route relies on.
@@ -12556,7 +12558,9 @@ else
             compiledVao.bind();
             const CompiledEffectDepthRangeScope compiledDepthRange(*this);
             BindCompiledEffectForDrawEXT(compiledStreams.data(), compiledStreams.size(),
-                                         *params.compiledEffectRuntime);
+                                         *params.compiledEffectRuntime, nullptr,
+                                         params.compiledDeviceTextures,
+                                         params.compiledDeviceSamplerStates);
             const int compiledIndexCount = VertexCountForPrimitives(primitive, primitiveCount);
             const auto compiledIdxType = compiledIb.thirtyTwoBit ? ::easygl::DataType::UnsignedInt
                                                                   : ::easygl::DataType::UnsignedShort;
@@ -12695,7 +12699,9 @@ else
             compiledVao.bind();
             const CompiledEffectDepthRangeScope compiledDepthRange(*this);
             BindCompiledEffectForDrawEXT(compiledStreams.data(), compiledStreams.size(),
-                                         *params.compiledEffectRuntime);
+                                         *params.compiledEffectRuntime, nullptr,
+                                         params.compiledDeviceTextures,
+                                         params.compiledDeviceSamplerStates);
             const int compiledIndexCount = VertexCountForPrimitives(primitive, primitiveCount);
             const auto compiledIdxType = compiledIb.thirtyTwoBit
                 ? ::easygl::DataType::UnsignedInt : ::easygl::DataType::UnsignedShort;

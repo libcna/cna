@@ -812,7 +812,8 @@ namespace CNA::Internal::Renderers::EasyGL
     void EasyGLRenderer::BindCompiledEffectForDrawEXT(
         const CompiledEffectStreamEXT* streams, std::size_t streamCount,
         ICompiledEffectRuntime& runtime, const ITextureRenderer* spriteBatchSlotZeroTexture,
-        const Microsoft::Xna::Framework::Graphics::TextureCollection* spriteBatchTextures)
+        const Microsoft::Xna::Framework::Graphics::TextureCollection* deviceTextures,
+        const Microsoft::Xna::Framework::Graphics::SamplerStateCollection* deviceSamplerStates)
     {
         RequireCompiledEffectContextEXT("a compiled-effect draw");
         auto* effect = dynamic_cast<EasyGLCompiledEffect*>(&runtime);
@@ -973,9 +974,9 @@ namespace CNA::Internal::Renderers::EasyGL
                 nativeTexture = ResolvedSamplerTextureEXT{};
                 nativeTexture.texture2D = spriteBatchSlotZeroTexture;
             }
-            else if (!nativeTexture.Resolved() && spriteBatchTextures != nullptr)
+            else if (deviceTextures != nullptr)
             {
-                selectedTexture = (*spriteBatchTextures)[sampler.index];
+                selectedTexture = (*deviceTextures)[sampler.index];
                 nativeTexture = ResolveSamplerTexture(selectedTexture);
             }
             const std::string slotName = std::to_string(sampler.index) + " ('" +
@@ -1037,6 +1038,11 @@ namespace CNA::Internal::Renderers::EasyGL
             // effect-declared MinFilter/AddressU/MaxAnisotropy was silently ignored at draw time
             // even though it was published correctly on GraphicsDevice.SamplerStates. A slot no
             // pass has assigned keeps whatever the game (or SpriteBatch.Begin) selected.
+            if (deviceSamplerStates != nullptr)
+            {
+                samplerState = (*deviceSamplerStates)[sampler.index];
+                samplerAssigned = true;
+            }
             if (samplerAssigned)
             {
                 ApplySamplerState(static_cast<int>(sampler.index),

@@ -1001,6 +1001,11 @@ namespace Microsoft::Xna::Framework::Graphics
     void Effect::FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& params) const
     {
         params.compiledEffectRuntime = compiledRuntime_.get();
+        if (compiledRuntime_ != nullptr && device_ != nullptr)
+        {
+            params.compiledDeviceTextures = &device_->getTexturesProperty();
+            params.compiledDeviceSamplerStates = &device_->getSamplerStatesProperty();
+        }
     }
 
     const std::string& Effect::GetVertexSource() const

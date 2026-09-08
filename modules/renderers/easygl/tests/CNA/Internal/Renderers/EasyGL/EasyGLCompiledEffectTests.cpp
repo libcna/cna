@@ -678,6 +678,64 @@ TEST(EasyGLCompiledEffectDrawTest, SharedSamplerPixelContract)
     CNA::TestSupport::RunCompiledEffectSamplerPixelContract(device, options);
 }
 
+TEST(EasyGLCompiledEffectDrawTest, DeviceTextureAndSamplerOverridesRemainAuthoritativeAfterPassApply)
+{
+    // SOFTWARE-186: FNA's Effect.INTERNAL_updateSamplers publishes a pass's assignments into the
+    // GraphicsDevice collections. A later application assignment to those same public slots is
+    // therefore what ApplySamplers verifies at the draw. The three possible centre colours below
+    // identify the failure precisely: blue means the stale effect-private texture won; green
+    // means the public texture won but the stale Clamp sampler did; only red means both public
+    // collections remained authoritative.
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+
+    namespace Fx = CNA::TestSupport::EffectFormat;
+    Effect effect(device, CNA::TestSupport::BuildSyntheticSamplingEffect({
+        {Fx::SampMagFilter, Fx::FilterPoint},
+        {Fx::SampMinFilter, Fx::FilterPoint},
+        {Fx::SampMipFilter, Fx::FilterPoint},
+        {Fx::SampAddressU, Fx::AddressClamp},
+        {Fx::SampAddressV, Fx::AddressClamp},
+    }));
+    auto& parameters = effect.getParametersProperty();
+    parameters["Transform"]->SetValue(Microsoft::Xna::Framework::Matrix::getIdentityProperty());
+    parameters["Tint"]->SetValue(Microsoft::Xna::Framework::Vector4::One);
+
+    Texture2D passTexture(device, 1, 1);
+    const Color blue[1] = {Color::Blue};
+    passTexture.SetData(blue, 1);
+    parameters["FxTexture"]->SetValue(&passTexture);
+
+    Texture2D deviceTexture(device, 2, 1);
+    const Color redGreen[2] = {Color::Red, Color::Green};
+    deviceTexture.SetData(redGreen, 2);
+
+    CNA::TestSupport::SamplingQuadVertex quad[6];
+    CNA::TestSupport::FillSamplingQuad(quad, 1.25f, 0.5f);
+    RenderTarget2D target(device, 8, 8);
+    device.SetRenderTarget(&target);
+    device.Clear(Color::Black);
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+    device.setDepthStencilStateProperty(DepthStencilState::None);
+    device.setBlendStateProperty(BlendState::Opaque);
+    effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+
+    device.getTexturesProperty()(0, &deviceTexture);
+    device.getSamplerStatesProperty()[0] = SamplerState::PointWrap;
+    device.DrawUserPrimitives(
+        PrimitiveType::TriangleList, static_cast<const void*>(quad), 0, 2,
+        CNA::TestSupport::SamplingQuadDeclaration());
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+    Color actual(0, 0, 0, 0);
+    const Rectangle centre(4, 4, 1, 1);
+    target.GetData(0, &centre, &actual, 0, 1);
+    EXPECT_NEAR(actual.getRProperty(), 255, 3);
+    EXPECT_NEAR(actual.getGProperty(), 0, 3);
+    EXPECT_NEAR(actual.getBProperty(), 0, 3);
+}
+
 TEST(EasyGLCompiledEffectDrawTest, SharedPassSelectionContract)
 {
     GraphicsDevice device;
@@ -902,7 +960,10 @@ TEST(EasyGLCompiledEffectDrawTest, CompiledDrawObjectsSurviveAContextRecreation)
 
 TEST(EasyGLCompiledEffectDrawTest, SharedCubeAndVolumeSamplerContract)
 {
-    GraphicsDevice device;
+    // SOFTWARE-179: Texture3D is a HiDef-only XNA resource. This compiled-effect family predated
+    // profile-ceiling enforcement and accidentally kept constructing the default Reach device.
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectCubeAndVolumeSamplerContract(device);
