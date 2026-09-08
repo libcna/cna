@@ -109,7 +109,18 @@ def walk(faces, seed_rule="minlive_highest_face", stop_rule="minlive_tie",
             candidate = pref if pref is not None else swap
             if candidate is None:
                 break
-            if stop_rule == "minlive_tie":
+            if stop_rule == "fresh_vertex":
+                fresh = [v for v in faces[candidate] if v != older and v != newer and v != r]
+                fresh = fresh[0] if fresh else None
+                if fresh is not None and fresh < max(older, newer, r):
+                    break
+            elif stop_rule == "fresh_vertex_pair":
+                fresh = [v for v in faces[candidate] if v not in (newer, r)] if pref is not None \
+                    else [v for v in faces[candidate] if v not in (older, r)]
+                fresh = fresh[0] if fresh else None
+                if fresh is not None and fresh < max(newer, r):
+                    break
+            elif stop_rule == "minlive_tie":
                 low = global_low()
                 if low is not None and min(live[v] for v in faces[candidate]) > low:
                     break
@@ -145,11 +156,12 @@ def score(cases, **kwargs):
 def main() -> int:
     everything = {}
     everything.update(corpus.load())
-    everything.update(corpus.load("build/xna-sample-sweep/optimize/probes2.json",
-                                  "build/xna-sample-sweep/optimize/answers2.txt"))
+    for n in ("2", "3", "4", "5", "6", "7"):
+        everything.update(corpus.load("build/xna-sample-sweep/optimize/probes%s.json" % n,
+                                      "build/xna-sample-sweep/optimize/answers%s.txt" % n))
     print("%d measured probes" % len(everything))
     for seed_rule in ("minlive_highest_face", "minlive_cached_first"):
-        for stop_rule in ("minlive_tie", "never"):
+        for stop_rule in ("minlive_tie", "never", "fresh_vertex", "fresh_vertex_pair"):
             for cap in (None, 7, 8):
                 exact, total, misses = score(everything, seed_rule=seed_rule,
                                              stop_rule=stop_rule, run_cap=cap)

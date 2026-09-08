@@ -71,6 +71,30 @@ deterministic, so a re-run reproduces the probes byte for byte.
     number.** `cfan9_rot0`, `_rot2`, `_rot4`, `_rot6`, `_rot8`, `cfan9_centre0`, `_centre5` and
     `_centre9` all answer the identical index sequence.
 
+## The sharpest measurement, and what it rules out
+
+Batches four to seven are one experiment repeated. A strip of `n` faces carries one extra triangle
+glued to face `T`; the strip's face list is then rewritten so that face `T` sits at index `j`, once
+by swapping it with the face at `j` and once by removing it and re-inserting it there, and `j` is
+swept over the whole list. Nothing else changes: the same positions, the same topology, the same
+attachment, the same seed (the pendant triangle, which always carries the mesh's only live-1
+vertex).
+
+The seed's first move flips at exactly `j = T`:
+
+| probe | `T` | continues into the neighbour for |
+|---|---:|---|
+| `ins_f2_at*`, `pos_f2_at*` | 2 | `j` = 0, 1 |
+| `ins_f8_at*`, `pos_f8_at*` | 8 | `j` = 0 .. 7 |
+| `ins_f14_at*` | 14 | `j` = 0 .. 13 |
+| `long_f2_at*` (a 24-face strip) | 2 | `j` = 0, 1 |
+
+The swap and the insert agree at every `j`, so the face that changes places with it is irrelevant.
+This is the cleanest statement of the open question there is: **the index alone decides**, the
+threshold is the face's own place in the strip's chain, and no property of live counts, cache
+occupancy, valence, adjacency or vertex numbering that this campaign has been able to compute
+moves with it.
+
 ## What is not settled
 
 Two rules, both isolated to a single decision each:
