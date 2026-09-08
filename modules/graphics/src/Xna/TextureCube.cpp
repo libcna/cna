@@ -38,6 +38,24 @@ namespace Microsoft::Xna::Framework::Graphics
         return std::max(1, base >> level);
     }
 
+    static void ValidateTransferWindowEXT(
+        const char* api, int startIndex, int elementCount, int requiredElements)
+    {
+        if (elementCount < requiredElements)
+        {
+            throw std::out_of_range(
+                std::string(api) +
+                ": elementCount is less than the number of texels in the requested region");
+        }
+        if (static_cast<std::int64_t>(startIndex) + static_cast<std::int64_t>(elementCount) >
+            static_cast<std::int64_t>((std::numeric_limits<int>::max)()))
+        {
+            throw std::out_of_range(
+                std::string(api) +
+                ": startIndex + elementCount does not fit in a 32-bit element index");
+        }
+    }
+
     // D9-103 follow-up: same profile-CEILING enforcement Texture2D.cpp already established
     // (D9-100's own table: Reach=512, HiDef=4096). SOFTWARE-179 made this renderer-independent
     // profile rule the common renderer default; hardware limits remain a separate question.
@@ -232,12 +250,7 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::out_of_range(std::string(api) + ": rectangle out of texture bounds");
         }
         const int required = width * height;
-        if (elementCount < required)
-        {
-            throw std::out_of_range(
-                std::string(api) +
-                ": elementCount is less than the number of texels in the requested region");
-        }
+        ValidateTransferWindowEXT(api, startIndex, elementCount, required);
         return required;
     }
 
@@ -298,16 +311,17 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::out_of_range("TextureCube::SetData: elementCount must be > 0");
         if (startIndex < 0)
             throw std::out_of_range("TextureCube::SetData: startIndex must be >= 0");
-        if (level < 0)
-            throw std::out_of_range("TextureCube::SetData: level must be >= 0");
+        if (level < 0 || level >= levelCount_)
+            throw std::out_of_range("TextureCube::SetData: level must be within the mip chain");
 
         const int levelSize = mipDim(size_, level);
         int x = 0, y = 0, w = levelSize, h = levelSize;
         if (rect) { x = rect->X; y = rect->Y; w = rect->Width; h = rect->Height; }
-        if (x < 0 || y < 0 || w <= 0 || h <= 0 || x + w > levelSize || y + h > levelSize)
+        if (x < 0 || y < 0 || w <= 0 || h <= 0
+            || w > levelSize || h > levelSize
+            || x > levelSize - w || y > levelSize - h)
             throw std::out_of_range("TextureCube::SetData: rectangle out of texture bounds");
-        if (elementCount < w * h)
-            throw std::out_of_range("TextureCube::SetData: elementCount is less than the number of pixels in the requested region");
+        ValidateTransferWindowEXT("TextureCube::SetData", startIndex, elementCount, w * h);
 
         // REMED-GFX-135 (REMED-GFX-127/130's contract, applied to the WRITE direction). Every check
         // above runs BEFORE anything is converted or handed to a renderer, so a rejected call cannot
@@ -447,16 +461,17 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::out_of_range("TextureCube::GetData: elementCount must be > 0");
         if (startIndex < 0)
             throw std::out_of_range("TextureCube::GetData: startIndex must be >= 0");
-        if (level < 0)
-            throw std::out_of_range("TextureCube::GetData: level must be >= 0");
+        if (level < 0 || level >= levelCount_)
+            throw std::out_of_range("TextureCube::GetData: level must be within the mip chain");
 
         const int levelSize = mipDim(size_, level);
         int x = 0, y = 0, w = levelSize, h = levelSize;
         if (rect) { x = rect->X; y = rect->Y; w = rect->Width; h = rect->Height; }
-        if (x < 0 || y < 0 || w <= 0 || h <= 0 || x + w > levelSize || y + h > levelSize)
+        if (x < 0 || y < 0 || w <= 0 || h <= 0
+            || w > levelSize || h > levelSize
+            || x > levelSize - w || y > levelSize - h)
             throw std::out_of_range("TextureCube::GetData: rectangle out of texture bounds");
-        if (elementCount < w * h)
-            throw std::out_of_range("TextureCube::GetData: elementCount is less than the number of pixels in the requested region");
+        ValidateTransferWindowEXT("TextureCube::GetData", startIndex, elementCount, w * h);
         Texture::ValidateGetDataFormat(format_, 4);
 
         // REMED-GFX-130 (REMED-GFX-127's contract, applied to ITextureCubeRenderer). `rgba` is

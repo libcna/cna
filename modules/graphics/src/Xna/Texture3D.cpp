@@ -34,6 +34,25 @@ namespace Microsoft::Xna::Framework::Graphics
         return std::max(1, base >> level);
     }
 
+    static void ValidateTransferWindowEXT(
+        const char* api, int startIndex, int elementCount, std::size_t requiredElements)
+    {
+        if (static_cast<std::size_t>(elementCount) < requiredElements ||
+            requiredElements > static_cast<std::size_t>((std::numeric_limits<int>::max)()))
+        {
+            throw std::out_of_range(
+                std::string(api) +
+                ": elementCount is less than the number of voxels in the requested region");
+        }
+        if (static_cast<std::int64_t>(startIndex) + static_cast<std::int64_t>(elementCount) >
+            static_cast<std::int64_t>((std::numeric_limits<int>::max)()))
+        {
+            throw std::out_of_range(
+                std::string(api) +
+                ": startIndex + elementCount does not fit in a 32-bit element index");
+        }
+    }
+
     // D9-103 follow-up: D9-100's own table -- GraphicsProfile.Reach does not support volume
     // textures AT ALL (a reported extent of 0), not merely a small size ceiling; GraphicsProfile
     // .HiDef caps at 256 in any dimension. SOFTWARE-179 made these renderer-independent profile
@@ -150,9 +169,8 @@ namespace Microsoft::Xna::Framework::Graphics
         const std::size_t boxVoxels =
             static_cast<std::size_t>(right - left) * static_cast<std::size_t>(bottom - top) *
             static_cast<std::size_t>(back - front);
-        if (static_cast<std::size_t>(elementCount) < boxVoxels ||
-            boxVoxels > static_cast<std::size_t>((std::numeric_limits<int>::max)()))
-            throw std::out_of_range("Texture3D::SetData: elementCount is less than the number of voxels in the requested region");
+        ValidateTransferWindowEXT(
+            "Texture3D::SetData", startIndex, elementCount, boxVoxels);
 
         // REMED-GFX-135 -- see TextureCube::SetData's identical note: converted to the REQUESTED
         // BOX rather than to elementCount, so the call never reads source elements it does not
@@ -234,9 +252,8 @@ namespace Microsoft::Xna::Framework::Graphics
         const std::size_t boxVoxels =
             static_cast<std::size_t>(boxW) * static_cast<std::size_t>(boxH) *
             static_cast<std::size_t>(boxD);
-        if (static_cast<std::size_t>(elementCount) < boxVoxels ||
-            boxVoxels > static_cast<std::size_t>((std::numeric_limits<int>::max)()))
-            throw std::out_of_range("Texture3D::GetData: elementCount is less than the number of voxels in the requested region");
+        ValidateTransferWindowEXT(
+            "Texture3D::GetData", startIndex, elementCount, boxVoxels);
         Texture::ValidateGetDataFormat(format_, 4);
 
         // REMED-GFX-130 -- see TextureCube::GetData for the full reasoning. `rgba` is scratch memory

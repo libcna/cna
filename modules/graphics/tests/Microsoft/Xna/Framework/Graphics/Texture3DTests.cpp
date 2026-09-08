@@ -23,6 +23,7 @@
 #include <gtest/gtest.h>
 #include <algorithm>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <vector>
@@ -307,6 +308,16 @@ TEST_F(Texture3DTest, SetDataBoxNegativeStartIndexThrowsOutOfRange)
     EXPECT_THROW(tex.SetData(0, 0, 0, 2, 2, 0, 1, buf.data(), -1, 4), std::out_of_range);
 }
 
+TEST_F(Texture3DTest, SetDataBoxOverflowingTransferWindowThrowsOutOfRange)
+{
+    Texture3D texture(gd, 1, 1, 1, false, SurfaceFormat::Color);
+    Color value(1, 2, 3, 4);
+
+    EXPECT_THROW(texture.SetData(0, 0, 0, 1, 1, 0, 1, &value,
+                                 (std::numeric_limits<int>::max)(), 1),
+                 std::out_of_range);
+}
+
 TEST_F(Texture3DTest, SetDataBoxNegativeLevelThrowsOutOfRange)
 {
     Texture3D tex(gd, 2, 2, 2, false, SurfaceFormat::Color);
@@ -424,6 +435,16 @@ TEST_F(Texture3DTest, GetDataStartIndexNegativeStartIndexThrowsOutOfRange)
     Texture3D tex(gd, 2, 2, 2, false, SurfaceFormat::Color);
     std::vector<Color> buf(8, Color(0, 0, 0, 0));
     EXPECT_THROW(tex.GetData(buf.data(), -1, 8), std::out_of_range);
+}
+
+TEST_F(Texture3DTest, GetDataOverflowingTransferWindowThrowsOutOfRange)
+{
+    Texture3D texture(gd, 1, 1, 1, false, SurfaceFormat::Color);
+    Color destination(9, 8, 7, 6);
+
+    EXPECT_THROW(texture.GetData(&destination, (std::numeric_limits<int>::max)(), 1),
+                 std::out_of_range);
+    EXPECT_EQ(destination, Color(9, 8, 7, 6));
 }
 
 TEST_F(Texture3DTest, GetDataBoxNullDataThrowsInvalidArgument)

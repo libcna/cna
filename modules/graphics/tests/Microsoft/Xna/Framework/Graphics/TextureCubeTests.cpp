@@ -32,6 +32,7 @@
 using namespace CNA::Testing::Renderers;
 #include <cstdint>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <utility>
@@ -459,11 +460,31 @@ TEST_F(TextureCubeTest, SetDataRectNegativeStartIndexThrowsOutOfRange)
     EXPECT_THROW(tex.SetData(CubeMapFace::PositiveX, 0, nullptr, buf.data(), -1, 4), std::out_of_range);
 }
 
+TEST_F(TextureCubeTest, SetDataRectOverflowingTransferWindowThrowsOutOfRange)
+{
+    TextureCube texture(gd, 1, false, SurfaceFormat::Color);
+    Color value(1, 2, 3, 4);
+
+    EXPECT_THROW(texture.SetData(CubeMapFace::PositiveX, 0, nullptr, &value,
+                                 (std::numeric_limits<int>::max)(), 1),
+                 std::out_of_range);
+}
+
 TEST_F(TextureCubeTest, SetDataRectNegativeLevelThrowsOutOfRange)
 {
     TextureCube tex(gd, 2, false, SurfaceFormat::Color);
     std::vector<Color> buf(4, Color(0, 0, 0, 0));
     EXPECT_THROW(tex.SetData(CubeMapFace::PositiveX, -1, nullptr, buf.data(), 0, 4), std::out_of_range);
+}
+
+TEST_F(TextureCubeTest, SetDataRectLevelAtLevelCountThrowsOutOfRange)
+{
+    TextureCube texture(gd, 4, true, SurfaceFormat::Color);
+    Color value(1, 2, 3, 4);
+
+    EXPECT_THROW(texture.SetData(CubeMapFace::PositiveX,
+                                 texture.getLevelCountProperty(), nullptr,
+                                 &value, 0, 1), std::out_of_range);
 }
 
 TEST_F(TextureCubeTest, SetDataRectOutOfBoundsThrowsOutOfRange)
@@ -568,6 +589,17 @@ TEST_F(TextureCubeTest, GetDataStartIndexNegativeStartIndexThrowsOutOfRange)
     EXPECT_THROW(tex.GetData(CubeMapFace::PositiveX, buf.data(), -1, 4), std::out_of_range);
 }
 
+TEST_F(TextureCubeTest, GetDataOverflowingTransferWindowThrowsOutOfRange)
+{
+    TextureCube texture(gd, 1, false, SurfaceFormat::Color);
+    Color destination(9, 8, 7, 6);
+
+    EXPECT_THROW(texture.GetData(CubeMapFace::PositiveX, &destination,
+                                 (std::numeric_limits<int>::max)(), 1),
+                 std::out_of_range);
+    EXPECT_EQ(destination, Color(9, 8, 7, 6));
+}
+
 TEST_F(TextureCubeTest, GetDataRectNullDataThrowsInvalidArgument)
 {
     TextureCube tex(gd, 2, false, SurfaceFormat::Color);
@@ -579,6 +611,17 @@ TEST_F(TextureCubeTest, GetDataRectNegativeLevelThrowsOutOfRange)
     TextureCube tex(gd, 2, false, SurfaceFormat::Color);
     std::vector<Color> buf(4, Color(0, 0, 0, 0));
     EXPECT_THROW(tex.GetData(CubeMapFace::PositiveX, -1, nullptr, buf.data(), 0, 4), std::out_of_range);
+}
+
+TEST_F(TextureCubeTest, GetDataRectLevelAtLevelCountThrowsOutOfRange)
+{
+    TextureCube texture(gd, 4, true, SurfaceFormat::Color);
+    Color destination(9, 8, 7, 6);
+
+    EXPECT_THROW(texture.GetData(CubeMapFace::PositiveX,
+                                 texture.getLevelCountProperty(), nullptr,
+                                 &destination, 0, 1), std::out_of_range);
+    EXPECT_EQ(destination, Color(9, 8, 7, 6));
 }
 
 TEST_F(TextureCubeTest, GetDataRectOutOfBoundsThrowsOutOfRange)
