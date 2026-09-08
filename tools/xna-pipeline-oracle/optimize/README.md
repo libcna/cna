@@ -103,13 +103,17 @@ That rule is exact on this family, and putting it into `model.py` moves the reco
 135 of 372 probes to **179** -- so it is not only about pendant triangles. Three readings of "the
 face across this edge" were scored: taking the first face listed on the edge and ending the run
 where it is used or wrongly wound scores 179; skipping the face the walk stands on first scores
-160; taking the first *unused* face, which is what a plain adjacency walk does, scores 135. A fourth, skipping only the *used* faces and
-still ending the run on a wrongly wound first survivor, scores 178. The first reading is the one
-kept -- it is what an edge-to-face table with one slot and first-write-wins would do -- and with a
-seed pivot taken as the *last* minimum-live corner of the seed face rather than the first, the
-reconstruction reaches **197 of 372**. What it still gets wrong is visible: `grid_4x4` leaves its
-first run after two faces because the edge it wants lists the face it just emitted first, and a
-closed fan of nine turns the wrong way at its seventh.
+160; taking the first *unused* face, which is what a plain adjacency walk does, scores 135. A fourth -- passing over the *used*
+faces and ending the run only when the first **unused** survivor is wrongly wound -- scores 178.
+
+**The fourth is the one kept, and the aggregate is the reason to distrust the others.** Three
+probes discriminate between it and the 179-scoring reading, and all three want the fourth:
+`ins_f8_at08` restarts because the first unused face on its edge is wrongly wound; `strip_8_rot1`
+walks its whole strip forward, which is only possible if the used face the edge lists first is
+passed over; and `grid_4x4` leaves its first run after two faces under any reading that stops at a
+used face. With a seed pivot taken as the *last* minimum-live corner of the seed face rather than
+the first -- worth 18 probes on its own -- the reconstruction stands at **178 of 372**, nineteen
+below a reading that is wrong wherever the corpus can tell.
 
 ## What is not settled## What is not settled
 

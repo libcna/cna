@@ -40,15 +40,18 @@ def walk(faces, seed_rule="minlive_highest_face", stop_rule="minlive_tie",
     def across(a, b):
         """The face the walk crosses to over edge (a, b), by the rule batch eight measured.
 
-        An edge's faces are looked up in input order and the **first** one is the candidate: where
-        it is already used, or is wound the same way as the face the walk stands on -- which no
-        strip walk can enter -- the run ends, rather than the second candidate being tried
-        (`ins_f8_at07` against `ins_f8_at08`). Reading it that way scores 179 of 372 where skipping
-        the current face scores 160, and where taking the first *unused* face scores 135.
+        An edge's faces are looked up in input order; used faces are passed over, and the first
+        unused one is the candidate. Where **that** face is wound the same way as the face the walk
+        stands on -- which no strip walk can enter -- the run ends, rather than the next candidate
+        being tried. `ins_f8_at07` puts the consistently wound face first and the walk crosses;
+        `ins_f8_at08` swaps the two and the walk restarts although the consistently wound face is
+        still there. Not passing over used faces scores higher in aggregate (197 against 178) and
+        is wrong on every probe that discriminates: `strip_8_rot1` and `grid_4x4` both need the
+        used face passed over, and a rule kept for the aggregate is a rule fitted to the corpus.
         """
         for i in m.edges.get(frozenset((a, b)), ()):
             if used[i]:
-                return None
+                continue
             face = faces[i]
             for x, y in ((face[0], face[1]), (face[1], face[2]), (face[2], face[0])):
                 if (x, y) == (b, a):
