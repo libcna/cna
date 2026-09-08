@@ -120,13 +120,21 @@ namespace CNA::Content::Cnb
             // Exactly the runtime rule: a matching pixel keeps its RGB and loses its alpha. Not
             // "becomes transparent black" -- that would change the colour a bilinear filter blends
             // toward at the edge of a keyed region.
+            //
+            // The match is on **four** channels, a document's three-component key standing for an
+            // alpha of 255. It is the same rule the `.contentproj` route follows, and it has to be:
+            // `CnjContentPipelineTest.Texture2DConvergesOnTheExistingTextureProcessorAndWriter`
+            // compiles one document both ways and compares the bytes, so a key that clears a
+            // different set of pixels here than there is a defect whichever set is right
+            // (`CNBF-118`; the four-channel rule is measured in
+            // plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-142`).
             const std::uint8_t keyR = (*options.colorKey)[0];
             const std::uint8_t keyG = (*options.colorKey)[1];
             const std::uint8_t keyB = (*options.colorKey)[2];
             for (std::size_t i = 0; i + 3u < image.pixels.size(); i += 4u)
             {
                 if (image.pixels[i] == keyR && image.pixels[i + 1u] == keyG &&
-                    image.pixels[i + 2u] == keyB)
+                    image.pixels[i + 2u] == keyB && image.pixels[i + 3u] == 255u)
                 {
                     image.pixels[i + 3u] = 0u;
                 }
