@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <algorithm>
+#include <cctype>
 #include <exception>
 #include <filesystem>
 #include <fstream>
@@ -140,6 +141,27 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 }
             }
             return fallback;
+        }
+
+        /** @brief The text a string property carries, or a fallback. */
+        [[nodiscard]] std::string PropertyText(const Canon::FbxNode& object, const std::string& name,
+                                               const std::string& fallback)
+        {
+            const Canon::FbxNode* property = FindProperty(object, name);
+            if (property == nullptr) { return fallback; }
+            // The value is the last string of the property row: `Property: "ShadingModel",
+            // "KString", "", "Lambert"` names the type and the flags before it.
+            std::string found = fallback;
+            bool sawName = false;
+            for (const Canon::FbxProperty& one : property->properties)
+            {
+                if (const std::string* value = std::get_if<std::string>(&one); value != nullptr)
+                {
+                    if (!sawName) { sawName = true; continue; }
+                    if (!value->empty()) { found = *value; }
+                }
+            }
+            return found;
         }
 
         /** @brief The three numbers a transform property carries, or a fallback. */
@@ -548,8 +570,25 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             material->setEmissiveColorProperty(colour("Emissive"));
             material->setAlphaProperty(1.0f);
             material->setSpecularColorProperty(colour("Specular"));
-            material->setSpecularPowerProperty(static_cast<float>(PropertyNumber(
-                *object.node, newTable ? "ShininessExponent" : "Shininess", 20.0)));
+            // A Lambert material has no specular power at all, and XNA leaves it unset rather
+            // than defaulting it: the genuine importer's answer for SAMPLE-035's `SphereLowPoly.fbx`
+            // -- `ShadingModel: "lambert"`, no shininess property of either spelling -- carries a
+            // diffuse, an emissive, an alpha and a specular *colour* and no `SpecularPower`, and
+            // the model XNA builds from it holds the `BasicEffect` default of 16 where CNA wrote
+            // 20. Every material measured that does answer one is a Phong
+            // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-138`).
+            const std::string shading = PropertyText(*object.node, "ShadingModel", "");
+            bool lambert = shading.size() == 7u;
+            for (std::size_t at = 0u; at < shading.size() && lambert; ++at)
+            {
+                lambert = static_cast<char>(std::tolower(static_cast<unsigned char>(shading[at]))) ==
+                          "lambert"[at];
+            }
+            if (!lambert)
+            {
+                material->setSpecularPowerProperty(static_cast<float>(PropertyNumber(
+                    *object.node, newTable ? "ShininessExponent" : "Shininess", 20.0)));
+            }
             materials.emplace(identity, std::move(material));
         }
 
