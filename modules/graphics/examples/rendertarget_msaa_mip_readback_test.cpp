@@ -188,26 +188,15 @@ namespace
     /**
      * @brief Whether this renderer POPULATES a render target's levels above zero at all.
      *
-     * False on SOFTWARE, whose `SoftwareRenderTargetRenderer::GetData` raises
-     * "the Software renderer stores mip level 0 only; level N was requested" -- a specific,
-     * catchable public refusal, with `LevelCount` still correct and level 0 still byte-exact.
-     * That is that renderer's own declared boundary, not this ticket's subject, and it is ASSERTED
-     * here rather than skipped: a nonzero level must throw and must leave the destination
-     * completely untouched. If Software ever grows a real chain, this check turns red and says so.
-     *
-     * False on HEADLESS too, which rasterizes nothing and refuses every render-target readback
-     * (`kTargetReadbackSupported`), so the refusal is already asserted one level up.
+     * Software now populates and reads its generated CPU chain. Headless rasterizes nothing and
+     * refuses every render-target readback (`kTargetReadbackSupported`), so its refusal is already
+     * asserted one level up.
      */
-    constexpr bool kTargetMipReadbackSupported =
-#if defined(CNA_RENDERER_SOFTWARE)
-        false;
-#else
-        true;
-#endif
+    constexpr bool kTargetMipReadbackSupported = true;
 
     /** @brief Whether `SetRenderTargets` with more than one attachment is executed here. */
     constexpr bool kMrtSupported =
-#if defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_HEADLESS)
+#if defined(CNA_RENDERER_HEADLESS)
         false;
 #else
         true;
@@ -229,12 +218,7 @@ namespace
 #endif
 
     /** @brief Whether `RenderTargetCube` is a bindable render target here. */
-    constexpr bool kCubeTargetSupported =
-#if defined(CNA_RENDERER_SOFTWARE)
-        false;
-#else
-        true;
-#endif
+    constexpr bool kCubeTargetSupported = true;
 
     // ---- the asymmetric pattern -------------------------------------------------------------
     //
@@ -1788,8 +1772,10 @@ int main(int argc, char** argv)
     }
 #endif
 
+#if !defined(CNA_RENDERER_SOFTWARE)
     if (!CNA::Examples::ProbeGpuDisplayAvailable())
         return CNA::Examples::kSkipExitCode;
+#endif
 
     RenderTargetMsaaMipReadbackTest game(std::move(onlyLeg));
     game.Run();

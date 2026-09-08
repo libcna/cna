@@ -592,6 +592,7 @@ namespace CNA::Internal::Renderers::Software
         {
             float x = 0.0f, y = 0.0f, width = 0.0f, height = 0.0f;
             float minDepth = 0.0f, maxDepth = 1.0f;
+            bool multisampledDestination = false;
         };
 
         /// Converts one clip-space vertex into a screen-space RasterVertex: perspective divide, the
@@ -610,15 +611,23 @@ namespace CNA::Internal::Renderers::Software
             // space at pixel + 0.5, so translate geometry by Wine/MonoGame/EasyGL's established
             // 63/128-pixel amount. Staying just below one half selects the XNA side of exact fill
             // edges after finite subpixel precision instead of leaving the result on the tie.
+            // REMED-GFX-235/SOFTWARE-134: the single-sample correction is deliberately absent
+            // from multisampled destinations. Moving four quarter-pixel sample locations by
+            // almost half a pixel drops three samples at the outer corner and two on each outer
+            // edge. EasyGL established the same distinction against the shared render-target
+            // readback corpus; XNA's measured one-pixel triangle remains protected on ordinary
+            // single-sample destinations.
             constexpr float kXnaPixelCenterOffset = 63.0f / 128.0f;
+            const float pixelCenterOffset =
+                vp.multisampledDestination ? 0.0f : kXnaPixelCenterOffset;
             const float invW = 1.0f / cv.w;
             const float ndcX = cv.x * invW;
             const float ndcY = cv.y * invW;
             const float ndcZ = cv.z * invW;
 
             RasterVertex out;
-            out.x = (ndcX * 0.5f + 0.5f) * vp.width + vp.x + kXnaPixelCenterOffset;
-            out.y = (1.0f - (ndcY * 0.5f + 0.5f)) * vp.height + vp.y + kXnaPixelCenterOffset;
+            out.x = (ndcX * 0.5f + 0.5f) * vp.width + vp.x + pixelCenterOffset;
+            out.y = (1.0f - (ndcY * 0.5f + 0.5f)) * vp.height + vp.y + pixelCenterOffset;
             out.depth = vp.minDepth + ndcZ * (vp.maxDepth - vp.minDepth);
             out.invW = invW;
             out.r = cv.r * invW;
@@ -3976,7 +3985,7 @@ namespace CNA::Internal::Renderers::Software
         GetActiveViewportRaster(vpX, vpY, vpW, vpH, vpMinDepth, vpMaxDepth);
         const ViewportTransform vpT{static_cast<float>(vpX), static_cast<float>(vpY),
                                     static_cast<float>(vpW), static_cast<float>(vpH),
-                                    vpMinDepth, vpMaxDepth};
+                                    vpMinDepth, vpMaxDepth, fb.multiSampleCount > 1};
         // REMED-GFX-080: effective raster clip = framebuffer ∩ Viewport ∩ (ScissorRectangle when
         // RasterizerState.ScissorTestEnable). The scissor is framebuffer-space, intersected after
         // the viewport clip (not viewport-local); disabled scissor leaves the viewport clip intact.
@@ -4065,7 +4074,7 @@ namespace CNA::Internal::Renderers::Software
         GetActiveViewportRaster(vpX, vpY, vpW, vpH, vpMinDepth, vpMaxDepth);
         const ViewportTransform vpT{static_cast<float>(vpX), static_cast<float>(vpY),
                                     static_cast<float>(vpW), static_cast<float>(vpH),
-                                    vpMinDepth, vpMaxDepth};
+                                    vpMinDepth, vpMaxDepth, fb.multiSampleCount > 1};
         // REMED-GFX-080: effective raster clip = framebuffer ∩ Viewport ∩ (ScissorRectangle when
         // RasterizerState.ScissorTestEnable). The scissor is framebuffer-space, intersected after
         // the viewport clip (not viewport-local); disabled scissor leaves the viewport clip intact.
@@ -4180,7 +4189,7 @@ namespace CNA::Internal::Renderers::Software
         GetActiveViewportRaster(vpX, vpY, vpW, vpH, vpMinDepth, vpMaxDepth);
         const ViewportTransform vpT{static_cast<float>(vpX), static_cast<float>(vpY),
                                     static_cast<float>(vpW), static_cast<float>(vpH),
-                                    vpMinDepth, vpMaxDepth};
+                                    vpMinDepth, vpMaxDepth, fb.multiSampleCount > 1};
         // REMED-GFX-080: effective raster clip = framebuffer ∩ Viewport ∩ (ScissorRectangle when
         // RasterizerState.ScissorTestEnable). The scissor is framebuffer-space, intersected after
         // the viewport clip (not viewport-local); disabled scissor leaves the viewport clip intact.
@@ -4348,7 +4357,7 @@ namespace CNA::Internal::Renderers::Software
         GetActiveViewportRaster(vpX, vpY, vpW, vpH, vpMinDepth, vpMaxDepth);
         const ViewportTransform vpT{static_cast<float>(vpX), static_cast<float>(vpY),
                                     static_cast<float>(vpW), static_cast<float>(vpH),
-                                    vpMinDepth, vpMaxDepth};
+                                    vpMinDepth, vpMaxDepth, fb.multiSampleCount > 1};
         // REMED-GFX-080: effective raster clip = framebuffer ∩ Viewport ∩ (ScissorRectangle when
         // RasterizerState.ScissorTestEnable). The scissor is framebuffer-space, intersected after
         // the viewport clip (not viewport-local); disabled scissor leaves the viewport clip intact.

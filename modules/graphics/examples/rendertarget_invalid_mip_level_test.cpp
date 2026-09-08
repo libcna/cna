@@ -169,24 +169,19 @@ namespace
     /**
      * @brief Whether this renderer POPULATES a render target's levels above zero at all.
      *
-     * False on SOFTWARE, which stores level 0 only and raises a specific catchable refusal for any
-     * other level. That is that renderer's own declared boundary; it is asserted, never skipped.
+     * Software now populates and reads its generated CPU chain; every level below `LevelCount` is
+     * therefore a positive transfer contract there too.
      */
-    constexpr bool kTargetMipReadbackSupported =
-#if defined(CNA_RENDERER_SOFTWARE)
-        false;
-#else
-        true;
-#endif
+    constexpr bool kTargetMipReadbackSupported = true;
 
     /**
      * @brief Whether `SetRenderTargets` with more than one attachment is executed here.
      *
-     * False on SOFTWARE and HEADLESS. Leg H1 declares the refusal rather than skipping, so an MRT
-     * route that silently started working would be visible.
+     * False on HEADLESS. SOFTWARE-120 supplies the same four-slot public binding path this leg
+     * exercises on the GPU renderers.
      */
     constexpr bool kMrtSupported =
-#if defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_HEADLESS)
+#if defined(CNA_RENDERER_HEADLESS)
         false;
 #else
         true;
@@ -1615,8 +1610,10 @@ int main(int argc, char** argv)
     }
 #endif
 
+#if !defined(CNA_RENDERER_SOFTWARE)
     if (!CNA::Examples::ProbeGpuDisplayAvailable())
         return CNA::Examples::kSkipExitCode;
+#endif
 
     RenderTargetInvalidMipLevelTest game(std::move(onlyLeg));
     game.Run();

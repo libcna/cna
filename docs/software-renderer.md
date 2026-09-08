@@ -217,7 +217,9 @@ rather than always passing.
   Direct3D 9's integer pixel-center convention, and exact triangle boundaries use the top-left fill
   rule. Adjacent triangles therefore own a shared edge exactly once regardless of draw order or
   submitted winding, including the Software renderer's four coverage samples; manual diagonal
-  exceptions are no longer part of solid rasterization.
+  exceptions are no longer part of solid rasterization. As on EasyGL, the near-half-pixel geometry
+  displacement is a single-sample compatibility rule and is omitted for a multisampled destination;
+  applying it to quarter-pixel 4x locations would incorrectly remove outer-edge coverage.
 - **Complete `AlphaTestEffect` comparisons** (`SOFTWARE-111`) — all eight XNA `CompareFunction`
   values use FNA's half-byte threshold encoding after texture, vertex and effect alpha are
   multiplied. A rejected fragment is discarded before colour, depth or stencil writes; a null

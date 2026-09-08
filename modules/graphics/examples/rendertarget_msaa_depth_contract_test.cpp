@@ -132,12 +132,11 @@ namespace
     /**
      * @brief Whether a `RenderTargetCube` can be a draw destination here.
      *
-     * Software refuses a cube destination outright (a deliberate v1 boundary recorded under
-     * REMED-GFX-182) and Headless does not rasterize, so leg X1's cube regression gate is declared
-     * rather than measured on those two.
+     * Headless does not rasterize, so leg X1's cube regression gate is declared rather than
+     * measured there. SOFTWARE-119 supplies a real six-face CPU target, including 4x storage.
      */
     constexpr bool kCubeTargetSupported =
-#if defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_SOFTWARE)
+#if defined(CNA_RENDERER_HEADLESS)
         false;
 #else
         true;
@@ -155,15 +154,12 @@ namespace
     /**
      * @brief Whether a stencil test actually gates rasterization here.
      *
-     * False on SOFTWARE, whose `SoftwareRenderer::ClearStencil` is an empty body and whose
-     * rasterizer runs no stencil test, and on WEBGPU, which stores the stencil state and
-     * deliberately never bakes it into a pipeline's `WGPUStencilFaceState` (WEBGPU-83). Both are
-     * pre-existing, separately recorded boundaries -- the same two the neighbouring
-     * `rendertarget_depthstencil_usage_test` declares through its `stencilInRT` field -- so leg D5
-     * reports them instead of claiming a stencil result those renderers cannot produce.
+     * False on WEBGPU, which stores the stencil state and deliberately never bakes it into a
+     * pipeline's `WGPUStencilFaceState` (WEBGPU-83). SOFTWARE-121 and SOFTWARE-110 provide the
+     * complete single- and per-sample CPU stencil state machine.
      */
     constexpr bool kStencilSupported =
-#if defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_WEBGPU)
+#if defined(CNA_RENDERER_WEBGPU)
         false;
 #else
         true;
@@ -1224,8 +1220,10 @@ int main(int argc, char** argv)
     }
 #endif
 
+#if !defined(CNA_RENDERER_SOFTWARE)
     if (!CNA::Examples::ProbeGpuDisplayAvailable())
         return CNA::Examples::kSkipExitCode;
+#endif
 
     RenderTargetMsaaDepthContractTest game(std::move(onlyLeg));
     game.Run();
