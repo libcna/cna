@@ -5911,6 +5911,8 @@ if (ProfileUsesGlslEs100())
         bound_->mrtFramebuffer = 0;
         wireframeIbo_.reset_handle_no_gl();
         wireframeIboCreated_ = false;
+        negativeBaseVertexIbo_.reset_handle_no_gl();
+        negativeBaseVertexIboCreated_ = false;
         probedFullFloatRenderable_.reset();
         probedHalfFloatRenderable_.reset();
         probedNormalizedRenderTargets_.fill(std::nullopt);
@@ -11845,6 +11847,136 @@ if (ProfileIsEs2ApiGeneration())
         return std::make_unique<EasyGLIndexBufferRenderer>(index_capacity, true, RegistryPtr());
     }
 
+    void EasyGLRenderer::BindNegativeBaseVertexIndices(
+        const EasyGLIndexBufferRenderer& ib, int startIndex, int indexCount, int baseVertex)
+    {
+        if (baseVertex >= 0)
+        {
+            throw System::InvalidOperationException(
+                "EasyGL negative-base fallback requires a negative baseVertex");
+        }
+
+        const std::size_t indexSize = ib.thirtyTwoBit
+            ? sizeof(std::uint32_t) : sizeof(std::uint16_t);
+        const std::size_t firstByte =
+            static_cast<std::size_t>(startIndex) * indexSize;
+        const std::size_t byteCount =
+            static_cast<std::size_t>(indexCount) * indexSize;
+        const auto& source = ib.GetCpuBytes();
+        if (firstByte > source.size() || byteCount > source.size() - firstByte)
+        {
+            throw System::InvalidOperationException(
+                "EasyGL negative-base fallback cannot read the requested CPU index-buffer slice");
+        }
+
+        negativeBaseVertexScratch_.resize(byteCount);
+        for (int i = 0; i < indexCount; ++i)
+        {
+            const std::size_t sourceOffset =
+                firstByte + static_cast<std::size_t>(i) * indexSize;
+            const std::size_t targetOffset = static_cast<std::size_t>(i) * indexSize;
+            if (ib.thirtyTwoBit)
+            {
+                std::uint32_t sourceIndex = 0;
+                std::memcpy(&sourceIndex, source.data() + sourceOffset, indexSize);
+                const std::int64_t effective =
+                    static_cast<std::int64_t>(sourceIndex) + baseVertex;
+                if (effective < 0 || effective > (std::numeric_limits<std::uint32_t>::max)())
+                {
+                    throw System::InvalidOperationException(
+                        "EasyGL negative baseVertex leaves the 32-bit index range");
+                }
+                const auto rebased = static_cast<std::uint32_t>(effective);
+                std::memcpy(negativeBaseVertexScratch_.data() + targetOffset,
+                            &rebased, indexSize);
+            }
+            else
+            {
+                std::uint16_t sourceIndex = 0;
+                std::memcpy(&sourceIndex, source.data() + sourceOffset, indexSize);
+                const std::int64_t effective =
+                    static_cast<std::int64_t>(sourceIndex) + baseVertex;
+                if (effective < 0 || effective > (std::numeric_limits<std::uint16_t>::max)())
+                {
+                    throw System::InvalidOperationException(
+                        "EasyGL negative baseVertex leaves the 16-bit index range");
+                }
+                const auto rebased = static_cast<std::uint16_t>(effective);
+                std::memcpy(negativeBaseVertexScratch_.data() + targetOffset,
+                            &rebased, indexSize);
+            }
+        }
+
+        if (!negativeBaseVertexIboCreated_)
+        {
+            negativeBaseVertexIbo_.create();
+            negativeBaseVertexIboCreated_ = true;
+        }
+        negativeBaseVertexIbo_.bind(::easygl::BufferTarget::ElementArray);
+        negativeBaseVertexIbo_.set_data(
+            ::easygl::BufferTarget::ElementArray,
+            negativeBaseVertexScratch_.data(),
+            negativeBaseVertexScratch_.size(),
+            ::easygl::BufferUsage::DynamicDraw);
+    }
+
+    void EasyGLRenderer::DrawIndexedWithBaseVertexFallback(
+        const EasyGLIndexBufferRenderer& ib,
+        ::easygl::PrimitiveType primitive,
+        int indexCount,
+        ::easygl::DataType indexType,
+        const void* indexOffset,
+        int startIndex,
+        int baseVertex,
+        bool instanced,
+        int instanceCount)
+    {
+        // A negative base is valid in XNA when the stored indices compensate it. Folding it into
+        // the selected index slice avoids both an impossible GLES/WebGL attribute offset before
+        // buffer start and driver-dependent desktop handling of negative native base vertices.
+        const bool foldNegativeIndices = baseVertex < 0;
+        if (foldNegativeIndices)
+            BindNegativeBaseVertexIndices(ib, startIndex, indexCount, baseVertex);
+        else
+            ib.ibo.bind(::easygl::BufferTarget::ElementArray);
+
+        const void* effectiveOffset = foldNegativeIndices ? nullptr : indexOffset;
+        const int effectiveBaseVertex = foldNegativeIndices ? 0 : baseVertex;
+        const auto draw = [&]() {
+            if (instanced)
+            {
+                device.draw_elements_instanced(
+                    primitive, indexCount, indexType, effectiveOffset, instanceCount);
+            }
+            else
+            {
+                device.draw_elements(primitive, indexCount, indexType, effectiveOffset);
+            }
+        };
+
+        if (effectiveBaseVertex == 0)
+        {
+            draw();
+        }
+        else if (ProfileRequiresBaseVertexPointerRebase())
+        {
+            ShiftEnabledPerVertexAttribPointers(effectiveBaseVertex, +1);
+            draw();
+            ShiftEnabledPerVertexAttribPointers(effectiveBaseVertex, -1);
+        }
+        else if (instanced)
+        {
+            ::metagl::glDrawElementsInstancedBaseVertex(
+                primitive, indexCount, indexType, effectiveOffset,
+                instanceCount, effectiveBaseVertex);
+        }
+        else
+        {
+            ::metagl::glDrawElementsBaseVertex(
+                primitive, indexCount, indexType, effectiveOffset, effectiveBaseVertex);
+        }
+    }
+
     bool EasyGLRenderer::DrawWireframe(const EasyGLVertexBufferRenderer& vb,
                                               const EasyGLIndexBufferRenderer* ib,
                                               PrimitiveType primitive, int primitiveCount,
@@ -11856,18 +11988,32 @@ if (ProfileIsEs2ApiGeneration())
             return false;
         if (primitiveCount <= 0) return true;
 
+        const bool foldNegativeIndices = ib != nullptr && baseVertex < 0;
+
         // Source vertex index at sequence position `pos` within this draw.
         auto readSrc = [&](int pos) -> std::uint32_t {
             if (!ib) return static_cast<std::uint32_t>(firstVertex + pos);
             const auto& bytes = ib->GetCpuBytes();
+            std::uint32_t sourceIndex = 0;
             if (ib->IsThirtyTwoBit()) {
-                std::uint32_t v;
-                std::memcpy(&v, bytes.data() + static_cast<std::size_t>(startIndex + pos) * 4, 4);
-                return v;
+                std::memcpy(&sourceIndex,
+                            bytes.data() + static_cast<std::size_t>(startIndex + pos) * 4, 4);
+            } else {
+                std::uint16_t value = 0;
+                std::memcpy(&value,
+                            bytes.data() + static_cast<std::size_t>(startIndex + pos) * 2, 2);
+                sourceIndex = value;
             }
-            std::uint16_t v;
-            std::memcpy(&v, bytes.data() + static_cast<std::size_t>(startIndex + pos) * 2, 2);
-            return static_cast<std::uint32_t>(v);
+            if (!foldNegativeIndices) return sourceIndex;
+
+            const std::int64_t effective =
+                static_cast<std::int64_t>(sourceIndex) + baseVertex;
+            if (effective < 0 || effective > (std::numeric_limits<std::uint32_t>::max)())
+            {
+                throw System::InvalidOperationException(
+                    "EasyGL wireframe negative baseVertex leaves the index range");
+            }
+            return static_cast<std::uint32_t>(effective);
         };
 
         wireframeScratch_.clear();
@@ -11899,22 +12045,24 @@ if (ProfileIsEs2ApiGeneration())
                                wireframeScratch_.size() * sizeof(std::uint32_t),
                                ::easygl::BufferUsage::DynamicDraw);
         const int lineIndexCount = static_cast<int>(wireframeScratch_.size());
-        if (baseVertex == 0) {
+        const int effectiveBaseVertex = foldNegativeIndices ? 0 : baseVertex;
+        if (effectiveBaseVertex == 0) {
             device.draw_elements(::easygl::PrimitiveType::Lines, lineIndexCount,
                                  ::easygl::DataType::UnsignedInt, nullptr);
         } else {
 if (ProfileRequiresBaseVertexPointerRebase())
 {
             // GLES/WebGL profiles cannot assume glDrawElementsBaseVertex (ES 3.2).
-            ShiftEnabledPerVertexAttribPointers(baseVertex, +1);
+            ShiftEnabledPerVertexAttribPointers(effectiveBaseVertex, +1);
             device.draw_elements(::easygl::PrimitiveType::Lines, lineIndexCount,
                                  ::easygl::DataType::UnsignedInt, nullptr);
-            ShiftEnabledPerVertexAttribPointers(baseVertex, -1);
+            ShiftEnabledPerVertexAttribPointers(effectiveBaseVertex, -1);
 }
 else
 {
             ::metagl::glDrawElementsBaseVertex(::easygl::PrimitiveType::Lines, lineIndexCount,
-                                               ::easygl::DataType::UnsignedInt, nullptr, baseVertex);
+                                               ::easygl::DataType::UnsignedInt, nullptr,
+                                               effectiveBaseVertex);
 }
         }
         vb.UnbindAfterDraw();
@@ -12221,7 +12369,7 @@ else
             const auto& compiledIb = static_cast<const EasyGLIndexBufferRenderer&>(ib_in);
             auto compiledStreams = CollectCompiledEffectStreams(compiledVb, params);
             RequireCompiledEffectDeclarations(compiledStreams);
-            const bool rebasePointers = params.baseVertex != 0 &&
+            const bool rebasePointers = params.baseVertex > 0 &&
                 ProfileRequiresBaseVertexPointerRebase();
             if (rebasePointers)
                 ApplyCompiledEffectBaseVertex(compiledStreams, params.baseVertex);
@@ -12230,7 +12378,6 @@ else
             const CompiledEffectDepthRangeScope compiledDepthRange(*this);
             BindCompiledEffectForDrawEXT(compiledStreams.data(), compiledStreams.size(),
                                          *params.compiledEffectRuntime);
-            compiledIb.ibo.bind(::easygl::BufferTarget::ElementArray);
             const int compiledIndexCount = VertexCountForPrimitives(primitive, primitiveCount);
             const auto compiledIdxType = compiledIb.thirtyTwoBit ? ::easygl::DataType::UnsignedInt
                                                                   : ::easygl::DataType::UnsignedShort;
@@ -12238,17 +12385,10 @@ else
             const void* compiledIndexOffset = reinterpret_cast<const void*>(
                 static_cast<std::uintptr_t>(params.startIndex) *
                 static_cast<std::uintptr_t>(compiledIndexSize));
-            if (params.baseVertex == 0 || rebasePointers)
-            {
-                device.draw_elements(ToEasyGl(primitive), compiledIndexCount, compiledIdxType,
-                                     compiledIndexOffset);
-            }
-            else
-            {
-                ::metagl::glDrawElementsBaseVertex(ToEasyGl(primitive), compiledIndexCount,
-                                                   compiledIdxType, compiledIndexOffset,
-                                                   params.baseVertex);
-            }
+            DrawIndexedWithBaseVertexFallback(
+                compiledIb, ToEasyGl(primitive), compiledIndexCount, compiledIdxType,
+                compiledIndexOffset, params.startIndex,
+                rebasePointers ? 0 : params.baseVertex, false, 0);
             compiledVao.unbind();
             return;
         }
@@ -12287,28 +12427,14 @@ else
             BindCustomEffectMatrices(*params.customEffectRenderer, world, view, projection);
             const int index_count = VertexCountForPrimitives(primitive, primitiveCount);
             vb.BindForDraw();
-            ib.ibo.bind(::easygl::BufferTarget::ElementArray);
             const auto idxTypeCustom = ib.thirtyTwoBit ? ::easygl::DataType::UnsignedInt
                                                         : ::easygl::DataType::UnsignedShort;
             const int indexSizeCustom = ib.thirtyTwoBit ? 4 : 2;
             const void* indexOffsetCustom = reinterpret_cast<const void*>(
                 static_cast<std::uintptr_t>(params.startIndex) * static_cast<std::uintptr_t>(indexSizeCustom));
-            if (params.baseVertex == 0) {
-                device.draw_elements(ToEasyGl(primitive), index_count, idxTypeCustom, indexOffsetCustom);
-            } else {
-if (ProfileRequiresBaseVertexPointerRebase())
-{
-                // GLES/WebGL profiles cannot assume glDrawElementsBaseVertex (ES 3.2).
-                ShiftEnabledPerVertexAttribPointers(params.baseVertex, +1);
-                device.draw_elements(ToEasyGl(primitive), index_count, idxTypeCustom, indexOffsetCustom);
-                ShiftEnabledPerVertexAttribPointers(params.baseVertex, -1);
-}
-else
-{
-                ::metagl::glDrawElementsBaseVertex(ToEasyGl(primitive), index_count, idxTypeCustom,
-                                                   indexOffsetCustom, params.baseVertex);
-}
-            }
+            DrawIndexedWithBaseVertexFallback(
+                ib, ToEasyGl(primitive), index_count, idxTypeCustom, indexOffsetCustom,
+                params.startIndex, params.baseVertex, false, 0);
             if (multiStream) RestoreSingleStreamAttributes(vao, params);
             vb.UnbindAfterDraw();
             return;
@@ -12330,28 +12456,14 @@ else
         vb.BindForDraw();
         const bool semanticLayout = ConfigureDeclarationForStockProgramEXT(
             const_cast<EasyGLVertexBufferRenderer&>(vb), layoutStride, params);
-        ib.ibo.bind(::easygl::BufferTarget::ElementArray);
         const auto idxType2 = ib.thirtyTwoBit ? ::easygl::DataType::UnsignedInt
                                                : ::easygl::DataType::UnsignedShort;
         const int indexSize = ib.thirtyTwoBit ? 4 : 2;
         const void* indexOffset = reinterpret_cast<const void*>(
             static_cast<std::uintptr_t>(params.startIndex) * static_cast<std::uintptr_t>(indexSize));
-        if (params.baseVertex == 0) {
-            device.draw_elements(ToEasyGl(primitive), index_count, idxType2, indexOffset);
-        } else {
-if (ProfileRequiresBaseVertexPointerRebase())
-{
-            // GLES/WebGL profiles cannot assume glDrawElementsBaseVertex (ES 3.2).
-            ShiftEnabledPerVertexAttribPointers(params.baseVertex, +1);
-            device.draw_elements(ToEasyGl(primitive), index_count, idxType2, indexOffset);
-            ShiftEnabledPerVertexAttribPointers(params.baseVertex, -1);
-}
-else
-{
-            ::metagl::glDrawElementsBaseVertex(ToEasyGl(primitive), index_count, idxType2,
-                                               indexOffset, params.baseVertex);
-}
-        }
+        DrawIndexedWithBaseVertexFallback(
+            ib, ToEasyGl(primitive), index_count, idxType2, indexOffset,
+            params.startIndex, params.baseVertex, false, 0);
         if (multiStream) RestoreSingleStreamAttributes(vao, params);
         vb.UnbindAfterDraw();
         if (semanticLayout)
@@ -12396,7 +12508,7 @@ else
             const auto& compiledIb = static_cast<const EasyGLIndexBufferRenderer&>(ib_in);
             auto compiledStreams = CollectCompiledEffectStreams(compiledVb, params);
             RequireCompiledEffectDeclarations(compiledStreams);
-            const bool rebasePointers = params.baseVertex != 0 &&
+            const bool rebasePointers = params.baseVertex > 0 &&
                 ProfileRequiresBaseVertexPointerRebase();
             if (rebasePointers)
                 ApplyCompiledEffectBaseVertex(compiledStreams, params.baseVertex);
@@ -12405,7 +12517,6 @@ else
             const CompiledEffectDepthRangeScope compiledDepthRange(*this);
             BindCompiledEffectForDrawEXT(compiledStreams.data(), compiledStreams.size(),
                                          *params.compiledEffectRuntime);
-            compiledIb.ibo.bind(::easygl::BufferTarget::ElementArray);
             const int compiledIndexCount = VertexCountForPrimitives(primitive, primitiveCount);
             const auto compiledIdxType = compiledIb.thirtyTwoBit
                 ? ::easygl::DataType::UnsignedInt : ::easygl::DataType::UnsignedShort;
@@ -12413,18 +12524,10 @@ else
             const void* compiledIndexOffset = reinterpret_cast<const void*>(
                 static_cast<std::uintptr_t>(params.startIndex) *
                 static_cast<std::uintptr_t>(compiledIndexSize));
-            if (params.baseVertex == 0 || rebasePointers)
-            {
-                device.draw_elements_instanced(ToEasyGl(primitive), compiledIndexCount,
-                                               compiledIdxType, compiledIndexOffset,
-                                               instanceCount);
-            }
-            else
-            {
-                ::metagl::glDrawElementsInstancedBaseVertex(
-                    ToEasyGl(primitive), compiledIndexCount, compiledIdxType,
-                    compiledIndexOffset, instanceCount, params.baseVertex);
-            }
+            DrawIndexedWithBaseVertexFallback(
+                compiledIb, ToEasyGl(primitive), compiledIndexCount, compiledIdxType,
+                compiledIndexOffset, params.startIndex,
+                rebasePointers ? 0 : params.baseVertex, true, instanceCount);
             compiledVao.unbind();
             return;
         }
@@ -12529,7 +12632,6 @@ else
         if (params.customEffectRenderer)
         {
             BindCustomEffectMatrices(*params.customEffectRenderer, world, view, projection);
-            ib.ibo.bind(::easygl::BufferTarget::ElementArray);
         }
         else
         {
@@ -12539,30 +12641,11 @@ else
             Prog3D& p = SelectProgram(CombinedVertexStrideOr(params, vb.GetStride()), params);
             p.prog.use();
             BindDrawParams(p, world, view, projection, params);
-            ib.ibo.bind(::easygl::BufferTarget::ElementArray);
         }
 
-        if (params.baseVertex == 0)
-        {
-            device.draw_elements_instanced(
-                ToEasyGl(primitive), index_count, idxType, indexOffset, instanceCount);
-        }
-        else
-        {
-if (ProfileRequiresBaseVertexPointerRebase())
-{
-            ShiftEnabledPerVertexAttribPointers(params.baseVertex, +1);
-            device.draw_elements_instanced(
-                ToEasyGl(primitive), index_count, idxType, indexOffset, instanceCount);
-            ShiftEnabledPerVertexAttribPointers(params.baseVertex, -1);
-}
-else
-{
-            ::metagl::glDrawElementsInstancedBaseVertex(
-                ToEasyGl(primitive), index_count, idxType, indexOffset,
-                instanceCount, params.baseVertex);
-}
-        }
+        DrawIndexedWithBaseVertexFallback(
+            ib, ToEasyGl(primitive), index_count, idxType, indexOffset,
+            params.startIndex, params.baseVertex, true, instanceCount);
 
         // REMED-GFX-202: every location this draw claimed is released again, in reverse, so a later
         // draw through the same VAO never inherits a stale divisor or a pointer into a foreign VBO.

@@ -1331,6 +1331,27 @@ namespace CNA::Internal::Renderers::EasyGL
         bool wireframeIboCreated_ = false;
         std::vector<std::uint32_t> wireframeScratch_;  ///< CPU build buffer (32-bit line indices)
 
+        // A compensated negative base can require an attribute address before buffer start on
+        // GLES/WebGL and is driver-sensitive even where a native desktop entry point exists.
+        // Rebase just the selected index slice into this scratch buffer on every GL profile.
+        ::easygl::Buffer negativeBaseVertexIbo_;
+        bool negativeBaseVertexIboCreated_ = false;
+        std::vector<std::uint8_t> negativeBaseVertexScratch_;
+
+        void BindNegativeBaseVertexIndices(
+            const EasyGLIndexBufferRenderer& ib, int startIndex, int indexCount, int baseVertex);
+
+        void DrawIndexedWithBaseVertexFallback(
+            const EasyGLIndexBufferRenderer& ib,
+            ::easygl::PrimitiveType primitive,
+            int indexCount,
+            ::easygl::DataType indexType,
+            const void* indexOffset,
+            int startIndex,
+            int baseVertex,
+            bool instanced,
+            int instanceCount);
+
         // Draw the given triangle geometry as a wireframe (GL_LINES). Returns false when the
         // primitive is not a triangle list/strip (caller should fall back to a normal draw).
         // ib == nullptr means a non-indexed draw (sequential vertices from firstVertex).
