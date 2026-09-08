@@ -34,6 +34,18 @@ namespace CNA::Internal::Renderers::D3DCommon
     bool IsXnaBlockCompressedSurfaceFormat(int surfaceFormat) noexcept;
 
     /**
+     * @brief Returns whether XNA permits an ordinal as a render-target surface format.
+     *
+     * This is the renderer-neutral XNA/FNA format set. A DirectX renderer must additionally query
+     * its device for texture, render-target, and shader-sampling support before accepting one.
+     *
+     * @param surfaceFormat SurfaceFormat ordinal.
+     * @return True for an XNA 4.0 render-target format; compressed and CNA extension formats are
+     *         excluded.
+     */
+    bool IsXnaRenderTargetSurfaceFormat(int surfaceFormat) noexcept;
+
+    /**
      * @brief Returns the byte size of one texel for an uncompressed XNA 4.0 surface format.
      *
      * @param surfaceFormat SurfaceFormat ordinal.

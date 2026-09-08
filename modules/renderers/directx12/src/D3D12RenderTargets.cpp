@@ -2,8 +2,12 @@
 #include "CNA/Internal/Renderers/DirectX12/D3D12RenderTargets.hpp"
 #include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DFormatMapping.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfTypeHelper.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 
 #include <algorithm>
+#include <array>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -15,6 +19,9 @@
 
 namespace CNA::Internal::Renderers::DirectX12
 {
+    using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+    using Microsoft::Xna::Framework::Graphics::PackedVector::HalfTypeHelper;
+
     namespace
     {
         std::string FormatHr(HRESULT hr)
@@ -64,33 +71,21 @@ namespace CNA::Internal::Renderers::DirectX12
             return requestedCount;
         }
 
-        /// DX-144: reads back subresource `subresource` (a single mip level, array slice 0) of
-        /// `resource` as a w*h RGBA8 byte buffer, via a READBACK-heap CopyTextureRegion -- the same
-        /// synchronous readback discipline D3D12Buffers.cpp/D3D12Textures.cpp already establish.
-        /// Returns an empty vector on any failure (honest bail-out, not a silently wrong result).
-        std::vector<uint8_t> ReadbackSubresourceRGBA8(
+        std::vector<uint8_t> ReadbackSubresource(
             DirectX12Renderer* owner, ID3D12Device* /*device*/, ID3D12Resource* resource,
-            UINT subresource, int w, int h)
+            UINT subresource, int w, int h, int bytesPerTexel)
         {
-            // plans/plan_dx.md DX-205 moved the body onto the renderer, because ReadBackbuffer() needs the
-            // very same READBACK-heap CopyTextureRegion against a resource that is not a render
-            // target, and two copies of a synchronous readback are two places to get the barrier
-            // restore wrong. The renderer always owns the device this used to be handed, so the
-            // parameter is kept only to leave every call site unchanged.
             if (!owner) return {};
-            return owner->ReadbackSubresourceRGBA8EXT(resource, subresource, w, h);
+            return owner->ReadbackSubresourceEXT(resource, subresource, w, h, bytesPerTexel);
         }
 
-        /// DX-144: uploads a w*h RGBA8 byte buffer into subresource `subresource` of `resource`, via
-        /// an UPLOAD-heap CopyTextureRegion -- mirrors D3D12TextureRenderer::UploadRegion() exactly
-        /// (D3D12Textures.cpp), just against an arbitrary render-target resource instead of a
-        /// texture. Silently returns on failure (caller treats a still-missing mip as an honest gap,
-        /// not a crash).
-        void UploadSubresourceRGBA8(
+        void UploadSubresource(
             DirectX12Renderer* owner, ID3D12Device* device, ID3D12Resource* resource,
-            UINT subresource, const uint8_t* rgba, int w, int h)
+            UINT subresource, const uint8_t* pixels, int w, int h,
+            DXGI_FORMAT dxgiFormat, int bytesPerTexel)
         {
-            const UINT rowPitch = (static_cast<UINT>(w) * 4 + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1)
+            const UINT tightRowPitch = static_cast<UINT>(w) * static_cast<UINT>(bytesPerTexel);
+            const UINT rowPitch = (tightRowPitch + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1)
                                  & ~(D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1);
             const UINT64 uploadBufferSize = static_cast<UINT64>(rowPitch) * static_cast<UINT64>(h);
 
@@ -118,8 +113,8 @@ namespace CNA::Internal::Renderers::DirectX12
             if (FAILED(hr)) return;
             for (int row = 0; row < h; ++row)
                 std::memcpy(mapped + static_cast<std::size_t>(row) * rowPitch,
-                            rgba + static_cast<std::size_t>(row) * static_cast<std::size_t>(w) * 4,
-                            static_cast<std::size_t>(w) * 4);
+                            pixels + static_cast<std::size_t>(row) * tightRowPitch,
+                            tightRowPitch);
             staging->Unmap(0, nullptr);
 
             D3D12_TEXTURE_COPY_LOCATION dst{};
@@ -131,7 +126,7 @@ namespace CNA::Internal::Renderers::DirectX12
             src.pResource = staging.Get();
             src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
             src.PlacedFootprint.Offset = 0;
-            src.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            src.PlacedFootprint.Footprint.Format = dxgiFormat;
             src.PlacedFootprint.Footprint.Width = static_cast<UINT>(w);
             src.PlacedFootprint.Footprint.Height = static_cast<UINT>(h);
             src.PlacedFootprint.Footprint.Depth = 1;
@@ -153,14 +148,148 @@ namespace CNA::Internal::Renderers::DirectX12
             owner->ExecuteCommandListAndWaitEXT(cmdList);
         }
 
-        /// DX-144: a simple 2x2 box filter, clamping the second sample to the last row/column for
-        /// odd source dimensions. For a SOLID-color source (this row's own established test
-        /// methodology, see D3D11's DX-144 closure note), any weighting reproduces the exact same
-        /// solid color regardless of the exact edge-clamp behavior -- this sidesteps needing to
-        /// replicate D3D11's own GenerateMips() box-filter kernel bit-for-bit.
-        std::vector<uint8_t> BoxFilterDownsample(const std::vector<uint8_t>& src, int srcW, int srcH, int dstW, int dstH)
+        template <typename T>
+        T ReadScalar(const uint8_t* bytes)
         {
-            std::vector<uint8_t> dst(static_cast<std::size_t>(dstW) * static_cast<std::size_t>(dstH) * 4);
+            T value{};
+            std::memcpy(&value, bytes, sizeof(value));
+            return value;
+        }
+
+        template <typename T>
+        void WriteScalar(uint8_t* bytes, T value)
+        {
+            std::memcpy(bytes, &value, sizeof(value));
+        }
+
+        int ComponentCount(SurfaceFormat format)
+        {
+            switch (format)
+            {
+                case SurfaceFormat::Single:
+                case SurfaceFormat::HalfSingle:
+                    return 1;
+                case SurfaceFormat::Rg32:
+                case SurfaceFormat::Vector2:
+                case SurfaceFormat::HalfVector2:
+                    return 2;
+                default:
+                    return 4;
+            }
+        }
+
+        std::array<float, 4> DecodePixel(const uint8_t* pixel, SurfaceFormat format)
+        {
+            std::array<float, 4> result{};
+            switch (format)
+            {
+                case SurfaceFormat::Color:
+                    for (int c = 0; c < 4; ++c) result[c] = pixel[c] / 255.0f;
+                    break;
+                case SurfaceFormat::Rgba1010102:
+                {
+                    const std::uint32_t packed = ReadScalar<std::uint32_t>(pixel);
+                    result[0] = static_cast<float>(packed & 0x3FFu) / 1023.0f;
+                    result[1] = static_cast<float>((packed >> 10) & 0x3FFu) / 1023.0f;
+                    result[2] = static_cast<float>((packed >> 20) & 0x3FFu) / 1023.0f;
+                    result[3] = static_cast<float>((packed >> 30) & 0x3u) / 3.0f;
+                    break;
+                }
+                case SurfaceFormat::Rg32:
+                case SurfaceFormat::Rgba64:
+                {
+                    const int count = ComponentCount(format);
+                    for (int c = 0; c < count; ++c)
+                        result[c] = ReadScalar<std::uint16_t>(pixel + c * 2) / 65535.0f;
+                    break;
+                }
+                case SurfaceFormat::Single:
+                case SurfaceFormat::Vector2:
+                case SurfaceFormat::Vector4:
+                {
+                    const int count = ComponentCount(format);
+                    for (int c = 0; c < count; ++c)
+                        result[c] = ReadScalar<float>(pixel + c * 4);
+                    break;
+                }
+                case SurfaceFormat::HalfSingle:
+                case SurfaceFormat::HalfVector2:
+                case SurfaceFormat::HalfVector4:
+                case SurfaceFormat::HdrBlendable:
+                {
+                    const int count = ComponentCount(format);
+                    for (int c = 0; c < count; ++c)
+                        result[c] = HalfTypeHelper::Convert(
+                            ReadScalar<std::uint16_t>(pixel + c * 2));
+                    break;
+                }
+                default:
+                    break;
+            }
+            return result;
+        }
+
+        void EncodePixel(uint8_t* pixel, SurfaceFormat format, const std::array<float, 4>& value)
+        {
+            switch (format)
+            {
+                case SurfaceFormat::Color:
+                    for (int c = 0; c < 4; ++c)
+                        pixel[c] = static_cast<uint8_t>(std::lround(
+                            std::clamp(value[c], 0.0f, 1.0f) * 255.0f));
+                    break;
+                case SurfaceFormat::Rgba1010102:
+                {
+                    const auto quantize = [](float channel, std::uint32_t maximum)
+                    {
+                        return static_cast<std::uint32_t>(std::lround(
+                            std::clamp(channel, 0.0f, 1.0f) * static_cast<float>(maximum)));
+                    };
+                    const std::uint32_t packed = quantize(value[0], 1023u) |
+                        (quantize(value[1], 1023u) << 10) |
+                        (quantize(value[2], 1023u) << 20) |
+                        (quantize(value[3], 3u) << 30);
+                    WriteScalar(pixel, packed);
+                    break;
+                }
+                case SurfaceFormat::Rg32:
+                case SurfaceFormat::Rgba64:
+                {
+                    const int count = ComponentCount(format);
+                    for (int c = 0; c < count; ++c)
+                        WriteScalar(pixel + c * 2, static_cast<std::uint16_t>(std::lround(
+                            std::clamp(value[c], 0.0f, 1.0f) * 65535.0f)));
+                    break;
+                }
+                case SurfaceFormat::Single:
+                case SurfaceFormat::Vector2:
+                case SurfaceFormat::Vector4:
+                {
+                    const int count = ComponentCount(format);
+                    for (int c = 0; c < count; ++c) WriteScalar(pixel + c * 4, value[c]);
+                    break;
+                }
+                case SurfaceFormat::HalfSingle:
+                case SurfaceFormat::HalfVector2:
+                case SurfaceFormat::HalfVector4:
+                case SurfaceFormat::HdrBlendable:
+                {
+                    const int count = ComponentCount(format);
+                    for (int c = 0; c < count; ++c)
+                        WriteScalar(pixel + c * 2, HalfTypeHelper::Convert(value[c]));
+                    break;
+                }
+                default:
+                    break;
+            }
+        }
+
+        std::vector<uint8_t> BoxFilterDownsample(
+            const std::vector<uint8_t>& src, int srcW, int srcH, int dstW, int dstH,
+            SurfaceFormat format, int bytesPerTexel)
+        {
+            std::vector<uint8_t> dst(
+                static_cast<std::size_t>(dstW) * static_cast<std::size_t>(dstH) * bytesPerTexel);
             for (int y = 0; y < dstH; ++y)
             {
                 const int sy0 = std::min(srcH - 1, y * 2);
@@ -169,14 +298,22 @@ namespace CNA::Internal::Renderers::DirectX12
                 {
                     const int sx0 = std::min(srcW - 1, x * 2);
                     const int sx1 = std::min(srcW - 1, x * 2 + 1);
-                    for (int c = 0; c < 4; ++c)
+                    const auto decode = [&](int sx, int sy)
                     {
-                        const int sum = src[(static_cast<std::size_t>(sy0) * srcW + sx0) * 4 + c]
-                                      + src[(static_cast<std::size_t>(sy0) * srcW + sx1) * 4 + c]
-                                      + src[(static_cast<std::size_t>(sy1) * srcW + sx0) * 4 + c]
-                                      + src[(static_cast<std::size_t>(sy1) * srcW + sx1) * 4 + c];
-                        dst[(static_cast<std::size_t>(y) * dstW + x) * 4 + c] = static_cast<uint8_t>(sum / 4);
-                    }
+                        const std::size_t offset =
+                            (static_cast<std::size_t>(sy) * srcW + sx) * bytesPerTexel;
+                        return DecodePixel(src.data() + offset, format);
+                    };
+                    const auto p00 = decode(sx0, sy0);
+                    const auto p10 = decode(sx1, sy0);
+                    const auto p01 = decode(sx0, sy1);
+                    const auto p11 = decode(sx1, sy1);
+                    std::array<float, 4> average{};
+                    for (int c = 0; c < ComponentCount(format); ++c)
+                        average[c] = (p00[c] + p10[c] + p01[c] + p11[c]) * 0.25f;
+                    const std::size_t offset =
+                        (static_cast<std::size_t>(y) * dstW + x) * bytesPerTexel;
+                    EncodePixel(dst.data() + offset, format, average);
                 }
             }
             return dst;
@@ -189,14 +326,20 @@ namespace CNA::Internal::Renderers::DirectX12
 
     D3D12RenderTargetRenderer::D3D12RenderTargetRenderer(
         DirectX12Renderer* owner, ID3D12Device* device, int w, int h, int depthFormat, bool mipMap,
-        int multiSampleCount)
+        int multiSampleCount, int surfaceFormat)
         : owner_(owner)
         , ownerLifetime_(owner ? owner->GetLifetimeTokenEXT() : std::weak_ptr<void>{})
         , device_(device)
         , width_(w)
         , height_(h)
-        , appliedMultiSampleCount_(ClampMultiSampleCount(device, DXGI_FORMAT_R8G8B8A8_UNORM, multiSampleCount))
+        , surfaceFormat_(surfaceFormat)
+        , dxgiFormat_(D3DCommon::SurfaceFormatToDxgi(surfaceFormat))
+        , bytesPerTexel_(D3DCommon::SurfaceFormatBytesPerTexel(surfaceFormat))
     {
+        if (dxgiFormat_ == DXGI_FORMAT_UNKNOWN || bytesPerTexel_ <= 0)
+            throw std::invalid_argument("D3D12RenderTargetRenderer: unsupported SurfaceFormat " +
+                                        std::to_string(surfaceFormat));
+        appliedMultiSampleCount_ = ClampMultiSampleCount(device, dxgiFormat_, multiSampleCount);
         isMsaa_ = appliedMultiSampleCount_ > 0;
         // Mutually exclusive on the same attachment, same rationale D3D11RenderTargetRenderer's own
         // DX-45 already established -- a full mip chain needs a single-sample source.
@@ -212,13 +355,13 @@ namespace CNA::Internal::Renderers::DirectX12
         colorDesc.Height = static_cast<UINT>(h);
         colorDesc.DepthOrArraySize = 1;
         colorDesc.MipLevels = static_cast<UINT16>(levelCount_);
-        colorDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        colorDesc.Format = dxgiFormat_;
         colorDesc.SampleDesc.Count = isMsaa_ ? static_cast<UINT>(appliedMultiSampleCount_) : 1;
         colorDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
         colorDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
 
         D3D12_CLEAR_VALUE colorClear{};
-        colorClear.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        colorClear.Format = dxgiFormat_;
 
         HRESULT hr = device_->CreateCommittedResource(
             &heapProps, D3D12_HEAP_FLAG_NONE, &colorDesc,
@@ -235,7 +378,7 @@ namespace CNA::Internal::Renderers::DirectX12
         // guaranteed for a multi-mip resource. TEXTURE2DMS has no MipSlice field at all (MSAA
         // resources never have mips, enforced above by the mutual-exclusion rule).
         D3D12_RENDER_TARGET_VIEW_DESC rtvDesc{};
-        rtvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        rtvDesc.Format = dxgiFormat_;
         if (isMsaa_)
         {
             rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DMS;
@@ -266,7 +409,7 @@ namespace CNA::Internal::Renderers::DirectX12
         }
 
         D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
-        srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        srvDesc.Format = dxgiFormat_;
         srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D; // always single-sample -- see GetSampleableColorResourceEXT()
         srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
         srvDesc.Texture2D.MipLevels = static_cast<UINT>(levelCount_);
@@ -329,7 +472,7 @@ namespace CNA::Internal::Renderers::DirectX12
             // NO depth buffer (depth test and every ClearDepth*/ClearStencil* variant were inert
             // against it). Found by DX-146's own depth/stencil pixel proofs.
             owner_->BindOffscreenColorTargetEXT(colorResource_.Get(), rtv_,
-                                                DXGI_FORMAT_R8G8B8A8_UNORM, width_, height_,
+                                                dxgiFormat_, width_, height_,
                                                 dsv_, dsvFormat_);
         }
     }
@@ -365,7 +508,7 @@ namespace CNA::Internal::Renderers::DirectX12
         tracker.TransitionTo(cmdList, colorResource_.Get(), D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
         tracker.TransitionTo(cmdList, resolveResource_.Get(), D3D12_RESOURCE_STATE_RESOLVE_DEST);
         cmdList->ResolveSubresource(resolveResource_.Get(), 0, colorResource_.Get(), 0,
-                                    DXGI_FORMAT_R8G8B8A8_UNORM);
+                                    dxgiFormat_);
         // Color goes back to whatever it was (RENDER_TARGET -- the only state BindAsRenderTarget()
         // ever leaves it in); the resolve target settles into the real shader-readable resting
         // state so it's immediately valid to sample/read back without a further transition. Its
@@ -403,7 +546,7 @@ namespace CNA::Internal::Renderers::DirectX12
                 "The requested rectangle leaves the " + std::to_string(levelW) + "x" +
                     std::to_string(levelH) + " mip level.");
         const std::int64_t requiredBytes =
-            static_cast<std::int64_t>(w) * static_cast<std::int64_t>(h) * 4;
+            static_cast<std::int64_t>(w) * static_cast<std::int64_t>(h) * bytesPerTexel_;
         if (static_cast<std::int64_t>(dataLength) < requiredBytes)
             throw System::ArgumentOutOfRangeException(
                 "dataLength", std::to_string(dataLength),
@@ -414,18 +557,20 @@ namespace CNA::Internal::Renderers::DirectX12
         if (!owner_ || !device_ || !source || data == nullptr)
             return false;
 
-        const std::vector<uint8_t> levelPixels = ReadbackSubresourceRGBA8(
-            owner_, device_.Get(), source, static_cast<UINT>(level), levelW, levelH);
-        // ReadbackSubresourceRGBA8's own honest bail-out: empty means the copy never completed.
-        if (levelPixels.size() < static_cast<std::size_t>(levelW) * levelH * 4)
+        const std::vector<uint8_t> levelPixels = ReadbackSubresource(
+            owner_, device_.Get(), source, static_cast<UINT>(level), levelW, levelH,
+            bytesPerTexel_);
+        if (levelPixels.size() <
+            static_cast<std::size_t>(levelW) * levelH * bytesPerTexel_)
             return false;
 
         auto* dst = static_cast<std::uint8_t*>(data);
-        const std::size_t rowBytes = static_cast<std::size_t>(w) * 4u;
+        const std::size_t rowBytes =
+            static_cast<std::size_t>(w) * static_cast<std::size_t>(bytesPerTexel_);
         for (int row = 0; row < h; ++row)
             std::memcpy(dst + static_cast<std::size_t>(row) * rowBytes,
                         levelPixels.data() +
-                            (static_cast<std::size_t>(y + row) * levelW + x) * 4u,
+                            (static_cast<std::size_t>(y + row) * levelW + x) * bytesPerTexel_,
                         rowBytes);
         return true;
     }
@@ -440,14 +585,17 @@ namespace CNA::Internal::Renderers::DirectX12
             const int dstW = std::max(1, srcW / 2);
             const int dstH = std::max(1, srcH / 2);
 
-            const auto srcPixels = ReadbackSubresourceRGBA8(
-                owner_, device_.Get(), colorResource_.Get(), static_cast<UINT>(level - 1), srcW, srcH);
+            const auto srcPixels = ReadbackSubresource(
+                owner_, device_.Get(), colorResource_.Get(), static_cast<UINT>(level - 1), srcW,
+                srcH, bytesPerTexel_);
             if (srcPixels.empty()) return; // honest bail-out -- leaves remaining levels undefined, not wrong
 
-            const auto dstPixels = BoxFilterDownsample(srcPixels, srcW, srcH, dstW, dstH);
-            UploadSubresourceRGBA8(
+            const auto dstPixels = BoxFilterDownsample(
+                srcPixels, srcW, srcH, dstW, dstH,
+                static_cast<SurfaceFormat>(surfaceFormat_), bytesPerTexel_);
+            UploadSubresource(
                 owner_, device_.Get(), colorResource_.Get(), static_cast<UINT>(level),
-                dstPixels.data(), dstW, dstH);
+                dstPixels.data(), dstW, dstH, dxgiFormat_, bytesPerTexel_);
 
             srcW = dstW; srcH = dstH;
         }
@@ -459,13 +607,19 @@ namespace CNA::Internal::Renderers::DirectX12
 
     D3D12RenderTargetCubeRenderer::D3D12RenderTargetCubeRenderer(
         DirectX12Renderer* owner, ID3D12Device* device, int size, int depthFormat, bool mipMap,
-        int multiSampleCount)
+        int multiSampleCount, int surfaceFormat)
         : owner_(owner)
         , ownerLifetime_(owner ? owner->GetLifetimeTokenEXT() : std::weak_ptr<void>{})
         , device_(device)
         , size_(size)
-        , appliedMultiSampleCount_(ClampMultiSampleCount(device, DXGI_FORMAT_R8G8B8A8_UNORM, multiSampleCount))
+        , surfaceFormat_(surfaceFormat)
+        , dxgiFormat_(D3DCommon::SurfaceFormatToDxgi(surfaceFormat))
+        , bytesPerTexel_(D3DCommon::SurfaceFormatBytesPerTexel(surfaceFormat))
     {
+        if (dxgiFormat_ == DXGI_FORMAT_UNKNOWN || bytesPerTexel_ <= 0)
+            throw std::invalid_argument("D3D12RenderTargetCubeRenderer: unsupported SurfaceFormat " +
+                                        std::to_string(surfaceFormat));
+        appliedMultiSampleCount_ = ClampMultiSampleCount(device, dxgiFormat_, multiSampleCount);
         isMsaa_ = appliedMultiSampleCount_ > 0;
         // Mutually exclusive on the same attachment, same rationale D3D12RenderTargetRenderer's own
         // DX-117 MSAA follow-up already established for the 2D leg.
@@ -481,13 +635,13 @@ namespace CNA::Internal::Renderers::DirectX12
         colorDesc.Height = static_cast<UINT>(size_);
         colorDesc.DepthOrArraySize = 6;
         colorDesc.MipLevels = static_cast<UINT16>(levelCount_);
-        colorDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        colorDesc.Format = dxgiFormat_;
         colorDesc.SampleDesc.Count = isMsaa_ ? static_cast<UINT>(appliedMultiSampleCount_) : 1;
         colorDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
         colorDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
 
         D3D12_CLEAR_VALUE colorClear{};
-        colorClear.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        colorClear.Format = dxgiFormat_;
 
         HRESULT hr = device_->CreateCommittedResource(
             &heapProps, D3D12_HEAP_FLAG_NONE, &colorDesc,
@@ -502,7 +656,7 @@ namespace CNA::Internal::Renderers::DirectX12
             if (!heaps_) heaps_ = owner_->GetDescriptorHeapsEXT();
             rtv_[face] = owner_->AllocateRtvDescriptorEXT();
             D3D12_RENDER_TARGET_VIEW_DESC rtvDesc{};
-            rtvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            rtvDesc.Format = dxgiFormat_;
             if (isMsaa_)
             {
                 rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DMSARRAY;
@@ -538,7 +692,7 @@ namespace CNA::Internal::Renderers::DirectX12
         }
 
         D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
-        srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        srvDesc.Format = dxgiFormat_;
         srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
         srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
         srvDesc.TextureCube.MipLevels = static_cast<UINT>(levelCount_);
@@ -606,7 +760,7 @@ namespace CNA::Internal::Renderers::DirectX12
             // and that shared-ness is itself part of the contract
             // (rendertarget_depthstencil_usage_test U2).
             owner_->BindOffscreenColorTargetEXT(colorResource_.Get(), rtv_[face],
-                                                DXGI_FORMAT_R8G8B8A8_UNORM, size_, size_,
+                                                dxgiFormat_, size_, size_,
                                                 dsv_, dsvFormat_);
         }
     }
@@ -638,7 +792,7 @@ namespace CNA::Internal::Renderers::DirectX12
         tracker.TransitionTo(cmdList, colorResource_.Get(), D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
         tracker.TransitionTo(cmdList, resolveResource_.Get(), D3D12_RESOURCE_STATE_RESOLVE_DEST);
         cmdList->ResolveSubresource(resolveResource_.Get(), dstSubresource, colorResource_.Get(), srcSubresource,
-                                    DXGI_FORMAT_R8G8B8A8_UNORM);
+                                    dxgiFormat_);
         tracker.TransitionTo(cmdList, colorResource_.Get(), priorColorState);
         tracker.TransitionTo(cmdList, resolveResource_.Get(), kShaderReadableState);
 
@@ -656,14 +810,18 @@ namespace CNA::Internal::Renderers::DirectX12
         if (level < 0 || level >= levelCount_) return false;
         const int levelSize = std::max(1, size_ >> level);
         if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
-        if (dataLength < w * h * 4) return false;
+        const std::int64_t requiredBytes =
+            static_cast<std::int64_t>(w) * static_cast<std::int64_t>(h) * bytesPerTexel_;
+        if (static_cast<std::int64_t>(dataLength) < requiredBytes) return false;
 
         // Always the resolved single-sample resource: a multisampled one cannot be the source of a
         // CopyTextureRegion, and UnbindAsRenderTarget has already resolved into this one per face.
         ID3D12Resource* source = GetSampleableColorResourceEXT();
         if (source == nullptr) return false;
 
-        const UINT rowPitch = AlignUp(static_cast<UINT>(w) * 4, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
+        const UINT tightRowPitch =
+            static_cast<UINT>(w) * static_cast<UINT>(bytesPerTexel_);
+        const UINT rowPitch = AlignUp(tightRowPitch, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
         const UINT64 readbackBufferSize = static_cast<UINT64>(rowPitch) * static_cast<UINT64>(h);
 
         D3D12_HEAP_PROPERTIES readbackHeapProps{};
@@ -689,7 +847,7 @@ namespace CNA::Internal::Renderers::DirectX12
         dst.pResource = readback.Get();
         dst.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
         dst.PlacedFootprint.Offset = 0;
-        dst.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        dst.PlacedFootprint.Footprint.Format = dxgiFormat_;
         dst.PlacedFootprint.Footprint.Width = static_cast<UINT>(w);
         dst.PlacedFootprint.Footprint.Height = static_cast<UINT>(h);
         dst.PlacedFootprint.Footprint.Depth = 1;
@@ -735,8 +893,8 @@ namespace CNA::Internal::Renderers::DirectX12
         for (int row = 0; row < h; ++row)
         {
             const std::uint8_t* srcRow = mapped + static_cast<std::size_t>(row) * rowPitch;
-            std::uint8_t* dstRow = out + static_cast<std::size_t>(row) * static_cast<std::size_t>(w) * 4;
-            std::memcpy(dstRow, srcRow, static_cast<std::size_t>(w) * 4);
+            std::uint8_t* dstRow = out + static_cast<std::size_t>(row) * tightRowPitch;
+            std::memcpy(dstRow, srcRow, tightRowPitch);
         }
         const D3D12_RANGE writtenRange{0, 0};
         readback->Unmap(0, &writtenRange);
@@ -772,14 +930,17 @@ namespace CNA::Internal::Renderers::DirectX12
             const UINT srcSubresource = static_cast<UINT>(level - 1) + face * static_cast<UINT>(levelCount_);
             const UINT dstSubresource = static_cast<UINT>(level) + face * static_cast<UINT>(levelCount_);
 
-            const auto srcPixels = ReadbackSubresourceRGBA8(
-                owner_, device_.Get(), colorResource_.Get(), srcSubresource, srcW, srcH);
+            const auto srcPixels = ReadbackSubresource(
+                owner_, device_.Get(), colorResource_.Get(), srcSubresource, srcW, srcH,
+                bytesPerTexel_);
             if (srcPixels.empty()) return; // honest bail-out -- leaves remaining levels undefined, not wrong
 
-            const auto dstPixels = BoxFilterDownsample(srcPixels, srcW, srcH, dstW, dstH);
-            UploadSubresourceRGBA8(
+            const auto dstPixels = BoxFilterDownsample(
+                srcPixels, srcW, srcH, dstW, dstH,
+                static_cast<SurfaceFormat>(surfaceFormat_), bytesPerTexel_);
+            UploadSubresource(
                 owner_, device_.Get(), colorResource_.Get(), dstSubresource,
-                dstPixels.data(), dstW, dstH);
+                dstPixels.data(), dstW, dstH, dxgiFormat_, bytesPerTexel_);
 
             srcW = dstW; srcH = dstH;
         }

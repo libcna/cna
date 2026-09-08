@@ -119,6 +119,13 @@ namespace CNA::Internal::Renderers::DirectX12
 
         /** @brief Classifies core XNA surface formats backed by native D3D12 storage. */
         [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief Classifies XNA render-target formats using actual D3D12 device support.
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return Supported only when the format is an XNA render-target format that this device
+         *         can render to and sample.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyRenderTargetFormatEXT(int surfaceFormat) const override;
         /** @brief Restricts Color-shaped transfers to actual Color storage. */
         [[nodiscard]] RendererFormatVerdict ClassifyColorTransferFormatEXT(int surfaceFormat) const override;
         /**
@@ -162,12 +169,39 @@ namespace CNA::Internal::Renderers::DirectX12
                                                                     bool preserveContents = false,
                                                                     bool mipMap = false,
                                                                     int multiSampleCount = 0) override;
+        /**
+         * @brief Creates a D3D12 2D render target in the requested XNA surface format.
+         * @param w Width in pixels.
+         * @param h Height in pixels.
+         * @param depthFormat DepthFormat ordinal.
+         * @param preserveContents Whether previous contents should be preserved.
+         * @param mipMap Whether to allocate a full mip chain.
+         * @param multiSampleCount Requested sample count.
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return The native D3D12 render target.
+         */
+        std::unique_ptr<IRenderTargetRenderer> CreateRenderTarget2DEXT(
+            int w, int h, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount, int surfaceFormat) override;
         void SetRenderTarget2D(IRenderTargetRenderer* rt) override;
         /// DX-117: real D3D12RenderTargetCubeRenderer, no longer the inherited default (-> nullptr).
         std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCube(int size, int depthFormat,
                                                                           bool preserveContents = false,
                                                                           bool mipMap = false,
                                                                           int multiSampleCount = 0) override;
+        /**
+         * @brief Creates a D3D12 cube render target in the requested XNA surface format.
+         * @param size Face width and height in pixels.
+         * @param depthFormat DepthFormat ordinal.
+         * @param preserveContents Whether previous contents should be preserved.
+         * @param mipMap Whether to allocate a full mip chain.
+         * @param multiSampleCount Requested sample count.
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return The native D3D12 cube render target.
+         */
+        std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCubeEXT(
+            int size, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount, int surfaceFormat) override;
         /// DX-117: real MRT -- binds every target's own RTV (up to 8, D3D12's own
         /// D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT, though this project's shared GraphicsDevice
         /// code already caps at 4, MAX_RENDERTARGET_BINDINGS). Draws themselves remain
@@ -349,6 +383,17 @@ namespace CNA::Internal::Renderers::DirectX12
         /// mechanism against a resource that is not a render target.
         [[nodiscard]] std::vector<std::uint8_t> ReadbackSubresourceRGBA8EXT(
             ID3D12Resource* resource, UINT subresource, int w, int h);
+        /**
+         * @brief Reads one texture subresource into tightly packed format-native rows.
+         * @param resource Source texture resource.
+         * @param subresource Source subresource index.
+         * @param w Width in texels.
+         * @param h Height in texels.
+         * @param bytesPerTexel Native byte count for one texel.
+         * @return Tightly packed rows, or an empty vector if the synchronous readback failed.
+         */
+        [[nodiscard]] std::vector<std::uint8_t> ReadbackSubresourceEXT(
+            ID3D12Resource* resource, UINT subresource, int w, int h, int bytesPerTexel);
         /** @brief Real swap chain, or null if IsSwapChainAvailableEXT() is false. */
         [[nodiscard]] IDXGISwapChain3* GetSwapChainEXT() const { return swapChain_.Get(); }
 

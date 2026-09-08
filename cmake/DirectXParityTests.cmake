@@ -579,6 +579,10 @@ function(cna_register_d3d_parity_tests)
         NAME SurfaceFormat_StorageContract TARGET surface_format_storage DIRECTX12_ORDER 1890
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/d3d_surface_format_storage_contract_test.cpp")
     cna_d3d_parity_fixture(
+        NAME RenderTarget_SurfaceFormat TARGET rendertarget_surface_format DIRECTX12_ORDER 1891
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_surface_format_contract_test.cpp"
+        DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 600)
+    cna_d3d_parity_fixture(
         NAME CompressedTexture_StorageContract TARGET compressed_texture_storage DIRECTX12_ORDER 1892
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/d3d_compressed_texture_contract_test.cpp"
         DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 600)

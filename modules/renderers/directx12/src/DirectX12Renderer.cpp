@@ -1165,12 +1165,19 @@ namespace CNA::Internal::Renderers::DirectX12
     std::unique_ptr<IRenderTargetRenderer> DirectX12Renderer::CreateRenderTarget2D(
         int w, int h, int depthFormat, bool /*preserveContents*/, bool mipMap, int multiSampleCount)
     {
+        return CreateRenderTarget2DEXT(w, h, depthFormat, false, mipMap, multiSampleCount, 0);
+    }
+
+    std::unique_ptr<IRenderTargetRenderer> DirectX12Renderer::CreateRenderTarget2DEXT(
+        int w, int h, int depthFormat, bool /*preserveContents*/, bool mipMap,
+        int multiSampleCount, int surfaceFormat)
+    {
         // DX-144: mipMap is now honored -- a real CPU box-filter downsample cascade on
         // UnbindAsRenderTarget() (see D3D12RenderTargets.hpp/.cpp's own header comment). DX-117
         // MSAA follow-up: multiSampleCount is now honored too -- device-queried and clamped to 0
         // (off) by D3D12RenderTargetRenderer's own ClampMultiSampleCount() when unsupported.
         return std::make_unique<D3D12RenderTargetRenderer>(this, device_.Get(), w, h, depthFormat, mipMap,
-                                                           multiSampleCount);
+                                                           multiSampleCount, surfaceFormat);
     }
 
     // REMED-GFX-134: a bound RenderTargetCube face was never tracked, so its
@@ -1231,6 +1238,14 @@ namespace CNA::Internal::Renderers::DirectX12
     std::unique_ptr<IRenderTargetCubeRenderer> DirectX12Renderer::CreateRenderTargetCube(
         int size, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
+        return CreateRenderTargetCubeEXT(
+            size, depthFormat, preserveContents, mipMap, multiSampleCount, 0);
+    }
+
+    std::unique_ptr<IRenderTargetCubeRenderer> DirectX12Renderer::CreateRenderTargetCubeEXT(
+        int size, int depthFormat, bool preserveContents, bool mipMap,
+        int multiSampleCount, int surfaceFormat)
+    {
         // REMED-GFX-136: consumed by being deliberately unused, for the same reason
         // CreateRenderTarget2D above states -- OMSetRenderTargets has no load action, so a bound
         // cube face keeps whatever is in it until something explicitly clears or draws over it.
@@ -1240,7 +1255,7 @@ namespace CNA::Internal::Renderers::DirectX12
         // multiSampleCount is now honored too -- device-queried and clamped to 0 (off) by
         // D3D12RenderTargetCubeRenderer's own ClampMultiSampleCount() when unsupported.
         return std::make_unique<D3D12RenderTargetCubeRenderer>(this, device_.Get(), size, depthFormat, mipMap,
-                                                               multiSampleCount);
+                                                               multiSampleCount, surfaceFormat);
     }
 
     void DirectX12Renderer::SetRenderTargets(
@@ -1300,7 +1315,7 @@ namespace CNA::Internal::Renderers::DirectX12
         // rendertarget_depthstencil_usage_test, which scored 7/29 on this renderer solely because of
         // it, while its own C1 control ("does depth testing work at all inside a render target?")
         // could never pass.
-        BindOffscreenColorTargetsEXT(resources, rtvs, n, DXGI_FORMAT_R8G8B8A8_UNORM,
+        BindOffscreenColorTargetsEXT(resources, rtvs, n, resources[0]->GetDesc().Format,
                                      renderTargets[0].GetWidth(),
                                      renderTargets[0].GetHeight(),
                                      first ? first->GetDsvEXT() : D3D12_CPU_DESCRIPTOR_HANDLE{},
@@ -1435,7 +1450,13 @@ namespace CNA::Internal::Renderers::DirectX12
     std::vector<std::uint8_t> DirectX12Renderer::ReadbackSubresourceRGBA8EXT(
         ID3D12Resource* resource, UINT subresource, int w, int h)
     {
-        if (!resource || !device_ || w <= 0 || h <= 0) return {};
+        return ReadbackSubresourceEXT(resource, subresource, w, h, 4);
+    }
+
+    std::vector<std::uint8_t> DirectX12Renderer::ReadbackSubresourceEXT(
+        ID3D12Resource* resource, UINT subresource, int w, int h, int bytesPerTexel)
+    {
+        if (!resource || !device_ || w <= 0 || h <= 0 || bytesPerTexel <= 0) return {};
 
         const D3D12_RESOURCE_DESC desc = resource->GetDesc();
         D3D12_PLACED_SUBRESOURCE_FOOTPRINT fp{};
@@ -1486,11 +1507,19 @@ namespace CNA::Internal::Renderers::DirectX12
         std::uint8_t* mapped = nullptr;
         const D3D12_RANGE rr{0, static_cast<SIZE_T>(totalBytes)};
         if (FAILED(rb->Map(0, &rr, reinterpret_cast<void**>(&mapped)))) return {};
-        std::vector<std::uint8_t> out(static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4);
+        const std::size_t tightRowBytes =
+            static_cast<std::size_t>(w) * static_cast<std::size_t>(bytesPerTexel);
+        if (rowBytes < tightRowBytes)
+        {
+            const D3D12_RANGE wr{0, 0};
+            rb->Unmap(0, &wr);
+            return {};
+        }
+        std::vector<std::uint8_t> out(tightRowBytes * static_cast<std::size_t>(h));
         for (int row = 0; row < h; ++row)
-            std::memcpy(out.data() + static_cast<std::size_t>(row) * static_cast<std::size_t>(w) * 4,
+            std::memcpy(out.data() + static_cast<std::size_t>(row) * tightRowBytes,
                         mapped + fp.Offset + static_cast<std::size_t>(row) * fp.Footprint.RowPitch,
-                        static_cast<std::size_t>(w) * 4);
+                        tightRowBytes);
         const D3D12_RANGE wr{0, 0};
         rb->Unmap(0, &wr);
         return out;
@@ -1619,6 +1648,28 @@ namespace CNA::Internal::Renderers::DirectX12
         if (D3DCommon::SurfaceFormatToDxgi(surfaceFormat) != DXGI_FORMAT_UNKNOWN)
             return RendererFormatVerdict::Unsupported;
         return RendererFormatVerdict::Defer;
+    }
+
+    RendererFormatVerdict DirectX12Renderer::ClassifyRenderTargetFormatEXT(int surfaceFormat) const
+    {
+        const DXGI_FORMAT format = D3DCommon::SurfaceFormatToDxgi(surfaceFormat);
+        if (!D3DCommon::IsXnaRenderTargetSurfaceFormat(surfaceFormat))
+            return format == DXGI_FORMAT_UNKNOWN
+                ? RendererFormatVerdict::Defer
+                : RendererFormatVerdict::Unsupported;
+        if (!device_) return RendererFormatVerdict::Unsupported;
+
+        D3D12_FEATURE_DATA_FORMAT_SUPPORT support{};
+        support.Format = format;
+        const D3D12_FORMAT_SUPPORT1 required =
+            static_cast<D3D12_FORMAT_SUPPORT1>(
+                D3D12_FORMAT_SUPPORT1_TEXTURE2D |
+                D3D12_FORMAT_SUPPORT1_RENDER_TARGET |
+                D3D12_FORMAT_SUPPORT1_SHADER_SAMPLE);
+        if (FAILED(device_->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT, &support, sizeof(support))) ||
+            (support.Support1 & required) != required)
+            return RendererFormatVerdict::Unsupported;
+        return RendererFormatVerdict::Supported;
     }
 
     RendererFormatVerdict DirectX12Renderer::ClassifyColorTransferFormatEXT(int surfaceFormat) const

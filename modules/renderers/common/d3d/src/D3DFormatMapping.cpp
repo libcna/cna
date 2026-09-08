@@ -84,6 +84,27 @@ namespace CNA::Internal::Renderers::D3DCommon
         }
     }
 
+    bool IsXnaRenderTargetSurfaceFormat(int surfaceFormat) noexcept
+    {
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+            case SurfaceFormat::Color:
+            case SurfaceFormat::Rgba1010102:
+            case SurfaceFormat::Rg32:
+            case SurfaceFormat::Rgba64:
+            case SurfaceFormat::Single:
+            case SurfaceFormat::Vector2:
+            case SurfaceFormat::Vector4:
+            case SurfaceFormat::HalfSingle:
+            case SurfaceFormat::HalfVector2:
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::HdrBlendable:
+                return true;
+            default:
+                return false;
+        }
+    }
+
     int SurfaceFormatBytesPerTexel(int surfaceFormat) noexcept
     {
         switch (static_cast<SurfaceFormat>(surfaceFormat))

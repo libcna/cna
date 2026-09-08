@@ -58,14 +58,20 @@ namespace CNA::Internal::Renderers::DirectX11
 
     D3D11RenderTargetRenderer::D3D11RenderTargetRenderer(
         DirectX11Renderer* owner, ID3D11Device* device, ID3D11DeviceContext* context,
-        int w, int h, int depthFormat, bool mipMap, int multiSampleCount)
+        int w, int h, int depthFormat, bool mipMap, int multiSampleCount, int surfaceFormat)
         : owner_(owner)
         , ownerLifetime_(owner ? owner->GetLifetimeTokenEXT() : std::weak_ptr<void>{})
         , device_(device)
         , context_(context)
         , width_(w), height_(h)
+        , surfaceFormat_(surfaceFormat)
+        , dxgiFormat_(D3DCommon::SurfaceFormatToDxgi(surfaceFormat))
+        , bytesPerTexel_(D3DCommon::SurfaceFormatBytesPerTexel(surfaceFormat))
     {
-        appliedMultiSampleCount_ = ClampMultiSampleCount(device_.Get(), DXGI_FORMAT_R8G8B8A8_UNORM, multiSampleCount);
+        if (dxgiFormat_ == DXGI_FORMAT_UNKNOWN || bytesPerTexel_ <= 0)
+            throw std::invalid_argument("D3D11RenderTargetRenderer: unsupported SurfaceFormat " +
+                                        std::to_string(surfaceFormat));
+        appliedMultiSampleCount_ = ClampMultiSampleCount(device_.Get(), dxgiFormat_, multiSampleCount);
         isMsaa_ = appliedMultiSampleCount_ > 0;
         // A mip chain requires GenerateMips(), which requires a single-sample source -- MSAA and
         // a full mip chain are mutually exclusive here (matches this project's own EasyGL/Vulkan
@@ -79,7 +85,7 @@ namespace CNA::Internal::Renderers::DirectX11
         colorDesc.Height = static_cast<UINT>(h);
         colorDesc.MipLevels = static_cast<UINT>(levelCount_);
         colorDesc.ArraySize = 1;
-        colorDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        colorDesc.Format = dxgiFormat_;
         colorDesc.SampleDesc.Count = isMsaa_ ? static_cast<UINT>(appliedMultiSampleCount_) : 1;
         colorDesc.SampleDesc.Quality = 0;
         colorDesc.Usage = D3D11_USAGE_DEFAULT;
@@ -163,7 +169,7 @@ namespace CNA::Internal::Renderers::DirectX11
         if (isMsaa_ && resolveTexture_)
         {
             context_->ResolveSubresource(resolveTexture_.Get(), 0, colorTexture_.Get(), 0,
-                                         DXGI_FORMAT_R8G8B8A8_UNORM);
+                                         dxgiFormat_);
         }
         if (mipMap_ && srv_)
         {
@@ -203,7 +209,7 @@ namespace CNA::Internal::Renderers::DirectX11
                 "The requested rectangle leaves the " + std::to_string(levelW) + "x" +
                     std::to_string(levelH) + " mip level.");
         const std::int64_t requiredBytes =
-            static_cast<std::int64_t>(w) * static_cast<std::int64_t>(h) * 4;
+            static_cast<std::int64_t>(w) * static_cast<std::int64_t>(h) * bytesPerTexel_;
         if (static_cast<std::int64_t>(dataLength) < requiredBytes)
             throw System::ArgumentOutOfRangeException(
                 "dataLength", std::to_string(dataLength),
@@ -219,7 +225,7 @@ namespace CNA::Internal::Renderers::DirectX11
         stagingDesc.Height = static_cast<UINT>(h);
         stagingDesc.MipLevels = 1;
         stagingDesc.ArraySize = 1;
-        stagingDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        stagingDesc.Format = dxgiFormat_;
         stagingDesc.SampleDesc.Count = 1;
         stagingDesc.Usage = D3D11_USAGE_STAGING;
         stagingDesc.BindFlags = 0;
@@ -241,7 +247,8 @@ namespace CNA::Internal::Renderers::DirectX11
 
         auto* dst = static_cast<std::uint8_t*>(data);
         const auto* src = static_cast<const std::uint8_t*>(mapped.pData);
-        const std::size_t rowBytes = static_cast<std::size_t>(w) * 4u;
+        const std::size_t rowBytes =
+            static_cast<std::size_t>(w) * static_cast<std::size_t>(bytesPerTexel_);
         for (int row = 0; row < h; ++row)
             std::memcpy(dst + static_cast<std::size_t>(row) * rowBytes,
                         src + static_cast<std::size_t>(row) * mapped.RowPitch, rowBytes);
@@ -256,14 +263,20 @@ namespace CNA::Internal::Renderers::DirectX11
 
     D3D11RenderTargetCubeRenderer::D3D11RenderTargetCubeRenderer(
         DirectX11Renderer* owner, ID3D11Device* device, ID3D11DeviceContext* context,
-        int size, int depthFormat, bool mipMap, int multiSampleCount)
+        int size, int depthFormat, bool mipMap, int multiSampleCount, int surfaceFormat)
         : owner_(owner)
         , ownerLifetime_(owner ? owner->GetLifetimeTokenEXT() : std::weak_ptr<void>{})
         , device_(device)
         , context_(context)
         , size_(size)
+        , surfaceFormat_(surfaceFormat)
+        , dxgiFormat_(D3DCommon::SurfaceFormatToDxgi(surfaceFormat))
+        , bytesPerTexel_(D3DCommon::SurfaceFormatBytesPerTexel(surfaceFormat))
     {
-        appliedMultiSampleCount_ = ClampMultiSampleCount(device_.Get(), DXGI_FORMAT_R8G8B8A8_UNORM, multiSampleCount);
+        if (dxgiFormat_ == DXGI_FORMAT_UNKNOWN || bytesPerTexel_ <= 0)
+            throw std::invalid_argument("D3D11RenderTargetCubeRenderer: unsupported SurfaceFormat " +
+                                        std::to_string(surfaceFormat));
+        appliedMultiSampleCount_ = ClampMultiSampleCount(device_.Get(), dxgiFormat_, multiSampleCount);
         isMsaa_ = appliedMultiSampleCount_ > 0;
         // Mutually exclusive on the same attachment, same rationale D3D11RenderTargetRenderer's own
         // DX-45 already established -- a full mip chain needs a single-sample source.
@@ -275,7 +288,7 @@ namespace CNA::Internal::Renderers::DirectX11
         desc.Height = static_cast<UINT>(size_);
         desc.MipLevels = static_cast<UINT>(levelCount_);
         desc.ArraySize = 6;
-        desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        desc.Format = dxgiFormat_;
         desc.SampleDesc.Count = isMsaa_ ? static_cast<UINT>(appliedMultiSampleCount_) : 1;
         // D3D11 cannot combine D3D11_RESOURCE_MISC_TEXTURECUBE with SampleDesc.Count > 1 on one
         // resource (a TextureCube SRV can never be multisampled) -- when MSAA, this becomes a
@@ -293,7 +306,7 @@ namespace CNA::Internal::Renderers::DirectX11
         for (int face = 0; face < 6; ++face)
         {
             D3D11_RENDER_TARGET_VIEW_DESC rtvDesc{};
-            rtvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            rtvDesc.Format = dxgiFormat_;
             if (isMsaa_)
             {
                 rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DMSARRAY;
@@ -320,7 +333,7 @@ namespace CNA::Internal::Renderers::DirectX11
             resolveDesc.Height = static_cast<UINT>(size_);
             resolveDesc.MipLevels = static_cast<UINT>(levelCount_);
             resolveDesc.ArraySize = 6;
-            resolveDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            resolveDesc.Format = dxgiFormat_;
             resolveDesc.SampleDesc.Count = 1;
             resolveDesc.Usage = D3D11_USAGE_DEFAULT;
             resolveDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
@@ -331,7 +344,7 @@ namespace CNA::Internal::Renderers::DirectX11
         }
 
         D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
-        srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        srvDesc.Format = dxgiFormat_;
         srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBE;
         srvDesc.TextureCube.MostDetailedMip = 0;
         srvDesc.TextureCube.MipLevels = static_cast<UINT>(levelCount_);
@@ -395,7 +408,7 @@ namespace CNA::Internal::Renderers::DirectX11
         const UINT srcSubresource = static_cast<UINT>(activeFace_);
         const UINT dstSubresource = static_cast<UINT>(activeFace_) * static_cast<UINT>(levelCount_);
         context_->ResolveSubresource(resolveTexture_.Get(), dstSubresource, texture_.Get(), srcSubresource,
-                                     DXGI_FORMAT_R8G8B8A8_UNORM);
+                                     dxgiFormat_);
     }
 
     bool D3D11RenderTargetCubeRenderer::GetData(int face, int level, int x, int y, int w, int h,
@@ -408,7 +421,9 @@ namespace CNA::Internal::Renderers::DirectX11
         if (level < 0 || level >= levelCount_) return false;
         const int levelSize = std::max(1, size_ >> level);
         if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
-        if (dataLength < w * h * 4) return false;
+        const std::int64_t requiredBytes =
+            static_cast<std::int64_t>(w) * static_cast<std::int64_t>(h) * bytesPerTexel_;
+        if (static_cast<std::int64_t>(dataLength) < requiredBytes) return false;
 
         // Always the resolved single-sample resource: the MSAA array cannot be staged, and its
         // content has already been resolved into this one per face by UnbindAsRenderTarget.
@@ -440,9 +455,10 @@ namespace CNA::Internal::Renderers::DirectX11
         {
             const auto* src = static_cast<const std::uint8_t*>(mapped.pData)
                             + static_cast<std::size_t>(y + row) * mapped.RowPitch
-                            + static_cast<std::size_t>(x) * 4;
-            std::memcpy(dst + static_cast<std::size_t>(row) * static_cast<std::size_t>(w) * 4, src,
-                        static_cast<std::size_t>(w) * 4);
+                            + static_cast<std::size_t>(x) * static_cast<std::size_t>(bytesPerTexel_);
+            const std::size_t rowBytes =
+                static_cast<std::size_t>(w) * static_cast<std::size_t>(bytesPerTexel_);
+            std::memcpy(dst + static_cast<std::size_t>(row) * rowBytes, src, rowBytes);
         }
         context_->Unmap(staging.Get(), subresource);
         return true;

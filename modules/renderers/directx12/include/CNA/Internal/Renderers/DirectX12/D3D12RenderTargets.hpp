@@ -64,7 +64,7 @@ namespace CNA::Internal::Renderers::DirectX12
     public:
         D3D12RenderTargetRenderer(DirectX12Renderer* owner, ID3D12Device* device,
                                  int w, int h, int depthFormat, bool mipMap = false,
-                                 int multiSampleCount = 0);
+                                 int multiSampleCount = 0, int surfaceFormat = 0);
         /// REMED-GFX-177: returns this target's SRV slot, RTV and (when it has depth) DSV to their
         /// allocators, which reissue them once the GPU has passed the fence value current at
         /// destruction. Before this, all three were consumed for the lifetime of the process.
@@ -72,12 +72,14 @@ namespace CNA::Internal::Renderers::DirectX12
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
+        /** @brief Returns the XNA SurfaceFormat ordinal used by the native color attachment. */
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
 
         void BindAsRenderTarget() override;
         void UnbindAsRenderTarget() override;
 
         /**
-         * @brief Reads this target's rendered pixels back as tightly packed RGBA8 rows.
+         * @brief Reads this target's rendered pixels back as tightly packed format-native rows.
          *
          * REMED-GFX-127. Reuses the READBACK-heap `CopyTextureRegion` + fence-wait + `Map`
          * discipline DX-144's own mip cascade already established in this file, against the
@@ -89,9 +91,8 @@ namespace CNA::Internal::Renderers::DirectX12
          *
          * The readback buffer is created and released inside this call, so repeated readbacks hold
          * no extra GPU memory; the fence wait is the one D3D12 genuinely requires for a synchronous
-         * read and is confined to this call. Storage is DXGI_FORMAT_R8G8B8A8_UNORM, so no swizzle
-         * applies; rows are top-first, so no flip applies, and the placed footprint's RowPitch is
-         * honoured rather than assuming tightly packed rows.
+         * read and is confined to this call. Rows are top-first, so no flip applies, and the placed
+         * footprint's RowPitch is honoured rather than assuming tightly packed rows.
          *
          * @param level      Mip level; this target has a full chain only when it was created with
          *                   mipMap.
@@ -99,7 +100,7 @@ namespace CNA::Internal::Renderers::DirectX12
          * @param y          Top edge of the requested rectangle, in level pixels.
          * @param w          Width of the requested rectangle, in pixels.
          * @param h          Height of the requested rectangle, in pixels.
-         * @param data       Destination for @p w * @p h tightly packed RGBA8 pixels.
+         * @param data       Destination for @p w * @p h tightly packed format-native texels.
          * @param dataLength Capacity of @p data in bytes.
          * @return True once the whole rectangle has been written; false if D3D12 could not complete
          *         the readback, leaving @p data untouched.
@@ -187,6 +188,9 @@ namespace CNA::Internal::Renderers::DirectX12
 
         int width_ = 0;
         int height_ = 0;
+        int surfaceFormat_ = 0;
+        DXGI_FORMAT dxgiFormat_ = DXGI_FORMAT_R8G8B8A8_UNORM;
+        int bytesPerTexel_ = 4;
         bool mipMap_ = false;
         int levelCount_ = 1;
         bool isMsaa_ = false;
@@ -203,13 +207,15 @@ namespace CNA::Internal::Renderers::DirectX12
     public:
         D3D12RenderTargetCubeRenderer(DirectX12Renderer* owner, ID3D12Device* device,
                                      int size, int depthFormat, bool mipMap = false,
-                                     int multiSampleCount = 0);
+                                     int multiSampleCount = 0, int surfaceFormat = 0);
         /// REMED-GFX-177: returns this cube target's SRV slot, its SIX per-face RTVs and (when it
         /// has depth) its DSV to their allocators. A cube target is the largest single descriptor
         /// consumer in this renderer, so it is also the one a fixed bump allocator exhausted fastest.
         ~D3D12RenderTargetCubeRenderer() override;
 
         [[nodiscard]] int GetSize() const override { return size_; }
+        /** @brief Returns the XNA SurfaceFormat ordinal used by the native cube attachment. */
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
         void BindAsRenderTargetFace(int face) override;
         void UnbindAsRenderTarget() override;
         [[nodiscard]] int GetMultiSampleCount() const override { return appliedMultiSampleCount_; }
@@ -253,8 +259,8 @@ namespace CNA::Internal::Renderers::DirectX12
          * The resource's tracked state is restored afterwards: this is a read, and leaving it in
          * COPY_SOURCE would desynchronise the shared state tracker for the next render pass.
          *
-         * No row flip and no channel swizzle: D3D12's render-target origin is top-left and this
-         * resource is `DXGI_FORMAT_R8G8B8A8_UNORM`.
+         * No row flip or conversion applies: D3D12's render-target origin is top-left and bytes
+         * remain in the target's native SurfaceFormat.
          *
          * @param face       Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
          * @param level      Mip level to read.
@@ -262,8 +268,8 @@ namespace CNA::Internal::Renderers::DirectX12
          * @param y          Top edge of the requested region, in texels.
          * @param w          Width of the requested region, in texels.
          * @param h          Height of the requested region, in texels.
-         * @param data       Destination for tightly packed RGBA8 rows, top row first.
-         * @param dataLength Size of @p data in bytes; at least w * h * 4.
+         * @param data       Destination for tightly packed format-native rows, top row first.
+         * @param dataLength Size of @p data in bytes; at least w * h * format bytes per texel.
          * @return True once the whole region was written; false for an out-of-range
          *         face/level/region, or a readback buffer this device refused to create or map.
          */
@@ -302,6 +308,9 @@ namespace CNA::Internal::Renderers::DirectX12
         bool hasDepth_ = false;
 
         int size_ = 0;
+        int surfaceFormat_ = 0;
+        DXGI_FORMAT dxgiFormat_ = DXGI_FORMAT_R8G8B8A8_UNORM;
+        int bytesPerTexel_ = 4;
         int activeFace_ = -1;
         bool mipMap_ = false;
         int levelCount_ = 1;

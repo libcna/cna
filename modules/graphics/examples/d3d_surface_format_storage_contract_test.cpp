@@ -7,12 +7,18 @@
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
 #if defined(CNA_RENDERER_DIRECTX11)
+#include "CNA/Internal/Renderers/DirectX11/D3D11RenderTargets.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11Textures.hpp"
 #elif defined(CNA_RENDERER_DIRECTX12)
+#include "CNA/Internal/Renderers/DirectX12/D3D12RenderTargets.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12Texture3D.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12TextureCube.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12Textures.hpp"
@@ -73,6 +79,8 @@ namespace
     using NativeTexture2D = CNA::Internal::Renderers::DirectX11::D3D11TextureRenderer;
     using NativeTextureCube = CNA::Internal::Renderers::DirectX11::D3D11TextureCubeRenderer;
     using NativeTexture3D = CNA::Internal::Renderers::DirectX11::D3D11Texture3DRenderer;
+    using NativeRenderTarget2D = CNA::Internal::Renderers::DirectX11::D3D11RenderTargetRenderer;
+    using NativeRenderTargetCube = CNA::Internal::Renderers::DirectX11::D3D11RenderTargetCubeRenderer;
 
     DXGI_FORMAT NativeFormat(const NativeTexture2D& texture)
     {
@@ -94,10 +102,26 @@ namespace
         texture.GetTextureEXT()->GetDesc(&desc);
         return desc.Format;
     }
+
+    DXGI_FORMAT NativeFormat(const NativeRenderTarget2D& target)
+    {
+        D3D11_TEXTURE2D_DESC desc{};
+        target.GetSampleableTextureEXT()->GetDesc(&desc);
+        return desc.Format;
+    }
+
+    DXGI_FORMAT NativeFormat(const NativeRenderTargetCube& target)
+    {
+        D3D11_TEXTURE2D_DESC desc{};
+        target.GetSampleableTextureEXT()->GetDesc(&desc);
+        return desc.Format;
+    }
 #else
     using NativeTexture2D = CNA::Internal::Renderers::DirectX12::D3D12TextureRenderer;
     using NativeTextureCube = CNA::Internal::Renderers::DirectX12::D3D12TextureCubeRenderer;
     using NativeTexture3D = CNA::Internal::Renderers::DirectX12::D3D12Texture3DRenderer;
+    using NativeRenderTarget2D = CNA::Internal::Renderers::DirectX12::D3D12RenderTargetRenderer;
+    using NativeRenderTargetCube = CNA::Internal::Renderers::DirectX12::D3D12RenderTargetCubeRenderer;
 
     DXGI_FORMAT NativeFormat(const NativeTexture2D& texture)
     {
@@ -112,6 +136,16 @@ namespace
     DXGI_FORMAT NativeFormat(const NativeTexture3D& texture)
     {
         return texture.GetResourceEXT()->GetDesc().Format;
+    }
+
+    DXGI_FORMAT NativeFormat(const NativeRenderTarget2D& target)
+    {
+        return target.GetSampleableColorResourceEXT()->GetDesc().Format;
+    }
+
+    DXGI_FORMAT NativeFormat(const NativeRenderTargetCube& target)
+    {
+        return target.GetSampleableColorResourceEXT()->GetDesc().Format;
     }
 #endif
 }
@@ -226,6 +260,27 @@ class D3DSurfaceFormatStorageContract final : public Game
               "Texture3D round-trips exact Single bytes across row and slice pitches");
     }
 
+    void RunRenderTargets(GraphicsDevice& device)
+    {
+        RenderTarget2D target2D(device, 4, 4, false, SurfaceFormat::Single,
+                                DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
+        auto* native2D = dynamic_cast<NativeRenderTarget2D*>(target2D.GetRenderTargetRenderer());
+        Check(native2D != nullptr &&
+                  native2D->GetSurfaceFormatEXT() == static_cast<int>(SurfaceFormat::Single) &&
+                  NativeFormat(*native2D) == DXGI_FORMAT_R32_FLOAT,
+              "RenderTarget2D creates and reports native DXGI_FORMAT_R32_FLOAT storage");
+
+        RenderTargetCube targetCube(device, 4, false, SurfaceFormat::HalfVector4,
+                                    DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
+        auto* nativeCube = dynamic_cast<NativeRenderTargetCube*>(
+            targetCube.GetRenderTargetCubeRenderer());
+        Check(nativeCube != nullptr &&
+                  nativeCube->GetSurfaceFormatEXT() ==
+                      static_cast<int>(SurfaceFormat::HalfVector4) &&
+                  NativeFormat(*nativeCube) == DXGI_FORMAT_R16G16B16A16_FLOAT,
+              "RenderTargetCube creates and reports native DXGI_FORMAT_R16G16B16A16_FLOAT storage");
+    }
+
     void RunInvalidOrdinal(GraphicsDevice& device)
     {
         ImageData invalid{2, 2, {}, 1, 999};
@@ -260,6 +315,7 @@ protected:
         RunUncompressedFormatTable(device);
         RunTextureCube(device);
         RunTexture3D(device);
+        RunRenderTargets(device);
         RunInvalidOrdinal(device);
         std::printf("=== %d/%d PASS ===\n", pass_, pass_ + fail_);
         Exit();

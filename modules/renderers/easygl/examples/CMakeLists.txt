@@ -2055,6 +2055,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_easygl_sampler_lod_addressw_contract
             TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plans/plan_dx.md DX-215 cross-renderer control: floating-point render-target values must
+        # survive rendering and native-format readback; unsupported DXT targets must be refused.
+        cna_easygl_test(cna_test_easygl_rendertarget_surface_format
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_surface_format_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_RenderTarget_SurfaceFormat
+            COMMAND cna_test_easygl_rendertarget_surface_format
+            TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # REMED-GFX-177 cross-renderer control: descriptor/binding bookkeeping must be a function of what
         # is LIVE, never of what has ever existed. D3D12 owned four fixed-capacity heaps with a monotonic
         # bump cursor and no free list, so the 65th sampleable resource EVER CREATED threw even when six

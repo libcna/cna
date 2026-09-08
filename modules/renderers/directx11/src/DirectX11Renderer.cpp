@@ -530,6 +530,24 @@ namespace CNA::Internal::Renderers::DirectX11
         return RendererFormatVerdict::Defer;
     }
 
+    RendererFormatVerdict DirectX11Renderer::ClassifyRenderTargetFormatEXT(int surfaceFormat) const
+    {
+        const DXGI_FORMAT format = D3DCommon::SurfaceFormatToDxgi(surfaceFormat);
+        if (!D3DCommon::IsXnaRenderTargetSurfaceFormat(surfaceFormat))
+            return format == DXGI_FORMAT_UNKNOWN
+                ? RendererFormatVerdict::Defer
+                : RendererFormatVerdict::Unsupported;
+        if (!device_) return RendererFormatVerdict::Unsupported;
+
+        UINT support = 0;
+        constexpr UINT required = D3D11_FORMAT_SUPPORT_TEXTURE2D |
+                                  D3D11_FORMAT_SUPPORT_RENDER_TARGET |
+                                  D3D11_FORMAT_SUPPORT_SHADER_SAMPLE;
+        if (FAILED(device_->CheckFormatSupport(format, &support)) || (support & required) != required)
+            return RendererFormatVerdict::Unsupported;
+        return RendererFormatVerdict::Supported;
+    }
+
     RendererFormatVerdict DirectX11Renderer::ClassifyColorTransferFormatEXT(int surfaceFormat) const
     {
         if (surfaceFormat == 0) return RendererFormatVerdict::Supported;
@@ -573,6 +591,14 @@ namespace CNA::Internal::Renderers::DirectX11
     std::unique_ptr<IRenderTargetRenderer> DirectX11Renderer::CreateRenderTarget2D(
         int w, int h, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
+        return CreateRenderTarget2DEXT(
+            w, h, depthFormat, preserveContents, mipMap, multiSampleCount, 0);
+    }
+
+    std::unique_ptr<IRenderTargetRenderer> DirectX11Renderer::CreateRenderTarget2DEXT(
+        int w, int h, int depthFormat, bool preserveContents, bool mipMap,
+        int multiSampleCount, int surfaceFormat)
+    {
         (void)preserveContents; // D3D11_USAGE_DEFAULT + ResolveSubresource-on-unbind already always
                                  // preserves prior contents across binds (no "discard on bind" path
                                  // exists in this renderer) -- matches EasyGL/Vulkan's own honoring
@@ -580,7 +606,8 @@ namespace CNA::Internal::Renderers::DirectX11
                                  // itself acts on (an explicit Clear() call), not something the
                                  // renderer needs to special-case at creation time.
         return std::make_unique<DirectX11::D3D11RenderTargetRenderer>(
-            this, device_.Get(), context_.Get(), w, h, depthFormat, mipMap, multiSampleCount);
+            this, device_.Get(), context_.Get(), w, h, depthFormat, mipMap, multiSampleCount,
+            surfaceFormat);
     }
 
     void DirectX11Renderer::FlushPendingMRTResolveEXT()
@@ -646,6 +673,14 @@ namespace CNA::Internal::Renderers::DirectX11
     std::unique_ptr<IRenderTargetCubeRenderer> DirectX11Renderer::CreateRenderTargetCube(
         int size, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
+        return CreateRenderTargetCubeEXT(
+            size, depthFormat, preserveContents, mipMap, multiSampleCount, 0);
+    }
+
+    std::unique_ptr<IRenderTargetCubeRenderer> DirectX11Renderer::CreateRenderTargetCubeEXT(
+        int size, int depthFormat, bool preserveContents, bool mipMap,
+        int multiSampleCount, int surfaceFormat)
+    {
         // DX-152: multiSampleCount is now honored -- device-queried and clamped to 0 (off) by
         // D3D11RenderTargetCubeRenderer's own ClampMultiSampleCount() when unsupported.
         // REMED-GFX-136: preserveContents is consumed by being deliberately unused, for the same
@@ -655,7 +690,8 @@ namespace CNA::Internal::Renderers::DirectX11
         // one.
         (void) preserveContents;
         return std::make_unique<DirectX11::D3D11RenderTargetCubeRenderer>(
-            this, device_.Get(), context_.Get(), size, depthFormat, mipMap, multiSampleCount);
+            this, device_.Get(), context_.Get(), size, depthFormat, mipMap, multiSampleCount,
+            surfaceFormat);
     }
 
     void DirectX11Renderer::SetRenderTargets(

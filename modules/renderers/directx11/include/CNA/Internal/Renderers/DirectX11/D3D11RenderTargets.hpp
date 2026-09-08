@@ -36,18 +36,21 @@ namespace CNA::Internal::Renderers::DirectX11
     {
     public:
         D3D11RenderTargetRenderer(DirectX11Renderer* owner, ID3D11Device* device, ID3D11DeviceContext* context,
-                                 int w, int h, int depthFormat, bool mipMap, int multiSampleCount);
+                                 int w, int h, int depthFormat, bool mipMap, int multiSampleCount,
+                                 int surfaceFormat);
         /** @brief Releases the target and detaches any live renderer binding that references it. */
         ~D3D11RenderTargetRenderer() override;
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
+        /** @brief Returns the XNA SurfaceFormat ordinal used by the native color attachment. */
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
 
         void BindAsRenderTarget() override;
         void UnbindAsRenderTarget() override;
 
         /**
-         * @brief Reads this target's rendered pixels back as tightly packed RGBA8 rows.
+         * @brief Reads this target's rendered pixels back as tightly packed format-native rows.
          *
          * REMED-GFX-127. D3D11's readback is the same staging-copy discipline
          * DirectX11Renderer::ReadBackbuffer already uses: copy the requested subresource region
@@ -60,9 +63,8 @@ namespace CNA::Internal::Renderers::DirectX11
          * frame.
          *
          * The staging texture is created and released inside this call, so repeated readbacks hold
-         * no extra GPU memory. Storage is DXGI_FORMAT_R8G8B8A8_UNORM, so no swizzle applies; rows
-         * are top-first, so no flip applies, and D3D11_MAPPED_SUBRESOURCE::RowPitch is honoured
-         * rather than assuming tightly packed rows.
+         * no extra GPU memory. Rows are top-first, so no flip applies, and
+         * D3D11_MAPPED_SUBRESOURCE::RowPitch is honoured rather than assuming tightly packed rows.
          *
          * @param level      Mip level; this target has a full chain only when it was created with
          *                   mipMap.
@@ -70,7 +72,7 @@ namespace CNA::Internal::Renderers::DirectX11
          * @param y          Top edge of the requested rectangle, in level pixels.
          * @param w          Width of the requested rectangle, in pixels.
          * @param h          Height of the requested rectangle, in pixels.
-         * @param data       Destination for @p w * @p h tightly packed RGBA8 pixels.
+         * @param data       Destination for @p w * @p h tightly packed format-native texels.
          * @param dataLength Capacity of @p data in bytes.
          * @return True once the whole rectangle has been written; false if D3D11 could not create
          *         or map the staging texture, leaving @p data untouched.
@@ -122,6 +124,9 @@ namespace CNA::Internal::Renderers::DirectX11
 
         int width_ = 0;
         int height_ = 0;
+        int surfaceFormat_ = 0;
+        DXGI_FORMAT dxgiFormat_ = DXGI_FORMAT_R8G8B8A8_UNORM;
+        int bytesPerTexel_ = 4;
         bool mipMap_ = false;
         int levelCount_ = 1;
         bool isMsaa_ = false;
@@ -151,11 +156,14 @@ namespace CNA::Internal::Renderers::DirectX11
     {
     public:
         D3D11RenderTargetCubeRenderer(DirectX11Renderer* owner, ID3D11Device* device, ID3D11DeviceContext* context,
-                                     int size, int depthFormat, bool mipMap, int multiSampleCount = 0);
+                                     int size, int depthFormat, bool mipMap, int multiSampleCount,
+                                     int surfaceFormat);
         /** @brief Releases the cube and detaches any live renderer binding that references it. */
         ~D3D11RenderTargetCubeRenderer() override;
 
         [[nodiscard]] int GetSize() const override { return size_; }
+        /** @brief Returns the XNA SurfaceFormat ordinal used by the native cube attachment. */
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
         void BindAsRenderTargetFace(int face) override;
         void UnbindAsRenderTarget() override;
         [[nodiscard]] int GetMultiSampleCount() const override { return appliedMultiSampleCount_; }
@@ -190,9 +198,8 @@ namespace CNA::Internal::Renderers::DirectX11
          * resource `UnbindAsRenderTarget`'s `ResolveSubresource()` already filled, never through
          * the raw multisample array (which `CopyResource` cannot stage anyway).
          *
-         * No row flip and no channel swizzle: D3D11's render-target origin is top-left and this
-         * resource is `DXGI_FORMAT_R8G8B8A8_UNORM`, so a rendered face is already stored exactly
-         * as the public contract wants it.
+         * No row flip or conversion applies: D3D11's render-target origin is top-left and bytes
+         * remain in the target's native SurfaceFormat.
          *
          * @param face       Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
          * @param level      Mip level to read.
@@ -200,8 +207,8 @@ namespace CNA::Internal::Renderers::DirectX11
          * @param y          Top edge of the requested region, in texels.
          * @param w          Width of the requested region, in texels.
          * @param h          Height of the requested region, in texels.
-         * @param data       Destination for tightly packed RGBA8 rows, top row first.
-         * @param dataLength Size of @p data in bytes; at least w * h * 4.
+         * @param data       Destination for tightly packed format-native rows, top row first.
+         * @param dataLength Size of @p data in bytes; at least w * h * format bytes per texel.
          * @return True once the whole region was written; false for an out-of-range
          *         face/level/region, or a staging texture this device refused to create or map.
          */
@@ -229,6 +236,9 @@ namespace CNA::Internal::Renderers::DirectX11
         ComPtr<ID3D11DepthStencilView> dsv_;
 
         int size_ = 0;
+        int surfaceFormat_ = 0;
+        DXGI_FORMAT dxgiFormat_ = DXGI_FORMAT_R8G8B8A8_UNORM;
+        int bytesPerTexel_ = 4;
         bool mipMap_ = false;
         int levelCount_ = 1;
         int activeFace_ = -1;
