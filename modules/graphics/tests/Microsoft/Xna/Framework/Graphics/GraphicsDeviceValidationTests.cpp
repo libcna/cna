@@ -381,6 +381,25 @@ TEST(GraphicsDeviceValidationTest, SetVertexBuffers_SeventeenBindingsThrow)
         System::ArgumentOutOfRangeException);
 }
 
+TEST(GraphicsDeviceValidationTest, SetVertexBuffers_DisposedSecondaryBufferThrowsTransactionally)
+{
+    GraphicsDevice gd;
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline";
+
+    VertexBuffer live(gd, 3);
+    VertexBuffer disposed(gd, 3);
+    disposed.Dispose();
+    gd.SetVertexBuffer(&live);
+
+    EXPECT_THROW(
+        gd.SetVertexBuffers({VertexBufferBinding(&live, 0, 0),
+                             VertexBufferBinding(&disposed, 0, 0)}),
+        System::ObjectDisposedException);
+    ASSERT_EQ(gd.GetVertexBuffers().size(), 1u);
+    EXPECT_EQ(gd.GetVertexBuffers()[0].getVertexBufferProperty(), &live);
+}
+
 TEST(GraphicsDeviceValidationTest, SetVertexBuffers_EmptyClearsSingularBinding)
 {
     GraphicsDevice gd;

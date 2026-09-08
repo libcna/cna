@@ -4140,6 +4140,13 @@ namespace Microsoft::Xna::Framework::Graphics
                 std::to_string(vertexBuffers.size()),
                 "Max Vertex Buffers supported is " + std::to_string(kMaxVertexBufferBindings));
 
+        for (const VertexBufferBinding& binding : vertexBuffers)
+        {
+            const VertexBuffer* const buffer = binding.getVertexBufferProperty();
+            if (buffer != nullptr && buffer->getIsDisposedProperty())
+                throw System::ObjectDisposedException(buffer->getNameProperty());
+        }
+
         // A null-buffer binding is a legal unused slot in XNA -- FNA itself stores
         // VertexBufferBinding.None entries -- so only the binding count is validated here;
         // the draw dispatch already skips defaulted bindings.
