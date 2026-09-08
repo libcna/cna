@@ -3860,6 +3860,66 @@ else
         }
     }
 
+    void EasyGLRenderTargetRenderer::UploadPixelsLevel(
+        int level, const uint8_t* data, int levelW, int levelH, int stride)
+    {
+        if (data == nullptr || level < 0 || level >= levelCount_ ||
+            levelW != std::max(1, width_ >> level) ||
+            levelH != std::max(1, height_ >> level))
+            throw std::invalid_argument(
+                "EasyGLRenderTargetRenderer::UpdatePixelsLevel: invalid mip upload.");
+
+        RenderTargetColorStorage storage{};
+        if (!MapRenderTargetColorFormat(surfaceFormat_, storage))
+            throw std::runtime_error(
+                "EasyGLRenderTargetRenderer::UpdatePixelsLevel: unsupported SurfaceFormat.");
+        const int rowBytes = levelW * storage.bytesPerPixel;
+        if (stride > 0 && stride < rowBytes)
+            throw std::invalid_argument(
+                "EasyGLRenderTargetRenderer::UpdatePixelsLevel: stride is smaller than one row.");
+        const int sourceStride = stride > 0 ? stride : rowBytes;
+
+        // A rendered GL attachment is exposed as top-row-first by reversing readback rows and by
+        // flipping its sampling coordinate. Store a public SetData image in that same bottom-up
+        // texel orientation, so upload, rendering, sampling and GetData all agree.
+        std::vector<std::uint8_t> bottomUp(
+            static_cast<std::size_t>(rowBytes) * levelH);
+        for (int row = 0; row < levelH; ++row)
+        {
+            std::copy_n(data + static_cast<std::size_t>(row) * sourceStride, rowBytes,
+                        bottomUp.data() +
+                            static_cast<std::size_t>(levelH - 1 - row) * rowBytes);
+        }
+        DrainGlErrors();
+        colorTex_.bind(::easygl::TextureTarget::Texture2D);
+        ::metagl::glPixelStorei(
+            ::metagl::PixelStoreParam::UnpackAlignment,
+            std::min(8, storage.bytesPerPixel));
+        colorTex_.set_sub_image_2d(
+            ::easygl::TextureTarget::Texture2D, level, 0, 0, levelW, levelH,
+            storage.pixelFormat, storage.pixelType, bottomUp.data());
+        ::metagl::glPixelStorei(::metagl::PixelStoreParam::UnpackAlignment, 4);
+        if (!GlUploadSucceeded())
+            throw std::runtime_error(
+                "EasyGLRenderTargetRenderer::UpdatePixelsLevel: GL rejected the upload.");
+    }
+
+    void EasyGLRenderTargetRenderer::UpdatePixels(const uint8_t* data, int stride)
+    {
+        UploadPixelsLevel(0, data, width_, height_, stride);
+    }
+
+    void EasyGLRenderTargetRenderer::UpdatePixelsLevel(
+        int level, const uint8_t* data, int levelW, int levelH)
+    {
+        RenderTargetColorStorage storage{};
+        if (!MapRenderTargetColorFormat(surfaceFormat_, storage))
+            throw std::runtime_error(
+                "EasyGLRenderTargetRenderer::UpdatePixelsLevel: unsupported SurfaceFormat.");
+        UploadPixelsLevel(level, data, levelW, levelH,
+                          levelW * storage.bytesPerPixel);
+    }
+
     void EasyGLRenderTargetRenderer::BindGL(int unit) const
     {
         colorTex_.active_bind(ToTextureUnit(unit), ::easygl::TextureTarget::Texture2D);

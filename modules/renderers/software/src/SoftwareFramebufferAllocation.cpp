@@ -56,6 +56,17 @@ namespace CNA::Internal::Renderers::Software
             return layout;
         }
 
+        if (request.allocateWideColor)
+        {
+            if (!CheckedMultiply(layout.pixelCount, 4u, layout.wideColorElementCount) ||
+                !CheckedMultiply(layout.wideColorElementCount, sizeof(float),
+                                 layout.wideColorBytes))
+            {
+                layout.error = SoftwareFramebufferAllocationError::ArithmeticOverflow;
+                return layout;
+            }
+        }
+
         if (request.allocateDepth)
         {
             layout.depthElementCount = layout.pixelCount;
@@ -73,6 +84,17 @@ namespace CNA::Internal::Renderers::Software
             {
                 layout.error = SoftwareFramebufferAllocationError::ArithmeticOverflow;
                 return layout;
+            }
+            if (request.allocateWideColor)
+            {
+                if (!CheckedMultiply(layout.pixelCount, 16u,
+                                     layout.multiSampleWideColorElementCount) ||
+                    !CheckedMultiply(layout.multiSampleWideColorElementCount, sizeof(float),
+                                     layout.multiSampleWideColorBytes))
+                {
+                    layout.error = SoftwareFramebufferAllocationError::ArithmeticOverflow;
+                    return layout;
+                }
             }
             if (request.allocateDepth)
             {
@@ -112,15 +134,29 @@ namespace CNA::Internal::Renderers::Software
                     layout.error = SoftwareFramebufferAllocationError::ArithmeticOverflow;
                     return layout;
                 }
+                if (request.allocateWideColor)
+                {
+                    std::size_t wideMipLevelBytes = 0;
+                    if (!CheckedMultiply(mipLevelBytes, sizeof(float), wideMipLevelBytes) ||
+                        !CheckedAdd(layout.wideMipBytes, wideMipLevelBytes,
+                                    layout.wideMipBytes))
+                    {
+                        layout.error = SoftwareFramebufferAllocationError::ArithmeticOverflow;
+                        return layout;
+                    }
+                }
             }
         }
 
         if (!CheckedAdd(layout.colorBytes, layout.depthBytes, layout.totalBytes) ||
+            !CheckedAdd(layout.totalBytes, layout.wideColorBytes, layout.totalBytes) ||
             !CheckedAdd(layout.totalBytes, layout.stencilBytes, layout.totalBytes) ||
             !CheckedAdd(layout.totalBytes, layout.multiSampleBytes, layout.totalBytes) ||
+            !CheckedAdd(layout.totalBytes, layout.multiSampleWideColorBytes, layout.totalBytes) ||
             !CheckedAdd(layout.totalBytes, layout.multiSampleDepthBytes, layout.totalBytes) ||
             !CheckedAdd(layout.totalBytes, layout.multiSampleStencilBytes, layout.totalBytes) ||
-            !CheckedAdd(layout.totalBytes, layout.mipBytes, layout.totalBytes))
+            !CheckedAdd(layout.totalBytes, layout.mipBytes, layout.totalBytes) ||
+            !CheckedAdd(layout.totalBytes, layout.wideMipBytes, layout.totalBytes))
         {
             layout.error = SoftwareFramebufferAllocationError::ArithmeticOverflow;
             return layout;

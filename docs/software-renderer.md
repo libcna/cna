@@ -205,6 +205,16 @@ rather than always passing.
   includes mixed 2D/cube sets and distinct faces of one cube. The shared 22-check contract passes
   unchanged on both Software and EasyGL, including face-local 4x resolve, independent mip chains,
   cube depth ownership and bound-cube destruction with live-peer finalization (`SOFTWARE-135`).
+- **Classic float render targets preserve their declared storage** (`SOFTWARE-146`).
+  `Single`, `Vector2`, `Vector4`, `HalfSingle`, `HalfVector2`, `HalfVector4` and `HdrBlendable`
+  retain negative and above-one components through clear, raster writes, independent RGB/alpha
+  blending, 4x resolve, float-domain mip generation, sampling and exact typed transfers. One- and
+  two-channel targets expose missing colour components as one; half formats quantize at every
+  target store. `RenderTargetCube` uses the same storage independently for all six faces and can
+  feed `EnvironmentMapEffect` without first narrowing to RGBA8. Known classic formats whose target
+  storage is not yet implemented are rejected before construction instead of being silently
+  substituted. The shared Software/EasyGL contract includes distinguishing 2D and cube samples,
+  additive HDR output, MSAA, depth, mips and full/partial typed transfers.
 - **Classic packed-16 `Texture2D` formats are real** (`SOFTWARE-140`). `Bgr565`, `Bgra5551`
   and `Bgra4444` retain their exact two-byte XNA layout for full, partial and mip transfers while
   each supplied level is decoded into a separate RGBA8 CPU sampling plane. The same public transfer

@@ -63,7 +63,7 @@ namespace
     /// The renderers whose SpriteBatch rasterizes and whose RenderTarget2D::GetData reads back.
     [[nodiscard]] bool SpriteBatchRasterizes()
     {
-        return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, OpenGL4);
+        return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, OpenGL4, Software);
     }
 
     class SingleChannelExpansionTest : public ::testing::Test

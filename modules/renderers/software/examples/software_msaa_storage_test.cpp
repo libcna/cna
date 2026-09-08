@@ -34,6 +34,18 @@ int main()
                     layout.totalBytes == pixelCount * 45u,
                 "4x allocation budget includes color, depth and stencil sample planes");
 
+    const SoftwareFramebufferAllocationLayout wideLayout =
+        PlanSoftwareFramebufferAllocation({8, 6, true, true, 4, true, true});
+    ok &= Check(wideLayout.IsValid() &&
+                    wideLayout.wideColorElementCount == pixelCount * 4u &&
+                    wideLayout.wideColorBytes == pixelCount * 4u * sizeof(float) &&
+                    wideLayout.multiSampleWideColorElementCount == pixelCount * 16u &&
+                    wideLayout.multiSampleWideColorBytes == pixelCount * 16u * sizeof(float) &&
+                    wideLayout.mipBytes == 15u * 4u &&
+                    wideLayout.wideMipBytes == 15u * 4u * sizeof(float) &&
+                    wideLayout.totalBytes == 6300u,
+                "wide 4x mip allocation budget includes every float-domain plane");
+
     SoftwareFramebuffer framebuffer(true, true);
     framebuffer.Resize(8, 6);
     framebuffer.depthBuffer[0] = 0.25f;

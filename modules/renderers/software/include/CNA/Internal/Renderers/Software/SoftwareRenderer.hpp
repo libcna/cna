@@ -26,9 +26,11 @@ namespace CNA::Internal::Renderers::Software
     struct SoftwareFramebuffer
     {
         explicit SoftwareFramebuffer(bool allocateDepth = true,
-                                     bool allocateStencil = true)
+                                     bool allocateStencil = true,
+                                     int requestedSurfaceFormat = 0)
             : allocateDepthStorage(allocateDepth),
-              allocateStencilStorage(allocateStencil)
+              allocateStencilStorage(allocateStencil),
+              surfaceFormat(requestedSurfaceFormat)
         {
         }
 
@@ -38,13 +40,17 @@ namespace CNA::Internal::Renderers::Software
         /// a const readback may refresh it from `multiSampleColor` without changing the rendered
         /// image or the active render-pass state.
         mutable std::vector<std::uint8_t> color;
+        /// Canonical shader-visible RGBA values for non-Color render-target formats.
+        mutable std::vector<float> wideColor;
         std::vector<float> depthBuffer;   ///< Single-sample/resolved width*height depths, 0..1.
         /// Single-sample/resolved 8-bit stencil value per pixel.
         std::vector<std::uint8_t> stencilBuffer;
         /// Four RGBA8 samples per pixel when 4x CPU MSAA is enabled; empty otherwise. `color`
         /// remains the resolved presentation/readback image, so existing consumers never see an
         /// unresolved sample plane.
-        std::vector<std::uint8_t> multiSampleColor;
+        mutable std::vector<std::uint8_t> multiSampleColor;
+        /// Four canonical float RGBA samples per pixel for non-Color 4x targets.
+        mutable std::vector<float> multiSampleWideColor;
         /// Four independent float depth samples per pixel when 4x CPU MSAA is enabled.
         std::vector<float> multiSampleDepthBuffer;
         /// Four independent 8-bit stencil samples per pixel when 4x CPU MSAA is enabled.
@@ -52,6 +58,7 @@ namespace CNA::Internal::Renderers::Software
         int multiSampleCount = 0; ///< 0 = single sampled; the CPU implementation supports 4 only.
         bool allocateDepthStorage = true;
         bool allocateStencilStorage = true;
+        int surfaceFormat = 0; ///< Raw XNA SurfaceFormat ordinal; zero is Color/RGBA8.
 
         void Resize(int w, int h);
         void SetMultiSampleCount(int sampleCount);
@@ -65,6 +72,63 @@ namespace CNA::Internal::Renderers::Software
         { return HasMultiSampleColor() && allocateStencilStorage; }
         /** @brief Returns the number of raster samples stored per pixel. */
         [[nodiscard]] int EffectiveSampleCount() const { return HasMultiSampleColor() ? 4 : 1; }
+        /** @brief Returns whether the target owns format-preserving float-domain colour storage. */
+        [[nodiscard]] bool HasWideColor() const { return surfaceFormat != 0; }
+        /**
+         * @brief Reads one stored destination colour in shader arithmetic range.
+         * @param pixel Pixel index in row-major order.
+         * @param sample Sample index 0-3 for MSAA, or -1 for resolved/single-sample storage.
+         * @return Canonical RGBA components after target-format quantization.
+         */
+        [[nodiscard]] std::array<float, 4> ReadColor(std::size_t pixel, int sample = -1) const;
+        /**
+         * @brief Applies the declared target format's channel expansion and precision.
+         * @param value Shader-domain RGBA value.
+         * @return The value a store followed by a load exposes.
+         */
+        [[nodiscard]] std::array<float, 4> QuantizeColor(
+            const std::array<float, 4>& value) const;
+        /**
+         * @brief Returns the exact byte width of one declared-format texel.
+         * @return Bytes per pixel for this framebuffer's SurfaceFormat.
+         */
+        [[nodiscard]] int DeclaredColorTexelSize() const;
+        /**
+         * @brief Decodes one exact declared-format texel.
+         * @param data Source texel bytes.
+         * @return Canonical shader-visible RGBA value.
+         */
+        [[nodiscard]] std::array<float, 4> DecodeDeclaredColor(const void* data) const;
+        /**
+         * @brief Encodes one canonical colour in the exact declared target format.
+         * @param value Canonical shader-visible RGBA value.
+         * @param data Destination texel bytes.
+         */
+        void EncodeDeclaredColor(const std::array<float, 4>& value, void* data) const;
+        /**
+         * @brief Writes selected channels and quantizes them to this target's declared format.
+         * @param pixel Pixel index in row-major order.
+         * @param sample Sample index 0-3 for MSAA, or -1 for resolved/single-sample storage.
+         * @param value Incoming RGBA components.
+         * @param colorWriteMask XNA ColorWriteChannels bits.
+         */
+        void WriteColor(std::size_t pixel, int sample,
+                        const std::array<float, 4>& value, int colorWriteMask) const;
+        /**
+         * @brief Replaces resolved level-zero colour from exact declared-format rows.
+         * @param data Source bytes.
+         * @param stride Source row pitch in bytes.
+         */
+        void LoadDeclaredColor(const std::uint8_t* data, int stride);
+        /**
+         * @brief Encodes a level-zero rectangle to exact declared-format bytes.
+         * @param x Left source coordinate.
+         * @param y Top source coordinate.
+         * @param w Rectangle width.
+         * @param h Rectangle height.
+         * @param data Destination bytes.
+         */
+        void StoreDeclaredColor(int x, int y, int w, int h, void* data) const;
         /// Copies every resolved RGBA pixel into all active samples. A no-op when MSAA is off.
         void CopyResolvedColorToMultiSample();
         /// Resolves the per-sample colour plane into `color`. A no-op for single-sample targets.
@@ -268,6 +332,29 @@ namespace CNA::Internal::Renderers::Software
          */
         [[nodiscard]] virtual const std::vector<std::uint8_t>& CubeFacePixels(
             int face, int level) const = 0;
+        /**
+         * @brief Fetches one cube texel in shader-visible range without RGBA8 narrowing.
+         * @param face Raw CubeMapFace ordinal.
+         * @param level Mip level beginning at zero.
+         * @param x Texel x coordinate.
+         * @param y Texel y coordinate.
+         * @param r Receives red.
+         * @param g Receives green.
+         * @param b Receives blue.
+         * @param a Receives alpha.
+         */
+        virtual void FetchCubeColorTexel(int face, int level, int x, int y,
+                                         float& r, float& g, float& b, float& a) const
+        {
+            const int dimension = CubeFaceDimension(level);
+            const std::vector<std::uint8_t>& pixels = CubeFacePixels(face, level);
+            const std::size_t offset =
+                (static_cast<std::size_t>(y) * dimension + x) * 4u;
+            r = pixels[offset + 0] / 255.0f;
+            g = pixels[offset + 1] / 255.0f;
+            b = pixels[offset + 2] / 255.0f;
+            a = pixels[offset + 3] / 255.0f;
+        }
     };
 
     /**
@@ -408,14 +495,34 @@ namespace CNA::Internal::Renderers::Software
     public:
         SoftwareRenderTargetRenderer(int w, int h, int depthFormat, bool mipMap, int multiSampleCount,
                                     bool hasRealDepthBuffer = true,
-                                    bool hasStandaloneStencilBuffer = false);
+                                    bool hasStandaloneStencilBuffer = false,
+                                    int surfaceFormat = 0);
 
         [[nodiscard]] int GetWidth() const override { return framebuffer_.width; }
         [[nodiscard]] int GetHeight() const override { return framebuffer_.height; }
 
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         /**
-         * @brief Copies a sub-rectangle of the rendered colour attachment into @p data as RGBA8.
+         * @brief Replaces one exact declared-format mip level.
+         * @param level Destination mip level.
+         * @param data Source pixels.
+         * @param levelW Expected mip width.
+         * @param levelH Expected mip height.
+         */
+        void UpdatePixelsLevel(int level, const uint8_t* data, int levelW, int levelH) override;
+        /**
+         * @brief Reports readable level-zero or allocated/generated mip storage.
+         * @param level Mip level to query.
+         * @return True when the level is currently readable.
+         */
+        [[nodiscard]] bool HasDefinedMipLevel(int level) const noexcept override;
+        /**
+         * @brief Returns the actual SurfaceFormat ordinal backing this target.
+         * @return Raw SurfaceFormat ordinal.
+         */
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
+        /**
+         * @brief Copies a rendered sub-rectangle in the target's declared SurfaceFormat.
          *
          * REMED-GFX-124: without this override the call reached `ITextureRenderer::GetData`'s default
          * no-op. That was not merely a missing feature -- `Texture2D::GetData`'s render-target
@@ -436,7 +543,7 @@ namespace CNA::Internal::Renderers::Software
          * @param y          Top edge of the requested rectangle, in pixels.
          * @param w          Width of the requested rectangle, in pixels.
          * @param h          Height of the requested rectangle, in pixels.
-         * @param data       Destination for @p w * @p h tightly packed RGBA8 pixels.
+         * @param data       Destination for @p w * @p h tightly packed declared-format pixels.
          * @param dataLength Capacity of @p data in bytes.
          * @throws System::ArgumentNullException if @p data is null.
          * @throws System::NotSupportedException if @p level is outside this target's chain, or
@@ -487,6 +594,18 @@ namespace CNA::Internal::Renderers::Software
         [[nodiscard]] int ColorWidth(int level) const override;
         [[nodiscard]] int ColorHeight(int level) const override;
         [[nodiscard]] const std::vector<std::uint8_t>& ColorPixels(int level) const override;
+        /**
+         * @brief Fetches a target texel without narrowing float-domain storage to RGBA8.
+         * @param level Mip level beginning at zero.
+         * @param x Texel x coordinate.
+         * @param y Texel y coordinate.
+         * @param r Receives red.
+         * @param g Receives green.
+         * @param b Receives blue.
+         * @param a Receives alpha.
+         */
+        void FetchColorTexel(int level, int x, int y,
+                             float& r, float& g, float& b, float& a) const override;
 
         [[nodiscard]] bool IsBound() const { return bound_; }
         [[nodiscard]] SoftwareFramebuffer& Framebuffer() { return framebuffer_; }
@@ -504,7 +623,9 @@ namespace CNA::Internal::Renderers::Software
         bool mipMap_ = false;
         int levelCount_ = 1;
         std::vector<std::vector<std::uint8_t>> mipLevels_; ///< levels 1..levelCount_-1
+        std::vector<std::vector<float>> mipWideLevels_; ///< canonical RGBA float levels 1..N
         bool mipLevelsReady_ = false;
+        int surfaceFormat_ = 0;
         int multiSampleCount_ = 0;
         bool hasRealDepthBuffer_ = true;
         bool hasStandaloneStencilBuffer_ = false;
@@ -688,9 +809,11 @@ namespace CNA::Internal::Renderers::Software
          * @param preserveContents Whether public usage requests preservation.
          * @param mipMap Whether to allocate and generate the full mip chain.
          * @param multiSampleCount Requested sample count; Software applies either 0 or 4.
+         * @param surfaceFormat Raw SurfaceFormat ordinal for the colour attachment.
          */
         SoftwareRenderTargetCubeRenderer(int size, int depthFormat, bool preserveContents,
-                                         bool mipMap, int multiSampleCount);
+                                         bool mipMap, int multiSampleCount,
+                                         int surfaceFormat = 0);
 
         /**
          * @brief Returns the level-zero edge length.
@@ -785,6 +908,19 @@ namespace CNA::Internal::Renderers::Software
          */
         [[nodiscard]] const std::vector<std::uint8_t>& CubeFacePixels(
             int face, int level) const override;
+        /**
+         * @brief Fetches a rendered cube texel from its format-preserving CPU plane.
+         * @param face Raw CubeMapFace ordinal.
+         * @param level Mip level beginning at zero.
+         * @param x Texel x coordinate.
+         * @param y Texel y coordinate.
+         * @param r Receives red.
+         * @param g Receives green.
+         * @param b Receives blue.
+         * @param a Receives alpha.
+         */
+        void FetchCubeColorTexel(int face, int level, int x, int y,
+                                 float& r, float& g, float& b, float& a) const override;
 
         /**
          * @brief Returns the face currently selected for rendering.
@@ -832,11 +968,13 @@ namespace CNA::Internal::Renderers::Software
         bool mipMap_ = false;
         int levelCount_ = 1;
         int multiSampleCount_ = 0;
+        int surfaceFormat_ = 0;
         int activeFace_ = -1;
         bool bound_ = false;
         std::array<bool, 6> boundFaces_{};
         std::array<SoftwareFramebuffer, 6> framebuffers_;
         std::vector<std::array<std::vector<std::uint8_t>, 6>> mipLevels_;
+        std::vector<std::array<std::vector<float>, 6>> mipWideLevels_;
         std::vector<std::array<bool, 6>> supplied_;
         std::array<int, 6> faceLevelCounts_{1, 1, 1, 1, 1, 1};
         std::vector<float> sharedDepth_;
@@ -1101,6 +1239,20 @@ namespace CNA::Internal::Renderers::Software
                                                                     bool preserveContents = false,
                                                                     bool mipMap = false,
                                                                     int multiSampleCount = 0) override;
+        /**
+         * @brief Creates a format-preserving CPU RenderTarget2D.
+         * @param w Width in pixels.
+         * @param h Height in pixels.
+         * @param depthFormat Raw DepthFormat ordinal.
+         * @param preserveContents Whether target transitions preserve prior contents.
+         * @param mipMap Whether to allocate a mip chain.
+         * @param multiSampleCount Requested sample count.
+         * @param surfaceFormat Raw SurfaceFormat ordinal.
+         * @return A CPU render target with matching declared-format storage.
+         */
+        std::unique_ptr<IRenderTargetRenderer> CreateRenderTarget2DEXT(
+            int w, int h, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount, int surfaceFormat) override;
         void SetRenderTarget2D(IRenderTargetRenderer* rt) override;
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
                               int count) override;
@@ -1124,6 +1276,19 @@ namespace CNA::Internal::Renderers::Software
             int size, int depthFormat, bool preserveContents = false, bool mipMap = false,
             int multiSampleCount = 0) override;
         /**
+         * @brief Creates a format-preserving CPU RenderTargetCube.
+         * @param size Edge length of every face.
+         * @param depthFormat Raw DepthFormat ordinal.
+         * @param preserveContents Whether target transitions preserve prior contents.
+         * @param mipMap Whether to allocate a mip chain.
+         * @param multiSampleCount Requested sample count.
+         * @param surfaceFormat Raw SurfaceFormat ordinal.
+         * @return A six-face CPU render target with matching declared-format storage.
+         */
+        std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCubeEXT(
+            int size, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount, int surfaceFormat) override;
+        /**
          * @brief Selects one cube face as the active CPU framebuffer.
          *
          * @param rt Render target to bind, or null to restore the backbuffer.
@@ -1135,6 +1300,13 @@ namespace CNA::Internal::Renderers::Software
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
         /** @brief Classifies formats whose complete CPU texture path is implemented. */
         [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(
+            int surfaceFormat) const override;
+        /**
+         * @brief Reports exactly the classic colour target formats backed by CPU storage.
+         * @param surfaceFormat Raw SurfaceFormat ordinal.
+         * @return Supported for implemented classic target formats, Unsupported for known gaps.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyRenderTargetFormatEXT(
             int surfaceFormat) const override;
         /** @brief Prevents packed texture bytes from entering the Color transfer overload. */
         [[nodiscard]] RendererFormatVerdict ClassifyColorTransferFormatEXT(

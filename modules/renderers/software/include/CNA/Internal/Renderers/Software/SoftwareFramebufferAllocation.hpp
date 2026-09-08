@@ -35,6 +35,7 @@ namespace CNA::Internal::Renderers::Software
         bool allocateStencil = true;
         int multiSampleCount = 0;
         bool mipMap = false;
+        bool allocateWideColor = false;
     };
 
     /** Side-effect-free result used before any vector or Win32-facing byte conversion. */
@@ -43,17 +44,22 @@ namespace CNA::Internal::Renderers::Software
         SoftwareFramebufferAllocationError error = SoftwareFramebufferAllocationError::None;
         std::size_t pixelCount = 0;
         std::size_t colorBytes = 0;
+        std::size_t wideColorElementCount = 0;
+        std::size_t wideColorBytes = 0;
         std::size_t depthElementCount = 0;
         std::size_t depthBytes = 0;
         std::size_t stencilBytes = 0;
         /** Four RGBA8 color samples per pixel when 4x MSAA is requested. */
         std::size_t multiSampleBytes = 0;
+        std::size_t multiSampleWideColorElementCount = 0;
+        std::size_t multiSampleWideColorBytes = 0;
         /** Four float depth samples per pixel when depth and 4x MSAA are requested. */
         std::size_t multiSampleDepthElementCount = 0;
         std::size_t multiSampleDepthBytes = 0;
         /** Four 8-bit stencil samples per pixel when stencil and 4x MSAA are requested. */
         std::size_t multiSampleStencilBytes = 0;
         std::size_t mipBytes = 0;
+        std::size_t wideMipBytes = 0;
         std::size_t totalBytes = 0;
 
         [[nodiscard]] bool IsValid() const

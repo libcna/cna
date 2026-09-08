@@ -133,7 +133,7 @@ namespace CNA::Internal::Renderers::Software
                 BlendFactorComponent(sourceFactor, channel, source, destination, constant);
             const float destinationTerm = destination[channel] *
                 BlendFactorComponent(destinationFactor, channel, source, destination, constant);
-            return std::clamp(ApplyBlendFunction(function, sourceTerm, destinationTerm), 0.0f, 1.0f);
+            return ApplyBlendFunction(function, sourceTerm, destinationTerm);
         }
 
         /// One CPU stencil state snapshot. The shared framebuffer stores one unsigned 8-bit value
@@ -1678,6 +1678,9 @@ namespace CNA::Internal::Renderers::Software
             { return cube_.CubeFaceDimension(level); }
             [[nodiscard]] const std::vector<std::uint8_t>& ColorPixels(int level) const override
             { return cube_.CubeFacePixels(face_, level); }
+            void FetchColorTexel(int level, int x, int y,
+                                 float& r, float& g, float& b, float& a) const override
+            { cube_.FetchCubeColorTexel(face_, level, x, y, r, g, b, a); }
 
         private:
             const SoftwareCubeSurface& cube_;
@@ -2054,31 +2057,17 @@ namespace CNA::Internal::Renderers::Software
             if (passingSamples == 0u)
                 return;
             const float r = pr / invW, g = pg / invW, b = pb / invW, a = pa / invW;
-            const auto writeColor = [&](std::uint8_t* destination) {
-                if (ColorWriteHasRed(colorWriteMask))
-                    destination[0] = static_cast<std::uint8_t>(
-                        std::clamp(r, 0.0f, 1.0f) * 255.0f);
-                if (ColorWriteHasGreen(colorWriteMask))
-                    destination[1] = static_cast<std::uint8_t>(
-                        std::clamp(g, 0.0f, 1.0f) * 255.0f);
-                if (ColorWriteHasBlue(colorWriteMask))
-                    destination[2] = static_cast<std::uint8_t>(
-                        std::clamp(b, 0.0f, 1.0f) * 255.0f);
-                if (ColorWriteHasAlpha(colorWriteMask))
-                    destination[3] = static_cast<std::uint8_t>(
-                        std::clamp(a, 0.0f, 1.0f) * 255.0f);
-            };
+            const std::array<float, 4> output{r, g, b, a};
             if (!fb.HasMultiSampleColor())
             {
-                writeColor(fb.color.data() + pixelIndex * 4u);
+                fb.WriteColor(pixelIndex, -1, output, colorWriteMask);
                 return;
             }
             for (int sample = 0; sample < 4; ++sample)
             {
                 if ((passingSamples & (1u << sample)) == 0u)
                     continue;
-                writeColor(fb.multiSampleColor.data() +
-                           (pixelIndex * 4u + static_cast<std::size_t>(sample)) * 4u);
+                fb.WriteColor(pixelIndex, sample, output, colorWriteMask);
             }
         }
 
@@ -2996,14 +2985,12 @@ namespace CNA::Internal::Renderers::Software
             // destination byte (identity), applied AFTER blending (Phase 10). The common All(15)
             // path writes every channel exactly as before.
             const std::array<float, 4> source{r, g, b, a};
-            const auto writeBlendedColor = [&](std::uint8_t* destinationBytes) {
+            const auto writeBlendedColor = [&](int sample) {
                 std::array<float, 4> output = source;
                 if (!ctx.blendState.IsOpaqueIdentity())
                 {
-                    const std::array<float, 4> destination{
-                        destinationBytes[0] / 255.0f, destinationBytes[1] / 255.0f,
-                        destinationBytes[2] / 255.0f, destinationBytes[3] / 255.0f,
-                    };
+                    const std::array<float, 4> destination =
+                        fb.ReadColor(pixelIndex, sample);
                     output[0] = BlendComponent(0, ctx.blendState.colorSource,
                                                ctx.blendState.colorDestination,
                                                ctx.blendState.colorFunction,
@@ -3021,28 +3008,18 @@ namespace CNA::Internal::Renderers::Software
                                                ctx.blendState.alphaFunction,
                                                source, destination, ctx.blendFactor);
                 }
-                for (float& channel : output)
-                    channel = std::clamp(channel, 0.0f, 1.0f);
-                if (ColorWriteHasRed(ctx.colorWriteMask))
-                    destinationBytes[0] = static_cast<std::uint8_t>(output[0] * 255.0f);
-                if (ColorWriteHasGreen(ctx.colorWriteMask))
-                    destinationBytes[1] = static_cast<std::uint8_t>(output[1] * 255.0f);
-                if (ColorWriteHasBlue(ctx.colorWriteMask))
-                    destinationBytes[2] = static_cast<std::uint8_t>(output[2] * 255.0f);
-                if (ColorWriteHasAlpha(ctx.colorWriteMask))
-                    destinationBytes[3] = static_cast<std::uint8_t>(output[3] * 255.0f);
+                fb.WriteColor(pixelIndex, sample, output, ctx.colorWriteMask);
             };
             if (!fb.HasMultiSampleColor())
             {
-                writeBlendedColor(fb.color.data() + pixelIndex * 4u);
+                writeBlendedColor(-1);
                 return;
             }
             for (int sample = 0; sample < 4; ++sample)
             {
                 if ((passingSamples & (1u << sample)) == 0u)
                     continue;
-                writeBlendedColor(fb.multiSampleColor.data() +
-                                  (pixelIndex * 4u + static_cast<std::size_t>(sample)) * 4u);
+                writeBlendedColor(sample);
             }
         }
 
@@ -4059,6 +4036,29 @@ namespace CNA::Internal::Renderers::Software
 #else
         return std::make_unique<SoftwareRenderTargetCubeRenderer>(
             size, depthFormat, preserveContents, mipMap, multiSampleCount);
+#endif
+    }
+
+    std::unique_ptr<IRenderTargetCubeRenderer> SoftwareRenderer::CreateRenderTargetCubeEXT(
+        int size, int depthFormat, bool preserveContents, bool mipMap,
+        int multiSampleCount, int surfaceFormat)
+    {
+#ifdef CNA_SOFTWARE_2D_ONLY
+        (void)size;
+        (void)depthFormat;
+        (void)preserveContents;
+        (void)mipMap;
+        (void)multiSampleCount;
+        (void)surfaceFormat;
+        throw System::NotSupportedException(
+            "Software's GDI 2D compilation unit does not include RenderTargetCube resources.");
+#else
+        if (ClassifyRenderTargetFormatEXT(surfaceFormat) != RendererFormatVerdict::Supported)
+            throw std::runtime_error(
+                "SoftwareRenderer::CreateRenderTargetCubeEXT: unsupported SurfaceFormat ordinal " +
+                std::to_string(surfaceFormat));
+        return std::make_unique<SoftwareRenderTargetCubeRenderer>(
+            size, depthFormat, preserveContents, mipMap, multiSampleCount, surfaceFormat);
 #endif
     }
 

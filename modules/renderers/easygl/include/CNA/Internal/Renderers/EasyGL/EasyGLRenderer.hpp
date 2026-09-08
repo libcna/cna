@@ -252,6 +252,28 @@ namespace CNA::Internal::Renderers::EasyGL
         int GetHeight() const override { return height_; }
 
         void BindGL(int unit) const override;
+        /**
+         * @brief Uploads a complete level-zero image in the target's declared format.
+         * @param data Source pixels in top-row-first order.
+         * @param stride Source row pitch in bytes.
+         */
+        void UpdatePixels(const uint8_t* data, int stride) override;
+        /**
+         * @brief Uploads a complete mip image in the target's declared format.
+         * @param level Destination mip level.
+         * @param data Source pixels in top-row-first order.
+         * @param levelW Expected mip width.
+         * @param levelH Expected mip height.
+         */
+        void UpdatePixelsLevel(int level, const uint8_t* data,
+                               int levelW, int levelH) override;
+        /**
+         * @brief Reports every allocated target mip as directly readable.
+         * @param level Mip level to query.
+         * @return True when the level belongs to this target's allocated chain.
+         */
+        [[nodiscard]] bool HasDefinedMipLevel(int level) const noexcept override
+        { return level >= 0 && level < levelCount_; }
 
         void BindAsRenderTarget()   override;
         void UnbindAsRenderTarget() override;
@@ -279,6 +301,8 @@ namespace CNA::Internal::Renderers::EasyGL
         friend class EasyGLRenderer;
 
         void CreateResources();
+        void UploadPixelsLevel(int level, const uint8_t* data,
+                               int levelW, int levelH, int stride);
         /** @brief Resolves this target's multisample colour storage into its public texture. */
         void ResolveColorEXT(const char* traceEvent) const;
         /// REMED-GFX-168: this target's own native identities, for `CNA_EASYGL_TARGET_TRACE`.

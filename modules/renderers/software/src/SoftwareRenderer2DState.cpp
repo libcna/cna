@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <memory>
 #include <stdexcept>
+#include <string>
 
 namespace CNA::Internal::Renderers::Software
 {
@@ -144,6 +145,39 @@ namespace CNA::Internal::Renderers::Software
         }
     }
 
+    RendererFormatVerdict SoftwareRenderer::ClassifyRenderTargetFormatEXT(
+        int surfaceFormat) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+            case SurfaceFormat::Color:
+            case SurfaceFormat::Single:
+            case SurfaceFormat::Vector2:
+            case SurfaceFormat::Vector4:
+            case SurfaceFormat::HalfSingle:
+            case SurfaceFormat::HalfVector2:
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::HdrBlendable:
+                return RendererFormatVerdict::Supported;
+            case SurfaceFormat::Bgr565:
+            case SurfaceFormat::Bgra5551:
+            case SurfaceFormat::Bgra4444:
+            case SurfaceFormat::Dxt1:
+            case SurfaceFormat::Dxt3:
+            case SurfaceFormat::Dxt5:
+            case SurfaceFormat::NormalizedByte2:
+            case SurfaceFormat::NormalizedByte4:
+            case SurfaceFormat::Rgba1010102:
+            case SurfaceFormat::Rg32:
+            case SurfaceFormat::Rgba64:
+            case SurfaceFormat::Alpha8:
+                return RendererFormatVerdict::Unsupported;
+            default:
+                return RendererFormatVerdict::Defer;
+        }
+    }
+
     RendererFormatVerdict SoftwareRenderer::ClassifyColorTransferFormatEXT(
         int surfaceFormat) const
     {
@@ -225,6 +259,11 @@ namespace CNA::Internal::Renderers::Software
                 // The first owns depth/stencil and classic stock effects emit COLOR0 only, while
                 // Clear and resolve/mip finalization visit every attachment.
                 return true;
+            case CNA::GraphicsCapability::FloatRenderTargets:
+            case CNA::GraphicsCapability::HalfFloatRenderTargets:
+                // SOFTWARE-146: all classic float/half target layouts retain their shader-domain
+                // values through draw, blend, resolve, mip generation and typed readback.
+                return true;
             case CNA::GraphicsCapability::Instancing:
                 // SOFTWARE-129: every instance is rasterized on the CPU from its independently
                 // frequency-stepped matrix record, through the same declaration/effect path as an
@@ -245,6 +284,19 @@ namespace CNA::Internal::Renderers::Software
     {
         return std::make_unique<SoftwareRenderTargetRenderer>(
             w, h, depthFormat, mipMap, multiSampleCount, depthFormat != 0, false);
+    }
+
+    std::unique_ptr<IRenderTargetRenderer> SoftwareRenderer::CreateRenderTarget2DEXT(
+        int w, int h, int depthFormat, bool, bool mipMap,
+        int multiSampleCount, int surfaceFormat)
+    {
+        if (ClassifyRenderTargetFormatEXT(surfaceFormat) != RendererFormatVerdict::Supported)
+            throw std::runtime_error(
+                "SoftwareRenderer::CreateRenderTarget2DEXT: unsupported SurfaceFormat ordinal " +
+                std::to_string(surfaceFormat));
+        return std::make_unique<SoftwareRenderTargetRenderer>(
+            w, h, depthFormat, mipMap, multiSampleCount, depthFormat != 0, false,
+            surfaceFormat);
     }
 
     void SoftwareRenderer::SetRenderTarget2D(IRenderTargetRenderer* rt)
