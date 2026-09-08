@@ -266,27 +266,27 @@ first run of this campaign was invalidated by a mid-run relink.
 | references in a sample with no `.contentproj` | 359 |
 | references whose item names a source the tree has not got | 43 |
 
-### 11.2 The sweep, run 8 (2026-09-08)
+### 11.2 The sweep, run 10 (2026-09-08)
 
-Run with everything through `XNASWEEP-130`. Run 3 is kept because it is what
+Run with everything through `XNASWEEP-131`. Run 3 is kept because it is what
 `XNASWEEP-104`--`110` were measured against.
 
-| | run 1 | run 2 | run 3 | run 6 | run 7 | run 8 |
+| | run 1 | run 2 | run 3 | run 6 | run 8 | run 10 |
 |---|---:|---:|---:|---:|---:|---:|
-| byte-identical | 922 | 3,524 | 3,619 | 3,711 | 3,718 | **3,718** |
-| differing | 343 | 1,444 | 1,547 | 1,510 | 1,599 | 1,679 |
-| missing (CNA produced nothing) | 6,102 | 2,399 | 2,201 | 2,146 | 2,050 | **1,970** |
-| build units that finished | -- | -- | 156 | 156 | 146 | 156 |
+| byte-identical | 922 | 3,524 | 3,619 | 3,711 | 3,718 | **3,738** |
+| differing | 343 | 1,444 | 1,547 | 1,510 | 1,679 | 1,659 |
+| missing (CNA produced nothing) | 6,102 | 2,399 | 2,201 | 2,146 | 1,970 | **1,970** |
+| build units that finished | -- | -- | 156 | 156 | 156 | 156 |
 
 *Differing* going up while *missing* goes down is the shape of progress here: an
 asset that could not be built at all is now built and compared. 231 references
-moved out of "nothing was produced" between run 3 and run 8.
+moved out of "nothing was produced" between run 3 and run 10.
 
-By source extension, run 8 (`identical / differing / missing`):
+By source extension, run 10 (`identical / differing / missing`):
 
 | extension | identical | differing | missing | identical % |
 |---|---:|---:|---:|---:|
-| `.png` | 3,167 | 785 | 33 | 79.5 |
+| `.png` | 3,171 | 781 | 33 | 79.6 |
 | `.xml` | 2 | 0 | 1,218 | 0.2 |
 | (model side output) | 0 | 204 | 542 | 0.0 |
 | `.fbx` | 0 | 175 | 125 | 0.0 |
@@ -295,12 +295,13 @@ By source extension, run 8 (`identical / differing / missing`):
 | `.tga` | 167 | 7 | 0 | 96.0 |
 | `.fx` | 0 | 92 | 11 | 0.0 |
 | `.jpg` | 0 | 88 | 8 | 0.0 |
-| `.bmp` | 55 | 30 | 8 | 59.1 |
+| `.bmp` | **71** | 14 | 8 | 76.3 |
 | `.x` | **15** | 37 | 11 | 23.8 |
 | `.wma` | 14 | 1 | 0 | 93.3 |
 | `.dds` | 8 | 3 | 0 | 72.7 |
 
-`.x` had no identical reference at all in run 3.
+`.x` had no identical reference at all in run 3, and `.bmp` -- the font sheets --
+went from 54 to 71 when `XNASWEEP-131` landed.
 
 ### 11.3 Every reference, classified
 
@@ -308,13 +309,13 @@ By source extension, run 8 (`identical / differing / missing`):
 
 | class | count | what it means |
 |---|---:|---|
-| `IDENTICAL` | **3,718** | CNA's build is the reference, byte for byte. |
-| `SEMANTICALLY_IDENTICAL` | 727 | Everything a runtime reads is equal. 717 are LZX -- two conforming encoders, one payload -- and 10 are numbers agreeing to within 6e-08 of the larger magnitude. |
+| `IDENTICAL` | **3,738** | CNA's build is the reference, byte for byte. |
+| `SEMANTICALLY_IDENTICAL` | 735 | Everything a runtime reads is equal. 725 are LZX -- two conforming encoders, one payload -- and 10 are numbers agreeing to within 6e-08 of the larger magnitude. |
 | `ACCEPTED_DIFFERENCE` | 726 | Measured, understood, and not closable from here. |
 | `CUSTOM_PIPELINE_GAP` | 1,370 | The asset needs a component the *sample* defines, in a .NET assembly C++ cannot load. |
 | `ENVIRONMENT_GAP` | 15 | This machine's, not CNA's: 10 effects the June-2010 fxc refuses and XNA's own D3DX9 accepted, and 5 fonts Windows has and this machine has not. |
 | `CORPUS_GAP` | 946 | The reference is in the corpus and the sweep has no way to build it. |
-| `UNEXPLAINED` | **232** | Everything else. |
+| `UNEXPLAINED` | **204** | Everything else. |
 
 The accepted differences, by reason:
 
@@ -337,13 +338,13 @@ names a source file the tree has not got.
 
 ### 11.3.1 What is still unexplained
 
-All 232, by what produced them:
+All 204, by what produced them:
 
 | count | processor | what differs |
 |---:|---|---|
 | 182 | `ModelProcessor` | `XNASWEEP-129`: bounding-sphere centres and bone translations at 1e-7, and the vertex-buffer digests that follow from 7% of one mesh's texture coordinates. |
-| 34 | `FontTextureProcessor` | The sheet, not the glyphs: XNA answers a 128x156 atlas where CNA answers 256x256, and XNA crops each glyph's transparent border where CNA keeps the whole cell. No rasterizer is involved in this route -- the glyphs are cut out of a bitmap the game drew -- so unlike `.spritefont` this one is closable. |
-| 15 | `TextureProcessor` | `.png` and `.dds` pairs whose difference is neither the mip dither nor the payload. |
+| 15 | `TextureProcessor` | `.png`, `.dds` pairs whose difference is neither the mip dither nor the payload. |
+| 6 | `FontTextureProcessor` | What is left of `XNASWEEP-131` after 34 of its 40 references became identical. |
 | 1 | `PassThroughProcessor` | One `.xml` asset. |
 
 ### 11.4 The read-only roots, re-audited 2026-09-08
@@ -392,13 +393,13 @@ configuration file, which `XNASWEEP-110` moved into the intermediate directory;
 `corpus_inventory.py` before any work; not one was generated, added or dropped
 for this campaign.
 
-**The answer.** 3,718 of them are byte for byte what CNA's product pipeline
+**The answer.** 3,738 of them are byte for byte what CNA's product pipeline
 produces from the same source, up from 922 when the sweep first ran and 3,619 at
-the run the earlier fixes were measured against. Another 727 differ only in ways
+the run the earlier fixes were measured against. Another 735 differ only in ways
 nothing a runtime does can see. 726 differ for a reason that is written down and
 cannot be closed from here. 1,370 need a component the *sample* defines and .NET
 loads from an assembly. 946 the sweep has no way to build at all, and 15 are this
-machine's fault rather than CNA's. **232 are unexplained**, and §11.3.1 says
+machine's fault rather than CNA's. **204 are unexplained**, and §11.3.1 says
 exactly which and what differs in each.
 
 ### 12.1 What the corpus found that one project could not
@@ -425,6 +426,7 @@ visible from the API surface, the differential corpus, or Platformer:
 | `XNASWEEP-124` | A `.wav`'s loop was one frame short of the one RIFF describes. |
 | `XNASWEEP-126` | A model's meshes were listed parent-first and each carried its own buffers. |
 | `XNASWEEP-127/128` | An FBX material's colour factors, its two property tables, and the texture never read. |
+| `XNASWEEP-131` | A font sheet's glyph is the ink in the cell, packed the way XNA packs it, premultiplied. |
 
 Two of the sweep's own findings were about the *measurement* rather than the
 thing measured, and both mattered: `XNASWEEP-021/041/042` established that 89 of
@@ -454,12 +456,15 @@ parity can ever mean here:
 
 In the order the measurements suggest:
 
-1. `XNASWEEP-131` -- `FontTextureProcessor` does not trim a glyph or repack the
-   sheet. 34 unexplained references, a measured rule, and no rasterizer in the
-   way. The one closable group.
-2. `XNASWEEP-129` -- 7% of one FBX mesh's texture coordinates. 182 unexplained
-   references sit behind it, and the channel is already isolated.
-3. `XNASWEEP-130` -- the sprite-font packer grows tall where XNA grows wide, 74
-   times out of 74. It will not make a font identical while the rasterizer
-   differs, but it is the difference underneath that one.
+1. `XNASWEEP-129` -- 7% of one FBX mesh's texture coordinates. 182 of the 204
+   unexplained references sit behind it, and the channel is already isolated.
+2. The last six `FontTextureProcessor` references, which `XNASWEEP-131` did not
+   reach when the other 34 became identical.
+3. The 15 `TextureProcessor` pairs whose difference is neither the mip dither nor
+   the container.
+
+`XNASWEEP-130` is now answered rather than open: the sprite-font packer grew tall
+where XNA grows wide because it was a shelf packer, and `XNASWEEP-131` replaced it
+with XNA's own. Those atlases will not make a `.spritefont` identical while the
+rasterizer differs, but the packer underneath them is no longer the reason.
 
