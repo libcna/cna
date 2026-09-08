@@ -1,4 +1,4 @@
-# Graphics renderer feature matrix — established GPU paths and Skia raster 2D
+# Graphics renderer feature matrix — established GPU paths and CPU/raster companions
 
 Master, up-to-date cross-renderer feature matrix for CNA's established renderers, written for
 Task 451 (Phase 51), extended 2026-07-14 with a `DIRECTX11` column (`../plans/plan_dx.md`, Phase DX11
@@ -56,26 +56,38 @@ game logic headlessly (no window, no GPU, no display server) for fast CI tests �
 itself via argument checks, resource-lifecycle tracking, and draw-call/state-change counters instead
 of pixel output. See `plans/plan_headless.md` for its own status.
 
-The **Software** renderer (`CNA_GRAPHICS_RENDERER=SOFTWARE`, tracked in `../plans/plan_software.md`) is
-also **not yet** a column here, but for a different reason than Headless: unlike Headless, it
-*does* render real pixels (a genuine CPU rasterizer). Its historical v1 boundary was too narrow
-for a meaningful column, but the active XNA/Core parity campaign has since added triangle strips,
-declaration-driven vertex input, six-plane clipping, top-left rasterization, complete blend and
-stencil state, sample-correct 4x MSAA, mip/address filtering, classic stock-effect fog, and full
-BasicEffect/EnvironmentMapEffect/SkinnedEffect lighting, and directional anisotropic filtering with
-per-slot/SpriteBatch state, exact CPU Texture3D mip/box storage and readback, and six-face
-RenderTargetCube rendering, shared depth/stencil, 4x resolve, mips, transfer and sampling, plus
-four-slot 2D/cube-face CPU MRT with independent clear/finalization and slot-zero stock-effect output;
-the same 22-check public MRT contract passes on Software and EasyGL. Classic indexed instancing now
-expands every declared per-instance matrix stream deterministically through the CPU stock-effect
-pipeline. Every classic `Texture2D` format now has exact typed CPU storage and format-aware
-sampling, including signed-normalized and HDR ranges; every XNA-permitted ordinary `TextureCube`
-format now has exact face/mip storage and format-correct environment-map sampling. Both target
-types likewise preserve the complete classic renderable matrix: Color, `Rgba1010102`, `Rg32`,
-`Rgba64` and all seven float/half layouts, with exact typed transfer, mips and sampling.
-SpriteBatch/SpriteFont and classic rigid and skinned Model paths also have shared public proof; the
-remaining device-lifecycle audits still defer a project-wide column. See
-`docs/software-renderer.md` and the evidence ledger for the measured current boundary.
+The **Software** renderer (`CNA_GRAPHICS_RENDERER=SOFTWARE`, tracked in
+`../plans/plan_software.md`) is a first-class independent CPU renderer for the classic XNA/Core
+contract. It is represented by the companion matrix below rather than forced into the GPU-native
+columns, because physical swap chains, driver state and context-loss rows are intentionally
+non-applicable. The historical v1 boundary is preserved only in the plan's clearly labeled history;
+the current renderer has behavioral evidence across every in-scope family. See
+[`software-renderer.md`](software-renderer.md) and
+[`software-easygl-parity-ledger.md`](software-easygl-parity-ledger.md) for detailed proofs.
+
+## Software CPU-raster XNA/Core companion matrix (`SOFTWARE-128`)
+
+`✅` means the CPU implementation and public behavioral evidence are present. `N/A` is an
+intentional implementation-model difference, and `DEFERRED-CNAEXT` is outside this classic
+XNA/Core campaign rather than a Software parity gap.
+
+| Feature family | Status | Evidence / boundary |
+|---|---:|---|
+| Device creation, CPU backbuffer, clear and readback | ✅ | Windowless renderer descriptor and null device window; deterministic backbuffer/target readback. The complete Software CTest label passes 156/156 under authenticated Xvfb. |
+| Primitive assembly and vertex/index input | ✅ | Triangle list/strip, line list/strip and existing PointListEXT regression path; indexed/non-indexed user/buffer draws, alternating strip winding, all 12 declaration formats, multiple streams, offsets, base vertex, 16/32-bit indices, dynamic updates and classic indexed instancing. |
+| Clipping and raster rules | ✅ | Six-plane homogeneous clipping, D3D/XNA top-left and integer-pixel-center rules, perspective-correct varyings, viewport depth, scissor, culling, wireframe and depth/slope bias have shared or strict CPU pixel contracts. |
+| Blend, depth, stencil, MSAA and queries | ✅ | All blend factors/functions with independent RGB/alpha, blend factor, four color masks, all depth/stencil comparisons/ops/masks/two-sided state, sample-correct 4× storage/coverage/resolve and exact CPU OcclusionQuery counts. |
+| Texture2D and sampling | ✅ | Complete classic format matrix including packed, DXT, SNORM and float/half storage; exact full/partial/mip/NPOT transfer; independent U/V Wrap/Clamp/Mirror, point/linear min-mag-mip selection, anisotropic sampling and per-slot state. |
+| TextureCube | ✅ | Every XNA-permitted plain-cube layout has exact face/mip transfer and format-correct EnvironmentMap sampling; measured-XNA-invalid layouts reject explicitly. |
+| Texture3D | ✅ | Exact classic storage/readback/upload for mip chains and partial boxes. No classic stock effect samples volume textures; CNAEXT shader sampling remains deferred. |
+| RenderTarget2D / RenderTargetCube | ✅ | Complete classic renderable color-format matrix, depth formats, discard/preserve, typed transfer, sampling after render, mips, face isolation and per-face 4× resolve. |
+| Multiple render targets | ✅ | Four ordered 2D/cube-face targets, independent clear/finalization/color masks, slot-zero depth ownership, mips and mixed-set validation pass the same 22-check public contract as EasyGL. |
+| Classic stock effects | ✅ | BasicEffect, AlphaTestEffect, DualTextureEffect, EnvironmentMapEffect, SkinnedEffect and SpriteEffect behavior cover unlit/lighting/default lights/fog/alpha/texture/vertex color/specular/per-pixel/normal-transform/bone paths with shared Software/EasyGL probes. |
+| SpriteBatch and SpriteFont | ✅ | Every draw/layout family, sort modes, transforms, sub-pixel placement, viewport/scissor/state/target interaction, glyph spacing/newline/fallback/flips/rotation/scale and deterministic disposal have shared public proof. |
+| Model.Draw orchestration | ✅ | Nine shared rigid/skinned hierarchy, effect, texture, content, index-width and sampled-animation scenes plus 122 shared Model unit checks. |
+| Resource lifecycle, validation and presentation reset | ✅ | Shared disposal/ownership/events/range checks and CPU backbuffer/MSAA/depth/stencil resize/reset behavior. Physical fullscreen or swap timing is not fabricated. |
+| Arbitrary ShaderEffect, PBR and modern engine pipeline | DEFERRED-CNAEXT | Custom shader execution, PBR/SkinnedPBR, compute/storage, HDR/post-processing, modern shadows/IBL and other `modules/graphics-ext` facilities are explicitly excluded. |
+| Physical window, GPU context, swap chain and driver state | N/A | Software owns no native window or graphics context; `Present()` completes synchronously while preserving the CPU framebuffer. |
 
 The **Stub** renderer (`CNA_GRAPHICS_RENDERER=STUB`, tracked in `../plans/plan_stub.md`) is, like Headless,
 **not** a column in this matrix and for the same reason: it never renders a single pixel. Unlike

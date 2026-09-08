@@ -20,11 +20,11 @@ so its public display IDs stay valid; Software does not depend on that succeedin
 usable without a display server. It only needs the same SDL3/SDL3_image/SDL3_mixer and
 `../sharp-runtime` checkout every other renderer already requires.
 
-## What this renderer is for (and isn't)
+## What this renderer is for
 
-Every other CNA renderer needs a real window and a real GPU context to run at all. `HEADLESS`
-solves that for testing game *logic* by never touching a GPU either — but it never renders a real
-pixel; `ReadBackbuffer()` just reports the last `Clear()` color for every pixel.
+GPU-backed CNA renderers need a graphics context and normally a window or offscreen platform
+surface. `HEADLESS` avoids that for testing game *logic*, but never renders a real pixel;
+`ReadBackbuffer()` only reports the last `Clear()` color for every pixel.
 
 Software is different: it actually **rasterizes real triangles** into a CPU-owned RGBA8
 framebuffer, entirely in software (a real edge-function rasterizer, real perspective-correct
@@ -38,18 +38,17 @@ non-indexed user/buffer draws. That makes it useful for:
   the existing EasyGL/BGFX/Vulkan golden-image tests (see `docs/graphics-renderer-feature-matrix.md`),
   which all need a real GPU context even under Xvfb.
 - **Server/CI environments** with no GPU whatsoever.
-- **Verifying basic XNA primitive/effect behavior** (does a triangle with these vertices, this
-  effect, this blend state produce the pixels you'd expect) as a fast, portable reference.
+- **Running classic XNA/Core graphics behavior on the CPU**, including stock effects, complete
+  graphics state, textures/cubes/targets/MRT, SpriteBatch/SpriteFont, queries and Model drawing.
 - **Cross-renderer diagnostics**: comparing a real GPU renderer's output against this renderer's
   independently-implemented rasterizer can help localize whether a rendering bug is in shared
   code, a specific GPU renderer, or expected-but-undocumented behavior (see "Cross-renderer
   diagnostic" below, `plans/plan_software.md` `SOFTWARE-61`/`SOFTWARE-84`).
 
-**What it proves:** "this triangle, with this effect state, this texture, and this blend mode,
-produces these exact pixels" — a real, independently-derived rendering result, not a fake one.
-**What it is not:** a real-time gameplay renderer. There is no SIMD, no multithreading, no
-tiling/binning — correctness and determinism are the goals, not speed (see `plans/plan_software.md`
-design decision 1).
+Software is a first-class correctness renderer: a normal XNA-style CNA application can rely on its
+classic graphics contract without a GPU. It is not optimized to match GPU throughput—there is no
+SIMD, multithreading or tile binning—because determinism and fidelity remain the primary goals (see
+`plans/plan_software.md` design decision 1).
 
 ## Writing a Software test
 
@@ -134,7 +133,7 @@ real rendering discrepancy. The comparator was also checked against a deliberate
 rather than always passing. `SOFTWARE-156` reduced the historical default tolerance of 40 to the
 measured one-byte bound; a wider tolerance now has to be an explicit, evidence-backed choice.
 
-## Known limitations (2026-09-08)
+## Current XNA/Core capabilities and intentional boundaries (2026-09-08)
 
 - **Vertex input is declaration-driven.** `VertexElementUsage`/usage index selects attributes
   across one or multiple streams, and all 12 XNA `VertexElementFormat` values are decoded at their
