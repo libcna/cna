@@ -206,9 +206,8 @@ TEST(RendererCapabilityProfileTest, DeviceSnapshotExposesLimitsAndHonestFormatKn
     {
         const CNA::RendererFormatSupport support =
             device.GetRendererSurfaceFormatSupportEXT(static_cast<SurfaceFormat>(ordinal));
-        EXPECT_EQ(support.knownUsages, classified) << ordinal;
+        EXPECT_EQ(support.knownUsages & classified, classified) << ordinal;
         EXPECT_EQ(support.supportedUsages & ~support.knownUsages, 0U) << ordinal;
-        EXPECT_FALSE(support.IsKnown(CNA::RendererFormatUsage::Sampled)) << ordinal;
     }
     EXPECT_EQ(device.GetRendererSurfaceFormatSupportEXT(static_cast<SurfaceFormat>(999)).knownUsages,
               0U);

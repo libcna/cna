@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
 #include "shaders/spirv_shaders.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -2265,6 +2266,44 @@ namespace CNA::Internal::Renderers::Vulkan
                                          0.0f);
     }
 
+    bool VulkanRenderer::MapSurfaceFormatToVkFormatEXT(
+        const int surfaceFormatOrdinal, VkFormat& out) noexcept
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        switch (static_cast<SurfaceFormat>(surfaceFormatOrdinal))
+        {
+            case SurfaceFormat::Color:           out = VK_FORMAT_R8G8B8A8_UNORM; return true;
+            case SurfaceFormat::Bgr565:          out = VK_FORMAT_R5G6B5_UNORM_PACK16; return true;
+            case SurfaceFormat::Bgra5551:        out = VK_FORMAT_A1R5G5B5_UNORM_PACK16; return true;
+            case SurfaceFormat::Bgra4444:        out = VK_FORMAT_A4R4G4B4_UNORM_PACK16; return true;
+            case SurfaceFormat::Dxt1:            out = VK_FORMAT_BC1_RGBA_UNORM_BLOCK; return true;
+            case SurfaceFormat::Dxt3:            out = VK_FORMAT_BC2_UNORM_BLOCK; return true;
+            case SurfaceFormat::Dxt5:            out = VK_FORMAT_BC3_UNORM_BLOCK; return true;
+            case SurfaceFormat::NormalizedByte2: out = VK_FORMAT_R8G8_SNORM; return true;
+            case SurfaceFormat::NormalizedByte4: out = VK_FORMAT_R8G8B8A8_SNORM; return true;
+            case SurfaceFormat::Rgba1010102:     out = VK_FORMAT_A2B10G10R10_UNORM_PACK32; return true;
+            case SurfaceFormat::Rg32:            out = VK_FORMAT_R16G16_UNORM; return true;
+            case SurfaceFormat::Rgba64:          out = VK_FORMAT_R16G16B16A16_UNORM; return true;
+            case SurfaceFormat::Alpha8:          out = VK_FORMAT_R8_UNORM; return true;
+            case SurfaceFormat::Single:          out = VK_FORMAT_R32_SFLOAT; return true;
+            case SurfaceFormat::Vector2:         out = VK_FORMAT_R32G32_SFLOAT; return true;
+            case SurfaceFormat::Vector4:         out = VK_FORMAT_R32G32B32A32_SFLOAT; return true;
+            case SurfaceFormat::HalfSingle:      out = VK_FORMAT_R16_SFLOAT; return true;
+            case SurfaceFormat::HalfVector2:     out = VK_FORMAT_R16G16_SFLOAT; return true;
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::HdrBlendable:    out = VK_FORMAT_R16G16B16A16_SFLOAT; return true;
+            case SurfaceFormat::ColorBgraEXT:    out = VK_FORMAT_B8G8R8A8_UNORM; return true;
+            case SurfaceFormat::ColorSrgbEXT:    out = VK_FORMAT_R8G8B8A8_SRGB; return true;
+            case SurfaceFormat::Dxt5SrgbEXT:     out = VK_FORMAT_BC3_SRGB_BLOCK; return true;
+            case SurfaceFormat::Bc7EXT:          out = VK_FORMAT_BC7_UNORM_BLOCK; return true;
+            case SurfaceFormat::Bc7SrgbEXT:      out = VK_FORMAT_BC7_SRGB_BLOCK; return true;
+            case SurfaceFormat::ByteEXT:         out = VK_FORMAT_R8_UNORM; return true;
+            case SurfaceFormat::UShortEXT:       out = VK_FORMAT_R16_UNORM; return true;
+        }
+        out = VK_FORMAT_UNDEFINED;
+        return false;
+    }
+
     // plan_vulkan.md VULKAN-170: the single table that says which public SurfaceFormat values this
     // renderer has native storage for, and in which VkFormat each one is stored.
     //
@@ -2380,7 +2419,14 @@ namespace CNA::Internal::Renderers::Vulkan
         vkGetPhysicalDeviceFormatProperties(physicalDevice_, storage.format, &props);
         constexpr VkFormatFeatureFlags required =
             VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
-        return (props.optimalTilingFeatures & required) == required
+        VkImageFormatProperties imageProperties{};
+        constexpr VkImageUsageFlags usage =
+            VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        const VkResult imageResult = vkGetPhysicalDeviceImageFormatProperties(
+            physicalDevice_, storage.format, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
+            usage, 0, &imageProperties);
+        return imageResult == VK_SUCCESS &&
+                   (props.optimalTilingFeatures & required) == required
             ? RendererFormatVerdict::Supported
             : RendererFormatVerdict::Unsupported;
     }
@@ -2444,7 +2490,15 @@ namespace CNA::Internal::Renderers::Vulkan
         vkGetPhysicalDeviceFormatProperties(physicalDevice_, swapchainFormat_, &props);
         constexpr VkFormatFeatureFlags required =
             VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT;
-        return (props.optimalTilingFeatures & required) == required
+        VkImageFormatProperties imageProperties{};
+        constexpr VkImageUsageFlags usage =
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        const VkResult imageResult = vkGetPhysicalDeviceImageFormatProperties(
+            physicalDevice_, swapchainFormat_, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
+            usage, 0, &imageProperties);
+        return imageResult == VK_SUCCESS &&
+                   (props.optimalTilingFeatures & required) == required
             ? RendererFormatVerdict::Supported
             : RendererFormatVerdict::Unsupported;
     }
@@ -2458,6 +2512,107 @@ namespace CNA::Internal::Renderers::Vulkan
         // accepting blocks it has nowhere to put.
         VulkanSurfaceFormatStorageEXT storage{};
         return MapSurfaceFormatToStorageEXT(surfaceFormat, storage) && storage.blockExtent > 1;
+    }
+
+    CNA::RendererFormatSupport VulkanRenderer::GetSurfaceFormatUsageSupportEXT(
+        const int surfaceFormat) const
+    {
+        using CNA::RendererFormatUsage;
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+
+        VkFormat semanticFormat = VK_FORMAT_UNDEFINED;
+        if (!MapSurfaceFormatToVkFormatEXT(surfaceFormat, semanticFormat) ||
+            physicalDevice_ == VK_NULL_HANDLE)
+            return {};
+
+        constexpr std::uint32_t allKnown =
+            static_cast<std::uint32_t>(RendererFormatUsage::TextureStorage) |
+            static_cast<std::uint32_t>(RendererFormatUsage::Sampled) |
+            static_cast<std::uint32_t>(RendererFormatUsage::Filterable) |
+            static_cast<std::uint32_t>(RendererFormatUsage::RenderTarget) |
+            static_cast<std::uint32_t>(RendererFormatUsage::Blendable) |
+            static_cast<std::uint32_t>(RendererFormatUsage::StorageRead) |
+            static_cast<std::uint32_t>(RendererFormatUsage::StorageWrite) |
+            static_cast<std::uint32_t>(RendererFormatUsage::StorageAtomic) |
+            static_cast<std::uint32_t>(RendererFormatUsage::TransferSource) |
+            static_cast<std::uint32_t>(RendererFormatUsage::TransferDestination) |
+            static_cast<std::uint32_t>(RendererFormatUsage::Mipmapped) |
+            static_cast<std::uint32_t>(RendererFormatUsage::Multisample) |
+            static_cast<std::uint32_t>(RendererFormatUsage::ColorTransfer);
+
+        CNA::RendererFormatSupport support{allKnown, 0};
+        const auto setSupported = [&](const RendererFormatUsage usage, const bool yes)
+        {
+            if (yes)
+                support.supportedUsages |= static_cast<std::uint32_t>(usage);
+        };
+
+        VkFormatProperties properties{};
+        vkGetPhysicalDeviceFormatProperties(physicalDevice_, semanticFormat, &properties);
+        const VkFormatFeatureFlags optimal = properties.optimalTilingFeatures;
+
+        VulkanSurfaceFormatStorageEXT storage{};
+        const bool hasImplementedStorage =
+            MapSurfaceFormatToStorageEXT(surfaceFormat, storage) &&
+            storage.format == semanticFormat &&
+            ClassifySurfaceFormatEXT(surfaceFormat) == RendererFormatVerdict::Supported;
+        const bool sampled = hasImplementedStorage &&
+            (optimal & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) != 0;
+        const bool transferDestination = hasImplementedStorage &&
+            (optimal & VK_FORMAT_FEATURE_TRANSFER_DST_BIT) != 0;
+        setSupported(RendererFormatUsage::TextureStorage, hasImplementedStorage);
+        setSupported(RendererFormatUsage::Sampled, sampled);
+        setSupported(RendererFormatUsage::Filterable,
+                     sampled && (optimal & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) != 0);
+        setSupported(RendererFormatUsage::TransferDestination, transferDestination);
+
+        VkImageFormatProperties textureImageProperties{};
+        constexpr VkImageUsageFlags textureUsage =
+            VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        const bool mipmapped = hasImplementedStorage &&
+            vkGetPhysicalDeviceImageFormatProperties(
+                physicalDevice_, semanticFormat, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
+                textureUsage, 0, &textureImageProperties) == VK_SUCCESS &&
+            textureImageProperties.maxMipLevels > 1;
+        setSupported(RendererFormatUsage::Mipmapped, mipmapped);
+
+        const bool isColor =
+            static_cast<SurfaceFormat>(surfaceFormat) == SurfaceFormat::Color;
+        const bool renderTarget =
+            ClassifyRenderTargetFormatEXT(surfaceFormat) == RendererFormatVerdict::Supported;
+        VkFormatProperties renderTargetProperties{};
+        if (renderTarget)
+            vkGetPhysicalDeviceFormatProperties(
+                physicalDevice_, swapchainFormat_, &renderTargetProperties);
+        setSupported(RendererFormatUsage::RenderTarget, renderTarget);
+        setSupported(RendererFormatUsage::Blendable,
+                     renderTarget &&
+                         (renderTargetProperties.optimalTilingFeatures &
+                          VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT) != 0);
+        setSupported(RendererFormatUsage::TransferSource,
+                     renderTarget &&
+                         (renderTargetProperties.optimalTilingFeatures &
+                          VK_FORMAT_FEATURE_TRANSFER_SRC_BIT) != 0);
+
+        VkImageFormatProperties multisampleProperties{};
+        constexpr VkImageUsageFlags multisampleUsage =
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT;
+        const bool multisample = renderTarget &&
+            vkGetPhysicalDeviceImageFormatProperties(
+                physicalDevice_, swapchainFormat_, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
+                multisampleUsage, 0, &multisampleProperties) == VK_SUCCESS &&
+            (multisampleProperties.sampleCounts &
+             physicalDeviceProperties_.limits.framebufferColorSampleCounts &
+             ~VK_SAMPLE_COUNT_1_BIT) != 0;
+        setSupported(RendererFormatUsage::Multisample, multisample);
+
+        const bool colorTransfer = isColor && hasImplementedStorage &&
+            ClassifyColorTransferFormatEXT(surfaceFormat) != RendererFormatVerdict::Unsupported;
+        setSupported(RendererFormatUsage::ColorTransfer, colorTransfer);
+
+        // Storage-image bits deliberately remain known-but-unsupported until MOD-2244 supplies
+        // the resource, binding and synchronization path. Native format flags are not enough.
+        return support;
     }
 
     bool VulkanRenderer::SupportsRenderTargetSurfaceFormatEXT(int surfaceFormatOrdinal) const
@@ -3210,7 +3365,8 @@ namespace CNA::Internal::Renderers::Vulkan
                       << "; wireframe fill mode: " << (fillModeNonSolidSupported_ ? "supported" : "NOT supported")
                       << "; independent MRT blend/write state: "
                       << (independentBlendSupported_ ? "supported" : "NOT supported")
-                      << "; SurfaceFormat: Color only (Task 176)" << std::endl;
+                      << "; render-target SurfaceFormat: Color; detailed format usage: "
+                         "27 formats classified (MOD-2222)" << std::endl;
         }
     }
 
@@ -14141,6 +14297,113 @@ namespace CNA::Internal::Renderers::Vulkan
         if (!SupportsComputeShadersEXT()) return 0;
         return ClampVulkanLimitToInt(
             physicalDeviceProperties_.limits.maxComputeWorkGroupInvocations);
+    }
+
+    int VulkanRenderer::GetMaxTextureDimension() const
+    {
+        if (physicalDevice_ == VK_NULL_HANDLE) return 0;
+        return ClampVulkanLimitToInt(
+            physicalDeviceProperties_.limits.maxImageDimension2D);
+    }
+
+    int VulkanRenderer::GetMaxVertexStreams() const
+    {
+        return GetMaxVertexInputBindingsEXT();
+    }
+
+    std::uint64_t VulkanRenderer::GetMaxStorageBufferBytesEXT() const
+    {
+        return SupportsComputeShadersEXT()
+            ? physicalDeviceProperties_.limits.maxStorageBufferRange
+            : UINT64_C(0);
+    }
+
+    std::uint64_t VulkanRenderer::GetMaxUniformBufferBytesEXT() const
+    {
+        if (device_ == VK_NULL_HANDLE) return 0;
+        constexpr std::uint64_t largestImplementedBinding =
+            static_cast<std::uint64_t>(VulkanEffectRenderer::kEffectUniformArrayCapacity) *
+            16U * sizeof(float);
+        return std::min<std::uint64_t>(
+            largestImplementedBinding,
+            physicalDeviceProperties_.limits.maxUniformBufferRange);
+    }
+
+    int VulkanRenderer::GetMaxComputeStorageBufferBindingsEXT() const
+    {
+        if (!SupportsComputeShadersEXT()) return 0;
+        const auto& limits = physicalDeviceProperties_.limits;
+        return ClampVulkanLimitToInt(std::min(
+            limits.maxPerStageDescriptorStorageBuffers,
+            limits.maxDescriptorSetStorageBuffers));
+    }
+
+    int VulkanRenderer::GetMaxTextureArrayLayersEXT() const
+    {
+        return 0;
+    }
+
+    int VulkanRenderer::GetMaxSampledTexturesPerShaderStageEXT() const
+    {
+        if (device_ == VK_NULL_HANDLE) return 0;
+        const auto& limits = physicalDeviceProperties_.limits;
+        constexpr std::uint32_t implementedSampledBindings =
+            static_cast<std::uint32_t>(VulkanEffectRenderer::kMaxEffectBoundTextures * 3);
+        return ClampVulkanLimitToInt(std::min({
+            implementedSampledBindings,
+            limits.maxPerStageDescriptorSamplers,
+            limits.maxPerStageDescriptorSampledImages,
+            limits.maxDescriptorSetSamplers,
+            limits.maxDescriptorSetSampledImages}));
+    }
+
+    int VulkanRenderer::GetMaxStorageImagesPerShaderStageEXT() const
+    {
+        return 0;
+    }
+
+    int VulkanRenderer::GetMaxVertexInputBindingsEXT() const
+    {
+        if (physicalDevice_ == VK_NULL_HANDLE) return 0;
+        constexpr std::uint32_t publicStreamCeiling = 16;
+        return ClampVulkanLimitToInt(std::min(
+            publicStreamCeiling,
+            physicalDeviceProperties_.limits.maxVertexInputBindings));
+    }
+
+    int VulkanRenderer::GetMaxVertexInputAttributesEXT() const
+    {
+        if (physicalDevice_ == VK_NULL_HANDLE) return 0;
+        return ClampVulkanLimitToInt(
+            physicalDeviceProperties_.limits.maxVertexInputAttributes);
+    }
+
+    int VulkanRenderer::GetMaxColorAttachmentsEXT() const
+    {
+        if (physicalDevice_ == VK_NULL_HANDLE) return 0;
+        constexpr std::uint32_t xnaRenderTargetCeiling = 4;
+        return ClampVulkanLimitToInt(std::min(
+            xnaRenderTargetCeiling,
+            physicalDeviceProperties_.limits.maxColorAttachments));
+    }
+
+    std::uint64_t VulkanRenderer::GetMinStorageBufferOffsetAlignmentEXT() const
+    {
+        return SupportsComputeShadersEXT()
+            ? physicalDeviceProperties_.limits.minStorageBufferOffsetAlignment
+            : UINT64_C(0);
+    }
+
+    std::uint64_t VulkanRenderer::GetMinUniformBufferOffsetAlignmentEXT() const
+    {
+        return device_ != VK_NULL_HANDLE
+            ? physicalDeviceProperties_.limits.minUniformBufferOffsetAlignment
+            : UINT64_C(0);
+    }
+
+    std::uint64_t VulkanRenderer::GetTimestampPeriodPicosecondsEXT() const
+    {
+        return 0;
     }
 
     std::unique_ptr<ISpriteBatchRenderer> VulkanRenderer::CreateSpriteBatch()

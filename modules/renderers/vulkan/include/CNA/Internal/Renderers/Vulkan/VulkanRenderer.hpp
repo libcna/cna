@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 #include "CNA/CNAHelper.hpp"
@@ -2026,6 +2027,20 @@ namespace CNA::Internal::Renderers::Vulkan
                                                  VulkanSurfaceFormatStorageEXT& out) const;
 
         /**
+         * @brief Maps a public surface format to its exact Vulkan storage spelling.
+         *
+         * This table describes semantic Vulkan equivalents, not implemented CNA resource support.
+         * @ref MapSurfaceFormatToStorageEXT is the narrower allocation table and
+         * @ref GetSurfaceFormatUsageSupportEXT intersects both answers with physical-device facts.
+         *
+         * @param surfaceFormatOrdinal The `SurfaceFormat` ordinal to map.
+         * @param out Receives the Vulkan format when an exact representation exists.
+         * @return True for every current `SurfaceFormat` with an exact Vulkan representation.
+         */
+        CNAEXT [[nodiscard]] static bool MapSurfaceFormatToVkFormatEXT(
+            int surfaceFormatOrdinal, VkFormat& out) noexcept;
+
+        /**
          * @brief Whether a `Texture2D` may be created with the given surface format.
          *
          * plan_vulkan.md VULKAN-170. `Supported`/`Unsupported` for a format this renderer stores
@@ -2077,6 +2092,19 @@ namespace CNA::Internal::Renderers::Vulkan
         {
             return IsCompressedTransferFormatEXT(surfaceFormat);
         }
+
+        /**
+         * @brief Returns device-derived, implemented usage support for one surface format.
+         *
+         * Every current format and usage is classified. A supported bit requires both the
+         * relevant Vulkan format/property bit and a complete CNA resource path; a native-only
+         * feature remains an explicit unsupported answer.
+         *
+         * @param surfaceFormat The `SurfaceFormat` ordinal to classify.
+         * @return Known and supported usage masks.
+         */
+        [[nodiscard]] CNA::RendererFormatSupport GetSurfaceFormatUsageSupportEXT(
+            int surfaceFormat) const override;
 
         /**
          * @brief Keeps loader-provided DXT payloads compressed on BC-capable devices.
@@ -2847,6 +2875,24 @@ namespace CNA::Internal::Renderers::Vulkan
         {
             return physicalDeviceProperties_;
         }
+
+        /**
+         * @brief Returns the selected physical-device handle for renderer-native diagnostics.
+         * @return Vulkan physical-device handle, or `VK_NULL_HANDLE` before selection.
+         */
+        CNAEXT [[nodiscard]] VkPhysicalDevice GetPhysicalDeviceHandleEXT() const noexcept
+        {
+            return physicalDevice_;
+        }
+
+        /**
+         * @brief Returns the Vulkan format used by current colour render targets.
+         * @return Applied swap-chain-compatible colour format.
+         */
+        CNAEXT [[nodiscard]] VkFormat GetRenderTargetVkFormatEXT() const noexcept
+        {
+            return swapchainFormat_;
+        }
         /**
          * @brief Returns the core features reported by the selected physical device.
          *
@@ -3000,6 +3046,90 @@ namespace CNA::Internal::Renderers::Vulkan
 
         /** @brief Returns this device's maximum invocations in one compute work group. */
         [[nodiscard]] int GetMaxComputeWorkGroupInvocationsEXT() const override;
+
+        /**
+         * @brief Returns the selected device's usable two-dimensional texture dimension.
+         * @return Maximum dimension, clamped to the public integer range.
+         */
+        [[nodiscard]] int GetMaxTextureDimension() const override;
+
+        /**
+         * @brief Returns the public stream ceiling clamped to native input bindings.
+         * @return Maximum accepted vertex stream count.
+         */
+        [[nodiscard]] int GetMaxVertexStreams() const override;
+
+        /**
+         * @brief Returns the maximum byte range of the implemented storage-buffer path.
+         * @return Maximum bytes, or zero when compute storage buffers are unavailable.
+         */
+        [[nodiscard]] std::uint64_t GetMaxStorageBufferBytesEXT() const override;
+
+        /**
+         * @brief Returns the maximum byte range used by Vulkan uniform-buffer bindings.
+         * @return Smaller of the native range and CNA's largest implemented binding.
+         */
+        [[nodiscard]] std::uint64_t GetMaxUniformBufferBytesEXT() const override;
+
+        /**
+         * @brief Returns the compute-stage storage-buffer binding ceiling.
+         * @return Maximum usable compute storage-buffer binding count.
+         */
+        [[nodiscard]] int GetMaxComputeStorageBufferBindingsEXT() const override;
+
+        /**
+         * @brief Returns zero until sampled texture arrays are implemented by MOD-2243.
+         * @return Zero in the current implementation.
+         */
+        [[nodiscard]] int GetMaxTextureArrayLayersEXT() const override;
+
+        /**
+         * @brief Returns the sampled-descriptor ceiling reachable by one custom effect stage.
+         * @return Smaller of all native descriptor ceilings and CNA's twelve bindings.
+         */
+        [[nodiscard]] int GetMaxSampledTexturesPerShaderStageEXT() const override;
+
+        /**
+         * @brief Returns zero until storage-image binding is implemented by MOD-2244.
+         * @return Zero in the current implementation.
+         */
+        [[nodiscard]] int GetMaxStorageImagesPerShaderStageEXT() const override;
+
+        /**
+         * @brief Returns the public input-binding ceiling clamped to the selected device.
+         * @return Maximum usable vertex-buffer binding count.
+         */
+        [[nodiscard]] int GetMaxVertexInputBindingsEXT() const override;
+
+        /**
+         * @brief Returns the selected device's vertex-attribute ceiling.
+         * @return Maximum usable vertex attribute count.
+         */
+        [[nodiscard]] int GetMaxVertexInputAttributesEXT() const override;
+
+        /**
+         * @brief Returns the selected device's colour-attachment ceiling clamped to XNA's four.
+         * @return Maximum usable simultaneous colour attachment count.
+         */
+        [[nodiscard]] int GetMaxColorAttachmentsEXT() const override;
+
+        /**
+         * @brief Returns the implemented storage-buffer offset-alignment requirement.
+         * @return Required byte alignment, or zero when storage buffers are unavailable.
+         */
+        [[nodiscard]] std::uint64_t GetMinStorageBufferOffsetAlignmentEXT() const override;
+
+        /**
+         * @brief Returns the uniform-buffer offset-alignment requirement.
+         * @return Required byte alignment.
+         */
+        [[nodiscard]] std::uint64_t GetMinUniformBufferOffsetAlignmentEXT() const override;
+
+        /**
+         * @brief Returns zero until Vulkan GPU timestamp queries are implemented by MOD-2246.
+         * @return Zero in the current implementation.
+         */
+        [[nodiscard]] std::uint64_t GetTimestampPeriodPicosecondsEXT() const override;
 
         // ---- Graphics state: IMPLEMENTED ----
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,

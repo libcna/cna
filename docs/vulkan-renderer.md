@@ -2,7 +2,7 @@
 
 ## Status of this document
 
-**Complete as of 2026-09-08 (`VULKAN-480`, updated by `REMED-GFX-203` and `MOD-2240`–`MOD-2242`), and written after the re-audits it depends on**
+**Complete as of 2026-09-08 (`VULKAN-480`, updated by `REMED-GFX-203`, `MOD-2222` and `MOD-2240`–`MOD-2242`), and written after the re-audits it depends on**
 (`VULKAN-470`–`VULKAN-474`) so that what it claims was checked rather than remembered. Every
 section names the row that put it there and the test that keeps it true; a claim with no test named
 beside it is not in here.
@@ -117,11 +117,14 @@ custom instanced draw, with no validation message.
 
 ### Surface formats
 
-Nine `SurfaceFormat` values have a `VkFormat` here: `Color`, `Bgr565`, `Bgra5551`, `Bgra4444`,
-`NormalizedByte2`, `NormalizedByte4`, `Dxt1`, `Dxt3`, `Dxt5`. Anything else is **deferred**, never
-refused: a format this renderer has never looked at is the framework's to judge
-(`Texture::ValidateFormat`), and saying "unsupported" would be a claim it has not earned
-(`VULKAN-170`).
+`MOD-2222` gives all 27 current `SurfaceFormat` values an explicit semantic `VkFormat` mapping and
+classifies all thirteen detailed usage bits from the selected physical device. The mapping is not
+itself a support promise. Nine formats currently have faithful `Texture2D` allocation paths:
+`Color`, `Bgr565`, `Bgra5551`, `Bgra4444`, `NormalizedByte2`, `NormalizedByte4`, `Dxt1`, `Dxt3` and
+`Dxt5`. The remaining formats are mapped so Vulkan properties can be inspected, but texture
+storage/sampling/transfer flags stay false until the CNA allocation, transfer and view semantics
+exist. The older construction verdict still **defers** such formats to `Texture::ValidateFormat`
+rather than pretending the renderer attempted them (`VULKAN-170`).
 
 DXT1/3/5 use native BC1_RGBA/BC2/BC3 storage for both `Texture2D` (`VULKAN-172`) and
 `TextureCube` (`VULKAN-240`) when the device exposes `textureCompressionBC`. The cube route is
@@ -130,9 +133,13 @@ by `Vulkan_DxtTextureCube`; the identical `EasyGL_DxtTextureCube` source is the 
 DDS and XNB loaders preserve the native blocks and complete mip chains on those devices
 (`VULKAN-241`), while a device without BC retains the shared decode-to-`Color` fallback.
 
-For a format it does map, the verdict comes from the **device's own** `VkFormatProperties` rather
-than from that list — a build that maps a format is not a device that can sample it (`VULKAN-170`,
-test `Vulkan_ProfileLimitsAudit` and `Vulkan_CapabilitySnapshot`).
+For a format it allocates, the verdict comes from the device's `VkFormatProperties` **and** an
+exact `vkGetPhysicalDeviceImageFormatProperties` query for the usage combination CNA creates. The
+detailed profile then intersects sampling, linear filtering, transfer, mip and attachment facts
+with those implemented paths. Native storage-image support is deliberately reported unsupported
+until `MOD-2244`; likewise texture-array layers and timestamp period remain zero until
+`MOD-2243`/`MOD-2246`. `Vulkan_FormatLimitQueries` compares every answer with the raw properties at
+runtime and verifies these native-only negative controls.
 
 **Render targets are narrower than textures: `Color` only.** All 26 other formats answer `false`,
 from the device, and a `RenderTarget2D` asking for one is refused rather than silently substituted
@@ -174,6 +181,12 @@ record to be exactly the subset consumed by implemented CNA paths. It also verif
 snapshot and graphics queue flag. Since `MOD-2241`, its former negative control is positive and
 device-dependent: capability, queue/storage availability and every published compute limit must
 agree exactly.
+
+`MOD-2222` also populates the detailed numeric profile from that same property snapshot. Texture
+dimension, buffer ranges and alignments, compute SSBO bindings, sampled descriptors, vertex inputs
+and colour attachments are clamped to the smaller of the native ceiling and CNA's implemented
+public path. The permanent `Vulkan_FormatLimitQueries` test compares these values directly with
+`VkPhysicalDeviceLimits`, so changing the renderer name cannot produce a passing hard-coded answer.
 
 ---
 
