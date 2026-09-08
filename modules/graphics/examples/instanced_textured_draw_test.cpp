@@ -57,6 +57,7 @@
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
@@ -954,6 +955,97 @@ protected:
                       " (want ~(128,0,0))" + whyD(cdn));
             check(litRedDual(cdi),
                   "W an INSTANCED one does too: " + Text(cdi) + " (want ~(128,0,0))" + whyD(cdi));
+        }
+
+        // ---- X/Y: SkinnedEffect on an instanced draw -----------------------------------------
+        // plans/plan_vulkan.md VULKAN-231. Instancing a skinned mesh is the ordinary way to draw a
+        // crowd, and the test has to fail if EITHER half is dropped -- so the bone and the
+        // per-instance matrix move the geometry in the SAME axis by DIFFERENT amounts, and two
+        // pixels separate every outcome.
+        //
+        // One bone, all weights on it, translating +0.25 in x. The instance buffer is the shared
+        // one: three instances at x = -0.5, 0, +0.5. Correct output puts the three quads (half
+        // width 0.12) at -0.25, +0.25 and +0.75.
+        //
+        //   NDC +0.75  covered  <=>  the bone AND the instance matrix were both applied
+        //   NDC  0.00  EMPTY    <=>  the bone was applied (without it an instance sits there)
+        //
+        // Drop the bone and the quads land on the instance positions: +0.75 is empty and the
+        // centre is covered, so both legs fail. Drop the instancing and all three land at +0.25:
+        // +0.75 is empty. Neither half can be missing and still pass.
+        {
+            // The stride-52 GPU-compact skinned record, and the empty-declaration VertexBuffer
+            // constructor its siblings use (see vulkan_skinnedeffect_translation_bone_test.cpp):
+            // pos(12) + normal(12) + uv(8) + weights(16) + indices(4).
+            struct SkinnedGpuVertex {
+                float px, py, pz;
+                float nx, ny, nz;
+                float u, v;
+                float w0, w1, w2, w3;
+                std::uint8_t i0, i1, i2, i3;
+            };
+            static_assert(sizeof(SkinnedGpuVertex) == 52);
+            const SkinnedGpuVertex sq[4] = {
+                { -0.12f,  0.12f, 0.0f, 0,0,1, 0.0f, 0.0f, 1,0,0,0, 0,0,0,0 },
+                { -0.12f, -0.12f, 0.0f, 0,0,1, 0.0f, 1.0f, 1,0,0,0, 0,0,0,0 },
+                {  0.12f, -0.12f, 0.0f, 0,0,1, 1.0f, 1.0f, 1,0,0,0, 0,0,0,0 },
+                {  0.12f,  0.12f, 0.0f, 0,0,1, 1.0f, 0.0f, 1,0,0,0, 0,0,0,0 },
+            };
+            VertexBuffer svb(dev, 4);
+            svb.SetDataRaw(sq, 4, static_cast<int>(sizeof(SkinnedGpuVertex)));
+
+            auto skinned = [&](bool instanced) {
+                dev.Clear(Color(0, 255, 0, 255));
+                dev.SetDepthTestEnabled(false);
+                dev.setBlendStateProperty(BlendState::Opaque);
+                dev.setRasterizerStateProperty(RasterizerState::CullNone);
+                dev.getSamplerStatesProperty()[0] = SamplerState::PointClamp;
+                SkinnedEffect fx(dev);
+                fx.setWorldProperty(Matrix::getIdentityProperty());
+                fx.setViewProperty(Matrix::getIdentityProperty());
+                fx.setProjectionProperty(Matrix::getIdentityProperty());
+                fx.setTextureProperty(blue_.get());
+                fx.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+                // Full ambient and no directional light, so the drawn pixel is the texture and a
+                // shading difference cannot be mistaken for a transform difference.
+                fx.setAmbientLightColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+                fx.getDirectionalLight0Property().setEnabledProperty(false);
+                fx.getDirectionalLight1Property().setEnabledProperty(false);
+                fx.getDirectionalLight2Property().setEnabledProperty(false);
+                fx.setSpecularColorProperty(Vector3(0.0f, 0.0f, 0.0f));
+                std::vector<Matrix> bones = { Matrix::CreateTranslation(0.25f, 0.0f, 0.0f) };
+                fx.SetBoneTransforms(bones);
+                fx.setWeightsPerVertexProperty(1);
+                fx.Apply();
+                dev.SetVertexBuffer(&svb);
+                dev.SetIndexBuffer(ib_.get());
+                if (instanced) {
+                    std::vector<VertexBufferBinding> bd = {
+                        VertexBufferBinding(&svb,          0, 0),
+                        VertexBufferBinding(instVb_.get(), 0, 1),
+                    };
+                    dev.SetVertexBuffers(bd);
+                    dev.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2, 3);
+                } else {
+                    dev.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2);
+                }
+                // NDC x -> pixel: (x + 1) / 2 * kN. +0.25 -> 5N/8, +0.75 -> 7N/8.
+                return std::vector<Color>{ ReadPixel(dev, (kN * 5) / 8, kN / 2),
+                                           ReadPixel(dev, (kN * 7) / 8, kN / 2),
+                                           ReadPixel(dev, kN / 2,       kN / 2) };
+            };
+            const auto sn = skinned(false);
+            const auto si = skinned(true);
+            check(IsBlue(sn[0]) && IsClear(sn[2]),
+                  "X control: a NON-instanced SkinnedEffect draw is moved +0.25 by its one bone -- "
+                  "at NDC +0.25 " + Text(sn[0]) + " (want blue), at the origin " + Text(sn[2]) +
+                      " (want the clear colour, because the bone moved it away)");
+            check(IsBlue(si[1]) && IsClear(si[2]),
+                  "Y an INSTANCED one composes the bone with the per-instance matrix -- at NDC "
+                  "+0.75 (= instance +0.5 AND bone +0.25) " + Text(si[1]) +
+                      " (want blue), at the origin " + Text(si[2]) +
+                      " (want the clear colour; covered there means the BONE was dropped, and a "
+                      "clear +0.75 means the per-instance matrix was)");
         }
 
         // ---- N/O: EnvironmentMapEffect on an instanced draw ---------------------------------

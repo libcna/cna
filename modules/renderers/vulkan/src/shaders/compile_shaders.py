@@ -320,6 +320,13 @@ def main():
         ("dual_texture_colored3d.vert.glsl", VERTEX_SHADER,
          "kInstancedDualTextureColored3dVertSpv"),
         ("env_map3d.vert.glsl",      VERTEX_SHADER, "kInstancedEnvMap3dVertSpv"),
+        # plans/plan_vulkan.md VULKAN-231: SkinnedEffect, all four of its modules -- both
+        # PreferPerPixelLighting variants times the plain/vertex-colour record (stride 52/56).
+        ("skinned3d.vert.glsl",           VERTEX_SHADER, "kInstancedSkinned3dVertSpv"),
+        ("skinned3d_vertexlit.vert.glsl", VERTEX_SHADER, "kInstancedSkinned3dVertexLitVertSpv"),
+        ("skinned3d_color.vert.glsl",     VERTEX_SHADER, "kInstancedSkinned3dColorVertSpv"),
+        ("skinned3d_vertexlit_color.vert.glsl", VERTEX_SHADER,
+         "kInstancedSkinned3dVertexLitColorVertSpv"),
     ]
 
     # plans/plan_gltf.md GLTF-465: the PBR variants whose vertex record carries a packed COLOR_0 slot.

@@ -1,4 +1,14 @@
 #version 450
+//
+// plans/plan_vulkan.md VULKAN-227/VULKAN-231: compiled twice -- once plain and once with
+// CNA_INSTANCED, which declares the four per-instance matrix columns at locations 12..15 and
+// turns CNA_INSTANCE_POSITION()/CNA_INSTANCE_WORLD() from the identity into the per-instance
+// transform. Without the define each call expands to exactly the text that was here before,
+// so the ordinary module's SPIR-V is byte-identical. See compile_shaders.py.
+//
+// The per-instance matrix applies AFTER the bone skin and BEFORE World/View/Projection --
+// the bone poses the mesh in its own object space and the instance places that posed mesh,
+// which is the composition EasyGL's own skinned program uses (cnaInstancePosition(skinnedPos)).
 
 // SkinnedEffect stride-56 variant (SkinnedVertex with a per-vertex Color appended at offset 52,
 // CNB-67) — see EasyGLRenderer.cpp's ApplyLayout stride==56 case for the canonical layout
@@ -62,7 +72,7 @@ void main() {
     if (weightsPerVertex >= 2.0) skinMat += bb.bones[int(aBoneIndices.y)] * aBoneWeights.y;
     if (weightsPerVertex >= 4.0) skinMat += bb.bones[int(aBoneIndices.z)] * aBoneWeights.z
                                           + bb.bones[int(aBoneIndices.w)] * aBoneWeights.w;
-    vec4 skinnedPos = skinMat * vec4(aPos, 1.0);
+    vec4 skinnedPos = CNA_INSTANCE_POSITION(skinMat * vec4(aPos, 1.0));
     gl_Position = pc.mvp * skinnedPos;
     gl_Position.y = -gl_Position.y; // Vulkan NDC Y is inverted vs OpenGL (matches textured3d.vert.glsl)
     gl_PointSize = 1.0;
@@ -70,7 +80,7 @@ void main() {
     // (SkinnedEffect.fx Skin() then Lighting.fxh's mul(normal, WorldInverseTranspose)).
     // The world factor was missing entirely, so any rotated or non-uniformly-scaled
     // skinned model was lit as if World were identity.
-    mat3 skinNormalMatrix = transpose(inverse(mat3(fog.world)));
+    mat3 skinNormalMatrix = transpose(inverse(mat3(CNA_INSTANCE_WORLD(fog.world))));
     vNormal     = normalize(skinNormalMatrix * (mat3(skinMat) * aNormal));
     vUV         = aUV;
     vWorldPos   = (fog.world * skinnedPos).xyz;

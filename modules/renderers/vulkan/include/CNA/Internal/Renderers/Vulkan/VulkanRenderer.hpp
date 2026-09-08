@@ -4020,6 +4020,9 @@ namespace CNA::Internal::Renderers::Vulkan
         // (no per-vertex color), 56 = the same layout with a per-vertex Color appended (CNB-67 /
         // SkinnedEffect::VertexColorEnabled) -- mirrors GetOrCreatePipelineDualTex3D's own
         // stride-selects-shader-variant convention.
+        // plans/plan_vulkan.md VULKAN-231: `instanced` selects the CNA_INSTANCED variant of the
+        // same source and adds binding 1, exactly as the alpha-test, lit, dual-texture and env-map
+        // factories do.
         VkPipeline GetOrCreatePipelineSkinned3D(std::size_t stride, VkPrimitiveTopology,
                                                  bool depthTest, bool depthWrite,
                                                  bool blend, int cullMode,
@@ -4027,7 +4030,8 @@ namespace CNA::Internal::Renderers::Vulkan
                                                  bool msaa, const DepthStencilKeyParams& dsParams = {},
                                          const BlendKeyParams& blendParams = {},
                                          VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
-                                         const VulkanVertexInputLayoutEXT& vertexLayout = {});
+                                         const VulkanVertexInputLayoutEXT& vertexLayout = {},
+                                         bool instanced = false);
         // Task 1103: PreferPerPixelLighting=false sibling of GetOrCreatePipelineSkinned3D above
         // (real per-vertex/Gouraud lighting, XNA's own default) — same signature/layout, different
         // shader modules and pipeline cache only.
@@ -4038,7 +4042,8 @@ namespace CNA::Internal::Renderers::Vulkan
                                                  bool msaa, const DepthStencilKeyParams& dsParams = {},
                                          const BlendKeyParams& blendParams = {},
                                          VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
-                                         const VulkanVertexInputLayoutEXT& vertexLayout = {});
+                                         const VulkanVertexInputLayoutEXT& vertexLayout = {},
+                                         bool instanced = false);
         // PbrEffect (unskinned, stride 48) / SkinnedPbrEffect (PBR + skinning combo, stride 68).
         // Metallic-roughness BRDF ported from EasyGLRenderer::EnsurePbrProgram()/
         // EnsurePbrSkinnedProgram() unchanged; only the resource-binding plumbing differs.
