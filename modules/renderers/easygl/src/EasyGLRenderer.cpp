@@ -5438,12 +5438,15 @@ if (ProfileUsesGlslEs100())
         ::easygl::VertexArray& vao = graphicsRenderer_->EnsureCompiledEffectVaoEXT();
         const TextureCollection& deviceTextures =
             customEffect_->getGraphicsDeviceInternal().getTexturesProperty();
+        const SamplerStateCollection& deviceSamplerStates =
+            customEffect_->getGraphicsDeviceInternal().getSamplerStatesProperty();
         for (int pass = 0; pass < passCount; ++pass)
         {
             technique->getPassesProperty()[pass].Apply();
             vao.bind();
             graphicsRenderer_->BindCompiledEffectForDrawEXT(&stream, 1, *runtime,
-                                                            current_texture_, &deviceTextures);
+                                                            current_texture_, &deviceTextures,
+                                                            &deviceSamplerStates);
             easyIndexBuffer->ibo.bind(::easygl::BufferTarget::ElementArray);
             device_.draw_elements(::easygl::PrimitiveType::Triangles, indexCount,
                                   ::easygl::DataType::UnsignedShort, nullptr);

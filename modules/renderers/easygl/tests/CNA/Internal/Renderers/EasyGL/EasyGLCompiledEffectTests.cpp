@@ -648,6 +648,54 @@ TEST(EasyGLCompiledEffectDrawTest, SpriteBatchInheritsStockVertexShaderForPixelO
     EXPECT_NEAR(actual.getBProperty(), 0, 3);
 }
 
+TEST(EasyGLCompiledEffectDrawTest, SpriteBatchBeginMipClampReachesCompiledPixelSampler)
+{
+    // SOFTWARE-187: this effect samples slot 0 but assigns no sampler-state fields of its own.
+    // FNA therefore leaves SpriteBatch.Begin's public slot-0 state authoritative. The sprite is
+    // magnified, so only MaxMipLevel=2 can select the blue 1x1 mip instead of the red base level.
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeSampler = true;
+    options.pixelShaderSamplesTexture = true;
+    Effect effect(device, CNA::TestSupport::BuildSyntheticEffect(options));
+    effect.getParametersProperty()["Tint"]->SetValue(
+        Microsoft::Xna::Framework::Vector4::One);
+
+    Texture2D sprite(device, 4, 4, true, SurfaceFormat::Color);
+    const Color red[16] = {
+        Color::Red, Color::Red, Color::Red, Color::Red,
+        Color::Red, Color::Red, Color::Red, Color::Red,
+        Color::Red, Color::Red, Color::Red, Color::Red,
+        Color::Red, Color::Red, Color::Red, Color::Red,
+    };
+    const Color green[4] = {Color::Green, Color::Green, Color::Green, Color::Green};
+    const Color blue[1] = {Color::Blue};
+    sprite.SetData(0, nullptr, red, 0, 16);
+    sprite.SetData(1, nullptr, green, 0, 4);
+    sprite.SetData(2, nullptr, blue, 0, 1);
+
+    SamplerState sampler = SamplerState::PointClamp;
+    sampler.setMaxMipLevelProperty(2);
+    RenderTarget2D target(device, 8, 8);
+    device.SetRenderTarget(&target);
+    device.Clear(Color::Black);
+    SpriteBatch batch(device);
+    batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &sampler, nullptr, nullptr, &effect);
+    batch.Draw(sprite, Rectangle(0, 0, 8, 8), Rectangle(0, 0, 4, 4), Color::White);
+    batch.End();
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+    Color actual(0, 0, 0, 0);
+    const Rectangle centre(4, 4, 1, 1);
+    target.GetData(0, &centre, &actual, 0, 1);
+    EXPECT_NEAR(actual.getRProperty(), 0, 3);
+    EXPECT_NEAR(actual.getGProperty(), 0, 3);
+    EXPECT_NEAR(actual.getBProperty(), 255, 3);
+}
+
 TEST(EasyGLCompiledEffectDrawTest, SharedOrientationContract)
 {
     GraphicsDevice device;

@@ -209,10 +209,13 @@ namespace Microsoft::Xna::Framework::Graphics
         if (begun)
             throw std::runtime_error("Begin has been called before calling End.");
 
+        const SamplerState& effectiveSampler =
+            samplerState ? *samplerState : SamplerState::LinearClamp;
         if (graphicsDevice_)
         {
             graphicsDevice_->setBlendStateProperty(
                 blendState ? *blendState : BlendState::AlphaBlend);
+            graphicsDevice_->getSamplerStatesProperty()[0] = effectiveSampler;
             // Task 803 finding: this parameter was previously entirely unused -- SpriteBatch
             // draws silently inherited whatever DepthStencilState the game's own 3D rendering
             // last configured (or each renderer's own construction-time default), instead of
@@ -249,7 +252,6 @@ namespace Microsoft::Xna::Framework::Graphics
                 renderer_->SetTransformMatrix(transformMatrix_);
                 // Matches FNA: a null samplerState defaults to SamplerState.LinearClamp, and the
                 // resolved state is always (re-)applied — never left over from a previous Begin().
-                const SamplerState& effectiveSampler = samplerState ? *samplerState : SamplerState::LinearClamp;
                 renderer_->SetSamplerFilter(static_cast<int>(effectiveSampler.getFilterProperty()));
                 renderer_->SetSamplerMaxAnisotropy(effectiveSampler.getMaxAnisotropyProperty());
                 renderer_->SetSamplerMipState(effectiveSampler.getMaxMipLevelProperty(),
