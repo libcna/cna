@@ -66,12 +66,26 @@ namespace Microsoft::Xna::Framework::Graphics
             case CNA::Internal::Renderers::RendererFormatVerdict::Supported:
                 return;
             case CNA::Internal::Renderers::RendererFormatVerdict::Unsupported:
-                throw System::NotSupportedException(
+                throw std::runtime_error(
                     "TextureCube: this SurfaceFormat is not supported by the active renderer.");
             case CNA::Internal::Renderers::RendererFormatVerdict::Defer:
                 Texture::ValidateFormat(format);
                 return;
         }
+    }
+
+    static bool IsColorTransferFormatEXT(const GraphicsDevice* device, SurfaceFormat format) noexcept
+    {
+        if (device != nullptr)
+        {
+            switch (device->GetRenderer().ClassifyColorTransferFormatEXT(static_cast<int>(format)))
+            {
+                case CNA::Internal::Renderers::RendererFormatVerdict::Supported: return true;
+                case CNA::Internal::Renderers::RendererFormatVerdict::Unsupported: return false;
+                case CNA::Internal::Renderers::RendererFormatVerdict::Defer: break;
+            }
+        }
+        return Texture::GetFormatSizeEXT(format) % 4 == 0;
     }
 
     TextureCube::~TextureCube() = default;
@@ -193,6 +207,9 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (getIsDisposedProperty())
             throw System::ObjectDisposedException("TextureCube");
+        if (!IsColorTransferFormatEXT(graphicsDevice_, format_))
+            throw std::invalid_argument(
+                "TextureCube::SetData: Color data requires a Color-compatible 32-bit format");
         if (!IsValidCubeMapFace(face))
             throw std::out_of_range("TextureCube::SetData: face is not a valid CubeMapFace value");
         if (!data)
@@ -342,6 +359,9 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (getIsDisposedProperty())
             throw System::ObjectDisposedException("TextureCube");
+        if (!IsColorTransferFormatEXT(graphicsDevice_, format_))
+            throw std::invalid_argument(
+                "TextureCube::GetData: Color data requires a Color-compatible 32-bit format");
         if (!IsValidCubeMapFace(face))
             throw std::out_of_range("TextureCube::GetData: face is not a valid CubeMapFace value");
         if (!data)

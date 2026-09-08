@@ -117,6 +117,10 @@ namespace CNA::Internal::Renderers::DirectX12
         void SetSwapInterval(int interval) override;
 
 
+        /** @brief Classifies core XNA surface formats backed by native D3D12 storage. */
+        [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(int surfaceFormat) const override;
+        /** @brief Restricts Color-shaped transfers to actual Color storage. */
+        [[nodiscard]] RendererFormatVerdict ClassifyColorTransferFormatEXT(int surfaceFormat) const override;
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         /// DX-111 (closing env_map3d): real D3D12TextureCubeRenderer, no longer the inherited
         /// default (IGraphicsRenderer::CreateTextureCube() -> nullptr).

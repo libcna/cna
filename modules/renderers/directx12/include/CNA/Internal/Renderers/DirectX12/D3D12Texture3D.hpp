@@ -1,9 +1,9 @@
 #pragma once
 
 // plans/plan_dx.md Phase DX13 (DX-122): real D3D12 3D texture renderer -- mirrors D3D11Texture3DRenderer's
-// (D3D11's own DX-42) XNA-level behavior contract, RGBA8 storage only (matches this project's own
-// established simplification, D3D11TextureRenderer.hpp's own header comment applies identically
-// here). Same explicit upload-heap-staging discipline D3D12TextureRenderer (DX-109) already
+// (D3D11's own DX-42) XNA-level behavior contract. Storage and transfer pitches follow the
+// requested uncompressed XNA SurfaceFormat. Same explicit upload-heap-staging discipline
+// D3D12TextureRenderer (DX-109) already
 // established, generalized to a real sub-volume (x,y,z,w,h,depth) upload/readback instead of
 // D3D12TextureRenderer's simpler always-full-level 2D case -- D3D12_TEXTURE_DIMENSION_TEXTURE3D has
 // no array dimension, so (unlike D3D12TextureRenderer's own array-size-1 simplification note) the
@@ -46,6 +46,7 @@ namespace CNA::Internal::Renderers::DirectX12
         [[nodiscard]] int GetWidthEXT() const { return width_; }
         [[nodiscard]] int GetHeightEXT() const { return height_; }
         [[nodiscard]] int GetDepthEXT() const { return depth_; }
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
         /// Raw GPU-resident ID3D12Resource* (CNAEXT -- future draw-path/readback-test consumers).
         [[nodiscard]] ID3D12Resource* GetResourceEXT() const { return texture_.Get(); }
         /// Shader-visible-heap GPU handle for this texture's SRV (CNAEXT -- SetGraphicsRootDescriptorTable).
@@ -69,5 +70,8 @@ namespace CNA::Internal::Renderers::DirectX12
         int height_ = 0;
         int depth_ = 0;
         int mipLevels_ = 1;
+        int surfaceFormat_ = 0;
+        DXGI_FORMAT dxgiFormat_ = DXGI_FORMAT_R8G8B8A8_UNORM;
+        int bytesPerTexel_ = 4;
     };
 }

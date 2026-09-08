@@ -1,8 +1,8 @@
 #pragma once
 
-// plans/plan_dx.md Phase DX12 (DX-111, closing env_map3d): real D3D12 cube-map texture renderer, RGBA8
-// storage only (matches this project's own established simplification -- D3D12Textures.hpp's own
-// header comment applies identically here). Same explicit upload-heap-staging discipline as
+// plans/plan_dx.md Phase DX12 (DX-111/DX-214): real D3D12 cube-map texture renderer. Storage and
+// transfer pitches follow the requested uncompressed XNA SurfaceFormat. Same explicit
+// upload-heap-staging discipline as
 // D3D12Textures.hpp/.cpp's D3D12TextureRenderer::UploadRegion(), just parameterized per face: a
 // fresh UPLOAD-heap staging BUFFER per SetData() call, CopyTextureRegion into the face's own
 // subresource, and D3D12ResourceStateTracker (DX-106) driving the
@@ -61,6 +61,7 @@ namespace CNA::Internal::Renderers::DirectX12
                                    void* data, int dataLength) const override;
 
         [[nodiscard]] int GetSizeEXT() const noexcept override { return size_; }
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
         [[nodiscard]] int GetMipLevelsEXT() const { return mipLevels_; }
         /// Raw GPU-resident ID3D12Resource* (CNAEXT diagnostics).
         [[nodiscard]] ID3D12Resource* GetResourceEXT() const { return texture_.Get(); }
@@ -83,5 +84,8 @@ namespace CNA::Internal::Renderers::DirectX12
         std::uint32_t srvIndex_ = D3D12ShaderVisibleDescriptorAllocator::kInvalidIndex;
         int size_ = 0;
         int mipLevels_ = 1;
+        int surfaceFormat_ = 0;
+        DXGI_FORMAT dxgiFormat_ = DXGI_FORMAT_R8G8B8A8_UNORM;
+        int bytesPerTexel_ = 4;
     };
 }

@@ -1,6 +1,7 @@
 // plans/plan_dx.md Phase DX12 (DX-111, closing env_map3d).
 #include "CNA/Internal/Renderers/DirectX12/D3D12TextureCube.hpp"
 #include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DFormatMapping.hpp"
 
 #include <algorithm>
 #include <cstdio>
@@ -43,12 +44,29 @@ namespace CNA::Internal::Renderers::DirectX12
             static_cast<D3D12_RESOURCE_STATES>(
                 static_cast<int>(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE) |
                 static_cast<int>(D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
+
+        void ResolveSurfaceFormat(int surfaceFormat, DXGI_FORMAT& dxgiFormat, int& bytesPerTexel)
+        {
+            using namespace D3DCommon;
+            dxgiFormat = SurfaceFormatToDxgi(surfaceFormat);
+            bytesPerTexel = SurfaceFormatBytesPerTexel(surfaceFormat);
+            if (!IsXnaUncompressedSurfaceFormat(surfaceFormat) ||
+                dxgiFormat == DXGI_FORMAT_UNKNOWN || bytesPerTexel == 0)
+            {
+                throw std::invalid_argument(
+                    "D3D12TextureCubeRenderer: unsupported SurfaceFormat::" +
+                    std::string(SurfaceFormatName(surfaceFormat)) + " (ordinal " +
+                    std::to_string(surfaceFormat) + ").");
+            }
+        }
     }
 
     D3D12TextureCubeRenderer::D3D12TextureCubeRenderer(
-        DirectX12Renderer* renderer, int size, bool mipMap, int /*surfaceFormat*/)
-        : renderer_(renderer), size_(size), mipLevels_(mipMap ? CalculateMipLevels(size) : 1)
+        DirectX12Renderer* renderer, int size, bool mipMap, int surfaceFormat)
+        : renderer_(renderer), size_(size), mipLevels_(mipMap ? CalculateMipLevels(size) : 1),
+          surfaceFormat_(surfaceFormat)
     {
+        ResolveSurfaceFormat(surfaceFormat_, dxgiFormat_, bytesPerTexel_);
         D3D12_HEAP_PROPERTIES heapProps{};
         heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
 
@@ -58,7 +76,7 @@ namespace CNA::Internal::Renderers::DirectX12
         desc.Height = static_cast<UINT>(size_);
         desc.DepthOrArraySize = 6;
         desc.MipLevels = static_cast<UINT16>(mipLevels_);
-        desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        desc.Format = dxgiFormat_;
         desc.SampleDesc.Count = 1;
         desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
 
@@ -71,7 +89,7 @@ namespace CNA::Internal::Renderers::DirectX12
         renderer_->GetResourceStateTrackerEXT().TrackResource(texture_.Get(), D3D12_RESOURCE_STATE_COPY_DEST);
 
         D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
-        srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        srvDesc.Format = dxgiFormat_;
         srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
         srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
         srvDesc.TextureCube.MostDetailedMip = 0;
@@ -120,9 +138,11 @@ namespace CNA::Internal::Renderers::DirectX12
         if (data == nullptr) return false;
         const int levelSize = std::max(1, size_ >> level);
         if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
-        if (dataLength < w * h * 4) return false;
+        const std::size_t rowBytes = static_cast<std::size_t>(w) * bytesPerTexel_;
+        const std::size_t required = rowBytes * static_cast<std::size_t>(h);
+        if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required) return false;
 
-        const UINT rowPitch = AlignUp(static_cast<UINT>(w) * 4, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
+        const UINT rowPitch = AlignUp(static_cast<UINT>(rowBytes), D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
         const UINT64 uploadBufferSize = static_cast<UINT64>(rowPitch) * static_cast<UINT64>(h);
 
         D3D12_HEAP_PROPERTIES uploadHeapProps{};
@@ -154,8 +174,7 @@ namespace CNA::Internal::Renderers::DirectX12
         for (int row = 0; row < h; ++row)
         {
             std::memcpy(mapped + static_cast<std::size_t>(row) * rowPitch,
-                        src + static_cast<std::size_t>(row) * static_cast<std::size_t>(w) * 4,
-                        static_cast<std::size_t>(w) * 4);
+                        src + static_cast<std::size_t>(row) * rowBytes, rowBytes);
         }
         staging->Unmap(0, nullptr);
 
@@ -173,7 +192,7 @@ namespace CNA::Internal::Renderers::DirectX12
         srcLoc.pResource = staging.Get();
         srcLoc.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
         srcLoc.PlacedFootprint.Offset = 0;
-        srcLoc.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        srcLoc.PlacedFootprint.Footprint.Format = dxgiFormat_;
         srcLoc.PlacedFootprint.Footprint.Width = static_cast<UINT>(w);
         srcLoc.PlacedFootprint.Footprint.Height = static_cast<UINT>(h);
         srcLoc.PlacedFootprint.Footprint.Depth = 1;
@@ -201,11 +220,14 @@ namespace CNA::Internal::Renderers::DirectX12
     {
         // REMED-GFX-130: see D3D12Texture3DRenderer::GetData -- silent returns fabricated a face.
         if (level < 0 || level >= mipLevels_ || face < 0 || face >= 6 || w <= 0 || h <= 0) return false;
-        if (data == nullptr || dataLength < w * h * 4) return false;
+        if (data == nullptr) return false;
         const int levelSize = std::max(1, size_ >> level);
         if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
+        const std::size_t rowBytes = static_cast<std::size_t>(w) * bytesPerTexel_;
+        const std::size_t required = rowBytes * static_cast<std::size_t>(h);
+        if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required) return false;
 
-        const UINT rowPitch = AlignUp(static_cast<UINT>(w) * 4, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
+        const UINT rowPitch = AlignUp(static_cast<UINT>(rowBytes), D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
         const UINT64 readbackBufferSize = static_cast<UINT64>(rowPitch) * static_cast<UINT64>(h);
 
         D3D12_HEAP_PROPERTIES readbackHeapProps{};
@@ -231,7 +253,7 @@ namespace CNA::Internal::Renderers::DirectX12
         dst.pResource = readback.Get();
         dst.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
         dst.PlacedFootprint.Offset = 0;
-        dst.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        dst.PlacedFootprint.Footprint.Format = dxgiFormat_;
         dst.PlacedFootprint.Footprint.Width = static_cast<UINT>(w);
         dst.PlacedFootprint.Footprint.Height = static_cast<UINT>(h);
         dst.PlacedFootprint.Footprint.Depth = 1;
@@ -277,8 +299,8 @@ namespace CNA::Internal::Renderers::DirectX12
         for (int row = 0; row < h; ++row)
         {
             const uint8_t* srcRow = mapped + static_cast<std::size_t>(row) * rowPitch;
-            uint8_t* dstRow = out + static_cast<std::size_t>(row) * static_cast<std::size_t>(w) * 4;
-            std::memcpy(dstRow, srcRow, static_cast<std::size_t>(w) * 4);
+            uint8_t* dstRow = out + static_cast<std::size_t>(row) * rowBytes;
+            std::memcpy(dstRow, srcRow, rowBytes);
         }
         const D3D12_RANGE writtenRange{0, 0};
         readback->Unmap(0, &writtenRange);

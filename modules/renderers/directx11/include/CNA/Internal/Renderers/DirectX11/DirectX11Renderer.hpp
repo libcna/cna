@@ -104,6 +104,10 @@ namespace CNA::Internal::Renderers::DirectX11
         std::unique_ptr<IIndexBufferRenderer> CreateIndexBuffer32(int index_capacity) override;
 
         // ---- IGraphicsRenderer: real (Phase DIRECTX6) ----
+        /** @brief Classifies core XNA surface formats backed by native D3D11 storage. */
+        [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(int surfaceFormat) const override;
+        /** @brief Restricts Color-shaped transfers to actual Color storage. */
+        [[nodiscard]] RendererFormatVerdict ClassifyColorTransferFormatEXT(int surfaceFormat) const override;
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ITexture3DRenderer> CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) override;
         std::unique_ptr<ITextureCubeRenderer> CreateTextureCube(int size, bool mipMap, int surfaceFormat) override;

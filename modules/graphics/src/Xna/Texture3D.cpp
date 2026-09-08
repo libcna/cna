@@ -48,6 +48,41 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
+    static void ValidateTexture3DFormatEXT(const GraphicsDevice& device, SurfaceFormat format)
+    {
+        if (!Texture::IsFormatAllowedByProfileEXT(device.getGraphicsProfileProperty(), format))
+        {
+            throw System::NotSupportedException(
+                "Texture3D: SurfaceFormat " + std::to_string(static_cast<int>(format)) +
+                " is not available on the selected GraphicsProfile.");
+        }
+        switch (device.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(format)))
+        {
+            case CNA::Internal::Renderers::RendererFormatVerdict::Supported:
+                return;
+            case CNA::Internal::Renderers::RendererFormatVerdict::Unsupported:
+                throw std::runtime_error(
+                    "Texture3D: this SurfaceFormat is not supported by the active renderer.");
+            case CNA::Internal::Renderers::RendererFormatVerdict::Defer:
+                Texture::ValidateFormat(format);
+                return;
+        }
+    }
+
+    static bool IsColorTransferFormatEXT(const GraphicsDevice* device, SurfaceFormat format) noexcept
+    {
+        if (device != nullptr)
+        {
+            switch (device->GetRenderer().ClassifyColorTransferFormatEXT(static_cast<int>(format)))
+            {
+                case CNA::Internal::Renderers::RendererFormatVerdict::Supported: return true;
+                case CNA::Internal::Renderers::RendererFormatVerdict::Unsupported: return false;
+                case CNA::Internal::Renderers::RendererFormatVerdict::Defer: break;
+            }
+        }
+        return Texture::GetFormatSizeEXT(format) % 4 == 0;
+    }
+
     Texture3D::~Texture3D() = default;
     Texture3D::Texture3D(Texture3D&&) noexcept = default;
     Texture3D& Texture3D::operator=(Texture3D&&) noexcept = default;
@@ -73,7 +108,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 "Texture3D: this renderer does not support real volume (3D) texture storage");
         }
         ValidateVolumeSizeForProfileEXT(device, width, height, depth);
-        Texture::ValidateFormat(format);
+        ValidateTexture3DFormatEXT(device, format);
         format_     = format;
         levelCount_ = mipMap ? CalculateMipLevels(width, height) : 1;
         renderer_ = device.GetRenderer().CreateTexture3D(width, height, depth, mipMap, static_cast<int>(format));
@@ -128,6 +163,9 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (getIsDisposedProperty())
             throw System::ObjectDisposedException("Texture3D");
+        if (!IsColorTransferFormatEXT(graphicsDevice_, format_))
+            throw std::invalid_argument(
+                "Texture3D::SetData: Color data requires a Color-compatible 32-bit format");
         if (!data)
             throw std::invalid_argument("Texture3D::SetData: data must not be null");
         if (elementCount <= 0)
@@ -202,6 +240,9 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (getIsDisposedProperty())
             throw System::ObjectDisposedException("Texture3D");
+        if (!IsColorTransferFormatEXT(graphicsDevice_, format_))
+            throw std::invalid_argument(
+                "Texture3D::GetData: Color data requires a Color-compatible 32-bit format");
         if (!data)
             throw std::invalid_argument("Texture3D::GetData: data must not be null");
         if (elementCount <= 0)

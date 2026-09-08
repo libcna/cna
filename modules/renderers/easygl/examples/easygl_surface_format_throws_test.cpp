@@ -174,7 +174,8 @@ protected:
         // REMED-GFX-244: the packed 16-bit formats are ES 3 sized-internal-format storage, so they
         // take the same guard the signed-normalized pair does -- promoted off the ES 2 generation,
         // refused on it rather than falling back to an unsized layout the driver picks.
-#if defined(CNA_GL_PROFILE_OPENGLES3) || defined(CNA_GL_PROFILE_OPENGL33) || defined(CNA_GL_PROFILE_WEBGL2)
+#if defined(CNA_GL_PROFILE_OPENGLES3) || defined(CNA_GL_PROFILE_OPENGL33) || defined(CNA_GL_PROFILE_WEBGL2) \
+ || defined(CNA_RENDERER_DIRECTX11) || defined(CNA_RENDERER_DIRECTX12)
         expectNoThrow("Texture2D Bgra5551", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Bgra5551);
         });
@@ -192,7 +193,8 @@ protected:
         // NormalizedByte2 or NormalizedByte4 is accepted at BOTH GraphicsProfile.Reach and .HiDef,
         // and neither is among the eleven formats Reach refuses. Demanding a throw here was an
         // over-specification of XNA rather than a contract. See spikes/xna-pixel-center-spike/.
-#if defined(CNA_GL_PROFILE_OPENGLES3) || defined(CNA_GL_PROFILE_OPENGL33) || defined(CNA_GL_PROFILE_WEBGL2)
+#if defined(CNA_GL_PROFILE_OPENGLES3) || defined(CNA_GL_PROFILE_OPENGL33) || defined(CNA_GL_PROFILE_WEBGL2) \
+ || defined(CNA_RENDERER_DIRECTX11) || defined(CNA_RENDERER_DIRECTX12)
         expectNoThrow("Texture2D NormalizedByte2", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::NormalizedByte2);
         });
@@ -264,7 +266,8 @@ protected:
 #if 1
         // REMED-GFX-244, same guard as Bgra5551 above. Bgra4444 had no non-Skia leg at all before
         // this ticket, so its behaviour on every GL profile was simply unstated.
-#if defined(CNA_GL_PROFILE_OPENGLES3) || defined(CNA_GL_PROFILE_OPENGL33) || defined(CNA_GL_PROFILE_WEBGL2)
+#if defined(CNA_GL_PROFILE_OPENGLES3) || defined(CNA_GL_PROFILE_OPENGL33) || defined(CNA_GL_PROFILE_WEBGL2) \
+ || defined(CNA_RENDERER_DIRECTX11) || defined(CNA_RENDERER_DIRECTX12)
         expectNoThrow("Texture2D Bgr565", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Bgr565);
         });

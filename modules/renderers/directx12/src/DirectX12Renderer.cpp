@@ -12,6 +12,7 @@
 #include "CNA/Internal/Renderers/DirectX12/D3D12EffectRenderer.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12Texture3D.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DConstantBuffers.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DFormatMapping.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DRasterizationConvention.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DStateMapping.hpp"
 
@@ -1609,6 +1610,23 @@ namespace CNA::Internal::Renderers::DirectX12
     }
 
     void DirectX12Renderer::SetPresentationMode(int) { /* no-op until DX-106 onward */ }
+
+    RendererFormatVerdict DirectX12Renderer::ClassifySurfaceFormatEXT(int surfaceFormat) const
+    {
+        if (D3DCommon::IsXnaUncompressedSurfaceFormat(surfaceFormat))
+            return RendererFormatVerdict::Supported;
+        if (D3DCommon::SurfaceFormatToDxgi(surfaceFormat) != DXGI_FORMAT_UNKNOWN)
+            return RendererFormatVerdict::Unsupported;
+        return RendererFormatVerdict::Defer;
+    }
+
+    RendererFormatVerdict DirectX12Renderer::ClassifyColorTransferFormatEXT(int surfaceFormat) const
+    {
+        if (surfaceFormat == 0) return RendererFormatVerdict::Supported;
+        if (D3DCommon::SurfaceFormatToDxgi(surfaceFormat) != DXGI_FORMAT_UNKNOWN)
+            return RendererFormatVerdict::Unsupported;
+        return RendererFormatVerdict::Defer;
+    }
 
     std::unique_ptr<ITextureRenderer> DirectX12Renderer::CreateTexture(const ImageData& data)
     {

@@ -1,7 +1,9 @@
 // plans/plan_dx.md Phase DX12 (DX-109).
 #include "CNA/Internal/Renderers/DirectX12/D3D12Textures.hpp"
 #include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DFormatMapping.hpp"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
@@ -31,13 +33,30 @@ namespace CNA::Internal::Renderers::DirectX12
             static_cast<D3D12_RESOURCE_STATES>(
                 static_cast<int>(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE) |
                 static_cast<int>(D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
+
+        void ResolveSurfaceFormat(int surfaceFormat, DXGI_FORMAT& dxgiFormat, int& bytesPerTexel)
+        {
+            using namespace D3DCommon;
+            dxgiFormat = SurfaceFormatToDxgi(surfaceFormat);
+            bytesPerTexel = SurfaceFormatBytesPerTexel(surfaceFormat);
+            if (!IsXnaUncompressedSurfaceFormat(surfaceFormat) ||
+                dxgiFormat == DXGI_FORMAT_UNKNOWN || bytesPerTexel == 0)
+            {
+                throw std::invalid_argument(
+                    "D3D12TextureRenderer: unsupported SurfaceFormat::" +
+                    std::string(SurfaceFormatName(surfaceFormat)) + " (ordinal " +
+                    std::to_string(surfaceFormat) + ").");
+            }
+        }
     }
 
     D3D12TextureRenderer::D3D12TextureRenderer(DirectX12Renderer* renderer, const ImageData& data)
         : renderer_(renderer)
         , width_(data.width), height_(data.height)
         , mipLevels_(data.mipLevels > 0 ? data.mipLevels : 1)
+        , surfaceFormat_(data.surfaceFormat)
     {
+        ResolveSurfaceFormat(surfaceFormat_, dxgiFormat_, bytesPerTexel_);
         D3D12_HEAP_PROPERTIES heapProps{};
         heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
 
@@ -47,7 +66,7 @@ namespace CNA::Internal::Renderers::DirectX12
         desc.Height = static_cast<UINT>(height_);
         desc.DepthOrArraySize = 1;
         desc.MipLevels = static_cast<UINT16>(mipLevels_);
-        desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        desc.Format = dxgiFormat_;
         desc.SampleDesc.Count = 1;
         desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN; // driver-chosen tiled layout, standard for TEXTURE2D
 
@@ -64,7 +83,7 @@ namespace CNA::Internal::Renderers::DirectX12
         renderer_->GetResourceStateTrackerEXT().TrackResource(texture_.Get(), D3D12_RESOURCE_STATE_COPY_DEST);
 
         D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
-        srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        srvDesc.Format = dxgiFormat_;
         srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
         srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
         srvDesc.Texture2D.MipLevels = static_cast<UINT>(mipLevels_);
@@ -78,7 +97,14 @@ namespace CNA::Internal::Renderers::DirectX12
 
         if (!data.pixels.empty())
         {
-            UploadRegion(0, data.pixels.data(), width_, height_, width_ * 4);
+            const std::size_t required = static_cast<std::size_t>(width_) *
+                                         static_cast<std::size_t>(height_) *
+                                         static_cast<std::size_t>(bytesPerTexel_);
+            if (data.pixels.size() < required)
+                throw std::invalid_argument(
+                    "D3D12TextureRenderer: level-zero pixel buffer is too small for SurfaceFormat::" +
+                    std::string(D3DCommon::SurfaceFormatName(surfaceFormat_)) + ".");
+            UploadRegion(0, data.pixels.data(), width_, height_, width_ * bytesPerTexel_);
         }
         else
         {
@@ -94,7 +120,8 @@ namespace CNA::Internal::Renderers::DirectX12
     void D3D12TextureRenderer::UploadRegion(
         int level, const uint8_t* rgba, int levelW, int levelH, int sourceStrideBytes)
     {
-        const UINT rowPitch = AlignUp(static_cast<UINT>(levelW) * 4, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
+        const UINT rowBytes = static_cast<UINT>(levelW * bytesPerTexel_);
+        const UINT rowPitch = AlignUp(rowBytes, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
         const UINT64 uploadBufferSize = static_cast<UINT64>(rowPitch) * static_cast<UINT64>(levelH);
 
         D3D12_HEAP_PROPERTIES uploadHeapProps{};
@@ -126,7 +153,7 @@ namespace CNA::Internal::Renderers::DirectX12
         {
             std::memcpy(mapped + static_cast<std::size_t>(row) * rowPitch,
                         rgba + static_cast<std::size_t>(row) * sourceStrideBytes,
-                        static_cast<std::size_t>(levelW) * 4);
+                        rowBytes);
         }
         staging->Unmap(0, nullptr);
 
@@ -143,7 +170,7 @@ namespace CNA::Internal::Renderers::DirectX12
         src.pResource = staging.Get();
         src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
         src.PlacedFootprint.Offset = 0;
-        src.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        src.PlacedFootprint.Footprint.Format = dxgiFormat_;
         src.PlacedFootprint.Footprint.Width = static_cast<UINT>(levelW);
         src.PlacedFootprint.Footprint.Height = static_cast<UINT>(levelH);
         src.PlacedFootprint.Footprint.Depth = 1;
@@ -182,13 +209,87 @@ namespace CNA::Internal::Renderers::DirectX12
 
     void D3D12TextureRenderer::UpdatePixels(const uint8_t* rgba, int stride)
     {
-        const int sourceStride = stride > 0 ? stride : width_ * 4;
+        const int sourceStride = stride > 0 ? stride : width_ * bytesPerTexel_;
         UploadRegion(0, rgba, width_, height_, sourceStride);
     }
 
     void D3D12TextureRenderer::UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH)
     {
         if (level < 0 || level >= mipLevels_) return;
-        UploadRegion(level, rgba, levelW, levelH, levelW * 4);
+        UploadRegion(level, rgba, levelW, levelH, levelW * bytesPerTexel_);
+    }
+
+    bool D3D12TextureRenderer::GetData(int level, int x, int y, int w, int h,
+                                       void* data, int dataLength) const
+    {
+        if (level < 0 || level >= mipLevels_ || w <= 0 || h <= 0 || data == nullptr) return false;
+        const int levelW = std::max(1, width_ >> level);
+        const int levelH = std::max(1, height_ >> level);
+        if (x < 0 || y < 0 || x + w > levelW || y + h > levelH) return false;
+        const std::size_t rowBytes = static_cast<std::size_t>(w) * bytesPerTexel_;
+        const std::size_t required = rowBytes * static_cast<std::size_t>(h);
+        if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required) return false;
+
+        const UINT rowPitch = AlignUp(static_cast<UINT>(rowBytes),
+                                      D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
+        const UINT64 readbackBufferSize = static_cast<UINT64>(rowPitch) * h;
+
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_READBACK;
+        D3D12_RESOURCE_DESC bufferDesc{};
+        bufferDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+        bufferDesc.Width = readbackBufferSize;
+        bufferDesc.Height = 1;
+        bufferDesc.DepthOrArraySize = 1;
+        bufferDesc.MipLevels = 1;
+        bufferDesc.Format = DXGI_FORMAT_UNKNOWN;
+        bufferDesc.SampleDesc.Count = 1;
+        bufferDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+        ComPtr<ID3D12Resource> readback;
+        HRESULT hr = renderer_->GetDeviceEXT()->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &bufferDesc, D3D12_RESOURCE_STATE_COPY_DEST,
+            nullptr, IID_PPV_ARGS(readback.GetAddressOf()));
+        if (FAILED(hr)) return false;
+
+        D3D12_TEXTURE_COPY_LOCATION dst{};
+        dst.pResource = readback.Get();
+        dst.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+        dst.PlacedFootprint.Footprint.Format = dxgiFormat_;
+        dst.PlacedFootprint.Footprint.Width = static_cast<UINT>(w);
+        dst.PlacedFootprint.Footprint.Height = static_cast<UINT>(h);
+        dst.PlacedFootprint.Footprint.Depth = 1;
+        dst.PlacedFootprint.Footprint.RowPitch = rowPitch;
+
+        D3D12_TEXTURE_COPY_LOCATION src{};
+        src.pResource = texture_.Get();
+        src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+        src.SubresourceIndex = static_cast<UINT>(level);
+        D3D12_BOX srcBox{static_cast<UINT>(x), static_cast<UINT>(y), 0,
+                         static_cast<UINT>(x + w), static_cast<UINT>(y + h), 1};
+
+        ID3D12CommandAllocator* allocator = renderer_->GetCommandAllocatorEXT(0);
+        ID3D12GraphicsCommandList* cmdList = renderer_->GetCommandListEXT();
+        allocator->Reset();
+        cmdList->Reset(allocator, nullptr);
+        auto& tracker = renderer_->GetResourceStateTrackerEXT();
+        const D3D12_RESOURCE_STATES priorState = tracker.GetTrackedStateEXT(texture_.Get());
+        tracker.TransitionTo(cmdList, texture_.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE);
+        cmdList->CopyTextureRegion(&dst, 0, 0, 0, &src, &srcBox);
+        tracker.TransitionTo(cmdList, texture_.Get(), priorState);
+        hr = cmdList->Close();
+        if (FAILED(hr)) return false;
+        renderer_->ExecuteCommandListAndWaitEXT(cmdList);
+
+        uint8_t* mapped = nullptr;
+        const D3D12_RANGE readRange{0, static_cast<SIZE_T>(readbackBufferSize)};
+        if (FAILED(readback->Map(0, &readRange, reinterpret_cast<void**>(&mapped)))) return false;
+        auto* out = static_cast<uint8_t*>(data);
+        for (int row = 0; row < h; ++row)
+            std::memcpy(out + static_cast<std::size_t>(row) * rowBytes,
+                        mapped + static_cast<std::size_t>(row) * rowPitch, rowBytes);
+        const D3D12_RANGE writtenRange{0, 0};
+        readback->Unmap(0, &writtenRange);
+        return true;
     }
 }

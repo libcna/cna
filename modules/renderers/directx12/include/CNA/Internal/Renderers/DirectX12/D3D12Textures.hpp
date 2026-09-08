@@ -1,8 +1,8 @@
 #pragma once
 
-// plans/plan_dx.md Phase DX12 (DX-109): real D3D12 2D texture renderer, RGBA8 storage only (matches this
-// project's own established simplification -- D3D11TextureRenderer.hpp's own header comment applies
-// identically here). Same explicit upload-heap-staging discipline as D3D12Buffers.hpp/.cpp:
+// plans/plan_dx.md Phase DX12 (DX-109/DX-214): real D3D12 2D texture renderer. Storage and
+// transfer pitches follow the requested uncompressed XNA SurfaceFormat. Same explicit
+// upload-heap-staging discipline as D3D12Buffers.hpp/.cpp:
 // CreateCommittedResource on a DEFAULT heap for the GPU-resident texture, a fresh UPLOAD-heap
 // staging BUFFER per upload (D3D12 requires texture-copy sources to be laid out as a row-pitch-
 // aligned buffer -- D3D12_TEXTURE_DATA_PITCH_ALIGNMENT, 256 bytes -- not a TEXTURE2D resource),
@@ -56,6 +56,9 @@ namespace CNA::Internal::Renderers::DirectX12
 
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
+        [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
 
         /// Real mip level count this texture was allocated with (CNAEXT diagnostics).
         [[nodiscard]] int GetMipLevelsEXT() const { return mipLevels_; }
@@ -88,5 +91,8 @@ namespace CNA::Internal::Renderers::DirectX12
         int width_ = 0;
         int height_ = 0;
         int mipLevels_ = 1;
+        int surfaceFormat_ = 0;
+        DXGI_FORMAT dxgiFormat_ = DXGI_FORMAT_R8G8B8A8_UNORM;
+        int bytesPerTexel_ = 4;
     };
 }

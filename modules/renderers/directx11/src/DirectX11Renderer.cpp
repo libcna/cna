@@ -9,6 +9,7 @@
 #include "CNA/Internal/Renderers/DirectX11/D3D11SpriteBatch.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DShaderCache.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DConstantBuffers.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DFormatMapping.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DRasterizationConvention.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DStateMapping.hpp"
 #include "System/NotSupportedException.hpp"
@@ -518,6 +519,23 @@ namespace CNA::Internal::Renderers::DirectX11
     // Deliberate no-op, matching D3D12's own equivalent: a bare "enable blending" has no defined
     // blend factors in XNA -- real blend configuration always arrives via ApplyBlendState().
     void DirectX11Renderer::SetBlendEnabled(bool enabled) { (void)enabled; }
+
+    RendererFormatVerdict DirectX11Renderer::ClassifySurfaceFormatEXT(int surfaceFormat) const
+    {
+        if (D3DCommon::IsXnaUncompressedSurfaceFormat(surfaceFormat))
+            return RendererFormatVerdict::Supported;
+        if (D3DCommon::SurfaceFormatToDxgi(surfaceFormat) != DXGI_FORMAT_UNKNOWN)
+            return RendererFormatVerdict::Unsupported;
+        return RendererFormatVerdict::Defer;
+    }
+
+    RendererFormatVerdict DirectX11Renderer::ClassifyColorTransferFormatEXT(int surfaceFormat) const
+    {
+        if (surfaceFormat == 0) return RendererFormatVerdict::Supported;
+        if (D3DCommon::SurfaceFormatToDxgi(surfaceFormat) != DXGI_FORMAT_UNKNOWN)
+            return RendererFormatVerdict::Unsupported;
+        return RendererFormatVerdict::Defer;
+    }
 
     std::unique_ptr<ITextureRenderer> DirectX11Renderer::CreateTexture(const ImageData& data)
     {

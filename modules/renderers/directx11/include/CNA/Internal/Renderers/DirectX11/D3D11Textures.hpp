@@ -2,11 +2,7 @@
 
 // plans/plan_dx.md Phase DIRECTX6 (DX-40/DX-41/DX-42): real D3D11 texture renderers.
 //
-// RGBA8 storage only (DXGI_FORMAT_R8G8B8A8_UNORM) -- matches this project's own established
-// simplification: EasyGL/Vulkan/Software all treat every ITextureRenderer/ITextureCubeRenderer/
-// ITexture3DRenderer as RGBA8 regardless of the XNA SurfaceFormat/`surfaceFormat` ordinal the
-// caller passed (CreateTexture3D/CreateTextureCube's own `surfaceFormat` parameter is accepted
-// for interface-signature compatibility but not yet honored by any renderer, this one included).
+// DX-214: storage and transfer pitches follow the requested uncompressed XNA SurfaceFormat.
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
@@ -32,6 +28,9 @@ namespace CNA::Internal::Renderers::DirectX11
 
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
+        [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
 
         /// Real mip level count this texture was allocated with (CNAEXT diagnostics).
         [[nodiscard]] int GetMipLevelsEXT() const { return mipLevels_; }
@@ -48,6 +47,9 @@ namespace CNA::Internal::Renderers::DirectX11
         int width_ = 0;
         int height_ = 0;
         int mipLevels_ = 1;
+        int surfaceFormat_ = 0;
+        DXGI_FORMAT dxgiFormat_ = DXGI_FORMAT_R8G8B8A8_UNORM;
+        int bytesPerTexel_ = 4;
     };
 
     /// Real D3D11 cube-map texture renderer (DX-41). A single 6-slice ID3D11Texture2D array with
@@ -74,6 +76,7 @@ namespace CNA::Internal::Renderers::DirectX11
                                    void* data, int dataLength) const override;
 
         [[nodiscard]] int GetSizeEXT() const noexcept override { return size_; }
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
         [[nodiscard]] int GetMipLevelsEXT() const { return mipLevels_; }
         [[nodiscard]] ID3D11Texture2D* GetTextureEXT() const { return texture_.Get(); }
         [[nodiscard]] ID3D11ShaderResourceView* GetShaderResourceViewEXT() const { return srv_.Get(); }
@@ -85,6 +88,9 @@ namespace CNA::Internal::Renderers::DirectX11
         ComPtr<ID3D11ShaderResourceView> srv_;
         int size_ = 0;
         int mipLevels_ = 1;
+        int surfaceFormat_ = 0;
+        DXGI_FORMAT dxgiFormat_ = DXGI_FORMAT_R8G8B8A8_UNORM;
+        int bytesPerTexel_ = 4;
     };
 
     /// Real D3D11 volume (3D) texture renderer (DX-42).
@@ -106,6 +112,7 @@ namespace CNA::Internal::Renderers::DirectX11
         [[nodiscard]] int GetWidthEXT() const { return width_; }
         [[nodiscard]] int GetHeightEXT() const { return height_; }
         [[nodiscard]] int GetDepthEXT() const { return depth_; }
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
         [[nodiscard]] ID3D11Texture3D* GetTextureEXT() const { return texture_.Get(); }
         [[nodiscard]] ID3D11ShaderResourceView* GetShaderResourceViewEXT() const { return srv_.Get(); }
 
@@ -118,5 +125,8 @@ namespace CNA::Internal::Renderers::DirectX11
         int height_ = 0;
         int depth_ = 0;
         int mipLevels_ = 1;
+        int surfaceFormat_ = 0;
+        DXGI_FORMAT dxgiFormat_ = DXGI_FORMAT_R8G8B8A8_UNORM;
+        int bytesPerTexel_ = 4;
     };
 }
