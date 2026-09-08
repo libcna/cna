@@ -106,6 +106,27 @@ namespace Microsoft::Xna::Framework::Graphics
 
     GetTypeNameCPP(SpriteBatch, "Microsoft.Xna.Framework.Graphics.SpriteBatch")
 
+    void SpriteBatch::Dispose(bool disposing)
+    {
+        if (!isDisposed_)
+        {
+            renderer_.reset();
+            spriteQueue_.clear();
+            customEffect_ = nullptr;
+            begun = false;
+        }
+        GraphicsResource::Dispose(disposing);
+    }
+
+    void SpriteBatch::throwIfDisposed() const
+    {
+        if (getIsDisposedProperty())
+        {
+            throw System::ObjectDisposedException(
+                getNameProperty().empty() ? "SpriteBatch" : getNameProperty());
+        }
+    }
+
     // -----------------------------------------------------------------------
     // Begin / End
     // -----------------------------------------------------------------------
@@ -184,6 +205,7 @@ namespace Microsoft::Xna::Framework::Graphics
                             Effect* effect,
                             Matrix transformMatrix)
     {
+        throwIfDisposed();
         if (begun)
             throw std::runtime_error("Begin has been called before calling End.");
 
@@ -256,6 +278,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void SpriteBatch::End()
     {
+        throwIfDisposed();
         if (!begun)
             throw std::runtime_error("End was called, but Begin has not yet been called.");
         if (renderer_)
@@ -395,6 +418,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void SpriteBatch::Draw(const Texture2D& texture, float x, float y)
     {
+        throwIfDisposed();
         if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
         if (!renderer_) return;
         const float destinationX = ValidateDestinationComponent(x, "x");
@@ -414,6 +438,7 @@ namespace Microsoft::Xna::Framework::Graphics
                            const Rectangle& sourceRectangle,
                            Color color)
     {
+        throwIfDisposed();
         if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
         if (!renderer_) return;
         pushSprite(texture, destinationRectangle, sourceRectangle,
@@ -429,6 +454,7 @@ namespace Microsoft::Xna::Framework::Graphics
                            SpriteEffects effect,
                            float layerDepth)
     {
+        throwIfDisposed();
         if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
         if (!renderer_) return;
         pushSprite(texture, destinationRectangle, sourceRectangle,
@@ -445,6 +471,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void SpriteBatch::Draw(const Texture2D& texture, Vector2 position, Color color)
     {
+        throwIfDisposed();
         if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
         if (!renderer_) return;
         const float destinationX = ValidateDestinationComponent(position.X, "position");
@@ -461,6 +488,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void SpriteBatch::Draw(const Texture2D& texture, Vector2 position,
                            std::optional<Rectangle> sourceRectangle, Color color)
     {
+        throwIfDisposed();
         if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
         if (!renderer_) return;
         const float destinationX = ValidateDestinationComponent(position.X, "position");
@@ -481,6 +509,7 @@ namespace Microsoft::Xna::Framework::Graphics
                            float rotation, Vector2 origin, float scale,
                            SpriteEffects effects, float layerDepth)
     {
+        throwIfDisposed();
         if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
         if (!renderer_) return;
         const float destinationX = ValidateDestinationComponent(position.X, "position");
@@ -504,6 +533,7 @@ namespace Microsoft::Xna::Framework::Graphics
                            float rotation, Vector2 origin, Vector2 scale,
                            SpriteEffects effects, float layerDepth)
     {
+        throwIfDisposed();
         if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
         if (!renderer_) return;
         const float destinationX = ValidateDestinationComponent(position.X, "position");
@@ -525,6 +555,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void SpriteBatch::Draw(const Texture2D& texture,
                            const Rectangle& destinationRectangle, Color color)
     {
+        throwIfDisposed();
         if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
         if (!renderer_) return;
         const int w = texture.getWidthProperty();
@@ -537,6 +568,7 @@ namespace Microsoft::Xna::Framework::Graphics
                            const Rectangle& destinationRectangle,
                            std::optional<Rectangle> sourceRectangle, Color color)
     {
+        throwIfDisposed();
         if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
         if (!renderer_) return;
         const int w = texture.getWidthProperty();
@@ -555,6 +587,7 @@ namespace Microsoft::Xna::Framework::Graphics
                            SpriteEffects effect,
                            float layerDepth)
     {
+        throwIfDisposed();
         if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
         if (!renderer_) return;
         const int w = texture.getWidthProperty();
@@ -573,6 +606,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                  Vector2 position,
                                  Color color)
     {
+        throwIfDisposed();
         DrawString(spriteFont, text, position, color, 0.0f, Vector2::Zero,
                    Vector2(1.0f, 1.0f), SpriteEffects::None, 0.0f);
     }
@@ -587,6 +621,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                  SpriteEffects effects,
                                  float layerDepth)
     {
+        throwIfDisposed();
         DrawString(spriteFont, text, position, color, rotation, origin,
                    Vector2(scale, scale), effects, layerDepth);
     }
@@ -601,6 +636,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                  SpriteEffects effects,
                                  float layerDepth)
     {
+        throwIfDisposed();
         if (!begun) throw std::runtime_error("SpriteBatch::DrawString called before Begin().");
         if (!renderer_ || text.empty()) return;
 
@@ -740,6 +776,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                  const System::Text::StringBuilder& text,
                                  Vector2 position, Color color)
     {
+        throwIfDisposed();
         DrawString(spriteFont, text.ToString(), position, color);
     }
 
@@ -749,6 +786,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                  float rotation, Vector2 origin, float scale,
                                  SpriteEffects effects, float layerDepth)
     {
+        throwIfDisposed();
         DrawString(spriteFont, text.ToString(), position, color,
                    rotation, origin, scale, effects, layerDepth);
     }
@@ -759,6 +797,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                  float rotation, Vector2 origin, Vector2 scale,
                                  SpriteEffects effects, float layerDepth)
     {
+        throwIfDisposed();
         DrawString(spriteFont, text.ToString(), position, color,
                    rotation, origin, scale, effects, layerDepth);
     }
@@ -767,6 +806,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                   const Vector2* positions, const Color* colors, const Vector2* uvs,
                                   int vertexCount, const std::uint16_t* indices, int indexCount)
     {
+        throwIfDisposed();
         if (!begun) throw std::runtime_error("SpriteBatch::DrawMeshEXT called before Begin().");
         // A mesh draw does not participate in the deferred sort/batch queue -- a declared, tested
         // scope boundary (docs/skia-vertices-2d-effect-contract.md), not a silent misbatch.

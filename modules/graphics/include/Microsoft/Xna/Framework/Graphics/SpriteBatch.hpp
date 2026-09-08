@@ -75,8 +75,20 @@ namespace Microsoft::Xna::Framework::Graphics
                         SpriteEffects effects, float layerDepth);
         void flushBatch();
         void flushSingle(const SpriteInfo& s);
+        void throwIfDisposed() const;
+
+    protected:
+        /**
+         * @brief Releases the renderer-side SpriteBatch resources.
+         *
+         * @param disposing True when called from Dispose(); false during finalization.
+         */
+        void Dispose(bool disposing) override;
 
     public:
+        /** @brief Exposes GraphicsResource::Dispose() alongside the protected lifecycle hook. */
+        using GraphicsResource::Dispose;
+
         /**
          * @brief Creates a sprite batch bound to a graphics device.
          *

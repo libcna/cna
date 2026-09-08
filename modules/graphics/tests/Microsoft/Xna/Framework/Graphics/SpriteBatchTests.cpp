@@ -16,6 +16,7 @@
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/ObjectDisposedException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
@@ -37,6 +38,26 @@ using Microsoft::Xna::Framework::Graphics::Texture2D;
 using CNA::Internal::Renderers::DummyTextureRenderer;
 using CNA::Internal::Renderers::RecordingSpriteBatchRenderer;
 using System::ArgumentOutOfRangeException;
+
+namespace
+{
+    class DestructionTrackingSpriteBatchRenderer final : public RecordingSpriteBatchRenderer
+    {
+    public:
+        explicit DestructionTrackingSpriteBatchRenderer(bool& destroyed)
+            : destroyed_(destroyed)
+        {
+        }
+
+        ~DestructionTrackingSpriteBatchRenderer() override
+        {
+            destroyed_ = true;
+        }
+
+    private:
+        bool& destroyed_;
+    };
+}
 
 // -----------------------------------------------------------------------
 // SpriteSortMode — enum values (XNA 4.0 specifies the underlying integers)
@@ -391,6 +412,38 @@ TEST(SpriteBatchTest, BeginEndBeginEndDoesNotThrow)
         batch.Begin();
         batch.End();
     });
+}
+
+TEST(SpriteBatchLifecycleTest, DisposeReleasesRendererAndIsIdempotent)
+{
+    bool rendererDestroyed = false;
+    int disposingEvents = 0;
+    SpriteBatch batch(
+        std::make_unique<DestructionTrackingSpriteBatchRenderer>(rendererDestroyed));
+    batch.Disposing += [&disposingEvents](System::Object*, const System::EventArgs&) {
+        ++disposingEvents;
+    };
+
+    batch.Begin();
+    batch.Dispose();
+
+    EXPECT_TRUE(batch.getIsDisposedProperty());
+    EXPECT_TRUE(rendererDestroyed);
+    EXPECT_EQ(disposingEvents, 1);
+
+    EXPECT_NO_THROW(batch.Dispose());
+    EXPECT_EQ(disposingEvents, 1);
+}
+
+TEST(SpriteBatchLifecycleTest, EveryRenderEntryRejectsDisposedBatch)
+{
+    SpriteBatch batch;
+    Texture2D texture;
+    batch.Dispose();
+
+    EXPECT_THROW(batch.Begin(), System::ObjectDisposedException);
+    EXPECT_THROW(batch.End(), System::ObjectDisposedException);
+    EXPECT_THROW(batch.Draw(texture, 0.0f, 0.0f), System::ObjectDisposedException);
 }
 
 // -----------------------------------------------------------------------

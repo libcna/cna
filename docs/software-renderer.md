@@ -272,6 +272,11 @@ rather than always passing.
   overloads, source rectangles, layer sorting, transforms, render targets, viewports, scissor,
   blend-state interactions, glyph placement, spacing, newline, fallback and text transforms. The
   complete `Software_Sprite*` CTest selection passes 22/22.
+- **SpriteBatch has a real disposable lifecycle** (`SOFTWARE-139`). Explicit `Dispose()` releases
+  the CPU renderer and every queued texture handle immediately, is idempotent, and makes later
+  Begin/End/Draw/DrawString calls fail with `ObjectDisposedException` rather than continuing to
+  render through a resource that only claimed to be disposed. FNA's internal SpriteEffect contract
+  (matrix-transformed texture × vertex color) is implemented directly by the same CPU quad path.
 - **Custom `ShaderEffect` (arbitrary GLSL/HLSL/WGSL source) compiles but doesn't actually execute**
   — mirrors `HEADLESS-16`'s own precedent exactly: the source is accepted without compiling, and
   only effects whose `FillGpuDrawParams()` output matches one of this renderer's fixed stock-effect
