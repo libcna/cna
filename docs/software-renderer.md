@@ -129,6 +129,11 @@ rather than always passing.
   binding offsets and 16/32-bit indexed user draws are covered by deterministic pixel tests. Only
   CNAEXT's old empty-declaration `VertexBuffer(device,count)` convenience path retains canonical
   stride inference for compatibility. Hardware instancing is still pending.
+- **Static and dynamic vertex/index buffers share EasyGL's public contract** (`SOFTWARE-109`).
+  Source-window uploads, `None`/`Discard`/`NoOverwrite`, repeated mutation, typed readback,
+  `BufferUsage`, missing bindings, disposed-resource guards and draw-range validation pass the same
+  nine renderer-neutral fixtures on Software and EasyGL (122/122 checks each). Destination-window
+  CNAEXT overloads and exact offset/base/index-width behavior have additional shared/unit coverage.
 - **An unbound optional base texture is white.** `PbrEffect`, `SkinnedPbrEffect` and
   `SkinnedEffect` deliberately keep their textured program selected with no base map; SOFTWARE
   preserves the vertex/factor colour in that case, matching the white fallback used by native

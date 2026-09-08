@@ -227,6 +227,49 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_IndexedAddressing COMMAND cna_test_software_indexed_addressing
         TIMEOUT 30 LABELS "Software")
 
+    # SOFTWARE-109: compile EasyGL's renderer-neutral public buffer and draw-validation corpus
+    # unchanged against Software. Together with Software_IndexedAddressing this covers binding
+    # guards, draw ranges/topologies, static/dynamic mutation, all SetDataOptions values, readback,
+    # BufferUsage and disposed-buffer validation through the public GraphicsDevice API.
+    set(CNA_EASYGL_PUBLIC_BUFFER_DIR
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples)
+    cna_software_test(cna_test_software_draw_novertexbuffer
+        ${CNA_EASYGL_PUBLIC_BUFFER_DIR}/easygl_draw_novertexbuffer_test.cpp)
+    cna_register_renderer_test(NAME Software_DrawNoVertexBuffer
+        COMMAND cna_test_software_draw_novertexbuffer TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_draw_noindexbuffer
+        ${CNA_EASYGL_PUBLIC_BUFFER_DIR}/easygl_draw_noindexbuffer_test.cpp)
+    cna_register_renderer_test(NAME Software_DrawNoIndexBuffer
+        COMMAND cna_test_software_draw_noindexbuffer TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_draw_range_validation
+        ${CNA_EASYGL_PUBLIC_BUFFER_DIR}/easygl_draw_range_validation_test.cpp)
+    cna_register_renderer_test(NAME Software_DrawRangeValidation
+        COMMAND cna_test_software_draw_range_validation TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_primitivetype_validation
+        ${CNA_EASYGL_PUBLIC_BUFFER_DIR}/easygl_primitivetype_validation_test.cpp)
+    cna_register_renderer_test(NAME Software_PrimitiveTypeValidation
+        COMMAND cna_test_software_primitivetype_validation TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_vertexbuffer_setdata
+        ${CNA_EASYGL_PUBLIC_BUFFER_DIR}/easygl_vertexbuffer_setdata_test.cpp)
+    cna_register_renderer_test(NAME Software_VertexBufferSetData
+        COMMAND cna_test_software_vertexbuffer_setdata TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_dynamic_buffer_stress
+        ${CNA_EASYGL_PUBLIC_BUFFER_DIR}/easygl_dynamic_buffer_stress_test.cpp)
+    cna_register_renderer_test(NAME Software_DynamicBufferStress
+        COMMAND cna_test_software_dynamic_buffer_stress TIMEOUT 60 LABELS "Software")
+    cna_software_test(cna_test_software_buffer_usage
+        ${CNA_EASYGL_PUBLIC_BUFFER_DIR}/easygl_buffer_usage_test.cpp)
+    cna_register_renderer_test(NAME Software_BufferUsage
+        COMMAND cna_test_software_buffer_usage TIMEOUT 60 LABELS "Software")
+    cna_software_test(cna_test_software_disposed_buffer
+        ${CNA_EASYGL_PUBLIC_BUFFER_DIR}/easygl_disposed_buffer_test.cpp)
+    cna_register_renderer_test(NAME Software_DisposedBuffer
+        COMMAND cna_test_software_disposed_buffer TIMEOUT 60 LABELS "Software")
+    cna_software_test(cna_test_software_vertex_index_getdata
+        ${CNA_EASYGL_PUBLIC_BUFFER_DIR}/easygl_vertexbuffer_indexbuffer_getdata_test.cpp)
+    cna_register_renderer_test(NAME Software_VertexIndexGetData
+        COMMAND cna_test_software_vertex_index_getdata TIMEOUT 60 LABELS "Software")
+
     # REMED-GFX-124: a RenderTarget2D must be readable and sampleable once it is no longer active --
     # GetData returns the rendered colour attachment (full level, rectangle, destination start index)
     # and the finished target samples as an ordinary texture through both SpriteBatch and a textured
