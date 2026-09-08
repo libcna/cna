@@ -165,8 +165,50 @@ def _step(topo: Topology, st: State, f: int, ein: int, params: dict):
     return taken, topo.edge_of[taken][(a, b) if a < b else (b, a)]
 
 
+def _simulate(topo: Topology, st: State, f: int, ein: int, params: dict,
+              horizon: int, force_at: int):
+    """Run the strip-growing process for `horizon` faces, forcing this strip to end after exactly
+    `force_at` of them.  Returns (misses, faces)."""
+    sim = st.clone()
+    sim.misses = 0
+    start = sim.emitted
+    length = 0
+    forced = False
+    while f >= 0 and sim.emitted - start < horizon:
+        if not forced and length == force_at:
+            forced = True
+            f = _restart_face(topo, sim, params)
+            length = 0
+            ein = -1
+            continue
+        f, ein = _step(topo, sim, f, ein, params)
+        length += 1
+        if f < 0:
+            f = _restart_face(topo, sim, params)
+            length = 0
+            ein = -1
+    return sim.misses, sim.emitted - start
+
+
+def _too_long(topo: Topology, st: State, f: int, ein: int, params: dict, length: int) -> bool:
+    if length < params["min_length"]:
+        return False
+    h = params["horizon"]
+    average = params["average"]
+    m0, n0 = _simulate(topo, st, f, ein, params, h, 0)
+    c0 = (m0 / n0 if n0 else float("inf")) if average else m0
+    for i in range(1, params["sims"]):
+        mi, ni = _simulate(topo, st, f, ein, params, h, i)
+        ci = (mi / ni if ni else float("inf")) if average else mi
+        if (ci <= c0) if params["strict"] else (ci < c0):
+            return False
+    return True
+
+
 def optimize(faces: Sequence[Face], cache: int = CACHE, restart: int = RESTART,
-             lookahead: Optional[int] = None) -> List[int]:
+             lookahead: Optional[int] = None, use_lookahead: bool = False,
+             horizon: int = 17, sims: int = 17, strict: bool = True, average: bool = True,
+             min_length: int = 0) -> List[int]:
     """The face order: `optimize(faces)[i]` is the input face at output position `i`.
 
     A strip is cut `restart` faces after the one whose emission first offered a restart location,
@@ -176,26 +218,32 @@ def optimize(faces: Sequence[Face], cache: int = CACHE, restart: int = RESTART,
     forty-eight of its faces in a single strip.
     """
     topo = Topology(faces)
-    params = {"cache": cache, "restart": restart,
+    params = {"cache": cache, "restart": restart, "horizon": horizon, "sims": sims,
+              "strict": strict, "average": average, "min_length": min_length,
               "lookahead": lookahead if lookahead is not None else cache + 5}
     st = State(topo.n)
     order: List[int] = []
     f = _seed(topo, st, params, restart=False)
     ein = -1
     since = -1                              # faces emitted since the first push of this strip
+    length = 0
     while f >= 0:
-        if since >= restart:
+        cut = since >= restart
+        if use_lookahead:
+            cut = length > 0 and _too_long(topo, st, f, ein, params, length)
+        if cut:
             f = _restart_face(topo, st, params)
-            ein, since = -1, -1
+            ein, since, length = -1, -1, 0
             continue
         order.append(f)
         had = len(st.queue)
         f, ein = _step(topo, st, f, ein, params)
+        length += 1
         if since >= 0:
             since += 1
         elif len(st.queue) > had:
             since = 1
         if f < 0:
             f = _restart_face(topo, st, params)
-            ein, since = -1, -1
+            ein, since, length = -1, -1, 0
     return order
