@@ -21,14 +21,15 @@ namespace CNA::Internal::Renderers::Software
         int w, int h, int depthFormat, bool mipMap, int multiSampleCount,
         bool hasRealDepthBuffer, bool hasStandaloneStencilBuffer)
         : framebuffer_(hasRealDepthBuffer,
-                       hasStandaloneStencilBuffer || hasRealDepthBuffer)
+                       hasStandaloneStencilBuffer ||
+                           (hasRealDepthBuffer && depthFormat == 3))
         , depthFormat_(depthFormat), mipMap_(mipMap), multiSampleCount_(multiSampleCount)
         , hasRealDepthBuffer_(hasRealDepthBuffer)
         , hasStandaloneStencilBuffer_(hasStandaloneStencilBuffer)
     {
         const SoftwareFramebufferAllocationRequest request{
             w, h, hasRealDepthBuffer,
-            hasStandaloneStencilBuffer || hasRealDepthBuffer,
+            hasStandaloneStencilBuffer || (hasRealDepthBuffer && depthFormat == 3),
             multiSampleCount == 4 ? 4 : 0, mipMap};
         const SoftwareFramebufferAllocationLayout layout =
             PlanSoftwareFramebufferAllocation(request);

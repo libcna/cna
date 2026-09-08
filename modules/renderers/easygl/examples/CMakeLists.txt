@@ -921,6 +921,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_easygl_rendertargetcube_plural_binding
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # SOFTWARE-120: renderer-neutral stock COLOR0 MRT semantics, independent of ShaderEffect.
+        cna_easygl_test(cna_test_easygl_mrt_stock_effect_contract
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/mrt_stock_effect_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_MrtStockEffectContract
+            COMMAND cna_test_easygl_mrt_stock_effect_contract
+            TIMEOUT 45 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 877: RenderTargetCube honors its exact requested DepthFormat (None vs Depth24Stencil8)
         cna_easygl_test(cna_test_easygl_rendertargetcube_depthformat
                         easygl_rendertargetcube_depthformat_test.cpp)

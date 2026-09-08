@@ -187,15 +187,12 @@ struct CapabilityExpectation
         case GraphicsRendererType::Fna3d:
             return {true, true, false};
 
-        // Software: one active colour buffer, so no MRT -- SoftwareRenderer::SetRenderTargets()
-        // throws for count > 1 and ApplyBlendState() applies slot-0's write mask only. It used to
-        // take the default arm and claim MRT support, which
-        // TheMultipleRenderTargetCapabilityMatchesWhatBindingActuallyDoes caught the moment that
-        // consistency check reached this renderer. SOFTWARE-122 added deterministic CPU occlusion
-        // queries. Custom ShaderEffect compilation is still absent, so CustomEffects remains an
-        // honest false rather than inheriting the shared default.
+        // SOFTWARE-120: Software binds and finalizes up to four CPU colour attachments, with the
+        // first owning depth/stencil and stock effects writing COLOR0. SOFTWARE-122 supplies exact
+        // CPU occlusion queries. Custom ShaderEffect compilation remains absent, so CustomEffects
+        // stays an honest false independently of classic MRT support.
         case GraphicsRendererType::Software:
-            return {false, true, false};
+            return {true, true, false};
 
         // plans/plan_igl.md IGL-61: IGL v1.1.1 exposes no occlusion-query object on any of its backends
         // -- there is no IDevice factory for one and no encoder call to begin or end one, verified

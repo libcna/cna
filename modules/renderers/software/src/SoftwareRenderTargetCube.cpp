@@ -148,7 +148,7 @@ namespace CNA::Internal::Renderers::Software
         if (level == 0)
         {
             framebuffer.CopyResolvedColorToMultiSample();
-            if (!bound_ || activeFace_ != face)
+            if (!boundFaces_[static_cast<std::size_t>(face)])
                 GenerateMipMaps(face);
         }
         if (x == 0 && y == 0 && width == dimension && height == dimension)
@@ -172,7 +172,7 @@ namespace CNA::Internal::Renderers::Software
         if (!ValidFaceRegion(face, level, levelCount_, dimension,
                              x, y, width, height, data, dataLength))
             return false;
-        if (level > 0 && bound_ && activeFace_ == face)
+        if (level > 0 && boundFaces_[static_cast<std::size_t>(face)])
             return false;
 
         const std::vector<std::uint8_t>& source = CubeFacePixels(face, level);
@@ -210,17 +210,11 @@ namespace CNA::Internal::Renderers::Software
 
     void SoftwareRenderTargetCubeRenderer::BindAsRenderTargetFace(int face)
     {
-        if (face < 0 || face > 5)
-            throw std::out_of_range(
-                "SoftwareRenderTargetCubeRenderer: invalid cube face");
         if (bound_)
             UnbindAsRenderTarget();
 
+        (void)BindForMrt(face, true);
         activeFace_ = face;
-        LoadSharedDepthStencil(framebuffers_[static_cast<std::size_t>(face)]);
-        for (int level = 1; level < levelCount_; ++level)
-            supplied_[static_cast<std::size_t>(level)][static_cast<std::size_t>(face)] = false;
-        faceLevelCounts_[static_cast<std::size_t>(face)] = 1;
         bound_ = true;
     }
 
@@ -228,13 +222,47 @@ namespace CNA::Internal::Renderers::Software
     {
         if (!bound_)
             return;
-        SoftwareFramebuffer& framebuffer =
-            framebuffers_[static_cast<std::size_t>(activeFace_)];
-        framebuffer.ResolveColor();
-        GenerateMipMaps(activeFace_);
-        StoreSharedDepthStencil(framebuffer);
+        UnbindForMrt(activeFace_, true);
         bound_ = false;
         activeFace_ = -1;
+    }
+
+    SoftwareFramebuffer& SoftwareRenderTargetCubeRenderer::BindForMrt(
+        int face, bool ownsDepthStencil)
+    {
+        if (face < 0 || face > 5)
+            throw std::out_of_range(
+                "SoftwareRenderTargetCubeRenderer: invalid cube face");
+        const std::size_t faceIndex = static_cast<std::size_t>(face);
+        if (boundFaces_[faceIndex])
+            throw std::logic_error(
+                "SoftwareRenderTargetCubeRenderer: cube face is already bound");
+
+        SoftwareFramebuffer& framebuffer = framebuffers_[faceIndex];
+        if (ownsDepthStencil)
+            LoadSharedDepthStencil(framebuffer);
+        for (int level = 1; level < levelCount_; ++level)
+            supplied_[static_cast<std::size_t>(level)][faceIndex] = false;
+        faceLevelCounts_[faceIndex] = 1;
+        boundFaces_[faceIndex] = true;
+        return framebuffer;
+    }
+
+    void SoftwareRenderTargetCubeRenderer::UnbindForMrt(
+        int face, bool ownsDepthStencil)
+    {
+        if (face < 0 || face > 5)
+            throw std::out_of_range(
+                "SoftwareRenderTargetCubeRenderer: invalid cube face");
+        const std::size_t faceIndex = static_cast<std::size_t>(face);
+        if (!boundFaces_[faceIndex])
+            return;
+        SoftwareFramebuffer& framebuffer = framebuffers_[faceIndex];
+        framebuffer.ResolveColor();
+        GenerateMipMaps(face);
+        if (ownsDepthStencil)
+            StoreSharedDepthStencil(framebuffer);
+        boundFaces_[faceIndex] = false;
     }
 
     void SoftwareRenderTargetCubeRenderer::GenerateMipMaps(int face)

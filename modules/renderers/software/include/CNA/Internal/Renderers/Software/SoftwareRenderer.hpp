@@ -7,6 +7,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <vector>
@@ -726,6 +727,22 @@ namespace CNA::Internal::Renderers::Software
          * @return Immutable CPU color/depth/stencil storage for the bound face.
          */
         [[nodiscard]] const SoftwareFramebuffer& Framebuffer() const;
+        /**
+         * @brief Prepares one face as a member of a simultaneous render-target set.
+         *
+         * @param face Raw CubeMapFace ordinal.
+         * @param ownsDepthStencil Whether this is slot zero and therefore owns the set's shared
+         *                         depth/stencil attachment.
+         * @return The selected face's CPU framebuffer.
+         */
+        [[nodiscard]] SoftwareFramebuffer& BindForMrt(int face, bool ownsDepthStencil);
+        /**
+         * @brief Resolves one face leaving a simultaneous render-target set.
+         *
+         * @param face Raw CubeMapFace ordinal.
+         * @param ownsDepthStencil Whether the face owns the set's shared depth/stencil attachment.
+         */
+        void UnbindForMrt(int face, bool ownsDepthStencil);
 
     private:
         void GenerateMipMaps(int face);
@@ -740,6 +757,7 @@ namespace CNA::Internal::Renderers::Software
         int multiSampleCount_ = 0;
         int activeFace_ = -1;
         bool bound_ = false;
+        std::array<bool, 6> boundFaces_{};
         std::array<SoftwareFramebuffer, 6> framebuffers_;
         std::vector<std::array<std::vector<std::uint8_t>, 6>> mipLevels_;
         std::vector<std::array<bool, 6>> supplied_;
@@ -1094,10 +1112,19 @@ namespace CNA::Internal::Renderers::Software
         /// REMED-GFX-030: raw XNA CompareFunction ordinal used for the depth comparison
         /// (Always=0 through NotEqual=7). Captured with the other two depth fields for each draw.
         [[nodiscard]] int GetDepthCompareFunction() const { return depthCompareFunction_; }
-        /// REMED-GFX-077: raw XNA ColorWriteChannels of the current BlendState (slot 0; Software has
-        /// one active colour buffer). Used by SoftwareSpriteBatchRenderer so its quads honour the
-        /// per-channel write mask the same way any other draw does. 15 (All) = every channel.
-        [[nodiscard]] int GetColorWriteMask() const { return colorWriteMask_; }
+        /**
+         * @brief Returns the raw XNA ColorWriteChannels mask for an MRT slot.
+         *
+         * Classic stock effects emit COLOR0 only, so the rasterizer consumes slot zero; retaining
+         * all four values keeps state application exact for multi-output effect paths.
+         *
+         * @param slot Render-target slot in the inclusive range zero through three.
+         * @return The raw ColorWriteChannels mask applied to the selected slot.
+         */
+        [[nodiscard]] int GetColorWriteMask(int slot = 0) const
+        {
+            return colorWriteMasks_[static_cast<std::size_t>(slot)];
+        }
         /// REMED-GFX-077/GDI-073: the current BlendState.MultiSampleMask. Bit 0 controls a
         /// single-sample surface; when the optional four-sample colour plane is active, bits 0..3
         /// independently gate its 2x2 coverage samples. 0xFFFFFFFF = all samples.
@@ -1231,10 +1258,24 @@ namespace CNA::Internal::Renderers::Software
         /// custom GraphicsDevice.Viewport positions, sub-scales, and depth-range-remaps 3D geometry.
         void GetActiveViewportRaster(int& x, int& y, int& w, int& h,
                                      float& minDepth, float& maxDepth) const;
+        /** @brief Resolves every currently bound single or simultaneous render target. */
+        void UnbindCurrentTargets();
+        /**
+         * @brief Invokes a colour-only operation on every active MRT attachment.
+         *
+         * @param operation Operation applied to each active colour framebuffer.
+         */
+        void ForEachActiveColorTarget(
+            const std::function<void(SoftwareFramebuffer&)>& operation);
 
         SoftwareFramebuffer backbuffer_;
         SoftwareRenderTargetRenderer* currentRenderTarget_ = nullptr;
         SoftwareRenderTargetCubeRenderer* currentCubeRenderTarget_ = nullptr;
+        std::array<SoftwareFramebuffer*, 4> currentMrtFramebuffers_{};
+        std::array<SoftwareRenderTargetRenderer*, 4> currentMrt2DTargets_{};
+        std::array<SoftwareRenderTargetCubeRenderer*, 4> currentMrtCubeTargets_{};
+        std::array<int, 4> currentMrtCubeFaces_{};
+        int currentMrtCount_ = 0;
         /// The one query whose Begin/End interval currently receives passing raster samples.
         SoftwareOcclusionQueryRenderer* activeOcclusionQuery_ = nullptr;
         int virtualWidth_ = 0;
@@ -1255,9 +1296,9 @@ namespace CNA::Internal::Renderers::Software
         SoftwareBlendState blendState_{};
         /// GraphicsDevice.BlendFactor, snapshotted beside blendState_ for each Software draw.
         std::array<float, 4> blendFactor_{1.0f, 1.0f, 1.0f, 1.0f};
-        /// REMED-GFX-077: raw XNA ColorWriteChannels of the current BlendState, slot 0 (bit0=R,
+        /// REMED-GFX-077/SOFTWARE-120: raw XNA ColorWriteChannels for MRT slots 0..3 (bit0=R,
         /// bit1=G, bit2=B, bit3=A). Defaults to 15 (All), matching XNA's default BlendState.
-        int colorWriteMask_ = 15;
+        std::array<int, 4> colorWriteMasks_{15, 15, 15, 15};
         /// REMED-GFX-077/GDI-073: current BlendState.MultiSampleMask. Single-sample surfaces use
         /// bit 0; the optional four-sample colour plane uses bits 0..3. Defaults to 0xFFFFFFFF (all
         /// samples), matching XNA's default (-1).

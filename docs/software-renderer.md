@@ -177,7 +177,7 @@ rather than always passing.
   - `SkinnedEffect`: real `WeightsPerVertex`-gated 1/2/4-bone position and normal blending,
     inverse-transpose World normals, full classic lighting in vertex/pixel modes, texture, alpha
     and fog.
-- **MRT remains open; render-target cube maps are real.** Ordinary `Texture2D` and `TextureCube`
+- **MRT and render-target cube maps are real.** Ordinary `Texture2D` and `TextureCube`
   mip storage and sampling are real. `Texture3D` has exact CPU RGBA8 storage for its full XNA mip
   chain plus bounded full/partial `SetData` and `GetData`; this storage capability does not imply
   CNAEXT `ShaderEffect` volume sampling.
@@ -188,11 +188,16 @@ rather than always passing.
   `RenderTargetCube` owns six isolated color faces, an XNA-style depth/stencil attachment shared
   across face switches, face-local 4x resolve and generated box-filter mips. Its faces support
   exact partial transfer and can be sampled after rendering by `EnvironmentMapEffect` through the
-  same CPU cube sampler as plain `TextureCube`. Multiple simultaneously bound render targets are
-  still rejected and tracked by `SOFTWARE-120`.
+  same CPU cube sampler as plain `TextureCube`. Up to four simultaneous 2D/cube-face bindings own
+  distinct CPU color planes. Clear/discard, resolve and mip generation visit every attachment;
+  only slot zero owns depth/stencil and receives the `COLOR0` output emitted by classic stock
+  effects. Higher attachments therefore retain their own explicit clear/preserved contents. This
+  includes mixed 2D/cube sets and distinct faces of one cube; the shared 2D contract also passes on
+  EasyGL, whose remaining cube-in-MRT refusal is tracked as `SOFTWARE-135`.
 - **Complete classic `BlendState` equations are applied.** RGB and alpha source/destination
   factors and functions are independent; `BlendFactor`, `ColorWriteChannels` and
-  `MultiSampleMask` are honored. Per-target write channels remain coupled to the pending MRT task.
+  `MultiSampleMask` are honored. All four MRT write-channel masks are retained; the classic stock
+  effect paths consume slot zero's mask because their sole fragment output is `COLOR0`.
 - **Classic 2D/cube sampler state is applied.** Point/linear minification and magnification,
   point/linear mip selection, independent U/V Wrap/Clamp/Mirror and per-slot state are covered by
   shared contracts. `TextureFilter::Anisotropic` computes the directional texel footprint, selects

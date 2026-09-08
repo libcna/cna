@@ -289,11 +289,12 @@ namespace CNA::Internal::Renderers::Software
             {
                 if ((activeSamples & 1u) == 0u)
                     return 0u;
-                if (stencilState.testEnabled)
+                const bool stencilAvailable =
+                    stencilState.testEnabled && !fb.stencilBuffer.empty();
+                const bool depthAvailable =
+                    depthState.testEnabled && !fb.depthBuffer.empty();
+                if (stencilAvailable)
                 {
-                    if (fb.stencilBuffer.empty())
-                        throw std::logic_error(
-                            "Software rasterizer received enabled stencil state without stencil storage.");
                     std::uint8_t& stencil = fb.stencilBuffer[pixelIndex];
                     if (!StencilComparisonPasses(stencilState.reference, stencil,
                                                  stencilState.readMask,
@@ -303,24 +304,21 @@ namespace CNA::Internal::Renderers::Software
                         return 0u;
                     }
                 }
-                if (depthState.testEnabled)
+                if (depthAvailable)
                 {
-                    if (fb.depthBuffer.empty())
-                        throw std::logic_error(
-                            "Software rasterizer received enabled depth state without depth storage.");
                     if (!DepthFragmentPasses(depthState, centerDepth,
                                              fb.depthBuffer[pixelIndex]))
                     {
-                        if (stencilState.testEnabled)
+                        if (stencilAvailable)
                             WriteStencil(fb.stencilBuffer[pixelIndex], stencilState,
                                          stencilState.depthFailOperation);
                         return 0u;
                     }
                 }
-                if (stencilState.testEnabled)
+                if (stencilAvailable)
                     WriteStencil(fb.stencilBuffer[pixelIndex], stencilState,
                                  stencilState.passOperation);
-                if (depthState.testEnabled)
+                if (depthAvailable)
                     WritePassingDepth(fb.depthBuffer[pixelIndex], depthState, centerDepth);
                 if (occlusionQuery != nullptr)
                     occlusionQuery->RecordPassingSamples(1u);
@@ -330,12 +328,10 @@ namespace CNA::Internal::Renderers::Software
             activeSamples &= 0xFu;
             if (activeSamples == 0u)
                 return 0u;
-            if (stencilState.testEnabled && fb.multiSampleStencilBuffer.empty())
-                throw std::logic_error(
-                    "Software rasterizer received enabled 4x stencil state without per-sample stencil storage.");
-            if (depthState.testEnabled && fb.multiSampleDepthBuffer.empty())
-                throw std::logic_error(
-                    "Software rasterizer received enabled 4x depth state without per-sample depth storage.");
+            const bool stencilAvailable =
+                stencilState.testEnabled && !fb.multiSampleStencilBuffer.empty();
+            const bool depthAvailable =
+                depthState.testEnabled && !fb.multiSampleDepthBuffer.empty();
 
             unsigned int passingSamples = 0u;
             for (int sample = 0; sample < 4; ++sample)
@@ -345,7 +341,7 @@ namespace CNA::Internal::Renderers::Software
                     continue;
                 const std::size_t sampleIndex = pixelIndex * 4u +
                                                 static_cast<std::size_t>(sample);
-                if (stencilState.testEnabled)
+                if (stencilAvailable)
                 {
                     std::uint8_t& stencil = fb.multiSampleStencilBuffer[sampleIndex];
                     if (!StencilComparisonPasses(stencilState.reference, stencil,
@@ -358,18 +354,18 @@ namespace CNA::Internal::Renderers::Software
                 }
                 const float sampleDepth = sampleDepths != nullptr
                     ? (*sampleDepths)[static_cast<std::size_t>(sample)] : centerDepth;
-                if (depthState.testEnabled && !DepthFragmentPasses(
+                if (depthAvailable && !DepthFragmentPasses(
                         depthState, sampleDepth, fb.multiSampleDepthBuffer[sampleIndex]))
                 {
-                    if (stencilState.testEnabled)
+                    if (stencilAvailable)
                         WriteStencil(fb.multiSampleStencilBuffer[sampleIndex], stencilState,
                                      stencilState.depthFailOperation);
                     continue;
                 }
-                if (stencilState.testEnabled)
+                if (stencilAvailable)
                     WriteStencil(fb.multiSampleStencilBuffer[sampleIndex], stencilState,
                                  stencilState.passOperation);
-                if (depthState.testEnabled)
+                if (depthAvailable)
                     WritePassingDepth(fb.multiSampleDepthBuffer[sampleIndex], depthState,
                                       sampleDepth);
                 passingSamples |= sampleBit;
@@ -4026,7 +4022,7 @@ namespace CNA::Internal::Renderers::Software
                                   depthBias_, slopeScaleDepthBias_, clip,
                                   rv[0], rv[static_cast<std::size_t>(fan)],
                                   rv[static_cast<std::size_t>(fan + 1)],
-                                  colorWriteMask_, multiSampleMask_, activeOcclusionQuery_,
+                                  colorWriteMasks_[0], multiSampleMask_, activeOcclusionQuery_,
                                   wire, edgeMask);
             }
         }
@@ -4116,7 +4112,7 @@ namespace CNA::Internal::Renderers::Software
                                   depthBias_, slopeScaleDepthBias_, clip,
                                   rv[0], rv[static_cast<std::size_t>(fan)],
                                   rv[static_cast<std::size_t>(fan + 1)],
-                                  colorWriteMask_, multiSampleMask_, activeOcclusionQuery_,
+                                  colorWriteMasks_[0], multiSampleMask_, activeOcclusionQuery_,
                                   wire, edgeMask);
             }
         }
@@ -4234,7 +4230,7 @@ namespace CNA::Internal::Renderers::Software
                 if (IsInsideClipVolume(cv))
                     RasterizePointShaded(
                         fb, depthState, stencilState, blendState, blendFactor, params,
-                        clip, ClipVertexToRasterVertex(cv, vpT), colorWriteMask_, multiSampleMask_,
+                        clip, ClipVertexToRasterVertex(cv, vpT), colorWriteMasks_[0], multiSampleMask_,
                         GetSamplerState(0), GetSamplerState(1), activeOcclusionQuery_);
                 continue;
             }
@@ -4250,7 +4246,7 @@ namespace CNA::Internal::Renderers::Software
                     RasterizeLineShaded(
                         fb, depthState, stencilState, blendState, blendFactor, params, clip,
                         ClipVertexToRasterVertex(a, vpT), ClipVertexToRasterVertex(b, vpT),
-                        colorWriteMask_, multiSampleMask_, GetSamplerState(0), GetSamplerState(1),
+                        colorWriteMasks_[0], multiSampleMask_, GetSamplerState(0), GetSamplerState(1),
                         activeOcclusionQuery_);
                 continue;
             }
@@ -4288,7 +4284,7 @@ namespace CNA::Internal::Renderers::Software
                                         depthBias_, slopeScaleDepthBias_, params,
                                         clip, rv[0], rv[static_cast<std::size_t>(fan)],
                                         rv[static_cast<std::size_t>(fan + 1)],
-                                        colorWriteMask_, multiSampleMask_, GetSamplerState(0),
+                                        colorWriteMasks_[0], multiSampleMask_, GetSamplerState(0),
                                         GetSamplerState(1), activeOcclusionQuery_, wire, edgeMask);
             }
         }
@@ -4403,7 +4399,7 @@ namespace CNA::Internal::Renderers::Software
                 if (IsInsideClipVolume(cv))
                     RasterizePointShaded(
                         fb, depthState, stencilState, blendState, blendFactor, params,
-                        clip, ClipVertexToRasterVertex(cv, vpT), colorWriteMask_, multiSampleMask_,
+                        clip, ClipVertexToRasterVertex(cv, vpT), colorWriteMasks_[0], multiSampleMask_,
                         GetSamplerState(0), GetSamplerState(1), activeOcclusionQuery_);
                 continue;
             }
@@ -4419,7 +4415,7 @@ namespace CNA::Internal::Renderers::Software
                     RasterizeLineShaded(
                         fb, depthState, stencilState, blendState, blendFactor, params, clip,
                         ClipVertexToRasterVertex(a, vpT), ClipVertexToRasterVertex(b, vpT),
-                        colorWriteMask_, multiSampleMask_, GetSamplerState(0), GetSamplerState(1),
+                        colorWriteMasks_[0], multiSampleMask_, GetSamplerState(0), GetSamplerState(1),
                         activeOcclusionQuery_);
                 continue;
             }
@@ -4457,7 +4453,7 @@ namespace CNA::Internal::Renderers::Software
                                         depthBias_, slopeScaleDepthBias_, params,
                                         clip, rv[0], rv[static_cast<std::size_t>(fan)],
                                         rv[static_cast<std::size_t>(fan + 1)],
-                                        colorWriteMask_, multiSampleMask_, GetSamplerState(0),
+                                        colorWriteMasks_[0], multiSampleMask_, GetSamplerState(0),
                                         GetSamplerState(1), activeOcclusionQuery_, wire, edgeMask);
             }
         }

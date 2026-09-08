@@ -203,7 +203,7 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
         bindings.emplace_back(targets.back().get());
     }
     if (CNA_RENDERER_IS(SdlRenderer, FreeDirect, DirectX1, DirectX2, DirectX3, DirectX5,
-                        DirectX6, DirectX7, DirectX8, Gdi, Software))
+                        DirectX6, DirectX7, DirectX8, Gdi))
     {
     // Task 709 (the SDL_RENDERER family) / DX3-27 (DirectDraw, plans/plan_freedirect.md) / DX1-27 (real DirectDraw v1,
     // plans/plan_dx1.md) / DX2-84 (same DirectDraw v1 2D layer, plans/plan_dx2.md) / plans/plan_dx3.md (same 2D
@@ -213,10 +213,8 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
     // the first. 4 is still within the MAX_RENDERTARGET_BINDINGS cap
     // this test's name/history (Task 881) refers to, so the throw here comes entirely from the
     // renderer's own single-target limitation, not the cap check.
-    // SOFTWARE belongs here for the same reason as the rest: SoftwareRenderer::SetRenderTargets()
-    // throws for count > 1 because the renderer has one active colour buffer. It was absent, so
-    // this test demanded a clean bind from a renderer that cannot do one; its SupportsCapability()
-    // now reports MultipleRenderTargets as false to match.
+    // SOFTWARE-120 removed Software from this refusal set: it now owns a four-slot CPU binding and
+    // finalization path, so the generic positive arm below applies.
     // Sokol left this list at plans/plan_sokol.md SOKOL-26: it is now real-MRT-capable too (a genuine
     // multi-attachment sg_pass, 2-4 RenderTarget2D targets), so 4 real targets bind cleanly here
     // exactly like EasyGL/Vulkan/D3D11/etc. do below.

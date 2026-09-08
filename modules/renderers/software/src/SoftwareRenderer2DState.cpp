@@ -23,6 +23,8 @@ namespace CNA::Internal::Renderers::Software
 
     SoftwareFramebuffer& SoftwareRenderer::CurrentFramebuffer()
     {
+        if (currentMrtCount_ > 0)
+            return *currentMrtFramebuffers_[0];
         if (currentRenderTarget_ != nullptr)
             return currentRenderTarget_->Framebuffer();
 #ifndef CNA_SOFTWARE_2D_ONLY
@@ -34,6 +36,8 @@ namespace CNA::Internal::Renderers::Software
 
     const SoftwareFramebuffer& SoftwareRenderer::CurrentFramebuffer() const
     {
+        if (currentMrtCount_ > 0)
+            return *currentMrtFramebuffers_[0];
         if (currentRenderTarget_ != nullptr)
             return currentRenderTarget_->Framebuffer();
 #ifndef CNA_SOFTWARE_2D_ONLY
@@ -45,7 +49,8 @@ namespace CNA::Internal::Renderers::Software
 
     void SoftwareRenderer::Clear(float r, float g, float b, float a)
     {
-        CurrentFramebuffer().ClearColor(r, g, b, a);
+        ForEachActiveColorTarget(
+            [=](SoftwareFramebuffer& framebuffer) { framebuffer.ClearColor(r, g, b, a); });
     }
 
     void SoftwareRenderer::Present() {}
@@ -59,7 +64,8 @@ namespace CNA::Internal::Renderers::Software
 
     void SoftwareRenderer::SetVirtualResolution(int width, int height)
     {
-        if (currentRenderTarget_ == nullptr && currentCubeRenderTarget_ == nullptr)
+        if (currentRenderTarget_ == nullptr && currentCubeRenderTarget_ == nullptr &&
+            currentMrtCount_ == 0)
             backbuffer_.Resize(width, height);
         virtualWidth_ = width;
         virtualHeight_ = height;
@@ -133,11 +139,10 @@ namespace CNA::Internal::Renderers::Software
                 // temporary and no per-vertex allocation.
                 return true;
             case CNA::GraphicsCapability::MultipleRenderTargets:
-                // SetRenderTargets() throws for count > 1 and ApplyBlendState() notes the same
-                // limit: this renderer has ONE active colour buffer. Reported honestly instead of
-                // inherited as the blanket true below -- a capability is a promise, and this one
-                // was being made and then broken.
-                return false;
+                // SOFTWARE-120: up to four ordered CPU colour attachments bind simultaneously.
+                // The first owns depth/stencil and classic stock effects emit COLOR0 only, while
+                // Clear and resolve/mip finalization visit every attachment.
+                return true;
             case CNA::GraphicsCapability::Instancing:
                 // Not implemented: this renderer does not override DrawInstancedPrimitivesEx, so
                 // an instanced draw is the shared base-class refusal -- reported honestly instead
@@ -156,19 +161,18 @@ namespace CNA::Internal::Renderers::Software
     std::unique_ptr<IRenderTargetRenderer> SoftwareRenderer::CreateRenderTarget2D(
         int w, int h, int depthFormat, bool, bool mipMap, int multiSampleCount)
     {
-        return std::make_unique<SoftwareRenderTargetRenderer>(w, h, depthFormat, mipMap, multiSampleCount);
+        return std::make_unique<SoftwareRenderTargetRenderer>(
+            w, h, depthFormat, mipMap, multiSampleCount, depthFormat != 0, false);
     }
 
     void SoftwareRenderer::SetRenderTarget2D(IRenderTargetRenderer* rt)
     {
-        if (currentRenderTarget_ != nullptr)
-            currentRenderTarget_->UnbindAsRenderTarget();
-#ifndef CNA_SOFTWARE_2D_ONLY
-        if (currentCubeRenderTarget_ != nullptr)
-            currentCubeRenderTarget_->UnbindAsRenderTarget();
-#endif
-        currentCubeRenderTarget_ = nullptr;
-        currentRenderTarget_ = static_cast<SoftwareRenderTargetRenderer*>(rt);
+        auto* next = dynamic_cast<SoftwareRenderTargetRenderer*>(rt);
+        if (rt != nullptr && next == nullptr)
+            throw std::runtime_error(
+                "SoftwareRenderer::SetRenderTarget2D: incompatible renderer resource.");
+        UnbindCurrentTargets();
+        currentRenderTarget_ = next;
         if (currentRenderTarget_ != nullptr)
             currentRenderTarget_->BindAsRenderTarget();
     }
@@ -181,15 +185,12 @@ namespace CNA::Internal::Renderers::Software
         throw std::runtime_error(
             "Software's GDI 2D compilation unit does not support RenderTargetCube.");
 #else
-        if (currentRenderTarget_ != nullptr)
-            currentRenderTarget_->UnbindAsRenderTarget();
-        if (currentCubeRenderTarget_ != nullptr)
-            currentCubeRenderTarget_->UnbindAsRenderTarget();
-        currentRenderTarget_ = nullptr;
-        currentCubeRenderTarget_ = dynamic_cast<SoftwareRenderTargetCubeRenderer*>(rt);
-        if (rt != nullptr && currentCubeRenderTarget_ == nullptr)
+        auto* next = dynamic_cast<SoftwareRenderTargetCubeRenderer*>(rt);
+        if (rt != nullptr && next == nullptr)
             throw std::runtime_error(
                 "SoftwareRenderer::SetRenderTargetCubeFace: incompatible renderer resource.");
+        UnbindCurrentTargets();
+        currentCubeRenderTarget_ = next;
         if (currentCubeRenderTarget_ != nullptr)
             currentCubeRenderTarget_->BindAsRenderTargetFace(face);
 #endif
@@ -203,16 +204,115 @@ namespace CNA::Internal::Renderers::Software
             SetRenderTarget2D(nullptr);
             return;
         }
-        if (count > 1)
-            throw std::runtime_error(
-                "SoftwareRenderer does not support multiple simultaneous render targets.");
-        if (renderTargets[0].IsRenderTargetCubeFace())
+        if (count == 1)
         {
-            SetRenderTargetCubeFace(renderTargets[0].GetRenderTargetCube(),
-                                    renderTargets[0].GetCubeFace());
+            if (renderTargets[0].IsRenderTargetCubeFace())
+                SetRenderTargetCubeFace(renderTargets[0].GetRenderTargetCube(),
+                                        renderTargets[0].GetCubeFace());
+            else
+                SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
             return;
         }
-        SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
+        if (count > 4)
+            throw std::invalid_argument(
+                "SoftwareRenderer::SetRenderTargets supports at most four targets.");
+
+        std::array<SoftwareRenderTargetRenderer*, 4> next2D{};
+        std::array<SoftwareRenderTargetCubeRenderer*, 4> nextCube{};
+        std::array<int, 4> nextFaces{};
+        for (int slot = 0; slot < count; ++slot)
+        {
+            if (renderTargets[slot].IsRenderTargetCubeFace())
+            {
+                nextCube[static_cast<std::size_t>(slot)] =
+                    dynamic_cast<SoftwareRenderTargetCubeRenderer*>(
+                        renderTargets[slot].GetRenderTargetCube());
+                nextFaces[static_cast<std::size_t>(slot)] = renderTargets[slot].GetCubeFace();
+                if (nextCube[static_cast<std::size_t>(slot)] == nullptr)
+                    throw std::runtime_error(
+                        "SoftwareRenderer::SetRenderTargets: incompatible cube target.");
+            }
+            else
+            {
+                next2D[static_cast<std::size_t>(slot)] =
+                    dynamic_cast<SoftwareRenderTargetRenderer*>(
+                        renderTargets[slot].GetRenderTarget2D());
+                if (next2D[static_cast<std::size_t>(slot)] == nullptr)
+                    throw std::runtime_error(
+                        "SoftwareRenderer::SetRenderTargets: incompatible 2D target.");
+            }
+        }
+
+        UnbindCurrentTargets();
+        try
+        {
+            for (int slot = 0; slot < count; ++slot)
+            {
+                const std::size_t index = static_cast<std::size_t>(slot);
+                currentMrt2DTargets_[index] = next2D[index];
+                currentMrtCubeTargets_[index] = nextCube[index];
+                currentMrtCubeFaces_[index] = nextFaces[index];
+                if (next2D[index] != nullptr)
+                {
+                    next2D[index]->BindAsRenderTarget();
+                    currentMrtFramebuffers_[index] = &next2D[index]->Framebuffer();
+                }
+                else
+                {
+                    currentMrtFramebuffers_[index] =
+                        &nextCube[index]->BindForMrt(nextFaces[index], slot == 0);
+                }
+                ++currentMrtCount_;
+            }
+        }
+        catch (...)
+        {
+            UnbindCurrentTargets();
+            throw;
+        }
+    }
+
+    void SoftwareRenderer::UnbindCurrentTargets()
+    {
+        if (currentMrtCount_ > 0)
+        {
+            for (int slot = 0; slot < currentMrtCount_; ++slot)
+            {
+                const std::size_t index = static_cast<std::size_t>(slot);
+                if (currentMrt2DTargets_[index] != nullptr)
+                    currentMrt2DTargets_[index]->UnbindAsRenderTarget();
+#ifndef CNA_SOFTWARE_2D_ONLY
+                else if (currentMrtCubeTargets_[index] != nullptr)
+                    currentMrtCubeTargets_[index]->UnbindForMrt(
+                        currentMrtCubeFaces_[index], slot == 0);
+#endif
+                currentMrtFramebuffers_[index] = nullptr;
+                currentMrt2DTargets_[index] = nullptr;
+                currentMrtCubeTargets_[index] = nullptr;
+                currentMrtCubeFaces_[index] = 0;
+            }
+            currentMrtCount_ = 0;
+        }
+        if (currentRenderTarget_ != nullptr)
+            currentRenderTarget_->UnbindAsRenderTarget();
+#ifndef CNA_SOFTWARE_2D_ONLY
+        if (currentCubeRenderTarget_ != nullptr)
+            currentCubeRenderTarget_->UnbindAsRenderTarget();
+#endif
+        currentRenderTarget_ = nullptr;
+        currentCubeRenderTarget_ = nullptr;
+    }
+
+    void SoftwareRenderer::ForEachActiveColorTarget(
+        const std::function<void(SoftwareFramebuffer&)>& operation)
+    {
+        if (currentMrtCount_ > 0)
+        {
+            for (int slot = 0; slot < currentMrtCount_; ++slot)
+                operation(*currentMrtFramebuffers_[static_cast<std::size_t>(slot)]);
+            return;
+        }
+        operation(CurrentFramebuffer());
     }
     void SoftwareRenderer::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                                                   int colorDstBlend, int alphaDstBlend,
@@ -234,11 +334,12 @@ namespace CNA::Internal::Renderers::Software
         blendState_ = SoftwareBlendState{colorSrcBlend, alphaSrcBlend,
                                          colorDstBlend, alphaDstBlend,
                                          colorBlendFunc, alphaBlendFunc};
-        // REMED-GFX-077: Software has one active colour buffer (no MRT), so only slot-0's write mask
-        // applies; the CPU fragment writers (WriteColoredFragment/WriteShadedFragment) gate each
-        // channel by it. Single-sample surfaces use MultiSampleMask bit 0; the optional four-sample
-        // colour plane uses bits 0..3 (GDI-073).
-        colorWriteMask_  = writeState.colorWriteChannels[0];
+        // SOFTWARE-120: retain all four slot masks. Classic XNA stock effects emit COLOR0 only,
+        // so the current fixed CPU fragment paths consume slot 0 and leave higher attachments at
+        // their explicit clear/preserved contents. Single-sample surfaces use MultiSampleMask bit
+        // 0; the optional four-sample colour plane uses bits 0..3 (GDI-073).
+        std::copy_n(writeState.colorWriteChannels, colorWriteMasks_.size(),
+                    colorWriteMasks_.begin());
         multiSampleMask_ = writeState.multiSampleMask;
     }
 
@@ -416,9 +517,9 @@ namespace CNA::Internal::Renderers::Software
 
     void SoftwareRenderer::ClearColorAndDepth(float r, float g, float b, float a, float depth)
     {
-        SoftwareFramebuffer& fb = CurrentFramebuffer();
-        fb.ClearColor(r, g, b, a);
-        fb.ClearDepthValue(depth);
+        ForEachActiveColorTarget(
+            [=](SoftwareFramebuffer& framebuffer) { framebuffer.ClearColor(r, g, b, a); });
+        CurrentFramebuffer().ClearDepthValue(depth);
     }
 
     void SoftwareRenderer::ClearDepth(float depth) { CurrentFramebuffer().ClearDepthValue(depth); }
@@ -431,7 +532,8 @@ namespace CNA::Internal::Renderers::Software
     }
     void SoftwareRenderer::ClearColorAndStencil(float r, float g, float b, float a, int stencil)
     {
-        CurrentFramebuffer().ClearColor(r, g, b, a);
+        ForEachActiveColorTarget(
+            [=](SoftwareFramebuffer& framebuffer) { framebuffer.ClearColor(r, g, b, a); });
         CurrentFramebuffer().ClearStencilValue(stencil);
     }
     void SoftwareRenderer::ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int stencil)

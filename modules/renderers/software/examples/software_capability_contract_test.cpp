@@ -53,8 +53,8 @@ namespace
             Check(device.SupportsCapability(CNA::GraphicsCapability::AdditiveBlending),
                   "AdditiveBlending remains advertised");
 
-            Check(!device.SupportsCapability(CNA::GraphicsCapability::MultipleRenderTargets),
-                  "MultipleRenderTargets is false until SOFTWARE-120 lands");
+            Check(device.SupportsCapability(CNA::GraphicsCapability::MultipleRenderTargets),
+                  "MultipleRenderTargets is advertised with the four-slot CPU binding path");
             Check(device.SupportsCapability(CNA::GraphicsCapability::AnisotropicFiltering),
                   "AnisotropicFiltering is advertised with its directional CPU sampler");
             Check(device.SupportsCapability(CNA::GraphicsCapability::OcclusionQuery),

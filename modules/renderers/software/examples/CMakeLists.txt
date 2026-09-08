@@ -562,6 +562,20 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
         COMMAND cna_test_software_rendertargetcube_sample
         TIMEOUT 30 LABELS "Software")
 
+    # SOFTWARE-120: classic XNA MRT binding/clear/depth/resolve/mip semantics with stock COLOR0.
+    cna_software_test(cna_test_software_mrt_stock_effect_contract
+                      ${CNA_GRAPHICS_EXAMPLES_DIR}/mrt_stock_effect_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_MrtStockEffectContract
+        COMMAND cna_test_software_mrt_stock_effect_contract
+        TIMEOUT 45 LABELS "Software")
+
+    # SOFTWARE-119/120: the existing normalized cube binding corpus now runs on the CPU renderer.
+    cna_software_test(cna_test_software_rendertargetcube_plural_binding
+                      ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertargetcube_plural_binding_test.cpp)
+    cna_register_renderer_test(NAME Software_RenderTargetCube_PluralBinding
+        COMMAND cna_test_software_rendertargetcube_plural_binding
+        TIMEOUT 60 LABELS "Software")
+
     # REMED-GFX-142: RenderTargetUsage's DEPTH and STENCIL half. FNA3D's own header documents
     # `preserveTargetContents` as storing the "color/depth/stencil" contents, and FNA's DiscardContents
     # bind clears all three (Target|DepthBuffer|Stencil, MaxDepth, 0) -- so the enum governs depth and
