@@ -1858,6 +1858,7 @@ if (ProfileIsEs2ApiGeneration())
         ::easygl::PixelType pixelType = ::easygl::PixelType::UnsignedByte;
         int unpackAlignment = 4;
         const void* upload = pixels;
+        std::vector<float> expandedFloat;
         std::vector<std::uint16_t> expanded16;
         std::vector<std::uint8_t> expanded8;
 
@@ -1931,6 +1932,61 @@ if (ProfileIsEs2ApiGeneration())
                     expanded8[index * 4u + 3] = source[index];
                 upload = expanded8.data();
             }
+            break;
+        case SurfaceFormat::Single:
+        case SurfaceFormat::Vector2:
+        {
+            const int sourceChannels = format == SurfaceFormat::Single ? 1 : 2;
+            internalFormat = ::easygl::InternalFormat::Rgba32F;
+            pixelType = ::easygl::PixelType::Float;
+            unpackAlignment = 8;
+            if (pixels != nullptr)
+            {
+                const auto* source = static_cast<const std::uint8_t*>(pixels);
+                const std::size_t texels = static_cast<std::size_t>(width) * height;
+                expandedFloat.assign(texels * 4u, 1.0f);
+                for (std::size_t index = 0; index < texels; ++index)
+                {
+                    std::memcpy(&expandedFloat[index * 4u],
+                                source + index * static_cast<std::size_t>(sourceChannels) * 4u,
+                                static_cast<std::size_t>(sourceChannels) * 4u);
+                }
+                upload = expandedFloat.data();
+            }
+            break;
+        }
+        case SurfaceFormat::Vector4:
+            internalFormat = ::easygl::InternalFormat::Rgba32F;
+            pixelType = ::easygl::PixelType::Float;
+            unpackAlignment = 8;
+            break;
+        case SurfaceFormat::HalfSingle:
+        case SurfaceFormat::HalfVector2:
+        {
+            const int sourceChannels = format == SurfaceFormat::HalfSingle ? 1 : 2;
+            internalFormat = ::easygl::InternalFormat::Rgba16F;
+            pixelType = ::easygl::PixelType::HalfFloat;
+            unpackAlignment = 8;
+            if (pixels != nullptr)
+            {
+                const auto* source = static_cast<const std::uint8_t*>(pixels);
+                const std::size_t texels = static_cast<std::size_t>(width) * height;
+                expanded16.assign(texels * 4u, 0x3c00u);
+                for (std::size_t index = 0; index < texels; ++index)
+                {
+                    std::memcpy(&expanded16[index * 4u],
+                                source + index * static_cast<std::size_t>(sourceChannels) * 2u,
+                                static_cast<std::size_t>(sourceChannels) * 2u);
+                }
+                upload = expanded16.data();
+            }
+            break;
+        }
+        case SurfaceFormat::HalfVector4:
+        case SurfaceFormat::HdrBlendable:
+            internalFormat = ::easygl::InternalFormat::Rgba16F;
+            pixelType = ::easygl::PixelType::HalfFloat;
+            unpackAlignment = 8;
             break;
         default:
             throw std::runtime_error("EasyGL: unsupported uncompressed cube SurfaceFormat");
@@ -6183,6 +6239,7 @@ if (!ProfileIsEs2ApiGeneration())
                     : RendererFormatVerdict::Unsupported;
             case SurfaceFormat::NormalizedByte2:
             case SurfaceFormat::NormalizedByte4:
+                return RendererFormatVerdict::Unsupported;
             case SurfaceFormat::Single:
             case SurfaceFormat::Vector2:
             case SurfaceFormat::Vector4:
@@ -6190,7 +6247,9 @@ if (!ProfileIsEs2ApiGeneration())
             case SurfaceFormat::HalfVector2:
             case SurfaceFormat::HalfVector4:
             case SurfaceFormat::HdrBlendable:
-                return RendererFormatVerdict::Unsupported;
+                return ProfileIsEs2ApiGeneration()
+                    ? RendererFormatVerdict::Unsupported
+                    : RendererFormatVerdict::Supported;
             default:
                 return RendererFormatVerdict::Defer;
         }

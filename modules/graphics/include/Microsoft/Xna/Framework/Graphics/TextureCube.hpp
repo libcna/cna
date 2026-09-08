@@ -2,6 +2,8 @@
 #pragma once
 
 #include <array>
+#include <bit>
+#include <concepts>
 #include <cstdint>
 #include <memory>
 #include <stdexcept>
@@ -10,6 +12,8 @@
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
+#include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
@@ -30,6 +34,13 @@ namespace CNA::Internal::Graphics
         constantValue.getPackedValueProperty();
         value.setPackedValueProperty(constantValue.getPackedValueProperty());
     };
+
+    /** @brief Identifies the scalar/vector binary32 elements accepted by float cube formats. */
+    template<typename T>
+    concept TextureCubeFloatElement =
+        std::same_as<std::remove_cvref_t<T>, float> ||
+        std::same_as<std::remove_cvref_t<T>, Microsoft::Xna::Framework::Vector2> ||
+        std::same_as<std::remove_cvref_t<T>, Microsoft::Xna::Framework::Vector4>;
 }
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -181,6 +192,92 @@ namespace Microsoft::Xna::Framework::Graphics
         }
 
         /**
+         * @brief Uploads scalar/vector binary32 data to an entire cube face.
+         *
+         * @tparam T `float`, `Vector2` or `Vector4`, matching the cube format.
+         * @param face Cube face to update.
+         * @param data Source elements.
+         * @param elementCount Number of available elements.
+         */
+        template<CNA::Internal::Graphics::TextureCubeFloatElement T>
+        void SetData(CubeMapFace face, const T* data, int elementCount)
+        {
+            SetData(face, 0, nullptr, data, 0, elementCount);
+        }
+
+        /**
+         * @brief Uploads a source window of scalar/vector binary32 data to an entire cube face.
+         *
+         * @tparam T `float`, `Vector2` or `Vector4`, matching the cube format.
+         * @param face Cube face to update.
+         * @param data Source elements.
+         * @param startIndex First source element.
+         * @param elementCount Number of available elements beginning at @p startIndex.
+         */
+        template<CNA::Internal::Graphics::TextureCubeFloatElement T>
+        void SetData(CubeMapFace face, const T* data, int startIndex, int elementCount)
+        {
+            SetData(face, 0, nullptr, data, startIndex, elementCount);
+        }
+
+        /**
+         * @brief Uploads scalar/vector binary32 data to a cube-face mip or rectangle.
+         *
+         * @tparam T `float`, `Vector2` or `Vector4`, matching the cube format.
+         * @param face Cube face to update.
+         * @param level Mip level beginning at zero.
+         * @param rect Destination rectangle, or null for the complete level.
+         * @param data Source elements.
+         * @param startIndex First source element.
+         * @param elementCount Number of available elements beginning at @p startIndex.
+         */
+        template<CNA::Internal::Graphics::TextureCubeFloatElement T>
+        void SetData(CubeMapFace face, int level,
+                     const Microsoft::Xna::Framework::Rectangle* rect,
+                     const T* data, int startIndex, int elementCount)
+        {
+            if (data == nullptr)
+                throw std::invalid_argument("TextureCube::SetData: data must not be null");
+            using Element = std::remove_cvref_t<T>;
+            constexpr int components = std::same_as<Element, float> ? 1
+                : (std::same_as<Element, Microsoft::Xna::Framework::Vector2> ? 2 : 4);
+            constexpr int elementBytes = components * static_cast<int>(sizeof(float));
+            const int required = ValidateTypedTransferEXT(
+                "TextureCube::SetData", face, level, rect,
+                startIndex, elementCount, elementBytes);
+            std::vector<std::uint8_t> bytes(
+                static_cast<std::size_t>(required) * elementBytes);
+            for (int index = 0; index < required; ++index)
+            {
+                const Element& value = data[startIndex + index];
+                for (int component = 0; component < components; ++component)
+                {
+                    float channel = 0.0f;
+                    if constexpr (std::same_as<Element, float>)
+                        channel = value;
+                    else if constexpr (std::same_as<Element, Microsoft::Xna::Framework::Vector2>)
+                        channel = component == 0 ? value.X : value.Y;
+                    else
+                    {
+                        switch (component)
+                        {
+                            case 0: channel = value.X; break;
+                            case 1: channel = value.Y; break;
+                            case 2: channel = value.Z; break;
+                            default: channel = value.W; break;
+                        }
+                    }
+                    const std::uint32_t bits = std::bit_cast<std::uint32_t>(channel);
+                    const std::size_t offset =
+                        (static_cast<std::size_t>(index) * components + component) * sizeof(float);
+                    for (std::size_t byte = 0; byte < sizeof(float); ++byte)
+                        bytes[offset + byte] = static_cast<std::uint8_t>(bits >> (byte * 8u));
+                }
+            }
+            SetTypedDataBytesEXT(face, level, rect, bytes.data(), elementBytes);
+        }
+
+        /**
          * @brief Uploads exact block-compressed bytes to an entire cube face.
          *
          * This represents XNA's generic byte-array SetData route for Dxt1, Dxt3 and Dxt5 cube
@@ -317,6 +414,95 @@ namespace Microsoft::Xna::Framework::Graphics
                         bytes[static_cast<std::size_t>(index) * sizeof(Word) + byte])
                         << (byte * 8u);
                 data[startIndex + index].setPackedValueProperty(value);
+            }
+        }
+
+        /**
+         * @brief Reads an entire cube face into scalar/vector binary32 elements.
+         *
+         * @tparam T `float`, `Vector2` or `Vector4`, matching the cube format.
+         * @param face Cube face to read.
+         * @param data Destination elements.
+         * @param elementCount Number of available destination elements.
+         */
+        template<CNA::Internal::Graphics::TextureCubeFloatElement T>
+        void GetData(CubeMapFace face, T* data, int elementCount) const
+        {
+            GetData(face, 0, nullptr, data, 0, elementCount);
+        }
+
+        /**
+         * @brief Reads an entire cube face into a destination window of binary32 elements.
+         *
+         * @tparam T `float`, `Vector2` or `Vector4`, matching the cube format.
+         * @param face Cube face to read.
+         * @param data Destination elements.
+         * @param startIndex First destination element.
+         * @param elementCount Number of available elements beginning at @p startIndex.
+         */
+        template<CNA::Internal::Graphics::TextureCubeFloatElement T>
+        void GetData(CubeMapFace face, T* data, int startIndex, int elementCount) const
+        {
+            GetData(face, 0, nullptr, data, startIndex, elementCount);
+        }
+
+        /**
+         * @brief Reads a cube-face mip or rectangle into scalar/vector binary32 elements.
+         *
+         * @tparam T `float`, `Vector2` or `Vector4`, matching the cube format.
+         * @param face Cube face to read.
+         * @param level Mip level beginning at zero.
+         * @param rect Source rectangle, or null for the complete level.
+         * @param data Destination elements.
+         * @param startIndex First destination element.
+         * @param elementCount Number of available elements beginning at @p startIndex.
+         */
+        template<CNA::Internal::Graphics::TextureCubeFloatElement T>
+        void GetData(CubeMapFace face, int level,
+                     const Microsoft::Xna::Framework::Rectangle* rect,
+                     T* data, int startIndex, int elementCount) const
+        {
+            if (data == nullptr)
+                throw std::invalid_argument("TextureCube::GetData: data must not be null");
+            using Element = std::remove_cvref_t<T>;
+            constexpr int components = std::same_as<Element, float> ? 1
+                : (std::same_as<Element, Microsoft::Xna::Framework::Vector2> ? 2 : 4);
+            constexpr int elementBytes = components * static_cast<int>(sizeof(float));
+            const int required = ValidateTypedTransferEXT(
+                "TextureCube::GetData", face, level, rect,
+                startIndex, elementCount, elementBytes);
+            std::vector<std::uint8_t> bytes(
+                static_cast<std::size_t>(required) * elementBytes);
+            GetTypedDataBytesEXT(face, level, rect, bytes.data(), elementBytes);
+            for (int index = 0; index < required; ++index)
+            {
+                Element& value = data[startIndex + index];
+                for (int component = 0; component < components; ++component)
+                {
+                    const std::size_t offset =
+                        (static_cast<std::size_t>(index) * components + component) * sizeof(float);
+                    std::uint32_t bits = 0u;
+                    for (std::size_t byte = 0; byte < sizeof(float); ++byte)
+                        bits |= static_cast<std::uint32_t>(bytes[offset + byte]) << (byte * 8u);
+                    const float channel = std::bit_cast<float>(bits);
+                    if constexpr (std::same_as<Element, float>)
+                        value = channel;
+                    else if constexpr (std::same_as<Element, Microsoft::Xna::Framework::Vector2>)
+                    {
+                        if (component == 0) value.X = channel;
+                        else value.Y = channel;
+                    }
+                    else
+                    {
+                        switch (component)
+                        {
+                            case 0: value.X = channel; break;
+                            case 1: value.Y = channel; break;
+                            case 2: value.Z = channel; break;
+                            default: value.W = channel; break;
+                        }
+                    }
+                }
             }
         }
 

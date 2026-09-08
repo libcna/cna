@@ -251,7 +251,9 @@ namespace
         return pixels[static_cast<std::size_t>(size / 2) * size + size / 2];
     }
 
-    [[nodiscard]] Color DrawWithEnvironmentMap(GraphicsDevice& device, TextureCube& cube)
+    [[nodiscard]] Color DrawWithEnvironmentMap(GraphicsDevice& device, TextureCube& cube,
+                                               float amount = 1.0f,
+                                               bool environmentOnly = false)
     {
         constexpr int size = 8;
         const VertexPositionNormalTexture vertices[6] = {
@@ -278,11 +280,11 @@ namespace
         EnvironmentMapEffect effect(device);
         effect.setTextureProperty(&white);
         effect.setEnvironmentMapProperty(&cube);
-        effect.setEnvironmentMapAmountProperty(1.0f);
+        effect.setEnvironmentMapAmountProperty(amount);
         effect.setFresnelFactorProperty(0.0f);
-        effect.setDiffuseColorProperty(Vector3::One);
+        effect.setDiffuseColorProperty(environmentOnly ? Vector3::Zero : Vector3::One);
         effect.setAmbientLightColorProperty(Vector3::Zero);
-        effect.setEmissiveColorProperty(Vector3::One);
+        effect.setEmissiveColorProperty(environmentOnly ? Vector3::Zero : Vector3::One);
         effect.getDirectionalLight0Property().setEnabledProperty(false);
         effect.getDirectionalLight1Property().setEnabledProperty(false);
         effect.getDirectionalLight2Property().setEnabledProperty(false);
@@ -301,7 +303,8 @@ namespace
 
     template<typename T>
     void VerifyCubeSample(GraphicsDevice& device, SurfaceFormat format, const T& value,
-                          int red, int green, int blue, int tolerance = 2)
+                          int red, int green, int blue, int tolerance = 2,
+                          float amount = 1.0f, bool environmentOnly = false)
     {
         if (device.GetRenderer().ClassifyTextureCubeFormatEXT(static_cast<int>(format)) !=
             RendererFormatVerdict::Supported)
@@ -309,7 +312,7 @@ namespace
         SCOPED_TRACE(static_cast<int>(format));
         TextureCube cube(device, 1, false, format);
         cube.SetData(CubeMapFace::PositiveZ, &value, 1);
-        const Color sampled = DrawWithEnvironmentMap(device, cube);
+        const Color sampled = DrawWithEnvironmentMap(device, cube, amount, environmentOnly);
         EXPECT_NEAR(sampled.getRProperty(), red, tolerance);
         EXPECT_NEAR(sampled.getGProperty(), green, tolerance);
         EXPECT_NEAR(sampled.getBProperty(), blue, tolerance);
@@ -505,6 +508,68 @@ TEST(ClassicTextureFormat, NormalizedIntegerCubeFormatsFeedEnvironmentMapSamplin
                      Alpha8(0.75f), 0, 0, 0);
 }
 
+TEST(ClassicTextureFormat, FloatCubeFormatsPreserveExactTransfers)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+
+    VerifyExactCubeTransfers<float>(device, SurfaceFormat::Single, [](int index) {
+        return static_cast<float>(index - 8) * 0.375f;
+    });
+    VerifyExactCubeTransfers<Vector2>(device, SurfaceFormat::Vector2, [](int index) {
+        return Vector2(static_cast<float>(index - 8) * 0.25f,
+                       static_cast<float>(7 - index) * 0.125f);
+    });
+    VerifyExactCubeTransfers<Vector4>(device, SurfaceFormat::Vector4, [](int index) {
+        return Vector4(static_cast<float>(index - 8) * 0.25f,
+                       static_cast<float>(7 - index) * 0.125f,
+                       static_cast<float>(index % 5) * 0.5f,
+                       static_cast<float>(index % 3) * 0.25f);
+    });
+    VerifyExactCubeTransfers<HalfSingle>(device, SurfaceFormat::HalfSingle, [](int index) {
+        return HalfSingle(static_cast<float>(index - 8) * 0.25f);
+    });
+    VerifyExactCubeTransfers<HalfVector2>(device, SurfaceFormat::HalfVector2, [](int index) {
+        return HalfVector2(static_cast<float>(index - 8) * 0.25f,
+                           static_cast<float>(7 - index) * 0.125f);
+    });
+    VerifyExactCubeTransfers<HalfVector4>(device, SurfaceFormat::HalfVector4, [](int index) {
+        return HalfVector4(static_cast<float>(index - 8) * 0.25f,
+                           static_cast<float>(7 - index) * 0.125f,
+                           static_cast<float>(index % 5) * 0.5f,
+                           static_cast<float>(index % 3) * 0.25f);
+    });
+    VerifyExactCubeTransfers<HalfVector4>(device, SurfaceFormat::HdrBlendable, [](int index) {
+        return HalfVector4(static_cast<float>(index - 8) * 0.5f,
+                           static_cast<float>(7 - index) * 0.25f,
+                           static_cast<float>(index % 5), 1.0f);
+    });
+}
+
+TEST(ClassicTextureFormat, FloatCubeFormatsPreserveHdrEnvironmentMapSampling)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+
+    VerifyCubeSample(device, SurfaceFormat::Single, 2.0f,
+                     128, 64, 64, 3, 0.25f, true);
+    VerifyCubeSample(device, SurfaceFormat::Vector2, Vector2(2.0f, 0.5f),
+                     128, 32, 64, 3, 0.25f, true);
+    VerifyCubeSample(device, SurfaceFormat::Vector4,
+                     Vector4(2.0f, 0.5f, -1.0f, 1.0f),
+                     128, 32, 0, 3, 0.25f, true);
+    VerifyCubeSample(device, SurfaceFormat::HalfSingle, HalfSingle(2.0f),
+                     128, 64, 64, 3, 0.25f, true);
+    VerifyCubeSample(device, SurfaceFormat::HalfVector2, HalfVector2(2.0f, 0.5f),
+                     128, 32, 64, 3, 0.25f, true);
+    VerifyCubeSample(device, SurfaceFormat::HalfVector4,
+                     HalfVector4(2.0f, 0.5f, -1.0f, 1.0f),
+                     128, 32, 0, 3, 0.25f, true);
+    VerifyCubeSample(device, SurfaceFormat::HdrBlendable,
+                     HalfVector4(2.0f, 0.5f, -1.0f, 1.0f),
+                     128, 32, 0, 3, 0.25f, true);
+}
+
 TEST(ClassicTextureFormat, PlainCubeCapabilityDoesNotInheritTexture2DFormatClaims)
 {
     if (!CNA_RENDERER_IS(Software, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2))
@@ -515,13 +580,6 @@ TEST(ClassicTextureFormat, PlainCubeCapabilityDoesNotInheritTexture2DFormatClaim
     const SurfaceFormat unfinishedFormats[] = {
         SurfaceFormat::NormalizedByte2,
         SurfaceFormat::NormalizedByte4,
-        SurfaceFormat::Single,
-        SurfaceFormat::Vector2,
-        SurfaceFormat::Vector4,
-        SurfaceFormat::HalfSingle,
-        SurfaceFormat::HalfVector2,
-        SurfaceFormat::HalfVector4,
-        SurfaceFormat::HdrBlendable,
     };
     for (const SurfaceFormat format : unfinishedFormats)
     {
@@ -546,7 +604,11 @@ TEST(ClassicTextureFormat, PlainCubeCapabilityDoesNotInheritTexture2DFormatClaim
         EXPECT_NO_THROW(TextureCube(device, 4, false, format));
     }
 
-    for (const SurfaceFormat format : {SurfaceFormat::Rg32, SurfaceFormat::Rgba64})
+    for (const SurfaceFormat format : {
+             SurfaceFormat::Rg32, SurfaceFormat::Rgba64,
+             SurfaceFormat::Single, SurfaceFormat::Vector2, SurfaceFormat::Vector4,
+             SurfaceFormat::HalfSingle, SurfaceFormat::HalfVector2,
+             SurfaceFormat::HalfVector4, SurfaceFormat::HdrBlendable})
     {
         SCOPED_TRACE(static_cast<int>(format));
         const RendererFormatVerdict expected =

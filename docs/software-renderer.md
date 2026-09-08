@@ -239,6 +239,14 @@ rather than always passing.
   point-sampled channel layouts, and `BasicEffect` probes that would fail if `Single(2)` or
   `NormalizedByte4(-0.5)` were narrowed early. Non-XNA `*EXT` texture formats remain outside this
   campaign rather than being accepted as Color.
+- **Every XNA-permitted ordinary `TextureCube` format has the same exact storage and sampling**
+  (`SOFTWARE-145`, `SOFTWARE-149`, `SOFTWARE-150`). Each of the six faces and every declared mip
+  independently retains Color, DXT1/3/5, normalized-integer, binary32 or binary16 bytes. Typed
+  full/start/rectangle/mip transfers preserve those bytes, while the cube sampler expands missing
+  channels and keeps negative or above-one values until effect math. Shared `EnvironmentMapEffect`
+  probes distinguish the packed layouts and prove that `2.0 * 0.25` reaches the framebuffer as
+  0.5 rather than being narrowed through RGBA8. `NormalizedByte2/4` remain rejected because the
+  measured XNA cube-format table excludes them on both Reach and HiDef.
 - **NPOT textures use the ordinary complete texture path** (`SOFTWARE-144`). Exact public transfer
   coverage includes 3x5 full and partial-row updates plus the 1x2/1x1 mip tail. The unchanged 3x5
   sampled-row scene passes on Software and EasyGL, while the shared sampler contracts cover NPOT
