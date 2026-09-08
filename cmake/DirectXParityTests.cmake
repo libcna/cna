@@ -623,6 +623,14 @@ function(cna_register_d3d_parity_tests)
         SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_rt_roundtrip_test.cpp"
         DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 600)
     cna_d3d_parity_fixture(
+        NAME RenderTarget_MsaaDepthContract TARGET rendertarget_msaa_depth DIRECTX12_ORDER 2060
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_msaa_depth_contract_test.cpp"
+        DIRECTX11_TIMEOUT 900 DIRECTX12_TIMEOUT 900)
+    cna_d3d_parity_fixture(
+        NAME RenderTarget_MsaaFirstReadback TARGET rendertarget_msaa_first_readback DIRECTX12_ORDER 2070
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_msaa_first_readback_test.cpp"
+        DIRECTX11_TIMEOUT 900 DIRECTX12_TIMEOUT 900)
+    cna_d3d_parity_fixture(
         NAME CompressedTexture_StorageContract TARGET compressed_texture_storage DIRECTX12_ORDER 1892
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/d3d_compressed_texture_contract_test.cpp"
         DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 600)

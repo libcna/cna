@@ -57,7 +57,7 @@
 //
 // PROCESS ISOLATION
 // -----------------
-// Each leg runs in its own forked child so a native abort in one cannot destroy the other results,
+// Each leg runs in its own child process so a native abort in one cannot destroy the other results,
 // and so "first read of the PROCESS" is a property this file can actually control. The supervisor
 // names SIGTRAP, SIGABRT, SIGSEGV and SIGALRM separately. No leg is permitted to abort.
 
@@ -93,9 +93,12 @@
 #include <csignal>
 #include <sys/wait.h>
 #include <unistd.h>
-#define CNA_GFX154_CAN_FORK 1
+#define CNA_GFX154_CAN_ISOLATE 1
+#elif defined(_WIN32)
+#include "common/WindowsProcessIsolation.hpp"
+#define CNA_GFX154_CAN_ISOLATE 1
 #else
-#define CNA_GFX154_CAN_FORK 0
+#define CNA_GFX154_CAN_ISOLATE 0
 #endif
 
 using namespace Microsoft::Xna::Framework;
@@ -127,6 +130,12 @@ namespace
     constexpr bool kRasterizes = true;
 #elif defined(CNA_RENDERER_SDL_GPU)
     constexpr const char* kRendererName = "SDL_GPU";
+    constexpr bool kRasterizes = true;
+#elif defined(CNA_RENDERER_DIRECTX11)
+    constexpr const char* kRendererName = "DIRECTX11";
+    constexpr bool kRasterizes = true;
+#elif defined(CNA_RENDERER_DIRECTX12)
+    constexpr const char* kRendererName = "DIRECTX12";
     constexpr bool kRasterizes = true;
 #else
 #error "REMED-GFX-154: this renderer has no declared first-readback contract."
@@ -1133,7 +1142,7 @@ namespace
         "G1", "G2",
     };
 
-#if CNA_GFX154_CAN_FORK
+#if CNA_GFX154_CAN_ISOLATE
     /// A leg that hangs must be reported as a TIMEOUT, not waited on forever.
     constexpr unsigned kLegTimeoutSeconds = 180;
 
@@ -1148,6 +1157,7 @@ namespace
         skipped = false;
         const std::string arg = std::string("--leg=") + legId;
 
+#if defined(__unix__) || defined(__APPLE__)
         const pid_t pid = fork();
         if (pid < 0)
         {
@@ -1210,6 +1220,37 @@ namespace
         std::printf("[FAIL] leg %s: neither exited nor signalled (status %d)\n", legId, status);
         std::fflush(stdout);
         return false;
+#else
+        const auto child = CNA::Examples::RunWindowsChild(
+            exePath, arg, kLegTimeoutSeconds * 1000u);
+        if (child.outcome == CNA::Examples::WindowsChildOutcome::TimedOut)
+        {
+            std::printf("[TIMEOUT] leg %s: no result within %u s (hang or readback stall)\n",
+                        legId, kLegTimeoutSeconds);
+            std::fflush(stdout);
+            return false;
+        }
+        if (child.outcome != CNA::Examples::WindowsChildOutcome::Exited)
+        {
+            std::printf("[FAIL] supervisor: Win32 child operation failed for leg %s (error %lu)\n",
+                        legId, static_cast<unsigned long>(child.systemError));
+            std::fflush(stdout);
+            return false;
+        }
+        if (child.exitCode == CNA::Examples::kSkipExitCode)
+        {
+            skipped = true;
+            std::printf("[SKIP] leg %s: no usable display\n", legId);
+            std::fflush(stdout);
+            return true;
+        }
+        if (child.exitCode == 0) return true;
+        std::printf("[%s] leg %s: exited %lu\n",
+                    CNA::Examples::IsWindowsAbnormalExit(child.exitCode) ? "FATAL" : "FAIL",
+                    legId, static_cast<unsigned long>(child.exitCode));
+        std::fflush(stdout);
+        return false;
+#endif
     }
 #endif
 }
@@ -1223,7 +1264,7 @@ int main(int argc, char** argv)
         if (a.rfind("--leg=", 0) == 0) onlyLeg = a.substr(6);
     }
 
-#if CNA_GFX154_CAN_FORK
+#if CNA_GFX154_CAN_ISOLATE
     if (onlyLeg.empty())
     {
         const int total = static_cast<int>(sizeof(kLegs) / sizeof(kLegs[0]));
