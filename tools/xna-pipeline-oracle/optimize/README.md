@@ -99,9 +99,14 @@ consistently wound face is still there, one index further on. `chain_j5_a15_b0` 
 edge, and the answer follows them and not it. So an edge's faces are looked up in input order, the
 first is taken, and a wrongly wound first candidate ends the run rather than being skipped.
 
-That rule is exact on this family and changes nothing on a manifold mesh, where an edge has two
-faces and the other one is always the consistently wound one -- so it does not touch the two
-manifold decisions below.
+That rule is exact on this family, and putting it into `model.py` moves the reconstruction from
+135 of 372 probes to **179** -- so it is not only about pendant triangles. Three readings of "the
+face across this edge" were scored: taking the first face listed on the edge and ending the run
+where it is used or wrongly wound scores 179; skipping the face the walk stands on first scores
+160; taking the first *unused* face, which is what a plain adjacency walk does, scores 135. The
+first reading is the one kept, and it is what an edge-to-face table with one slot and first-write-
+wins would do. It still ends a closed fan's run after one face, which the corpus says it should
+not, so it is a better reading and not the whole of it.
 
 ## What is not settled## What is not settled
 

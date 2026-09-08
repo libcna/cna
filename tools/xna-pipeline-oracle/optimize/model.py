@@ -38,9 +38,22 @@ def walk(faces, seed_rule="minlive_highest_face", stop_rule="minlive_tie",
     order: List[int] = []
 
     def across(a, b):
+        """The face the walk crosses to over edge (a, b), by the rule batch eight measured.
+
+        An edge's faces are looked up in input order and the **first** one is the candidate: where
+        it is already used, or is wound the same way as the face the walk stands on -- which no
+        strip walk can enter -- the run ends, rather than the second candidate being tried
+        (`ins_f8_at07` against `ins_f8_at08`). Reading it that way scores 179 of 372 where skipping
+        the current face scores 160, and where taking the first *unused* face scores 135.
+        """
         for i in m.edges.get(frozenset((a, b)), ()):
-            if not used[i]:
-                return i
+            if used[i]:
+                return None
+            face = faces[i]
+            for x, y in ((face[0], face[1]), (face[1], face[2]), (face[2], face[0])):
+                if (x, y) == (b, a):
+                    return i
+            return None
         return None
 
     def age(v):
