@@ -6245,6 +6245,60 @@ if (!ProfileIsEs2ApiGeneration())
         surfaceState_.SetPresentationMode(static_cast<CnaPresentationMode>(mode));
     }
 
+    int EasyGLRenderer::ApplyMultiSampleCount(int requestedMultiSampleCount)
+    {
+        if (metagl::IsContextLost()) return GetMultiSampleCount();
+
+        int applied = requestedMultiSampleCount > 1 ? requestedMultiSampleCount : 1;
+        if (ProfileIsEs2ApiGeneration())
+        {
+            applied = 1;
+        }
+        else if (applied > 1)
+        {
+            GLint maxSamples = 0;
+            metagl::glGetIntegerv(::metagl::GetParameter::MaxSamples, &maxSamples);
+            applied = std::min(applied, static_cast<int>(maxSamples));
+            if (applied < 2) applied = 1;
+        }
+
+        if (applied == sampleCount_)
+        {
+            if (bound_->height == 0) BindDefaultFramebuffer();
+            return GetMultiSampleCount();
+        }
+
+        sampleCount_ = applied;
+        if (sampleCount_ > 1)
+        {
+            // A target-bound Reset is unusual but legal to reach through CNA's public surface.
+            // Defer replacing the default destination until it is selected again rather than
+            // stealing the active render-target binding here.
+            if (bound_->height == 0)
+            {
+                int width = 0;
+                int height = 0;
+                surfaceState_.GetDrawableSize(width, height);
+                CreateMsaaBuffers(width, height);
+                msaaFbo_.bind(::easygl::FramebufferTarget::Framebuffer);
+            }
+        }
+        else
+        {
+            if (bound_->height == 0)
+                ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::Framebuffer);
+            msaaFbo_.destroy();
+            msaaColorRbo_.destroy();
+            msaaDepthRbo_.destroy();
+            msaaW_ = 0;
+            msaaH_ = 0;
+            msaaStorageDepthFormat_ = -1;
+        }
+
+        ApplyCurrentDepthStencilAvailability();
+        return GetMultiSampleCount();
+    }
+
     void EasyGLRenderer::SetSwapInterval(int interval)
     {
         // Recorded as well as forwarded. Whether the driver HONOURS an interval is the driver's

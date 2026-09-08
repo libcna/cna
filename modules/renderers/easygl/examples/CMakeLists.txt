@@ -1352,7 +1352,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_easygl_test(cna_test_easygl_presentation_msaa_contract
                         ${CNA_GRAPHICS_EXAMPLES_DIR}/presentation_msaa_contract_test.cpp)
         cna_register_renderer_test(NAME EasyGL_PresentationMsaaContract
-            COMMAND cna_test_easygl_presentation_msaa_contract 0
+            COMMAND cna_test_easygl_presentation_msaa_contract 4
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_vertexbuffer_setdata

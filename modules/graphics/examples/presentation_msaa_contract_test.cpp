@@ -123,6 +123,21 @@ protected:
                   disabledPixel.getBProperty() == 0,
               "single-sample backbuffer draws normally after sample storage is released");
 
+        graphics_->setPreferMultiSamplingProperty(true);
+        graphics_->ApplyChanges();
+        Check(device.getPresentationParametersProperty().getMultiSampleCountProperty()
+                  == expectedSamples &&
+                  renderer.GetMultiSampleCount() == expectedSamples,
+              "re-enabling PreferMultiSampling restores backbuffer sample storage");
+
+        device.setBlendStateProperty(firstSampleOnly);
+        device.Clear(Color::Black);
+        DrawFullScreen(device, Color::Red);
+        const Color reenabledPixel = ReadCenter(device);
+        Check(Near(reenabledPixel.getRProperty(), expectedRed) &&
+                  reenabledPixel.getGProperty() == 0 && reenabledPixel.getBProperty() == 0,
+              "re-enabled backbuffer exposes independent sample-mask output again");
+
         std::printf("=== %d/%d PASS ===\n", passed_, total_);
         result_ = passed_ == total_ ? 0 : 1;
         Exit();

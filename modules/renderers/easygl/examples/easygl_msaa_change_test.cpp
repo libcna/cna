@@ -1,39 +1,19 @@
 // SPDX-License-Identifier: MS-PL
-// Task 229: Verify MSAA MultiSampleCount changes after device creation.
+// Task 229/SOFTWARE-182: Verify MSAA MultiSampleCount changes after device creation.
 //
-// MultiSampleCount is applied to the EasyGL renderer only at construction time
-// (via GraphicsRendererCreateArgs::multiSampleCount). There is no
-// IGraphicsRenderer::SetMultiSampleCount() — changing the sample count at
-// runtime would require recreating the renderer, which is not yet implemented.
-//
-// Task 902: GraphicsDeviceManager::applyToExistingRenderer() now calls the real
-// GraphicsDevice::Reset(), which writes the renderer's actual, honestly-reported
-// applied MultiSampleCount (IGraphicsRenderer::ApplyMultiSampleCount(), which for
-// EasyGL just echoes GetMultiSampleCount() since it can't reconfigure post-
-// construction) back into the stored PresentationParameters — matching real FNA's
-// PresentationParameters.MultiSampleCount = FNA3D_GetMaxMultiSampleCount(...)
-// write-back after FNA3D_ResetBackbuffer(). This means toggling
-// preferMultiSampling via ApplyChanges() on an *already-constructed* EasyGL
-// device can no longer retroactively report MultiSampleCount=8 in the PP: the
-// renderer genuinely never engaged MSAA, so honestly reports back 0.
+// EasyGL owns a faux multisample backbuffer FBO, so Reset can replace those attachments without
+// recreating the GL context. GraphicsDevice writes the real driver-clamped value returned by
+// ApplyMultiSampleCount() back into PresentationParameters, matching FNA's reset contract.
 //
 // The invariants this test verifies:
 //   1. GDM with preferMultiSampling=false → device PP stores MultiSampleCount=0.
-//   2. GDM with preferMultiSampling=true, applied via ApplyChanges() on an
-//      already-constructed device (this device was first created with
-//      preferMultiSampling=false) → device PP stores MultiSampleCount=0, since
-//      EasyGL cannot actually engage MSAA post-construction and now honestly
-//      reports that back (does not throw).
-//   3. Direct GraphicsDevice::SetPresentationParameters() with arbitrary
-//      sample counts stores the value — does not throw (bypasses Reset()'s
-//      ApplyMultiSampleCount() write-back entirely).
-//
-// What is NOT tested: actual MSAA rendering quality (requires pixel readback
-// and a rendered scene with geometry edges — out of scope for this task), nor
-// MultiSampleCount reaching the renderer when preferMultiSampling=true is set
-// *before* the device's first construction (see vulkan_msaa_test.cpp, Task 902,
-// for that scenario on a renderer that does support runtime MSAA reconfiguration).
+//   2. GDM with preferMultiSampling=true on the already-created device allocates a real supported
+//      count and reports the same count from both GraphicsDevice and the renderer.
+//   3. Disabling releases that storage.
+//   4. CNAEXT SetPresentationParameters remains store-only but reports the currently applied count
+//      instead of echoing an unapplied request.
 
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -63,13 +43,13 @@ class MsaaChangeTest : public Game
         check(actual == expected, buf);
     }
 
-    void directSet(GraphicsDevice& dev, int count, const char* label)
+    void directSet(GraphicsDevice& dev, int count, int expected, const char* label)
     {
         PresentationParameters pp = dev.getPresentationParametersProperty().Clone();
         pp.setMultiSampleCountProperty(count);
         dev.SetPresentationParameters(pp);
         checkCount(dev.getPresentationParametersProperty().getMultiSampleCountProperty(),
-                   count, label);
+                   expected, label);
     }
 
 protected:
@@ -81,13 +61,14 @@ protected:
         checkCount(dev.getPresentationParametersProperty().getMultiSampleCountProperty(),
                    0, "GDM default MultiSampleCount=0 (preferMultiSampling=false)");
 
-        // Enable MSAA via GDM on an already-constructed EasyGL device — Task 902's
-        // Reset()-driven ApplyMultiSampleCount() write-back means the PP now honestly
-        // stores 0 (EasyGL cannot engage MSAA post-construction), not the requested 8.
+        // Enable MSAA via GDM on an already-constructed EasyGL device.
         gdm_->setPreferMultiSamplingProperty(true);
         gdm_->ApplyChanges();
-        checkCount(dev.getPresentationParametersProperty().getMultiSampleCountProperty(),
-                   0, "GDM preferMultiSampling=true on existing device → MultiSampleCount=0 in PP (EasyGL can't reconfigure post-construction)");
+        const int applied = dev.getPresentationParametersProperty().getMultiSampleCountProperty();
+        check(applied > 1 && applied <= 8,
+              "GDM preferMultiSampling=true allocates a supported multisample count");
+        checkCount(dev.GetRenderer().GetMultiSampleCount(), applied,
+                   "renderer and PresentationParameters report the same applied count");
         check(gdm_->getPreferMultiSamplingProperty(),
               "GDM getter returns true after setPreferMultiSampling(true)");
 
@@ -97,12 +78,13 @@ protected:
         checkCount(dev.getPresentationParametersProperty().getMultiSampleCountProperty(),
                    0, "GDM preferMultiSampling=false → MultiSampleCount=0 in PP");
 
-        // Direct path — arbitrary values round-trip in PP; renderer is unchanged
-        directSet(dev, 0, "Direct SetPP MultiSampleCount=0 stored");
-        directSet(dev, 1, "Direct SetPP MultiSampleCount=1 stored");
-        directSet(dev, 2, "Direct SetPP MultiSampleCount=2 stored");
-        directSet(dev, 4, "Direct SetPP MultiSampleCount=4 stored");
-        directSet(dev, 8, "Direct SetPP MultiSampleCount=8 stored");
+        // Direct store-only path — the renderer stays single-sample and the stored state reports
+        // that applied result rather than an arbitrary request.
+        directSet(dev, 0, 0, "Direct SetPP MultiSampleCount=0 reports applied zero");
+        directSet(dev, 1, 0, "Direct SetPP MultiSampleCount=1 reports applied zero");
+        directSet(dev, 2, 0, "Direct SetPP MultiSampleCount=2 reports applied zero");
+        directSet(dev, 4, 0, "Direct SetPP MultiSampleCount=4 reports applied zero");
+        directSet(dev, 8, 0, "Direct SetPP MultiSampleCount=8 reports applied zero");
 
         Game::Initialize();
     }
