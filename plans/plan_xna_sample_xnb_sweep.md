@@ -404,6 +404,27 @@ Nothing this session does writes into either root: the sweep builds into
 the differential oracle into `build/xna-pipeline-oracle/`, and `find` over both
 roots returns no `cna-buildcontent.json` at all.
 
+### 11.4.1 The final qualification, 2026-09-08
+
+| run | result |
+|---|---|
+| `CnaContentPipelineTests` | **463 / 463**, no skips. |
+| `CnaContentTests` | 1,804 run, **1,790 passed**, 9 skipped, **5 failed** -- exactly the five `HEADLESS` failures §33.1 of `plan_xnapipeline_parity.md` records, and no others. |
+| `CnaMathTests` | **845 / 845**. |
+| `CnaContentPipelineTests` under **ASan + UBSan** (`build-asan/`, `-fsanitize=address,undefined -O0`) | **123 / 123** over the model, texture, font and reader-hardening suites, including the two fuzz rows that mutate a `.x` and an FBX byte by byte. **No sanitizer report of any kind.** |
+| `git diff --check` | clean. |
+| the corpus | run 16, `sweep.py` -> `classify.py` -> `taxonomy.py` over all 7,726. |
+
+One failure had to be chased rather than accepted: `CnaContentTests` came back with
+**six** rather than five, and the sixth was real -- `XNASWEEP-159`, a colour-key
+rule this campaign changed in one of the two routes a convergence test compares.
+A second, `XnaRouteScaling.TheCoordinatorIsNotQuadraticInTheNumberOfAssets`,
+failed once while a four-job sweep was running and passes on its own; it is a
+wall-clock ratio test and the machine was busy.
+
+`build-asan/` is 4.4 GB and is not needed for anything but this; it is
+gitignored and can be removed.
+
 ### 11.5 Next
 
 In the order the measurements put them:
