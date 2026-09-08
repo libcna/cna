@@ -409,12 +409,30 @@ configuration file, which `XNASWEEP-110` moved into the intermediate directory;
 
 ### 11.5 Next
 
-1. Re-run the sweep on the current binary after each batch of fixes; every fix
-   from `XNASWEEP-118` on moves a category.
-2. Run `classify.py` and split `differs` into `payload-identical` (LZX), the
-   float-tolerance rows and the rest.
-3. `.jpg` is measured and accepted; `.fbx` is measured through the genuine
-   importer (`XNASWEEP-121`) and `.x` through it too (`XNASWEEP-122`).
+In the order the measurements put them:
+
+1. **`XNASWEEP-149`.** Every reference that is still unexplained turns on the
+   order `MeshHelper.OptimizeForCache` puts a mesh's triangles in, or on a
+   number that follows from it. Twenty probes are committed with the graphics
+   oracle; the restart rule is identified and reproduces nine of them exactly.
+   What is left is a mesh whose strips run past the cap and a closed surface's
+   two poles.
+2. **`XNASWEEP-150`.** SAMPLE-142's skeletons and SAMPLE-138's `photograph.fbx`:
+   a root bone whose linear part XNA answers as the identity where the file
+   gives it a scaling or two quarter turns, with the translation divided by the
+   part that went missing. Fifteen references, and `Cube.fbx` says the switch is
+   not in the FBX.
+3. **`XNASWEEP-153`.** One number in `tank.fbx`, one float from the file's own,
+   in ten references.
+4. **`XNASWEEP-158`'s 367.** Nine samples whose references were built by a
+   hand-written runner rather than a `.contentproj`; the sweep maps projects, so
+   it reaches none of them.
+
+The partial `OptimizeForCache` model is deliberately **not** shipped. It
+reproduces the current behaviour exactly on a mesh with no shared vertices and
+nine of the twenty probes besides, so nothing that is identical today could
+regress -- but the meshes it does not reproduce would change without evidence,
+and a reorder fitted to nine shapes is a guess dressed as a fix.
 
 ---
 
