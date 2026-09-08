@@ -257,10 +257,13 @@ rather than always passing.
   sampled-row scene passes on Software and EasyGL, while the shared sampler contracts cover NPOT
   point/linear magnification, minification, per-resource dimensions and mip selection. There is no
   power-of-two padding, row-alignment special case or alternate sampling rule in the CPU backend.
-- **Complete classic `BlendState` equations are applied.** RGB and alpha source/destination
-  factors and functions are independent; `BlendFactor`, `ColorWriteChannels` and
-  `MultiSampleMask` are honored. All four MRT write-channel masks are retained; the classic stock
-  effect paths consume slot zero's mask because their sole fragment output is `COLOR0`.
+- **Complete classic `BlendState` equations are applied** (`SOFTWARE-152`). RGB and alpha
+  source/destination factors and functions are independent; `BlendFactor`, `ColorWriteChannels`
+  and `MultiSampleMask` are honored. A shared public target-readback matrix covers all 13 source
+  factors, every GL/FNA-valid destination factor and all five RGB/alpha functions in 35/35 checks
+  on both Software and EasyGL. Seven unchanged EasyGL preset/separate-state scenes also pass on
+  Software. All four MRT write-channel masks are retained; the classic stock effect paths consume
+  slot zero's mask because their sole fragment output is `COLOR0`.
 - **Classic 2D/cube sampler state is applied.** Point/linear minification and magnification,
   point/linear mip selection, independent U/V Wrap/Clamp/Mirror and per-slot state are covered by
   shared contracts. `TextureFilter::Anisotropic` computes the directional texel footprint, selects

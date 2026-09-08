@@ -1756,6 +1756,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_BlendState_BlendFactor COMMAND cna_test_easygl_blendstate_blendfactor
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # SOFTWARE-152: renderer-neutral analytic matrix for all 13 source factors, every valid
+        # destination factor and all five independent RGB/alpha blend functions.
+        cna_easygl_test(cna_test_easygl_blendstate_matrix
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/blend_state_matrix_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_BlendState_Matrix
+            COMMAND cna_test_easygl_blendstate_matrix TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 313: DepthStencilState.DepthBufferWriteEnable actually gates depth-buffer writes
         cna_easygl_test(cna_test_easygl_depthstencilstate_write_enable
                         easygl_depthstencilstate_write_enable_test.cpp)

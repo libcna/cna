@@ -355,6 +355,23 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_PresentationResetContract
         COMMAND cna_test_software_presentation_reset_contract TIMEOUT 30 LABELS "Software")
 
+    # SOFTWARE-152: run EasyGL's seven renderer-neutral preset/separate-state blend scenes
+    # unchanged, then cover a shared analytic matrix across every factor and function.
+    set(CNA_EASYGL_BLEND_DIR ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples)
+    foreach(CNA_BLEND_TEST IN ITEMS
+            opaque alphablend nonpremultiplied additive separate_functions separate_factors
+            blendfactor)
+        cna_software_test(cna_test_software_blendstate_${CNA_BLEND_TEST}
+            ${CNA_EASYGL_BLEND_DIR}/easygl_blendstate_${CNA_BLEND_TEST}_test.cpp)
+        cna_register_renderer_test(NAME Software_BlendState_${CNA_BLEND_TEST}
+            COMMAND cna_test_software_blendstate_${CNA_BLEND_TEST}
+            TIMEOUT 30 LABELS "Software")
+    endforeach()
+    cna_software_test(cna_test_software_blendstate_matrix
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/blend_state_matrix_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_BlendState_Matrix
+        COMMAND cna_test_software_blendstate_matrix TIMEOUT 30 LABELS "Software")
+
     # REMED-GFX-124: a RenderTarget2D must be readable and sampleable once it is no longer active --
     # GetData returns the rendered colour attachment (full level, rectangle, destination start index)
     # and the finished target samples as an ordinary texture through both SpriteBatch and a textured
