@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_modern.md MOD-2241: public Vulkan ComputeShader + StorageBuffer conformance.
+// plans/plan_modern.md MOD-2241/MOD-2242: public Vulkan compute/storage conformance.
 //
 // A  The selected queue, public capability, and all reported compute limits agree.
 // B  Non-SPIR-V input is rejected with a useful compile error rather than reaching the driver.
 // C  StorageBuffer's public CPU upload/readback round-trip preserves every element.
 // D  A three-SSBO SPIR-V vector add dispatch produces every expected result.
-// E  Binding/feature boundaries are explicit: out-of-range slots and pre-MOD-2242 scalar
-//    metadata fail by name, while image binding remains reported unsupported until MOD-2244.
-// F  The complete exercise produces no new Vulkan validation warnings or errors.
+// E  Reflected sparse SSBO slots and named int32/float32 push constants drive real output.
+// F  Unknown/mistyped names, undeclared/missing slots, and images fail explicitly.
+// G  Repeated dispatches reuse one descriptor set/layout and destruction reclaims both.
+// H  The complete exercise produces no new Vulkan validation warnings or errors.
 
 #include "CNA/Graphics/ComputeShader.hpp"
 #include "CNA/Graphics/StorageBuffer.hpp"
@@ -18,6 +19,7 @@
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <cstdio>
@@ -103,10 +105,104 @@ namespace
         0x00000028u, 0x00000027u, 0x000100fdu, 0x00010038u,
     };
 
+    // Unoptimized shaderc output keeps OpMemberName records, which are the Vulkan-side metadata
+    // required by ComputeShader::setUniform(name, value). Its output buffer intentionally uses
+    // sparse binding 7, proving that the descriptor layout follows SPIR-V rather than a fixed
+    // four-slot public fiction:
+    //   layout(push_constant) uniform Params { int uCount; float uScale; } params;
+    //   values[i] = (a[i] + b[i]) * params.uScale; // only while i < params.uCount
+    constexpr uint32_t kScaledVectorAddSpirV[] = {
+        0x07230203u, 0x00010000u, 0x000d000bu, 0x0000003eu, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
+        0x00000001u, 0x4c534c47u, 0x6474732eu, 0x3035342eu, 0x00000000u, 0x0003000eu, 0x00000000u, 0x00000001u,
+        0x0006000fu, 0x00000005u, 0x00000004u, 0x6e69616du, 0x00000000u, 0x0000000bu, 0x00060010u, 0x00000004u,
+        0x00000011u, 0x00000040u, 0x00000001u, 0x00000001u, 0x00030003u, 0x00000002u, 0x000001c2u, 0x000a0004u,
+        0x475f4c47u, 0x4c474f4fu, 0x70635f45u, 0x74735f70u, 0x5f656c79u, 0x656e696cu, 0x7269645fu, 0x69746365u,
+        0x00006576u, 0x00080004u, 0x475f4c47u, 0x4c474f4fu, 0x6e695f45u, 0x64756c63u, 0x69645f65u, 0x74636572u,
+        0x00657669u, 0x00040005u, 0x00000004u, 0x6e69616du, 0x00000000u, 0x00030005u, 0x00000008u, 0x00000069u,
+        0x00080005u, 0x0000000bu, 0x475f6c67u, 0x61626f6cu, 0x766e496cu, 0x7461636fu, 0x496e6f69u, 0x00000044u,
+        0x00040005u, 0x00000013u, 0x61726150u, 0x0000736du, 0x00050006u, 0x00000013u, 0x00000000u, 0x756f4375u,
+        0x0000746eu, 0x00050006u, 0x00000013u, 0x00000001u, 0x61635375u, 0x0000656cu, 0x00040005u, 0x00000015u,
+        0x61726170u, 0x0000736du, 0x00030005u, 0x00000021u, 0x00000043u, 0x00050006u, 0x00000021u, 0x00000000u,
+        0x756c6176u, 0x00007365u, 0x00030005u, 0x00000023u, 0x00000000u, 0x00030005u, 0x00000026u, 0x00000041u,
+        0x00040006u, 0x00000026u, 0x00000000u, 0x00000061u, 0x00030005u, 0x00000028u, 0x00000000u, 0x00030005u,
+        0x0000002eu, 0x00000042u, 0x00040006u, 0x0000002eu, 0x00000000u, 0x00000062u, 0x00030005u, 0x00000030u,
+        0x00000000u, 0x00040047u, 0x0000000bu, 0x0000000bu, 0x0000001cu, 0x00030047u, 0x00000013u, 0x00000002u,
+        0x00050048u, 0x00000013u, 0x00000000u, 0x00000023u, 0x00000000u, 0x00050048u, 0x00000013u, 0x00000001u,
+        0x00000023u, 0x00000004u, 0x00040047u, 0x00000020u, 0x00000006u, 0x00000004u, 0x00030047u, 0x00000021u,
+        0x00000003u, 0x00040048u, 0x00000021u, 0x00000000u, 0x00000019u, 0x00050048u, 0x00000021u, 0x00000000u,
+        0x00000023u, 0x00000000u, 0x00030047u, 0x00000023u, 0x00000019u, 0x00040047u, 0x00000023u, 0x00000021u,
+        0x00000007u, 0x00040047u, 0x00000023u, 0x00000022u, 0x00000000u, 0x00040047u, 0x00000025u, 0x00000006u,
+        0x00000004u, 0x00030047u, 0x00000026u, 0x00000003u, 0x00040048u, 0x00000026u, 0x00000000u, 0x00000018u,
+        0x00050048u, 0x00000026u, 0x00000000u, 0x00000023u, 0x00000000u, 0x00030047u, 0x00000028u, 0x00000018u,
+        0x00040047u, 0x00000028u, 0x00000021u, 0x00000000u, 0x00040047u, 0x00000028u, 0x00000022u, 0x00000000u,
+        0x00040047u, 0x0000002du, 0x00000006u, 0x00000004u, 0x00030047u, 0x0000002eu, 0x00000003u, 0x00040048u,
+        0x0000002eu, 0x00000000u, 0x00000018u, 0x00050048u, 0x0000002eu, 0x00000000u, 0x00000023u, 0x00000000u,
+        0x00030047u, 0x00000030u, 0x00000018u, 0x00040047u, 0x00000030u, 0x00000021u, 0x00000001u, 0x00040047u,
+        0x00000030u, 0x00000022u, 0x00000000u, 0x00040047u, 0x0000003du, 0x0000000bu, 0x00000019u, 0x00020013u,
+        0x00000002u, 0x00030021u, 0x00000003u, 0x00000002u, 0x00040015u, 0x00000006u, 0x00000020u, 0x00000000u,
+        0x00040020u, 0x00000007u, 0x00000007u, 0x00000006u, 0x00040017u, 0x00000009u, 0x00000006u, 0x00000003u,
+        0x00040020u, 0x0000000au, 0x00000001u, 0x00000009u, 0x0004003bu, 0x0000000au, 0x0000000bu, 0x00000001u,
+        0x0004002bu, 0x00000006u, 0x0000000cu, 0x00000000u, 0x00040020u, 0x0000000du, 0x00000001u, 0x00000006u,
+        0x00040015u, 0x00000011u, 0x00000020u, 0x00000001u, 0x00030016u, 0x00000012u, 0x00000020u, 0x0004001eu,
+        0x00000013u, 0x00000011u, 0x00000012u, 0x00040020u, 0x00000014u, 0x00000009u, 0x00000013u, 0x0004003bu,
+        0x00000014u, 0x00000015u, 0x00000009u, 0x0004002bu, 0x00000011u, 0x00000016u, 0x00000000u, 0x00040020u,
+        0x00000017u, 0x00000009u, 0x00000011u, 0x00020014u, 0x0000001bu, 0x0003001du, 0x00000020u, 0x00000012u,
+        0x0003001eu, 0x00000021u, 0x00000020u, 0x00040020u, 0x00000022u, 0x00000002u, 0x00000021u, 0x0004003bu,
+        0x00000022u, 0x00000023u, 0x00000002u, 0x0003001du, 0x00000025u, 0x00000012u, 0x0003001eu, 0x00000026u,
+        0x00000025u, 0x00040020u, 0x00000027u, 0x00000002u, 0x00000026u, 0x0004003bu, 0x00000027u, 0x00000028u,
+        0x00000002u, 0x00040020u, 0x0000002au, 0x00000002u, 0x00000012u, 0x0003001du, 0x0000002du, 0x00000012u,
+        0x0003001eu, 0x0000002eu, 0x0000002du, 0x00040020u, 0x0000002fu, 0x00000002u, 0x0000002eu, 0x0004003bu,
+        0x0000002fu, 0x00000030u, 0x00000002u, 0x0004002bu, 0x00000011u, 0x00000035u, 0x00000001u, 0x00040020u,
+        0x00000036u, 0x00000009u, 0x00000012u, 0x0004002bu, 0x00000006u, 0x0000003bu, 0x00000040u, 0x0004002bu,
+        0x00000006u, 0x0000003cu, 0x00000001u, 0x0006002cu, 0x00000009u, 0x0000003du, 0x0000003bu, 0x0000003cu,
+        0x0000003cu, 0x00050036u, 0x00000002u, 0x00000004u, 0x00000000u, 0x00000003u, 0x000200f8u, 0x00000005u,
+        0x0004003bu, 0x00000007u, 0x00000008u, 0x00000007u, 0x00050041u, 0x0000000du, 0x0000000eu, 0x0000000bu,
+        0x0000000cu, 0x0004003du, 0x00000006u, 0x0000000fu, 0x0000000eu, 0x0003003eu, 0x00000008u, 0x0000000fu,
+        0x0004003du, 0x00000006u, 0x00000010u, 0x00000008u, 0x00050041u, 0x00000017u, 0x00000018u, 0x00000015u,
+        0x00000016u, 0x0004003du, 0x00000011u, 0x00000019u, 0x00000018u, 0x0004007cu, 0x00000006u, 0x0000001au,
+        0x00000019u, 0x000500aeu, 0x0000001bu, 0x0000001cu, 0x00000010u, 0x0000001au, 0x000300f7u, 0x0000001eu,
+        0x00000000u, 0x000400fau, 0x0000001cu, 0x0000001du, 0x0000001eu, 0x000200f8u, 0x0000001du, 0x000100fdu,
+        0x000200f8u, 0x0000001eu, 0x0004003du, 0x00000006u, 0x00000024u, 0x00000008u, 0x0004003du, 0x00000006u,
+        0x00000029u, 0x00000008u, 0x00060041u, 0x0000002au, 0x0000002bu, 0x00000028u, 0x00000016u, 0x00000029u,
+        0x0004003du, 0x00000012u, 0x0000002cu, 0x0000002bu, 0x0004003du, 0x00000006u, 0x00000031u, 0x00000008u,
+        0x00060041u, 0x0000002au, 0x00000032u, 0x00000030u, 0x00000016u, 0x00000031u, 0x0004003du, 0x00000012u,
+        0x00000033u, 0x00000032u, 0x00050081u, 0x00000012u, 0x00000034u, 0x0000002cu, 0x00000033u, 0x00050041u,
+        0x00000036u, 0x00000037u, 0x00000015u, 0x00000035u, 0x0004003du, 0x00000012u, 0x00000038u, 0x00000037u,
+        0x00050085u, 0x00000012u, 0x00000039u, 0x00000034u, 0x00000038u, 0x00060041u, 0x0000002au, 0x0000003au,
+        0x00000023u, 0x00000016u, 0x00000024u, 0x0003003eu, 0x0000003au, 0x00000039u, 0x000100fdu, 0x00010038u
+    };
+
     std::string VectorAddProgram()
     {
         return std::string(
             reinterpret_cast<const char*>(kVectorAddSpirV), sizeof(kVectorAddSpirV));
+    }
+
+    std::string ScaledVectorAddProgram()
+    {
+        return std::string(
+            reinterpret_cast<const char*>(kScaledVectorAddSpirV),
+            sizeof(kScaledVectorAddSpirV));
+    }
+
+    std::string ScaledVectorWithoutFirstMemberNameProgram()
+    {
+        std::vector<uint32_t> words(
+            std::begin(kScaledVectorAddSpirV), std::end(kScaledVectorAddSpirV));
+        for (std::size_t cursor = 5; cursor < words.size();) {
+            const uint16_t wordCount = static_cast<uint16_t>(words[cursor] >> 16u);
+            const uint16_t opcode = static_cast<uint16_t>(words[cursor] & 0xffffu);
+            if (opcode == 6) {
+                // Turn one OpMemberName into an ignored OpName-shaped record. The native parser
+                // must refuse the now-incomplete name metadata before driver object creation.
+                words[cursor] = (words[cursor] & 0xffff0000u) | 5u;
+                break;
+            }
+            cursor += wordCount;
+        }
+        return std::string(
+            reinterpret_cast<const char*>(words.data()),
+            words.size() * sizeof(uint32_t));
     }
 }
 
@@ -177,6 +273,18 @@ protected:
         check(invalidRejected, "C invalid shader bytes are refused before dispatch",
               invalidMessage.empty() ? "no exception" : invalidMessage);
 
+        bool missingNameRejected = false;
+        std::string missingNameMessage;
+        try {
+            ComputeShader missingName(device, ScaledVectorWithoutFirstMemberNameProgram());
+        } catch (const std::runtime_error& error) {
+            missingNameMessage = error.what();
+            missingNameRejected = missingNameMessage.find("OpMemberName") != std::string::npos;
+        }
+        check(missingNameRejected,
+              "C stripped scalar-name metadata is refused before native object creation",
+              missingNameMessage.empty() ? "no exception" : missingNameMessage);
+
         std::vector<float> a(kElementCount);
         std::vector<float> b(kElementCount);
         std::vector<float> expected(kElementCount);
@@ -226,13 +334,11 @@ protected:
         } catch (const std::out_of_range&) {
             slotRejected = true;
         }
-        bool scalarRejected = false;
-        std::string scalarMessage;
+        bool unknownScalarRejected = false;
         try {
             vectorAdd.setUniform("uCount", static_cast<int>(kElementCount));
-        } catch (const std::runtime_error& error) {
-            scalarMessage = error.what();
-            scalarRejected = scalarMessage.find("MOD-2242") != std::string::npos;
+        } catch (const std::out_of_range&) {
+            unknownScalarRejected = true;
         }
         bool missingBindingRejected = false;
         try {
@@ -244,21 +350,111 @@ protected:
             missingBindingRejected =
                 std::string(error.what()).find("binding 2") != std::string::npos;
         }
-        check(slotRejected && scalarRejected && missingBindingRejected &&
+        check(slotRejected && unknownScalarRejected && missingBindingRejected &&
                   !vectorAdd.isImageBindingSupported(),
-              "F unimplemented or out-of-range bindings fail explicitly",
+              "F undeclared, unknown, missing, and image bindings fail explicitly",
               "slot4=" + std::string(slotRejected ? "refused" : "accepted") +
-                  " scalar=" + std::string(scalarRejected ? "refused" : "accepted") +
+                  " unknownScalar=" +
+                  std::string(unknownScalarRejected ? "refused" : "accepted") +
                   " missing2=" +
                   std::string(missingBindingRejected ? "refused" : "accepted") +
                   " imageSupport=" +
-                  std::string(vectorAdd.isImageBindingSupported() ? "true" : "false") +
-                  (scalarMessage.empty() ? "" : " message=" + scalarMessage));
+                  std::string(vectorAdd.isImageBindingSupported() ? "true" : "false"));
+
+        constexpr std::size_t kActiveCount = 173;
+        const std::size_t baselineLiveSets =
+            renderer->GetLiveComputeDescriptorSetCountEXT();
+        const std::size_t baselineLiveLayouts =
+            renderer->GetLiveComputePipelineLayoutCountEXT();
+        const uint64_t baselineSetAllocations =
+            renderer->GetComputeDescriptorSetAllocationCountEXT();
+        const uint64_t baselineLayoutCreations =
+            renderer->GetComputePipelineLayoutCreationCountEXT();
+        bool allocatedExactlyOnce = false;
+        bool countersStayedBounded = false;
+        bool scalarTypesRejected = false;
+        std::size_t scaledMismatch = kElementCount;
+        {
+            ComputeShader scaled(device, ScaledVectorAddProgram());
+            allocatedExactlyOnce =
+                renderer->GetLiveComputeDescriptorSetCountEXT() == baselineLiveSets + 1 &&
+                renderer->GetLiveComputePipelineLayoutCountEXT() == baselineLiveLayouts + 1 &&
+                renderer->GetComputeDescriptorSetAllocationCountEXT() ==
+                    baselineSetAllocations + 1 &&
+                renderer->GetComputePipelineLayoutCreationCountEXT() ==
+                    baselineLayoutCreations + 1;
+
+            scaled.bindStorageBuffer(0, inputA.getBuffer());
+            scaled.bindStorageBuffer(1, inputB.getBuffer());
+            scaled.bindStorageBuffer(7, output.getBuffer());
+            scaled.setUniform("uCount", static_cast<int>(kActiveCount));
+            output.setData(sentinel);
+            for (int iteration = 0; iteration < 32; ++iteration) {
+                scaled.setUniform("uScale", 0.25f + static_cast<float>(iteration) * 0.01f);
+                scaled.dispatch(static_cast<int>(kElementCount / 64));
+            }
+            scaled.setUniform("uScale", 0.5f);
+            scaled.dispatch(static_cast<int>(kElementCount / 64));
+
+            const std::vector<float> scaledActual = output.getData();
+            for (std::size_t i = 0; i < kElementCount; ++i) {
+                const float wanted = i < kActiveCount ? expected[i] * 0.5f : sentinel[i];
+                if (std::abs(scaledActual[i] - wanted) > 0.0001f) {
+                    scaledMismatch = i;
+                    break;
+                }
+            }
+
+            bool intAsFloatRejected = false;
+            bool floatAsIntRejected = false;
+            try {
+                scaled.setUniform("uCount", 1.0f);
+            } catch (const std::invalid_argument&) {
+                intAsFloatRejected = true;
+            }
+            try {
+                scaled.setUniform("uScale", 1);
+            } catch (const std::invalid_argument&) {
+                floatAsIntRejected = true;
+            }
+            scalarTypesRejected = intAsFloatRejected && floatAsIntRejected;
+            countersStayedBounded =
+                renderer->GetLiveComputeDescriptorSetCountEXT() == baselineLiveSets + 1 &&
+                renderer->GetLiveComputePipelineLayoutCountEXT() == baselineLiveLayouts + 1 &&
+                renderer->GetComputeDescriptorSetAllocationCountEXT() ==
+                    baselineSetAllocations + 1 &&
+                renderer->GetComputePipelineLayoutCreationCountEXT() ==
+                    baselineLayoutCreations + 1;
+        }
+
+        check(scaledMismatch == kElementCount,
+              "G sparse SSBO and named scalar metadata drive exact bounded output",
+              scaledMismatch == kElementCount
+                  ? std::to_string(kActiveCount) + " scaled, " +
+                        std::to_string(kElementCount - kActiveCount) + " untouched"
+                  : "first mismatch at " + std::to_string(scaledMismatch));
+        check(allocatedExactlyOnce && countersStayedBounded && scalarTypesRejected,
+              "H repeated dispatches reuse one typed descriptor/layout snapshot",
+              "iterations=33 setAllocations=" +
+                  std::to_string(renderer->GetComputeDescriptorSetAllocationCountEXT() -
+                                 baselineSetAllocations) +
+                  " layoutCreations=" +
+                  std::to_string(renderer->GetComputePipelineLayoutCreationCountEXT() -
+                                 baselineLayoutCreations) +
+                  " typeMismatch=" +
+                  std::string(scalarTypesRejected ? "refused" : "accepted"));
+        check(renderer->GetLiveComputeDescriptorSetCountEXT() == baselineLiveSets &&
+                  renderer->GetLiveComputePipelineLayoutCountEXT() == baselineLiveLayouts,
+              "I compute descriptor and pipeline-layout ownership is reclaimed",
+              "liveSets=" +
+                  std::to_string(renderer->GetLiveComputeDescriptorSetCountEXT()) +
+                  " liveLayouts=" +
+                  std::to_string(renderer->GetLiveComputePipelineLayoutCountEXT()));
 
         const std::size_t validationAfter = renderer->GetValidationMessagesEXT().size();
         check(VulkanRenderer::IsValidationActiveEXT() &&
                   validationAfter == validationBefore,
-              "G compute/storage operations add no Vulkan validation messages",
+              "J compute/storage operations add no Vulkan validation messages",
               "layer=" +
                   std::string(VulkanRenderer::IsValidationActiveEXT() ? "active" : "inactive") +
                   " before=" + std::to_string(validationBefore) +

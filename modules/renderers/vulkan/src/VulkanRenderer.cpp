@@ -13467,6 +13467,8 @@ namespace CNA::Internal::Renderers::Vulkan
         if (pipelineLayout_ != VK_NULL_HANDLE) {
             vkDestroyPipelineLayout(device, pipelineLayout_, nullptr);
             pipelineLayout_ = VK_NULL_HANDLE;
+            if (owner_->liveComputePipelineLayoutCountEXT_ > 0)
+                --owner_->liveComputePipelineLayoutCountEXT_;
         }
         if (shaderModule_ != VK_NULL_HANDLE) {
             vkDestroyShaderModule(device, shaderModule_, nullptr);
@@ -13475,6 +13477,9 @@ namespace CNA::Internal::Renderers::Vulkan
         if (descriptorPool_ != VK_NULL_HANDLE) {
             vkDestroyDescriptorPool(device, descriptorPool_, nullptr);
             descriptorPool_ = VK_NULL_HANDLE;
+            if (descriptorSet_ != VK_NULL_HANDLE &&
+                owner_->liveComputeDescriptorSetCountEXT_ > 0)
+                --owner_->liveComputeDescriptorSetCountEXT_;
             descriptorSet_ = VK_NULL_HANDLE;
         }
         if (descriptorSetLayout_ != VK_NULL_HANDLE) {
@@ -13486,19 +13491,26 @@ namespace CNA::Internal::Renderers::Vulkan
     void VulkanComputeShaderRenderer::ReleaseVulkanResources()
     {
         ReleaseProgramEXT();
-        storageBuffers_.fill(nullptr);
+        storageBuffers_.clear();
+        storageBindingSlots_.clear();
+        scalarSlots_.clear();
+        pushConstantBytes_.clear();
     }
 
     bool VulkanComputeShaderRenderer::CompileProgram(const std::string& computeSrc)
     {
         ReleaseProgramEXT();
         compileError_.clear();
-        requiredStorageBindings_.fill(false);
+        storageBindingSlots_.clear();
+        storageBuffers_.clear();
+        scalarSlots_.clear();
+        pushConstantBytes_.clear();
         if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE) {
             compileError_ = "Vulkan compute shader: renderer device is unavailable";
             return false;
         }
-        if ((computeSrc.size() & 3u) != 0 || computeSrc.size() < sizeof(uint32_t)) {
+        if ((computeSrc.size() & 3u) != 0 ||
+            computeSrc.size() < 5 * sizeof(uint32_t)) {
             compileError_ = "Vulkan compute shader: source must be a complete SPIR-V word stream";
             return false;
         }
@@ -13510,17 +13522,71 @@ namespace CNA::Internal::Renderers::Vulkan
             return false;
         }
 
-        // Read only the two decorations needed to make unbinding safe. A descriptor set cannot
-        // legally retain a destroyed VkBuffer, and Vulkan has no core "null descriptor" in the
-        // version this renderer requests. Knowing which set-0 binding numbers the module declares
-        // lets DispatchEXT reject a missing required buffer before it submits the stale set. This
-        // is not public reflection or MOD-2242's semantic constant metadata; it is the minimum
-        // lifetime fact required by IComputeShaderRenderer::BindStorageBuffer(nullptr).
+        struct PointerType
+        {
+            uint32_t storageClass = 0;
+            uint32_t pointeeType = 0;
+        };
+        struct Variable
+        {
+            uint32_t pointerType = 0;
+            uint32_t storageClass = 0;
+        };
+        struct ScalarType
+        {
+            ScalarKind kind = ScalarKind::Int32;
+            bool supported = false;
+        };
+
+        constexpr uint16_t OpMemberName = 6;
+        constexpr uint16_t OpTypeInt = 21;
+        constexpr uint16_t OpTypeFloat = 22;
+        constexpr uint16_t OpTypeStruct = 30;
+        constexpr uint16_t OpTypePointer = 32;
+        constexpr uint16_t OpVariable = 59;
         constexpr uint16_t OpDecorate = 71;
+        constexpr uint16_t OpMemberDecorate = 72;
+        constexpr uint32_t DecorationBlock = 2;
+        constexpr uint32_t DecorationBufferBlock = 3;
         constexpr uint32_t DecorationBinding = 33;
         constexpr uint32_t DecorationDescriptorSet = 34;
+        constexpr uint32_t DecorationOffset = 35;
+        constexpr uint32_t StorageClassUniformConstant = 0;
+        constexpr uint32_t StorageClassUniform = 2;
+        constexpr uint32_t StorageClassPushConstant = 9;
+        constexpr uint32_t StorageClassStorageBuffer = 12;
+
+        const auto memberKey = [](const uint32_t type, const uint32_t member) {
+            return (static_cast<uint64_t>(type) << 32u) | member;
+        };
+        const auto decodeLiteralString = [](
+            const uint32_t* data, const std::size_t count, bool& complete) {
+            std::string value;
+            value.reserve(count * sizeof(uint32_t));
+            complete = false;
+            for (std::size_t i = 0; i < count && !complete; ++i) {
+                for (unsigned byte = 0; byte < 4; ++byte) {
+                    const char ch = static_cast<char>((data[i] >> (byte * 8u)) & 0xffu);
+                    if (ch == '\0') {
+                        complete = true;
+                        break;
+                    }
+                    value.push_back(ch);
+                }
+            }
+            return value;
+        };
+
         std::unordered_map<uint32_t, uint32_t> bindingById;
         std::unordered_map<uint32_t, uint32_t> descriptorSetById;
+        std::unordered_map<uint32_t, PointerType> pointerTypes;
+        std::unordered_map<uint32_t, Variable> variables;
+        std::unordered_map<uint32_t, std::vector<uint32_t>> structMembers;
+        std::unordered_map<uint32_t, ScalarType> scalarTypes;
+        std::unordered_map<uint64_t, std::string> memberNames;
+        std::unordered_map<uint64_t, uint32_t> memberOffsets;
+        std::unordered_map<uint32_t, bool> blockTypes;
+        std::unordered_map<uint32_t, bool> bufferBlockTypes;
         for (std::size_t cursor = 5; cursor < words.size();)
         {
             const uint32_t instruction = words[cursor];
@@ -13530,27 +13596,202 @@ namespace CNA::Internal::Renderers::Vulkan
                 compileError_ = "Vulkan compute shader: malformed SPIR-V instruction stream";
                 return false;
             }
-            if (opcode == OpDecorate && wordCount >= 4) {
+            if (opcode == OpMemberName && wordCount >= 4) {
+                bool complete = false;
+                std::string name = decodeLiteralString(
+                    &words[cursor + 3], wordCount - 3, complete);
+                if (!complete) {
+                    compileError_ =
+                        "Vulkan compute shader: unterminated SPIR-V member name";
+                    return false;
+                }
+                memberNames[memberKey(words[cursor + 1], words[cursor + 2])] =
+                    std::move(name);
+            } else if (opcode == OpTypeInt && wordCount == 4) {
+                const bool isInt32 = words[cursor + 2] == 32 && words[cursor + 3] == 1;
+                scalarTypes[words[cursor + 1]] = {ScalarKind::Int32, isInt32};
+            } else if (opcode == OpTypeFloat && wordCount == 3) {
+                scalarTypes[words[cursor + 1]] = {
+                    ScalarKind::Float32, words[cursor + 2] == 32};
+            } else if (opcode == OpTypeStruct && wordCount >= 2) {
+                structMembers[words[cursor + 1]] = std::vector<uint32_t>(
+                    words.begin() + static_cast<std::ptrdiff_t>(cursor + 2),
+                    words.begin() + static_cast<std::ptrdiff_t>(cursor + wordCount));
+            } else if (opcode == OpTypePointer && wordCount == 4) {
+                pointerTypes[words[cursor + 1]] = {
+                    words[cursor + 2], words[cursor + 3]};
+            } else if (opcode == OpVariable && wordCount >= 4) {
+                variables[words[cursor + 2]] = {
+                    words[cursor + 1], words[cursor + 3]};
+            } else if (opcode == OpDecorate && wordCount >= 3) {
                 const uint32_t target = words[cursor + 1];
                 const uint32_t decoration = words[cursor + 2];
-                if (decoration == DecorationBinding)
+                if (decoration == DecorationBlock)
+                    blockTypes[target] = true;
+                else if (decoration == DecorationBufferBlock)
+                    bufferBlockTypes[target] = true;
+                else if (decoration == DecorationBinding && wordCount >= 4)
                     bindingById[target] = words[cursor + 3];
-                else if (decoration == DecorationDescriptorSet)
+                else if (decoration == DecorationDescriptorSet && wordCount >= 4)
                     descriptorSetById[target] = words[cursor + 3];
+            } else if (opcode == OpMemberDecorate && wordCount >= 4 &&
+                       words[cursor + 3] == DecorationOffset) {
+                if (wordCount < 5) {
+                    compileError_ =
+                        "Vulkan compute shader: malformed SPIR-V member Offset decoration";
+                    return false;
+                }
+                memberOffsets[memberKey(words[cursor + 1], words[cursor + 2])] =
+                    words[cursor + 4];
             }
             cursor += wordCount;
         }
-        for (const auto& [target, binding] : bindingById)
+
+        for (const auto& [variableId, variable] : variables)
         {
-            const auto set = descriptorSetById.find(target);
-            if (set == descriptorSetById.end() || set->second != 0) continue;
-            if (binding >= static_cast<uint32_t>(StorageBindingCount)) {
+            const auto pointerIt = pointerTypes.find(variable.pointerType);
+            if (pointerIt == pointerTypes.end()) {
                 compileError_ =
-                    "Vulkan compute shader: set 0 storage binding " +
-                    std::to_string(binding) + " exceeds the supported range [0, 3]";
+                    "Vulkan compute shader: SPIR-V variable has an unknown pointer type";
                 return false;
             }
-            requiredStorageBindings_[binding] = true;
+            const PointerType& pointer = pointerIt->second;
+            if (pointer.storageClass != variable.storageClass) {
+                compileError_ =
+                    "Vulkan compute shader: SPIR-V variable and pointer storage classes differ";
+                return false;
+            }
+
+            if (variable.storageClass == StorageClassPushConstant)
+            {
+                const auto membersIt = structMembers.find(pointer.pointeeType);
+                if (membersIt == structMembers.end() ||
+                    !blockTypes.contains(pointer.pointeeType)) {
+                    compileError_ =
+                        "Vulkan compute shader: push constants must use a reflected Block "
+                        "structure";
+                    return false;
+                }
+                if (!pushConstantBytes_.empty() || !scalarSlots_.empty()) {
+                    compileError_ =
+                        "Vulkan compute shader: multiple push-constant blocks are unsupported";
+                    return false;
+                }
+                uint32_t byteSize = 0;
+                std::unordered_map<uint32_t, std::string> nameByOffset;
+                for (std::size_t member = 0; member < membersIt->second.size(); ++member)
+                {
+                    const uint64_t key = memberKey(
+                        pointer.pointeeType, static_cast<uint32_t>(member));
+                    const auto nameIt = memberNames.find(key);
+                    const auto offsetIt = memberOffsets.find(key);
+                    const auto scalarIt = scalarTypes.find(membersIt->second[member]);
+                    if (nameIt == memberNames.end() || nameIt->second.empty()) {
+                        compileError_ =
+                            "Vulkan compute shader: every scalar push constant needs an "
+                            "OpMemberName for name-based binding";
+                        return false;
+                    }
+                    if (offsetIt == memberOffsets.end() || (offsetIt->second & 3u) != 0) {
+                        compileError_ =
+                            "Vulkan compute shader: push-constant member '" + nameIt->second +
+                            "' needs a four-byte-aligned Offset decoration";
+                        return false;
+                    }
+                    if (scalarIt == scalarTypes.end() || !scalarIt->second.supported) {
+                        compileError_ =
+                            "Vulkan compute shader: push-constant member '" + nameIt->second +
+                            "' is not a signed int32 or float32 scalar";
+                        return false;
+                    }
+                    if (const auto occupied = nameByOffset.find(offsetIt->second);
+                        occupied != nameByOffset.end()) {
+                        compileError_ =
+                            "Vulkan compute shader: push constants '" + occupied->second +
+                            "' and '" + nameIt->second + "' overlap at offset " +
+                            std::to_string(offsetIt->second);
+                        return false;
+                    }
+                    nameByOffset.emplace(offsetIt->second, nameIt->second);
+                    if (!scalarSlots_.emplace(
+                            nameIt->second,
+                            ScalarSlot{scalarIt->second.kind, offsetIt->second}).second) {
+                        compileError_ =
+                            "Vulkan compute shader: duplicate push-constant member name '" +
+                            nameIt->second + "'";
+                        return false;
+                    }
+                    if (offsetIt->second > std::numeric_limits<uint32_t>::max() - 4u) {
+                        compileError_ =
+                            "Vulkan compute shader: push-constant offset overflows its range";
+                        return false;
+                    }
+                    byteSize = std::max(byteSize, offsetIt->second + 4u);
+                }
+                if (byteSize == 0 || byteSize >
+                    owner_->physicalDeviceProperties_.limits.maxPushConstantsSize) {
+                    compileError_ =
+                        "Vulkan compute shader: reflected push-constant range exceeds the "
+                        "selected device limit";
+                    return false;
+                }
+                pushConstantBytes_.assign(byteSize, 0);
+                continue;
+            }
+
+            if (variable.storageClass != StorageClassUniformConstant &&
+                variable.storageClass != StorageClassUniform &&
+                variable.storageClass != StorageClassStorageBuffer)
+                continue;
+
+            const auto bindingIt = bindingById.find(variableId);
+            const auto setIt = descriptorSetById.find(variableId);
+            if (bindingIt == bindingById.end() || setIt == descriptorSetById.end()) {
+                compileError_ =
+                    "Vulkan compute shader: every descriptor resource needs explicit set and "
+                    "binding decorations";
+                return false;
+            }
+            if (setIt->second != 0) {
+                compileError_ =
+                    "Vulkan compute shader: only descriptor set 0 is supported; resource binding " +
+                    std::to_string(bindingIt->second) + " declares set " +
+                    std::to_string(setIt->second);
+                return false;
+            }
+
+            const bool isStorageBuffer =
+                (variable.storageClass == StorageClassStorageBuffer &&
+                 blockTypes.contains(pointer.pointeeType)) ||
+                (variable.storageClass == StorageClassUniform &&
+                 bufferBlockTypes.contains(pointer.pointeeType));
+            if (!isStorageBuffer) {
+                compileError_ =
+                    "Vulkan compute shader: set 0 binding " +
+                    std::to_string(bindingIt->second) +
+                    " is not a storage buffer; sampled/storage images remain MOD-2244 work";
+                return false;
+            }
+            if (std::find(storageBindingSlots_.begin(), storageBindingSlots_.end(),
+                          bindingIt->second) != storageBindingSlots_.end()) {
+                compileError_ =
+                    "Vulkan compute shader: duplicate set 0 storage binding " +
+                    std::to_string(bindingIt->second);
+                return false;
+            }
+            storageBindingSlots_.push_back(bindingIt->second);
+            storageBuffers_.emplace(bindingIt->second, nullptr);
+        }
+        std::sort(storageBindingSlots_.begin(), storageBindingSlots_.end());
+        const auto storageCount = static_cast<uint32_t>(storageBindingSlots_.size());
+        if (storageCount >
+                owner_->physicalDeviceProperties_.limits.maxPerStageDescriptorStorageBuffers ||
+            storageCount >
+                owner_->physicalDeviceProperties_.limits.maxDescriptorSetStorageBuffers) {
+            compileError_ =
+                "Vulkan compute shader: reflected storage-buffer count exceeds the selected "
+                "device descriptor limits";
+            return false;
         }
 
         VkShaderModuleCreateInfo moduleInfo{};
@@ -13566,60 +13807,75 @@ namespace CNA::Internal::Renderers::Vulkan
             return false;
         }
 
-        std::array<VkDescriptorSetLayoutBinding, StorageBindingCount> bindings{};
-        for (int i = 0; i < StorageBindingCount; ++i) {
-            bindings[static_cast<std::size_t>(i)].binding = static_cast<uint32_t>(i);
-            bindings[static_cast<std::size_t>(i)].descriptorType =
+        std::vector<VkDescriptorSetLayoutBinding> bindings(storageBindingSlots_.size());
+        for (std::size_t i = 0; i < storageBindingSlots_.size(); ++i) {
+            bindings[i].binding = storageBindingSlots_[i];
+            bindings[i].descriptorType =
                 VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            bindings[static_cast<std::size_t>(i)].descriptorCount = 1;
-            bindings[static_cast<std::size_t>(i)].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+            bindings[i].descriptorCount = 1;
+            bindings[i].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
         }
-        VkDescriptorSetLayoutCreateInfo setLayoutInfo{};
-        setLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        setLayoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-        setLayoutInfo.pBindings = bindings.data();
-        result = vkCreateDescriptorSetLayout(
-            owner_->device_, &setLayoutInfo, nullptr, &descriptorSetLayout_);
-        if (result != VK_SUCCESS) {
-            compileError_ = "Vulkan compute shader: vkCreateDescriptorSetLayout failed (" +
-                std::to_string(static_cast<int>(result)) + ")";
-            ReleaseProgramEXT();
-            return false;
+        if (!bindings.empty()) {
+            VkDescriptorSetLayoutCreateInfo setLayoutInfo{};
+            setLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+            setLayoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+            setLayoutInfo.pBindings = bindings.data();
+            result = vkCreateDescriptorSetLayout(
+                owner_->device_, &setLayoutInfo, nullptr, &descriptorSetLayout_);
+            if (result != VK_SUCCESS) {
+                compileError_ = "Vulkan compute shader: vkCreateDescriptorSetLayout failed (" +
+                    std::to_string(static_cast<int>(result)) + ")";
+                ReleaseProgramEXT();
+                return false;
+            }
+
+            VkDescriptorPoolSize poolSize{};
+            poolSize.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            poolSize.descriptorCount = storageCount;
+            VkDescriptorPoolCreateInfo poolInfo{};
+            poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+            poolInfo.maxSets = 1;
+            poolInfo.poolSizeCount = 1;
+            poolInfo.pPoolSizes = &poolSize;
+            result = vkCreateDescriptorPool(owner_->device_, &poolInfo, nullptr, &descriptorPool_);
+            if (result != VK_SUCCESS) {
+                compileError_ = "Vulkan compute shader: vkCreateDescriptorPool failed (" +
+                    std::to_string(static_cast<int>(result)) + ")";
+                ReleaseProgramEXT();
+                return false;
+            }
+
+            VkDescriptorSetAllocateInfo allocateInfo{};
+            allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+            allocateInfo.descriptorPool = descriptorPool_;
+            allocateInfo.descriptorSetCount = 1;
+            allocateInfo.pSetLayouts = &descriptorSetLayout_;
+            result = vkAllocateDescriptorSets(owner_->device_, &allocateInfo, &descriptorSet_);
+            if (result != VK_SUCCESS) {
+                compileError_ = "Vulkan compute shader: vkAllocateDescriptorSets failed (" +
+                    std::to_string(static_cast<int>(result)) + ")";
+                ReleaseProgramEXT();
+                return false;
+            }
+            ++owner_->liveComputeDescriptorSetCountEXT_;
+            ++owner_->computeDescriptorSetAllocationCountEXT_;
         }
 
-        VkDescriptorPoolSize poolSize{};
-        poolSize.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        poolSize.descriptorCount = StorageBindingCount;
-        VkDescriptorPoolCreateInfo poolInfo{};
-        poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-        poolInfo.maxSets = 1;
-        poolInfo.poolSizeCount = 1;
-        poolInfo.pPoolSizes = &poolSize;
-        result = vkCreateDescriptorPool(owner_->device_, &poolInfo, nullptr, &descriptorPool_);
-        if (result != VK_SUCCESS) {
-            compileError_ = "Vulkan compute shader: vkCreateDescriptorPool failed (" +
-                std::to_string(static_cast<int>(result)) + ")";
-            ReleaseProgramEXT();
-            return false;
+        VkPushConstantRange pushConstantRange{};
+        if (!pushConstantBytes_.empty()) {
+            pushConstantRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+            pushConstantRange.offset = 0;
+            pushConstantRange.size = static_cast<uint32_t>(pushConstantBytes_.size());
         }
-
-        VkDescriptorSetAllocateInfo allocateInfo{};
-        allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocateInfo.descriptorPool = descriptorPool_;
-        allocateInfo.descriptorSetCount = 1;
-        allocateInfo.pSetLayouts = &descriptorSetLayout_;
-        result = vkAllocateDescriptorSets(owner_->device_, &allocateInfo, &descriptorSet_);
-        if (result != VK_SUCCESS) {
-            compileError_ = "Vulkan compute shader: vkAllocateDescriptorSets failed (" +
-                std::to_string(static_cast<int>(result)) + ")";
-            ReleaseProgramEXT();
-            return false;
-        }
-
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        pipelineLayoutInfo.setLayoutCount = 1;
-        pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout_;
+        pipelineLayoutInfo.setLayoutCount = descriptorSetLayout_ != VK_NULL_HANDLE ? 1u : 0u;
+        pipelineLayoutInfo.pSetLayouts =
+            descriptorSetLayout_ != VK_NULL_HANDLE ? &descriptorSetLayout_ : nullptr;
+        pipelineLayoutInfo.pushConstantRangeCount =
+            pushConstantBytes_.empty() ? 0u : 1u;
+        pipelineLayoutInfo.pPushConstantRanges =
+            pushConstantBytes_.empty() ? nullptr : &pushConstantRange;
         result = vkCreatePipelineLayout(
             owner_->device_, &pipelineLayoutInfo, nullptr, &pipelineLayout_);
         if (result != VK_SUCCESS) {
@@ -13628,6 +13884,8 @@ namespace CNA::Internal::Renderers::Vulkan
             ReleaseProgramEXT();
             return false;
         }
+        ++owner_->liveComputePipelineLayoutCountEXT_;
+        ++owner_->computePipelineLayoutCreationCountEXT_;
 
         VkPipelineShaderStageCreateInfo stage{};
         stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -13656,34 +13914,52 @@ namespace CNA::Internal::Renderers::Vulkan
         owner_->boundComputeShader_ = this;
     }
 
-    void VulkanComputeShaderRenderer::SetUniformInt(const char* name, int /*value*/)
+    void VulkanComputeShaderRenderer::SetUniformInt(const char* name, const int value)
     {
-        throw std::runtime_error(
-            "Vulkan compute shader: scalar integer uniform '" +
-            std::string(name != nullptr ? name : "") +
-            "' requires MOD-2242 binding metadata and is not accepted yet");
+        if (!IsValid())
+            throw std::runtime_error(
+                "Vulkan compute shader: cannot set a scalar on an invalid program");
+        const std::string key = name != nullptr ? name : "";
+        const auto slot = scalarSlots_.find(key);
+        if (slot == scalarSlots_.end())
+            throw std::out_of_range(
+                "Vulkan compute shader: no reflected int32 push constant named '" + key + "'");
+        if (slot->second.kind != ScalarKind::Int32)
+            throw std::invalid_argument(
+                "Vulkan compute shader: push constant '" + key + "' is float32, not int32");
+        std::memcpy(pushConstantBytes_.data() + slot->second.offset, &value, sizeof(value));
     }
 
-    void VulkanComputeShaderRenderer::SetUniformFloat(const char* name, float /*value*/)
+    void VulkanComputeShaderRenderer::SetUniformFloat(const char* name, const float value)
     {
-        throw std::runtime_error(
-            "Vulkan compute shader: scalar float uniform '" +
-            std::string(name != nullptr ? name : "") +
-            "' requires MOD-2242 binding metadata and is not accepted yet");
+        if (!IsValid())
+            throw std::runtime_error(
+                "Vulkan compute shader: cannot set a scalar on an invalid program");
+        const std::string key = name != nullptr ? name : "";
+        const auto slot = scalarSlots_.find(key);
+        if (slot == scalarSlots_.end())
+            throw std::out_of_range(
+                "Vulkan compute shader: no reflected float32 push constant named '" + key + "'");
+        if (slot->second.kind != ScalarKind::Float32)
+            throw std::invalid_argument(
+                "Vulkan compute shader: push constant '" + key + "' is int32, not float32");
+        std::memcpy(pushConstantBytes_.data() + slot->second.offset, &value, sizeof(value));
     }
 
     void VulkanComputeShaderRenderer::BindStorageBuffer(
         const int binding, IStorageBufferRenderer* buffer)
     {
-        if (binding < 0 || binding >= StorageBindingCount)
+        if (binding < 0 ||
+            !storageBuffers_.contains(static_cast<uint32_t>(binding)))
             throw std::out_of_range(
-                "Vulkan compute shader: storage binding must be in [0, 3]");
+                "Vulkan compute shader: storage binding " + std::to_string(binding) +
+                " is not declared by this SPIR-V module in set 0");
         auto* native = dynamic_cast<VulkanStorageBufferRenderer*>(buffer);
         if (buffer != nullptr &&
             (native == nullptr || !native->IsOwnedByEXT(owner_)))
             throw std::invalid_argument(
                 "Vulkan compute shader: storage buffer belongs to another renderer");
-        storageBuffers_[static_cast<std::size_t>(binding)] = native;
+        storageBuffers_[static_cast<uint32_t>(binding)] = native;
     }
 
     void VulkanComputeShaderRenderer::BindImageTexture(
@@ -13703,8 +13979,10 @@ namespace CNA::Internal::Renderers::Vulkan
     void VulkanComputeShaderRenderer::ForgetStorageBufferEXT(
         const VulkanStorageBufferRenderer* buffer) noexcept
     {
-        for (auto& bound : storageBuffers_)
+        for (auto& [binding, bound] : storageBuffers_) {
+            static_cast<void>(binding);
             if (bound == buffer) bound = nullptr;
+        }
     }
 
     void VulkanComputeShaderRenderer::DispatchEXT(
@@ -13720,34 +13998,38 @@ namespace CNA::Internal::Renderers::Vulkan
                     "Vulkan compute shader: dispatch group count exceeds the device limit");
         }
 
-        for (int binding = 0; binding < StorageBindingCount; ++binding) {
-            if (requiredStorageBindings_[static_cast<std::size_t>(binding)] &&
-                storageBuffers_[static_cast<std::size_t>(binding)] == nullptr)
+        // Snapshot public bindings before command recording. MOD-2247 can enqueue the resulting
+        // immutable state without a later bind/setUniform call changing an already-issued dispatch.
+        const auto storageBuffers = storageBuffers_;
+        const auto pushConstantBytes = pushConstantBytes_;
+        for (const uint32_t binding : storageBindingSlots_) {
+            if (storageBuffers.at(binding) == nullptr)
                 throw std::runtime_error(
                     "Vulkan compute shader: required set 0 storage binding " +
                     std::to_string(binding) + " is not bound");
         }
 
-        std::array<VkDescriptorBufferInfo, StorageBindingCount> infos{};
-        std::array<VkWriteDescriptorSet, StorageBindingCount> writes{};
-        uint32_t writeCount = 0;
-        for (int binding = 0; binding < StorageBindingCount; ++binding) {
-            auto* buffer = storageBuffers_[static_cast<std::size_t>(binding)];
-            if (buffer == nullptr) continue;
-            auto& info = infos[writeCount];
+        std::vector<VkDescriptorBufferInfo> infos(storageBindingSlots_.size());
+        std::vector<VkWriteDescriptorSet> writes(storageBindingSlots_.size());
+        for (std::size_t i = 0; i < storageBindingSlots_.size(); ++i) {
+            const uint32_t binding = storageBindingSlots_[i];
+            auto* buffer = storageBuffers.at(binding);
+            auto& info = infos[i];
             info.buffer = buffer->GetBufferEXT();
             info.offset = 0;
             info.range = static_cast<VkDeviceSize>(buffer->GetByteSize());
-            auto& write = writes[writeCount];
+            auto& write = writes[i];
             write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             write.dstSet = descriptorSet_;
-            write.dstBinding = static_cast<uint32_t>(binding);
+            write.dstBinding = binding;
             write.descriptorCount = 1;
             write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
             write.pBufferInfo = &info;
-            ++writeCount;
         }
-        vkUpdateDescriptorSets(owner_->device_, writeCount, writes.data(), 0, nullptr);
+        if (!writes.empty()) {
+            vkUpdateDescriptorSets(owner_->device_, static_cast<uint32_t>(writes.size()),
+                                   writes.data(), 0, nullptr);
+        }
 
         VkCommandBuffer commandBuffer = owner_->BeginOneTimeCommands();
         VkMemoryBarrier hostToCompute{};
@@ -13759,9 +14041,16 @@ namespace CNA::Internal::Renderers::Vulkan
             commandBuffer, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
             0, 1, &hostToCompute, 0, nullptr, 0, nullptr);
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_);
-        vkCmdBindDescriptorSets(
-            commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout_, 0,
-            1, &descriptorSet_, 0, nullptr);
+        if (descriptorSet_ != VK_NULL_HANDLE) {
+            vkCmdBindDescriptorSets(
+                commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout_, 0,
+                1, &descriptorSet_, 0, nullptr);
+        }
+        if (!pushConstantBytes.empty()) {
+            vkCmdPushConstants(
+                commandBuffer, pipelineLayout_, VK_SHADER_STAGE_COMPUTE_BIT, 0,
+                static_cast<uint32_t>(pushConstantBytes.size()), pushConstantBytes.data());
+        }
         vkCmdDispatch(commandBuffer,
                       static_cast<uint32_t>(groupsX),
                       static_cast<uint32_t>(groupsY),
@@ -13826,10 +14115,11 @@ namespace CNA::Internal::Renderers::Vulkan
             && (graphicsQueueFlags_ & VK_QUEUE_COMPUTE_BIT) != 0
             && limits.maxComputeWorkGroupInvocations > 0
             && limits.maxPerStageDescriptorStorageBuffers >=
-                VulkanComputeShaderRenderer::StorageBindingCount
+                VulkanComputeShaderRenderer::BaselineStorageBindingCount
             && limits.maxDescriptorSetStorageBuffers >=
-                VulkanComputeShaderRenderer::StorageBindingCount
-            && limits.maxStorageBufferRange > 0;
+                VulkanComputeShaderRenderer::BaselineStorageBindingCount
+            && limits.maxStorageBufferRange > 0
+            && limits.maxPushConstantsSize >= 4;
     }
 
     int VulkanRenderer::GetMaxComputeWorkGroupCountEXT(const int axis) const

@@ -2,7 +2,7 @@
 
 ## Status of this document
 
-**Complete as of 2026-09-08 (`VULKAN-480`, updated by `REMED-GFX-203`, `MOD-2240` and `MOD-2241`), and written after the re-audits it depends on**
+**Complete as of 2026-09-08 (`VULKAN-480`, updated by `REMED-GFX-203` and `MOD-2240`–`MOD-2242`), and written after the re-audits it depends on**
 (`VULKAN-470`–`VULKAN-474`) so that what it claims was checked rather than remembered. Every
 section names the row that put it there and the test that keeps it true; a claim with no test named
 beside it is not in here.
@@ -70,19 +70,29 @@ Two entries need their sentence rather than a cell:
 
 ### Compute and storage buffers
 
-`MOD-2241`. **Test:** `Vulkan_ComputeStorageBuffer` — raw SPIR-V compute bytecode runs on the
-renderer’s existing graphics/compute queue. Descriptor set 0 exposes four direct storage-buffer
-bindings; the permanent oracle binds three host-visible coherent buffers and verifies all 256
-elements of `C = A + B` through the public `ComputeShader` and `StorageBuffer` wrappers. Invalid
-bytecode, foreign/out-of-range buffers, scalar uniforms and image/sampler bindings are refused by
-name rather than accepted and ignored.
+`MOD-2241`–`MOD-2242`. **Test:** `Vulkan_ComputeStorageBuffer` — raw SPIR-V compute bytecode runs on
+the renderer’s existing graphics/compute queue. Internal reflection builds descriptor set 0 from
+the storage-buffer bindings the module actually declares, including sparse slot numbers; there is
+no public descriptor API and no fixed four-slot layout. Named signed-int32 and float32 members of a
+SPIR-V push-constant `Block` map to `ComputeShader::setUniform`, with names, member offsets,
+four-byte alignment, types, range size and the device limit validated before native object
+creation. Other constant shapes and non-storage descriptors are rejected precisely rather than
+accepted and ignored. The permanent oracle proves all 256 elements of `C = A + B`, then uses sparse
+output slot 7 plus `uCount`/`uScale` to change only 173 elements.
+
+Each program allocates at most one descriptor set and one pipeline layout, reuses both across
+dispatches, snapshots resource/scalar bindings at dispatch issue time, and reclaims both at program
+destruction. Test-only live/cumulative native counters prove that 33 repeated dispatches allocate
+nothing further and that the live counts return to their baseline. Invalid or name-stripped
+bytecode, a missing or
+undeclared slot, an unknown/mistyped scalar and unsupported image operations all fail explicitly
+instead of becoming a silent no-op or a validation error.
 
 The v1 readback boundary is intentionally synchronous: dispatch records host-write → shader
 read/write and shader-write → host-read dependencies, submits on the existing queue and completes
 before a requested `StorageBuffer::getBytes`. `MOD-2247`–`MOD-2253` own integration into deferred
 public-call ordering and removal of routine waits; only explicit readback will remain synchronous.
-Name-based scalar/constant metadata is `MOD-2242`, and storage images are `MOD-2244`, so neither is
-claimed by this baseline.
+Storage images remain `MOD-2244` work and are not claimed here.
 
 ### Multi-stream vertex input
 

@@ -1155,15 +1155,15 @@ namespace CNA::Internal::Renderers::Vulkan
     /**
      * @brief SPIR-V compute pipeline implementing CNA's existing compute-shader seam.
      *
-     * plans/plan_modern.md MOD-2241. Set zero contains four direct storage-buffer slots. This
-     * baseline intentionally rejects scalar/name and image/sampler bindings until the metadata
-     * and resource work owned by MOD-2242/MOD-2244 exists; it never accepts and ignores them.
+     * plans/plan_modern.md MOD-2241/MOD-2242. SPIR-V reflection creates only the set-zero storage
+     * slots the module declares and maps named 32-bit scalar push-constant members. Image/sampler
+     * bindings remain an explicit MOD-2244 refusal; they are never accepted and ignored.
      */
     class VulkanComputeShaderRenderer final : public IComputeShaderRenderer
     {
     public:
-        /** @brief Number of direct storage-buffer binding points in the v1 Vulkan compute layout. */
-        static constexpr int StorageBindingCount = 4;
+        /** @brief Storage slots required by the permanent baseline vector-add oracle. */
+        static constexpr int BaselineStorageBindingCount = 3;
 
         /**
          * @brief Creates and compiles a compute program.
@@ -1188,7 +1188,7 @@ namespace CNA::Internal::Renderers::Vulkan
         void Bind() override;
 
         /**
-         * @brief Refuses name-based scalar integers until Vulkan binding metadata is available.
+         * @brief Updates a reflected 32-bit integer push-constant member by name.
          *
          * @param name Uniform name.
          * @param value Requested value.
@@ -1196,7 +1196,7 @@ namespace CNA::Internal::Renderers::Vulkan
         void SetUniformInt(const char* name, int value) override;
 
         /**
-         * @brief Refuses name-based scalar floats until Vulkan binding metadata is available.
+         * @brief Updates a reflected 32-bit float push-constant member by name.
          *
          * @param name Uniform name.
          * @param value Requested value.
@@ -1206,7 +1206,7 @@ namespace CNA::Internal::Renderers::Vulkan
         /**
          * @brief Binds a Vulkan storage buffer to descriptor set zero.
          *
-         * @param binding Direct SPIR-V binding index in the range [0, 3].
+         * @param binding Direct SPIR-V set-zero binding declared by this module.
          * @param buffer Buffer to bind, or null to unbind it.
          */
         void BindStorageBuffer(int binding, IStorageBufferRenderer* buffer) override;
@@ -1253,6 +1253,13 @@ namespace CNA::Internal::Renderers::Vulkan
         void DisconnectOwner() noexcept { owner_ = nullptr; }
 
     private:
+        enum class ScalarKind { Int32, Float32 };
+        struct ScalarSlot
+        {
+            ScalarKind kind = ScalarKind::Int32;
+            uint32_t offset = 0;
+        };
+
         void ReleaseProgramEXT();
 
         VulkanRenderer* owner_ = nullptr;
@@ -1262,8 +1269,10 @@ namespace CNA::Internal::Renderers::Vulkan
         VkDescriptorSet descriptorSet_ = VK_NULL_HANDLE;
         VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
         VkPipeline pipeline_ = VK_NULL_HANDLE;
-        std::array<VulkanStorageBufferRenderer*, StorageBindingCount> storageBuffers_{};
-        std::array<bool, StorageBindingCount> requiredStorageBindings_{};
+        std::vector<uint32_t> storageBindingSlots_;
+        std::unordered_map<uint32_t, VulkanStorageBufferRenderer*> storageBuffers_;
+        std::unordered_map<std::string, ScalarSlot> scalarSlots_;
+        std::vector<uint8_t> pushConstantBytes_;
         std::string compileError_;
     };
 
@@ -2675,6 +2684,30 @@ namespace CNA::Internal::Renderers::Vulkan
         {
             return oneTimeCommandWaitNanosEXT_;
         }
+
+        /** @brief Returns live descriptor sets owned by Vulkan compute programs. */
+        CNAEXT [[nodiscard]] std::size_t GetLiveComputeDescriptorSetCountEXT() const noexcept
+        {
+            return liveComputeDescriptorSetCountEXT_;
+        }
+
+        /** @brief Returns all Vulkan compute descriptor-set allocations since construction. */
+        CNAEXT [[nodiscard]] uint64_t GetComputeDescriptorSetAllocationCountEXT() const noexcept
+        {
+            return computeDescriptorSetAllocationCountEXT_;
+        }
+
+        /** @brief Returns live semantic pipeline layouts owned by Vulkan compute programs. */
+        CNAEXT [[nodiscard]] std::size_t GetLiveComputePipelineLayoutCountEXT() const noexcept
+        {
+            return liveComputePipelineLayoutCountEXT_;
+        }
+
+        /** @brief Returns all Vulkan compute pipeline-layout creations since construction. */
+        CNAEXT [[nodiscard]] uint64_t GetComputePipelineLayoutCreationCountEXT() const noexcept
+        {
+            return computePipelineLayoutCreationCountEXT_;
+        }
         /**
          * @brief Test-only: how many deferred 3D draws are still queued for the next submit.
          *
@@ -3093,6 +3126,11 @@ namespace CNA::Internal::Renderers::Vulkan
         /// waits cost. Both device-dependent in magnitude, both structural in ratio.
         uint64_t oneTimeCommandCountEXT_ = 0;
         uint64_t oneTimeCommandWaitNanosEXT_ = 0;
+        /// plans/plan_modern.md MOD-2242: live and cumulative native compute allocation counters.
+        std::size_t liveComputeDescriptorSetCountEXT_ = 0;
+        uint64_t computeDescriptorSetAllocationCountEXT_ = 0;
+        std::size_t liveComputePipelineLayoutCountEXT_ = 0;
+        uint64_t computePipelineLayoutCreationCountEXT_ = 0;
         /// The single funnel for vkDeviceWaitIdle, so the counter above cannot miss one.
         void DeviceWaitIdleEXT();
         uint64_t frameSubmitCountEXT_      = 0;
