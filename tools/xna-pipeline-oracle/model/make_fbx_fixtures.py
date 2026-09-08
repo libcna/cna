@@ -349,6 +349,59 @@ def main():
           '\tModel: "Model::Fold", "Mesh" {\n\t}\n',
           '\tConnect: "OO", "Model::Fold", "Model::Scene"\n')
 
+    # 10. What a scene's children come back in the order of, and what a bone does to it. XNA's
+    # importer promotes the skeleton's root: the first bone a depth-first walk reaches leaves the
+    # node it was connected under and becomes the *last* child of the scene's root, with its
+    # transform re-expressed against that root. Where it *is* the root, the same expression makes
+    # its transform relative to itself, which is the identity -- which is what every RobotGame
+    # mech's `Model::Root` comes back as (XNASWEEP-150, XNASWEEP-160, XNASWEEP-161).
+    def typed(name, kind, translation=(0, 0, 0), rotation=(0, 0, 0), scaling=(1, 1, 1),
+              pre_rotation=None):
+        return ('\tModel: "Model::%s", "%s" {\n\t\tVersion: 232\n%s'
+                "\t\tMultiLayer: 0\n\t\tMultiTake: 1\n\t\tShading: Y\n"
+                "\t\tCulling: \"CullingOff\"\n\t}\n"
+                % (name, kind, properties(translation, rotation, scaling, pre_rotation)))
+
+    def scene(filename, nodes, connections):
+        """`nodes` is [(name, kind, translation)]; `connections` is [(child, parent)]."""
+        write(os.path.join(out, filename),
+              {"count": len(nodes), "models": len(nodes), "materials": 0, "deformers": 0},
+              "".join(typed(n, k, t) for n, k, t in nodes),
+              "".join('\tModel: "Model::%s", "%s" {\n\t}\n' % (n, k) for n, k, _ in nodes),
+              "".join('\tConnect: "OO", "Model::%s", "Model::%s"\n' % (c, p)
+                      for c, p in connections))
+
+    # SAMPLE-142's own shape: a `Root`-class bone connected first, a `Null` second, and the null
+    # comes back first because the bone is moved to the end.
+    scene("fbx_bone_scene_order.fbx",
+          [("Root", "Root", (1, 0, 0)), (" Footsteps", "Null", (2, 0, 0))],
+          [("Root", "Scene"), (" Footsteps", "Scene")])
+    # Only the *first* bone moves, and it moves past the nodes connected after it.
+    scene("fbx_bone_first_only.fbx",
+          [("LimbA", "LimbNode", (1, 0, 0)), ("NullA", "Null", (2, 0, 0)),
+           ("RootA", "Root", (3, 0, 0)), ("NullB", "Null", (4, 0, 0))],
+          [("LimbA", "Scene"), ("NullA", "Scene"), ("RootA", "Scene"), ("NullB", "Scene")])
+    # A bone two levels down comes back at the root carrying the transform it had in the world.
+    scene("fbx_bone_promoted.fbx",
+          [("A", "Null", (1, 0, 0)), ("B", "Null", (2, 0, 0)),
+           ("Limb", "LimbNode", (3, 0, 0)), ("C", "Null", (4, 0, 0))],
+          [("A", "Scene"), ("B", "Scene"), ("Limb", "B"), ("C", "B")])
+    # The scene's single top-level object is the skeleton root: `Duskmas.FBX`'s own transform, and
+    # the identity is what comes back.
+    write(os.path.join(out, "fbx_bone_is_root.fbx"),
+          {"count": 2, "models": 2, "materials": 0, "deformers": 0},
+          typed("Root", "LimbNode", (0, 1.49544370174408, 5.96046447753906e-008), (0, 0, 90),
+                (1, 1, 1), (-90, 0, 0)) + typed("Pelvis", "LimbNode", (1, 2, 3)),
+          '\tModel: "Model::Root", "LimbNode" {\n\t}\n'
+          '\tModel: "Model::Pelvis", "LimbNode" {\n\t}\n',
+          '\tConnect: "OO", "Model::Root", "Model::Scene"\n'
+          '\tConnect: "OO", "Model::Pelvis", "Model::Root"\n')
+    # A `Light` and a `Marker` are not nodes, which the corpus had never carried.
+    scene("fbx_light_marker.fbx",
+          [("Lamp", "Light", (1, 0, 0)), ("Pin", "Marker", (2, 0, 0)),
+           ("Alpha", "Null", (3, 0, 0))],
+          [("Lamp", "Scene"), ("Pin", "Scene"), ("Alpha", "Scene")])
+
     with open(os.path.join(out, "FBX-PROVENANCE.md"), "w", encoding="utf-8") as handle:
         handle.write("# FBX corpus (authored)\n\n")
         handle.write("Written by `tools/xna-pipeline-oracle/model/make_fbx_fixtures.py`, in FBX 6.1\n")

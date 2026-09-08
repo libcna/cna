@@ -10,12 +10,15 @@
 #include <fstream>
 #include <iterator>
 #include <map>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "CNA/Content/Pipeline/FbxFileReader.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/ContentBuildLogger.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentIdentity.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/ContentImporterContext.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/ExternalReference.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/StockMaterials.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/VertexChannelNames.hpp"
@@ -117,8 +120,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          * cameras, and XNA answers a single `MeshContent` node. CNA answered ten bones for it
          * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-111`).
          *
-         * `Light` is deliberately not in this list: no source in the corpus carries one, so what
-         * XNA does with it has not been measured here and is left alone rather than guessed at.
+         * `Light` and `Marker` are not nodes either, which was measured rather than assumed:
+         * `co_light_then_null` and `co_marker_then_null` hand the genuine importer a scene of two
+         * top-level models, one of each class beside a `Null`, and it answers a single node
+         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-161`).
          *
          * @param kind The object's FBX class.
          * @return Whether it is part of the node graph.
@@ -126,7 +131,112 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         [[nodiscard]] bool IsSceneNode(const std::string& kind)
         {
             return kind != "Material" && kind != "Texture" && kind != "Camera" &&
-                   kind != "CameraSwitcher";
+                   kind != "CameraSwitcher" && kind != "Light" && kind != "Marker";
+        }
+
+        /**
+         * @brief Whether an FBX object of this class becomes a `BoneContent` rather than a node.
+         *
+         * `LimbNode` is the class every skeleton joint an exporter writes carries, and `Root` is
+         * the one 3ds Max writes for a biped's root. Both answer `BoneContent` from the genuine
+         * importer, measured on `co_limbnode_then_null` and `co_root_then_null`
+         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-161`).
+         *
+         * @param kind The object's FBX class.
+         * @return Whether it is a bone.
+         */
+        [[nodiscard]] bool IsBoneNode(const std::string& kind)
+        {
+            return kind == "LimbNode" || kind == "Root";
+        }
+
+        /** @brief The first bone a depth-first walk reaches, or null where there is none. */
+        [[nodiscard]] std::shared_ptr<Graphics::BoneContent> FirstBone(
+            const std::shared_ptr<NodeContent>& node)
+        {
+            if (auto bone = std::dynamic_pointer_cast<Graphics::BoneContent>(node))
+            {
+                return bone;
+            }
+            for (const std::shared_ptr<NodeContent>& child : node->getChildrenProperty())
+            {
+                if (std::shared_ptr<Graphics::BoneContent> found = FirstBone(child))
+                {
+                    return found;
+                }
+            }
+            return nullptr;
+        }
+
+        /** @brief Counts the maximal bone subtrees a scene holds -- its skeletons. */
+        void CountSkeletons(const std::shared_ptr<NodeContent>& node, bool insideSkeleton,
+                            std::vector<std::string>& roots)
+        {
+            const bool isBone = std::dynamic_pointer_cast<Graphics::BoneContent>(node) != nullptr;
+            if (isBone && !insideSkeleton)
+            {
+                roots.push_back(node->getNameProperty());
+            }
+            for (const std::shared_ptr<NodeContent>& child : node->getChildrenProperty())
+            {
+                CountSkeletons(child, isBone, roots);
+            }
+        }
+
+        /**
+         * @brief Moves the scene's first bone to the root, keeping where it stands in the world.
+         *
+         * The genuine importer promotes the skeleton's root: the first bone a depth-first walk
+         * reaches leaves whatever node it was connected under and becomes the *last* child of the
+         * scene's root node, with its own transform re-expressed against that root -- so a bone
+         * two levels down comes back carrying its absolute transform, and one that was already a
+         * child of the root comes back unchanged but at the end of the list. Measured on
+         * `cd_deep_bone` (a bone under a node with a transform answers that node's transform
+         * composed into its own), `cb_four_mixed` (only the first bone moves) and
+         * `co_hammer_shape` (`SAMPLE-142`'s own shape: the `Root`-class bone comes back after the
+         * `Null` the file connects second).
+         *
+         * Where the bone *is* the root -- a scene whose single top-level object is the skeleton --
+         * the same expression makes its transform relative to itself, which is the identity: that
+         * is why every RobotGame mech answers an identity root where its file gives it a quarter
+         * turn (`cs_bone_dusk`, and `plans/plan_xna_sample_xnb_sweep.md` `XNASWEEP-150`).
+         *
+         * @param root The scene's root node.
+         * @return The same root.
+         */
+        [[nodiscard]] std::shared_ptr<NodeContent> PromoteSkeletonRoot(
+            const std::shared_ptr<NodeContent>& root, ContentImporterContext& context)
+        {
+            const std::shared_ptr<Graphics::BoneContent> bone = FirstBone(root);
+            if (bone == nullptr)
+            {
+                return root;
+            }
+            // A second skeleton is warned about rather than merged, and XNA's own text leaves the
+            // two names unformatted -- `{0}` and `{1}` reach the log verbatim, which is what the
+            // genuine importer answers for `fbx_bone_first_only.fbx`.
+            std::vector<std::string> skeletons;
+            CountSkeletons(root, false, skeletons);
+            if (skeletons.size() > 1u)
+            {
+                context.getLoggerProperty().LogWarning(
+                    std::string(), ContentIdentity(),
+                    "Multiple skeletons were found in the file. The first skeleton, named "
+                    "\"{0}\" has been moved to be a child of the scene root. The other, "
+                    "\"{1}\", will be ignored.");
+            }
+            const Matrix absolute = bone->getAbsoluteTransformProperty();
+            const Matrix into = Matrix::Invert(root->getAbsoluteTransformProperty());
+            if (bone != root)
+            {
+                if (NodeContent* parent = bone->getParentProperty(); parent != nullptr)
+                {
+                    parent->getChildrenProperty().Remove(bone);
+                }
+                root->getChildrenProperty().Add(bone);
+            }
+            bone->setTransformProperty(absolute * into);
+            return root;
         }
 
         /** @brief One `Properties60`/`Properties70` entry, by its name. */
@@ -508,7 +618,6 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
     std::shared_ptr<Graphics::NodeContent> FbxImporter::Import(const std::string& filename,
                                                                ContentImporterContext& context)
     {
-        (void)context;
         std::error_code error;
         if (!std::filesystem::exists(filename, error) || error)
         {
@@ -1271,6 +1380,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 }
                 node = mesh;
             }
+            else if (IsBoneNode(object.kind))
+            {
+                node = std::make_shared<Graphics::BoneContent>();
+            }
             else
             {
                 node = std::make_shared<NodeContent>();
@@ -1365,7 +1478,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         if (roots.size() == 1u && topLevel == 1u)
         {
             // One top-level model answers as the root itself, as the .x route's single frame does.
-            return build(roots.front(), IdentityRows(), build);
+            return PromoteSkeletonRoot(build(roots.front(), IdentityRows(), build), context);
         }
         auto root = std::make_shared<NodeContent>();
         root->setNameProperty("RootNode");
@@ -1373,7 +1486,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         {
             root->getChildrenProperty().Add(build(identity, IdentityRows(), build));
         }
-        return root;
+        return PromoteSkeletonRoot(root, context);
     }
 
     ContentImporterAttribute FbxImporter::Attribute()

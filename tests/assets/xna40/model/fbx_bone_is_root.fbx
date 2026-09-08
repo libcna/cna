@@ -1,0 +1,87 @@
+; FBX 6.1.0 project file
+; Written by tools/xna-pipeline-oracle/model/make_fbx_fixtures.py for this repository.
+;----------------------------------------------------
+
+FBXHeaderExtension:  {
+	FBXHeaderVersion: 1003
+	FBXVersion: 6100
+	CreationTimeStamp:  {
+		Version: 1000
+		Year: 2026
+		Month: 1
+		Day: 1
+		Hour: 0
+		Minute: 0
+		Second: 0
+		Millisecond: 0
+	}
+	Creator: "CNA"
+}
+CreationTime: "2026-01-01 00:00:00:000"
+Creator: "CNA"
+
+Definitions:  {
+	Version: 100
+	Count: 2
+	ObjectType: "Model" {
+		Count: 2
+	}
+	ObjectType: "Material" {
+		Count: 0
+	}
+	ObjectType: "Deformer" {
+		Count: 0
+	}
+}
+
+Objects:  {
+	Model: "Model::Root", "LimbNode" {
+		Version: 232
+		Properties60:  {
+			Property: "Lcl Translation", "Lcl Translation", "A+",0,1.49544,5.96046e-08
+			Property: "Lcl Rotation", "Lcl Rotation", "A+",0,0,90
+			Property: "Lcl Scaling", "Lcl Scaling", "A+",1,1,1
+			Property: "PreRotation", "Vector3D", "",-90,0,0
+			Property: "RotationActive", "bool", "",1
+		}
+		MultiLayer: 0
+		MultiTake: 1
+		Shading: Y
+		Culling: "CullingOff"
+	}
+	Model: "Model::Pelvis", "LimbNode" {
+		Version: 232
+		Properties60:  {
+			Property: "Lcl Translation", "Lcl Translation", "A+",1,2,3
+			Property: "Lcl Rotation", "Lcl Rotation", "A+",0,0,0
+			Property: "Lcl Scaling", "Lcl Scaling", "A+",1,1,1
+		}
+		MultiLayer: 0
+		MultiTake: 1
+		Shading: Y
+		Culling: "CullingOff"
+	}
+}
+
+Relations:  {
+	Model: "Model::Root", "LimbNode" {
+	}
+	Model: "Model::Pelvis", "LimbNode" {
+	}
+}
+
+Connections:  {
+	Connect: "OO", "Model::Root", "Model::Scene"
+	Connect: "OO", "Model::Pelvis", "Model::Root"
+}
+
+Takes:  {
+	Current: ""
+}
+
+Version5:  {
+	AmbientRenderSettings:  {
+		Version: 101
+		AmbientLightColor: 0,0,0,0
+	}
+}

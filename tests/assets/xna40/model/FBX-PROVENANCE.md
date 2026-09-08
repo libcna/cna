@@ -10,9 +10,14 @@ is third-party content.
 | File | Bytes |
 |---|---:|
 | `fbx_bare_mesh.fbx` | 1270 |
+| `fbx_bone_first_only.fbx` | 2354 |
+| `fbx_bone_is_root.fbx` | 1679 |
+| `fbx_bone_promoted.fbx` | 2307 |
+| `fbx_bone_scene_order.fbx` | 1564 |
 | `fbx_cameras.fbx` | 2191 |
 | `fbx_empty.fbx` | 0 |
 | `fbx_hierarchy.fbx` | 2058 |
+| `fbx_light_marker.fbx` | 1946 |
 | `fbx_not_fbx.fbx` | 31 |
 | `fbx_not_fbx_large.fbx` | 1024 |
 | `fbx_oblique.fbx` | 1787 |

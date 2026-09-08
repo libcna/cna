@@ -113,21 +113,32 @@ namespace
         [[nodiscard]] std::string getIntermediateDirectoryProperty() const override { return "obj"; }
         [[nodiscard]] Xna::ContentBuildLogger& getLoggerProperty() const override
         {
-            return const_cast<SilentLogger&>(logger_);
+            return const_cast<RecordingLogger&>(logger_);
         }
         [[nodiscard]] std::string getOutputDirectoryProperty() const override { return "bin"; }
         void AddDependency(const std::string& filename) override { dependencies.push_back(filename); }
 
+        /** @brief The warnings the importer logged, in the oracle's own `warning: ` form. */
+        [[nodiscard]] const std::vector<std::string>& Warnings() const { return logger_.lines; }
+
     private:
-        class SilentLogger final : public Xna::ContentBuildLogger
+        /** @brief Records warnings and drops the rest, because the oracle records only warnings. */
+        class RecordingLogger final : public Xna::ContentBuildLogger
         {
+        public:
+            std::vector<std::string> lines;
+
         protected:
             void LogMessage(const std::string&) override {}
             void LogImportantMessage(const std::string&) override {}
-            void LogWarning(const std::string&, const Xna::ContentIdentity&, const std::string&) override {}
+            void LogWarning(const std::string&, const Xna::ContentIdentity&,
+                            const std::string& message) override
+            {
+                lines.push_back("warning: " + message);
+            }
         };
 
-        SilentLogger logger_;
+        RecordingLogger logger_;
     };
 
     /** @brief The oracle's own `0.######` formatting, so the two strings compare verbatim. */
@@ -431,7 +442,12 @@ namespace
             dependencies += (dependencies.empty() ? "" : ",") +
                             std::filesystem::path(one).filename().string();
         }
-        return text + "dependencies=[" + dependencies + "] log=[]";
+        std::string log;
+        for (const std::string& line : context.Warnings())
+        {
+            log += (log.empty() ? "" : " | ") + line;
+        }
+        return text + "dependencies=[" + dependencies + "] log=[" + log + "]";
     }
 }
 
@@ -561,7 +577,12 @@ namespace
             dependencies += (dependencies.empty() ? "" : ",") +
                             std::filesystem::path(one).filename().string();
         }
-        return text + "dependencies=[" + dependencies + "] log=[]";
+        std::string log;
+        for (const std::string& line : context.Warnings())
+        {
+            log += (log.empty() ? "" : " | ") + line;
+        }
+        return text + "dependencies=[" + dependencies + "] log=[" + log + "]";
     }
 
     /**
@@ -683,6 +704,20 @@ TEST(XnaFbxImporter, EveryFileAnswersTheGraphXnaAnswers)
           // `LayerElementReflectionUV` in `Layer: 0` and answers both indices
           // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-143`).
           "fbx_uv_layer_one.fbx", "fbx_uv_two_sets.fbx",
+          // The skeleton's root is promoted: the first bone a depth-first walk reaches leaves the
+          // node it was connected under and becomes the *last* child of the scene's root, with its
+          // transform re-expressed against that root. The first of these is SAMPLE-142's own
+          // shape -- a `Root`-class bone connected before a `Null`, and the null comes back first;
+          // the second shows only the *first* bone moving; the third a bone two levels down coming
+          // back carrying the transform it had in the world; and the fourth a scene whose single
+          // top-level object is the skeleton, where making the bone's transform relative to itself
+          // is the identity `Duskmas.FBX` comes back with
+          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-150`, `XNASWEEP-160`, `XNASWEEP-161`).
+          "fbx_bone_scene_order.fbx", "fbx_bone_first_only.fbx", "fbx_bone_promoted.fbx",
+          "fbx_bone_is_root.fbx",
+          // A `Light` and a `Marker` are not nodes, which no source in the corpus had ever carried
+          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-161`).
+          "fbx_light_marker.fbx",
           "fbx_two_materials.fbx"})
     {
         ImporterContext context;
