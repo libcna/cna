@@ -53,10 +53,43 @@ namespace CNA::Internal::Renderers::DirectX11
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
         void GetViewportSize(int& width, int& height) override;
+        /**
+         * @brief Returns the physical back-buffer rectangle used for logical presentation.
+         * @param x Receives the rectangle's left edge in drawable pixels.
+         * @param y Receives the rectangle's top edge in drawable pixels.
+         * @param width Receives the rectangle's width in drawable pixels.
+         * @param height Receives the rectangle's height in drawable pixels.
+         */
+        void GetDefaultViewportRect(int& x, int& y, int& width, int& height) override;
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
         void SetSwapInterval(int interval) override;
+        /**
+         * @brief Returns the most recently requested DXGI presentation interval.
+         * @return The exact interval most recently passed to SetSwapInterval.
+         */
+        CNAEXT [[nodiscard]] int GetSwapIntervalEXT() const override { return swapInterval_; }
         void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
+        /**
+         * @brief Maps a platform-window point into the current logical presentation.
+         * @param windowX Window-space X coordinate.
+         * @param windowY Window-space Y coordinate.
+         * @param logX Receives the logical X coordinate.
+         * @param logY Receives the logical Y coordinate.
+         * @return true when the point lies inside the presented image.
+         */
+        bool TransformWindowToLogical(float windowX, float windowY,
+                                      float& logX, float& logY) const override;
+        /**
+         * @brief Maps a logical point into platform-window coordinates.
+         * @param logX Logical X coordinate.
+         * @param logY Logical Y coordinate.
+         * @param windowX Receives the window-space X coordinate.
+         * @param windowY Receives the window-space Y coordinate.
+         * @return true when presentation geometry is available.
+         */
+        bool TransformLogicalToWindow(float logX, float logY,
+                                      float& windowX, float& windowY) const override;
 
 
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
@@ -94,6 +127,12 @@ namespace CNA::Internal::Renderers::DirectX11
         /// draw calls without duplicating this renderer's own context-creation path (CNAEXT,
         /// DX-30/DX-31's buffer renderers both need this).
         [[nodiscard]] ID3D11DeviceContext* GetContextEXT() const { return context_.Get(); }
+        /**
+         * @brief Returns the active SpriteBatch projection size in logical viewport units.
+         * @param width Receives the logical viewport width.
+         * @param height Receives the logical viewport height.
+         */
+        CNAEXT void GetSpriteViewportSizeEXT(float& width, float& height) const;
         /// Exposes the per-(shader,stride) ID3D11InputLayout cache (CNAEXT, DX-32) -- shared by
         /// tests now and by Phase DIRECTX8's draw-call wiring later.
         [[nodiscard]] D3D11InputLayoutCache& GetInputLayoutCacheEXT() { return inputLayoutCache_; }
@@ -442,9 +481,11 @@ namespace CNA::Internal::Renderers::DirectX11
         bool vsyncEnabled_ = true;
         bool allowTearingRequested_ = true;
         bool exclusiveFullscreen_ = false;
+        int swapInterval_ = 1;
 
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
+        CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
 
         // Phase DIRECTX5 (DX-32): per-(shader,stride) ID3D11InputLayout cache.
         D3D11InputLayoutCache inputLayoutCache_;

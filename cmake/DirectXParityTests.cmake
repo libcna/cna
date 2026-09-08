@@ -873,6 +873,24 @@ function(cna_register_d3d_parity_tests)
         NAME BackbufferReject TARGET backbuffer_reject DIRECTX12_ORDER 2250
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/backbuffer_headless_reject_test.cpp"
         DIRECTX11_TIMEOUT 900 DIRECTX12_TIMEOUT 1200)
+    cna_d3d_parity_fixture(
+        NAME PresentationModeContract TARGET presentation_mode_contract DIRECTX12_ORDER 2260
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/presentation_mode_contract_test.cpp"
+        DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 600)
+    cna_d3d_parity_fixture(
+        NAME SwapIntervalForwarding TARGET swap_interval_forwarding DIRECTX12_ORDER 2270
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/swap_interval_forwarding_contract_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME SpriteBatch_CustomViewportRT TARGET spritebatch_custom_viewport_rt DIRECTX12_ORDER 2280
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_custom_viewport_rt_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME SpriteBatch_ViewportSwitch TARGET spritebatch_viewport_switch DIRECTX12_ORDER 2290
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_viewport_switch_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME ViewportResetAfterResize TARGET viewport_reset_after_resize
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/viewport_reset_after_resize_test.cpp"
+        DIRECTX11_TIMEOUT 300 DIRECTX11_ONLY
+        REASON "D3D12 swap-chain resize and its public resize proof remain DX-218")
 
     list(SORT _cna_d3d_fixture_keys)
     foreach(_cna_d3d_fixture_key IN LISTS _cna_d3d_fixture_keys)

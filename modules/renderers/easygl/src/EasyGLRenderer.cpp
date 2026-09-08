@@ -708,7 +708,8 @@ namespace CNA::Internal::Renderers::EasyGL
         int clientWidth = 0;
         int clientHeight = 0;
         GetClientSize(clientWidth, clientHeight);
-        if (virtualHeight_ <= 0)
+        if (presentationMode_ == CnaPresentationMode::NativeBackBuffer ||
+            virtualHeight_ <= 0)
         {
             width = clientWidth;
             height = clientHeight;
@@ -820,7 +821,10 @@ namespace CNA::Internal::Renderers::EasyGL
             static_cast<float>(logicalWidth) / clientViewportWidth;
         logicalY = (windowY - clientViewportY) *
             static_cast<float>(logicalHeight) / clientViewportHeight;
-        return true;
+        return windowX >= clientViewportX &&
+               windowX < clientViewportX + clientViewportWidth &&
+               windowY >= clientViewportY &&
+               windowY < clientViewportY + clientViewportHeight;
     }
 
     bool EasyGLSurfaceState::LogicalToWindow(const float logicalX, const float logicalY,
@@ -4343,8 +4347,16 @@ if (ProfileUsesGlslEs100())
         int fullW = 0, fullH = 0;
         if (haveRt) { fullW = rtW; fullH = rtH; }
         else if (graphicsRenderer_) graphicsRenderer_->getPhysicalSize(fullW, fullH);
-        const bool customVp = curVw > 0 && curVh > 0 && fullW > 0 && fullH > 0
-                              && (curVx != 0 || curVy != 0 || curVw != fullW || curVh != fullH);
+        int defaultVx = 0, defaultVy = 0, defaultVw = fullW, defaultVh = fullH;
+        if (!haveRt && graphicsRenderer_)
+        {
+            graphicsRenderer_->GetDefaultViewportRect(
+                defaultVx, defaultVy, defaultVw, defaultVh);
+            defaultVy = fullH - defaultVy - defaultVh;
+        }
+        const bool customVp = curVw > 0 && curVh > 0 && fullW > 0 && fullH > 0 &&
+            (curVx != defaultVx || curVy != defaultVy ||
+             curVw != defaultVw || curVh != defaultVh);
 
         // Task 1078: a custom-effect draw into a bound RenderTarget2D must size its viewport
         // and orthographic projection to that RT, not the window -- getPhysicalSize()/
@@ -4353,8 +4365,25 @@ if (ProfileUsesGlslEs100())
         if (customVp)
         {
             // Keep the custom GL viewport (do NOT reset to the full target); project by Viewport.W/H.
-            logW = curVw;
-            logH = curVh;
+            if (haveRt)
+            {
+                logW = curVw;
+                logH = curVh;
+            }
+            else
+            {
+                int fullLogicalWidth = 0;
+                int fullLogicalHeight = 0;
+                graphicsRenderer_->getLogicalSize(fullLogicalWidth, fullLogicalHeight);
+                logW = defaultVw > 0
+                    ? static_cast<int>(std::lround(
+                          static_cast<double>(curVw) * fullLogicalWidth / defaultVw))
+                    : curVw;
+                logH = defaultVh > 0
+                    ? static_cast<int>(std::lround(
+                          static_cast<double>(curVh) * fullLogicalHeight / defaultVh))
+                    : curVh;
+            }
         }
         else if (haveRt)
         {
@@ -4364,10 +4393,6 @@ if (ProfileUsesGlslEs100())
         }
         else if (graphicsRenderer_)
         {
-            int physW = 0, physH = 0;
-            graphicsRenderer_->getPhysicalSize(physW, physH);
-            if (physW > 0 && physH > 0)
-                device_.set_viewport(0, 0, physW, physH);
             graphicsRenderer_->getLogicalSize(logW, logH);
         }
         if (logW <= 0 || logH <= 0)
@@ -5277,13 +5302,14 @@ if (!ProfileIsEs2ApiGeneration())
 }
         }
 
-        // Use the render-target's own height for the Y-flip when an RT is bound;
-        // fall back to the window/viewport height for the default framebuffer.
+        // Use the render target's own height when one is bound and the drawable's
+        // physical height for the default framebuffer. The logical presentation
+        // height can differ and cannot invert a physical glReadPixels rectangle.
         int fbH = bound_->height;
         if (fbH == 0)
         {
-            int vpW;
-            GetViewportSize(vpW, fbH);
+            int physicalWidth = 0;
+            getPhysicalSize(physicalWidth, fbH);
         }
 
         // OpenGL origin is bottom-left; flip y so caller gets top-left origin.

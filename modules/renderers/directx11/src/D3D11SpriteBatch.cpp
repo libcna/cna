@@ -98,11 +98,7 @@ namespace CNA::Internal::Renderers::DirectX11
 
     void D3D11SpriteBatchRenderer::GetCurrentViewportSize(float& width, float& height) const
     {
-        UINT numViewports = 1;
-        D3D11_VIEWPORT vp{};
-        context_->RSGetViewports(&numViewports, &vp);
-        width = vp.Width;
-        height = vp.Height;
+        owner_->GetSpriteViewportSizeEXT(width, height);
     }
 
     ID3D11InputLayout* D3D11SpriteBatchRenderer::GetOrCreateSprite2DInputLayout()

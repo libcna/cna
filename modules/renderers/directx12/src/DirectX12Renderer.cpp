@@ -13,6 +13,7 @@
 #include "CNA/Internal/Renderers/DirectX12/D3D12Texture3D.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DConstantBuffers.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DFormatMapping.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DPresentation.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DRasterizationConvention.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DStateMapping.hpp"
 
@@ -156,7 +157,8 @@ namespace CNA::Internal::Renderers::DirectX12
             hwnd_ = static_cast<HWND>(nativeWindow.hwnd);
         }
 
-        // DX-116: mirrors DirectX11Renderer's own constructor exactly.
+        presentationMode_ = args.presentationMode;
+        swapInterval_ = args.swapInterval;
         vsyncEnabled_ = args.swapInterval > 0;
 
         // DX-119: default every tracked sampler slot to this renderer's own pre-DX-119 hardcoded
@@ -934,6 +936,36 @@ namespace CNA::Internal::Renderers::DirectX12
                               static_cast<float>(boundColorHeight_), 0.0f, 1.0f};
     }
 
+    void DirectX12Renderer::GetSpriteViewportSizeEXT(float& width, float& height) const
+    {
+        const D3D12_VIEWPORT viewport = GetEffectiveViewportEXT();
+        width = viewport.Width;
+        height = viewport.Height;
+        if (boundColorResource_ != GetCurrentBackBufferResourceEXT())
+            return;
+
+        const int physicalWidth = !surface_ && !windowlessPresentationExplicit_
+            ? (virtualWidth_ > 0 ? virtualWidth_ : width_)
+            : width_;
+        const int physicalHeight = !surface_ && !windowlessPresentationExplicit_
+            ? (virtualHeight_ > 0 ? virtualHeight_ : height_)
+            : height_;
+        const auto geometry = ComputeD3DPresentationGeometry(
+            physicalWidth, physicalHeight,
+            virtualWidth_, virtualHeight_, presentationMode_);
+        const int logicalWidth = static_cast<int>(std::lround(geometry.logicalWidth));
+        const int logicalHeight = static_cast<int>(std::lround(geometry.logicalHeight));
+        const int presentationWidth = static_cast<int>(std::lround(geometry.width));
+        const int presentationHeight = static_cast<int>(std::lround(geometry.height));
+        if (presentationWidth > 0 && presentationHeight > 0)
+        {
+            width = viewport.Width * static_cast<float>(logicalWidth) /
+                static_cast<float>(presentationWidth);
+            height = viewport.Height * static_cast<float>(logicalHeight) /
+                static_cast<float>(presentationHeight);
+        }
+    }
+
     Matrix DirectX12Renderer::ApplyXnaPixelCenterEXT(const Matrix& transform) const
     {
         const D3D12_VIEWPORT viewport = GetEffectiveViewportEXT();
@@ -1430,7 +1462,7 @@ namespace CNA::Internal::Renderers::DirectX12
         // DX-26's own sync-interval/tearing policy, reused unchanged for D3D12.
         const bool mayTear =
             allowTearingSupported_ && allowTearingRequested_ && !vsyncEnabled_ && !exclusiveFullscreen_;
-        const UINT syncInterval = vsyncEnabled_ ? 1 : 0;
+        const UINT syncInterval = static_cast<UINT>(std::max(0, swapInterval_));
         const UINT flags = mayTear ? DXGI_PRESENT_ALLOW_TEARING : 0;
 
         HRESULT hr = swapChain_->Present(syncInterval, flags);
@@ -1589,42 +1621,44 @@ namespace CNA::Internal::Renderers::DirectX12
     {
         // DX-116: mirrors DirectX11Renderer::SetSwapInterval exactly -- sync interval is
         // renderer state applied at the next Present(), not a direct D3D12 API call ahead of time.
+        swapInterval_ = interval;
         vsyncEnabled_ = interval > 0;
     }
 
-    // LATENT: this renderer needs a GetDefaultViewportRect() override before it grows window
-    // resize or real presentation modes. It does NOT misbehave today, and the note is here rather
-    // than in a plan file because this method is where the trap is.
-    //
-    // The size returned here is the LOGICAL one. GraphicsDevice::UpdateViewportFromWindow() feeds
-    // it to Viewport.Width/Height, and separately applies IGraphicsRenderer::
-    // GetDefaultViewportRect() as the PHYSICAL device viewport. This renderer does not override
-    // that method, so it inherits the base default -- which returns (0, 0, GetViewportSize()),
-    // i.e. the logical size used as if it were physical pixels -- and GetEffectiveViewportEXT()
-    // then passes the stored rect straight into D3D12_VIEWPORT without rescaling it.
-    //
-    // Harmless right now only because logical and physical are the same rectangle by
-    // construction: the swap chain is created at exactly virtualWidth_ x virtualHeight_
-    // (CreateSwapChain), OnSurfaceChanged() never calls ResizeBuffers(), and SetPresentationMode()
-    // is a no-op. Break any one of those three -- resize the swap chain with the window (the gap
-    // DX-116 records as deliberately unattempted), or implement Letterbox/Overscan/
-    // FixedHeightDynamicWidth -- and the logical size stops matching the target, at which point
-    // the game renders into a sub-rectangle of the window and the rest keeps the clear colour.
-    //
-    // That is not hypothetical: it is exactly what EasyGL did, reported against galaxy-eggbert
-    // 2026-08-21 (resizing the window or F11 did not enlarge the game). The same structural gap
-    // was found and fixed in EasyGL, OpenGL4, OpenGLES1 and Magnum in the same pass; those four
-    // had already grown the window-following behaviour this one has not. Copy any of their
-    // GetDefaultViewportRect() overrides -- or OpenGL2Renderer::ComputeLogicalViewport(), the
-    // reference implementation -- when the time comes.
-    //
-    // Renderers that instead treat the pushed viewport as LOGICAL and rescale it themselves
-    // (Diligent, Sokol, LLGL, SDL_GPU, WebGPU) need no override; that is the other valid shape,
-    // and would be an equally correct answer for this renderer.
+    // DX-217: GetViewportSize is the logical half of presentation; GetDefaultViewportRect below
+    // is the physical half that GraphicsDevice maps viewport/scissor state into. Both derive from
+    // the same D3DCommon geometry, so DX-218 can resize the physical back buffer without changing
+    // the game's logical coordinate system.
     void DirectX12Renderer::GetViewportSize(int& width, int& height)
     {
-        width = virtualWidth_;
-        height = virtualHeight_;
+        if (!surface_ && !windowlessPresentationExplicit_)
+        {
+            width = virtualWidth_ > 0 ? virtualWidth_ : width_;
+            height = virtualHeight_ > 0 ? virtualHeight_ : height_;
+            return;
+        }
+        const auto geometry = ComputeD3DPresentationGeometry(
+            width_, height_, virtualWidth_, virtualHeight_, presentationMode_);
+        width = static_cast<int>(std::lround(geometry.logicalWidth));
+        height = static_cast<int>(std::lround(geometry.logicalHeight));
+    }
+
+    void DirectX12Renderer::GetDefaultViewportRect(int& x, int& y, int& width, int& height)
+    {
+        if (!surface_ && !windowlessPresentationExplicit_)
+        {
+            x = 0;
+            y = 0;
+            width = virtualWidth_ > 0 ? virtualWidth_ : width_;
+            height = virtualHeight_ > 0 ? virtualHeight_ : height_;
+            return;
+        }
+        const auto geometry = ComputeD3DPresentationGeometry(
+            width_, height_, virtualWidth_, virtualHeight_, presentationMode_);
+        x = static_cast<int>(std::lround(geometry.x));
+        y = static_cast<int>(std::lround(geometry.y));
+        width = static_cast<int>(std::lround(geometry.width));
+        height = static_cast<int>(std::lround(geometry.height));
     }
 
     void DirectX12Renderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
@@ -1646,9 +1680,44 @@ namespace CNA::Internal::Renderers::DirectX12
     {
         virtualWidth_ = width;
         virtualHeight_ = height;
+        if (!surface_)
+            windowlessPresentationExplicit_ = false;
     }
 
-    void DirectX12Renderer::SetPresentationMode(int) { /* no-op until DX-106 onward */ }
+    void DirectX12Renderer::SetPresentationMode(int mode)
+    {
+        presentationMode_ = static_cast<CnaPresentationMode>(mode);
+        if (!surface_)
+            windowlessPresentationExplicit_ = true;
+    }
+
+    bool DirectX12Renderer::TransformWindowToLogical(
+        float windowX, float windowY, float& logX, float& logY) const
+    {
+        if (!surface_)
+            return false;
+        const auto geometry = ComputeD3DPresentationGeometry(
+            width_, height_, virtualWidth_, virtualHeight_, presentationMode_);
+        return MapDrawableToLogical(
+            geometry, surface_->WindowToDrawable(windowX), surface_->WindowToDrawable(windowY),
+            logX, logY);
+    }
+
+    bool DirectX12Renderer::TransformLogicalToWindow(
+        float logX, float logY, float& windowX, float& windowY) const
+    {
+        if (!surface_)
+            return false;
+        const auto geometry = ComputeD3DPresentationGeometry(
+            width_, height_, virtualWidth_, virtualHeight_, presentationMode_);
+        float drawableX = 0.0f;
+        float drawableY = 0.0f;
+        if (!MapLogicalToDrawable(geometry, logX, logY, drawableX, drawableY))
+            return false;
+        windowX = surface_->DrawableToWindow(drawableX);
+        windowY = surface_->DrawableToWindow(drawableY);
+        return true;
+    }
 
     RendererFormatVerdict DirectX12Renderer::ClassifySurfaceFormatEXT(int surfaceFormat) const
     {

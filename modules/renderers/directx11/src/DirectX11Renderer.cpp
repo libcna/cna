@@ -10,11 +10,13 @@
 #include "CNA/Internal/Renderers/D3DCommon/D3DShaderCache.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DConstantBuffers.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DFormatMapping.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DPresentation.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DRasterizationConvention.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DStateMapping.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
@@ -96,6 +98,8 @@ namespace CNA::Internal::Renderers::DirectX11
         , virtualWidth_(args.virtualWidth)
         , virtualHeight_(args.virtualHeight)
     {
+        presentationMode_ = args.presentationMode;
+        swapInterval_ = args.swapInterval;
         vsyncEnabled_ = args.swapInterval > 0;
 
         CNA::Platform::Win32NativeWindow nativeWindow;
@@ -346,7 +350,7 @@ namespace CNA::Internal::Renderers::DirectX11
 
         const bool mayTear =
             allowTearingSupported_ && allowTearingRequested_ && !vsyncEnabled_ && !exclusiveFullscreen_;
-        const UINT syncInterval = vsyncEnabled_ ? 1 : 0;
+        const UINT syncInterval = static_cast<UINT>(std::max(0, swapInterval_));
         const UINT flags = mayTear ? DXGI_PRESENT_ALLOW_TEARING : 0;
 
         const HRESULT hr = swapChain_->Present(syncInterval, flags);
@@ -357,8 +361,25 @@ namespace CNA::Internal::Renderers::DirectX11
     void DirectX11Renderer::GetViewportSize(int& width, int& height)
     {
         const auto drawableSize = surface_.GetDrawableSize();
-        width = drawableSize.width > 0 ? drawableSize.width : width_;
-        height = drawableSize.height > 0 ? drawableSize.height : height_;
+        const int physicalWidth = drawableSize.width > 0 ? drawableSize.width : width_;
+        const int physicalHeight = drawableSize.height > 0 ? drawableSize.height : height_;
+        const auto geometry = D3DCommon::ComputeD3DPresentationGeometry(
+            physicalWidth, physicalHeight, virtualWidth_, virtualHeight_, presentationMode_);
+        width = static_cast<int>(std::lround(geometry.logicalWidth));
+        height = static_cast<int>(std::lround(geometry.logicalHeight));
+    }
+
+    void DirectX11Renderer::GetDefaultViewportRect(int& x, int& y, int& width, int& height)
+    {
+        const auto drawableSize = surface_.GetDrawableSize();
+        const int physicalWidth = drawableSize.width > 0 ? drawableSize.width : width_;
+        const int physicalHeight = drawableSize.height > 0 ? drawableSize.height : height_;
+        const auto geometry = D3DCommon::ComputeD3DPresentationGeometry(
+            physicalWidth, physicalHeight, virtualWidth_, virtualHeight_, presentationMode_);
+        x = static_cast<int>(std::lround(geometry.x));
+        y = static_cast<int>(std::lround(geometry.y));
+        width = static_cast<int>(std::lround(geometry.width));
+        height = static_cast<int>(std::lround(geometry.height));
     }
 
     void DirectX11Renderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
@@ -374,14 +395,46 @@ namespace CNA::Internal::Renderers::DirectX11
 
     void DirectX11Renderer::SetPresentationMode(int mode)
     {
-        (void)mode; // presentation-mode scaling: not yet implemented (out of Phase DIRECTX4's scope)
+        presentationMode_ = static_cast<CnaPresentationMode>(mode);
     }
 
     void DirectX11Renderer::SetSwapInterval(int interval)
     {
         // DX-26: sync interval is renderer state applied at the next Present(), not a direct
         // D3D11 API call -- there is no "set swap interval" entry point to call ahead of time.
+        swapInterval_ = interval;
         vsyncEnabled_ = interval > 0;
+    }
+
+    bool DirectX11Renderer::TransformWindowToLogical(
+        float windowX, float windowY, float& logX, float& logY) const
+    {
+        const auto drawableSize = surface_.GetDrawableSize();
+        const int physicalWidth = drawableSize.width > 0 ? drawableSize.width : width_;
+        const int physicalHeight = drawableSize.height > 0 ? drawableSize.height : height_;
+        const auto geometry = D3DCommon::ComputeD3DPresentationGeometry(
+            physicalWidth, physicalHeight, virtualWidth_, virtualHeight_, presentationMode_);
+        return D3DCommon::MapDrawableToLogical(
+            geometry, surface_.WindowToDrawable(windowX), surface_.WindowToDrawable(windowY),
+            logX, logY);
+    }
+
+    bool DirectX11Renderer::TransformLogicalToWindow(
+        float logX, float logY, float& windowX, float& windowY) const
+    {
+        const auto drawableSize = surface_.GetDrawableSize();
+        const int physicalWidth = drawableSize.width > 0 ? drawableSize.width : width_;
+        const int physicalHeight = drawableSize.height > 0 ? drawableSize.height : height_;
+        const auto geometry = D3DCommon::ComputeD3DPresentationGeometry(
+            physicalWidth, physicalHeight, virtualWidth_, virtualHeight_, presentationMode_);
+        float drawableX = 0.0f;
+        float drawableY = 0.0f;
+        if (!D3DCommon::MapLogicalToDrawable(
+                geometry, logX, logY, drawableX, drawableY))
+            return false;
+        windowX = surface_.DrawableToWindow(drawableX);
+        windowY = surface_.DrawableToWindow(drawableY);
+        return true;
     }
 
     void DirectX11Renderer::ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)
@@ -972,6 +1025,37 @@ namespace CNA::Internal::Renderers::DirectX11
         vp.MinDepth = minDepth;
         vp.MaxDepth = maxDepth;
         context_->RSSetViewports(1, &vp);
+    }
+
+    void DirectX11Renderer::GetSpriteViewportSizeEXT(float& width, float& height) const
+    {
+        UINT count = 1;
+        D3D11_VIEWPORT viewport{};
+        context_->RSGetViewports(&count, &viewport);
+        width = viewport.Width;
+        height = viewport.Height;
+
+        const bool backBufferBound = currentRTVCount_ == 1 &&
+            currentColorRTVs_[0] == backBufferRTV_.Get();
+        if (!backBufferBound)
+            return;
+
+        const auto drawableSize = surface_.GetDrawableSize();
+        const int physicalWidth = drawableSize.width > 0 ? drawableSize.width : width_;
+        const int physicalHeight = drawableSize.height > 0 ? drawableSize.height : height_;
+        const auto geometry = D3DCommon::ComputeD3DPresentationGeometry(
+            physicalWidth, physicalHeight, virtualWidth_, virtualHeight_, presentationMode_);
+        const int logicalWidth = static_cast<int>(std::lround(geometry.logicalWidth));
+        const int logicalHeight = static_cast<int>(std::lround(geometry.logicalHeight));
+        const int presentationWidth = static_cast<int>(std::lround(geometry.width));
+        const int presentationHeight = static_cast<int>(std::lround(geometry.height));
+        if (presentationWidth > 0 && presentationHeight > 0)
+        {
+            width = viewport.Width * static_cast<float>(logicalWidth) /
+                static_cast<float>(presentationWidth);
+            height = viewport.Height * static_cast<float>(logicalHeight) /
+                static_cast<float>(presentationHeight);
+        }
     }
 
     void DirectX11Renderer::TrackCurrentRenderTargetEXT(

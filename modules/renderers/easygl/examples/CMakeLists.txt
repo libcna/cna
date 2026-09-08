@@ -2223,6 +2223,28 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_BackbufferReject COMMAND cna_test_easygl_backbuffer_reject
             TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # DX-217 cross-renderer controls for the common presentation policy and
+        # GraphicsDeviceManager swap-interval forwarding contracts.
+        cna_easygl_test(cna_test_easygl_presentation_mode_contract
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/presentation_mode_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_PresentationModeContract
+            COMMAND cna_test_easygl_presentation_mode_contract
+            TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_easygl_test(cna_test_easygl_swap_interval_forwarding
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/swap_interval_forwarding_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_SwapIntervalForwarding
+            COMMAND cna_test_easygl_swap_interval_forwarding
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # DX-229's render-target variant independently proves that logical
+        # presentation scaling does not leak into an explicitly bound target.
+        cna_easygl_test(cna_test_easygl_spritebatch_custom_viewport_rt
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_custom_viewport_rt_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_SpriteBatch_CustomViewportRT
+            COMMAND cna_test_easygl_spritebatch_custom_viewport_rt
+            TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # REMED-GFX-155 cross-renderer control: a render target produced and unbound earlier in a public
         # frame must be visible to a consumer that draws on the BACKBUFFER later in that same frame. The
         # defect was bgfx-local (it radix-sorts a frame's draws by their view's sort position, which

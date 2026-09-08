@@ -109,12 +109,45 @@ namespace CNA::Internal::Renderers::DirectX12
         /// objects, so a post-process pass that believes its shader ran is right.
         [[nodiscard]] bool ExecutesShaderEffectSourceEXT() const override { return true; }
         void GetViewportSize(int& width, int& height) override;
+        /**
+         * @brief Returns the physical back-buffer rectangle used for logical presentation.
+         * @param x Receives the rectangle's left edge in drawable pixels.
+         * @param y Receives the rectangle's top edge in drawable pixels.
+         * @param width Receives the rectangle's width in drawable pixels.
+         * @param height Receives the rectangle's height in drawable pixels.
+         */
+        void GetDefaultViewportRect(int& x, int& y, int& width, int& height) override;
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
         void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
         /// DX-116: mirrors DirectX11Renderer::SetSwapInterval exactly -- sync interval is
         /// renderer state applied at the next Present(), not a direct D3D12 API call ahead of time.
         void SetSwapInterval(int interval) override;
+        /**
+         * @brief Returns the most recently requested DXGI presentation interval.
+         * @return The exact interval most recently passed to SetSwapInterval.
+         */
+        CNAEXT [[nodiscard]] int GetSwapIntervalEXT() const override { return swapInterval_; }
+        /**
+         * @brief Maps a platform-window point into the current logical presentation.
+         * @param windowX Window-space X coordinate.
+         * @param windowY Window-space Y coordinate.
+         * @param logX Receives the logical X coordinate.
+         * @param logY Receives the logical Y coordinate.
+         * @return true when the point lies inside the presented image.
+         */
+        bool TransformWindowToLogical(float windowX, float windowY,
+                                      float& logX, float& logY) const override;
+        /**
+         * @brief Maps a logical point into platform-window coordinates.
+         * @param logX Logical X coordinate.
+         * @param logY Logical Y coordinate.
+         * @param windowX Receives the window-space X coordinate.
+         * @param windowY Receives the window-space Y coordinate.
+         * @return true when presentation geometry is available.
+         */
+        bool TransformLogicalToWindow(float logX, float logY,
+                                      float& windowX, float& windowY) const override;
 
 
         /** @brief Classifies core XNA surface formats backed by native D3D12 storage. */
@@ -295,6 +328,12 @@ namespace CNA::Internal::Renderers::DirectX12
         /// byte-identical to the pre-fix hardcode). Shared by the 4 renderer draw paths and the
         /// D3D12 SpriteBatch flush (which reads it via owner_).
         [[nodiscard]] D3D12_VIEWPORT GetEffectiveViewportEXT() const;
+        /**
+         * @brief Returns the active SpriteBatch projection size in logical viewport units.
+         * @param width Receives the logical viewport width.
+         * @param height Receives the logical viewport height.
+         */
+        CNAEXT void GetSpriteViewportSizeEXT(float& width, float& height) const;
 
         std::unique_ptr<IVertexBufferRenderer> CreateVertexBuffer(int vertex_capacity) override;
         std::unique_ptr<IIndexBufferRenderer> CreateIndexBuffer16(int index_capacity) override;
@@ -835,6 +874,12 @@ namespace CNA::Internal::Renderers::DirectX12
         bool vsyncEnabled_ = true;
         bool allowTearingRequested_ = true;
         bool exclusiveFullscreen_ = false;
+        int swapInterval_ = 1;
+        CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
+        // GraphicsDeviceManager reapplies its default mode before every Reset. A windowless
+        // renderer keeps legacy local-pixel behavior until a caller explicitly selects a mode
+        // after setting the virtual resolution.
+        bool windowlessPresentationExplicit_ = false;
 
         // DX-116: window-size-lifetime resources -- real back-buffer RTVs (one per
         // kFramesInFlight) + a shared depth-stencil buffer, mirroring D3D11's own DX-24 group.

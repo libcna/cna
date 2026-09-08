@@ -279,8 +279,11 @@ namespace CNA::Internal::Renderers::DirectX12
         // projection stayed full-target, squishing the sprite into the sub-region. The default
         // full-target viewport keeps vpW/vpH == the target size, byte-identical to the prior behavior.
         const D3D12_VIEWPORT effectiveViewport = owner_->GetEffectiveViewportEXT();
-        const int vpW = static_cast<int>(effectiveViewport.Width);
-        const int vpH = static_cast<int>(effectiveViewport.Height);
+        float logicalViewportWidth = 0.0f;
+        float logicalViewportHeight = 0.0f;
+        owner_->GetSpriteViewportSizeEXT(logicalViewportWidth, logicalViewportHeight);
+        const int vpW = static_cast<int>(std::lround(logicalViewportWidth));
+        const int vpH = static_cast<int>(std::lround(logicalViewportHeight));
 
         auto rootSig = owner_->GetRootSignatureCacheEXT().GetOrCreate(device_.Get(), /*numCbvs=*/1, /*numSrvs=*/1, /*numSamplers=*/1);
         if (!rootSig)
