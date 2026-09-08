@@ -817,6 +817,32 @@ function(cna_register_d3d_parity_tests)
         NAME RenderTarget_FirstUse TARGET rt_first_use DIRECTX12_ORDER 2030
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_first_use_test.cpp"
         DIRECTX11_TIMEOUT 180 DIRECTX12_TIMEOUT 600)
+    cna_d3d_parity_fixture(
+        NAME DeviceValidation TARGET device_validation DIRECTX12_ORDER 2040
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_device_validation_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME DrawNoVertexBuffer TARGET draw_novertexbuffer DIRECTX12_ORDER 2050
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_draw_novertexbuffer_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME DrawNoIndexBuffer TARGET draw_noindexbuffer DIRECTX12_ORDER 2060
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_draw_noindexbuffer_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME DrawRangeValidation TARGET draw_range_validation DIRECTX12_ORDER 2070
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_draw_range_validation_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME DrawUserPrimitives_VPC TARGET draw_user_primitives_vpc DIRECTX12_ORDER 2080
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_draw_user_primitives_vpc_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME DrawUserPrimitives_CustomVD TARGET draw_user_primitives_custom DIRECTX12_ORDER 2090
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_draw_user_primitives_custom_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME DrawUserIndexedPrimitives_VPC TARGET draw_user_indexed_primitives_vpc
+        DIRECTX12_ORDER 2100
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_draw_user_indexed_primitives_vpc_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME DrawUserIndexedPrimitives_32 TARGET draw_user_indexed_primitives_32
+        DIRECTX12_ORDER 2110
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_draw_user_indexed_primitives_32_test.cpp")
 
     list(SORT _cna_d3d_fixture_keys)
     foreach(_cna_d3d_fixture_key IN LISTS _cna_d3d_fixture_keys)
