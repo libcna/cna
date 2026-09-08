@@ -451,6 +451,10 @@ TEST(XnaXImporter, EveryFileAnswersTheGraphXnaAnswers)
 {
     for (const std::string& fixture :
          {"bare_mesh.x", "binary_mesh.x", "generated_normals.x", "hierarchy.x", "missing_texture.x",
+          // `MeshNormals` carries its own face list, so a corner's normal is not its position's:
+          // this quad's two triangles name one normal each and the genuine importer answers six
+          // vertices for four positions (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-144`).
+          "normal_per_face.x",
           "oblique_normals.x", "quad_textured.x", "transform_z.x", "two_materials.x",
           "with_templates.x", "zero_power.x"})
     {

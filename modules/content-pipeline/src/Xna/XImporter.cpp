@@ -292,6 +292,14 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
 
             // The optional channels, each indexed by the mesh's own vertices.
             std::vector<Vector3> normals;
+            // `MeshNormals` carries its own face list, and it is not the mesh's: a normal is
+            // indexed per face corner, not per position. SAMPLE-032's `Cube.x` has 8 positions and
+            // **6** normals -- one per cube face -- with twelve `3;n,n,n;` rows saying which. Read
+            // as though a normal belonged to a position it answers 8 vertices where XNA answers
+            // **24**, because a vertex is a position *and* its channel values and every corner of
+            // that cube has a different normal (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-144`;
+            // `XNASWEEP-112` is the same rule on the FBX route).
+            std::vector<std::vector<std::size_t>> normalFaces;
             if (const Canon::DirectXFileObject* object2 = Find(object, "MeshNormals"); object2 != nullptr)
             {
                 std::size_t normalAt = 0u;
@@ -301,6 +309,20 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     normals.push_back(Convert(
                         Vector3(At(*object2, normalAt), At(*object2, normalAt + 1), At(*object2, normalAt + 2))));
                     normalAt += 3u;
+                }
+                const std::size_t normalFaceCount = Count(*object2, normalAt++);
+                normalFaces.reserve(normalFaceCount);
+                for (std::size_t i = 0; i < normalFaceCount; ++i)
+                {
+                    const std::size_t corners = Count(*object2, normalAt++);
+                    std::vector<std::size_t> face;
+                    face.reserve(corners);
+                    for (std::size_t corner = 0; corner < corners; ++corner)
+                    {
+                        const std::size_t index = Count(*object2, normalAt++);
+                        face.push_back(index < normals.size() ? index : 0u);
+                    }
+                    normalFaces.push_back(std::move(face));
                 }
             }
             const std::vector<Vector3> generated =
@@ -436,7 +458,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 // A batch's vertices are the mesh positions its own faces name, in first-use
                 // order, which is what makes its indices local and its position indices shared.
                 std::vector<std::size_t> used;
-                std::map<std::size_t, SharpRuntime::intcs> local;
+                std::vector<std::size_t> usedNormals;
+                std::map<std::pair<std::size_t, std::size_t>, SharpRuntime::intcs> local;
                 std::vector<SharpRuntime::intcs> indices;
                 for (std::size_t face = 0; face < faces.size(); ++face)
                 {
@@ -447,14 +470,24 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     // A polygon becomes a triangle fan, which is how every reader of this format
                     // turns an n-gon into triangles.
                     std::vector<SharpRuntime::intcs> corners;
-                    for (const std::size_t vertex : faces[face])
+                    for (std::size_t corner = 0; corner < faces[face].size(); ++corner)
                     {
-                        const auto found = local.find(vertex);
+                        const std::size_t vertex = faces[face][corner];
+                        // The key is the position *and* the normal the corner names, because a
+                        // vertex is both (`XNASWEEP-144`).
+                        std::size_t normalIndex = vertex;
+                        if (face < normalFaces.size() && corner < normalFaces[face].size())
+                        {
+                            normalIndex = normalFaces[face][corner];
+                        }
+                        const std::pair<std::size_t, std::size_t> key{vertex, normalIndex};
+                        const auto found = local.find(key);
                         if (found == local.end())
                         {
                             const auto assigned = static_cast<SharpRuntime::intcs>(used.size());
-                            local.emplace(vertex, assigned);
+                            local.emplace(key, assigned);
                             used.push_back(vertex);
+                            usedNormals.push_back(normalIndex);
                             corners.push_back(assigned);
                         }
                         else
@@ -517,14 +550,16 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 {
                     std::vector<Vector3> channel;
                     channel.reserve(used.size());
-                    for (const std::size_t vertex : used)
+                    for (std::size_t v = 0; v < used.size(); ++v)
                     {
                         // A file with no MeshNormals still answers a normal channel: the genuine
                         // importer generates one from the geometry (measured, x/bare_mesh.x and
                         // x/generated_normals.x).
-                        channel.push_back(vertex < normals.size()   ? normals[vertex]
-                                          : vertex < generated.size() ? generated[vertex]
-                                                                      : Vector3(0.0f, 0.0f, -1.0f));
+                        const std::size_t normalIndex = usedNormals[v];
+                        const std::size_t vertex = used[v];
+                        channel.push_back(normalIndex < normals.size() ? normals[normalIndex]
+                                          : vertex < generated.size()  ? generated[vertex]
+                                                                       : Vector3(0.0f, 0.0f, -1.0f));
                     }
                     geometry->getVerticesProperty().getChannelsProperty().Add<Vector3>(
                         VertexChannelNames::Normal(), channel);
