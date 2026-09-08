@@ -295,6 +295,11 @@ def main():
         # VULKAN-226 (env map) each keep their family's push constant, UBO, pipeline layout,
         # descriptor set and fragment stage; only the vertex module differs.
         ("alpha_test3d.vert.glsl",  VERTEX_SHADER, "kInstancedAlphaTest3dVertSpv"),
+        # plans/plan_vulkan.md VULKAN-229: the coloured alpha-test shape, which VULKAN-222
+        # left -- a Position+Colour+TextureCoordinate instanced draw took the uncoloured
+        # module and bound its colour bytes to that shader's UV input.
+        ("alpha_test_colored3d.vert.glsl", VERTEX_SHADER,
+         "kInstancedAlphaTestColored3dVertSpv"),
         ("lit_textured3d.vert.glsl", VERTEX_SHADER, "kInstancedLitTextured3dVertSpv"),
         ("lit_textured3d_vertexlit.vert.glsl", VERTEX_SHADER,
          "kInstancedLitTextured3dVertexLitVertSpv"),

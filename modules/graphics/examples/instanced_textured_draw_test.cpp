@@ -132,6 +132,12 @@ class InstancedTexturedDrawTest final : public Game
         return c.getBProperty() >= 180 && c.getRProperty() <= 80 && c.getGProperty() <= 80;
     }
 
+    /// The clear colour every leg below paints, (0,255,0) -- "nothing drew here".
+    static bool IsClear(const Color& c)
+    {
+        return c.getGProperty() >= 180 && c.getRProperty() <= 80 && c.getBProperty() <= 80;
+    }
+
     /// Names whatever a renderer actually produced, so a FAIL line says which wrong answer it is.
     static std::string Diagnose(const Color& c)
     {
@@ -468,6 +474,95 @@ protected:
                       "routed to a program without one looks like)");
         }
 
+        // ---- T/U: the COLOURED alpha-test shape ---------------------------------------------
+        // plans/plan_vulkan.md VULKAN-229. H/I drive a Position+TextureCoordinate record; the
+        // alpha-test family has a second vertex shape, Position+Colour+TextureCoordinate with
+        // VertexColorEnabled, and only that one reads a colour. Same 2x1 texture trick, but WHITE
+        // rather than blue, with a grey(128) vertex colour -- so the left half must read
+        // (128,128,128), (255,255,255) is the specific signature of a program that dropped the
+        // vertex colour, and the right half must still be discarded.
+        {
+            Texture2D atc(dev, 2, 1, false, SurfaceFormat::Color);
+            const std::uint8_t apxc[8] = { 255, 255, 255, 255,   255, 255, 255, 0 };
+            atc.SetDataRGBA(apxc, 2);
+            struct PCT { float x, y, z; std::uint8_t r, g, b, a; float u, v; };
+            static_assert(sizeof(PCT) == 24);
+            const PCT cwq[4] = {
+                { -0.6f,  0.3f, 0.0f, 128, 128, 128, 255, 0.0f, 0.0f },
+                { -0.6f, -0.3f, 0.0f, 128, 128, 128, 255, 0.0f, 1.0f },
+                {  0.6f, -0.3f, 0.0f, 128, 128, 128, 255, 1.0f, 1.0f },
+                {  0.6f,  0.3f, 0.0f, 128, 128, 128, 255, 1.0f, 0.0f },
+            };
+            const VertexDeclaration cwqDecl(24, {
+                VertexElement(0,  VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+                VertexElement(12, VertexElementFormat::Color,   VertexElementUsage::Color, 0),
+                VertexElement(16, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+            });
+            VertexBuffer cwvb(dev, cwqDecl, 4, BufferUsage::None);
+            cwvb.SetDataRaw(cwq, 4, static_cast<int>(sizeof(PCT)));
+            const InstMat4 one2[1] = { TranslateMat(0.0f, 0.0f, 0.0f) };
+            const VertexDeclaration instDecl2(64, {
+                VertexElement(0,  VertexElementFormat::Vector4, VertexElementUsage::BlendWeight, 0),
+                VertexElement(16, VertexElementFormat::Vector4, VertexElementUsage::BlendWeight, 1),
+                VertexElement(32, VertexElementFormat::Vector4, VertexElementUsage::BlendWeight, 2),
+                VertexElement(48, VertexElementFormat::Vector4, VertexElementUsage::BlendWeight, 3),
+            });
+            VertexBuffer ivb2(dev, instDecl2, 1, BufferUsage::None);
+            ivb2.SetDataRaw(one2, 1, static_cast<int>(sizeof(InstMat4)));
+
+            auto alphaColorLeg = [&](bool instanced) {
+                dev.Clear(Color(0, 255, 0, 255));
+                dev.SetDepthTestEnabled(false);
+                dev.setBlendStateProperty(BlendState::Opaque);
+                dev.setRasterizerStateProperty(RasterizerState::CullNone);
+                dev.getSamplerStatesProperty()[0] = SamplerState::PointClamp;
+                AlphaTestEffect fx(dev);
+                fx.setAlphaFunctionProperty(CompareFunction::Greater);
+                fx.setReferenceAlphaProperty(128);
+                fx.setWorldProperty(Matrix::getIdentityProperty());
+                fx.setViewProperty(Matrix::getIdentityProperty());
+                fx.setProjectionProperty(Matrix::getIdentityProperty());
+                fx.setTextureProperty(&atc);
+                fx.setVertexColorEnabledProperty(true);
+                fx.Apply();
+                dev.SetVertexBuffer(&cwvb);
+                dev.SetIndexBuffer(ib_.get());
+                if (instanced) {
+                    std::vector<VertexBufferBinding> bd = {
+                        VertexBufferBinding(&cwvb, 0, 0),
+                        VertexBufferBinding(&ivb2, 0, 1),
+                    };
+                    dev.SetVertexBuffers(bd);
+                    dev.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2, 1);
+                } else {
+                    dev.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2);
+                }
+                return std::pair<Color, Color>{ ReadPixel(dev, kN / 4, kN / 2),
+                                                ReadPixel(dev, (kN * 3) / 4, kN / 2) };
+            };
+            auto okc = [&](const std::pair<Color, Color>& q) {
+                const int r = q.first.getRProperty();
+                const bool leftGrey = r >= 100 && r <= 155 &&
+                                      std::abs(r - q.first.getGProperty()) <= 6 &&
+                                      std::abs(r - q.first.getBProperty()) <= 6;
+                return leftGrey && IsClear(q.second);
+            };
+            auto whyc = [](const std::pair<Color, Color>& q) {
+                if (q.first.getRProperty() > 200 && q.first.getGProperty() > 200)
+                    return " -- the vertex colour was dropped";
+                if (!IsClear(q.second)) return " -- the alpha test never ran";
+                return "";
+            };
+            const auto acn = alphaColorLeg(false);
+            const auto aci = alphaColorLeg(true);
+            check(okc(acn),
+                  "T control: a NON-instanced COLOURED AlphaTestEffect draw keeps the grey vertex "
+                  "colour and discards the transparent half -- left " + Text(acn.first) +
+                      " (want ~(128,128,128)), right " + Text(acn.second) + whyc(acn));
+            check(okc(aci),
+                  "U an INSTANCED one does too: left " + Text(aci.first) + ", right " +
+                      Text(aci.second) + whyc(aci));
+        }
 
         // ---- J/K: LIGHTING on an instanced draw ---------------------------------------------
         // One directional light at N.L = 0.5 over a white texture with a white DiffuseColor, so the

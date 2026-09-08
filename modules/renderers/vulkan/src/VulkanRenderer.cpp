@@ -7238,14 +7238,18 @@ namespace CNA::Internal::Renderers::Vulkan
         // the color attribute and gates it by VertexColorEnabled; strides 20/32 have no color data
         // and keep the original shared position+UV-only shader (UV offset remapped per stride).
         const bool colored = (stride == 24);
-        // VULKAN-222: the instanced variant, which has no coloured sibling yet -- a
-        // Position+Colour+TexCoord instanced alpha-test draw still takes the uncoloured
-        // module and loses its colour, and that is VULKAN-218's, not silently accepted.
-        VkShaderModule vert = instanced
-            ? CreateShaderModule(kInstancedAlphaTest3dVertSpv, kInstancedAlphaTest3dVertSpv_size)
-            : (colored
-            ? CreateShaderModule(kAlphaTestColored3dVertSpv, kAlphaTestColored3dVertSpv_size)
-            : CreateShaderModule(kAlphaTest3dVertSpv, kAlphaTest3dVertSpv_size));
+        // VULKAN-222/VULKAN-229: shape outer, `instanced` inner. Written the other way round this
+        // routed a Position+Colour+TexCoord instanced draw to the UNCOLOURED module, whose location 1
+        // is `inUV` -- so the record's four colour bytes were read as the first two floats of a
+        // texture coordinate. Both halves of that pair now come from the same `colored` predicate.
+        VkShaderModule vert = colored
+            ? (instanced
+               ? CreateShaderModule(kInstancedAlphaTestColored3dVertSpv,
+                                    kInstancedAlphaTestColored3dVertSpv_size)
+               : CreateShaderModule(kAlphaTestColored3dVertSpv, kAlphaTestColored3dVertSpv_size))
+            : (instanced
+               ? CreateShaderModule(kInstancedAlphaTest3dVertSpv, kInstancedAlphaTest3dVertSpv_size)
+               : CreateShaderModule(kAlphaTest3dVertSpv, kAlphaTest3dVertSpv_size));
         VkShaderModule frag = CreateShaderModule(kAlphaTest3dFragSpv, kAlphaTest3dFragSpv_size);
 
         // VULKAN-222: two bindings when instanced -- 0 per-vertex, 1 per-instance at 64 bytes,
@@ -15075,6 +15079,21 @@ namespace CNA::Internal::Renderers::Vulkan
             instancedDualTexLayout = BuildVulkanVertexInputLayoutEXT(
                 vbForLayout.GetDeclarationEXT(), StockInputs::kDualTexture,
                 std::size(StockInputs::kDualTexture));
+        // VULKAN-229: the alpha-test family's own input table, chosen by the SAME `stride == 24`
+        // predicate `GetOrCreatePipelineAlphaTest3D` uses for its module and its baked attribute
+        // set, so the layout and the shader cannot disagree. `BuildInstancedVertexLayoutEXT`'s
+        // basic tables cannot serve here: they are chosen from the declaration rather than the
+        // stride, so a colour-carrying record at a stride other than 24 would build a
+        // {pos, colour, uv} layout for a module whose location 1 is a UV.
+        VulkanVertexInputLayoutEXT instancedAlphaTestLayout;
+        if (instancedAlphaTest) {
+            std::size_t atInputCount = 0;
+            const auto* atInputs = EffectFamilyStockInputsEXT(
+                /*needsAlphaTest=*/true, /*needsEnvMap=*/false, /*needsSkinned=*/false,
+                pvStride, atInputCount);
+            instancedAlphaTestLayout = BuildVulkanVertexInputLayoutEXT(
+                vbForLayout.GetDeclarationEXT(), atInputs, atInputCount);
+        }
         VulkanVertexInputLayoutEXT instancedLitLayout;
         if (instancedLit) {
             // VULKAN-228: the shape's own input table, in the shape's own location order. The
@@ -15172,6 +15191,8 @@ namespace CNA::Internal::Renderers::Vulkan
         // Same two lines the ordinary indexed route uses, so the sampler is slot 0's, as there.
         d.instancedTextured = instancedTextured;
         d.useAlphaTest      = instancedAlphaTest;
+        // VULKAN-229: and its own layout, for the reason recorded where it is built.
+        if (instancedAlphaTest) d.vertexLayout = instancedAlphaTestLayout;
         // VULKAN-224: the lit family's descriptor set and its 64-float UBO come from the very
         // helper VULKAN-223 extracted for this -- the same code the two ordinary routes run, so an
         // instanced lit draw cannot drift from a non-instanced one. The push constant needs no
