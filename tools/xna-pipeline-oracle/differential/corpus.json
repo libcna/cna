@@ -1204,6 +1204,28 @@
    },
    "platform": "Windows",
    "profile": "HiDef"
+  },
+  {
+   "case": "texture/png_colorkey_alpha",
+   "source": "texture/probe_colorkey_alpha.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "ColorKeyEnabled": "True"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/png_colorkey_alpha_off",
+   "source": "texture/probe_colorkey_alpha.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "ColorKeyEnabled": "False"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
   }
  ]
 }

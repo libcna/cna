@@ -1048,14 +1048,17 @@ namespace CNA::Content::Pipeline
             {
                 for (std::size_t index = 0u; index + 3u < pixels.size(); index += 4u)
                 {
-                    // Three channels, not four. XNA's `ColorKeyColor` is a Color and a project
-                    // writes its alpha, but nothing measured here says whether that alpha takes
-                    // part in the match: every case the corpus has is an opaque key against an
-                    // opaque texel. Comparing it would be a guess, and a guess that stops keying
-                    // texels a build used to key.
+                    // Four channels. The alpha *does* take part in the match, and the corpus has
+                    // the case that says so: SAMPLE-070's `Potion3h.png` carries sixteen texels
+                    // that are exactly the key colour (255,0,255) at an alpha of 254 rather than
+                    // 255, and XNA's own build keeps every one of them -- they arrive in the
+                    // reference as (254,0,254,254), which is (255,0,255,254) premultiplied.
+                    // Comparing three channels cleared them to transparent black
+                    // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-142`).
                     if (pixels[index] == (*colorKey)[0] &&
                         pixels[index + 1u] == (*colorKey)[1] &&
-                        pixels[index + 2u] == (*colorKey)[2])
+                        pixels[index + 2u] == (*colorKey)[2] &&
+                        pixels[index + 3u] == (*colorKey)[3])
                     {
                         if (clearKeyedColor)
                         {
