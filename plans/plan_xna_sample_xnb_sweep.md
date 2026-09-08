@@ -433,25 +433,27 @@ and a reorder fitted to nine shapes is a guess dressed as a fix.
 
 ## 12. What the campaign found
 
-**The denominator.** 7,734 genuine `.xnb` files, produced by Microsoft's own XNA
+**The denominator.** 7,726 genuine `.xnb` files, produced by Microsoft's own XNA
 4.0 Content Pipeline from public XNA samples, present on this machine. Frozen by
 `corpus_inventory.py` before any work; not one was generated, added or dropped
-for this campaign.
+for this campaign, and all 7,726 still match the digest it froze them with. The
+number was 7,734 until `XNASWEEP-132` found eight of them were MonoGame's output
+rather than XNA's and the inventory stopped counting them.
 
-**The answer.** 3,738 of them are byte for byte what CNA's product pipeline
+**The answer.** 3,771 of them are byte for byte what CNA's product pipeline
 produces from the same source, up from 922 when the sweep first ran and 3,619 at
-the run the earlier fixes were measured against. Another 735 differ only in ways
-nothing a runtime does can see. 726 differ for a reason that is written down and
+the run the earlier fixes were measured against. Another 728 differ only in ways
+nothing a runtime does can see. 736 differ for a reason that is written down and
 cannot be closed from here. 1,370 need a component the *sample* defines and .NET
-loads from an assembly. 946 the sweep has no way to build at all, and 15 are this
-machine's fault rather than CNA's. **204 are unexplained**, and §11.3.1 says
-exactly which and what differs in each.
+loads from an assembly. 931 the sweep has no way to build at all, and 15 are this
+machine's fault rather than CNA's. **175 are unexplained**, every one of them a
+model, and §11.3.1 says exactly what differs in each.
 
 ### 12.1 What the corpus found that one project could not
 
-Fourteen framework defects, each fixed in the component that owns it, each with
-its own regression test. None of them is sample-specific and none of them was
-visible from the API surface, the differential corpus, or Platformer:
+Twenty-eight framework defects, each fixed in the component that owns it, each
+with its own regression test. None of them is sample-specific and none of them
+was visible from the API surface, the differential corpus, or Platformer:
 
 | | |
 |---|---|
@@ -469,6 +471,16 @@ visible from the API surface, the differential corpus, or Platformer:
 | `XNASWEEP-121` | The quarter turn every Z-up exporter writes, composed in `float`. |
 | `XNASWEEP-122` | A bone with no name and a bone whose name is empty are different bytes. |
 | `XNASWEEP-124` | A `.wav`'s loop was one frame short of the one RIFF describes. |
+| `XNASWEEP-131` | A font sheet's glyph is the ink in the cell, not the cell. |
+| `XNASWEEP-145` | An FBX object's name includes its prefix; a material could answer for a model. |
+| `XNASWEEP-146` | The geometry's own offset from its node, and the flag that decides whether `PreRotation` counts. |
+| `XNASWEEP-148` | A `.x` file's normals are values; two entries holding the same numbers are one normal. |
+| `XNASWEEP-151` | An FBX 7 mesh is two objects, and the second is not a node. |
+| `XNASWEEP-152` | A node's transform has ten terms, and CNA composed four. |
+| `XNASWEEP-154` | The scene's order is the order it is connected in, not declared in. |
+| `XNASWEEP-155` | A mesh's batches come out in the order its polygons first name a material. |
+| `XNASWEEP-156` | A mesh with no normals got a constant `(0,0,1)`, right only in the XY plane. |
+| `XNASWEEP-157` | One index buffer for the model, and a shared-resource table in first-reference order. |
 | `XNASWEEP-126` | A model's meshes were listed parent-first and each carried its own buffers. |
 | `XNASWEEP-127/128` | An FBX material's colour factors, its two property tables, and the texture never read. |
 | `XNASWEEP-131` | A font sheet's glyph is the ink in the cell, packed the way XNA packs it, premultiplied. |
