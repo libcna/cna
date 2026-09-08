@@ -127,9 +127,10 @@ namespace CNA::Internal::Renderers::Software
     void SoftwareFramebuffer::SetMultiSampleCount(int sampleCount)
     {
         // CPU MSAA deliberately has one high-quality, predictable option: a rotated-independent
-        // 2x2 grid. Treat every other request as unsupported rather than silently claiming an
-        // arbitrary count with a different number of actual samples.
-        const int appliedCount = sampleCount == 4 ? 4 : 0;
+        // 2x2 grid. XNA asks the device for the greatest supported count no larger than its
+        // preference, so a request of eight clamps to the real four-sample implementation while
+        // one or two cannot be silently promoted beyond the requested quality.
+        const int appliedCount = sampleCount >= 4 ? 4 : 0;
         if (multiSampleCount == appliedCount)
             return;
 

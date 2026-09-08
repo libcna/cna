@@ -75,6 +75,33 @@ namespace CNA::Internal::Renderers::Software
 
     void SoftwareRenderer::SetPresentationMode(int) {}
 
+    int SoftwareRenderer::GetAppliedMultiSampleCountEXT(int) const
+    {
+        return backbuffer_.multiSampleCount;
+    }
+
+    int SoftwareRenderer::ApplyMultiSampleCount(int requestedMultiSampleCount)
+    {
+        backbuffer_.SetMultiSampleCount(requestedMultiSampleCount);
+        return backbuffer_.multiSampleCount;
+    }
+
+    void SoftwareRenderer::UpdatePresentationFormatEXT(
+        int, int depthStencilFormat, bool)
+    {
+        const bool allocateDepth = depthStencilFormat != 0;
+        const bool allocateStencil = depthStencilFormat == 3;
+        if (backbuffer_.allocateDepthStorage == allocateDepth &&
+            backbuffer_.allocateStencilStorage == allocateStencil)
+        {
+            return;
+        }
+
+        backbuffer_.allocateDepthStorage = allocateDepth;
+        backbuffer_.allocateStencilStorage = allocateStencil;
+        backbuffer_.Resize(backbuffer_.width, backbuffer_.height);
+    }
+
     void SoftwareRenderer::ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)
     {
         if (w < 0 || h < 0)

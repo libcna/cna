@@ -312,6 +312,49 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_ResourceLeak
         COMMAND cna_test_software_resource_leak TIMEOUT 60 LABELS "Software")
 
+    # SOFTWARE-127: public presentation/reset state remains meaningful for a renderer without a
+    # physical window. Compile the renderer-neutral EasyGL programs unchanged against Software;
+    # native window resize, fullscreen switching and swap timing are intentionally not asserted.
+    set(CNA_EASYGL_PRESENTATION_DIR
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples)
+    cna_software_test(cna_test_software_presentation_parameters
+        ${CNA_EASYGL_PRESENTATION_DIR}/easygl_presentation_parameters_test.cpp)
+    cna_register_renderer_test(NAME Software_PresentationParameters
+        COMMAND cna_test_software_presentation_parameters TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_device_reset_events
+        ${CNA_EASYGL_PRESENTATION_DIR}/easygl_device_reset_events_test.cpp)
+    cna_register_renderer_test(NAME Software_DeviceResetEvents
+        COMMAND cna_test_software_device_reset_events TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_backbuffer_resize
+        ${CNA_EASYGL_PRESENTATION_DIR}/easygl_backbuffer_resize_test.cpp)
+    cna_register_renderer_test(NAME Software_BackbufferResize
+        COMMAND cna_test_software_backbuffer_resize TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_present_interval
+        ${CNA_EASYGL_PRESENTATION_DIR}/easygl_present_interval_test.cpp)
+    cna_register_renderer_test(NAME Software_PresentInterval
+        COMMAND cna_test_software_present_interval TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_fullscreen_field
+        ${CNA_EASYGL_PRESENTATION_DIR}/easygl_fullscreen_field_test.cpp)
+    cna_register_renderer_test(NAME Software_FullscreenField
+        COMMAND cna_test_software_fullscreen_field TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_depth_format
+        ${CNA_EASYGL_PRESENTATION_DIR}/easygl_depth_format_test.cpp)
+    cna_register_renderer_test(NAME Software_DepthFormat
+        COMMAND cna_test_software_depth_format TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_presentation_msaa_contract
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/presentation_msaa_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_PresentationMsaaContract
+        COMMAND cna_test_software_presentation_msaa_contract 4 TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_rendertarget_viewport_scissor_reset
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_viewport_scissor_reset_test.cpp)
+    cna_register_renderer_test(NAME Software_RenderTarget_ViewportScissorReset
+        COMMAND cna_test_software_rendertarget_viewport_scissor_reset
+        TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_presentation_reset_contract
+        software_presentation_reset_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_PresentationResetContract
+        COMMAND cna_test_software_presentation_reset_contract TIMEOUT 30 LABELS "Software")
+
     # REMED-GFX-124: a RenderTarget2D must be readable and sampleable once it is no longer active --
     # GetData returns the rendered colour attachment (full level, rectangle, destination start index)
     # and the finished target samples as an ordinary texture through both SpriteBatch and a textured

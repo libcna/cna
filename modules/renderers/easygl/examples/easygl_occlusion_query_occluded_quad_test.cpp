@@ -21,12 +21,14 @@
 // Exit code 0 = all PASS, 1 = at least one FAIL.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
+#include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectPass.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectPassCollection.hpp"
@@ -74,6 +76,7 @@ namespace
 
 class OcclusionQueryOccludedQuadTest : public Game
 {
+    std::unique_ptr<GraphicsDeviceManager> graphics_;
     std::unique_ptr<VertexBuffer> vbOccluder_, vbTarget_;
     std::unique_ptr<IndexBuffer>  ib_;
     bool done_   = false;
@@ -164,6 +167,12 @@ protected:
     }
 
 public:
+    OcclusionQueryOccludedQuadTest()
+    {
+        graphics_ = std::make_unique<GraphicsDeviceManager>(this);
+        graphics_->setPreferredDepthStencilFormatProperty(DepthFormat::Depth24);
+    }
+
     int getResult() const { return result_; }
 };
 

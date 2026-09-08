@@ -1317,6 +1317,33 @@ namespace CNA::Internal::Renderers::Software
         void GetViewportSize(int& width, int& height) override;
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
+        /**
+         * @brief Returns the sample count actually stored by the CPU backbuffer.
+         * @return Zero for single-sample storage or four for the CPU 4x mode.
+         */
+        [[nodiscard]] int GetMultiSampleCount() const override
+        { return backbuffer_.multiSampleCount; }
+        /**
+         * @brief Reports the construction-time sample count applied by the CPU backbuffer.
+         * @param requestedMultiSampleCount Requested count before renderer clamping.
+         * @return Zero or four according to the storage actually allocated.
+         */
+        [[nodiscard]] int GetAppliedMultiSampleCountEXT(
+            int requestedMultiSampleCount) const override;
+        /**
+         * @brief Reconfigures CPU backbuffer sample storage at device reset time.
+         * @param requestedMultiSampleCount Requested XNA presentation sample count.
+         * @return Zero or four according to the storage actually allocated.
+         */
+        int ApplyMultiSampleCount(int requestedMultiSampleCount) override;
+        /**
+         * @brief Reconfigures meaningful CPU backbuffer depth and stencil storage.
+         * @param backBufferFormat Requested backbuffer SurfaceFormat ordinal.
+         * @param depthStencilFormat Requested DepthFormat ordinal.
+         * @param isFullScreen Requested fullscreen state, which has no CPU-window effect.
+         */
+        void UpdatePresentationFormatEXT(
+            int backBufferFormat, int depthStencilFormat, bool isFullScreen) override;
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
 
 

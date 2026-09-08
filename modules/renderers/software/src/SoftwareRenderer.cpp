@@ -4861,7 +4861,11 @@ namespace CNA::Internal::Renderers
 
     std::unique_ptr<IGraphicsRenderer> Software::CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
-        return std::make_unique<Software::SoftwareRenderer>(args.virtualWidth, args.virtualHeight);
+        auto renderer = std::make_unique<Software::SoftwareRenderer>(
+            args.virtualWidth, args.virtualHeight,
+            args.depthStencilFormat != 0, args.depthStencilFormat == 3);
+        renderer->ApplyMultiSampleCount(args.multiSampleCount);
+        return renderer;
     }
 #endif
 }

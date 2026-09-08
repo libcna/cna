@@ -194,7 +194,8 @@ rather than always passing.
   `RenderTarget2D` does implement an actual four-sample CPU colour plane and generated mip levels.
   Unbind resolves the samples before mip generation; a level-zero `GetData` while the target is
   active snapshots the live samples without unbinding it, while generated levels remain unavailable
-  until the pass ends. Requests other than 0 or 4 samples still fall back to single-sample storage.
+  until the pass ends. Requests of four or more clamp to the real four-sample mode; one and two
+  remain single-sample rather than being promoted beyond the requested quality.
   `RenderTargetCube` owns six isolated color faces, an XNA-style depth/stencil attachment shared
   across face switches, face-local 4x resolve and generated box-filter mips. Its faces support
   exact partial transfer and can be sampled after rendering by `EnvironmentMapEffect` through the
@@ -339,12 +340,21 @@ rather than always passing.
   per-mesh effects, texture materials, JSON/binary content loading, 16/32-bit indices, imported
   skeleton data and visible animation-clip deformation. This proof exercises public Model and
   ContentManager orchestration rather than stopping at isolated SkinnedEffect triangles.
+- **Meaningful presentation resets are real CPU state changes** (`SOFTWARE-127`).
+  `GraphicsDeviceManager.ApplyChanges()` resizes the backbuffer, reports the renderer-applied
+  sample count, switches real single/4x sample storage, and allocates exactly the depth/stencil
+  planes requested by `None`, `Depth16`/`Depth24` or `Depth24Stencil8`. A size change restores the
+  viewport and scissor to the complete target; an ordinary `Present()` preserves custom values.
+  Six unchanged EasyGL public fixtures plus shared MSAA and target-restoration contracts protect
+  these renderer-independent semantics. Physical fullscreen modes, swap timing and a native GPU
+  context remain intentionally non-applicable.
 - **Custom `ShaderEffect` (arbitrary GLSL/HLSL/WGSL source) compiles but doesn't actually execute**
   — mirrors `HEADLESS-16`'s own precedent exactly: the source is accepted without compiling, and
   only effects whose `FillGpuDrawParams()` output matches one of this renderer's fixed stock-effect
   CPU paths will render correctly.
-- **`Present()` is a no-op**; there is no way to visually inspect a Software-rendered frame on
-  screen in this renderer's current form. An opt-in "blit the CPU framebuffer to a real window"
+- **`Present()` completes immediately without a physical swap**, preserving the CPU framebuffer
+  and current viewport/scissor state. There is no way to visually inspect a Software-rendered frame
+  on screen in this renderer's current form. An opt-in "blit the CPU framebuffer to a real window"
   mode is a reasonable future addition (`plans/plan_software.md` design decision 3) but isn't needed for
   this renderer's actual value proposition (deterministic, GPU-free pixel tests).
 
