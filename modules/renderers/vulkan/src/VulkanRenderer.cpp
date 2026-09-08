@@ -9349,7 +9349,10 @@ namespace CNA::Internal::Renderers::Vulkan
         PipelineKey key = { stateKey ^ (compiled.pass.pipelineKey * 1099511628211ull) ^
                                 (static_cast<std::uint64_t>(draw.stride) * 0x9E3779B97F4A7C15ull),
                             PackBlendBits(draw.blend, draw.blendParams),
-                            PackColorWriteBits(draw.blendParams), draw.NarrowSampleMaskEXT(blendParams.sampleMask, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa))) };
+                            PackColorWriteBits(draw.blendParams),
+                            NarrowSampleMaskEXT(
+                                draw.blendParams.sampleMask,
+                                RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa))) };
         // VULKAN-216: the sample count is part of this pipeline's identity, not just of its render pass.
         key.ms = static_cast<uint32_t>(RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
         auto it = compiledEffectPipelines_.find(key);
@@ -9398,7 +9401,9 @@ namespace CNA::Internal::Renderers::Vulkan
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         ms.rasterizationSamples = MsaaSamplesForPipelinesEXT(msaa);  // VULKAN-216
-        const VkSampleMask sampleMask = draw.NarrowSampleMaskEXT(blendParams.sampleMask, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
+        const VkSampleMask sampleMask = NarrowSampleMaskEXT(
+            draw.blendParams.sampleMask,
+            RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
         if (sampleMask != 0xFFFFFFFFu) ms.pSampleMask = &sampleMask;
 
         VkPipelineDepthStencilStateCreateInfo ds{};

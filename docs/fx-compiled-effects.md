@@ -288,8 +288,12 @@ nine-function effect context is CNA's own, written against the portable SPIR-V p
 renderer builds a pipeline per linked shader pair and vertex layout, binds the four descriptor sets
 that profile fixes, and replays the draw from growable per-frame uniform chunks at `Present()`. It
 draws buffered, user, indexed and instanced geometry, and samples 2D, cube and volume textures. The
-one thing it refuses that is specific to compiled Effects is vertex-stage sampling; multi-stream
-vertex input is refused renderer-wide, for stock draws equally.
+one thing it refuses that is specific to compiled Effects is vertex-stage sampling. The former
+renderer-wide multi-stream refusal was removed by `REMED-GFX-203` on 2026-09-08; that change also
+wires combined declarations and immutable packed snapshots into the compiled route, but the
+option-on compiled-effect conformance matrix remains at its dated result until that configuration
+is run again. `FX-129` repairs the unrelated sample-mask compile regression found while checking
+that path.
 
 DirectX 11, DirectX 9 and Metal are the planned next waves; each becomes true only after it passes
 the same shared suite **on hardware that can execute it**. None of the three has been written, and
