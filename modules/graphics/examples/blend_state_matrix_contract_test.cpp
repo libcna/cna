@@ -263,6 +263,31 @@ protected:
                          std::string("opaque-factor alpha bypasses ") + kFunctionNames[i]);
         }
 
+        // D3D9/11 and OpenGL ignore both factors for MIN/MAX and compare the raw source and
+        // destination components. Zero factors make this impossible to pass by accidentally
+        // applying the ordinary factor-then-equation formula.
+        for (const BlendFunction function : {BlendFunction::Max, BlendFunction::Min})
+        {
+            BlendState state;
+            state.setColorSourceBlendProperty(Blend::Zero);
+            state.setColorDestinationBlendProperty(Blend::Zero);
+            state.setAlphaSourceBlendProperty(Blend::Zero);
+            state.setAlphaDestinationBlendProperty(Blend::Zero);
+            state.setColorBlendFunctionProperty(function);
+            state.setAlphaBlendFunctionProperty(function);
+            const Color actual = Render(device, state);
+            const bool maximum = function == BlendFunction::Max;
+            const char* name = maximum ? "Max" : "Min";
+            CheckChannel(actual.getRProperty(),
+                         maximum ? std::max(kSource.getRProperty(), kDestination.getRProperty())
+                                 : std::min(kSource.getRProperty(), kDestination.getRProperty()),
+                         std::string(name) + " ignores zero RGB factors");
+            CheckChannel(actual.getAProperty(),
+                         maximum ? std::max(kSource.getAProperty(), kDestination.getAProperty())
+                                 : std::min(kSource.getAProperty(), kDestination.getAProperty()),
+                         std::string(name) + " ignores zero alpha factors");
+        }
+
         std::printf("=== %d/%d PASS ===\n", passed_, total_);
         result_ = passed_ == total_ ? 0 : 1;
         Exit();
