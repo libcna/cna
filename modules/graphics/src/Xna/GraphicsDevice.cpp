@@ -3512,6 +3512,21 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::applySamplerStatesToRenderer()
     {
         if (!renderer_) return;
+
+        // FNA reapplies RasterizerState at every draw, rather than only when the property object is
+        // assigned. The current state is publicly mutable through GraphicsDevice.RasterizerState,
+        // and native rasterizer application also depends on the active destination's sample/depth
+        // configuration. This method is the common pre-draw state flush for every draw overload.
+        const RasterizerState& rs = rasterizerState_;
+        renderer_->ApplyRasterizerState(
+            (int)rs.getCullModeProperty(),
+            (int)rs.getFillModeProperty(),
+            rs.getScissorTestEnableProperty(),
+            rs.getDepthBiasProperty(),
+            rs.getSlopeScaleDepthBiasProperty());
+        renderer_->ApplyRasterizerMultiSampleState(
+            rs.getMultiSampleAntiAliasProperty());
+
         for (int i = 0; i < SamplerStateCollection::MaxSamplers; ++i)
         {
             const SamplerState& ss = samplerStates_[i];

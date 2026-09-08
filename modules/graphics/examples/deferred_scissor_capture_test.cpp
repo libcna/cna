@@ -2007,6 +2007,68 @@ class DeferredScissorCaptureTest : public Game
         }, label);
     }
 
+    /**
+     * @brief K4 -- mutations made through GraphicsDevice.RasterizerState are consumed by the next
+     *        draw without requiring the state object to be assigned again.
+     *
+     * FNA reapplies RasterizerState unconditionally in GraphicsDevice.ApplyState() before every
+     * draw. CNA exposes the same current object by mutable reference, so merely caching the values
+     * installed by the last assignment leaves its public state and native state inconsistent.
+     */
+    void RunCurrentRasterizerStateMutation(GraphicsDevice& dev)
+    {
+        const std::string label = "K4 current RasterizerState in-place mutation";
+        keepAlive_.clear();
+        if (!kContract.draws3D || !kContract.targetScissorApplies)
+        {
+            skip(label + ": skipped -- no 3D render-target scissor on this renderer");
+            return;
+        }
+        auto rt = MakeTarget(dev, kRTW, kRTH);
+
+        dev.SetRenderTarget(rt.get());
+        dev.Clear(kBlack);
+        dev.setBlendStateProperty(BlendState::Opaque);
+        dev.setDepthStencilStateProperty(DepthStencilState::None);
+        fx_->VertexColorEnabled = true;
+        fx_->setTextureEnabledProperty(false);
+        fx_->Apply();
+        SetScissor(dev, 0, 0, kRTW / 2, kRTH);
+
+        // Assignment installs disabled native state. The in-place mutation must still enable the
+        // left-half clip for the next draw.
+        dev.setRasterizerStateProperty(Raster(false));
+        dev.getRasterizerStateProperty().setScissorTestEnableProperty(true);
+        {
+            VertexBuffer& vb = MakeVb(dev, FullQuad(kRed));
+            dev.SetVertexBuffer(&vb);
+            dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+            dev.SetVertexBuffer(nullptr);
+        }
+
+        // Reverse the transition. This bottom-half quad must reach the right half because the
+        // current object's new disabled value is consumed at this draw.
+        dev.setRasterizerStateProperty(Raster(true));
+        dev.getRasterizerStateProperty().setScissorTestEnableProperty(false);
+        {
+            VertexBuffer& vb = MakeVb(dev, Quad(-1.0f, 1.0f, -1.0f, 0.0f, 0.5f, kBlue));
+            dev.SetVertexBuffer(&vb);
+            dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+            dev.SetVertexBuffer(nullptr);
+        }
+
+        SetScissor(dev, 0, 0, kRTW, kRTH);
+        dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        dev.setRasterizerStateProperty(Raster(true));
+
+        if (!CanJudgeTarget(label)) return;
+        const Image image = ReadTarget(*rt, kRTW, kRTH);
+        CheckProbes(image, {
+            {  8, 12, kRed   }, { 40, 12, kBlack },
+            {  8, 40, kBlue  }, { 40, 40, kBlue  },
+        }, label);
+    }
+
     // =====================================================================
     // L -- repetition: no state leaks between cycles or frames
     // =====================================================================
@@ -2173,6 +2235,7 @@ class DeferredScissorCaptureTest : public Game
         RunScissorTestDisabled(dev);
         RunScissorTestToggledInOneCycle(dev);
         RunRasterizerStateIdentity(dev);
+        RunCurrentRasterizerStateMutation(dev);
         RunManyScissorsInOneCycle(dev);
         RunSameTargetTwiceInOneFrame(dev);
         // Repeat the decisive sequence once more in the same frame: nothing may have leaked.
