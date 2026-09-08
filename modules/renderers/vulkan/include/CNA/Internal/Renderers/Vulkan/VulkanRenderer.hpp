@@ -25,6 +25,8 @@ namespace CNA::Internal::Renderers::Vulkan
     class VulkanRenderer;            // forward
     class VulkanRenderTargetRenderer;        // forward
     class VulkanRenderTargetCubeRenderer;    // forward
+    class VulkanStorageBufferRenderer;       // forward
+    class VulkanComputeShaderRenderer;       // forward
 
     // -------------------------------------------------------------------------
     // Vertex types (internal to the Vulkan renderer)
@@ -1084,6 +1086,188 @@ namespace CNA::Internal::Renderers::Vulkan
     };
 
     // -------------------------------------------------------------------------
+    // VulkanStorageBufferRenderer / VulkanComputeShaderRenderer
+    // -------------------------------------------------------------------------
+
+    /**
+     * @brief Host-visible Vulkan storage buffer used by the CNAEXT compute contract.
+     *
+     * plans/plan_modern.md MOD-2241. The first Vulkan compute slice deliberately makes requested
+     * CPU readback synchronous. Its memory is host coherent, while the dispatch command records
+     * the host-to-compute and compute-to-host dependencies around the shader invocation.
+     */
+    class VulkanStorageBufferRenderer final : public IStorageBufferRenderer
+    {
+    public:
+        /**
+         * @brief Creates a storage buffer of @p byteSize bytes.
+         *
+         * @param owner The Vulkan renderer that owns the device.
+         * @param byteSize The positive buffer size.
+         */
+        VulkanStorageBufferRenderer(VulkanRenderer* owner, std::size_t byteSize);
+
+        /** @brief Releases the native buffer and its memory. */
+        ~VulkanStorageBufferRenderer() override;
+
+        /**
+         * @brief Copies bytes from the CPU into the storage buffer.
+         *
+         * @param data Source bytes.
+         * @param byteSize Number of bytes to copy from the beginning of the buffer.
+         */
+        void SetData(const void* data, std::size_t byteSize) override;
+
+        /**
+         * @brief Copies bytes from the storage buffer to the CPU after completed dispatch work.
+         *
+         * @param out Destination bytes.
+         * @param byteSize Number of bytes to copy from the beginning of the buffer.
+         */
+        void GetData(void* out, std::size_t byteSize) const override;
+
+        /** @brief Returns the allocated byte count. */
+        [[nodiscard]] std::size_t GetByteSize() const override { return byteSize_; }
+
+        /** @brief Returns the native buffer bound into compute descriptor sets. */
+        [[nodiscard]] VkBuffer GetBufferEXT() const noexcept { return buffer_; }
+
+        /** @brief Returns whether this resource belongs to @p owner. */
+        [[nodiscard]] bool IsOwnedByEXT(const VulkanRenderer* owner) const noexcept
+        {
+            return owner_ == owner;
+        }
+
+        /** @brief Destroys Vulkan handles immediately while the owning device exists. */
+        void ReleaseVulkanResources();
+
+        /** @brief Forgets the renderer after device teardown. */
+        void DisconnectOwner() noexcept { owner_ = nullptr; }
+
+    private:
+        VulkanRenderer* owner_ = nullptr;
+        VkBuffer buffer_ = VK_NULL_HANDLE;
+        VkDeviceMemory memory_ = VK_NULL_HANDLE;
+        void* mapped_ = nullptr;
+        std::size_t byteSize_ = 0;
+    };
+
+    /**
+     * @brief SPIR-V compute pipeline implementing CNA's existing compute-shader seam.
+     *
+     * plans/plan_modern.md MOD-2241. Set zero contains four direct storage-buffer slots. This
+     * baseline intentionally rejects scalar/name and image/sampler bindings until the metadata
+     * and resource work owned by MOD-2242/MOD-2244 exists; it never accepts and ignores them.
+     */
+    class VulkanComputeShaderRenderer final : public IComputeShaderRenderer
+    {
+    public:
+        /** @brief Number of direct storage-buffer binding points in the v1 Vulkan compute layout. */
+        static constexpr int StorageBindingCount = 4;
+
+        /**
+         * @brief Creates and compiles a compute program.
+         *
+         * @param owner The Vulkan renderer that owns the device.
+         * @param computeSrc SPIR-V module bytes.
+         */
+        VulkanComputeShaderRenderer(VulkanRenderer* owner, const std::string& computeSrc);
+
+        /** @brief Releases the compute pipeline, descriptor objects and shader module. */
+        ~VulkanComputeShaderRenderer() override;
+
+        /**
+         * @brief Replaces the program with the supplied SPIR-V module.
+         *
+         * @param computeSrc SPIR-V module bytes.
+         * @return True when module and pipeline creation both succeed.
+         */
+        bool CompileProgram(const std::string& computeSrc) override;
+
+        /** @brief Selects this program for a following dispatch. */
+        void Bind() override;
+
+        /**
+         * @brief Refuses name-based scalar integers until Vulkan binding metadata is available.
+         *
+         * @param name Uniform name.
+         * @param value Requested value.
+         */
+        void SetUniformInt(const char* name, int value) override;
+
+        /**
+         * @brief Refuses name-based scalar floats until Vulkan binding metadata is available.
+         *
+         * @param name Uniform name.
+         * @param value Requested value.
+         */
+        void SetUniformFloat(const char* name, float value) override;
+
+        /**
+         * @brief Binds a Vulkan storage buffer to descriptor set zero.
+         *
+         * @param binding Direct SPIR-V binding index in the range [0, 3].
+         * @param buffer Buffer to bind, or null to unbind it.
+         */
+        void BindStorageBuffer(int binding, IStorageBufferRenderer* buffer) override;
+
+        /**
+         * @brief Refuses storage-image binding until MOD-2244 implements image usage tracking.
+         *
+         * @param unit Image binding index.
+         * @param texture Texture requested by the caller.
+         * @param accessMode Requested image access mode.
+         */
+        void BindImageTexture(int unit, ITextureRenderer* texture, int accessMode) override;
+
+        /**
+         * @brief Refuses sampled-texture binding until the Vulkan compute layout describes it.
+         *
+         * @param unit Sampler binding index.
+         * @param texture Texture requested by the caller.
+         */
+        void BindTexture(int unit, ITextureRenderer* texture) override;
+
+        /** @brief Returns whether module and compute pipeline creation succeeded. */
+        [[nodiscard]] bool IsValid() const override { return pipeline_ != VK_NULL_HANDLE; }
+
+        /** @brief Returns the precise refusal or Vulkan creation error from the last compile. */
+        [[nodiscard]] std::string GetCompileError() const override { return compileError_; }
+
+        /**
+         * @brief Records, submits and synchronously completes one compute dispatch.
+         *
+         * @param groupsX Work-group count on X.
+         * @param groupsY Work-group count on Y.
+         * @param groupsZ Work-group count on Z.
+         */
+        void DispatchEXT(int groupsX, int groupsY, int groupsZ);
+
+        /** @brief Clears a binding that names a storage buffer being destroyed. */
+        void ForgetStorageBufferEXT(const VulkanStorageBufferRenderer* buffer) noexcept;
+
+        /** @brief Destroys Vulkan handles immediately while the owning device exists. */
+        void ReleaseVulkanResources();
+
+        /** @brief Forgets the renderer after device teardown. */
+        void DisconnectOwner() noexcept { owner_ = nullptr; }
+
+    private:
+        void ReleaseProgramEXT();
+
+        VulkanRenderer* owner_ = nullptr;
+        VkShaderModule shaderModule_ = VK_NULL_HANDLE;
+        VkDescriptorSetLayout descriptorSetLayout_ = VK_NULL_HANDLE;
+        VkDescriptorPool descriptorPool_ = VK_NULL_HANDLE;
+        VkDescriptorSet descriptorSet_ = VK_NULL_HANDLE;
+        VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
+        VkPipeline pipeline_ = VK_NULL_HANDLE;
+        std::array<VulkanStorageBufferRenderer*, StorageBindingCount> storageBuffers_{};
+        std::array<bool, StorageBindingCount> requiredStorageBindings_{};
+        std::string compileError_;
+    };
+
+    // -------------------------------------------------------------------------
     // VulkanTexture3DRenderer
     // -------------------------------------------------------------------------
 
@@ -1660,6 +1844,8 @@ namespace CNA::Internal::Renderers::Vulkan
         friend class VulkanTextureCubeRenderer;
         friend class VulkanRenderTargetCubeRenderer;
         friend class VulkanMRTProxy;
+        friend class VulkanStorageBufferRenderer;
+        friend class VulkanComputeShaderRenderer;
 
     public:
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
@@ -2724,6 +2910,64 @@ namespace CNA::Internal::Renderers::Vulkan
         std::unique_ptr<IRenderTargetRenderer>    CreateRenderTarget2D(int w, int h, int depthFormat, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) override;
         void                                     SetRenderTarget2D(IRenderTargetRenderer* rt) override;
 
+        /**
+         * @brief Creates a SPIR-V compute pipeline through the existing CNAEXT contract.
+         *
+         * @param computeSrc Raw SPIR-V module bytes.
+         * @return A renderer object whose validity and compile log describe pipeline creation.
+         */
+        std::unique_ptr<IComputeShaderRenderer> CreateComputeShader(
+            const std::string& computeSrc) override;
+
+        /**
+         * @brief Creates a host-visible storage buffer for compute use.
+         *
+         * @param byteSize Positive size in bytes, bounded by this device's storage-buffer limit.
+         * @return The created storage buffer.
+         */
+        std::unique_ptr<IStorageBufferRenderer> CreateStorageBuffer(
+            std::size_t byteSize) override;
+
+        /**
+         * @brief Dispatches a Vulkan compute program on the existing ordered graphics queue.
+         *
+         * @param shader Program created by this renderer.
+         * @param groupsX Work-group count on X.
+         * @param groupsY Work-group count on Y.
+         * @param groupsZ Work-group count on Z.
+         */
+        void DispatchCompute(IComputeShaderRenderer* shader, int groupsX,
+                             int groupsY, int groupsZ) override;
+
+        /**
+         * @brief Fulfils a compute memory-barrier request after the synchronous v1 dispatch.
+         *
+         * @param barrierBits CNA graphics memory-barrier bits.
+         */
+        void MemoryBarrierEXT(int barrierBits) override;
+
+        /** @brief Returns whether the selected ordered queue and limits support CNA compute. */
+        [[nodiscard]] bool SupportsComputeShadersEXT() const override;
+
+        /**
+         * @brief Returns this device's maximum dispatch group count for one axis.
+         *
+         * @param axis Axis ordinal: 0 is X, 1 is Y, 2 is Z.
+         * @return Maximum group count, or zero for an invalid axis/unsupported device.
+         */
+        [[nodiscard]] int GetMaxComputeWorkGroupCountEXT(int axis) const override;
+
+        /**
+         * @brief Returns this device's maximum compute local size for one axis.
+         *
+         * @param axis Axis ordinal: 0 is X, 1 is Y, 2 is Z.
+         * @return Maximum local size, or zero for an invalid axis/unsupported device.
+         */
+        [[nodiscard]] int GetMaxComputeWorkGroupSizeEXT(int axis) const override;
+
+        /** @brief Returns this device's maximum invocations in one compute work group. */
+        [[nodiscard]] int GetMaxComputeWorkGroupInvocationsEXT() const override;
+
         // ---- Graphics state: IMPLEMENTED ----
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                              int colorDstBlend, int alphaDstBlend,
@@ -3393,6 +3637,9 @@ namespace CNA::Internal::Renderers::Vulkan
         std::vector<VulkanVertexBufferRenderer*>  liveVertexBuffers_;
         std::vector<VulkanIndexBufferRenderer*>   liveIndexBuffers_;
         std::vector<VulkanRenderTargetRenderer*>  liveRenderTargets_;
+        std::vector<VulkanStorageBufferRenderer*> liveStorageBuffers_;
+        std::vector<VulkanComputeShaderRenderer*> liveComputeShaders_;
+        VulkanComputeShaderRenderer* boundComputeShader_ = nullptr;
         // VULKAN-407: the three classes that were in no list at all. Without them a Texture3D,
         // TextureCube or RenderTargetCube outliving its GraphicsDevice leaked every Vulkan object
         // it owned and read a destroyed VulkanRenderer on the way out.

@@ -2518,6 +2518,19 @@ namespace CNA::Internal::Renderers::Vulkan
         retiredMrtProxies_.clear();
 
         // Step 2: destroy buffers and memory.
+        // MOD-2241: compute pipelines own descriptor sets that name storage buffers. Tear those
+        // objects down first, then their buffers, while the device is idle and still alive.
+        for (auto* shader : liveComputeShaders_) {
+            shader->ReleaseVulkanResources();
+            shader->DisconnectOwner();
+        }
+        liveComputeShaders_.clear();
+        boundComputeShader_ = nullptr;
+        for (auto* buffer : liveStorageBuffers_) {
+            buffer->ReleaseVulkanResources();
+            buffer->DisconnectOwner();
+        }
+        liveStorageBuffers_.clear();
         // Externally-owned render targets, vertex/index buffers (C++ objects may outlive this destructor).
         for (auto* rt : liveRenderTargets_) { rt->ReleaseVulkanResources(); rt->DisconnectOwner(); }
         liveRenderTargets_.clear();
@@ -13333,6 +13346,511 @@ namespace CNA::Internal::Renderers::Vulkan
                            static_cast<const void*>(tex.get()), data.width, data.height,
                            static_cast<unsigned long long>(frameGeneration_));
         return tex;
+    }
+
+    // =========================================================================
+    // MOD-2241: Vulkan compute shaders and storage buffers
+    // =========================================================================
+
+    namespace
+    {
+        int ClampVulkanLimitToInt(const uint32_t value)
+        {
+            return value > static_cast<uint32_t>(std::numeric_limits<int>::max())
+                ? std::numeric_limits<int>::max()
+                : static_cast<int>(value);
+        }
+    }
+
+    VulkanStorageBufferRenderer::VulkanStorageBufferRenderer(
+        VulkanRenderer* owner, const std::size_t byteSize)
+        : owner_(owner)
+        , byteSize_(byteSize)
+    {
+        if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE)
+            throw std::runtime_error("Vulkan storage buffer: renderer device is unavailable");
+        if (byteSize_ == 0)
+            throw std::invalid_argument("Vulkan storage buffer: byte size must be positive");
+        if (static_cast<VkDeviceSize>(byteSize_) >
+            owner_->physicalDeviceProperties_.limits.maxStorageBufferRange)
+            throw std::invalid_argument(
+                "Vulkan storage buffer: byte size exceeds maxStorageBufferRange");
+
+        owner_->CreateBuffer(
+            static_cast<VkDeviceSize>(byteSize_),
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+                VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
+                VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            buffer_, memory_, &mapped_);
+    }
+
+    VulkanStorageBufferRenderer::~VulkanStorageBufferRenderer()
+    {
+        if (owner_ != nullptr)
+        {
+            for (auto* shader : owner_->liveComputeShaders_)
+                shader->ForgetStorageBufferEXT(this);
+            auto& live = owner_->liveStorageBuffers_;
+            live.erase(std::remove(live.begin(), live.end(), this), live.end());
+        }
+        ReleaseVulkanResources();
+    }
+
+    void VulkanStorageBufferRenderer::SetData(const void* data, const std::size_t byteSize)
+    {
+        if (byteSize > byteSize_)
+            throw std::invalid_argument("Vulkan storage buffer SetData exceeds its allocation");
+        if (data == nullptr && byteSize != 0)
+            throw std::invalid_argument("Vulkan storage buffer SetData source is null");
+        if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE || mapped_ == nullptr)
+            throw std::runtime_error("Vulkan storage buffer SetData after device disposal");
+        if (byteSize != 0) std::memcpy(mapped_, data, byteSize);
+    }
+
+    void VulkanStorageBufferRenderer::GetData(void* out, const std::size_t byteSize) const
+    {
+        if (byteSize > byteSize_)
+            throw std::invalid_argument("Vulkan storage buffer GetData exceeds its allocation");
+        if (out == nullptr && byteSize != 0)
+            throw std::invalid_argument("Vulkan storage buffer GetData destination is null");
+        if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE || mapped_ == nullptr)
+            throw std::runtime_error("Vulkan storage buffer GetData after device disposal");
+        // DispatchEXT completes its queue submission before returning and records a
+        // SHADER_WRITE -> HOST_READ dependency. HOST_COHERENT therefore needs no invalidate.
+        if (byteSize != 0) std::memcpy(out, mapped_, byteSize);
+    }
+
+    void VulkanStorageBufferRenderer::ReleaseVulkanResources()
+    {
+        if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE) return;
+        if (mapped_ != nullptr) {
+            vkUnmapMemory(owner_->device_, memory_);
+            mapped_ = nullptr;
+        }
+        if (buffer_ != VK_NULL_HANDLE) {
+            vkDestroyBuffer(owner_->device_, buffer_, nullptr);
+            buffer_ = VK_NULL_HANDLE;
+        }
+        if (memory_ != VK_NULL_HANDLE) {
+            vkFreeMemory(owner_->device_, memory_, nullptr);
+            memory_ = VK_NULL_HANDLE;
+        }
+    }
+
+    VulkanComputeShaderRenderer::VulkanComputeShaderRenderer(
+        VulkanRenderer* owner, const std::string& computeSrc)
+        : owner_(owner)
+    {
+        CompileProgram(computeSrc);
+    }
+
+    VulkanComputeShaderRenderer::~VulkanComputeShaderRenderer()
+    {
+        if (owner_ != nullptr)
+        {
+            if (owner_->boundComputeShader_ == this) owner_->boundComputeShader_ = nullptr;
+            auto& live = owner_->liveComputeShaders_;
+            live.erase(std::remove(live.begin(), live.end(), this), live.end());
+        }
+        ReleaseVulkanResources();
+    }
+
+    void VulkanComputeShaderRenderer::ReleaseProgramEXT()
+    {
+        if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE) return;
+        VkDevice device = owner_->device_;
+        if (pipeline_ != VK_NULL_HANDLE) {
+            vkDestroyPipeline(device, pipeline_, nullptr);
+            pipeline_ = VK_NULL_HANDLE;
+        }
+        if (pipelineLayout_ != VK_NULL_HANDLE) {
+            vkDestroyPipelineLayout(device, pipelineLayout_, nullptr);
+            pipelineLayout_ = VK_NULL_HANDLE;
+        }
+        if (shaderModule_ != VK_NULL_HANDLE) {
+            vkDestroyShaderModule(device, shaderModule_, nullptr);
+            shaderModule_ = VK_NULL_HANDLE;
+        }
+        if (descriptorPool_ != VK_NULL_HANDLE) {
+            vkDestroyDescriptorPool(device, descriptorPool_, nullptr);
+            descriptorPool_ = VK_NULL_HANDLE;
+            descriptorSet_ = VK_NULL_HANDLE;
+        }
+        if (descriptorSetLayout_ != VK_NULL_HANDLE) {
+            vkDestroyDescriptorSetLayout(device, descriptorSetLayout_, nullptr);
+            descriptorSetLayout_ = VK_NULL_HANDLE;
+        }
+    }
+
+    void VulkanComputeShaderRenderer::ReleaseVulkanResources()
+    {
+        ReleaseProgramEXT();
+        storageBuffers_.fill(nullptr);
+    }
+
+    bool VulkanComputeShaderRenderer::CompileProgram(const std::string& computeSrc)
+    {
+        ReleaseProgramEXT();
+        compileError_.clear();
+        requiredStorageBindings_.fill(false);
+        if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE) {
+            compileError_ = "Vulkan compute shader: renderer device is unavailable";
+            return false;
+        }
+        if ((computeSrc.size() & 3u) != 0 || computeSrc.size() < sizeof(uint32_t)) {
+            compileError_ = "Vulkan compute shader: source must be a complete SPIR-V word stream";
+            return false;
+        }
+
+        std::vector<uint32_t> words(computeSrc.size() / sizeof(uint32_t));
+        std::memcpy(words.data(), computeSrc.data(), computeSrc.size());
+        if (words.front() != 0x07230203u) {
+            compileError_ = "Vulkan compute shader: source is not SPIR-V bytecode";
+            return false;
+        }
+
+        // Read only the two decorations needed to make unbinding safe. A descriptor set cannot
+        // legally retain a destroyed VkBuffer, and Vulkan has no core "null descriptor" in the
+        // version this renderer requests. Knowing which set-0 binding numbers the module declares
+        // lets DispatchEXT reject a missing required buffer before it submits the stale set. This
+        // is not public reflection or MOD-2242's semantic constant metadata; it is the minimum
+        // lifetime fact required by IComputeShaderRenderer::BindStorageBuffer(nullptr).
+        constexpr uint16_t OpDecorate = 71;
+        constexpr uint32_t DecorationBinding = 33;
+        constexpr uint32_t DecorationDescriptorSet = 34;
+        std::unordered_map<uint32_t, uint32_t> bindingById;
+        std::unordered_map<uint32_t, uint32_t> descriptorSetById;
+        for (std::size_t cursor = 5; cursor < words.size();)
+        {
+            const uint32_t instruction = words[cursor];
+            const uint16_t wordCount = static_cast<uint16_t>(instruction >> 16u);
+            const uint16_t opcode = static_cast<uint16_t>(instruction & 0xffffu);
+            if (wordCount == 0 || cursor + wordCount > words.size()) {
+                compileError_ = "Vulkan compute shader: malformed SPIR-V instruction stream";
+                return false;
+            }
+            if (opcode == OpDecorate && wordCount >= 4) {
+                const uint32_t target = words[cursor + 1];
+                const uint32_t decoration = words[cursor + 2];
+                if (decoration == DecorationBinding)
+                    bindingById[target] = words[cursor + 3];
+                else if (decoration == DecorationDescriptorSet)
+                    descriptorSetById[target] = words[cursor + 3];
+            }
+            cursor += wordCount;
+        }
+        for (const auto& [target, binding] : bindingById)
+        {
+            const auto set = descriptorSetById.find(target);
+            if (set == descriptorSetById.end() || set->second != 0) continue;
+            if (binding >= static_cast<uint32_t>(StorageBindingCount)) {
+                compileError_ =
+                    "Vulkan compute shader: set 0 storage binding " +
+                    std::to_string(binding) + " exceeds the supported range [0, 3]";
+                return false;
+            }
+            requiredStorageBindings_[binding] = true;
+        }
+
+        VkShaderModuleCreateInfo moduleInfo{};
+        moduleInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+        moduleInfo.codeSize = computeSrc.size();
+        moduleInfo.pCode = words.data();
+        VkResult result = vkCreateShaderModule(
+            owner_->device_, &moduleInfo, nullptr, &shaderModule_);
+        if (result != VK_SUCCESS) {
+            compileError_ = "Vulkan compute shader: vkCreateShaderModule failed (" +
+                std::to_string(static_cast<int>(result)) + ")";
+            ReleaseProgramEXT();
+            return false;
+        }
+
+        std::array<VkDescriptorSetLayoutBinding, StorageBindingCount> bindings{};
+        for (int i = 0; i < StorageBindingCount; ++i) {
+            bindings[static_cast<std::size_t>(i)].binding = static_cast<uint32_t>(i);
+            bindings[static_cast<std::size_t>(i)].descriptorType =
+                VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            bindings[static_cast<std::size_t>(i)].descriptorCount = 1;
+            bindings[static_cast<std::size_t>(i)].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+        }
+        VkDescriptorSetLayoutCreateInfo setLayoutInfo{};
+        setLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        setLayoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+        setLayoutInfo.pBindings = bindings.data();
+        result = vkCreateDescriptorSetLayout(
+            owner_->device_, &setLayoutInfo, nullptr, &descriptorSetLayout_);
+        if (result != VK_SUCCESS) {
+            compileError_ = "Vulkan compute shader: vkCreateDescriptorSetLayout failed (" +
+                std::to_string(static_cast<int>(result)) + ")";
+            ReleaseProgramEXT();
+            return false;
+        }
+
+        VkDescriptorPoolSize poolSize{};
+        poolSize.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        poolSize.descriptorCount = StorageBindingCount;
+        VkDescriptorPoolCreateInfo poolInfo{};
+        poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        poolInfo.maxSets = 1;
+        poolInfo.poolSizeCount = 1;
+        poolInfo.pPoolSizes = &poolSize;
+        result = vkCreateDescriptorPool(owner_->device_, &poolInfo, nullptr, &descriptorPool_);
+        if (result != VK_SUCCESS) {
+            compileError_ = "Vulkan compute shader: vkCreateDescriptorPool failed (" +
+                std::to_string(static_cast<int>(result)) + ")";
+            ReleaseProgramEXT();
+            return false;
+        }
+
+        VkDescriptorSetAllocateInfo allocateInfo{};
+        allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocateInfo.descriptorPool = descriptorPool_;
+        allocateInfo.descriptorSetCount = 1;
+        allocateInfo.pSetLayouts = &descriptorSetLayout_;
+        result = vkAllocateDescriptorSets(owner_->device_, &allocateInfo, &descriptorSet_);
+        if (result != VK_SUCCESS) {
+            compileError_ = "Vulkan compute shader: vkAllocateDescriptorSets failed (" +
+                std::to_string(static_cast<int>(result)) + ")";
+            ReleaseProgramEXT();
+            return false;
+        }
+
+        VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+        pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        pipelineLayoutInfo.setLayoutCount = 1;
+        pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout_;
+        result = vkCreatePipelineLayout(
+            owner_->device_, &pipelineLayoutInfo, nullptr, &pipelineLayout_);
+        if (result != VK_SUCCESS) {
+            compileError_ = "Vulkan compute shader: vkCreatePipelineLayout failed (" +
+                std::to_string(static_cast<int>(result)) + ")";
+            ReleaseProgramEXT();
+            return false;
+        }
+
+        VkPipelineShaderStageCreateInfo stage{};
+        stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+        stage.module = shaderModule_;
+        stage.pName = "main";
+        VkComputePipelineCreateInfo pipelineInfo{};
+        pipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+        pipelineInfo.stage = stage;
+        pipelineInfo.layout = pipelineLayout_;
+        result = vkCreateComputePipelines(
+            owner_->device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline_);
+        if (result != VK_SUCCESS) {
+            compileError_ = "Vulkan compute shader: vkCreateComputePipelines failed (" +
+                std::to_string(static_cast<int>(result)) + ")";
+            ReleaseProgramEXT();
+            return false;
+        }
+        return true;
+    }
+
+    void VulkanComputeShaderRenderer::Bind()
+    {
+        if (!IsValid())
+            throw std::runtime_error("Vulkan compute shader Bind called for an invalid program");
+        owner_->boundComputeShader_ = this;
+    }
+
+    void VulkanComputeShaderRenderer::SetUniformInt(const char* name, int /*value*/)
+    {
+        throw std::runtime_error(
+            "Vulkan compute shader: scalar integer uniform '" +
+            std::string(name != nullptr ? name : "") +
+            "' requires MOD-2242 binding metadata and is not accepted yet");
+    }
+
+    void VulkanComputeShaderRenderer::SetUniformFloat(const char* name, float /*value*/)
+    {
+        throw std::runtime_error(
+            "Vulkan compute shader: scalar float uniform '" +
+            std::string(name != nullptr ? name : "") +
+            "' requires MOD-2242 binding metadata and is not accepted yet");
+    }
+
+    void VulkanComputeShaderRenderer::BindStorageBuffer(
+        const int binding, IStorageBufferRenderer* buffer)
+    {
+        if (binding < 0 || binding >= StorageBindingCount)
+            throw std::out_of_range(
+                "Vulkan compute shader: storage binding must be in [0, 3]");
+        auto* native = dynamic_cast<VulkanStorageBufferRenderer*>(buffer);
+        if (buffer != nullptr &&
+            (native == nullptr || !native->IsOwnedByEXT(owner_)))
+            throw std::invalid_argument(
+                "Vulkan compute shader: storage buffer belongs to another renderer");
+        storageBuffers_[static_cast<std::size_t>(binding)] = native;
+    }
+
+    void VulkanComputeShaderRenderer::BindImageTexture(
+        int /*unit*/, ITextureRenderer* /*texture*/, int /*accessMode*/)
+    {
+        throw std::runtime_error(
+            "Vulkan compute shader: storage-image binding is not available until MOD-2244");
+    }
+
+    void VulkanComputeShaderRenderer::BindTexture(
+        int /*unit*/, ITextureRenderer* /*texture*/)
+    {
+        throw std::runtime_error(
+            "Vulkan compute shader: sampled-texture binding has no Vulkan compute layout yet");
+    }
+
+    void VulkanComputeShaderRenderer::ForgetStorageBufferEXT(
+        const VulkanStorageBufferRenderer* buffer) noexcept
+    {
+        for (auto& bound : storageBuffers_)
+            if (bound == buffer) bound = nullptr;
+    }
+
+    void VulkanComputeShaderRenderer::DispatchEXT(
+        const int groupsX, const int groupsY, const int groupsZ)
+    {
+        if (!IsValid())
+            throw std::runtime_error("Vulkan compute shader: cannot dispatch an invalid program");
+        const int groups[3] = {groupsX, groupsY, groupsZ};
+        for (int axis = 0; axis < 3; ++axis) {
+            if (groups[axis] <= 0 ||
+                groups[axis] > owner_->GetMaxComputeWorkGroupCountEXT(axis))
+                throw std::invalid_argument(
+                    "Vulkan compute shader: dispatch group count exceeds the device limit");
+        }
+
+        for (int binding = 0; binding < StorageBindingCount; ++binding) {
+            if (requiredStorageBindings_[static_cast<std::size_t>(binding)] &&
+                storageBuffers_[static_cast<std::size_t>(binding)] == nullptr)
+                throw std::runtime_error(
+                    "Vulkan compute shader: required set 0 storage binding " +
+                    std::to_string(binding) + " is not bound");
+        }
+
+        std::array<VkDescriptorBufferInfo, StorageBindingCount> infos{};
+        std::array<VkWriteDescriptorSet, StorageBindingCount> writes{};
+        uint32_t writeCount = 0;
+        for (int binding = 0; binding < StorageBindingCount; ++binding) {
+            auto* buffer = storageBuffers_[static_cast<std::size_t>(binding)];
+            if (buffer == nullptr) continue;
+            auto& info = infos[writeCount];
+            info.buffer = buffer->GetBufferEXT();
+            info.offset = 0;
+            info.range = static_cast<VkDeviceSize>(buffer->GetByteSize());
+            auto& write = writes[writeCount];
+            write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            write.dstSet = descriptorSet_;
+            write.dstBinding = static_cast<uint32_t>(binding);
+            write.descriptorCount = 1;
+            write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            write.pBufferInfo = &info;
+            ++writeCount;
+        }
+        vkUpdateDescriptorSets(owner_->device_, writeCount, writes.data(), 0, nullptr);
+
+        VkCommandBuffer commandBuffer = owner_->BeginOneTimeCommands();
+        VkMemoryBarrier hostToCompute{};
+        hostToCompute.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+        hostToCompute.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
+        hostToCompute.dstAccessMask =
+            VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+        vkCmdPipelineBarrier(
+            commandBuffer, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            0, 1, &hostToCompute, 0, nullptr, 0, nullptr);
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_);
+        vkCmdBindDescriptorSets(
+            commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout_, 0,
+            1, &descriptorSet_, 0, nullptr);
+        vkCmdDispatch(commandBuffer,
+                      static_cast<uint32_t>(groupsX),
+                      static_cast<uint32_t>(groupsY),
+                      static_cast<uint32_t>(groupsZ));
+        VkMemoryBarrier computeToHost{};
+        computeToHost.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+        computeToHost.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+        computeToHost.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
+        vkCmdPipelineBarrier(
+            commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_HOST_BIT,
+            0, 1, &computeToHost, 0, nullptr, 0, nullptr);
+        // This is MOD-2241's explicitly synchronous public readback boundary. MOD-2247 moves
+        // dispatches into the renderer's monotonic frame ordering; MOD-2253 keeps only requested
+        // readback synchronous. There is no second queue, device, or presentation lifecycle.
+        owner_->EndOneTimeCommands(commandBuffer);
+    }
+
+    std::unique_ptr<IComputeShaderRenderer> VulkanRenderer::CreateComputeShader(
+        const std::string& computeSrc)
+    {
+        if (!SupportsComputeShadersEXT()) return nullptr;
+        auto shader = std::make_unique<VulkanComputeShaderRenderer>(this, computeSrc);
+        liveComputeShaders_.push_back(shader.get());
+        return shader;
+    }
+
+    std::unique_ptr<IStorageBufferRenderer> VulkanRenderer::CreateStorageBuffer(
+        const std::size_t byteSize)
+    {
+        if (!SupportsComputeShadersEXT()) return nullptr;
+        auto buffer = std::make_unique<VulkanStorageBufferRenderer>(this, byteSize);
+        liveStorageBuffers_.push_back(buffer.get());
+        return buffer;
+    }
+
+    void VulkanRenderer::DispatchCompute(
+        IComputeShaderRenderer* shader, const int groupsX,
+        const int groupsY, const int groupsZ)
+    {
+        auto* native = dynamic_cast<VulkanComputeShaderRenderer*>(shader);
+        if (native == nullptr)
+            throw std::invalid_argument(
+                "Vulkan DispatchCompute requires a Vulkan compute shader");
+        if (boundComputeShader_ != native)
+            throw std::runtime_error(
+                "Vulkan DispatchCompute requires the compute shader to be bound first");
+        native->DispatchEXT(groupsX, groupsY, groupsZ);
+    }
+
+    void VulkanRenderer::MemoryBarrierEXT(int /*barrierBits*/)
+    {
+        // DispatchEXT already records shader-write -> host-read and waits for submission
+        // completion, which is stronger than the public wrapper's immediate post-dispatch barrier.
+        // It is semantically fulfilled, not ignored. MOD-2247/2249 replace this synchronous
+        // boundary with resource-tracked barriers once compute joins deferred command ordering.
+    }
+
+    bool VulkanRenderer::SupportsComputeShadersEXT() const
+    {
+        const auto& limits = physicalDeviceProperties_.limits;
+        return device_ != VK_NULL_HANDLE
+            && (graphicsQueueFlags_ & VK_QUEUE_COMPUTE_BIT) != 0
+            && limits.maxComputeWorkGroupInvocations > 0
+            && limits.maxPerStageDescriptorStorageBuffers >=
+                VulkanComputeShaderRenderer::StorageBindingCount
+            && limits.maxDescriptorSetStorageBuffers >=
+                VulkanComputeShaderRenderer::StorageBindingCount
+            && limits.maxStorageBufferRange > 0;
+    }
+
+    int VulkanRenderer::GetMaxComputeWorkGroupCountEXT(const int axis) const
+    {
+        if (!SupportsComputeShadersEXT() || axis < 0 || axis > 2) return 0;
+        return ClampVulkanLimitToInt(
+            physicalDeviceProperties_.limits.maxComputeWorkGroupCount[axis]);
+    }
+
+    int VulkanRenderer::GetMaxComputeWorkGroupSizeEXT(const int axis) const
+    {
+        if (!SupportsComputeShadersEXT() || axis < 0 || axis > 2) return 0;
+        return ClampVulkanLimitToInt(
+            physicalDeviceProperties_.limits.maxComputeWorkGroupSize[axis]);
+    }
+
+    int VulkanRenderer::GetMaxComputeWorkGroupInvocationsEXT() const
+    {
+        if (!SupportsComputeShadersEXT()) return 0;
+        return ClampVulkanLimitToInt(
+            physicalDeviceProperties_.limits.maxComputeWorkGroupInvocations);
     }
 
     std::unique_ptr<ISpriteBatchRenderer> VulkanRenderer::CreateSpriteBatch()

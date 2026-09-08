@@ -1430,6 +1430,16 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_modern_feature_discovery
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        if(CNA_CNAEXT)
+            # plans/plan_modern.md MOD-2241: SPIR-V compute + three storage buffers through the
+            # public CNAEXT wrappers. Every vector element and the validation stream are checked.
+            cna_vulkan_test(cna_test_vulkan_compute_storage_buffer
+                            vulkan_compute_storage_buffer_test.cpp)
+            cna_register_renderer_test(NAME Vulkan_ComputeStorageBuffer
+                COMMAND cna_test_vulkan_compute_storage_buffer
+                TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        endif()
+
         # plans/plan_vulkan.md VULKAN-098 (F-19): this renderer's clip-space depth range is XNA's
         # [0,1], and EasyGL's is OpenGL's [-1,1]. Measured positively across the range -- a 5x4
         # truth table plus both planes -- rather than inferred from a depth-bias experiment, which

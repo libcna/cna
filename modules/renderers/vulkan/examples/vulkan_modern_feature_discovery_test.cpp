@@ -156,13 +156,23 @@ protected:
               "flags=" + std::to_string(queueFlags));
 
         const bool nativeCompute = (queueFlags & VK_QUEUE_COMPUTE_BIT) != 0
-            && properties.limits.maxComputeWorkGroupInvocations > 0;
-        check(!device.SupportsCapability(GraphicsCapability::ComputeShaders)
-                  && !renderer->SupportsComputeShadersEXT()
-                  && renderer->GetMaxComputeWorkGroupInvocationsEXT() == 0,
-              "F native compute availability is not mistaken for an implemented CNA path",
+            && properties.limits.maxComputeWorkGroupInvocations > 0
+            && properties.limits.maxPerStageDescriptorStorageBuffers >= 4
+            && properties.limits.maxDescriptorSetStorageBuffers >= 4;
+        const bool rendererCompute = renderer->SupportsComputeShadersEXT();
+        const bool deviceCompute =
+            device.SupportsCapability(GraphicsCapability::ComputeShaders);
+        const int publishedInvocations = renderer->GetMaxComputeWorkGroupInvocationsEXT();
+        check(rendererCompute == nativeCompute && deviceCompute == rendererCompute
+                  && publishedInvocations ==
+                      (nativeCompute
+                           ? static_cast<int>(properties.limits.maxComputeWorkGroupInvocations)
+                           : 0),
+              "F implemented compute follows the selected queue and device limits exactly",
               std::string("nativeOrderedQueue=") + (nativeCompute ? "true" : "false")
-                  + " publicCapability=false publicLimit=0");
+                  + " renderer=" + (rendererCompute ? "true" : "false")
+                  + " public=" + (deviceCompute ? "true" : "false")
+                  + " invocations=" + std::to_string(publishedInvocations));
 
         std::printf("=== %d/%d PASS ===\n", pass_, pass_ + fail_);
         std::fflush(stdout);

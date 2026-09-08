@@ -246,24 +246,18 @@ class VulkanCapabilityContractTest : public Game
                   std::string("capability=") + (supported ? "true" : "false") + ", " + how);
         }
 
-        // VULKAN-470. IndirectDraw=false, observed one step before the draw: an indirect draw needs
-        // its arguments in a storage buffer, and this renderer cannot make one. `CreateStorageBuffer`
-        // returns null, so `DrawPrimitivesIndirectEXT` has no argument buffer that could be passed
-        // to it -- the capability is false because the route does not exist, not because a check
-        // turns it away. That is a stronger observation than a refusal message would be, and it is
-        // the only one available: the parameter is a reference, so there is nothing to hand it.
-        //
-        // ComputeShaders is false for the same reason and is checked the same way -- storage
-        // buffers are the compute path's own memory. CompiledEffects is different: it is false
-        // because `CNA_VULKAN_COMPILED_EFFECTS` is OFF in this build, and only a build that turns
-        // it on can observe the other answer. plan_vulkan.md's VULKAN-470 row records that.
+        // VULKAN-470 / MOD-2241. IndirectDraw remains false, but it can no longer borrow the old
+        // "there is no storage buffer" proof: compute now owns a real storage-buffer route while
+        // the two indirect-draw entry points remain unimplemented. Observe both answers and the
+        // resource that separates them. CompiledEffects is different again: it is false because
+        // `CNA_VULKAN_COMPILED_EFFECTS` is OFF in this build, and only an enabled build can observe
+        // the other answer.
         {
             const bool indirect = r.SupportsCapability(GraphicsCapability::IndirectDraw);
             const bool compute  = r.SupportsCapability(GraphicsCapability::ComputeShaders);
             const auto buffer   = const_cast<VulkanRenderer&>(r).CreateStorageBuffer(64);
-            check(!indirect && !compute && buffer == nullptr,
-                  "C IndirectDraw=false and ComputeShaders=false have no route: this renderer "
-                  "cannot create the storage buffer both would need",
+            check(!indirect && compute && buffer != nullptr,
+                  "C ComputeShaders=true has storage while IndirectDraw stays independently false",
                   std::string("indirect=") + (indirect ? "true" : "false")
                       + " compute=" + (compute ? "true" : "false")
                       + " storageBuffer=" + (buffer == nullptr ? "null" : "created"));

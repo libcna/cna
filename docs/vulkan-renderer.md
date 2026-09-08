@@ -2,7 +2,7 @@
 
 ## Status of this document
 
-**Complete as of 2026-09-08 (`VULKAN-480`, updated by `REMED-GFX-203` and `MOD-2240`), and written after the re-audits it depends on**
+**Complete as of 2026-09-08 (`VULKAN-480`, updated by `REMED-GFX-203`, `MOD-2240` and `MOD-2241`), and written after the re-audits it depends on**
 (`VULKAN-470`–`VULKAN-474`) so that what it claims was checked rather than remembered. Every
 section names the row that put it there and the test that keeps it true; a claim with no test named
 beside it is not in here.
@@ -45,7 +45,8 @@ measures on (§*Environment* below).
 | `ShaderEffect` **source execution** | unsupported | fixed |
 | Multi-stream vertex input | supported | fixed |
 | Compiled XNA `.fx` effects | **unsupported** here | fixed |
-| Compute shaders, compute image binding, indirect draw | **unsupported** | fixed |
+| SPIR-V compute shaders and storage buffers | supported | device |
+| Compute image binding and indirect draw | **unsupported** | fixed |
 | Float32 / Float16 render targets, half-float linear filtering | **unsupported** | device |
 | GPU timers, shadow sampling, image-based lighting | **unsupported** | fixed |
 
@@ -65,7 +66,23 @@ Two entries need their sentence rather than a cell:
 |---|---|---|
 | `MaxTextureDimension` | 16384 | device |
 | `MaxVertexStreams` | 16 | fixed — public streams of each input rate are packed into one immutable native snapshot |
-| Every compute limit | 0 | fixed — there is no compute path |
+| Compute group counts, local sizes and invocations | selected device's `VkPhysicalDeviceLimits` | device |
+
+### Compute and storage buffers
+
+`MOD-2241`. **Test:** `Vulkan_ComputeStorageBuffer` — raw SPIR-V compute bytecode runs on the
+renderer’s existing graphics/compute queue. Descriptor set 0 exposes four direct storage-buffer
+bindings; the permanent oracle binds three host-visible coherent buffers and verifies all 256
+elements of `C = A + B` through the public `ComputeShader` and `StorageBuffer` wrappers. Invalid
+bytecode, foreign/out-of-range buffers, scalar uniforms and image/sampler bindings are refused by
+name rather than accepted and ignored.
+
+The v1 readback boundary is intentionally synchronous: dispatch records host-write → shader
+read/write and shader-write → host-read dependencies, submits on the existing queue and completes
+before a requested `StorageBuffer::getBytes`. `MOD-2247`–`MOD-2253` own integration into deferred
+public-call ordering and removal of routine waits; only explicit readback will remain synchronous.
+Name-based scalar/constant metadata is `MOD-2242`, and storage images are `MOD-2244`, so neither is
+claimed by this baseline.
 
 ### Multi-stream vertex input
 
@@ -136,16 +153,17 @@ only when the extension is advertised and its `formatA4R4G4B4` feature is true. 
 any optional feature still starts and the corresponding public capability under-claims or refuses.
 
 Modern commands use the existing graphics submission queue in their first implementation. The
-queue family flags are recorded at device selection; a `VK_QUEUE_COMPUTE_BIT` there is necessary
-for compute but is not sufficient for CNA to advertise compute. There is no second queue lifecycle
-and no asynchronous-compute promise. This keeps compute, copy and graphics in the same public-call
-ordering domain that later synchronization rows extend.
+queue family flags are recorded at device selection; compute is advertised only when this queue
+has `VK_QUEUE_COMPUTE_BIT`, the required storage-buffer slots exist, and the device publishes
+usable compute limits. There is no second queue lifecycle and no asynchronous-compute promise.
+This keeps compute, copy and graphics on the one queue that later synchronization rows bring into
+the same deferred public-call ordering domain.
 
 **Test:** `Vulkan_ModernFeatureDiscovery` walks all 55 core feature bits and requires the enabled
 record to be exactly the subset consumed by implemented CNA paths. It also verifies the property
-snapshot, the graphics queue flag, and the important negative control: llvmpipe's selected ordered
-queue is compute-capable, but CNA still reports compute unsupported and a zero compute limit until
-the dispatch/storage-buffer path is implemented.
+snapshot and graphics queue flag. Since `MOD-2241`, its former negative control is positive and
+device-dependent: capability, queue/storage availability and every published compute limit must
+agree exactly.
 
 ---
 
@@ -493,13 +511,13 @@ short form a reader needs before opening it.
 | `SpriteSortMode::Immediate` honoured at the renderer boundary | EasyGL does not override `SetImmediateMode` at all. |
 | Precise occlusion counts on real hardware | `VK_QUERY_CONTROL_PRECISE_BIT` with the feature enabled, answered honestly through `PixelCountIsPreciseEXT` (`VULKAN-370`). |
 
-**Differences that are gaps, and are owned:** compute shaders, indirect draw, GPU timers, shadow
-sampling and image-based lighting are all `false` here and implemented on EasyGL. They are outside
+**Differences that are gaps, and are owned:** indirect draw, GPU timers, shadow sampling and image-
+based lighting are all `false` here and implemented on EasyGL. They are outside
 this campaign's scope — the ordinary XNA graphics surface — and `plans/plan_modern.md` owns the
 engine layer that uses them. The capability profile reports them `false` rather than accepting the
 call and doing nothing, which is the property that matters: `GraphicsDevice`'s four EXT queries
-(`ExecutesShaderEffectSourceEXT`, `SupportsShadowSamplingEXT`, `SupportsImageBasedLightingEXT`,
-`SupportsComputeShadersEXT`) answer the same way.
+(`ExecutesShaderEffectSourceEXT`, `SupportsShadowSamplingEXT`, `SupportsImageBasedLightingEXT`)
+answer the same way. Compute/storage support is now the measured exception described above.
 
 ---
 
