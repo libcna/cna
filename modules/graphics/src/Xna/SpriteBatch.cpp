@@ -127,6 +127,15 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
+    void SpriteBatch::applyRenderState()
+    {
+        if (graphicsDevice_ == nullptr) return;
+        graphicsDevice_->setBlendStateProperty(blendState_);
+        graphicsDevice_->getSamplerStatesProperty()[0] = samplerState_;
+        graphicsDevice_->setDepthStencilStateProperty(depthStencilState_);
+        graphicsDevice_->setRasterizerStateProperty(rasterizerState_);
+    }
+
     // -----------------------------------------------------------------------
     // Begin / End
     // -----------------------------------------------------------------------
@@ -209,40 +218,21 @@ namespace Microsoft::Xna::Framework::Graphics
         if (begun)
             throw std::runtime_error("Begin has been called before calling End.");
 
-        const SamplerState& effectiveSampler =
-            samplerState ? *samplerState : SamplerState::LinearClamp;
-        if (graphicsDevice_)
-        {
-            graphicsDevice_->setBlendStateProperty(
-                blendState ? *blendState : BlendState::AlphaBlend);
-            graphicsDevice_->getSamplerStatesProperty()[0] = effectiveSampler;
-            // Task 803 finding: this parameter was previously entirely unused -- SpriteBatch
-            // draws silently inherited whatever DepthStencilState the game's own 3D rendering
-            // last configured (or each renderer's own construction-time default), instead of
-            // FNA's real default of DepthStencilState.None when the caller passes null. Matches
-            // FNA's SpriteBatch.Begin(): a null depthStencilState always means None, the state is
-            // always (re-)applied here, never left over from a previous Begin() (mirrors the
-            // samplerState handling immediately below).
-            graphicsDevice_->setDepthStencilStateProperty(
-                depthStencilState ? *depthStencilState : DepthStencilState::None);
-            // REMED-GFX-081: this parameter was previously discarded (`/*rasterizerState*/`), so a
-            // RasterizerState supplied to Begin -- e.g. one with ScissorTestEnable/CullMode/FillMode
-            // set -- never reached the device or renderer; the only way to affect sprite rasterizer
-            // state was to assign GraphicsDevice.RasterizerState directly. FNA's PrepRenderState
-            // applies `rasterizerState ?? RasterizerState.CullCounterClockwise`; do the same here
-            // (a null rasterizerState always resolves to the SpriteBatch default and is always
-            // (re-)applied, never left over from a previous Begin -- mirrors the blend/depth/sampler
-            // handling). Applied via the GraphicsDevice property so it routes through the same
-            // ApplyRasterizerState path every renderer already uses; the state is copied (no raw
-            // pointer to the caller's RasterizerState is retained).
-            graphicsDevice_->setRasterizerStateProperty(
-                rasterizerState ? *rasterizerState : RasterizerState::CullCounterClockwise);
-        }
-
-        customEffect_    = effect;
+        blendState_ = blendState ? *blendState : BlendState::AlphaBlend;
+        samplerState_ = samplerState ? *samplerState : SamplerState::LinearClamp;
+        depthStencilState_ = depthStencilState ? *depthStencilState : DepthStencilState::None;
+        rasterizerState_ =
+            rasterizerState ? *rasterizerState : RasterizerState::CullCounterClockwise;
+        customEffect_ = effect;
         transformMatrix_ = transformMatrix;
-        sortMode_        = sortMode;
+        sortMode_ = sortMode;
         spriteQueue_.clear();
+
+        // FNA's PrepRenderState runs here only for Immediate. Every deferred sorting mode waits
+        // until End(), including an empty batch, so public device state remains observable as the
+        // caller left it between Begin and the eventual flush.
+        if (sortMode_ == SpriteSortMode::Immediate)
+            applyRenderState();
 
         if (renderer_)
         {
@@ -252,12 +242,12 @@ namespace Microsoft::Xna::Framework::Graphics
                 renderer_->SetTransformMatrix(transformMatrix_);
                 // Matches FNA: a null samplerState defaults to SamplerState.LinearClamp, and the
                 // resolved state is always (re-)applied — never left over from a previous Begin().
-                renderer_->SetSamplerFilter(static_cast<int>(effectiveSampler.getFilterProperty()));
-                renderer_->SetSamplerMaxAnisotropy(effectiveSampler.getMaxAnisotropyProperty());
-                renderer_->SetSamplerMipState(effectiveSampler.getMaxMipLevelProperty(),
-                                              effectiveSampler.getMipMapLevelOfDetailBiasProperty());
-                renderer_->SetSamplerAddressMode(static_cast<int>(effectiveSampler.getAddressUProperty()),
-                                                static_cast<int>(effectiveSampler.getAddressVProperty()));
+                renderer_->SetSamplerFilter(static_cast<int>(samplerState_.getFilterProperty()));
+                renderer_->SetSamplerMaxAnisotropy(samplerState_.getMaxAnisotropyProperty());
+                renderer_->SetSamplerMipState(samplerState_.getMaxMipLevelProperty(),
+                                              samplerState_.getMipMapLevelOfDetailBiasProperty());
+                renderer_->SetSamplerAddressMode(static_cast<int>(samplerState_.getAddressUProperty()),
+                                                static_cast<int>(samplerState_.getAddressVProperty()));
                 renderer_->SetImmediateMode(sortMode_ == SpriteSortMode::Immediate);
                 renderer_->Begin();
             }
@@ -285,6 +275,8 @@ namespace Microsoft::Xna::Framework::Graphics
         throwIfDisposed();
         if (!begun)
             throw std::runtime_error("End was called, but Begin has not yet been called.");
+        if (sortMode_ != SpriteSortMode::Immediate)
+            applyRenderState();
         if (renderer_)
         {
             if (sortMode_ != SpriteSortMode::Immediate)

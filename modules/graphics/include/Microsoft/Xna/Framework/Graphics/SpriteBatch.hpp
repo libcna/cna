@@ -62,6 +62,10 @@ namespace Microsoft::Xna::Framework::Graphics
         SpriteSortMode sortMode_    = SpriteSortMode::Deferred;
         Matrix transformMatrix_     = Matrix::getIdentityProperty();
         Effect* customEffect_       = nullptr;
+        BlendState blendState_;
+        SamplerState samplerState_;
+        DepthStencilState depthStencilState_;
+        RasterizerState rasterizerState_;
         std::vector<SpriteInfo> spriteQueue_;
 
         void pushSprite(const Texture2D& texture,
@@ -75,6 +79,7 @@ namespace Microsoft::Xna::Framework::Graphics
                         SpriteEffects effects, float layerDepth);
         void flushBatch();
         void flushSingle(const SpriteInfo& s);
+        void applyRenderState();
         void throwIfDisposed() const;
 
     protected:

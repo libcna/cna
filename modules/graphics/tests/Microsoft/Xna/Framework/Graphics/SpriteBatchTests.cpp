@@ -176,10 +176,10 @@ TEST(SpriteBatchTest, BeginFiveParameterNullBlendUsesAlphaBlend)
 
     batch.Begin(SpriteSortMode::Deferred, static_cast<const BlendState*>(nullptr),
                 nullptr, nullptr, nullptr);
+    batch.End();
 
     EXPECT_EQ(device.getBlendStateProperty().getColorDestinationBlendProperty(),
               BlendState::AlphaBlend.getColorDestinationBlendProperty());
-    batch.End();
 }
 
 TEST(SpriteBatchTest, BeginSixParameterNullBlendUsesAlphaBlend)
@@ -192,10 +192,10 @@ TEST(SpriteBatchTest, BeginSixParameterNullBlendUsesAlphaBlend)
 
     batch.Begin(SpriteSortMode::Deferred, static_cast<const BlendState*>(nullptr),
                 nullptr, nullptr, nullptr, nullptr);
+    batch.End();
 
     EXPECT_EQ(device.getBlendStateProperty().getColorDestinationBlendProperty(),
               BlendState::AlphaBlend.getColorDestinationBlendProperty());
-    batch.End();
 }
 
 TEST(SpriteBatchTest, BeginSevenParameterNullBlendUsesAlphaBlend)
@@ -209,10 +209,10 @@ TEST(SpriteBatchTest, BeginSevenParameterNullBlendUsesAlphaBlend)
 
     batch.Begin(SpriteSortMode::Deferred, static_cast<const BlendState*>(nullptr),
                 nullptr, nullptr, nullptr, nullptr, Matrix::getIdentityProperty());
+    batch.End();
 
     EXPECT_EQ(device.getBlendStateProperty().getColorDestinationBlendProperty(),
               BlendState::AlphaBlend.getColorDestinationBlendProperty());
-    batch.End();
 }
 
 TEST(SpriteBatchTest, BeginPublishesExplicitSamplerStateToDeviceSlotZero)
@@ -270,6 +270,42 @@ TEST(SpriteBatchTest, BeginPublishesLinearClampWhenSamplerIsNull)
     EXPECT_FLOAT_EQ(actual.getMipMapLevelOfDetailBiasProperty(),
                     SamplerState::LinearClamp.getMipMapLevelOfDetailBiasProperty());
     batch.End();
+}
+
+TEST(SpriteBatchTest, DeferredBeginAppliesRenderStatesOnlyWhenEndFlushes)
+{
+    using Microsoft::Xna::Framework::Graphics::BlendState;
+    using Microsoft::Xna::Framework::Graphics::CullMode;
+    using Microsoft::Xna::Framework::Graphics::DepthStencilState;
+    using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+    using Microsoft::Xna::Framework::Graphics::RasterizerState;
+    using Microsoft::Xna::Framework::Graphics::SamplerState;
+
+    GraphicsDevice device;
+    device.setBlendStateProperty(BlendState::Opaque);
+    device.getSamplerStatesProperty()[0] = SamplerState::PointWrap;
+    device.setDepthStencilStateProperty(DepthStencilState::Default);
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+    SpriteBatch batch(device);
+
+    batch.Begin(SpriteSortMode::Deferred, BlendState::Additive, &SamplerState::PointClamp,
+                &DepthStencilState::None, &RasterizerState::CullClockwise);
+
+    EXPECT_EQ(device.getBlendStateProperty().getColorDestinationBlendProperty(),
+              BlendState::Opaque.getColorDestinationBlendProperty());
+    EXPECT_EQ(device.getSamplerStatesProperty()[0].getAddressUProperty(),
+              SamplerState::PointWrap.getAddressUProperty());
+    EXPECT_TRUE(device.getDepthStencilStateProperty().getDepthBufferEnableProperty());
+    EXPECT_EQ(device.getRasterizerStateProperty().getCullModeProperty(), CullMode::None);
+
+    batch.End();
+
+    EXPECT_EQ(device.getBlendStateProperty().getColorDestinationBlendProperty(),
+              BlendState::Additive.getColorDestinationBlendProperty());
+    EXPECT_EQ(device.getSamplerStatesProperty()[0].getAddressUProperty(),
+              SamplerState::PointClamp.getAddressUProperty());
+    EXPECT_FALSE(device.getDepthStencilStateProperty().getDepthBufferEnableProperty());
+    EXPECT_EQ(device.getRasterizerStateProperty().getCullModeProperty(), CullMode::CullClockwiseFace);
 }
 
 // --- Draw guard: throws when called before Begin (no-renderer batch) ---
