@@ -44,6 +44,7 @@
 // against a bound render target is DX-118's job, same as it is for the back buffer.
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/DirectX12/D3D12RendererReference.hpp"
 #include "D3D12DescriptorHeaps.hpp"
 
 #include <d3d12.h>
@@ -167,8 +168,7 @@ namespace CNA::Internal::Renderers::DirectX12
         /// GenerateMipsEXT(). No-op when isMsaa_ is false.
         void ResolveMsaaEXT() const;
 
-        DirectX12Renderer* owner_ = nullptr;
-        std::weak_ptr<void> ownerLifetime_;
+        D3D12RendererReference owner_;
         ComPtr<ID3D12Device> device_;
 
         /// Kept alive independently of owner_ so the destructor can always free the descriptors.
@@ -285,8 +285,7 @@ namespace CNA::Internal::Renderers::DirectX12
         /// when isMsaa_ is false or no face is currently active.
         void ResolveMsaaEXT();
 
-        DirectX12Renderer* owner_ = nullptr;
-        std::weak_ptr<void> ownerLifetime_;
+        D3D12RendererReference owner_;
         ComPtr<ID3D12Device> device_;
 
         /// Kept alive independently of owner_ so the destructor can always free the descriptors.

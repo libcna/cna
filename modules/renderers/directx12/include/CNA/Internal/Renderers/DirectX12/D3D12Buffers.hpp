@@ -25,6 +25,7 @@
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
+#include "CNA/Internal/Renderers/DirectX12/D3D12RendererReference.hpp"
 
 #include <d3d12.h>
 #include <wrl/client.h>
@@ -72,7 +73,7 @@ namespace CNA::Internal::Renderers::DirectX12
         void EnsureCapacity(std::size_t requiredBytes);
         void UploadAndCopy(const void* data, std::size_t byteCount);
 
-        DirectX12Renderer* renderer_ = nullptr;
+        D3D12RendererReference renderer_;
         ComPtr<ID3D12Resource> buffer_;
         int capacity_ = 0;
         int vertexCount_ = 0;
@@ -120,7 +121,7 @@ namespace CNA::Internal::Renderers::DirectX12
         void EnsureCapacity(std::size_t requiredBytes);
         void UploadAndCopy(const void* data, std::size_t byteCount, bool dataIsThirtyTwoBit);
 
-        DirectX12Renderer* renderer_ = nullptr;
+        D3D12RendererReference renderer_;
         ComPtr<ID3D12Resource> buffer_;
         int capacity_ = 0;
         int indexCount_ = 0;

@@ -13,6 +13,7 @@
 // DX-111's actual prerequisite") -- this is the real, scoped follow-up.
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/DirectX12/D3D12RendererReference.hpp"
 #include "D3D12DescriptorHeaps.hpp"
 
 #include <d3d12.h>
@@ -62,7 +63,7 @@ namespace CNA::Internal::Renderers::DirectX12
     private:
         void TransitionToShaderReadableEXT();
 
-        DirectX12Renderer* renderer_ = nullptr;
+        D3D12RendererReference renderer_;
         ComPtr<ID3D12Resource> texture_;
         /// Kept alive independently of renderer_ so the destructor can always free the slot.
         std::shared_ptr<D3D12DescriptorHeaps> heaps_;

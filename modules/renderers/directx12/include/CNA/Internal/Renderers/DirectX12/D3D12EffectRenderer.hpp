@@ -18,6 +18,7 @@
 // typically compiles effects up front) -- an honest, documented simplification, not an oversight.
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/DirectX12/D3D12RendererReference.hpp"
 
 #include <d3d12.h>
 #include <wrl/client.h>
@@ -68,7 +69,7 @@ namespace CNA::Internal::Renderers::DirectX12
         [[nodiscard]] D3D12_GPU_DESCRIPTOR_HANDLE GetTexture3DGpuHandleEXT(int unit) const;
 
     private:
-        DirectX12Renderer* owner_;
+        D3D12RendererReference owner_;
         ID3D12Device* device_;
         ComPtr<ID3D12PipelineState> pso_;
         ComPtr<ID3D12Resource> constantBuffer_;

@@ -99,7 +99,8 @@ namespace CNA::Internal::Renderers::DirectX12
 
     D3D12Texture3DRenderer::D3D12Texture3DRenderer(DirectX12Renderer* renderer,
                                                   int w, int h, int depth, bool mipMap, int surfaceFormat)
-        : renderer_(renderer)
+        : renderer_(renderer, renderer ? renderer->GetLifetimeTokenEXT() : std::weak_ptr<void>{},
+                    "D3D12Texture3DRenderer")
         , width_(w), height_(h), depth_(depth)
         , mipLevels_(mipMap ? CalculateMipLevels(w, h, depth) : 1)
         , surfaceFormat_(surfaceFormat)

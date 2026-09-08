@@ -90,7 +90,9 @@ namespace CNA::Internal::Renderers::DirectX12
     // -------------------------------------------------------------------------
 
     D3D12VertexBufferRenderer::D3D12VertexBufferRenderer(DirectX12Renderer* renderer, int vertex_capacity)
-        : renderer_(renderer), capacity_(vertex_capacity)
+        : renderer_(renderer, renderer ? renderer->GetLifetimeTokenEXT() : std::weak_ptr<void>{},
+                    "D3D12VertexBufferRenderer"),
+          capacity_(vertex_capacity)
     {
     }
 
@@ -165,7 +167,9 @@ namespace CNA::Internal::Renderers::DirectX12
 
     D3D12IndexBufferRenderer::D3D12IndexBufferRenderer(
         DirectX12Renderer* renderer, int index_capacity, bool thirtyTwoBit)
-        : renderer_(renderer), capacity_(index_capacity), thirtyTwoBit_(thirtyTwoBit)
+        : renderer_(renderer, renderer ? renderer->GetLifetimeTokenEXT() : std::weak_ptr<void>{},
+                    "D3D12IndexBufferRenderer"),
+          capacity_(index_capacity), thirtyTwoBit_(thirtyTwoBit)
     {
     }
 

@@ -108,6 +108,7 @@
 #include "CNA/Internal/Renderers/DirectX12/D3D12TextureCube.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12RenderTargets.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12EffectRenderer.hpp"
+#include "System/ObjectDisposedException.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12Texture3D.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
@@ -6131,6 +6132,108 @@ int main()
                   "color, not the stock sprite2d pipeline's -- through the real public XNA API, off-"
                   "screen (plans/plan_dx.md DX-121)");
         }
+    }
+
+    // ---- Check WW: DX-220 detached-resource safety. ------------------------------------------
+    // GraphicsDevice's public disposal path already disposes every registered GraphicsResource
+    // before resetting its renderer (the shared Resource_DeviceDisposeOrder fixture proves that
+    // separately). This lower-level probe deliberately keeps every D3D12 backend alive beyond its
+    // owner so no internal user can turn an unusual shutdown order into a raw-pointer UAF.
+    {
+        auto owner = std::make_unique<DirectX12Renderer>(args);
+
+        ImageData detachedImage;
+        detachedImage.width = 2;
+        detachedImage.height = 2;
+        detachedImage.pixels.assign(16, 0x7f);
+
+        auto texture = owner->CreateTexture(detachedImage);
+        auto textureCube = owner->CreateTextureCube(2, false, 0);
+        auto texture3D = owner->CreateTexture3D(2, 2, 2, false, 0);
+        auto vertexBuffer = owner->CreateVertexBuffer(3);
+        auto indexBuffer = owner->CreateIndexBuffer16(3);
+        auto renderTarget = owner->CreateRenderTarget2D(2, 2, 0);
+        auto renderTargetCube = owner->CreateRenderTargetCube(2, 0);
+        auto query = owner->CreateOcclusionQuery();
+        auto effect = owner->CreateEffectRenderer({}, {});
+        auto spriteBatch = owner->CreateSpriteBatch();
+
+        owner.reset();
+
+        auto expectDetached = [](const char* objectName, auto&& operation, const char* label)
+        {
+            bool namedException = false;
+            try
+            {
+                operation();
+            }
+            catch (const System::ObjectDisposedException& exception)
+            {
+                namedException = exception.getObjectNameProperty() == objectName;
+            }
+            catch (...)
+            {
+            }
+            Check(namedException, label);
+        };
+
+        std::array<std::uint8_t, 32> bytes{};
+        expectDetached("D3D12TextureRenderer",
+                       [&] { texture->UpdatePixels(bytes.data(), 8); },
+                       "WW1: detached Texture2D update throws its named ObjectDisposedException");
+        expectDetached("D3D12TextureCubeRenderer",
+                       [&] { (void) textureCube->SetData(0, 0, 0, 0, 2, 2, bytes.data(), 16); },
+                       "WW2: detached TextureCube update throws its named ObjectDisposedException");
+        expectDetached("D3D12Texture3DRenderer",
+                       [&] { (void) texture3D->SetData(0, 0, 0, 0, 2, 2, 2, bytes.data(), 32); },
+                       "WW3: detached Texture3D update throws its named ObjectDisposedException");
+        expectDetached("D3D12VertexBufferRenderer",
+                       [&] { vertexBuffer->SetData(bytes.data(), 3, 4); },
+                       "WW4: detached vertex-buffer update throws its named ObjectDisposedException");
+        expectDetached("D3D12IndexBufferRenderer",
+                       [&] { indexBuffer->SetData16(bytes.data(), 3); },
+                       "WW5: detached index-buffer update throws its named ObjectDisposedException");
+        expectDetached("D3D12RenderTargetRenderer",
+                       [&] { renderTarget->BindAsRenderTarget(); },
+                       "WW6: detached RenderTarget2D bind throws its named ObjectDisposedException");
+        expectDetached("D3D12RenderTargetCubeRenderer",
+                       [&] { renderTargetCube->BindAsRenderTargetFace(0); },
+                       "WW7: detached RenderTargetCube bind throws its named ObjectDisposedException");
+        expectDetached("D3D12OcclusionQueryRenderer",
+                       [&] { query->Begin(); },
+                       "WW8: detached OcclusionQuery begin throws its named ObjectDisposedException");
+        expectDetached("D3D12EffectRenderer",
+                       [&] { (void) effect->CompileProgram({}, {}); },
+                       "WW9: detached Effect compile throws its named ObjectDisposedException");
+        expectDetached("D3D12SpriteBatchRenderer",
+                       [&]
+                       {
+                           spriteBatch->Begin();
+                           spriteBatch->Draw(*texture, 0.0f, 0.0f);
+                           spriteBatch->End();
+                       },
+                       "WW10: detached SpriteBatch flush throws its named ObjectDisposedException");
+
+        bool releaseWasSafe = true;
+        try
+        {
+            spriteBatch.reset();
+            effect.reset();
+            query.reset();
+            renderTargetCube.reset();
+            renderTarget.reset();
+            indexBuffer.reset();
+            vertexBuffer.reset();
+            texture3D.reset();
+            textureCube.reset();
+            texture.reset();
+        }
+        catch (...)
+        {
+            releaseWasSafe = false;
+        }
+        Check(releaseWasSafe,
+              "WW11: every detached backend releases its independently-owned native resources safely");
     }
 
     std::printf("\n%s: %d failure(s)\n", g_failures == 0 ? "RESULT: ALL PASS" : "RESULT: FAILURES", g_failures);

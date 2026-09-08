@@ -327,8 +327,8 @@ namespace CNA::Internal::Renderers::DirectX12
     D3D12RenderTargetRenderer::D3D12RenderTargetRenderer(
         DirectX12Renderer* owner, ID3D12Device* device, int w, int h, int depthFormat, bool mipMap,
         int multiSampleCount, int surfaceFormat)
-        : owner_(owner)
-        , ownerLifetime_(owner ? owner->GetLifetimeTokenEXT() : std::weak_ptr<void>{})
+        : owner_(owner, owner ? owner->GetLifetimeTokenEXT() : std::weak_ptr<void>{},
+                 "D3D12RenderTargetRenderer")
         , device_(device)
         , width_(w)
         , height_(h)
@@ -457,7 +457,7 @@ namespace CNA::Internal::Renderers::DirectX12
 
     D3D12RenderTargetRenderer::~D3D12RenderTargetRenderer()
     {
-        if (owner_ && !ownerLifetime_.expired()) owner_->NotifyRenderTargetDestroyedEXT(this);
+        if (owner_) owner_->NotifyRenderTargetDestroyedEXT(this);
         if (!heaps_) return;
         heaps_->cbvSrvUav.Free(srvIndex_);
         heaps_->rtv.Free(rtv_);
@@ -466,23 +466,21 @@ namespace CNA::Internal::Renderers::DirectX12
 
     void D3D12RenderTargetRenderer::BindAsRenderTarget()
     {
-        if (owner_)
-        {
-            // DX-146: pass this target's own DSV too. DX-117 created the depth resource+DSV but
-            // never bound them, so a render target with a real depth buffer silently gave every draw
-            // NO depth buffer (depth test and every ClearDepth*/ClearStencil* variant were inert
-            // against it). Found by DX-146's own depth/stencil pixel proofs.
-            owner_->BindOffscreenColorTargetEXT(colorResource_.Get(), rtv_,
-                                                dxgiFormat_, width_, height_,
-                                                dsv_, dsvFormat_);
-        }
+        // DX-146: pass this target's own DSV too. DX-117 created the depth resource+DSV but
+        // never bound them, so a render target with a real depth buffer silently gave every draw
+        // NO depth buffer (depth test and every ClearDepth*/ClearStencil* variant were inert
+        // against it). Found by DX-146's own depth/stencil pixel proofs.
+        owner_->BindOffscreenColorTargetEXT(colorResource_.Get(), rtv_,
+                                            dxgiFormat_, width_, height_,
+                                            dsv_, dsvFormat_);
     }
 
     void D3D12RenderTargetRenderer::UnbindAsRenderTarget()
     {
+        (void) owner_.Get();
         ResolveMsaaEXT();
         GenerateMipsEXT();
-        if (owner_) owner_->RestoreBackBufferRenderTargetEXT();
+        owner_->RestoreBackBufferRenderTargetEXT();
     }
 
     void D3D12RenderTargetRenderer::ResolveMsaaEXT() const
@@ -524,6 +522,7 @@ namespace CNA::Internal::Renderers::DirectX12
     bool D3D12RenderTargetRenderer::GetData(int level, int x, int y, int w, int h,
                                            void* data, int dataLength) const
     {
+        (void) owner_.Get();
         if (level < 0)
             throw System::ArgumentOutOfRangeException(
                 "level", std::to_string(level), "level must not be negative.");
@@ -557,19 +556,18 @@ namespace CNA::Internal::Renderers::DirectX12
         // An active MSAA target has not crossed the ordinary unbind/resolve boundary yet. Refresh
         // only that active attachment before readback; an idle target's sampleable resource may
         // have been updated independently and must not be overwritten from an old MSAA surface.
-        if (isMsaa_ && owner_ && !ownerLifetime_.expired() &&
-            owner_->IsRenderTargetActiveEXT(this))
+        if (isMsaa_ && owner_ && owner_->IsRenderTargetActiveEXT(this))
         {
             ResolveMsaaEXT();
             GenerateMipsEXT();
         }
 
         ID3D12Resource* const source = GetSampleableColorResourceEXT();
-        if (!owner_ || !device_ || !source || data == nullptr)
+        if (!device_ || !source || data == nullptr)
             return false;
 
         const std::vector<uint8_t> levelPixels = ReadbackSubresource(
-            owner_, device_.Get(), source, static_cast<UINT>(level), levelW, levelH,
+            owner_.Get(), device_.Get(), source, static_cast<UINT>(level), levelW, levelH,
             bytesPerTexel_);
         if (levelPixels.size() <
             static_cast<std::size_t>(levelW) * levelH * bytesPerTexel_)
@@ -600,7 +598,7 @@ namespace CNA::Internal::Renderers::DirectX12
             const int dstH = std::max(1, srcH / 2);
 
             const auto srcPixels = ReadbackSubresource(
-                owner_, device_.Get(), mipResource, static_cast<UINT>(level - 1), srcW,
+                owner_.Get(), device_.Get(), mipResource, static_cast<UINT>(level - 1), srcW,
                 srcH, bytesPerTexel_);
             if (srcPixels.empty()) return; // honest bail-out -- leaves remaining levels undefined, not wrong
 
@@ -608,7 +606,7 @@ namespace CNA::Internal::Renderers::DirectX12
                 srcPixels, srcW, srcH, dstW, dstH,
                 static_cast<SurfaceFormat>(surfaceFormat_), bytesPerTexel_);
             UploadSubresource(
-                owner_, device_.Get(), mipResource, static_cast<UINT>(level),
+                owner_.Get(), device_.Get(), mipResource, static_cast<UINT>(level),
                 dstPixels.data(), dstW, dstH, dxgiFormat_, bytesPerTexel_);
 
             srcW = dstW; srcH = dstH;
@@ -622,8 +620,8 @@ namespace CNA::Internal::Renderers::DirectX12
     D3D12RenderTargetCubeRenderer::D3D12RenderTargetCubeRenderer(
         DirectX12Renderer* owner, ID3D12Device* device, int size, int depthFormat, bool mipMap,
         int multiSampleCount, int surfaceFormat)
-        : owner_(owner)
-        , ownerLifetime_(owner ? owner->GetLifetimeTokenEXT() : std::weak_ptr<void>{})
+        : owner_(owner, owner ? owner->GetLifetimeTokenEXT() : std::weak_ptr<void>{},
+                 "D3D12RenderTargetCubeRenderer")
         , device_(device)
         , size_(size)
         , surfaceFormat_(surfaceFormat)
@@ -754,7 +752,7 @@ namespace CNA::Internal::Renderers::DirectX12
 
     D3D12RenderTargetCubeRenderer::~D3D12RenderTargetCubeRenderer()
     {
-        if (owner_ && !ownerLifetime_.expired()) owner_->NotifyRenderTargetCubeDestroyedEXT(this);
+        if (owner_) owner_->NotifyRenderTargetCubeDestroyedEXT(this);
         if (!heaps_) return;
         heaps_->cbvSrvUav.Free(srvIndex_);
         for (D3D12_CPU_DESCRIPTOR_HANDLE face : rtv_) heaps_->rtv.Free(face);
@@ -763,21 +761,19 @@ namespace CNA::Internal::Renderers::DirectX12
 
     void D3D12RenderTargetCubeRenderer::BindAsRenderTargetFace(int face)
     {
+        (void) owner_.Get();
         activeFace_ = face;
-        if (owner_)
-        {
-            // plans/plan_dx.md DX-209: bind this cube's own depth-stencil view too. DX-146 fixed exactly
-            // this omission for the 2D leg and left the cube leg behind, so a RenderTargetCube with
-            // a real depth buffer gave every face-targeted draw NO depth buffer -- depth and stencil
-            // tests inert, ClearDepth/ClearStencil inert. XNA allocates ONE depth-stencil buffer per
-            // RenderTargetCube, shared by all six faces (FNA: one glDepthStencilBuffer per target),
-            // which is exactly what this one dsv_ is; a face change therefore does not reset depth,
-            // and that shared-ness is itself part of the contract
-            // (rendertarget_depthstencil_usage_test U2).
-            owner_->BindOffscreenColorTargetEXT(colorResource_.Get(), rtv_[face],
-                                                dxgiFormat_, size_, size_,
-                                                dsv_, dsvFormat_);
-        }
+        // plans/plan_dx.md DX-209: bind this cube's own depth-stencil view too. DX-146 fixed exactly
+        // this omission for the 2D leg and left the cube leg behind, so a RenderTargetCube with
+        // a real depth buffer gave every face-targeted draw NO depth buffer -- depth and stencil
+        // tests inert, ClearDepth/ClearStencil inert. XNA allocates ONE depth-stencil buffer per
+        // RenderTargetCube, shared by all six faces (FNA: one glDepthStencilBuffer per target),
+        // which is exactly what this one dsv_ is; a face change therefore does not reset depth,
+        // and that shared-ness is itself part of the contract
+        // (rendertarget_depthstencil_usage_test U2).
+        owner_->BindOffscreenColorTargetEXT(colorResource_.Get(), rtv_[face],
+                                            dxgiFormat_, size_, size_,
+                                            dsv_, dsvFormat_);
     }
 
     void D3D12RenderTargetCubeRenderer::ResolveMsaaEXT()
@@ -818,7 +814,8 @@ namespace CNA::Internal::Renderers::DirectX12
     {
         // REMED-GFX-134: closes the refusal this class inherited from ITextureCubeRenderer's
         // `return false` default. Same readback-heap mechanism as D3D12TextureCubeRenderer::GetData.
-        if (!owner_ || data == nullptr) return false;
+        (void) owner_.Get();
+        if (data == nullptr) return false;
         if (face < 0 || face >= 6 || w <= 0 || h <= 0) return false;
         if (level < 0 || level >= levelCount_) return false;
         const int levelSize = std::max(1, size_ >> level);
@@ -916,12 +913,13 @@ namespace CNA::Internal::Renderers::DirectX12
 
     void D3D12RenderTargetCubeRenderer::UnbindAsRenderTarget()
     {
+        (void) owner_.Get();
         // DX-152/DX-144: resolve MSAA, then generate the active face's mip chain before clearing
         // activeFace_. The latter runs against the single-sample resolve resource when needed.
         ResolveMsaaEXT();
         GenerateMipsEXT();
         activeFace_ = -1;
-        if (owner_) owner_->RestoreBackBufferRenderTargetEXT();
+        owner_->RestoreBackBufferRenderTargetEXT();
     }
 
     void D3D12RenderTargetCubeRenderer::GenerateMipsEXT()
@@ -946,7 +944,7 @@ namespace CNA::Internal::Renderers::DirectX12
             const UINT dstSubresource = static_cast<UINT>(level) + face * static_cast<UINT>(levelCount_);
 
             const auto srcPixels = ReadbackSubresource(
-                owner_, device_.Get(), mipResource, srcSubresource, srcW, srcH,
+                owner_.Get(), device_.Get(), mipResource, srcSubresource, srcW, srcH,
                 bytesPerTexel_);
             if (srcPixels.empty()) return; // honest bail-out -- leaves remaining levels undefined, not wrong
 
@@ -954,7 +952,7 @@ namespace CNA::Internal::Renderers::DirectX12
                 srcPixels, srcW, srcH, dstW, dstH,
                 static_cast<SurfaceFormat>(surfaceFormat_), bytesPerTexel_);
             UploadSubresource(
-                owner_, device_.Get(), mipResource, dstSubresource,
+                owner_.Get(), device_.Get(), mipResource, dstSubresource,
                 dstPixels.data(), dstW, dstH, dxgiFormat_, bytesPerTexel_);
 
             srcW = dstW; srcH = dstH;

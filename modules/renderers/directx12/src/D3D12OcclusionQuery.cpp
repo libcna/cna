@@ -22,7 +22,8 @@ namespace CNA::Internal::Renderers::DirectX12
     }
 
     D3D12OcclusionQueryRenderer::D3D12OcclusionQueryRenderer(DirectX12Renderer* renderer)
-        : renderer_(renderer)
+        : renderer_(renderer, renderer ? renderer->GetLifetimeTokenEXT() : std::weak_ptr<void>{},
+                    "D3D12OcclusionQueryRenderer")
     {
         ID3D12Device* device = renderer_->GetDeviceEXT();
 

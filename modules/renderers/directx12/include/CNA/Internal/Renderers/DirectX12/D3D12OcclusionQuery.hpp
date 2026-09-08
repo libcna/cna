@@ -4,6 +4,7 @@
 // D3D11OcclusionQueryRenderer (DX-47) XNA-level contract exactly.
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/DirectX12/D3D12RendererReference.hpp"
 
 #include <d3d12.h>
 #include <wrl/client.h>
@@ -40,7 +41,7 @@ namespace CNA::Internal::Renderers::DirectX12
         [[nodiscard]] int PixelCount() const override;
 
     private:
-        DirectX12Renderer* renderer_;
+        D3D12RendererReference renderer_;
         ComPtr<ID3D12QueryHeap> queryHeap_;
         // D3D12_HEAP_TYPE_READBACK resources must always stay in D3D12_RESOURCE_STATE_COPY_DEST
         // (the only state a readback heap resource may ever be in) -- created once in that state

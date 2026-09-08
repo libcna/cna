@@ -21,12 +21,15 @@ namespace CNA::Internal::Renderers::DirectX12
     }
 
     D3D12EffectRenderer::D3D12EffectRenderer(DirectX12Renderer* owner)
-        : owner_(owner), device_(owner_->GetDeviceEXT())
+        : owner_(owner, owner ? owner->GetLifetimeTokenEXT() : std::weak_ptr<void>{},
+                 "D3D12EffectRenderer"),
+          device_(owner_->GetDeviceEXT())
     {
     }
 
     bool D3D12EffectRenderer::CompileProgram(const std::string& vertSrc, const std::string& fragSrc)
     {
+        (void) owner_.Get();
         compileError_.clear();
         valid_ = false;
         pso_.Reset();
@@ -165,6 +168,7 @@ namespace CNA::Internal::Renderers::DirectX12
 
     void D3D12EffectRenderer::Bind()
     {
+        (void) owner_.Get();
         if (!valid_) return;
         std::memcpy(constantBufferMapped_, pushConst_, sizeof(pushConst_));
     }

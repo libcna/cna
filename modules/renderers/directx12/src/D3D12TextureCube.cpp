@@ -94,7 +94,9 @@ namespace CNA::Internal::Renderers::DirectX12
 
     D3D12TextureCubeRenderer::D3D12TextureCubeRenderer(
         DirectX12Renderer* renderer, int size, bool mipMap, int surfaceFormat)
-        : renderer_(renderer), size_(size), mipLevels_(mipMap ? CalculateMipLevels(size) : 1),
+        : renderer_(renderer, renderer ? renderer->GetLifetimeTokenEXT() : std::weak_ptr<void>{},
+                    "D3D12TextureCubeRenderer"),
+          size_(size), mipLevels_(mipMap ? CalculateMipLevels(size) : 1),
           surfaceFormat_(surfaceFormat)
     {
         ResolveSurfaceFormat(surfaceFormat_, dxgiFormat_, bytesPerTexel_, compressed_,

@@ -55,7 +55,8 @@ namespace CNA::Internal::Renderers::DirectX12
     }
 
     D3D12TextureRenderer::D3D12TextureRenderer(DirectX12Renderer* renderer, const ImageData& data)
-        : renderer_(renderer)
+        : renderer_(renderer, renderer ? renderer->GetLifetimeTokenEXT() : std::weak_ptr<void>{},
+                    "D3D12TextureRenderer")
         , width_(data.width), height_(data.height)
         , mipLevels_(data.mipLevels > 0 ? data.mipLevels : 1)
         , surfaceFormat_(data.surfaceFormat)

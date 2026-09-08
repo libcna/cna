@@ -53,15 +53,17 @@ namespace CNA::Internal::Renderers::DirectX12
     }
 
     D3D12SpriteBatchRenderer::D3D12SpriteBatchRenderer(DirectX12Renderer* owner)
-        : owner_(owner)
+        : owner_(owner, owner ? owner->GetLifetimeTokenEXT() : std::weak_ptr<void>{},
+                 "D3D12SpriteBatchRenderer")
         , device_(owner_->GetDeviceEXT())
-        , vb_(owner_, 256)
-        , ib_(owner_, 384, /*thirtyTwoBit=*/false)
+        , vb_(owner_.Get(), 256)
+        , ib_(owner_.Get(), 384, /*thirtyTwoBit=*/false)
     {
     }
 
     void D3D12SpriteBatchRenderer::Begin()
     {
+        (void) owner_.Get();
         if (begun_) return;
         begun_ = true;
     }

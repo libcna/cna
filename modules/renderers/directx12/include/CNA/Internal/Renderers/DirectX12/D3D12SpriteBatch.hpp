@@ -31,6 +31,7 @@
 //     D3D12 output merger instead of every sprite silently using Opaque.
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/DirectX12/D3D12RendererReference.hpp"
 #include "D3D12PipelineStateCache.hpp"
 #include "D3D12Buffers.hpp"
 
@@ -86,7 +87,7 @@ namespace CNA::Internal::Renderers::DirectX12
         ID3D12PipelineState* GetOrCreateSprite2DPso(ID3D12RootSignature* rootSig);
         ID3D12Resource* GetOrCreatePerDrawConstantBuffer();
 
-        DirectX12Renderer* owner_ = nullptr;
+        D3D12RendererReference owner_;
         ComPtr<ID3D12Device> device_;
 
         D3D12VertexBufferRenderer vb_;
