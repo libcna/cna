@@ -1188,16 +1188,25 @@ namespace CNA::Internal::Renderers::Software
                                     float& r, float& g, float& b, float& a)
         {
             const int levels = std::max(1, texture.ColorLevelCount());
-            // No chain, or a magnifying footprint: there is no level below 0 to select, so the mip
-            // component has nothing to decide and the magnification filter owns the result.
-            if (levels <= 1 || magnify || !(lambda > 0.0f))
+            if (levels <= 1)
             {
                 SampleLevel(texture, 0, sampler, magnify, u, v, r, g, b, a);
                 return;
             }
 
             const float maxLevel = static_cast<float>(levels - 1);
-            const float clamped = std::min(lambda, maxLevel);
+            // FNA3D maps MaxMipLevel to the sampler's minimum LOD and adds the explicit bias before
+            // that clamp. Despite its historical XNA name, MaxMipLevel therefore means "most
+            // detailed permitted level", not the largest numeric level the sampler may reach.
+            const float biased = lambda + sampler.lodBias;
+            const float minLevel = static_cast<float>(std::clamp(sampler.maxMipLevel, 0, levels - 1));
+            const float clamped = std::clamp(std::max(biased, minLevel), 0.0f, maxLevel);
+            const bool effectiveMagnify = clamped <= 0.0f && (magnify || biased < 0.0f);
+            if (!(clamped > 0.0f))
+            {
+                SampleLevel(texture, 0, sampler, effectiveMagnify, u, v, r, g, b, a);
+                return;
+            }
 
             if (FilterSelectsMipWithPoint(sampler.filter))
             {

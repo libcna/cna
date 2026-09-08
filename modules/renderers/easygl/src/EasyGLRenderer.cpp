@@ -5113,6 +5113,12 @@ if (ProfileUsesGlslEs100())
         pendingMaxAnisotropy_ = maxAnisotropy;
     }
 
+    void EasyGLSpriteBatchRenderer::SetSamplerMipState(int maxMipLevel, float lodBias)
+    {
+        pendingMaxMipLevel_ = maxMipLevel;
+        pendingLodBias_ = lodBias;
+    }
+
     void EasyGLSpriteBatchRenderer::SetSamplerAddressMode(int addressU, int addressV)
     {
         pendingAddressU_ = addressU;
@@ -5226,8 +5232,11 @@ if (ProfileUsesGlslEs100())
         current_texture_->BindGL();
         ApplyChannelExpansion(prog, current_texture_->GetSurfaceFormatEXT());
         if (graphicsRenderer_)
+        {
             graphicsRenderer_->ApplySamplerState(0, pendingFilter_, pendingAddressU_, pendingAddressV_,
                                                  pendingMaxAnisotropy_);
+            graphicsRenderer_->ApplySamplerMipState(0, pendingMaxMipLevel_, pendingLodBias_);
+        }
 
         vbo_.bind(::easygl::BufferTarget::Array);
         vbo_.set_data(::easygl::BufferTarget::Array,

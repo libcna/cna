@@ -629,6 +629,15 @@ namespace CNA::Internal::Renderers::Software
         s.maxAnisotropy = maxAnisotropy;
     }
 
+    void SoftwareRenderer::ApplySamplerMipState(int slot, int maxMipLevel, float lodBias)
+    {
+        if (slot < 0 || slot >= kMaxSamplerSlots)
+            throw std::runtime_error("SoftwareRenderer::ApplySamplerMipState: slot must be 0..15");
+        SoftwareSamplerState& s = samplerSlots_[static_cast<std::size_t>(slot)];
+        s.maxMipLevel = std::max(0, maxMipLevel);
+        s.lodBias = lodBias;
+    }
+
     // REMED-GFX-080: store the ScissorRectangle so the raster paths can intersect it into their
     // effective clip when scissor testing is enabled (previously a no-op, so ScissorRectangle never
     // clipped anything). GraphicsDevice pushes this on every setScissorRectangleProperty() and

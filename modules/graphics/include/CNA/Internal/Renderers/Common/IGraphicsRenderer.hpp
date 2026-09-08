@@ -1037,6 +1037,13 @@ namespace CNA::Internal::Renderers
          */
         virtual void SetSamplerMaxAnisotropy(int /*maxAnisotropy*/) {}
         /**
+         * @brief Sets explicit mip-level controls for the batch sampler.
+         *
+         * @param maxMipLevel Most detailed mip level the sampler may select.
+         * @param lodBias Bias added to the computed mip level of detail.
+         */
+        virtual void SetSamplerMipState(int /*maxMipLevel*/, float /*lodBias*/) {}
+        /**
          * @brief Sets the texture address (wrap/clamp/mirror) mode applied to each Draw call.
          *
          * Default: no-op (renderer keeps whatever wrap mode the texture was created with, i.e.

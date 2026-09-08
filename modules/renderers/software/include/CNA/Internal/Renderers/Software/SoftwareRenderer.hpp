@@ -379,6 +379,10 @@ namespace CNA::Internal::Renderers::Software
         int addressV = 1;
         /** @brief Requested maximum anisotropy; Software clamps work to its deterministic CPU cap. */
         int maxAnisotropy = 4;
+        /** @brief Most detailed mip level the sampler may select. */
+        int maxMipLevel = 0;
+        /** @brief Bias added to the computed mip level of detail before resource clamping. */
+        float lodBias = 0.0f;
     };
 
     /**
@@ -1233,6 +1237,8 @@ namespace CNA::Internal::Renderers::Software
         void SetSamplerFilter(int textureFilter) override { textureFilter_ = textureFilter; }
         void SetSamplerMaxAnisotropy(int maxAnisotropy) override
         { maxAnisotropy_ = maxAnisotropy; }
+        void SetSamplerMipState(int maxMipLevel, float lodBias) override
+        { maxMipLevel_ = maxMipLevel; lodBias_ = lodBias; }
         void SetSamplerAddressMode(int addressU, int addressV) override
         { addressU_ = addressU; addressV_ = addressV; }
         void Draw(const ITextureRenderer& texture, float x, float y) override;
@@ -1282,7 +1288,8 @@ namespace CNA::Internal::Renderers::Software
         /// re-established on every Begin and cannot leak from a previous batch). Pre-fix these three
         /// fields were written here and read nowhere, so the whole SamplerState argument was inert.
         [[nodiscard]] SoftwareSamplerState GetSamplerState() const
-        { return SoftwareSamplerState{textureFilter_, addressU_, addressV_, maxAnisotropy_}; }
+        { return SoftwareSamplerState{textureFilter_, addressU_, addressV_, maxAnisotropy_,
+                                      maxMipLevel_, lodBias_}; }
 
     private:
         SoftwareRenderer& owner_;
@@ -1293,6 +1300,8 @@ namespace CNA::Internal::Renderers::Software
         int addressU_ = 1;
         int addressV_ = 1;
         int maxAnisotropy_ = 4;
+        int maxMipLevel_ = 0;
+        float lodBias_ = 0.0f;
     };
 
     /**
@@ -1451,6 +1460,7 @@ namespace CNA::Internal::Renderers::Software
         void ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
                                   float depthBias = 0.0f, float slopeScaleDepthBias = 0.0f) override;
         void ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy) override;
+        void ApplySamplerMipState(int slot, int maxMipLevel, float lodBias) override;
         void SetBlendFactor(float r, float g, float b, float a) override;
         void SetReferenceStencil(int value) override;
         void SetScissorRect(int x, int y, int w, int h) override;

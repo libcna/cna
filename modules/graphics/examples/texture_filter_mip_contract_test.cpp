@@ -76,6 +76,7 @@
 //   I  transitions              Point then Linear, two chains of different length, recreation
 //   J  NPOT and odd destination a 6x6 chain and destinations that are not powers of two
 //   K  draw paths               indexed, non-indexed and DrawUser reach the same selection
+//   L  explicit mip state       MaxMipLevel and positive/negative LOD bias affect real selection
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs, 77 = skipped.
 
@@ -160,6 +161,13 @@ namespace
 #else
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "UNKNOWN";
+#endif
+
+#if defined(CNA_RENDERER_EASYGL) && !defined(CNA_GL_PROFILE_OPENGL33)
+    // FNA3D and EasyGL both document that GL_TEXTURE_LOD_BIAS has no OpenGL ES equivalent.
+    constexpr bool kLodBiasObservable = false;
+#else
+    constexpr bool kLodBiasObservable = true;
 #endif
 
     constexpr int kBBW = 160;
@@ -284,13 +292,17 @@ class TextureFilterMipContractTest : public Game
 
     static SamplerState MakeSampler(TextureFilter filter,
                                     TextureAddressMode u = TextureAddressMode::Clamp,
-                                    TextureAddressMode v = TextureAddressMode::Clamp)
+                                    TextureAddressMode v = TextureAddressMode::Clamp,
+                                    int maxMipLevel = 0,
+                                    float lodBias = 0.0f)
     {
         SamplerState s;
         s.setFilterProperty(filter);
         s.setAddressUProperty(u);
         s.setAddressVProperty(v);
         s.setMaxAnisotropyProperty(4);
+        s.setMaxMipLevelProperty(maxMipLevel);
+        s.setMipMapLevelOfDetailBiasProperty(lodBias);
         return s;
     }
 
@@ -967,6 +979,62 @@ class TextureFilterMipContractTest : public Game
         }
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // L -- MaxMipLevel is the most-detailed permitted level; LOD bias shifts real selection
+    // ---------------------------------------------------------------------------------------------
+    void RunL(GraphicsDevice& dev)
+    {
+        const auto sampler = [](int maxMipLevel, float lodBias) {
+            return MakeSampler(TextureFilter::Point, TextureAddressMode::Clamp,
+                               TextureAddressMode::Clamp, maxMipLevel, lodBias);
+        };
+
+        check(SoleLevel(Draw3D(dev, 8, 8, *mipFlat_, sampler(2, 0.0f)), flatLevels_) == 2,
+              "L0 MaxMipLevel=2 forbids levels 0/1 even at a one-to-one footprint");
+        check(SoleLevel(Draw3D(dev, 2, 2, *mipFlat_, sampler(1, 0.0f)), flatLevels_) == 2,
+              "L1 MaxMipLevel=1 is a lower LOD bound, not a clamp to exactly level 1");
+        check(SoleLevel(Draw3D(dev, 8, 8, *mipFlat_, sampler(99, 0.0f)), flatLevels_) == 3,
+              "L2 MaxMipLevel beyond the resource chain clamps to its last stored level");
+
+        if constexpr (kLodBiasObservable)
+        {
+            check(SoleLevel(Draw3D(dev, 4, 4, *mipFlat_, sampler(0, 1.0f)), flatLevels_) == 2,
+                  "L3 positive LOD bias shifts lambda 1 to level 2");
+            check(SoleLevel(Draw3D(dev, 2, 2, *mipFlat_, sampler(0, -1.0f)), flatLevels_) == 1,
+                  "L4 negative LOD bias shifts lambda 2 to level 1");
+            check(SoleLevel(Draw3D(dev, 2, 2, *mipFlat_, sampler(2, -2.0f)), flatLevels_) == 2,
+                  "L5 MaxMipLevel clamps after a negative LOD bias");
+
+            const int biased = SoleLevel(
+                Draw3D(dev, 4, 4, *mipFlat_, sampler(0, 1.0f)), flatLevels_);
+            const int reset = SoleLevel(
+                Draw3D(dev, 4, 4, *mipFlat_, sampler(0, 0.0f)), flatLevels_);
+            const int clamped = SoleLevel(
+                Draw3D(dev, 4, 4, *mipFlat_, sampler(2, 0.0f)), flatLevels_);
+            check(biased == 2 && reset == 1 && clamped == 2,
+                  "L6 bias/default/clamp transitions do not leak between draws");
+        }
+        else
+        {
+            note("L3-L6 LOD bias is unrepresentable on this OpenGL ES profile; FNA3D applies it "
+                 "only on desktop GL");
+        }
+
+        check(SoleLevel(DrawSprite(dev, 8, 8, *mipFlat_, sampler(2, 0.0f)), flatLevels_) == 2,
+              "L7 SpriteBatch forwards MaxMipLevel to its sampler");
+        if constexpr (kLodBiasObservable)
+        {
+            check(SoleLevel(DrawSprite(dev, 4, 4, *mipFlat_, sampler(0, 1.0f)), flatLevels_) == 2,
+                  "L8 SpriteBatch forwards MipMapLevelOfDetailBias to its sampler");
+
+            const SamplerState linear = MakeSampler(
+                TextureFilter::Linear, TextureAddressMode::Clamp,
+                TextureAddressMode::Clamp, 0, 1.0f);
+            check(SoleLevel(Draw3D(dev, 4, 4, *mipFlat_, linear), flatLevels_) == 2,
+                  "L9 LOD bias applies before linear mip selection too");
+        }
+    }
+
 public:
     TextureFilterMipContractTest()
     {
@@ -1042,6 +1110,7 @@ protected:
         RunI(dev);
         RunJ(dev);
         RunK(dev);
+        RunL(dev);
 
         std::printf("=== %d/%d checks passed on %s ===\n", passCount_, totalCount_, kRendererName);
         result_ = (passCount_ == totalCount_) ? 0 : 1;

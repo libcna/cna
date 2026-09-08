@@ -291,7 +291,11 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   shared contracts. `TextureFilter::Anisotropic` computes the directional texel footprint, selects
   mip LOD from its minor axis and averages up to 16 taps along its major axis; `MaxAnisotropy`,
   per-slot independence, SpriteBatch forwarding and address interaction are shared-tested against
-  EasyGL by `SOFTWARE-117`.
+  EasyGL by `SOFTWARE-117`. `SOFTWARE-158` additionally proves that
+  `MipMapLevelOfDetailBias` shifts the computed LOD and `MaxMipLevel` applies afterward as the
+  most-detailed permitted level (FNA3D's minimum-LOD interpretation), including combined state,
+  transitions and SpriteBatch. Software passes all 97 checks; OpenGL ES runs the 91 representable
+  checks because, like FNA3D, EasyGL cannot express texture LOD bias on that profile.
 - **Backface culling respects `RasterizerState.CullMode`** (`SOFTWARE-81`) — `None`/
   `CullClockwiseFace`/`CullCounterClockwiseFace` are all honored, including by
   `SpriteBatch`'s own quads (matching real FNA, whose `SpriteBatch` defaults to
