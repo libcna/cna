@@ -4,6 +4,7 @@
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
+#include "CNA/Internal/Graphics/DxtUtil.hpp"
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
 #include "CNA/Internal/Renderers/Vulkan/VulkanCompiledEffect.hpp"
 namespace {
@@ -15497,9 +15498,10 @@ namespace CNA::Internal::Renderers::Vulkan
     }
 
     std::unique_ptr<ITextureCubeRenderer> VulkanRenderer::CreateTextureCube(
-        int size, bool mipMap, int /*surfaceFormat*/)
+        int size, bool mipMap, int surfaceFormat)
     {
-        return std::make_unique<VulkanTextureCubeRenderer>(this, size, mipMap);
+        return std::make_unique<VulkanTextureCubeRenderer>(
+            this, size, mipMap, surfaceFormat);
     }
 
     std::unique_ptr<IRenderTargetCubeRenderer> VulkanRenderer::CreateRenderTargetCube(int size, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
@@ -16048,18 +16050,43 @@ namespace CNA::Internal::Renderers::Vulkan
         return levels;
     }
 
-    VulkanTextureCubeRenderer::VulkanTextureCubeRenderer(VulkanRenderer* owner, int size, bool mipMap)
-        : owner_(owner), size_(size)
+    VulkanTextureCubeRenderer::VulkanTextureCubeRenderer(
+        VulkanRenderer* owner, int size, bool mipMap, int surfaceFormat)
+        : owner_(owner), size_(size), surfaceFormat_(surfaceFormat)
     {
         if (!owner_ || owner_->device_ == VK_NULL_HANDLE) return;
         VkDevice dev = owner_->device_;
         levelCount_ = mipMap ? CalculateVulkanTextureCubeMipLevels(size) : 1;
 
+        // plan_vulkan.md VULKAN-240. TextureCube used to drop surfaceFormat here and allocate
+        // RGBA8 unconditionally. Preserve that storage for the Color-shaped public transfer path,
+        // but allocate the exact BC format when the public compressed-byte overload selected it.
+        VulkanRenderer::VulkanSurfaceFormatStorageEXT requestedStorage{};
+        if (owner_->MapSurfaceFormatToStorageEXT(surfaceFormat_, requestedStorage) &&
+            requestedStorage.blockExtent > 1)
+        {
+            vkFormat_ = requestedStorage.format;
+            compressedBlockBytes_ = requestedStorage.bytesPerTexel;
+            compressedLevels_.resize(static_cast<std::size_t>(6 * levelCount_));
+            for (int face = 0; face < 6; ++face)
+            {
+                for (int level = 0; level < levelCount_; ++level)
+                {
+                    const int levelSize = std::max(1, size_ >> level);
+                    compressedLevels_[static_cast<std::size_t>(face * levelCount_ + level)]
+                        .assign(static_cast<std::size_t>(
+                                    VulkanRenderer::LevelByteCountEXT(
+                                        requestedStorage, levelSize, levelSize)),
+                                0u);
+                }
+            }
+        }
+
         VkImageCreateInfo imgInfo{};
         imgInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
         imgInfo.flags         = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
         imgInfo.imageType     = VK_IMAGE_TYPE_2D;
-        imgInfo.format        = VK_FORMAT_R8G8B8A8_UNORM;
+        imgInfo.format        = vkFormat_;
         imgInfo.extent        = { static_cast<uint32_t>(size), static_cast<uint32_t>(size), 1 };
         imgInfo.mipLevels     = static_cast<uint32_t>(levelCount_);
         imgInfo.arrayLayers   = 6;
@@ -16123,7 +16150,7 @@ namespace CNA::Internal::Renderers::Vulkan
         viewInfo.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         viewInfo.image    = image_;
         viewInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
-        viewInfo.format   = VK_FORMAT_R8G8B8A8_UNORM;
+        viewInfo.format   = vkFormat_;
         viewInfo.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0,
                                        static_cast<uint32_t>(levelCount_), 0, 6 };
         vkCreateImageView(dev, &viewInfo, nullptr, &imageView_);
@@ -16164,7 +16191,9 @@ namespace CNA::Internal::Renderers::Vulkan
     {
         // REMED-GFX-135: each of these used to be a silent `return` the shared layer could not tell
         // apart from a completed upload, and the level/rectangle were not range-checked at all.
-        if (!owner_ || image_ == VK_NULL_HANDLE || !data || w <= 0 || h <= 0) return false;
+        if (!owner_ || image_ == VK_NULL_HANDLE || !data || w <= 0 || h <= 0 ||
+            compressedBlockBytes_ != 0)
+            return false;
         if (face < 0 || face >= 6 || level < 0 || level >= levelCount_) return false;
         const int levelSize = std::max(1, size_ >> level);
         if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
@@ -16233,6 +16262,116 @@ namespace CNA::Internal::Renderers::Vulkan
         return true;
     }
 
+    bool VulkanTextureCubeRenderer::SetCompressedDataEXT(
+        int face, int level, int x, int y, int w, int h,
+        const void* data, int dataLength)
+    {
+        if (!owner_ || image_ == VK_NULL_HANDLE || data == nullptr ||
+            compressedBlockBytes_ == 0 || w <= 0 || h <= 0)
+            return false;
+        if (face < 0 || face >= 6 || level < 0 || level >= levelCount_)
+            return false;
+
+        const int levelSize = std::max(1, size_ >> level);
+        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize ||
+            (x % 4) != 0 || (y % 4) != 0 ||
+            ((w % 4) != 0 && x + w != levelSize) ||
+            ((h % 4) != 0 && y + h != levelSize))
+            return false;
+
+        const int regionBlockColumns = (w + 3) / 4;
+        const int regionBlockRows = (h + 3) / 4;
+        const std::size_t regionBytes =
+            static_cast<std::size_t>(regionBlockColumns) *
+            static_cast<std::size_t>(regionBlockRows) *
+            static_cast<std::size_t>(compressedBlockBytes_);
+        if (dataLength < 0 || static_cast<std::size_t>(dataLength) < regionBytes)
+            return false;
+
+        const std::size_t shadowIndex =
+            static_cast<std::size_t>(face * levelCount_ + level);
+        if (shadowIndex >= compressedLevels_.size())
+            return false;
+        auto replacement = compressedLevels_[shadowIndex];
+        const int levelBlockColumns = (levelSize + 3) / 4;
+        for (int row = 0; row < regionBlockRows; ++row)
+        {
+            const std::size_t destination =
+                (static_cast<std::size_t>(y / 4 + row) *
+                     static_cast<std::size_t>(levelBlockColumns) +
+                 static_cast<std::size_t>(x / 4)) *
+                static_cast<std::size_t>(compressedBlockBytes_);
+            const std::size_t source =
+                static_cast<std::size_t>(row * regionBlockColumns) *
+                static_cast<std::size_t>(compressedBlockBytes_);
+            std::memcpy(replacement.data() + destination,
+                        static_cast<const std::uint8_t*>(data) + source,
+                        static_cast<std::size_t>(regionBlockColumns) *
+                            static_cast<std::size_t>(compressedBlockBytes_));
+        }
+
+        // Upload the complete mip face from the updated shadow. Besides making partial block
+        // replacement straightforward, this defines every untouched block instead of exposing
+        // the undefined contents a newly allocated optimal image starts with.
+        const VkDeviceSize uploadBytes = static_cast<VkDeviceSize>(replacement.size());
+        VkBuffer stagingBuffer = VK_NULL_HANDLE;
+        VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
+        void* mapped = nullptr;
+        owner_->CreateBuffer(uploadBytes,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            stagingBuffer, stagingMemory, &mapped);
+        if (mapped == nullptr)
+        {
+            if (stagingBuffer != VK_NULL_HANDLE)
+                vkDestroyBuffer(owner_->device_, stagingBuffer, nullptr);
+            if (stagingMemory != VK_NULL_HANDLE)
+                vkFreeMemory(owner_->device_, stagingMemory, nullptr);
+            return false;
+        }
+        std::memcpy(mapped, replacement.data(), replacement.size());
+
+        VkCommandBuffer commandBuffer = owner_->BeginOneTimeCommands();
+        VkImageMemoryBarrier toTransfer{};
+        toTransfer.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        toTransfer.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        toTransfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        toTransfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toTransfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toTransfer.image = image_;
+        toTransfer.subresourceRange = {
+            VK_IMAGE_ASPECT_COLOR_BIT, static_cast<std::uint32_t>(level), 1,
+            static_cast<std::uint32_t>(face), 1};
+        toTransfer.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        toTransfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        vkCmdPipelineBarrier(commandBuffer,
+            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+            0, 0, nullptr, 0, nullptr, 1, &toTransfer);
+
+        VkBufferImageCopy copy{};
+        copy.imageSubresource = {
+            VK_IMAGE_ASPECT_COLOR_BIT, static_cast<std::uint32_t>(level),
+            static_cast<std::uint32_t>(face), 1};
+        copy.imageExtent = {
+            static_cast<std::uint32_t>(levelSize),
+            static_cast<std::uint32_t>(levelSize), 1};
+        vkCmdCopyBufferToImage(commandBuffer, stagingBuffer, image_,
+                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+
+        VkImageMemoryBarrier toRead = toTransfer;
+        std::swap(toRead.oldLayout, toRead.newLayout);
+        std::swap(toRead.srcAccessMask, toRead.dstAccessMask);
+        vkCmdPipelineBarrier(commandBuffer,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            0, 0, nullptr, 0, nullptr, 1, &toRead);
+        owner_->EndOneTimeCommands(commandBuffer);
+
+        vkDestroyBuffer(owner_->device_, stagingBuffer, nullptr);
+        vkFreeMemory(owner_->device_, stagingMemory, nullptr);
+        compressedLevels_[shadowIndex] = std::move(replacement);
+        return true;
+    }
+
     // Task 865: real GPU readback via vkCmdCopyImageToBuffer + a host-visible staging buffer,
     // mirroring SetData's per-face upload path in reverse (inline barriers scoped to just the
     // target face layer, mirroring SetData's own approach -- the shared TransitionImageLayout
@@ -16245,7 +16384,40 @@ namespace CNA::Internal::Renderers::Vulkan
         if (!owner_ || image_ == VK_NULL_HANDLE || !data || dataLength <= 0) return false;
         if (face < 0 || face >= 6) return false;
         if (level < 0 || level >= levelCount_ || w <= 0 || h <= 0) return false;
+        const int levelSize = std::max(1, size_ >> level);
+        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
         if (dataLength < w * h * 4) return false;
+
+        if (compressedBlockBytes_ != 0)
+        {
+            const std::size_t shadowIndex =
+                static_cast<std::size_t>(face * levelCount_ + level);
+            if (shadowIndex >= compressedLevels_.size()) return false;
+            const auto& blocks = compressedLevels_[shadowIndex];
+            using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+            using CNA::Internal::Graphics::DxtUtil;
+            const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat_);
+            const std::vector<std::uint8_t> rgba = format == SurfaceFormat::Dxt1
+                ? DxtUtil::DecompressDxt1(blocks.data(), blocks.size(), levelSize, levelSize)
+                : (format == SurfaceFormat::Dxt3
+                       ? DxtUtil::DecompressDxt3(
+                             blocks.data(), blocks.size(), levelSize, levelSize)
+                       : DxtUtil::DecompressDxt5(
+                             blocks.data(), blocks.size(), levelSize, levelSize));
+            auto* destination = static_cast<std::uint8_t*>(data);
+            for (int row = 0; row < h; ++row)
+            {
+                std::memcpy(
+                    destination + static_cast<std::size_t>(row) *
+                                      static_cast<std::size_t>(w) * 4u,
+                    rgba.data() +
+                        (static_cast<std::size_t>(y + row) *
+                             static_cast<std::size_t>(levelSize) +
+                         static_cast<std::size_t>(x)) * 4u,
+                    static_cast<std::size_t>(w) * 4u);
+            }
+            return true;
+        }
         VkDevice dev = owner_->device_;
 
         VkBuffer       stagingBuf = VK_NULL_HANDLE;

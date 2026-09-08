@@ -2884,6 +2884,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_dxt_format
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-240: DXT1/3/5 cube faces use their requested native BC image,
+        # survive readback and partial block replacement, and are sampled by EnvironmentMapEffect.
+        # The same source runs on EasyGL so this is a direct capability comparison.
+        cna_vulkan_test(cna_test_vulkan_dxt_texturecube
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/dxt_texturecube_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DxtTextureCube
+            COMMAND cna_test_vulkan_dxt_texturecube
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_vulkan.md VULKAN-172: the DXT1 DDS route through Texture2D::FromStream. It exercises
         # the loaders' DEFAULT policy, which force-decodes block content to Color -- so it is the
         # control that the native path above did not change the decode route, not a second test of

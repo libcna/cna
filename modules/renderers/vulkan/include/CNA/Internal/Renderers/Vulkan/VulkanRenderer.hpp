@@ -1141,7 +1141,16 @@ namespace CNA::Internal::Renderers::Vulkan
     class VulkanTextureCubeRenderer : public ITextureCubeRenderer, public IVulkanCubeSamplable
     {
     public:
-        VulkanTextureCubeRenderer(VulkanRenderer* owner, int size, bool mipMap);
+        /**
+         * @brief Creates cube-map storage in the requested native surface format.
+         *
+         * @param owner Owning Vulkan renderer.
+         * @param size Edge length of every cube face in texels.
+         * @param mipMap Whether to allocate the complete mip chain.
+         * @param surfaceFormat Requested `SurfaceFormat` ordinal.
+         */
+        VulkanTextureCubeRenderer(
+            VulkanRenderer* owner, int size, bool mipMap, int surfaceFormat);
         ~VulkanTextureCubeRenderer() override;
 
         /**
@@ -1161,6 +1170,22 @@ namespace CNA::Internal::Renderers::Vulkan
         /// REMED-GFX-135: same explicit completion contract as VulkanTexture3DRenderer::SetData.
         [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
                                    const void* data, int dataLength) override;
+        /**
+         * @brief Uploads a block-aligned DXT1, DXT3 or DXT5 region to one cube face.
+         *
+         * @param face Cube face index.
+         * @param level Mip level to update.
+         * @param x Left edge of the region in texels.
+         * @param y Top edge of the region in texels.
+         * @param w Region width in texels.
+         * @param h Region height in texels.
+         * @param data Exact compressed block payload.
+         * @param dataLength Payload size in bytes.
+         * @return True when the entire update was stored.
+         */
+        [[nodiscard]] bool SetCompressedDataEXT(
+            int face, int level, int x, int y, int w, int h,
+            const void* data, int dataLength) override;
         /// REMED-GFX-130: same explicit completion contract as VulkanTexture3DRenderer::GetData --
         /// true only once the staging copy has filled the whole requested face rectangle.
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
@@ -1177,6 +1202,10 @@ namespace CNA::Internal::Renderers::Vulkan
         VkImageView    imageView_ = VK_NULL_HANDLE;
         int size_ = 0;
         int levelCount_ = 1;
+        int surfaceFormat_ = 0;
+        VkFormat vkFormat_ = VK_FORMAT_R8G8B8A8_UNORM;
+        int compressedBlockBytes_ = 0;
+        std::vector<std::vector<std::uint8_t>> compressedLevels_;
     };
 
     // -------------------------------------------------------------------------
@@ -1842,6 +1871,19 @@ namespace CNA::Internal::Renderers::Vulkan
          * @return True when `SetData` hands this renderer raw blocks.
          */
         [[nodiscard]] bool IsCompressedTransferFormatEXT(int surfaceFormat) const override;
+
+        /**
+         * @brief Whether a cube texture format is transferred as native 4x4 blocks.
+         *
+         * @param surfaceFormat The `SurfaceFormat` ordinal.
+         * @return True for DXT1, DXT3 or DXT5 when the selected device supports its Vulkan BC
+         *         storage format.
+         */
+        [[nodiscard]] bool IsCompressedCubeTransferFormatEXT(
+            int surfaceFormat) const override
+        {
+            return IsCompressedTransferFormatEXT(surfaceFormat);
+        }
 
         /**
          * @brief Whether a `RenderTarget2D` may be created with the given surface format.

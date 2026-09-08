@@ -1821,6 +1821,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_DxtFormat COMMAND cna_test_easygl_dxt_format
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-240: direct EasyGL control for compressed cube-map upload,
+        # readback, partial replacement and sampling.
+        cna_easygl_test(cna_test_easygl_dxt_texturecube
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/dxt_texturecube_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_DxtTextureCube COMMAND cna_test_easygl_dxt_texturecube
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # REMED-GFX-244: the three packed 16-bit formats GraphicsProfile.Reach permits, uploaded
         # through their typed SetData overloads and sampled in a real draw -- the channel order
         # differs between XNA and GL for the two with alpha, so this is the case that proves the
