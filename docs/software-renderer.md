@@ -13,9 +13,12 @@ cmake -S . -B cmake-build-software \
 cmake --build cmake-build-software --parallel 2
 ```
 
-No extra dependencies are needed — like `HEADLESS`, this renderer never touches SDL's video
-subsystem, OpenGL, Vulkan, or any GPU library. It only needs the same SDL3/SDL3_image/SDL3_mixer
-and `../sharp-runtime` checkout every other renderer already requires.
+No extra dependencies are needed. The renderer descriptor requests neither SDL's video subsystem
+nor a native window, and the implementation never uses OpenGL, Vulkan, or any GPU library. Shared
+`GraphicsAdapter` enumeration may initialize and retain platform video when a display is available
+so its public display IDs stay valid; Software does not depend on that succeeding and remains fully
+usable without a display server. It only needs the same SDL3/SDL3_image/SDL3_mixer and
+`../sharp-runtime` checkout every other renderer already requires.
 
 ## What this renderer is for (and isn't)
 
@@ -26,8 +29,8 @@ pixel; `ReadBackbuffer()` just reports the last `Clear()` color for every pixel.
 Software is different: it actually **rasterizes real triangles** into a CPU-owned RGBA8
 framebuffer, entirely in software (a real edge-function rasterizer, real perspective-correct
 attribute interpolation, and real per-sample depth/stencil tests). `GraphicsDevice::GetBackBufferData()`/
-`ReadBackbuffer()` return genuinely correct pixels — no GPU, window, or display server involved at
-any point. Triangle lists and strips, line lists and strips, and the existing `PointListEXT` path
+`ReadBackbuffer()` return genuinely correct pixels without a GPU or native window and with no
+display-server requirement. Triangle lists and strips, line lists and strips, and the existing `PointListEXT` path
 all use the CPU rasterizer; triangle strips preserve XNA's alternating winding across indexed and
 non-indexed user/buffer draws. That makes it useful for:
 

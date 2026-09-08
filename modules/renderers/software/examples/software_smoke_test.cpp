@@ -3,8 +3,9 @@
 // (CPU rasterizer) graphics renderer's foundation -- no window, real framebuffer, real pixel
 // readback, real vertex/index storage. Draw calls do not yet rasterize (Phase S4).
 //
-// Check A -- SDL's video subsystem was never initialized (SDL_WasInit(SDL_INIT_VIDEO) == 0) and
-//   there is no real window -- matches HEADLESS's own "no display server needed at all" promise.
+// Check A -- the Software descriptor requests neither a video subsystem nor a window, and the
+//   resulting GraphicsDevice has no real window. Process-global video may still be initialized by
+//   shared GraphicsAdapter enumeration when a display is available; that is not renderer ownership.
 // Check B -- Clear(r,g,b,a) followed by GetBackBufferData() reads back the EXACT clear color --
 //   this is the whole point of this renderer: real, correct pixels, not a fiction.
 // Check C -- binding a RenderTarget2D and clearing it does not affect the backbuffer's own
@@ -31,9 +32,8 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 
-#include "CNA/Internal/Renderers/Software/SoftwareRenderer.hpp"
-
-#include <SDL3/SDL.h>
+#include "CNA/GraphicsRendererType.hpp"
+#include "CNA/Internal/Renderers/Common/GraphicsRendererRegistry.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -42,7 +42,6 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Renderers::Software;
 
 class SoftwareSmokeTest : public Game
 {
@@ -60,11 +59,16 @@ protected:
     void Draw(const GameTime&) override
     {
         auto& dev = getGraphicsDeviceProperty();
-        auto& renderer = static_cast<SoftwareRenderer&>(dev.GetRenderer());
 
-        // Check A: no real window/video subsystem anywhere.
-        check(SDL_WasInit(SDL_INIT_VIDEO) == 0, "SDL_INIT_VIDEO was never initialized under the Software renderer");
-        check(reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty()) == nullptr, "GraphicsDevice has no real window under the Software renderer");
+        // Check A: this renderer never requests or creates window-system resources. The common
+        // adapter cache is allowed to pin video independently so real display IDs remain valid.
+        const auto* descriptor =
+            CNA::Internal::Renderers::GraphicsRendererRegistry::Find(
+                CNA::GraphicsRendererType::Software);
+        check(descriptor != nullptr && !descriptor->needsVideoSubsystem && !descriptor->needsWindow,
+              "Software descriptor requires neither platform video nor a native window");
+        check(getWindowProperty().getHandleProperty() == 0,
+              "GraphicsDevice has no real window under the Software renderer");
 
         // Check B: real, correct pixel readback after Clear().
         {
