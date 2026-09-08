@@ -717,6 +717,13 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 Layer materialLayer = ReadLayer(*geometry, "LayerElementMaterial", "Materials",
                                                 "", 1u);
                 materialLayer.reference = "Direct";
+                // Which texture a polygon uses, where the mesh says so. `TextureId` is a per
+                // polygon index into the textures connected to the model, and -1 is *no texture*
+                // -- the layer's `IndexToDirect` names the same array `Materials` does, not a
+                // second one (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-141`).
+                Layer textureLayer = ReadLayer(*geometry, "LayerElementTexture", "TextureId",
+                                               "", 1u);
+                textureLayer.reference = "Direct";
 
                 // Walk the polygons, gathering each one's control points and which material it uses.
                 struct Polygon
@@ -724,6 +731,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     std::vector<std::size_t> corners;      // indices into the polygon-vertex stream
                     std::vector<std::size_t> controlPoints;
                     std::size_t material = 0u;
+                    int texture = -1;
                 };
                 std::vector<Polygon> polygons;
                 Polygon current;
@@ -745,6 +753,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                             materialLayer.At(i, controlPoint, polygons.size());
                         current.material = assigned.empty() ? 0u
                                                             : static_cast<std::size_t>(assigned.front());
+                        const std::vector<double> textured =
+                            textureLayer.At(i, controlPoint, polygons.size());
+                        current.texture = textured.empty() ? -1 : static_cast<int>(textured.front());
                         polygons.push_back(std::move(current));
                         current = Polygon{};
                     }
@@ -834,15 +845,43 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                             // through a layer element. The same fixture built without a
                             // `LayerElementTexture` answers a material with no texture at all
                             // (measured, fbx/fbx_material_factor_texture.fbx, XNASWEEP-127).
-                            // Texture i belongs to batch i, and a batch past the last texture gets
-                            // none: SAMPLE-033's `Ship.fbx` has three materials and one texture,
-                            // and the genuine importer puts that texture on the first batch and
-                            // leaves the other two without one.
-                            const std::int64_t texture =
-                                geometry->Find("LayerElementTexture") != nullptr &&
-                                        batch < object.textures.size()
-                                    ? object.textures[batch]
-                                    : 0;
+                            //
+                            // *Which* texture is the polygons' own `TextureId`, not the batch's
+                            // ordinal. The two agree on SAMPLE-033's `Ship.fbx`, where material 0's
+                            // 5,942 polygons carry `TextureId` 0 and the other two materials' 2,228
+                            // carry -1, so "texture i belongs to batch i" also put the one texture
+                            // on the first batch. They disagree on Spacewar's `p2_pencil.fbx`,
+                            // whose *second* material's polygons are the textured ones and whose
+                            // first material's are all -1: XNA leaves that first batch without a
+                            // texture and CNA gave it one (`XNASWEEP-141`).
+                            std::int64_t texture = 0;
+                            if (geometry->Find("LayerElementTexture") != nullptr)
+                            {
+                                int identifier = -1;
+                                for (const Polygon& polygon : polygons)
+                                {
+                                    if (!batchMaterials.empty() && polygon.material != batch)
+                                    {
+                                        continue;
+                                    }
+                                    // The batch's *first* polygon decides, not the first one that
+                                    // has a texture: `fbx_texture_second_batch.fbx` is one batch
+                                    // whose two polygons carry -1 and 0, and the genuine importer
+                                    // answers a material with no texture at all.
+                                    identifier = polygon.texture;
+                                    break;
+                                }
+                                if (identifier < 0 && textureLayer.stride == 0u)
+                                {
+                                    // No per-polygon list at all: the ordinal is all there is.
+                                    identifier = static_cast<int>(batch);
+                                }
+                                if (identifier >= 0 &&
+                                    static_cast<std::size_t>(identifier) < object.textures.size())
+                                {
+                                    texture = object.textures[static_cast<std::size_t>(identifier)];
+                                }
+                            }
                             batchContent->setMaterialProperty(
                                 withTexture(material->second, batchMaterials[batch], texture));
                         }

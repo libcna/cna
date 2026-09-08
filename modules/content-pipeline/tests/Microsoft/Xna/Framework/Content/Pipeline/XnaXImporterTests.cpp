@@ -627,6 +627,11 @@ TEST(XnaFbxImporter, EveryFileAnswersTheGraphXnaAnswers)
           // one that is not, the second's the other way round
           // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-140`).
           "fbx_texture_path_filename.fbx", "fbx_texture_path_relative.fbx",
+          // Which texture a batch gets is its polygons' own `TextureId`, and this one's first
+          // polygon carries -1: the genuine importer answers a material with no texture at all,
+          // where taking the first *non-negative* id would have given it one
+          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-141`).
+          "fbx_texture_second_batch.fbx",
           "fbx_two_materials.fbx"})
     {
         ImporterContext context;
