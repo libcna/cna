@@ -27,7 +27,7 @@ deterministic, so a re-run reproduces the probes byte for byte.
 
 | File | What it is |
 |---|---|
-| `generate.py` | the probe families, `build()` (batch 1) and `build_targeted()` (batch 2) |
+| `generate.py` | the probe families: `build()` (batch 1), `build_targeted()` (batch 2), `build_rules()` (batch 3) |
 | `OptimizeForCacheOracle.cs` | the driver: reads a probe file, calls the genuine method, prints the answer |
 | `run-optimize-oracle.sh` | compiles it with `mcs` and runs it under Wine against the real assemblies |
 | `corpus.py` | loads probes + answers and decodes each answer into a permutation of the input faces |
@@ -52,8 +52,11 @@ deterministic, so a re-run reproduces the probes byte for byte.
    `hist_grid44_soup6_after` puts six disjoint triangles ahead of the grid in the emitted order and
    the grid's own 32 faces come back exactly as they do alone; `hist_grid42_twice` answers two
    disjoint copies of one grid identically.
-7. **Components come out highest-face-index first**, which is why a mesh with no shared vertices
-   comes back exactly reversed.
+7. **A component is not entered because it is last in the list but because it holds the seed the
+   rule picks.** `pair_fan_strip_stripfirst` puts a strip at indices 0--5 and a closed fan at
+   6--11 and the *strip* comes first, because only the strip has a vertex of minimum live count;
+   a mesh with no shared vertices comes back exactly reversed for the same reason, every one of
+   its vertices being minimal.
 8. **The answer is a sequence of runs**, each a generalized triangle strip: from a face entered
    across the ordered pair `(older, newer)` with third vertex `r`, the next face carries
    `(newer, r)` -- the strip step -- or `(older, r)`, which keeps `older` as a fan pivot. Both are
@@ -62,6 +65,11 @@ deterministic, so a re-run reproduces the probes byte for byte.
    `ofan_16` 16.
 10. **A closed fan of nine or more stops at exactly seven**, and one of eight does not stop at all;
     a two-ring cylinder behaves the same way (`cyl_2x4` runs 8, `cyl_2x6` runs 7 then restarts).
+    The stop is not a cap: `ladder_8_at0` -- a row of eight quads with one quad below its far end
+    -- answers **sixteen** faces in one run, and `row_24` forty-eight.
+11. **A closed fan's answer does not depend on where its face list starts or on the centre's
+    number.** `cfan9_rot0`, `_rot2`, `_rot4`, `_rot6`, `_rot8`, `cfan9_centre0`, `_centre5` and
+    `_centre9` all answer the identical index sequence.
 
 ## What is not settled
 
@@ -71,10 +79,14 @@ Two rules, both isolated to a single decision each:
   count" reproduces most seeds, and preferring a vertex still in the cache reproduces most of the
   rest, but `cfan_9` seeds at the *lowest* such face and `sphere_2x4_reversed` seeds at a face with
   no minimum-live vertex at all.
-- **When a run ends.** `grid_4x4`'s first run and its second run reach, after eight faces, states
-  that are identical in every feature the walk can read -- the same run length, the same live
-  counts on the same shaped candidates, the same cache ages, the same absence of a preferred edge
-  and the same available swap -- and the first restarts while the second takes the swap. No rule
-  over live counts, cache position, run length, remaining faces, face index or vertex index can
-  separate them, and the history probes rule out the emitted count. Whatever separates them is not
-  in the state this model keeps.
+- **When a run ends.** Two pairs of decisions are identical in every feature the walk can read and
+  come out differently. `grid_4x4`'s first run and its second reach, after eight faces, the same
+  run length, the same live counts on the same-shaped candidates, the same cache ages, the same
+  absence of a preferred edge and the same available swap -- and the first restarts while the
+  second takes the swap. `bstrip_plain_at0` and `bstrip_plain_at2` glue one extra triangle to a
+  sixteen-face strip, at its end and two faces in; both seed at the triangle, both then have a
+  neighbouring face carrying a minimum-live vertex, and the first continues into it while the
+  second restarts at the strip's far end. No rule over live counts, cache position, run length,
+  remaining faces, face index or vertex index separates either pair, and the history probes rule
+  out the emitted count. Whatever separates them is not in the state this model keeps; a data
+  structure whose order depends on the order faces were added would.

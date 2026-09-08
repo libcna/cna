@@ -430,3 +430,68 @@ def build_targeted() -> Probes:
         p.add("row_%d" % count, coords, faces)
 
     return p
+
+
+def build_rules() -> Probes:
+    """The third batch: index against topology, on the two decisions still open.
+
+    `branchstrip_8_at0` continues from its seed into the face next to it and `branchstrip_8_at2`
+    restarts, from states that differ only in which index the neighbouring face carries. These
+    reverse and rotate the same strip so that the topology is fixed and the index moves, and vary
+    the closed fan the seed rule also fails on.  XNASWEEP-149.
+    """
+    p = Probes()
+
+    def strip_with_branch(name, count, at, order=None):
+        coords, faces = strip(count)
+        faces = list(faces)
+        if order is not None:
+            index = {old: new for new, old in enumerate(order)}
+            at = index[at]
+            faces = [faces[i] for i in order]
+        extra = len(coords)
+        a, b, _ = faces[at]
+        p.add(name, list(coords) + [(float(at), -1.0, 0.0)], faces + [(a, extra, b)])
+
+    n = 16
+    for at in (0, 2, 14):
+        strip_with_branch("bstrip_plain_at%d" % at, 8, at)
+        strip_with_branch("bstrip_rev_at%d" % at, 8, at, list(reversed(range(n))))
+        strip_with_branch("bstrip_rot4_at%d" % at, 8, at, [(i + 4) % n for i in range(n)])
+        strip_with_branch("bstrip_perm3_at%d" % at, 8, at, [(3 * i) % n for i in range(n)])
+
+    # A closed fan whose faces are rotated: the seed's tie-break with the topology held fixed.
+    for shift in range(0, 9, 2):
+        coords, faces = closed_fan(9)
+        p.add("cfan9_rot%d" % shift, coords,
+              [faces[(i + shift) % 9] for i in range(9)])
+    for shift in (0, 3, 6):
+        coords, faces = closed_fan(12)
+        p.add("cfan12_rot%d" % shift, coords,
+              [faces[(i + shift) % 12] for i in range(12)])
+    # ... and with the centre carrying a different vertex number.
+    for centre in (0, 5, 9):
+        coords, faces = closed_fan(9, centre=centre)
+        p.add("cfan9_centre%d" % centre, coords, faces)
+
+    # Two disjoint pieces whose minimum-live vertices sit on faces whose indices can be swapped.
+    for swap in (False, True):
+        one_c, one_f = strip(3)
+        two_c, two_f = closed_fan(6)
+        base = len(one_c)
+        coords = list(one_c) + [(x + 20.0, y, z) for (x, y, z) in two_c]
+        shifted = [(f[0] + base, f[1] + base, f[2] + base) for f in two_f]
+        faces = (shifted + list(one_f)) if swap else (list(one_f) + shifted)
+        p.add("pair_fan_strip_%s" % ("fanfirst" if swap else "stripfirst"), coords, faces)
+
+    # A two-row grid whose rows are handed over interleaved rather than row by row: the run/restart
+    # boundary with the topology fixed and the index order changed.
+    for label, mix in (("interleaved", lambda i, n: (i % 2) * (n // 2) + i // 2),
+                       ("evensfirst", lambda i, n: (i * 2) % n + (1 if i * 2 >= n else 0))):
+        coords, faces = grid(4, 2)
+        n2 = len(faces)
+        order = [mix(i, n2) for i in range(n2)]
+        if sorted(order) == list(range(n2)):
+            p.add("grid42_%s" % label, coords, [faces[i] for i in order])
+
+    return p

@@ -70,15 +70,19 @@ class Walk:
     def age(self, v):
         return len(self.cache) - self.cache.index(v) if v in self.cache else 999
 
-    def features(self, i):
+    def features(self, i, shared=()):
+        """The candidate's features; `shared` is the edge it is entered across, where there is one."""
         if i is None:
             return None
         face = self.faces[i]
+        fresh = [v for v in face if v not in shared]
+        fresh_live = min((self.live[v] for v in fresh), default=0)
         lives = [self.live[v] for v in face]
         return {"face": i, "minlive": min(lives), "sumlive": sum(lives),
                 "hits": sum(1 for v in face if v in self.cache),
                 "minage": min(self.age(v) for v in face),
-                "maxage": max(self.age(v) for v in face)}
+                "maxage": max(self.age(v) for v in face),
+                "freshlive": fresh_live}
 
     def global_best(self):
         live = [n for n in self.live.values() if n > 0]
@@ -139,7 +143,7 @@ def decisions(case: corpus.Case, cache_size: int = 12):
         else:
             label = "restart" if chosen is not None else "end"
         row = {"case": case.name, "step": step, "label": label, "chosen": chosen, "run": run,
-               "pref": w.features(pref), "swap": w.features(swap),
+               "pref": w.features(pref, (newer, r)), "swap": w.features(swap, (older, r)),
                "globallow": low, "globalbest": gbest, "globalfaces": gfaces,
                "live_older": w.live[older], "live_newer": w.live[newer], "live_r": w.live[r],
                "age_older": w.age(older), "age_newer": w.age(newer), "age_r": w.age(r),
