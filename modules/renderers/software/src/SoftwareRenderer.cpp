@@ -673,23 +673,16 @@ namespace CNA::Internal::Renderers::Software
             return (px - ax) * (by - ay) - (py - ay) * (bx - ax);
         }
 
-        /// REMED-GFX-083: the Software depth buffer's minimum resolvable difference "r" -- the unit
-        /// RasterizerState.DepthBias is expressed in. GraphicsDevice forwards the public XNA float
-        /// UNSCALED to every renderer (see setRasterizerStateProperty); the GPU drivers then multiply it
-        /// by their own depth-format r (D3D11RasterizerStateCache rounds it into the 24-bit-UNORM
-        /// DepthBias INT, Vulkan/EasyGL feed it to vkCmdSetDepthBias/glPolygonOffset). The Software buffer
-        /// is float32 in [0,1]; 2^-24 is the minimum resolvable difference of XNA's canonical Depth24
-        /// format (and D3D11's 24-bit UNORM path), so a given DepthBias yields the same constant offset
-        /// here as on the D3D11 renderer -- cross-renderer observable parity without a per-primitive
-        /// max-z-exponent computation.
-        constexpr float kDepthBiasUnit = 1.0f / static_cast<float>(1 << 24);
-
-        /// REMED-GFX-083: the effective per-triangle depth offset added to every fragment's post-viewport
-        /// depth, matching the OpenGL/D3D/Vulkan polygon-offset contract the GPU renderers map onto:
-        ///   offset = slopeScaleDepthBias * m + depthBias * r
+        /// The effective per-triangle depth offset added to every fragment's post-viewport depth.
+        /// XNA's public constant bias is already expressed in normalized window-depth units. FNA3D
+        /// therefore multiplies it by `(2^depthBits)-1` before passing it to APIs whose native constant
+        /// is measured in minimum-resolvable-depth units (GL polygon-offset units and D3D11's integer
+        /// DepthBias). Software stores normalized float depth directly, so applying that conversion and
+        /// then multiplying by a reciprocal here would be redundant: the public value is the offset.
+        ///   offset = slopeScaleDepthBias * m + depthBias
         /// where m = max(|dz/dx|, |dz/dy|) is the triangle's maximum depth slope in raster space (screen
         /// x/y pixels, post-viewport window depth) -- computed ONCE per triangle from the depth plane,
-        /// never per fragment -- and r is the depth buffer's minimum resolvable difference (kDepthBiasUnit).
+        /// never per fragment.
         /// SIGN: a POSITIVE bias INCREASES depth == pushes the polygon AWAY from the camera (toward the far
         /// plane), the standard XNA/D3D/GL/Vulkan convention. Returns exactly 0.0f when both biases are 0
         /// (the overwhelmingly common case) with no slope math, so the zero-bias path stays byte-identical
@@ -713,7 +706,7 @@ namespace CNA::Internal::Renderers::Software
                     maxDepthSlope = std::max(std::fabs(dzdx), std::fabs(dzdy));
                 }
             }
-            return slopeScaleDepthBias * maxDepthSlope + depthBias * kDepthBiasUnit;
+            return slopeScaleDepthBias * maxDepthSlope + depthBias;
         }
 
         /// REMED-GFX-073/079: an inclusive pixel clip rectangle for the rasterizer. Pre-intersected

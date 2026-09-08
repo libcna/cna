@@ -224,8 +224,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
         TIMEOUT 30 LABELS "Software")
 
     # REMED-GFX-083: RasterizerState.DepthBias / SlopeScaleDepthBias must offset the per-fragment depth
-    # -- ApplyRasterizerState previously dropped both floats. Constant bias (DepthBias * r) and slope
-    # bias (SlopeScaleDepthBias * max|dz/dx,dz/dy|) are added to the post-viewport window depth (sign:
+    # -- ApplyRasterizerState previously dropped both floats. Normalized constant bias (DepthBias) and
+    # slope bias (SlopeScaleDepthBias * max|dz/dx,dz/dy|) are added to window depth (sign:
     # positive pushes away from the camera), across the colored / shaded / wireframe / RT paths, with
     # a byte-identical zero-bias fast path. Deterministic exact-coplanar geometry (no z-fighting noise).
     cna_software_test(cna_test_software_depthbias software_depthbias_test.cpp)

@@ -136,6 +136,8 @@ namespace CNA::Internal::Renderers::EasyGL
         int mrtCount = 0;
         /** @brief Native draw FBO for the active MRT set, used to restore it after direct readback. */
         unsigned int mrtFramebuffer = 0;
+        /** @brief Raw XNA DepthFormat ordinal for the active destination. */
+        int depthFormat = 3;
         /** @brief Extent of the bound destination in pixels; 0 means the default framebuffer. */
         int width  = 0;
         /** @brief Extent of the bound destination in pixels; 0 means the default framebuffer. */
@@ -1121,6 +1123,8 @@ namespace CNA::Internal::Renderers::EasyGL
         void CreateMsaaBuffers(int w, int h);
         void BindDefaultFramebuffer();
         void ResolveMsaa();
+        /** @brief Reapplies XNA's normalized constant depth bias for the active depth format. */
+        void ApplyCurrentDepthBias();
         void EnsureCallingThreadContext();
         void ReleaseCallingThreadContextLease() noexcept;
 
@@ -1286,6 +1290,12 @@ namespace CNA::Internal::Renderers::EasyGL
         /// reissue `glStencilFunc` with a new reference. GL binds function, reference and mask in
         /// one call, so the other two have to be remembered to change the one.
         bool stencilEnabled_ = false;
+
+        /// XNA's constant bias is normalized depth, while GL's `units` argument is expressed in
+        /// implementation-defined minimum depth increments. Keep the public value so target binds
+        /// can rescale it for the destination's Depth16 or Depth24 storage.
+        float depthBias_ = 0.0f;
+        float slopeScaleDepthBias_ = 0.0f;
 
         /// REMED-GFX-237: the WRITE masks a clear has to force and then put back. XNA's Clear
         /// ignores both, `glClear` obeys both, so each clear overrides them -- and the next draw

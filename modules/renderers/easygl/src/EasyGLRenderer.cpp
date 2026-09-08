@@ -6075,6 +6075,7 @@ else
         }
         if (ProfileIsDesktopCore())
             EnableVertexProgramPointSize();
+        ApplyCurrentDepthBias();
 
         // 4. Notify listeners that context is restored. ResourceRegistry calls
         //    recreate_gl_resource() on every tracked resource (shaders, textures, buffers, VAOs).
@@ -6959,14 +6960,20 @@ if (!ProfileIsEs2ApiGeneration())
         {
             bound_->width = rt->GetWidth();
             bound_->height = rt->GetHeight();
+            if (const auto* easyRt = dynamic_cast<const EasyGLRenderTargetRenderer*>(rt))
+                bound_->depthFormat = easyRt->depthFormat_;
+            else
+                bound_->depthFormat = 0;
             rt->BindAsRenderTarget();
         }
         else
         {
             bound_->width = 0;
             bound_->height = 0;
+            bound_->depthFormat = 3;
             BindDefaultFramebuffer();
         }
+        ApplyCurrentDepthBias();
         TargetTrace("set2d.exit", rt, TraceBindingDetailEXT());
     }
 
@@ -6985,7 +6992,12 @@ if (!ProfileIsEs2ApiGeneration())
         bound_->cube = rt;
         bound_->width = rt->GetSize();
         bound_->height = rt->GetSize();
+        if (const auto* easyRt = dynamic_cast<const EasyGLRenderTargetCubeRenderer*>(rt))
+            bound_->depthFormat = easyRt->depthFormat_;
+        else
+            bound_->depthFormat = 0;
         rt->BindAsRenderTargetFace(face);
+        ApplyCurrentDepthBias();
         TargetTrace("setcube.exit", rt, TraceBindingDetailEXT());
     }
 
@@ -7191,7 +7203,11 @@ if (!ProfileIsEs2ApiGeneration())
         bound_->mrtFramebuffer = mrtFbo_.native_handle();
         bound_->width = renderTargets[0].GetWidth();
         bound_->height = renderTargets[0].GetHeight();
+        bound_->depthFormat = targets[0].rt2D
+            ? targets[0].rt2D->depthFormat_
+            : targets[0].cube->depthFormat_;
         ApplyCurrentColorWriteMasks();
+        ApplyCurrentDepthBias();
         TargetTrace("mrt.set", this,
                     TraceBindingDetailEXT() + " mrtFbo=" + std::to_string(mrtFbo_.native_handle()));
     }
@@ -7475,13 +7491,31 @@ if (!ProfileIsEs2ApiGeneration())
         // OpenGL ES has no glPolygonMode; FillMode::WireFrame (1) is emulated at draw
         // time by re-expanding triangles into GL_LINES (see DrawWireframe).
         wireframe_ = (fillMode == 1);
-        // Task 767: DepthBias/SlopeScaleDepthBias map directly onto real GL polygon offset
-        // (matches this project's own already-established Vulkan convention, see
-        // VulkanRenderer::ApplyRasterizerState's comment: "matching FNA's
-        // glPolygonOffset(slopeScaleDepthBias, depthBias)"). Always enabled -- factor=0/units=0
-        // is a genuine no-op in GL, so there is no need to conditionally disable it.
-        device.set_polygon_offset_fill_enabled(true);
-        device.set_polygon_offset(slopeScaleDepthBias, depthBias);
+        // FNA exposes constant DepthBias in normalized depth coordinates. GL instead defines the
+        // polygon-offset `units` argument in minimum-resolvable depth increments, so the active
+        // depth format determines the conversion. Preserve the public state and apply it through
+        // the same 16/24-bit scale table as FNA3D's GL and D3D11 backends.
+        depthBias_ = depthBias;
+        slopeScaleDepthBias_ = slopeScaleDepthBias;
+        ApplyCurrentDepthBias();
+    }
+
+    void EasyGLRenderer::ApplyCurrentDepthBias()
+    {
+        if (metagl::IsContextLost()) return;
+
+        float depthScale = 0.0f;
+        switch (bound_->depthFormat)
+        {
+        case 1: depthScale = 65535.0f; break;      // Depth16
+        case 2:                                   // Depth24
+        case 3: depthScale = 16777215.0f; break;  // Depth24Stencil8
+        default: break;                           // None / unknown
+        }
+
+        device.set_polygon_offset_fill_enabled(
+            slopeScaleDepthBias_ != 0.0f || depthBias_ != 0.0f);
+        device.set_polygon_offset(slopeScaleDepthBias_, depthBias_ * depthScale);
     }
 
     void EasyGLRenderer::ApplyRasterizerMultiSampleState(bool enabled)

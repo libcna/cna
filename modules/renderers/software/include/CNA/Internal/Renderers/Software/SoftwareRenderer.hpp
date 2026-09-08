@@ -1777,12 +1777,10 @@ namespace CNA::Internal::Renderers::Software
         /// REMED-GFX-083: RasterizerState.DepthBias / SlopeScaleDepthBias, stored by ApplyRasterizerState()
         /// (its 4th/5th float args, previously discarded). Both default to 0 (XNA/FNA default), for which
         /// the rasterizer adds no depth offset and the output is byte-identical to pre-GFX-083. Expressed
-        /// in the same UNSCALED units GraphicsDevice forwards to every GPU renderer: DepthBias in units of
-        /// the depth buffer's minimum resolvable difference (fed into vkCmdSetDepthBias's constantFactor /
-        /// glPolygonOffset's units / rounded into D3D11_RASTERIZER_DESC::DepthBias), SlopeScaleDepthBias as
-        /// a multiplier on the triangle's max screen-space depth slope (vkCmdSetDepthBias's slopeFactor /
-        /// glPolygonOffset's factor). The rasterizer folds both into the post-viewport per-fragment depth
-        /// via ComputeDepthBiasOffset (see the .cpp), matching the GPU renderers' polygon-offset contract.
+        /// in XNA's public units: DepthBias is a normalized post-viewport depth offset, while
+        /// SlopeScaleDepthBias multiplies the triangle's maximum screen-space depth slope. GPU
+        /// backends convert the constant to their native depth-buffer units; the CPU rasterizer
+        /// can add the normalized value directly in ComputeDepthBiasOffset (see the .cpp).
         float depthBias_ = 0.0f;
         float slopeScaleDepthBias_ = 0.0f;
 

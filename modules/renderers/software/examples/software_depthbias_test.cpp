@@ -3,18 +3,15 @@
 // RasterizerState.SlopeScaleDepthBias. Before this task SoftwareRenderer::ApplyRasterizerState
 // dropped BOTH float arguments (its 4th/5th params were unnamed `float, float`), so the per-fragment
 // depth written by the rasterizer received no polygon offset -- Software behaved as if DepthBias == 0
-// and SlopeScaleDepthBias == 0 for every draw. The GPU renderers honor these: EasyGL/Vulkan feed them
-// UNSCALED into glPolygonOffset(slopeScaleDepthBias, depthBias) / vkCmdSetDepthBias(depthBias, 0,
-// slopeScaleDepthBias), and D3D11 rounds DepthBias to D3D11_RASTERIZER_DESC::DepthBias (INT) and maps
-// SlopeScaleDepthBias to ::SlopeScaledDepthBias. So coplanar/decal geometry that relies on a depth
-// bias to win/lose a z-fight rendered differently on Software than on the GPU renderers.
+// and SlopeScaleDepthBias == 0 for every draw. SOFTWARE-176 later corrected a second defect hidden by
+// this original regression: XNA's public constant value is normalized depth, not one native depth
+// buffer unit. FNA3D multiplies it by the active depth format's `(2^bits)-1` scale before GL/D3D11;
+// Software applies it directly to its normalized float depth. Coplanar/decal geometry that relies on
+// a realistic bias must therefore agree without million-scale test values.
 //
-// XNA/FNA + cross-renderer contract (verified against FNA RasterizerState, GraphicsDevice's unscaled
-// forwarding, and CNA's D3D11/Vulkan/EasyGL ApplyRasterizerState):
-//   effectiveOffset = SlopeScaleDepthBias * m + DepthBias * r        (added to post-viewport depth)
+// XNA/FNA + cross-renderer contract (verified against FNA3D's GL and D3D11 drivers):
+//   effectiveOffset = SlopeScaleDepthBias * m + DepthBias            (normalized depth)
 //     m = max(|dz/dx|, |dz/dy|)  -- the triangle's max screen-space depth slope (window depth, pixels)
-//     r = the depth buffer's minimum resolvable difference (Software float32 buffer: 2^-24, XNA's
-//         canonical Depth24 unit -- the same magnitude D3D11's 24-bit UNORM path uses)
 //   Sign: POSITIVE bias INCREASES depth == pushes the polygon AWAY from the camera (toward far); a
 //         later coplanar polygon with positive bias LOSES, with negative bias WINS. Applied in
 //         window-depth space (after Viewport.MinDepth/MaxDepth), matching GL/D3D/Vulkan polygon offset.
@@ -22,9 +19,9 @@
 // Test method (identical to GFX-073/079/080/082): render into the 96x72 backbuffer (or a bound RT) with
 // depth testing on, using EXACTLY the same coplanar geometry for the two contenders so per-pixel depth
 // is bit-identical (no z-fighting noise -- the flip comes only from the bias), read back the real CPU
-// framebuffer via GetBackBufferData, and probe the center. Bias magnitudes are large integer-valued
-// floats so the offset is an unambiguous ~0.18 in normalized depth (and D3D11's round-to-int preserves
-// them, keeping cross-renderer parity).
+// framebuffer via GetBackBufferData, and probe the center. The constant bias is a realistic 0.02
+// normalized-depth displacement: large enough to be deterministic, small enough to prove the public
+// unit contract instead of accidentally compensating for a missing native conversion.
 //
 // Pre-fix (bias dropped): every "biased" check below sees the SAME result as its zero-bias baseline
 // (the later coplanar polygon always wins), so the biased checks FAIL. Post-fix they flip.
@@ -70,11 +67,9 @@ namespace
     constexpr int kBBW = 96;
     constexpr int kBBH = 72;
 
-    // A large integer-valued DepthBias: offset = 3e6 * 2^-24 == 0.17881 in normalized depth. Unambiguous
-    // (not z-fighting noise) and integer so D3D11's round-to-int keeps the same value (cross-renderer
-    // parity). SlopeScaleDepthBias for the slope section: 150 * m (m ~ 0.003 for the sloped quad below)
-    // ~ 0.45, a clean full flip.
-    constexpr float kBias = 3000000.0f;
+    // A realistic normalized constant bias. SlopeScaleDepthBias for the slope section remains 150:
+    // 150 * m (m ~ 0.003 for the sloped quad below) is ~0.45, a clean full flip.
+    constexpr float kBias = 0.02f;
     constexpr float kSlopeScale = 150.0f;
 
     bool isRed(const Color& c)   { return c.getRProperty() >= 200 && c.getGProperty() <= 60 && c.getBProperty() <= 60; }
@@ -375,7 +370,7 @@ class SoftwareDepthBiasTest : public Game
             SetRaster(dev, FillMode::Solid, 0.0f, 0.0f);
             dev.Clear(Color::Black);
             FlatQuadColored(dev, 0.5f, red);
-            SetRaster(dev, FillMode::Solid, kBias, 0.0f);   // huge positive bias
+            SetRaster(dev, FillMode::Solid, kBias, 0.0f);
             FlatQuadColored(dev, 0.5f, green);
             check(isGreen(At(Read(dev), 48, 36)),
                   "F0: depth test OFF -> later polygon (green) always wins regardless of DepthBias (control)");

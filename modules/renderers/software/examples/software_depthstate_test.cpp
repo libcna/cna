@@ -47,7 +47,7 @@ namespace
 {
     constexpr int kWidth = 96;
     constexpr int kHeight = 72;
-    constexpr float kDepthBias = 3000000.0f; // 3e6 * 2^-24 ~= 0.179 in Software window depth.
+    constexpr float kDepthBias = 0.02f; // XNA constant bias is normalized window depth.
 
     const Color kClear(11, 17, 23, 255);
     const Color kOtherClear(29, 31, 37, 255);
@@ -370,15 +370,15 @@ protected:
         SetFullViewport(device, kWidth, kHeight);
 
         // GFX-083 contract: polygon offset is applied before the selected comparison and stored only
-        // on pass. Positive constant bias pushes z=0.4 behind stored 0.5; zero bias then passes.
+        // on pass. Positive constant bias pushes z=0.49 behind stored 0.5; zero bias then passes.
         ClearTargetAndDepth(device, kClear, 0.5f);
         device.setDepthStencilStateProperty(DepthStencilState::Default);
         SetRasterizer(device, kDepthBias, 0.0f);
-        DrawQuad(device, effect, -1.0f, 1.0f, 0.4f, kRed);
+        DrawQuad(device, effect, -1.0f, 1.0f, 0.49f, kRed);
         Check(Exact(ReadPixel(device, kWidth / 2, kHeight / 2), kClear),
               "DepthBias is applied before depth comparison");
         SetRasterizer(device);
-        DrawQuad(device, effect, -1.0f, 1.0f, 0.4f, kGreen);
+        DrawQuad(device, effect, -1.0f, 1.0f, 0.49f, kGreen);
         Check(Exact(ReadPixel(device, kWidth / 2, kHeight / 2), kGreen),
               "failed biased fragment did not replace stored depth");
 
