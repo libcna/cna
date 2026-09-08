@@ -439,6 +439,12 @@ TEST_F(GraphicsAdapterTest, QueryRenderTargetFormatDoesNotPromiseRgba64OnGles)
 
 TEST_F(GraphicsAdapterTest, QueryBackBufferFormatAcceptsColor)
 {
+    const CNA::GraphicsRendererType renderer =
+        CNA::getCurrentGraphicsRendererType();
+    const bool usesFixedDirectXDepth =
+        renderer == CNA::GraphicsRendererType::DirectX11 ||
+        renderer == CNA::GraphicsRendererType::DirectX12;
+
     GraphicsAdapter& def = GraphicsAdapter::getDefaultAdapterProperty();
     SurfaceFormat selectedFormat;
     DepthFormat selectedDepthFormat;
@@ -448,8 +454,12 @@ TEST_F(GraphicsAdapterTest, QueryBackBufferFormatAcceptsColor)
         GraphicsProfile::HiDef, SurfaceFormat::Color, DepthFormat::None, 0,
         selectedFormat, selectedDepthFormat, selectedMultiSampleCount);
 
-    EXPECT_TRUE(accepted);
+    EXPECT_EQ(accepted, !usesFixedDirectXDepth);
     EXPECT_EQ(selectedFormat, SurfaceFormat::Color);
+    EXPECT_EQ(selectedDepthFormat, usesFixedDirectXDepth
+        ? DepthFormat::Depth24Stencil8
+        : DepthFormat::None);
+    EXPECT_EQ(selectedMultiSampleCount, 0);
 }
 
 TEST_F(GraphicsAdapterTest, QueryBackBufferFormatSubstitutesNonColorFormat)

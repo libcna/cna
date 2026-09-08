@@ -36,19 +36,26 @@ namespace CNA::Internal::Renderers::DirectX11
             return levels;
         }
 
-        /// Real, device-queried MSAA support (DX-45) -- never assumes a requested sample count is
-        /// supported. Returns 0 (no MSAA) if requestedCount <= 1 or the device reports zero
-        /// quality levels for it.
+        /// Real, device-queried MSAA support (DX-45/DX-245). The public constructor has already
+        /// rounded the request down to a power of two; continue down that sequence until the
+        /// device accepts one, matching the adapter and default-back-buffer queries.
         int ClampMultiSampleCount(ID3D11Device* device, DXGI_FORMAT format, int requestedCount)
         {
             if (requestedCount <= 1) return 0;
-            UINT qualityLevels = 0;
-            if (FAILED(device->CheckMultisampleQualityLevels(
-                    format, static_cast<UINT>(requestedCount), &qualityLevels)) || qualityLevels == 0)
+
+            int candidate = requestedCount;
+            while (candidate > 1)
             {
-                return 0;
+                UINT qualityLevels = 0;
+                if (SUCCEEDED(device->CheckMultisampleQualityLevels(
+                        format, static_cast<UINT>(candidate), &qualityLevels)) &&
+                    qualityLevels > 0)
+                {
+                    return candidate;
+                }
+                candidate >>= 1;
             }
-            return requestedCount;
+            return 0;
         }
     }
 

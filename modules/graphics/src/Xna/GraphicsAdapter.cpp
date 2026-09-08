@@ -408,7 +408,10 @@ namespace Microsoft::Xna::Framework::Graphics
                        static_cast<int>(graphicsProfile), static_cast<int>(format))
             ? format
             : SurfaceFormat::Color;
-        selectedDepthFormat = depthFormat;
+        selectedDepthFormat = queries.selectBackBufferDepthStencilFormat != nullptr
+            ? static_cast<DepthFormat>(
+                  queries.selectBackBufferDepthStencilFormat(static_cast<int>(depthFormat)))
+            : depthFormat;
         selectedMultiSampleCount = queries.clampMultiSampleCount != nullptr
             ? queries.clampMultiSampleCount(
                   static_cast<int>(selectedFormat), static_cast<int>(multiSampleCount))

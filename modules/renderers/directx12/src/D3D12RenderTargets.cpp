@@ -53,22 +53,28 @@ namespace CNA::Internal::Renderers::DirectX12
         }
 
         /// MSAA follow-up: real, device-queried MSAA support, mirroring D3D11's own
-        /// ClampMultiSampleCount() (D3D11RenderTargets.cpp) exactly -- never assumes a requested
-        /// sample count is supported. Returns 0 (no MSAA) if requestedCount <= 1 or the device
-        /// reports zero quality levels for it.
+        /// ClampMultiSampleCount() exactly. The public constructor already rounded the request to
+        /// a power of two; continue down that sequence until the device accepts one.
         int ClampMultiSampleCount(ID3D12Device* device, DXGI_FORMAT format, int requestedCount)
         {
             if (requestedCount <= 1) return 0;
-            D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS data{};
-            data.Format = format;
-            data.SampleCount = static_cast<UINT>(requestedCount);
-            data.Flags = D3D12_MULTISAMPLE_QUALITY_LEVELS_FLAG_NONE;
-            if (FAILED(device->CheckFeatureSupport(D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS, &data, sizeof(data)))
-                || data.NumQualityLevels == 0)
+
+            int candidate = requestedCount;
+            while (candidate > 1)
             {
-                return 0;
+                D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS data{};
+                data.Format = format;
+                data.SampleCount = static_cast<UINT>(candidate);
+                data.Flags = D3D12_MULTISAMPLE_QUALITY_LEVELS_FLAG_NONE;
+                if (SUCCEEDED(device->CheckFeatureSupport(
+                        D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS, &data, sizeof(data))) &&
+                    data.NumQualityLevels > 0)
+                {
+                    return candidate;
+                }
+                candidate >>= 1;
             }
-            return requestedCount;
+            return 0;
         }
 
         std::vector<uint8_t> ReadbackSubresource(
