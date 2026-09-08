@@ -1,18 +1,22 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_modern.md MOD-2222: detailed Vulkan format and limit answers must come from the
-// selected physical device and must be intersected with resource paths CNA actually implements.
+// plans/plan_modern.md MOD-2222/MOD-2224: detailed Vulkan format and limit answers must come from
+// the selected physical device, be intersected with resource paths CNA actually implements, and
+// agree with real RenderTarget2D construction for base, mipmapped and multisampled requests.
 
 #include "CNA/RendererCapabilityProfile.hpp"
 #include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstdio>
+#include <exception>
 #include <limits>
 #include <memory>
 #include <string>
@@ -21,6 +25,7 @@ using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 using CNA::Internal::Renderers::RendererFormatVerdict;
 using CNA::Internal::Renderers::Vulkan::VulkanRenderer;
+using CNA::Internal::Renderers::Vulkan::VulkanRenderTargetRenderer;
 
 namespace
 {
@@ -86,6 +91,24 @@ namespace
         return value > static_cast<std::uint32_t>(std::numeric_limits<int>::max())
             ? std::numeric_limits<int>::max()
             : static_cast<int>(value);
+    }
+
+    int HighestMultiSampleCount(const VkSampleCountFlags available)
+    {
+        constexpr std::array<VkSampleCountFlagBits, 6> candidates{{
+            VK_SAMPLE_COUNT_64_BIT,
+            VK_SAMPLE_COUNT_32_BIT,
+            VK_SAMPLE_COUNT_16_BIT,
+            VK_SAMPLE_COUNT_8_BIT,
+            VK_SAMPLE_COUNT_4_BIT,
+            VK_SAMPLE_COUNT_2_BIT,
+        }};
+        for (const VkSampleCountFlagBits candidate : candidates)
+        {
+            if ((available & candidate) != 0)
+                return static_cast<int>(candidate);
+        }
+        return 0;
     }
 }
 
@@ -277,6 +300,201 @@ protected:
         Check(bcNeedsEnabledFeature,
               "E compressed storage is never advertised without the enabled BC feature");
 
+        // MOD-2224: query truth is only useful if the matching public constructor behaves the
+        // same way. Exercise every format at a deliberately odd size so the test also catches
+        // accidental even/power-of-two assumptions in image allocation and mip calculation.
+        constexpr int contractWidth = 7;
+        constexpr int contractHeight = 5;
+        constexpr int expectedMipLevels = 3; // 7x5 -> 3x2 -> 1x1
+        bool baseConstructionAgrees = true;
+        bool mipConstructionAgrees = true;
+        bool multisampleConstructionAgrees = true;
+        int baseSupported = 0;
+        int baseRefused = 0;
+        int mipSupported = 0;
+        int mipRefused = 0;
+        int multisampleSupported = 0;
+        int multisampleRefused = 0;
+        std::string firstConstructionError;
+
+        const auto RecordConstructionError = [&](const FormatCase& format,
+                                                  const char* path,
+                                                  const std::string& reason)
+        {
+            if (firstConstructionError.empty())
+                firstConstructionError = std::string(format.name) + " " + path + ": " + reason;
+        };
+
+        for (const auto& format : kFormats)
+        {
+            const CNA::RendererFormatSupport support =
+                device.GetRendererSurfaceFormatSupportEXT(format.surface);
+            VulkanRenderer::VulkanSurfaceFormatStorageEXT renderTargetStorage{};
+            const bool hasRenderTargetMapping =
+                renderer->MapRenderTargetFormatToStorageEXT(
+                    static_cast<int>(format.surface), renderTargetStorage);
+            const bool renderTargetAdvertised =
+                support.Supports(CNA::RendererFormatUsage::RenderTarget);
+            const bool publicPredicate =
+                device.SupportsSurfaceFormatAsRenderTargetEXT(format.surface);
+            bool baseReturned = false;
+            bool baseIdentityExact = false;
+            try
+            {
+                RenderTarget2D target(
+                    device, contractWidth, contractHeight, false, format.surface,
+                    DepthFormat::None);
+                baseReturned = true;
+                auto* native = dynamic_cast<VulkanRenderTargetRenderer*>(
+                    target.GetRenderTargetRenderer());
+                baseIdentityExact = native != nullptr &&
+                    target.getWidthProperty() == contractWidth &&
+                    target.getHeightProperty() == contractHeight &&
+                    target.getFormatProperty() == format.surface &&
+                    target.getLevelCountProperty() == 1 &&
+                    native->GetSurfaceFormatEXT() == static_cast<int>(format.surface) &&
+                    hasRenderTargetMapping &&
+                    native->GetVkFormatEXT() == renderTargetStorage.format;
+                if (!baseIdentityExact)
+                    RecordConstructionError(format, "base", "constructed with the wrong identity");
+            }
+            catch (const std::exception& error)
+            {
+                if (renderTargetAdvertised)
+                    RecordConstructionError(format, "base", error.what());
+            }
+            catch (...)
+            {
+                if (renderTargetAdvertised)
+                    RecordConstructionError(format, "base", "unknown exception");
+            }
+            if (!renderTargetAdvertised && baseReturned)
+                RecordConstructionError(format, "base", "unexpectedly constructed");
+            if (baseReturned) ++baseSupported; else ++baseRefused;
+            baseConstructionAgrees = baseConstructionAgrees &&
+                renderTargetAdvertised == publicPredicate &&
+                (renderTargetAdvertised
+                    ? baseReturned && baseIdentityExact
+                    : !baseReturned);
+
+            const bool mipAdvertised = renderTargetAdvertised &&
+                support.Supports(CNA::RendererFormatUsage::Mipmapped);
+            bool mipReturned = false;
+            bool mipIdentityExact = false;
+            try
+            {
+                RenderTarget2D target(
+                    device, contractWidth, contractHeight, true, format.surface,
+                    DepthFormat::None);
+                mipReturned = true;
+                auto* native = dynamic_cast<VulkanRenderTargetRenderer*>(
+                    target.GetRenderTargetRenderer());
+                mipIdentityExact = native != nullptr &&
+                    target.getWidthProperty() == contractWidth &&
+                    target.getHeightProperty() == contractHeight &&
+                    target.getFormatProperty() == format.surface &&
+                    target.getLevelCountProperty() == expectedMipLevels &&
+                    native->GetSurfaceFormatEXT() == static_cast<int>(format.surface) &&
+                    hasRenderTargetMapping &&
+                    native->GetVkFormatEXT() == renderTargetStorage.format;
+                if (!mipIdentityExact)
+                    RecordConstructionError(format, "mip", "constructed with the wrong identity");
+            }
+            catch (const std::exception& error)
+            {
+                if (mipAdvertised)
+                    RecordConstructionError(format, "mip", error.what());
+            }
+            catch (...)
+            {
+                if (mipAdvertised)
+                    RecordConstructionError(format, "mip", "unknown exception");
+            }
+            if (!mipAdvertised && mipReturned)
+                RecordConstructionError(format, "mip", "unexpectedly constructed");
+            if (mipReturned) ++mipSupported; else ++mipRefused;
+            mipConstructionAgrees = mipConstructionAgrees &&
+                (mipAdvertised
+                    ? mipReturned && mipIdentityExact
+                    : !mipReturned);
+
+            VkImageFormatProperties multisampleProperties{};
+            VkSampleCountFlags availableSamples = 0;
+            if (hasRenderTargetMapping &&
+                vkGetPhysicalDeviceImageFormatProperties(
+                    physical, renderTargetStorage.format, VK_IMAGE_TYPE_2D,
+                    VK_IMAGE_TILING_OPTIMAL,
+                    VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                        VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT,
+                    0, &multisampleProperties) == VK_SUCCESS)
+            {
+                availableSamples = multisampleProperties.sampleCounts &
+                    renderer->GetDeviceLimitsEXT().framebufferColorSampleCounts;
+            }
+            const int highestSamples = HighestMultiSampleCount(availableSamples);
+            const bool multisampleAdvertised = renderTargetAdvertised &&
+                support.Supports(CNA::RendererFormatUsage::Multisample);
+            bool multisampleReturned = false;
+            bool multisampleIdentityExact = false;
+            try
+            {
+                RenderTarget2D target(
+                    device, contractWidth, contractHeight, false, format.surface,
+                    DepthFormat::None,
+                    multisampleAdvertised ? highestSamples : 2);
+                multisampleReturned = true;
+                auto* native = dynamic_cast<VulkanRenderTargetRenderer*>(
+                    target.GetRenderTargetRenderer());
+                multisampleIdentityExact = native != nullptr && highestSamples > 1 &&
+                    target.getMultiSampleCountProperty() == highestSamples &&
+                    native->GetColorSampleCountEXT() ==
+                        static_cast<VkSampleCountFlagBits>(highestSamples) &&
+                    hasRenderTargetMapping &&
+                    native->GetVkFormatEXT() == renderTargetStorage.format;
+                if (!multisampleIdentityExact)
+                    RecordConstructionError(
+                        format, "MSAA", "constructed with the wrong format/sample count");
+            }
+            catch (const std::exception& error)
+            {
+                if (multisampleAdvertised)
+                    RecordConstructionError(format, "MSAA", error.what());
+            }
+            catch (...)
+            {
+                if (multisampleAdvertised)
+                    RecordConstructionError(format, "MSAA", "unknown exception");
+            }
+            if (!multisampleAdvertised && multisampleReturned)
+                RecordConstructionError(format, "MSAA", "unexpectedly constructed");
+            if (multisampleReturned) ++multisampleSupported; else ++multisampleRefused;
+            multisampleConstructionAgrees = multisampleConstructionAgrees &&
+                ((highestSamples > 1) == multisampleAdvertised) &&
+                (multisampleAdvertised
+                    ? multisampleReturned && multisampleIdentityExact
+                    : !multisampleReturned);
+        }
+
+        Check(baseConstructionAgrees && baseSupported > 0 && baseRefused > 0,
+              "F capability snapshot agrees with all odd-sized base target constructors",
+              firstConstructionError.empty()
+                  ? std::to_string(baseSupported) + " created, " +
+                        std::to_string(baseRefused) + " refused"
+                  : firstConstructionError);
+        Check(mipConstructionAgrees && mipSupported > 0 && mipRefused > 0,
+              "G mip capability agrees with complete 7x5 chains for every format",
+              firstConstructionError.empty()
+                  ? std::to_string(mipSupported) + " created, " +
+                        std::to_string(mipRefused) + " refused"
+                  : firstConstructionError);
+        Check(multisampleConstructionAgrees && multisampleSupported > 0 &&
+                  multisampleRefused > 0,
+              "H MSAA capability agrees with exact per-format sample construction",
+              firstConstructionError.empty()
+                  ? std::to_string(multisampleSupported) + " created, " +
+                        std::to_string(multisampleRefused) + " refused"
+                  : firstConstructionError);
+
         const auto& limits = renderer->GetDeviceLimitsEXT();
         const bool compute = renderer->SupportsComputeShadersEXT();
         const std::uint64_t expectedStorageBytes = compute ? limits.maxStorageBufferRange : 0;
@@ -328,7 +546,7 @@ protected:
             EqualLimit(CNA::RendererLimit::MinUniformBufferOffsetAlignment,
                        limits.minUniformBufferOffsetAlignment) &&
             EqualLimit(CNA::RendererLimit::TimestampPeriodPicoseconds, 0);
-        Check(limitsExact, "F every new published limit equals this physical-device snapshot");
+        Check(limitsExact, "I every new published limit equals this physical-device snapshot");
 
         const bool nativeOnlyLimitsExist = limits.maxImageArrayLayers > 0 &&
             limits.maxPerStageDescriptorStorageImages > 0 &&
@@ -339,10 +557,10 @@ protected:
                       CNA::RendererLimit::MaxStorageImagesPerShaderStage).value == 0 &&
                   device.GetRendererLimitEXT(
                       CNA::RendererLimit::TimestampPeriodPicoseconds).value == 0,
-              "G native array/storage-image/timestamp facts stay zero until CNA implements them");
+              "J native array/storage-image/timestamp facts stay zero until CNA implements them");
 
         Check(renderer->GetValidationMessagesEXT().empty(),
-              "H capability queries emit no Vulkan validation message",
+              "K capability queries and constructor contracts emit no Vulkan validation message",
               renderer->GetValidationMessagesEXT().empty()
                   ? "none"
                   : renderer->GetValidationMessagesEXT().front());

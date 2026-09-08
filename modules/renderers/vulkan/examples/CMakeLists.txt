@@ -1430,9 +1430,10 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_modern_feature_discovery
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # plans/plan_modern.md MOD-2222: all current SurfaceFormat values map to exact VkFormats;
-        # usage masks and numeric limits are the intersection of live physical-device facts with
-        # paths this renderer actually implements, never a renderer-name lookup.
+        # plans/plan_modern.md MOD-2222/MOD-2224: all current SurfaceFormat values map to exact
+        # VkFormats; usage masks and numeric limits are the intersection of live physical-device
+        # facts with paths this renderer actually implements, and public construction of every
+        # base/mip/MSAA combination must agree with those answers.
         cna_vulkan_test(cna_test_vulkan_format_limit_queries
                         vulkan_format_limit_queries_test.cpp)
         cna_register_renderer_test(NAME Vulkan_FormatLimitQueries

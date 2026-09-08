@@ -139,7 +139,11 @@ detailed profile then intersects sampling, linear filtering, transfer, mip and a
 with those implemented paths. Native storage-image support is deliberately reported unsupported
 until `MOD-2244`; likewise texture-array layers and timestamp period remain zero until
 `MOD-2243`/`MOD-2246`. `Vulkan_FormatLimitQueries` compares every answer with the raw properties at
-runtime and verifies these native-only negative controls.
+runtime and verifies these native-only negative controls. Since `MOD-2224`, it also attempts the
+public base, full-mip-chain and highest-supported-MSAA `RenderTarget2D` constructor for all 27
+formats at 7×5. The capability snapshot, public format predicate and constructor must agree; the
+llvmpipe reference run creates the same nine formats and refuses the same eighteen on all three
+paths, with zero validation messages.
 
 `MOD-2223` adds a separate exact `RenderTarget2D` allocation table: `Color`, `Rgba64`, `Single`,
 `Vector2`, `Vector4`, `HalfSingle`, `HalfVector2`, `HalfVector4` and `HdrBlendable`. The table feeds
@@ -148,7 +152,9 @@ creation, format-aware render-pass and pipeline cache keys, mixed-format MRT, sa
 generation and byte-width-correct readback. An MSAA request above one is admitted only when the
 exact colour format and selected depth format share a supported sample count; unsupported pairs
 throw instead of becoming single-sampled or `Color`. `Vulkan_FloatRenderTarget` proves the live
-clear/draw/sample/readback path, values above 1.0, mixed MRT, MSAA resolve and mips. Float/HDR
+clear/draw/sample/readback path, values above 1.0, mixed MRT, MSAA resolve and mips. Its MSAA and
+mip pixel legs use odd dimensions, including the complete `7×5 → 3×2 → 1×1` chain, so
+the constructor contract is backed by rendered contents rather than allocation alone. Float/HDR
 `RenderTargetCube` remains unsupported.
 
 **Colour transfer** — `GetData`/`SetData` shaped as `Color` — refuses
@@ -194,7 +200,9 @@ agree exactly.
 dimension, buffer ranges and alignments, compute SSBO bindings, sampled descriptors, vertex inputs
 and colour attachments are clamped to the smaller of the native ceiling and CNA's implemented
 public path. The permanent `Vulkan_FormatLimitQueries` test compares these values directly with
-`VkPhysicalDeviceLimits`, so changing the renderer name cannot produce a passing hard-coded answer.
+`VkPhysicalDeviceLimits`, then cross-checks the format snapshot against real construction, so
+changing the renderer name or advertising an unusable format cannot produce a passing hard-coded
+answer.
 
 ---
 

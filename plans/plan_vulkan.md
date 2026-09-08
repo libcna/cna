@@ -220,8 +220,11 @@ implementation tasks.**
 - GPU timers (`IGpuTimerRenderer`, `SupportsGpuTimerEXT`) and debug-region APIs owned by the
   engine layer;
 - float/HDR render-target ownership remains in the modern plan. Its `RenderTarget2D` half is now
-  implemented by `MOD-2223`; float/HDR `CreateRenderTargetCubeEXT` remains outside this plan and
-  unimplemented (`MOD-104`, `MOD-107`, `MOD-123`). Display colour spaces remain `MOD-2092`;
+  implemented by `MOD-2223`; `MOD-2224` permanently cross-checks all 27 format capabilities
+  against odd-sized base/mip/MSAA construction (**11/11**, 9 accepted and 18 refused on llvmpipe)
+  and runs actual odd-sized float resolve/mip pixels. Float/HDR `CreateRenderTargetCubeEXT` remains
+  outside this plan and unimplemented (`MOD-104`, `MOD-107`, `MOD-123`). Display colour spaces
+  remain `MOD-2092`;
 - texture arrays (`MOD-2226`, `MOD-2243`), bindless resources, VRS;
 - ray tracing (`MOD-2096`) and mesh shaders (`MOD-2097`) — `MOD-2096`'s text names
   `plan_vulkan.md` as the place such a capability question *would* be asked; that reference does

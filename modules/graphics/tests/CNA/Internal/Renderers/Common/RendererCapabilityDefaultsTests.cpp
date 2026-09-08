@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 // plans/plan_runtimerenderer.md RTR-P3-17: the defaults of the virtuals that replaced the XNA layer's
 // #ifdef CNA_RENDERER_* blocks.
+// plans/plan_modern.md MOD-2224: capability defaults must stay explicitly unknown/zero, and a
+// malformed supported bit must never pass the public known-and-supported predicate.
 //
 // What matters here is precisely the DEFAULT behaviour, because that is what 45 of the 46 renderers
 // get. When these decisions lived behind the preprocessor, the #else branch carried the
@@ -121,6 +123,31 @@ TEST(RendererCapabilityDefaultsTest, DetailedFormatUsagesDefaultToUnknown)
         EXPECT_EQ(support.knownUsages, 0U) << "format ordinal " << format;
         EXPECT_EQ(support.supportedUsages, 0U) << "format ordinal " << format;
     }
+}
+
+TEST(RendererCapabilityDefaultsTest, FormatSupportRejectsUnknownAndPartiallyKnownRequests)
+{
+    constexpr auto storage = CNA::RendererFormatUsage::TextureStorage;
+    constexpr auto renderTarget = CNA::RendererFormatUsage::RenderTarget;
+    constexpr auto storageAndTarget = storage | renderTarget;
+
+    // Deliberately malformed input: a renderer claims render-target support without classifying
+    // that usage. RendererFormatSupport is also the public C++ query result, so its predicate must
+    // remain safe even before GraphicsDevice's snapshot builder normalizes the raw masks.
+    const CNA::RendererFormatSupport malformed{
+        static_cast<std::uint32_t>(storage),
+        static_cast<std::uint32_t>(storageAndTarget)};
+
+    EXPECT_TRUE(malformed.IsKnown(storage));
+    EXPECT_TRUE(malformed.Supports(storage));
+    EXPECT_FALSE(malformed.IsKnown(renderTarget));
+    EXPECT_FALSE(malformed.Supports(renderTarget));
+    EXPECT_FALSE(malformed.IsKnown(storageAndTarget));
+    EXPECT_FALSE(malformed.Supports(storageAndTarget));
+
+    const CNA::RendererFormatSupport empty{};
+    EXPECT_FALSE(empty.IsKnown(storage));
+    EXPECT_FALSE(empty.Supports(storage));
 }
 
 TEST(RendererCapabilityDefaultsTest, CompressedTransferDefaultsToFalseForEveryFormat)

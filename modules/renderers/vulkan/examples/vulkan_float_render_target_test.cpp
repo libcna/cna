@@ -35,6 +35,8 @@ using CNA::Internal::Renderers::Vulkan::VulkanRenderTargetRenderer;
 namespace
 {
     constexpr int kSize = 4;
+    constexpr int kOddWidth = 7;
+    constexpr int kOddHeight = 5;
     constexpr float kRed = 4.0f;
     constexpr float kGreen = 2.0f;
     constexpr float kBlue = 1.0f;
@@ -232,13 +234,14 @@ protected:
         try
         {
             RenderTarget2D multisampled(
-                device, kSize, kSize, false, SurfaceFormat::HalfVector4,
+                device, kOddWidth, kOddHeight, false, SurfaceFormat::HalfVector4,
                 DepthFormat::None, 4);
             multisampleCreated = multisampled.getMultiSampleCountProperty() > 0;
             device.SetRenderTarget(&multisampled);
             device.Clear(kRed, kGreen, kBlue, 1.0f);
             device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
-            std::vector<HalfVector4> pixels(static_cast<std::size_t>(kSize) * kSize);
+            std::vector<HalfVector4> pixels(
+                static_cast<std::size_t>(kOddWidth) * kOddHeight);
             multisampled.GetData(pixels.data(), static_cast<int>(pixels.size()));
             multisamplePreserved = true;
             for (const HalfVector4& pixel : pixels)
@@ -250,7 +253,7 @@ protected:
         }
         Check(multisampleCreated == multisampleAdvertised &&
                   (!multisampleCreated || multisamplePreserved),
-              "J HalfVector4 MSAA support agrees with construction and unclamped resolve",
+              "J odd-sized HalfVector4 MSAA agrees with construction and unclamped resolve",
               std::string("advertised=") + (multisampleAdvertised ? "true" : "false"));
 
         const bool mipAdvertised =
@@ -260,12 +263,14 @@ protected:
         try
         {
             RenderTarget2D mipped(
-                device, 8, 8, true, SurfaceFormat::HalfVector4, DepthFormat::None);
-            mipCreated = mipped.getLevelCountProperty() > 1;
+                device, kOddWidth, kOddHeight, true, SurfaceFormat::HalfVector4,
+                DepthFormat::None);
+            mipCreated = mipped.getLevelCountProperty() == 3;
             device.SetRenderTarget(&mipped);
             device.Clear(kRed, kGreen, kBlue, 1.0f);
             device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
-            std::vector<HalfVector4> levelOne(16);
+            // Integer halving follows the real chain: 7x5 -> 3x2 -> 1x1.
+            std::vector<HalfVector4> levelOne(6);
             mipped.GetData(1, nullptr, levelOne.data(), 0,
                            static_cast<int>(levelOne.size()));
             mipPreserved = true;
@@ -277,7 +282,7 @@ protected:
             mipCreated = false;
         }
         Check(mipCreated == mipAdvertised && (!mipCreated || mipPreserved),
-              "K HalfVector4 mip support agrees with construction and generated content",
+              "K odd-sized HalfVector4 mip chain agrees with generated content",
               std::string("advertised=") + (mipAdvertised ? "true" : "false"));
 
         std::printf("RESULT: %d passed, %d failed\n", pass_, fail_);
