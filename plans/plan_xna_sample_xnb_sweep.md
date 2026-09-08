@@ -379,33 +379,42 @@ All 204, by what produced them:
 | 6 | `FontTextureProcessor` | What is left of `XNASWEEP-131` after 34 of its 40 references became identical. |
 | 1 | `PassThroughProcessor` | One `.xml` asset. |
 
-### 11.4 The read-only roots, re-audited 2026-09-08
+### 11.4 The read-only roots, re-audited 2026-09-08 (second pass)
 
 `build/xna-sample-sweep/audit/` holds the `find . -printf '%y %s %T@ %p'`
 baseline of both roots, taken before any work at 17:54 on 2026-09-07, and the
 audit re-takes and diffs it. **Take it from inside each root**, as the baseline
 was: an absolute-path re-take differs from it on every line and says nothing.
 
-| root | result |
+| check | result |
 |---|---|
-| `/rv/tmp/XNAGameStudio/Samples` | **0 differing lines.** Every type, size, modification time and path identical. |
-| `/rv/tmp/samples` | Changed, and none of it by this campaign. |
+| `/rv/tmp/XNAGameStudio/Samples` against the baseline | **0 differing lines.** Every type, size, modification time and path identical. |
+| every corpus reference against its frozen `sha256` | **7,726 of 7,726 identical, 0 missing.** The denominator is the one `corpus_inventory.py` froze. |
+| `/rv/tmp/samples` against the baseline | Changed, and none of it by this session -- itemised below. |
+| the sample tree's directory times across a whole sweep | **0 changes.** Snapshotted before sweep 16 and again after 170 of its 327 units; not one directory time moved. |
 
-The second row needs its evidence rather than an assurance, because this machine
-runs many sessions at once and that tree is not only this campaign's.
+The third row needs its evidence rather than an assurance, because this machine
+runs many sessions at once and that tree is not only this campaign's. Outside the
+`cna-*` and `CNA_BUILD` build trees the diff holds three kinds of thing:
 
-Every file that changed outside the `cna-*` and `CNA_BUILD` build trees -- 1,028
-of them -- is under **`SAMPLE-070-RolePlayingGame_4_0_Win_Xbox` (1,027)** and
-`SAMPLE-068-CatapultWarsTrainingKit_4_0` (1), and they arrive with an
-`evidence/space-key-probe/` directory holding a `chrome.log` and a `server.log`,
-a `scripts/probe-space.sh`, and a new `MANIFEST.md`: another session's browser
-probe, regenerating that sample's own `xna4-build` outputs. Nothing this campaign
-does writes into either root -- the sweep builds into
-`build/xna-sample-sweep/out/units/`, the model oracle into
-`build/xna-sample-sweep/model-probe*/`, and the differential oracle into
-`build/xna-pipeline-oracle/`. The one path that ever did was `BuildContent`'s own
-configuration file, which `XNASWEEP-110` moved into the intermediate directory;
-`find` over both roots now returns no `cna-buildcontent.json` at all.
+- **2,300 lines under `SAMPLE-070-RolePlayingGame_4_0_Win_Xbox`** and 38, 27 and
+  18 under `SAMPLE-068`, `SAMPLE-067` and `SAMPLE-071`, arriving with an
+  `evidence/space-key-probe/` directory, a `scripts/probe-space.sh` and a new
+  `MANIFEST.md`: another session's browser probe.
+- **121 directory times**, and nothing else -- no file added, removed, resized or
+  rewritten inside any of them. They are the sample content directories the sweep
+  reads, and every one of the new times falls between 19:23 and 20:15 on
+  **2026-09-07**, before this session began. A directory's time moves when an
+  entry is created or removed in it, so something wrote and then removed a file
+  there that evening; whatever it was, it is not in the binary now, which the
+  fourth row measures directly.
+- nothing else.
+
+Nothing this session does writes into either root: the sweep builds into
+`build/xna-sample-sweep/out/units/` and stages reconstructed projects into
+`build/xna-sample-sweep/staged/`, the model oracle into `build/xna-pipeline-oracle/model/`,
+the differential oracle into `build/xna-pipeline-oracle/`, and `find` over both
+roots returns no `cna-buildcontent.json` at all.
 
 ### 11.5 Next
 
