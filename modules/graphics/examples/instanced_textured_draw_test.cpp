@@ -877,6 +877,85 @@ protected:
                   "M an INSTANCED one does too: " + Text(di) + " (want ~(0,0,128))" + why(di));
         }
 
+        // ---- V/W: the COLOURED dual-texture shape -------------------------------------------
+        // plans/plan_vulkan.md VULKAN-230. L/M drive the two-coordinate shape; DualTextureEffect
+        // has a second one, Position+Colour+TextureCoordinate at stride 24 (Task 889), where the
+        // record carries ONE coordinate set and the shader's second UV input reads the same
+        // element (VULKAN-150). tex0 WHITE, tex2 quarter-grey, vertex colour RED: the correct
+        // answer is 255 * 0.25 * 2 = 128 times red -> (128,0,0), (128,128,128) is the specific
+        // signature of a dropped vertex colour, and (255,0,0) of a dropped second texture.
+        {
+            Texture2D whiteD(dev, 1, 1, false, SurfaceFormat::Color);
+            const std::uint8_t wpxD[4] = { 255, 255, 255, 255 };
+            whiteD.SetDataRGBA(wpxD, 1);
+            Texture2D quarterD(dev, 1, 1, false, SurfaceFormat::Color);
+            const std::uint8_t qpxD[4] = { 64, 64, 64, 255 };
+            quarterD.SetDataRGBA(qpxD, 1);
+            struct PCT2 { float x, y, z; std::uint8_t r, g, b, a; float u, v; };
+            static_assert(sizeof(PCT2) == 24);
+            const PCT2 cdq[4] = {
+                { -0.12f,  0.12f, 0.0f, 255, 0, 0, 255, 0.0f, 0.0f },
+                { -0.12f, -0.12f, 0.0f, 255, 0, 0, 255, 0.0f, 1.0f },
+                {  0.12f, -0.12f, 0.0f, 255, 0, 0, 255, 1.0f, 1.0f },
+                {  0.12f,  0.12f, 0.0f, 255, 0, 0, 255, 1.0f, 0.0f },
+            };
+            const VertexDeclaration cdqDecl(24, {
+                VertexElement(0,  VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+                VertexElement(12, VertexElementFormat::Color,   VertexElementUsage::Color, 0),
+                VertexElement(16, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+            });
+            VertexBuffer cdvb(dev, cdqDecl, 4, BufferUsage::None);
+            cdvb.SetDataRaw(cdq, 4, static_cast<int>(sizeof(PCT2)));
+
+            auto dualColored = [&](bool instanced) {
+                dev.Clear(Color(0, 255, 0, 255));
+                dev.SetDepthTestEnabled(false);
+                dev.setBlendStateProperty(BlendState::Opaque);
+                dev.setRasterizerStateProperty(RasterizerState::CullNone);
+                dev.getSamplerStatesProperty()[0] = SamplerState::PointClamp;
+                dev.getSamplerStatesProperty()[1] = SamplerState::PointClamp;
+                DualTextureEffect fx(dev);
+                fx.setWorldProperty(Matrix::getIdentityProperty());
+                fx.setViewProperty(Matrix::getIdentityProperty());
+                fx.setProjectionProperty(Matrix::getIdentityProperty());
+                fx.setTextureProperty(&whiteD);
+                fx.setTexture2Property(&quarterD);
+                fx.setVertexColorEnabledProperty(true);
+                fx.Apply();
+                dev.SetVertexBuffer(&cdvb);
+                dev.SetIndexBuffer(ib_.get());
+                if (instanced) {
+                    std::vector<VertexBufferBinding> bd = {
+                        VertexBufferBinding(&cdvb,         0, 0),
+                        VertexBufferBinding(instVb_.get(), 0, 1),
+                    };
+                    dev.SetVertexBuffers(bd);
+                    dev.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2, 3);
+                } else {
+                    dev.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2);
+                }
+                return ReadPixel(dev, kN / 2, kN / 2);
+            };
+            const Color cdn = dualColored(false);
+            const Color cdi = dualColored(true);
+            auto litRedDual = [](const Color& c) {
+                return c.getRProperty() >= 100 && c.getRProperty() <= 160 &&
+                       c.getGProperty() <= 40 && c.getBProperty() <= 40;
+            };
+            auto whyD = [](const Color& c) {
+                if (c.getGProperty() > 60 && c.getBProperty() > 60)
+                    return " -- the vertex colour was dropped";
+                if (c.getRProperty() > 200) return " -- the SECOND texture was dropped";
+                return "";
+            };
+            check(litRedDual(cdn),
+                  "V control: a NON-instanced COLOURED DualTextureEffect draw multiplies both "
+                  "textures, doubles, and keeps the RED vertex colour: " + Text(cdn) +
+                      " (want ~(128,0,0))" + whyD(cdn));
+            check(litRedDual(cdi),
+                  "W an INSTANCED one does too: " + Text(cdi) + " (want ~(128,0,0))" + whyD(cdi));
+        }
+
         // ---- N/O: EnvironmentMapEffect on an instanced draw ---------------------------------
         // A cube map whose every face is RED over a blue base texture, with
         // EnvironmentMapAmount = 1: the reflection wins outright, so the answer is red. If the

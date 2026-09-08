@@ -314,6 +314,11 @@ def main():
         ("lit_textured3d_vertexlit_color.vert.glsl", VERTEX_SHADER,
          "kInstancedLitTextured3dVertexLitColorVertSpv"),
         ("dual_texture3d.vert.glsl", VERTEX_SHADER, "kInstancedDualTexture3dVertSpv"),
+        # plans/plan_vulkan.md VULKAN-230: the coloured dual-texture shape, which VULKAN-225
+        # left -- a stride-24 instanced draw took the uncoloured module, whose location 1 is
+        # a UV, so the record's colour bytes were read as a texture coordinate.
+        ("dual_texture_colored3d.vert.glsl", VERTEX_SHADER,
+         "kInstancedDualTextureColored3dVertSpv"),
         ("env_map3d.vert.glsl",      VERTEX_SHADER, "kInstancedEnvMap3dVertSpv"),
     ]
 

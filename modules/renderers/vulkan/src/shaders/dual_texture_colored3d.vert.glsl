@@ -4,6 +4,15 @@
 // Task 889: unlike dual_texture3d.vert.glsl (stride 20, no color attribute), this variant
 // reads the vertex color and gates its multiply by VertexColorEnabled, mirroring
 // alpha_test_colored3d.vert.glsl's/colored_textured3d.vert.glsl's already-correct formula.
+//
+// plans/plan_vulkan.md VULKAN-227/VULKAN-230: compiled twice -- once plain and once with
+// CNA_INSTANCED, which declares the four per-instance matrix columns at locations 12..15 and
+// turns CNA_INSTANCE_POSITION() from the identity into the per-instance transform. Without the
+// define each call expands to exactly the text that was here before, so the ordinary module's
+// SPIR-V is byte-identical. See compile_shaders.py.
+//
+// VULKAN-219: the per-instance matrix applies INSIDE the effect's own world transform, which
+// pc.mvp already carries, and the fog term dots the instance-transformed object-space position.
 layout(location = 0) in vec3 inPos;
 layout(location = 1) in vec4 inColor;   // normalized UNORM R8G8B8A8
 layout(location = 2) in vec2 inUV;
@@ -33,7 +42,7 @@ layout(set = 0, binding = 2) uniform FogParams {
 } fog;
 
 void main() {
-    vec4 pos = pc.mvp * vec4(inPos, 1.0);
+    vec4 pos = pc.mvp * CNA_INSTANCE_POSITION(vec4(inPos, 1.0));
     pos.y = -pos.y;
     gl_Position = pos;
     gl_PointSize = 1.0;
@@ -51,5 +60,5 @@ void main() {
     // Task 899: fog factor from raw object-space Z. REMED-GFX-005: corrected to FNA/EasyGL Task-1111
     // form (z+FogEnd)/(FogEnd-FogStart); the prior Task 888/899 (FogEnd-z) formula was the
     // mirror image and wrong. Zero-length range -> fully fogged, matching FNA SetFogVector.
-    fragFogFactor = 1.0 - clamp(dot(vec4(inPos, 1.0), fog.fogVector), 0.0, 1.0); // REMED-GFX-010: FNA view-space fog vector
+    fragFogFactor = 1.0 - clamp(dot(CNA_INSTANCE_POSITION(vec4(inPos, 1.0)), fog.fogVector), 0.0, 1.0); // REMED-GFX-010: FNA view-space fog vector
 }

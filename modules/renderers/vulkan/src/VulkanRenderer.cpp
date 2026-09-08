@@ -7575,14 +7575,19 @@ namespace CNA::Internal::Renderers::Vulkan
         // the color attribute and gates it by VertexColorEnabled, mirroring Task 887's
         // alpha_test_colored3d.vert.glsl pattern; both variants share the unchanged fragment shader.
         const bool colored = (dualStride == 24);
-        // VULKAN-225: the instanced module has no coloured sibling yet -- a
-        // Position+Colour+2xUV instanced dual-texture draw takes the uncoloured one and
-        // loses its colour, which is VULKAN-218's rather than silently accepted.
-        VkShaderModule vert = instanced
-            ? CreateShaderModule(kInstancedDualTexture3dVertSpv, kInstancedDualTexture3dVertSpv_size)
-            : (colored
-            ? CreateShaderModule(kDualTextureColored3dVertSpv, kDualTextureColored3dVertSpv_size)
-            : CreateShaderModule(kDualTexture3dVertSpv,        kDualTexture3dVertSpv_size));
+        // VULKAN-225/VULKAN-230: shape outer, `instanced` inner, as in the alpha-test and lit
+        // factories. Written the other way round, a stride-24 instanced draw took the UNCOLOURED
+        // module while this factory baked the COLOURED attribute set: location 1 is `inUV` there,
+        // so the record's four colour bytes arrived as a texture coordinate and location 3 was
+        // left with no consumer -- which is what the validation layer reported.
+        VkShaderModule vert = colored
+            ? (instanced
+               ? CreateShaderModule(kInstancedDualTextureColored3dVertSpv,
+                                    kInstancedDualTextureColored3dVertSpv_size)
+               : CreateShaderModule(kDualTextureColored3dVertSpv, kDualTextureColored3dVertSpv_size))
+            : (instanced
+               ? CreateShaderModule(kInstancedDualTexture3dVertSpv, kInstancedDualTexture3dVertSpv_size)
+               : CreateShaderModule(kDualTexture3dVertSpv, kDualTexture3dVertSpv_size));
         VkShaderModule frag = CreateShaderModule(kDualTexture3dFragSpv,  kDualTexture3dFragSpv_size);
 
         // VULKAN-225: two bindings when instanced -- 0 per-vertex, 1 per-instance at 64 bytes.
@@ -15076,9 +15081,13 @@ namespace CNA::Internal::Renderers::Vulkan
                 std::size(StockInputs::kEnvMapped));
         VulkanVertexInputLayoutEXT instancedDualTexLayout;
         if (instancedDualTex)
-            instancedDualTexLayout = BuildVulkanVertexInputLayoutEXT(
-                vbForLayout.GetDeclarationEXT(), StockInputs::kDualTexture,
-                std::size(StockInputs::kDualTexture));
+            // VULKAN-230: the ORDINARY route's own builder, under the same `stride == 24`
+            // predicate the factory uses for its module and its baked attribute set -- so the
+            // coloured shape's layout and shader agree by construction. VULKAN-150 records why
+            // this family has a builder rather than a table: at stride 24 the record carries one
+            // coordinate set and the shader's second UV input is aliased onto it.
+            instancedDualTexLayout = BuildDualTextureVertexLayoutEXT(
+                vbForLayout.GetDeclarationEXT(), pvStride == 24);
         // VULKAN-229: the alpha-test family's own input table, chosen by the SAME `stride == 24`
         // predicate `GetOrCreatePipelineAlphaTest3D` uses for its module and its baked attribute
         // set, so the layout and the shader cannot disagree. `BuildInstancedVertexLayoutEXT`'s
