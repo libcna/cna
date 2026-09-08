@@ -31,8 +31,26 @@ import json
 import os
 import re
 
+# A runner is recognised by what it does -- constructing Microsoft's own `BuildContent` task --
+# rather than by its file name, because the name is not a convention: three samples call theirs
+# `Xna4ContentDiagnostic.cs`, `Xna4AssetProbe.cs` and `RobotGameXna4StockProbe.cs`, and one
+# (`SAMPLE-003`, pruned) has no `scripts/` directory left at all and keeps its runner beside the
+# output it wrote (`plans/plan_xna_sample_xnb_sweep.md` `XNASWEEP-133`). The names below are only
+# the preference order when a sample has more than one.
 SCRIPT_NAMES = ("XnaPipelineRunner.cs", "XnaPipelineRunnerWin7.cs", "XnaPipelineRunnerWin7Local.cs",
                 "DiagPipelineRunner.cs", "Xna4DiagnosticPipeline.cs")
+
+_BUILD_CONTENT = re.compile(r"\bnew\s+BuildContent\b")
+# The `.contentproj` is read as XML, its `Compile` items are walked, and each item's child elements
+# are copied on to the task item under their own names. All three are needed: a runner that reads
+# the project for the asset list but writes its own metadata names does not carry the project's
+# parameters, which is what `SAMPLE-146`'s does -- it strips the `ProcessorParameters_` prefix, so
+# `BuildContent`, which reads only that prefix, saw none of them and built the defaults.
+_READS_XML = re.compile(r"\bXmlDocument\b|\bXDocument\b")
+_WALKS_COMPILE = re.compile(r"[\"':]Compile[\"']|Descendants\(\s*\w+\s*\+\s*\"Compile\"")
+_COPIES_METADATA = re.compile(r"SetMetadata\(\s*\w+\.(?:LocalName|Name)\s*,")
+_STRIPS_PARAMETER_PREFIX = re.compile(
+    r"SetMetadata\(\s*\w+\.Substring\(\s*\"ProcessorParameters_\"\.Length")
 
 _METADATA = re.compile(r'SetMetadata\(\s*"ProcessorParameters_([A-Za-z0-9_]+)"\s*,\s*"([^"]*)"\s*\)')
 # The same call in either spelling: the parameter named by a literal, or built as
@@ -46,8 +64,9 @@ _SOURCE_LIKE = re.compile(r'^[^"]*\.[A-Za-z0-9]{1,10}$')
 
 
 def classify(text):
-    if ".contentproj" in text and ("XmlDocument" in text or "SelectNodes" in text or
-                                   "XDocument" in text):
+    """Which of the three shapes a runner is, judged on what it does with the project."""
+    if (_READS_XML.search(text) and _WALKS_COMPILE.search(text)
+            and _COPIES_METADATA.search(text) and not _STRIPS_PARAMETER_PREFIX.search(text)):
         return "project-faithful"
     if "Directory.GetFiles" in text or "EnumerateFiles" in text:
         return "enumerated"
@@ -257,6 +276,43 @@ def _resolve(expression, binding):
     return None
 
 
+def _findRunner(directory):
+    """The sample-relative path of the runner that drove `BuildContent`, or None.
+
+    Every C# file under the sample is read, because the runner's *name* is not a convention and one
+    sample keeps no `scripts/` directory at all. Where a sample has more than one copy -- most keep
+    the same file in `scripts/` and beside the output it wrote -- the `scripts/` copy is preferred,
+    then the known names, then the shortest path, so the answer does not depend on walk order.
+    """
+    found = []
+    for where, subdirs, files in os.walk(directory):
+        subdirs.sort()
+        # A sample's own game source is large and holds no runner; the pipeline runners live near
+        # the top of the tree. Four levels is enough for every one of them and keeps this cheap.
+        if where[len(directory):].count(os.sep) >= 4:
+            subdirs[:] = []
+        for name in sorted(files):
+            if not name.endswith(".cs"):
+                continue
+            path = os.path.join(where, name)
+            try:
+                with open(path, encoding="utf-8", errors="replace") as handle:
+                    text = handle.read()
+            except OSError:
+                continue
+            if _BUILD_CONTENT.search(text):
+                found.append(os.path.relpath(path, directory))
+    if not found:
+        return None
+    def rank(relative):
+        parts = relative.split(os.sep)
+        name = parts[-1]
+        return (0 if parts[0] == "scripts" else 1,
+                SCRIPT_NAMES.index(name) if name in SCRIPT_NAMES else len(SCRIPT_NAMES),
+                len(parts), relative)
+    return sorted(found, key=rank)[0]
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--root", default="/rv/tmp/samples")
@@ -267,20 +323,16 @@ def main(argv=None):
                 "generator": "tools/xna-sample-sweep/runner_provenance.py",
                 "samples": {}}
     for sample in sorted(os.listdir(args.root)):
-        scripts = os.path.join(args.root, sample, "scripts")
-        if not os.path.isdir(scripts):
+        directory = os.path.join(args.root, sample)
+        if not os.path.isdir(directory):
             continue
-        chosen = None
-        for name in SCRIPT_NAMES:
-            if os.path.isfile(os.path.join(scripts, name)):
-                chosen = name
-                break
+        chosen = _findRunner(directory)
         if chosen is None:
             continue
-        with open(os.path.join(scripts, chosen), encoding="utf-8", errors="replace") as handle:
+        with open(os.path.join(directory, chosen), encoding="utf-8", errors="replace") as handle:
             text = handle.read()
         document["samples"][sample] = {
-            "script": "scripts/" + chosen,
+            "script": chosen.replace(os.sep, "/"),
             "kind": classify(text),
             "parameterOverrides": overrides(text),
         }
