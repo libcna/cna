@@ -48,45 +48,35 @@ classification and evidence is in `docs/software-easygl-parity-ledger.md`.
   component, which is absent from the sibling `develop` checkout (`df1b42ab`) but present in the
   existing sibling `next` worktree (`7e9c58fd`). Baseline builds therefore use
   `-DCNA_SHARP_RUNTIME_ROOT=/rv/data/development/github.com/openeggbert/sharp-runtimenext`.
-- The first configure also established that all pinned CNA submodules were absent; they were
-  initialized at the revisions recorded by this repository. This changes no tracked CNA file.
-- The OPENGLES3/EasyGL comparison configuration exists at `cmake-build-easygl` with the same
-  sharp-runtime and ccache inputs. Targeted comparison tests run under Mesa GLES 3.2 through SDL's
-  offscreen driver. After `SOFTWARE-151`, the full EasyGL `CnaGraphicsTests` run passes 2,336 with
-  58 intentional renderer-specific skips out of 2,394; the corresponding Software run passes
-  2,324 with 54 intentional renderer-specific skips out of 2,378.
-- Baseline build/test results will be recorded in `SOFTWARE-100` after the clean configuration has
-  completed; failed environment bootstrap attempts are retained here so they are not mislabeled as
-  renderer regressions.
+- The first configure established that the pinned CNA submodules were absent; they were initialized
+  at the revisions recorded by this repository without changing a tracked CNA file. All campaign
+  builds used `/rv/cnaccache` through ccache and at most two compile jobs.
+- The final Software configuration builds. Its complete `Software` CTest label passes 156/156 with
+  `-j 2` under an authenticated TCP Xvfb, and `CnaGraphicsTests` passes 2,324 with 54 intentional
+  renderer-specific skips out of 2,378. The renderer-native 64×64 differential dump differs from
+  Mesa EasyGL by at most one byte per channel and passes the tightened default comparator.
+- The OPENGLES3/EasyGL comparison configuration at `cmake-build-easygl` builds against the same
+  sharp-runtime and ccache inputs. The last clean monolithic checkpoint passed 2,336 tests with 58
+  intentional skips out of 2,394. The final authenticated-Xvfb run covered the same 2,394 tests but
+  suffered two transient SDL `x11 not available` device-construction failures; four fresh-process
+  shards reduced that to one transient, and all three exact cases pass independently on fresh
+  authenticated displays. No pixel, API, shared-code or parity assertion failed.
 - GDI cannot be configured natively on this Linux host. The supported MinGW configuration succeeds,
   but both the focused stencil target and the renderer-only target are currently blocked before any
   GDI/CNA source is compiled by sibling sharp-runtime commit `7e9c58fd` unconditionally including
   POSIX `poll.h` from `System/Diagnostics/Process.cpp`. Software's shared 2D state source is still
   covered by the native Software build; this external GDI cross-build blocker is recorded rather
   than misreported as a stencil regression.
-- After `SOFTWARE-115`, the complete `Software` label run is 73 passed, four existing MSAA/
-  invalid-mip fixtures skipped by their own environment gates, and only the known display-dependent
-  `Software_PresentLifecycle` supervisor failure (21/22 child legs skipped cleanly; its one
-  abort-required leg sees the same unavailable-video exit instead). The new shared 4x fragment
-  contract passes 8/8 on both Software and Mesa EasyGL; storage transitions pass 5/5. The focused
-  Software MSAA/depth/stencil/raster set passes 12/12 CTests. EasyGL's related color-write,
-  stencil, top-left and RenderTarget2D MSAA binaries pass 61/61 checks when run directly under
-  Xvfb. The shared five-family stock-effect fog contract passes 33/33 on each renderer and the
-  shared BasicEffect lighting contract passes 15/15 on each renderer. The shared EnvironmentMap
-  contract passes 14/14 on both renderers, its public API/clamp filter passes 47/47 on Software,
-  and eleven pre-existing EasyGL EnvironmentMap binaries pass 23/23 under Xvfb. The shared
-  SkinnedEffect contract passes 19/19 on both renderers and its earlier material contract passes
-  9/9 on both; 18 EasyGL SkinnedEffect regression binaries are green under Xvfb. Ten affected
-  Software CTests and seven pre-existing EasyGL BasicEffect binaries are green. CTest's configured `DISPLAY=:0`
-  overrides the outer Xvfb display and is recorded as a harness/environment failure, not a
-  renderer failure.
-- The first broad `CnaTests` run after `SOFTWARE-118` completed all 8,788 tests: 8,649 passed,
-  133 skipped and six failed. Two failures are stale custom-GLSL expectations on the explicitly
-  deferred CNAEXT `ShaderEffect` path; the remaining four are in ContentManager video loading,
-  HostProcess pipe-size assumptions and PacketReader color decoding. No failure exercises
-  Software rasterization or Texture3D. The result is retained as an honest campaign baseline;
-  `SOFTWARE-100` remains yellow until the non-renderer failures and the broad EasyGL baseline are
-  independently reconciled.
+- The final broad Software `CnaTests` run under authenticated Xvfb executed 8,816 tests after
+  excluding one separately measured pathological CNAEXT GamerServices case: 8,739 passed, 72 were
+  intentionally skipped and five failed. Three failures inspect deferred modern code rather than
+  rendering it (`GltfRendererPbrFallbackPolicy.EveryPbrRendererHonorsCallerOwnedCullState` and two
+  obsolete Software-invalid expectations for custom `ShaderEffect` content); the other two are the
+  unrelated ContentManager `StringReader` registration and `PacketReader` Color decoding tests.
+  The excluded `GuideTest.TheClickThatAnswersAMessageBoxDoesNotAlsoReachTheGame` scans the complete
+  viewport in four-pixel steps and renders the overlay twice at every point; it made no progress
+  past its test body within an isolated 30-second limit and made the unfiltered CPU run impractical.
+  No broad-suite failure exercises Software rasterization or a claimed XNA/Core capability.
 
 ### Executable backlog
 
@@ -96,7 +86,7 @@ its own tests and plan evidence in the same commit.
 
 | # | Task | Status | Acceptance criteria / evidence |
 |---|---|---|---|
-| SOFTWARE-100 | Reconcile current Software implementation, documentation, build configuration and test baseline against repository reality | 🟨 | Record the start state above; complete a clean Software build, all `Software` CTests and `CnaTests`; configure/build/run the practical EasyGL baseline; replace every stale current-status limitation with measured truth without erasing the S1-S9 history. |
+| SOFTWARE-100 | Reconcile current Software implementation, documentation, build configuration and test baseline against repository reality | 🟨 BLOCKED | The repository/build/renderer baselines are fully reconciled above, the complete Software label is 156/156, Software `CnaGraphicsTests` is green and every transient EasyGL/X11 case passes independently. The original all-`CnaTests` acceptance criterion cannot be green inside this renderer campaign: the practical 8,816-test Xvfb run has five named non-renderer failures, while one CNAEXT Guide overlay search is pathologically slow under a CPU renderer. GDI verification is additionally blocked before CNA compilation by sibling sharp-runtime's POSIX-only `<poll.h>`. These exact blockers are recorded rather than widening scope into content/net/GamerServices/sharp-runtime work. |
 | SOFTWARE-101 | Inventory EasyGL's classic XNA/core feature evidence independently of filenames | ✅ | Initial inventory completed 2026-09-07 across all 246 EasyGL example/test translation units, renderer interfaces and the public XNA graphics surface. Every family is classified in the ledger; modern custom-shader/PBR/glTF engine examples and physical GL/window behavior are separated from XNA/Core candidates instead of silently expanding scope. Keep verdicts current as probes refine them. |
 | SOFTWARE-102 | Maintain the Software-vs-EasyGL parity ledger | ✅ | `docs/software-easygl-parity-ledger.md` records EasyGL evidence, Software evidence, scope, verdict, task and verification for every renderer-contract/public-XNA family found in the initial three-way audit. It explicitly treats boundary-only fixtures as gap evidence. The ledger remains living evidence and must be updated with each task. |
 | SOFTWARE-103 | Generalize shared Software/EasyGL differential infrastructure beyond the one vertex-color triangle | 🟨 | Reusable contracts now cover top-left/MSAA coverage, XNA pixel centers, stock effects, buffers, samplers, query values/lifecycle, resource disposal/ownership/events, SpriteBatch/Font and Model. `SOFTWARE-124` adds nine unchanged public lifecycle programs on both renderers. Continue across meaningful presentation/reset behavior before closure. |
