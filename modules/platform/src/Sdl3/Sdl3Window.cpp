@@ -36,8 +36,28 @@ namespace CNA::Platform::Sdl3 {
             }
         }
 
-        void SetExclusiveMode(SDL_Window* window, const int requestedWidth,
-                              const int requestedHeight, const char* operation)
+        /// Puts the window on the desktop display mode, i.e. borderless fullscreen.
+        void SetDesktopFullscreenMode(SDL_Window* window, const char* operation)
+        {
+            RequireSdlSuccess(SDL_SetWindowFullscreenMode(window, nullptr), operation);
+        }
+
+        /// Selects the exclusive display mode closest to a requested size, and reports whether the
+        /// display could offer one at all.
+        ///
+        /// Finding none is not an error. X11 without RandR mode-setting answers that way -- an
+        /// Xvfb screen is the everyday case, and several compositors publish exactly one mode --
+        /// and so does any monitor asked for a size no mode covers, which is what a phone-shaped
+        /// 480x800 backbuffer is on a desktop. The Web and Android branches of
+        /// SetFullscreenMode() already treat "this display has no mode list" as a reason to take
+        /// the desktop mode rather than fail; a desktop display that happens to answer the same
+        /// way is the same situation and gets the same treatment.
+        ///
+        /// The alternative is fatal to the game: XNA hands a game only the IsFullScreen boolean,
+        /// so there is no way for it to ask for a mode switch it can be refused, and no XNA game
+        /// carries a fallback for one. Throwing here unwinds out of Game::Run().
+        bool TrySetExclusiveMode(SDL_Window* window, const int requestedWidth,
+                                 const int requestedHeight, const char* operation)
         {
             const SDL_DisplayID display = SDL_GetDisplayForWindow(window);
             if (display == 0)
@@ -51,9 +71,13 @@ namespace CNA::Platform::Sdl3 {
             if (!SDL_GetClosestFullscreenDisplayMode(display, requestedWidth, requestedHeight,
                                                      0.0f, highDensity, &closest))
             {
-                throw PlatformException(operation, LastSdlError());
+                // The failure is the answer, not a fault to propagate: clear it so a later
+                // unrelated RequireSdlSuccess() cannot report this call's message.
+                SDL_ClearError();
+                return false;
             }
             RequireSdlSuccess(SDL_SetWindowFullscreenMode(window, &closest), operation);
+            return true;
         }
 
         /// Determines which windowing system SDL is actually driving.
@@ -307,7 +331,11 @@ namespace CNA::Platform::Sdl3 {
         if ((SDL_GetWindowFlags(window_) & SDL_WINDOW_FULLSCREEN) != 0 &&
             SDL_GetWindowFullscreenMode(window_) != nullptr)
         {
-            SetExclusiveMode(window_, width, height, "Window::SetSize(ExclusiveFullscreen)");
+            if (!TrySetExclusiveMode(window_, width, height,
+                                     "Window::SetSize(ExclusiveFullscreen)"))
+            {
+                SetDesktopFullscreenMode(window_, "Window::SetSize(ExclusiveFullscreen)");
+            }
             return;
         }
         RequireSdlSuccess(SDL_SetWindowSize(window_, width, height), "Window::SetSize");
@@ -403,8 +431,12 @@ namespace CNA::Platform::Sdl3 {
                 }
 
                 const WindowBounds bounds = GetClientBounds();
-                SetExclusiveMode(window_, bounds.width, bounds.height,
-                                 "Window::SetFullscreenMode(ExclusiveFullscreen)");
+                if (!TrySetExclusiveMode(window_, bounds.width, bounds.height,
+                                         "Window::SetFullscreenMode(ExclusiveFullscreen)"))
+                {
+                    SetDesktopFullscreenMode(window_,
+                                             "Window::SetFullscreenMode(ExclusiveFullscreen)");
+                }
                 RequireSdlSuccess(SDL_SetWindowFullscreen(window_, true),
                                   "Window::SetFullscreenMode(ExclusiveFullscreen)");
                 break;
