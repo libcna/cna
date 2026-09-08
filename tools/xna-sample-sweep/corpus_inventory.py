@@ -26,6 +26,8 @@ import concurrent.futures
 import hashlib
 import json
 import os
+import posixpath
+import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -71,6 +73,35 @@ SYNTHESIZED = {
         "copy of the file SAMPLE-013-Platformer_4_0/scripts/BuildSongXnb.cs wrote",
 }
 
+# MonoGame's content builder leaves a `PipelineBuildEvent` document (`.mgcontent`) beside every
+# `.xnb` it writes, naming the `.xnb` in `<DestFile>`. That is the evidence a directory holding
+# MonoGame output is a MonoGame output directory whatever it is called: `SAMPLE-003`'s
+# `xna4-original/Content-built/` is one, and its name puts it under a genuine root
+# (`plans/plan_xna_sample_xnb_sweep.md` `XNASWEEP-132`).
+MGCONTENT_DEST = re.compile(rb"<DestFile>([^<]*)</DestFile>")
+
+
+def monogame_destinations(root: str):
+    """Corpus-relative directories a MonoGame `.mgcontent` names as a build destination."""
+    destinations = set()
+    for directory, subdirs, files in os.walk(root):
+        subdirs.sort()
+        for name in files:
+            if not name.lower().endswith(".mgcontent"):
+                continue
+            with open(os.path.join(directory, name), "rb") as handle:
+                document = handle.read()
+            for match in MGCONTENT_DEST.finditer(document):
+                written = match.group(1).decode("utf-8", "replace").replace("\\", "/")
+                if not written:
+                    continue
+                absolute = written if os.path.isabs(written) else os.path.join(directory, written)
+                relative = os.path.relpath(os.path.dirname(absolute), root)
+                if not relative.startswith(".."):
+                    destinations.add(relative.replace(os.sep, "/"))
+    return destinations
+
+
 # Directory names that mark output of something that is not the genuine pipeline. Checked first.
 FOREIGN_PREFIXES = ("cna-", "fna-", "mgcb")
 FOREIGN_EXACT = {"cna-build", "cna-content", "cna-diag", "cna-diagnostic", "evidence",
@@ -78,10 +109,13 @@ FOREIGN_EXACT = {"cna-build", "cna-content", "cna-diag", "cna-diagnostic", "evid
                  "cna-source-2d", "cna-source-diagnostic", "modern-fna-original"}
 
 
-def classify(relative: str):
+def classify(relative: str, monogame=()):
     """Answers (provenance, genuine) for a corpus-relative `.xnb` path."""
-    if relative.replace(os.sep, "/") in SYNTHESIZED:
+    posix = relative.replace(os.sep, "/")
+    if posix in SYNTHESIZED:
         return "synthesized", False
+    if posixpath.dirname(posix) in monogame:
+        return "monogame", False
     parts = relative.split(os.sep)
     for part in parts[:-1]:
         if part in FOREIGN_EXACT or part.startswith(FOREIGN_PREFIXES):
@@ -189,6 +223,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     root = os.path.abspath(args.root)
+    monogame = monogame_destinations(root)
     candidates, foreign = [], {}
     for directory, subdirs, files in os.walk(root):
         subdirs.sort()
@@ -196,7 +231,7 @@ def main(argv=None):
             if not name.lower().endswith(".xnb"):
                 continue
             relative = os.path.relpath(os.path.join(directory, name), root)
-            provenance, genuine = classify(relative)
+            provenance, genuine = classify(relative, monogame)
             if genuine:
                 candidates.append((relative, provenance))
             else:
