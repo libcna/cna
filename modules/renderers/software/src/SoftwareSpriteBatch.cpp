@@ -35,9 +35,11 @@ namespace CNA::Internal::Renderers::Software
 
     void SoftwareSpriteBatchRenderer::Draw(const ITextureRenderer& texture, float x, float y)
     {
-        Draw(texture, Rectangle(static_cast<int>(x), static_cast<int>(y), texture.GetWidth(), texture.GetHeight()),
-             Rectangle(0, 0, texture.GetWidth(), texture.GetHeight()), Color(255, 255, 255, 255),
-             0.0f, Vector2(0.0f, 0.0f), SpriteEffects::None, 0.0f);
+        Draw(texture, x, y, static_cast<float>(texture.GetWidth()),
+             static_cast<float>(texture.GetHeight()),
+             Rectangle(0, 0, texture.GetWidth(), texture.GetHeight()),
+             Color(255, 255, 255, 255), 0.0f, Vector2(0.0f, 0.0f),
+             SpriteEffects::None, 0.0f);
     }
 
     void SoftwareSpriteBatchRenderer::Draw(const ITextureRenderer& texture, const Rectangle& destinationRectangle,
@@ -50,6 +52,26 @@ namespace CNA::Internal::Renderers::Software
     void SoftwareSpriteBatchRenderer::Draw(const ITextureRenderer& texture, const Rectangle& destinationRectangle,
                                           const Rectangle& sourceRectangle, const Color& color, float rotation,
                                           const Vector2& origin, SpriteEffects effects, float layerDepth)
+    {
+        Draw(texture,
+             static_cast<float>(destinationRectangle.X),
+             static_cast<float>(destinationRectangle.Y),
+             static_cast<float>(destinationRectangle.Width),
+             static_cast<float>(destinationRectangle.Height),
+             sourceRectangle, color, rotation, origin, effects, layerDepth);
+    }
+
+    void SoftwareSpriteBatchRenderer::Draw(const ITextureRenderer& texture,
+                                          float destinationX,
+                                          float destinationY,
+                                          float destinationWidth,
+                                          float destinationHeight,
+                                          const Rectangle& sourceRectangle,
+                                          const Color& color,
+                                          float rotation,
+                                          const Vector2& origin,
+                                          SpriteEffects effects,
+                                          float layerDepth)
     {
         if (!begun_)
             throw std::runtime_error("SoftwareSpriteBatchRenderer::Draw: Draw() called before Begin()");
@@ -68,10 +90,10 @@ namespace CNA::Internal::Renderers::Software
         const float b = color.getBProperty() / 255.0f;
         const float a = color.getAProperty() / 255.0f;
 
-        const float dx = static_cast<float>(destinationRectangle.X);
-        const float dy = static_cast<float>(destinationRectangle.Y);
-        const float dw = static_cast<float>(destinationRectangle.Width);
-        const float dh = static_cast<float>(destinationRectangle.Height);
+        const float dx = destinationX;
+        const float dy = destinationY;
+        const float dw = destinationWidth;
+        const float dh = destinationHeight;
         const float sw = static_cast<float>(std::max(1, sourceRectangle.Width));
         const float sh = static_cast<float>(std::max(1, sourceRectangle.Height));
         const float ox = origin.X;

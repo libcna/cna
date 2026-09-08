@@ -946,6 +946,32 @@ namespace CNA::Internal::Renderers::Software
                   const Vector2& origin,
                   SpriteEffects effects,
                   float layerDepth) override;
+        /**
+         * @brief Rasterizes one sprite without quantizing its destination geometry.
+         *
+         * @param texture Source texture.
+         * @param destinationX Destination left edge in viewport-local pixels.
+         * @param destinationY Destination top edge in viewport-local pixels.
+         * @param destinationWidth Destination width in pixels.
+         * @param destinationHeight Destination height in pixels.
+         * @param sourceRectangle Source texel rectangle.
+         * @param color Per-channel tint.
+         * @param rotation Rotation about @p origin in radians.
+         * @param origin Rotation and scale origin in source-texel units.
+         * @param effects Horizontal and vertical reflection flags.
+         * @param layerDepth Sprite sort depth forwarded to the fragment pipeline.
+         */
+        void Draw(const ITextureRenderer& texture,
+                  float destinationX,
+                  float destinationY,
+                  float destinationWidth,
+                  float destinationHeight,
+                  const Rectangle& sourceRectangle,
+                  const Color& color,
+                  float rotation,
+                  const Vector2& origin,
+                  SpriteEffects effects,
+                  float layerDepth) override;
 
         [[nodiscard]] bool IsBegun() const { return begun_; }
 

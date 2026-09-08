@@ -765,6 +765,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
         COMMAND cna_test_software_point_sampling
         TIMEOUT 300 LABELS "Software")
 
+    # SOFTWARE-137: XNA/FNA preserve fractional SpriteBatch positions and scaled sizes to the
+    # renderer. Direct float draws must equal the same geometry expressed through Begin's matrix.
+    cna_software_test(cna_test_software_spritebatch_subpixel
+                      ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_subpixel_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteBatchSubpixelContract
+        COMMAND cna_test_software_spritebatch_subpixel TIMEOUT 30 LABELS "Software")
+
     # SOFTWARE-104: a capability is a usable public promise, not a statement about what a CPU
     # renderer might eventually implement. False entries are paired with the current factory/API
     # boundary so unsupported queries, volume textures and custom shaders cannot masquerade as

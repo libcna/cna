@@ -262,6 +262,11 @@ rather than always passing.
   and `MinDepth/MaxDepth` (`REMED-GFX-079`, 25/25 focused checks), and an enabled
   `ScissorRectangle` intersects both paths in target space (`REMED-GFX-080`). The default
   full-target viewport remains byte-identical to the earlier behavior.
+- **`SpriteBatch` destinations remain sub-pixel precise** (`SOFTWARE-137`) — Vector2 positions,
+  scalar/non-uniform scales and per-glyph DrawString rectangles reach CPU quad generation as floats
+  rather than being truncated by the renderer interface's compatibility fallback. A shared
+  Software/EasyGL fixture compares each direct draw with the equivalent `Begin` transform using
+  byte-exact full-target images.
 - **Custom `ShaderEffect` (arbitrary GLSL/HLSL/WGSL source) compiles but doesn't actually execute**
   — mirrors `HEADLESS-16`'s own precedent exactly: the source is accepted without compiling, and
   only effects whose `FillGpuDrawParams()` output matches one of this renderer's fixed stock-effect
