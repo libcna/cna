@@ -50,6 +50,11 @@ namespace CNA::Platform
     class IPlatformWindow;
 }
 
+namespace CNA::Internal
+{
+    class Texture2DArrayGraphicsDeviceTestPeer;
+}
+
 namespace Microsoft::Xna::Framework
 {
     class Game;
@@ -1643,5 +1648,6 @@ namespace Microsoft::Xna::Framework::Graphics
         friend class Microsoft::Xna::Framework::GraphicsDeviceManager;
         friend class Microsoft::Xna::Framework::Game;
         friend class Microsoft::Xna::Framework::Content::ContentReader;
+        friend class CNA::Internal::Texture2DArrayGraphicsDeviceTestPeer;
     };
 }

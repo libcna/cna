@@ -543,6 +543,23 @@ namespace CNA::Internal::Renderers
     };
 
     /**
+     * @brief Renderer-owned record for one sampled two-dimensional texture array.
+     *
+     * `CNA::Graphics::Texture2DArray` owns this record through shared lifetime identity so future
+     * sampled bindings can retain internal work safely without retaining or dereferencing the
+     * public `GraphicsResource`. The interface intentionally exposes no native image/view handle.
+     * Layer and mip transfers are added by plans/plan_modern.md `MOD-2226`; this first contract
+     * supplies ownership and deterministic unsupported defaults only.
+     */
+    class ITexture2DArrayRenderer
+        : public std::enable_shared_from_this<ITexture2DArrayRenderer>
+    {
+    public:
+        /** @brief Releases the renderer-owned texture-array record. */
+        virtual ~ITexture2DArrayRenderer() = default;
+    };
+
+    /**
      * Renderer texture handle. Shared lifetime identity lets bounded consumers retain weak
      * bindings without keeping disposed public Texture2D resources alive or storing raw pointers.
      */
@@ -2230,6 +2247,28 @@ namespace CNA::Internal::Renderers
         virtual std::unique_ptr<IOcclusionQueryRenderer> CreateOcclusionQuery() { return nullptr; }
         virtual std::unique_ptr<ITexture3DRenderer> CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) { return nullptr; }
         virtual std::unique_ptr<ITextureCubeRenderer> CreateTextureCube(int size, bool mipMap, int surfaceFormat) { return nullptr; }
+
+        /**
+         * @brief Creates a sampled two-dimensional texture array, or refuses it by returning null.
+         *
+         * This renderer-neutral factory is false by default. A renderer may override it only when
+         * its `MaxTextureArrayLayers` and every requested per-format usage bit describe the same
+         * implemented path. Native hardware availability alone is not sufficient.
+         *
+         * @param width Level-zero width in texels.
+         * @param height Level-zero height in texels.
+         * @param layerCount Number of array layers.
+         * @param mipLevelCount Number of allocated mip levels.
+         * @param surfaceFormat `SurfaceFormat` ordinal.
+         * @param usage `CNA::Graphics::Texture2DArrayUsage` bit mask.
+         * @return Renderer-owned record, or null when this path is unavailable.
+         */
+        virtual std::unique_ptr<ITexture2DArrayRenderer> CreateTexture2DArrayEXT(
+            int /*width*/, int /*height*/, int /*layerCount*/, int /*mipLevelCount*/,
+            int /*surfaceFormat*/, std::uint32_t /*usage*/)
+        {
+            return nullptr;
+        }
 
         /// Creates an off-screen FBO-backed render target. Returns nullptr on
         /// renderers that do not support render targets. `depthFormat` is the raw ordinal of

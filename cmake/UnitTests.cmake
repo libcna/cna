@@ -320,7 +320,11 @@ if(CNA_BUILD_TESTS)
     set(CNA_TEST_GROUP_DEPENDENCY_devices_ext cna_devices_ext)
     set(CNA_TEST_GROUP_DEPENDENCY_gamer_services CNA_GamerServices)
     set(CNA_TEST_GROUP_DEPENDENCY_graphics cna_graphics_core)
-    set(CNA_TEST_GROUP_DEPENDENCY_graphics_ext cna_graphics_ext)
+    # Engine resources such as Texture2DArray exercise their real GraphicsDevice ownership and
+    # renderer capability gate. Link the aggregate so this focused group receives the selected
+    # renderer registry as well as the graphics-ext implementation; cna_graphics_ext alone cannot
+    # construct a device because renderer families deliberately sit outside its dependency edge.
+    set(CNA_TEST_GROUP_DEPENDENCY_graphics_ext CNA)
     set(CNA_TEST_GROUP_DEPENDENCY_input cna_input)
     set(CNA_TEST_GROUP_DEPENDENCY_integration CNA)
     set(CNA_TEST_GROUP_DEPENDENCY_math cna_math)

@@ -225,7 +225,9 @@ implementation tasks.**
   and runs actual odd-sized float resolve/mip pixels. Float/HDR `CreateRenderTargetCubeEXT` remains
   outside this plan and unimplemented (`MOD-104`, `MOD-107`, `MOD-123`). Display colour spaces
   remain `MOD-2092`;
-- texture arrays (`MOD-2226`, `MOD-2243`), bindless resources, VRS;
+- the renderer-neutral sampled texture-array facade and deterministic refusal contract are complete
+  (`MOD-2225`); layer/mip transfers and sampled binding (`MOD-2226`) plus Vulkan allocation, views
+  and retirement (`MOD-2243`) remain modern-plan work. Bindless resources and VRS remain outside;
 - ray tracing (`MOD-2096`) and mesh shaders (`MOD-2097`) — `MOD-2096`'s text names
   `plan_vulkan.md` as the place such a capability question *would* be asked; that reference does
   **not** transfer ownership, and this plan deliberately declines it as modern-GPU work;

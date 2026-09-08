@@ -12,9 +12,11 @@ describes the public wrapper/event mechanics and the currently implemented rende
 
 ## 1. Ownership Model
 
-Every GPU-backed resource holds a `std::unique_ptr<IXxxRenderer>` (e.g.
-`IVertexBufferRenderer`, `ITexture2DRenderer`). Ownership is exclusive: only one
-`GraphicsResource` object at a time owns the underlying GPU handle.
+Every GPU-backed resource owns a renderer-side object. Existing XNA resources hold a
+`std::unique_ptr<IXxxRenderer>` (for example `IVertexBufferRenderer` or `ITexture2DRenderer`). A
+modern resource whose accepted work may outlive its public wrapper may instead own an internal
+shared record, as `Texture2DArray` does; that sharing never reaches the public API and exists only
+for command/fence retention.
 
 `GraphicsResource` itself does not hold a renderer pointer. The derived class is
 responsible for declaring and managing `renderer_`.
@@ -44,8 +46,9 @@ record for fence/completion-safe retirement. The native handle is never promised
 the instant the public object becomes disposed.
 
 The destructor calls `Dispose(false)`, so if the user forgets to call `Dispose()` the wrapper's
-renderer-side ownership is still released eventually — but the `Disposing` event is **not** fired
-and `ResourceDestroyed` is **not** raised in that path. Always call `Dispose()` explicitly.
+renderer-side ownership is still released eventually. The `Disposing` event is not fired on that
+path; `ResourceDestroyed` is still raised while the device is alive because deregistration must
+occur. Call `Dispose()` explicitly when subscribers need the `Disposing` notification.
 
 ### Override chain
 
@@ -55,6 +58,7 @@ and `ResourceDestroyed` is **not** raised in that path. Always call `Dispose()` 
 | `IndexBuffer`      | `renderer_.reset()` → `GraphicsResource::Dispose(bool)` |
 | `Texture2D`        | `renderer_.reset()` → `Texture::Dispose(bool)` → `GraphicsResource::Dispose(bool)` |
 | `RenderTarget2D`   | `renderer_.reset()` → `Texture2D::Dispose(bool)` → … |
+| `Texture2DArray`   | internal shared-record reset → `GraphicsResource::Dispose(bool)` |
 
 ---
 
@@ -148,6 +152,8 @@ The `GraphicsResource` base's `resources_` pointer entry is **not** updated duri
 move. If you move a tracked resource, the device still holds the original address.
 Avoid moving tracked resources out of their original storage location.
 
+`Texture2DArray` deletes both move operations, so its tracked address cannot change.
+
 ---
 
 ## 6. Resources Without a Device
@@ -216,7 +222,7 @@ Some resources (e.g. `BlendState`, `SamplerState`) may be constructed without a
 | When is the native handle freed? | Immediately if unused, otherwise after the renderer's completion token/fence |
 | Is double-dispose safe? | Yes — `isDisposed_` guard makes it a no-op |
 | What happens when the device is disposed? | All tracked resources are disposed first, then the device renderer |
-| Do events fire on destructor path? | No — only on the `Dispose()` path |
+| Do events fire on destructor path? | `ResourceDestroyed` does; `Disposing` does not |
 | Does move transfer the tracking pointer? | No — avoid moving tracked resources to a different address |
 | Can I use a resource after `Dispose()`? | No — `isDisposed_` is set; GPU handle is null |
 | Must the caller wait for the GPU before disposal? | No — fence/completion-safe retirement is renderer-owned |

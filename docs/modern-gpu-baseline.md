@@ -195,7 +195,7 @@ tree, not about native API potential.
 |---|---|---|
 | MOD-2200 | Supplied | The obsolete draft was reconciled into the live plan. |
 | MOD-2201 | Supplied by this audit | This document and the repeatable three-renderer probe are the evidence. |
-| MOD-2202 | Partial | Ordering/lifetime rules are scattered across renderer docs; there is no portable cross-API ADR and current Vulkan docs still allow unsafe in-flight destruction. |
+| MOD-2202 | Supplied | Accepted ADR 0001 defines portable ordering, retention, disposal, synchronization and refusal semantics across immediate and deferred APIs. |
 | MOD-2203 | Supplied | Immutable schema-2 feature/limit/format profile and C ABI are tested. |
 | MOD-2210 | Partial | `ShaderDialectEXT` exists, but not public language/stage values or stage-specific false-by-default queries. |
 | MOD-2211 | Absent | No owning validated text/binary shader payload. |
@@ -210,7 +210,7 @@ tree, not about native API potential.
 | MOD-2222 | Supplied | Vulkan derives implemented format/limit promises from physical-device facts. |
 | MOD-2223 | Supplied | Vulkan has exact float/HDR `RenderTarget2D` storage, rendering and readback. |
 | MOD-2224 | Supplied | Default and Vulkan constructor/format/limit contract suites are permanent. |
-| MOD-2225 | Absent | No `Texture2DArray` public resource or descriptor. |
+| MOD-2225 | Supplied | Immutable `Texture2DArrayDescriptor`, usage mask and tracked `Texture2DArray` facade validate cached live limits/format usages before a false-by-default renderer factory. No native handle is exposed; Vulkan allocation remains `MOD-2243`. |
 | MOD-2226 | Absent | No array layer/mip transfer or sampled-binding API. |
 | MOD-2227 | Absent | No dedicated storage texture resource. |
 | MOD-2228 | Partial | `ComputeShader::bindImage(Texture2D&)` exists; the storage-texture overload, retention and portable path do not. |
@@ -242,5 +242,6 @@ tree, not about native API potential.
 | MOD-2265 | Partial | Existing performance notes/timer support do not cover all Phase 22 paths or three measured backends. |
 | MOD-2266 | Absent | Mandatory Vulkan paths, applicable OpenGL4 portability, shared gates and no-stall evidence are not complete. |
 
-The next dependency is `MOD-2202`. Public resource descriptors must not be frozen until their
-ordering, retention, disposal, readback and rejection semantics have one portable definition.
+The portable contract prerequisite is now supplied by `MOD-2202`. The next texture-array work is
+`MOD-2226` plus Vulkan's native allocation/view/retirement path in `MOD-2243`; neither may weaken
+the descriptor's reject-before-native-mutation rule.

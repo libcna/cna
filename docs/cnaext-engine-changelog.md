@@ -14,6 +14,23 @@ something breaks.
 
 ---
 
+## Revision 3 — 2026-09-09
+
+### New sampled texture-array resource (`MOD-2225`)
+
+- `Texture2DArrayUsage` declares sampled/filterable and transfer intent without exposing a native
+  image-layout or barrier vocabulary.
+- `Texture2DArrayDescriptor` is immutable and rejects invalid dimensions, mip counts, formats and
+  usage masks before a device is needed.
+- `Texture2DArray` is a non-copyable, non-movable `GraphicsResource`. Construction validates the
+  live device's known limits and exact per-format usage support before renderer allocation or
+  resource registration; disposal participates in normal `GraphicsDevice` tracking.
+
+This revision publishes the renderer-neutral resource and deterministic refusal contract only.
+Layer/mip transfer and sampled binding arrive in `MOD-2226`; Vulkan native allocation, views and
+retirement arrive in `MOD-2243`. A renderer that has not implemented that complete path keeps the
+factory null and the maximum-array-layer limit at zero.
+
 ## Revision 2 — 2026-08-18
 
 ### Incompatible (`MOD-1900`)

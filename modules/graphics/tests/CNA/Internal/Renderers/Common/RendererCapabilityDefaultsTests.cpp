@@ -191,6 +191,12 @@ TEST(RendererCapabilityDefaultsTest, ModernGpuLimitsDefaultToExplicitlyUnavailab
     EXPECT_EQ(renderer.GetTimestampPeriodPicosecondsEXT(), 0U);
 }
 
+TEST(RendererCapabilityDefaultsTest, TextureArrayFactoryDefaultsToUnsupported)
+{
+    DefaultsOnlyRenderer renderer;
+    EXPECT_EQ(renderer.CreateTexture2DArrayEXT(4, 3, 2, 1, 0, UINT32_C(1)), nullptr);
+}
+
 TEST(RendererCapabilityDefaultsTest, AppliedMultiSampleCountEchoesTheRequest)
 {
     // The identity default is the whole point: it is what every renderer except GDI did. Answering

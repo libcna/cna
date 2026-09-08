@@ -207,6 +207,12 @@ consuming frame fence. Applications neither receive the `VkDevice` nor wait it i
 disposal. Every Phase 22 resource must join those mechanisms; an unsupported modern resource stays
 unavailable until it does.
 
+`MOD-2225` now supplies the public `Texture2DArray` facade, immutable descriptor and
+reject-before-allocation checks. Vulkan deliberately still reports `MaxTextureArrayLayers == 0`
+and inherits the null `CreateTexture2DArrayEXT` factory: native array availability is not a CNA
+feature until `MOD-2243` implements allocation, image views and fence-safe retirement, and
+`MOD-2226` adds observable layer/mip transfer and sampling oracles.
+
 Two current implementation gaps are stated rather than normalized into the contract:
 
 - compute dispatch uses a one-time command buffer and waits immediately (`MOD-2247`/`MOD-2249`/
