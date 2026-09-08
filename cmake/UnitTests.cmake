@@ -669,6 +669,13 @@ if(CNA_BUILD_TESTS)
         target_link_libraries(CnaTests PRIVATE CNA_GamerServices CNA_Net)
     endif()
 
+    # Microsoft::Phone is a Windows Phone API surface, so cna_phone is deliberately outside the
+    # CNA umbrella -- a game that is not a phone port must not link it. CnaTests consumes every
+    # group's objects, including the phone group's, so it names the library the same way the two
+    # optional modules just above do. The focused CnaPhoneTests target gets it from
+    # CNA_TEST_GROUP_DEPENDENCY_phone; only the aggregate needs this line.
+    target_link_libraries(CnaTests PRIVATE cna_phone)
+
     if(TARGET cna_net_two_process_harness)
         # The net test object group owns the subprocess path so both the focused executable and
         # the full CnaTests compatibility executable build the harness before compiling it.
