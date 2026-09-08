@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// SOFTWARE-107/131: renderer-neutral XNA/D3D top-left fill and pixel-center contract.
+// SOFTWARE-107/131/136: renderer-neutral XNA/D3D fill, pixel-center and constant-varying contract.
 // Two additive triangles share the TL->BR diagonal of an integer-coordinate screen-space square.
 // Every sample on that edge must belong to exactly one triangle: a crack stays black and an
 // all-inclusive edge doubles red. Reversing draw order or winding must not change coverage.
@@ -181,6 +181,17 @@ class TopLeftFillContractTest final : public Game
         return invalid;
     }
 
+    int NonConstantSquarePixels(const std::vector<Color>& pixels) const
+    {
+        const Color expected = pixels[static_cast<std::size_t>((kMin + 4) * kSize + kMin + 8)];
+        int different = 0;
+        for (int y = kMin; y < kMax; ++y)
+            for (int x = kMin; x < kMax; ++x)
+                different += Same(
+                    pixels[static_cast<std::size_t>(y * kSize + x)], expected) ? 0 : 1;
+        return different;
+    }
+
     bool SameImage(const std::vector<Color>& a, const std::vector<Color>& b) const
     {
         if (a.size() != b.size())
@@ -220,6 +231,12 @@ protected:
               "shared TL->BR edge has neither cracks nor additive double hits (invalid=" +
                   std::to_string(invalidDiagonal) + ", sample=" +
                   ColorText(baseline[static_cast<std::size_t>(20 * kSize + 20)]) + ")");
+        const int nonConstant = NonConstantSquarePixels(baseline);
+        Check(nonConstant == 0,
+              "constant triangle varying stays byte-identical across both halves (different=" +
+                  std::to_string(nonConstant) + ", sample=" +
+                  ColorText(baseline[static_cast<std::size_t>((kMin + 4) * kSize + kMin + 8)]) +
+                  ")");
 
         const std::vector<Color> reversedOrder = RenderBackbuffer(device, true, false);
         Check(SameImage(baseline, reversedOrder),

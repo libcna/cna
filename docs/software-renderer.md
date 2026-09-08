@@ -214,12 +214,15 @@ rather than always passing.
   (`-W <= X,Y <= W`, `0 <= Z <= W`). Polygon clipping interpolates all active varyings, preserves
   winding, supports multi-plane results larger than the old near-only quad, and keeps internal fan
   diagonals out of wireframe output.
-- **XNA/D3D raster coverage** (`SOFTWARE-107`, `SOFTWARE-131`) — 3D viewport mapping reproduces
+- **XNA/D3D raster coverage** (`SOFTWARE-107`, `SOFTWARE-131`, `SOFTWARE-136`) — 3D viewport mapping reproduces
   Direct3D 9's integer pixel-center convention, and exact triangle boundaries use the top-left fill
   rule. Adjacent triangles therefore own a shared edge exactly once regardless of draw order or
   submitted winding, including the Software renderer's four coverage samples; manual diagonal
-  exceptions are no longer part of solid rasterization. As on EasyGL, the near-half-pixel geometry
-  displacement is a single-sample compatibility rule and is omitted for a multisampled destination;
+  exceptions are no longer part of solid rasterization. Algebraically equivalent affine-difference
+  barycentric interpolation also keeps a constant vertex varying byte-identical across a primitive,
+  instead of letting floating-point weight-sum drift create one-byte bands. As on EasyGL, the
+  near-half-pixel geometry displacement is a single-sample compatibility rule and is omitted for a
+  multisampled destination;
   applying it to quarter-pixel 4x locations would incorrectly remove outer-edge coverage.
 - **Complete `AlphaTestEffect` comparisons** (`SOFTWARE-111`) — all eight XNA `CompareFunction`
   values use FNA's half-byte threshold encoding after texture, vertex and effect alpha are

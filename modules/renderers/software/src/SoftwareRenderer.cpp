@@ -1950,6 +1950,16 @@ namespace CNA::Internal::Renderers::Software
                    EdgeContainsSample(edgeV0V1, area, v0.x, v0.y, v1.x, v1.y);
         }
 
+        /// Interpolates a triangle varying from two independent barycentric coordinates.  The
+        /// affine-difference form deliberately preserves a constant input exactly: GPU
+        /// interpolation cannot turn a flat-coloured triangle into adjacent 8-bit values merely
+        /// because three separately divided weights sum to 0.99999994 on the CPU.
+        [[nodiscard]] float BarycentricInterpolate(float a, float b, float c,
+                                                   float lambda0, float lambda1)
+        {
+            return c + lambda0 * (a - c) + lambda1 * (b - c);
+        }
+
         /// REMED-GFX-082: Liang-Barsky clip of the parametric segment P(t) = a + t*(b - a), t in
         /// [0,1], to the inclusive pixel rectangle [clip.minX,maxX] x [clip.minY,maxY]. Returns the
         /// surviving parameter range [t0,t1] (t0 <= t1) or false if the segment is entirely outside.
@@ -2189,19 +2199,20 @@ namespace CNA::Internal::Renderers::Software
 
                     const float lambda0 = w0 / area;
                     const float lambda1 = w1 / area;
-                    const float lambda2 = w2 / area;
 
                     // Post-divide depth interpolates linearly in screen space -- no perspective
                     // correction needed for this one attribute (a well-known rasterization
                     // property), unlike color/UV below.
-                    float depth = lambda0 * v0.depth + lambda1 * v1.depth + lambda2 * v2.depth;
+                    float depth = BarycentricInterpolate(
+                        v0.depth, v1.depth, v2.depth, lambda0, lambda1);
                     if (hasBias) depth = std::clamp(depth + biasOffset, 0.0f, 1.0f);  // REMED-GFX-083
-                    const float invW = lambda0 * v0.invW + lambda1 * v1.invW + lambda2 * v2.invW;
+                    const float invW = BarycentricInterpolate(
+                        v0.invW, v1.invW, v2.invW, lambda0, lambda1);
                     WriteColoredFragment(fb, depthState, faceStencil, clip, x, y, depth, invW,
-                                         lambda0 * v0.r + lambda1 * v1.r + lambda2 * v2.r,
-                                         lambda0 * v0.g + lambda1 * v1.g + lambda2 * v2.g,
-                                         lambda0 * v0.b + lambda1 * v1.b + lambda2 * v2.b,
-                                         lambda0 * v0.a + lambda1 * v1.a + lambda2 * v2.a,
+                                         BarycentricInterpolate(v0.r, v1.r, v2.r, lambda0, lambda1),
+                                         BarycentricInterpolate(v0.g, v1.g, v2.g, lambda0, lambda1),
+                                         BarycentricInterpolate(v0.b, v1.b, v2.b, lambda0, lambda1),
+                                         BarycentricInterpolate(v0.a, v1.a, v2.a, lambda0, lambda1),
                                          colorWriteMask, multiSampleMask, occlusionQuery, coverageMask,
                                          fb.HasMultiSampleColor() ? &sampleDepths : nullptr);
                 }
@@ -3288,36 +3299,37 @@ namespace CNA::Internal::Renderers::Software
 
                     const float lambda0 = w0 / area;
                     const float lambda1 = w1 / area;
-                    const float lambda2 = w2 / area;
 
-                    float depth = lambda0 * v0.depth + lambda1 * v1.depth + lambda2 * v2.depth;
+                    float depth = BarycentricInterpolate(
+                        v0.depth, v1.depth, v2.depth, lambda0, lambda1);
                     if (hasBias) depth = std::clamp(depth + biasOffset, 0.0f, 1.0f);  // REMED-GFX-083
-                    const float invW = lambda0 * v0.invW + lambda1 * v1.invW + lambda2 * v2.invW;
+                    const float invW = BarycentricInterpolate(
+                        v0.invW, v1.invW, v2.invW, lambda0, lambda1);
                     WriteShadedFragment(fb, ctx, clip, x, y, depth, invW,
-                                        lambda0 * v0.r + lambda1 * v1.r + lambda2 * v2.r,
-                                        lambda0 * v0.g + lambda1 * v1.g + lambda2 * v2.g,
-                                        lambda0 * v0.b + lambda1 * v1.b + lambda2 * v2.b,
-                                        lambda0 * v0.a + lambda1 * v1.a + lambda2 * v2.a,
-                                        lambda0 * v0.u + lambda1 * v1.u + lambda2 * v2.u,
-                                        lambda0 * v0.v + lambda1 * v1.v + lambda2 * v2.v,
-                                        lambda0 * v0.u1 + lambda1 * v1.u1 + lambda2 * v2.u1,
-                                        lambda0 * v0.v1 + lambda1 * v1.v1 + lambda2 * v2.v1,
-                                        lambda0 * v0.fogKeep + lambda1 * v1.fogKeep +
-                                            lambda2 * v2.fogKeep,
-                                        lambda0 * v0.sr + lambda1 * v1.sr + lambda2 * v2.sr,
-                                        lambda0 * v0.sg + lambda1 * v1.sg + lambda2 * v2.sg,
-                                        lambda0 * v0.sb + lambda1 * v1.sb + lambda2 * v2.sb,
-                                        lambda0 * v0.envx + lambda1 * v1.envx + lambda2 * v2.envx,
-                                        lambda0 * v0.envy + lambda1 * v1.envy + lambda2 * v2.envy,
-                                        lambda0 * v0.envz + lambda1 * v1.envz + lambda2 * v2.envz,
-                                        lambda0 * v0.envBlend + lambda1 * v1.envBlend +
-                                            lambda2 * v2.envBlend,
-                                        lambda0 * v0.wpx + lambda1 * v1.wpx + lambda2 * v2.wpx,
-                                        lambda0 * v0.wpy + lambda1 * v1.wpy + lambda2 * v2.wpy,
-                                        lambda0 * v0.wpz + lambda1 * v1.wpz + lambda2 * v2.wpz,
-                                        lambda0 * v0.nx + lambda1 * v1.nx + lambda2 * v2.nx,
-                                        lambda0 * v0.ny + lambda1 * v1.ny + lambda2 * v2.ny,
-                                        lambda0 * v0.nz + lambda1 * v1.nz + lambda2 * v2.nz,
+                                        BarycentricInterpolate(v0.r, v1.r, v2.r, lambda0, lambda1),
+                                        BarycentricInterpolate(v0.g, v1.g, v2.g, lambda0, lambda1),
+                                        BarycentricInterpolate(v0.b, v1.b, v2.b, lambda0, lambda1),
+                                        BarycentricInterpolate(v0.a, v1.a, v2.a, lambda0, lambda1),
+                                        BarycentricInterpolate(v0.u, v1.u, v2.u, lambda0, lambda1),
+                                        BarycentricInterpolate(v0.v, v1.v, v2.v, lambda0, lambda1),
+                                        BarycentricInterpolate(v0.u1, v1.u1, v2.u1, lambda0, lambda1),
+                                        BarycentricInterpolate(v0.v1, v1.v1, v2.v1, lambda0, lambda1),
+                                        BarycentricInterpolate(
+                                            v0.fogKeep, v1.fogKeep, v2.fogKeep, lambda0, lambda1),
+                                        BarycentricInterpolate(v0.sr, v1.sr, v2.sr, lambda0, lambda1),
+                                        BarycentricInterpolate(v0.sg, v1.sg, v2.sg, lambda0, lambda1),
+                                        BarycentricInterpolate(v0.sb, v1.sb, v2.sb, lambda0, lambda1),
+                                        BarycentricInterpolate(v0.envx, v1.envx, v2.envx, lambda0, lambda1),
+                                        BarycentricInterpolate(v0.envy, v1.envy, v2.envy, lambda0, lambda1),
+                                        BarycentricInterpolate(v0.envz, v1.envz, v2.envz, lambda0, lambda1),
+                                        BarycentricInterpolate(
+                                            v0.envBlend, v1.envBlend, v2.envBlend, lambda0, lambda1),
+                                        BarycentricInterpolate(v0.wpx, v1.wpx, v2.wpx, lambda0, lambda1),
+                                        BarycentricInterpolate(v0.wpy, v1.wpy, v2.wpy, lambda0, lambda1),
+                                        BarycentricInterpolate(v0.wpz, v1.wpz, v2.wpz, lambda0, lambda1),
+                                        BarycentricInterpolate(v0.nx, v1.nx, v2.nx, lambda0, lambda1),
+                                        BarycentricInterpolate(v0.ny, v1.ny, v2.ny, lambda0, lambda1),
+                                        BarycentricInterpolate(v0.nz, v1.nz, v2.nz, lambda0, lambda1),
                                         coverageMask,
                                         fb.HasMultiSampleColor() ? &sampleDepths : nullptr);
                 }
