@@ -6,6 +6,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/RendererTestGate.hpp"
+#include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -436,6 +437,59 @@ TEST(ClassicTextureFormat, PointSamplingExpandsChannelsAndPreservesDeclaredRange
         EXPECT_NEAR(signedPixel.getGProperty(), 0, 2);
         EXPECT_NEAR(signedPixel.getBProperty(), 0, 2);
     }
+}
+
+TEST(ClassicTextureFormat, HalfVector4LinearFilteringMatchesTheAdvertisedCapability)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    ASSERT_EQ(device.GetRenderer().ClassifySurfaceFormatEXT(
+                  static_cast<int>(SurfaceFormat::HalfVector4)),
+              RendererFormatVerdict::Supported);
+
+    Texture2D texture(device, 2, 1, false, SurfaceFormat::HalfVector4);
+    const HalfVector4 source[2] = {
+        HalfVector4(1.0f, 0.0f, 0.0f, 1.0f),
+        HalfVector4(0.0f, 0.0f, 1.0f, 1.0f),
+    };
+    texture.SetData(source, 2);
+
+    const VertexPositionTexture vertices[6] = {
+        {Vector3(-1.0f,  1.0f, 0.5f), Vector2(0.5f, 0.5f)},
+        {Vector3(-1.0f, -1.0f, 0.5f), Vector2(0.5f, 0.5f)},
+        {Vector3( 1.0f,  1.0f, 0.5f), Vector2(0.5f, 0.5f)},
+        {Vector3( 1.0f,  1.0f, 0.5f), Vector2(0.5f, 0.5f)},
+        {Vector3(-1.0f, -1.0f, 0.5f), Vector2(0.5f, 0.5f)},
+        {Vector3( 1.0f, -1.0f, 0.5f), Vector2(0.5f, 0.5f)},
+    };
+    VertexBuffer buffer(device, VertexPositionTexture::getVertexDeclarationStatic(),
+                        6, BufferUsage::None);
+    buffer.SetData(vertices, 6);
+    RenderTarget2D target(device, 8, 8, false, SurfaceFormat::Color,
+                          DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
+    device.SetRenderTarget(&target);
+    device.Clear(Color::Black);
+    device.getSamplerStatesProperty()[0] = SamplerState::LinearClamp;
+    device.setBlendStateProperty(BlendState::Opaque);
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+    BasicEffect effect(device);
+    effect.setTextureProperty(&texture);
+    effect.setTextureEnabledProperty(true);
+    effect.Apply();
+    device.SetVertexBuffer(&buffer);
+    device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+    device.SetVertexBuffer(nullptr);
+    device.SetRenderTarget(nullptr);
+
+    Color actual;
+    const Rectangle centre(4, 4, 1, 1);
+    target.GetData(0, &centre, &actual, 0, 1);
+    EXPECT_NEAR(actual.getRProperty(), 128, 3);
+    EXPECT_NEAR(actual.getGProperty(), 0, 2);
+    EXPECT_NEAR(actual.getBProperty(), 128, 3);
+    EXPECT_NEAR(actual.getAProperty(), 255, 2);
+    EXPECT_TRUE(device.SupportsCapability(
+        CNA::GraphicsCapability::HalfFloatTextureLinearFiltering));
 }
 
 TEST(ClassicTextureFormat, DxtCubeBlocksFeedThePublicEnvironmentMapSampler)

@@ -292,6 +292,11 @@ namespace CNA::Internal::Renderers::Software
 #endif
     }
 
+    bool SoftwareRenderer::SupportsHalfFloatTextureLinearFilteringEXT() const
+    {
+        return true;
+    }
+
     bool SoftwareRenderer::SupportsCapability(CNA::GraphicsCapability capability) const
     {
         switch (capability)

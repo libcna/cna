@@ -1432,6 +1432,12 @@ namespace CNA::Internal::Renderers::Software
         std::unique_ptr<IOcclusionQueryRenderer> CreateOcclusionQuery() override;
 
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
+        /**
+         * @brief Reports support for linearly filtering half-float texture data.
+         *
+         * @return Always true because the CPU sampler filters decoded floating-point planes.
+         */
+        [[nodiscard]] bool SupportsHalfFloatTextureLinearFilteringEXT() const override;
         /** @brief Classifies formats whose complete CPU texture path is implemented. */
         [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(
             int surfaceFormat) const override;
