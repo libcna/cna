@@ -307,6 +307,14 @@
    "profile": "HiDef"
   },
   {
+   "case": "model/fbx_float_rounding",
+   "source": "model/fbx_float_rounding.fbx",
+   "importer": "FbxImporter",
+   "processor": "ModelProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
    "case": "font/description",
    "source": "source/control_font.spritefont",
    "importer": "FontDescriptionImporter",
