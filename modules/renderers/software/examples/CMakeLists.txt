@@ -555,6 +555,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
         COMMAND cna_test_software_rendertargetcube_msaa_face
         TIMEOUT 30 LABELS "Software")
 
+    # SOFTWARE-119: the rendered cube and sampled TextureCube views are the same CPU resource.
+    cna_software_test(cna_test_software_rendertargetcube_sample
+                      ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertargetcube_sample_test.cpp)
+    cna_register_renderer_test(NAME Software_RenderTargetCube_SampleAfterUnbind
+        COMMAND cna_test_software_rendertargetcube_sample
+        TIMEOUT 30 LABELS "Software")
+
     # REMED-GFX-142: RenderTargetUsage's DEPTH and STENCIL half. FNA3D's own header documents
     # `preserveTargetContents` as storing the "color/depth/stencil" contents, and FNA's DiscardContents
     # bind clears all three (Target|DepthBuffer|Stencil, MaxDepth, 0) -- so the enum governs depth and

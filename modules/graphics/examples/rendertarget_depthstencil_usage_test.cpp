@@ -262,14 +262,11 @@ namespace
                                  false, false, false, false, true,
                                  true, true, false, false, true, true, false, false};
 #elif defined(CNA_RENDERER_SOFTWARE)
-    // No RenderTargetCube. A real CPU depth buffer per framebuffer, owned by that framebuffer and
-    // never shared, so depth simply persists. NO stencil storage at all
-    // (`SoftwareRenderer::ClearStencil` is an empty body and nothing rasterises a stencil
-    // test), so C2 declares stencil unsupported and every stencil check reports that boundary
-    // instead of a result it cannot have.
-    constexpr Contract kContract{"SOFTWARE", Support::Exact, false, Support::Unsupported,
-                                 true, false, true, false, true,
-                                 true, true, false, false, true, true, false, false};
+    // SOFTWARE-121 supplies complete CPU stencil semantics. SOFTWARE-119 adds six independent
+    // cube colour/sample planes backed by the one depth/stencil state XNA shares across all faces.
+    constexpr Contract kContract{"SOFTWARE", Support::Exact, true, Support::Exact,
+                                 true, true, true, true, true,
+                                 true, true, true, true, true, true, false, false};
 #elif defined(CNA_RENDERER_EASYGL)
     // A real depth renderbuffer per target, attached once at construction and never re-attached;
     // no glInvalidateFramebuffer and no clear-on-bind anywhere, so an FBO's depth/stencil simply

@@ -137,11 +137,11 @@ namespace
                                  false, Support::Unsupported, Support::Unsupported,
                                  Support::Unsupported, false};
 #elif defined(CNA_RENDERER_SOFTWARE)
-    // SOFTWARE-82/118 provide exact CPU storage for every declared cube and volume mip level.
-    // Cube-map render targets remain independently tracked by SOFTWARE-119.
+    // SOFTWARE-82/118/119 provide exact CPU storage for every declared cube, volume and rendered
+    // cube mip level.
     constexpr Contract kContract{"SOFTWARE", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact,
-                                 Support::Unsupported, false};
+                                 Support::Exact, false};
 #elif defined(CNA_RENDERER_EASYGL)
     // EasyGL uploads into the shared GL cube texture and normalizes its differing row convention.
     constexpr Contract kContract{"EASYGL", true, Support::Exact, Support::Exact,

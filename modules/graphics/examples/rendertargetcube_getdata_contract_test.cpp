@@ -148,11 +148,10 @@ namespace
     constexpr Contract kContract{"HEADLESS", true, Support::Unsupported, Support::Unsupported,
                                  false, true, Support::Unsupported, MipTargets::Real, true, false, false, false, false};
 #elif defined(CNA_RENDERER_SOFTWARE)
-    // Cube-map render targets are an explicit documented v1 scope boundary here
-    // (CreateRenderTargetCube keeps IGraphicsRenderer's nullptr default), so binding one is refused
-    // by GraphicsDevice::SetRenderTargets and there is no resource to read.
-    constexpr Contract kContract{"SOFTWARE", false, Support::Unsupported, Support::Unsupported,
-                                 true, false, Support::Unsupported, MipTargets::Real, true, false, false, false, false};
+    // SOFTWARE-119 owns six independent CPU colour/sample planes, generates every mip on unbind,
+    // and exposes exact top-first upload/readback from the same storage the rasterizer writes.
+    constexpr Contract kContract{"SOFTWARE", true, Support::Exact, Support::Exact,
+                                 true, true, Support::Exact, MipTargets::Real, true, true, true, false, false};
 #elif defined(CNA_RENDERER_EASYGL) && defined(CNA_GL_PROFILE_OPENGLES2)
     // The OPENGLES2 GL profile of the EasyGL family: identical to the EASYGL contract below
     // except MSAA -- core OpenGL ES 2.0 has no multisample renderbuffers/blit

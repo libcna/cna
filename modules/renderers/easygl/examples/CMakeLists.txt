@@ -910,7 +910,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
         # Task 334: RenderTargetCube sampled as TextureCube via EnvironmentMapEffect after unbinding
         cna_easygl_test(cna_test_easygl_rendertargetcube_sample
-                        easygl_rendertargetcube_sample_test.cpp)
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertargetcube_sample_test.cpp)
         cna_register_renderer_test(NAME EasyGL_RenderTargetCube_SampleAfterUnbind COMMAND cna_test_easygl_rendertargetcube_sample
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 

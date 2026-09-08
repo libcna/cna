@@ -1659,22 +1659,25 @@ namespace CNA::Internal::Renderers::Software
         class CubeFaceSurface final : public SoftwareColorSurface
         {
         public:
-            CubeFaceSurface(const SoftwareTextureCubeRenderer& cube, int face)
+            CubeFaceSurface(const SoftwareCubeSurface& cube, int face)
                 : cube_(cube), face_(face) {}
 
-            [[nodiscard]] int ColorWidth() const override { return std::max(1, cube_.GetSize()); }
-            [[nodiscard]] int ColorHeight() const override { return std::max(1, cube_.GetSize()); }
+            [[nodiscard]] int ColorWidth() const override { return std::max(1, cube_.CubeSize()); }
+            [[nodiscard]] int ColorHeight() const override { return std::max(1, cube_.CubeSize()); }
             [[nodiscard]] const std::vector<std::uint8_t>& ColorPixels() const override
-            { return cube_.FacePixels(face_); }
+            { return cube_.CubeFacePixels(face_, 0); }
 
-            [[nodiscard]] int ColorLevelCount() const override { return cube_.FaceLevelCount(face_); }
-            [[nodiscard]] int ColorWidth(int level) const override { return cube_.FaceDim(level); }
-            [[nodiscard]] int ColorHeight(int level) const override { return cube_.FaceDim(level); }
+            [[nodiscard]] int ColorLevelCount() const override
+            { return cube_.CubeFaceLevelCount(face_); }
+            [[nodiscard]] int ColorWidth(int level) const override
+            { return cube_.CubeFaceDimension(level); }
+            [[nodiscard]] int ColorHeight(int level) const override
+            { return cube_.CubeFaceDimension(level); }
             [[nodiscard]] const std::vector<std::uint8_t>& ColorPixels(int level) const override
-            { return cube_.FacePixels(face_, level); }
+            { return cube_.CubeFacePixels(face_, level); }
 
         private:
-            const SoftwareTextureCubeRenderer& cube_;
+            const SoftwareCubeSurface& cube_;
             int face_;
         };
 
@@ -1716,7 +1719,7 @@ namespace CNA::Internal::Renderers::Software
         /// `static_cast<int>(s * size)` fetch at level 0, so the cube was point-sampled at level 0
         /// however `SamplerStates[1]` was set. The parameter list now mirrors `SampleTexture`'s
         /// exactly -- sampler, magnification classification, lambda -- because it does the same job.
-        void SampleCubeMap(const SoftwareTextureCubeRenderer& cube, const SoftwareSamplerState& sampler,
+        void SampleCubeMap(const SoftwareCubeSurface& cube, const SoftwareSamplerState& sampler,
                           bool magnify, float lambda, const Vector3& dir,
                           float& r, float& g, float& b, float& a,
                           const TextureFootprint* footprint = nullptr)
@@ -2685,7 +2688,7 @@ namespace CNA::Internal::Renderers::Software
             // texture and a finished render target are indistinguishable to every consumer below.
             const SoftwareColorSurface* texture0;
             const SoftwareColorSurface* texture1;
-            const SoftwareTextureCubeRenderer* envMap;
+            const SoftwareCubeSurface* envMap;
             bool useDualTexture;
             bool useEnvMap;
             bool needUV;
@@ -2986,9 +2989,9 @@ namespace CNA::Internal::Renderers::Software
             const auto* texture0 = dynamic_cast<const SoftwareColorSurface*>(params.texture0);
             const auto* texture1 = dynamic_cast<const SoftwareColorSurface*>(params.texture1);
 #ifndef CNA_SOFTWARE_2D_ONLY
-            const auto* envMap = dynamic_cast<const SoftwareTextureCubeRenderer*>(params.envMap);
+            const auto* envMap = dynamic_cast<const SoftwareCubeSurface*>(params.envMap);
 #else
-            const SoftwareTextureCubeRenderer* envMap = nullptr;
+            const SoftwareCubeSurface* envMap = nullptr;
 #endif
             const bool useDualTexture = params.dualTexture && texture0 != nullptr && texture1 != nullptr;
 #ifndef CNA_SOFTWARE_2D_ONLY
@@ -3103,9 +3106,9 @@ namespace CNA::Internal::Renderers::Software
             const auto* texture0 = dynamic_cast<const SoftwareColorSurface*>(params.texture0);
             const auto* texture1 = dynamic_cast<const SoftwareColorSurface*>(params.texture1);
 #ifndef CNA_SOFTWARE_2D_ONLY
-            const auto* envMap = dynamic_cast<const SoftwareTextureCubeRenderer*>(params.envMap);
+            const auto* envMap = dynamic_cast<const SoftwareCubeSurface*>(params.envMap);
 #else
-            const SoftwareTextureCubeRenderer* envMap = nullptr;
+            const SoftwareCubeSurface* envMap = nullptr;
 #endif
             const bool useDualTexture = params.dualTexture && texture0 != nullptr && texture1 != nullptr;
 #ifndef CNA_SOFTWARE_2D_ONLY
@@ -3139,7 +3142,7 @@ namespace CNA::Internal::Renderers::Software
 #ifndef CNA_SOFTWARE_2D_ONLY
             const TextureFootprint footprintCube = useEnvMap
                 ? TriangleCubeTextureFootprint(v0, v1, v2,
-                                               std::max(1, envMap->GetSize()))
+                                               std::max(1, envMap->CubeSize()))
                 : TextureFootprint{};
             const float rhoCube = footprintCube.isotropicRate;
 #else
@@ -3869,6 +3872,23 @@ namespace CNA::Internal::Renderers::Software
         // REMED-GFX-135: `mipMap` used to be discarded here, so a mipmapped TextureCube reported a
         // LevelCount whose storage did not exist and every mip upload was dropped in silence.
         return std::make_unique<SoftwareTextureCubeRenderer>(size, mipMap);
+#endif
+    }
+
+    std::unique_ptr<IRenderTargetCubeRenderer> SoftwareRenderer::CreateRenderTargetCube(
+        int size, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
+    {
+#ifdef CNA_SOFTWARE_2D_ONLY
+        (void)size;
+        (void)depthFormat;
+        (void)preserveContents;
+        (void)mipMap;
+        (void)multiSampleCount;
+        throw System::NotSupportedException(
+            "Software's GDI 2D compilation unit does not include RenderTargetCube resources.");
+#else
+        return std::make_unique<SoftwareRenderTargetCubeRenderer>(
+            size, depthFormat, preserveContents, mipMap, multiSampleCount);
 #endif
     }
 

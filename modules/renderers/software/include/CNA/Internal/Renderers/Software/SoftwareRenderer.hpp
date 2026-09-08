@@ -198,6 +198,49 @@ namespace CNA::Internal::Renderers::Software
     };
 
     /**
+     * @brief Read-only access to one Software cube resource's face and mip storage.
+     *
+     * Plain TextureCube and RenderTargetCube both implement this renderer-local capability, so
+     * EnvironmentMapEffect samples the same CPU cube contract regardless of how the pixels were
+     * produced.
+     */
+    class SoftwareCubeSurface
+    {
+    public:
+        /** @brief Destroys the renderer-local cube storage view. */
+        virtual ~SoftwareCubeSurface() = default;
+        /**
+         * @brief Returns the level-zero edge length.
+         *
+         * @return The width and height of every level-zero face in pixels.
+         */
+        [[nodiscard]] virtual int CubeSize() const = 0;
+        /**
+         * @brief Returns the contiguous mip count available for one face.
+         *
+         * @param face Raw CubeMapFace ordinal in the range 0 through 5.
+         * @return The number of sampleable levels beginning at level zero.
+         */
+        [[nodiscard]] virtual int CubeFaceLevelCount(int face) const = 0;
+        /**
+         * @brief Returns one mip level's edge length.
+         *
+         * @param level Mip level beginning at zero.
+         * @return The width and height of the requested square face.
+         */
+        [[nodiscard]] virtual int CubeFaceDimension(int level) const = 0;
+        /**
+         * @brief Returns one face and mip level's tightly packed RGBA8 pixels.
+         *
+         * @param face Raw CubeMapFace ordinal in the range 0 through 5.
+         * @param level Mip level beginning at zero.
+         * @return The immutable pixel storage used by the CPU cube sampler.
+         */
+        [[nodiscard]] virtual const std::vector<std::uint8_t>& CubeFacePixels(
+            int face, int level) const = 0;
+    };
+
+    /**
      * @brief REMED-GFX-150: one resolved XNA SamplerState for one texture slot.
      *
      * Holds the raw XNA enum ordinals `IGraphicsRenderer::ApplySamplerState` already carries, so the
@@ -418,7 +461,8 @@ namespace CNA::Internal::Renderers::Software
     /// `SetData(level > 0, ...)` returned early without storing anything -- one of the three silent
     /// write-loss routes that finding removed. Storage is now allocated per level, so `LevelCount`
     /// and `SetData`/`GetData` agree at every level.
-    class SoftwareTextureCubeRenderer final : public ITextureCubeRenderer
+    class SoftwareTextureCubeRenderer final : public ITextureCubeRenderer,
+                                              public SoftwareCubeSurface
     {
     public:
         /**
@@ -503,6 +547,38 @@ namespace CNA::Internal::Renderers::Software
          */
         [[nodiscard]] const std::vector<std::uint8_t>& FacePixels(int face, int level) const;
 
+        /**
+         * @brief Returns the level-zero edge length through the shared CPU cube sampler contract.
+         *
+         * @return The cube size in pixels.
+         */
+        [[nodiscard]] int CubeSize() const override { return GetSize(); }
+        /**
+         * @brief Returns the contiguous supplied mip count for one face.
+         *
+         * @param face Raw CubeMapFace ordinal.
+         * @return The number of sampleable levels beginning at zero.
+         */
+        [[nodiscard]] int CubeFaceLevelCount(int face) const override
+        { return FaceLevelCount(face); }
+        /**
+         * @brief Returns one mip level's edge length.
+         *
+         * @param level Mip level beginning at zero.
+         * @return The face dimension in pixels.
+         */
+        [[nodiscard]] int CubeFaceDimension(int level) const override { return FaceDim(level); }
+        /**
+         * @brief Returns immutable sample storage for one face and mip level.
+         *
+         * @param face Raw CubeMapFace ordinal.
+         * @param level Mip level beginning at zero.
+         * @return The tightly packed RGBA8 face pixels.
+         */
+        [[nodiscard]] const std::vector<std::uint8_t>& CubeFacePixels(
+            int face, int level) const override
+        { return FacePixels(face, level); }
+
     private:
         /// Face edge length at @p level, never below 1 -- mirrors TextureCube.cpp's own mipDim().
         [[nodiscard]] int LevelDim(int level) const;
@@ -517,6 +593,161 @@ namespace CNA::Internal::Renderers::Software
         std::vector<std::array<bool, 6>> supplied_;
         /// Contiguously supplied levels from 0, per face. Always at least 1.
         std::array<int, 6> faceLevels_{1, 1, 1, 1, 1, 1};
+    };
+
+    /**
+     * @brief SOFTWARE-119 CPU renderable cube with isolated face colour and shared depth/stencil.
+     */
+    class SoftwareRenderTargetCubeRenderer final : public IRenderTargetCubeRenderer,
+                                                   public SoftwareCubeSurface
+    {
+    public:
+        /**
+         * @brief Allocates six renderable RGBA8 faces and the requested classic target storage.
+         *
+         * @param size Edge length of every face.
+         * @param depthFormat Raw XNA DepthFormat ordinal.
+         * @param preserveContents Whether public usage requests preservation.
+         * @param mipMap Whether to allocate and generate the full mip chain.
+         * @param multiSampleCount Requested sample count; Software applies either 0 or 4.
+         */
+        SoftwareRenderTargetCubeRenderer(int size, int depthFormat, bool preserveContents,
+                                         bool mipMap, int multiSampleCount);
+
+        /**
+         * @brief Returns the level-zero edge length.
+         *
+         * @return The cube size in pixels.
+         */
+        [[nodiscard]] int GetSize() const override { return size_; }
+        /**
+         * @brief Selects one face as the active render surface.
+         *
+         * @param face Raw CubeMapFace ordinal in the range 0 through 5.
+         */
+        void BindAsRenderTargetFace(int face) override;
+        /** @brief Resolves and releases the active face, generating its mip chain when requested. */
+        void UnbindAsRenderTarget() override;
+        /**
+         * @brief Returns the applied sample count.
+         *
+         * @return Either zero or four.
+         */
+        [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
+        /**
+         * @brief Reports whether requested depth storage is real.
+         *
+         * @param requested Whether the public layer requested a depth buffer.
+         * @return True when the target owns compatible CPU depth storage.
+         */
+        [[nodiscard]] bool HasRealDepthBuffer(bool requested) const override
+        { return requested && depthFormat_ != 0; }
+        /**
+         * @brief Reports whether requested stencil storage is real.
+         *
+         * @param requested Whether the public layer requested a stencil buffer.
+         * @return True only for Depth24Stencil8 storage.
+         */
+        [[nodiscard]] bool HasRealStencilBuffer(bool requested) const override
+        { return requested && depthFormat_ == 3; }
+        /**
+         * @brief Uploads a tightly packed RGBA8 rectangle to one face and mip level.
+         *
+         * @param face Raw CubeMapFace ordinal.
+         * @param level Mip level beginning at zero.
+         * @param x Left edge of the destination rectangle.
+         * @param y Top edge of the destination rectangle.
+         * @param w Rectangle width.
+         * @param h Rectangle height.
+         * @param data Source pixels.
+         * @param dataLength Available source bytes.
+         * @return True when the complete validated upload was performed.
+         */
+        [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
+                                   const void* data, int dataLength) override;
+        /**
+         * @brief Reads a tightly packed RGBA8 rectangle from one face and mip level.
+         *
+         * @param face Raw CubeMapFace ordinal.
+         * @param level Mip level beginning at zero.
+         * @param x Left edge of the source rectangle.
+         * @param y Top edge of the source rectangle.
+         * @param w Rectangle width.
+         * @param h Rectangle height.
+         * @param data Destination pixels.
+         * @param dataLength Available destination bytes.
+         * @return True when the complete validated readback was performed.
+         */
+        [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
+
+        /**
+         * @brief Returns the level-zero edge length.
+         *
+         * @return The cube size in pixels.
+         */
+        [[nodiscard]] int CubeSize() const override { return size_; }
+        /**
+         * @brief Returns the contiguous generated or supplied mip count for one face.
+         * @param face Raw CubeMapFace ordinal.
+         * @return The number of sampleable levels beginning at zero.
+         */
+        [[nodiscard]] int CubeFaceLevelCount(int face) const override;
+        /**
+         * @brief Returns one mip level's edge length.
+         * @param level Mip level beginning at zero.
+         * @return The face dimension in pixels.
+         */
+        [[nodiscard]] int CubeFaceDimension(int level) const override;
+        /**
+         * @brief Returns immutable sample storage for one face and mip level.
+         * @param face Raw CubeMapFace ordinal.
+         * @param level Mip level beginning at zero.
+         * @return The tightly packed RGBA8 face pixels.
+         */
+        [[nodiscard]] const std::vector<std::uint8_t>& CubeFacePixels(
+            int face, int level) const override;
+
+        /**
+         * @brief Returns the face currently selected for rendering.
+         *
+         * @return The raw CubeMapFace ordinal, or -1 when unbound.
+         */
+        [[nodiscard]] int ActiveFace() const { return activeFace_; }
+        /**
+         * @brief Returns the active face's framebuffer.
+         *
+         * @return Mutable CPU color/depth/stencil storage for the bound face.
+         */
+        [[nodiscard]] SoftwareFramebuffer& Framebuffer();
+        /**
+         * @brief Returns the active face's framebuffer.
+         *
+         * @return Immutable CPU color/depth/stencil storage for the bound face.
+         */
+        [[nodiscard]] const SoftwareFramebuffer& Framebuffer() const;
+
+    private:
+        void GenerateMipMaps(int face);
+        void LoadSharedDepthStencil(SoftwareFramebuffer& framebuffer);
+        void StoreSharedDepthStencil(const SoftwareFramebuffer& framebuffer);
+        [[nodiscard]] std::vector<std::uint8_t>& MutableFacePixels(int face, int level);
+
+        int size_ = 0;
+        int depthFormat_ = 0;
+        bool mipMap_ = false;
+        int levelCount_ = 1;
+        int multiSampleCount_ = 0;
+        int activeFace_ = -1;
+        bool bound_ = false;
+        std::array<SoftwareFramebuffer, 6> framebuffers_;
+        std::vector<std::array<std::vector<std::uint8_t>, 6>> mipLevels_;
+        std::vector<std::array<bool, 6>> supplied_;
+        std::array<int, 6> faceLevelCounts_{1, 1, 1, 1, 1, 1};
+        std::vector<float> sharedDepth_;
+        std::vector<std::uint8_t> sharedStencil_;
+        std::vector<float> sharedMultiSampleDepth_;
+        std::vector<std::uint8_t> sharedMultiSampleStencil_;
     };
 
     /** @brief SOFTWARE-118 CPU-owned RGBA8 storage for an XNA volume texture and all mip levels. */
@@ -758,6 +989,26 @@ namespace CNA::Internal::Renderers::Software
                                                             int surfaceFormat) override;
         std::unique_ptr<ITextureCubeRenderer> CreateTextureCube(int size, bool mipMap,
                                                                 int surfaceFormat) override;
+        /**
+         * @brief Creates a CPU-backed renderable cube resource.
+         *
+         * @param size Edge length of every face.
+         * @param depthFormat Raw XNA DepthFormat ordinal.
+         * @param preserveContents Whether target transitions preserve prior contents.
+         * @param mipMap Whether the target owns a generated mip chain.
+         * @param multiSampleCount Requested multisample count.
+         * @return A six-face Software render target.
+         */
+        std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCube(
+            int size, int depthFormat, bool preserveContents = false, bool mipMap = false,
+            int multiSampleCount = 0) override;
+        /**
+         * @brief Selects one cube face as the active CPU framebuffer.
+         *
+         * @param rt Render target to bind, or null to restore the backbuffer.
+         * @param face Raw CubeMapFace ordinal.
+         */
+        void SetRenderTargetCubeFace(IRenderTargetCubeRenderer* rt, int face) override;
         std::unique_ptr<IOcclusionQueryRenderer> CreateOcclusionQuery() override;
 
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
@@ -983,6 +1234,7 @@ namespace CNA::Internal::Renderers::Software
 
         SoftwareFramebuffer backbuffer_;
         SoftwareRenderTargetRenderer* currentRenderTarget_ = nullptr;
+        SoftwareRenderTargetCubeRenderer* currentCubeRenderTarget_ = nullptr;
         /// The one query whose Begin/End interval currently receives passing raster samples.
         SoftwareOcclusionQueryRenderer* activeOcclusionQuery_ = nullptr;
         int virtualWidth_ = 0;

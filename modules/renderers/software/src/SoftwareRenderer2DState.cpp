@@ -23,12 +23,24 @@ namespace CNA::Internal::Renderers::Software
 
     SoftwareFramebuffer& SoftwareRenderer::CurrentFramebuffer()
     {
-        return currentRenderTarget_ != nullptr ? currentRenderTarget_->Framebuffer() : backbuffer_;
+        if (currentRenderTarget_ != nullptr)
+            return currentRenderTarget_->Framebuffer();
+#ifndef CNA_SOFTWARE_2D_ONLY
+        if (currentCubeRenderTarget_ != nullptr)
+            return currentCubeRenderTarget_->Framebuffer();
+#endif
+        return backbuffer_;
     }
 
     const SoftwareFramebuffer& SoftwareRenderer::CurrentFramebuffer() const
     {
-        return currentRenderTarget_ != nullptr ? currentRenderTarget_->Framebuffer() : backbuffer_;
+        if (currentRenderTarget_ != nullptr)
+            return currentRenderTarget_->Framebuffer();
+#ifndef CNA_SOFTWARE_2D_ONLY
+        if (currentCubeRenderTarget_ != nullptr)
+            return currentCubeRenderTarget_->Framebuffer();
+#endif
+        return backbuffer_;
     }
 
     void SoftwareRenderer::Clear(float r, float g, float b, float a)
@@ -47,7 +59,7 @@ namespace CNA::Internal::Renderers::Software
 
     void SoftwareRenderer::SetVirtualResolution(int width, int height)
     {
-        if (currentRenderTarget_ == nullptr)
+        if (currentRenderTarget_ == nullptr && currentCubeRenderTarget_ == nullptr)
             backbuffer_.Resize(width, height);
         virtualWidth_ = width;
         virtualHeight_ = height;
@@ -151,9 +163,36 @@ namespace CNA::Internal::Renderers::Software
     {
         if (currentRenderTarget_ != nullptr)
             currentRenderTarget_->UnbindAsRenderTarget();
+#ifndef CNA_SOFTWARE_2D_ONLY
+        if (currentCubeRenderTarget_ != nullptr)
+            currentCubeRenderTarget_->UnbindAsRenderTarget();
+#endif
+        currentCubeRenderTarget_ = nullptr;
         currentRenderTarget_ = static_cast<SoftwareRenderTargetRenderer*>(rt);
         if (currentRenderTarget_ != nullptr)
             currentRenderTarget_->BindAsRenderTarget();
+    }
+
+    void SoftwareRenderer::SetRenderTargetCubeFace(IRenderTargetCubeRenderer* rt, int face)
+    {
+#ifdef CNA_SOFTWARE_2D_ONLY
+        (void)rt;
+        (void)face;
+        throw std::runtime_error(
+            "Software's GDI 2D compilation unit does not support RenderTargetCube.");
+#else
+        if (currentRenderTarget_ != nullptr)
+            currentRenderTarget_->UnbindAsRenderTarget();
+        if (currentCubeRenderTarget_ != nullptr)
+            currentCubeRenderTarget_->UnbindAsRenderTarget();
+        currentRenderTarget_ = nullptr;
+        currentCubeRenderTarget_ = dynamic_cast<SoftwareRenderTargetCubeRenderer*>(rt);
+        if (rt != nullptr && currentCubeRenderTarget_ == nullptr)
+            throw std::runtime_error(
+                "SoftwareRenderer::SetRenderTargetCubeFace: incompatible renderer resource.");
+        if (currentCubeRenderTarget_ != nullptr)
+            currentCubeRenderTarget_->BindAsRenderTargetFace(face);
+#endif
     }
 
     void SoftwareRenderer::SetRenderTargets(
@@ -168,8 +207,11 @@ namespace CNA::Internal::Renderers::Software
             throw std::runtime_error(
                 "SoftwareRenderer does not support multiple simultaneous render targets.");
         if (renderTargets[0].IsRenderTargetCubeFace())
-            throw std::runtime_error(
-                "SoftwareRenderer does not support RenderTargetCube face bindings.");
+        {
+            SetRenderTargetCubeFace(renderTargets[0].GetRenderTargetCube(),
+                                    renderTargets[0].GetCubeFace());
+            return;
+        }
         SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
     }
     void SoftwareRenderer::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
