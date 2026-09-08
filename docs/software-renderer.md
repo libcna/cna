@@ -30,6 +30,12 @@ compiled Direct3D 9 Effect Framework bytecode, while EasyGL does when built with
 excluded CNAEXT `ShaderEffect` API; `SOFTWARE-161` records the assessment and
 `SOFTWARE-162..165` the CPU shader-interpreter backlog.
 
+The same challenge also confirmed a renderer-wide public-API hole: CNA stores
+`GraphicsDevice.VertexTextures` and `VertexSamplerStates`, but no renderer contract consumes them.
+FNA applies those collections before drawing, and EasyGL currently rejects even compiled vertex
+shaders that declare samplers. `SOFTWARE-167` records the proof and `SOFTWARE-168` the shared
+binding work; Software execution additionally depends on the compiled-effect phases.
+
 ## What this renderer is for
 
 GPU-backed CNA renderers need a graphics context and normally a window or offscreen platform
@@ -153,6 +159,11 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   sampling. Software has no CPU vertex/pixel shader interpreter, advertises
   `CompiledEffects=false`, and rejects those same valid bytes. `SOFTWARE-162..165` is the phased
   implementation backlog; CNAEXT `ShaderEffect` is a separate excluded API.
+- **Public vertex-stage texture/sampler collections are inert renderer-wide** (`SOFTWARE-167`).
+  `GraphicsDevice.VertexTextures` and `VertexSamplerStates` have the correct public shape and
+  resource-disposal bookkeeping, but common code has no operation that publishes their contents
+  to any renderer. FNA does so on every dirty draw-state application. `SOFTWARE-168` owns the
+  shared binding contract; Software's actual vertex sampling also depends on `SOFTWARE-163/164`.
 - **Vertex input is declaration-driven.** `VertexElementUsage`/usage index selects attributes
   across one or multiple streams, and all 12 XNA `VertexElementFormat` values are decoded at their
   declared offsets. Reordered, padded, application-defined and non-canonical-stride layouts,
