@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "Microsoft/Phone/Notification/HttpNotificationChannel.hpp"
+#include "Microsoft/Phone/Notification/PushNotificationSender.hpp"
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -165,4 +166,78 @@ TEST(HttpNotificationChannelTest, ShellToastBindingIsRecorded)
     channel.BindToShellToast();
 
     EXPECT_TRUE(channel.getIsShellToastBoundProperty());
+}
+
+TEST(PushNotificationSenderTest, WhatTheSenderPostsIsWhatTheChannelReceives)
+{
+    // Both halves of the push path against each other: the sender a service uses, and the
+    // channel an application opens.
+    HttpNotificationChannel channel("SenderChannel", "TestService");
+    channel.Open();
+    ASSERT_NE(channel.getChannelUriProperty(), nullptr);
+
+    std::vector<std::string> received;
+    channel.HttpNotificationReceived += [&received](System::Object*,
+                                                    const HttpNotificationEventArgs& e) {
+        received.push_back(e.getBodyAsStringProperty());
+    };
+
+    Microsoft::Phone::Notification::RawPushNotificationMessage message(
+        Microsoft::Phone::Notification::MessageSendPriority::High);
+    const std::string payload = "<Message ContentType=\"GameState\" />";
+    message.RawData.assign(payload.begin(), payload.end());
+
+    ASSERT_TRUE(message.SendAsync(*channel.getChannelUriProperty()));
+
+    for (int attempt = 0; attempt < 50 && received.empty(); attempt++) {
+        channel.DispatchPendingNotificationsEXT();
+        if (received.empty()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+    }
+
+    ASSERT_EQ(received.size(), 1u);
+    EXPECT_EQ(received[0], payload);
+
+    channel.Close();
+}
+
+TEST(PushNotificationSenderTest, AToastCarriesItsTitleToTheReceiver)
+{
+    HttpNotificationChannel channel("ToastSenderChannel", "TestService");
+    channel.Open();
+    ASSERT_NE(channel.getChannelUriProperty(), nullptr);
+
+    std::vector<std::string> received;
+    channel.HttpNotificationReceived += [&received](System::Object*,
+                                                    const HttpNotificationEventArgs& e) {
+        received.push_back(e.getBodyAsStringProperty());
+    };
+
+    Microsoft::Phone::Notification::ToastPushNotificationMessage toast(
+        Microsoft::Phone::Notification::MessageSendPriority::High);
+    toast.Title = "Yacht - Network player made his step";
+
+    ASSERT_TRUE(toast.SendAsync(*channel.getChannelUriProperty()));
+
+    for (int attempt = 0; attempt < 50 && received.empty(); attempt++) {
+        channel.DispatchPendingNotificationsEXT();
+        if (received.empty()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+    }
+
+    ASSERT_EQ(received.size(), 1u);
+    EXPECT_NE(received[0].find("Yacht - Network player made his step"), std::string::npos);
+
+    channel.Close();
+}
+
+TEST(PushNotificationSenderTest, SendingToAnAddressNobodyIsListeningOnFails)
+{
+    Microsoft::Phone::Notification::RawPushNotificationMessage message;
+    message.RawData = {1, 2, 3};
+
+    // Port 1 on loopback: nothing binds it, so the connection is refused rather than hanging.
+    EXPECT_FALSE(message.SendAsync(System::Uri("http://127.0.0.1:1/nothing/")));
 }
