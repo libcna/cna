@@ -4,6 +4,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
@@ -65,6 +66,9 @@ namespace Microsoft::Xna::Framework::Graphics
         , depth_(depth)
         , renderer_(nullptr)
     {
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(width, "width");
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(height, "height");
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(depth, "depth");
         // REMED-CONTENT-004: renderers without real volume storage leave CreateTexture3D() at its
         // null shared default. Previously that let every subsequent SetData()/GetData() call
         // silently no-op, so the capability is checked before renderer creation instead.

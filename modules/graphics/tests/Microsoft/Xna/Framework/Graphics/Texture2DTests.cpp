@@ -37,6 +37,7 @@ using namespace CNA::Testing::Renderers;
 #include "System/IO/MemoryStream.hpp"
 #include "System/Environment.hpp"
 #include "System/NotSupportedException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 using Microsoft::Xna::Framework::Color;
@@ -326,6 +327,18 @@ class LevelCountTest : public ::testing::Test
 protected:
     GraphicsDevice gd;
 };
+
+TEST_F(LevelCountTest, ConstructorsRejectNonPositiveDimensionsBeforeRendererAllocation)
+{
+    EXPECT_THROW((void)Texture2D(gd, 0, 1), System::ArgumentOutOfRangeException);
+    EXPECT_THROW((void)Texture2D(gd, -1, 1), System::ArgumentOutOfRangeException);
+    EXPECT_THROW((void)Texture2D(gd, 1, 0), System::ArgumentOutOfRangeException);
+    EXPECT_THROW((void)Texture2D(gd, 1, -1), System::ArgumentOutOfRangeException);
+    EXPECT_THROW((void)Texture2D(gd, 0, 1, true, SurfaceFormat::Color),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW((void)Texture2D(gd, 1, 0, true, SurfaceFormat::Color),
+                 System::ArgumentOutOfRangeException);
+}
 
 TEST_F(LevelCountTest, SimpleTwoArgConstructorIsAlwaysOne)
 {

@@ -39,6 +39,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
 #include "System/NotSupportedException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 using Microsoft::Xna::Framework::Color;
@@ -91,6 +92,22 @@ protected:
 
     GraphicsDevice gd;
 };
+
+TEST_F(Texture3DTest, ConstructorRejectsEveryNonPositiveDimensionBeforeRendererAllocation)
+{
+    EXPECT_THROW((void)Texture3D(gd, 0, 1, 1, false, SurfaceFormat::Color),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW((void)Texture3D(gd, -1, 1, 1, true, SurfaceFormat::Color),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW((void)Texture3D(gd, 1, 0, 1, false, SurfaceFormat::Color),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW((void)Texture3D(gd, 1, -1, 1, true, SurfaceFormat::Color),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW((void)Texture3D(gd, 1, 1, 0, false, SurfaceFormat::Color),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW((void)Texture3D(gd, 1, 1, -1, true, SurfaceFormat::Color),
+                 System::ArgumentOutOfRangeException);
+}
 
 // Deliberately NOT a Texture3DTest fixture (that fixture skips on an unsupported renderer) --
 // this is the mirror-image check, verifying the new throw behavior on such a renderer.

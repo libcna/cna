@@ -17,6 +17,7 @@
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Alpha8.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgr565.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgra5551.hpp"
@@ -55,6 +56,8 @@ namespace Microsoft::Xna::Framework::Graphics
     // profile's own limit, which is what XNA's portability guarantee means.
     static void ValidateTextureSizeForProfileEXT(const GraphicsDevice& device, int w, int h)
     {
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(w, "width");
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(h, "height");
         const int profile = static_cast<int>(device.getGraphicsProfileProperty());
         const int maxSize = device.GetRenderer().GetMaxTextureSizeForProfileEXT(profile);
         if (w > maxSize || h > maxSize)

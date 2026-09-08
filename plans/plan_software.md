@@ -1,6 +1,6 @@
 # Software (CPU) Rasterizer Graphics Backend — Implementation Plan
 
-> **Current status (Software <-> EasyGL XNA/Core parity campaign, 2026-09-07..08): STOCK-EFFECT PARITY; CLASSIC COMPILED-EFFECT GAP CONFIRMED.**
+> **Current status (Software <-> EasyGL XNA/Core parity campaign, 2026-09-07..08): HIGH PARITY; SPECIFIC CLASSIC-XNA GAPS REMAIN.**
 > The original `SOFTWARE-1..86` rows below remain the historical record of the deliberately small
 > v1 renderer. They are not the current completion boundary. The authorized target is now an
 > independent, deterministic CPU implementation of the classic XNA 4.0/core graphics behavior on
@@ -18,7 +18,9 @@
 > orchestration all have renderer-independent proof. The final adversarial challenge nevertheless
 > disproved the broader parity claim: opt-in EasyGL executes classic XNA Direct3D 9 Effect
 > Framework bytecode while Software rejects it. That is distinct from deferred CNAEXT
-> `ShaderEffect` support and is now an explicit multi-phase backlog. Deferred CNAEXT-modern and
+> `ShaderEffect` support and is now an explicit multi-phase backlog. The same challenge also found
+> inert public vertex-stage texture/sampler collections and the missing 14 non-Color HiDef
+> `Texture3D` formats. Deferred CNAEXT-modern and
 > non-applicable physical GPU/window behavior remain separately classified.
 > The executable task table is below; the evidence ledger is
 > `docs/software-easygl-parity-ledger.md`.
@@ -181,13 +183,16 @@ its own tests and plan evidence in the same commit.
 | SOFTWARE-169 | Match XNA/FNA's opaque-factor blend-enable rule | ✅ | Completed 2026-09-08. The adversarial property-combination pass found that Software's fast path required One/Zero **and Add** before bypassing blending, while both FNA3D's OpenGL and D3D11 drivers—and EasyGL—derive BlendEnable from the four factors alone. Thus a One/Zero `BlendState` with `ReverseSubtract` or `Min` incorrectly produced zero RGB/alpha on Software instead of the unblended source. The shared matrix now varies all five functions under opaque factors and checks both RGB and alpha: it exposed four pre-fix Software failures and now passes 45/45 on Software and Mesa desktop EasyGL. Software's reference-compatible bypass now deliberately ignores the function whenever both channels use One/Zero. |
 | SOFTWARE-170 | Ignore blend factors for `BlendFunction.Min` and `Max` | ✅ | Completed 2026-09-08. Software multiplied source and destination by their selected factors before every operation, but D3D9/11 and OpenGL MIN/MAX compare the raw components and ignore both factors; FNA3D maps XNA's functions directly to those operations. New zero-factor cases made the distinction deterministic and failed 4/49 before repair (Min/Max independently for RGB and alpha). The CPU blend stage now bypasses factor evaluation for those two functions. The expanded shared matrix passes 49/49 on Software and Mesa desktop EasyGL, while the other 35 factor/function cases and opaque-factor quirk remain covered in the same draw path. |
 | SOFTWARE-171 | Accept XNA's signed indexed `baseVertex` contract | ✅ | Completed 2026-09-08. The recovered Microsoft XNA 4.0 `GraphicsDevice` passes `baseVertex` unchanged to Direct3D 9 as a signed value and documents it as the offset added to each index; FNA does the same. CNA instead rejected every negative value in both indexed entry points and Software repeated the rejection, even when `baseVertex + minVertexIndex` and every decoded address were valid. Both public paths now validate signed effective starts in 64-bit arithmetic; Software separately validates every decoded index plus base before reading CPU memory. The ordinary regression uses indices 3..5 with base -3 to select a green triangle instead of a same-position red decoy, and the instanced regression uses indices 12..20 with base -12 to select slots 0..2 instead of 4..6. Both pass on Software and Mesa desktop EasyGL; the surrounding range suites pass 22/24 on Software (two intentional foreign-renderer skips) and 35/40 on EasyGL (five existing renderer-specific skips), while underflowing ranges and decoded addresses remain rejected. |
+| SOFTWARE-172 | Reject non-positive texture and render-target dimensions before native allocation | ✅ | Completed 2026-09-08. Recovered Microsoft XNA 4.0 checks every `Texture2D` width/height, `TextureCube` size and `Texture3D` width/height/depth for values less than one and throws `ArgumentOutOfRangeException` before profile/native allocation. CNA instead delegated the question to each renderer: Software produced renderer-specific standard exceptions and EasyGL could issue invalid zero-sized GL allocation calls. The shared constructors now perform the XNA check first. `RenderTarget2D` and `RenderTargetCube` repeat it in their pre-base allocation helpers because C++ evaluates those native-factory arguments before the `Texture2D`/`TextureCube` base constructor can run. Five focused tests cover zero and negative values across both overloads and all five resource kinds; they pass 5/5 on Software and OPENGLES3 EasyGL. |
+| SOFTWARE-173 | Implement all XNA HiDef `Texture3D` storage and typed transfer formats | ⬜ | The adversarial texture audit proved the public constructor currently accepts only `SurfaceFormat::Color`: `Texture::ValidateFormat` rejects the other 14 formats before either Software or EasyGL allocates them, and `Texture3D` exposes only `Color*` SetData/GetData overloads. Recovered XNA 4.0 and FNA's HiDef capability table allow `Bgr565`, `Bgra5551`, `Bgra4444`, `Rgba1010102`, `Rg32`, `Rgba64`, `Alpha8`, `Single`, `Vector2`, `Vector4`, `HalfSingle`, `HalfVector2`, `HalfVector4` and `HdrBlendable` in addition to Color. Add profile-aware validation, exact typed full/window/box/mip transfers and declared-format storage in Software and EasyGL, reusing the completed TextureCube serialization/format mapping rather than silently widening through RGBA8. Compiled-effect sampling remains SOFTWARE-164. |
 
 ### Current dependency order
 
-Tasks through `SOFTWARE-161` plus `SOFTWARE-166/167/169/170/171` are complete except for the intentionally
+Tasks through `SOFTWARE-161` plus `SOFTWARE-166/167/169/170/171/172` are complete except for the intentionally
 historical `SOFTWARE-85/86` and the independently blocked `SOFTWARE-100`. `SOFTWARE-162..165` are
 the dependency-ordered compiled-effect implementation backlog; `SOFTWARE-168` is the associated
-renderer-wide vertex-stage binding backlog. `SOFTWARE-100` remains yellow for the previously recorded
+renderer-wide vertex-stage binding backlog, and `SOFTWARE-173` is the newly proven classic volume-
+format backlog. `SOFTWARE-100` remains yellow for the previously recorded
 repository-wide blockers; that status does not excuse any renderer gap found here.
 
 ---

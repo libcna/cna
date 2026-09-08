@@ -3,6 +3,7 @@
 
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 
@@ -41,6 +42,11 @@ namespace Microsoft::Xna::Framework::Graphics
         GraphicsDevice& device, int width, int height, SurfaceFormat format,
         DepthFormat depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
+        // This helper is evaluated before Texture2D's base constructor. Validate here as well so
+        // an invalid render target cannot reach a native allocation or replace XNA's argument
+        // exception with a renderer-specific failure.
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(width, "width");
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(height, "height");
         // plans/plan_runtimerenderer.md design decision 9: renderability is the renderer's own question.
         // A renderer that answers Defer accepts the framework's rule, which is what every renderer
         // except SKIA did when this was an #ifdef block.

@@ -46,6 +46,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "System/FormatException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #include "System/IO/MemoryStream.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
@@ -172,6 +173,14 @@ class TextureCubeTest : public ::testing::Test
 protected:
     GraphicsDevice gd;
 };
+
+TEST_F(TextureCubeTest, ConstructorRejectsNonPositiveSizeBeforeRendererAllocation)
+{
+    EXPECT_THROW((void)TextureCube(gd, 0, false, SurfaceFormat::Color),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW((void)TextureCube(gd, -1, true, SurfaceFormat::Color),
+                 System::ArgumentOutOfRangeException);
+}
 
 TEST_F(TextureCubeTest, ConstructorSetsSize)
 {

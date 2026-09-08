@@ -175,9 +175,11 @@ TEST(RenderTargetUsageTest, DefaultIsDiscardContents)
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "System/NotSupportedException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 namespace
@@ -186,6 +188,7 @@ namespace
 
     using Microsoft::Xna::Framework::Color;
     using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+    using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
     using Microsoft::Xna::Framework::Graphics::RenderTargetCube;
     using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 
@@ -220,6 +223,30 @@ namespace
         return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
                                Software, Magnum, OpenGL4, Wicked, Igl);
     }
+}
+
+TEST(RenderTargetDimensionValidationTest, RenderTarget2DRejectsNonPositiveDimensionsBeforeAllocation)
+{
+    GraphicsDevice gd;
+    EXPECT_THROW((void)RenderTarget2D(gd, 0, 1), System::ArgumentOutOfRangeException);
+    EXPECT_THROW((void)RenderTarget2D(gd, 1, 0), System::ArgumentOutOfRangeException);
+    EXPECT_THROW((void)RenderTarget2D(
+                     gd, -1, 1, true, SurfaceFormat::Color, DepthFormat::None, 4,
+                     RenderTargetUsage::PreserveContents),
+                 System::ArgumentOutOfRangeException);
+}
+
+TEST(RenderTargetDimensionValidationTest, RenderTargetCubeRejectsNonPositiveSizeBeforeAllocation)
+{
+    GraphicsDevice gd;
+    EXPECT_THROW((void)RenderTargetCube(
+                     gd, 0, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                     RenderTargetUsage::DiscardContents),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW((void)RenderTargetCube(
+                     gd, -1, true, SurfaceFormat::Color, DepthFormat::None, 4,
+                     RenderTargetUsage::PreserveContents),
+                 System::ArgumentOutOfRangeException);
 }
 
 TEST(RenderTargetCubeSetDataContractTest, StoresTheFaceOrRefusesButNeverSilentlyDiscardsIt)

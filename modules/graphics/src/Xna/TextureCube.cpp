@@ -6,6 +6,7 @@
 #include "CNA/Internal/Graphics/DdsCubeDecoder.hpp"
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
 #include "System/IO/Stream.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #include "System/FormatException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
@@ -42,6 +43,7 @@ namespace Microsoft::Xna::Framework::Graphics
     // no ceiling, which is exactly what they did when this was an #ifdef block.
     static void ValidateCubeSizeForProfileEXT(const GraphicsDevice& device, int size)
     {
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(size, "size");
         const int profile = static_cast<int>(device.getGraphicsProfileProperty());
         const int maxSize = device.GetRenderer().GetMaxCubeSizeForProfileEXT(profile);
         if (size > maxSize)
