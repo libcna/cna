@@ -718,11 +718,15 @@ namespace Microsoft::Xna::Framework::Graphics
         // FNA's own raw w*h*GetFormatSizeEXT/GetBlockSizeSquaredEXT validation formula, which
         // under-counts the true padded byte requirement for a rectangle whose edge falls inside
         // a partial NPOT tail block; every byte count below uses the exact padded block count.
-        const bool touchesRightEdge = x + w == levelW;
-        const bool touchesBottomEdge = y + h == levelH;
         if (x < 0 || y < 0 || w <= 0 || h <= 0
-            || w > levelW || h > levelH || x > levelW - w || y > levelH - h
-            || (x % 4) != 0 || (y % 4) != 0
+            || w > levelW || h > levelH || x > levelW - w || y > levelH - h)
+        {
+            throw std::out_of_range(
+                "Texture2D::SetData: compressed rectangle must be block-aligned and within bounds");
+        }
+        const bool touchesRightEdge = x == levelW - w;
+        const bool touchesBottomEdge = y == levelH - h;
+        if ((x % 4) != 0 || (y % 4) != 0
             || ((w % 4) != 0 && !touchesRightEdge)
             || ((h % 4) != 0 && !touchesBottomEdge))
         {
@@ -1664,11 +1668,15 @@ namespace Microsoft::Xna::Framework::Graphics
             w = rect->Width; h = rect->Height;
         }
 
-        const bool touchesRightEdge = x + w == levelW;
-        const bool touchesBottomEdge = y + h == levelH;
         if (x < 0 || y < 0 || w <= 0 || h <= 0
-            || w > levelW || h > levelH || x > levelW - w || y > levelH - h
-            || (x % 4) != 0 || (y % 4) != 0
+            || w > levelW || h > levelH || x > levelW - w || y > levelH - h)
+        {
+            throw std::out_of_range(
+                "Texture2D::GetData: compressed rectangle must be block-aligned and within bounds");
+        }
+        const bool touchesRightEdge = x == levelW - w;
+        const bool touchesBottomEdge = y == levelH - h;
+        if ((x % 4) != 0 || (y % 4) != 0
             || ((w % 4) != 0 && !touchesRightEdge)
             || ((h % 4) != 0 && !touchesBottomEdge))
         {

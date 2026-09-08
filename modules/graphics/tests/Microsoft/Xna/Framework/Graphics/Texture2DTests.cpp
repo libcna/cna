@@ -666,6 +666,23 @@ TEST_F(UnsupportedFormatConstructionTest, DxtFullPartialMipAndNpotTailTransfersA
     ExpectDxtTransferContract(gd, SurfaceFormat::Dxt5);
 }
 
+TEST_F(UnsupportedFormatConstructionTest, CompressedRegionEndpointOverflowThrowsCleanly)
+{
+    if (!gd.GetRenderer().IsCompressedTransferFormatEXT(
+            static_cast<int>(SurfaceFormat::Dxt1)))
+        GTEST_SKIP() << "The active renderer does not preserve DXT texture blocks";
+
+    Texture2D texture(gd, 4, 4, false, SurfaceFormat::Dxt1);
+    std::array<std::uint8_t, 8> bytes{};
+    const Rectangle overflowingX(std::numeric_limits<int>::max(), 0, 4, 4);
+    const Rectangle overflowingY(0, std::numeric_limits<int>::max(), 4, 4);
+
+    EXPECT_THROW(texture.SetData(0, &overflowingX, bytes.data(), 0, 8), std::out_of_range);
+    EXPECT_THROW(texture.SetData(0, &overflowingY, bytes.data(), 0, 8), std::out_of_range);
+    EXPECT_THROW(texture.GetData(0, &overflowingX, bytes.data(), 0, 8), std::out_of_range);
+    EXPECT_THROW(texture.GetData(0, &overflowingY, bytes.data(), 0, 8), std::out_of_range);
+}
+
 TEST_F(UnsupportedFormatConstructionTest, SingleThrows)
 {
     // REMED-GFX-242: this fixture's device is GraphicsProfile.Reach, which excludes this

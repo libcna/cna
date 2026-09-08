@@ -30,6 +30,7 @@
 
 // Lets CNA_RENDERER_IS name identities bare, matching the compile-time guards it replaced.
 using namespace CNA::Testing::Renderers;
+#include <array>
 #include <cstdint>
 #include <iterator>
 #include <limits>
@@ -444,6 +445,23 @@ TEST_F(TextureCubeTest, SetDataCompressedBytesUploadsRequestedFaceMip)
                                 pixels.data(), 0, 16));
     for (const Color& pixel : pixels)
         EXPECT_EQ(pixel, Color(0, 255, 0, 255));
+}
+
+TEST_F(TextureCubeTest, SetDataCompressedRegionEndpointOverflowThrowsCleanly)
+{
+    if (!gd.GetRenderer().IsCompressedCubeTransferFormatEXT(
+            static_cast<int>(SurfaceFormat::Dxt1)))
+        GTEST_SKIP() << "The active renderer has no compressed cube transfer route.";
+
+    TextureCube texture(gd, 4, false, SurfaceFormat::Dxt1);
+    std::array<std::uint8_t, 8> bytes{};
+    const Rectangle overflowingX(std::numeric_limits<int>::max(), 0, 4, 4);
+    const Rectangle overflowingY(0, std::numeric_limits<int>::max(), 4, 4);
+
+    EXPECT_THROW(texture.SetData(CubeMapFace::PositiveX, 0, &overflowingX,
+                                 bytes.data(), 0, 8), std::out_of_range);
+    EXPECT_THROW(texture.SetData(CubeMapFace::PositiveX, 0, &overflowingY,
+                                 bytes.data(), 0, 8), std::out_of_range);
 }
 
 TEST_F(TextureCubeTest, SetDataRectZeroElementCountThrowsOutOfRange)

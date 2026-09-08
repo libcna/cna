@@ -405,11 +405,15 @@ namespace Microsoft::Xna::Framework::Graphics
         const int levelSize = mipDim(size_, level);
         int x = 0, y = 0, w = levelSize, h = levelSize;
         if (rect) { x = rect->X; y = rect->Y; w = rect->Width; h = rect->Height; }
-        const bool touchesRightEdge = x + w == levelSize;
-        const bool touchesBottomEdge = y + h == levelSize;
         if (x < 0 || y < 0 || w <= 0 || h <= 0
-            || w > levelSize || h > levelSize || x > levelSize - w || y > levelSize - h
-            || (x % 4) != 0 || (y % 4) != 0
+            || w > levelSize || h > levelSize || x > levelSize - w || y > levelSize - h)
+        {
+            throw std::out_of_range(
+                "TextureCube::SetData: compressed rectangle must be block-aligned and within bounds");
+        }
+        const bool touchesRightEdge = x == levelSize - w;
+        const bool touchesBottomEdge = y == levelSize - h;
+        if ((x % 4) != 0 || (y % 4) != 0
             || ((w % 4) != 0 && !touchesRightEdge)
             || ((h % 4) != 0 && !touchesBottomEdge))
         {
