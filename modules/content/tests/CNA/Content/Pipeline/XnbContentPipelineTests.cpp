@@ -48,10 +48,17 @@
 #include "Microsoft/Xna/Framework/Graphics/ModelBone.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Media/Song.hpp"
 #include "Microsoft/Xna/Framework/Media/Video/Video.hpp"
 
@@ -60,13 +67,21 @@ namespace Cnb = CNA::Content::Cnb;
 namespace Xnb = CNA::Internal::Xnb;
 
 using Microsoft::Xna::Framework::Color;
+using Microsoft::Xna::Framework::Rectangle;
 using Microsoft::Xna::Framework::Content::ContentManager;
 using Microsoft::Xna::Framework::Curve;
 using Microsoft::Xna::Framework::Audio::SoundEffect;
+using Microsoft::Xna::Framework::Graphics::BlendState;
+using Microsoft::Xna::Framework::Graphics::DepthFormat;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::BasicEffect;
 using Microsoft::Xna::Framework::Graphics::Model;
+using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
+using Microsoft::Xna::Framework::Graphics::RenderTargetUsage;
+using Microsoft::Xna::Framework::Graphics::SpriteBatch;
 using Microsoft::Xna::Framework::Graphics::SpriteFont;
+using Microsoft::Xna::Framework::Graphics::SpriteSortMode;
+using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 using Microsoft::Xna::Framework::Media::Song;
 using Microsoft::Xna::Framework::Media::Video;
@@ -769,13 +784,34 @@ TEST(XnbContentPipelineTest, SpriteFontRuntimeXnbAndTranscodedCnbHaveEquivalentS
     EXPECT_EQ(b.getLineSpacingProperty(), a.getLineSpacingProperty());
     EXPECT_FLOAT_EQ(b.getSpacingProperty(), a.getSpacingProperty());
     EXPECT_EQ(b.getDefaultCharacterProperty(), a.getDefaultCharacterProperty());
-    std::vector<Color> atlasA(
-        static_cast<std::size_t>(a.getTextureEXT().getWidthProperty()) *
-        a.getTextureEXT().getHeightProperty());
-    std::vector<Color> atlasB(atlasA.size());
-    a.getTextureEXT().GetData(atlasA.data(), static_cast<int>(atlasA.size()));
-    b.getTextureEXT().GetData(atlasB.data(), static_cast<int>(atlasB.size()));
-    EXPECT_EQ(atlasB, atlasA);
+    const int atlasWidth = a.getTextureEXT().getWidthProperty();
+    const int atlasHeight = a.getTextureEXT().getHeightProperty();
+    ASSERT_EQ(b.getTextureEXT().getWidthProperty(), atlasWidth);
+    ASSERT_EQ(b.getTextureEXT().getHeightProperty(), atlasHeight);
+
+    // The source fixture deliberately carries a DXT3 atlas while the frozen CNB schema stores
+    // the transcoded atlas as Color. A Color GetData call is therefore not a valid equivalence
+    // oracle: it asks two resources with different public storage layouts for the same typed raw
+    // transfer. Compare their observable texture semantics through the renderer instead.
+    auto renderAtlas = [&](const Texture2D& atlas)
+    {
+        RenderTarget2D target(
+            device, atlasWidth, atlasHeight, false, SurfaceFormat::Color,
+            DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
+        SpriteBatch batch(device);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Transparent);
+        batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque);
+        batch.Draw(atlas, Rectangle(0, 0, atlasWidth, atlasHeight), Color::White);
+        batch.End();
+        device.SetRenderTarget(nullptr);
+
+        std::vector<Color> pixels(static_cast<std::size_t>(atlasWidth) * atlasHeight);
+        target.GetData(pixels.data(), static_cast<int>(pixels.size()));
+        return pixels;
+    };
+
+    EXPECT_EQ(renderAtlas(b.getTextureEXT()), renderAtlas(a.getTextureEXT()));
 }
 
 TEST(XnbContentPipelineTest, SoundEffectCodecMatrixPreservesDecodedPcmAndMetadata)
