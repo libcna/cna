@@ -127,14 +127,15 @@ using Microsoft::Xna::Framework::Graphics::Viewport;
 // REMED-GFX-123: the binding-offset/InstanceFrequency oracle is asserted only on the renderers whose
 // instanced path has actually been corrected to consume VertexBufferBinding.VertexOffset and
 // InstanceFrequency -- EasyGL (REMED-GFX-122), D3D11/D3D12 (REMED-GFX-123), Vulkan, bgfx and
-// WebGPU (REMED-GFX-211/213). D3D9 runs the index-range contract above and nothing here; whether
+// WebGPU (REMED-GFX-211/213), and Software (SOFTWARE-129). D3D9 runs the index-range contract above
+// and nothing here; whether
 // it honours the binding offsets is a separate question that belongs to its own measurement, not
 // to this file's compiled expectations, and no D3D display has been reachable to take it.
 /// plans/plan_runtimerenderer.md RTR-P9-5: the binding-offset oracle set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool InstancedBindingOffsetOracle()
 {
     return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
-                           DirectX11, DirectX12, Vulkan, Bgfx, WebGPU);
+                           DirectX11, DirectX12, Vulkan, Bgfx, WebGPU, Software);
 }
 
 namespace

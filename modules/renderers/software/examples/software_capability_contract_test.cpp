@@ -63,8 +63,8 @@ namespace
                   "CustomEffects is false because supplied shader source is not executed");
             Check(device.SupportsCapability(CNA::GraphicsCapability::Texture3D),
                   "Texture3D is advertised with exact CPU volume storage");
-            Check(!device.SupportsCapability(CNA::GraphicsCapability::Instancing),
-                  "Instancing is false while its draw path is absent");
+            Check(device.SupportsCapability(CNA::GraphicsCapability::Instancing),
+                  "Instancing is true with the CPU instance-frequency draw path");
 
             OcclusionQuery query(device);
             query.Begin();

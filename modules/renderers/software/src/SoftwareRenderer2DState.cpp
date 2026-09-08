@@ -144,10 +144,10 @@ namespace CNA::Internal::Renderers::Software
                 // Clear and resolve/mip finalization visit every attachment.
                 return true;
             case CNA::GraphicsCapability::Instancing:
-                // Not implemented: this renderer does not override DrawInstancedPrimitivesEx, so
-                // an instanced draw is the shared base-class refusal -- reported honestly instead
-                // of inherited as the blanket true below.
-                return false;
+                // SOFTWARE-129: every instance is rasterized on the CPU from its independently
+                // frequency-stepped matrix record, through the same declaration/effect path as an
+                // ordinary indexed draw.
+                return true;
             default:
                 return true;
         }

@@ -148,18 +148,18 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 // The renderers whose stock instanced path actually rasterizes and whose RenderTarget2D::GetData
 // reads the result back -- REMED-GFX-118's own permanent suite set. A renderer outside it has no
 // instanced draw implementation at all (`IGraphicsRenderer::DrawInstancedPrimitivesEx`'s default
-// throws), which is a pre-existing capability boundary this task neither creates nor closes; the
-// public transport group below still runs there and still asserts the shared validation contract.
+// throws), which remains a capability boundary for any renderer outside this set. SOFTWARE-129
+// adds Software only after its independent CPU route passes the complete shared oracle.
 /// plans/plan_runtimerenderer.md RTR-P9-5: the same set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool MultiStreamOracle()
 {
     return CNA_RENDERER_IS(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan,
-                           DirectX9, DirectX11, DirectX12, Magnum);
+                           DirectX9, DirectX11, DirectX12, Magnum, Software);
 }
 
 // The renderers whose instanced path was corrected to consume VertexBufferBinding.VertexOffset AND
 // InstanceFrequency -- EasyGL (REMED-GFX-122), D3D11/D3D12 (REMED-GFX-123), Vulkan, bgfx and
-// WebGPU (REMED-GFX-211/213). InstancedDrawRangeTests.cpp uses exactly this set for the same
+// WebGPU (REMED-GFX-211/213), and Software (SOFTWARE-129). InstancedDrawRangeTests.cpp uses this set for the same
 // reason.
 //
 // This is now every renderer that rasterizes an instanced draw at all EXCEPT D3D9, so the triage
@@ -173,7 +173,8 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// plans/plan_runtimerenderer.md RTR-P9-5: the same set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool BindingOffsetOracle()
 {
-    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX11, DirectX12, Vulkan, Bgfx, WebGPU, Magnum);
+    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX11, DirectX12,
+                           Vulkan, Bgfx, WebGPU, Magnum, Software);
 }
 
 namespace

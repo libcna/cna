@@ -128,7 +128,14 @@ rather than always passing.
   declared offsets. Reordered, padded, application-defined and non-canonical-stride layouts,
   binding offsets and 16/32-bit indexed user draws are covered by deterministic pixel tests. Only
   CNAEXT's old empty-declaration `VertexBuffer(device,count)` convenience path retains canonical
-  stride inference for compatibility. Hardware instancing is still pending.
+  stride inference for compatibility.
+- **Classic indexed instancing runs entirely on the CPU** (`SOFTWARE-129`). Per-instance
+  declarations concatenate into the same four-column stock-effect matrix contract as EasyGL. Each
+  stream advances from its own binding offset by `floor(instanceIndex / InstanceFrequency)` while
+  base vertex affects only per-vertex streams. Split geometry/matrix streams, both index widths,
+  arbitrary positive frequencies, dynamic updates, queued lifetime and ordinary/instanced state
+  transitions share one renderer-neutral public test corpus. This is deterministic CPU expansion,
+  not delegation to EasyGL or a GPU.
 - **Static and dynamic vertex/index buffers share EasyGL's public contract** (`SOFTWARE-109`).
   Source-window uploads, `None`/`Discard`/`NoOverwrite`, repeated mutation, typed readback,
   `BufferUsage`, missing bindings, disposed-resource guards and draw-range validation pass the same

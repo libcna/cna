@@ -5,6 +5,7 @@
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <algorithm>
@@ -2250,6 +2251,7 @@ namespace CNA::Internal::Renderers::Software
             const GpuDrawParams* params = nullptr;
             const SoftwareVertexBufferRenderer* fallbackBuffer = nullptr;
             std::array<const std::uint8_t*, kMaxVertexStreams> recordBase{};
+            bool useInstanceStreams = false;
 
             [[nodiscard]] const std::uint8_t* At(int combinedByteOffset) const
             {
@@ -2377,6 +2379,46 @@ namespace CNA::Internal::Renderers::Software
                 return {};
             }
 
+            [[nodiscard]] bool ReadInstanceMatrix(float matrix[16]) const
+            {
+                if (!useInstanceStreams)
+                    return false;
+                // OpenGL's disabled/default generic vertex attribute is (0,0,0,1), which is also
+                // what EasyGL's stock instancing locations retain when a declaration supplies
+                // fewer than four columns. The public parity fixtures use a complete matrix, but
+                // preserving the native default makes malformed/short declarations deterministic.
+                std::fill(matrix, matrix + 16, 0.0f);
+                matrix[3] = matrix[7] = matrix[11] = matrix[15] = 1.0f;
+
+                int column = 0;
+                bool found = false;
+                for (int i = 0; i < params->vertexStreamCount && column < 4; ++i)
+                {
+                    const auto& stream = params->vertexStreams[static_cast<std::size_t>(i)];
+                    if (stream.instanceFrequency <= 0)
+                        continue;
+                    const auto* buffer =
+                        static_cast<const SoftwareVertexBufferRenderer*>(stream.buffer);
+                    for (const auto& element : buffer->Declaration().GetElements())
+                    {
+                        if (column >= 4)
+                            break;
+                        const Attribute attribute = Decode(
+                            recordBase[static_cast<std::size_t>(i)] +
+                                element.getOffsetProperty(),
+                            element.getVertexElementFormatProperty());
+                        for (int component = 0; component < 4; ++component)
+                        {
+                            matrix[static_cast<std::size_t>(column * 4 + component)] =
+                                attribute.value[static_cast<std::size_t>(component)];
+                        }
+                        ++column;
+                        found = true;
+                    }
+                }
+                return found;
+            }
+
             [[nodiscard]] bool HasDeclaration() const
             {
                 if (params->vertexStreamCount == 0)
@@ -2435,6 +2477,14 @@ namespace CNA::Internal::Renderers::Software
                 std::memcpy(&normal, raw.At(12), sizeof(Vector3));
                 normal = ApplyAffineColumnMajor(blended, normal, 0.0f);
                 haveNormal = true;
+            }
+
+            float instanceMatrix[16];
+            if (raw.ReadInstanceMatrix(instanceMatrix))
+            {
+                position = ApplyAffineColumnMajor(instanceMatrix, position, 1.0f);
+                if (haveNormal)
+                    normal = ApplyAffineColumnMajor(instanceMatrix, normal, 0.0f);
             }
 
             const Vector4 clip = Vector4::Transform(position, combined);
@@ -2579,6 +2629,14 @@ namespace CNA::Internal::Renderers::Software
                 }
                 position = ApplyAffineColumnMajor(blended, position, 1.0f);
                 normal = ApplyAffineColumnMajor(blended, normal, 0.0f);
+            }
+
+            float instanceMatrix[16];
+            if (raw.ReadInstanceMatrix(instanceMatrix))
+            {
+                position = ApplyAffineColumnMajor(instanceMatrix, position, 1.0f);
+                if (haveNormal)
+                    normal = ApplyAffineColumnMajor(instanceMatrix, normal, 0.0f);
             }
 
             const Vector4 clip = Vector4::Transform(position, combined);
@@ -4311,10 +4369,20 @@ namespace CNA::Internal::Renderers::Software
         }
     }
 
-    void SoftwareRenderer::DrawIndexedPrimitivesEx(const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,
-                                                          const Matrix& world, const Matrix& view,
-                                                          const Matrix& projection, PrimitiveType primitive,
-                                                          int primitiveCount, const GpuDrawParams& params)
+    void SoftwareRenderer::DrawIndexedPrimitivesEx(
+        const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,
+        const Matrix& world, const Matrix& view, const Matrix& projection,
+        PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
+    {
+        DrawIndexedPrimitivesInternal(
+            vb, ib, world, view, projection, primitive, primitiveCount, params, false);
+    }
+
+    void SoftwareRenderer::DrawIndexedPrimitivesInternal(
+        const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,
+        const Matrix& world, const Matrix& view, const Matrix& projection,
+        PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
+        bool applyInstanceStreams)
     {
         if (primitiveCount <= 0)
             throw std::runtime_error("SoftwareRenderer::DrawIndexedPrimitivesEx: primitiveCount must be > 0");
@@ -4389,6 +4457,7 @@ namespace CNA::Internal::Renderers::Software
             CombinedVertexReader reader;
             reader.params = &params;
             reader.fallbackBuffer = &swVb;
+            reader.useInstanceStreams = applyInstanceStreams;
             if (params.vertexStreamCount == 0)
             {
                 reader.recordBase[0] =
@@ -4400,9 +4469,12 @@ namespace CNA::Internal::Renderers::Software
                 const auto& stream = params.vertexStreams[static_cast<std::size_t>(s2)];
                 const auto* streamVb =
                     static_cast<const SoftwareVertexBufferRenderer*>(stream.buffer);
+                const std::int64_t streamElement = stream.instanceFrequency > 0
+                    ? static_cast<std::int64_t>(stream.vertexOffset)
+                    : static_cast<std::int64_t>(stream.vertexOffset) + vertexIndex;
                 reader.recordBase[static_cast<std::size_t>(s2)] =
                     streamVb->Data().data() +
-                    static_cast<std::size_t>(stream.vertexOffset + vertexIndex) *
+                    static_cast<std::size_t>(streamElement) *
                         static_cast<std::size_t>(stream.strideInBytes);
             }
             return reader;
@@ -4479,6 +4551,80 @@ namespace CNA::Internal::Renderers::Software
             }
         }
     }
+
+    void SoftwareRenderer::DrawInstancedPrimitivesEx(
+        const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,
+        const Matrix& world, const Matrix& view, const Matrix& projection,
+        PrimitiveType primitive, int primitiveCount, int instanceCount,
+        const GpuDrawParams& params)
+    {
+        if (instanceCount <= 0)
+        {
+            throw System::ArgumentOutOfRangeException(
+                "instanceCount", std::to_string(instanceCount),
+                "instanceCount must be greater than zero.");
+        }
+
+        // Normalize hand-built renderer-contract calls as well as public GraphicsDevice calls.
+        // The latter always supply concrete strides/counts; SetInstancedVertexStreamsEXT permits
+        // zero strides so a renderer can recover them from its own buffer resource.
+        GpuDrawParams normalized = params;
+        int nextInstanceLocation = 0;
+        for (int i = 0; i < normalized.vertexStreamCount; ++i)
+        {
+            auto& stream = normalized.vertexStreams[static_cast<std::size_t>(i)];
+            if (stream.buffer == nullptr)
+                throw System::InvalidOperationException(
+                    "Software instanced drawing requires every active vertex stream to own a buffer.");
+            const auto* buffer =
+                static_cast<const SoftwareVertexBufferRenderer*>(stream.buffer);
+            if (stream.strideInBytes <= 0)
+                stream.strideInBytes = static_cast<int>(buffer->Stride());
+            if (stream.vertexCount <= 0)
+                stream.vertexCount = buffer->GetVertexCount();
+
+            if (stream.instanceFrequency <= 0)
+                continue;
+            const auto& elements = buffer->Declaration().GetElements();
+            if (elements.empty() || nextInstanceLocation >= 4)
+            {
+                throw System::InvalidOperationException(
+                    "Software instanced drawing requires a declared per-instance matrix within "
+                    "the four stock-effect instance attribute locations.");
+            }
+            nextInstanceLocation += std::min<int>(
+                static_cast<int>(elements.size()), 4 - nextInstanceLocation);
+
+            const int requiredElements =
+                1 + (instanceCount - 1) / stream.instanceFrequency;
+            if (stream.vertexOffset < 0 || stream.vertexOffset > stream.vertexCount ||
+                requiredElements > stream.vertexCount - stream.vertexOffset)
+            {
+                throw System::ArgumentOutOfRangeException(
+                    "instanceCount", std::to_string(instanceCount),
+                    "The requested instance range exceeds the per-instance vertex buffer bound "
+                    "to slot " + std::to_string(stream.slot) + '.');
+            }
+        }
+
+        normalized.instanceCount = 1;
+        for (int instance = 0; instance < instanceCount; ++instance)
+        {
+            GpuDrawParams current = normalized;
+            for (int i = 0; i < current.vertexStreamCount; ++i)
+            {
+                auto& stream = current.vertexStreams[static_cast<std::size_t>(i)];
+                if (stream.instanceFrequency > 0)
+                {
+                    stream.vertexOffset =
+                        normalized.vertexStreams[static_cast<std::size_t>(i)].vertexOffset +
+                        instance / stream.instanceFrequency;
+                }
+            }
+            DrawIndexedPrimitivesInternal(
+                vb, ib, world, view, projection, primitive, primitiveCount, current, true);
+        }
+    }
 #else
     void SoftwareRenderer::DrawColoredPrimitives(const IVertexBufferRenderer&, const Matrix&,
                                                          const Matrix&, const Matrix&, PrimitiveType, int)
@@ -4509,6 +4655,14 @@ namespace CNA::Internal::Renderers::Software
     {
         throw System::NotSupportedException(
             "Software's GDI 2D compilation unit does not include indexed effect-aware 3D drawing.");
+    }
+
+    void SoftwareRenderer::DrawInstancedPrimitivesEx(
+        const IVertexBufferRenderer&, const IIndexBufferRenderer&, const Matrix&, const Matrix&,
+        const Matrix&, PrimitiveType, int, int, const GpuDrawParams&)
+    {
+        throw System::NotSupportedException(
+            "Software's GDI 2D compilation unit does not include instanced 3D drawing.");
     }
 #endif
 }

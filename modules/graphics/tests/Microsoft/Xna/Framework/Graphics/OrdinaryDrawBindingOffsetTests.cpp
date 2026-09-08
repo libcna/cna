@@ -142,21 +142,24 @@ using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
                             Software);
 }
 
-// REMED-GFX-118's instanced suite set: the renderers whose instanced route renders the geometry.
+// REMED-GFX-118's instanced suite set: the renderers whose instanced route renders the geometry;
+// SOFTWARE-129 adds the deterministic CPU implementation.
 /// plans/plan_runtimerenderer.md RTR-P9-5: the same renderer set, evaluated at runtime so this describes
 /// the ACTIVE renderer rather than the build default.
 [[nodiscard]] inline bool OrdinaryBindingOffsetInstancedTransition()
 {
     return CNA_RENDERER_IS(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan,
-                           DirectX9, DirectX11, DirectX12);
+                           DirectX9, DirectX11, DirectX12, Software);
 }
 
-// The renderers whose INSTANCED route consumes VertexBufferBinding.VertexOffset.
+// The renderers whose INSTANCED route consumes VertexBufferBinding.VertexOffset; Software joins
+// through SOFTWARE-129.
 /// plans/plan_runtimerenderer.md RTR-P9-5: the same renderer set, evaluated at runtime so this
 /// describes the ACTIVE renderer rather than the build default.
 [[nodiscard]] inline bool OrdinaryBindingOffsetInstancedOffset()
 {
-    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX11, DirectX12);
+    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX11, DirectX12,
+                           Software);
 }
 
 namespace
@@ -1304,4 +1307,3 @@ TEST_F(OrdinaryDrawBindingOffsetTest, OrdinaryInstancedOrdinaryTransitionsKeepEa
 
     ExpectOnlyCellLit(renderOrdinary(), layout, 3, kLiveBand, "ordinary after the instanced leg");
 }
-

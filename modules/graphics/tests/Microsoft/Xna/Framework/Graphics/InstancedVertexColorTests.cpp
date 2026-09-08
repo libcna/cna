@@ -110,12 +110,12 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// describes the ACTIVE renderer rather than the build default.
 [[nodiscard]] inline bool InstancedVertexColor()
 {
-    return CNA_RENDERER_IS(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11, 
-                            DirectX12);
+    return CNA_RENDERER_IS(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan,
+                           DirectX9, DirectX11, DirectX12, Software);
 }
 
-// The renderers whose instanced route this file has MEASURED on a real display, and which therefore
-// carry an assertion in one direction or the other. D3D9/D3D11/D3D12 stay outside it because no
+// The renderers whose instanced route this file has MEASURED on a real display or, for Software,
+// deterministic CPU readback, and which therefore carry an assertion. D3D9/D3D11/D3D12 stay out because no
 // D3D display was reachable (SDL reports "x11 not available" under Wine on the Xvfb displays this
 // environment permits) -- REMED-GFX-212 identifies D3D11/D3D12 from source as colouring the
 // instanced route from DiffuseColor, but an unmeasured renderer must not be asserted in either
@@ -123,11 +123,13 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// plans/plan_runtimerenderer.md RTR-P9-5: the measured set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool InstancedVertexColorMeasured()
 {
-    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Bgfx, Vulkan, WebGPU);
+    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Bgfx, Vulkan, WebGPU,
+                           Software);
 }
 
 // The renderers whose instanced route was measured obeying the PUBLIC CONTRACT: EasyGL always did,
-// Vulkan and WebGPU were corrected by REMED-GFX-212, and bgfx by REMED-GFX-215.
+// Vulkan and WebGPU were corrected by REMED-GFX-212, bgfx by REMED-GFX-215, and Software gained
+// its independent CPU route in SOFTWARE-129.
 //
 // bgfx was outside this set until REMED-GFX-215. Its instanced route consumed COLOR0 -- which is
 // what REMED-GFX-212's own triage measured, with a WHITE DiffuseColor that cannot tell "COLOR0
@@ -144,7 +146,8 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// plans/plan_runtimerenderer.md RTR-P9-5: the public-contract set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool InstancedVertexColorContract()
 {
-    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Vulkan, WebGPU, Bgfx);
+    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Vulkan, WebGPU, Bgfx,
+                           Software);
 }
 
 
@@ -1201,4 +1204,3 @@ TEST_F(InstancedVertexColorTest, QueuedInstancedDrawSurvivesItsGeometryWrapperBe
 
     ExpectColumns(CaptureTarget(target), true, Route::Instanced, "lifetime/destroyed-wrapper");
 }
-

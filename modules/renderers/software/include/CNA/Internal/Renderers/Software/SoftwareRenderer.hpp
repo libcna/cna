@@ -1094,6 +1094,24 @@ namespace CNA::Internal::Renderers::Software
                                      const Matrix& world, const Matrix& view, const Matrix& projection,
                                      PrimitiveType primitive, int primitiveCount,
                                      const GpuDrawParams& params) override;
+        /**
+         * @brief Draws indexed geometry once for each per-instance stream record.
+         *
+         * @param vb Primary per-vertex buffer.
+         * @param ib Bound index buffer.
+         * @param world Effect world matrix.
+         * @param view Effect view matrix.
+         * @param projection Effect projection matrix.
+         * @param primitive Primitive topology.
+         * @param primitiveCount Number of primitives per instance.
+         * @param instanceCount Number of instances to rasterize.
+         * @param params Complete per-draw effect and vertex-stream state.
+         */
+        void DrawInstancedPrimitivesEx(
+            const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,
+            const Matrix& world, const Matrix& view, const Matrix& projection,
+            PrimitiveType primitive, int primitiveCount, int instanceCount,
+            const GpuDrawParams& params) override;
 
         // ---- Software-specific, CNAEXT-equivalent debug/testing API ----
 
@@ -1232,6 +1250,12 @@ namespace CNA::Internal::Renderers::Software
         [[nodiscard]] bool TryActivateOcclusionQuery(SoftwareOcclusionQueryRenderer* query);
         /** @brief Releases the renderer-wide active query slot when owned by @p query. */
         void ReleaseOcclusionQuery(SoftwareOcclusionQueryRenderer* query);
+
+        void DrawIndexedPrimitivesInternal(
+            const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,
+            const Matrix& world, const Matrix& view, const Matrix& projection,
+            PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
+            bool applyInstanceStreams);
 
         /// Submits one already-transformed SpriteBatch quad to the shared CPU triangle rasterizer.
         /// Keeping this narrow bridge private lets SoftwareSpriteBatchRenderer own the public draw
