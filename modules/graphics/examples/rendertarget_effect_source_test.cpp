@@ -131,6 +131,11 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTangentTexture.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTangentTextureSkinned.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTextureSkinned.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 #include "System/NotSupportedException.hpp"
 
@@ -225,73 +230,6 @@ namespace
     // described, so only SDL_GPU declares that boundary.
     constexpr bool kSecondSampleableFormat =
 #if defined(CNA_RENDERER_SDL_GPU)
-        false;
-#else
-        true;
-#endif
-
-    /**
-     * @brief Whether the skinned/PBR families accept this fixture's VertexPositionTexture stride.
-     *
-     * A vertex-LAYOUT boundary, not a render-to-texture one, and the same shape as REMED-GFX-151's
-     * own `kDualTextureAcceptsPositionTexture`. Every family here is fed one stride-20 quad so a
-     * single expected image is valid across all of them; SkinnedEffect and the PBR pair genuinely
-     * want normal/tangent-bearing strides, and some renderers enforce that where others tolerate it:
-     * EasyGL validates the stock program's declared attributes, WEBGPU falls through to
-     * DrawColoredPrimitives, and D3D9 reports that stride 20 has no matching CNA vertex layout.
-     * Their texture SLOT is the same ITextureRenderer binding the other families use, so the
-     * contract is still covered there by the remaining families.
-     */
-    constexpr bool kSkinnedFamiliesAcceptPositionTexture =
-#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_WEBGPU) || \
-    defined(CNA_RENDERER_DIRECTX9) || defined(CNA_RENDERER_DIRECTX11) || \
-    defined(CNA_RENDERER_DIRECTX12) || defined(CNA_RENDERER_LLGL)
-        false;
-#else
-        true;
-#endif
-
-    /**
-     * @brief Whether BasicEffect accepts VertexColorEnabled on a VertexPositionTexture stream.
-     *
-     * D3D9 has no vertex layout for "stride 20, lighting off, vertex colour on, textured"
-     * (plans/plan_dx9.md D9-82b) and rejects it deterministically. A vertex-layout boundary, unrelated to
-     * how a texture is resolved -- the plain BasicEffect family covers the same binding site there.
-     */
-    constexpr bool kBasicEffectAcceptsVertexColorWithoutColorStream =
-#if defined(CNA_RENDERER_DIRECTX9)
-        false;
-#else
-        true;
-#endif
-
-    /**
-     * @brief Whether `DualTextureEffect` accepts this fixture's `VertexPositionTexture` geometry.
-     *
-     * D3D9 rejects it outright -- "stride 20 with vertexColor=false has no matching CNA vertex
-     * layout (plans/plan_dx9.md D9-82d)" -- a documented, pre-existing vertex-layout boundary of that
-     * renderer and nothing to do with texture resolution. The same declaration REMED-GFX-151's own
-     * fixture already carries.
-     */
-    constexpr bool kDualTextureAcceptsPositionTexture =
-#if defined(CNA_RENDERER_DIRECTX9)
-        false;
-#else
-        true;
-#endif
-
-    /**
-     * @brief Whether EnvironmentMapEffect accepts a VertexPositionTexture stream.
-     *
-     * EasyGL and D3D9 require a normal-bearing stride for it; D3D11 and D3D12 say so outright --
-     * "EnvironmentMapEffect (env_map3d) requires stride 32 (VertexPositionNormalTexture)". Same
-     * kind of boundary as above; leg L1's cube-sampling sub-check is recorded rather than asserted
-     * there, and its face-aliasing checks still run.
-     */
-    constexpr bool kEnvMapAcceptsPositionTexture =
-#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_DIRECTX9) || \
-    defined(CNA_RENDERER_DIRECTX11) || defined(CNA_RENDERER_DIRECTX12) || \
-    defined(CNA_RENDERER_LLGL)
         false;
 #else
         true;
@@ -403,6 +341,33 @@ namespace
         float u, v;
     };
     static_assert(sizeof(PackedPositionTexture) == 20, "the packed stream stride must be 20 bytes");
+
+    struct PackedSkinned
+    {
+        float x, y, z;
+        float nx, ny, nz;
+        float u, v;
+        float w0, w1, w2, w3;
+        std::uint8_t i0, i1, i2, i3;
+    };
+    static_assert(sizeof(PackedSkinned) == 52);
+
+    struct PackedPbr
+    {
+        float x, y, z;
+        float nx, ny, nz;
+        float tx, ty, tz, tw;
+        float u, v;
+    };
+    static_assert(sizeof(PackedPbr) == 48);
+
+    struct PackedSkinnedPbr
+    {
+        PackedPbr rigid;
+        float w0, w1, w2, w3;
+        std::uint8_t i0, i1, i2, i3;
+    };
+    static_assert(sizeof(PackedSkinnedPbr) == 68);
 
     /** @brief How the consumer geometry reaches the device. */
     enum class DrawMode
@@ -690,6 +655,62 @@ class RenderTargetEffectSourceTest : public Game
             switch (mode)
             {
                 case DrawMode::UserPrimitives:
+                    if (family == Family::BasicVertexColor || family == Family::DualSlot0 ||
+                        family == Family::DualSlot1)
+                    {
+                        VertexPositionColorTexture colored[6];
+                        for (int i = 0; i < 6; ++i)
+                            colored[i] = {q[i].Position, Color::White, q[i].TextureCoordinate};
+                        dev.DrawUserPrimitives(PrimitiveType::TriangleList, colored, 0, 2);
+                        break;
+                    }
+                    if (family == Family::EnvMapDiffuse)
+                    {
+                        VertexPositionNormalTexture normal[6];
+                        for (int i = 0; i < 6; ++i)
+                            normal[i] = {q[i].Position, Vector3(0.f, 0.f, 1.f),
+                                         q[i].TextureCoordinate};
+                        dev.DrawUserPrimitives(PrimitiveType::TriangleList, normal, 0, 2);
+                        break;
+                    }
+                    if (family == Family::Skinned)
+                    {
+                        PackedSkinned skinned[6];
+                        for (int i = 0; i < 6; ++i)
+                            skinned[i] = {q[i].Position.X, q[i].Position.Y, q[i].Position.Z,
+                                          0.f, 0.f, 1.f,
+                                          q[i].TextureCoordinate.X, q[i].TextureCoordinate.Y,
+                                          1.f, 0.f, 0.f, 0.f, 0, 0, 0, 0};
+                        dev.DrawUserPrimitives(
+                            PrimitiveType::TriangleList, static_cast<const void*>(skinned), 0, 2,
+                            VertexPositionNormalTextureSkinned::getVertexDeclarationStatic());
+                        break;
+                    }
+                    if (family == Family::Pbr)
+                    {
+                        PackedPbr pbr[6];
+                        for (int i = 0; i < 6; ++i)
+                            pbr[i] = {q[i].Position.X, q[i].Position.Y, q[i].Position.Z,
+                                      0.f, 0.f, 1.f, 1.f, 0.f, 0.f, 1.f,
+                                      q[i].TextureCoordinate.X, q[i].TextureCoordinate.Y};
+                        dev.DrawUserPrimitives(
+                            PrimitiveType::TriangleList, static_cast<const void*>(pbr), 0, 2,
+                            VertexPositionNormalTangentTexture::getVertexDeclarationStatic());
+                        break;
+                    }
+                    if (family == Family::SkinnedPbr)
+                    {
+                        PackedSkinnedPbr pbr[6];
+                        for (int i = 0; i < 6; ++i)
+                            pbr[i] = {{q[i].Position.X, q[i].Position.Y, q[i].Position.Z,
+                                       0.f, 0.f, 1.f, 1.f, 0.f, 0.f, 1.f,
+                                       q[i].TextureCoordinate.X, q[i].TextureCoordinate.Y},
+                                      1.f, 0.f, 0.f, 0.f, 0, 0, 0, 0};
+                        dev.DrawUserPrimitives(
+                            PrimitiveType::TriangleList, static_cast<const void*>(pbr), 0, 2,
+                            VertexPositionNormalTangentTextureSkinned::getVertexDeclarationStatic());
+                        break;
+                    }
                     dev.DrawUserPrimitives(PrimitiveType::TriangleList, q, 0, 2);
                     break;
                 case DrawMode::UserIndexedPrimitives:
@@ -796,6 +817,7 @@ class RenderTargetEffectSourceTest : public Game
                     fx.setTextureProperty(&whiteTex_);
                     fx.setTexture2Property(src);
                 }
+                fx.setVertexColorEnabledProperty(true);
                 fx.Apply();
                 issue();
                 break;
@@ -815,6 +837,12 @@ class RenderTargetEffectSourceTest : public Game
                 fx.setEnvironmentMapAmountProperty(0.0f);
                 fx.setFresnelFactorProperty(0.0f);
                 fx.setEnvironmentMapSpecularProperty(Vector3(0.f, 0.f, 0.f));
+                fx.setDiffuseColorProperty(Vector3::One);
+                fx.setAmbientLightColorProperty(Vector3::One);
+                fx.setEmissiveColorProperty(Vector3::Zero);
+                fx.DirectionalLight0.setEnabledProperty(false);
+                fx.DirectionalLight1.setEnabledProperty(false);
+                fx.DirectionalLight2.setEnabledProperty(false);
                 fx.Apply();
                 issue();
                 break;
@@ -829,6 +857,12 @@ class RenderTargetEffectSourceTest : public Game
                 const std::vector<Matrix> bones = {Matrix::getIdentityProperty()};
                 fx.SetBoneTransforms(bones);
                 fx.setWeightsPerVertexProperty(1);
+                fx.setDiffuseColorProperty(Vector3::One);
+                fx.setAmbientLightColorProperty(Vector3::One);
+                fx.setEmissiveColorProperty(Vector3::Zero);
+                fx.DirectionalLight0.setEnabledProperty(false);
+                fx.DirectionalLight1.setEnabledProperty(false);
+                fx.DirectionalLight2.setEnabledProperty(false);
                 fx.Apply();
                 issue();
                 break;
@@ -842,6 +876,12 @@ class RenderTargetEffectSourceTest : public Game
                 fx.setTextureProperty(src);
                 fx.setMetallicFactorProperty(0.0f);
                 fx.setRoughnessFactorProperty(1.0f);
+                fx.setDiffuseColorProperty(Vector3::One);
+                fx.setAmbientLightColorProperty(Vector3::One);
+                fx.setEmissiveFactorProperty(Vector3::Zero);
+                fx.DirectionalLight0.setEnabledProperty(false);
+                fx.DirectionalLight1.setEnabledProperty(false);
+                fx.DirectionalLight2.setEnabledProperty(false);
                 fx.Apply();
                 issue();
                 break;
@@ -858,6 +898,12 @@ class RenderTargetEffectSourceTest : public Game
                 const std::vector<Matrix> bones = {Matrix::getIdentityProperty()};
                 fx.SetBoneTransforms(bones);
                 fx.setWeightsPerVertexProperty(1);
+                fx.setDiffuseColorProperty(Vector3::One);
+                fx.setAmbientLightColorProperty(Vector3::One);
+                fx.setEmissiveFactorProperty(Vector3::Zero);
+                fx.DirectionalLight0.setEnabledProperty(false);
+                fx.DirectionalLight1.setEnabledProperty(false);
+                fx.DirectionalLight2.setEnabledProperty(false);
                 fx.Apply();
                 issue();
                 break;
@@ -909,10 +955,13 @@ class RenderTargetEffectSourceTest : public Game
         if (!RequireReadable(reads[0], label + " render-target source")) return;
         if (!RequireReadable(reads[1], label + " Texture2D control"))     return;
 
+        int lively = 0;
         int mismatched = 0;
         std::string first;
         for (int y = 0; y < dstH; ++y)
             for (int x = 0; x < dstW; ++x)
+            {
+                if (!Same(reads[1].at(x, y), Color(0, 0, 0, 255))) ++lively;
                 if (!Same(reads[0].at(x, y), reads[1].at(x, y)))
                 {
                     ++mismatched;
@@ -921,7 +970,11 @@ class RenderTargetEffectSourceTest : public Game
                                 ") rt=" + ColorText(reads[0].at(x, y)) +
                                 " tex=" + ColorText(reads[1].at(x, y));
                 }
+            }
         const int total = dstW * dstH;
+        check(lively >= total / 4,
+              label + ": the Texture2D control produces visible pixels (" +
+              std::to_string(lively) + "/" + std::to_string(total) + ")");
         check(mismatched == 0,
               label + ": a never-read render target and its Texture2D control sample identically (" +
               std::to_string(total - mismatched) + "/" + std::to_string(total) + ")" + first);
@@ -982,10 +1035,9 @@ class RenderTargetEffectSourceTest : public Game
                 if (!Same(reads[1].at(x, y), Color(0, 0, 0, 255))) ++lively;
         if (lively < kPW * kPH / 4)
         {
-            boundary(label + ": the LIVE control rendered nothing (" + std::to_string(lively) + "/" +
-                     std::to_string(kPW * kPH) + " non-black) on " + kRendererName +
-                     ", so the destroyed-source comparison would measure nothing here -- recorded, "
-                     "not counted");
+            check(false, label + ": the live Texture2D control must produce visible pixels (" +
+                         std::to_string(lively) + "/" + std::to_string(kPW * kPH) +
+                         " non-black on " + kRendererName + ")");
             return false;
         }
 
@@ -1079,36 +1131,6 @@ class RenderTargetEffectSourceTest : public Game
         };
         for (Family f : families)
         {
-            if ((f == Family::DualSlot0 || f == Family::DualSlot1) &&
-                !kDualTextureAcceptsPositionTexture)
-            {
-                boundary(std::string("B1 ") + FamilyName(f) + " skipped on " + kRendererName +
-                         ": DualTextureEffect rejects this fixture's stride-20 stream "
-                         "(plans/plan_dx9.md D9-82d)");
-                continue;
-            }
-            if (f == Family::BasicVertexColor && !kBasicEffectAcceptsVertexColorWithoutColorStream)
-            {
-                boundary(std::string("B1 ") + FamilyName(f) + " skipped on " + kRendererName +
-                         ": no vertex layout for a textured, vertex-coloured, unlit stride-20 stream "
-                         "(plans/plan_dx9.md D9-82b) -- a vertex-layout boundary, unrelated to how a "
-                         "texture is resolved");
-                continue;
-            }
-            if (f == Family::EnvMapDiffuse && !kEnvMapAcceptsPositionTexture)
-            {
-                boundary(std::string("B1 ") + FamilyName(f) + " skipped on " + kRendererName +
-                         ": EnvironmentMapEffect requires a normal-bearing stream here");
-                continue;
-            }
-            if ((f == Family::Skinned || f == Family::Pbr || f == Family::SkinnedPbr) &&
-                !kSkinnedFamiliesAcceptPositionTexture)
-            {
-                boundary(std::string("B1 ") + FamilyName(f) + " skipped on " + kRendererName +
-                         ": it rejects this fixture's VertexPositionTexture stride (a vertex-layout "
-                         "boundary, unrelated to how a texture is resolved)");
-                continue;
-            }
             if (f == Family::EnvMapDiffuse && envCube_ == nullptr)
             {
                 // The subject here is the effect's ordinary DIFFUSE slot, but the effect still
@@ -1296,36 +1318,6 @@ class RenderTargetEffectSourceTest : public Game
         };
         for (Family f : families)
         {
-            if ((f == Family::DualSlot0 || f == Family::DualSlot1) &&
-                !kDualTextureAcceptsPositionTexture)
-            {
-                boundary(std::string("M2 ") + FamilyName(f) + " skipped on " + kRendererName +
-                         ": DualTextureEffect rejects this fixture's stride-20 stream "
-                         "(plans/plan_dx9.md D9-82d)");
-                continue;
-            }
-            if (f == Family::BasicVertexColor && !kBasicEffectAcceptsVertexColorWithoutColorStream)
-            {
-                boundary(std::string("M2 ") + FamilyName(f) + " skipped on " + kRendererName +
-                         ": no vertex layout for a textured, vertex-coloured, unlit stride-20 stream "
-                         "(plans/plan_dx9.md D9-82b) -- a vertex-layout boundary, unrelated to how a "
-                         "texture is resolved");
-                continue;
-            }
-            if (f == Family::EnvMapDiffuse && !kEnvMapAcceptsPositionTexture)
-            {
-                boundary(std::string("M2 ") + FamilyName(f) + " skipped on " + kRendererName +
-                         ": EnvironmentMapEffect requires a normal-bearing stream here");
-                continue;
-            }
-            if ((f == Family::Skinned || f == Family::Pbr || f == Family::SkinnedPbr) &&
-                !kSkinnedFamiliesAcceptPositionTexture)
-            {
-                boundary(std::string("M2 ") + FamilyName(f) + " skipped on " + kRendererName +
-                         ": it rejects this fixture's VertexPositionTexture stride (a vertex-layout "
-                         "boundary, unrelated to how a texture is resolved)");
-                continue;
-            }
             if (f == Family::EnvMapDiffuse && envCube_ == nullptr)
             {
                 // The subject here is the effect's ordinary DIFFUSE slot, but the effect still
@@ -1339,12 +1331,10 @@ class RenderTargetEffectSourceTest : public Game
                                         DrawMode::UserPrimitives, patternTex_))
                 ++measured;
         }
-        // A run in which NOTHING measured is a failure, however many boundaries it declared: the
-        // point of this leg is coverage across families, and "every family was unmeasurable" would
-        // otherwise pass silently on the strength of the declarations alone.
-        check(measured > 0, "M2 at least one stock-effect family was actually measurable on " +
-                            std::string(kRendererName) + " (" + std::to_string(measured) + "/" +
-                            std::to_string(static_cast<int>(std::size(families))) + ")");
+        check(measured == static_cast<int>(std::size(families)),
+              "M2 every stock-effect family is behaviorally measured on " +
+              std::string(kRendererName) + " (" + std::to_string(measured) + "/" +
+              std::to_string(static_cast<int>(std::size(families))) + ")");
     }
 
     /**
@@ -1757,33 +1747,41 @@ class RenderTargetEffectSourceTest : public Game
     {
         const int kFace = kPH;   // a small square face
         std::unique_ptr<RenderTargetCube> cube;
+        std::unique_ptr<TextureCube> control;
         try
         {
             cube = std::make_unique<RenderTargetCube>(dev, kFace, false, SurfaceFormat::Color,
                                                       DepthFormat::None, 0,
                                                       RenderTargetUsage::PreserveContents);
+            control = std::make_unique<TextureCube>(dev, kFace, false, SurfaceFormat::Color);
         }
         catch (const std::exception& e)
         {
-            boundary(std::string("L1 ") + kRendererName + " cannot create a RenderTargetCube here (" +
-                 e.what() + ") -- capability boundary recorded");
+            boundary(std::string("L1 ") + kRendererName +
+                     " cannot create the render-target/control cube pair here (" + e.what() +
+                     ") -- capability boundary recorded");
             return;
         }
 
-        // Two faces get UNMISTAKABLY different solid colours, so a cube whose faces alias, or whose
-        // face index is dropped, cannot pass.
-        const Color faceColors[2] = { Color(230, 40, 60, 255), Color(30, 90, 220, 255) };
-        const CubeMapFace faces[2] = { CubeMapFace::PositiveX, CubeMapFace::NegativeX };
+        const CubeMapFace faces[6] = {
+            CubeMapFace::PositiveX, CubeMapFace::NegativeX,
+            CubeMapFace::PositiveY, CubeMapFace::NegativeY,
+            CubeMapFace::PositiveZ, CubeMapFace::NegativeZ,
+        };
+        const Color sampleColor(30, 90, 220, 255);
+        const std::vector<Color> sampleFace(static_cast<std::size_t>(kFace) * kFace, sampleColor);
         bool produced = true;
-        for (int i = 0; i < 2; ++i)
+        for (int i = 0; i < 6; ++i)
         {
             try
             {
                 dev.SetRenderTarget(cube.get(), faces[i]);
                 ResetState(dev);
-                dev.Clear(faceColors[i]);
+                dev.Clear(sampleColor);
                 dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
                 ResetState(dev);
+                control->SetData(faces[i], sampleFace.data(), 0,
+                                 static_cast<int>(sampleFace.size()));
             }
             catch (const std::exception& e)
             {
@@ -1795,47 +1793,91 @@ class RenderTargetEffectSourceTest : public Game
         }
         if (!produced) return;
 
-        // Sampling the cube through EnvironmentMapEffect is the public route that binds an
-        // ITextureCubeRenderer. The value judged is that it completes and binds a real resource; the
-        // per-face colour is judged by GetData, which is the cube's own established readback
-        // contract (REMED-GFX-134) rather than a new oracle invented here.
-        bool threw = false;
-        std::string what;
-        if (!kEnvMapAcceptsPositionTexture)
-        {
-            boundary(std::string("L1 ") + kRendererName + " needs a normal-bearing stream for "
-                     "EnvironmentMapEffect, so the cube-slot draw is recorded "
-                     "rather than asserted here; the face-aliasing checks below still run");
-        }
-        else try
+        const auto sample = [&](TextureCube& source)
         {
             RenderTarget2D dst(dev, kPW, kPH, false, SurfaceFormat::Color, DepthFormat::None, 0,
                                RenderTargetUsage::DiscardContents);
             dev.SetRenderTarget(&dst);
             ResetState(dev);
             dev.Clear(Color(0, 0, 0, 255));
-            VertexPositionTexture q[6];
-            FillQuad(q);
+            VertexPositionTexture base[6];
+            VertexPositionNormalTexture normal[6];
+            FillQuad(base);
+            for (int i = 0; i < 6; ++i)
+                normal[i] = {base[i].Position, Vector3(0.f, 0.f, 1.f),
+                             base[i].TextureCoordinate};
             EnvironmentMapEffect fx(dev);
             fx.setWorldProperty(Matrix::getIdentityProperty());
             fx.setViewProperty(Matrix::getIdentityProperty());
             fx.setProjectionProperty(Matrix::getIdentityProperty());
             fx.setTextureProperty(&whiteTex_);
-            fx.setEnvironmentMapProperty(cube.get());
+            fx.setEnvironmentMapProperty(&source);
             fx.setEnvironmentMapAmountProperty(1.0f);
+            fx.setEnvironmentMapSpecularProperty(Vector3::Zero);
+            fx.setDiffuseColorProperty(Vector3::One);
+            fx.setAmbientLightColorProperty(Vector3::Zero);
+            fx.setEmissiveColorProperty(Vector3::Zero);
             fx.Apply();
-            dev.DrawUserPrimitives(PrimitiveType::TriangleList, q, 0, 2);
+            dev.DrawUserPrimitives(PrimitiveType::TriangleList, normal, 0, 2);
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
             ResetState(dev);
-            Readback r = ReadWhole(dst, kPW, kPH);
-            (void)r;
+            return ReadWhole(dst, kPW, kPH);
+        };
+
+        Readback reads[2];
+        try
+        {
+            reads[0] = sample(*cube);
+            reads[1] = sample(*control);
         }
-        catch (const std::exception& e) { threw = true; what = e.what(); }
-        catch (...)                     { threw = true; what = "(non-std exception)"; }
-        if (kEnvMapAcceptsPositionTexture)
-            check(!threw, std::string("L1 a rendered-into RenderTargetCube reaches "
-                                      "EnvironmentMapEffect's cube slot without an unsafe cast") +
-                          (threw ? std::string(": threw ") + what : std::string()));
+        catch (const std::exception& e)
+        {
+            check(false, std::string("L1 EnvironmentMapEffect cube sampling threw: ") + e.what());
+            return;
+        }
+        catch (...)
+        {
+            check(false, "L1 EnvironmentMapEffect cube sampling threw a non-std exception");
+            return;
+        }
+
+        if (!RequireReadable(reads[0], "L1 RenderTargetCube sample")) return;
+        if (!RequireReadable(reads[1], "L1 TextureCube control sample")) return;
+        int lively = 0;
+        int mismatched = 0;
+        std::string first;
+        for (int y = 0; y < kPH; ++y)
+            for (int x = 0; x < kPW; ++x)
+            {
+                if (!Same(reads[1].at(x, y), Color(0, 0, 0, 255))) ++lively;
+                if (!Same(reads[0].at(x, y), reads[1].at(x, y)))
+                {
+                    ++mismatched;
+                    if (first.empty())
+                        first = " first at (" + std::to_string(x) + "," + std::to_string(y) +
+                                ") rt=" + ColorText(reads[0].at(x, y)) +
+                                " tex=" + ColorText(reads[1].at(x, y));
+                }
+            }
+        check(lively >= kPW * kPH / 4,
+              "L1 the ordinary TextureCube control produces visible EnvironmentMapEffect pixels (" +
+              std::to_string(lively) + "/" + std::to_string(kPW * kPH) + ")");
+        check(mismatched == 0,
+              "L1 a rendered RenderTargetCube samples identically to its TextureCube control (" +
+              std::to_string(kPW * kPH - mismatched) + "/" + std::to_string(kPW * kPH) + ")" +
+              first);
+
+        // Repaint two faces with unmistakably different colours after the sampling proof, so the
+        // independent face-readback check still detects face aliasing.
+        const Color faceColors[2] = {Color(230, 40, 60, 255), Color(30, 90, 220, 255)};
+        for (int i = 0; i < 2; ++i)
+        {
+            dev.SetRenderTarget(cube.get(), faces[i]);
+            ResetState(dev);
+            dev.Clear(faceColors[i]);
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            ResetState(dev);
+        }
 
         // Faces must not alias -- read each face back through the cube's own GetData contract.
         for (int i = 0; i < 2; ++i)
