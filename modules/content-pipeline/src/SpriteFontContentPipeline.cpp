@@ -1557,25 +1557,73 @@ namespace CNA::Content::Pipeline
             Fail(origin, "Cannot build this font: there were no glyphs found to build");
         }
 
+        // A cell is not a glyph: XNA trims each cell to the texels that are not the separator and
+        // records where the trim started in the cropping rectangle, so what reaches the atlas is
+        // the ink and what reaches the runtime is where to put it back. SAMPLE-062's
+        // `NetRumbleFont.png` is the case that shows it -- an 8x27 cell whose only ink is one texel
+        // answers bounds `[124, 1, 1, 1]` and a cropping of `[7, 26, 8, 27]`, and the sheet that
+        // holds all 95 glyphs is 128x156 where the untrimmed cells needed 256x256
+        // (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-131).
+        //
+        // A cell with no ink at all -- the space -- is the degenerate case, and XNA answers a 1x1
+        // box at the bottom-right corner of the cell: the scan's initial minimum is the last texel
+        // and the extent is clamped to one, which is exactly `[7, 26, 8, 27]` for an 8x27 cell.
         std::vector<RasterGlyph> glyphs;
+        std::vector<Microsoft::Xna::Framework::Rectangle> croppings;
+        std::vector<std::uint32_t> advances;
         glyphs.reserve(found.size());
+        croppings.reserve(found.size());
+        advances.reserve(found.size());
         for (const SheetGlyph& glyph : found)
         {
-            RasterGlyph raster;
-            raster.width = glyph.width;
-            raster.height = glyph.height;
-            raster.coverage.assign(static_cast<std::size_t>(glyph.width) * glyph.height * 4u, 0u);
+            std::uint32_t minX = glyph.width == 0u ? 0u : glyph.width - 1u;
+            std::uint32_t minY = glyph.height == 0u ? 0u : glyph.height - 1u;
+            std::uint32_t maxX = 0u;
+            std::uint32_t maxY = 0u;
             for (std::uint32_t row = 0u; row < glyph.height; ++row)
             {
+                for (std::uint32_t column = 0u; column < glyph.width; ++column)
+                {
+                    const std::size_t at =
+                        ((static_cast<std::size_t>(glyph.y) + row) * width + glyph.x + column) * 4u;
+                    // Ink is a texel that is neither the separator nor fully transparent. A real
+                    // sheet has both: NetRumbleFont's cells are separated by magenta and *padded*
+                    // with transparent white, and trimming on the separator alone finds no border
+                    // to trim at all.
+                    if (at + 3u >= rgba.size() || IsSeparator(&rgba[at]) || rgba[at + 3u] == 0u)
+                    {
+                        continue;
+                    }
+                    minX = std::min(minX, column);
+                    minY = std::min(minY, row);
+                    maxX = std::max(maxX, column);
+                    maxY = std::max(maxY, row);
+                }
+            }
+            const std::uint32_t inkWidth = maxX >= minX ? maxX - minX + 1u : 1u;
+            const std::uint32_t inkHeight = maxY >= minY ? maxY - minY + 1u : 1u;
+
+            RasterGlyph raster;
+            raster.width = inkWidth;
+            raster.height = inkHeight;
+            raster.coverage.assign(static_cast<std::size_t>(inkWidth) * inkHeight * 4u, 0u);
+            for (std::uint32_t row = 0u; row < inkHeight; ++row)
+            {
                 const std::size_t from =
-                    ((static_cast<std::size_t>(glyph.y) + row) * width + glyph.x) * 4u;
+                    ((static_cast<std::size_t>(glyph.y) + minY + row) * width + glyph.x + minX) * 4u;
+                if (from + static_cast<std::size_t>(inkWidth) * 4u > rgba.size()) { break; }
                 std::copy_n(rgba.begin() + static_cast<std::ptrdiff_t>(from),
-                            static_cast<std::size_t>(glyph.width) * 4u,
+                            static_cast<std::size_t>(inkWidth) * 4u,
                             raster.coverage.begin() +
                                 static_cast<std::ptrdiff_t>(static_cast<std::size_t>(row) *
-                                                            glyph.width * 4u));
+                                                            inkWidth * 4u));
             }
             glyphs.push_back(std::move(raster));
+            croppings.push_back(Microsoft::Xna::Framework::Rectangle(
+                static_cast<SharpRuntime::intcs>(minX), static_cast<SharpRuntime::intcs>(minY),
+                static_cast<SharpRuntime::intcs>(glyph.width),
+                static_cast<SharpRuntime::intcs>(glyph.height)));
+            advances.push_back(glyph.width);
         }
 
         std::vector<PackedGlyph> placements;
@@ -1590,6 +1638,11 @@ namespace CNA::Content::Pipeline
 
         Cnb::CnbSpriteFontData font;
         font.atlas.width = side;
+        // The height is rounded to a power of two, which five genuine builds of a sheet agree on
+        // (`fonttexture/*` in the differential corpus) and SAMPLE-062's `NetRumbleFont` does not:
+        // that one answers 128x**156** where this rounds to 128x256. Something distinguishes the
+        // two and this campaign did not find it, so the rule five measurements support is the one
+        // kept (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-131).
         font.atlas.height = RoundUpToPowerOfTwo(usedHeight);
         font.atlas.depth = 1u;
         font.atlas.faceCount = 1u;
@@ -1620,13 +1673,13 @@ namespace CNA::Content::Pipeline
                 static_cast<SharpRuntime::intcs>(placement.y),
                 static_cast<SharpRuntime::intcs>(glyph.width),
                 static_cast<SharpRuntime::intcs>(glyph.height)));
-            // Measured: the cropping rectangle is the glyph's own size at the origin, and the
-            // kerning triple is (0, width, 0) -- a sheet says nothing about bearings.
-            font.cropping.push_back(Microsoft::Xna::Framework::Rectangle(
-                0, 0, static_cast<SharpRuntime::intcs>(glyph.width),
-                static_cast<SharpRuntime::intcs>(glyph.height)));
+            // The cropping rectangle is where the trim started and how big the cell was; the
+            // kerning triple is (0, *cell* width, 0), which is the advance a sheet can say
+            // anything about -- the trimmed width is not it (measured, NetRumbleFont's kerning is
+            // 8 for a glyph whose ink is one texel wide).
+            font.cropping.push_back(croppings[index]);
             font.kerning.push_back(Microsoft::Xna::Framework::Vector3(
-                0.0f, static_cast<float>(glyph.width), 0.0f));
+                0.0f, static_cast<float>(advances[index]), 0.0f));
             font.characters.push_back(static_cast<SharpRuntime::charcs>(
                 static_cast<std::uint32_t>(firstCharacter) + static_cast<std::uint32_t>(index)));
             lineSpacing = std::max(lineSpacing, static_cast<std::int32_t>(glyph.height));
