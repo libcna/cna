@@ -1285,16 +1285,16 @@ if (ProfileIsDesktopCore())
         // shader compile failure (Mesa's desktop compiler accepts "#version 300 es" leniently
         // even under a core-profile context, confirmed empirically), a real missing GL state
         // toggle. Not exposed by meta-gl's typed Capability enum (GLES/WebGL have no equivalent
-        // constant at all, so meta-gl never needed to expose it), so loaded and called directly
-        // via a runtime function pointer, matching this project's own "no static libGL linkage"
-        // convention (meta-gl itself loads every GL entry point the same way). Every stock vertex
+        // constant at all, so meta-gl never needed to expose it), so resolve the entry point for
+        // the current context. Every stock vertex
         // shader below therefore writes gl_PointSize explicitly: once this state is enabled, its
         // value is undefined when a shader omits the write, and real desktop drivers may rasterize
-        // no point at all while llvmpipe happens to retain the 1-pixel default.
+        // no point at all while llvmpipe happens to retain the 1-pixel default. The raw function
+        // pointer belongs to this context and must not be cached across its teardown.
         void EnableVertexProgramPointSize()
         {
             using GlEnableFn = void (*)(unsigned int);
-            static const auto glEnableFn =
+            const auto glEnableFn =
                 reinterpret_cast<GlEnableFn>(LoadEasyGlProcAddress("glEnable"));
             constexpr unsigned int kGlVertexProgramPointSize = 0x8642;
             if (glEnableFn) glEnableFn(kGlVertexProgramPointSize);

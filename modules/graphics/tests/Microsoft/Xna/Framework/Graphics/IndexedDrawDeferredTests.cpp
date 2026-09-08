@@ -728,7 +728,7 @@ TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsThirtyTwoBitIndexElements)
         0,
         3,
         3,
-        0,
+        1,
         1);
 
     ExpectExactColor(
@@ -2935,7 +2935,7 @@ TEST_F(IndexedDrawDeferredTest, PublicContractAcceptsCompensatedNegativeIndexedB
     // The signed base compensates the index values: 3..5 become 0..2. Dropping the base would
     // render the identically positioned red decoy, while applying it twice leaves the buffer.
     device.DrawIndexedPrimitives(
-        PrimitiveType::TriangleList, -3, 3, 3, 1, 1);
+        PrimitiveType::TriangleList, -3, 3, 3, 0, 1);
 
     ExpectExactColor(
         ReadCenter(device), Color::Lime,
@@ -2952,13 +2952,15 @@ TEST_F(IndexedDrawDeferredTest, PublicContractAcceptsCompensatedNegativeIndexedB
         selected[0], selected[1], selected[2],
         decoy[0], decoy[1], decoy[2],
     };
-    const std::array<std::uint32_t, 3> indices{3, 4, 5};
+    // The leading decoy index makes startIndex observable. A fallback that rebases the whole
+    // buffer but still draws at the old byte offset will miss the requested three-index slice.
+    const std::array<std::uint32_t, 4> indices{0, 3, 4, 5};
     VertexBuffer vertexBuffer(
         device, PositionColorDeclaration(), 6, BufferUsage::None);
     IndexBuffer indexBuffer(
-        device, IndexElementSize::ThirtyTwoBits, 3, BufferUsage::None);
+        device, IndexElementSize::ThirtyTwoBits, 4, BufferUsage::None);
     vertexBuffer.SetData(vertices.data(), 6);
-    indexBuffer.SetData(indices.data(), 3);
+    indexBuffer.SetData(indices.data(), 4);
     BasicEffect effect(device);
     ApplyVertexColorEffect(effect);
     device.Clear(Color::Black);
@@ -2966,11 +2968,49 @@ TEST_F(IndexedDrawDeferredTest, PublicContractAcceptsCompensatedNegativeIndexedB
     device.SetIndexBuffer(&indexBuffer);
 
     device.DrawIndexedPrimitives(
-        PrimitiveType::TriangleList, -3, 3, 3, 0, 1);
+        PrimitiveType::TriangleList, -3, 3, 3, 1, 1);
 
     ExpectExactColor(
         ReadCenter(device), Color::Lime,
         "compensated negative baseVertex with 32-bit indices and nonzero startIndex");
+}
+
+TEST(EasyGlIndexedDeviceLifecycleTest, ThirtyTwoBitDrawDoesNotPoisonNextDesktopContext)
+{
+    CNA_SKIP_IF_RENDERER_IS_NOT(OpenGL33);
+
+    {
+        GraphicsDevice firstDevice;
+        firstDevice.setRasterizerStateProperty(RasterizerState::CullNone);
+        firstDevice.setDepthStencilStateProperty(DepthStencilState::None);
+        const auto red = CenterTriangle(Color::Red);
+        const auto blue = CenterTriangle(Color::Blue);
+        const std::array<VertexPositionColor, 6> sourceVertices{
+            red[0], red[1], red[2], blue[0], blue[1], blue[2],
+        };
+        const std::array<std::uint32_t, 3> indices{3, 4, 5};
+        VertexBuffer vertexBuffer(
+            firstDevice, PositionColorDeclaration(), 6, BufferUsage::None);
+        IndexBuffer indexBuffer(
+            firstDevice, IndexElementSize::ThirtyTwoBits, 3, BufferUsage::None);
+        vertexBuffer.SetData(sourceVertices.data(), 6);
+        indexBuffer.SetData(indices.data(), 3);
+        BasicEffect effect(firstDevice);
+        effect.VertexColorEnabled = true;
+        effect.Apply();
+        firstDevice.Clear(Color::Black);
+        firstDevice.SetVertexBuffer(&vertexBuffer);
+        firstDevice.SetIndexBuffer(&indexBuffer);
+        firstDevice.DrawIndexedPrimitives(
+            PrimitiveType::TriangleList, 0, 0, 3, 0, 1);
+        ExpectExactColor(
+            ReadCenter(firstDevice), Color::Blue,
+            "first context completed a 32-bit indexed draw");
+    }
+
+    GraphicsDevice replacement;
+    EXPECT_TRUE(replacement.SupportsCapability(GraphicsCapability::ThreeD));
+    EXPECT_NO_THROW(replacement.Clear(Color::Black));
 }
 
 #ifdef CNA_TEST_WEBGPU_AVAILABLE
