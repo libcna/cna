@@ -118,7 +118,7 @@ its own tests and plan evidence in the same commit.
 | SOFTWARE-129 | Implement classic XNA hardware instancing on the CPU | ⬜ | Consume all per-instance streams with `VertexBufferBinding.InstanceFrequency`, apply instance transforms/colors through the same stock-effect contract as EasyGL/FNA, honor offsets/base vertex/index widths and validate ranges. Public indexed/non-indexed multi-stream instances must produce deterministic pixels; `Instancing` is advertised only after they pass. |
 | SOFTWARE-130 | Reconcile EasyGL's stock-input format guard with XNA/FNA declaration conversion | ⬜ | FNA3D binds each declared format directly to a semantic-matched shader input and supplies missing vector components through native defaults; EasyGL currently rejects most non-canonical formats before its own general attribute binder can do so. Replace the exact-format guard with conversion-compatible validation and run the declaration format fixture on both EasyGL and Software. |
 | SOFTWARE-131 | Match XNA/D3D9 integer pixel-center mapping in Software's 3D viewport transform | ✅ | Completed 2026-09-07. The corner-origin CPU raster coordinates now apply the same just-under-half-pixel `63/128` screen displacement used by EasyGL/Wine/MonoGame to reproduce D3D9 integer pixel centers. The measured shared XNA one-pixel-triangle fixture passes 2/2 on both Software and EasyGL. This also corrected the formerly failing non-integer 3D PointClamp U2 case: the full shared `PointSamplingContract` now passes 146/146 instead of 145/146. |
-| SOFTWARE-132 | Replace obsolete Software-v1 topology rejection/skip oracles with current positive coverage | ⬜ | `IndexedDrawDeferredTests` and `NonIndexedDrawRangeTests` must stop expecting Software to reject TriangleStrip/LineList/LineStrip now implemented by the CPU renderer. Enable Software in the existing exact topology/range fixtures, retain `PointListEXT` only as regression coverage, and require valid-invalid-valid sequencing to use a genuinely invalid enum without altering the framebuffer. |
+| SOFTWARE-132 | Replace obsolete Software-v1 topology rejection/skip oracles with current positive coverage | ✅ | Completed 2026-09-08. `IndexedDrawDeferredTests` and `NonIndexedDrawRangeTests` no longer claim Software is TriangleList-only or expect valid TriangleStrip/LineList/LineStrip/PointListEXT draws to throw. Software now runs the existing exact range/topology fixtures: both index widths, user and persistent strips, dynamic/static A→B→A buffer lifetime, indexed list/strip geometry, non-indexed five-topology ranges and topology switches. The negative CPU-only tests use a genuinely invalid enum, require `InvalidOperationException`, assert no partial pixels, then prove a valid-invalid-valid sequence remains byte-stable. Line probes require an exact RGBA match within the fixture's existing 5×5 coverage window rather than assuming that every valid line convention chooses the same single pixel. Both complete suites pass 40/40 on Software; EasyGL remains 30 pass/10 renderer-specific skips with no regression. `PointListEXT` is retained only as existing CNAEXT regression coverage, not counted toward XNA completion. |
 
 ### Current dependency order
 
@@ -368,11 +368,12 @@ window/GPU.
 - If Phase S4's rasterizer core turns out to need real polygon near-plane clipping sooner than
   expected (visible artifacts in even simple test scenes), treat that as a legitimate scope
   addition to flag and discuss, not something to silently skip or silently half-implement.
-- **`TriangleStrip` remains unsupported.** `GLTF-387` extended the effect-aware indexed and
-  non-indexed path to `LineList`, `LineStrip` and `PointListEXT`; near-plane-clipped lines and
-  points share the established depth/blend/shading fragment path. Strips and the legacy coloured
-  convenience paths retain the clear TriangleList-only refusal rather than silently misrendering.
-  See `docs/software-renderer.md`'s Known Limitations for the current boundary.
+- **Historical v1 topology boundary (superseded by `SOFTWARE-105` and `SOFTWARE-132`).** At that
+  point `GLTF-387` had extended only the effect-aware paths to `LineList`, `LineStrip` and
+  `PointListEXT`, while TriangleStrip and the legacy coloured paths still rejected the draw.
+  Software now supports the four classic XNA topologies across the public indexed/non-indexed
+  paths; `PointListEXT` remains regression-tested existing CNAEXT behavior rather than campaign
+  completion scope.
 - **Bilinear texture sampling (`SOFTWARE-80`) is always on, regardless of `SamplerState.Filter`**,
   and there is no real texture address-mode support — `Wrap`/`Mirror` are not implemented, UVs are
   simply clamped to `[0,1]` at the texture bounds regardless of what `SamplerState.AddressU/V`

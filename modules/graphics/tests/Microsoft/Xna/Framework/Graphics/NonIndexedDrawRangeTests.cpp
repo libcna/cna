@@ -27,9 +27,8 @@
 // and support backbuffer readback, so they carry the permanent TriangleList coverage. The full
 // five-topology sweep additionally needs PointListEXT, which Vulkan/D3D9/D3D11/D3D12 still route
 // through their triangle-list default (the independent REMED-GFX-114), so that sweep runs on Bgfx,
-// EasyGL and WebGPU. Software raster keeps its documented TriangleList-only v1 boundary, so its
-// explicit rejection of the other four topologies is asserted in its own section below
-// (REMED-GFX-119) rather than in the shared sweep.
+// EasyGL, WebGPU and Software. PointListEXT remains extension-only regression coverage; the four
+// classic XNA topologies are required parity behavior.
 
 #include <algorithm>
 #include <array>
@@ -78,6 +77,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/InvalidOperationException.hpp"
 
 // plans/plan_runtimerenderer.md RTR-P9-9: this file's bgfx blocks call bgfx:: directly and hold a
 // BgfxRenderer pointer, so they stay COMPILE-time -- no runtime predicate makes a type exist. The
@@ -1233,7 +1233,7 @@ TEST_F(NonIndexedDrawRangeTest, EverySupportedTopologyHonorsVertexStartAndExactC
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Software);
     RequireRangeRendering();
 
     const SlotLayout layout = BackbufferLayout();
@@ -1291,7 +1291,7 @@ TEST_F(NonIndexedDrawRangeTest, TopologySwitchesKeepTheirOwnRangesInOneFrame)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Software);
     RequireRangeRendering();
 
     const SlotLayout layout = BackbufferLayout();
@@ -1737,10 +1737,8 @@ TEST_F(NonIndexedDrawRangeTest, SoftwareNonIndexedRangeIsIndependentOfRenderStat
     device.setRasterizerStateProperty(RasterizerState::CullNone);
 }
 
-// Software raster's documented v1 boundary is TriangleList only. The other four topologies stay
-// explicitly rejected rather than approximated through the triangle path, and a rejected draw must
-// leave the frame exactly as the clear left it.
-TEST_F(NonIndexedDrawRangeTest, SoftwareRejectsUnsupportedNonIndexedTopologiesWithoutRendering)
+// An invalid enum is rejected before Software submission and leaves the frame exactly as cleared.
+TEST_F(NonIndexedDrawRangeTest, SoftwareRejectsAnInvalidNonIndexedTopologyWithoutRendering)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
@@ -1760,20 +1758,12 @@ TEST_F(NonIndexedDrawRangeTest, SoftwareRejectsUnsupportedNonIndexedTopologiesWi
     device.Clear(Color::Black);
     device.SetVertexBuffer(&vertexBuffer);
 
-    constexpr std::array<PrimitiveType, 4> unsupported{
-        PrimitiveType::TriangleStrip,
-        PrimitiveType::LineList,
-        PrimitiveType::LineStrip,
-        PrimitiveType::PointListEXT,
-    };
-    for (const PrimitiveType primitive : unsupported)
-    {
-        // Both a zero and a nonzero offset, so the rejection cannot depend on the range either.
-        EXPECT_THROW(device.DrawPrimitives(primitive, 0, 1), std::runtime_error)
-            << TopologyName(primitive) << " at vertexStart 0 was not rejected";
-        EXPECT_THROW(device.DrawPrimitives(primitive, 6, 1), std::runtime_error)
-            << TopologyName(primitive) << " at vertexStart 6 was not rejected";
-    }
+    const PrimitiveType invalid = static_cast<PrimitiveType>(999);
+    // Both a zero and a nonzero offset, so the rejection cannot depend on the range either.
+    EXPECT_THROW(
+        device.DrawPrimitives(invalid, 0, 1), System::InvalidOperationException);
+    EXPECT_THROW(
+        device.DrawPrimitives(invalid, 6, 1), System::InvalidOperationException);
 
     const FrameSnapshot pixels =
         CaptureBackbuffer(device, layout.width, layout.height);
@@ -1815,7 +1805,7 @@ TEST_F(NonIndexedDrawRangeTest, SoftwareValidInvalidValidNonIndexedSequenceKeeps
     ExpectRangeExclusive(before, plan, Color::Black, "valid draw before the rejected range");
 
     // Every rejected form: past the end, one primitive too many, a topology-count overflow, a
-    // byte-offset-scale overflow and an unsupported topology. None may render or corrupt state.
+    // byte-offset-scale overflow and an invalid topology. None may render or corrupt state.
     ApplyVertexColorEffect(effect);
     device.Clear(Color::Black);
     device.SetVertexBuffer(&vertexBuffer);
@@ -1842,7 +1832,8 @@ TEST_F(NonIndexedDrawRangeTest, SoftwareValidInvalidValidNonIndexedSequenceKeeps
             std::numeric_limits<int>::max()),
         System::ArgumentOutOfRangeException);
     EXPECT_THROW(
-        device.DrawPrimitives(PrimitiveType::TriangleStrip, 0, 1), std::runtime_error);
+        device.DrawPrimitives(static_cast<PrimitiveType>(999), 0, 1),
+        System::InvalidOperationException);
 
     const FrameSnapshot rejected =
         CaptureBackbuffer(device, layout.width, layout.height);

@@ -48,6 +48,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/InvalidOperationException.hpp"
 
 // plans/plan_runtimerenderer.md RTR-P9-9: these three blocks need their renderer's own headers and
 // types, so they stay COMPILE-time -- no runtime predicate makes a type exist. The condition
@@ -1086,11 +1087,6 @@ TEST_F(IndexedDrawDeferredTest, PublicThirtyTwoBitDrawHonorsCompleteRangeBaseCou
 
 TEST_F(IndexedDrawDeferredTest, BasicIndexedTriangleStripSupportsBothIndexWidths)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: asked of the ACTIVE renderer. GTEST_SKIP() returns from
-    // the test body it is written in, so what used to be the `#else` arm is simply what follows.
-    if (CNA_RENDERER_IS(Software))
-        GTEST_SKIP() << "Software v1 intentionally supports indexed TriangleList only";
-
     if (!device.SupportsCapability(GraphicsCapability::ThreeD))
         GTEST_SKIP() << "Renderer explicitly does not support indexed triangle strips";
     device.setRasterizerStateProperty(RasterizerState::CullNone);
@@ -1133,7 +1129,7 @@ TEST_F(IndexedDrawDeferredTest, BasicIndexedTriangleStripSupportsBothIndexWidths
 
     // plans/plan_runtimerenderer.md RTR-P9-5: the renderers with an exact-pixel backbuffer oracle.
     if (CNA_RENDERER_IS(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
-                        DirectX9, DirectX11))
+                        DirectX9, DirectX11, Software))
     {
         const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
         ExpectExactColor(pixels.AtNdc(-0.5f), Color::Red, "basic Uint16 strip");
@@ -2358,7 +2354,7 @@ TEST_F(IndexedDrawDeferredTest, DrawUserIndexedTriangleStripsPreserveWidthsOffse
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, Software);
     RequireIndexedRendering();
 
 #ifdef CNA_TEST_VULKAN_AVAILABLE
@@ -2431,7 +2427,7 @@ TEST_F(IndexedDrawDeferredTest, IndexedTriangleStripAtoBtoAPreservesWidthsRanges
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, Software);
     RequireIndexedRendering();
 
 #ifdef CNA_TEST_WEBGPU_AVAILABLE
@@ -2531,7 +2527,7 @@ TEST_F(IndexedDrawDeferredTest, IndexedTopologiesRenderExactDistinctGeometry)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, Vulkan);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, Vulkan, Software);
     RequireIndexedRendering();
 
 #ifdef CNA_TEST_VULKAN_AVAILABLE
@@ -2594,7 +2590,8 @@ TEST_F(IndexedDrawDeferredTest, IndexedTopologiesRenderExactDistinctGeometry)
     const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
     ExpectExactColor(pixels.AtNdc(-0.75f), Color::Red, "indexed triangle list");
     ExpectExactColor(pixels.AtNdc(-0.25f), Color::Lime, "indexed triangle strip");
-    ExpectExactColor(pixels.AtNdc(0.25f), Color::Blue, "indexed line list");
+    ExpectExactColorNear(
+        pixels, 0.25f, 0.0f, Color::Blue, "indexed line list");
     ExpectExactColorNear(
         pixels, 0.65f, 0.0f, Color::Yellow, "indexed line strip first segment");
     ExpectExactColorNear(
@@ -2609,7 +2606,7 @@ TEST_F(IndexedDrawDeferredTest, PublicThirtyTwoBitTopologiesRenderExactDistinctG
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, Vulkan);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, Vulkan, Software);
     RequireIndexedRendering();
 
 #ifdef CNA_TEST_VULKAN_AVAILABLE
@@ -2681,7 +2678,8 @@ TEST_F(IndexedDrawDeferredTest, PublicThirtyTwoBitTopologiesRenderExactDistinctG
     const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
     ExpectExactColor(pixels.AtNdc(-0.75f), Color::Red, "Uint32 triangle list");
     ExpectExactColor(pixels.AtNdc(-0.25f), Color::Lime, "Uint32 triangle strip");
-    ExpectExactColor(pixels.AtNdc(0.25f), Color::Blue, "Uint32 line list");
+    ExpectExactColorNear(
+        pixels, 0.25f, 0.0f, Color::Blue, "Uint32 line list");
     ExpectExactColorNear(
         pixels, 0.65f, 0.0f, Color::Yellow, "Uint32 line strip first segment");
     ExpectExactColorNear(
@@ -2693,7 +2691,7 @@ TEST_F(IndexedDrawDeferredTest, PublicThirtyTwoBitTopologiesRenderExactDistinctG
 }
 
 
-TEST_F(IndexedDrawDeferredTest, SoftwareExplicitlyRejectsUnsupportedIndexedTopologies)
+TEST_F(IndexedDrawDeferredTest, SoftwareRejectsAnInvalidIndexedTopologyWithoutRendering)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
@@ -2711,25 +2709,20 @@ TEST_F(IndexedDrawDeferredTest, SoftwareExplicitlyRejectsUnsupportedIndexedTopol
 
     BasicEffect effect(device);
     ApplyVertexColorEffect(effect);
+    device.Clear(Color::Black);
     device.SetVertexBuffer(&vertexBuffer);
     device.SetIndexBuffer(&indexBuffer);
 
     EXPECT_THROW(
         device.DrawIndexedPrimitives(
-            PrimitiveType::TriangleStrip, 0, 0, 4, 0, 2),
-        std::runtime_error);
-    EXPECT_THROW(
-        device.DrawIndexedPrimitives(
-            PrimitiveType::LineList, 0, 0, 4, 0, 2),
-        std::runtime_error);
-    EXPECT_THROW(
-        device.DrawIndexedPrimitives(
-            PrimitiveType::LineStrip, 0, 0, 4, 0, 3),
-        std::runtime_error);
-    EXPECT_THROW(
-        device.DrawIndexedPrimitives(
-            PrimitiveType::PointListEXT, 0, 0, 4, 0, 4),
-        std::runtime_error);
+            static_cast<PrimitiveType>(999), 0, 0, 4, 0, 1),
+        System::InvalidOperationException);
+
+    const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
+    EXPECT_TRUE(std::all_of(
+        pixels.pixels.begin(), pixels.pixels.end(),
+        [](const Color& pixel) { return pixel == Color::Black; }))
+        << "the invalid indexed topology submitted partial geometry";
 }
 
 // REMED-GFX-110: the CPU raster paths address real host storage, so a decoded index that leaves
