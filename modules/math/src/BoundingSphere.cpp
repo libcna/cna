@@ -198,6 +198,53 @@ namespace Microsoft::Xna::Framework
         return CreateFromPoints(frustum.GetCorners());
     }
 
+    namespace
+    {
+        /**
+         * @brief The squared length of a difference, accumulated the way XNA's own answer is.
+         *
+         * XNA 4.0 ships as a 32-bit assembly and its `Vector3` arithmetic runs on the x87 unit,
+         * where `x*x + y*y + z*z` is accumulated at extended precision and rounded to `float`
+         * only when the result is stored. Accumulating in `float` instead gives a different
+         * `Length`, and `CreateFromPoints` amplifies the difference: a point that lands exactly
+         * on the sphere either grows it or does not. Measured against the genuine assemblies over
+         * 200 random point pairs -- `Vector3.Distance` and `Vector3.DistanceSquared` agree with a
+         * double accumulation on every one and with a float accumulation on none
+         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-134`).
+         */
+        [[nodiscard]] inline double SquaredLength(const Vector3& value) noexcept
+        {
+            const double x = static_cast<double>(value.X);
+            const double y = static_cast<double>(value.Y);
+            const double z = static_cast<double>(value.Z);
+            return x * x + y * y + z * z;
+        }
+
+        /** @brief `Vector3.Length()` as XNA answers it: accumulated wide, stored narrow. */
+        [[nodiscard]] inline float WideLength(const Vector3& value) noexcept
+        {
+            return static_cast<float>(std::sqrt(SquaredLength(value)));
+        }
+
+        /** @brief `Vector3.Distance(a, b)`: the difference is not stored, so it is not narrowed. */
+        [[nodiscard]] inline float WideDistance(const Vector3& left, const Vector3& right) noexcept
+        {
+            const double x = static_cast<double>(left.X) - static_cast<double>(right.X);
+            const double y = static_cast<double>(left.Y) - static_cast<double>(right.Y);
+            const double z = static_cast<double>(left.Z) - static_cast<double>(right.Z);
+            return static_cast<float>(std::sqrt(x * x + y * y + z * z));
+        }
+
+        /** @brief `Vector3.DistanceSquared(a, b)`, likewise. */
+        [[nodiscard]] inline float WideDistanceSquared(const Vector3& left, const Vector3& right) noexcept
+        {
+            const double x = static_cast<double>(left.X) - static_cast<double>(right.X);
+            const double y = static_cast<double>(left.Y) - static_cast<double>(right.Y);
+            const double z = static_cast<double>(left.Z) - static_cast<double>(right.Z);
+            return static_cast<float>(x * x + y * y + z * z);
+        }
+    }
+
     BoundingSphere BoundingSphere::CreateFromPoints(const std::vector<Vector3>& points)
     {
         if (points.empty())
@@ -223,9 +270,9 @@ namespace Microsoft::Xna::Framework
             if (pt.Z > maxz.Z) maxz = pt;
         }
 
-        float sqDistX = Vector3::DistanceSquared(maxx, minx);
-        float sqDistY = Vector3::DistanceSquared(maxy, miny);
-        float sqDistZ = Vector3::DistanceSquared(maxz, minz);
+        const float sqDistX = WideDistanceSquared(maxx, minx);
+        const float sqDistY = WideDistanceSquared(maxy, miny);
+        const float sqDistZ = WideDistanceSquared(maxz, minz);
 
         Vector3 min = minx;
         Vector3 max = maxx;
@@ -248,29 +295,38 @@ namespace Microsoft::Xna::Framework
             min = minz;
         }
 
-        Vector3 center = (min + max) * 0.5f;
-        float radius = Vector3::Distance(max, center);
+        // The seed is the midpoint of that pair and *half their distance* -- not the distance from
+        // the midpoint to either end, which differs from it by an ulp often enough to change which
+        // points the growth pass then touches. Measured: over 200 random pairs the genuine answer
+        // is `Vector3.Distance(max, min) * 0.5f` on every one (`XNASWEEP-134`).
+        Vector3 center(
+            static_cast<float>((static_cast<double>(min.X) + static_cast<double>(max.X)) * 0.5),
+            static_cast<float>((static_cast<double>(min.Y) + static_cast<double>(max.Y)) * 0.5),
+            static_cast<float>((static_cast<double>(min.Z) + static_cast<double>(max.Z)) * 0.5));
+        float radius = WideDistance(max, min) * 0.5f;
 
-        float sqRadius = radius * radius;
         for (const Vector3& pt : points)
         {
-            Vector3 diff = pt - center;
-            float sqDist = diff.LengthSquared();
-            if (sqDist > sqRadius)
+            // Every value here is a `float` the moment it is stored, and the arithmetic between
+            // stores is wide. The growth is XNA's own: the new radius is the midpoint of the old
+            // one and the distance, and the centre slides along the difference by the fraction
+            // that leaves the far side where it was. CNA's earlier form -- move by half the
+            // overshoot along the unit direction, then take the radius as the distance to the
+            // point -- agrees algebraically and not in floating point, and it is the reason 123
+            // of the corpus's model references carried a bounding-sphere centre a few parts in
+            // 10^7 away from XNA's. Measured exactly over 560 point sets (`XNASWEEP-134`).
+            const Vector3 difference = pt - center;
+            const float distance = WideLength(difference);
+            if (!(distance > radius))
             {
-                const float distance = std::sqrt(sqDist);
-                const Vector3 direction = diff / distance;
-                // The centre moves along the direction by half the overshoot. Algebraically the
-                // same as taking the midpoint of the far side and the point, and not the same in
-                // floating point: the midpoint form mixes the point's coordinates into components
-                // the direction does not touch, so a centre component that should stay exactly
-                // zero drifts by an ulp. XNA's answer for a symmetric quad is exactly zero
-                // (measured, tests/reference/xna40/differential/model_x_textured.xnb, whose mesh
-                // sphere is (0,0,0); plans/plan_xnapipeline_parity.md XNAPP-266).
-                center = center + direction * ((distance - radius) * 0.5f);
-                radius = Vector3::Distance(pt, center);
-                sqRadius = radius * radius;
+                continue;
             }
+            const float grown = (radius + distance) * 0.5f;
+            const float share = static_cast<float>(
+                1.0 - static_cast<double>(grown) / static_cast<double>(distance));
+            const Vector3 offset = difference * share;
+            center = center + offset;
+            radius = grown;
         }
 
         return BoundingSphere(center, radius);
