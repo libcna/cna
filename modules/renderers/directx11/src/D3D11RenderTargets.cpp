@@ -73,24 +73,22 @@ namespace CNA::Internal::Renderers::DirectX11
                                         std::to_string(surfaceFormat));
         appliedMultiSampleCount_ = ClampMultiSampleCount(device_.Get(), dxgiFormat_, multiSampleCount);
         isMsaa_ = appliedMultiSampleCount_ > 0;
-        // A mip chain requires GenerateMips(), which requires a single-sample source -- MSAA and
-        // a full mip chain are mutually exclusive here (matches this project's own EasyGL/Vulkan
-        // precedent: a render target is either "resolved once, then mip-cascaded" or "rendered
-        // straight to a mip-chain texture", never both on the same attachment).
-        mipMap_ = mipMap && !isMsaa_;
+        // The multisampled draw resource has one level; its single-sample resolve resource owns
+        // the public mip chain and is the GenerateMips source/destination.
+        mipMap_ = mipMap;
         levelCount_ = mipMap_ ? CalculateMipLevels(w, h) : 1;
 
         D3D11_TEXTURE2D_DESC colorDesc{};
         colorDesc.Width = static_cast<UINT>(w);
         colorDesc.Height = static_cast<UINT>(h);
-        colorDesc.MipLevels = static_cast<UINT>(levelCount_);
+        colorDesc.MipLevels = isMsaa_ ? 1u : static_cast<UINT>(levelCount_);
         colorDesc.ArraySize = 1;
         colorDesc.Format = dxgiFormat_;
         colorDesc.SampleDesc.Count = isMsaa_ ? static_cast<UINT>(appliedMultiSampleCount_) : 1;
         colorDesc.SampleDesc.Quality = 0;
         colorDesc.Usage = D3D11_USAGE_DEFAULT;
         colorDesc.BindFlags = D3D11_BIND_RENDER_TARGET | (isMsaa_ ? 0 : D3D11_BIND_SHADER_RESOURCE);
-        colorDesc.MiscFlags = mipMap_ ? D3D11_RESOURCE_MISC_GENERATE_MIPS : 0;
+        colorDesc.MiscFlags = !isMsaa_ && mipMap_ ? D3D11_RESOURCE_MISC_GENERATE_MIPS : 0;
 
         HRESULT hr = device_->CreateTexture2D(&colorDesc, nullptr, colorTexture_.GetAddressOf());
         if (FAILED(hr))
@@ -105,9 +103,11 @@ namespace CNA::Internal::Renderers::DirectX11
             // The MSAA texture itself is never sampled directly -- ResolveSubresource() into this
             // separate single-sample texture on UnbindAsRenderTarget() (DX-45's own design note).
             D3D11_TEXTURE2D_DESC resolveDesc = colorDesc;
+            resolveDesc.MipLevels = static_cast<UINT>(levelCount_);
             resolveDesc.SampleDesc.Count = 1;
-            resolveDesc.MiscFlags = 0;
-            resolveDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+            resolveDesc.MiscFlags = mipMap_ ? D3D11_RESOURCE_MISC_GENERATE_MIPS : 0;
+            resolveDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE |
+                                    (mipMap_ ? D3D11_BIND_RENDER_TARGET : 0);
             hr = device_->CreateTexture2D(&resolveDesc, nullptr, resolveTexture_.GetAddressOf());
             if (FAILED(hr))
                 throw std::runtime_error("D3D11RenderTargetRenderer: CreateTexture2D(resolve) failed, hr=" + FormatHr(hr));
@@ -278,15 +278,15 @@ namespace CNA::Internal::Renderers::DirectX11
                                         std::to_string(surfaceFormat));
         appliedMultiSampleCount_ = ClampMultiSampleCount(device_.Get(), dxgiFormat_, multiSampleCount);
         isMsaa_ = appliedMultiSampleCount_ > 0;
-        // Mutually exclusive on the same attachment, same rationale D3D11RenderTargetRenderer's own
-        // DX-45 already established -- a full mip chain needs a single-sample source.
-        mipMap_ = mipMap && !isMsaa_;
+        // The multisampled draw array has one level; its single-sample cube resolve resource owns
+        // the public mip chain and is the GenerateMips source/destination.
+        mipMap_ = mipMap;
         levelCount_ = mipMap_ ? CalculateMipLevels(size, size) : 1;
 
         D3D11_TEXTURE2D_DESC desc{};
         desc.Width = static_cast<UINT>(size_);
         desc.Height = static_cast<UINT>(size_);
-        desc.MipLevels = static_cast<UINT>(levelCount_);
+        desc.MipLevels = isMsaa_ ? 1u : static_cast<UINT>(levelCount_);
         desc.ArraySize = 6;
         desc.Format = dxgiFormat_;
         desc.SampleDesc.Count = isMsaa_ ? static_cast<UINT>(appliedMultiSampleCount_) : 1;
@@ -297,7 +297,8 @@ namespace CNA::Internal::Renderers::DirectX11
         // SRV actually targets.
         desc.Usage = D3D11_USAGE_DEFAULT;
         desc.BindFlags = D3D11_BIND_RENDER_TARGET | (isMsaa_ ? 0 : D3D11_BIND_SHADER_RESOURCE);
-        desc.MiscFlags = (isMsaa_ ? 0 : D3D11_RESOURCE_MISC_TEXTURECUBE) | (mipMap_ ? D3D11_RESOURCE_MISC_GENERATE_MIPS : 0);
+        desc.MiscFlags = (isMsaa_ ? 0 : D3D11_RESOURCE_MISC_TEXTURECUBE) |
+                         (!isMsaa_ && mipMap_ ? D3D11_RESOURCE_MISC_GENERATE_MIPS : 0);
 
         HRESULT hr = device_->CreateTexture2D(&desc, nullptr, texture_.GetAddressOf());
         if (FAILED(hr))
@@ -336,8 +337,10 @@ namespace CNA::Internal::Renderers::DirectX11
             resolveDesc.Format = dxgiFormat_;
             resolveDesc.SampleDesc.Count = 1;
             resolveDesc.Usage = D3D11_USAGE_DEFAULT;
-            resolveDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-            resolveDesc.MiscFlags = D3D11_RESOURCE_MISC_TEXTURECUBE;
+            resolveDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE |
+                                    (mipMap_ ? D3D11_BIND_RENDER_TARGET : 0);
+            resolveDesc.MiscFlags = D3D11_RESOURCE_MISC_TEXTURECUBE |
+                                    (mipMap_ ? D3D11_RESOURCE_MISC_GENERATE_MIPS : 0);
             hr = device_->CreateTexture2D(&resolveDesc, nullptr, resolveTexture_.GetAddressOf());
             if (FAILED(hr))
                 throw std::runtime_error("D3D11RenderTargetCubeRenderer: CreateTexture2D(resolve) failed, hr=" + FormatHr(hr));
@@ -402,9 +405,8 @@ namespace CNA::Internal::Renderers::DirectX11
     {
         if (!isMsaa_ || !resolveTexture_ || activeFace_ < 0) return;
         // Only the currently-active face -- matches this class's own existing "only one face is
-        // ever the active draw target at a time" mip-regen convention. Both the MSAA source (no
-        // mips) and the resolve destination's base mip level use the same per-face subresource
-        // formula (levelCount_ is always 1 here since mipMap_ is forced false when isMsaa_).
+        // ever the active draw target at a time" mip-regen convention. The MSAA source has one
+        // subresource per face; the resolve destination uses the full face-major mip layout.
         const UINT srcSubresource = static_cast<UINT>(activeFace_);
         const UINT dstSubresource = static_cast<UINT>(activeFace_) * static_cast<UINT>(levelCount_);
         context_->ResolveSubresource(resolveTexture_.Get(), dstSubresource, texture_.Get(), srcSubresource,

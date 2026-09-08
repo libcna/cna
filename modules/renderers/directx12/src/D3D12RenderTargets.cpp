@@ -341,9 +341,9 @@ namespace CNA::Internal::Renderers::DirectX12
                                         std::to_string(surfaceFormat));
         appliedMultiSampleCount_ = ClampMultiSampleCount(device, dxgiFormat_, multiSampleCount);
         isMsaa_ = appliedMultiSampleCount_ > 0;
-        // Mutually exclusive on the same attachment, same rationale D3D11RenderTargetRenderer's own
-        // DX-45 already established -- a full mip chain needs a single-sample source.
-        mipMap_ = mipMap && !isMsaa_;
+        // The multisampled draw resource has one level; its single-sample resolve resource owns
+        // the public mip chain and is the CPU downsample source/destination.
+        mipMap_ = mipMap;
         levelCount_ = mipMap_ ? CalculateMipLevels(w, h) : 1;
 
         D3D12_HEAP_PROPERTIES heapProps{};
@@ -354,7 +354,7 @@ namespace CNA::Internal::Renderers::DirectX12
         colorDesc.Width = static_cast<UINT64>(w);
         colorDesc.Height = static_cast<UINT>(h);
         colorDesc.DepthOrArraySize = 1;
-        colorDesc.MipLevels = static_cast<UINT16>(levelCount_);
+        colorDesc.MipLevels = isMsaa_ ? 1 : static_cast<UINT16>(levelCount_);
         colorDesc.Format = dxgiFormat_;
         colorDesc.SampleDesc.Count = isMsaa_ ? static_cast<UINT>(appliedMultiSampleCount_) : 1;
         colorDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
@@ -375,8 +375,8 @@ namespace CNA::Internal::Renderers::DirectX12
         rtv_ = owner_->AllocateRtvDescriptorEXT();
         // Explicit MipSlice=0 (rather than a null desc) -- required once levelCount_ > 1, since an
         // RTV can only ever target exactly one mip level and a null desc's inference is not
-        // guaranteed for a multi-mip resource. TEXTURE2DMS has no MipSlice field at all (MSAA
-        // resources never have mips, enforced above by the mutual-exclusion rule).
+        // guaranteed for a multi-mip resource. TEXTURE2DMS has no MipSlice field at all, so the
+        // MSAA draw resource has one level while its resolve resource can retain the full chain.
         D3D12_RENDER_TARGET_VIEW_DESC rtvDesc{};
         rtvDesc.Format = dxgiFormat_;
         if (isMsaa_)
@@ -398,6 +398,7 @@ namespace CNA::Internal::Renderers::DirectX12
             // COMMON, a legal generic initial state for CreateCommittedResource, and tracked from
             // there -- ResolveMsaaEXT() transitions it to RESOLVE_DEST before the first resolve.
             D3D12_RESOURCE_DESC resolveDesc = colorDesc;
+            resolveDesc.MipLevels = static_cast<UINT16>(levelCount_);
             resolveDesc.SampleDesc.Count = 1;
             resolveDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
             hr = device_->CreateCommittedResource(
@@ -579,6 +580,9 @@ namespace CNA::Internal::Renderers::DirectX12
     {
         if (!mipMap_ || levelCount_ <= 1 || !owner_) return;
 
+        ID3D12Resource* const mipResource = GetSampleableColorResourceEXT();
+        if (mipResource == nullptr) return;
+
         int srcW = width_, srcH = height_;
         for (int level = 1; level < levelCount_; ++level)
         {
@@ -586,7 +590,7 @@ namespace CNA::Internal::Renderers::DirectX12
             const int dstH = std::max(1, srcH / 2);
 
             const auto srcPixels = ReadbackSubresource(
-                owner_, device_.Get(), colorResource_.Get(), static_cast<UINT>(level - 1), srcW,
+                owner_, device_.Get(), mipResource, static_cast<UINT>(level - 1), srcW,
                 srcH, bytesPerTexel_);
             if (srcPixels.empty()) return; // honest bail-out -- leaves remaining levels undefined, not wrong
 
@@ -594,7 +598,7 @@ namespace CNA::Internal::Renderers::DirectX12
                 srcPixels, srcW, srcH, dstW, dstH,
                 static_cast<SurfaceFormat>(surfaceFormat_), bytesPerTexel_);
             UploadSubresource(
-                owner_, device_.Get(), colorResource_.Get(), static_cast<UINT>(level),
+                owner_, device_.Get(), mipResource, static_cast<UINT>(level),
                 dstPixels.data(), dstW, dstH, dxgiFormat_, bytesPerTexel_);
 
             srcW = dstW; srcH = dstH;
@@ -621,9 +625,9 @@ namespace CNA::Internal::Renderers::DirectX12
                                         std::to_string(surfaceFormat));
         appliedMultiSampleCount_ = ClampMultiSampleCount(device, dxgiFormat_, multiSampleCount);
         isMsaa_ = appliedMultiSampleCount_ > 0;
-        // Mutually exclusive on the same attachment, same rationale D3D12RenderTargetRenderer's own
-        // DX-117 MSAA follow-up already established for the 2D leg.
-        mipMap_ = mipMap && !isMsaa_;
+        // The multisampled draw array has one level; its single-sample cube resolve resource owns
+        // the public mip chain and is the CPU downsample source/destination.
+        mipMap_ = mipMap;
         levelCount_ = mipMap_ ? CalculateMipLevels(size, size) : 1;
 
         D3D12_HEAP_PROPERTIES heapProps{};
@@ -634,7 +638,7 @@ namespace CNA::Internal::Renderers::DirectX12
         colorDesc.Width = static_cast<UINT64>(size_);
         colorDesc.Height = static_cast<UINT>(size_);
         colorDesc.DepthOrArraySize = 6;
-        colorDesc.MipLevels = static_cast<UINT16>(levelCount_);
+        colorDesc.MipLevels = isMsaa_ ? 1 : static_cast<UINT16>(levelCount_);
         colorDesc.Format = dxgiFormat_;
         colorDesc.SampleDesc.Count = isMsaa_ ? static_cast<UINT>(appliedMultiSampleCount_) : 1;
         colorDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
@@ -681,6 +685,7 @@ namespace CNA::Internal::Renderers::DirectX12
             // the active face only on UnbindAsRenderTarget() (mirrors the 2D leg's own
             // resolveResource_/ResolveMsaaEXT() design, DX-117 follow-up).
             D3D12_RESOURCE_DESC resolveDesc = colorDesc;
+            resolveDesc.MipLevels = static_cast<UINT16>(levelCount_);
             resolveDesc.SampleDesc.Count = 1;
             resolveDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
             hr = device_->CreateCommittedResource(
@@ -780,10 +785,8 @@ namespace CNA::Internal::Renderers::DirectX12
         cmdList->Reset(allocator, nullptr);
 
         // Only the currently-active face -- matches GenerateMipsEXT()'s own existing "only one
-        // face is ever the active draw target at a time" convention. The MSAA source has no mips
-        // (subresource = face); the resolve destination's base mip level uses the standard
-        // mip + face*levelCount_ formula (levelCount_ is always 1 here since mipMap_ is forced
-        // false when isMsaa_).
+        // face is ever the active draw target at a time" convention. The MSAA source has one
+        // subresource per face; the resolve destination uses the full face-major mip layout.
         const UINT srcSubresource = static_cast<UINT>(activeFace_);
         const UINT dstSubresource = static_cast<UINT>(activeFace_) * static_cast<UINT>(levelCount_);
 
@@ -903,9 +906,8 @@ namespace CNA::Internal::Renderers::DirectX12
 
     void D3D12RenderTargetCubeRenderer::UnbindAsRenderTarget()
     {
-        // DX-152/DX-144: resolve MSAA, then generate the active face's mip chain (mutually
-        // exclusive in practice -- isMsaa_ forces mipMap_ false -- but ordered the same way the
-        // 2D leg orders ResolveMsaaEXT()/GenerateMipsEXT()), BEFORE clearing activeFace_.
+        // DX-152/DX-144: resolve MSAA, then generate the active face's mip chain before clearing
+        // activeFace_. The latter runs against the single-sample resolve resource when needed.
         ResolveMsaaEXT();
         GenerateMipsEXT();
         activeFace_ = -1;
@@ -915,6 +917,9 @@ namespace CNA::Internal::Renderers::DirectX12
     void D3D12RenderTargetCubeRenderer::GenerateMipsEXT()
     {
         if (!mipMap_ || levelCount_ <= 1 || !owner_ || activeFace_ < 0) return;
+
+        ID3D12Resource* const mipResource = GetSampleableColorResourceEXT();
+        if (mipResource == nullptr) return;
 
         // Only the face that was actually just drawn to gets its chain regenerated -- mirrors
         // D3D11RenderTargetCubeRenderer's own single-active-face convention (one shared
@@ -931,7 +936,7 @@ namespace CNA::Internal::Renderers::DirectX12
             const UINT dstSubresource = static_cast<UINT>(level) + face * static_cast<UINT>(levelCount_);
 
             const auto srcPixels = ReadbackSubresource(
-                owner_, device_.Get(), colorResource_.Get(), srcSubresource, srcW, srcH,
+                owner_, device_.Get(), mipResource, srcSubresource, srcW, srcH,
                 bytesPerTexel_);
             if (srcPixels.empty()) return; // honest bail-out -- leaves remaining levels undefined, not wrong
 
@@ -939,7 +944,7 @@ namespace CNA::Internal::Renderers::DirectX12
                 srcPixels, srcW, srcH, dstW, dstH,
                 static_cast<SurfaceFormat>(surfaceFormat_), bytesPerTexel_);
             UploadSubresource(
-                owner_, device_.Get(), colorResource_.Get(), dstSubresource,
+                owner_, device_.Get(), mipResource, dstSubresource,
                 dstPixels.data(), dstW, dstH, dxgiFormat_, bytesPerTexel_);
 
             srcW = dstW; srcH = dstH;

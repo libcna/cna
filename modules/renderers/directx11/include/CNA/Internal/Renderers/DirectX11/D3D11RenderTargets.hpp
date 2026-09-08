@@ -142,16 +142,15 @@ namespace CNA::Internal::Renderers::DirectX11
     ///
     /// DX-152: real, device-queried MSAA is now supported, mirroring D3D11RenderTargetRenderer's
     /// own DX-45 design -- never assumes a requested sample count is supported
-    /// (ID3D11Device::CheckMultisampleQualityLevels), MSAA and a full mip chain are mutually
-    /// exclusive on the same attachment (same rationale DX-45 already established). D3D11 cannot
-    /// combine D3D11_RESOURCE_MISC_TEXTURECUBE with SampleDesc.Count > 1 on one resource (a
+    /// (ID3D11Device::CheckMultisampleQualityLevels). D3D11 cannot combine
+    /// D3D11_RESOURCE_MISC_TEXTURECUBE with SampleDesc.Count > 1 on one resource (a
     /// TextureCube SRV can never be multisampled), so when MSAA is active, `texture_` becomes a
     /// PLAIN (non-cube) 6-slice Texture2DMSArray used ONLY as an RTV target -- never sampled
     /// directly, same "MSAA resource is render-target-only" rule DX-45 already established -- and
     /// a separate `resolveTexture_` (real D3D11_RESOURCE_MISC_TEXTURECUBE, single-sample) is
-    /// ResolveSubresource()'d from it on UnbindAsRenderTarget(), only for the currently-active
-    /// face (matching this class's own existing "only one face is ever active" mip-regen
-    /// convention).
+    /// ResolveSubresource()'d from it on UnbindAsRenderTarget(), then owns and regenerates the full
+    /// mip chain when requested. Only the currently-active face is resolved (matching this class's
+    /// own existing "only one face is ever active" mip-regen convention).
     class D3D11RenderTargetCubeRenderer final : public IRenderTargetCubeRenderer
     {
     public:

@@ -21,10 +21,10 @@
 // plans/plan_dx.md DX-117 MSAA follow-up: real, device-queried MSAA is now supported for
 // D3D12RenderTargetRenderer (2D), mirroring D3D11RenderTargetRenderer's own DX-45 design exactly --
 // never assumes a requested sample count is supported (ID3D12Device::CheckFeatureSupport with
-// D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS), MSAA and a full mip chain are mutually exclusive on
-// the same attachment (same rationale D3D11 already established), and the MSAA color resource is
-// never sampled directly -- ResolveSubresource() into a separate single-sample resource on
-// UnbindAsRenderTarget(), the D3D12-command-list equivalent of D3D11's own
+// D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS), and the MSAA color resource is never sampled directly
+// -- ResolveSubresource() into a separate single-sample resource on UnbindAsRenderTarget(). That
+// resource retains and regenerates the full mip chain when requested. This is the D3D12-command-
+// list equivalent of D3D11's own
 // ID3D11DeviceContext::ResolveSubresource() call (D3D12's own version additionally needs explicit
 // RESOLVE_SOURCE/RESOLVE_DEST resource-state transitions, which D3D11 doesn't).
 //

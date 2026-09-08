@@ -631,6 +631,14 @@ function(cna_register_d3d_parity_tests)
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_msaa_first_readback_test.cpp"
         DIRECTX11_TIMEOUT 900 DIRECTX12_TIMEOUT 900)
     cna_d3d_parity_fixture(
+        NAME RenderTarget_InvalidMipLevel TARGET rendertarget_invalid_mip DIRECTX12_ORDER 2080
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_invalid_mip_level_test.cpp"
+        DIRECTX11_TIMEOUT 1200 DIRECTX12_TIMEOUT 1200)
+    cna_d3d_parity_fixture(
+        NAME RenderTarget_MsaaMipReadback TARGET rendertarget_msaa_mip_readback DIRECTX12_ORDER 2090
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_msaa_mip_readback_test.cpp"
+        DIRECTX11_TIMEOUT 1200 DIRECTX12_TIMEOUT 1200)
+    cna_d3d_parity_fixture(
         NAME CompressedTexture_StorageContract TARGET compressed_texture_storage DIRECTX12_ORDER 1892
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/d3d_compressed_texture_contract_test.cpp"
         DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 600)
