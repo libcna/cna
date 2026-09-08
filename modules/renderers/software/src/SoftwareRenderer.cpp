@@ -3527,14 +3527,6 @@ namespace CNA::Internal::Renderers::Software
                     "startIndex", std::to_string(startIndex),
                     "startIndex must not be negative.");
             }
-            // CNA's public contract rejects a negative baseVertex before renderer dispatch; the
-            // CPU paths address real host storage, so they re-assert it rather than trust it.
-            if (baseVertex < 0)
-            {
-                throw System::ArgumentOutOfRangeException(
-                    "baseVertex", std::to_string(baseVertex),
-                    "baseVertex must not be negative.");
-            }
             if (startIndex > availableIndexCount ||
                 consumedIndexCount > static_cast<std::int64_t>(availableIndexCount) - startIndex)
             {

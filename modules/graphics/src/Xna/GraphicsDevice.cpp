@@ -1088,7 +1088,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::ValidateVertexStreamRanges(
         const CNA::Internal::Renderers::GpuDrawParams& p,
-        int startElement,
+        std::int64_t startElement,
         int elementCount,
         const char* parameterName,
         const std::string& parameterValue) const
@@ -1101,10 +1101,11 @@ namespace Microsoft::Xna::Framework::Graphics
             // Every term is an element count of THIS stream, so the arithmetic is done against
             // this stream's own capacity -- a short secondary stream is rejected even when
             // stream 0 could satisfy the same request.
-            const int available = stream.vertexCount;
-            if (stream.vertexOffset > available ||
-                startElement > available - stream.vertexOffset ||
-                elementCount > available - stream.vertexOffset - startElement)
+            const std::int64_t available = stream.vertexCount;
+            const std::int64_t effectiveStart =
+                static_cast<std::int64_t>(stream.vertexOffset) + startElement;
+            if (effectiveStart < 0 || effectiveStart > available ||
+                elementCount > available - effectiveStart)
             {
                 throw System::ArgumentOutOfRangeException(
                     parameterName, parameterValue,
@@ -1203,7 +1204,6 @@ namespace Microsoft::Xna::Framework::Graphics
 
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
         System::ArgumentOutOfRangeException::ThrowIfNegative(startIndex, "startIndex");
-        System::ArgumentOutOfRangeException::ThrowIfNegative(baseVertex, "baseVertex");
         System::ArgumentOutOfRangeException::ThrowIfNegative(minVertexIndex, "minVertexIndex");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(numVertices, "numVertices");
 
@@ -1222,10 +1222,10 @@ namespace Microsoft::Xna::Framework::Graphics
         // REMED-GFX-200: the binding offset moves the whole declared range, so it is part of what
         // must fit -- exactly as DrawInstancedPrimitives below has counted it since REMED-GFX-118.
         const int bindingVertexOffset = CurrentVertexBufferOffset();
-        if (bindingVertexOffset > availableVertexCount ||
-            baseVertex > availableVertexCount - bindingVertexOffset ||
-            minVertexIndex > availableVertexCount - bindingVertexOffset - baseVertex ||
-            numVertices > availableVertexCount - bindingVertexOffset - baseVertex - minVertexIndex)
+        const std::int64_t declaredVertexStart =
+            static_cast<std::int64_t>(bindingVertexOffset) + baseVertex + minVertexIndex;
+        if (declaredVertexStart < 0 || declaredVertexStart > availableVertexCount ||
+            numVertices > static_cast<std::int64_t>(availableVertexCount) - declaredVertexStart)
         {
             throw System::ArgumentOutOfRangeException(
                 "numVertices", std::to_string(numVertices),
@@ -1247,7 +1247,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // REMED-GFX-201: baseVertex advances EVERY per-vertex stream, each by that many of its own
         // elements, which is FNA3D's `vertexStride * (vertexOffset + baseVertex)` per binding.
         const int foldedOffset = FoldedVertexStreamOffset();
-        p.baseVertex = baseVertex + foldedOffset;
+        p.baseVertex = static_cast<int>(static_cast<std::int64_t>(baseVertex) + foldedOffset);
         p.minVertexIndex = minVertexIndex;
         p.numVertices = numVertices;
         FillVertexStreamBindings(
@@ -1256,7 +1256,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // own elements, so every stream must hold it -- not only the one named by `vb`. Argument
         // validation precedes the capability gate for the reason DrawPrimitives states.
         ValidateVertexStreamRanges(
-            p, p.baseVertex + minVertexIndex, numVertices,
+            p, static_cast<std::int64_t>(p.baseVertex) + minVertexIndex, numVertices,
             "numVertices", std::to_string(numVertices));
         ValidateVertexStreamCapability(p);
         applySamplerStatesToRenderer();
@@ -1296,7 +1296,6 @@ namespace Microsoft::Xna::Framework::Graphics
 
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
         System::ArgumentOutOfRangeException::ThrowIfNegative(startIndex, "startIndex");
-        System::ArgumentOutOfRangeException::ThrowIfNegative(baseVertex, "baseVertex");
         System::ArgumentOutOfRangeException::ThrowIfNegative(minVertexIndex, "minVertexIndex");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(numVertices, "numVertices");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(instanceCount, "instanceCount");
@@ -1323,10 +1322,10 @@ namespace Microsoft::Xna::Framework::Graphics
         const int vertexBufferOffset = CurrentVertexBufferOffset();
 
         const int availableVertexCount = currentVertexBuffer_->getVertexCountProperty();
-        if (vertexBufferOffset > availableVertexCount ||
-            baseVertex > availableVertexCount - vertexBufferOffset ||
-            minVertexIndex > availableVertexCount - vertexBufferOffset - baseVertex ||
-            numVertices > availableVertexCount - vertexBufferOffset - baseVertex - minVertexIndex)
+        const std::int64_t declaredVertexStart =
+            static_cast<std::int64_t>(vertexBufferOffset) + baseVertex + minVertexIndex;
+        if (declaredVertexStart < 0 || declaredVertexStart > availableVertexCount ||
+            numVertices > static_cast<std::int64_t>(availableVertexCount) - declaredVertexStart)
         {
             throw System::ArgumentOutOfRangeException(
                 "numVertices", std::to_string(numVertices),
@@ -1362,7 +1361,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // frequency-sized group of instances. Argument validation precedes the capability gate for
         // the reason DrawPrimitives states: an out-of-range request is wrong on every renderer.
         ValidateVertexStreamRanges(
-            p, baseVertex + minVertexIndex, numVertices,
+            p, static_cast<std::int64_t>(baseVertex) + minVertexIndex, numVertices,
             "numVertices", std::to_string(numVertices));
         ValidateInstanceStreamRanges(p, instanceCount);
         ValidateVertexStreamCapability(p);

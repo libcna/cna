@@ -385,7 +385,9 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Draws indexed primitives from the bound vertex and index buffers.
          * @param primitiveType  The type of primitive to draw.
-         * @param baseVertex     Offset added to each index before reading from the vertex buffer.
+         * @param baseVertex     Signed offset added to each index before reading from the vertex
+         *                       buffer. A negative value is valid when the resulting indices and
+         *                       declared vertex window remain in range.
          * @param minVertexIndex Minimum vertex index among the referenced vertices.
          * @param numVertices    Number of vertices referenced.
          * @param startIndex     Location in the index buffer to start reading.
@@ -407,7 +409,9 @@ namespace Microsoft::Xna::Framework::Graphics
          * begins at that binding's vertex offset.
          *
          * @param primitiveType  The type of primitive to draw.
-         * @param baseVertex     Offset added to each index before reading from the vertex buffer.
+         * @param baseVertex     Signed offset added to each index before reading from the vertex
+         *                       buffer. A negative value is valid when the resulting indices and
+         *                       declared vertex window remain in range.
          * @param minVertexIndex Minimum vertex index among the referenced vertices.
          * @param numVertices    Number of vertices referenced.
          * @param startIndex     Location in the index buffer to start reading.
@@ -415,11 +419,11 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param instanceCount  Number of instances to draw.
          * @throws std::runtime_error if no vertex buffer, index buffer or effect is bound.
          * @throws System::ArgumentOutOfRangeException if @p primitiveCount, @p numVertices or
-         *         @p instanceCount is not positive; if @p baseVertex, @p minVertexIndex or
-         *         @p startIndex is negative; if the requested index range leaves the bound index
-         *         buffer; if the declared vertex range leaves the bound vertex buffer after its
-         *         binding offset and @p baseVertex; or if the required per-instance element range
-         *         leaves its bound buffer after applying binding offset and instance frequency.
+         *         @p instanceCount is not positive; if @p minVertexIndex or @p startIndex is
+         *         negative; if the requested index range leaves the bound index buffer; if the
+         *         declared vertex range leaves the bound vertex buffer after its binding offset
+         *         and @p baseVertex; or if the required per-instance element range leaves its
+         *         bound buffer after applying binding offset and instance frequency.
          */
         void DrawInstancedPrimitives(PrimitiveType primitiveType,
                                      int baseVertex, int minVertexIndex,
@@ -1490,7 +1494,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // rejected here even when stream 0 is long enough, naming the offending slot.
         void ValidateVertexStreamRanges(
             const CNA::Internal::Renderers::GpuDrawParams& p,
-            int startElement,
+            std::int64_t startElement,
             int elementCount,
             const char* parameterName,
             const std::string& parameterValue) const;

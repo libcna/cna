@@ -544,7 +544,7 @@ protected:
             };
             const std::array<RangeCase, 12> cases{{
                 {0, 0, 12, -1, 1, "negative startIndex"},
-                {-1, 0, 12, 0, 1, "negative baseVertex"},
+                {-1, 0, 12, 0, 1, "negative baseVertex underflows the declared range"},
                 {0, -1, 12, 0, 1, "negative minVertexIndex"},
                 {0, 0, -1, 0, 1, "negative numVertices"},
                 {0, 0, 0, 0, 1, "zero numVertices"},

@@ -2907,30 +2907,37 @@ TEST_F(IndexedDrawDeferredTest, PublicContractValidatesEveryIndexedRangeBeforeSu
         System::ArgumentOutOfRangeException);
 }
 
-TEST_F(IndexedDrawDeferredTest, PublicContractRejectsNegativeIndexedBaseVertex)
+TEST_F(IndexedDrawDeferredTest, PublicContractAcceptsCompensatedNegativeIndexedBaseVertex)
 {
-    if (!device.SupportsCapability(GraphicsCapability::ThreeD))
-        GTEST_SKIP() << "Renderer explicitly does not support indexed rendering";
+    RequireIndexedRendering();
 
-    const auto vertices = StripTriangleAt(0.0f, Color::White);
-    const std::array<std::uint16_t, 3> indices{0, 1, 2};
+    const auto selected = CenterTriangle(Color::Lime);
+    const auto decoy = CenterTriangle(Color::Red);
+    const std::array<VertexPositionColor, 6> vertices{
+        selected[0], selected[1], selected[2],
+        decoy[0], decoy[1], decoy[2],
+    };
+    const std::array<std::uint16_t, 3> indices{3, 4, 5};
     VertexBuffer vertexBuffer(
-        device, PositionColorDeclaration(), 3, BufferUsage::None);
+        device, PositionColorDeclaration(), 6, BufferUsage::None);
     IndexBuffer indexBuffer(
         device, IndexElementSize::SixteenBits, 3, BufferUsage::None);
-    vertexBuffer.SetData(vertices.data(), 3);
+    vertexBuffer.SetData(vertices.data(), 6);
     indexBuffer.SetData(indices.data(), 3);
     BasicEffect effect(device);
     ApplyVertexColorEffect(effect);
+    device.Clear(Color::Black);
     device.SetVertexBuffer(&vertexBuffer);
     device.SetIndexBuffer(&indexBuffer);
 
-    // CNA's current public contract rejects every negative baseVertex before renderer dispatch;
-    // positive baseVertex behavior is exercised by the rendering test above.
-    EXPECT_THROW(
-        device.DrawIndexedPrimitives(
-            PrimitiveType::TriangleStrip, -1, 0, 3, 0, 1),
-        System::ArgumentOutOfRangeException);
+    // The signed base compensates the index values: 3..5 become 0..2. Dropping the base would
+    // render the identically positioned red decoy, while applying it twice leaves the buffer.
+    device.DrawIndexedPrimitives(
+        PrimitiveType::TriangleList, -3, 3, 3, 0, 1);
+
+    ExpectExactColor(
+        ReadCenter(device), Color::Lime,
+        "compensated negative baseVertex with 16-bit indices");
 }
 
 #ifdef CNA_TEST_WEBGPU_AVAILABLE

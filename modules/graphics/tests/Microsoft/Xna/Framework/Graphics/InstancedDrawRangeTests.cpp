@@ -1970,6 +1970,55 @@ TEST_F(InstancedDrawRangeTest, DisposingAfterQueuedInstancedDrawsIsSafe)
 }
 #endif
 
+// Microsoft XNA forwards baseVertex as a signed D3D9 value. Here the consumed identity indices
+// 12..20 are compensated by -12 and must address slots 0..2; dropping the base renders the visible
+// decoy range 4..6, while applying it twice underflows the vertex buffer.
+TEST_F(InstancedDrawRangeTest, InstancedDrawAcceptsCompensatedNegativeBaseVertex)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, Software);
+    RequireInstancedRendering();
+
+    const GridLayout layout = BackbufferLayout();
+    const InstancedFixture fixture = BuildFixture(layout);
+
+    VertexBuffer meshBuffer(
+        device, PositionColorDeclaration(),
+        static_cast<int>(fixture.mesh.size()), BufferUsage::None);
+    meshBuffer.SetData(fixture.mesh.data(), static_cast<int>(fixture.mesh.size()));
+
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::SixteenBits,
+        static_cast<int>(fixture.indices.size()), BufferUsage::None);
+    indexBuffer.SetData(fixture.indices.data(), static_cast<int>(fixture.indices.size()));
+
+    VertexBuffer instanceBuffer(
+        device, InstanceMatrixDeclaration(), kRowCount, BufferUsage::None);
+    instanceBuffer.SetDataRaw(
+        fixture.instances.data(), kRowCount, static_cast<int>(sizeof(InstanceMatrix)));
+
+    BasicEffect effect(device);
+    ApplyInstancedEffect(effect);
+    device.Clear(Color::Black);
+    device.SetVertexBuffers({
+        VertexBufferBinding(&meshBuffer, 0, 0),
+        VertexBufferBinding(&instanceBuffer, 0, 1),
+    });
+    device.SetIndexBuffer(&indexBuffer);
+    const int instances = InstancesFor(2);
+    device.DrawInstancedPrimitives(
+        PrimitiveType::TriangleList, -12, 12, 9, 12, 3, instances);
+
+    const FrameSnapshot pixels = CaptureBackbuffer(device, layout.width, layout.height);
+    const ExpectedRange range = ResolveExpectedRange(12, -12, 3);
+    ASSERT_EQ(0, range.firstSlot);
+    ExpectInstancedGeometryRendered(
+        pixels, layout, range, instances, "compensated negative baseVertex");
+    ExpectColumnsExclusive(
+        pixels, layout, range, Color::Black, "compensated negative baseVertex");
+    ExpectInstanceRowsExclusive(
+        pixels, layout, instances, Color::Black, "compensated negative baseVertex");
+}
+
 #ifdef CNA_TEST_BGFX_AVAILABLE
 // REMED-GFX-121, pinned: `vs_instanced3d.sc` builds the per-instance world matrix with the raw
 // `mat4(i_data0, i_data1, i_data2, i_data3)` constructor. bgfx maps `mat4()` to GLSL's COLUMN
