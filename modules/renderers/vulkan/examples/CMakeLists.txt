@@ -2891,12 +2891,12 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
                         ${CNA_GRAPHICS_EXAMPLES_DIR}/dxt_texturecube_test.cpp)
         cna_register_renderer_test(NAME Vulkan_DxtTextureCube
             COMMAND cna_test_vulkan_dxt_texturecube
-            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+            WORKING_DIRECTORY "${CNA_SOURCE_DIR}")
 
-        # plan_vulkan.md VULKAN-172: the DXT1 DDS route through Texture2D::FromStream. It exercises
-        # the loaders' DEFAULT policy, which force-decodes block content to Color -- so it is the
-        # control that the native path above did not change the decode route, not a second test of
-        # the same thing.
+        # plan_vulkan.md VULKAN-172/VULKAN-241: the DXT1 DDS route through Texture2D::FromStream.
+        # On a BC-capable device it now exercises native block preservation; otherwise the shared
+        # loader decodes to Color. Either route must produce the same rendered result.
         cna_vulkan_test(cna_test_vulkan_dxt1_texture
                         ${CNA_GRAPHICS_EXAMPLES_DIR}/dxt1_texture_test.cpp)
         cna_register_renderer_test(NAME Vulkan_Dxt1FromStream

@@ -79,6 +79,8 @@ DXT1/3/5 use native BC1_RGBA/BC2/BC3 storage for both `Texture2D` (`VULKAN-172`)
 `TextureCube` (`VULKAN-240`) when the device exposes `textureCompressionBC`. The cube route is
 measured from exact block upload through decompressed readback and `EnvironmentMapEffect` sampling
 by `Vulkan_DxtTextureCube`; the identical `EasyGL_DxtTextureCube` source is the parity control.
+DDS and XNB loaders preserve the native blocks and complete mip chains on those devices
+(`VULKAN-241`), while a device without BC retains the shared decode-to-`Color` fallback.
 
 For a format it does map, the verdict comes from the **device's own** `VkFormatProperties` rather
 than from that list — a build that maps a format is not a device that can sample it (`VULKAN-170`,

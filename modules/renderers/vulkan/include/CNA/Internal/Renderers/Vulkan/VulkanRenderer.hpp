@@ -1886,6 +1886,19 @@ namespace CNA::Internal::Renderers::Vulkan
         }
 
         /**
+         * @brief Keeps loader-provided DXT payloads compressed on BC-capable devices.
+         *
+         * The content loaders still apply their per-format transfer gate, so this device-wide
+         * preference does not claim a format whose individual storage properties are unsuitable.
+         *
+         * @return True when the opened Vulkan device enabled block-compression support.
+         */
+        [[nodiscard]] bool LoadsCompressedContentNativelyEXT() const override
+        {
+            return textureCompressionBCSupported_;
+        }
+
+        /**
          * @brief Whether a `RenderTarget2D` may be created with the given surface format.
          *
          * plan_vulkan.md VULKAN-171. Renderability is a strictly narrower question than

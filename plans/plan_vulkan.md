@@ -15,7 +15,7 @@
 
 ## 1. Current status
 
-**Parity reached — see §28.1 for the dated verdict, its evidence and, as importantly, its scope, then §28.2 for the post-verdict correction.** **Two hundred and thirty-one tasks are ✅ and five ⛔** as of 2026-09-08 (`awk -F'|' '/^\| VULKAN-[0-9]+ \|/ {print $4}' plans/plan_vulkan.md | sort | uniq -c`, which is the authority for these counts and is what every row-status change is re-run against). The paragraph below is the inline list as it stood at **one hundred and nineteen** ✅ and is kept as history rather than maintained; it names the hundred and eighteen listed here (`VULKAN-004`, `-009`, `-008`, `-020`, `-021`, `-022`, `-023`, `-025`, `-026`, `-027`,
+**Parity reached — see §28.1 for the dated verdict, its evidence and, as importantly, its scope, then §28.2–§28.3 for the post-verdict corrections.** **Two hundred and thirty-two tasks are ✅ and five ⛔** as of 2026-09-08 (`awk -F'|' '/^\| VULKAN-[0-9]+ \|/ {print $4}' plans/plan_vulkan.md | sort | uniq -c`, which is the authority for these counts and is what every row-status change is re-run against). The paragraph below is the inline list as it stood at **one hundred and nineteen** ✅ and is kept as history rather than maintained; it names the hundred and eighteen listed here (`VULKAN-004`, `-009`, `-008`, `-020`, `-021`, `-022`, `-023`, `-025`, `-026`, `-027`,
 `-055`, `-090`, `-091`, `-094`, `-095`, `-215`, `-097`, `-098`, `-130`, `-131`, `-132`, `-133`, `-134`, `-141`, `-144`, `-145`, `-146`, `-147`, `-148`, `-149`, `-150`,
 `-151`, `-152`, `-153`, `-154`, `-155`, `-156`, `-157`, `-158`, `-159`, `-160`, `-161`, `-162`, `-163`, `-170`, `-171`, `-172`, `-173`, `-174`, `-175`, `-176`, `-177`, `-179`, `-250`, `-251`, `-265`, `-332`, `-333`,
 `-330`, `-331`, `-339`, `-340`, `-341`, `-342`, `-343`, `-346`, `-347`, `-348`, `-349`, `-370`, `-390`, `-391`, `-392`, `-393`, `-394`, `-395`, `-396`, `-399`, `-400`, `-401`, `-402`, `-403`, `-404`, `-405`, `-406`, `-407`, `-408`, `-470`, `-471`, `-474`, `-475`, `-476`, `-477`, `-481`, `-482`), plus
@@ -924,6 +924,7 @@ measurement before a task can be written honestly.
 | F-42 | **An instanced draw dropped `BasicEffect.World` here, and the same entry point's own fallback did not.** `VulkanRenderer::DrawInstancedPrimitivesEx` takes a `world` matrix and passed only `view * projection` into the push constant, under a comment that read *“this route's world comes from the per-instance buffer”* — so the per-instance matrix **replaced** `World` instead of composing with it, and a game that set `BasicEffect.World` had it silently ignored on every instanced draw. **The argument that this is a defect and not a design is two lines above it in the same function:** when no per-instance stream is bound, that entry point falls back to `DrawIndexedPrimitivesEx(vb, ib, **world**, …)`, which applies it. One draw call therefore honoured `World` or dropped it depending only on whether an instance buffer happened to be bound. EasyGL composes — `cnaInstancePosition(p)` returns `instanceMatrix * p` and the stock program's own WVP applies afterwards — so this is an EasyGL-parity gap as well as an internal contradiction. **Measured:** `World = translate(+0.3, 0, 0)`, three instances at x = −0.5/0/+0.5, quad half-width 0.12, centre pixel — EasyGL reads the clear colour (the centre instance moved away), Vulkan read **blue** (still at the origin). Both renderers agree non-instanced, which is what makes it attributable. **XNA has no stock-effect instancing at all**, so there is no XNA answer to match here and EasyGL is the reference by §5's maturity rule; the internal contradiction is what settles it independently of that. Found while sizing `VULKAN-218`'s lit shape and reading how the instanced shader composes its matrices. | `modules/renderers/vulkan/src/VulkanRenderer.cpp` (`FillInstancedPushConst`, `DrawInstancedPrimitivesEx`), `modules/renderers/easygl/src/EasyGLRenderer.cpp:190` | `VULKAN-219` ✅ |
 
 | F-43 | **The parity verdict omitted compressed `TextureCube` storage.** EasyGL overrides both `ITextureCubeRenderer::SetCompressedDataEXT` and `IGraphicsRenderer::IsCompressedCubeTransferFormatEXT`, keeps a per-face/per-level block shadow, uploads DXT1/3/5 and samples the resulting cube. Vulkan inherited both `false` defaults; worse, `CreateTextureCube(size,mipMap,surfaceFormat)` discarded `surfaceFormat` and always allocated `VK_FORMAT_R8G8B8A8_UNORM`. The generic unit tests hid the difference by skipping their compressed legs when the capability returned false, while Appendix A classified the missing override as an honest absence owned by `VULKAN-172`. That row implemented BC storage for `Texture2D`, not `TextureCube`. **Resolved 2026-09-08:** the cube now forwards the requested format, allocates BC1_RGBA/BC2/BC3 storage through the same device-gated format table as `Texture2D`, accepts exact block payloads, preserves partial replacements in a CPU block shadow, exposes decompressed `Color` readback, and reports the compressed cube route. The same new source measures DXT1/3/5 readback and GPU sampling plus a partial DXT1 update: **7/7 Vulkan, 7/7 EasyGL** on llvmpipe/OpenGL ES 3.2 under isolated Xvfb runs. | `VulkanRenderer::CreateTextureCube`, `VulkanTextureCubeRenderer`, `dxt_texturecube_test.cpp`; contrast `EasyGLTextureCubeRenderer` | `VULKAN-240` ✅ |
+| F-44 | **Vulkan stored BC1/BC2/BC3 natively but told every DDS/XNB content loader to expand them to `Color`.** `VULKAN-172` implemented and advertised per-format compressed `Texture2D` transfer, and `VULKAN-240` completed the cube route, but Vulkan still inherited `LoadsCompressedContentNativelyEXT() == false`; EasyGL overrides it with `true`. `Texture2D::FromStream`, `Texture2DContentTypeReader` and `TextureCubeContentTypeReader` consult that renderer-wide preference before their separate per-format gate, so Vulkan's working BC storage was unreachable from normal content. Appendix A called that mismatch `UNSUPPORTED_HONEST` and assigned it to a task that had not added the override. **Resolved 2026-09-08:** Vulkan returns the device's `textureCompressionBC` feature. The existing per-format 2D/cube checks remain authoritative, and non-BC devices retain the shared decode-to-`Color` fallback. The shared direct test now proves the stored format and full mip count through an in-memory DXT1 DDS, an in-memory DXT5 Texture2D XNB body and the real six-face/seven-mip DXT1 cube fixture: **11/11 Vulkan and 11/11 EasyGL**; the older rendered `Vulkan_Dxt1FromStream` control also passes. | `VulkanRenderer::LoadsCompressedContentNativelyEXT`, `Texture2D::FromStream`, `Texture2DContentTypeReader`, `TextureCubeContentTypeReader`, `dxt_texturecube_test.cpp` | `VULKAN-241` ✅ |
 
 ### 9.2 Documentation contradicted by the current tree
 
@@ -1101,7 +1102,7 @@ Classifications: `PARITY` · `VULKAN_STRONGER` · `TEST_GAP` · `IMPLEMENTATION_
 | NPOT | `EasyGL_NpotTexture` | `Vulkan_NpotTexture` (shared source) | `PARITY` | — |
 | `Texture3D` slices, partial boxes, mips, readback | `EasyGL_Texture3D_*` ×4 | `Vulkan_Texture3D_Slices_RoundTrip`, `_Mip_RoundTrip`, `_PartialBox_Readback`, `_Mip_Layout` | `PARITY`; `Texture3D_PartialBox_RoundTrip` (write side) is EasyGL-only | `TEST_GAP` → `VULKAN-175` |
 | `TextureCube` faces, partial rects, mips, content load | `EasyGL_TextureCube_*` ×4 | `Vulkan_TextureCube_Mip_RoundTrip`, `_PartialRect_RoundTrip`, `_ContentLoad`, `_CubeVolume_*Contract` | `PARITY`; `TextureCube_Faces_RoundTrip` is EasyGL-only | `TEST_GAP` → `VULKAN-176` |
-| Block-compressed formats (`Dxt1`/`Dxt3`/`Dxt5`) | `EasyGL_DxtFormat`, `_DXT1_FromStream_Readback`, `EasyGL_DxtTextureCube` | `Texture2D` stores BC1_RGBA/BC2/BC3 natively since `VULKAN-172`; `TextureCube` now does the same since `VULKAN-240`. Both are gated on `textureCompressionBC`. `Vulkan_DxtFormat` verifies two adjacent 2D blocks; `Vulkan_DxtTextureCube` verifies all three formats through decompressed readback and real `EnvironmentMapEffect` sampling, plus a block-aligned partial replacement. The `FromStream` decode route remains the control (`Vulkan_Dxt1FromStream`). A device without BC claims nothing and refuses at construction — there is no shared decode fallback to fall back to | `PARITY`, with a recorded divergence: `ClassifyColorTransferFormatEXT` refuses a `Color`-shaped transfer for the three where EasyGL defers | `VULKAN-170` ✅, `VULKAN-172` ✅, `VULKAN-240` ✅, `VULKAN-171` |
+| Block-compressed formats (`Dxt1`/`Dxt3`/`Dxt5`) | `EasyGL_DxtFormat`, `_DXT1_FromStream_Readback`, `EasyGL_DxtTextureCube` | `Texture2D` stores BC1_RGBA/BC2/BC3 natively since `VULKAN-172`; `TextureCube` does the same since `VULKAN-240`. Both are gated on `textureCompressionBC`. `VULKAN-241` also lets the DDS and XNB loaders preserve those native blocks instead of always expanding them to `Color`. `Vulkan_DxtFormat` verifies adjacent 2D blocks; `Vulkan_DxtTextureCube` verifies all three cube formats through readback and real `EnvironmentMapEffect` sampling, a partial replacement, and DXT1/DXT5 DDS/XNB formats plus complete mip counts. `Vulkan_Dxt1FromStream` separately verifies the rendered DDS result. A device without BC claims no direct compressed storage: construction refuses it, while content loaders retain their shared decode-to-`Color` fallback | `PARITY`, with a recorded divergence: `ClassifyColorTransferFormatEXT` refuses a `Color`-shaped transfer for the three where EasyGL defers | `VULKAN-170` ✅, `VULKAN-172` ✅, `VULKAN-240` ✅, `VULKAN-241` ✅, `VULKAN-171` |
 | Packed 16-bit formats (`Bgr565`/`Bgra5551`/`Bgra4444`) | `EasyGL_Packed16Format` | all three stored natively and **pixel-verified in a real draw** (`Vulkan_Packed16Format`, the same source): `Bgr565`/`Bgra5551` as core-1.0 packed formats since `VULKAN-173`, `Bgra4444` through `VK_EXT_4444_formats` since `VULKAN-179`, refused by name on a device that does not offer it | `PARITY` | `VULKAN-173` ✅, `VULKAN-179` ✅ |
 | `NormalizedByte2`/`NormalizedByte4` | classified `Supported` | stored natively since `VULKAN-174` as `R8G8_SNORM`/`R8G8B8A8_SNORM` and **pixel-verified including a negative texel**, which is what separates SNORM storage from UNORM storage of the same bytes; `ClassifyColorTransferFormatEXT` refuses a `Color`-shaped transfer for both | `PARITY` | `VULKAN-174` ✅ |
 | Non-`Color` render-target formats | `ClassifyRenderTargetFormatEXT` real (incl. float probe) | real since `VULKAN-171`: `Color` answered from the device's own `VkFormatProperties` for the swapchain format, everything else `Defer` — because both render-target classes create their colour image in `swapchainFormat_` and the requested format reaches neither. **1** renderable format against **9** storable ones, asserted as an invariant | `PARITY` — refuses rather than substituting, which is `MOD-115`'s rule; float stays `CNAEXT_OUT_OF_SCOPE` (`MOD-2223`) | `VULKAN-171` ✅ |
@@ -1610,6 +1611,7 @@ Vulkan   lit non-instanced (128,128,128)   lit INSTANCED (255,255,255)
 | ID | Task | Status | Acceptance criterion |
 |---|---|---|---|
 | VULKAN-240 | Implement and directly compare compressed `TextureCube` storage (F-43) | ✅ | **Closed a gap the final audit and the interface appendix both misclassified.** `VulkanRenderer::CreateTextureCube` no longer discards `surfaceFormat`; `VulkanTextureCubeRenderer` allocates the exact BC1_RGBA/BC2/BC3 `VkFormat` returned by `MapSurfaceFormatToStorageEXT`, stores every face/mip's blocks in a CPU shadow, performs exact staged uploads, supports block-aligned partial replacement and decompresses that shadow for the public `Color` readback. `IsCompressedCubeTransferFormatEXT` now follows the same device-gated answer as the 2D route. The uncompressed path is unchanged and explicitly refuses a compressed image instead of sending RGBA bytes into BC storage. **Test:** one shared source registered as `Vulkan_DxtTextureCube` and `EasyGL_DxtTextureCube`; DXT1/3/5 each pass decompressed readback and `EnvironmentMapEffect` sampling, and an 8×8 DXT1 face proves a partial 4×4 replacement changes only its requested block. **Measured under separate isolated Xvfb runs:** Vulkan **7/7**, EasyGL **7/7**. The targeted Vulkan build used the configured system ccache and rebuilt only the renderer library and this executable. Appendix A moves both missing overrides from EasyGL-only to both. |
+| VULKAN-241 | Preserve compressed DDS/XNB content on Vulkan's native BC storage (F-44) | ✅ | **Closed the next gap exposed by the same interface census.** Vulkan's per-format 2D and cube gates already knew the device-supported BC formats, but the inherited renderer-wide loader preference was still `false`, so normal content could not reach either native route. `LoadsCompressedContentNativelyEXT` now returns `textureCompressionBCSupported_`; loaders still require their existing per-format transfer answer and still decode to `Color` on a non-BC device. The shared `DxtTextureCube` source adds exact format/mip assertions for an in-memory four-mip DXT1 DDS, an in-memory four-mip DXT5 Texture2D XNB body and the real six-face/seven-mip DXT1 cube XNB. **Measured under separate isolated Xvfb runs:** Vulkan **11/11**, EasyGL **11/11**; the existing rendered `Vulkan_Dxt1FromStream` test also passes. Both builds were targeted, `-j4`, with the configured system ccache. Appendix A moves the loader-preference virtual from EasyGL-only to both. |
 
 ---
 
@@ -1764,6 +1766,23 @@ change.
 
 ---
 
+## 28.3 Post-verdict correction — native compressed content loads (`VULKAN-241`)
+
+The §28.1 declaration and then §28.2 still overlooked the last link between the now-native BC
+storage and normal game content. Vulkan inherited a renderer-wide `false` preference, so DDS and
+XNB readers expanded DXT blocks to `Color` even though their per-format checks would otherwise
+admit them. EasyGL preserved those blocks. Appendix A saw the missing override but incorrectly
+called it an honest absence owned by `VULKAN-172`.
+
+`VULKAN-241` makes the preference device-gated and leaves the per-format and decode-fallback gates
+intact. Direct cross-renderer evidence is now **11/11** on each backend: in addition to
+`VULKAN-240`'s cube upload/readback/sampling legs, DDS Texture2D, XNB Texture2D and XNB TextureCube
+retain DXT1/DXT5 plus every mip on a BC-capable device. The task count after this correction is
+**232 ✅, 5 ⛔, 0 ⬜, 0 🟨**. The full-suite figures in §28.1 remain historical measurements at
+that commit, not measurements of either post-verdict change.
+
+---
+
 ## 29. Dependencies on other plans
 
 | Plan | Relationship |
@@ -1824,16 +1843,17 @@ manufactures three methods that do not exist. The counts before those fixes were
 189/54-with-`Height`-`logical`-`transform`; they are stated here so a different number later is read
 as a method change rather than a rediscovered bug.
 
-**The census — four columns: as `VULKAN-027` first measured it on 2026-09-05, as `VULKAN-474`
+**The census — four categories: as `VULKAN-027` first measured it on 2026-09-05, as `VULKAN-474`
 re-measured it on 2026-09-06, as `VULKAN-207` re-measured it on 2026-09-07 at the end of the
-campaign, and after `VULKAN-240` corrected the compressed-cube omission on 2026-09-08. The
+campaign, and after `VULKAN-240`/`VULKAN-241` corrected the compressed-content omissions on
+2026-09-08. The
 movement is accounted for exactly at every step. The interface itself grew from 186 virtuals to
-189 before the final two overrides moved categories.**
+189 before the final three overrides moved categories.**
 
 | Group | 2026-09-05 | 2026-09-06 | 2026-09-07 | 2026-09-08 | Meaning |
 |---|---|---|---|---|---|
-| Both override | 102 | 106 | **114** | **116** | Vulkan implements what EasyGL implements. |
-| **EasyGL overrides, Vulkan does not** | **54** | **50** | **44** | **42** | The substance of this audit — table A.1. |
+| Both override | 102 | 106 | **114** | **117** | Vulkan implements what EasyGL implements. |
+| **EasyGL overrides, Vulkan does not** | **54** | **50** | **44** | **41** | The substance of this audit — table A.1. |
 | Vulkan overrides, EasyGL does not | 3 | 7 | **8** | **8** | `VULKAN_STRONGER`. |
 | Neither overrides | 27 | 23 | **23** | **23** | Both take the shared default, so there is no Vulkan-specific divergence. |
 | *total virtuals* | *186* | *186* | ***189*** | ***189*** | |
@@ -1865,11 +1885,13 @@ deleted** — the reason a row was once a survivor is the history this appendix 
 five of the six were justified as *“honest about an absent feature”* or *“a default that is
 correct”* right up until the row that made them real.
 
-**The 2026-09-07 → 2026-09-08 movement is two virtuals, both from EasyGL-only to both:**
+**The 2026-09-07 → 2026-09-08 movement is three virtuals, all from EasyGL-only to both:**
 `ITextureCubeRenderer::SetCompressedDataEXT` and
 `IGraphicsRenderer::IsCompressedCubeTransferFormatEXT`. `VULKAN-240` moved both after proving
-that their previous `UNSUPPORTED_HONEST` classification concealed a real parity gap. The
-committed census tool now reports **189 / 116 both / 42 EasyGL-only / 8 Vulkan-only / 23 neither**.
+that their previous `UNSUPPORTED_HONEST` classification concealed a real parity gap;
+`IGraphicsRenderer::LoadsCompressedContentNativelyEXT` followed in `VULKAN-241`, after the same
+classification was shown to keep native 2D and cube storage unreachable from DDS/XNB loaders. The
+committed census tool now reports **189 / 117 both / 41 EasyGL-only / 8 Vulkan-only / 23 neither**.
 
 **The finding, as `VULKAN-027` wrote it against the 54.** Of the 54, exactly **one family is a real defect**: the four array uniform setters
 of `IEffectRenderer` are silently ignored on Vulkan while EasyGL implements them. The gap itself was
@@ -1882,9 +1904,9 @@ because the deferred draw model copies vertex and index bytes at draw time; and
 `CreateRenderTarget2DEXT` looks like a dropped `SurfaceFormat` but cannot be, because Vulkan's
 `Defer` verdict reduces to *Color only* and a non-`Color` render target is refused one layer above.
 
-### A.1 EasyGL overrides, Vulkan does not (42, re-measured 2026-09-08 by `VULKAN-240`)
+### A.1 EasyGL overrides, Vulkan does not (41, re-measured 2026-09-08 by `VULKAN-241`)
 
-The table below still has **50** rows. Eight of them are struck through in their Classification
+The table below still has **50** rows. Nine of them are struck through in their Classification
 cell and marked **NO LONGER IN A.1**: those virtuals moved into A.2 when the rows named in §31's
 movement table gave Vulkan its own override. They stay here because why a virtual was once a
 survivor — and what justified leaving it that way — is the history this appendix exists to keep;
@@ -1914,7 +1936,7 @@ deleting the row would leave the count smaller with no account of why.
 | `IGraphicsRenderer` | `ClassifyColorTransferFormatEXT` | default | `Defer` | ~~DEFERRED_POLICY~~ → **NO LONGER IN A.1** | As above. **Left the survivor set on 2026-09-07: `VULKAN-174` gave Vulkan its own override, so this virtual is now in the *both* column and needs no justification. Kept struck through rather than deleted, because why it was once a survivor is this appendix's history.** |
 | `IGraphicsRenderer` | `IsCompressedTransferFormatEXT` | default | `return false` | ~~UNSUPPORTED_HONEST~~ → **NO LONGER IN A.1** | Owned by `VULKAN-172`. **Left the survivor set on 2026-09-07: `VULKAN-172` gave Vulkan its own override, so this virtual is now in the *both* column and needs no justification. Kept struck through rather than deleted, because why it was once a survivor is this appendix's history.** |
 | `IGraphicsRenderer` | `IsCompressedCubeTransferFormatEXT` | default | `return false` | ~~UNSUPPORTED_HONEST~~ → **NO LONGER IN A.1** | The old owner reference was incomplete: `VULKAN-172` exposed block transfer for 2D textures only. `VULKAN-240` gives Vulkan the cube-specific override and moves this virtual into the *both* column. |
-| `IGraphicsRenderer` | `LoadsCompressedContentNativelyEXT` | default | `return false` | UNSUPPORTED_HONEST | Owned by `VULKAN-172`. |
+| `IGraphicsRenderer` | `LoadsCompressedContentNativelyEXT` | default | `return false` | ~~UNSUPPORTED_HONEST~~ → **NO LONGER IN A.1** | The old classification was wrong: `VULKAN-172` supplied native BC `Texture2D` storage and `VULKAN-240` supplied the cube route, but the inherited `false` kept both unreachable from DDS/XNB content. `VULKAN-241` returns the device's BC feature and moves this virtual into the *both* column, with direct loader-format and mip-count evidence. |
 | `IGraphicsRenderer` | `CreateRenderTarget2DEXT` | default | forwards to `CreateRenderTarget2D`, dropping `surfaceFormat` | DEFAULT_CORRECT | The dropped argument cannot carry information: `ClassifyRenderTargetFormatEXT` defers, which reduces to *Color only*, so a non-`Color` render target is refused one layer up and this entry point never sees one. |
 | `IGraphicsRenderer` | `SupportsHalfFloatTextureLinearFilteringEXT` | default | `return false` | DEFAULT_CORRECT | `VULKAN-470` observed why: a half-float `Texture2D` cannot be created at all under `GraphicsProfile.Reach`, so there is no surface for a sampler to filter. |
 | `IGraphicsRenderer` | `CreateRenderTargetCubeEXT` | default | forwards to `CreateRenderTargetCube` | DEFAULT_CORRECT | Same reduction as `CreateRenderTarget2DEXT`. |

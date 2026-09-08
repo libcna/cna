@@ -1826,7 +1826,8 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_easygl_test(cna_test_easygl_dxt_texturecube
                         ${CNA_GRAPHICS_EXAMPLES_DIR}/dxt_texturecube_test.cpp)
         cna_register_renderer_test(NAME EasyGL_DxtTextureCube COMMAND cna_test_easygl_dxt_texturecube
-            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+            WORKING_DIRECTORY "${CNA_SOURCE_DIR}")
 
         # REMED-GFX-244: the three packed 16-bit formats GraphicsProfile.Reach permits, uploaded
         # through their typed SetData overloads and sampled in a real draw -- the channel order
