@@ -92,6 +92,9 @@ namespace
         SoftwareCapabilityContractTest()
         {
             graphics_ = std::make_unique<GraphicsDeviceManager>(this);
+            // Texture3D is a HiDef-only classic XNA feature. SOFTWARE-179 made that profile gate
+            // real for every renderer, so this positive capability probe must request HiDef.
+            graphics_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
             graphics_->setPreferredBackBufferWidthProperty(16);
             graphics_->setPreferredBackBufferHeightProperty(16);
         }

@@ -84,6 +84,9 @@ class Texture3DTest : public ::testing::Test
 protected:
     void SetUp() override
     {
+        // Volume textures are a HiDef-only XNA feature. The old unlimited renderer default let
+        // this fixture accidentally exercise them through the default Reach device.
+        gd.SetGraphicsProfileEXT(Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
         if (!gd.SupportsCapability(CNA::GraphicsCapability::Texture3D))
         {
             GTEST_SKIP() << "Texture3D is not supported on this renderer (REMED-CONTENT-004)";

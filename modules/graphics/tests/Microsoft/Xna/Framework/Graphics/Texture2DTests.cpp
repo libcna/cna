@@ -1005,27 +1005,35 @@ protected:
     GraphicsDevice gd;
 };
 
-TEST_F(DimensionGuardTest, WidthExceedingMaxTextureDimensionThrowsNotSupportedException)
+TEST_F(DimensionGuardTest, WidthExceedingEffectiveTextureDimensionThrowsNotSupportedException)
 {
-    const int overSize = gd.GetMaxTextureDimension() + 1;
+    const int profileMax = gd.GetRenderer().GetMaxTextureSizeForProfileEXT(
+        static_cast<int>(gd.getGraphicsProfileProperty()));
+    const int overSize = std::min(gd.GetMaxTextureDimension(), profileMax) + 1;
     EXPECT_THROW(Texture2D(gd, overSize, 4), System::NotSupportedException);
 }
 
-TEST_F(DimensionGuardTest, HeightExceedingMaxTextureDimensionThrowsNotSupportedException)
+TEST_F(DimensionGuardTest, HeightExceedingEffectiveTextureDimensionThrowsNotSupportedException)
 {
-    const int overSize = gd.GetMaxTextureDimension() + 1;
+    const int profileMax = gd.GetRenderer().GetMaxTextureSizeForProfileEXT(
+        static_cast<int>(gd.getGraphicsProfileProperty()));
+    const int overSize = std::min(gd.GetMaxTextureDimension(), profileMax) + 1;
     EXPECT_THROW(Texture2D(gd, 4, overSize), System::NotSupportedException);
 }
 
-TEST_F(DimensionGuardTest, WidthExceedingMaxTextureDimensionThrowsOnFormatConstructorToo)
+TEST_F(DimensionGuardTest, WidthExceedingEffectiveTextureDimensionThrowsOnFormatConstructorToo)
 {
-    const int overSize = gd.GetMaxTextureDimension() + 1;
+    const int profileMax = gd.GetRenderer().GetMaxTextureSizeForProfileEXT(
+        static_cast<int>(gd.getGraphicsProfileProperty()));
+    const int overSize = std::min(gd.GetMaxTextureDimension(), profileMax) + 1;
     EXPECT_THROW(Texture2D(gd, overSize, 4, false, SurfaceFormat::Color), System::NotSupportedException);
 }
 
 TEST_F(DimensionGuardTest, DimensionAtTheLimitDoesNotThrow)
 {
-    const int maxDim = gd.GetMaxTextureDimension();
+    const int profileMax = gd.GetRenderer().GetMaxTextureSizeForProfileEXT(
+        static_cast<int>(gd.getGraphicsProfileProperty()));
+    const int maxDim = std::min(gd.GetMaxTextureDimension(), profileMax);
     // A 1-pixel-tall texture at exactly the limit avoids allocating maxDim*maxDim*4 bytes of CPU
     // shadow storage for this test while still exercising the exact boundary value.
     EXPECT_NO_THROW(Texture2D(gd, maxDim, 1));

@@ -2019,12 +2019,9 @@ namespace CNA::Internal::Renderers
 
         // --- GraphicsProfile ceilings (plans/plan_runtimerenderer.md design decision 9) -------------
         //
-        // XNA's GraphicsProfile.Reach/HiDef carry real, enforced-at-creation-time ceilings. Only a
-        // renderer with a genuine capability structure to consult (D3D9's D3DCAPS9) can answer them
-        // honestly; the other 45 have no such structure, and this project refuses to substitute a
-        // hardcoded table pretending to be a capability query. The defaults below are therefore
-        // "no ceiling" -- exactly the behaviour every non-D3D9 renderer had when these lived as
-        // #ifdef CNA_RENDERER_DIRECTX9 blocks inside the XNA layer.
+        // XNA's GraphicsProfile.Reach/HiDef carry renderer-independent, enforced-at-creation-time
+        // ceilings. These are profile rules rather than hardware queries, so every renderer must
+        // expose the same values here. A renderer may impose a lower hardware limit separately.
 
         /**
          * @brief Largest texture edge length the given GraphicsProfile permits.
@@ -2034,24 +2031,22 @@ namespace CNA::Internal::Renderers
          * guarantee means.
          *
          * @param graphicsProfile GraphicsProfile ordinal (Reach = 0, HiDef = 1).
-         * @return The maximum edge length, or std::numeric_limits<int>::max() for no ceiling.
+         * @return The maximum edge length (2048 for Reach, 4096 for HiDef).
          */
         [[nodiscard]] virtual int GetMaxTextureSizeForProfileEXT(int graphicsProfile) const
         {
-            (void)graphicsProfile;
-            return (std::numeric_limits<int>::max)();
+            return graphicsProfile == 1 /* GraphicsProfile::HiDef */ ? 4096 : 2048;
         }
 
         /**
          * @brief Largest cube-map edge length the given GraphicsProfile permits.
          *
          * @param graphicsProfile GraphicsProfile ordinal (Reach = 0, HiDef = 1).
-         * @return The maximum edge length, or std::numeric_limits<int>::max() for no ceiling.
+         * @return The maximum edge length (512 for Reach, 4096 for HiDef).
          */
         [[nodiscard]] virtual int GetMaxCubeSizeForProfileEXT(int graphicsProfile) const
         {
-            (void)graphicsProfile;
-            return (std::numeric_limits<int>::max)();
+            return graphicsProfile == 1 /* GraphicsProfile::HiDef */ ? 4096 : 512;
         }
 
         /**
@@ -2062,13 +2057,11 @@ namespace CNA::Internal::Renderers
          * size ceiling.
          *
          * @param graphicsProfile GraphicsProfile ordinal (Reach = 0, HiDef = 1).
-         * @return The maximum extent, 0 for "no volume textures at all", or
-         *         std::numeric_limits<int>::max() for no ceiling.
+         * @return The maximum extent (0 for Reach, meaning unsupported; 256 for HiDef).
          */
         [[nodiscard]] virtual int GetMaxVolumeExtentForProfileEXT(int graphicsProfile) const
         {
-            (void)graphicsProfile;
-            return (std::numeric_limits<int>::max)();
+            return graphicsProfile == 1 /* GraphicsProfile::HiDef */ ? 256 : 0;
         }
 
         /**
@@ -2078,12 +2071,11 @@ namespace CNA::Internal::Renderers
          * renderer) and from any hardware cap the renderer enforces separately.
          *
          * @param graphicsProfile GraphicsProfile ordinal (Reach = 0, HiDef = 1).
-         * @return The maximum count, or std::numeric_limits<int>::max() for no ceiling.
+         * @return The maximum count (1 for Reach, 4 for HiDef).
          */
         [[nodiscard]] virtual int GetMaxRenderTargetsForProfileEXT(int graphicsProfile) const
         {
-            (void)graphicsProfile;
-            return (std::numeric_limits<int>::max)();
+            return graphicsProfile == 1 /* GraphicsProfile::HiDef */ ? 4 : 1;
         }
 
         // --- Surface-format boundaries (plans/plan_runtimerenderer.md design decision 9) -------------

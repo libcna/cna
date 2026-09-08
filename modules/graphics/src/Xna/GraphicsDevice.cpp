@@ -3932,8 +3932,8 @@ namespace Microsoft::Xna::Framework::Graphics
         // table) -- a SEPARATE, lower, software-imposed limit from MAX_RENDERTARGET_BINDINGS
         // above (XNA's own general 4-target ceiling) and from D9-54's own hardware-cap
         // enforcement inside the renderer (NumSimultaneousRTs, which could be higher).
-        // plans/plan_runtimerenderer.md design decision 9: asked of the active renderer; renderers with
-        // no profile distinction report no ceiling.
+        // SOFTWARE-179: asked through the active renderer contract, whose common default carries
+        // this renderer-independent profile rule. A renderer may still report a lower limit.
         if (renderer_ != nullptr)
         {
             const int profile = static_cast<int>(graphicsProfile_);

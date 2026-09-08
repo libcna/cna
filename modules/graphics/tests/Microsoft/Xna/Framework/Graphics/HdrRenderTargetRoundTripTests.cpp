@@ -533,6 +533,7 @@ TEST(HdrRenderTargetRoundTripTest, AMixedFloatAndColourTargetSetBinds)
     // MOD-125: the depth/normal prepass SSAO needs writes linear depth to a float attachment and
     // encoded normals to a Color one in a single pass, so a mixed-format set has to bind and draw.
     GraphicsDevice gd;
+    gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     if (!gd.SupportsCapability(CNA::GraphicsCapability::MultipleRenderTargets))
         GTEST_SKIP() << "this renderer has no MRT";
     if (!gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HalfVector2))

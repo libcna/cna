@@ -39,8 +39,8 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
     // D9-103 follow-up: same profile-CEILING enforcement Texture2D.cpp already established
-    // (D9-100's own table: Reach=512, HiDef=4096). Renderers with no profile distinction report
-    // no ceiling, which is exactly what they did when this was an #ifdef block.
+    // (D9-100's own table: Reach=512, HiDef=4096). SOFTWARE-179 made this renderer-independent
+    // profile rule the common renderer default; hardware limits remain a separate question.
     static void ValidateCubeSizeForProfileEXT(const GraphicsDevice& device, int size)
     {
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(size, "size");

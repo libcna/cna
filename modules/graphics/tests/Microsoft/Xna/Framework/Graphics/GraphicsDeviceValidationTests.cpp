@@ -195,6 +195,9 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FiveTargets_Throws)
 TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
 {
     GraphicsDevice gd;
+    // MRT is a HiDef-only XNA feature. The renderer-specific branches below test the native
+    // capability boundary, so do not let the default Reach profile reject the bind first.
+    gd.SetGraphicsProfileEXT(Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
     std::vector<std::unique_ptr<RenderTarget2D>> targets;
     std::vector<RenderTargetBinding> bindings;
     for (int i = 0; i < 4; ++i)

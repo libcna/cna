@@ -49,11 +49,10 @@ namespace Microsoft::Xna::Framework::Graphics
     // -----------------------------------------------------------------------
 
     // plans/plan_runtimerenderer.md design decision 9 / plans/plan_dx9.md D9-103: GraphicsProfile.Reach/HiDef
-    // texture-size ceilings. Only a renderer with a real capability structure to consult (D3D9)
-    // enforces one; every other renderer reports no ceiling, which is exactly what it did when this
-    // was a compile-time renderer branch. Checked as a profile CEILING, not a hardware
-    // query: even where the device could allocate more, a Reach-profile game is restricted to the
-    // profile's own limit, which is what XNA's portability guarantee means.
+    // texture-size ceilings. Checked as a profile CEILING, not a hardware query: even where the
+    // device could allocate more, a Reach-profile game is restricted to the profile's own limit,
+    // which is what XNA's portability guarantee means. SOFTWARE-179 made the renderer-interface
+    // default carry this rule so non-D3D9 renderers cannot silently opt out.
     static void ValidateTextureSizeForProfileEXT(const GraphicsDevice& device, int w, int h)
     {
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(w, "width");

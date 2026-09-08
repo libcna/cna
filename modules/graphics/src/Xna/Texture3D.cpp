@@ -36,7 +36,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     // D9-103 follow-up: D9-100's own table -- GraphicsProfile.Reach does not support volume
     // textures AT ALL (a reported extent of 0), not merely a small size ceiling; GraphicsProfile
-    // .HiDef caps at 256 in any dimension. Renderers with no profile distinction report no ceiling.
+    // .HiDef caps at 256 in any dimension. SOFTWARE-179 made these renderer-independent profile
+    // rules the common renderer default rather than a D3D9-only behavior.
     static void ValidateVolumeSizeForProfileEXT(const GraphicsDevice& device, int width, int height, int depth)
     {
         const int profile = static_cast<int>(device.getGraphicsProfileProperty());

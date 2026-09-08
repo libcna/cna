@@ -295,6 +295,9 @@ TEST(GraphicsDeviceCapabilityTest, SupportsMultipleRenderTargets)
 TEST(GraphicsDeviceCapabilityTest, TheMultipleRenderTargetCapabilityMatchesWhatBindingActuallyDoes)
 {
     GraphicsDevice gd;
+    // Multiple render targets are a HiDef-only XNA feature. This test asks whether the renderer
+    // capability is truthful, so select the profile that permits the operation before probing it.
+    gd.SetGraphicsProfileEXT(Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
 
     using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
     using Microsoft::Xna::Framework::Graphics::RenderTargetBinding;
