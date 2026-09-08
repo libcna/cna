@@ -330,7 +330,9 @@ if(CNA_BUILD_TESTS)
     set(CNA_TEST_GROUP_DEPENDENCY_phone cna_phone cna_runtime)
     set(CNA_TEST_GROUP_DEPENDENCY_media cna_media)
     set(CNA_TEST_GROUP_DEPENDENCY_net CNA_Net)
-    set(CNA_TEST_GROUP_DEPENDENCY_platform cna_platform)
+    # cna_input as well as cna_platform: Sdl3KeyCodeRoundTripTests holds the platform's key
+    # mapping to the input module's own, so the focused target does not link without it.
+    set(CNA_TEST_GROUP_DEPENDENCY_platform cna_platform cna_input)
     set(CNA_TEST_GROUP_DEPENDENCY_renderers CNA)
     set(CNA_TEST_GROUP_DEPENDENCY_runtime cna_runtime)
     set(CNA_TEST_GROUP_DEPENDENCY_storage cna_storage)
