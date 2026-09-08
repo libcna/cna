@@ -1114,6 +1114,8 @@ namespace CNA::Internal::Renderers::EasyGL
 
         // MSAA — multisampled render buffer resolved to FBO 0 on Present().
         int sampleCount_ = 1;
+        int backBufferDepthFormat_ = 3;
+        int msaaStorageDepthFormat_ = -1;
         int msaaW_       = 0;
         int msaaH_       = 0;
         ::easygl::Framebuffer  msaaFbo_;
@@ -1123,6 +1125,8 @@ namespace CNA::Internal::Renderers::EasyGL
         void CreateMsaaBuffers(int w, int h);
         void BindDefaultFramebuffer();
         void ResolveMsaa();
+        /** @brief Enables only the depth/stencil planes selected for the active destination. */
+        void ApplyCurrentDepthStencilAvailability();
         /** @brief Reapplies XNA's normalized constant depth bias for the active depth format. */
         void ApplyCurrentDepthBias();
         void EnsureCallingThreadContext();
@@ -1290,6 +1294,7 @@ namespace CNA::Internal::Renderers::EasyGL
         /// reissue `glStencilFunc` with a new reference. GL binds function, reference and mask in
         /// one call, so the other two have to be remembered to change the one.
         bool stencilEnabled_ = false;
+        bool depthEnabled_ = false;
 
         /// XNA's constant bias is normalized depth, while GL's `units` argument is expressed in
         /// implementation-defined minimum depth increments. Keep the public value so target binds
@@ -1443,6 +1448,7 @@ namespace CNA::Internal::Renderers::EasyGL
          * @param multiSampleCount Requested MSAA sample count.
          * @param swapInterval Swap interval (0 immediate, 1 VSync, 2 half-rate).
          * @param profile Which GL profile to create the context and shaders for.
+         * @param depthStencilFormat Raw XNA DepthFormat ordinal selected for the backbuffer.
          */
 
         /**
@@ -1456,7 +1462,8 @@ namespace CNA::Internal::Renderers::EasyGL
             int virtualWidth = 0, int virtualHeight = 0,
             CnaPresentationMode mode = CnaPresentationMode::FixedHeightDynamicWidth,
             bool contextRecoveryEnabled = true, int multiSampleCount = 1,
-            int swapInterval = 1, GlProfile profile = kCompileTimeGlProfile);
+            int swapInterval = 1, GlProfile profile = kCompileTimeGlProfile,
+            int depthStencilFormat = 3);
         ~EasyGLRenderer() override;
 
         /**
@@ -1696,6 +1703,15 @@ namespace CNA::Internal::Renderers::EasyGL
          * @return The interval last passed to SetSwapInterval, or the renderer's default if none.
          */
         CNAEXT [[nodiscard]] int GetSwapIntervalEXT() const override { return swapInterval_; }
+
+        /**
+         * @brief Applies the selected semantic depth/stencil format to the GL backbuffer path.
+         * @param backBufferFormat Ignored because EasyGL's backbuffer is fixed RGBA8.
+         * @param depthStencilFormat Raw XNA DepthFormat ordinal.
+         * @param isFullScreen Ignored because fullscreen is owned by the platform window.
+         */
+        void UpdatePresentationFormatEXT(int backBufferFormat, int depthStencilFormat,
+                                         bool isFullScreen) override;
 
         /**
          * @brief Reports the fixed RGBA8 Color format requested for the GL default framebuffer.

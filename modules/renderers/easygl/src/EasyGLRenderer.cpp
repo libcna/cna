@@ -5613,18 +5613,20 @@ if (ProfileUsesGlslEs100())
         const RendererSurfaceInfo& surface, CNA::Platform::IPlatformGlContext& glContext,
         const int virtualWidth, const int virtualHeight, const CnaPresentationMode mode,
         const bool contextRecoveryEnabled, const int multiSampleCount, const int swapInterval,
-        const GlProfile profile)
+        const GlProfile profile, const int depthStencilFormat)
         : platformContext_(std::make_unique<EasyGLPlatformContext>(
               glContext, RequireEasyGlWindowId(surface), RequestedGlContext(profile)))
         , surfaceState_(surface, virtualWidth, virtualHeight, mode)
         , contextRecoveryEnabled_(contextRecoveryEnabled)
         , sampleCount_(multiSampleCount > 1 ? multiSampleCount : 1)
+        , backBufferDepthFormat_(depthStencilFormat)
     {
         // plans/plan_runtimerenderer.md P11: publish the profile before anything else runs -- the context
         // attributes, the shader adaptation and the API-generation checks all read it, and they run
         // from free helpers that have no other way to reach this instance.
         profile_ = profile;
         ActiveGlProfile() = profile;
+        bound_->depthFormat = backBufferDepthFormat_;
 
         // MERGE: next guarded the blocks below with #if defined(CNA_GL_PROFILE_<X>). P11 made the
         // profile a RUNTIME value so all five identities can be compiled in at once, so each guard
@@ -5808,25 +5810,43 @@ if (ProfileUsesGlslEs100())
         if (maxSamples > 0 && sampleCount_ > static_cast<int>(maxSamples))
             sampleCount_ = static_cast<int>(maxSamples);
 
-        msaaW_ = w; msaaH_ = h;
-        if (!msaaFbo_.is_created()) msaaFbo_.create();
-        if (!msaaColorRbo_.is_created()) msaaColorRbo_.create();
-        if (!msaaDepthRbo_.is_created()) msaaDepthRbo_.create();
+        // SOFTWARE-181: the old FBO always carried Depth24 and never stencil, regardless of the
+        // selected XNA DepthFormat. Rebuild the small renderer-owned attachment set atomically so
+        // a reset can add/remove stencil or depth without leaving a stale attachment behind.
+        msaaFbo_.destroy();
+        msaaColorRbo_.destroy();
+        msaaDepthRbo_.destroy();
+        msaaFbo_.create();
+        msaaColorRbo_.create();
 
         msaaColorRbo_.bind();
         msaaColorRbo_.set_storage_multisample(sampleCount_,
                                                ::metagl::InternalFormat::Rgba8, w, h);
-        msaaDepthRbo_.bind();
-        msaaDepthRbo_.set_storage_multisample(sampleCount_,
-                                               ::metagl::InternalFormat::DepthComponent24, w, h);
 
         msaaFbo_.bind(::easygl::FramebufferTarget::Framebuffer);
         msaaFbo_.attach_renderbuffer(::easygl::FramebufferTarget::Framebuffer,
                                       ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
                                       msaaColorRbo_);
-        msaaFbo_.attach_renderbuffer(::easygl::FramebufferTarget::Framebuffer,
-                                      ::metagl::FramebufferAttachment::Depth,
-                                      msaaDepthRbo_);
+
+        ::metagl::InternalFormat depthStorage{};
+        ::metagl::FramebufferAttachment depthAttachment{};
+        if (MapDepthFormat(backBufferDepthFormat_, depthStorage, depthAttachment))
+        {
+            msaaDepthRbo_.create();
+            msaaDepthRbo_.bind();
+            msaaDepthRbo_.set_storage_multisample(sampleCount_, depthStorage, w, h);
+            msaaFbo_.attach_renderbuffer(::easygl::FramebufferTarget::Framebuffer,
+                                          depthAttachment, msaaDepthRbo_);
+        }
+
+        if (!msaaFbo_.is_complete())
+            throw std::runtime_error(
+                "EasyGL: multisample backbuffer is incomplete for DepthFormat ordinal "
+                + std::to_string(backBufferDepthFormat_));
+
+        msaaW_ = w;
+        msaaH_ = h;
+        msaaStorageDepthFormat_ = backBufferDepthFormat_;
     }
 
     void EasyGLRenderer::BindDefaultFramebuffer()
@@ -5836,7 +5856,9 @@ if (ProfileUsesGlslEs100())
             // Recreate MSAA FBO if the window was resized.
             int physW, physH;
             surfaceState_.GetDrawableSize(physW, physH);
-            if (physW != msaaW_ || physH != msaaH_)
+            if (!msaaFbo_.is_created()
+                || physW != msaaW_ || physH != msaaH_
+                || msaaStorageDepthFormat_ != backBufferDepthFormat_)
                 CreateMsaaBuffers(physW, physH);
 
             msaaFbo_.bind(::easygl::FramebufferTarget::Framebuffer);
@@ -6230,6 +6252,24 @@ if (!ProfileIsEs2ApiGeneration())
         // this renderer's, and is the half a test can check anywhere. REMED-GFX-243.
         swapInterval_ = interval;
         platformContext_->SetSwapInterval(interval);
+    }
+
+    void EasyGLRenderer::UpdatePresentationFormatEXT(
+        int backBufferFormat, int depthStencilFormat, bool isFullScreen)
+    {
+        (void) backBufferFormat;
+        (void) isFullScreen;
+        if (depthStencilFormat < 0 || depthStencilFormat > 3)
+            throw std::out_of_range("EasyGL: invalid DepthFormat ordinal");
+
+        backBufferDepthFormat_ = depthStencilFormat;
+        if (bound_->height == 0)
+        {
+            bound_->depthFormat = backBufferDepthFormat_;
+            BindDefaultFramebuffer();
+            ApplyCurrentDepthStencilAvailability();
+            ApplyCurrentDepthBias();
+        }
     }
 
     void EasyGLRenderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
@@ -6986,9 +7026,10 @@ if (!ProfileIsEs2ApiGeneration())
         {
             bound_->width = 0;
             bound_->height = 0;
-            bound_->depthFormat = 3;
+            bound_->depthFormat = backBufferDepthFormat_;
             BindDefaultFramebuffer();
         }
+        ApplyCurrentDepthStencilAvailability();
         ApplyCurrentDepthBias();
         TargetTrace("set2d.exit", rt, TraceBindingDetailEXT());
     }
@@ -7013,6 +7054,7 @@ if (!ProfileIsEs2ApiGeneration())
         else
             bound_->depthFormat = 0;
         rt->BindAsRenderTargetFace(face);
+        ApplyCurrentDepthStencilAvailability();
         ApplyCurrentDepthBias();
         TargetTrace("setcube.exit", rt, TraceBindingDetailEXT());
     }
@@ -7223,6 +7265,7 @@ if (!ProfileIsEs2ApiGeneration())
             ? targets[0].rt2D->depthFormat_
             : targets[0].cube->depthFormat_;
         ApplyCurrentColorWriteMasks();
+        ApplyCurrentDepthStencilAvailability();
         ApplyCurrentDepthBias();
         TargetTrace("mrt.set", this,
                     TraceBindingDetailEXT() + " mrtFbo=" + std::to_string(mrtFbo_.native_handle()));
@@ -7432,8 +7475,10 @@ if (!ProfileIsEs2ApiGeneration())
     {
         if (metagl::IsContextLost()) return;
 
-        device.set_depth_test_enabled(depthEnable);
-        device.set_depth_mask(depthWriteEnable);
+        depthEnabled_ = depthEnable;
+        depthWriteEnabled_ = depthWriteEnable;
+        device.set_depth_test_enabled(depthEnable && bound_->depthFormat != 0);
+        device.set_depth_mask(depthWriteEnable && bound_->depthFormat != 0);
         if (depthEnable)
             device.set_depth_func(ToEasyGLCompareFunc(depthFunc));
 
@@ -7441,7 +7486,6 @@ if (!ProfileIsEs2ApiGeneration())
         // function call with a new reference. Recorded even when the stencil test is off, because
         // the reference survives a disabled state and applies again when one re-enables it.
         stencilEnabled_   = stencilEnable;
-        depthWriteEnabled_ = depthWriteEnable;   // REMED-GFX-237
         stencilWriteMask_  = stencilWriteMask;   // REMED-GFX-237
         stencilTwoSided_  = twoSidedStencilMode;
         stencilFunc_      = stencilFunc;
@@ -7449,7 +7493,7 @@ if (!ProfileIsEs2ApiGeneration())
         stencilReadMask_  = stencilMask;
         referenceStencil_ = referenceStencil;
 
-        device.set_stencil_test_enabled(stencilEnable);
+        device.set_stencil_test_enabled(stencilEnable && bound_->depthFormat == 3);
         if (stencilEnable)
         {
             const auto eglSFail  = ToEasyGLStencilOp(stencilFail);
@@ -7483,6 +7527,16 @@ if (!ProfileIsEs2ApiGeneration())
                 device.set_stencil_mask(static_cast<unsigned int>(stencilWriteMask));
             }
         }
+    }
+
+    void EasyGLRenderer::ApplyCurrentDepthStencilAvailability()
+    {
+        if (metagl::IsContextLost()) return;
+        const bool hasDepth = bound_->depthFormat != 0;
+        const bool hasStencil = bound_->depthFormat == 3;
+        device.set_depth_test_enabled(depthEnabled_ && hasDepth);
+        device.set_depth_mask(depthWriteEnabled_ && hasDepth);
+        device.set_stencil_test_enabled(stencilEnabled_ && hasStencil);
     }
 
     void EasyGLRenderer::ApplyRasterizerState(int cullMode, int fillMode,
@@ -11776,7 +11830,8 @@ if (ProfileIsEs2ApiGeneration())
     /// ApplyDepthStencilState, which does not install one otherwise.
     void EasyGLRenderer::RestoreWriteMasksAfterClear(bool depth, bool stencil)
     {
-        if (depth && !depthWriteEnabled_) device.set_depth_mask(false);
+        if (depth)
+            device.set_depth_mask(depthWriteEnabled_ && bound_->depthFormat != 0);
         if (stencil && stencilEnabled_)
         {
             const auto mask = static_cast<unsigned int>(stencilWriteMask_);
@@ -11875,7 +11930,8 @@ if (ProfileIsEs2ApiGeneration())
 
     void EasyGLRenderer::SetDepthTestEnabled(bool enabled)
     {
-        device.set_depth_test_enabled(enabled);
+        depthEnabled_ = enabled;
+        device.set_depth_test_enabled(enabled && bound_->depthFormat != 0);
         if (enabled)
         {
             device.set_depth_func(::easygl::CompareFunc::Lequal);
@@ -11895,7 +11951,7 @@ if (ProfileIsEs2ApiGeneration())
     void EasyGLRenderer::SetDepthWriteEnabled(bool enabled)
     {
         depthWriteEnabled_ = enabled;   // REMED-GFX-237: what a clear must put back.
-        device.set_depth_mask(enabled);
+        device.set_depth_mask(enabled && bound_->depthFormat != 0);
     }
 
     std::unique_ptr<IVertexBufferRenderer> EasyGLRenderer::CreateVertexBuffer(int vertex_capacity)
@@ -12942,7 +12998,8 @@ namespace CNA::Internal::Renderers
             args.surface, *args.glContext,
             args.virtualWidth, args.virtualHeight,
             args.presentationMode, args.contextRecoveryEnabled,
-            args.multiSampleCount, args.swapInterval, profile);
+            args.multiSampleCount, args.swapInterval, profile,
+            args.depthStencilFormat);
     }
 
     std::unique_ptr<IGraphicsRenderer> EasyGL::CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)

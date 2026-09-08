@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// SOFTWARE-127: CPU-specific proof for meaningful reset behavior without a physical window.
+// SOFTWARE-127/181: renderer-neutral proof for meaningful presentation/reset behavior.
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -84,7 +84,7 @@ class SoftwarePresentationResetContractTest final : public Game
         DrawFullScreen(device, Color::Red, 0.2f);
         DrawFullScreen(device, Color::Green, 0.8f);
         Check(ReadCenter(device).getGProperty() == 128,
-              "DepthFormat::None removes depth rejection from the CPU backbuffer");
+              "DepthFormat::None removes depth rejection from the selected backbuffer");
 
         graphics_->setPreferredDepthStencilFormatProperty(DepthFormat::Depth24);
         graphics_->ApplyChanges();
@@ -93,7 +93,7 @@ class SoftwarePresentationResetContractTest final : public Game
         DrawFullScreen(device, Color::Red, 0.2f);
         DrawFullScreen(device, Color::Green, 0.8f);
         Check(ReadCenter(device).getRProperty() == 255,
-              "DepthFormat::Depth24 restores depth rejection on the CPU backbuffer");
+              "DepthFormat::Depth24 restores depth rejection on the selected backbuffer");
     }
 
     void CheckStencilAttachment(GraphicsDevice& device)
@@ -120,7 +120,7 @@ class SoftwarePresentationResetContractTest final : public Game
         device.Clear(ClearOptions::Target | ClearOptions::Stencil, Color::Black, 1.0f, 0);
         DrawFullScreen(device, Color::Green, 0.5f);
         Check(ReadCenter(device).getGProperty() == 0,
-              "Depth24Stencil8 restores stencil rejection on the CPU backbuffer");
+              "Depth24Stencil8 restores stencil rejection on the selected backbuffer");
     }
 
 protected:
@@ -150,9 +150,9 @@ protected:
         const auto afterResize = device.getViewportProperty();
         Check(afterResize.getXProperty() == 0 && afterResize.getYProperty() == 0 &&
                   afterResize.getWidthProperty() == 80 && afterResize.getHeightProperty() == 60,
-              "CPU backbuffer resize resets Viewport to the complete new target");
+              "Backbuffer resize resets Viewport to the complete new target");
         Check(device.getScissorRectangleProperty() == Rectangle(0, 0, 80, 60),
-              "CPU backbuffer resize resets ScissorRectangle to the complete new target");
+              "Backbuffer resize resets ScissorRectangle to the complete new target");
 
         RasterizerState rasterizer;
         rasterizer.setCullModeProperty(CullMode::None);

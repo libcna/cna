@@ -1333,6 +1333,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_DepthFormat COMMAND cna_test_easygl_depth_format
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # SOFTWARE-181 adversarial differential: the Software reset contract is intentionally
+        # renderer-neutral and proves that the selected backbuffer depth/stencil format changes
+        # actual fragment acceptance, not merely the stored PresentationParameters field.
+        cna_easygl_test(cna_test_easygl_presentation_reset_contract
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/software/examples/software_presentation_reset_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_PresentationResetContract
+            COMMAND cna_test_easygl_presentation_reset_contract
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         cna_easygl_test(cna_test_easygl_msaa_change
                         easygl_msaa_change_test.cpp)
         cna_register_renderer_test(NAME EasyGL_MsaaChange COMMAND cna_test_easygl_msaa_change
