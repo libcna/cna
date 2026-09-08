@@ -429,7 +429,10 @@ TEST(ClassicTextureFormat, PointSamplingExpandsChannelsAndPreservesDeclaredRange
         signedTexture.SetData(&negative, 1);
         const Color signedPixel =
             DrawWithBasicEffect(device, signedTexture, Vector3(-1.0f, 0.0f, 0.0f));
-        EXPECT_NEAR(signedPixel.getRProperty(), 129, 3);
+        // BasicEffect routes DiffuseColor through the stock HLSL COLOR0 vertex output. XNA's
+        // D3D9 contract saturates that output before the signed texture is sampled, so the two
+        // negative operands do not survive to become a positive fragment result.
+        EXPECT_NEAR(signedPixel.getRProperty(), 0, 2);
         EXPECT_NEAR(signedPixel.getGProperty(), 0, 2);
         EXPECT_NEAR(signedPixel.getBProperty(), 0, 2);
     }
