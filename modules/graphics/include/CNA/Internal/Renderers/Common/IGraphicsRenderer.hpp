@@ -655,6 +655,17 @@ namespace CNA::Internal::Renderers
         /// 2D-only render targets never allocate real depth-buffer storage regardless of what
         /// format was requested, and overrides this to always return false (Task 708).
         [[nodiscard]] virtual bool HasRealDepthBuffer(bool depthFormatWasRequested) const { return depthFormatWasRequested; }
+
+        /// @brief CNAEXT. How many bits this target's depth buffer stores, for scaling DepthBias.
+        ///
+        /// XNA's RasterizerState.DepthBias is a NORMALIZED depth value added straight to the
+        /// depth, the way D3D9's D3DRS_DEPTHBIAS is. An API whose bias is expressed in multiples
+        /// of the smallest resolvable depth step -- OpenGL's glPolygonOffset units, Vulkan's
+        /// depthBiasConstantFactor -- needs that step to convert, and the step is 2^-bits. 24 is
+        /// the default because every CNA DepthFormat that allocates depth is 24-bit except
+        /// Depth16, and a renderer that does not track the distinction is no worse off than
+        /// before this existed.
+        [[nodiscard]] virtual int DepthBufferBitsEXT() const { return 24; }
         /// Returns whether this target has a real stencil plane. The caller passes true only for
         /// Depth24Stencil8. Most renderers allocate depth and stencil together, so the compatibility
         /// default delegates to HasRealDepthBuffer(); a renderer with standalone stencil storage
@@ -688,6 +699,10 @@ namespace CNA::Internal::Renderers
         {
             return depthFormatWasRequested;
         }
+
+        /// @brief CNAEXT. How many bits this target's depth buffer stores, for scaling DepthBias.
+        /// See IRenderTargetRenderer::DepthBufferBitsEXT() for why a renderer needs this.
+        [[nodiscard]] virtual int DepthBufferBitsEXT() const { return 24; }
         /// Cube equivalent of IRenderTargetRenderer::HasRealStencilBuffer.
         [[nodiscard]] virtual bool HasRealStencilBuffer(bool stencilFormatWasRequested) const
         {

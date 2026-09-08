@@ -6371,6 +6371,26 @@ if (!ProfileIsEs2ApiGeneration())
         }
     }
 
+    int EasyGLRenderer::CurrentDepthBufferBits() const
+    {
+        // Whatever is bound right now owns the depth precision: a render target has its own
+        // DepthFormat, and only with nothing bound does the backbuffer's apply.
+        if (bound_->rt2D != nullptr) return bound_->rt2D->DepthBufferBitsEXT();
+        if (bound_->cube != nullptr) return bound_->cube->DepthBufferBitsEXT();
+        if (bound_->mrtCount > 0 && bound_->mrt[0] != nullptr)
+            return bound_->mrt[0]->DepthBufferBitsEXT();
+        return backBufferDepthBits_;
+    }
+
+    void EasyGLRenderer::UpdatePresentationFormatEXT(const int /*backBufferFormat*/,
+                                                     const int depthStencilFormat,
+                                                     const bool /*isFullScreen*/)
+    {
+        // Only the depth precision is consumed here, and only to convert DepthBias into GL's
+        // units. EasyGL does not otherwise reconfigure itself for a requested format.
+        backBufferDepthBits_ = EasyGLDepthBufferBits(depthStencilFormat);
+    }
+
     void EasyGLRenderer::ApplyRasterizerState(int cullMode, int fillMode,
                                                       bool scissorTestEnable,
                                                       float depthBias,
@@ -6393,13 +6413,28 @@ if (!ProfileIsEs2ApiGeneration())
         // OpenGL ES has no glPolygonMode; FillMode::WireFrame (1) is emulated at draw
         // time by re-expanding triangles into GL_LINES (see DrawWireframe).
         wireframe_ = (fillMode == 1);
-        // Task 767: DepthBias/SlopeScaleDepthBias map directly onto real GL polygon offset
-        // (matches this project's own already-established Vulkan convention, see
-        // VulkanRenderer::ApplyRasterizerState's comment: "matching FNA's
-        // glPolygonOffset(slopeScaleDepthBias, depthBias)"). Always enabled -- factor=0/units=0
-        // is a genuine no-op in GL, so there is no need to conditionally disable it.
+        // DepthBias/SlopeScaleDepthBias become GL polygon offset -- but NOT one-for-one, which is
+        // what Task 767 originally did here.
+        //
+        // XNA's DepthBias is a NORMALIZED depth value added straight to the depth, exactly as
+        // D3D9's D3DRS_DEPTHBIAS is. GL's `units` argument is a multiple of the smallest
+        // resolvable depth step, about 2^-24 on a 24-bit buffer, so passing the same number
+        // through applies roughly a sixteen-millionth of what the game asked for. SAMPLE-073
+        // (SoccerPitch) is the measured case: its flattened ball shadow sets
+        // DepthBias = -0.0001f to lift itself off the pitch, that arrived as about -6e-12, and
+        // the shadow z-fought with the pitch into horizontal scanlines while real XNA on D3D9
+        // draws it solid. Scaling by the depth buffer's own resolution makes the request mean
+        // what the game meant. CLAUDE.md: where XNA and FNA disagree, XNA wins.
+        //
+        // SlopeScaleDepthBias needs no conversion: GL's `factor` multiplies the polygon's depth
+        // slope, which is the same quantity D3D9's D3DRS_SLOPESCALEDEPTHBIAS multiplies.
+        //
+        // Always enabled -- factor=0/units=0 is a genuine no-op in GL, so there is no need to
+        // conditionally disable it.
         device.set_polygon_offset_fill_enabled(true);
-        device.set_polygon_offset(slopeScaleDepthBias, depthBias);
+        device.set_polygon_offset(
+            slopeScaleDepthBias,
+            EasyGLDepthBiasToPolygonOffsetUnits(depthBias, CurrentDepthBufferBits()));
     }
 
     void EasyGLRenderer::SetScissorRect(int x, int y, int w, int h)

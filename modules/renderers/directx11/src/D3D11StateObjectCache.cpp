@@ -138,14 +138,28 @@ namespace CNA::Internal::Renderers::DirectX11
         bool scissorTestEnable,
         float depthBias, float slopeScaleDepthBias)
     {
-        // XNA's RasterizerState.DepthBias is a float already expressed in units of "r", the
-        // depth buffer format's minimum resolvable difference -- the exact same convention this
-        // project's own Vulkan renderer feeds unscaled into vkCmdSetDepthBias's depthBiasConstantFactor,
-        // and EasyGL feeds unscaled into glPolygonOffset's "units" parameter (see
-        // VulkanRenderer::ApplyRasterizerState / EasyGLRenderer::ApplyRasterizerState's
-        // own comments, Task 767). D3D11_RASTERIZER_DESC::DepthBias is the same "r"-scaled bias,
-        // but declared INT rather than FLOAT -- round to the nearest representable integer count
-        // rather than truncating.
+        // KNOWN DIVERGENCE, measured 2026-09-08 against real XNA on D3D9 (SAMPLE-073, SoccerPitch).
+        //
+        // This code, and the Vulkan/Magnum/OpenGL1/OpenGL2/PortableGL renderers with it, was
+        // written on the premise that "XNA's RasterizerState.DepthBias is a float already
+        // expressed in units of r, the depth buffer format's minimum resolvable difference".
+        // That premise is false for XNA, which is D3D9: D3DRS_DEPTHBIAS is a NORMALIZED depth
+        // value in [0,1] added straight to the depth. D3D10 and later changed to the r-scaled
+        // integer convention this comment described, and the premise is really that convention
+        // read back onto XNA.
+        //
+        // The measurement: SoccerPitch lifts its flattened ball shadow off the pitch with
+        // DepthBias = -0.0001f. Real XNA draws a solid shadow. EasyGL, passing the value through
+        // unscaled, produced roughly -6e-12 of offset and the shadow z-fought into scanlines;
+        // scaling by the depth buffer's own resolution made it solid. EasyGL was fixed
+        // accordingly -- see EasyGLDepthBiasToPolygonOffsetUnits and its tests.
+        //
+        // Here the same premise makes it worse than small: lround(-0.0001f) is 0, so an XNA
+        // game's depth bias is dropped entirely. The correction is the same one EasyGL took,
+        // scaling by the bound depth buffer's precision, but it is left undone because it cannot
+        // be verified on this host -- D3D11 needs Windows, and an unverified change to a
+        // renderer's rasterizer state is exactly what this project's rules exclude. Recorded in
+        // docs/easygl_bugs.md, "DepthBias is not in units of r".
         const int depthBiasInt = static_cast<int>(std::lround(depthBias));
         const Key key{cullMode, fillMode, scissorTestEnable, depthBiasInt, slopeScaleDepthBias};
         auto it = cache_.find(key);

@@ -420,3 +420,35 @@ TEST(EasyGLSurfaceState, LetterboxInputMappingSubtractsTheBarsBeforeScaling)
     EXPECT_FLOAT_EQ(x, 580.0f);
     EXPECT_FLOAT_EQ(y, 600.0f);
 }
+
+// XNA's RasterizerState.DepthBias is a normalized depth added straight to the depth, the way
+// D3D9's D3DRS_DEPTHBIAS is; OpenGL counts its polygon-offset units in the smallest resolvable
+// depth step, 2^-bits. EasyGL passed the value through unconverted, which applies about a
+// sixteen-millionth of what the game asked for -- indistinguishable from no bias. SAMPLE-073's
+// flattened ball shadow sets -0.0001f to lift itself off the pitch and z-fought with it into
+// horizontal scanlines, where real XNA on D3D9 draws it solid.
+TEST(EasyGLDepthBias, IsScaledByTheDepthBuffersOwnResolution)
+{
+    // The sample's own number on the usual 24-bit buffer: -0.0001 of normalized depth is 1677.7
+    // steps of 2^-24, not -0.0001 of a step.
+    EXPECT_FLOAT_EQ(CNA::Internal::Renderers::EasyGL::EasyGLDepthBiasToPolygonOffsetUnits(-0.0001f, 24), -0.0001f * 16777216.0f);
+    EXPECT_NEAR(CNA::Internal::Renderers::EasyGL::EasyGLDepthBiasToPolygonOffsetUnits(-0.0001f, 24), -1677.7216f, 0.001f);
+
+    // A shallower buffer resolves less, so the same request is fewer steps.
+    EXPECT_FLOAT_EQ(CNA::Internal::Renderers::EasyGL::EasyGLDepthBiasToPolygonOffsetUnits(-0.0001f, 16), -0.0001f * 65536.0f);
+
+    // No bias stays no bias at any precision, so the always-enabled polygon offset stays a no-op.
+    EXPECT_FLOAT_EQ(CNA::Internal::Renderers::EasyGL::EasyGLDepthBiasToPolygonOffsetUnits(0.0f, 24), 0.0f);
+    EXPECT_FLOAT_EQ(CNA::Internal::Renderers::EasyGL::EasyGLDepthBiasToPolygonOffsetUnits(0.0f, 16), 0.0f);
+}
+
+TEST(EasyGLDepthBias, DepthFormatOrdinalsMapToTheirRealPrecision)
+{
+    // DepthFormat: None = 0, Depth16 = 1, Depth24 = 2, Depth24Stencil8 = 3.
+    EXPECT_EQ(CNA::Internal::Renderers::EasyGL::EasyGLDepthBufferBits(1), 16);
+    EXPECT_EQ(CNA::Internal::Renderers::EasyGL::EasyGLDepthBufferBits(2), 24);
+    EXPECT_EQ(CNA::Internal::Renderers::EasyGL::EasyGLDepthBufferBits(3), 24);
+    // None allocates no depth buffer; the answer only has to be defined, and a bias applied
+    // against no depth buffer cannot be observed.
+    EXPECT_EQ(CNA::Internal::Renderers::EasyGL::EasyGLDepthBufferBits(0), 24);
+}

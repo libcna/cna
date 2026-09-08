@@ -111,6 +111,40 @@ namespace CNA::Internal::Renderers::EasyGL
      * to owe. The MRT slots are the one case where the neighbours' finalization IS observable,
      * which is why a detach clears one SLOT rather than abandoning the set.
      */
+    /**
+     * @brief CNAEXT. Depth precision of a `Microsoft::Xna::Framework::Graphics::DepthFormat` ordinal.
+     *
+     * Depth16 stores 16 bits; Depth24 and Depth24Stencil8 store 24. `None` allocates no depth
+     * buffer at all, and answers 24 so a caller scaling a depth bias has a defined number rather
+     * than a division by zero -- with no depth buffer bound the bias cannot be observed anyway.
+     *
+     * @param depthFormat Raw `DepthFormat` ordinal.
+     * @return Bits of depth precision.
+     */
+    [[nodiscard]] inline int EasyGLDepthBufferBits(const int depthFormat)
+    {
+        // DepthFormat: None = 0, Depth16 = 1, Depth24 = 2, Depth24Stencil8 = 3.
+        return depthFormat == 1 ? 16 : 24;
+    }
+
+    /**
+     * @brief CNAEXT. Converts an XNA `RasterizerState.DepthBias` into OpenGL polygon-offset units.
+     *
+     * XNA's value is a normalized depth added straight to the depth, as D3D9's `D3DRS_DEPTHBIAS`
+     * is. GL's `units` argument is counted in the smallest resolvable depth step, `2^-bits`, so
+     * the same number means `2^bits` times less offset there. Passing it through unconverted is
+     * indistinguishable from applying no bias at all.
+     *
+     * @param depthBias XNA depth bias, in normalized depth.
+     * @param bits      Depth precision of the buffer being drawn into.
+     * @return The value to hand `glPolygonOffset`'s `units` argument.
+     */
+    [[nodiscard]] inline float EasyGLDepthBiasToPolygonOffsetUnits(const float depthBias,
+                                                                   const int bits)
+    {
+        return depthBias * static_cast<float>(1u << bits);
+    }
+
     struct EasyGLBoundTargetEXT
     {
         /** @brief Currently bound single `RenderTarget2D` renderer, or nullptr. */
@@ -252,6 +286,12 @@ namespace CNA::Internal::Renderers::EasyGL
             return depthFormatWasRequested && depthFormat_ != 0;
         }
 
+        /** @brief CNAEXT. Depth precision of this target, from the DepthFormat it was created with. */
+        [[nodiscard]] int DepthBufferBitsEXT() const override
+        {
+            return EasyGLDepthBufferBits(depthFormat_);
+        }
+
         void release_gl_handle_only() override;
         void recreate_gl_resource()   override;
 
@@ -362,6 +402,12 @@ namespace CNA::Internal::Renderers::EasyGL
 
         void release_gl_handle_only() override;
         void recreate_gl_resource()   override;
+
+        /** @brief CNAEXT. Depth precision of this cube target, from its own DepthFormat. */
+        [[nodiscard]] int DepthBufferBitsEXT() const override
+        {
+            return EasyGLDepthBufferBits(depthFormat_);
+        }
 
     private:
         void CreateResources();
@@ -1142,6 +1188,12 @@ namespace CNA::Internal::Renderers::EasyGL
         // leaving a dangling pointer for the next transition to dispatch through. See
         // EasyGLBoundTargetEXT for why the record is shared rather than owned outright, and why it
         // holds identity and extent but no GL handles.
+        /// Depth precision of the BACKBUFFER, kept because a depth bias has to be converted into
+        /// GL's units and GL's units are multiples of 2^-bits. Updated by
+        /// UpdatePresentationFormatEXT(); 24 until a game asks for something else, which is what
+        /// GraphicsDeviceManager's own DepthFormat::Depth24 default produces.
+        int backBufferDepthBits_ = 24;
+
         std::shared_ptr<EasyGLBoundTargetEXT> bound_ = std::make_shared<EasyGLBoundTargetEXT>();
 
         /// Task 870/319: what ApplyDepthStencilState last installed, so SetReferenceStencil can
@@ -1719,6 +1771,11 @@ namespace CNA::Internal::Renderers::EasyGL
          * @param value The new reference value.
          */
         void SetReferenceStencil(int value) override;
+        void UpdatePresentationFormatEXT(int backBufferFormat, int depthStencilFormat,
+                                         bool isFullScreen) override;
+
+        /** @brief Depth precision of whatever depth buffer is bound right now, in bits. */
+        [[nodiscard]] int CurrentDepthBufferBits() const;
         void SetScissorRect(int x, int y, int w, int h) override;
         void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) override;
 
