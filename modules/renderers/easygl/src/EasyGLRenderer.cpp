@@ -4224,6 +4224,11 @@ if (ProfileUsesGlslEs100())
         pendingFilter_ = textureFilter;
     }
 
+    void EasyGLSpriteBatchRenderer::SetSamplerMaxAnisotropy(int maxAnisotropy)
+    {
+        pendingMaxAnisotropy_ = maxAnisotropy;
+    }
+
     void EasyGLSpriteBatchRenderer::SetSamplerAddressMode(int addressU, int addressV)
     {
         pendingAddressU_ = addressU;
@@ -4337,7 +4342,8 @@ if (ProfileUsesGlslEs100())
         current_texture_->BindGL();
         ApplyChannelExpansion(prog, current_texture_->GetSurfaceFormatEXT());
         if (graphicsRenderer_)
-            graphicsRenderer_->ApplySamplerState(0, pendingFilter_, pendingAddressU_, pendingAddressV_, 1);
+            graphicsRenderer_->ApplySamplerState(0, pendingFilter_, pendingAddressU_, pendingAddressV_,
+                                                 pendingMaxAnisotropy_);
 
         vbo_.bind(::easygl::BufferTarget::Array);
         vbo_.set_data(::easygl::BufferTarget::Array,
@@ -4505,7 +4511,7 @@ if (ProfileUsesGlslEs100())
             graphicsRenderer_->getLogicalSize(logicalWidth, logicalHeight);
         }
         graphicsRenderer_->ApplySamplerState(0, pendingFilter_, pendingAddressU_,
-                                             pendingAddressV_, 1);
+                                             pendingAddressV_, pendingMaxAnisotropy_);
 
         EasyGLRenderer::CompiledEffectStreamEXT stream;
         stream.buffer = easyVertexBuffer;

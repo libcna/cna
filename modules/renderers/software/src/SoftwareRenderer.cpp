@@ -989,6 +989,19 @@ namespace CNA::Internal::Renderers::Software
             return filter == 1 || filter == 4 || filter == 7 || filter == 8;
         }
 
+        /// SOFTWARE-117: a triangle's texture-space pixel footprint. The principal rates are
+        /// singular values of the screen-to-texel Jacobian, while `isotropicRate` retains the
+        /// established maximum-column LOD rule. `majorU/V` is the full major-axis footprint in
+        /// normalized texture coordinates, independent of a mip level's dimensions.
+        struct TextureFootprint
+        {
+            float isotropicRate = 1.0f;
+            float majorRate = 1.0f;
+            float minorRate = 1.0f;
+            float majorU = 0.0f;
+            float majorV = 0.0f;
+        };
+
         /// REMED-GFX-150: the one authoritative texture sample for this renderer. Separates, in
         /// order: filter selection (magnification vs minification half of the XNA filter), texel
         /// addressing, address-mode transformation, and format decode. Reads exactly one texel for
@@ -1152,7 +1165,7 @@ namespace CNA::Internal::Renderers::Software
         ///
         /// The stages are kept strictly separate and in this order:
         ///   1. the footprint arrives as @p lambda = log2(texels per destination pixel), computed
-        ///      ONCE per triangle by TriangleTexelRate -- no per-fragment derivative work, no
+        ///      ONCE per triangle by TriangleTextureFootprint -- no per-fragment derivative work, no
         ///      allocation, no scratch buffer;
         ///   2. lambda is clamped to the levels this resource really HOLDS (ColorLevelCount), so a
         ///      declared-but-unwritten chain can never expose a level nobody filled;
@@ -1165,9 +1178,10 @@ namespace CNA::Internal::Renderers::Software
         /// path exactly: one call, same level, same filter, same fetch count. Point costs ONE
         /// within-level sample and Linear at most two, so nothing here changes the cost of an
         /// ordinary draw over a texture that has no chain.
-        void SampleTexture(const SoftwareColorSurface& texture, const SoftwareSamplerState& sampler,
-                           bool magnify, float lambda, float u, float v,
-                           float& r, float& g, float& b, float& a)
+        void SampleTextureIsotropic(const SoftwareColorSurface& texture,
+                                    const SoftwareSamplerState& sampler,
+                                    bool magnify, float lambda, float u, float v,
+                                    float& r, float& g, float& b, float& a)
         {
             const int levels = std::max(1, texture.ColorLevelCount());
             // No chain, or a magnifying footprint: there is no level below 0 to select, so the mip
@@ -1212,52 +1226,141 @@ namespace CNA::Internal::Renderers::Software
             a += (a1 - a) * weight;
         }
 
-        /// REMED-GFX-150: whether this triangle MAGNIFIES the given texture (a destination pixel
-        /// covers at most one texel) or minifies it.
+        /// SOFTWARE-117: deterministic CPU anisotropic filtering. The ordinary isotropic path
+        /// selects LOD from the longest footprint axis, which blurs an oblique surface in both
+        /// directions. Anisotropic filtering instead samples along that major axis while selecting
+        /// LOD from the minor axis. When the requested ratio exceeds the renderer's 16x work cap,
+        /// the minor rate is raised just enough to keep the remaining ratio representable; this is
+        /// the same quality/work trade-off exposed by a finite GPU anisotropy limit.
+        void SampleTexture(const SoftwareColorSurface& texture, const SoftwareSamplerState& sampler,
+                           bool magnify, float lambda, float u, float v,
+                           float& r, float& g, float& b, float& a,
+                           const TextureFootprint* footprint = nullptr)
+        {
+            constexpr int kMaxCpuAnisotropy = 16;
+            const int maxAnisotropy = std::clamp(sampler.maxAnisotropy, 1,
+                                                 kMaxCpuAnisotropy);
+            if (sampler.filter != 2 || maxAnisotropy <= 1 || footprint == nullptr ||
+                !(footprint->majorRate > 1.0f))
+            {
+                SampleTextureIsotropic(texture, sampler, magnify, lambda, u, v, r, g, b, a);
+                return;
+            }
+
+            const float majorRate = std::max(1.0f, footprint->majorRate);
+            const float minorRate = std::max(1.0f, footprint->minorRate);
+            const float filteredMinorRate =
+                std::max(minorRate, majorRate / static_cast<float>(maxAnisotropy));
+            const int tapCount = std::clamp(
+                static_cast<int>(std::ceil(majorRate / filteredMinorRate)), 1, maxAnisotropy);
+            if (tapCount <= 1)
+            {
+                SampleTextureIsotropic(texture, sampler, false,
+                                       std::log2(filteredMinorRate), u, v, r, g, b, a);
+                return;
+            }
+
+            const float tapLambda = std::log2(filteredMinorRate);
+            float sumR = 0.0f, sumG = 0.0f, sumB = 0.0f, sumA = 0.0f;
+            for (int tap = 0; tap < tapCount; ++tap)
+            {
+                const float position =
+                    (static_cast<float>(tap) + 0.5f) / static_cast<float>(tapCount) - 0.5f;
+                float tapR = 0.0f, tapG = 0.0f, tapB = 0.0f, tapA = 0.0f;
+                SampleTextureIsotropic(texture, sampler, false, tapLambda,
+                                       u + footprint->majorU * position,
+                                       v + footprint->majorV * position,
+                                       tapR, tapG, tapB, tapA);
+                sumR += tapR;
+                sumG += tapG;
+                sumB += tapB;
+                sumA += tapA;
+            }
+            const float inverseTapCount = 1.0f / static_cast<float>(tapCount);
+            r = sumR * inverseTapCount;
+            g = sumG * inverseTapCount;
+            b = sumB * inverseTapCount;
+            a = sumA * inverseTapCount;
+        }
+
+        /// REMED-GFX-150/SOFTWARE-117: the texture-space footprint of one destination pixel.
         ///
         /// XNA's TextureFilter names a SEPARATE minification and magnification filter for ordinals
         /// 5..8 (MinLinearMagPoint*, MinPointMagLinear*); the other five use one filter for both, so
         /// this classification is ignored for them and cannot perturb Point or Linear.
         ///
-        /// REMED-GFX-175: the same rate is now also the LOD, so this returns rho itself rather than
-        /// the magnify/minify bit it used to. The classification is unchanged -- rho <= 1 is
-        /// magnification -- so nothing REMED-GFX-150 established moves; what is new is that the
-        /// caller can also take log2(rho) and select a mip level with it.
-        ///
-        /// The rate is the standard rho = max(|d(s,t)/dx|, |d(s,t)/dy|) in texels per pixel,
-        /// evaluated ONCE per triangle from its three vertices: exact for the affine SpriteBatch
-        /// quads (invW == 1 throughout), and a per-triangle estimate for perspective 3D geometry,
-        /// where the true rate varies across the triangle. RasterVertex stores u,v premultiplied by
-        /// invW, so they are un-premultiplied here first. A degenerate triangle reports a rate of 1
-        /// -- magnification, level 0 -- because its rate is undefined and it covers no pixels worth
-        /// minifying.
+        /// The two rates are the singular values of the standard screen-to-texel Jacobian,
+        /// evaluated once per triangle: exact for affine SpriteBatch quads and a stable
+        /// per-triangle estimate for perspective geometry. A separate maximum-column rate preserves
+        /// the historical isotropic LOD/magnification decision; the principal rates and major-axis
+        /// direction are read only by TextureFilter::Anisotropic.
         /// REMED-GFX-182: the screen-space part of the rate, shared by the 2D and cube paths so
         /// there is exactly one footprint formula on this renderer. @p s0..@p t2 are the source
         /// coordinates in TEXELS at the triangle's three vertices; how they were obtained -- a UV
         /// attribute for an ordinary texture, a reflection vector projected onto a cube face for the
         /// environment map -- is the caller's business and is the only thing that differs.
-        float ScreenSpaceTexelRate(const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2,
-                                   float s0, float s1, float s2, float t0, float t1, float t2)
+        TextureFootprint ScreenSpaceTextureFootprint(
+            const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2,
+            float s0, float s1, float s2, float t0, float t1, float t2,
+            int texW, int texH)
         {
             const float area2 = (v1.x - v0.x) * (v2.y - v0.y) - (v2.x - v0.x) * (v1.y - v0.y);
-            if (!(std::abs(area2) > 1e-12f)) return 1.0f;
+            if (!(std::abs(area2) > 1e-12f)) return TextureFootprint{};
 
             const float dsdx = ((s1 - s0) * (v2.y - v0.y) - (s2 - s0) * (v1.y - v0.y)) / area2;
             const float dsdy = ((s2 - s0) * (v1.x - v0.x) - (s1 - s0) * (v2.x - v0.x)) / area2;
             const float dtdx = ((t1 - t0) * (v2.y - v0.y) - (t2 - t0) * (v1.y - v0.y)) / area2;
             const float dtdy = ((t2 - t0) * (v1.x - v0.x) - (t1 - t0) * (v2.x - v0.x)) / area2;
+            const float isotropicRate = std::max(
+                std::sqrt(dsdx * dsdx + dtdx * dtdx),
+                std::sqrt(dsdy * dsdy + dtdy * dtdy));
 
-            const float rhoX = std::sqrt(dsdx * dsdx + dtdx * dtdx);
-            const float rhoY = std::sqrt(dsdy * dsdy + dtdy * dtdy);
-            const float rho = std::max(rhoX, rhoY);
-            // The `!(rho > 1)` form rejects NaN too, so a non-finite rate collapses onto
-            // magnification/level 0 rather than propagating into a level index.
-            return !(rho > 1.0f) ? 1.0f : rho;
+            // J*transpose(J) is a symmetric 2x2 matrix in texture space. Its eigenvalues are the
+            // squared principal-axis rates; its major eigenvector gives the tap direction.
+            const float aa = dsdx * dsdx + dsdy * dsdy;
+            const float bb = dsdx * dtdx + dsdy * dtdy;
+            const float cc = dtdx * dtdx + dtdy * dtdy;
+            const float trace = aa + cc;
+            const float discriminant = std::sqrt(std::max(0.0f,
+                (aa - cc) * (aa - cc) + 4.0f * bb * bb));
+            const float majorSquared = 0.5f * (trace + discriminant);
+            const float minorSquared = std::max(0.0f, 0.5f * (trace - discriminant));
+            const float majorRate = std::sqrt(std::max(0.0f, majorSquared));
+            const float minorRate = std::sqrt(minorSquared);
+            if (!std::isfinite(majorRate) || !std::isfinite(minorRate))
+                return TextureFootprint{};
+
+            float axisS = 1.0f;
+            float axisT = 0.0f;
+            if (std::abs(bb) > 1e-12f)
+            {
+                axisS = bb;
+                axisT = majorSquared - aa;
+                const float axisLength = std::sqrt(axisS * axisS + axisT * axisT);
+                if (axisLength > 0.0f)
+                {
+                    axisS /= axisLength;
+                    axisT /= axisLength;
+                }
+            }
+            else if (cc > aa)
+            {
+                axisS = 0.0f;
+                axisT = 1.0f;
+            }
+
+            TextureFootprint result;
+            result.isotropicRate = isotropicRate > 1.0f ? isotropicRate : 1.0f;
+            result.majorRate = majorRate > 1.0f ? majorRate : 1.0f;
+            result.minorRate = minorRate;
+            result.majorU = axisS * majorRate / static_cast<float>(std::max(1, texW));
+            result.majorV = axisT * majorRate / static_cast<float>(std::max(1, texH));
+            return result;
         }
 
-        float TriangleTexelRate(const RasterVertex& v0, const RasterVertex& v1,
-                                const RasterVertex& v2, int texW, int texH,
-                                bool secondCoordinate = false)
+        TextureFootprint TriangleTextureFootprint(
+            const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2,
+            int texW, int texH, bool secondCoordinate = false)
         {
             const float w0 = (v0.invW != 0.0f) ? v0.invW : 1.0f;
             const float w1 = (v1.invW != 0.0f) ? v1.invW : 1.0f;
@@ -1268,13 +1371,14 @@ namespace CNA::Internal::Renderers::Software
             const float t0 = secondCoordinate ? v0.v1 : v0.v;
             const float t1 = secondCoordinate ? v1.v1 : v1.v;
             const float t2 = secondCoordinate ? v2.v1 : v2.v;
-            return ScreenSpaceTexelRate(v0, v1, v2,
-                                        u0 / w0 * static_cast<float>(texW),
-                                        u1 / w1 * static_cast<float>(texW),
-                                        u2 / w2 * static_cast<float>(texW),
-                                        t0 / w0 * static_cast<float>(texH),
-                                        t1 / w1 * static_cast<float>(texH),
-                                        t2 / w2 * static_cast<float>(texH));
+            return ScreenSpaceTextureFootprint(
+                v0, v1, v2,
+                u0 / w0 * static_cast<float>(texW),
+                u1 / w1 * static_cast<float>(texW),
+                u2 / w2 * static_cast<float>(texW),
+                t0 / w0 * static_cast<float>(texH),
+                t1 / w1 * static_cast<float>(texH),
+                t2 / w2 * static_cast<float>(texH), texW, texH);
         }
 
         /// REMED-GFX-175: the level-of-detail a texel rate implies. rho <= 1 is magnification, which
@@ -1614,7 +1718,8 @@ namespace CNA::Internal::Renderers::Software
         /// exactly -- sampler, magnification classification, lambda -- because it does the same job.
         void SampleCubeMap(const SoftwareTextureCubeRenderer& cube, const SoftwareSamplerState& sampler,
                           bool magnify, float lambda, const Vector3& dir,
-                          float& r, float& g, float& b, float& a)
+                          float& r, float& g, float& b, float& a,
+                          const TextureFootprint* footprint = nullptr)
         {
             int face = 0;
             float s = 0.5f, t = 0.5f;
@@ -1624,7 +1729,7 @@ namespace CNA::Internal::Renderers::Software
             const SoftwareSamplerState cubeSampler = CubeSamplerFor(sampler);
 
             const long long fetchesBefore = g_samplerTrace.texelFetches;
-            SampleTexture(surface, cubeSampler, magnify, lambda, s, t, r, g, b, a);
+            SampleTexture(surface, cubeSampler, magnify, lambda, s, t, r, g, b, a, footprint);
 
             if (g_cubeTrace.enabled)
             {
@@ -1697,8 +1802,9 @@ namespace CNA::Internal::Renderers::Software
         /// face's hemisphere, or a triangle whose normals or eye vector degenerate, reports a rate
         /// of 1 -- magnification, level 0 -- which is the same "deterministic rather than clever"
         /// fallback a degenerate 2D triangle already gets.
-        float TriangleCubeTexelRate(const RasterVertex& v0, const RasterVertex& v1,
-                                    const RasterVertex& v2, int faceDim)
+        TextureFootprint TriangleCubeTextureFootprint(
+            const RasterVertex& v0, const RasterVertex& v1,
+            const RasterVertex& v2, int faceDim)
         {
             const RasterVertex* verts[3] = {&v0, &v1, &v2};
             Vector3 dirs[3];
@@ -1711,7 +1817,7 @@ namespace CNA::Internal::Renderers::Software
                 const float directionLengthSquared =
                     dirs[k].X * dirs[k].X + dirs[k].Y * dirs[k].Y +
                     dirs[k].Z * dirs[k].Z;
-                if (!(directionLengthSquared > 1e-12f)) return 1.0f;
+                if (!(directionLengthSquared > 1e-12f)) return TextureFootprint{};
                 sum = Vector3(sum.X + dirs[k].X, sum.Y + dirs[k].Y, sum.Z + dirs[k].Z);
             }
 
@@ -1721,12 +1827,13 @@ namespace CNA::Internal::Renderers::Software
 
             float s[3], t[3];
             for (int k = 0; k < 3; ++k)
-                if (!CubeFaceLocal(dirs[k], face, s[k], t[k])) return 1.0f;
+                if (!CubeFaceLocal(dirs[k], face, s[k], t[k])) return TextureFootprint{};
 
             const float dim = static_cast<float>(std::max(1, faceDim));
-            return ScreenSpaceTexelRate(v0, v1, v2,
-                                        s[0] * dim, s[1] * dim, s[2] * dim,
-                                        t[0] * dim, t[1] * dim, t[2] * dim);
+            return ScreenSpaceTextureFootprint(
+                v0, v1, v2,
+                s[0] * dim, s[1] * dim, s[2] * dim,
+                t[0] * dim, t[1] * dim, t[2] * dim, faceDim, faceDim);
         }
 
         /// REMED-GFX-182: one complete cube-sample line, emitted once the effect contribution is
@@ -2603,6 +2710,9 @@ namespace CNA::Internal::Renderers::Software
             // resource has a single stored level never consult it.
             float lambda0;
             float lambda1;
+            /// SOFTWARE-117: directional footprint used only by TextureFilter::Anisotropic.
+            TextureFootprint footprint0;
+            TextureFootprint footprint1;
             // REMED-GFX-182: the reflection cube's own magnification classification and
             // level-of-detail. The SAMPLER is `sampler1` -- the cube and DualTextureEffect's second
             // texture share slot 1, exactly as they share binding 1 on every GPU renderer -- but the
@@ -2611,6 +2721,7 @@ namespace CNA::Internal::Renderers::Software
             // reflection vector rather than from the UV attribute.
             bool magnifyCube;
             float lambdaCube;
+            TextureFootprint footprintCube;
         };
 
         /// SOFTWARE-111: evaluates the exact stock-effect alpha-test expression shared by FNA's
@@ -2678,10 +2789,10 @@ namespace CNA::Internal::Renderers::Software
                 // independently, with their corresponding sampler slots and footprints.
                 float t0r, t0g, t0b, t0a;
                 SampleTexture(*ctx.texture0, ctx.sampler0, ctx.magnify0, ctx.lambda0, u, v,
-                              t0r, t0g, t0b, t0a);
+                              t0r, t0g, t0b, t0a, &ctx.footprint0);
                 float t1r, t1g, t1b, t1a;
                 SampleTexture(*ctx.texture1, ctx.sampler1, ctx.magnify1, ctx.lambda1, u1, v1,
-                              t1r, t1g, t1b, t1a);
+                              t1r, t1g, t1b, t1a, &ctx.footprint1);
                 r *= (t0r * 2.0f) * t1r;
                 g *= (t0g * 2.0f) * t1g;
                 b *= (t0b * 2.0f) * t1b;
@@ -2691,7 +2802,7 @@ namespace CNA::Internal::Renderers::Software
             {
                 float texR, texG, texB, texA;
                 SampleTexture(*ctx.texture0, ctx.sampler0, ctx.magnify0, ctx.lambda0, u, v,
-                              texR, texG, texB, texA);
+                              texR, texG, texB, texA, &ctx.footprint0);
                 r *= texR;
                 g *= texG;
                 b *= texB;
@@ -2787,7 +2898,7 @@ namespace CNA::Internal::Renderers::Software
                 // REMED-GFX-182: the cube is filtered by the PUBLIC SamplerStates[1] this draw
                 // captured, through the same sampler every ordinary texture goes through.
                 SampleCubeMap(*ctx.envMap, ctx.sampler1, ctx.magnifyCube, ctx.lambdaCube, reflDir,
-                              envR, envG, envB, envA);
+                              envR, envG, envB, envA, &ctx.footprintCube);
 
                 r = r * (1.0f - blendFactor) + (envR * a) * blendFactor + ctx.params.envMapSpecular[0] * envA * a;
                 g = g * (1.0f - blendFactor) + (envG * a) * blendFactor + ctx.params.envMapSpecular[1] * envA * a;
@@ -3009,31 +3120,39 @@ namespace CNA::Internal::Renderers::Software
             // REMED-GFX-175: one texel rate per bound texture, resolved once per triangle, feeding
             // BOTH the magnification classification REMED-GFX-150 established and the level-of-detail
             // the mip component needs. The two can never disagree because they come from one number.
-            const float rho0 = (texture0 != nullptr)
-                ? TriangleTexelRate(v0, v1, v2, std::max(1, texture0->ColorWidth()),
-                                    std::max(1, texture0->ColorHeight()))
-                : 1.0f;
-            const float rho1 = (texture1 != nullptr)
-                ? TriangleTexelRate(v0, v1, v2, std::max(1, texture1->ColorWidth()),
-                                    std::max(1, texture1->ColorHeight()), true)
-                : 1.0f;
+            const TextureFootprint footprint0 = (texture0 != nullptr)
+                ? TriangleTextureFootprint(v0, v1, v2,
+                                           std::max(1, texture0->ColorWidth()),
+                                           std::max(1, texture0->ColorHeight()))
+                : TextureFootprint{};
+            const TextureFootprint footprint1 = (texture1 != nullptr)
+                ? TriangleTextureFootprint(v0, v1, v2,
+                                           std::max(1, texture1->ColorWidth()),
+                                           std::max(1, texture1->ColorHeight()), true)
+                : TextureFootprint{};
+            const float rho0 = footprint0.isotropicRate;
+            const float rho1 = footprint1.isotropicRate;
             const bool magnify0 = !(rho0 > 1.0f);
             const bool magnify1 = !(rho1 > 1.0f);
             // REMED-GFX-182: the cube's own footprint, resolved once per triangle from the SAME
             // reflection expression the fragment path uses and only when a cube is actually bound.
 #ifndef CNA_SOFTWARE_2D_ONLY
-            const float rhoCube = useEnvMap
-                ? TriangleCubeTexelRate(v0, v1, v2, std::max(1, envMap->GetSize()))
-                : 1.0f;
+            const TextureFootprint footprintCube = useEnvMap
+                ? TriangleCubeTextureFootprint(v0, v1, v2,
+                                               std::max(1, envMap->GetSize()))
+                : TextureFootprint{};
+            const float rhoCube = footprintCube.isotropicRate;
 #else
             constexpr float rhoCube = 1.0f;
+            const TextureFootprint footprintCube{};
 #endif
             const ShadedContext ctx{params, texture0, texture1, envMap, useDualTexture, useEnvMap,
                                     needUV, blendState, blendFactor,
                                     depthState, faceStencil, colorWriteMask, multiSampleMask,
                                     occlusionQuery, sampler0, sampler1, magnify0, magnify1,
                                     LodFromTexelRate(rho0), LodFromTexelRate(rho1),
-                                    !(rhoCube > 1.0f), LodFromTexelRate(rhoCube)};
+                                    footprint0, footprint1,
+                                    !(rhoCube > 1.0f), LodFromTexelRate(rhoCube), footprintCube};
 
             if (g_samplerTrace.enabled) ++g_samplerTrace.triangles;
             // REMED-GFX-182: stamp BOTH captured slot descriptions, so the cube trace can print the

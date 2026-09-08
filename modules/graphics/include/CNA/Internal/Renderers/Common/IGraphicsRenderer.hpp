@@ -981,6 +981,12 @@ namespace CNA::Internal::Renderers
         /// Passes the raw TextureFilter int value; 0=Linear, 1=Point/Nearest, others map to nearest.
         virtual void SetSamplerFilter(int /*textureFilter*/) {}
         /**
+         * @brief Sets the maximum anisotropy applied when the filter is Anisotropic.
+         *
+         * @param maxAnisotropy Requested maximum anisotropy from the batch SamplerState.
+         */
+        virtual void SetSamplerMaxAnisotropy(int /*maxAnisotropy*/) {}
+        /**
          * @brief Sets the texture address (wrap/clamp/mirror) mode applied to each Draw call.
          *
          * Default: no-op (renderer keeps whatever wrap mode the texture was created with, i.e.

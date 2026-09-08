@@ -105,10 +105,9 @@ namespace CNA::Internal::Renderers::Software
             case CNA::GraphicsCapability::Texture3D:
                 return false;
             case CNA::GraphicsCapability::AnisotropicFiltering:
-                // The CPU sampler currently maps TextureFilter::Anisotropic onto its isotropic
-                // linear path and ignores MaxAnisotropy. SOFTWARE-117 will opt this back in only
-                // after an oblique-minification fixture proves a real anisotropic implementation.
-                return false;
+                // SOFTWARE-117: the CPU sampler resolves the full directional texel footprint,
+                // selects LOD from its minor axis and averages up to 16 taps along its major axis.
+                return true;
             case CNA::GraphicsCapability::OcclusionQuery:
                 // SOFTWARE-122: the CPU query counts the exact samples surviving coverage,
                 // MultiSampleMask, alpha, depth and stencil through the shared fragment path.
@@ -282,10 +281,10 @@ namespace CNA::Internal::Renderers::Software
 
     // REMED-GFX-150: store the SamplerState so the rasterizer's sampler can honor it. Previously
     // every parameter but `slot` was unnamed and discarded, so TextureFilter and TextureAddressMode
-    // never reached a single textured fragment and every draw filtered LinearClamp. maxAnisotropy is
-    // still not consumed: this renderer has no anisotropic filter, and TextureFilter::Anisotropic
-    // already resolves to Linear through the same min/mag table the other ordinals use.
-    void SoftwareRenderer::ApplySamplerState(int slot, int filter, int addressU, int addressV, int)
+    // never reached a single textured fragment and every draw filtered LinearClamp. SOFTWARE-117
+    // additionally retains MaxAnisotropy for the directional CPU footprint sampler.
+    void SoftwareRenderer::ApplySamplerState(int slot, int filter, int addressU, int addressV,
+                                             int maxAnisotropy)
     {
         if (slot < 0 || slot >= kMaxSamplerSlots)
             throw std::runtime_error("SoftwareRenderer::ApplySamplerState: slot must be 0..15");
@@ -293,6 +292,7 @@ namespace CNA::Internal::Renderers::Software
         s.filter = filter;
         s.addressU = addressU;
         s.addressV = addressV;
+        s.maxAnisotropy = maxAnisotropy;
     }
 
     // REMED-GFX-080: store the ScissorRectangle so the raster paths can intersect it into their

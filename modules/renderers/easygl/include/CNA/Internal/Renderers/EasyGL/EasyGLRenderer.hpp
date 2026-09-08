@@ -707,6 +707,7 @@ namespace CNA::Internal::Renderers::EasyGL
         int pendingFilter_    = 0; // TextureFilter::Linear
         int pendingAddressU_  = 1; // TextureAddressMode::Clamp
         int pendingAddressV_  = 1; // TextureAddressMode::Clamp
+        int pendingMaxAnisotropy_ = 4; // SamplerState default
 
     public:
         explicit EasyGLSpriteBatchRenderer(::easygl::Device& device, std::shared_ptr<::easygl::ResourceRegistry> registry,
@@ -718,6 +719,7 @@ namespace CNA::Internal::Renderers::EasyGL
         void SetTransformMatrix(const Matrix& m) override;
         void SetCustomEffect(Effect* effect) override;
         void SetSamplerFilter(int textureFilter) override;
+        void SetSamplerMaxAnisotropy(int maxAnisotropy) override;
         void SetSamplerAddressMode(int addressU, int addressV) override;
         void Draw(const ITextureRenderer& texture, float x, float y) override;
         void Draw(const ITextureRenderer& texture,

@@ -2099,6 +2099,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_easygl_sampler_component_isolation
             TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # SOFTWARE-117 parity oracle: the same public contract exercises the driver-backed
+        # anisotropic path and verifies SpriteBatch forwards the caller's MaxAnisotropy.
+        cna_easygl_test(cna_test_easygl_anisotropic_filter_contract
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/anisotropic_filter_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_AnisotropicFilterContract
+            COMMAND cna_test_easygl_anisotropic_filter_contract
+            TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # REMED-GFX-175: a TextureFilter ordinal's MIPMAP component is a third, independent decision,
         # and ordinals 0 (Linear) and 1 (Point) were losing it -- both mapped onto a GL filter with no
         # mipmap term, so a texture that really owns a chain never mip-filtered under either, the

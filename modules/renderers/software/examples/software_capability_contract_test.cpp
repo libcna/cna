@@ -55,8 +55,8 @@ namespace
 
             Check(!device.SupportsCapability(CNA::GraphicsCapability::MultipleRenderTargets),
                   "MultipleRenderTargets is false until SOFTWARE-120 lands");
-            Check(!device.SupportsCapability(CNA::GraphicsCapability::AnisotropicFiltering),
-                  "AnisotropicFiltering is false while Anisotropic maps to linear");
+            Check(device.SupportsCapability(CNA::GraphicsCapability::AnisotropicFiltering),
+                  "AnisotropicFiltering is advertised with its directional CPU sampler");
             Check(device.SupportsCapability(CNA::GraphicsCapability::OcclusionQuery),
                   "OcclusionQuery is advertised with its exact CPU counter");
             Check(!device.SupportsCapability(CNA::GraphicsCapability::CustomEffects),

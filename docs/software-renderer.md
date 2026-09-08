@@ -191,8 +191,10 @@ rather than always passing.
   `MultiSampleMask` are honored. Per-target write channels remain coupled to the pending MRT task.
 - **Classic 2D/cube sampler state is applied.** Point/linear minification and magnification,
   point/linear mip selection, independent U/V Wrap/Clamp/Mirror and per-slot state are covered by
-  shared contracts. `TextureFilter::Anisotropic` still follows the isotropic linear path and is
-  truthfully reported unsupported pending `SOFTWARE-117`.
+  shared contracts. `TextureFilter::Anisotropic` computes the directional texel footprint, selects
+  mip LOD from its minor axis and averages up to 16 taps along its major axis; `MaxAnisotropy`,
+  per-slot independence, SpriteBatch forwarding and address interaction are shared-tested against
+  EasyGL by `SOFTWARE-117`.
 - **Backface culling respects `RasterizerState.CullMode`** (`SOFTWARE-81`) — `None`/
   `CullClockwiseFace`/`CullCounterClockwiseFace` are all honored, including by
   `SpriteBatch`'s own quads (matching real FNA, whose `SpriteBatch` defaults to

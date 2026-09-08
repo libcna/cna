@@ -254,6 +254,10 @@ namespace CNA::Internal::Renderers::Gdi
                 inner_->SetCustomEffect(effect);
             }
             void SetSamplerFilter(int textureFilter) override { inner_->SetSamplerFilter(textureFilter); }
+            void SetSamplerMaxAnisotropy(int maxAnisotropy) override
+            {
+                inner_->SetSamplerMaxAnisotropy(maxAnisotropy);
+            }
             void SetSamplerAddressMode(int addressU, int addressV) override
             {
                 inner_->SetSamplerAddressMode(addressU, addressV);

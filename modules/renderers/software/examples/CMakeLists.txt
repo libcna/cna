@@ -708,6 +708,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
         COMMAND cna_test_software_sampler_component_isolation
         TIMEOUT 300 LABELS "Software")
 
+    # SOFTWARE-117: public, renderer-independent evidence that anisotropic filtering uses the
+    # directional footprint, honours MaxAnisotropy, remains independent per slot, and preserves
+    # address modes. The same source is built against EasyGL below as the parity oracle.
+    cna_software_test(cna_test_software_anisotropic_filter_contract
+                      ${CNA_GRAPHICS_EXAMPLES_DIR}/anisotropic_filter_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_AnisotropicFilterContract
+        COMMAND cna_test_software_anisotropic_filter_contract
+        TIMEOUT 300 LABELS "Software")
+
     # REMED-GFX-175: the mip component of a TextureFilter ordinal, measured against a chain whose
     # levels name themselves. Software is the CPU reference implementation, so what it does with a
     # real chain settles the contract independently of any GPU driver.

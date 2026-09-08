@@ -358,9 +358,8 @@ TEST(GraphicsDeviceCapabilityTest, SupportsCompiledEffectsOnlyOnCompletedBackend
               kExpectCompiledEffects);
 }
 
-// MSAA/anisotropic filtering are genuinely device/driver-dependent -- don't assert a specific
-// value (would make this test flaky across different CI machines/GPUs), just that querying them
-// doesn't throw.
+// MSAA/anisotropic filtering are genuinely device/driver-dependent on GPU renderers. Software's
+// deterministic CPU implementation is unconditional; the generic query still must never throw.
 TEST(GraphicsDeviceCapabilityTest, MultiSampleAntiAliasingQueryDoesNotThrow)
 {
     GraphicsDevice gd;
@@ -371,6 +370,8 @@ TEST(GraphicsDeviceCapabilityTest, AnisotropicFilteringQueryDoesNotThrow)
 {
     GraphicsDevice gd;
     EXPECT_NO_THROW({ (void)gd.SupportsCapability(GraphicsCapability::AnisotropicFiltering); });
+    if (CNA_RENDERER_IS(Software))
+        EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::AnisotropicFiltering));
 }
 
 // REMED-CONTENT-001: GetMaxTextureDimension() must report a real, positive, sane ceiling -- shared

@@ -217,6 +217,8 @@ namespace CNA::Internal::Renderers::Software
         int addressU = 1;
         /** @brief Raw TextureAddressMode ordinal for V (0 = Wrap, 1 = Clamp, 2 = Mirror). */
         int addressV = 1;
+        /** @brief Requested maximum anisotropy; Software clamps work to its deterministic CPU cap. */
+        int maxAnisotropy = 4;
     };
 
     /**
@@ -622,6 +624,8 @@ namespace CNA::Internal::Renderers::Software
         void SetTransformMatrix(const Matrix& m) override { transformMatrix_ = m; }
         void SetCustomEffect(Effect* effect) override { customEffect_ = effect; }
         void SetSamplerFilter(int textureFilter) override { textureFilter_ = textureFilter; }
+        void SetSamplerMaxAnisotropy(int maxAnisotropy) override
+        { maxAnisotropy_ = maxAnisotropy; }
         void SetSamplerAddressMode(int addressU, int addressV) override
         { addressU_ = addressU; addressV_ = addressV; }
         void Draw(const ITextureRenderer& texture, float x, float y) override;
@@ -645,7 +649,7 @@ namespace CNA::Internal::Renderers::Software
         /// re-established on every Begin and cannot leak from a previous batch). Pre-fix these three
         /// fields were written here and read nowhere, so the whole SamplerState argument was inert.
         [[nodiscard]] SoftwareSamplerState GetSamplerState() const
-        { return SoftwareSamplerState{textureFilter_, addressU_, addressV_}; }
+        { return SoftwareSamplerState{textureFilter_, addressU_, addressV_, maxAnisotropy_}; }
 
     private:
         SoftwareRenderer& owner_;
@@ -655,6 +659,7 @@ namespace CNA::Internal::Renderers::Software
         int textureFilter_ = 0;
         int addressU_ = 1;
         int addressV_ = 1;
+        int maxAnisotropy_ = 4;
     };
 
     /**
