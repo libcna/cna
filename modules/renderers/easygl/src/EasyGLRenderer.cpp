@@ -7482,6 +7482,22 @@ if (!ProfileIsEs2ApiGeneration())
         device.set_polygon_offset(slopeScaleDepthBias, depthBias);
     }
 
+    void EasyGLRenderer::ApplyRasterizerMultiSampleState(bool enabled)
+    {
+        if (metagl::IsContextLost()) return;
+#if defined(CNA_GL_PROFILE_OPENGL33)
+        // GL_MULTISAMPLE is intentionally absent from OpenGL ES. FNA3D makes the same desktop-only
+        // state transition; its ES path cannot represent RasterizerState.MultiSampleAntiAlias.
+        constexpr auto multisample = static_cast<metagl::Capability>(0x809D);
+        if (enabled)
+            metagl::glEnable(multisample);
+        else
+            metagl::glDisable(multisample);
+#else
+        (void) enabled;
+#endif
+    }
+
     void EasyGLRenderer::SetScissorRect(int x, int y, int w, int h)
     {
         if (metagl::IsContextLost()) return;

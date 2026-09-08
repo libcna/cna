@@ -2529,6 +2529,17 @@ namespace CNA::Internal::Renderers
                                           float depthBias = 0.0f,
                                           float slopeScaleDepthBias = 0.0f) {}
 
+        /**
+         * @brief Applies multisample rasterization enablement independently of target storage.
+         *
+         * A disabled state still targets every stored sample, but evaluates triangle coverage at
+         * one pixel center and replicates the result instead of evaluating independent sample
+         * locations. Defaults to no-op for backends that have not adopted this classic state.
+         *
+         * @param enabled Whether independent multisample rasterization is enabled.
+         */
+        virtual void ApplyRasterizerMultiSampleState(bool /*enabled*/) {}
+
         /// Applies a SamplerState to the given texture slot. Default: no-op.
         /// @param slot         Texture unit index (0–15).
         /// @param filter       Raw TextureFilter int value.

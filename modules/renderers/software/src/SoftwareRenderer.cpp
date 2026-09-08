@@ -2115,6 +2115,7 @@ namespace CNA::Internal::Renderers::Software
                                const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2,
                                int colorWriteMask, unsigned int multiSampleMask,
                                SoftwareOcclusionQueryRenderer* occlusionQuery,
+                               bool multiSampleAntiAlias,
                                bool wireframe = false, unsigned edgeMask = kEdgeAll)
         {
             const float area = EdgeFunction(v0.x, v0.y, v1.x, v1.y, v2.x, v2.y);
@@ -2184,6 +2185,12 @@ namespace CNA::Internal::Renderers::Software
                         if (!TriangleContainsSample(v0, v1, v2, area, w0, w1, w2))
                             continue;
                     }
+                    else if (!multiSampleAntiAlias)
+                    {
+                        if (!TriangleContainsSample(v0, v1, v2, area, w0, w1, w2))
+                            continue;
+                        coverageMask = 0xFu;
+                    }
                     else
                     {
                         coverageMask = 0u;
@@ -2224,6 +2231,8 @@ namespace CNA::Internal::Renderers::Software
                     float depth = BarycentricInterpolate(
                         v0.depth, v1.depth, v2.depth, lambda0, lambda1);
                     if (hasBias) depth = std::clamp(depth + biasOffset, 0.0f, 1.0f);  // REMED-GFX-083
+                    if (fb.HasMultiSampleColor() && !multiSampleAntiAlias)
+                        sampleDepths.fill(depth);
                     const float invW = BarycentricInterpolate(
                         v0.invW, v1.invW, v2.invW, lambda0, lambda1);
                     WriteColoredFragment(fb, depthState, faceStencil, clip, x, y, depth, invW,
@@ -3171,6 +3180,7 @@ namespace CNA::Internal::Renderers::Software
                                      const SoftwareSamplerState& sampler0,
                                      const SoftwareSamplerState& sampler1,
                                      SoftwareOcclusionQueryRenderer* occlusionQuery,
+                                     bool multiSampleAntiAlias,
                                      bool wireframe = false, unsigned edgeMask = kEdgeAll)
         {
             const float area = EdgeFunction(v0.x, v0.y, v1.x, v1.y, v2.x, v2.y);
@@ -3327,6 +3337,12 @@ namespace CNA::Internal::Renderers::Software
                         if (!TriangleContainsSample(v0, v1, v2, area, w0, w1, w2))
                             continue;
                     }
+                    else if (!multiSampleAntiAlias)
+                    {
+                        if (!TriangleContainsSample(v0, v1, v2, area, w0, w1, w2))
+                            continue;
+                        coverageMask = 0xFu;
+                    }
                     else
                     {
                         // Four actual coverage samples at (1/4,1/4), (3/4,1/4),
@@ -3368,6 +3384,8 @@ namespace CNA::Internal::Renderers::Software
                     float depth = BarycentricInterpolate(
                         v0.depth, v1.depth, v2.depth, lambda0, lambda1);
                     if (hasBias) depth = std::clamp(depth + biasOffset, 0.0f, 1.0f);  // REMED-GFX-083
+                    if (fb.HasMultiSampleColor() && !multiSampleAntiAlias)
+                        sampleDepths.fill(depth);
                     const float invW = BarycentricInterpolate(
                         v0.invW, v1.invW, v2.invW, lambda0, lambda1);
                     WriteShadedFragment(fb, ctx, clip, x, y, depth, invW,
@@ -4104,12 +4122,14 @@ namespace CNA::Internal::Renderers::Software
                                 cullMode, depthBias, slopeScaleDepthBias,
                                 spriteParams, clip, rv0, rv1, rv2,
                                 GetColorWriteMask(), GetMultiSampleMask(),
-                                spriteSampler, spriteSampler, activeOcclusionQuery_, wire, kEdgeAll);
+                                spriteSampler, spriteSampler, activeOcclusionQuery_,
+                                IsMultiSampleAntiAliasEnabled(), wire, kEdgeAll);
         RasterizeTriangleShaded(fb, depthState, stencilState, blendState, blendFactor,
                                 cullMode, depthBias, slopeScaleDepthBias,
                                 spriteParams, clip, rv2, rv3, rv0,
                                 GetColorWriteMask(), GetMultiSampleMask(),
-                                spriteSampler, spriteSampler, activeOcclusionQuery_, wire, kEdgeAll);
+                                spriteSampler, spriteSampler, activeOcclusionQuery_,
+                                IsMultiSampleAntiAliasEnabled(), wire, kEdgeAll);
     }
 
     std::unique_ptr<ITexture3DRenderer> SoftwareRenderer::CreateTexture3D(
@@ -4318,7 +4338,7 @@ namespace CNA::Internal::Renderers::Software
                                   rv[0], rv[static_cast<std::size_t>(fan)],
                                   rv[static_cast<std::size_t>(fan + 1)],
                                   colorWriteMasks_[0], multiSampleMask_, activeOcclusionQuery_,
-                                  wire, edgeMask);
+                                  multiSampleAntiAlias_, wire, edgeMask);
             }
         }
     }
@@ -4408,7 +4428,7 @@ namespace CNA::Internal::Renderers::Software
                                   rv[0], rv[static_cast<std::size_t>(fan)],
                                   rv[static_cast<std::size_t>(fan + 1)],
                                   colorWriteMasks_[0], multiSampleMask_, activeOcclusionQuery_,
-                                  wire, edgeMask);
+                                  multiSampleAntiAlias_, wire, edgeMask);
             }
         }
     }
@@ -4580,7 +4600,8 @@ namespace CNA::Internal::Renderers::Software
                                         clip, rv[0], rv[static_cast<std::size_t>(fan)],
                                         rv[static_cast<std::size_t>(fan + 1)],
                                         colorWriteMasks_[0], multiSampleMask_, GetSamplerState(0),
-                                        GetSamplerState(1), activeOcclusionQuery_, wire, edgeMask);
+                                        GetSamplerState(1), activeOcclusionQuery_,
+                                        multiSampleAntiAlias_, wire, edgeMask);
             }
         }
     }
@@ -4763,7 +4784,8 @@ namespace CNA::Internal::Renderers::Software
                                         clip, rv[0], rv[static_cast<std::size_t>(fan)],
                                         rv[static_cast<std::size_t>(fan + 1)],
                                         colorWriteMasks_[0], multiSampleMask_, GetSamplerState(0),
-                                        GetSamplerState(1), activeOcclusionQuery_, wire, edgeMask);
+                                        GetSamplerState(1), activeOcclusionQuery_,
+                                        multiSampleAntiAlias_, wire, edgeMask);
             }
         }
     }

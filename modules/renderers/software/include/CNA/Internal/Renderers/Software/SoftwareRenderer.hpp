@@ -1459,6 +1459,7 @@ namespace CNA::Internal::Renderers::Software
                                     int ccwStencilPass, int ccwStencilFail, int ccwStencilDepthFail) override;
         void ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
                                   float depthBias = 0.0f, float slopeScaleDepthBias = 0.0f) override;
+        void ApplyRasterizerMultiSampleState(bool enabled) override;
         void ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy) override;
         void ApplySamplerMipState(int slot, int maxMipLevel, float lodBias) override;
         void SetBlendFactor(float r, float g, float b, float a) override;
@@ -1577,6 +1578,10 @@ namespace CNA::Internal::Renderers::Software
         /// supplied through SpriteBatch.Begin (REMED-GFX-081) outlines the sprite's quad triangles the
         /// same way it outlines 3D geometry.
         [[nodiscard]] int GetFillMode() const { return fillMode_; }
+
+        /** @brief Returns whether triangles use independent multisample coverage locations. */
+        [[nodiscard]] bool IsMultiSampleAntiAliasEnabled() const
+        { return multiSampleAntiAlias_; }
 
         /// REMED-GFX-083: the RasterizerState.DepthBias / SlopeScaleDepthBias floats from the most recent
         /// ApplyRasterizerState() call (both previously discarded). Consumed by SoftwareSpriteBatchRenderer
@@ -1760,6 +1765,9 @@ namespace CNA::Internal::Renderers::Software
         /// RasterizerState is applied, in which case it outlines only the triangle edges. Independent
         /// of CullMode/ScissorTestEnable.
         int fillMode_ = 0;
+
+        /** @brief XNA rasterizer multisample coverage toggle; enabled by default. */
+        bool multiSampleAntiAlias_ = true;
 
         /// REMED-GFX-083: RasterizerState.DepthBias / SlopeScaleDepthBias, stored by ApplyRasterizerState()
         /// (its 4th/5th float args, previously discarded). Both default to 0 (XNA/FNA default), for which

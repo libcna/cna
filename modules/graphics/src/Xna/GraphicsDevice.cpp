@@ -3663,12 +3663,16 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::setRasterizerStateProperty(const RasterizerState& value)
     {
         if (renderer_)
+        {
             renderer_->ApplyRasterizerState(
                 (int)value.getCullModeProperty(),
                 (int)value.getFillModeProperty(),
                 value.getScissorTestEnableProperty(),
                 value.getDepthBiasProperty(),
                 value.getSlopeScaleDepthBiasProperty());
+            renderer_->ApplyRasterizerMultiSampleState(
+                value.getMultiSampleAntiAliasProperty());
+        }
         rasterizerState_ = value;
     }
 

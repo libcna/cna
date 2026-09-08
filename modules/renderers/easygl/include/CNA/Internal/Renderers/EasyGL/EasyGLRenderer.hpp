@@ -1816,6 +1816,7 @@ namespace CNA::Internal::Renderers::EasyGL
                                     int ccwStencilFail, int ccwStencilDepthFail) override;
         void ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
                                   float depthBias, float slopeScaleDepthBias) override;
+        void ApplyRasterizerMultiSampleState(bool enabled) override;
         void ApplySamplerState(int slot, int filter, int addressU, int addressV,
                                int maxAnisotropy) override;
         /**

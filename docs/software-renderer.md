@@ -325,11 +325,15 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   counter-clockwise tuple, and the stencil-fail/depth-fail/pass ordering. This applies to colored
   and stock-effect triangles, strips, lines, points, wireframe and SpriteBatch, with alpha discard
   occurring first.
-- **Sample-correct 4x MSAA** (`SOFTWARE-110`) — color, depth and stencil are stored and tested
+- **Sample-correct 4x MSAA** (`SOFTWARE-110`, `SOFTWARE-160`) — color, depth and stencil are stored and tested
   independently at four rotated 2x2 coverage locations. `MultiSampleMask` gates those same samples,
   triangle depth is evaluated at each covered location, and resolve deterministically averages the
-  surviving colors. The renderer-neutral mask/depth/stencil contract also exposed and repaired
-  EasyGL's former silent omission of non-default sample masks.
+  surviving colors. `RasterizerState.MultiSampleAntiAlias=false` leaves four-sample storage intact
+  but evaluates triangle coverage/depth once at the pixel center and replicates that result to the
+  enabled samples; the shared boundary fixture proves the result has no partially covered pixels
+  and that a true/false/true transition restores the exact independently sampled image. The same
+  contract exposed and repaired EasyGL's former silent omission of non-default sample masks and now
+  maps this rasterizer toggle to desktop `GL_MULTISAMPLE`; OpenGL ES has no equivalent.
 - **`OcclusionQuery` is an exact CPU raster query** (`SOFTWARE-122`). `Begin` starts a fresh
   measurement, `End` completes synchronously, and `PixelCount` is the number of raster samples
   surviving clipping, scissor, geometric coverage, `MultiSampleMask`, alpha test, depth and

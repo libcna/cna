@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// SOFTWARE-110: renderer-neutral 4x coverage, mask, depth and stencil sample contract.
+// SOFTWARE-110/SOFTWARE-160: renderer-neutral 4x coverage, mask, depth, stencil and
+// RasterizerState.MultiSampleAntiAlias contract.
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -38,6 +39,12 @@ namespace
     constexpr int kTargetSize = 8;
     const Color kBlack(0, 0, 0, 255);
     const Color kFullGreen(0, 255, 0, 255);
+
+#if defined(CNA_RENDERER_EASYGL) && !defined(CNA_GL_PROFILE_OPENGL33)
+    constexpr bool kCanDisableMultisampleRasterization = false;
+#else
+    constexpr bool kCanDisableMultisampleRasterization = true;
+#endif
 
     std::string Text(const Color& color)
     {
@@ -217,6 +224,51 @@ class MsaaFragmentContractTest final : public Game
               "stencil written in sample 0 does not reject samples 1..3: " + Text(result));
     }
 
+    void CheckMultiSampleAntiAliasToggle(GraphicsDevice& device)
+    {
+        const auto render = [&](bool enabled) {
+            Begin(device);
+            RasterizerState rasterizer;
+            rasterizer.setCullModeProperty(CullMode::None);
+            rasterizer.setMultiSampleAntiAliasProperty(enabled);
+            device.setRasterizerStateProperty(rasterizer);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setBlendStateProperty(BlendState::Opaque);
+            DrawHalfTriangle(device, kFullGreen, 0.5f);
+            return FinishAndReadAll(device);
+        };
+
+        const auto independentlySampled = render(true);
+        int partialWithMsaa = 0;
+        for (const Color& pixel : independentlySampled)
+            if (pixel.getGProperty() > 0 && pixel.getGProperty() < 255)
+                ++partialWithMsaa;
+        Check(partialWithMsaa > 0,
+              "MultiSampleAntiAlias=true independently covers boundary samples (partial pixels=" +
+                  std::to_string(partialWithMsaa) + ")");
+
+        if constexpr (kCanDisableMultisampleRasterization)
+        {
+            const auto replicatedCenter = render(false);
+            int partialWithoutMsaa = 0;
+            for (const Color& pixel : replicatedCenter)
+                if (pixel.getGProperty() > 0 && pixel.getGProperty() < 255)
+                    ++partialWithoutMsaa;
+            Check(partialWithoutMsaa == 0,
+                  "MultiSampleAntiAlias=false evaluates one pixel center and replicates its result "
+                  "to every sample (partial pixels=" + std::to_string(partialWithoutMsaa) + ")");
+            Check(independentlySampled != replicatedCenter,
+                  "MultiSampleAntiAlias true and false produce observably different boundary coverage");
+            Check(render(true) == independentlySampled,
+                  "MultiSampleAntiAlias true/false/true transition restores independent coverage");
+        }
+        else
+        {
+            std::printf("[NOTE] MultiSampleAntiAlias=false is unrepresentable on this OpenGL ES "
+                        "profile; desktop GL and Software execute the toggle checks\n");
+        }
+    }
+
 protected:
     void Draw(const GameTime&) override
     {
@@ -241,6 +293,7 @@ protected:
         CheckIndependentDepthSamples(device);
         CheckDepthAtCoveredSamples(device);
         CheckIndependentStencilSamples(device);
+        CheckMultiSampleAntiAliasToggle(device);
 
         std::printf("=== %d/%d PASS ===\n", passed_, total_);
         result_ = passed_ == total_ ? 0 : 1;

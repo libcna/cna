@@ -613,6 +613,11 @@ namespace CNA::Internal::Renderers::Software
         slopeScaleDepthBias_ = slopeScaleDepthBias;
     }
 
+    void SoftwareRenderer::ApplyRasterizerMultiSampleState(bool enabled)
+    {
+        multiSampleAntiAlias_ = enabled;
+    }
+
     // REMED-GFX-150: store the SamplerState so the rasterizer's sampler can honor it. Previously
     // every parameter but `slot` was unnamed and discarded, so TextureFilter and TextureAddressMode
     // never reached a single textured fragment and every draw filtered LinearClamp. SOFTWARE-117
