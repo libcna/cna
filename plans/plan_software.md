@@ -1,6 +1,6 @@
 # Software (CPU) Rasterizer Graphics Backend — Implementation Plan
 
-> **Current status (Software <-> EasyGL XNA/Core parity campaign, 2026-09-07..08): FINAL ADVERSARIAL CHALLENGE ACTIVE.**
+> **Current status (Software <-> EasyGL XNA/Core parity campaign, 2026-09-07..08): STOCK-EFFECT PARITY; CLASSIC COMPILED-EFFECT GAP CONFIRMED.**
 > The original `SOFTWARE-1..86` rows below remain the historical record of the deliberately small
 > v1 renderer. They are not the current completion boundary. The authorized target is now an
 > independent, deterministic CPU implementation of the classic XNA 4.0/core graphics behavior on
@@ -13,10 +13,13 @@
 > point/linear and mip filtering, independent Wrap/Clamp/Mirror U/V addressing, texture/cube mip
 > storage, viewport/scissor, wireframe, depth bias, 16/32-bit indexed addressing, dynamic buffer
 > updates, and ordinary multi-stream vertex input all have implementation and focused tests.
-> The campaign closed every discovered feasible XNA/Core renderer gap with public behavioral
-> evidence. Resource lifecycle, presentation/reset, SpriteBatch, SpriteFont and classic Model
-> orchestration all have renderer-independent proof. Deferred CNAEXT-modern and non-applicable
-> physical GPU/window behavior remain explicitly classified rather than counted as parity gaps.
+> The campaign closed every discovered bounded XNA/Core renderer gap with public behavioral
+> evidence. Resource lifecycle, presentation/reset, SpriteBatch, SpriteFont and stock-effect Model
+> orchestration all have renderer-independent proof. The final adversarial challenge nevertheless
+> disproved the broader parity claim: opt-in EasyGL executes classic XNA Direct3D 9 Effect
+> Framework bytecode while Software rejects it. That is distinct from deferred CNAEXT
+> `ShaderEffect` support and is now an explicit multi-phase backlog. Deferred CNAEXT-modern and
+> non-applicable physical GPU/window behavior remain separately classified.
 > The executable task table is below; the evidence ledger is
 > `docs/software-easygl-parity-ledger.md`.
 >
@@ -78,6 +81,25 @@ classification and evidence is in `docs/software-easygl-parity-ledger.md`.
   viewport in four-pixel steps and renders the overlay twice at every point; it made no progress
   past its test body within an isolated 30-second limit and made the unfiltered CPU run impractical.
   No broad-suite failure exercises Software rasterization or a claimed XNA/Core capability.
+
+### Final adversarial challenge baseline
+
+- Challenge start commit: `92ed418b3dfcd4a2e03ea8c0d092a0b4caca9e9f`, branch `software`,
+  clean tracked and untracked worktree.
+- The plan contained 94 explicit `SOFTWARE-*` rows at challenge start: 91 complete, one blocked
+  (`SOFTWARE-100`) and two intentionally pending historical options (`SOFTWARE-85/86`). The
+  highest assigned identifier was `SOFTWARE-157`.
+- The existing Software configuration built. Without a display, 155 of 156 `Software`-label
+  CTests passed; `Software_PresentLifecycle` alone was not executable because its expected-abort
+  child also exited with GoogleTest's skip code after SDL could not create an X11 window. The
+  preceding campaign's authenticated-Xvfb result remains 156/156 and will be repeated before the
+  challenge verdict.
+- The existing OPENGLES3 EasyGL configuration built with compiled effects disabled. A separate
+  desktop `OPENGL33` configuration was created to exercise desktop-only state and a dependency-
+  enabled `OPENGL33` configuration was created with `CNA_EASYGL_COMPILED_EFFECTS=ON` for the
+  classic-Effect audit. This matters because the option defaults off only to avoid pulling
+  MojoShader into an otherwise dependency-free renderer; it is not a claim that EasyGL lacks the
+  feature.
 
 ### Executable backlog
 
@@ -146,15 +168,19 @@ its own tests and plan evidence in the same commit.
 | SOFTWARE-156 | Tighten the legacy cross-renderer dump comparator to an evidence-backed default | ✅ | Completed 2026-09-08. The original diagnostic defaulted to a 40-byte per-channel tolerance even though its measured canonical Software/EasyGL difference was one. The standalone comparator now defaults to one byte and its usage/documentation state that bound explicitly; wider exceptions must be supplied deliberately and justified by their own scene. Fresh renderer-native 64×64 dumps compare successfully at the one-byte default, while an explicit zero tolerance rejects the measured rounding difference. |
 | SOFTWARE-157 | Bind the shared `GraphicsAdapter` video pin to ambient-platform lifecycle | ✅ | Completed 2026-09-08. The final EasyGL audit's fresh-process sharding exposed that `GraphicsAdapter` represented its long-lived video reference with one process-global boolean and released it through whichever platform happened to be current. After a `ScopedCurrentPlatform`/Game transition that could release the replacement's reference, strand the predecessor's reference, and leave cached display IDs without the session that issued them. `CurrentPlatform` now owns renderer-agnostic, token-keyed subsystem pins: a platform transition acquires the replacement before releasing the predecessor, repeated pinning is idempotent, a failed transfer is retried on the next real-adapter access, and reset/unpin releases exactly the recorded owner. Deterministic platform tests prove acquisition order, idempotence and reset cleanup. Graphics-device lifecycle tests separately measure the persistent adapter pin and each device-owned reference, including lazy retry. The complete Software graphics suite remains 2,324 pass/54 intentional skips and the Software CTest label remains 156/156; the EasyGL lifecycle fixture passes five consecutive runs (30 executed tests plus five legitimate single-renderer skips) under Mesa/Xvfb. |
 | SOFTWARE-158 | Honor `SamplerState.MaxMipLevel` and `MipMapLevelOfDetailBias` in every Software sampling path | ✅ | Completed 2026-09-08. The adversarial contract first failed 8/97 Software checks: `GraphicsDevice` forwarded both properties through `IGraphicsRenderer::ApplySamplerMipState`, but Software inherited that method's no-op and its sampler stored neither value; `SpriteBatch` independently dropped both properties for every renderer. Software now applies bias before resource clamping and treats `MaxMipLevel` as FNA3D's minimum-LOD/lower-bound state in ordinary, anisotropic and SpriteBatch sampling. The batch renderer contract carries both values, restoring EasyGL's already implemented sampler state on that path too. Self-identifying mips prove positive/negative bias, oversized/lower-bound max-mip behavior, combined clamp+bias, state restoration and SpriteBatch forwarding. Software and Mesa desktop EasyGL pass 97/97; Mesa EasyGL GLES passes the 91 representable checks and explicitly classifies its six LOD-bias checks because FNA3D/GL ES expose no equivalent. |
-| SOFTWARE-159 | Audit `SamplerState.AddressW` against observable classic `Texture3D` effect sampling | ⬜ | Audit required. Common 3D draw state forwards AddressW and EasyGL compiled effects consume it; Software inherits the renderer no-op and no current stock effect samples `Texture3D`. Determine whether the currently usable classic compiled-Effect surface makes this observable before creating an implementation-only test. |
+| SOFTWARE-159 | Audit `SamplerState.AddressW` against observable classic `Texture3D` effect sampling | ✅ | Completed 2026-09-08. `GraphicsDevice` already publishes `AddressW` through `IGraphicsRenderer::ApplySamplerAddressW`; opt-in EasyGL applies it to `GL_TEXTURE_WRAP_R`, and the live compiled-effect `SharedCubeAndVolumeSamplerContract` proves a classic pixel shader samples `Texture3D`. Software inherits the no-op and none of the six stock XNA effects has a volume sampler, so there is no honest stock-effect test or isolated fix: the property becomes observable only through the missing compiled-effect executor. Volume sampling with U/V/W addressing is therefore an explicit acceptance criterion of `SOFTWARE-164`, not falsely marked implemented because storage alone exists. |
 | SOFTWARE-160 | Implement `RasterizerState.MultiSampleAntiAlias` propagation and observable sample-coverage semantics | ✅ | Completed 2026-09-08. The adversarial boundary-geometry contract first failed 2/12 Software checks: the public property existed and FNA/FNA3D applied it, but `GraphicsDevice` dropped it because the renderer contract had no corresponding operation. The new explicit renderer operation is invoked before the public cache commits. Software now evaluates coverage/depth once at the pixel center and replicates the result to all four stored samples when false; true retains independent quarter-sample evaluation. EasyGL maps the state to desktop `GL_MULTISAMPLE`, matching FNA3D, and explicitly classifies ES where the toggle does not exist. Software and Mesa desktop EasyGL pass 12/12; Mesa EasyGL GLES passes all nine representable checks. The true/false/true transition is image-exact. |
-| SOFTWARE-161 | Assess classic compiled XNA `Effect` parity independently of CNAEXT `ShaderEffect` | ⬜ | Audit task. Inventory the runtime representation, public techniques/passes/parameters, EasyGL MojoShader path, SpriteBatch custom-effect route, model/content material route, instruction profiles, reusable parser/IR, minimum CPU execution architecture and implementation scope. Do not count CNAEXT shader-source support as a substitute and do not claim full parity if Software cannot execute an EasyGL-supported classic compiled effect. |
+| SOFTWARE-161 | Assess classic compiled XNA `Effect` parity independently of CNAEXT `ShaderEffect` | ✅ | Completed 2026-09-08; the broad parity claim is disproved. CNA receives original XNA/FNA Direct3D 9 Effect Framework bytecode (`.fxb` or bytes read from XNB), not MGFX or CNA source. With `CNA_EASYGL_COMPILED_EFFECTS=ON`, EasyGL uses pinned MojoShader's effect parser and OpenGL adapter for reflection, parameters, techniques, passes, state assignments and translated SM1-3 vertex/pixel programs. Its complete 37-test suite passes on Mesa desktop GL, including exact pixels, ordinary/indexed/multi-stream/instanced draws, SpriteBatch custom effects, render-target/cube/volume samplers and context recreation. `EffectReader`, `EffectMaterialReader` and model shared resources expose the path to content and model materials. Software instead advertises false and rejects the same structurally valid/authentic bytes; its four focused capability/refusal tests pass only as boundary evidence. MojoShader exposes translated source/binary and a preshader evaluator, not a CPU vertex/pixel execution IR. Genuine parity therefore requires a reusable D3D9 shader-token interpreter integrated with Software's vertex, clipping, quad-fragment, sampler and MRT stages. Estimated scope is a standalone subsystem: roughly 4-8 engineering weeks and 5-10 kLOC plus conformance fixtures. The phased implementation is `SOFTWARE-162..165`; capability must remain false until all phases pass. |
+| SOFTWARE-162 | Build a Software compiled-effect runtime and reusable D3D9 shader-token IR | ⬜ | Reuse MojoShader's Effect Framework parsing/reflection/state translation while capturing and validating the original vertex/pixel token streams into a Software-owned IR. Implement parameter storage, preshaders, techniques, passes, cloning, disposal and pass state publication through `ICompiledEffectRuntime`. Do not advertise `CompiledEffects` and do not silently substitute stock shaders. |
+| SOFTWARE-163 | Execute compiled-effect vertex shaders through Software vertex input and clipping | ⬜ | Implement the classic SM1-3 vertex register/instruction semantics required by committed XNA fixtures, declaration-semantic binding, output saturation rules, ordinary/indexed/user/buffer draws, multiple streams, base vertex, offsets and instancing. Feed declared shader outputs into the existing homogeneous clipper and perspective interpolator. |
+| SOFTWARE-164 | Execute compiled-effect pixel shaders with classic texture/sampler/MRT semantics | ⬜ | Implement scalar/quad pixel execution, control flow, discard, derivatives and implicit/explicit LOD needed by SM1-3; bind 2D/cube/volume samplers with Filter, U/V/W addressing, anisotropy, max mip and LOD bias; publish COLOR0-3 to MRT and preserve depth/stencil/blend/MSAA ordering. The EasyGL shared sampler, SpriteBatch, render-target, cube/volume and draw contracts must execute rather than skip. This task closes `SOFTWARE-159`'s observable AddressW dependency. |
+| SOFTWARE-165 | Complete classic compiled-effect conformance and enable the capability | ⬜ | Close remaining SM1/SM2/SM3 instruction/profile cases, malformed-input and lifecycle behavior, SpriteBatch multi-pass/custom-effect routing, EffectMaterial/model-content draws, stress/fuzz coverage and performance bounds. Run the full shared compiled-effect contract against Software and EasyGL. Set `GraphicsCapability::CompiledEffects=true` only after no supported EasyGL classic-effect contract remains refused or stock-substituted. |
 
 ### Current dependency order
 
-Tasks through `SOFTWARE-158` plus `SOFTWARE-160` are complete. The adversarial challenge is auditing
-the AddressW/compiled-Effect dependency
-under `SOFTWARE-159`/`SOFTWARE-161`. `SOFTWARE-100` remains yellow for the previously recorded
+Tasks through `SOFTWARE-161` are complete except for the intentionally historical `SOFTWARE-85/86`
+and the independently blocked `SOFTWARE-100`. `SOFTWARE-162..165` are the dependency-ordered
+compiled-effect implementation backlog. `SOFTWARE-100` remains yellow for the previously recorded
 repository-wide blockers; that status does not excuse any renderer gap found here.
 
 ---

@@ -23,6 +23,13 @@ as ownership by the windowless Software device. The renderer only needs the same
 SDL3/SDL3_image/SDL3_mixer and
 `../sharp-runtime` checkout every other renderer already requires.
 
+The final adversarial challenge found one material classic-XNA boundary: Software does not execute
+compiled Direct3D 9 Effect Framework bytecode, while EasyGL does when built with
+`CNA_EASYGL_COMPILED_EFFECTS=ON`. Software truthfully reports
+`GraphicsCapability::CompiledEffects=false` and rejects those bytes. This is distinct from the
+excluded CNAEXT `ShaderEffect` API; `SOFTWARE-161` records the assessment and
+`SOFTWARE-162..165` the CPU shader-interpreter backlog.
+
 ## What this renderer is for
 
 GPU-backed CNA renderers need a graphics context and normally a window or offscreen platform
@@ -41,17 +48,18 @@ non-indexed user/buffer draws. That makes it useful for:
   the existing EasyGL/BGFX/Vulkan golden-image tests (see `docs/graphics-renderer-feature-matrix.md`),
   which all need a real GPU context even under Xvfb.
 - **Server/CI environments** with no GPU whatsoever.
-- **Running classic XNA/Core graphics behavior on the CPU**, including stock effects, complete
-  graphics state, textures/cubes/targets/MRT, SpriteBatch/SpriteFont, queries and Model drawing.
+- **Running the stock-effect classic XNA/Core graphics subset on the CPU**, including complete
+  graphics state for those paths, textures/cubes/targets/MRT, SpriteBatch/SpriteFont, queries and
+  stock-effect Model drawing.
 - **Cross-renderer diagnostics**: comparing a real GPU renderer's output against this renderer's
   independently-implemented rasterizer can help localize whether a rendering bug is in shared
   code, a specific GPU renderer, or expected-but-undocumented behavior (see "Cross-renderer
   diagnostic" below, `plans/plan_software.md` `SOFTWARE-61`/`SOFTWARE-84`).
 
-Software is a first-class correctness renderer: a normal XNA-style CNA application can rely on its
-classic graphics contract without a GPU. It is not optimized to match GPU throughput—there is no
-SIMD, multithreading or tile binning—because determinism and fidelity remain the primary goals (see
-`plans/plan_software.md` design decision 1).
+Software is a first-class stock-effect correctness renderer: an XNA-style CNA application that does
+not use compiled custom Effects can rely on the verified CPU contract without a GPU. It is not
+optimized to match GPU throughput—there is no SIMD, multithreading or tile binning—because
+determinism and fidelity remain the primary goals (see `plans/plan_software.md` design decision 1).
 
 ## Writing a Software test
 
@@ -99,8 +107,8 @@ The original raw-dump diagnostic below remains a useful small end-to-end smoke t
 parity corpus is now much broader: renderer-neutral public programs are compiled independently in
 the Software and EasyGL configurations and assert exact pixels, transfers, resource properties,
 exception behavior and query counts. They cover raster/sample rules, declarations and buffers,
-textures/samplers/formats, targets/cubes/MRT, complete graphics state, classic stock effects,
-SpriteBatch/SpriteFont, lifecycle/reset, occlusion and `Model.Draw()`. Tight non-zero tolerances are
+textures/samplers/formats, targets/cubes/MRT, complete stock-path graphics state, classic stock
+effects, SpriteBatch/SpriteFont, lifecycle/reset, occlusion and stock-effect `Model.Draw()`. Tight non-zero tolerances are
 local to tests with a documented normalized-conversion or raster-rounding reason; most contracts
 use exact equality.
 
@@ -138,6 +146,13 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
 
 ## Current XNA/Core capabilities and intentional boundaries (2026-09-08)
 
+- **Classic compiled XNA Effects are not supported** (`SOFTWARE-161`). The public bytecode
+  constructor accepts XNA/FNA Direct3D 9 Effect Framework bytes only on renderers whose real
+  runtime implements them. Opt-in EasyGL passes 37 tests covering reflection, techniques/passes,
+  parameters, draw pixels, state, SpriteBatch, instancing, multi-stream input and 2D/cube/volume
+  sampling. Software has no CPU vertex/pixel shader interpreter, advertises
+  `CompiledEffects=false`, and rejects those same valid bytes. `SOFTWARE-162..165` is the phased
+  implementation backlog; CNAEXT `ShaderEffect` is a separate excluded API.
 - **Vertex input is declaration-driven.** `VertexElementUsage`/usage index selects attributes
   across one or multiple streams, and all 12 XNA `VertexElementFormat` values are decoded at their
   declared offsets. Reordered, padded, application-defined and non-canonical-stride layouts,
@@ -212,7 +227,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
 - **MRT and render-target cube maps are real.** Ordinary `Texture2D` and `TextureCube`
   mip storage and sampling are real. `Texture3D` has exact CPU RGBA8 storage for its full XNA mip
   chain plus bounded full/partial `SetData` and `GetData`; this storage capability does not imply
-  CNAEXT `ShaderEffect` volume sampling.
+  either CNAEXT `ShaderEffect` or classic compiled-Effect volume sampling. The latter is an
+  in-scope gap tracked by `SOFTWARE-159`/`SOFTWARE-164` because opt-in EasyGL demonstrably supports
+  it.
   `RenderTarget2D` does implement an actual four-sample CPU colour plane and generated mip levels.
   Unbind resolves the samples before mip generation; a level-zero `GetData` while the target is
   active snapshots the live samples without unbinding it, while generated levels remain unavailable
