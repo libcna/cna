@@ -598,11 +598,48 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         // two effects for twelve meshes -- and what keeps two models that name different textures
         // apart (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-127).
         const std::filesystem::path sourceDirectory = std::filesystem::path(filename).parent_path();
-        const auto textureFile = [&objects](const std::int64_t identity) -> std::string
+        // A `Texture` names its file twice and the two do not have to agree. The SDK resolves the
+        // absolute `FileName` first and falls back to `RelativeFilename` when that names nothing,
+        // and the reference XNA writes is whichever one *resolved*. Three files in the sample
+        // corpus settle it, and they disagree with each other: Spacewar's `bfg_proj.fbx` names
+        // `../textures/bfg_proj.tga` and `../texture/bfg_proj.tga` -- one letter apart, and only
+        // the first is a directory that exists -- and XNA's build writes `..\textures\bfg_proj_0`;
+        // `p1_rocket_proj.fbx` names `../textures/p1_rocket.tga` against
+        // `../../textures/player_1_weapons/p1_rocket.tga`, and XNA writes the first; and
+        // SAMPLE-005's `saucer.fbx` names `saucer_p1_diff_v1.tga` against `saucer_texture.tga`,
+        // where only the *second* is beside it, and XNA writes `saucer_texture_0`. Preferring
+        // either field outright is wrong for one of the three; preferring the one that exists is
+        // right for all three (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-140`). A path is
+        // matched the way Windows matches one, which `XNASWEEP-115` already needed.
+        const auto textureFile = [&objects, &sourceDirectory](const std::int64_t identity) -> std::string
         {
             const auto found = objects.find(identity);
             if (found == objects.end() || found->second.node == nullptr) { return {}; }
-            for (const char* field : {"RelativeFilename", "FileName"})
+            std::vector<std::string> spellings;
+            for (const char* field : {"FileName", "Filename", "RelativeFilename"})
+            {
+                const Canon::FbxNode* named = found->second.node->Find(field);
+                if (named == nullptr) { continue; }
+                std::string text = named->Text(0);
+                if (!text.empty() &&
+                    std::find(spellings.begin(), spellings.end(), text) == spellings.end())
+                {
+                    spellings.push_back(std::move(text));
+                }
+            }
+            for (const std::string& spelling : spellings)
+            {
+                std::error_code error;
+                if (std::filesystem::is_regular_file(
+                        ResolveNamedSourceFileEXT(sourceDirectory, spelling), error))
+                {
+                    return spelling;
+                }
+            }
+            // None of them names a file that is here. The reference is still written -- XNA does
+            // not require the texture to exist to record it -- and the spelling kept is the one
+            // this importer has always kept.
+            for (const char* field : {"RelativeFilename", "FileName", "Filename"})
             {
                 const Canon::FbxNode* named = found->second.node->Find(field);
                 if (named != nullptr)

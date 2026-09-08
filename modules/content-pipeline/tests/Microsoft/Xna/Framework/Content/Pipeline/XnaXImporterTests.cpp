@@ -299,8 +299,18 @@ namespace
                     }
                     for (const auto& [key, reference] : batch->getMaterialProperty()->getTexturesProperty())
                     {
+                        // Relative to the fixture directory, as the oracle prints it: a `Texture`
+                        // names its file twice and the two can name different *directories*, so
+                        // the file name alone would not say which one was taken
+                        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-140`).
+                        const std::filesystem::path referenced =
+                            std::filesystem::path(reference->getFilenameProperty()).lexically_normal();
+                        const std::filesystem::path relative =
+                            referenced.lexically_relative(Fixture("").lexically_normal());
                         text += "    materialTexture " + key + "=" +
-                                std::filesystem::path(reference->getFilenameProperty()).filename().string() +
+                                (relative.empty() || relative.begin()->string() == ".."
+                                     ? referenced.filename().string()
+                                     : relative.generic_string()) +
                                 "\n";
                     }
                 }
@@ -611,6 +621,12 @@ TEST(XnaFbxImporter, EveryFileAnswersTheGraphXnaAnswers)
           "fbx_material_factor_texture.fbx", "fbx_material_legacy.fbx",
           "fbx_oblique.fbx", "fbx_prerotation_units.fbx",
           "fbx_quad_polygon.fbx", "fbx_quad_textured.fbx", "fbx_split_vertices.fbx",
+          // A `Texture` names its file twice and the two can name different directories; the
+          // reference XNA writes is whichever one resolves. These two separate the branches:
+          // the first's `FileName` names a directory that is there and its `RelativeFilename`
+          // one that is not, the second's the other way round
+          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-140`).
+          "fbx_texture_path_filename.fbx", "fbx_texture_path_relative.fbx",
           "fbx_two_materials.fbx"})
     {
         ImporterContext context;

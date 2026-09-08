@@ -56,6 +56,20 @@ namespace Cna.Xna40.ModelOracle
                    Environment.Version + "\",\n \"cases\": [\n" + string.Join(",\n", Cases.ToArray()) + "\n ]\n}\n";
         }
 
+        /** A reference's path, relative to the fixture directory and with forward slashes. */
+        private static string Relative(string path)
+        {
+            if (string.IsNullOrEmpty(path)) { return path; }
+            string full = Path.GetFullPath(path).Replace('\\', '/');
+            string root = Path.GetFullPath(FixtureDirectory).Replace('\\', '/');
+            if (!root.EndsWith("/")) { root += "/"; }
+            if (full.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+            {
+                return full.Substring(root.Length);
+            }
+            return Path.GetFileName(path);
+        }
+
         private static string F(float value)
         {
             return value.ToString("0.######", CultureInfo.InvariantCulture);
@@ -156,8 +170,15 @@ namespace Cna.Xna40.ModelOracle
                         foreach (KeyValuePair<string, ExternalReference<TextureContent>> texture
                                      in geometry.Material.Textures)
                         {
+                            // Relative to the fixture directory, not just the file name: a
+                            // `Texture` names its file twice and the two can name different
+                            // *directories*, which is the whole question for
+                            // fbx_texture_path_filename.fbx and fbx_texture_path_relative.fbx
+                            // (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-140). Every other
+                            // fixture names a bare file beside itself, so their records do not
+                            // change.
                             builder.Append("    materialTexture " + texture.Key + "=" +
-                                           Path.GetFileName(texture.Value.Filename) + "\n");
+                                           Relative(texture.Value.Filename) + "\n");
                         }
                     }
                 }
