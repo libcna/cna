@@ -1439,6 +1439,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_format_limit_queries
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plans/plan_modern.md MOD-2223: allocation identity plus end-to-end float/HDR clear,
+        # draw, sampling, mixed-MRT and typed readback coverage.
+        cna_vulkan_test(cna_test_vulkan_float_render_target
+                        vulkan_float_render_target_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_FloatRenderTarget
+            COMMAND cna_test_vulkan_float_render_target
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         if(CNA_CNAEXT)
             # plans/plan_modern.md MOD-2241: SPIR-V compute + three storage buffers through the
             # public CNAEXT wrappers. Every vector element and the validation stream are checked.

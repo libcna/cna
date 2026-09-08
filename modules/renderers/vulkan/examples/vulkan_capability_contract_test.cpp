@@ -223,26 +223,29 @@ class VulkanCapabilityContractTest : public Game
                   std::string("capability=") + (supported ? "true" : "false") + ", " + how);
         }
 
-        // VULKAN-470. HalfFloatTextureLinearFiltering is about SAMPLING a half-float texture, not
-        // about rendering to one, so the leg above does not cover it. The reason it is false here
-        // is one step earlier than filtering: the format cannot be given to a Texture2D at all, so
-        // there is no surface for a sampler to filter. Asserting that is what makes "false" an
-        // observation rather than a claim.
+        // MOD-2223. A half-float RenderTarget2D is itself sampleable texture storage, even though
+        // standalone Texture2D allocation for this format remains a separate unsupported path.
+        // The coarse answer must therefore match the detailed format bit and the target's actual
+        // construction result, not the standalone Texture2D constructor.
         {
             const bool supported =
                 r.SupportsCapability(GraphicsCapability::HalfFloatTextureLinearFiltering);
             bool created = false;
             std::string how;
             try {
-                Texture2D half(dev, 8, 8, false, SurfaceFormat::HalfVector4);
+                RenderTarget2D half(
+                    dev, 8, 8, false, SurfaceFormat::HalfVector4, DepthFormat::None);
                 created = true;
                 how = "created";
             } catch (const std::exception& e) {
                 how = std::string("refused: ") + e.what();
             }
-            check(!supported && !created,
-                  "C HalfFloatTextureLinearFiltering=false has no surface to filter: a half-float "
-                  "Texture2D is refused outright",
+            const bool detailed = dev.GetRendererSurfaceFormatSupportEXT(
+                SurfaceFormat::HalfVector4).Supports(
+                    CNA::RendererFormatUsage::Filterable);
+            check(supported == detailed && created ==
+                      dev.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HalfVector4),
+                  "C HalfFloatTextureLinearFiltering matches the sampled target format path",
                   std::string("capability=") + (supported ? "true" : "false") + ", " + how);
         }
 

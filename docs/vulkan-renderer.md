@@ -2,7 +2,7 @@
 
 ## Status of this document
 
-**Complete as of 2026-09-08 (`VULKAN-480`, updated by `REMED-GFX-203`, `MOD-2222` and `MOD-2240`–`MOD-2242`), and written after the re-audits it depends on**
+**Complete as of 2026-09-08 (`VULKAN-480`, updated by `REMED-GFX-203`, `MOD-2222`–`MOD-2223` and `MOD-2240`–`MOD-2242`), and written after the re-audits it depends on**
 (`VULKAN-470`–`VULKAN-474`) so that what it claims was checked rather than remembered. Every
 section names the row that put it there and the test that keeps it true; a claim with no test named
 beside it is not in here.
@@ -47,7 +47,7 @@ measures on (§*Environment* below).
 | Compiled XNA `.fx` effects | **unsupported** here | fixed |
 | SPIR-V compute shaders and storage buffers | supported | device |
 | Compute image binding and indirect draw | **unsupported** | fixed |
-| Float32 / Float16 render targets, half-float linear filtering | **unsupported** | device |
+| Float32 / Float16 `RenderTarget2D`, half-float linear filtering | supported | device |
 | GPU timers, shadow sampling, image-based lighting | **unsupported** | fixed |
 
 Two entries need their sentence rather than a cell:
@@ -141,9 +141,17 @@ until `MOD-2244`; likewise texture-array layers and timestamp period remain zero
 `MOD-2243`/`MOD-2246`. `Vulkan_FormatLimitQueries` compares every answer with the raw properties at
 runtime and verifies these native-only negative controls.
 
-**Render targets are narrower than textures: `Color` only.** All 26 other formats answer `false`,
-from the device, and a `RenderTarget2D` asking for one is refused rather than silently substituted
-(`VULKAN-171`, `VULKAN-020`). **Colour transfer** — `GetData`/`SetData` shaped as `Color` — refuses
+`MOD-2223` adds a separate exact `RenderTarget2D` allocation table: `Color`, `Rgba64`, `Single`,
+`Vector2`, `Vector4`, `HalfSingle`, `HalfVector2`, `HalfVector4` and `HdrBlendable`. The table feeds
+classification and allocation together, and each native format is carried through image/view
+creation, format-aware render-pass and pipeline cache keys, mixed-format MRT, sampling, mip
+generation and byte-width-correct readback. An MSAA request above one is admitted only when the
+exact colour format and selected depth format share a supported sample count; unsupported pairs
+throw instead of becoming single-sampled or `Color`. `Vulkan_FloatRenderTarget` proves the live
+clear/draw/sample/readback path, values above 1.0, mixed MRT, MSAA resolve and mips. Float/HDR
+`RenderTargetCube` remains unsupported.
+
+**Colour transfer** — `GetData`/`SetData` shaped as `Color` — refuses
 `NormalizedByte4` and `NormalizedByte2` explicitly even though the framework's four-byte rule would
 admit the first: its bytes are signed and sample to [-1, 1], so a `Color`-shaped transfer would read
 the wrong values while looking well-formed (`VULKAN-174`).

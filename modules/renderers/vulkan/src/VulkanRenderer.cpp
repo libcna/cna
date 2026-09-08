@@ -278,6 +278,8 @@ namespace CNA::Internal::Renderers::Vulkan
 
     static VkSampleCountFlagBits PickSampleCount(const VkPhysicalDeviceLimits& limits,
                                                  int requested);
+    static VkSampleCountFlagBits PickSampleCountFromFlags(VkSampleCountFlags available,
+                                                          int requested);
 
     static int SampleCountToInt(VkSampleCountFlagBits s)
     {
@@ -748,9 +750,18 @@ namespace CNA::Internal::Renderers::Vulkan
                                                           bool preserveContents,
                                                           VulkanRenderer* owner,
                                                           int requestedMultiSampleCount,
-                                                          bool mipMap)
-        : width_(w), height_(h), preserveContents_(preserveContents), owner_(owner)
+                                                          bool mipMap,
+                                                          int surfaceFormat)
+        : width_(w), height_(h), preserveContents_(preserveContents),
+          surfaceFormat_(surfaceFormat), owner_(owner)
     {
+        VulkanRenderer::VulkanSurfaceFormatStorageEXT colorStorage{};
+        if (!owner_ || !owner_->MapRenderTargetFormatToStorageEXT(surfaceFormat_, colorStorage))
+            throw std::runtime_error(
+                "VulkanRenderTargetRenderer: requested SurfaceFormat is not implemented");
+        colorVkFormat_ = colorStorage.format;
+        bytesPerTexel_ = colorStorage.bytesPerTexel;
+
         // Task 911: real per-instance DepthStencilFormat fidelity -- None means no depth
         // attachment at all; otherwise a real, distinct VkFormat picked for THIS instance,
         // independent of the backbuffer's own depthFormat_.
@@ -774,21 +785,51 @@ namespace CNA::Internal::Renderers::Vulkan
         // reports (VULKAN-347's rule: report what you got, not what you were asked for).
         //
         // What that decision cost, and where it is paid: the renderer no longer has ONE MSAA
-        // sample count, so the MSAA render-pass caches are keyed by (depth format, sample count)
-        // and `PipelineKey` carries the count. See `GetOrCreateRTRenderPassMsaa` and
-        // `MsaaSamplesForPipelinesEXT`.
-        const VkSampleCountFlagBits rtSamples =
-            requestedMultiSampleCount > 0
-                ? PickSampleCount(owner_->physicalDeviceProperties_.limits,
-                                  requestedMultiSampleCount)
-                : VK_SAMPLE_COUNT_1_BIT;
+        // sample count, so the MSAA render-pass caches are keyed by the exact colour format,
+        // depth format and sample count. `PipelineKey` carries the same compatibility tuple; see
+        // `GetOrCreateRTRenderPassMsaa` and `MsaaSamplesForPipelinesEXT`.
+        VkImageFormatProperties colorSampleProperties{};
+        VkSampleCountFlags availableSamples = VK_SAMPLE_COUNT_1_BIT;
+        if (vkGetPhysicalDeviceImageFormatProperties(
+                owner_->physicalDevice_, colorVkFormat_, VK_IMAGE_TYPE_2D,
+                VK_IMAGE_TILING_OPTIMAL,
+                VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                    VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT,
+                0, &colorSampleProperties) == VK_SUCCESS)
+        {
+            availableSamples = colorSampleProperties.sampleCounts &
+                               owner_->physicalDeviceProperties_.limits
+                                   .framebufferColorSampleCounts;
+        }
+        if (hasDepth)
+        {
+            VkImageFormatProperties depthSampleProperties{};
+            if (vkGetPhysicalDeviceImageFormatProperties(
+                    owner_->physicalDevice_, depthVkFormat_, VK_IMAGE_TYPE_2D,
+                    VK_IMAGE_TILING_OPTIMAL,
+                    VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                    0, &depthSampleProperties) != VK_SUCCESS)
+            {
+                availableSamples = 0;
+            }
+            else
+            {
+                availableSamples &= depthSampleProperties.sampleCounts &
+                                    owner_->physicalDeviceProperties_.limits
+                                        .framebufferDepthSampleCounts;
+            }
+        }
+        const VkSampleCountFlagBits rtSamples = requestedMultiSampleCount > 0
+            ? PickSampleCountFromFlags(availableSamples, requestedMultiSampleCount)
+            : VK_SAMPLE_COUNT_1_BIT;
         const bool wantsMsaa = rtSamples > VK_SAMPLE_COUNT_1_BIT;
 
-        // --- Color image (must use swapchainFormat_ for pipeline compatibility) ---
+        // --- Color image. MOD-2223 carries the exact requested format through allocation,
+        // framebuffer compatibility, sampling and readback instead of substituting Color. ---
         VkImageCreateInfo colorInfo{};
         colorInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
         colorInfo.imageType     = VK_IMAGE_TYPE_2D;
-        colorInfo.format        = owner_->swapchainFormat_;
+        colorInfo.format        = colorVkFormat_;
         colorInfo.extent        = { uw, uh, 1 };
         colorInfo.mipLevels     = static_cast<uint32_t>(levelCount_);
         colorInfo.arrayLayers   = 1;
@@ -818,7 +859,7 @@ namespace CNA::Internal::Renderers::Vulkan
         colorView.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         colorView.image    = colorImage_;
         colorView.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        colorView.format   = owner_->swapchainFormat_;
+        colorView.format   = colorVkFormat_;
         colorView.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
         if (vkCreateImageView(dev, &colorView, nullptr, &colorView_) != VK_SUCCESS)
             throw std::runtime_error("VulkanRenderTargetRenderer: vkCreateImageView (color) failed");
@@ -884,7 +925,7 @@ namespace CNA::Internal::Renderers::Vulkan
             VkImageCreateInfo msaaColorInfo{};
             msaaColorInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
             msaaColorInfo.imageType     = VK_IMAGE_TYPE_2D;
-            msaaColorInfo.format        = owner_->swapchainFormat_;
+            msaaColorInfo.format        = colorVkFormat_;
             msaaColorInfo.extent        = { uw, uh, 1 };
             msaaColorInfo.mipLevels     = 1;
             msaaColorInfo.arrayLayers   = 1;
@@ -912,7 +953,7 @@ namespace CNA::Internal::Renderers::Vulkan
             msaaColorView.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
             msaaColorView.image    = msaaColorImage_;
             msaaColorView.viewType = VK_IMAGE_VIEW_TYPE_2D;
-            msaaColorView.format   = owner_->swapchainFormat_;
+            msaaColorView.format   = colorVkFormat_;
             msaaColorView.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
             if (vkCreateImageView(dev, &msaaColorView, nullptr, &msaaColorView_) != VK_SUCCESS)
                 throw std::runtime_error("VulkanRenderTargetRenderer: vkCreateImageView (MSAA color) failed");
@@ -934,7 +975,8 @@ namespace CNA::Internal::Renderers::Vulkan
             VkImageView fbAtts[] = { msaaColorView_, colorView_, depthView_ };
             VkFramebufferCreateInfo fbInfo{};
             fbInfo.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-            fbInfo.renderPass      = owner_->GetOrCreateRTRenderPassMsaa(depthVkFormat_,
+            fbInfo.renderPass      = owner_->GetOrCreateRTRenderPassMsaa(colorVkFormat_,
+                                                                        depthVkFormat_,
                                                                         /*discardContents=*/true,
                                                                         rtSamples);
             fbInfo.attachmentCount = hasDepth ? 3u : 2u;
@@ -955,7 +997,8 @@ namespace CNA::Internal::Renderers::Vulkan
             // variant (see GetOrCreateRTRenderPass()'s own comment: discard/load differ only in
             // loadOp/initialLayout, which don't affect compatibility) -- but THIS framebuffer
             // must be built against whichever variant this RT instance actually uses.
-            fbInfo.renderPass      = owner_->GetOrCreateRTRenderPass(depthVkFormat_, !preserveContents_);
+            fbInfo.renderPass      = owner_->GetOrCreateRTRenderPass(
+                colorVkFormat_, depthVkFormat_, !preserveContents_);
             fbInfo.attachmentCount = hasDepth ? 2u : 1u;
             fbInfo.pAttachments    = fbAtts;
             fbInfo.width           = uw;
@@ -1050,9 +1093,10 @@ namespace CNA::Internal::Renderers::Vulkan
         pass_->framebuffer   = (msaaFramebuffer_ != VK_NULL_HANDLE) ? msaaFramebuffer_ : framebuffer_;
         pass_->renderPass    = (msaaFramebuffer_ != VK_NULL_HANDLE)
                                ? owner_->GetOrCreateRTRenderPassMsaa(
-                                     depthVkFormat_, /*discardContents=*/true,
+                                     colorVkFormat_, depthVkFormat_, /*discardContents=*/true,
                                      GetColorSampleCountEXT())
-                               : owner_->GetOrCreateRTRenderPass(depthVkFormat_, !preserveContents_);
+                               : owner_->GetOrCreateRTRenderPass(
+                                     colorVkFormat_, depthVkFormat_, !preserveContents_);
         pass_->width         = width_;
         pass_->height        = height_;
         pass_->msaa          = (msaaFramebuffer_ != VK_NULL_HANDLE);
@@ -1060,6 +1104,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // reads to decide what `msaa == true` means for every pipeline it builds in this segment.
         pass_->samples       = GetColorSampleCountEXT();
         pass_->depthFormat   = depthVkFormat_;
+        pass_->colorFormat   = colorVkFormat_;
         // REMED-GFX-129: a PreserveContents target's non-MSAA pass loads its colour, so a leading
         // Clear() cannot ride the load action there. The MSAA variant this target asks for is
         // DiscardContents-shaped for every usage (see the framebuffer branch above).
@@ -1224,8 +1269,9 @@ namespace CNA::Internal::Renderers::Vulkan
     // no-op when nothing is pending -- e.g. after a previous Present already recorded the pass, in
     // which case the RT render pass's SHADER_READ_ONLY_OPTIMAL finalLayout / the constructor's
     // initial transition already left colorImage_ readable). Then copy the requested sub-rectangle
-    // via a host-visible staging buffer, mirroring VulkanTexture3DRenderer::GetData, applying the
-    // swapchain BGRA->RGBA swap since the RT colour image uses swapchainFormat_.
+    // via a host-visible staging buffer, mirroring VulkanTexture3DRenderer::GetData. Only a Color
+    // target backed by a BGRA swapchain format needs channel reordering; float/HDR and Rgba64 data
+    // is copied byte-for-byte in its public SurfaceFormat layout.
     bool VulkanRenderTargetRenderer::GetData(int level, int x, int y, int w, int h,
                                             void* data, int dataLength) const
     {
@@ -1331,15 +1377,24 @@ namespace CNA::Internal::Renderers::Vulkan
             VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             static_cast<uint32_t>(level));
 
-        const bool isBGRA = (owner_->swapchainFormat_ == VK_FORMAT_B8G8R8A8_UNORM ||
-                             owner_->swapchainFormat_ == VK_FORMAT_B8G8R8A8_SRGB);
+        const bool isBGRA = surfaceFormat_ == static_cast<int>(
+            Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color) &&
+            (colorVkFormat_ == VK_FORMAT_B8G8R8A8_UNORM ||
+             colorVkFormat_ == VK_FORMAT_B8G8R8A8_SRGB);
         auto*       dst = static_cast<uint8_t*>(data);
         const auto* src = static_cast<const uint8_t*>(mapped);
-        const int   pixels = dataLength / 4;
-        for (int i = 0; i < pixels; ++i) {
-            const int o = i * 4;
-            if (isBGRA) { dst[o+0] = src[o+2]; dst[o+1] = src[o+1]; dst[o+2] = src[o+0]; dst[o+3] = src[o+3]; }
-            else        { dst[o+0] = src[o+0]; dst[o+1] = src[o+1]; dst[o+2] = src[o+2]; dst[o+3] = src[o+3]; }
+        const int pixels = dataLength / bytesPerTexel_;
+        if (!isBGRA)
+        {
+            std::memcpy(dst, src, static_cast<std::size_t>(dataLength));
+        }
+        else
+        {
+            for (int i = 0; i < pixels; ++i) {
+                const int o = i * 4;
+                dst[o+0] = src[o+2]; dst[o+1] = src[o+1];
+                dst[o+2] = src[o+0]; dst[o+3] = src[o+3];
+            }
         }
 
         VkTargetReadbackTraceEXT("rt2d.read.exit   call=%llu elementsWritten=%d "
@@ -1436,6 +1491,7 @@ namespace CNA::Internal::Renderers::Vulkan
             const VkFormat depthFormat = activeRT_
                 ? activeRT_->GetDepthFormat()
                 : renderer_->depthFormat_;
+            renderer_->SetPipelineColorFormatsEXT(activeRT_.get());
             preparedCustomPipeline = customEffectRenderer_->GetOrCreatePipeline(
                 colorAttachmentCount, samples, depthFormat,
                 renderer_->blendEnabled_, renderer_->blendParams_,
@@ -1966,6 +2022,12 @@ namespace CNA::Internal::Renderers::Vulkan
     {
         const VkSampleCountFlags avail = limits.framebufferColorSampleCounts
                                        & limits.framebufferDepthSampleCounts;
+        return PickSampleCountFromFlags(avail, requested);
+    }
+
+    static VkSampleCountFlagBits PickSampleCountFromFlags(const VkSampleCountFlags available,
+                                                          const int requested)
+    {
         const VkSampleCountFlagBits candidates[] = {
             VK_SAMPLE_COUNT_64_BIT, VK_SAMPLE_COUNT_32_BIT, VK_SAMPLE_COUNT_16_BIT,
             VK_SAMPLE_COUNT_8_BIT,  VK_SAMPLE_COUNT_4_BIT,  VK_SAMPLE_COUNT_2_BIT,
@@ -1973,7 +2035,7 @@ namespace CNA::Internal::Renderers::Vulkan
         };
         const int counts[] = { 64, 32, 16, 8, 4, 2, 1 };
         for (int i = 0; i < 7; ++i) {
-            if (counts[i] <= requested && (avail & candidates[i]))
+            if (counts[i] <= requested && (available & candidates[i]))
                 return candidates[i];
         }
         return VK_SAMPLE_COUNT_1_BIT;
@@ -2009,12 +2071,13 @@ namespace CNA::Internal::Renderers::Vulkan
         if (sampleCount_ > VK_SAMPLE_COUNT_1_BIT)
             std::clog << "[Vulkan] MSAA: " << static_cast<int>(sampleCount_) << "x\n";
         CreateSwapchain();
+        SetPipelineColorFormatsEXT(nullptr);
         CreateImageViews();
         CreateDepthResources();
         CreateRenderPass();
-        // Task 911: RT render passes are no longer eagerly created here -- they're now
-        // depth-format-keyed and lazily created on first use via GetOrCreateRTRenderPass()/
-        // GetOrCreateRTRenderPassMsaa() (see VulkanRenderTargetRenderer/VulkanRenderTargetCubeRenderer).
+        // Task 911/MOD-2223: RT render passes are no longer eagerly created here. They are keyed
+        // by the exact colour/depth/sample compatibility tuple and lazily created on first use via
+        // GetOrCreateRTRenderPass()/GetOrCreateRTRenderPassMsaa().
         if (sampleCount_ > VK_SAMPLE_COUNT_1_BIT) {
             CreateMsaaColorResources();
             CreateRenderPassMsaa();
@@ -2304,6 +2367,46 @@ namespace CNA::Internal::Renderers::Vulkan
         return false;
     }
 
+    bool VulkanRenderer::MapRenderTargetFormatToStorageEXT(
+        const int surfaceFormatOrdinal, VulkanSurfaceFormatStorageEXT& out) const noexcept
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        switch (static_cast<SurfaceFormat>(surfaceFormatOrdinal))
+        {
+            case SurfaceFormat::Color:
+                out = { swapchainFormat_ != VK_FORMAT_UNDEFINED
+                            ? swapchainFormat_
+                            : VK_FORMAT_R8G8B8A8_UNORM,
+                        4 };
+                return true;
+            case SurfaceFormat::Rgba64:
+                out = { VK_FORMAT_R16G16B16A16_UNORM, 8 };
+                return true;
+            case SurfaceFormat::Single:
+                out = { VK_FORMAT_R32_SFLOAT, 4 };
+                return true;
+            case SurfaceFormat::Vector2:
+                out = { VK_FORMAT_R32G32_SFLOAT, 8 };
+                return true;
+            case SurfaceFormat::Vector4:
+                out = { VK_FORMAT_R32G32B32A32_SFLOAT, 16 };
+                return true;
+            case SurfaceFormat::HalfSingle:
+                out = { VK_FORMAT_R16_SFLOAT, 2 };
+                return true;
+            case SurfaceFormat::HalfVector2:
+                out = { VK_FORMAT_R16G16_SFLOAT, 4 };
+                return true;
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::HdrBlendable:
+                out = { VK_FORMAT_R16G16B16A16_SFLOAT, 8 };
+                return true;
+            default:
+                out = {};
+                return false;
+        }
+    }
+
     // plan_vulkan.md VULKAN-170: the single table that says which public SurfaceFormat values this
     // renderer has native storage for, and in which VkFormat each one is stored.
     //
@@ -2462,45 +2565,43 @@ namespace CNA::Internal::Renderers::Vulkan
 
     RendererFormatVerdict VulkanRenderer::ClassifyRenderTargetFormatEXT(int surfaceFormat) const
     {
-        // plan_vulkan.md VULKAN-171. Renderability is a strictly narrower question than
-        // storability, and this renderer's answer is narrower still than the device's -- which is
-        // the point of not reusing VULKAN-170's verdict here.
-        //
-        // `VulkanRenderTargetRenderer` and `VulkanRenderTargetCubeRenderer` create their colour
-        // image in `owner_->swapchainFormat_`, unconditionally: the requested SurfaceFormat reaches
-        // neither constructor. So the ONLY format this renderer genuinely renders into is `Color`,
-        // and it is answered from the device's real `VkFormatProperties` for that swapchain format
-        // rather than asserted -- `COLOR_ATTACHMENT_BIT` plus `SAMPLED_IMAGE_BIT`, because every
-        // render target here is also created `USAGE_SAMPLED_BIT` so it can be read back and used
-        // as a texture.
-        //
-        // Everything else is `Defer`, and that is deliberate rather than lazy. The nine formats
-        // VULKAN-170's table now claims as TEXTURE storage -- the packed 16-bit trio, the
-        // signed-normalized pair, the three block-compressed ones -- must NOT leak into this
-        // answer: nothing renders into a BCn surface at all, and the other five would be silently
-        // substituted for the swapchain format, which is exactly the "asked for one format, got
-        // another" MOD-115 forbids. `Vulkan_SurfaceFormatClassification`'s render-target sweep is
-        // what stops that leak happening by accident later.
-        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
-        if (static_cast<SurfaceFormat>(surfaceFormat) != SurfaceFormat::Color)
+        // MOD-2223: this verdict and the allocation constructor consume the same table, so an
+        // accepted float/HDR target cannot silently become Color. Formats outside the table still
+        // defer to the framework's Color-only rule.
+        VulkanSurfaceFormatStorageEXT storage{};
+        if (!MapRenderTargetFormatToStorageEXT(surfaceFormat, storage))
             return RendererFormatVerdict::Defer;
-        if (physicalDevice_ == VK_NULL_HANDLE || swapchainFormat_ == VK_FORMAT_UNDEFINED)
+        if (physicalDevice_ == VK_NULL_HANDLE)
             return RendererFormatVerdict::Defer;
         VkFormatProperties props{};
-        vkGetPhysicalDeviceFormatProperties(physicalDevice_, swapchainFormat_, &props);
+        vkGetPhysicalDeviceFormatProperties(physicalDevice_, storage.format, &props);
         constexpr VkFormatFeatureFlags required =
-            VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT;
+            VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+            VK_FORMAT_FEATURE_TRANSFER_SRC_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
         VkImageFormatProperties imageProperties{};
         constexpr VkImageUsageFlags usage =
             VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
             VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
         const VkResult imageResult = vkGetPhysicalDeviceImageFormatProperties(
-            physicalDevice_, swapchainFormat_, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
+            physicalDevice_, storage.format, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
             usage, 0, &imageProperties);
         return imageResult == VK_SUCCESS &&
                    (props.optimalTilingFeatures & required) == required
             ? RendererFormatVerdict::Supported
             : RendererFormatVerdict::Unsupported;
+    }
+
+    bool VulkanRenderer::SupportsHalfFloatTextureLinearFilteringEXT() const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        if (ClassifyRenderTargetFormatEXT(static_cast<int>(SurfaceFormat::HalfVector4)) !=
+            RendererFormatVerdict::Supported)
+            return false;
+        VkFormatProperties properties{};
+        vkGetPhysicalDeviceFormatProperties(
+            physicalDevice_, VK_FORMAT_R16G16B16A16_SFLOAT, &properties);
+        return (properties.optimalTilingFeatures &
+                VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) != 0;
     }
 
     bool VulkanRenderer::IsCompressedTransferFormatEXT(int surfaceFormat) const
@@ -2576,14 +2677,27 @@ namespace CNA::Internal::Renderers::Vulkan
             textureImageProperties.maxMipLevels > 1;
         setSupported(RendererFormatUsage::Mipmapped, mipmapped);
 
-        const bool isColor =
-            static_cast<SurfaceFormat>(surfaceFormat) == SurfaceFormat::Color;
+        const bool isColor = static_cast<SurfaceFormat>(surfaceFormat) == SurfaceFormat::Color;
         const bool renderTarget =
             ClassifyRenderTargetFormatEXT(surfaceFormat) == RendererFormatVerdict::Supported;
+        VulkanSurfaceFormatStorageEXT renderTargetStorage{};
+        const bool hasRenderTargetStorage =
+            MapRenderTargetFormatToStorageEXT(surfaceFormat, renderTargetStorage);
         VkFormatProperties renderTargetProperties{};
-        if (renderTarget)
+        if (renderTarget && hasRenderTargetStorage)
             vkGetPhysicalDeviceFormatProperties(
-                physicalDevice_, swapchainFormat_, &renderTargetProperties);
+                physicalDevice_, renderTargetStorage.format, &renderTargetProperties);
+        setSupported(RendererFormatUsage::Sampled,
+                     sampled || (renderTarget &&
+                         (renderTargetProperties.optimalTilingFeatures &
+                          VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) != 0));
+        const bool textureFilterable = sampled &&
+            (optimal & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) != 0;
+        const bool renderTargetFilterable = renderTarget &&
+            (renderTargetProperties.optimalTilingFeatures &
+             VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) != 0;
+        setSupported(RendererFormatUsage::Filterable,
+                     textureFilterable || renderTargetFilterable);
         setSupported(RendererFormatUsage::RenderTarget, renderTarget);
         setSupported(RendererFormatUsage::Blendable,
                      renderTarget &&
@@ -2593,13 +2707,31 @@ namespace CNA::Internal::Renderers::Vulkan
                      renderTarget &&
                          (renderTargetProperties.optimalTilingFeatures &
                           VK_FORMAT_FEATURE_TRANSFER_SRC_BIT) != 0);
+        VkImageFormatProperties renderTargetImageProperties{};
+        constexpr VkImageUsageFlags renderTargetUsage =
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        const bool renderTargetImage = renderTarget && hasRenderTargetStorage &&
+            vkGetPhysicalDeviceImageFormatProperties(
+                physicalDevice_, renderTargetStorage.format, VK_IMAGE_TYPE_2D,
+                VK_IMAGE_TILING_OPTIMAL, renderTargetUsage, 0,
+                &renderTargetImageProperties) == VK_SUCCESS;
+        const bool renderTargetMipmapped = renderTargetImage &&
+            renderTargetImageProperties.maxMipLevels > 1 &&
+            (renderTargetProperties.optimalTilingFeatures &
+             (VK_FORMAT_FEATURE_BLIT_SRC_BIT | VK_FORMAT_FEATURE_BLIT_DST_BIT |
+              VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT)) ==
+                (VK_FORMAT_FEATURE_BLIT_SRC_BIT | VK_FORMAT_FEATURE_BLIT_DST_BIT |
+                 VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT);
+        setSupported(RendererFormatUsage::Mipmapped, renderTargetMipmapped);
 
         VkImageFormatProperties multisampleProperties{};
         constexpr VkImageUsageFlags multisampleUsage =
             VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT;
         const bool multisample = renderTarget &&
             vkGetPhysicalDeviceImageFormatProperties(
-                physicalDevice_, swapchainFormat_, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
+                physicalDevice_, renderTargetStorage.format, VK_IMAGE_TYPE_2D,
+                VK_IMAGE_TILING_OPTIMAL,
                 multisampleUsage, 0, &multisampleProperties) == VK_SUCCESS &&
             (multisampleProperties.sampleCounts &
              physicalDeviceProperties_.limits.framebufferColorSampleCounts &
@@ -2917,14 +3049,14 @@ namespace CNA::Internal::Renderers::Vulkan
             if (fb != VK_NULL_HANDLE) vkDestroyFramebuffer(device_, fb, nullptr);
         swapchainFramebuffers_.clear();
         if (renderPassMsaa_ != VK_NULL_HANDLE) { vkDestroyRenderPass(device_, renderPassMsaa_, nullptr); renderPassMsaa_ = VK_NULL_HANDLE; }
-        // Task 911: RT render passes are now depth-format-keyed caches, not single members.
-        for (auto& [fmt, rp] : rtRenderPassByDepthFmt_)
+        // Task 911/MOD-2223: RT render passes are compatibility-keyed caches, not single members.
+        for (auto& [key, rp] : rtRenderPassByDepthFmt_)
             if (rp != VK_NULL_HANDLE) vkDestroyRenderPass(device_, rp, nullptr);
         rtRenderPassByDepthFmt_.clear();
-        for (auto& [fmt, rp] : rtRenderPassLoadByDepthFmt_)
+        for (auto& [key, rp] : rtRenderPassLoadByDepthFmt_)
             if (rp != VK_NULL_HANDLE) vkDestroyRenderPass(device_, rp, nullptr);
         rtRenderPassLoadByDepthFmt_.clear();
-        for (auto& [fmt, rp] : rtRenderPassMsaaByDepthFmt_)
+        for (auto& [key, rp] : rtRenderPassMsaaByDepthFmt_)
             if (rp != VK_NULL_HANDLE) vkDestroyRenderPass(device_, rp, nullptr);
         rtRenderPassMsaaByDepthFmt_.clear();
         // REMED-GFX-141: the MSAA load variant has the same lifetime as the MSAA clear variant.
@@ -3365,8 +3497,9 @@ namespace CNA::Internal::Renderers::Vulkan
                       << "; wireframe fill mode: " << (fillModeNonSolidSupported_ ? "supported" : "NOT supported")
                       << "; independent MRT blend/write state: "
                       << (independentBlendSupported_ ? "supported" : "NOT supported")
-                      << "; render-target SurfaceFormat: Color; detailed format usage: "
-                         "27 formats classified (MOD-2222)" << std::endl;
+                      << "; render-target formats: Color plus device-queried Rgba64/float/HDR "
+                         "storage (MOD-2223); detailed format usage: 27 formats classified"
+                      << std::endl;
         }
     }
 
@@ -3751,10 +3884,14 @@ namespace CNA::Internal::Renderers::Vulkan
         swapchainPassVariants_.clear();
     }
 
-    VkRenderPass VulkanRenderer::GetOrCreateRTRenderPass(VkFormat depthFmt, bool discardContents)
+    VkRenderPass VulkanRenderer::GetOrCreateRTRenderPass(
+        VkFormat colorFmt, VkFormat depthFmt, bool discardContents)
     {
         auto& cache = discardContents ? rtRenderPassByDepthFmt_ : rtRenderPassLoadByDepthFmt_;
-        auto it = cache.find(depthFmt);
+        RTPassKey cacheKey{};
+        cacheKey.colorFormats[0] = static_cast<int32_t>(colorFmt);
+        cacheKey.depthFormat = static_cast<int32_t>(depthFmt);
+        auto it = cache.find(cacheKey);
         if (it != cache.end()) return it->second;
 
         const bool hasDepth = (depthFmt != VK_FORMAT_UNDEFINED);
@@ -3762,7 +3899,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // Same as renderPass_ but color finalLayout = SHADER_READ_ONLY_OPTIMAL.
         // This makes the two passes compatible so pipelines can be reused across them.
         VkAttachmentDescription colorAtt{};
-        colorAtt.format         = swapchainFormat_;
+        colorAtt.format         = colorFmt;
         colorAtt.samples        = VK_SAMPLE_COUNT_1_BIT;
         colorAtt.loadOp         = discardContents ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
         colorAtt.storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
@@ -3862,21 +3999,23 @@ namespace CNA::Internal::Renderers::Vulkan
         VkRenderPass rp = VK_NULL_HANDLE;
         if (vkCreateRenderPass(device_, &ci, nullptr, &rp) != VK_SUCCESS)
             throw std::runtime_error("vkCreateRenderPass (RT) failed");
-        cache[depthFmt] = rp;
+        cache[cacheKey] = rp;
         return rp;
     }
 
-    VkRenderPass VulkanRenderer::GetOrCreateRTRenderPassMsaa(VkFormat depthFmt,
-                                                                    bool discardContents,
-                                                                    VkSampleCountFlagBits samples)
+    VkRenderPass VulkanRenderer::GetOrCreateRTRenderPassMsaa(
+        VkFormat colorFmt, VkFormat depthFmt, bool discardContents,
+        VkSampleCountFlagBits samples)
     {
         // REMED-GFX-141: two caches, exactly like GetOrCreateRTRenderPass's own clear/load pair.
-        // plan_vulkan.md VULKAN-216: keyed by (depth format, sample count) rather than by depth
-        // format alone. Render-pass compatibility requires attachments to agree on sample count as
-        // well as format, so a 4x target and a 2x target at the same depth format genuinely need
-        // two passes -- sharing one would make every pipeline built against it invalid in the other.
+        // plan_vulkan.md VULKAN-216 / MOD-2223: keyed by colour format, depth format and sample
+        // count. Render-pass compatibility requires every attachment format and sample count to
+        // agree, so changing any member of that tuple genuinely needs another pass.
         auto& cache = discardContents ? rtRenderPassMsaaByDepthFmt_ : rtRenderPassMsaaLoadByDepthFmt_;
-        const MsaaRTPassKey cacheKey{depthFmt, static_cast<uint32_t>(samples)};
+        RTPassKey cacheKey{};
+        cacheKey.colorFormats[0] = static_cast<int32_t>(colorFmt);
+        cacheKey.depthFormat = static_cast<int32_t>(depthFmt);
+        cacheKey.samples = static_cast<uint32_t>(samples);
         auto it = cache.find(cacheKey);
         if (it != cache.end()) return it->second;
 
@@ -3911,7 +4050,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // bind cycle, which is exactly what LOAD/STORE buys and what CLEAR/DONT_CARE made
         // impossible. No depth resolve was added to fake it.
         VkAttachmentDescription colorAtt{};
-        colorAtt.format         = swapchainFormat_;
+        colorAtt.format         = colorFmt;
         colorAtt.samples        = samples;
         colorAtt.loadOp         = discardContents ? VK_ATTACHMENT_LOAD_OP_CLEAR
                                                   : VK_ATTACHMENT_LOAD_OP_LOAD;
@@ -3924,7 +4063,7 @@ namespace CNA::Internal::Renderers::Vulkan
         colorAtt.finalLayout    = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
         VkAttachmentDescription resolveAtt{};
-        resolveAtt.format         = swapchainFormat_;
+        resolveAtt.format         = colorFmt;
         resolveAtt.samples        = VK_SAMPLE_COUNT_1_BIT;
         resolveAtt.loadOp         = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         resolveAtt.storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
@@ -4012,14 +4151,18 @@ namespace CNA::Internal::Renderers::Vulkan
     }
 
     VkRenderPass VulkanRenderer::GetOrCreateMRTRenderPass(
-        uint32_t colorAttachmentCount, VkSampleCountFlagBits sampleCount,
+        const std::vector<VkFormat>& colorFormats, VkSampleCountFlagBits sampleCount,
         VkFormat depthFormat)
     {
+        const uint32_t colorAttachmentCount = static_cast<uint32_t>(colorFormats.size());
         const bool msaa = sampleCount > VK_SAMPLE_COUNT_1_BIT;
         const bool hasDepth = depthFormat != VK_FORMAT_UNDEFINED;
-        const uint64_t key = static_cast<uint64_t>(colorAttachmentCount)
-            | (static_cast<uint64_t>(sampleCount) << 8)
-            | (static_cast<uint64_t>(static_cast<uint32_t>(depthFormat)) << 16);
+        RTPassKey key{};
+        key.colorCount = colorAttachmentCount;
+        key.depthFormat = static_cast<int32_t>(depthFormat);
+        key.samples = static_cast<uint32_t>(sampleCount);
+        for (uint32_t i = 0; i < colorAttachmentCount && i < key.colorFormats.size(); ++i)
+            key.colorFormats[i] = static_cast<int32_t>(colorFormats[i]);
         auto it = mrtRenderPasses_.find(key);
         if (it != mrtRenderPasses_.end()) return it->second;
 
@@ -4035,7 +4178,7 @@ namespace CNA::Internal::Renderers::Vulkan
         std::vector<VkAttachmentDescription> atts(attachmentCount);
         for (uint32_t i = 0; i < colorAttachmentCount; ++i) {
             auto& color = atts[i];
-            color.format         = swapchainFormat_;
+            color.format         = colorFormats[i];
             color.samples        = sampleCount;
             color.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
             color.storeOp        = msaa ? VK_ATTACHMENT_STORE_OP_DONT_CARE
@@ -4047,7 +4190,7 @@ namespace CNA::Internal::Renderers::Vulkan
                                         : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             if (msaa) {
                 auto& resolve = atts[resolveBase + i];
-                resolve.format         = swapchainFormat_;
+                resolve.format         = colorFormats[i];
                 resolve.samples        = VK_SAMPLE_COUNT_1_BIT;
                 resolve.loadOp         = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
                 resolve.storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
@@ -4129,9 +4272,9 @@ namespace CNA::Internal::Renderers::Vulkan
         return rp;
     }
 
-    // Shared render-pass selection for every 2D/custom/3D pipeline. MRT is keyed by color count,
-    // sample count, and binding 0's real depth format. Single-target draws reuse the compatible
-    // backbuffer pass or fall back to a depth-format-keyed RT pass.
+    // Shared render-pass selection for every 2D/custom/3D pipeline. MRT is keyed by every colour
+    // format, sample count and binding 0's real depth format. Single-target draws reuse the
+    // compatible backbuffer pass or fall back to an exact-format RT pass.
     VkRenderPass VulkanRenderer::PickRTPipelineRenderPass(uint32_t colorAttachmentCount, bool msaa,
                                                                   VkFormat targetDepthFmt,
                                                                   VkSampleCountFlagBits samplesOverride)
@@ -4142,20 +4285,46 @@ namespace CNA::Internal::Renderers::Vulkan
         // this segment is actually recording with.
         const VkSampleCountFlagBits samples =
             samplesOverride != 0 ? samplesOverride : MsaaSamplesForPipelinesEXT(msaa);
+        std::vector<VkFormat> colorFormats;
+        colorFormats.reserve(std::max(1u, colorAttachmentCount));
+        for (uint32_t i = 0; i < std::max(1u, colorAttachmentCount); ++i)
+        {
+            const VkFormat format = i < pipelineColorFormats_.size()
+                ? static_cast<VkFormat>(pipelineColorFormats_[i])
+                : VK_FORMAT_UNDEFINED;
+            colorFormats.push_back(format != VK_FORMAT_UNDEFINED ? format : swapchainFormat_);
+        }
         if (colorAttachmentCount > 1)
-            return GetOrCreateMRTRenderPass(colorAttachmentCount, samples, targetDepthFmt);
+            return GetOrCreateMRTRenderPass(colorFormats, samples, targetDepthFmt);
+        const VkFormat targetColorFmt = colorFormats.front();
         // The backbuffer's own passes are the reference only when the count matches theirs: a
         // render target that asked for 2x on a 4x device shares the depth format but not the
         // shape, and reusing renderPassMsaa_ there would build a 4x pipeline for a 2x pass.
-        if (targetDepthFmt == depthFormat_
+        if (targetColorFmt == swapchainFormat_ && targetDepthFmt == depthFormat_
             && samples == (msaa ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT))
             return (msaa && renderPassMsaa_) ? renderPassMsaa_ : renderPass_;
         // Pipelines only ever need a REFERENCE render pass, and REMED-GFX-141's load variant is
         // render-pass-compatible with the clear one (they differ only in loadOp/storeOp/
         // initialLayout, none of which participates in compatibility), so this keeps asking for the
-        // clear variant on both legs -- no pipeline cache key changed.
-        return msaa ? GetOrCreateRTRenderPassMsaa(targetDepthFmt, true, samples)
-                    : GetOrCreateRTRenderPass(targetDepthFmt, true);
+        // clear variant on both legs. Pipeline keys independently carry the same colour/depth/
+        // sample tuple, so cache identity and the selected reference pass cannot diverge.
+        return msaa ? GetOrCreateRTRenderPassMsaa(
+                          targetColorFmt, targetDepthFmt, true, samples)
+                    : GetOrCreateRTRenderPass(targetColorFmt, targetDepthFmt, true);
+    }
+
+    void VulkanRenderer::SetPipelineColorFormatsEXT(const VulkanRTSource* target)
+    {
+        pipelineColorFormats_.fill(static_cast<int32_t>(VK_FORMAT_UNDEFINED));
+        if (target == nullptr)
+        {
+            pipelineColorFormats_[0] = static_cast<int32_t>(swapchainFormat_);
+            return;
+        }
+        const uint32_t count = std::min<uint32_t>(
+            target->GetColorAttachmentCount(), pipelineColorFormats_.size());
+        for (uint32_t i = 0; i < count; ++i)
+            pipelineColorFormats_[i] = static_cast<int32_t>(target->GetColorFormatEXT(i));
     }
 
     void VulkanRenderer::CreateFramebuffers()
@@ -4241,6 +4410,7 @@ namespace CNA::Internal::Renderers::Vulkan
         CleanupSwapchain();
         CleanupDepthResources();
         CreateSwapchain();
+        SetPipelineColorFormatsEXT(nullptr);
         CreateImageViews();
         CreateDepthResources();
         if (sampleCount_ > VK_SAMPLE_COUNT_1_BIT) CreateMsaaColorResources();
@@ -5282,9 +5452,10 @@ namespace CNA::Internal::Renderers::Vulkan
                                  | (depthTest  ? (1ull << 4) : 0ull)
                                  | (depthWrite ? (1ull << 5) : 0ull)
                                  | (PackDepthStencilBits(dsParams) << 12);
-        const PipelineKey key = {
+        PipelineKey key = {
                                   FoldDepthFormatIntoKey(stateBits, depthFmt),
                                   PackBlendBits(blend, bp), PackColorWriteBits(bp), NarrowSampleMaskEXT(bp.sampleMask, 1) };
+        ApplyPipelineTargetKeyEXT(key);
         auto cached = pipelines2DByDepthFmt_.find(key);
         if (cached != pipelines2DByDepthFmt_.end()) return cached->second;
 
@@ -5697,10 +5868,11 @@ namespace CNA::Internal::Renderers::Vulkan
                                  | (depthTest  ? (1ull << 4) : 0ull)
                                  | (depthWrite ? (1ull << 5) : 0ull)
                                  | (PackDepthStencilBits(dsParams) << 12);
-        const PipelineKey key = {
+        PipelineKey key = {
                                   FoldDepthFormatIntoKey(stateBits, depthFmt),
                                   PackBlendBits(blend, bp), PackColorWriteBits(bp), NarrowSampleMaskEXT(bp.sampleMask, RasterSampleCountEXT(msaaSamples)), 0ull,
                                   static_cast<uint32_t>(RasterSampleCountEXT(msaaSamples)) };
+        ApplyPipelineTargetKeyEXT(key);
         auto cached = pipelines2DMsaaByDepthFmt_.find(key);
         if (cached != pipelines2DMsaaByDepthFmt_.end()) return cached->second;
 
@@ -5980,6 +6152,7 @@ namespace CNA::Internal::Renderers::Vulkan
             depthTest,
             depthWrite,
         };
+        key.colorFormats = owner_->pipelineColorFormats_;
         // VULKAN-255: a 3D draw brings four more things a sprite batch never varies. They stay
         // zero for a sprite pipeline, so the two families cannot collide in this one cache.
         if (three != nullptr) {
@@ -6950,6 +7123,7 @@ namespace CNA::Internal::Renderers::Vulkan
         PipelineKey key = { FoldDepthFormatIntoKey(Make3DKey(topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), NarrowSampleMaskEXT(blendParams.sampleMask, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa))) };
         // VULKAN-216: the sample count is part of this pipeline's identity, not just of its render pass.
         key.ms = static_cast<uint32_t>(RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
+        ApplyPipelineTargetKeyEXT(key);
         auto it = pipelines3D_.find(key);
         if (it != pipelines3D_.end()) return it->second;
 
@@ -7558,6 +7732,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // binding, four more attributes and its own vertex module -- so it needs its own
         // identity. Folded into the layout hash, which is already part of the key.
         if (instanced) key.vl ^= 0x9E3779B97F4A7C15ull;
+        ApplyPipelineTargetKeyEXT(key);
         auto it = pipelinesAlphaTest3D_.find(key);
         if (it != pipelinesAlphaTest3D_.end()) return it->second;
 
@@ -7896,6 +8071,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // VULKAN-225: the instanced variant is a different pipeline -- own module, second
         // binding, four more attributes -- so it needs its own identity.
         if (instanced) key.vl ^= 0x9E3779B97F4A7C15ull;
+        ApplyPipelineTargetKeyEXT(key);
         auto it = pipelinesDualTex3D_.find(key);
         if (it != pipelinesDualTex3D_.end()) return it->second;
 
@@ -8314,6 +8490,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // VULKAN-226: the instanced variant is a different pipeline -- own module, second
         // binding, four more attributes -- so it needs its own identity.
         if (instanced) key.vl ^= 0x9E3779B97F4A7C15ull;
+        ApplyPipelineTargetKeyEXT(key);
         auto it = pipelinesEnvMap3D_.find(key);
         if (it != pipelinesEnvMap3D_.end()) return it->second;
 
@@ -8607,6 +8784,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // VULKAN-224: the instanced variant is a different pipeline -- a second binding, four
         // more attributes and its own vertex module -- so it needs its own identity.
         if (instanced) key.vl ^= 0x9E3779B97F4A7C15ull;
+        ApplyPipelineTargetKeyEXT(key);
         auto it = pipelinesLitTextured3D_.find(key);
         if (it != pipelinesLitTextured3D_.end()) return it->second;
 
@@ -8793,6 +8971,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // VULKAN-224: the instanced variant is a different pipeline -- a second binding, four
         // more attributes and its own vertex module -- so it needs its own identity.
         if (instanced) key.vl ^= 0x9E3779B97F4A7C15ull;
+        ApplyPipelineTargetKeyEXT(key);
         auto it = pipelinesLitTextured3DVertexLit_.find(key);
         if (it != pipelinesLitTextured3DVertexLit_.end()) return it->second;
 
@@ -9541,6 +9720,7 @@ namespace CNA::Internal::Renderers::Vulkan
                                 RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa))) };
         // VULKAN-216: the sample count is part of this pipeline's identity, not just of its render pass.
         key.ms = static_cast<uint32_t>(RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
+        ApplyPipelineTargetKeyEXT(key);
         auto it = compiledEffectPipelines_.find(key);
         if (it != compiledEffectPipelines_.end()) return it->second;
 
@@ -9780,6 +9960,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // VULKAN-234: and the colour-less variant is another, for the same reason -- one fewer
         // vertex input and a different module.
         if (positionOnly) key.vl ^= 0xC2B2AE3D27D4EB4Full;
+        ApplyPipelineTargetKeyEXT(key);
         auto it = pipelinesFogColored3D_.find(key);
         if (it != pipelinesFogColored3D_.end()) return it->second;
 
@@ -9948,6 +10129,7 @@ namespace CNA::Internal::Renderers::Vulkan
         if (vertexLayout.IsComplete()) key.a = FoldPerVertexStrideIntoKey(key.a, recordStride);
         // VULKAN-233: the instanced variant is its own pipeline, as in every other family.
         if (instanced) key.vl ^= 0x9E3779B97F4A7C15ull;
+        ApplyPipelineTargetKeyEXT(key);
         auto it = pipelinesFogTex3D_.find(key);
         if (it != pipelinesFogTex3D_.end()) return it->second;
 
@@ -10313,6 +10495,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // VULKAN-231: the instanced variant is a different pipeline -- own module, second binding,
         // four more attributes -- so it needs its own identity, as in every other family.
         if (instanced) key.vl ^= 0x9E3779B97F4A7C15ull;
+        ApplyPipelineTargetKeyEXT(key);
         auto it = pipelinesSkinned3D_.find(key);
         if (it != pipelinesSkinned3D_.end()) return it->second;
 
@@ -10505,6 +10688,7 @@ namespace CNA::Internal::Renderers::Vulkan
         if (vertexLayout.IsComplete()) key.a = FoldPerVertexStrideIntoKey(key.a, recordStride);
         // VULKAN-231: see the per-pixel sibling -- the instanced variant is its own pipeline.
         if (instanced) key.vl ^= 0x9E3779B97F4A7C15ull;
+        ApplyPipelineTargetKeyEXT(key);
         auto it = pipelinesSkinned3DVertexLit_.find(key);
         if (it != pipelinesSkinned3DVertexLit_.end()) return it->second;
 
@@ -10851,6 +11035,7 @@ namespace CNA::Internal::Renderers::Vulkan
         if (vertexLayout.IsComplete()) key.a = FoldPerVertexStrideIntoKey(key.a, recordStride);
         // VULKAN-232: the instanced variant is its own pipeline, as in every other family.
         if (instanced) key.vl ^= 0x9E3779B97F4A7C15ull;
+        ApplyPipelineTargetKeyEXT(key);
         auto it = pipelinesPbr3D_.find(key);
         if (it != pipelinesPbr3D_.end()) return it->second;
 
@@ -11218,6 +11403,7 @@ namespace CNA::Internal::Renderers::Vulkan
         if (vertexLayout.IsComplete()) key.a = FoldPerVertexStrideIntoKey(key.a, recordStride);
         // VULKAN-232: the instanced variant is its own pipeline, as in every other family.
         if (instanced) key.vl ^= 0x9E3779B97F4A7C15ull;
+        ApplyPipelineTargetKeyEXT(key);
         auto it = pipelinesPbrSkinned3D_.find(key);
         if (it != pipelinesPbrSkinned3D_.end()) return it->second;
 
@@ -12660,6 +12846,7 @@ namespace CNA::Internal::Renderers::Vulkan
             pipelineSampleCount_ = seg.isBackbuffer
                 ? sampleCount_
                 : (seg.rt ? seg.rt->GetMsaaSampleCountEXT() : VK_SAMPLE_COUNT_1_BIT);
+            SetPipelineColorFormatsEXT(seg.isBackbuffer ? nullptr : seg.rt);
             if (seg.isBackbuffer) {
                 ++backbufferSeen;
                 const bool isFirstBackbuffer = (backbufferSeen == 1);
@@ -14421,8 +14608,88 @@ namespace CNA::Internal::Renderers::Vulkan
         // vkCmdBlitImage cascade regenerated every frame this RT is rendered into — see
         // VulkanRenderTargetRenderer::MaybeGenerateMips. depthFormat (Task 877) now gets true
         // per-instance fidelity (Task 911) — see VulkanRenderTargetRenderer's constructor comment.
-        return std::make_unique<VulkanRenderTargetRenderer>(w, h, depthFormat, preserveContents, this,
-                                                            multiSampleCount, mipMap);
+        return CreateRenderTarget2DEXT(
+            w, h, depthFormat, preserveContents, mipMap, multiSampleCount,
+            static_cast<int>(Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color));
+    }
+
+    std::unique_ptr<IRenderTargetRenderer> VulkanRenderer::CreateRenderTarget2DEXT(
+        int w, int h, int depthFormat, bool preserveContents, bool mipMap,
+        int multiSampleCount, int surfaceFormat)
+    {
+        if (ClassifyRenderTargetFormatEXT(surfaceFormat) != RendererFormatVerdict::Supported)
+        {
+            throw std::runtime_error(
+                "Vulkan: SurfaceFormat ordinal " + std::to_string(surfaceFormat) +
+                " is not supported as a RenderTarget2D on this device");
+        }
+
+        VulkanSurfaceFormatStorageEXT storage{};
+        if (!MapRenderTargetFormatToStorageEXT(surfaceFormat, storage))
+            throw std::runtime_error("Vulkan: RenderTarget2D format mapping is unavailable");
+
+        VkFormatProperties formatProperties{};
+        vkGetPhysicalDeviceFormatProperties(physicalDevice_, storage.format, &formatProperties);
+        if (mipMap)
+        {
+            constexpr VkFormatFeatureFlags mipFeatures =
+                VK_FORMAT_FEATURE_BLIT_SRC_BIT | VK_FORMAT_FEATURE_BLIT_DST_BIT |
+                VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
+            if ((formatProperties.optimalTilingFeatures & mipFeatures) != mipFeatures)
+            {
+                throw std::runtime_error(
+                    "Vulkan: requested RenderTarget2D format cannot generate a linear mip chain");
+            }
+        }
+
+        // XNA/FNA treat both zero and one as single-sampled requests. Only a request above one
+        // promises a multisample pair and therefore needs the exact colour/depth compatibility
+        // check below.
+        if (multiSampleCount > 1)
+        {
+            VkImageFormatProperties colorProperties{};
+            VkSampleCountFlags available = 0;
+            if (vkGetPhysicalDeviceImageFormatProperties(
+                    physicalDevice_, storage.format, VK_IMAGE_TYPE_2D,
+                    VK_IMAGE_TILING_OPTIMAL,
+                    VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                        VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT,
+                    0, &colorProperties) == VK_SUCCESS)
+            {
+                available = colorProperties.sampleCounts &
+                            physicalDeviceProperties_.limits.framebufferColorSampleCounts;
+            }
+
+            if (static_cast<DepthFormat>(depthFormat) != DepthFormat::None)
+            {
+                const VkFormat depthVkFormat = PickDepthFormat(
+                    physicalDevice_, static_cast<DepthFormat>(depthFormat));
+                VkImageFormatProperties depthProperties{};
+                if (vkGetPhysicalDeviceImageFormatProperties(
+                        physicalDevice_, depthVkFormat, VK_IMAGE_TYPE_2D,
+                        VK_IMAGE_TILING_OPTIMAL,
+                        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                        0, &depthProperties) != VK_SUCCESS)
+                {
+                    available = 0;
+                }
+                else
+                {
+                    available &= depthProperties.sampleCounts &
+                                 physicalDeviceProperties_.limits.framebufferDepthSampleCounts;
+                }
+            }
+            if (PickSampleCountFromFlags(available, multiSampleCount) ==
+                VK_SAMPLE_COUNT_1_BIT)
+            {
+                throw std::runtime_error(
+                    "Vulkan: requested RenderTarget2D format/depth/sample-count combination "
+                    "has no multisample support");
+            }
+        }
+
+        return std::make_unique<VulkanRenderTargetRenderer>(
+            w, h, depthFormat, preserveContents, this, multiSampleCount, mipMap, surfaceFormat);
     }
 
     // REMED-GFX-140: open a new logical render pass. The counter advances on EVERY call, even
@@ -15513,6 +15780,7 @@ namespace CNA::Internal::Renderers::Vulkan
             msaa ? (currentRT_ ? currentRT_->GetMsaaSampleCountEXT() : sampleCount_)
                  : VK_SAMPLE_COUNT_1_BIT;
         const VkFormat depthFmt = currentRT_ ? currentRT_->GetDepthFormat() : depthFormat_;
+        SetPipelineColorFormatsEXT(currentRT_.get());
         VulkanEffectRenderer::Pipeline3DDescEXT three{};
         three.layout    = layout;
         three.stride    = static_cast<uint32_t>(stride);
@@ -17015,6 +17283,7 @@ namespace CNA::Internal::Renderers::Vulkan
             VkImageView msaaView = VK_NULL_HANDLE;
             VkImageView depthView = VK_NULL_HANDLE;
             VkFormat depthFormat = VK_FORMAT_UNDEFINED;
+            VkFormat colorFormat = VK_FORMAT_UNDEFINED;
             std::shared_ptr<VulkanTargetPassEXT> targetPass;
         };
         auto normalize = [](const RenderTargetBindingDescriptor& binding) {
@@ -17054,6 +17323,8 @@ namespace CNA::Internal::Renderers::Vulkan
                                                     : VK_FORMAT_UNDEFINED;
                 result.targetPass = rt2D->PassEXT();
             }
+            if (result.targetPass)
+                result.colorFormat = result.targetPass->GetColorFormatEXT();
             return result;
         };
 
@@ -17090,8 +17361,11 @@ namespace CNA::Internal::Renderers::Vulkan
                 }
         }
 
+        colorFormats_.reserve(count);
+        for (const Attachment& attachment : attachments)
+            colorFormats_.push_back(attachment.colorFormat);
         renderPass_ = owner->GetOrCreateMRTRenderPass(
-            count, colorSampleCount_, depthFormat_);
+            colorFormats_, colorSampleCount_, depthFormat_);
 
         // REMED-GFX-095: each target keeps ownership of both resources. MRT only selects
         // the already-existing transient MSAA view as color i and the texture view as
@@ -18298,7 +18572,7 @@ namespace CNA::Internal::Renderers::Vulkan
                 VkFramebufferCreateInfo fbInfo{};
                 fbInfo.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
                 fbInfo.renderPass      = owner_->GetOrCreateRTRenderPassMsaa(
-                    depthVkFormat_, !preserveContents_, rtSamples);
+                    owner_->swapchainFormat_, depthVkFormat_, !preserveContents_, rtSamples);
                 fbInfo.attachmentCount = hasDepth ? 3u : 2u;
                 fbInfo.pAttachments    = atts;
                 fbInfo.width           = us;
@@ -18309,7 +18583,7 @@ namespace CNA::Internal::Renderers::Vulkan
 
                 facePasses_[face]->framebuffer = msaaFramebuffers_[face];
                 facePasses_[face]->renderPass  = owner_->GetOrCreateRTRenderPassMsaa(
-                    depthVkFormat_, !preserveContents_, rtSamples);
+                    owner_->swapchainFormat_, depthVkFormat_, !preserveContents_, rtSamples);
                 facePasses_[face]->msaa        = true;
                 facePasses_[face]->samples     = rtSamples;
             }
@@ -18326,7 +18600,8 @@ namespace CNA::Internal::Renderers::Vulkan
                 // loadOp/initialLayout, neither of which affects render-pass compatibility), so
                 // this adds at most one more cached render pass per distinct depth format, never a
                 // per-target or per-face one.
-                fbInfo.renderPass      = owner_->GetOrCreateRTRenderPass(depthVkFormat_, !preserveContents_);
+                fbInfo.renderPass      = owner_->GetOrCreateRTRenderPass(
+                    owner_->swapchainFormat_, depthVkFormat_, !preserveContents_);
                 fbInfo.attachmentCount = hasDepth ? 2u : 1u;
                 fbInfo.pAttachments    = atts;
                 fbInfo.width           = us;
@@ -18336,8 +18611,8 @@ namespace CNA::Internal::Renderers::Vulkan
                     throw std::runtime_error("VulkanRenderTargetCubeRenderer: vkCreateFramebuffer failed");
 
                 facePasses_[face]->framebuffer = framebuffers_[face];
-                facePasses_[face]->renderPass  = owner_->GetOrCreateRTRenderPass(depthVkFormat_,
-                                                                                 !preserveContents_);
+                facePasses_[face]->renderPass  = owner_->GetOrCreateRTRenderPass(
+                    owner_->swapchainFormat_, depthVkFormat_, !preserveContents_);
                 facePasses_[face]->msaa        = false;
             }
 
@@ -18347,6 +18622,7 @@ namespace CNA::Internal::Renderers::Vulkan
             facePasses_[face]->mipLevels   = levelCount_;
             facePasses_[face]->mipLayer    = static_cast<uint32_t>(face);
             facePasses_[face]->depthFormat = depthVkFormat_;
+            facePasses_[face]->colorFormat = owner_->swapchainFormat_;
             // REMED-GFX-129: the face needs the same usage the render pass above was picked with,
             // so it can report whether its colour attachment is cleared or loaded on entry.
             facePasses_[face]->loadOpIsClear = !preserveContents_;

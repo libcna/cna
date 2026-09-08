@@ -131,13 +131,14 @@ whole phase exists to remove, so there is no downgrade policy to choose between.
 
 ### The format table
 
-The internal formats below are EasyGL's, which is the reference implementation; the D3D and Vulkan
-columns name the format an implementation is expected to choose when it lands, and are **not** claims
-that it has.
+The internal formats below are EasyGL's, which is the reference implementation. Since `MOD-2223`,
+the Vulkan column is also the format the live implementation allocates; the D3D column remains the
+intended mapping rather than an implementation claim.
 
 | `SurfaceFormat` | Channels × bits | EasyGL internal format | Bytes/texel | Vulkan equivalent | D3D equivalent |
 |---|---|---|---|---|---|
 | `Color` | 4 × 8 unorm | `RGBA8` | 4 | `R8G8B8A8_UNORM` | `R8G8B8A8_UNORM` |
+| `Rgba64` | 4 × 16 unorm | `RGBA16` (desktop GL) | 8 | `R16G16B16A16_UNORM` | `R16G16B16A16_UNORM` |
 | `HalfSingle` | 1 × 16 float | `R16F` | 2 | `R16_SFLOAT` | `R16_FLOAT` |
 | `HalfVector2` | 2 × 16 float | `RG16F` | 4 | `R16G16_SFLOAT` | `R16G16_FLOAT` |
 | `HalfVector4` | 4 × 16 float | `RGBA16F` | 8 | `R16G16B16A16_SFLOAT` | `R16G16B16A16_FLOAT` |
@@ -146,8 +147,9 @@ that it has.
 | `Vector2` | 2 × 32 float | `RG32F` | 8 | `R32G32_SFLOAT` | `R32G32_FLOAT` |
 | `Vector4` | 4 × 32 float | `RGBA32F` | 16 | `R32G32B32A32_SFLOAT` | `R32G32B32A32_FLOAT` |
 
-Every other `SurfaceFormat` — the compressed formats, `Bgra5551`, `Rgba1010102`, `Rg32`, `Rgba64`
-and the rest — is **not** a render-target format in CNA, on any renderer, and is refused.
+Other `SurfaceFormat` values are outside the current EasyGL/Vulkan exact target tables and those
+renderers refuse them. This is CNA's implemented boundary, not a claim that FNA's HiDef profile
+omits every one of them: notably `Rgba1010102` and `Rg32` remain a shared parity follow-up.
 
 ### `HdrBlendable` is `HalfVector4`
 
@@ -171,15 +173,15 @@ pass that needs a `Single` accumulation buffer writes it with blending off.
 
 ### Per-renderer status
 
-Only two renderers answer this question with their own verdict today; every other renderer defers,
-and the framework's own rule then applies — `Color`, and nothing else. That is the literal truth for a
-renderer that has implemented no other render-target format, which is why the default is honest
-rather than merely conservative.
+The implementations below answer this question with their own device verdict. A renderer without
+an override defers, and the framework's own rule then applies — `Color`, and nothing else. That is
+the literal truth for a renderer that has implemented no other render-target format, which is why
+the default is honest rather than merely conservative.
 
 | Renderer | Float render targets | Note |
 |---|---|---|
 | `OpenGLES3`, `OpenGL33`, `OpenGLES2`, `OpenGL4`, `WebGL1`, `WebGL2` (EasyGL) | ✅ all seven float formats | Verified against Mesa llvmpipe (ES 3.2) by `HdrRenderTargetRoundTripTests`. What a *driver* supports is still asked at run time, so an ES 2 profile that lacks float FBOs reports false rather than failing later. |
-| `Vulkan` | ⬜ defers → `Color` only | Measured, not assumed (`MOD-1610`): its `HdrRenderTargetRoundTrip` cases skip on a real lavapipe device. |
+| `Vulkan` | ✅ all seven float formats | `MOD-2223`: exact native attachments are queried from the selected device and exercised by `Vulkan_FloatRenderTarget` through clear, draw, sample, readback, MSAA and mips. Float cube targets remain unsupported. |
 | Every other renderer | ⬜ defers → `Color` only | No `ClassifyRenderTargetFormatEXT` override, so the framework rule applies. The 2D-only and fixed-function identities are ⛔ by their own nature — see the per-identity matrix below. |
 
 ## Per-renderer support matrix
@@ -196,7 +198,7 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 | Subsystem | EasyGL (reference) | Vulkan | D3D11 | Other renderers |
 |---|---|---|---|---|
 | Post-process effects (`DepthEffect`, `CRTEffect`) | ✅ GLSL | ⛔ its `ShaderEffect` takes SPIR-V, not the passes' GLSL | ⬜ | `AsciiPostProcessEffect` is CPU-side and runs everywhere |
-| Float/HDR render targets | ✅ RGBA16F + RGBA32F, runtime-probed | ⬜ measured: `Color` only today | ⬜ | ⬜ — each reports `false` and `RenderTarget2D` refuses the format rather than substituting `Color` |
+| Float/HDR render targets | ✅ RGBA16F + RGBA32F, runtime-probed | ✅ exact Float16/Float32 `RenderTarget2D`, device-probed (`MOD-2223`) | ⬜ | ⬜ — each reports `false` and `RenderTarget2D` refuses the format rather than substituting `Color` |
 | `RenderPipeline` + post-process passes | ✅ | 🟨 runs and copies through — measured, frame identical to no pipeline | ⬜ | The passes need `GraphicsCapability::CustomEffects`; without it each copies its input and the frame still renders |
 | Shadow maps (directional, PCF) | ✅ generation + reception on all four lit effects | ⬜ `SupportsShadowSamplingEXT()` false | ⬜ | ⬜ — an effect accepts the shadow state and a renderer without the shader ignores it, so the frame renders unshadowed rather than failing |
 | Cascaded shadow maps (2-4, atlas) | ✅ same four programs, one shared shader path | ⬜ | ⬜ | ⬜ — same accepted-and-ignored convention |

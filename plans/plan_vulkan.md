@@ -219,8 +219,9 @@ implementation tasks.**
 - indirect drawing (`DrawPrimitivesIndirectEXT` / `DrawIndexedPrimitivesIndirectEXT`);
 - GPU timers (`IGpuTimerRenderer`, `SupportsGpuTimerEXT`) and debug-region APIs owned by the
   engine layer;
-- float/HDR render-target formats and `CreateRenderTarget2DEXT`/`CreateRenderTargetCubeEXT`
-  (`MOD-104`, `MOD-107`, `MOD-123`, `MOD-2223`), display colour spaces (`MOD-2092`);
+- float/HDR render-target ownership remains in the modern plan. Its `RenderTarget2D` half is now
+  implemented by `MOD-2223`; float/HDR `CreateRenderTargetCubeEXT` remains outside this plan and
+  unimplemented (`MOD-104`, `MOD-107`, `MOD-123`). Display colour spaces remain `MOD-2092`;
 - texture arrays (`MOD-2226`, `MOD-2243`), bindless resources, VRS;
 - ray tracing (`MOD-2096`) and mesh shaders (`MOD-2097`) — `MOD-2096`'s text names
   `plan_vulkan.md` as the place such a capability question *would* be asked; that reference does
@@ -1101,7 +1102,7 @@ Classifications: `PARITY` · `VULKAN_STRONGER` · `TEST_GAP` · `IMPLEMENTATION_
 | Block-compressed formats (`Dxt1`/`Dxt3`/`Dxt5`) | `EasyGL_DxtFormat`, `_DXT1_FromStream_Readback`, `EasyGL_DxtTextureCube` | `Texture2D` stores BC1_RGBA/BC2/BC3 natively since `VULKAN-172`; `TextureCube` does the same since `VULKAN-240`. Both are gated on `textureCompressionBC`. `VULKAN-241` also lets the DDS and XNB loaders preserve those native blocks instead of always expanding them to `Color`. `Vulkan_DxtFormat` verifies adjacent 2D blocks; `Vulkan_DxtTextureCube` verifies all three cube formats through readback and real `EnvironmentMapEffect` sampling, a partial replacement, and DXT1/DXT5 DDS/XNB formats plus complete mip counts. `Vulkan_Dxt1FromStream` separately verifies the rendered DDS result. A device without BC claims no direct compressed storage: construction refuses it, while content loaders retain their shared decode-to-`Color` fallback | `PARITY`, with a recorded divergence: `ClassifyColorTransferFormatEXT` refuses a `Color`-shaped transfer for the three where EasyGL defers | `VULKAN-170` ✅, `VULKAN-172` ✅, `VULKAN-240` ✅, `VULKAN-241` ✅, `VULKAN-171` |
 | Packed 16-bit formats (`Bgr565`/`Bgra5551`/`Bgra4444`) | `EasyGL_Packed16Format` | all three stored natively and **pixel-verified in a real draw** (`Vulkan_Packed16Format`, the same source): `Bgr565`/`Bgra5551` as core-1.0 packed formats since `VULKAN-173`, `Bgra4444` through `VK_EXT_4444_formats` since `VULKAN-179`, refused by name on a device that does not offer it | `PARITY` | `VULKAN-173` ✅, `VULKAN-179` ✅ |
 | `NormalizedByte2`/`NormalizedByte4` | classified `Supported` | stored natively since `VULKAN-174` as `R8G8_SNORM`/`R8G8B8A8_SNORM` and **pixel-verified including a negative texel**, which is what separates SNORM storage from UNORM storage of the same bytes; `ClassifyColorTransferFormatEXT` refuses a `Color`-shaped transfer for both | `PARITY` | `VULKAN-174` ✅ |
-| Non-`Color` render-target formats | `ClassifyRenderTargetFormatEXT` real (incl. float probe) | real since `VULKAN-171`: `Color` answered from the device's own `VkFormatProperties` for the swapchain format, everything else `Defer` — because both render-target classes create their colour image in `swapchainFormat_` and the requested format reaches neither. **1** renderable format against **9** storable ones, asserted as an invariant | `PARITY` — refuses rather than substituting, which is `MOD-115`'s rule; float stays `CNAEXT_OUT_OF_SCOPE` (`MOD-2223`) | `VULKAN-171` ✅ |
+| Non-`Color` `RenderTarget2D` formats | `ClassifyRenderTargetFormatEXT` real (incl. float probe); exact `Color`/`Rgba64` + seven float/HDR allocation table | real since `MOD-2223`: the same nine exact formats reach Vulkan image/view allocation, render-pass and pipeline compatibility, mixed-format MRT, sampling and width-correct readback. Support is intersected with the selected device's exact format/image/sample facts; unsupported formats and sample pairs are refused without substituting `Color`. `Vulkan_FloatRenderTarget` proves clear/readback above 1.0 for `Vector4` and `HalfVector4`, HalfVector4 sampling into a Vector4 draw, mixed Vector4+Color MRT, MSAA resolve and mips | `PARITY` for `RenderTarget2D`, delivered by the modern plan without transferring ownership here. Float/HDR `RenderTargetCube` remains out of scope and unimplemented | `VULKAN-171` ✅, `MOD-2223` ✅ |
 | sRGB | — | `Vulkan_Texture2D_ColorFormat_Linear`, `Vulkan_Pbr_SrgbTransfer`, `Vulkan_ColorSpace_MidTone` | `VULKAN_STRONGER` | — |
 | Texture lifetime, disposed-texture behaviour, bound-resource disposal | `EasyGL_DisposedResource`, `_BoundResourceDispose`, `_HandleRelease`, `_ResourceLeak` | `Vulkan_BoundTargetLifetime`, `_DeferredResourceLifetime`, `_DeferredSourceLifetime`, and since `VULKAN-177` the two shared sources plus `Vulkan_DisposedTextureEviction` — which is the Vulkan-specific half neither shared source reaches, and whose cache-size legs catch a defect the pixels and the validation layer both miss | `PARITY` | `VULKAN-177` ✅ |
 | `HasDefinedMipLevel` | not overridden | not overridden | `PARITY` | — |
@@ -1372,8 +1373,9 @@ re-audits from the current tree rather than from that sentence.
 ## 17. Phase 5 — Textures (`VULKAN-170`–`VULKAN-209`)
 
 The block-compressed and packed-format rows are one coherent feature, split into independently
-committable pieces. They are **not** the modern engine layer's float-format work (`MOD-2223`), which
-stays out of scope.
+committable pieces. They are **not** the modern engine layer's float-format work (`MOD-2223`), whose
+`RenderTarget2D` implementation has since landed through its owning plan and is recorded here only
+to keep the capability matrix truthful. Float/HDR `RenderTargetCube` work stays out of scope.
 
 | ID | Task | Status | Acceptance criterion |
 |---|---|---|---|
@@ -1916,17 +1918,17 @@ as a method change rather than a rediscovered bug.
 **The census — four categories: as `VULKAN-027` first measured it on 2026-09-05, as `VULKAN-474`
 re-measured it on 2026-09-06, as `VULKAN-207` re-measured it on 2026-09-07 at the end of the
 campaign, and after `VULKAN-240`/`VULKAN-241` corrected the compressed-content omissions on
-2026-09-08. The
-movement is accounted for exactly at every step. The interface itself grew from 186 virtuals to
-189 before the final three overrides moved categories.**
+2026-09-08, followed by the current modern-plan implementation. The movement is accounted for
+exactly at every step. The interface itself grew from 186 virtuals to 189 before the compressed
+overrides moved categories, then to 202 through the detailed format/limit contract.**
 
-| Group | 2026-09-05 | 2026-09-06 | 2026-09-07 | 2026-09-08 | Meaning |
-|---|---|---|---|---|---|
-| Both override | 102 | 106 | **114** | **117** | Vulkan implements what EasyGL implements. |
-| **EasyGL overrides, Vulkan does not** | **54** | **50** | **44** | **41** | The substance of this audit — table A.1. |
-| Vulkan overrides, EasyGL does not | 3 | 7 | **8** | **8** | `VULKAN_STRONGER`. |
-| Neither overrides | 27 | 23 | **23** | **23** | Both take the shared default, so there is no Vulkan-specific divergence. |
-| *total virtuals* | *186* | *186* | ***189*** | ***189*** | |
+| Group | 2026-09-05 | 2026-09-06 | 2026-09-07 | `VULKAN-241` | Current | Meaning |
+|---|---|---|---|---|---|---|
+| Both override | 102 | 106 | **114** | **117** | **127** | Vulkan implements what EasyGL implements. |
+| **EasyGL overrides, Vulkan does not** | **54** | **50** | **44** | **41** | **31** | The live survivor set — table A.1. |
+| Vulkan overrides, EasyGL does not | 3 | 7 | **8** | **8** | **23** | Renderer-specific answers and modern rollout queries. |
+| Neither overrides | 27 | 23 | **23** | **23** | **21** | Both take the shared default, so there is no Vulkan-specific divergence. |
+| *total virtuals* | *186* | *186* | ***189*** | ***189*** | ***202*** | |
 
 **The 2026-09-05 → 2026-09-06 movement** was four virtuals: `IEffectRenderer`'s array uniform
 setters, which `VULKAN-265` made Vulkan override — to **refuse**, which counts as implementing the
@@ -1961,7 +1963,14 @@ correct”* right up until the row that made them real.
 that their previous `UNSUPPORTED_HONEST` classification concealed a real parity gap;
 `IGraphicsRenderer::LoadsCompressedContentNativelyEXT` followed in `VULKAN-241`, after the same
 classification was shown to keep native 2D and cube storage unreachable from DDS/XNB loaders. The
-committed census tool now reports **189 / 117 both / 41 EasyGL-only / 8 Vulkan-only / 23 neither**.
+committed census tool reported **189 / 117 both / 41 EasyGL-only / 8 Vulkan-only / 23 neither** at
+`VULKAN-241`. The modern-plan work landed afterward is deliberately accounted for rather than
+mistaken for classic-parity drift: after `MOD-2220`–`MOD-2223` and `MOD-2240`–`MOD-2242`, the same
+tool reports **202 / 127 both / 31 EasyGL-only / 23 Vulkan-only / 21 neither**. Thirteen new detailed
+format/limit virtuals account for the larger interface; ten former EasyGL-only compute/float-target
+virtuals are now implemented by both renderers; and `GetMaxVertexStreams` plus
+`GetMaxTextureDimension` moved from neither to Vulkan-only. The classic verdict's ownership has not
+changed, but its appendix now states the live source count.
 
 **The finding, as `VULKAN-027` wrote it against the 54.** Of the 54, exactly **one family is a real defect**: the four array uniform setters
 of `IEffectRenderer` are silently ignored on Vulkan while EasyGL implements them. The gap itself was
@@ -1974,9 +1983,9 @@ because the deferred draw model copies vertex and index bytes at draw time; and
 `CreateRenderTarget2DEXT` looks like a dropped `SurfaceFormat` but cannot be, because Vulkan's
 `Defer` verdict reduces to *Color only* and a non-`Color` render target is refused one layer above.
 
-### A.1 EasyGL overrides, Vulkan does not (41, re-measured 2026-09-08 by `VULKAN-241`)
+### A.1 EasyGL overrides, Vulkan does not (31 current; 41 at `VULKAN-241`)
 
-The table below still has **50** rows. Nine of them are struck through in their Classification
+The table below still has **50** rows. Nineteen of them are struck through in their Classification
 cell and marked **NO LONGER IN A.1**: those virtuals moved into A.2 when the rows named in §31's
 movement table gave Vulkan its own override. They stay here because why a virtual was once a
 survivor — and what justified leaving it that way — is the history this appendix exists to keep;
@@ -2007,26 +2016,26 @@ deleting the row would leave the count smaller with no account of why.
 | `IGraphicsRenderer` | `IsCompressedTransferFormatEXT` | default | `return false` | ~~UNSUPPORTED_HONEST~~ → **NO LONGER IN A.1** | Owned by `VULKAN-172`. **Left the survivor set on 2026-09-07: `VULKAN-172` gave Vulkan its own override, so this virtual is now in the *both* column and needs no justification. Kept struck through rather than deleted, because why it was once a survivor is this appendix's history.** |
 | `IGraphicsRenderer` | `IsCompressedCubeTransferFormatEXT` | default | `return false` | ~~UNSUPPORTED_HONEST~~ → **NO LONGER IN A.1** | The old owner reference was incomplete: `VULKAN-172` exposed block transfer for 2D textures only. `VULKAN-240` gives Vulkan the cube-specific override and moves this virtual into the *both* column. |
 | `IGraphicsRenderer` | `LoadsCompressedContentNativelyEXT` | default | `return false` | ~~UNSUPPORTED_HONEST~~ → **NO LONGER IN A.1** | The old classification was wrong: `VULKAN-172` supplied native BC `Texture2D` storage and `VULKAN-240` supplied the cube route, but the inherited `false` kept both unreachable from DDS/XNB content. `VULKAN-241` returns the device's BC feature and moves this virtual into the *both* column, with direct loader-format and mip-count evidence. |
-| `IGraphicsRenderer` | `CreateRenderTarget2DEXT` | default | forwards to `CreateRenderTarget2D`, dropping `surfaceFormat` | DEFAULT_CORRECT | The dropped argument cannot carry information: `ClassifyRenderTargetFormatEXT` defers, which reduces to *Color only*, so a non-`Color` render target is refused one layer up and this entry point never sees one. |
-| `IGraphicsRenderer` | `SupportsHalfFloatTextureLinearFilteringEXT` | default | `return false` | DEFAULT_CORRECT | `VULKAN-470` observed why: a half-float `Texture2D` cannot be created at all under `GraphicsProfile.Reach`, so there is no surface for a sampler to filter. |
+| `IGraphicsRenderer` | `CreateRenderTarget2DEXT` | default | forwards to `CreateRenderTarget2D`, dropping `surfaceFormat` | ~~DEFAULT_CORRECT~~ → **NO LONGER IN A.1** | `MOD-2223` adds Vulkan's override and carries all nine implemented formats into exact native storage; `Vulkan_FloatRenderTarget` proves the previously dropped argument now changes allocation and pixels. |
+| `IGraphicsRenderer` | `SupportsHalfFloatTextureLinearFilteringEXT` | default | `return false` | ~~DEFAULT_CORRECT~~ → **NO LONGER IN A.1** | `MOD-2223` answers from the implemented `HalfVector4` target path and the selected device's `SAMPLED_IMAGE_FILTER_LINEAR` feature. |
 | `IGraphicsRenderer` | `CreateRenderTargetCubeEXT` | default | forwards to `CreateRenderTargetCube` | DEFAULT_CORRECT | Same reduction as `CreateRenderTarget2DEXT`. |
-| `IGraphicsRenderer` | `CreateComputeShader` | default | `return nullptr` | CNAEXT_OUT_OF_SCOPE | Honest absence; `VULKAN-470` observed that the compute route does not exist rather than being refused. |
-| `IGraphicsRenderer` | `CreateStorageBuffer` | default | `return nullptr` | CNAEXT_OUT_OF_SCOPE | As above. |
-| `IGraphicsRenderer` | `DispatchCompute` | default | no-op | CNAEXT_OUT_OF_SCOPE | Unreachable without a compute shader. |
-| `IGraphicsRenderer` | `MemoryBarrierEXT` | default | no-op | CNAEXT_OUT_OF_SCOPE | Unreachable without compute or storage buffers. |
+| `IGraphicsRenderer` | `CreateComputeShader` | default | `return nullptr` | ~~CNAEXT_OUT_OF_SCOPE~~ → **NO LONGER IN A.1** | `MOD-2242` creates reflected SPIR-V compute pipelines on Vulkan. |
+| `IGraphicsRenderer` | `CreateStorageBuffer` | default | `return nullptr` | ~~CNAEXT_OUT_OF_SCOPE~~ → **NO LONGER IN A.1** | `MOD-2241` implements host-visible storage buffers with validated ranges and exact device limits. |
+| `IGraphicsRenderer` | `DispatchCompute` | default | no-op | ~~CNAEXT_OUT_OF_SCOPE~~ → **NO LONGER IN A.1** | `MOD-2242` snapshots bindings/uniforms and records a real Vulkan dispatch. |
+| `IGraphicsRenderer` | `MemoryBarrierEXT` | default | no-op | ~~CNAEXT_OUT_OF_SCOPE~~ → **NO LONGER IN A.1** | `MOD-2242` implements the storage-buffer visibility barrier used by the compute path. |
 | `IGraphicsRenderer` | `ExecutesShaderEffectSourceEXT` | default | `return false` | DEFAULT_CORRECT | Truthful and load-bearing: Vulkan's `ShaderEffect` consumes SPIR-V against a fixed push-constant layout and never executes the GLSL source the engine layer writes. `CLAUDE.md` tells callers to ask exactly this query. |
 | `IGraphicsRenderer` | `SupportsShadowSamplingEXT` | default | `return false` | CNAEXT_OUT_OF_SCOPE | Honest absence. |
 | `IGraphicsRenderer` | `SupportsImageBasedLightingEXT` | default | `return false` | CNAEXT_OUT_OF_SCOPE | Honest absence. |
-| `IGraphicsRenderer` | `SupportsComputeShadersEXT` | default | `return false` | CNAEXT_OUT_OF_SCOPE | Honest absence, observed by `VULKAN-470`. |
+| `IGraphicsRenderer` | `SupportsComputeShadersEXT` | default | `return false` | ~~CNAEXT_OUT_OF_SCOPE~~ → **NO LONGER IN A.1** | `MOD-2240`/`MOD-2242` answer from the selected queue family, implemented resource path and device limits. |
 | `IGraphicsRenderer` | `SupportsIndirectDrawEXT` | default | `return false` | UNSUPPORTED_HONEST | Honest absence, observed by `VULKAN-470`: `DrawPrimitivesIndirectEXT` takes its argument buffer by reference and `CreateStorageBuffer` returns null, so there is nothing to hand it. |
 | `IGraphicsRenderer` | `SupportsComputeImageBindingEXT` | default | `return false` | CNAEXT_OUT_OF_SCOPE | Honest absence. |
 | `IGraphicsRenderer` | `GetMaxVertexShaderStorageBlocksEXT` | default | `return 0` | CNAEXT_OUT_OF_SCOPE | Consistent with no storage buffers. |
 | `IGraphicsRenderer` | `BindStorageBufferForDrawEXT` | default | no-op | CNAEXT_OUT_OF_SCOPE | Unreachable without a storage buffer. |
 | `IGraphicsRenderer` | `SupportsGpuTimerEXT` | default | `return false` | CNAEXT_OUT_OF_SCOPE | Honest absence. |
 | `IGraphicsRenderer` | `CreateGpuTimerEXT` | default | `return nullptr` | CNAEXT_OUT_OF_SCOPE | Honest absence. |
-| `IGraphicsRenderer` | `GetMaxComputeWorkGroupCountEXT` | default | `return 0` | CNAEXT_OUT_OF_SCOPE | Consistent with no compute. |
-| `IGraphicsRenderer` | `GetMaxComputeWorkGroupSizeEXT` | default | `return 0` | CNAEXT_OUT_OF_SCOPE | Consistent with no compute. |
-| `IGraphicsRenderer` | `GetMaxComputeWorkGroupInvocationsEXT` | default | `return 0` | CNAEXT_OUT_OF_SCOPE | Consistent with no compute. |
+| `IGraphicsRenderer` | `GetMaxComputeWorkGroupCountEXT` | default | `return 0` | ~~CNAEXT_OUT_OF_SCOPE~~ → **NO LONGER IN A.1** | `MOD-2240` publishes the selected device's three-dimensional dispatch-count limits. |
+| `IGraphicsRenderer` | `GetMaxComputeWorkGroupSizeEXT` | default | `return 0` | ~~CNAEXT_OUT_OF_SCOPE~~ → **NO LONGER IN A.1** | `MOD-2240` publishes the selected device's three-dimensional local-size limits. |
+| `IGraphicsRenderer` | `GetMaxComputeWorkGroupInvocationsEXT` | default | `return 0` | ~~CNAEXT_OUT_OF_SCOPE~~ → **NO LONGER IN A.1** | `MOD-2240` publishes the selected device's invocation ceiling. |
 | `IGraphicsRenderer` | `SetRenderTargetCubeFace` | default | `rt->BindAsRenderTargetFace(face)` | DEFAULT_CORRECT | Vulkan implements `BindAsRenderTargetFace` (`VulkanRenderer.cpp:14353`) and the replay path calls it (`:13196`), so the default composes into working per-face binding. |
 | `IGraphicsRenderer` | `DrawPrimitivesIndirectEXT` | default | no-op | UNSUPPORTED_HONEST | Unreachable: its argument buffer is taken by reference and none can be created. |
 | `IGraphicsRenderer` | `DrawIndexedPrimitivesIndirectEXT` | default | no-op | UNSUPPORTED_HONEST | As above. |
@@ -2035,12 +2044,25 @@ deleting the row would leave the count smaller with no account of why.
 | `IGraphicsRenderer` | `DebugSimulateContextLoss` | default | no-op | OWNED_ELSEWHERE | Owned by `VULKAN-334`. |
 | `IGraphicsRenderer` | `DebugRestoreContext` | default | no-op | OWNED_ELSEWHERE | Owned by `VULKAN-334`. |
 
-### A.2 Both renderers override (114, re-measured 2026-09-07 by `VULKAN-207`)
+### A.2 Both renderers override (127 current; 114 at `VULKAN-207`)
 
 Listed for completeness; no divergence to classify.
 
 | Interface | Virtual | Kind |
 |---|---|---|
+| `ITextureCubeRenderer` | `SetCompressedDataEXT` | default | *(Vulkan override by `VULKAN-240`)* |
+| `IGraphicsRenderer` | `IsCompressedCubeTransferFormatEXT` | default | *(Vulkan override by `VULKAN-240`)* |
+| `IGraphicsRenderer` | `LoadsCompressedContentNativelyEXT` | default | *(Vulkan override by `VULKAN-241`)* |
+| `IGraphicsRenderer` | `CreateRenderTarget2DEXT` | default | *(Vulkan override by `MOD-2223`)* |
+| `IGraphicsRenderer` | `SupportsHalfFloatTextureLinearFilteringEXT` | default | *(Vulkan override by `MOD-2223`)* |
+| `IGraphicsRenderer` | `CreateComputeShader` | default | *(Vulkan override by `MOD-2242`)* |
+| `IGraphicsRenderer` | `CreateStorageBuffer` | default | *(Vulkan override by `MOD-2241`)* |
+| `IGraphicsRenderer` | `DispatchCompute` | default | *(Vulkan override by `MOD-2242`)* |
+| `IGraphicsRenderer` | `MemoryBarrierEXT` | default | *(Vulkan override by `MOD-2242`)* |
+| `IGraphicsRenderer` | `SupportsComputeShadersEXT` | default | *(Vulkan override by `MOD-2240`/`MOD-2242`)* |
+| `IGraphicsRenderer` | `GetMaxComputeWorkGroupCountEXT` | default | *(Vulkan override by `MOD-2240`)* |
+| `IGraphicsRenderer` | `GetMaxComputeWorkGroupSizeEXT` | default | *(Vulkan override by `MOD-2240`)* |
+| `IGraphicsRenderer` | `GetMaxComputeWorkGroupInvocationsEXT` | default | *(Vulkan override by `MOD-2240`)* |
 | `IEffectRenderer` | `Bind` | PURE |
 | `IGraphicsRenderer` | `SupportsTexture3DSamplingEXT` | default | *(added and overridden by both in `VULKAN-164`)* |
 | `ISpriteBatchRenderer` | `SetSamplerAddressModeWEXT` | default | *(added by `VULKAN-164`, EasyGL's override by `VULKAN-206`)* |
@@ -2150,10 +2172,25 @@ Listed for completeness; no divergence to classify.
 | `IVertexBufferRenderer` | `SetData` | PURE |
 | `IVertexBufferRenderer` | `SetVertexDeclaration` | PURE |
 
-### A.3 Vulkan overrides, EasyGL does not (8, re-measured 2026-09-07 by `VULKAN-207`) — `VULKAN_STRONGER`
+### A.3 Vulkan overrides, EasyGL does not (23 current; 8 at `VULKAN-207`)
 
 | Interface | Virtual | Kind |
 |---|---|---|
+| `IGraphicsRenderer` | `GetSurfaceFormatUsageSupportEXT` | default |
+| `IGraphicsRenderer` | `GetMaxStorageBufferBytesEXT` | default |
+| `IGraphicsRenderer` | `GetMaxUniformBufferBytesEXT` | default |
+| `IGraphicsRenderer` | `GetMaxComputeStorageBufferBindingsEXT` | default |
+| `IGraphicsRenderer` | `GetMaxTextureArrayLayersEXT` | default |
+| `IGraphicsRenderer` | `GetMaxSampledTexturesPerShaderStageEXT` | default |
+| `IGraphicsRenderer` | `GetMaxStorageImagesPerShaderStageEXT` | default |
+| `IGraphicsRenderer` | `GetMaxVertexInputBindingsEXT` | default |
+| `IGraphicsRenderer` | `GetMaxVertexInputAttributesEXT` | default |
+| `IGraphicsRenderer` | `GetMaxColorAttachmentsEXT` | default |
+| `IGraphicsRenderer` | `GetMinStorageBufferOffsetAlignmentEXT` | default |
+| `IGraphicsRenderer` | `GetMinUniformBufferOffsetAlignmentEXT` | default |
+| `IGraphicsRenderer` | `GetTimestampPeriodPicosecondsEXT` | default |
+| `IGraphicsRenderer` | `GetMaxVertexStreams` | default |
+| `IGraphicsRenderer` | `GetMaxTextureDimension` | default |
 | `IGraphicsRenderer` | `GetAppliedBackBufferFormatEXT` | default |
 | `IGraphicsRenderer` | `GetAppliedDepthStencilFormatEXT` | default |
 | `IGraphicsRenderer` | `GetAppliedMultiSampleCountEXT` | default |
@@ -2163,7 +2200,7 @@ Listed for completeness; no divergence to classify.
 | `IRenderTargetCubeRenderer` | `GetAppliedDepthStencilFormatEXT` | default | *(added by `VULKAN-215`)* |
 | `ISpriteBatchRenderer` | `SetImmediateMode` | default |
 
-### A.4 Neither renderer overrides (23, unchanged at the 2026-09-07 re-measurement) — shared default, no Vulkan-specific divergence
+### A.4 Neither renderer overrides (21 current; 23 at `VULKAN-207`) — shared default, no Vulkan-specific divergence
 
 | Interface | Virtual | Kind |
 |---|---|---|
@@ -2173,9 +2210,7 @@ Listed for completeness; no divergence to classify.
 | `IGraphicsRenderer` | `GetDisplayColorSpaceEXT` | default |
 | `IGraphicsRenderer` | `GetMaxCubeSizeForProfileEXT` | default |
 | `IGraphicsRenderer` | `GetMaxRenderTargetsForProfileEXT` | default |
-| `IGraphicsRenderer` | `GetMaxTextureDimension` | default |
 | `IGraphicsRenderer` | `GetMaxTextureSizeForProfileEXT` | default |
-| `IGraphicsRenderer` | `GetMaxVertexStreams` | default |
 | `IGraphicsRenderer` | `GetMaxVolumeExtentForProfileEXT` | default |
 | `IGraphicsRenderer` | `GetUnsupported3DGraphicsCallBehavior` | default |
 | `IGraphicsRenderer` | `OnSurfaceInvalidated` | default |

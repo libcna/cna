@@ -45,6 +45,16 @@ namespace CNA::Internal::Renderers::Vulkan
         virtual int           GetWidth()                   const = 0;
         virtual int           GetHeight()                  const = 0;
         virtual uint32_t      GetColorAttachmentCount()    const = 0;
+        /**
+         * @brief Returns the exact native format of one colour attachment.
+         *
+         * @param index Zero-based colour-attachment index.
+         * @return The native format, or `VK_FORMAT_UNDEFINED` when the index is not present.
+         */
+        virtual VkFormat      GetColorFormatEXT(uint32_t /*index*/ = 0) const
+        {
+            return VK_FORMAT_UNDEFINED;
+        }
         /// True if this source's actual framebuffer/render pass uses multisample color
         /// attachments plus single-sample resolves. Default false; overridden by the concrete
         /// single-target, cube-face, and MRT sources when MSAA is genuinely engaged.
@@ -130,6 +140,8 @@ namespace CNA::Internal::Renderers::Vulkan
         VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT;
         /** @brief This target's own depth format, VK_FORMAT_UNDEFINED for no depth attachment. */
         VkFormat      depthFormat   = VK_FORMAT_UNDEFINED;
+        /** @brief The exact native format of this pass's colour attachment. */
+        VkFormat      colorFormat   = VK_FORMAT_UNDEFINED;
         /** @brief Whether `renderPass` begins its colour attachments with LOAD_OP_CLEAR. */
         bool          loadOpIsClear = true;
         /** @brief Shared depth/stencil group identity (REMED-GFX-142); null = this pass alone. */
@@ -151,6 +163,11 @@ namespace CNA::Internal::Renderers::Vulkan
         int           GetHeight()               const override { return height; }
         /** @brief @copydoc VulkanRTSource::GetColorAttachmentCount */
         uint32_t      GetColorAttachmentCount() const override { return 1; }
+        /** @brief @copydoc VulkanRTSource::GetColorFormatEXT */
+        VkFormat      GetColorFormatEXT(uint32_t index = 0) const override
+        {
+            return index == 0 ? colorFormat : VK_FORMAT_UNDEFINED;
+        }
         /** @brief @copydoc VulkanRTSource::WantsMsaa */
         bool          WantsMsaa()               const override { return msaa; }
         /** @brief @copydoc VulkanRTSource::GetMsaaSampleCountEXT */
@@ -301,19 +318,25 @@ namespace CNA::Internal::Renderers::Vulkan
          */
         [[nodiscard]] int GetAppliedDepthStencilFormatEXT(
             int requestedDepthStencilFormat) const override;
-        // Task 911: `depthFormat` (raw Microsoft::Xna::Framework::Graphics::DepthFormat ordinal)
-        // gives this instance true per-RT DepthStencilFormat fidelity -- a real, distinct
-        // VkFormat picked via PickDepthFormat() (or no depth attachment at all for
-        // DepthFormat::None), independent of the backbuffer's own depthFormat_ and of every
-        // other render target. Each distinct depthVkFormat_ gets its own render pass (see
-        // VulkanRenderer::GetOrCreateRTRenderPass()/GetOrCreateRTRenderPassMsaa()) and its
-        // own pipeline cache entries (DepthStencilKeyParams no longer needs a depth-format
-        // dimension since depthCompareOp/stencil ops are independent of the buffer's exact
-        // format -- but the render pass itself is, since Vulkan pipeline/render-pass
-        // compatibility requires an exact attachment-format match).
+        /**
+         * @brief Creates a Vulkan-backed two-dimensional render target.
+         *
+         * The public colour and depth formats are preserved as exact native attachment formats.
+         * Each colour/depth/sample combination obtains a render-pass-compatible pipeline rather
+         * than substituting the swapchain format.
+         *
+         * @param w Width in texels.
+         * @param h Height in texels.
+         * @param depthFormat Requested `DepthFormat` ordinal.
+         * @param preserveContents Whether later bind cycles must load existing attachment data.
+         * @param owner Owning Vulkan renderer.
+         * @param requestedMultiSampleCount Preferred sample count, or zero for single-sampling.
+         * @param mipMap Whether to allocate and regenerate a complete mip chain.
+         * @param surfaceFormat Requested `SurfaceFormat` ordinal.
+         */
         VulkanRenderTargetRenderer(int w, int h, int depthFormat, bool preserveContents,
                                    VulkanRenderer* owner, int requestedMultiSampleCount = 0,
-                                   bool mipMap = false);
+                                   bool mipMap = false, int surfaceFormat = 0);
         ~VulkanRenderTargetRenderer() override;
 
         int GetWidth()  const override { return width_; }
@@ -352,6 +375,18 @@ namespace CNA::Internal::Renderers::Vulkan
                 appliedMultiSampleCount_ > 1 ? appliedMultiSampleCount_ : 1);
         }
         VkImageView     GetDepthView()             const { return depthView_; }
+        /**
+         * @brief Returns the requested public `SurfaceFormat` ordinal.
+         *
+         * @return The exact public format used to create this target.
+         */
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
+        /**
+         * @brief Returns the exact native format of the colour image.
+         *
+         * @return The target's Vulkan colour format.
+         */
+        [[nodiscard]] VkFormat GetVkFormatEXT() const noexcept { return colorVkFormat_; }
         VkDescriptorSet GetVkDescriptorSet()       const override { return descriptorSet_; }
         // Task 878: the full-mip-range view, so mip filtering works when this RT is sampled as
         // an ordinary texture (on-the-fly descriptor sets built by RecordCommandBuffer's texture
@@ -363,9 +398,10 @@ namespace CNA::Internal::Renderers::Vulkan
         // Present() runs. Vulkan defers all draw work to a single Present-time record, so this
         // first flushes any deferred passes queued into this target (FlushDeferredRenderTarget),
         // then copies colorImage_ back via a host-visible staging buffer -- mirroring
-        // VulkanTexture3DRenderer::GetData's pattern, plus the swapchain BGRA->RGBA channel swap
-        // (the RT colour image uses swapchainFormat_). Pre-fix this was the unimplemented base
-        // no-op, so a RenderTarget2D read back before Present returned all-zeros.
+        // VulkanTexture3DRenderer::GetData's pattern. A Color target backed by a BGRA swapchain
+        // format receives the required BGRA->RGBA channel swap; wider integer and float targets
+        // are copied byte-for-byte. Pre-fix this was the unimplemented base no-op, so a
+        // RenderTarget2D read back before Present returned all-zeros.
         //
         // REMED-GFX-127: returns true only once the staging copy has filled the whole requested
         // region; false when this target has no usable colour image (torn-down owner/device) so the
@@ -382,6 +418,9 @@ namespace CNA::Internal::Renderers::Vulkan
         bool                    preserveContents_ = false;
         // Task 878: number of mip levels colorImage_ actually owns (1 when mipMap was false).
         int                     levelCount_   = 1;
+        int                     surfaceFormat_ = 0;
+        VkFormat                colorVkFormat_ = VK_FORMAT_UNDEFINED;
+        int                     bytesPerTexel_ = 4;
         VkImage                 colorImage_   = VK_NULL_HANDLE;
         VkDeviceMemory          colorMemory_  = VK_NULL_HANDLE;
         VkImageView             colorView_    = VK_NULL_HANDLE; ///< mip 0 only — framebuffer color attachment.
@@ -724,6 +763,7 @@ namespace CNA::Internal::Renderers::Vulkan
             uint32_t topology = 0;
             int32_t  cullMode = 0;
             bool     wireframe = false;
+            std::array<int32_t, 4> colorFormats{};
             bool operator==(const PipelineVariantKey&) const noexcept = default;
         };
         struct PipelineVariantKeyHash
@@ -733,6 +773,8 @@ namespace CNA::Internal::Renderers::Vulkan
                 std::size_t h = std::hash<uint32_t>{}(key.colorAttachmentCount);
                 h ^= std::hash<uint32_t>{}(key.sampleCount) + (h << 6) + (h >> 2);
                 h ^= std::hash<int32_t>{}(key.depthFormat) + (h << 6) + (h >> 2);
+                for (const int32_t format : key.colorFormats)
+                    h ^= std::hash<int32_t>{}(format) + (h << 6) + (h >> 2);
                 h ^= std::hash<bool>{}(key.blend) + (h << 6) + (h >> 2);
                 h ^= std::hash<uint32_t>{}(key.blendBits) + (h << 6) + (h >> 2);
                 h ^= std::hash<uint32_t>{}(key.colorWriteBits) + (h << 6) + (h >> 2);
@@ -1676,6 +1718,16 @@ namespace CNA::Internal::Renderers::Vulkan
         VkSampleCountFlagBits GetMsaaSampleCountEXT() const override { return colorSampleCount_; }
         // XNA/FNA shares binding 0's depth attachment across the active MRT set.
         VkFormat      GetDepthFormat()           const override { return depthFormat_; }
+        /**
+         * @brief Returns one MRT attachment's exact native colour format.
+         *
+         * @param index Zero-based colour-attachment index.
+         * @return The native format, or `VK_FORMAT_UNDEFINED` when the index is not present.
+         */
+        VkFormat      GetColorFormatEXT(uint32_t index = 0) const override
+        {
+            return index < colorFormats_.size() ? colorFormats_[index] : VK_FORMAT_UNDEFINED;
+        }
         /** @brief Regenerates every mipmapped colour attachment finalized by this MRT pass. */
         void          MaybeGenerateMips(VkCommandBuffer cb) override;
 
@@ -1740,6 +1792,7 @@ namespace CNA::Internal::Renderers::Vulkan
         std::vector<VkImageView> colorAttachments_;
         std::vector<VkImageView> resolveAttachments_;
         std::vector<VkImageView> framebufferAttachments_;
+        std::vector<VkFormat> colorFormats_;
         // REMED-GFX-190: immutable per-binding destinations, retained in public attachment order.
         // Besides supplying the exact image/layer/level metadata for post-pass mip generation,
         // shared ownership keeps that metadata valid when a bound target is disposed before the
@@ -1821,6 +1874,8 @@ namespace CNA::Internal::Renderers::Vulkan
         /// and the second target would be drawn with the first's `rasterizationSamples` into a
         /// render pass that does not match it.
         uint32_t ms = 1;
+        /// MOD-2223: exact native colour formats of the compatible render pass, one per MRT slot.
+        std::array<int32_t, 4> cf{};
         bool operator==(const PipelineKey&) const noexcept = default;
     };
     struct PipelineKeyHash {
@@ -1832,6 +1887,8 @@ namespace CNA::Internal::Renderers::Vulkan
             h ^= (std::hash<uint32_t>{}(k.sm) + 0x27D4EB2F165667C5ull + (h << 6) + (h >> 2));
             h ^= (std::hash<uint64_t>{}(k.vl) + 0x9E3779B97F4A7C15ull + (h << 6) + (h >> 2));
             h ^= (std::hash<uint32_t>{}(k.ms) + 0x85EBCA77C2B2AE63ull + (h << 6) + (h >> 2));
+            for (const int32_t format : k.cf)
+                h ^= (std::hash<int32_t>{}(format) + 0xC2B2AE3D27D4EB4Full + (h << 6) + (h >> 2));
             return h;
         }
     };
@@ -2041,6 +2098,20 @@ namespace CNA::Internal::Renderers::Vulkan
             int surfaceFormatOrdinal, VkFormat& out) noexcept;
 
         /**
+         * @brief Maps a faithfully implemented RenderTarget2D format to native storage.
+         *
+         * `Color` follows the selected swapchain format so existing backbuffer-compatible paths
+         * keep their component order. Float/HDR and `Rgba64` targets use their exact semantic
+         * Vulkan formats and byte widths.
+         *
+         * @param surfaceFormatOrdinal The public SurfaceFormat ordinal.
+         * @param out Receives the native storage description.
+         * @return True when VulkanRenderTargetRenderer implements the requested format.
+         */
+        CNAEXT [[nodiscard]] bool MapRenderTargetFormatToStorageEXT(
+            int surfaceFormatOrdinal, VulkanSurfaceFormatStorageEXT& out) const noexcept;
+
+        /**
          * @brief Whether a `Texture2D` may be created with the given surface format.
          *
          * plan_vulkan.md VULKAN-170. `Supported`/`Unsupported` for a format this renderer stores
@@ -2133,6 +2204,14 @@ namespace CNA::Internal::Renderers::Vulkan
          */
         [[nodiscard]] CNA::Internal::Renderers::RendererFormatVerdict ClassifyRenderTargetFormatEXT(
             int surfaceFormat) const override;
+
+        /**
+         * @brief Reports linear filtering for the implemented half-float render-target path.
+         *
+         * @return True when the selected device can sample RGBA16F with linear filtering and can
+         *         create the matching render target.
+         */
+        [[nodiscard]] bool SupportsHalfFloatTextureLinearFilteringEXT() const override;
 
         /**
          * @brief CNAEXT. XNA's Direct3D 9 pixel-centre correction, as a clip-space translation.
@@ -2987,6 +3066,21 @@ namespace CNA::Internal::Renderers::Vulkan
         std::unique_ptr<ITextureRenderer>         CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchRenderer>     CreateSpriteBatch() override;
         std::unique_ptr<IRenderTargetRenderer>    CreateRenderTarget2D(int w, int h, int depthFormat, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) override;
+        /**
+         * @brief Creates an exact-format Vulkan `RenderTarget2D` for the CNA extension path.
+         *
+         * @param w Width in texels.
+         * @param h Height in texels.
+         * @param depthFormat Requested `DepthFormat` ordinal.
+         * @param preserveContents Whether later bind cycles must load existing attachment data.
+         * @param mipMap Whether to allocate and regenerate a complete mip chain.
+         * @param multiSampleCount Preferred sample count, or zero for single-sampling.
+         * @param surfaceFormat Requested `SurfaceFormat` ordinal.
+         * @return A render-target renderer using the requested format exactly.
+         */
+        std::unique_ptr<IRenderTargetRenderer>    CreateRenderTarget2DEXT(
+            int w, int h, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount, int surfaceFormat) override;
         void                                     SetRenderTarget2D(IRenderTargetRenderer* rt) override;
 
         /**
@@ -3283,12 +3377,9 @@ namespace CNA::Internal::Renderers::Vulkan
         VkImage                  msaaColorImage_  = VK_NULL_HANDLE;
         VkDeviceMemory           msaaColorMemory_ = VK_NULL_HANDLE;
         VkImageView              msaaColorView_   = VK_NULL_HANDLE;
-        // Task 911: depth-format-keyed (VK_FORMAT_UNDEFINED = no depth attachment), lazily
-        // populated via GetOrCreatePipeline2DMsaa() -- mirrors the 3D pipeline caches' own
-        // per-target-depth-format fidelity, since the 2D sprite pipeline's render pass must still
-        // exactly attachment-format-match whichever target it draws into even though it never
-        // itself reads/writes the depth attachment (VkPipelineDepthStencilStateCreateInfo has
-        // depthTestEnable=depthWriteEnable=VK_FALSE always).
+        // Task 911/MOD-2223: keyed by the target's exact colour/depth/sample compatibility tuple
+        // and lazily populated via GetOrCreatePipeline2DMsaa(). The sprite pipeline never reads
+        // depth, but its render pass must still attachment-format-match the target it draws into.
         // REMED-GFX-071: now keyed by (depth-format-folded uint64 + blendEnabled bit, PackBlendBits)
         // -- the full PipelineKey shape the 3D caches use -- so a distinct SpriteBatch BlendState
         // gets its own VkPipeline (with FillBlendAttachmentState-derived factors) instead of one
@@ -3309,37 +3400,39 @@ namespace CNA::Internal::Renderers::Vulkan
 
         // --- Render pass (permanent) + framebuffers (per swapchain image) ---
         VkRenderPass               renderPass_       = VK_NULL_HANDLE;
-        // Task 911: RT render passes are now keyed by real depth VkFormat (VK_FORMAT_UNDEFINED =
-        // no depth attachment at all) instead of one hardcoded device-wide format shared by every
-        // render target — each RenderTarget2D/RenderTargetCube gets true per-instance
-        // DepthStencilFormat fidelity. Lazily populated via GetOrCreateRTRenderPass()/
-        // GetOrCreateRTRenderPassMsaa(); a format's entry is shared by every RT requesting that
-        // same format (render-pass "compatibility" requires an exact attachment-format match, so
-        // a distinct format genuinely needs its own render pass, but RTs sharing a format safely
-        // share one pass + one pipeline, mirroring the pre-existing single-format reuse pattern).
-        std::unordered_map<VkFormat, VkRenderPass> rtRenderPassByDepthFmt_;      // LOAD_OP_CLEAR, color → SHADER_READ_ONLY_OPTIMAL
-        std::unordered_map<VkFormat, VkRenderPass> rtRenderPassLoadByDepthFmt_;  // LOAD_OP_LOAD,  color → SHADER_READ_ONLY_OPTIMAL
-        /// plan_vulkan.md VULKAN-216: keyed by (depth format, sample count), not by depth format
-        /// alone. Two render passes are compatible only if their attachments agree on format AND
-        /// sample count, so a 4x target and a 2x target need different passes even at the same
-        /// depth format -- and a pipeline built against one is invalid in the other.
-        using MsaaRTPassKey = std::pair<VkFormat, uint32_t>;
-        struct MsaaRTPassKeyHash {
-            std::size_t operator()(const MsaaRTPassKey& k) const noexcept
+        // Task 911/MOD-2223: every RT pass is keyed by its exact colour formats, depth format
+        // (VK_FORMAT_UNDEFINED means no depth attachment) and sample count. Entries are populated
+        // lazily and shared only by targets with a render-pass-compatible attachment tuple.
+        struct RTPassKey
+        {
+            std::array<int32_t, 4> colorFormats{};
+            uint32_t colorCount = 1;
+            int32_t depthFormat = static_cast<int32_t>(VK_FORMAT_UNDEFINED);
+            uint32_t samples = static_cast<uint32_t>(VK_SAMPLE_COUNT_1_BIT);
+            bool operator==(const RTPassKey&) const noexcept = default;
+        };
+        struct RTPassKeyHash {
+            std::size_t operator()(const RTPassKey& k) const noexcept
             {
-                return std::hash<uint32_t>{}(static_cast<uint32_t>(k.first)) * 0x9E3779B9u
-                     ^ std::hash<uint32_t>{}(k.second);
+                std::size_t h = std::hash<uint32_t>{}(k.colorCount);
+                h ^= std::hash<int32_t>{}(k.depthFormat) + (h << 6) + (h >> 2);
+                h ^= std::hash<uint32_t>{}(k.samples) + (h << 6) + (h >> 2);
+                for (const int32_t format : k.colorFormats)
+                    h ^= std::hash<int32_t>{}(format) + (h << 6) + (h >> 2);
+                return h;
             }
         };
-        std::unordered_map<MsaaRTPassKey, VkRenderPass, MsaaRTPassKeyHash>
+        std::unordered_map<RTPassKey, VkRenderPass, RTPassKeyHash> rtRenderPassByDepthFmt_;
+        std::unordered_map<RTPassKey, VkRenderPass, RTPassKeyHash> rtRenderPassLoadByDepthFmt_;
+        std::unordered_map<RTPassKey, VkRenderPass, RTPassKeyHash>
             rtRenderPassMsaaByDepthFmt_;  // 3-attachment MSAA color/resolve/depth, LOAD_OP_CLEAR
         /// REMED-GFX-141: the MSAA render pass's missing LOAD variant. Its multisample colour
         /// attachment uses LOAD_OP_LOAD + STORE_OP_STORE and stays in COLOR_ATTACHMENT_OPTIMAL
         /// across passes, so a PreserveContents target's own multisample samples survive a bind
-        /// cycle instead of being cleared and thrown away. Same depth-format keying, same
-        /// per-format sharing, and render-pass-compatible with the clear variant (load/store ops
-        /// and layouts take no part in compatibility), so no pipeline cache key changed.
-        std::unordered_map<MsaaRTPassKey, VkRenderPass, MsaaRTPassKeyHash>
+        /// cycle instead of being cleared and thrown away. It uses the same full compatibility key
+        /// and is render-pass-compatible with the clear variant because load/store operations and
+        /// layouts do not participate in compatibility.
+        std::unordered_map<RTPassKey, VkRenderPass, RTPassKeyHash>
             rtRenderPassMsaaLoadByDepthFmt_;
         std::vector<VkFramebuffer> swapchainFramebuffers_;
 
@@ -3823,7 +3916,7 @@ namespace CNA::Internal::Renderers::Vulkan
         uint32_t              lastMrtPipelineColorCountEXT_ = 0;
 
         // --- MRT render pass cache (target count + samples + shared depth format) ---
-        std::unordered_map<uint64_t, VkRenderPass> mrtRenderPasses_;
+        std::unordered_map<RTPassKey, VkRenderPass, RTPassKeyHash> mrtRenderPasses_;
 
         // --- Per-frame 3D dynamic geometry buffers ---
         // Vertex/index data is copied to CPU at draw time, then uploaded here after fence wait.
@@ -4445,13 +4538,15 @@ namespace CNA::Internal::Renderers::Vulkan
         // created against the discard variant is render-pass-compatible with the load variant
         // too (they differ only in loadOp/initialLayout, which compatibility ignores), so callers
         // that only need a pipeline's *reference* render pass should always pass false.
-        VkRenderPass GetOrCreateRTRenderPass(VkFormat depthFmt, bool discardContents);
+        VkRenderPass GetOrCreateRTRenderPass(VkFormat colorFmt, VkFormat depthFmt,
+                                             bool discardContents);
         // Task 911: MSAA counterpart. REMED-GFX-141 gave it the LOAD_OP_LOAD variant it never had:
         // `discardContents` false keeps the multisample colour attachment's own samples across
         // passes (LOAD/STORE, COLOR_ATTACHMENT_OPTIMAL in and out) instead of clearing them and
         // discarding them at every pass end. The two variants are render-pass-compatible, so the
         // same pipelines serve both.
-        VkRenderPass GetOrCreateRTRenderPassMsaa(VkFormat depthFmt, bool discardContents,
+        VkRenderPass GetOrCreateRTRenderPassMsaa(VkFormat colorFmt, VkFormat depthFmt,
+                                                 bool discardContents,
                                                  VkSampleCountFlagBits samples);
         /**
          * @brief plan_vulkan.md VULKAN-216: the sample count `msaa == true` currently denotes.
@@ -4473,6 +4568,12 @@ namespace CNA::Internal::Renderers::Vulkan
             return msaa ? pipelineSampleCount_ : VK_SAMPLE_COUNT_1_BIT;
         }
         VkSampleCountFlagBits pipelineSampleCount_ = VK_SAMPLE_COUNT_1_BIT;
+        std::array<int32_t, 4> pipelineColorFormats_{};
+        void SetPipelineColorFormatsEXT(const VulkanRTSource* target);
+        void ApplyPipelineTargetKeyEXT(PipelineKey& key) const noexcept
+        {
+            key.cf = pipelineColorFormats_;
+        }
         void CreateSurface();
         void PickPhysicalDevice();
         void CreateLogicalDevice();
@@ -4726,12 +4827,12 @@ namespace CNA::Internal::Renderers::Vulkan
         void CreateSpriteBuffers();
         void CreateFrame3DBuffers();
         void EnsureFrame3DBuffers();
-        VkRenderPass GetOrCreateMRTRenderPass(uint32_t colorAttachmentCount,
+        VkRenderPass GetOrCreateMRTRenderPass(const std::vector<VkFormat>& colorFormats,
                                               VkSampleCountFlagBits sampleCount,
                                               VkFormat depthFormat);
-        // The render-pass-selection decision shared by every 2D/custom/3D pipeline. MRT uses a
-        // pass keyed by color count, sample count, and binding 0's depth format; single-target
-        // draws reuse compatible backbuffer passes or a depth-format-keyed RT pass.
+        // The render-pass-selection decision shared by every 2D/custom/3D pipeline. MRT uses every
+        // colour format, the sample count and binding 0's depth format; single-target draws reuse
+        // compatible backbuffer passes or an exact-format RT pass.
         /// @param samplesOverride VULKAN-216: the sample count to build against when the caller
         ///        already knows it and is NOT inside a `RecordCommandBuffer` segment (the effect
         ///        renderer builds its pipeline at `SpriteBatch::End()` time, before replay, so

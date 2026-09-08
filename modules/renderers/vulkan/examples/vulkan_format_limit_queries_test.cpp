@@ -150,20 +150,6 @@ protected:
         bool bcNeedsEnabledFeature = true;
         std::string firstMaskError;
 
-        VkFormatProperties renderTargetProperties{};
-        vkGetPhysicalDeviceFormatProperties(
-            physical, renderTargetFormat, &renderTargetProperties);
-        VkImageFormatProperties multisampleProperties{};
-        constexpr VkImageUsageFlags multisampleUsage =
-            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT;
-        const bool nativeMultisample =
-            vkGetPhysicalDeviceImageFormatProperties(
-                physical, renderTargetFormat, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
-                multisampleUsage, 0, &multisampleProperties) == VK_SUCCESS &&
-            (multisampleProperties.sampleCounts &
-             renderer->GetDeviceLimitsEXT().framebufferColorSampleCounts &
-             ~VK_SAMPLE_COUNT_1_BIT) != 0;
-
         for (const auto& format : kFormats)
         {
             const int ordinal = static_cast<int>(format.surface);
@@ -191,23 +177,66 @@ protected:
             const bool expectedRenderTarget =
                 renderer->ClassifyRenderTargetFormatEXT(ordinal) ==
                     RendererFormatVerdict::Supported;
+            VulkanRenderer::VulkanSurfaceFormatStorageEXT renderTargetStorage{};
+            const bool renderTargetMapped = renderer->MapRenderTargetFormatToStorageEXT(
+                ordinal, renderTargetStorage);
+            VkFormatProperties renderTargetProperties{};
+            if (renderTargetMapped)
+                vkGetPhysicalDeviceFormatProperties(
+                    physical, renderTargetStorage.format, &renderTargetProperties);
             const bool expectedBlend = expectedRenderTarget &&
                 (renderTargetProperties.optimalTilingFeatures &
                  VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT) != 0;
             const bool expectedTransferSource = expectedRenderTarget &&
                 (renderTargetProperties.optimalTilingFeatures &
                  VK_FORMAT_FEATURE_TRANSFER_SRC_BIT) != 0;
-            const bool expectedMips = expectedStorage && textureProperties.maxMipLevels > 1;
-            const bool expectedFilter = expectedStorage &&
-                (properties.optimalTilingFeatures &
-                 VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) != 0;
+            VkImageFormatProperties renderTargetImageProperties{};
+            constexpr VkImageUsageFlags renderTargetUsage =
+                VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+                VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+            const bool nativeRenderTargetImage = expectedRenderTarget && renderTargetMapped &&
+                vkGetPhysicalDeviceImageFormatProperties(
+                    physical, renderTargetStorage.format, VK_IMAGE_TYPE_2D,
+                    VK_IMAGE_TILING_OPTIMAL, renderTargetUsage, 0,
+                    &renderTargetImageProperties) == VK_SUCCESS;
+            const bool expectedMips =
+                (expectedStorage && textureProperties.maxMipLevels > 1) ||
+                (nativeRenderTargetImage && renderTargetImageProperties.maxMipLevels > 1 &&
+                 (renderTargetProperties.optimalTilingFeatures &
+                  (VK_FORMAT_FEATURE_BLIT_SRC_BIT | VK_FORMAT_FEATURE_BLIT_DST_BIT |
+                   VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT)) ==
+                     (VK_FORMAT_FEATURE_BLIT_SRC_BIT | VK_FORMAT_FEATURE_BLIT_DST_BIT |
+                      VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT));
+            const bool expectedSampled = expectedStorage ||
+                (expectedRenderTarget &&
+                 (renderTargetProperties.optimalTilingFeatures &
+                  VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) != 0);
+            const bool expectedFilter =
+                (expectedStorage &&
+                 (properties.optimalTilingFeatures &
+                  VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) != 0) ||
+                (expectedRenderTarget &&
+                 (renderTargetProperties.optimalTilingFeatures &
+                  VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) != 0);
+            VkImageFormatProperties multisampleProperties{};
+            constexpr VkImageUsageFlags multisampleUsage =
+                VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT;
+            const bool nativeMultisample = expectedRenderTarget && renderTargetMapped &&
+                vkGetPhysicalDeviceImageFormatProperties(
+                    physical, renderTargetStorage.format, VK_IMAGE_TYPE_2D,
+                    VK_IMAGE_TILING_OPTIMAL, multisampleUsage, 0,
+                    &multisampleProperties) == VK_SUCCESS &&
+                (multisampleProperties.sampleCounts &
+                 renderer->GetDeviceLimitsEXT().framebufferColorSampleCounts &
+                 ~VK_SAMPLE_COUNT_1_BIT) != 0;
             const bool expectedColorTransfer =
                 format.surface == SurfaceFormat::Color && expectedStorage;
 
             const bool oneExact = support.knownUsages == kAllUsageBits &&
                 (support.supportedUsages & ~support.knownUsages) == 0 &&
                 support.Supports(CNA::RendererFormatUsage::TextureStorage) == expectedStorage &&
-                support.Supports(CNA::RendererFormatUsage::Sampled) == expectedStorage &&
+                support.Supports(CNA::RendererFormatUsage::Sampled) == expectedSampled &&
                 support.Supports(CNA::RendererFormatUsage::Filterable) == expectedFilter &&
                 support.Supports(CNA::RendererFormatUsage::RenderTarget) == expectedRenderTarget &&
                 support.Supports(CNA::RendererFormatUsage::Blendable) == expectedBlend &&
@@ -220,7 +249,7 @@ protected:
                     expectedStorage &&
                 support.Supports(CNA::RendererFormatUsage::Mipmapped) == expectedMips &&
                 support.Supports(CNA::RendererFormatUsage::Multisample) ==
-                    (expectedRenderTarget && nativeMultisample) &&
+                    nativeMultisample &&
                 support.Supports(CNA::RendererFormatUsage::ColorTransfer) ==
                     expectedColorTransfer;
             if (!oneExact && firstMaskError.empty())
