@@ -188,6 +188,101 @@ namespace Microsoft::Xna::Framework::Graphics
             && f <= static_cast<int>(CubeMapFace::NegativeZ);
     }
 
+    int TextureCube::ValidateTypedTransferEXT(
+        const char* api, CubeMapFace face, int level,
+        const Microsoft::Xna::Framework::Rectangle* rect,
+        int startIndex, int elementCount, int elementBytes) const
+    {
+        if (getIsDisposedProperty())
+            throw System::ObjectDisposedException("TextureCube");
+        if (!IsValidCubeMapFace(face))
+            throw std::out_of_range(std::string(api) + ": face is not a valid CubeMapFace value");
+        if (startIndex < 0)
+            throw std::out_of_range(std::string(api) + ": startIndex must be >= 0");
+        if (elementCount <= 0)
+            throw std::out_of_range(std::string(api) + ": elementCount must be > 0");
+        if (level < 0 || level >= levelCount_)
+            throw std::out_of_range(std::string(api) + ": level must be within the mip chain");
+        if (Texture::GetBlockSizeSquaredEXT(format_) != 1 ||
+            Texture::GetFormatSizeEXT(format_) != elementBytes)
+        {
+            throw std::invalid_argument(
+                std::string(api) +
+                ": packed element width does not match the uncompressed cube format");
+        }
+
+        const int levelSize = mipDim(size_, level);
+        int x = 0;
+        int y = 0;
+        int width = levelSize;
+        int height = levelSize;
+        if (rect != nullptr)
+        {
+            x = rect->X;
+            y = rect->Y;
+            width = rect->Width;
+            height = rect->Height;
+        }
+        if (x < 0 || y < 0 || width <= 0 || height <= 0 ||
+            width > levelSize || height > levelSize ||
+            x > levelSize - width || y > levelSize - height)
+        {
+            throw std::out_of_range(std::string(api) + ": rectangle out of texture bounds");
+        }
+        const int required = width * height;
+        if (elementCount < required)
+        {
+            throw std::out_of_range(
+                std::string(api) +
+                ": elementCount is less than the number of texels in the requested region");
+        }
+        return required;
+    }
+
+    void TextureCube::SetTypedDataBytesEXT(
+        CubeMapFace face, int level, const Microsoft::Xna::Framework::Rectangle* rect,
+        const std::uint8_t* data, int elementBytes)
+    {
+        if (!renderer_)
+            throw System::NotSupportedException(
+                "TextureCube::SetData: this renderer creates no cube-map resource");
+        const int levelSize = mipDim(size_, level);
+        const int x = rect != nullptr ? rect->X : 0;
+        const int y = rect != nullptr ? rect->Y : 0;
+        const int width = rect != nullptr ? rect->Width : levelSize;
+        const int height = rect != nullptr ? rect->Height : levelSize;
+        if (!renderer_->SetDataBytesEXT(
+                static_cast<int>(face), level, x, y, width, height,
+                data, width * height * elementBytes))
+        {
+            throw System::NotSupportedException(
+                "TextureCube::SetData: the active renderer did not store the complete "
+                "declared-format cube region");
+        }
+    }
+
+    void TextureCube::GetTypedDataBytesEXT(
+        CubeMapFace face, int level, const Microsoft::Xna::Framework::Rectangle* rect,
+        std::uint8_t* data, int elementBytes) const
+    {
+        if (!renderer_)
+            throw System::NotSupportedException(
+                "TextureCube::GetData: this renderer creates no cube-map resource");
+        const int levelSize = mipDim(size_, level);
+        const int x = rect != nullptr ? rect->X : 0;
+        const int y = rect != nullptr ? rect->Y : 0;
+        const int width = rect != nullptr ? rect->Width : levelSize;
+        const int height = rect != nullptr ? rect->Height : levelSize;
+        if (!renderer_->GetDataBytesEXT(
+                static_cast<int>(face), level, x, y, width, height,
+                data, width * height * elementBytes))
+        {
+            throw System::NotSupportedException(
+                "TextureCube::GetData: the active renderer did not return the complete "
+                "declared-format cube region");
+        }
+    }
+
     void TextureCube::SetData(CubeMapFace face, int level, const Microsoft::Xna::Framework::Rectangle* rect,
                               const Color* data, int startIndex, int elementCount)
     {

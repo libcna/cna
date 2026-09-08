@@ -418,6 +418,31 @@ namespace CNA::Internal::Renderers
             return false;
         }
         /**
+         * @brief Uploads exact uncompressed declared-format texels into one cube face.
+         *
+         * Unlike @ref SetData, this route does not imply RGBA8. The concrete cube resource knows
+         * its SurfaceFormat and must interpret each tightly packed row in that exact layout. The
+         * default refuses so existing renderers cannot silently claim typed cube transfers.
+         *
+         * @param face Cube face index.
+         * @param level Mip level beginning at zero.
+         * @param x Destination x coordinate in texels.
+         * @param y Destination y coordinate in texels.
+         * @param w Region width in texels.
+         * @param h Region height in texels.
+         * @param data Exact declared-format texels, tightly packed by row.
+         * @param dataLength Available source bytes.
+         * @return True only when the complete region was stored.
+         */
+        [[nodiscard]] virtual bool SetDataBytesEXT(
+            int face, int level, int x, int y, int w, int h,
+            const void* data, int dataLength)
+        {
+            (void)face; (void)level; (void)x; (void)y; (void)w; (void)h;
+            (void)data; (void)dataLength;
+            return false;
+        }
+        /**
          * @brief Reads back raw RGBA8 pixels from a sub-rectangle of a single cube face.
          *
          * REMED-GFX-130, extending REMED-GFX-127's contract to this interface. Returns **true only
@@ -447,6 +472,30 @@ namespace CNA::Internal::Renderers
          */
         [[nodiscard]] virtual bool GetData(int face, int level, int x, int y, int w, int h,
                                            void* data, int dataLength) const
+        {
+            (void)face; (void)level; (void)x; (void)y; (void)w; (void)h;
+            (void)data; (void)dataLength;
+            return false;
+        }
+        /**
+         * @brief Reads exact uncompressed declared-format texels from one cube face.
+         *
+         * The destination layout is the cube resource's actual SurfaceFormat, not RGBA8. The
+         * default refuses so callers never receive converted or fabricated bytes.
+         *
+         * @param face Cube face index.
+         * @param level Mip level beginning at zero.
+         * @param x Source x coordinate in texels.
+         * @param y Source y coordinate in texels.
+         * @param w Region width in texels.
+         * @param h Region height in texels.
+         * @param data Destination for tightly packed declared-format texels.
+         * @param dataLength Available destination bytes.
+         * @return True only when the complete region was copied.
+         */
+        [[nodiscard]] virtual bool GetDataBytesEXT(
+            int face, int level, int x, int y, int w, int h,
+            void* data, int dataLength) const
         {
             (void)face; (void)level; (void)x; (void)y; (void)w; (void)h;
             (void)data; (void)dataLength;

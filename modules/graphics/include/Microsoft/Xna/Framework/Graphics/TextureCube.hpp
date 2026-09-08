@@ -2,7 +2,10 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 #include <memory>
+#include <stdexcept>
+#include <type_traits>
 #include <vector>
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -17,6 +20,17 @@ namespace CNA::Internal::Renderers
 }
 
 namespace System::IO { class Stream; }
+
+namespace CNA::Internal::Graphics
+{
+    /** @brief Identifies XNA packed-vector elements that expose their exact storage word. */
+    template<typename T>
+    concept TextureCubePackedElement = requires(T value, const T constantValue)
+    {
+        constantValue.getPackedValueProperty();
+        value.setPackedValueProperty(constantValue.getPackedValueProperty());
+    };
+}
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -102,6 +116,71 @@ namespace Microsoft::Xna::Framework::Graphics
                      const Color* data, int startIndex, int elementCount);
 
         /**
+         * @brief Uploads packed-vector data to an entire cube face.
+         *
+         * @tparam T An XNA packed-vector type whose packed width matches the cube format.
+         * @param face Cube face to update.
+         * @param data Source packed elements.
+         * @param elementCount Number of available elements.
+         */
+        template<CNA::Internal::Graphics::TextureCubePackedElement T>
+        void SetData(CubeMapFace face, const T* data, int elementCount)
+        {
+            SetData(face, 0, nullptr, data, 0, elementCount);
+        }
+
+        /**
+         * @brief Uploads a source window of packed-vector data to an entire cube face.
+         *
+         * @tparam T An XNA packed-vector type whose packed width matches the cube format.
+         * @param face Cube face to update.
+         * @param data Source packed elements.
+         * @param startIndex First source element.
+         * @param elementCount Number of available elements beginning at @p startIndex.
+         */
+        template<CNA::Internal::Graphics::TextureCubePackedElement T>
+        void SetData(CubeMapFace face, const T* data, int startIndex, int elementCount)
+        {
+            SetData(face, 0, nullptr, data, startIndex, elementCount);
+        }
+
+        /**
+         * @brief Uploads packed-vector data to a cube-face mip or rectangle.
+         *
+         * @tparam T An XNA packed-vector type whose packed width matches the cube format.
+         * @param face Cube face to update.
+         * @param level Mip level beginning at zero.
+         * @param rect Destination rectangle, or null for the complete level.
+         * @param data Source packed elements.
+         * @param startIndex First source element.
+         * @param elementCount Number of available elements beginning at @p startIndex.
+         */
+        template<CNA::Internal::Graphics::TextureCubePackedElement T>
+        void SetData(CubeMapFace face, int level,
+                     const Microsoft::Xna::Framework::Rectangle* rect,
+                     const T* data, int startIndex, int elementCount)
+        {
+            if (data == nullptr)
+                throw std::invalid_argument("TextureCube::SetData: data must not be null");
+            using Word = std::remove_cvref_t<decltype(data[0].getPackedValueProperty())>;
+            static_assert(std::is_unsigned_v<Word>);
+            const int required = ValidateTypedTransferEXT(
+                "TextureCube::SetData", face, level, rect,
+                startIndex, elementCount, static_cast<int>(sizeof(Word)));
+            std::vector<std::uint8_t> bytes(
+                static_cast<std::size_t>(required) * sizeof(Word));
+            for (int index = 0; index < required; ++index)
+            {
+                const Word value = data[startIndex + index].getPackedValueProperty();
+                for (std::size_t byte = 0; byte < sizeof(Word); ++byte)
+                    bytes[static_cast<std::size_t>(index) * sizeof(Word) + byte] =
+                        static_cast<std::uint8_t>(value >> (byte * 8u));
+            }
+            SetTypedDataBytesEXT(face, level, rect, bytes.data(),
+                                 static_cast<int>(sizeof(Word)));
+        }
+
+        /**
          * @brief Uploads exact block-compressed bytes to an entire cube face.
          *
          * This represents XNA's generic byte-array SetData route for Dxt1, Dxt3 and Dxt5 cube
@@ -175,6 +254,73 @@ namespace Microsoft::Xna::Framework::Graphics
                      Color* data, int startIndex, int elementCount) const;
 
         /**
+         * @brief Reads an entire cube face into packed-vector elements.
+         *
+         * @tparam T An XNA packed-vector type whose packed width matches the cube format.
+         * @param face Cube face to read.
+         * @param data Destination packed elements.
+         * @param elementCount Number of available destination elements.
+         */
+        template<CNA::Internal::Graphics::TextureCubePackedElement T>
+        void GetData(CubeMapFace face, T* data, int elementCount) const
+        {
+            GetData(face, 0, nullptr, data, 0, elementCount);
+        }
+
+        /**
+         * @brief Reads an entire cube face into a destination window of packed-vector elements.
+         *
+         * @tparam T An XNA packed-vector type whose packed width matches the cube format.
+         * @param face Cube face to read.
+         * @param data Destination packed elements.
+         * @param startIndex First destination element.
+         * @param elementCount Number of available elements beginning at @p startIndex.
+         */
+        template<CNA::Internal::Graphics::TextureCubePackedElement T>
+        void GetData(CubeMapFace face, T* data, int startIndex, int elementCount) const
+        {
+            GetData(face, 0, nullptr, data, startIndex, elementCount);
+        }
+
+        /**
+         * @brief Reads a cube-face mip or rectangle into packed-vector elements.
+         *
+         * @tparam T An XNA packed-vector type whose packed width matches the cube format.
+         * @param face Cube face to read.
+         * @param level Mip level beginning at zero.
+         * @param rect Source rectangle, or null for the complete level.
+         * @param data Destination packed elements.
+         * @param startIndex First destination element.
+         * @param elementCount Number of available elements beginning at @p startIndex.
+         */
+        template<CNA::Internal::Graphics::TextureCubePackedElement T>
+        void GetData(CubeMapFace face, int level,
+                     const Microsoft::Xna::Framework::Rectangle* rect,
+                     T* data, int startIndex, int elementCount) const
+        {
+            if (data == nullptr)
+                throw std::invalid_argument("TextureCube::GetData: data must not be null");
+            using Word = std::remove_cvref_t<decltype(data[0].getPackedValueProperty())>;
+            static_assert(std::is_unsigned_v<Word>);
+            const int required = ValidateTypedTransferEXT(
+                "TextureCube::GetData", face, level, rect,
+                startIndex, elementCount, static_cast<int>(sizeof(Word)));
+            std::vector<std::uint8_t> bytes(
+                static_cast<std::size_t>(required) * sizeof(Word));
+            GetTypedDataBytesEXT(face, level, rect, bytes.data(),
+                                 static_cast<int>(sizeof(Word)));
+            for (int index = 0; index < required; ++index)
+            {
+                Word value = 0;
+                for (std::size_t byte = 0; byte < sizeof(Word); ++byte)
+                    value |= static_cast<Word>(
+                        bytes[static_cast<std::size_t>(index) * sizeof(Word) + byte])
+                        << (byte * 8u);
+                data[startIndex + index].setPackedValueProperty(value);
+            }
+        }
+
+        /**
          * @brief Creates a TextureCube by decoding DDS image data from a stream.
          *
          * @param device The graphics device to create the texture on.
@@ -211,6 +357,17 @@ namespace Microsoft::Xna::Framework::Graphics
         void Dispose(bool disposing) override;
 
     private:
+        [[nodiscard]] int ValidateTypedTransferEXT(
+            const char* api, CubeMapFace face, int level,
+            const Microsoft::Xna::Framework::Rectangle* rect,
+            int startIndex, int elementCount, int elementBytes) const;
+        void SetTypedDataBytesEXT(
+            CubeMapFace face, int level, const Microsoft::Xna::Framework::Rectangle* rect,
+            const std::uint8_t* data, int elementBytes);
+        void GetTypedDataBytesEXT(
+            CubeMapFace face, int level, const Microsoft::Xna::Framework::Rectangle* rect,
+            std::uint8_t* data, int elementBytes) const;
+
         int size_;
         // Shared ownership gives C++ value wrappers the reference-resource behavior used by CNA's
         // Texture2D mapping and lets effect renderers observe cube lifetime through weak_ptr.

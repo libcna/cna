@@ -16,6 +16,9 @@
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Alpha8.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgr565.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgra4444.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgra5551.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfSingle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfVector2.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfVector4.hpp"
@@ -149,6 +152,68 @@ namespace
         EXPECT_NEAR(pixel.getAProperty(), a, tolerance);
     }
 
+    template<typename T, typename Factory>
+    void VerifyExactCubeTransfers(GraphicsDevice& device, SurfaceFormat format, Factory makeValue)
+    {
+        const RendererFormatVerdict verdict =
+            device.GetRenderer().ClassifyTextureCubeFormatEXT(static_cast<int>(format));
+        if (verdict != RendererFormatVerdict::Supported)
+        {
+            if (CNA_RENDERER_IS(Software))
+                ADD_FAILURE() << "Software must support classic cube SurfaceFormat ordinal "
+                              << static_cast<int>(format);
+            return;
+        }
+
+        SCOPED_TRACE(static_cast<int>(format));
+        TextureCube cube(device, 4, true, format);
+        std::vector<T> source(18, makeValue(90));
+        std::vector<T> expected;
+        expected.reserve(16);
+        for (int index = 0; index < 16; ++index)
+        {
+            expected.push_back(makeValue(index));
+            source[static_cast<std::size_t>(index + 1)] = expected.back();
+        }
+        cube.SetData(CubeMapFace::PositiveZ, source.data(), 1, 16);
+
+        std::vector<T> readback(18, makeValue(91));
+        cube.GetData(CubeMapFace::PositiveZ, readback.data(), 1, 16);
+        EXPECT_EQ(readback.front(), makeValue(91));
+        EXPECT_EQ(readback.back(), makeValue(91));
+        for (int index = 0; index < 16; ++index)
+            EXPECT_EQ(readback[static_cast<std::size_t>(index + 1)], expected[index]);
+
+        const Rectangle patchRectangle(1, 1, 2, 2);
+        std::vector<T> patch(6, makeValue(92));
+        for (int index = 0; index < 4; ++index)
+            patch[static_cast<std::size_t>(index + 1)] = makeValue(20 + index);
+        cube.SetData(CubeMapFace::PositiveZ, 0, &patchRectangle,
+                     patch.data(), 1, 4);
+        expected[5] = patch[1];
+        expected[6] = patch[2];
+        expected[9] = patch[3];
+        expected[10] = patch[4];
+
+        std::vector<T> rectangleRead(6, makeValue(93));
+        cube.GetData(CubeMapFace::PositiveZ, 0, &patchRectangle,
+                     rectangleRead.data(), 1, 4);
+        EXPECT_EQ(rectangleRead.front(), makeValue(93));
+        EXPECT_EQ(rectangleRead.back(), makeValue(93));
+        for (int index = 0; index < 4; ++index)
+            EXPECT_EQ(rectangleRead[static_cast<std::size_t>(index + 1)], patch[index + 1]);
+
+        const T mipValue = makeValue(40);
+        cube.SetData(CubeMapFace::NegativeX, 2, nullptr, &mipValue, 0, 1);
+        T mipRead = makeValue(94);
+        cube.GetData(CubeMapFace::NegativeX, 2, nullptr, &mipRead, 0, 1);
+        EXPECT_EQ(mipRead, mipValue);
+
+        std::vector<T> finalRead(16, makeValue(95));
+        cube.GetData(CubeMapFace::PositiveZ, finalRead.data(), 16);
+        EXPECT_EQ(finalRead, expected);
+    }
+
     [[nodiscard]] Color DrawWithBasicEffect(GraphicsDevice& device, Texture2D& texture,
                                             const Vector3& diffuse)
     {
@@ -232,6 +297,22 @@ namespace
         std::vector<Color> pixels(static_cast<std::size_t>(size) * size);
         target.GetData(pixels.data(), static_cast<int>(pixels.size()));
         return pixels[static_cast<std::size_t>(size / 2) * size + size / 2];
+    }
+
+    template<typename T>
+    void VerifyCubeSample(GraphicsDevice& device, SurfaceFormat format, const T& value,
+                          int red, int green, int blue, int tolerance = 2)
+    {
+        if (device.GetRenderer().ClassifyTextureCubeFormatEXT(static_cast<int>(format)) !=
+            RendererFormatVerdict::Supported)
+            return;
+        SCOPED_TRACE(static_cast<int>(format));
+        TextureCube cube(device, 1, false, format);
+        cube.SetData(CubeMapFace::PositiveZ, &value, 1);
+        const Color sampled = DrawWithEnvironmentMap(device, cube);
+        EXPECT_NEAR(sampled.getRProperty(), red, tolerance);
+        EXPECT_NEAR(sampled.getGProperty(), green, tolerance);
+        EXPECT_NEAR(sampled.getBProperty(), blue, tolerance);
     }
 }
 
@@ -370,6 +451,60 @@ TEST(ClassicTextureFormat, DxtCubeBlocksFeedThePublicEnvironmentMapSampler)
     EXPECT_NEAR(sampled.getAProperty(), 255, 2);
 }
 
+TEST(ClassicTextureFormat, NormalizedIntegerCubeFormatsPreserveExactTransfers)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+
+    VerifyExactCubeTransfers<Bgr565>(device, SurfaceFormat::Bgr565, [](int index) {
+        return Bgr565((index % 11) / 10.0f, (index % 7) / 6.0f,
+                      (index % 5) / 4.0f);
+    });
+    VerifyExactCubeTransfers<Bgra5551>(device, SurfaceFormat::Bgra5551, [](int index) {
+        return Bgra5551((index % 11) / 10.0f, (index % 7) / 6.0f,
+                        (index % 5) / 4.0f, (index % 2) * 1.0f);
+    });
+    VerifyExactCubeTransfers<Bgra4444>(device, SurfaceFormat::Bgra4444, [](int index) {
+        return Bgra4444((index % 11) / 10.0f, (index % 7) / 6.0f,
+                        (index % 5) / 4.0f, (index % 4) / 3.0f);
+    });
+    VerifyExactCubeTransfers<Rgba1010102>(device, SurfaceFormat::Rgba1010102, [](int index) {
+        return Rgba1010102((index % 11) / 10.0f, (index % 7) / 6.0f,
+                           (index % 5) / 4.0f, (index % 4) / 3.0f);
+    });
+    VerifyExactCubeTransfers<Rg32>(device, SurfaceFormat::Rg32, [](int index) {
+        return Rg32((index % 13) / 12.0f, (index % 9) / 8.0f);
+    });
+    VerifyExactCubeTransfers<Rgba64>(device, SurfaceFormat::Rgba64, [](int index) {
+        return Rgba64((index % 13) / 12.0f, (index % 11) / 10.0f,
+                      (index % 7) / 6.0f, (index % 5) / 4.0f);
+    });
+    VerifyExactCubeTransfers<Alpha8>(device, SurfaceFormat::Alpha8, [](int index) {
+        return Alpha8((index % 17) / 16.0f);
+    });
+}
+
+TEST(ClassicTextureFormat, NormalizedIntegerCubeFormatsFeedEnvironmentMapSampling)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+
+    VerifyCubeSample(device, SurfaceFormat::Bgr565,
+                     Bgr565(0.5f, 0.25f, 1.0f), 132, 65, 255, 4);
+    VerifyCubeSample(device, SurfaceFormat::Bgra5551,
+                     Bgra5551(0.5f, 0.25f, 1.0f, 1.0f), 132, 66, 255, 5);
+    VerifyCubeSample(device, SurfaceFormat::Bgra4444,
+                     Bgra4444(0.5f, 0.25f, 1.0f, 1.0f), 136, 68, 255, 5);
+    VerifyCubeSample(device, SurfaceFormat::Rgba1010102,
+                     Rgba1010102(0.5f, 0.25f, 1.0f, 1.0f), 128, 64, 255);
+    VerifyCubeSample(device, SurfaceFormat::Rg32,
+                     Rg32(0.5f, 0.25f), 128, 64, 255);
+    VerifyCubeSample(device, SurfaceFormat::Rgba64,
+                     Rgba64(0.5f, 0.25f, 1.0f, 1.0f), 128, 64, 255);
+    VerifyCubeSample(device, SurfaceFormat::Alpha8,
+                     Alpha8(0.75f), 0, 0, 0);
+}
+
 TEST(ClassicTextureFormat, PlainCubeCapabilityDoesNotInheritTexture2DFormatClaims)
 {
     if (!CNA_RENDERER_IS(Software, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2))
@@ -378,15 +513,8 @@ TEST(ClassicTextureFormat, PlainCubeCapabilityDoesNotInheritTexture2DFormatClaim
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
                           PresentationParameters());
     const SurfaceFormat unfinishedFormats[] = {
-        SurfaceFormat::Bgr565,
-        SurfaceFormat::Bgra5551,
-        SurfaceFormat::Bgra4444,
         SurfaceFormat::NormalizedByte2,
         SurfaceFormat::NormalizedByte4,
-        SurfaceFormat::Rgba1010102,
-        SurfaceFormat::Rg32,
-        SurfaceFormat::Rgba64,
-        SurfaceFormat::Alpha8,
         SurfaceFormat::Single,
         SurfaceFormat::Vector2,
         SurfaceFormat::Vector4,
@@ -406,12 +534,28 @@ TEST(ClassicTextureFormat, PlainCubeCapabilityDoesNotInheritTexture2DFormatClaim
 
     for (const SurfaceFormat format : {
              SurfaceFormat::Color, SurfaceFormat::Dxt1,
-             SurfaceFormat::Dxt3, SurfaceFormat::Dxt5})
+             SurfaceFormat::Dxt3, SurfaceFormat::Dxt5,
+             SurfaceFormat::Bgr565, SurfaceFormat::Bgra5551,
+             SurfaceFormat::Bgra4444, SurfaceFormat::Rgba1010102,
+             SurfaceFormat::Alpha8})
     {
         SCOPED_TRACE(static_cast<int>(format));
         EXPECT_EQ(device.GetRenderer().ClassifyTextureCubeFormatEXT(
                       static_cast<int>(format)),
                   RendererFormatVerdict::Supported);
         EXPECT_NO_THROW(TextureCube(device, 4, false, format));
+    }
+
+    for (const SurfaceFormat format : {SurfaceFormat::Rg32, SurfaceFormat::Rgba64})
+    {
+        SCOPED_TRACE(static_cast<int>(format));
+        const RendererFormatVerdict expected =
+            device.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(format));
+        EXPECT_EQ(device.GetRenderer().ClassifyTextureCubeFormatEXT(static_cast<int>(format)),
+                  expected);
+        if (expected == RendererFormatVerdict::Supported)
+            EXPECT_NO_THROW(TextureCube(device, 4, false, format));
+        else
+            EXPECT_THROW(TextureCube(device, 4, false, format), System::NotSupportedException);
     }
 }

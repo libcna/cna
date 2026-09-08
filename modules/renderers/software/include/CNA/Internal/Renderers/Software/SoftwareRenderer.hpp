@@ -682,6 +682,22 @@ namespace CNA::Internal::Renderers::Software
             int face, int level, int x, int y, int w, int h,
             const void* data, int dataLength) override;
         /**
+         * @brief Stores exact uncompressed declared-format cube texels.
+         *
+         * @param face Raw CubeMapFace ordinal.
+         * @param level Mip level beginning at zero.
+         * @param x Destination x coordinate in texels.
+         * @param y Destination y coordinate in texels.
+         * @param w Region width in texels.
+         * @param h Region height in texels.
+         * @param data Tightly packed declared-format source texels.
+         * @param dataLength Available source bytes.
+         * @return True when the complete region and its decoded sampling plane were updated.
+         */
+        [[nodiscard]] bool SetDataBytesEXT(
+            int face, int level, int x, int y, int w, int h,
+            const void* data, int dataLength) override;
+        /**
          * @brief Reads one face's stored RGBA8 sub-rectangle back from this renderer's CPU shadow.
          *
          * REMED-GFX-130. `levels_` IS this resource's authoritative content here -- SetData writes
@@ -695,6 +711,22 @@ namespace CNA::Internal::Renderers::Software
          */
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
+        /**
+         * @brief Reads exact uncompressed declared-format cube texels.
+         *
+         * @param face Raw CubeMapFace ordinal.
+         * @param level Mip level beginning at zero.
+         * @param x Source x coordinate in texels.
+         * @param y Source y coordinate in texels.
+         * @param w Region width in texels.
+         * @param h Region height in texels.
+         * @param data Destination for tightly packed declared-format texels.
+         * @param dataLength Available destination bytes.
+         * @return True when the complete requested raw region was copied.
+         */
+        [[nodiscard]] bool GetDataBytesEXT(
+            int face, int level, int x, int y, int w, int h,
+            void* data, int dataLength) const override;
 
         [[nodiscard]] int GetSize() const { return size_; }
         /**
@@ -774,6 +806,19 @@ namespace CNA::Internal::Renderers::Software
         [[nodiscard]] const std::vector<std::uint8_t>& CubeFacePixels(
             int face, int level) const override
         { return FacePixels(face, level); }
+        /**
+         * @brief Fetches one format-decoded cube texel without precision narrowing.
+         * @param face Raw CubeMapFace ordinal.
+         * @param level Mip level beginning at zero.
+         * @param x Texel x coordinate.
+         * @param y Texel y coordinate.
+         * @param r Receives red.
+         * @param g Receives green.
+         * @param b Receives blue.
+         * @param a Receives alpha.
+         */
+        void FetchCubeColorTexel(int face, int level, int x, int y,
+                                 float& r, float& g, float& b, float& a) const override;
 
     private:
         /// Face edge length at @p level, never below 1 -- mirrors TextureCube.cpp's own mipDim().
@@ -784,6 +829,10 @@ namespace CNA::Internal::Renderers::Software
         int levelCount_ = 1;
         /// levels_[level][face] -- one tightly packed RGBA8 buffer per face per allocated mip level.
         std::vector<std::array<std::vector<std::uint8_t>, 6>> levels_;
+        /// Exact uncompressed declared-format bytes, retained independently from sampled colour.
+        std::vector<std::array<std::vector<std::uint8_t>, 6>> rawLevels_;
+        /// Canonical shader-visible RGBA values preserving wider-than-8-bit precision.
+        std::vector<std::array<std::vector<float>, 6>> sampleLevels_;
         /// Exact face/mip DXT blocks; empty for an uncompressed cube.
         std::vector<std::array<std::vector<std::uint8_t>, 6>> compressedLevels_;
         /// REMED-GFX-182: supplied_[level][face] -- whether the FULL face rectangle at that level

@@ -1,4 +1,5 @@
 #include "CNA/Internal/Renderers/Software/SoftwareRenderer.hpp"
+#include "SoftwareTextureFormat.hpp"
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ColorMatrixEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfTypeHelper.hpp"
@@ -3641,15 +3642,34 @@ namespace CNA::Internal::Renderers::Software
                                 format == SurfaceFormat::Dxt3 ||
                                 format == SurfaceFormat::Dxt5;
         levels_.resize(static_cast<std::size_t>(levelCount_));
+        sampleLevels_.resize(static_cast<std::size_t>(levelCount_));
         if (compressed)
             compressedLevels_.resize(static_cast<std::size_t>(levelCount_));
+        else
+            rawLevels_.resize(static_cast<std::size_t>(levelCount_));
         supplied_.assign(static_cast<std::size_t>(levelCount_), std::array<bool, 6>{});
         for (int level = 0; level < levelCount_; ++level)
         {
             const int dim = LevelDim(level);
             const std::size_t faceBytes = static_cast<std::size_t>(dim) * static_cast<std::size_t>(dim) * 4u;
-            for (auto& face : levels_[static_cast<std::size_t>(level)])
-                face.assign(faceBytes, 0u);
+            for (int face = 0; face < 6; ++face)
+            {
+                levels_[static_cast<std::size_t>(level)][static_cast<std::size_t>(face)]
+                    .assign(faceBytes, 0u);
+                sampleLevels_[static_cast<std::size_t>(level)][static_cast<std::size_t>(face)]
+                    .assign(faceBytes, 0.0f);
+                if (!compressed)
+                {
+                    auto& raw = rawLevels_[static_cast<std::size_t>(level)]
+                                         [static_cast<std::size_t>(face)];
+                    raw.assign(SoftwareTextureFormat::RawByteCount(surfaceFormat_, dim, dim), 0u);
+                    SoftwareTextureFormat::DecodePixels(
+                        surfaceFormat_, raw.data(), raw.size(),
+                        dim * SoftwareTextureFormat::BytesPerTexel(surfaceFormat_), dim, dim,
+                        levels_[static_cast<std::size_t>(level)][static_cast<std::size_t>(face)],
+                        sampleLevels_[static_cast<std::size_t>(level)][static_cast<std::size_t>(face)]);
+                }
+            }
             if (compressed)
             {
                 const std::size_t blockBytes = format == SurfaceFormat::Dxt1 ? 8u : 16u;
@@ -3682,9 +3702,16 @@ namespace CNA::Internal::Renderers::Software
     {
         using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
         const auto format = static_cast<SurfaceFormat>(surfaceFormat_);
-        if (format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
-            format == SurfaceFormat::Dxt5)
+        if (format != SurfaceFormat::Color)
             return false;
+        return SetDataBytesEXT(face, level, x, y, w, h, data, dataLength);
+    }
+
+    bool SoftwareTextureCubeRenderer::SetDataBytesEXT(
+        int face, int level, int x, int y, int w, int h,
+        const void* data, int dataLength)
+    {
+        if (SoftwareTextureFormat::IsDxt(surfaceFormat_)) return false;
         // REMED-GFX-135: `level != 0` used to be a silent early `return` -- the shared layer had no
         // way to tell that apart from a completed upload, so a mipmapped cube accepted every level
         // and kept only level 0. Every level TextureCube declares now has real storage, and
@@ -3693,20 +3720,27 @@ namespace CNA::Internal::Renderers::Software
         if (level < 0 || level >= levelCount_) return false;
         const int dim = LevelDim(level);
         if (w <= 0 || h <= 0 || x < 0 || y < 0 || x + w > dim || y + h > dim) return false;
-        if (dataLength < w * h * 4) return false;
+        const int bytesPerTexel = SoftwareTextureFormat::BytesPerTexel(surfaceFormat_);
+        if (dataLength < w * h * bytesPerTexel) return false;
 
         const auto* src = static_cast<const std::uint8_t*>(data);
-        std::vector<std::uint8_t>& pixels =
-            levels_[static_cast<std::size_t>(level)][static_cast<std::size_t>(face)];
-        const std::size_t rowBytes = static_cast<std::size_t>(w) * 4u;
+        std::vector<std::uint8_t>& raw =
+            rawLevels_[static_cast<std::size_t>(level)][static_cast<std::size_t>(face)];
+        const std::size_t rowBytes =
+            static_cast<std::size_t>(w) * static_cast<std::size_t>(bytesPerTexel);
         for (int row = 0; row < h; ++row)
         {
             const std::size_t dstOffset = (static_cast<std::size_t>(y + row) * static_cast<std::size_t>(dim) +
-                                          static_cast<std::size_t>(x)) * 4u;
+                                          static_cast<std::size_t>(x)) *
+                                          static_cast<std::size_t>(bytesPerTexel);
             std::copy(src + static_cast<std::size_t>(row) * rowBytes,
                      src + static_cast<std::size_t>(row) * rowBytes + rowBytes,
-                     pixels.begin() + static_cast<std::ptrdiff_t>(dstOffset));
+                     raw.begin() + static_cast<std::ptrdiff_t>(dstOffset));
         }
+        SoftwareTextureFormat::DecodePixels(
+            surfaceFormat_, raw.data(), raw.size(), dim * bytesPerTexel, dim, dim,
+            levels_[static_cast<std::size_t>(level)][static_cast<std::size_t>(face)],
+            sampleLevels_[static_cast<std::size_t>(level)][static_cast<std::size_t>(face)]);
 
         // REMED-GFX-182: a level becomes selectable only once the FULL face rectangle at that level
         // has been written -- a partial upload leaves the rest of the level at the construction
@@ -3734,7 +3768,6 @@ namespace CNA::Internal::Renderers::Software
         const void* data, int dataLength)
     {
         using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
-        using CNA::Internal::Graphics::DxtUtil;
         const auto format = static_cast<SurfaceFormat>(surfaceFormat_);
         if (format != SurfaceFormat::Dxt1 && format != SurfaceFormat::Dxt3 &&
             format != SurfaceFormat::Dxt5)
@@ -3777,14 +3810,11 @@ namespace CNA::Internal::Renderers::Software
                         replacement.begin() + static_cast<std::ptrdiff_t>(destinationOffset));
         }
 
-        std::vector<std::uint8_t> decoded = format == SurfaceFormat::Dxt1
-            ? DxtUtil::DecompressDxt1(replacement.data(), replacement.size(), dim, dim)
-            : (format == SurfaceFormat::Dxt3
-                   ? DxtUtil::DecompressDxt3(replacement.data(), replacement.size(), dim, dim)
-                   : DxtUtil::DecompressDxt5(replacement.data(), replacement.size(), dim, dim));
         blocks = std::move(replacement);
-        levels_[static_cast<std::size_t>(level)][static_cast<std::size_t>(face)] =
-            std::move(decoded);
+        SoftwareTextureFormat::DecodePixels(
+            surfaceFormat_, blocks.data(), blocks.size(), 0, dim, dim,
+            levels_[static_cast<std::size_t>(level)][static_cast<std::size_t>(face)],
+            sampleLevels_[static_cast<std::size_t>(level)][static_cast<std::size_t>(face)]);
 
         if (x == 0 && y == 0 && w == dim && h == dim)
         {
@@ -3811,6 +3841,12 @@ namespace CNA::Internal::Renderers::Software
             return false;
         if (level < 0 || level >= levelCount_)
             return false;
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const auto format = static_cast<SurfaceFormat>(surfaceFormat_);
+        if (format != SurfaceFormat::Color &&
+            format != SurfaceFormat::Dxt1 && format != SurfaceFormat::Dxt3 &&
+            format != SurfaceFormat::Dxt5)
+            return false;
         const int dim = LevelDim(level);
         if (w <= 0 || h <= 0 || x < 0 || y < 0 || x + w > dim || y + h > dim)
             return false;
@@ -3829,6 +3865,59 @@ namespace CNA::Internal::Renderers::Software
                      dst + static_cast<std::size_t>(row) * rowBytes);
         }
         return true;
+    }
+
+    bool SoftwareTextureCubeRenderer::GetDataBytesEXT(
+        int face, int level, int x, int y, int w, int h,
+        void* data, int dataLength) const
+    {
+        if (SoftwareTextureFormat::IsDxt(surfaceFormat_) || data == nullptr ||
+            face < 0 || face > 5 || level < 0 || level >= levelCount_)
+            return false;
+        const int dim = LevelDim(level);
+        if (w <= 0 || h <= 0 || x < 0 || y < 0 || w > dim || h > dim ||
+            x > dim - w || y > dim - h)
+            return false;
+        const int bytesPerTexel = SoftwareTextureFormat::BytesPerTexel(surfaceFormat_);
+        if (dataLength < w * h * bytesPerTexel) return false;
+
+        auto* destination = static_cast<std::uint8_t*>(data);
+        const auto& raw = rawLevels_[static_cast<std::size_t>(level)]
+                                   [static_cast<std::size_t>(face)];
+        const std::size_t rowBytes =
+            static_cast<std::size_t>(w) * static_cast<std::size_t>(bytesPerTexel);
+        for (int row = 0; row < h; ++row)
+        {
+            const std::size_t sourceOffset =
+                (static_cast<std::size_t>(y + row) * dim + x) *
+                static_cast<std::size_t>(bytesPerTexel);
+            std::copy_n(raw.data() + sourceOffset, rowBytes,
+                        destination + static_cast<std::size_t>(row) * rowBytes);
+        }
+        return true;
+    }
+
+    void SoftwareTextureCubeRenderer::FetchCubeColorTexel(
+        int face, int level, int x, int y,
+        float& r, float& g, float& b, float& a) const
+    {
+        const int resolvedFace = (face < 0 || face > 5) ? 0 : face;
+        const int resolvedLevel = (level < 0 || level >= levelCount_) ? 0 : level;
+        const int dim = LevelDim(resolvedLevel);
+        const auto& samples = sampleLevels_[static_cast<std::size_t>(resolvedLevel)]
+                                           [static_cast<std::size_t>(resolvedFace)];
+        if (samples.size() < static_cast<std::size_t>(dim) * dim * 4u)
+        {
+            SoftwareCubeSurface::FetchCubeColorTexel(
+                resolvedFace, resolvedLevel, x, y, r, g, b, a);
+            return;
+        }
+        const std::size_t offset =
+            (static_cast<std::size_t>(y) * dim + x) * 4u;
+        r = samples[offset + 0];
+        g = samples[offset + 1];
+        b = samples[offset + 2];
+        a = samples[offset + 3];
     }
 
 #endif

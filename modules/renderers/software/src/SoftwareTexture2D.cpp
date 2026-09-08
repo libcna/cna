@@ -2,6 +2,7 @@
 
 #include "CNA/Internal/Renderers/Software/SoftwareRenderer.hpp"
 #include "SoftwareTextureErrors.hpp"
+#include "SoftwareTextureFormat.hpp"
 
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfTypeHelper.hpp"
@@ -22,7 +23,7 @@
 
 namespace CNA::Internal::Renderers::Software
 {
-    namespace
+    namespace SoftwareTextureFormat
     {
         using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 
@@ -265,6 +266,8 @@ namespace CNA::Internal::Renderers::Software
             }
         }
     }
+
+    using namespace SoftwareTextureFormat;
 
     // GDI-076: GDI's own 16,384-per-axis ceiling made a single square RGBA8 level as large as
     // 1 GiB before this planner existed -- neither this constructor, GdiRenderer's

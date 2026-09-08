@@ -514,11 +514,45 @@ namespace CNA::Internal::Renderers::EasyGL
             int face, int level, int x, int y, int w, int h,
             const void* data, int dataLength) override;
 
+        /**
+         * @brief Uploads exact uncompressed declared-format texels into one cube face.
+         *
+         * @param face Raw CubeMapFace ordinal.
+         * @param level Mip level beginning at zero.
+         * @param x Destination x coordinate in texels.
+         * @param y Destination y coordinate in texels.
+         * @param w Region width in texels.
+         * @param h Region height in texels.
+         * @param data Tightly packed declared-format source texels.
+         * @param dataLength Available source bytes.
+         * @return True when GL and the exact restoration shadow received the complete region.
+         */
+        [[nodiscard]] bool SetDataBytesEXT(
+            int face, int level, int x, int y, int w, int h,
+            const void* data, int dataLength) override;
+
         /// REMED-GFX-130: true only once the requested face/mip rectangle has been read back
         /// through the temporary FBO below; false for an out-of-range face or an incomplete
         /// framebuffer, so the shared layer rejects the read instead of fabricating a face.
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
+
+        /**
+         * @brief Reads exact uncompressed declared-format texels from one cube face.
+         *
+         * @param face Raw CubeMapFace ordinal.
+         * @param level Mip level beginning at zero.
+         * @param x Source x coordinate in texels.
+         * @param y Source y coordinate in texels.
+         * @param w Region width in texels.
+         * @param h Region height in texels.
+         * @param data Destination for tightly packed declared-format texels.
+         * @param dataLength Available destination bytes.
+         * @return True when the complete exact region was copied from the restoration shadow.
+         */
+        [[nodiscard]] bool GetDataBytesEXT(
+            int face, int level, int x, int y, int w, int h,
+            void* data, int dataLength) const override;
 
         /// Binds this cube map to the requested GL texture unit.
         void BindGL(int unit) const override;
@@ -546,8 +580,8 @@ namespace CNA::Internal::Renderers::EasyGL
         int levelCount_ = 1;
         /// Exact face-major DXT blocks, retained because compressed GL images are not FBO-readable.
         std::vector<std::vector<std::uint8_t>> compressedLevels_;
-        /// Face-major uncompressed mip data retained only when context recovery is enabled.
-        std::vector<std::vector<std::uint8_t>> rgbaLevels_;
+        /// Exact face-major uncompressed declared-format data for readback and restoration.
+        std::vector<std::vector<std::uint8_t>> rawLevels_;
         std::array<std::shared_ptr<std::vector<uint8_t>>, 6> cpuPixels_{};
         std::weak_ptr<::easygl::ResourceRegistry> registry_;
     };

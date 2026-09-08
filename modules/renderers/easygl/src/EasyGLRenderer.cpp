@@ -1840,6 +1840,116 @@ if (ProfileIsEs2ApiGeneration())
                    : ::metagl::CompressedInternalFormat::RgbaS3tcDxt5);
     }
 
+    static int CubeBytesPerTexelEXT(
+        Microsoft::Xna::Framework::Graphics::SurfaceFormat format)
+    {
+        return Microsoft::Xna::Framework::Graphics::Texture::GetFormatSizeEXT(format);
+    }
+
+    static void UploadUncompressedCubeTexelsEXT(
+        ::easygl::Texture& texture, ::easygl::TextureTarget target, int level,
+        int x, int y, int width, int height,
+        Microsoft::Xna::Framework::Graphics::SurfaceFormat format,
+        const void* pixels, bool wholeLevel)
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        ::easygl::InternalFormat internalFormat = RgbaTexImageInternalFormat();
+        ::easygl::PixelFormat pixelFormat = ::easygl::PixelFormat::Rgba;
+        ::easygl::PixelType pixelType = ::easygl::PixelType::UnsignedByte;
+        int unpackAlignment = 4;
+        const void* upload = pixels;
+        std::vector<std::uint16_t> expanded16;
+        std::vector<std::uint8_t> expanded8;
+
+        switch (format)
+        {
+        case SurfaceFormat::Color:
+            break;
+        case SurfaceFormat::Bgr565:
+            internalFormat = ::easygl::InternalFormat::Rgb565;
+            pixelFormat = ::easygl::PixelFormat::Rgb;
+            pixelType = ::easygl::PixelType::UnsignedShort565;
+            unpackAlignment = 2;
+            break;
+        case SurfaceFormat::Bgra5551:
+        case SurfaceFormat::Bgra4444:
+            internalFormat = format == SurfaceFormat::Bgra5551
+                ? ::easygl::InternalFormat::Rgb5A1
+                : ::easygl::InternalFormat::Rgba4;
+            pixelType = format == SurfaceFormat::Bgra5551
+                ? ::easygl::PixelType::UnsignedShort5551
+                : ::easygl::PixelType::UnsignedShort4444;
+            unpackAlignment = 2;
+            if (pixels != nullptr)
+            {
+                const int rotate = format == SurfaceFormat::Bgra5551 ? 1 : 4;
+                const auto* source = static_cast<const std::uint8_t*>(pixels);
+                expanded16.resize(static_cast<std::size_t>(width) * height);
+                for (std::size_t index = 0; index < expanded16.size(); ++index)
+                {
+                    std::uint16_t value = 0;
+                    std::memcpy(&value, source + index * 2u, 2u);
+                    expanded16[index] = static_cast<std::uint16_t>(
+                        (value << rotate) | (value >> (16 - rotate)));
+                }
+                upload = expanded16.data();
+            }
+            break;
+        case SurfaceFormat::Rgba1010102:
+            internalFormat = ::easygl::InternalFormat::Rgb10A2;
+            pixelType = ::easygl::PixelType::UnsignedInt2101010Rev;
+            break;
+        case SurfaceFormat::Rg32:
+            internalFormat = ::easygl::InternalFormat::Rgba16;
+            pixelType = ::easygl::PixelType::UnsignedShort;
+            unpackAlignment = 8;
+            if (pixels != nullptr)
+            {
+                const auto* source = static_cast<const std::uint8_t*>(pixels);
+                const std::size_t texels = static_cast<std::size_t>(width) * height;
+                expanded16.assign(texels * 4u, 65535u);
+                for (std::size_t index = 0; index < texels; ++index)
+                {
+                    std::memcpy(&expanded16[index * 4u + 0], source + index * 4u + 0u, 2u);
+                    std::memcpy(&expanded16[index * 4u + 1], source + index * 4u + 2u, 2u);
+                }
+                upload = expanded16.data();
+            }
+            break;
+        case SurfaceFormat::Rgba64:
+            internalFormat = ::easygl::InternalFormat::Rgba16;
+            pixelType = ::easygl::PixelType::UnsignedShort;
+            unpackAlignment = 8;
+            break;
+        case SurfaceFormat::Alpha8:
+            if (pixels != nullptr)
+            {
+                const auto* source = static_cast<const std::uint8_t*>(pixels);
+                const std::size_t texels = static_cast<std::size_t>(width) * height;
+                expanded8.assign(texels * 4u, 0u);
+                for (std::size_t index = 0; index < texels; ++index)
+                    expanded8[index * 4u + 3] = source[index];
+                upload = expanded8.data();
+            }
+            break;
+        default:
+            throw std::runtime_error("EasyGL: unsupported uncompressed cube SurfaceFormat");
+        }
+
+        ::metagl::glPixelStorei(::metagl::PixelStoreParam::UnpackAlignment, unpackAlignment);
+        if (wholeLevel)
+        {
+            texture.set_image_2d(target, level, internalFormat, width, height,
+                                 pixelFormat, pixelType, upload);
+        }
+        else
+        {
+            texture.set_sub_image_2d(target, level, x, y, width, height,
+                                     pixelFormat, pixelType, upload);
+        }
+        ::metagl::glPixelStorei(::metagl::PixelStoreParam::UnpackAlignment, 4);
+    }
+
     EasyGLTextureCubeRenderer::EasyGLTextureCubeRenderer(
         int size, bool mipMap, int surfaceFormat,
         std::shared_ptr<::easygl::ResourceRegistry> registry)
@@ -1854,8 +1964,21 @@ if (ProfileIsEs2ApiGeneration())
                          format == SurfaceFormat::Dxt5;
         if (dxt)
             compressedLevels_.resize(static_cast<std::size_t>(6 * levelCount_));
-        else if (registry != nullptr)
-            rgbaLevels_.resize(static_cast<std::size_t>(6 * levelCount_));
+        else
+        {
+            rawLevels_.resize(static_cast<std::size_t>(6 * levelCount_));
+            for (int face = 0; face < 6; ++face)
+            {
+                for (int level = 0; level < levelCount_; ++level)
+                {
+                    const int levelSize = std::max(1, size_ >> level);
+                    rawLevels_[static_cast<std::size_t>(face * levelCount_ + level)].assign(
+                        static_cast<std::size_t>(levelSize) * levelSize *
+                            CubeBytesPerTexelEXT(format),
+                        0u);
+                }
+            }
+        }
         CreateResources();
         if (registry != nullptr) registry->add(this);
     }
@@ -1905,16 +2028,12 @@ if (ProfileIsEs2ApiGeneration())
                     const std::size_t index =
                         static_cast<std::size_t>(face * levelCount_ + level);
                     const std::vector<std::uint8_t>* saved = nullptr;
-                    if (!dxt && index < rgbaLevels_.size() && !rgbaLevels_[index].empty())
-                        saved = &rgbaLevels_[index];
-                    if (!dxt && level == 0 && cpuPixels_[face] && !cpuPixels_[face]->empty())
-                        saved = cpuPixels_[face].get();
-                    tex_.set_image_2d(faceTarget, level,
-                                      RgbaTexImageInternalFormat(),
-                                      levelSize, levelSize,
-                                      ::metagl::PixelFormat::Rgba,
-                                      ::metagl::PixelType::UnsignedByte,
-                                      saved != nullptr ? saved->data() : nullptr);
+                    if (!dxt && index < rawLevels_.size() && !rawLevels_[index].empty())
+                        saved = &rawLevels_[index];
+                    UploadUncompressedCubeTexelsEXT(
+                        tex_, faceTarget, level, 0, 0, levelSize, levelSize,
+                        dxt ? SurfaceFormat::Color : format,
+                        saved != nullptr ? saved->data() : nullptr, true);
                     if (dxt)
                     {
                         const auto& blocks = compressedLevels_[index];
@@ -2010,8 +2129,6 @@ if (ProfileIsEs2ApiGeneration())
     {
         if (face < 0 || face >= static_cast<int>(cpuPixels_.size())) return;
         cpuPixels_[static_cast<std::size_t>(face)] = std::move(pixels);
-        const std::size_t levelZero = static_cast<std::size_t>(face * levelCount_);
-        if (levelZero < rgbaLevels_.size()) rgbaLevels_[levelZero].clear();
     }
 
     void EasyGLTextureCubeRenderer::release_gl_handle_only()
@@ -2032,38 +2149,52 @@ if (ProfileIsEs2ApiGeneration())
     bool EasyGLTextureCubeRenderer::SetData(int face, int level, int x, int y, int w, int h,
                                             const void* data, int dataLength)
     {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        if (static_cast<SurfaceFormat>(surfaceFormat_) != SurfaceFormat::Color)
+            return false;
+        return SetDataBytesEXT(face, level, x, y, w, h, data, dataLength);
+    }
+
+    bool EasyGLTextureCubeRenderer::SetDataBytesEXT(
+        int face, int level, int x, int y, int w, int h,
+        const void* data, int dataLength)
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat_);
+        if (format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
+            format == SurfaceFormat::Dxt5)
+            return false;
         // REMED-GFX-135: the face guard used to be a silent `return`, which the shared layer could
         // not tell apart from a completed upload.
         if (face < 0 || face >= 6 || data == nullptr || w <= 0 || h <= 0) return false;
         if (level < 0 || level >= levelCount_) return false;
         const int levelSize = std::max(1, size_ >> level);
         if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
-        if (dataLength < w * h * 4) return false;
+        const int bytesPerTexel = CubeBytesPerTexelEXT(format);
+        if (dataLength < w * h * bytesPerTexel) return false;
 
         DrainGlErrors();
         tex_.bind(::easygl::TextureTarget::TextureCubeMap);
-        tex_.set_sub_image_2d(kCubeFaceTargets[face], level, x, y, w, h,
-                              ::metagl::PixelFormat::Rgba,
-                              ::metagl::PixelType::UnsignedByte,
-                              data);
+        UploadUncompressedCubeTexelsEXT(
+            tex_, kCubeFaceTargets[face], level, x, y, w, h, format, data, false);
         if (!GlUploadSucceeded()) return false;
         const std::size_t index = static_cast<std::size_t>(face * levelCount_ + level);
-        if (index < rgbaLevels_.size())
+        if (index < rawLevels_.size())
         {
             const int rowPixels = levelSize;
-            auto& saved = rgbaLevels_[index];
+            auto& saved = rawLevels_[index];
             if (saved.empty())
             {
-                saved.resize(static_cast<std::size_t>(levelSize) * levelSize * 4, 0u);
+                saved.resize(static_cast<std::size_t>(levelSize) * levelSize * bytesPerTexel, 0u);
             }
             for (int row = 0; row < h; ++row)
             {
                 std::memcpy(
                     saved.data() +
-                        (static_cast<std::size_t>(y + row) * rowPixels + x) * 4,
+                        (static_cast<std::size_t>(y + row) * rowPixels + x) * bytesPerTexel,
                     static_cast<const std::uint8_t*>(data) +
-                        static_cast<std::size_t>(row) * w * 4,
-                    static_cast<std::size_t>(w) * 4);
+                        static_cast<std::size_t>(row) * w * bytesPerTexel,
+                    static_cast<std::size_t>(w) * bytesPerTexel);
             }
         }
         return true;
@@ -2173,31 +2304,42 @@ if (ProfileIsEs2ApiGeneration())
             return true;
         }
 
-        ::easygl::Framebuffer fbo;
-        fbo.create();
-        fbo.bind(::easygl::FramebufferTarget::Framebuffer);
-        fbo.attach_texture_2d(::easygl::FramebufferTarget::Framebuffer,
-                              ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
-                              kCubeFaceTargets[face],
-                              tex_, level);
-if (!ProfileIsEs2ApiGeneration())
-{
-        // GLES 2.0 has no glReadBuffer; the bound framebuffer's single color attachment is the
-        // implicit read source there, so the explicit selection exists only for the ES 3.0 profiles.
-        fbo.set_read_buffer(::metagl::to_read_buffer(::metagl::ColorAttachment::Color0));
-}
+        if (format != SurfaceFormat::Color)
+            return false;
+        // Plain TextureCube content is authored only through SetData. Exact raw shadows service
+        // Color and typed readback, avoiding framebuffer conversion and preserving packed bits.
+        return GetDataBytesEXT(face, level, x, y, w, h, data, dataLength);
+    }
 
-        const bool complete = fbo.is_complete(::easygl::FramebufferTarget::Framebuffer);
-        if (complete)
+    bool EasyGLTextureCubeRenderer::GetDataBytesEXT(
+        int face, int level, int x, int y, int w, int h,
+        void* data, int dataLength) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat_);
+        if (format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
+            format == SurfaceFormat::Dxt5 || face < 0 || face >= 6 || data == nullptr ||
+            level < 0 || level >= levelCount_ || w <= 0 || h <= 0)
+            return false;
+        const int levelSize = std::max(1, size_ >> level);
+        if (x < 0 || y < 0 || w > levelSize || h > levelSize ||
+            x > levelSize - w || y > levelSize - h)
+            return false;
+        const int bytesPerTexel = CubeBytesPerTexelEXT(format);
+        if (dataLength < w * h * bytesPerTexel) return false;
+        const auto& source = rawLevels_[static_cast<std::size_t>(face * levelCount_ + level)];
+        if (source.size() < static_cast<std::size_t>(levelSize) * levelSize * bytesPerTexel)
+            return false;
+        auto* destination = static_cast<std::uint8_t*>(data);
+        const std::size_t rowBytes = static_cast<std::size_t>(w) * bytesPerTexel;
+        for (int row = 0; row < h; ++row)
         {
-            ::metagl::glReadPixels(x, y, w, h,
-                                   ::metagl::PixelFormat::Rgba,
-                                   ::metagl::PixelType::UnsignedByte,
-                                   data);
+            const std::size_t sourceOffset =
+                (static_cast<std::size_t>(y + row) * levelSize + x) * bytesPerTexel;
+            std::memcpy(destination + static_cast<std::size_t>(row) * rowBytes,
+                        source.data() + sourceOffset, rowBytes);
         }
-
-        ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::Framebuffer);
-        return complete;
+        return true;
     }
 
     // --- EasyGLEffectRenderer ---
@@ -6018,22 +6160,29 @@ if (!ProfileIsEs2ApiGeneration())
         int surfaceFormat) const
     {
         using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
-        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat);
+        switch (format)
         {
             case SurfaceFormat::Color:
             case SurfaceFormat::Dxt1:
             case SurfaceFormat::Dxt3:
             case SurfaceFormat::Dxt5:
+            case SurfaceFormat::Alpha8:
                 return RendererFormatVerdict::Supported;
             case SurfaceFormat::Bgr565:
             case SurfaceFormat::Bgra5551:
             case SurfaceFormat::Bgra4444:
-            case SurfaceFormat::NormalizedByte2:
-            case SurfaceFormat::NormalizedByte4:
             case SurfaceFormat::Rgba1010102:
+                return ProfileIsEs2ApiGeneration()
+                    ? RendererFormatVerdict::Unsupported
+                    : RendererFormatVerdict::Supported;
             case SurfaceFormat::Rg32:
             case SurfaceFormat::Rgba64:
-            case SurfaceFormat::Alpha8:
+                return ContextHasTextureNorm16EXT()
+                    ? RendererFormatVerdict::Supported
+                    : RendererFormatVerdict::Unsupported;
+            case SurfaceFormat::NormalizedByte2:
+            case SurfaceFormat::NormalizedByte4:
             case SurfaceFormat::Single:
             case SurfaceFormat::Vector2:
             case SurfaceFormat::Vector4:
