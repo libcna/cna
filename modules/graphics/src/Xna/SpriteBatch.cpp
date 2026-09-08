@@ -275,6 +275,9 @@ namespace Microsoft::Xna::Framework::Graphics
         throwIfDisposed();
         if (!begun)
             throw std::runtime_error("End was called, but Begin has not yet been called.");
+        // FNA clears its front-end guard before PrepRenderState/FlushBatch. A backend exception
+        // therefore ends this Begin/End session and a caller that catches it may start another.
+        begun = false;
         if (sortMode_ != SpriteSortMode::Immediate)
             applyRenderState();
         if (renderer_)
@@ -287,7 +290,6 @@ namespace Microsoft::Xna::Framework::Graphics
             // every queued texture renderer through that call, then release the queue.
             spriteQueue_.clear();
         }
-        begun         = false;
         customEffect_ = nullptr;
     }
 

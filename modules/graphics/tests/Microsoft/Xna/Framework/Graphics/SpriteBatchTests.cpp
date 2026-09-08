@@ -58,6 +58,23 @@ namespace
     private:
         bool& destroyed_;
     };
+
+    class ThrowOnceEndSpriteBatchRenderer final : public RecordingSpriteBatchRenderer
+    {
+    public:
+        void End() override
+        {
+            if (!thrown_)
+            {
+                thrown_ = true;
+                throw std::runtime_error("synthetic renderer End failure");
+            }
+            RecordingSpriteBatchRenderer::End();
+        }
+
+    private:
+        bool thrown_ = false;
+    };
 }
 
 // -----------------------------------------------------------------------
@@ -506,6 +523,17 @@ TEST(SpriteBatchTest, BeginEndBeginEndDoesNotThrow)
         batch.Begin();
         batch.End();
     });
+}
+
+TEST(SpriteBatchTest, EndExceptionDoesNotLeaveBatchActive)
+{
+    auto renderer = std::make_unique<ThrowOnceEndSpriteBatchRenderer>();
+    SpriteBatch batch(std::move(renderer));
+
+    batch.Begin();
+    EXPECT_THROW(batch.End(), std::runtime_error);
+    EXPECT_NO_THROW(batch.Begin());
+    EXPECT_NO_THROW(batch.End());
 }
 
 TEST(SpriteBatchLifecycleTest, DisposeReleasesRendererAndIsIdempotent)
