@@ -82,6 +82,17 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             Vector3 scaling{1.0f, 1.0f, 1.0f};
             /** @brief `RotationActive`, which is what decides whether `PreRotation` counts. */
             bool rotationActive = false;
+            /**
+             * @brief Whether this object is an FBX 7 `Geometry`, the mesh data of the model it is
+             *        connected to rather than a node of its own.
+             *
+             * FBX 6 writes a mesh's `Vertices` inside the `Model`; FBX 7 splits them into a
+             * `Geometry` object connected to it. SAMPLE-061's `marble.FBX` is the second shape, and
+             * reading the `Geometry` as a node of its own answers two bones -- `marble` and a
+             * nameless child -- where XNA answers one, `marble`, carrying the mesh
+             * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-151`).
+             */
+            bool isGeometryData = false;
             /** @brief The geometry's own offset from the node, FBX's `Geometric*` properties. */
             Vector3 geometricTranslation{0.0f, 0.0f, 0.0f};
             Vector3 geometricRotation{0.0f, 0.0f, 0.0f};
@@ -545,6 +556,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     object.kind = node.Text(1);
                     identity = nextSynthetic--;
                 }
+                object.isGeometryData = node.name == "Geometry";
                 if (node.name == "Material")
                 {
                     object.kind = "Material";
@@ -798,6 +810,16 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             const Object& object = objects.at(identity);
             std::shared_ptr<NodeContent> node;
             const Canon::FbxNode* geometry = object.node;
+            for (const std::int64_t child : object.children)
+            {
+                const auto found = objects.find(child);
+                if (found != objects.end() && found->second.isGeometryData &&
+                    found->second.node != nullptr)
+                {
+                    geometry = found->second.node;
+                    break;
+                }
+            }
             const bool isMesh = object.kind == "Mesh" && geometry != nullptr &&
                                 geometry->Find("Vertices") != nullptr;
             if (isMesh)
@@ -1149,7 +1171,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             const Rows geometricInverse = InverseGeometricRows(object);
             for (const std::int64_t child : object.children)
             {
-                if (objects.count(child) == 0 || !IsSceneNode(objects.at(child).kind))
+                if (objects.count(child) == 0 || objects.at(child).isGeometryData ||
+                    !IsSceneNode(objects.at(child).kind))
                 {
                     continue;
                 }
@@ -1212,7 +1235,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         {
             const Object& object = objects.at(identity);
             const bool top = anyInScene ? object.inScene : !object.attached;
-            if (!top || object.kind == "Material") { continue; }
+            if (!top || object.kind == "Material" || object.isGeometryData) { continue; }
             ++topLevel;
             if (IsSceneNode(object.kind)) { roots.push_back(identity); }
         }

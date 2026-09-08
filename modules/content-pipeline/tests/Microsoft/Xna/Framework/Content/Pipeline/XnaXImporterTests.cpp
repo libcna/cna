@@ -640,6 +640,11 @@ TEST(XnaFbxImporter, EveryFileAnswersTheGraphXnaAnswers)
           // child, and the `PreRotation` this file also carries is *not* applied because it does
           // not set `RotationActive` (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-146`).
           "fbx_geometric_offset.fbx",
+          // FBX 7 splits a mesh in two, a `Geometry` object connected to the `Model` that places
+          // it. The geometry is that model's data, not a node of its own: XNA answers one node,
+          // `marble`, where reading the `Geometry` as a node answers two
+          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-151`).
+          "fbx7_geometry.fbx",
           "fbx_split_vertices.fbx",
           // A `Texture` names its file twice and the two can name different directories; the
           // reference XNA writes is whichever one resolves. These two separate the branches:
