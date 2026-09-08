@@ -2,7 +2,7 @@
 
 ## Status of this document
 
-**Complete as of 2026-09-08 (`VULKAN-480`, updated by `REMED-GFX-203`), and written after the re-audits it depends on**
+**Complete as of 2026-09-08 (`VULKAN-480`, updated by `REMED-GFX-203` and `MOD-2240`), and written after the re-audits it depends on**
 (`VULKAN-470`–`VULKAN-474`) so that what it claims was checked rather than remembered. Every
 section names the row that put it there and the test that keeps it true; a claim with no test named
 beside it is not in here.
@@ -123,6 +123,29 @@ two devices — **AMD Radeon 780M (RADV PHOENIX)**, Mesa 25.0.7, conformance 1.4
 **llvmpipe (LLVM 19.1.7)**, conformance 1.3.1.1. The `device`-origin rows above were read from
 llvmpipe unless stated; where the two devices differ the difference is in the plan, not here — the
 one that matters for a reader is MSAA, where llvmpipe offers up to 4× and RADV up to 8×.
+
+### Device discovery and the modern-command queue
+
+`MOD-2240`. The instance requests Vulkan 1.1, and the selected device is queried once through
+`vkGetPhysicalDeviceProperties2` and `vkGetPhysicalDeviceFeatures2`. CNA keeps the supported and
+enabled feature records separate. A native bit is enabled only when a complete renderer path uses
+it: today those are `fillModeNonSolid`, `samplerAnisotropy`, `independentBlend`,
+`occlusionQueryPrecise` and `textureCompressionBC`, each conditional on device support. The
+optional `VK_EXT_4444_formats` feature is queried and enabled through the features2 `pNext` chain
+only when the extension is advertised and its `formatA4R4G4B4` feature is true. A device missing
+any optional feature still starts and the corresponding public capability under-claims or refuses.
+
+Modern commands use the existing graphics submission queue in their first implementation. The
+queue family flags are recorded at device selection; a `VK_QUEUE_COMPUTE_BIT` there is necessary
+for compute but is not sufficient for CNA to advertise compute. There is no second queue lifecycle
+and no asynchronous-compute promise. This keeps compute, copy and graphics in the same public-call
+ordering domain that later synchronization rows extend.
+
+**Test:** `Vulkan_ModernFeatureDiscovery` walks all 55 core feature bits and requires the enabled
+record to be exactly the subset consumed by implemented CNA paths. It also verifies the property
+snapshot, the graphics queue flag, and the important negative control: llvmpipe's selected ordered
+queue is compute-capable, but CNA still reports compute unsupported and a zero compute limit until
+the dispatch/storage-buffer path is implemented.
 
 ---
 

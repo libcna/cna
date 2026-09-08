@@ -275,7 +275,8 @@ namespace CNA::Internal::Renderers::Vulkan
     // before any device exists. A plain atomic because the query has no renderer instance to reach.
     static std::atomic<uint32_t> sAdapterSampleCountsEXT{0};
 
-    static VkSampleCountFlagBits PickSampleCount(VkPhysicalDevice pd, int requested);
+    static VkSampleCountFlagBits PickSampleCount(const VkPhysicalDeviceLimits& limits,
+                                                 int requested);
 
     static int SampleCountToInt(VkSampleCountFlagBits s)
     {
@@ -777,7 +778,8 @@ namespace CNA::Internal::Renderers::Vulkan
         // `MsaaSamplesForPipelinesEXT`.
         const VkSampleCountFlagBits rtSamples =
             requestedMultiSampleCount > 0
-                ? PickSampleCount(owner_->physicalDevice_, requestedMultiSampleCount)
+                ? PickSampleCount(owner_->physicalDeviceProperties_.limits,
+                                  requestedMultiSampleCount)
                 : VK_SAMPLE_COUNT_1_BIT;
         const bool wantsMsaa = rtSamples > VK_SAMPLE_COUNT_1_BIT;
 
@@ -1958,12 +1960,11 @@ namespace CNA::Internal::Renderers::Vulkan
     // VulkanRenderer — construction
     // =========================================================================
 
-    static VkSampleCountFlagBits PickSampleCount(VkPhysicalDevice pd, int requested)
+    static VkSampleCountFlagBits PickSampleCount(const VkPhysicalDeviceLimits& limits,
+                                                 int requested)
     {
-        VkPhysicalDeviceProperties props;
-        vkGetPhysicalDeviceProperties(pd, &props);
-        VkSampleCountFlags avail = props.limits.framebufferColorSampleCounts
-                                 & props.limits.framebufferDepthSampleCounts;
+        const VkSampleCountFlags avail = limits.framebufferColorSampleCounts
+                                       & limits.framebufferDepthSampleCounts;
         const VkSampleCountFlagBits candidates[] = {
             VK_SAMPLE_COUNT_64_BIT, VK_SAMPLE_COUNT_32_BIT, VK_SAMPLE_COUNT_16_BIT,
             VK_SAMPLE_COUNT_8_BIT,  VK_SAMPLE_COUNT_4_BIT,  VK_SAMPLE_COUNT_2_BIT,
@@ -1997,14 +1998,13 @@ namespace CNA::Internal::Renderers::Vulkan
         {
             // VULKAN-187 (F-34): publish what this physical device can do, so the adapter-level
             // query that runs before any device exists has a real answer once one has.
-            VkPhysicalDeviceProperties adapterProps;
-            vkGetPhysicalDeviceProperties(physicalDevice_, &adapterProps);
             sAdapterSampleCountsEXT.store(
-                static_cast<uint32_t>(adapterProps.limits.framebufferColorSampleCounts &
-                                      adapterProps.limits.framebufferDepthSampleCounts),
+                static_cast<uint32_t>(
+                    physicalDeviceProperties_.limits.framebufferColorSampleCounts &
+                    physicalDeviceProperties_.limits.framebufferDepthSampleCounts),
                 std::memory_order_relaxed);
         }
-        sampleCount_ = PickSampleCount(physicalDevice_, args.multiSampleCount);
+        sampleCount_ = PickSampleCount(physicalDeviceProperties_.limits, args.multiSampleCount);
         if (sampleCount_ > VK_SAMPLE_COUNT_1_BIT)
             std::clog << "[Vulkan] MSAA: " << static_cast<int>(sampleCount_) << "x\n";
         CreateSwapchain();
@@ -2063,7 +2063,7 @@ namespace CNA::Internal::Renderers::Vulkan
             case CNA::GraphicsCapability::MultipleRenderTargets:
                 // The renderer caps its own MRT set at FNA's MAX_RENDERTARGET_BINDINGS, but the
                 // question here is whether more than one attachment is expressible at all.
-                return deviceLimits_.maxColorAttachments > 1;
+                return physicalDeviceProperties_.limits.maxColorAttachments > 1;
             case CNA::GraphicsCapability::DepthStencilBuffer:
                 // FindDepthFormat() picks a device-wide depth format at construction and throws if
                 // the device offers none, so this is a real attachment rather than an assumption.
@@ -2084,8 +2084,9 @@ namespace CNA::Internal::Renderers::Vulkan
                 // could multisample colour alone still could not run this renderer's MSAA render
                 // pass, so claiming the capability from the colour mask alone would be a promise
                 // ApplyMultiSampleCount then declines to keep.
-                const VkSampleCountFlags both = deviceLimits_.framebufferColorSampleCounts
-                                              & deviceLimits_.framebufferDepthSampleCounts;
+                const VkSampleCountFlags both =
+                    physicalDeviceProperties_.limits.framebufferColorSampleCounts
+                    & physicalDeviceProperties_.limits.framebufferDepthSampleCounts;
                 return (both & ~static_cast<VkSampleCountFlags>(VK_SAMPLE_COUNT_1_BIT)) != 0;
             }
 
@@ -3018,17 +3019,29 @@ namespace CNA::Internal::Renderers::Vulkan
             physicalDevice_      = dev;
             graphicsQueueFamily_ = *gfx;
             presentQueueFamily_  = *pres;
+            graphicsQueueFlags_  = qps[*gfx].queueFlags;
             break;
         }
         if (physicalDevice_ == VK_NULL_HANDLE)
             throw std::runtime_error("Vulkan: no suitable GPU");
 
-        VkPhysicalDeviceProperties p;
-        vkGetPhysicalDeviceProperties(physicalDevice_, &p);
+        // plans/plan_modern.md MOD-2240: use Vulkan 1.1's extensible discovery entry points once,
+        // after the selected-device decision. Supported and enabled feature records stay separate:
+        // a native optional feature is not a CNA capability until an implemented path consumes it.
+        VkPhysicalDeviceProperties2 properties2{};
+        properties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+        vkGetPhysicalDeviceProperties2(physicalDevice_, &properties2);
+        physicalDeviceProperties_ = properties2.properties;
+
+        VkPhysicalDeviceFeatures2 features2{};
+        features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+        vkGetPhysicalDeviceFeatures2(physicalDevice_, &features2);
+        supportedDeviceFeatures_ = features2.features;
+
+        const VkPhysicalDeviceProperties& p = physicalDeviceProperties_;
         // plan_vulkan.md VULKAN-020: SupportsCapability answers several members from the device's
         // own limits, and it must answer for the device this loop actually selected -- which is not
         // necessarily GPU 0. Cached here, next to the selection, rather than re-queried per call.
-        deviceLimits_ = p.limits;
         // VULKAN-151: can this device bind Byte4 bone indices to the shaders' `vec4` input?
         // VK_FORMAT_R8G8B8A8_USCALED is not a mandatory vertex-buffer format, so ask rather than
         // assume. Measured YES on both drivers here (spikes/vulkan-vertex-format-spike/).
@@ -3065,8 +3078,7 @@ namespace CNA::Internal::Renderers::Vulkan
             qi.pQueuePriorities = &prio;
             qis.push_back(qi);
         }
-        VkPhysicalDeviceFeatures supported{};
-        vkGetPhysicalDeviceFeatures(physicalDevice_, &supported);
+        const VkPhysicalDeviceFeatures& supported = supportedDeviceFeatures_;
         VkPhysicalDeviceFeatures feat{};
         if (supported.fillModeNonSolid) {
             feat.fillModeNonSolid     = VK_TRUE;
@@ -3075,9 +3087,7 @@ namespace CNA::Internal::Renderers::Vulkan
         if (supported.samplerAnisotropy) {
             feat.samplerAnisotropy = VK_TRUE;
             anisotropySupported_   = true;
-            VkPhysicalDeviceProperties props{};
-            vkGetPhysicalDeviceProperties(physicalDevice_, &props);
-            maxSamplerAnisotropy_ = props.limits.maxSamplerAnisotropy;
+            maxSamplerAnisotropy_ = physicalDeviceProperties_.limits.maxSamplerAnisotropy;
         }
         if (supported.independentBlend) {
             feat.independentBlend = VK_TRUE;
@@ -3098,6 +3108,10 @@ namespace CNA::Internal::Renderers::Vulkan
             feat.textureCompressionBC = VK_TRUE;
             textureCompressionBCSupported_ = true;
         }
+        // The enabled snapshot is deliberately narrower than the supported one. MOD-2241 and
+        // later rows extend it only together with the public path and native validation test that
+        // consume each newly enabled feature.
+        enabledDeviceFeatures_ = feat;
         // plan_vulkan.md VULKAN-179: SurfaceFormat::Bgra4444 is D3DFMT_A4R4G4B4, whose exact
         // Vulkan spelling VK_FORMAT_A4R4G4B4_UNORM_PACK16 came with VK_EXT_4444_formats and is core
         // only in 1.3, while this renderer's instance asks for 1.1. Enabling the extension where
@@ -3142,8 +3156,12 @@ namespace CNA::Internal::Renderers::Vulkan
         ci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
         ci.queueCreateInfoCount = static_cast<uint32_t>(qis.size());
         ci.pQueueCreateInfos = qis.data();
-        ci.pEnabledFeatures = &feat;
-        if (formatA4R4G4B4Supported_) ci.pNext = &formats4444;
+        VkPhysicalDeviceFeatures2 enabledFeatures2{};
+        enabledFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+        enabledFeatures2.features = enabledDeviceFeatures_;
+        if (formatA4R4G4B4Supported_) enabledFeatures2.pNext = &formats4444;
+        ci.pNext = &enabledFeatures2;
+        ci.pEnabledFeatures = nullptr;
         ci.enabledExtensionCount = static_cast<uint32_t>(enabledDeviceExtensions.size());
         ci.ppEnabledExtensionNames = enabledDeviceExtensions.data();
         if (sEnableValidation) {
@@ -3161,9 +3179,9 @@ namespace CNA::Internal::Renderers::Vulkan
         // at all (unlike several sibling renderers, which print something at initialization) --
         // a real, previously-undocumented gap on its own.
         {
-            VkPhysicalDeviceProperties devProps{};
-            vkGetPhysicalDeviceProperties(physicalDevice_, &devProps);
-            const int maxMsaa = SampleCountToInt(PickSampleCount(physicalDevice_, 64));
+            const VkPhysicalDeviceProperties& devProps = physicalDeviceProperties_;
+            const int maxMsaa = SampleCountToInt(
+                PickSampleCount(physicalDeviceProperties_.limits, 64));
             // plan_vulkan.md VULKAN-402: std::clog, not std::cout. A startup diagnostic on stdout
             // is what GraphicsDeviceRendererTest.StartupDiagnosticNeverWritesToStdout exists to
             // forbid -- stdout belongs to the program's output, and a host that pipes it gets this
@@ -4329,7 +4347,7 @@ namespace CNA::Internal::Renderers::Vulkan
                 "The Vulkan renderer: vkCreateSampler failed with " +
                 std::to_string(static_cast<int>(created)) + " after " +
                 std::to_string(samplerCache_.size()) + " live samplers (this device allows " +
-                std::to_string(deviceLimits_.maxSamplerAllocationCount) +
+                std::to_string(physicalDeviceProperties_.limits.maxSamplerAllocationCount) +
                 "). Refused rather than drawing with a substituted sampler.");
         samplerCache_[key] = CachedSamplerEXT{ sampler, ++samplerUseClock_ };
         return sampler;
@@ -13241,7 +13259,8 @@ namespace CNA::Internal::Renderers::Vulkan
 
     int VulkanRenderer::ApplyMultiSampleCount(int requestedMultiSampleCount)
     {
-        const VkSampleCountFlagBits newCount = PickSampleCount(physicalDevice_, requestedMultiSampleCount);
+        const VkSampleCountFlagBits newCount =
+            PickSampleCount(physicalDeviceProperties_.limits, requestedMultiSampleCount);
         if (newCount == sampleCount_)
             return SampleCountToInt(sampleCount_);
 
@@ -15910,9 +15929,7 @@ namespace CNA::Internal::Renderers::Vulkan
         if (!owner || !renderTargets || count == 0) return;
         VkDevice dev = owner->device_;
 
-        VkPhysicalDeviceProperties properties{};
-        vkGetPhysicalDeviceProperties(owner->physicalDevice_, &properties);
-        if (count > 4 || count > properties.limits.maxColorAttachments)
+        if (count > 4 || count > owner->physicalDeviceProperties_.limits.maxColorAttachments)
             throw std::runtime_error("VulkanMRTProxy: render-target count exceeds supported MRT limit");
         if (!owner->independentBlendSupported_)
             throw std::runtime_error(
@@ -16926,7 +16943,8 @@ namespace CNA::Internal::Renderers::Vulkan
         // decision; it mirrors the replacement now.
         const VkSampleCountFlagBits rtSamples =
             requestedMultiSampleCount > 0
-                ? PickSampleCount(owner_->physicalDevice_, requestedMultiSampleCount)
+                ? PickSampleCount(owner_->physicalDeviceProperties_.limits,
+                                  requestedMultiSampleCount)
                 : VK_SAMPLE_COUNT_1_BIT;
         const bool wantsMsaa = rtSamples > VK_SAMPLE_COUNT_1_BIT;
 

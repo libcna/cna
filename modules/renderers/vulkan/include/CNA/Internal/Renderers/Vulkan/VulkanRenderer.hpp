@@ -2234,7 +2234,7 @@ namespace CNA::Internal::Renderers::Vulkan
         /// this row that failure was a silently substituted white texture.
         CNAEXT [[nodiscard]] std::uint32_t GetMaxSamplerAllocationCountEXT() const noexcept
         {
-            return deviceLimits_.maxSamplerAllocationCount;
+            return physicalDeviceProperties_.limits.maxSamplerAllocationCount;
         }
         // REMED-GFX-095: live MRT construction/pipeline diagnostics used by the dedicated
         // regression to distinguish a requested multisample target from a silent 1x pass.
@@ -2612,7 +2612,61 @@ namespace CNA::Internal::Renderers::Vulkan
          */
         CNAEXT [[nodiscard]] const VkPhysicalDeviceLimits& GetDeviceLimitsEXT() const noexcept
         {
-            return deviceLimits_;
+            return physicalDeviceProperties_.limits;
+        }
+        /**
+         * @brief Returns the selected physical device properties captured during discovery.
+         *
+         * plans/plan_modern.md `MOD-2240`. The renderer queries these once through
+         * `vkGetPhysicalDeviceProperties2`, after device selection, and uses the same snapshot for
+         * capability reporting and logical-device setup diagnostics.
+         *
+         * @return Read-only physical-device properties.
+         */
+        CNAEXT [[nodiscard]] const VkPhysicalDeviceProperties&
+        GetPhysicalDevicePropertiesEXT() const noexcept
+        {
+            return physicalDeviceProperties_;
+        }
+        /**
+         * @brief Returns the core features reported by the selected physical device.
+         *
+         * plans/plan_modern.md `MOD-2240`. This is the base feature record obtained through
+         * `vkGetPhysicalDeviceFeatures2`; extension feature structs are queried in its `pNext`
+         * chain only when the corresponding extension is advertised.
+         *
+         * @return Read-only supported core features.
+         */
+        CNAEXT [[nodiscard]] const VkPhysicalDeviceFeatures&
+        GetSupportedDeviceFeaturesEXT() const noexcept
+        {
+            return supportedDeviceFeatures_;
+        }
+        /**
+         * @brief Returns the core features CNA enabled on the logical device.
+         *
+         * plans/plan_modern.md `MOD-2240`. A reported native feature is not enabled merely because
+         * it exists: this record contains only features consumed by an implemented CNA path.
+         *
+         * @return Read-only enabled core features.
+         */
+        CNAEXT [[nodiscard]] const VkPhysicalDeviceFeatures&
+        GetEnabledDeviceFeaturesEXT() const noexcept
+        {
+            return enabledDeviceFeatures_;
+        }
+        /**
+         * @brief Returns the flags of the queue family used for CNA graphics command submission.
+         *
+         * plans/plan_modern.md `MOD-2240`. Modern Vulkan work uses this same ordered queue in its
+         * first implementation; a compute-capable bit here does not by itself advertise CNA
+         * compute support and no asynchronous-compute promise is made.
+         *
+         * @return The selected graphics queue-family flags.
+         */
+        CNAEXT [[nodiscard]] VkQueueFlags GetGraphicsQueueFlagsEXT() const noexcept
+        {
+            return graphicsQueueFlags_;
         }
         /**
          * @brief plan_vulkan.md VULKAN-180: silences the stderr ECHO of validation messages.
@@ -2758,8 +2812,18 @@ namespace CNA::Internal::Renderers::Vulkan
         VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
         VkDevice         device_         = VK_NULL_HANDLE;
 
+        /// plans/plan_modern.md MOD-2240: one features2/properties2 discovery snapshot for the
+        /// selected device. Supported and enabled are deliberately distinct: a native optional
+        /// feature is not enabled until an implemented CNA path consumes it.
+        VkPhysicalDeviceProperties physicalDeviceProperties_{};
+        VkPhysicalDeviceFeatures   supportedDeviceFeatures_{};
+        VkPhysicalDeviceFeatures   enabledDeviceFeatures_{};
+
         uint32_t graphicsQueueFamily_ = 0;
         uint32_t presentQueueFamily_  = 0;
+        /// plans/plan_modern.md MOD-2240: the existing ordered submission queue is also the first
+        /// modern-command queue where its flags permit; CNA does not claim async compute.
+        VkQueueFlags graphicsQueueFlags_ = 0;
         VkQueue  graphicsQueue_       = VK_NULL_HANDLE;
         VkQueue  presentQueue_        = VK_NULL_HANDLE;
 
@@ -3055,10 +3119,6 @@ namespace CNA::Internal::Renderers::Vulkan
         /// (`spikes/vulkan-vertex-format-spike/`); a device that does not gets a by-name refusal
         /// for a `Byte4`-spelled bone index rather than a wrong picture.
         bool uscaledVertexFormatSupported_ = false;
-        /// plan_vulkan.md VULKAN-020: the SELECTED physical device's limits, cached where the
-        /// selection is made. `SupportsCapability` answers `MultipleRenderTargets` and (VULKAN-021)
-        /// `MultiSampleAntiAliasing` from these rather than from a constant.
-        VkPhysicalDeviceLimits deviceLimits_{};
         /// VULKAN-180: see SetValidationEchoEnabledEXT. Recording is unconditional.
         bool                   validationEcho_ = true;
         /// plan_vulkan.md VULKAN-097: clip-space multiplier for XNA's slightly-less-than-half-

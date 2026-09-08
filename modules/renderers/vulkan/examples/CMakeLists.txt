@@ -1421,6 +1421,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_capability_snapshot
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plans/plan_modern.md MOD-2240: feature/property discovery uses Vulkan's extensible query
+        # forms, enables only features consumed by implemented CNA paths, and keeps modern work on
+        # the existing ordered graphics queue without advertising native availability as support.
+        cna_vulkan_test(cna_test_vulkan_modern_feature_discovery
+                        vulkan_modern_feature_discovery_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_ModernFeatureDiscovery
+            COMMAND cna_test_vulkan_modern_feature_discovery
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plans/plan_vulkan.md VULKAN-098 (F-19): this renderer's clip-space depth range is XNA's
         # [0,1], and EasyGL's is OpenGL's [-1,1]. Measured positively across the range -- a 5x4
         # truth table plus both planes -- rather than inferred from a depth-bias experiment, which
