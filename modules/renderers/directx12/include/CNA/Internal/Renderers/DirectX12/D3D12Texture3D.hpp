@@ -2,7 +2,7 @@
 
 // plans/plan_dx.md Phase DX13 (DX-122): real D3D12 3D texture renderer -- mirrors D3D11Texture3DRenderer's
 // (D3D11's own DX-42) XNA-level behavior contract. Storage and transfer pitches follow the
-// requested uncompressed XNA SurfaceFormat. Same explicit upload-heap-staging discipline
+// requested core XNA SurfaceFormat, including BC1/2/3 block pitches. Same explicit upload-heap-staging discipline
 // D3D12TextureRenderer (DX-109) already
 // established, generalized to a real sub-volume (x,y,z,w,h,depth) upload/readback instead of
 // D3D12TextureRenderer's simpler always-full-level 2D case -- D3D12_TEXTURE_DIMENSION_TEXTURE3D has
@@ -20,6 +20,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <vector>
 
 namespace CNA::Internal::Renderers::DirectX12
 {
@@ -73,5 +74,8 @@ namespace CNA::Internal::Renderers::DirectX12
         int surfaceFormat_ = 0;
         DXGI_FORMAT dxgiFormat_ = DXGI_FORMAT_R8G8B8A8_UNORM;
         int bytesPerTexel_ = 4;
+        bool compressed_ = false;
+        int bytesPerBlock_ = 0;
+        std::vector<std::vector<std::uint8_t>> compressedLevels_;
     };
 }

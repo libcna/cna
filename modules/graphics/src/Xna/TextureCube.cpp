@@ -359,7 +359,10 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (getIsDisposedProperty())
             throw System::ObjectDisposedException("TextureCube");
-        if (!IsColorTransferFormatEXT(graphicsDevice_, format_))
+        const bool isCompressedTransfer = graphicsDevice_ != nullptr &&
+            graphicsDevice_->GetRenderer().IsCompressedCubeTransferFormatEXT(
+                static_cast<int>(format_));
+        if (!IsColorTransferFormatEXT(graphicsDevice_, format_) && !isCompressedTransfer)
             throw std::invalid_argument(
                 "TextureCube::GetData: Color data requires a Color-compatible 32-bit format");
         if (!IsValidCubeMapFace(face))

@@ -34,13 +34,17 @@ namespace CNA::Internal::Renderers::DirectX12
                 static_cast<int>(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE) |
                 static_cast<int>(D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
 
-        void ResolveSurfaceFormat(int surfaceFormat, DXGI_FORMAT& dxgiFormat, int& bytesPerTexel)
+        void ResolveSurfaceFormat(int surfaceFormat, DXGI_FORMAT& dxgiFormat, int& bytesPerTexel,
+                                  bool& compressed, int& bytesPerBlock)
         {
             using namespace D3DCommon;
             dxgiFormat = SurfaceFormatToDxgi(surfaceFormat);
             bytesPerTexel = SurfaceFormatBytesPerTexel(surfaceFormat);
-            if (!IsXnaUncompressedSurfaceFormat(surfaceFormat) ||
-                dxgiFormat == DXGI_FORMAT_UNKNOWN || bytesPerTexel == 0)
+            compressed = IsXnaBlockCompressedSurfaceFormat(surfaceFormat);
+            bytesPerBlock = SurfaceFormatBytesPerBlock(surfaceFormat);
+            if ((!IsXnaUncompressedSurfaceFormat(surfaceFormat) && !compressed) ||
+                dxgiFormat == DXGI_FORMAT_UNKNOWN ||
+                (compressed ? bytesPerBlock == 0 : bytesPerTexel == 0))
             {
                 throw std::invalid_argument(
                     "D3D12TextureRenderer: unsupported SurfaceFormat::" +
@@ -56,7 +60,8 @@ namespace CNA::Internal::Renderers::DirectX12
         , mipLevels_(data.mipLevels > 0 ? data.mipLevels : 1)
         , surfaceFormat_(data.surfaceFormat)
     {
-        ResolveSurfaceFormat(surfaceFormat_, dxgiFormat_, bytesPerTexel_);
+        ResolveSurfaceFormat(surfaceFormat_, dxgiFormat_, bytesPerTexel_, compressed_,
+                             bytesPerBlock_);
         D3D12_HEAP_PROPERTIES heapProps{};
         heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
 
@@ -97,14 +102,16 @@ namespace CNA::Internal::Renderers::DirectX12
 
         if (!data.pixels.empty())
         {
-            const std::size_t required = static_cast<std::size_t>(width_) *
-                                         static_cast<std::size_t>(height_) *
-                                         static_cast<std::size_t>(bytesPerTexel_);
+            const int rowUnits = compressed_ ? (width_ + 3) / 4 : width_;
+            const int rowCount = compressed_ ? (height_ + 3) / 4 : height_;
+            const int unitBytes = compressed_ ? bytesPerBlock_ : bytesPerTexel_;
+            const std::size_t rowBytes = static_cast<std::size_t>(rowUnits) * unitBytes;
+            const std::size_t required = rowBytes * static_cast<std::size_t>(rowCount);
             if (data.pixels.size() < required)
                 throw std::invalid_argument(
                     "D3D12TextureRenderer: level-zero pixel buffer is too small for SurfaceFormat::" +
                     std::string(D3DCommon::SurfaceFormatName(surfaceFormat_)) + ".");
-            UploadRegion(0, data.pixels.data(), width_, height_, width_ * bytesPerTexel_);
+            UploadRegion(0, data.pixels.data(), width_, height_, static_cast<int>(rowBytes));
         }
         else
         {
@@ -120,9 +127,13 @@ namespace CNA::Internal::Renderers::DirectX12
     void D3D12TextureRenderer::UploadRegion(
         int level, const uint8_t* rgba, int levelW, int levelH, int sourceStrideBytes)
     {
-        const UINT rowBytes = static_cast<UINT>(levelW * bytesPerTexel_);
+        const UINT rowBytes = compressed_
+            ? static_cast<UINT>(((levelW + 3) / 4) * bytesPerBlock_)
+            : static_cast<UINT>(levelW * bytesPerTexel_);
+        const int rowCount = compressed_ ? (levelH + 3) / 4 : levelH;
         const UINT rowPitch = AlignUp(rowBytes, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
-        const UINT64 uploadBufferSize = static_cast<UINT64>(rowPitch) * static_cast<UINT64>(levelH);
+        const UINT64 uploadBufferSize = static_cast<UINT64>(rowPitch) *
+                                        static_cast<UINT64>(rowCount);
 
         D3D12_HEAP_PROPERTIES uploadHeapProps{};
         uploadHeapProps.Type = D3D12_HEAP_TYPE_UPLOAD;
@@ -149,7 +160,7 @@ namespace CNA::Internal::Renderers::DirectX12
         hr = staging->Map(0, &readRange, reinterpret_cast<void**>(&mapped));
         if (FAILED(hr))
             throw std::runtime_error("D3D12TextureRenderer: staging Map failed, hr=" + FormatHr(hr));
-        for (int row = 0; row < levelH; ++row)
+        for (int row = 0; row < rowCount; ++row)
         {
             std::memcpy(mapped + static_cast<std::size_t>(row) * rowPitch,
                         rgba + static_cast<std::size_t>(row) * sourceStrideBytes,
@@ -209,14 +220,18 @@ namespace CNA::Internal::Renderers::DirectX12
 
     void D3D12TextureRenderer::UpdatePixels(const uint8_t* rgba, int stride)
     {
-        const int sourceStride = stride > 0 ? stride : width_ * bytesPerTexel_;
+        const int nativeStride = compressed_ ? ((width_ + 3) / 4) * bytesPerBlock_
+                                             : width_ * bytesPerTexel_;
+        const int sourceStride = stride > 0 ? stride : nativeStride;
         UploadRegion(0, rgba, width_, height_, sourceStride);
     }
 
     void D3D12TextureRenderer::UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH)
     {
         if (level < 0 || level >= mipLevels_) return;
-        UploadRegion(level, rgba, levelW, levelH, levelW * bytesPerTexel_);
+        const int sourceStride = compressed_ ? ((levelW + 3) / 4) * bytesPerBlock_
+                                             : levelW * bytesPerTexel_;
+        UploadRegion(level, rgba, levelW, levelH, sourceStride);
     }
 
     bool D3D12TextureRenderer::GetData(int level, int x, int y, int w, int h,
@@ -226,13 +241,20 @@ namespace CNA::Internal::Renderers::DirectX12
         const int levelW = std::max(1, width_ >> level);
         const int levelH = std::max(1, height_ >> level);
         if (x < 0 || y < 0 || x + w > levelW || y + h > levelH) return false;
-        const std::size_t rowBytes = static_cast<std::size_t>(w) * bytesPerTexel_;
-        const std::size_t required = rowBytes * static_cast<std::size_t>(h);
+        if (compressed_ && ((x % 4) != 0 || (y % 4) != 0 ||
+                            ((w % 4) != 0 && x + w != levelW) ||
+                            ((h % 4) != 0 && y + h != levelH)))
+            return false;
+        const int rowCount = compressed_ ? (h + 3) / 4 : h;
+        const std::size_t rowBytes = compressed_
+            ? static_cast<std::size_t>((w + 3) / 4) * bytesPerBlock_
+            : static_cast<std::size_t>(w) * bytesPerTexel_;
+        const std::size_t required = rowBytes * static_cast<std::size_t>(rowCount);
         if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required) return false;
 
         const UINT rowPitch = AlignUp(static_cast<UINT>(rowBytes),
                                       D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
-        const UINT64 readbackBufferSize = static_cast<UINT64>(rowPitch) * h;
+        const UINT64 readbackBufferSize = static_cast<UINT64>(rowPitch) * rowCount;
 
         D3D12_HEAP_PROPERTIES heapProps{};
         heapProps.Type = D3D12_HEAP_TYPE_READBACK;
@@ -285,7 +307,7 @@ namespace CNA::Internal::Renderers::DirectX12
         const D3D12_RANGE readRange{0, static_cast<SIZE_T>(readbackBufferSize)};
         if (FAILED(readback->Map(0, &readRange, reinterpret_cast<void**>(&mapped)))) return false;
         auto* out = static_cast<uint8_t*>(data);
-        for (int row = 0; row < h; ++row)
+        for (int row = 0; row < rowCount; ++row)
             std::memcpy(out + static_cast<std::size_t>(row) * rowBytes,
                         mapped + static_cast<std::size_t>(row) * rowPitch, rowBytes);
         const D3D12_RANGE writtenRange{0, 0};

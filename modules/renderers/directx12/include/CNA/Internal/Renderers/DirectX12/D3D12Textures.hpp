@@ -1,7 +1,7 @@
 #pragma once
 
-// plans/plan_dx.md Phase DX12 (DX-109/DX-214): real D3D12 2D texture renderer. Storage and
-// transfer pitches follow the requested uncompressed XNA SurfaceFormat. Same explicit
+// plans/plan_dx.md Phase DX12 (DX-109/DX-214/DX-225): real D3D12 2D texture renderer. Storage and
+// transfer pitches follow the requested core XNA SurfaceFormat. Same explicit
 // upload-heap-staging discipline as D3D12Buffers.hpp/.cpp:
 // CreateCommittedResource on a DEFAULT heap for the GPU-resident texture, a fresh UPLOAD-heap
 // staging BUFFER per upload (D3D12 requires texture-copy sources to be laid out as a row-pitch-
@@ -94,5 +94,7 @@ namespace CNA::Internal::Renderers::DirectX12
         int surfaceFormat_ = 0;
         DXGI_FORMAT dxgiFormat_ = DXGI_FORMAT_R8G8B8A8_UNORM;
         int bytesPerTexel_ = 4;
+        bool compressed_ = false;
+        int bytesPerBlock_ = 0;
     };
 }

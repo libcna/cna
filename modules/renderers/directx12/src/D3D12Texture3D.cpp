@@ -1,7 +1,9 @@
 // plans/plan_dx.md Phase DX13 (DX-122).
 #include "CNA/Internal/Renderers/DirectX12/D3D12Texture3D.hpp"
 #include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
+#include "CNA/Internal/Graphics/DxtUtil.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DFormatMapping.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 
 #include <algorithm>
 #include <cstdio>
@@ -47,18 +49,50 @@ namespace CNA::Internal::Renderers::DirectX12
                 static_cast<int>(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE) |
                 static_cast<int>(D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
 
-        void ResolveSurfaceFormat(int surfaceFormat, DXGI_FORMAT& dxgiFormat, int& bytesPerTexel)
+        void ResolveSurfaceFormat(int surfaceFormat, DXGI_FORMAT& dxgiFormat, int& bytesPerTexel,
+                                  bool& compressed, int& bytesPerBlock)
         {
             using namespace D3DCommon;
             dxgiFormat = SurfaceFormatToDxgi(surfaceFormat);
             bytesPerTexel = SurfaceFormatBytesPerTexel(surfaceFormat);
-            if (!IsXnaUncompressedSurfaceFormat(surfaceFormat) ||
-                dxgiFormat == DXGI_FORMAT_UNKNOWN || bytesPerTexel == 0)
+            compressed = IsXnaBlockCompressedSurfaceFormat(surfaceFormat);
+            bytesPerBlock = SurfaceFormatBytesPerBlock(surfaceFormat);
+            if ((!IsXnaUncompressedSurfaceFormat(surfaceFormat) && !compressed) ||
+                dxgiFormat == DXGI_FORMAT_UNKNOWN ||
+                (compressed ? bytesPerBlock == 0 : bytesPerTexel == 0))
             {
                 throw std::invalid_argument(
                     "D3D12Texture3DRenderer: unsupported SurfaceFormat::" +
                     std::string(SurfaceFormatName(surfaceFormat)) + " (ordinal " +
                     std::to_string(surfaceFormat) + ").");
+            }
+        }
+
+        std::size_t CompressedVolumeLevelByteCount(
+            int width, int height, int depth, int bytesPerBlock)
+        {
+            return static_cast<std::size_t>((width + 3) / 4) *
+                   static_cast<std::size_t>((height + 3) / 4) *
+                   static_cast<std::size_t>(depth) *
+                   static_cast<std::size_t>(bytesPerBlock);
+        }
+
+        std::vector<std::uint8_t> DecompressLevel(
+            int surfaceFormat, const std::uint8_t* blocks, std::size_t byteCount,
+            int width, int height)
+        {
+            using CNA::Internal::Graphics::DxtUtil;
+            using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+            switch (static_cast<SurfaceFormat>(surfaceFormat))
+            {
+                case SurfaceFormat::Dxt1:
+                    return DxtUtil::DecompressDxt1(blocks, byteCount, width, height);
+                case SurfaceFormat::Dxt3:
+                    return DxtUtil::DecompressDxt3(blocks, byteCount, width, height);
+                case SurfaceFormat::Dxt5:
+                    return DxtUtil::DecompressDxt5(blocks, byteCount, width, height);
+                default:
+                    return {};
             }
         }
     }
@@ -70,7 +104,8 @@ namespace CNA::Internal::Renderers::DirectX12
         , mipLevels_(mipMap ? CalculateMipLevels(w, h, depth) : 1)
         , surfaceFormat_(surfaceFormat)
     {
-        ResolveSurfaceFormat(surfaceFormat_, dxgiFormat_, bytesPerTexel_);
+        ResolveSurfaceFormat(surfaceFormat_, dxgiFormat_, bytesPerTexel_, compressed_,
+                             bytesPerBlock_);
         D3D12_HEAP_PROPERTIES heapProps{};
         heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
 
@@ -104,6 +139,19 @@ namespace CNA::Internal::Renderers::DirectX12
             {
                 renderer_->GetDeviceEXT()->CreateShaderResourceView(texture_.Get(), &srvDesc, cpu);
             });
+
+        if (compressed_)
+        {
+            compressedLevels_.resize(static_cast<std::size_t>(mipLevels_));
+            for (int level = 0; level < mipLevels_; ++level)
+            {
+                compressedLevels_[static_cast<std::size_t>(level)].assign(
+                    CompressedVolumeLevelByteCount(
+                        std::max(1, width_ >> level), std::max(1, height_ >> level),
+                        std::max(1, depth_ >> level), bytesPerBlock_),
+                    0);
+            }
+        }
 
         // No initial pixel data (ITexture3DRenderer's own construction contract, unlike
         // D3D12TextureRenderer's ImageData-driven level-0 upload) -- transition straight to the
@@ -145,10 +193,43 @@ namespace CNA::Internal::Renderers::DirectX12
         const int levelD = std::max(1, depth_ >> level);
         if (x < 0 || y < 0 || z < 0 || x + w > levelW || y + h > levelH || z + depth > levelD)
             return false;
-        const std::size_t rowBytes = static_cast<std::size_t>(w) * bytesPerTexel_;
-        const std::size_t tightSliceBytes = rowBytes * static_cast<std::size_t>(h);
+        if (compressed_ && ((x % 4) != 0 || (y % 4) != 0 ||
+                            ((w % 4) != 0 && x + w != levelW) ||
+                            ((h % 4) != 0 && y + h != levelH)))
+            return false;
+        const int rowCount = compressed_ ? (h + 3) / 4 : h;
+        const std::size_t rowBytes = compressed_
+            ? static_cast<std::size_t>((w + 3) / 4) * bytesPerBlock_
+            : static_cast<std::size_t>(w) * bytesPerTexel_;
+        const std::size_t tightSliceBytes = rowBytes * static_cast<std::size_t>(rowCount);
         const std::size_t required = tightSliceBytes * static_cast<std::size_t>(depth);
         if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required) return false;
+
+        if (compressed_)
+        {
+            const int levelBlockCols = (levelW + 3) / 4;
+            const int levelBlockRows = (levelH + 3) / 4;
+            const std::size_t levelRowBytes =
+                static_cast<std::size_t>(levelBlockCols) * bytesPerBlock_;
+            const std::size_t levelSliceBytes =
+                levelRowBytes * static_cast<std::size_t>(levelBlockRows);
+            auto& levelBlocks = compressedLevels_[static_cast<std::size_t>(level)];
+            for (int slice = 0; slice < depth; ++slice)
+            {
+                for (int row = 0; row < rowCount; ++row)
+                {
+                    std::memcpy(
+                        levelBlocks.data() +
+                            static_cast<std::size_t>(z + slice) * levelSliceBytes +
+                            static_cast<std::size_t>(y / 4 + row) * levelRowBytes +
+                            static_cast<std::size_t>(x / 4) * bytesPerBlock_,
+                        static_cast<const std::uint8_t*>(data) +
+                            static_cast<std::size_t>(slice) * tightSliceBytes +
+                            static_cast<std::size_t>(row) * rowBytes,
+                        rowBytes);
+                }
+            }
+        }
 
         // Row-pitch-aligned staging BUFFER, one slice-pitch-sized region per Z slice -- same
         // discipline D3D12TextureRenderer::UploadRegion already established for its own 2D case,
@@ -156,7 +237,7 @@ namespace CNA::Internal::Renderers::DirectX12
         // there is no separate per-slice alignment requirement for an UPLOAD-heap staging buffer,
         // unlike the resource's own internal tiled layout).
         const UINT rowPitch = AlignUp(static_cast<UINT>(rowBytes), D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
-        const UINT slicePitch = rowPitch * static_cast<UINT>(h);
+        const UINT slicePitch = rowPitch * static_cast<UINT>(rowCount);
         const UINT64 uploadBufferSize = static_cast<UINT64>(slicePitch) * static_cast<UINT64>(depth);
 
         D3D12_HEAP_PROPERTIES uploadHeapProps{};
@@ -189,7 +270,7 @@ namespace CNA::Internal::Renderers::DirectX12
         const uint8_t* src = static_cast<const uint8_t*>(data);
         for (int slice = 0; slice < depth; ++slice)
         {
-            for (int row = 0; row < h; ++row)
+            for (int row = 0; row < rowCount; ++row)
             {
                 const uint8_t* srcRow = src
                     + static_cast<std::size_t>(slice) * tightSliceBytes
@@ -251,6 +332,34 @@ namespace CNA::Internal::Renderers::DirectX12
         const int levelD = std::max(1, depth_ >> level);
         if (x < 0 || y < 0 || z < 0 || x + w > levelW || y + h > levelH || z + depth > levelD)
             return false;
+        if (compressed_)
+        {
+            const std::size_t required = static_cast<std::size_t>(w) * h * depth * 4u;
+            if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required) return false;
+            const int levelBlockRows = (levelH + 3) / 4;
+            const std::size_t levelSliceBytes =
+                static_cast<std::size_t>((levelW + 3) / 4) * levelBlockRows * bytesPerBlock_;
+            const auto& levelBlocks = compressedLevels_[static_cast<std::size_t>(level)];
+            auto* destination = static_cast<std::uint8_t*>(data);
+            for (int slice = 0; slice < depth; ++slice)
+            {
+                const std::uint8_t* sliceBlocks = levelBlocks.data() +
+                    static_cast<std::size_t>(z + slice) * levelSliceBytes;
+                const auto rgba = DecompressLevel(
+                    surfaceFormat_, sliceBlocks, levelSliceBytes, levelW, levelH);
+                if (rgba.size() < static_cast<std::size_t>(levelW) * levelH * 4u) return false;
+                for (int row = 0; row < h; ++row)
+                {
+                    std::memcpy(
+                        destination +
+                            (static_cast<std::size_t>(slice) * h + row) * w * 4u,
+                        rgba.data() +
+                            (static_cast<std::size_t>(y + row) * levelW + x) * 4u,
+                        static_cast<std::size_t>(w) * 4u);
+                }
+            }
+            return true;
+        }
         const std::size_t rowBytes = static_cast<std::size_t>(w) * bytesPerTexel_;
         const std::size_t tightSliceBytes = rowBytes * static_cast<std::size_t>(h);
         const std::size_t required = tightSliceBytes * static_cast<std::size_t>(depth);

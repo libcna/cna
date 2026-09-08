@@ -441,6 +441,8 @@ namespace CNA::Internal::Renderers
          * @param w          Width of the requested region, in texels.
          * @param h          Height of the requested region, in texels.
          * @param data       Destination for tightly packed texels in the texture's SurfaceFormat.
+         *                   A block-compressed cube renderer writes decoded RGBA8 because the
+         *                   public TextureCube readback contract receives Color elements.
          * @param dataLength Size of @p data in bytes.
          * @return True if the whole region was written; false if this renderer read nothing back.
          */
@@ -517,7 +519,9 @@ namespace CNA::Internal::Renderers
          * @param w          Width of the requested box, in voxels.
          * @param h          Height of the requested box, in voxels.
          * @param depth      Depth of the requested box, in voxels.
-         * @param data       Destination for a tightly packed format-native box.
+         * @param data       Destination for a tightly packed format-native box. A
+         *                   block-compressed volume renderer writes decoded RGBA8 because the
+         *                   public Texture3D readback contract receives Color elements.
          * @param dataLength Size of @p data in bytes.
          * @return True if the whole box was written; false if this renderer read nothing back.
          */

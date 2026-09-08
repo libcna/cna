@@ -1,7 +1,7 @@
 #pragma once
 
-// plans/plan_dx.md Phase DX12 (DX-111/DX-214): real D3D12 cube-map texture renderer. Storage and
-// transfer pitches follow the requested uncompressed XNA SurfaceFormat. Same explicit
+// plans/plan_dx.md Phase DX12 (DX-111/DX-214/DX-225): real D3D12 cube-map texture renderer. Storage
+// and transfer pitches follow the requested core XNA SurfaceFormat. Same explicit
 // upload-heap-staging discipline as
 // D3D12Textures.hpp/.cpp's D3D12TextureRenderer::UploadRegion(), just parameterized per face: a
 // fresh UPLOAD-heap staging BUFFER per SetData() call, CopyTextureRegion into the face's own
@@ -28,6 +28,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <vector>
 
 namespace CNA::Internal::Renderers::DirectX12
 {
@@ -52,6 +53,22 @@ namespace CNA::Internal::Renderers::DirectX12
         /// creation/Map/Close still throws -- that is a broken device, not an unsupported request.
         [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
                                    const void* data, int dataLength) override;
+        /**
+         * @brief Uploads an exact DXT block payload to a cube face region.
+         *
+         * @param face Cube face index.
+         * @param level Mip level.
+         * @param x Left edge in texels.
+         * @param y Top edge in texels.
+         * @param w Width in texels.
+         * @param h Height in texels.
+         * @param data Source block payload.
+         * @param dataLength Source payload size in bytes.
+         * @return true when the complete region was stored.
+         */
+        [[nodiscard]] bool SetCompressedDataEXT(
+            int face, int level, int x, int y, int w, int h,
+            const void* data, int dataLength) override;
 
         /// REMED-GFX-130: true only once the READBACK-heap copy has completed and the whole
         /// requested face rectangle has been unpacked from it; false for an out-of-range
@@ -87,5 +104,8 @@ namespace CNA::Internal::Renderers::DirectX12
         int surfaceFormat_ = 0;
         DXGI_FORMAT dxgiFormat_ = DXGI_FORMAT_R8G8B8A8_UNORM;
         int bytesPerTexel_ = 4;
+        bool compressed_ = false;
+        int bytesPerBlock_ = 0;
+        std::vector<std::vector<std::uint8_t>> compressedLevels_;
     };
 }

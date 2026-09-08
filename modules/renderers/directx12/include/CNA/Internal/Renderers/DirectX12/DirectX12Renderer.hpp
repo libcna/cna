@@ -121,6 +121,26 @@ namespace CNA::Internal::Renderers::DirectX12
         [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(int surfaceFormat) const override;
         /** @brief Restricts Color-shaped transfers to actual Color storage. */
         [[nodiscard]] RendererFormatVerdict ClassifyColorTransferFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief Reports whether D3D12 transfers the specified surface format as compressed blocks.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return true for the core XNA Dxt1, Dxt3, and Dxt5 formats.
+         */
+        [[nodiscard]] bool IsCompressedTransferFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief Reports whether D3D12 accepts compressed block transfers for cube faces.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return true for the core XNA Dxt1, Dxt3, and Dxt5 formats.
+         */
+        [[nodiscard]] bool IsCompressedCubeTransferFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief Keeps supported compressed content in its native block-compressed form.
+         *
+         * @return true because D3D12 uploads XNA DXT blocks without CPU decompression.
+         */
+        [[nodiscard]] bool LoadsCompressedContentNativelyEXT() const override;
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         /// DX-111 (closing env_map3d): real D3D12TextureCubeRenderer, no longer the inherited
         /// default (IGraphicsRenderer::CreateTextureCube() -> nullptr).

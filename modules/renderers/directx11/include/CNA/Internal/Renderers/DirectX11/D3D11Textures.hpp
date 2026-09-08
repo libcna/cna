@@ -2,12 +2,14 @@
 
 // plans/plan_dx.md Phase DIRECTX6 (DX-40/DX-41/DX-42): real D3D11 texture renderers.
 //
-// DX-214: storage and transfer pitches follow the requested uncompressed XNA SurfaceFormat.
+// DX-214/DX-225: storage and transfer pitches follow the requested core XNA SurfaceFormat.
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
 #include <d3d11.h>
 #include <wrl/client.h>
+
+#include <vector>
 
 namespace CNA::Internal::Renderers::DirectX11
 {
@@ -50,6 +52,8 @@ namespace CNA::Internal::Renderers::DirectX11
         int surfaceFormat_ = 0;
         DXGI_FORMAT dxgiFormat_ = DXGI_FORMAT_R8G8B8A8_UNORM;
         int bytesPerTexel_ = 4;
+        bool compressed_ = false;
+        int bytesPerBlock_ = 0;
     };
 
     /// Real D3D11 cube-map texture renderer (DX-41). A single 6-slice ID3D11Texture2D array with
@@ -69,6 +73,22 @@ namespace CNA::Internal::Renderers::DirectX11
         /// caller's memory before it returns, so the source is never retained past this call.
         [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
                                    const void* data, int dataLength) override;
+        /**
+         * @brief Uploads an exact DXT block payload to a cube face region.
+         *
+         * @param face Cube face index.
+         * @param level Mip level.
+         * @param x Left edge in texels.
+         * @param y Top edge in texels.
+         * @param w Width in texels.
+         * @param h Height in texels.
+         * @param data Source block payload.
+         * @param dataLength Source payload size in bytes.
+         * @return true when the complete region was stored.
+         */
+        [[nodiscard]] bool SetCompressedDataEXT(
+            int face, int level, int x, int y, int w, int h,
+            const void* data, int dataLength) override;
         /// REMED-GFX-130: true only once the whole requested face rectangle has been copied out of
         /// the STAGING mirror; false for an out-of-range face/level or a failed staging
         /// creation/Map, so the shared layer rejects the read instead of fabricating a face.
@@ -91,6 +111,9 @@ namespace CNA::Internal::Renderers::DirectX11
         int surfaceFormat_ = 0;
         DXGI_FORMAT dxgiFormat_ = DXGI_FORMAT_R8G8B8A8_UNORM;
         int bytesPerTexel_ = 4;
+        bool compressed_ = false;
+        int bytesPerBlock_ = 0;
+        std::vector<std::vector<std::uint8_t>> compressedLevels_;
     };
 
     /// Real D3D11 volume (3D) texture renderer (DX-42).
@@ -128,5 +151,8 @@ namespace CNA::Internal::Renderers::DirectX11
         int surfaceFormat_ = 0;
         DXGI_FORMAT dxgiFormat_ = DXGI_FORMAT_R8G8B8A8_UNORM;
         int bytesPerTexel_ = 4;
+        bool compressed_ = false;
+        int bytesPerBlock_ = 0;
+        std::vector<std::vector<std::uint8_t>> compressedLevels_;
     };
 }

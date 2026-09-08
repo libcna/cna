@@ -522,7 +522,8 @@ namespace CNA::Internal::Renderers::DirectX11
 
     RendererFormatVerdict DirectX11Renderer::ClassifySurfaceFormatEXT(int surfaceFormat) const
     {
-        if (D3DCommon::IsXnaUncompressedSurfaceFormat(surfaceFormat))
+        if (D3DCommon::IsXnaUncompressedSurfaceFormat(surfaceFormat) ||
+            D3DCommon::IsXnaBlockCompressedSurfaceFormat(surfaceFormat))
             return RendererFormatVerdict::Supported;
         if (D3DCommon::SurfaceFormatToDxgi(surfaceFormat) != DXGI_FORMAT_UNKNOWN)
             return RendererFormatVerdict::Unsupported;
@@ -535,6 +536,21 @@ namespace CNA::Internal::Renderers::DirectX11
         if (D3DCommon::SurfaceFormatToDxgi(surfaceFormat) != DXGI_FORMAT_UNKNOWN)
             return RendererFormatVerdict::Unsupported;
         return RendererFormatVerdict::Defer;
+    }
+
+    bool DirectX11Renderer::IsCompressedTransferFormatEXT(int surfaceFormat) const
+    {
+        return D3DCommon::IsXnaBlockCompressedSurfaceFormat(surfaceFormat);
+    }
+
+    bool DirectX11Renderer::IsCompressedCubeTransferFormatEXT(int surfaceFormat) const
+    {
+        return D3DCommon::IsXnaBlockCompressedSurfaceFormat(surfaceFormat);
+    }
+
+    bool DirectX11Renderer::LoadsCompressedContentNativelyEXT() const
+    {
+        return true;
     }
 
     std::unique_ptr<ITextureRenderer> DirectX11Renderer::CreateTexture(const ImageData& data)

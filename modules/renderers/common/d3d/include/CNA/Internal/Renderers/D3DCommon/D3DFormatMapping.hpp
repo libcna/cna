@@ -26,12 +26,28 @@ namespace CNA::Internal::Renderers::D3DCommon
     bool IsXnaUncompressedSurfaceFormat(int surfaceFormat) noexcept;
 
     /**
+     * @brief Returns whether an ordinal is a block-compressed XNA 4.0 surface format.
+     *
+     * @param surfaceFormat SurfaceFormat ordinal.
+     * @return True for Dxt1, Dxt3, or Dxt5; CNA extension formats are excluded.
+     */
+    bool IsXnaBlockCompressedSurfaceFormat(int surfaceFormat) noexcept;
+
+    /**
      * @brief Returns the byte size of one texel for an uncompressed XNA 4.0 surface format.
      *
      * @param surfaceFormat SurfaceFormat ordinal.
      * @return Bytes per texel, or zero for compressed, extension, or unknown formats.
      */
     int SurfaceFormatBytesPerTexel(int surfaceFormat) noexcept;
+
+    /**
+     * @brief Returns the byte size of one 4x4 block for an XNA compressed format.
+     *
+     * @param surfaceFormat SurfaceFormat ordinal.
+     * @return Eight for Dxt1, sixteen for Dxt3/Dxt5, or zero otherwise.
+     */
+    int SurfaceFormatBytesPerBlock(int surfaceFormat) noexcept;
 
     /**
      * @brief Returns a stable diagnostic name for a SurfaceFormat ordinal.

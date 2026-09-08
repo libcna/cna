@@ -71,6 +71,19 @@ namespace CNA::Internal::Renderers::D3DCommon
         }
     }
 
+    bool IsXnaBlockCompressedSurfaceFormat(int surfaceFormat) noexcept
+    {
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+            case SurfaceFormat::Dxt1:
+            case SurfaceFormat::Dxt3:
+            case SurfaceFormat::Dxt5:
+                return true;
+            default:
+                return false;
+        }
+    }
+
     int SurfaceFormatBytesPerTexel(int surfaceFormat) noexcept
     {
         switch (static_cast<SurfaceFormat>(surfaceFormat))
@@ -96,6 +109,20 @@ namespace CNA::Internal::Renderers::D3DCommon
             case SurfaceFormat::HdrBlendable:
                 return 8;
             case SurfaceFormat::Vector4:
+                return 16;
+            default:
+                return 0;
+        }
+    }
+
+    int SurfaceFormatBytesPerBlock(int surfaceFormat) noexcept
+    {
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+            case SurfaceFormat::Dxt1:
+                return 8;
+            case SurfaceFormat::Dxt3:
+            case SurfaceFormat::Dxt5:
                 return 16;
             default:
                 return 0;
