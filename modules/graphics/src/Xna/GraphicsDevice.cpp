@@ -3789,6 +3789,8 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (data == nullptr)
             throw std::invalid_argument("data");
+        if (startIndex < 0)
+            throw std::out_of_range("GetBackBufferData: startIndex must be >= 0");
 
         // REMED-GFX-165: the read region is derived from the AUTHORITATIVE backbuffer description --
         // PresentationParameters -- never from the renderer's live viewport. A rectangle-less call
@@ -3813,7 +3815,8 @@ namespace Microsoft::Xna::Framework::Graphics
             // A rectangle is validated against the REAL backbuffer bounds, before any native copy, so
             // an out-of-range request fails deterministically rather than reading outside the resource.
             if (w <= 0 || h <= 0 || x < 0 || y < 0 ||
-                x + w > backBufferWidth || y + h > backBufferHeight)
+                w > backBufferWidth || h > backBufferHeight ||
+                x > backBufferWidth - w || y > backBufferHeight - h)
                 throw std::out_of_range(
                     "GetBackBufferData: rectangle is outside the backbuffer bounds");
         }
@@ -3838,14 +3841,21 @@ namespace Microsoft::Xna::Framework::Graphics
             std::fflush(stderr);
         }
 
-        if (elementCount < w * h)
-            throw std::runtime_error("GetBackBufferData: data array too small for requested region");
+        const int pixelCount = w * h;
+        if (elementCount < pixelCount)
+            throw std::out_of_range(
+                "GetBackBufferData: elementCount is less than the requested pixel count");
+        if (static_cast<std::int64_t>(startIndex) + static_cast<std::int64_t>(elementCount) >
+            static_cast<std::int64_t>((std::numeric_limits<int>::max)()))
+        {
+            throw std::out_of_range(
+                "GetBackBufferData: startIndex + elementCount does not fit in a 32-bit element index");
+        }
         Texture::ValidateGetDataFormat(presentationParameters_.getBackBufferFormatProperty(), 4);
 
         // Color inherits a vtable pointer, so its first byte is NOT the R component.
         // Use a plain byte buffer for ReadBackbuffer, then unpack each RGBA group
         // into a Color(r, g, b, a) to avoid writing into the vtable pointer.
-        const int pixelCount = w * h;
         std::vector<uint8_t> buf(static_cast<std::size_t>(pixelCount) * 4);
         renderer_->ReadBackbuffer(x, y, w, h, buf.data());
         for (int i = 0; i < pixelCount; ++i)
