@@ -91,7 +91,16 @@ opt-in ignores vertex colors entirely (this renderer faithfully reproduces that,
 what caused `Software_Rasterizer`'s tests to briefly fail while `DrawPrimitivesEx` was first wired
 up — see `plans/plan_software.md` `SOFTWARE-50`'s notes for the full story).
 
-## Cross-renderer diagnostic (SOFTWARE-61/84)
+## Cross-renderer differential infrastructure (SOFTWARE-61/84/103/156)
+
+The original raw-dump diagnostic below remains a useful small end-to-end smoke test. The main
+parity corpus is now much broader: renderer-neutral public programs are compiled independently in
+the Software and EasyGL configurations and assert exact pixels, transfers, resource properties,
+exception behavior and query counts. They cover raster/sample rules, declarations and buffers,
+textures/samplers/formats, targets/cubes/MRT, complete graphics state, classic stock effects,
+SpriteBatch/SpriteFont, lifecycle/reset, occlusion and `Model.Draw()`. Tight non-zero tolerances are
+local to tests with a documented normalized-conversion or raster-rounding reason; most contracts
+use exact equality.
 
 `modules/graphics/examples/cross_renderer_diagnostic_scene.cpp` renders one simple, fully unlit (vertex-color-only,
 no lighting) triangle and dumps the resulting 64x64 RGBA8 backbuffer to a raw file given as
