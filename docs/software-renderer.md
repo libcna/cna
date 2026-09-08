@@ -17,7 +17,10 @@ No extra dependencies are needed. The renderer descriptor requests neither SDL's
 nor a native window, and the implementation never uses OpenGL, Vulkan, or any GPU library. Shared
 `GraphicsAdapter` enumeration may initialize and retain platform video when a display is available
 so its public display IDs stay valid; Software does not depend on that succeeding and remains fully
-usable without a display server. It only needs the same SDL3/SDL3_image/SDL3_mixer and
+usable without a display server. The shared pin follows ambient-platform transitions atomically
+(`SOFTWARE-157`), acquiring the replacement before releasing the predecessor; it is never counted
+as ownership by the windowless Software device. The renderer only needs the same
+SDL3/SDL3_image/SDL3_mixer and
 `../sharp-runtime` checkout every other renderer already requires.
 
 ## What this renderer is for

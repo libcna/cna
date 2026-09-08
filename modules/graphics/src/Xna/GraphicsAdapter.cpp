@@ -87,61 +87,37 @@ namespace Microsoft::Xna::Framework::Graphics
         class AdapterVideoPin final
         {
         public:
-            /// Raises the subsystem, answering whether it came up. The previous pin is dropped
-            /// only after the new reference is taken, so a running session is never torn down
-            /// between two enumerations.
+            /// Raises the subsystem, answering whether it came up. CurrentPlatform owns the
+            /// association with the platform instance and transfers it without ending a running
+            /// session when the ambient platform changes.
             static bool Raise()
             {
-                bool raised = false;
                 try
                 {
-                    CNA::Platform::GetCurrentPlatform().AcquireSubsystem(
+                    CNA::Platform::Detail::PinCurrentPlatformSubsystem(
+                        &ownerToken_,
                         CNA::Platform::PlatformSubsystem::Video);
-                    raised = true;
+                    return true;
                 }
                 catch (const CNA::Platform::PlatformException&)
                 {
                     // No display server, or no video subsystem on this platform at all;
                     // PlatformNotSupportedException derives from this, so both arrive here.
+                    return false;
                 }
-
-                if (held_)
-                {
-                    Release();
-                }
-                held_ = raised;
-                return raised;
             }
 
             /// Gives the reference back, for an enumeration that found nothing to keep valid.
             static void Drop()
             {
-                if (!held_)
-                    return;
-
-                held_ = false;
-                Release();
+                CNA::Platform::Detail::UnpinCurrentPlatformSubsystem(&ownerToken_);
             }
 
         private:
-            static void Release()
-            {
-                try
-                {
-                    CNA::Platform::GetCurrentPlatform().ReleaseSubsystem(
-                        CNA::Platform::PlatformSubsystem::Video);
-                }
-                catch (...)
-                {
-                    // A release that fails leaves the subsystem up, which is the harmless
-                    // direction and must not propagate out of an enumeration.
-                }
-            }
-
-            static bool held_;
+            static char ownerToken_;
         };
 
-        bool AdapterVideoPin::held_ = false;
+        char AdapterVideoPin::ownerToken_ = 0;
     }
 
     GraphicsAdapter& GraphicsAdapter::getDefaultAdapterProperty()
@@ -324,6 +300,13 @@ namespace Microsoft::Xna::Framework::Graphics
         if (adapters_.empty())
         {
             AdaptersChanged();
+        }
+        else if (adapters_[0]->displayId_ != 0)
+        {
+            // A platform transition normally transfers the ambient pin itself. If the replacement
+            // could not start video at transition time, retry when the real adapter cache is used
+            // instead of silently treating its native display ids as durable without a session.
+            (void)AdapterVideoPin::Raise();
         }
 
         return adapters_;
