@@ -88,11 +88,14 @@ bytecode, a missing or
 undeclared slot, an unknown/mistyped scalar and unsupported image operations all fail explicitly
 instead of becoming a silent no-op or a validation error.
 
-The v1 readback boundary is intentionally synchronous: dispatch records host-write → shader
-read/write and shader-write → host-read dependencies, submits on the existing queue and completes
-before a requested `StorageBuffer::getBytes`. `MOD-2247`–`MOD-2253` own integration into deferred
-public-call ordering and removal of routine waits; only explicit readback will remain synchronous.
-Storage images remain `MOD-2244` work and are not claimed here.
+The v1 compute implementation is transitionally synchronous at **every dispatch**: it records
+host-write → shader read/write and shader-write → host-read dependencies, submits on the existing
+queue and waits before `dispatch` returns, even when no `StorageBuffer::getBytes` follows. That is
+stronger than correctness requires and is not the accepted final contract.
+`docs/adr/0001-modern-gpu-ordering-lifetime.md` permits blocking only at a requested synchronous
+readback boundary; `MOD-2247`–`MOD-2253` own integration into deferred public-call ordering,
+resource-tracked barriers, fence-safe retirement and removal of this routine wait. Storage images
+remain `MOD-2244` work and are not claimed here.
 
 ### Multi-stream vertex input
 
@@ -189,6 +192,31 @@ has `VK_QUEUE_COMPUTE_BIT`, the required storage-buffer slots exist, and the dev
 usable compute limits. There is no second queue lifecycle and no asynchronous-compute promise.
 This keeps compute, copy and graphics on the one queue that later synchronization rows bring into
 the same deferred public-call ordering domain.
+
+### Portable ordering and lifetime contract
+
+`MOD-2202` is fixed by `docs/adr/0001-modern-gpu-ordering-lifetime.md`. Vulkan does not define a
+separate application-visible ordering model: XNA work, modern copies/compute/indirect work and
+presentation form one public-call order on the selected graphics/compute queue. The renderer, not
+the application, owns pipeline barriers, image layouts, render-pass breaks and fence values.
+
+The existing XNA Vulkan paths already snapshot mutable draw state, retain deferred render-target
+destinations independently of their public wrappers, evict descriptor entries that mention dying
+views and retire images, buffers, views, pipelines, layouts, descriptors and queries only after the
+consuming frame fence. Applications neither receive the `VkDevice` nor wait it idle before
+disposal. Every Phase 22 resource must join those mechanisms; an unsupported modern resource stays
+unavailable until it does.
+
+Two current implementation gaps are stated rather than normalized into the contract:
+
+- compute dispatch uses a one-time command buffer and waits immediately (`MOD-2247`/`MOD-2249`/
+  `MOD-2253`); and
+- off-screen dependency readback currently begins with `DeviceWaitIdleEXT` instead of waiting only
+  for the requested dependency closure's submission (`MOD-2253`).
+
+Normal `Dispose()` must never add a queue/device idle. Device teardown, loss/recovery and a
+requested synchronous readback are the only relevant completion boundaries, with readback waiting
+on its narrow submission fence rather than the whole device.
 
 **Test:** `Vulkan_ModernFeatureDiscovery` walks all 55 core feature bits and requires the enabled
 record to be exactly the subset consumed by implemented CNA paths. It also verifies the property

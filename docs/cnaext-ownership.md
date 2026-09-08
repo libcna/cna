@@ -20,6 +20,12 @@ takes the device by reference at construction and keeps it for life. That is the
 important ownership fact about the layer — *a `CNA::Graphics` object must not outlive its
 `GraphicsDevice`*, and none of them try to detect it if it does.
 
+Public ownership and in-flight native lifetime are deliberately different. A deferred renderer may
+retain an internal native resource record after a public wrapper is disposed, solely until the
+accepted command and its completion token are finished. This is required by
+`docs/adr/0001-modern-gpu-ordering-lifetime.md`; it neither makes the public object shared nor lets a
+caller keep using it after disposal.
+
 ## The owned/borrowed pair idiom
 
 Three classes accept an object the caller owns *or* build one themselves, and they all spell it the
@@ -65,8 +71,9 @@ use. Reading the raw pointer is always correct; the `unique_ptr` only answers "m
 | `TonemapPass` | `FullscreenPass`, `ShaderEffect` | — | `GraphicsDevice&` |
 
 Every class marked "Owns" in that table releases exactly what it owns in its destructor, and none of
-them own anything a caller can also see. There is no `shared_ptr` anywhere in the layer, and no
-class deletes something it did not create.
+them own anything a caller can also see. There is no public `shared_ptr` ownership in the layer, and
+no class deletes something it did not create. Renderer-internal retained records are allowed for
+deferred command and fence-safe native lifetime.
 
 ## Two things that are inconsistent, and why they stay
 
@@ -85,9 +92,12 @@ class deletes something it did not create.
 
 ## What a caller has to remember
 
-Three sentences, and they cover the whole layer:
+Four rules cover the whole layer:
 
 1. Nothing in `CNA::Graphics` may outlive its `GraphicsDevice`.
-2. Anything you pass in as a raw pointer, you keep alive; anything you pass as `unique_ptr`, you
+2. GPU-facing use and disposal are serialized on the device's graphics thread; the public objects
+   are not concurrently thread-safe.
+3. Anything you pass in as a raw pointer, you keep alive; anything you pass as `unique_ptr`, you
    have handed over.
-3. Nothing here is thread-safe, and nothing here is reference-counted.
+4. Public objects are not reference-counted; internal renderers may retain only the native record
+   needed by already accepted work.

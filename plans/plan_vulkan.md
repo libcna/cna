@@ -237,6 +237,14 @@ Existing CNAEXT/internal diagnostic hooks that Vulkan tests already use (the `*E
 counters, `validationMessages_`, `VkSamplerTraceEXT`) stay; this plan does not expand the modern
 public API.
 
+**Later Phase 22 synchronization decision (2026-09-09):**
+`docs/adr/0001-modern-gpu-ordering-lifetime.md` supersedes `VULKAN-399`'s historical conclusion
+that a device-wide wait is acceptable merely because the caller requested readback. Readback may
+block, but only on the ordered submission needed for the requested dependency closure; replacing
+`FlushDeferredRenderTarget`'s `DeviceWaitIdleEXT` with that targeted fence is now owned by
+`MOD-2253`. The old row remains below as the accurate record of what was measured and decided
+before the portable modern-resource contract existed.
+
 Performance work is a non-goal except where §13's four named pathologies make the renderer
 materially less robust than EasyGL. No speculative micro-optimization task may be created without a
 measurement.
