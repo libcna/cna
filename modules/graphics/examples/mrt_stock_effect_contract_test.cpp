@@ -100,11 +100,12 @@ class MrtStockEffectContractTest final : public Game
         return result;
     }
 
-    Color ReadCubeCenter(RenderTargetCube& target, CubeMapFace face)
+    Color ReadCubeCenter(RenderTargetCube& target, CubeMapFace face, int level = 0)
     {
-        const Rectangle center(kSize / 2, kSize / 2, 1, 1);
+        const int dimension = std::max(1, kSize >> level);
+        const Rectangle center(dimension / 2, dimension / 2, 1, 1);
         Color result(0, 0, 0, 0);
-        target.GetData(face, 0, &center, &result, 0, 1);
+        target.GetData(face, level, &center, &result, 0, 1);
         return result;
     }
 
@@ -276,7 +277,6 @@ class MrtStockEffectContractTest final : public Game
               "higher MRT attachments generate mips from their own clear storage");
     }
 
-#if defined(CNA_RENDERER_SOFTWARE)
     void TestCubeMembers()
     {
         auto& device = getGraphicsDeviceProperty();
@@ -314,8 +314,77 @@ class MrtStockEffectContractTest final : public Game
         Check(Near(ReadCubeCenter(cube, CubeMapFace::PositiveY), cubeOutput) &&
                   Near(ReadCenter(*first), secondClear),
               "a cube face in slot zero receives COLOR0 and owns the set ordering");
+
+        auto msaaSecond = MakeTarget(DepthFormat::None, 4);
+        RenderTargetCube msaaCube(
+            device, kSize, false, SurfaceFormat::Color, DepthFormat::None, 4,
+            RenderTargetUsage::PreserveContents);
+        device.SetRenderTargets({
+            RenderTargetBinding(static_cast<Texture*>(&msaaCube), CubeMapFace::PositiveZ),
+            RenderTargetBinding(msaaSecond.get()),
+        });
+        device.Clear(Color(0, 0, 0, 0));
+        BlendState oneSample = BlendState::Opaque;
+        oneSample.setMultiSampleMaskProperty(1);
+        device.setBlendStateProperty(oneSample);
+        DrawFullScreen(Color::White);
+        device.SetRenderTargets({});
+        Check(msaaCube.getMultiSampleCountProperty() == 4 &&
+                  Near(ReadCubeCenter(msaaCube, CubeMapFace::PositiveZ), Color(64, 64, 64, 64)),
+              "a multisampled cube MRT slot resolves its selected face");
+        Check(Near(ReadCenter(*msaaSecond), Color(0, 0, 0, 0)),
+              "an unwritten multisampled 2D peer resolves independently of the cube face");
+
+        auto mipSecond = MakeTarget(DepthFormat::None, 0, true);
+        RenderTargetCube mipCube(
+            device, kSize, true, SurfaceFormat::Color, DepthFormat::None, 0,
+            RenderTargetUsage::PreserveContents);
+        device.SetRenderTargets({
+            RenderTargetBinding(static_cast<Texture*>(&mipCube), CubeMapFace::NegativeZ),
+            RenderTargetBinding(mipSecond.get()),
+        });
+        device.Clear(kClear);
+        device.setBlendStateProperty(BlendState::Opaque);
+        DrawFullScreen(kSource);
+        device.SetRenderTargets({});
+        Check(Near(ReadCubeCenter(mipCube, CubeMapFace::NegativeZ, 1), kSource) &&
+                  Near(ReadCenter(*mipSecond, 1), kClear),
+              "cube and 2D MRT members generate independent mip chains");
+
+        auto depthPeer = MakeTarget();
+        RenderTargetCube depthCube(
+            device, kSize, false, SurfaceFormat::Color, DepthFormat::Depth24, 0,
+            RenderTargetUsage::PreserveContents);
+        device.SetRenderTargets({
+            RenderTargetBinding(static_cast<Texture*>(&depthCube), CubeMapFace::NegativeY),
+            RenderTargetBinding(depthPeer.get()),
+        });
+        device.Clear(ClearOptions::Target | ClearOptions::DepthBuffer, kClear, 1.0f, 0);
+        device.setDepthStencilStateProperty(DepthStencilState::Default);
+        const Color nearColor(57, 193, 89, 255);
+        DrawFullScreen(nearColor, 0.2f);
+        DrawFullScreen(Color::Red, 0.8f);
+        device.SetRenderTargets({});
+        Check(Near(ReadCubeCenter(depthCube, CubeMapFace::NegativeY), nearColor) &&
+                  Near(ReadCenter(*depthPeer), kClear),
+              "a cube face in slot zero owns depth for the MRT set");
+
+        auto survivor = MakeTarget(DepthFormat::None, 0, true);
+        auto dyingCube = std::make_unique<RenderTargetCube>(
+            device, kSize, false, SurfaceFormat::Color, DepthFormat::None, 0,
+            RenderTargetUsage::PreserveContents);
+        device.SetRenderTargets({
+            RenderTargetBinding(
+                static_cast<Texture*>(dyingCube.get()), CubeMapFace::PositiveX),
+            RenderTargetBinding(survivor.get()),
+        });
+        device.Clear(kClear);
+        dyingCube.reset();
+        device.SetRenderTargets({});
+        Check(Near(ReadCenter(*survivor), kClear) &&
+                  Near(ReadCenter(*survivor, 1), kClear),
+              "destroying a bound cube detaches its MRT slots and still finalizes live peers");
     }
-#endif
 
 protected:
     void Draw(const GameTime&) override
@@ -332,9 +401,7 @@ protected:
         TestWriteMasksAndDiscardClear();
         TestDepthOwnership();
         TestMsaaAndMips();
-#if defined(CNA_RENDERER_SOFTWARE)
         TestCubeMembers();
-#endif
 
         std::printf("=== %d/%d PASS ===\n", passed_, total_);
         result_ = passed_ == total_ ? 0 : 1;

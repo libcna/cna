@@ -111,6 +111,19 @@ namespace CNA::Internal::Renderers::EasyGL
      * to owe. The MRT slots are the one case where the neighbours' finalization IS observable,
      * which is why a detach clears one SLOT rather than abandoning the set.
      */
+    struct EasyGLMrtBindingEXT
+    {
+        /** @brief Bound 2D target when this slot names a RenderTarget2D. */
+        EasyGLRenderTargetRenderer* rt2D = nullptr;
+        /** @brief Bound cube target when this slot names one of its faces. */
+        EasyGLRenderTargetCubeRenderer* cube = nullptr;
+        /** @brief Cube-face ordinal used when `cube` is non-null. */
+        int cubeFace = 0;
+
+        /** @brief Returns whether this slot names no live attachment. */
+        [[nodiscard]] bool IsEmpty() const { return rt2D == nullptr && cube == nullptr; }
+    };
+
     struct EasyGLBoundTargetEXT
     {
         /** @brief Currently bound single `RenderTarget2D` renderer, or nullptr. */
@@ -118,7 +131,7 @@ namespace CNA::Internal::Renderers::EasyGL
         /** @brief Currently bound `RenderTargetCube` renderer, or nullptr. */
         IRenderTargetCubeRenderer* cube = nullptr;
         /** @brief Currently bound ordered multi-target set; entries beyond `mrtCount` are unused. */
-        std::array<EasyGLRenderTargetRenderer*, 4> mrt = {};
+        std::array<EasyGLMrtBindingEXT, 4> mrt = {};
         /** @brief Number of live slots in `mrt`; 0 when no multi-target set is bound. */
         int mrtCount = 0;
         /** @brief Native draw FBO for the active MRT set, used to restore it after direct readback. */
@@ -364,7 +377,20 @@ namespace CNA::Internal::Renderers::EasyGL
         void recreate_gl_resource()   override;
 
     private:
+        friend class EasyGLRenderer;
+
         void CreateResources();
+        /** @brief Attaches one selected cube face as an MRT colour destination. */
+        void AttachColorToMRT(
+            ::easygl::Framebuffer& framebuffer,
+            ::metagl::FramebufferAttachment attachment,
+            int face) const;
+        /** @brief Attaches this cube target's depth/stencil storage to an MRT framebuffer. */
+        void AttachDepthToMRT(::easygl::Framebuffer& framebuffer) const;
+        /** @brief Resolves and mip-finalizes one face after an MRT binding ends. */
+        void UnbindMRTFace(int face);
+        /** @brief Resolves one multisampled face into the public cube texture. */
+        void ResolveFaceEXT(int face, const char* traceEvent);
         /// REMED-GFX-168: this cube's own native identities, for `CNA_EASYGL_TARGET_TRACE`.
         [[nodiscard]] std::string TraceNativeDetailEXT() const;
         /// REMED-GFX-168: clears the shared binding record if it still names this cube.

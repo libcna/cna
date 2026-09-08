@@ -65,7 +65,8 @@ stencil state, sample-correct 4x MSAA, mip/address filtering, classic stock-effe
 BasicEffect/EnvironmentMapEffect/SkinnedEffect lighting, and directional anisotropic filtering with
 per-slot/SpriteBatch state, exact CPU Texture3D mip/box storage and readback, and six-face
 RenderTargetCube rendering, shared depth/stencil, 4x resolve, mips, transfer and sampling, plus
-four-slot CPU MRT with independent clear/finalization and slot-zero stock-effect output. Instancing
+four-slot 2D/cube-face CPU MRT with independent clear/finalization and slot-zero stock-effect output;
+the same 22-check public MRT contract passes on Software and EasyGL. Instancing
 and the broader SpriteBatch/Model audits remain open, so a project-wide column is
 still deferred until those rows close. See `docs/software-renderer.md` and the evidence ledger for
 the measured current boundary.

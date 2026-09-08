@@ -192,8 +192,9 @@ rather than always passing.
   distinct CPU color planes. Clear/discard, resolve and mip generation visit every attachment;
   only slot zero owns depth/stencil and receives the `COLOR0` output emitted by classic stock
   effects. Higher attachments therefore retain their own explicit clear/preserved contents. This
-  includes mixed 2D/cube sets and distinct faces of one cube; the shared 2D contract also passes on
-  EasyGL, whose remaining cube-in-MRT refusal is tracked as `SOFTWARE-135`.
+  includes mixed 2D/cube sets and distinct faces of one cube. The shared 22-check contract passes
+  unchanged on both Software and EasyGL, including face-local 4x resolve, independent mip chains,
+  cube depth ownership and bound-cube destruction with live-peer finalization (`SOFTWARE-135`).
 - **Complete classic `BlendState` equations are applied.** RGB and alpha source/destination
   factors and functions are independent; `BlendFactor`, `ColorWriteChannels` and
   `MultiSampleMask` are honored. All four MRT write-channel masks are retained; the classic stock

@@ -3162,12 +3162,12 @@ if (ProfileIsEs2ApiGeneration())
         bool anySlotLeft = false;
         for (int i = 0; i < binding->mrtCount; ++i)
         {
-            if (binding->mrt[static_cast<std::size_t>(i)] == this)
+            if (binding->mrt[static_cast<std::size_t>(i)].rt2D == this)
             {
                 TargetTrace("mrt.detach", this, "slot " + std::to_string(i));
-                binding->mrt[static_cast<std::size_t>(i)] = nullptr;
+                binding->mrt[static_cast<std::size_t>(i)] = {};
             }
-            else if (binding->mrt[static_cast<std::size_t>(i)] != nullptr)
+            else if (!binding->mrt[static_cast<std::size_t>(i)].IsEmpty())
             {
                 anySlotLeft = true;
             }
@@ -3442,7 +3442,8 @@ else
             bool activeMrt = false;
             if (binding)
                 for (int i = 0; i < binding->mrtCount; ++i)
-                    activeMrt = activeMrt || binding->mrt[static_cast<std::size_t>(i)] == this;
+                    activeMrt = activeMrt ||
+                        binding->mrt[static_cast<std::size_t>(i)].rt2D == this;
             if (activeSingle || activeMrt)
             {
                 ResolveColorEXT("rt2d.resolve.readback");
@@ -3613,8 +3614,9 @@ if (ProfileIsEs2ApiGeneration())
      *
      * A cube is recorded as ONE binding whatever face is active -- the face index lives in the cube's
      * own `lastFace_` -- so detaching the resource detaches every face of it at once, and a face
-     * binding cannot outlive its parent. A cube is never a member of a multi-target set (EasyGL's
-     * `SetRenderTargets` refuses cube faces in one), so there are no slots to walk.
+     * binding cannot outlive its parent. In an MRT set the same cube may occupy several slots as
+     * distinct faces; all of those slots are cleared together while unrelated live attachments
+     * remain available for finalization.
      *
      * Its pending finalization -- resolving `msaaColorRbos_[lastFace_]` into `cubeTex_` and
      * regenerating that face's mip chain -- writes into members this destructor destroys, exactly as
@@ -3628,6 +3630,26 @@ if (ProfileIsEs2ApiGeneration())
         {
             TargetTrace("cube.detach", this, "was the bound cube, face " + std::to_string(lastFace_));
             binding->cube = nullptr;
+            binding->width = 0;
+            binding->height = 0;
+        }
+        bool anySlotLeft = false;
+        for (int i = 0; i < binding->mrtCount; ++i)
+        {
+            if (binding->mrt[static_cast<std::size_t>(i)].cube == this)
+            {
+                TargetTrace("mrt.detach.cube", this, "slot " + std::to_string(i));
+                binding->mrt[static_cast<std::size_t>(i)] = {};
+            }
+            else if (!binding->mrt[static_cast<std::size_t>(i)].IsEmpty())
+            {
+                anySlotLeft = true;
+            }
+        }
+        if (binding->mrtCount > 0 && !anySlotLeft)
+        {
+            binding->mrtCount = 0;
+            binding->mrtFramebuffer = 0;
             binding->width = 0;
             binding->height = 0;
         }
@@ -3797,26 +3819,76 @@ else
         }
     }
 
-    void EasyGLRenderTargetCubeRenderer::UnbindAsRenderTarget()
+    void EasyGLRenderTargetCubeRenderer::AttachColorToMRT(
+        ::easygl::Framebuffer& framebuffer,
+        ::metagl::FramebufferAttachment attachment,
+        int face) const
     {
-        TargetTrace("cube.unbind", this, TraceNativeDetailEXT());
         if (multiSampleCount_ > 0)
         {
-            TargetTrace("cube.resolve", this, TraceNativeDetailEXT());
-            const auto faceTarget = static_cast<::easygl::TextureTarget>(
-                static_cast<unsigned int>(::easygl::TextureTarget::TextureCubeMapPositiveX) + lastFace_);
-            resolveFbo_.bind(::easygl::FramebufferTarget::Framebuffer);
-            resolveFbo_.attach_texture_2d(::easygl::FramebufferTarget::Framebuffer,
-                                          ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
-                                          faceTarget,
-                                          cubeTex_, 0);
-            fbo_.bind(::easygl::FramebufferTarget::ReadFramebuffer);
-            resolveFbo_.bind(::easygl::FramebufferTarget::DrawFramebuffer);
-            ::easygl::Framebuffer::blit(0, 0, size_, size_,
-                                        0, 0, size_, size_,
-                                        ::metagl::ClearBufferBit::Color,
-                                        ::metagl::BlitFilter::Linear);
+            framebuffer.attach_renderbuffer(
+                ::easygl::FramebufferTarget::Framebuffer,
+                attachment, msaaColorRbos_[static_cast<std::size_t>(face)]);
         }
+        else
+        {
+            const auto faceTarget = static_cast<::easygl::TextureTarget>(
+                static_cast<unsigned int>(::easygl::TextureTarget::TextureCubeMapPositiveX)
+                + static_cast<unsigned int>(face));
+            framebuffer.attach_texture_2d(
+                ::easygl::FramebufferTarget::Framebuffer,
+                attachment, faceTarget, cubeTex_, 0);
+        }
+    }
+
+    void EasyGLRenderTargetCubeRenderer::AttachDepthToMRT(
+        ::easygl::Framebuffer& framebuffer) const
+    {
+        ::metagl::InternalFormat ignoredFormat;
+        ::metagl::FramebufferAttachment attachment;
+        if (MapDepthFormat(depthFormat_, ignoredFormat, attachment))
+        {
+            framebuffer.attach_renderbuffer(
+                ::easygl::FramebufferTarget::Framebuffer,
+                attachment, depthRbo_);
+        }
+    }
+
+    void EasyGLRenderTargetCubeRenderer::ResolveFaceEXT(
+        int face, const char* traceEvent)
+    {
+        if (multiSampleCount_ <= 0) return;
+        TargetTrace(traceEvent, this, TraceNativeDetailEXT());
+        const auto faceTarget = static_cast<::easygl::TextureTarget>(
+            static_cast<unsigned int>(::easygl::TextureTarget::TextureCubeMapPositiveX)
+            + static_cast<unsigned int>(face));
+
+        // The transient MRT FBO owns the live colour attachment while an MRT set is bound. Rebind
+        // this cube's private source FBO to the requested face's sample plane before resolving it.
+        fbo_.bind(::easygl::FramebufferTarget::Framebuffer);
+        fbo_.attach_renderbuffer(
+            ::easygl::FramebufferTarget::Framebuffer,
+            ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
+            msaaColorRbos_[static_cast<std::size_t>(face)]);
+        resolveFbo_.bind(::easygl::FramebufferTarget::Framebuffer);
+        resolveFbo_.attach_texture_2d(
+            ::easygl::FramebufferTarget::Framebuffer,
+            ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
+            faceTarget, cubeTex_, 0);
+        fbo_.bind(::easygl::FramebufferTarget::ReadFramebuffer);
+        resolveFbo_.bind(::easygl::FramebufferTarget::DrawFramebuffer);
+        ::easygl::Framebuffer::blit(0, 0, size_, size_,
+                                    0, 0, size_, size_,
+                                    ::metagl::ClearBufferBit::Color,
+                                    ::metagl::BlitFilter::Linear);
+    }
+
+    void EasyGLRenderTargetCubeRenderer::UnbindMRTFace(int face)
+    {
+        TargetTrace("cube.unbind.mrt", this,
+                    TraceNativeDetailEXT() + " mrtFace=" + std::to_string(face));
+        if (multiSampleCount_ > 0)
+            ResolveFaceEXT(face, "cube.resolve.mrt");
         // Regenerate the mip chain for all 6 faces from their just-rendered (and possibly
         // just-resolved) level-0 content.
         if (levelCount_ > 1)
@@ -3825,6 +3897,12 @@ else
             cubeTex_.generate_mipmap(::easygl::TextureTarget::TextureCubeMap);
         }
         ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::Framebuffer);
+    }
+
+    void EasyGLRenderTargetCubeRenderer::UnbindAsRenderTarget()
+    {
+        TargetTrace("cube.unbind", this, TraceNativeDetailEXT());
+        UnbindMRTFace(lastFace_);
     }
 
     unsigned int EasyGLRenderTargetCubeRenderer::GetGLHandle() const
@@ -5899,7 +5977,12 @@ if (!ProfileIsEs2ApiGeneration())
            << " mrtCount=" << bound_->mrtCount
            << " curDim=" << bound_->width << 'x' << bound_->height;
         for (int i = 0; i < bound_->mrtCount; ++i)
-            os << " mrt" << i << '=' << static_cast<const void*>(bound_->mrt[i]);
+        {
+            const EasyGLMrtBindingEXT& slot = bound_->mrt[static_cast<std::size_t>(i)];
+            os << " mrt" << i << "=2d:" << static_cast<const void*>(slot.rt2D)
+               << ",cube:" << static_cast<const void*>(slot.cube)
+               << ",face:" << slot.cubeFace;
+        }
         return os.str();
     }
 
@@ -5954,9 +6037,12 @@ if (!ProfileIsEs2ApiGeneration())
         bound_->height = 0;
         for (int i = 0; i < count; ++i)
         {
-            EasyGLRenderTargetRenderer* target = bound_->mrt[i];
-            bound_->mrt[i] = nullptr;
-            if (target) target->UnbindAsRenderTarget();
+            const EasyGLMrtBindingEXT target = bound_->mrt[static_cast<std::size_t>(i)];
+            bound_->mrt[static_cast<std::size_t>(i)] = {};
+            if (target.rt2D)
+                target.rt2D->UnbindAsRenderTarget();
+            else if (target.cube)
+                target.cube->UnbindMRTFace(target.cubeFace);
         }
     }
 
@@ -6010,32 +6096,41 @@ if (!ProfileIsEs2ApiGeneration())
                 + " targets, but the active GL profile supports "
                 + std::to_string(maxMrtTargets_) + ".");
 
-        std::array<EasyGLRenderTargetRenderer*, 4> targets{};
+        std::array<EasyGLMrtBindingEXT, 4> targets{};
         for (int i = 0; i < count; ++i)
         {
             if (renderTargets[i].IsRenderTargetCubeFace())
-                throw std::runtime_error(
-                    "EasyGL SetRenderTargets: cube faces in a multi-target set are not "
-                    "implemented by this CNA renderer.");
-            targets[i] = dynamic_cast<EasyGLRenderTargetRenderer*>(
-                renderTargets[i].GetRenderTarget2D());
-            if (!targets[i])
-                throw std::runtime_error(
-                    "EasyGL SetRenderTargets: binding " + std::to_string(i)
-                    + " is not an EasyGL RenderTarget2D.");
-            if (targets[i]->GetWidth() != renderTargets[0].GetWidth()
-                || targets[i]->GetHeight() != renderTargets[0].GetHeight())
+            {
+                targets[i].cube = dynamic_cast<EasyGLRenderTargetCubeRenderer*>(
+                    renderTargets[i].GetRenderTargetCube());
+                targets[i].cubeFace = renderTargets[i].GetCubeFace();
+                if (!targets[i].cube)
+                    throw std::runtime_error(
+                        "EasyGL SetRenderTargets: binding " + std::to_string(i)
+                        + " is not an EasyGL RenderTargetCube face.");
+            }
+            else
+            {
+                targets[i].rt2D = dynamic_cast<EasyGLRenderTargetRenderer*>(
+                    renderTargets[i].GetRenderTarget2D());
+                if (!targets[i].rt2D)
+                    throw std::runtime_error(
+                        "EasyGL SetRenderTargets: binding " + std::to_string(i)
+                        + " is not an EasyGL RenderTarget2D.");
+            }
+            if (renderTargets[i].GetWidth() != renderTargets[0].GetWidth()
+                || renderTargets[i].GetHeight() != renderTargets[0].GetHeight())
                 throw std::runtime_error(
                     "EasyGL SetRenderTargets: render targets must have matching dimensions.");
-            if (targets[i]->GetMultiSampleCount()
+            if (renderTargets[i].GetAppliedMultiSampleCount()
                 != renderTargets[0].GetAppliedMultiSampleCount())
                 throw std::runtime_error(
                     "EasyGL SetRenderTargets: render targets must have matching applied "
                     "sample counts.");
             for (int previous = 0; previous < i; ++previous)
-                if (targets[i] == targets[previous])
+                if (renderTargets[i].IsSameSubresource(renderTargets[previous]))
                     throw std::runtime_error(
-                        "EasyGL SetRenderTargets: the same render target cannot occupy "
+                        "EasyGL SetRenderTargets: the same render-target subresource cannot occupy "
                         "multiple slots.");
         }
         if (!supportsIndexedColorMasks_)
@@ -6095,10 +6190,17 @@ if (!ProfileIsEs2ApiGeneration())
                 static_cast<GLenum>(::metagl::ColorAttachment::Color0)
                 + static_cast<GLenum>(i));
             const auto attachment = ::metagl::to_framebuffer_attachment(color);
-            targets[i]->AttachColorToMRT(mrtFbo_, attachment);
+            if (targets[i].rt2D)
+                targets[i].rt2D->AttachColorToMRT(mrtFbo_, attachment);
+            else
+                targets[i].cube->AttachColorToMRT(
+                    mrtFbo_, attachment, targets[i].cubeFace);
             drawBuffers[i] = ::metagl::to_draw_buffer(color);
         }
-        targets[0]->AttachDepthToMRT(mrtFbo_);
+        if (targets[0].rt2D)
+            targets[0].rt2D->AttachDepthToMRT(mrtFbo_);
+        else
+            targets[0].cube->AttachDepthToMRT(mrtFbo_);
         mrtFbo_.set_draw_buffers(
             std::span<const ::easygl::DrawBuffer>(
                 drawBuffers.data(), static_cast<std::size_t>(count)));
@@ -6783,7 +6885,7 @@ else
         for (int i = 0; i < bound_->mrtCount; ++i)
         {
             sourceIsCurrentTarget = sourceIsCurrentTarget ||
-                bound_->mrt[static_cast<std::size_t>(i)] == &source;
+                bound_->mrt[static_cast<std::size_t>(i)].rt2D == &source;
         }
         if (sourceIsCurrentTarget)
         {
@@ -10122,9 +10224,13 @@ CNA_GL_PUNCTUAL_DECL
             if (bound_->cube != nullptr && bound_->cube->GetMultiSampleCount() > 0)
                 multisampledDestination = true;
             for (int slot = 0; slot < bound_->mrtCount; ++slot)
-                if (bound_->mrt[static_cast<std::size_t>(slot)] != nullptr &&
-                    bound_->mrt[static_cast<std::size_t>(slot)]->GetMultiSampleCount() > 0)
+            {
+                const EasyGLMrtBindingEXT& target =
+                    bound_->mrt[static_cast<std::size_t>(slot)];
+                if ((target.rt2D != nullptr && target.rt2D->GetMultiSampleCount() > 0) ||
+                    (target.cube != nullptr && target.cube->GetMultiSampleCount() > 0))
                     multisampledDestination = true;
+            }
         }
         Matrix xnaPixelCenter = Matrix::getIdentityProperty();
         if (viewportWidth > 0 && viewportHeight > 0 && !multisampledDestination)
