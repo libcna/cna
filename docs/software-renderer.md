@@ -277,6 +277,11 @@ rather than always passing.
   Begin/End/Draw/DrawString calls fail with `ObjectDisposedException` rather than continuing to
   render through a resource that only claimed to be disposed. FNA's internal SpriteEffect contract
   (matrix-transformed texture × vertex color) is implemented directly by the same CPU quad path.
+- **Classic `Model.Draw()` is end-to-end tested on the CPU** (`SOFTWARE-125`). Nine unchanged
+  EasyGL fixtures pass through Software for rigid and skinned models, root/child mesh placement,
+  per-mesh effects, texture materials, JSON/binary content loading, 16/32-bit indices, imported
+  skeleton data and visible animation-clip deformation. This proof exercises public Model and
+  ContentManager orchestration rather than stopping at isolated SkinnedEffect triangles.
 - **Custom `ShaderEffect` (arbitrary GLSL/HLSL/WGSL source) compiles but doesn't actually execute**
   — mirrors `HEADLESS-16`'s own precedent exactly: the source is accepted without compiling, and
   only effects whose `FillGpuDrawParams()` output matches one of this renderer's fixed stock-effect

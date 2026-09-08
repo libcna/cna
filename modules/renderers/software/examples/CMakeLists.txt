@@ -865,6 +865,57 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_SpriteBatch_RasterizerScissorParity
         COMMAND cna_test_software_spritebatch_rasterizer_scissor_parity TIMEOUT 60 LABELS "Software")
 
+    # SOFTWARE-125: run the classic public Model corpus unchanged from EasyGL. Together these
+    # fixtures cover hand-built and Content.Load<Model>() models, hierarchy, per-mesh effects,
+    # 16/32-bit indices, texture material binding and real SkinnedEffect animation playback.
+    set(CNA_EASYGL_MODEL_TEST_DIR
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples)
+
+    cna_software_test(cna_test_software_model_draw
+        ${CNA_EASYGL_MODEL_TEST_DIR}/easygl_model_draw_test.cpp)
+    cna_register_renderer_test(NAME Software_ModelDraw_RedQuad
+        COMMAND cna_test_software_model_draw TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_model_hierarchy_child_mesh
+        ${CNA_EASYGL_MODEL_TEST_DIR}/easygl_model_hierarchy_child_mesh_test.cpp)
+    cna_register_renderer_test(NAME Software_Model_HierarchyChildMesh
+        COMMAND cna_test_software_model_hierarchy_child_mesh TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_model_two_meshes_effects
+        ${CNA_EASYGL_MODEL_TEST_DIR}/easygl_model_two_meshes_effects_test.cpp)
+    cna_register_renderer_test(NAME Software_Model_TwoMeshesEffects
+        COMMAND cna_test_software_model_two_meshes_effects TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_model_json_reader
+        ${CNA_EASYGL_MODEL_TEST_DIR}/easygl_model_json_reader_test.cpp)
+    cna_register_renderer_test(NAME Software_ModelJsonReader_Quad
+        COMMAND cna_test_software_model_json_reader TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_model_json_reader_32bit_indices
+        ${CNA_EASYGL_MODEL_TEST_DIR}/easygl_model_json_reader_32bit_indices_test.cpp)
+    cna_register_renderer_test(NAME Software_ModelJsonReader_32BitIndices
+        COMMAND cna_test_software_model_json_reader_32bit_indices TIMEOUT 60 LABELS "Software")
+
+    cna_software_test(cna_test_software_model_json_reader_texture
+        ${CNA_EASYGL_MODEL_TEST_DIR}/easygl_model_json_reader_texture_test.cpp)
+    cna_register_renderer_test(NAME Software_ModelJsonReader_Texture
+        COMMAND cna_test_software_model_json_reader_texture TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_model_json_reader_bone_hierarchy
+        ${CNA_EASYGL_MODEL_TEST_DIR}/easygl_model_json_reader_bone_hierarchy_test.cpp)
+    cna_register_renderer_test(NAME Software_ModelJsonReader_BoneHierarchy
+        COMMAND cna_test_software_model_json_reader_bone_hierarchy TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_model_json_reader_skeleton
+        ${CNA_EASYGL_MODEL_TEST_DIR}/easygl_model_json_reader_skeleton_test.cpp)
+    cna_register_renderer_test(NAME Software_ModelJsonReader_Skeleton
+        COMMAND cna_test_software_model_json_reader_skeleton TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_model_skinned_animation
+        ${CNA_EASYGL_MODEL_TEST_DIR}/easygl_model_skinned_animation_playback_test.cpp)
+    cna_register_renderer_test(NAME Software_Model_SkinnedAnimationPlayback
+        COMMAND cna_test_software_model_skinned_animation TIMEOUT 30 LABELS "Software")
+
     # SOFTWARE-104: a capability is a usable public promise, not a statement about what a CPU
     # renderer might eventually implement. False entries are paired with the current factory/API
     # boundary so unsupported queries, volume textures and custom shaders cannot masquerade as
