@@ -215,8 +215,18 @@ rather than always passing.
   content keeps its compressed format and complete mip chain instead of being expanded by the
   loader. Shared transfer and unchanged sampled-draw probes pass on Software and Mesa EasyGL; the
   same evidence also repaired EasyGL's previously missing compressed readback/context-restoration
-  shadow. The remaining classic uncompressed formats are tracked by `SOFTWARE-142` and are not
-  silently advertised or reinterpreted as Color.
+  shadow.
+- **Every classic uncompressed `Texture2D` format has real typed storage and sampling**
+  (`SOFTWARE-142`). In addition to Color and the packed-16 formats, Software accepts
+  `NormalizedByte2/4`, `Rgba1010102`, `Rg32`, `Rgba64`, `Alpha8`, `Single`, `Vector2/4`,
+  `HalfSingle`, `HalfVector2/4` and `HdrBlendable` at the XNA profile tiers that permit them.
+  Exact original bytes back full/partial/mip `GetData`; a separate float RGBA plane prevents signed
+  normalized or HDR values from being clipped to RGBA8 before shader math. One- and two-channel
+  colour formats expose XNA's missing components as one, while `Alpha8` follows FNA's
+  `(0,0,0,A)` mapping. A shared Software/EasyGL public contract checks all typed transfers, all
+  point-sampled channel layouts, and `BasicEffect` probes that would fail if `Single(2)` or
+  `NormalizedByte4(-0.5)` were narrowed early. Non-XNA `*EXT` texture formats remain outside this
+  campaign rather than being accepted as Color.
 - **NPOT textures use the ordinary complete texture path** (`SOFTWARE-144`). Exact public transfer
   coverage includes 3x5 full and partial-row updates plus the 1x2/1x1 mip tail. The unchanged 3x5
   sampled-row scene passes on Software and EasyGL, while the shared sampler contracts cover NPOT

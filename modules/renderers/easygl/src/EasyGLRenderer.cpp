@@ -46,6 +46,7 @@ namespace CNA::Internal::Renderers::EasyGL
 #include "Microsoft/Xna/Framework/Graphics/EffectTechnique.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "System/NotSupportedException.hpp"
@@ -1357,6 +1358,30 @@ if (ProfileIsDesktopCore())
         return UsesEs2ApiGeneration(ActiveGlProfile())
             ? ::metagl::InternalFormat::Rgba
             : ::metagl::InternalFormat::Rgba8;
+    }
+
+    /// GL_EXT_texture_norm16 promotes normalized RG16/RGBA16 storage to GLES/WebGL; desktop core
+    /// has it without an extension. Otherwise XNA's sixteen-bit channels must be refused rather
+    /// than silently narrowed to RGBA8.
+    [[nodiscard]] inline bool ContextHasTextureNorm16EXT()
+    {
+        return ProfileIsDesktopCore() || ::metagl::HasExtension("GL_EXT_texture_norm16");
+    }
+
+    static void SetOrdinaryTextureDefaults(::easygl::Texture& texture)
+    {
+        texture.set_parameter(::easygl::TextureTarget::Texture2D,
+                              ::easygl::TextureParameterSetter::MinFilter,
+                              static_cast<int>(::easygl::TextureMinFilter::Linear));
+        texture.set_parameter(::easygl::TextureTarget::Texture2D,
+                              ::easygl::TextureParameterSetter::MagFilter,
+                              static_cast<int>(::easygl::TextureMagFilter::Linear));
+        texture.set_parameter(::easygl::TextureTarget::Texture2D,
+                              ::easygl::TextureParameterSetter::WrapS,
+                              static_cast<int>(::easygl::TextureWrapMode::ClampToEdge));
+        texture.set_parameter(::easygl::TextureTarget::Texture2D,
+                              ::easygl::TextureParameterSetter::WrapT,
+                              static_cast<int>(::easygl::TextureWrapMode::ClampToEdge));
     }
 
     /// Attaches a render target's depth (or packed depth+stencil) renderbuffer to the bound FBO.
@@ -2910,27 +2935,182 @@ else
             uploadFormat == SurfaceFormat::NormalizedByte2)
         {
             const bool twoChannel = uploadFormat == SurfaceFormat::NormalizedByte2;
+            std::vector<std::int8_t> expanded;
+            const void* upload = pixels;
+            if (twoChannel && pixels != nullptr)
+            {
+                const std::size_t texels = static_cast<std::size_t>(levelWidth)
+                    * static_cast<std::size_t>(levelHeight);
+                const auto* source = static_cast<const std::int8_t*>(pixels);
+                expanded.resize(texels * 4u);
+                for (std::size_t i = 0; i < texels; ++i)
+                {
+                    expanded[i * 4u + 0] = source[i * 2u + 0];
+                    expanded[i * 4u + 1] = source[i * 2u + 1];
+                    expanded[i * 4u + 2] = 127;
+                    expanded[i * 4u + 3] = 127;
+                }
+                upload = expanded.data();
+            }
             texture.bind(::easygl::TextureTarget::Texture2D);
             ::metagl::glPixelStorei(::metagl::PixelStoreParam::UnpackAlignment, 1);
             texture.set_image_2d(::easygl::TextureTarget::Texture2D, level,
-                                 twoChannel ? ::easygl::InternalFormat::Rg8Snorm
-                                            : ::easygl::InternalFormat::Rgba8Snorm,
+                                 ::easygl::InternalFormat::Rgba8Snorm,
                                  levelWidth, levelHeight,
-                                 twoChannel ? ::easygl::PixelFormat::Rg
-                                            : ::easygl::PixelFormat::Rgba,
-                                 ::easygl::PixelType::Byte, pixels);
-            texture.set_parameter(::easygl::TextureTarget::Texture2D,
-                                  ::easygl::TextureParameterSetter::MinFilter,
-                                  static_cast<int>(::easygl::TextureMinFilter::Linear));
-            texture.set_parameter(::easygl::TextureTarget::Texture2D,
-                                  ::easygl::TextureParameterSetter::MagFilter,
-                                  static_cast<int>(::easygl::TextureMagFilter::Linear));
-            texture.set_parameter(::easygl::TextureTarget::Texture2D,
-                                  ::easygl::TextureParameterSetter::WrapS,
-                                  static_cast<int>(::easygl::TextureWrapMode::ClampToEdge));
-            texture.set_parameter(::easygl::TextureTarget::Texture2D,
-                                  ::easygl::TextureParameterSetter::WrapT,
-                                  static_cast<int>(::easygl::TextureWrapMode::ClampToEdge));
+                                 ::easygl::PixelFormat::Rgba,
+                                 ::easygl::PixelType::Byte, upload);
+            ::metagl::glPixelStorei(::metagl::PixelStoreParam::UnpackAlignment, 4);
+            SetOrdinaryTextureDefaults(texture);
+            return;
+        }
+        if (uploadFormat == SurfaceFormat::Alpha8)
+        {
+            std::vector<std::uint8_t> expanded;
+            const void* upload = nullptr;
+            if (pixels != nullptr)
+            {
+                const std::size_t texels = static_cast<std::size_t>(levelWidth)
+                    * static_cast<std::size_t>(levelHeight);
+                const auto* source = static_cast<const std::uint8_t*>(pixels);
+                expanded.assign(texels * 4u, 0u);
+                for (std::size_t i = 0; i < texels; ++i)
+                    expanded[i * 4u + 3] = source[i];
+                upload = expanded.data();
+            }
+            texture.bind(::easygl::TextureTarget::Texture2D);
+            texture.set_image_2d(::easygl::TextureTarget::Texture2D, level,
+                                 RgbaTexImageInternalFormat(), levelWidth, levelHeight,
+                                 ::easygl::PixelFormat::Rgba,
+                                 ::easygl::PixelType::UnsignedByte, upload);
+            SetOrdinaryTextureDefaults(texture);
+            return;
+        }
+        if (uploadFormat == SurfaceFormat::Single || uploadFormat == SurfaceFormat::Vector2)
+        {
+            const int sourceChannels = uploadFormat == SurfaceFormat::Single ? 1 : 2;
+            std::vector<float> expanded;
+            const void* upload = nullptr;
+            if (pixels != nullptr)
+            {
+                const std::size_t texels = static_cast<std::size_t>(levelWidth)
+                    * static_cast<std::size_t>(levelHeight);
+                const auto* source = static_cast<const std::uint8_t*>(pixels);
+                expanded.assign(texels * 4u, 1.0f);
+                for (std::size_t i = 0; i < texels; ++i)
+                {
+                    std::memcpy(&expanded[i * 4u + 0],
+                                source + i * static_cast<std::size_t>(sourceChannels) * 4u, 4u);
+                    if (sourceChannels == 2)
+                        std::memcpy(&expanded[i * 4u + 1], source + (i * 2u + 1u) * 4u, 4u);
+                }
+                upload = expanded.data();
+            }
+            texture.bind(::easygl::TextureTarget::Texture2D);
+            texture.set_image_2d(::easygl::TextureTarget::Texture2D, level,
+                                 ::easygl::InternalFormat::Rgba32F, levelWidth, levelHeight,
+                                 ::easygl::PixelFormat::Rgba,
+                                 ::easygl::PixelType::Float, upload);
+            SetOrdinaryTextureDefaults(texture);
+            return;
+        }
+        if (uploadFormat == SurfaceFormat::HalfSingle ||
+            uploadFormat == SurfaceFormat::HalfVector2)
+        {
+            const int sourceChannels = uploadFormat == SurfaceFormat::HalfSingle ? 1 : 2;
+            std::vector<std::uint16_t> expanded;
+            const void* upload = nullptr;
+            if (pixels != nullptr)
+            {
+                const std::size_t texels = static_cast<std::size_t>(levelWidth)
+                    * static_cast<std::size_t>(levelHeight);
+                const auto* source = static_cast<const std::uint8_t*>(pixels);
+                expanded.assign(texels * 4u, 0x3c00u);
+                for (std::size_t i = 0; i < texels; ++i)
+                {
+                    std::memcpy(&expanded[i * 4u + 0],
+                                source + i * static_cast<std::size_t>(sourceChannels) * 2u, 2u);
+                    if (sourceChannels == 2)
+                        std::memcpy(&expanded[i * 4u + 1], source + (i * 2u + 1u) * 2u, 2u);
+                }
+                upload = expanded.data();
+            }
+            texture.bind(::easygl::TextureTarget::Texture2D);
+            ::metagl::glPixelStorei(::metagl::PixelStoreParam::UnpackAlignment, 2);
+            texture.set_image_2d(::easygl::TextureTarget::Texture2D, level,
+                                 ::easygl::InternalFormat::Rgba16F, levelWidth, levelHeight,
+                                 ::easygl::PixelFormat::Rgba,
+                                 ::easygl::PixelType::HalfFloat, upload);
+            ::metagl::glPixelStorei(::metagl::PixelStoreParam::UnpackAlignment, 4);
+            SetOrdinaryTextureDefaults(texture);
+            return;
+        }
+        if (uploadFormat == SurfaceFormat::Rg32)
+        {
+            std::vector<std::uint16_t> expanded;
+            const void* upload = nullptr;
+            if (pixels != nullptr)
+            {
+                const std::size_t texels = static_cast<std::size_t>(levelWidth)
+                    * static_cast<std::size_t>(levelHeight);
+                const auto* source = static_cast<const std::uint8_t*>(pixels);
+                expanded.assign(texels * 4u, 65535u);
+                for (std::size_t i = 0; i < texels; ++i)
+                {
+                    std::memcpy(&expanded[i * 4u + 0], source + (i * 2u + 0u) * 2u, 2u);
+                    std::memcpy(&expanded[i * 4u + 1], source + (i * 2u + 1u) * 2u, 2u);
+                }
+                upload = expanded.data();
+            }
+            texture.bind(::easygl::TextureTarget::Texture2D);
+            ::metagl::glPixelStorei(::metagl::PixelStoreParam::UnpackAlignment, 2);
+            texture.set_image_2d(::easygl::TextureTarget::Texture2D, level,
+                                 ::easygl::InternalFormat::Rgba16,
+                                 levelWidth, levelHeight, ::easygl::PixelFormat::Rgba,
+                                 ::easygl::PixelType::UnsignedShort, upload);
+            ::metagl::glPixelStorei(::metagl::PixelStoreParam::UnpackAlignment, 4);
+            SetOrdinaryTextureDefaults(texture);
+            return;
+        }
+
+        ::easygl::InternalFormat internalFormat{};
+        ::easygl::PixelType pixelType{};
+        int unpackAlignment = 4;
+        bool mapped = true;
+        switch (uploadFormat)
+        {
+        case SurfaceFormat::Rgba1010102:
+            internalFormat = ::easygl::InternalFormat::Rgb10A2;
+            pixelType = ::easygl::PixelType::UnsignedInt2101010Rev;
+            break;
+        case SurfaceFormat::Rgba64:
+            internalFormat = ::easygl::InternalFormat::Rgba16;
+            pixelType = ::easygl::PixelType::UnsignedShort;
+            unpackAlignment = 8;
+            break;
+        case SurfaceFormat::Vector4:
+            internalFormat = ::easygl::InternalFormat::Rgba32F;
+            pixelType = ::easygl::PixelType::Float;
+            unpackAlignment = 8;
+            break;
+        case SurfaceFormat::HalfVector4:
+        case SurfaceFormat::HdrBlendable:
+            internalFormat = ::easygl::InternalFormat::Rgba16F;
+            pixelType = ::easygl::PixelType::HalfFloat;
+            unpackAlignment = 8;
+            break;
+        default:
+            mapped = false;
+            break;
+        }
+        if (mapped)
+        {
+            texture.bind(::easygl::TextureTarget::Texture2D);
+            ::metagl::glPixelStorei(::metagl::PixelStoreParam::UnpackAlignment, unpackAlignment);
+            texture.set_image_2d(::easygl::TextureTarget::Texture2D, level,
+                                 internalFormat, levelWidth, levelHeight,
+                                 ::easygl::PixelFormat::Rgba, pixelType, pixels);
+            ::metagl::glPixelStorei(::metagl::PixelStoreParam::UnpackAlignment, 4);
+            SetOrdinaryTextureDefaults(texture);
             return;
         }
         texture.set_image_2d(::easygl::TextureTarget::Texture2D, level,
@@ -2998,7 +3178,12 @@ if (ProfileIsEs2ApiGeneration())
         }
         else
         {
-            const std::vector<uint8_t> blank(static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4, 0);
+            const std::size_t bytesPerTexel = static_cast<std::size_t>(
+                Microsoft::Xna::Framework::Graphics::Texture::GetFormatSizeEXT(format));
+            const std::vector<uint8_t> blank(
+                static_cast<std::size_t>(width) * static_cast<std::size_t>(height)
+                    * bytesPerTexel,
+                0);
             UploadLevel(0, width, height, blank.data());
         }
         // REMED-GFX-175: the fresh GL texture object has storage for level 0 only, so a declared
@@ -4224,6 +4409,7 @@ if (ProfileIsEs2ApiGeneration())
         case SurfaceFormat::Vector2:
         case SurfaceFormat::HalfVector2:
         case SurfaceFormat::NormalizedByte2:
+        case SurfaceFormat::Rg32:
             mask[2] = mask[3] = 0.0f;
             fill[2] = fill[3] = 1.0f;
             break;
@@ -5038,9 +5224,13 @@ if (ProfileUsesGlslEs100())
                                    : std::string("NOT supported (falls back to trilinear)"))
                       << "; texture SurfaceFormat: Color"
                       << (ProfileIsEs2ApiGeneration()
-                              ? " only"
-                              : " + NormalizedByte4 (RGBA8_SNORM) + NormalizedByte2 (RG8_SNORM)"
-                                " + Bgr565 (RGB565) + Bgra5551 (RGB5_A1) + Bgra4444 (RGBA4)")
+                              ? " + Alpha8"
+                              : " + NormalizedByte4/2 (RGBA8_SNORM)"
+                                " + Bgr565/Bgra5551/Bgra4444"
+                                " + Rgba1010102 + Alpha8"
+                                " + Single/Vector2/Vector4"
+                                " + HalfSingle/HalfVector2/HalfVector4/HdrBlendable")
+                      << (ContextHasTextureNorm16EXT() ? " + Rg32/Rgba64" : "")
                       << (ContextHasS3tcEXT()
                               ? " + Dxt1/Dxt3/Dxt5 (S3TC blocks)"
                               : " + Dxt1/Dxt3/Dxt5 (decoded, no S3TC extension)")
@@ -5718,6 +5908,8 @@ if (!ProfileIsEs2ApiGeneration())
         const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat);
         if (format == SurfaceFormat::Color)
             return RendererFormatVerdict::Supported;
+        if (format == SurfaceFormat::Alpha8)
+            return RendererFormatVerdict::Supported;
         // Both signed-normalized byte formats need the ES 3 sized-internal-format set.
         if (format == SurfaceFormat::NormalizedByte4 || format == SurfaceFormat::NormalizedByte2)
         {
@@ -5743,6 +5935,22 @@ if (!ProfileIsEs2ApiGeneration())
         {
             return RendererFormatVerdict::Supported;
         }
+        if (format == SurfaceFormat::Rg32 || format == SurfaceFormat::Rgba64)
+        {
+            return ContextHasTextureNorm16EXT()
+                ? RendererFormatVerdict::Supported
+                : RendererFormatVerdict::Unsupported;
+        }
+        if (format == SurfaceFormat::Rgba1010102 ||
+            format == SurfaceFormat::Single || format == SurfaceFormat::Vector2 ||
+            format == SurfaceFormat::Vector4 || format == SurfaceFormat::HalfSingle ||
+            format == SurfaceFormat::HalfVector2 || format == SurfaceFormat::HalfVector4 ||
+            format == SurfaceFormat::HdrBlendable)
+        {
+            return ProfileIsEs2ApiGeneration()
+                ? RendererFormatVerdict::Unsupported
+                : RendererFormatVerdict::Supported;
+        }
         return RendererFormatVerdict::Defer;
     }
 
@@ -5766,9 +5974,9 @@ if (!ProfileIsEs2ApiGeneration())
     {
         using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
         const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat);
-        if (format == SurfaceFormat::NormalizedByte4 || format == SurfaceFormat::NormalizedByte2 ||
-            format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
-            format == SurfaceFormat::Dxt5)
+        if (format != SurfaceFormat::Color &&
+            static_cast<int>(format) >= static_cast<int>(SurfaceFormat::Bgr565) &&
+            static_cast<int>(format) <= static_cast<int>(SurfaceFormat::HdrBlendable))
             return RendererFormatVerdict::Unsupported;
         return RendererFormatVerdict::Defer;
     }

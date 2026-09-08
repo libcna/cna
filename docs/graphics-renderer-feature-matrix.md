@@ -68,9 +68,11 @@ RenderTargetCube rendering, shared depth/stencil, 4x resolve, mips, transfer and
 four-slot 2D/cube-face CPU MRT with independent clear/finalization and slot-zero stock-effect output;
 the same 22-check public MRT contract passes on Software and EasyGL. Classic indexed instancing now
 expands every declared per-instance matrix stream deterministically through the CPU stock-effect
-pipeline. The broader SpriteBatch/Model audits remain open, so a project-wide column is
-still deferred until those rows close. See `docs/software-renderer.md` and the evidence ledger for
-the measured current boundary.
+pipeline. Every classic `Texture2D` format now has exact typed CPU storage and format-aware
+sampling, including signed-normalized and HDR ranges. SpriteBatch/SpriteFont and classic rigid and
+skinned Model paths also have shared public proof; the remaining render-target/cube-format and
+device-lifecycle audits still defer a project-wide column. See `docs/software-renderer.md` and the
+evidence ledger for the measured current boundary.
 
 The **Stub** renderer (`CNA_GRAPHICS_RENDERER=STUB`, tracked in `../plans/plan_stub.md`) is, like Headless,
 **not** a column in this matrix and for the same reason: it never renders a single pixel. Unlike

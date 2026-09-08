@@ -196,6 +196,35 @@ namespace CNA::Internal::Renderers::Software
          */
         [[nodiscard]] virtual const std::vector<std::uint8_t>& ColorPixels(int level) const
         { (void)level; return ColorPixels(); }
+
+        /**
+         * @brief Fetches one texel in the value range exposed to an XNA pixel shader.
+         *
+         * The default converts the RGBA8 colour surface. Texture formats with signed-normalized,
+         * floating-point, or wider normalized storage override this so sampling does not lose
+         * range or precision merely because the CPU framebuffer itself is RGBA8.
+         *
+         * @param level Mip level beginning at zero.
+         * @param x Texel x coordinate within the level.
+         * @param y Texel y coordinate within the level.
+         * @param r Receives the red component.
+         * @param g Receives the green component.
+         * @param b Receives the blue component.
+         * @param a Receives the alpha component.
+         */
+        virtual void FetchColorTexel(int level, int x, int y,
+                                     float& r, float& g, float& b, float& a) const
+        {
+            const int width = ColorWidth(level);
+            const auto& pixels = ColorPixels(level);
+            const std::size_t offset =
+                (static_cast<std::size_t>(y) * static_cast<std::size_t>(width) +
+                 static_cast<std::size_t>(x)) * 4u;
+            r = pixels[offset + 0] / 255.0f;
+            g = pixels[offset + 1] / 255.0f;
+            b = pixels[offset + 2] / 255.0f;
+            a = pixels[offset + 3] / 255.0f;
+        }
     };
 
     /**
@@ -322,11 +351,26 @@ namespace CNA::Internal::Renderers::Software
         [[nodiscard]] int ColorWidth(int level) const override;
         [[nodiscard]] int ColorHeight(int level) const override;
         [[nodiscard]] const std::vector<std::uint8_t>& ColorPixels(int level) const override;
+        /**
+         * @brief Fetches one decoded texel without narrowing signed or floating-point formats.
+         *
+         * @param level Mip level beginning at zero.
+         * @param x Texel x coordinate within the level.
+         * @param y Texel y coordinate within the level.
+         * @param r Receives the red component.
+         * @param g Receives the green component.
+         * @param b Receives the blue component.
+         * @param a Receives the alpha component.
+         */
+        void FetchColorTexel(int level, int x, int y,
+                             float& r, float& g, float& b, float& a) const override;
 
     protected:
         int width_ = 0;
         int height_ = 0;
         std::vector<std::uint8_t> pixels_;
+        /// Shader-visible RGBA values; unlike pixels_, this preserves signed and HDR ranges.
+        std::vector<float> samplePixels_;
 
         /**
          * @brief One supplied mip level above level 0.
@@ -345,6 +389,8 @@ namespace CNA::Internal::Renderers::Software
             std::vector<std::uint8_t> pixels;
             /** @brief Exact caller-visible bytes in the declared SurfaceFormat. */
             std::vector<std::uint8_t> rawPixels;
+            /** @brief Shader-visible RGBA values without RGBA8 narrowing. */
+            std::vector<float> samplePixels;
         };
 
         int surfaceFormat_ = 0;

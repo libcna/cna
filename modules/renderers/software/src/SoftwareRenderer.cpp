@@ -1044,13 +1044,6 @@ namespace CNA::Internal::Renderers::Software
         {
             const int texW = std::max(1, texture.ColorWidth(level));
             const int texH = std::max(1, texture.ColorHeight(level));
-            const auto& pixels = texture.ColorPixels(level);
-
-            const auto fetch = [&](int px, int py, int channel) -> float {
-                const std::size_t idx = (static_cast<std::size_t>(py) * static_cast<std::size_t>(texW) +
-                                        static_cast<std::size_t>(px)) * 4u + static_cast<std::size_t>(channel);
-                return pixels[idx] / 255.0f;
-            };
 
             const bool point = magnify ? FilterMagnifiesWithPoint(sampler.filter)
                                        : FilterMinifiesWithPoint(sampler.filter);
@@ -1060,10 +1053,7 @@ namespace CNA::Internal::Renderers::Software
                                            texW, sampler.addressU);
                 const int y = AddressTexel(FloorToTexelIndex(v * static_cast<float>(texH)),
                                            texH, sampler.addressV);
-                r = fetch(x, y, 0);
-                g = fetch(x, y, 1);
-                b = fetch(x, y, 2);
-                a = fetch(x, y, 3);
+                texture.FetchColorTexel(level, x, y, r, g, b, a);
                 // ONE texel, all four channels from it. REMED-GFX-182: counted whenever EITHER trace
                 // is on, so the cube trace's fetch cardinality is measured here rather than inferred.
                 if (g_samplerTrace.enabled || g_cubeTrace.enabled) g_samplerTrace.texelFetches += 1;
@@ -1112,20 +1102,25 @@ namespace CNA::Internal::Renderers::Software
             // the texel exactly for a uniform footprint; a linear filter over a uniform region must
             // return that region's value, on the 2D path as much as on the cube path this now
             // serves (a mip level of a flat cube face is exactly such a region).
-            const auto bilerp = [&](int channel) -> float {
-                const float t00 = fetch(x0, y0, channel);
-                const float t10 = fetch(x1, y0, channel);
-                const float t01 = fetch(x0, y1, channel);
-                const float t11 = fetch(x1, y1, channel);
+            float r00, g00, b00, a00;
+            float r10, g10, b10, a10;
+            float r01, g01, b01, a01;
+            float r11, g11, b11, a11;
+            texture.FetchColorTexel(level, x0, y0, r00, g00, b00, a00);
+            texture.FetchColorTexel(level, x1, y0, r10, g10, b10, a10);
+            texture.FetchColorTexel(level, x0, y1, r01, g01, b01, a01);
+            texture.FetchColorTexel(level, x1, y1, r11, g11, b11, a11);
+
+            const auto bilerp = [&](float t00, float t10, float t01, float t11) -> float {
                 const float top = t00 + (t10 - t00) * fx;
                 const float bottom = t01 + (t11 - t01) * fx;
                 return top + (bottom - top) * fy;
             };
 
-            r = bilerp(0);
-            g = bilerp(1);
-            b = bilerp(2);
-            a = bilerp(3);
+            r = bilerp(r00, r10, r01, r11);
+            g = bilerp(g00, g10, g01, g11);
+            b = bilerp(b00, b10, b01, b11);
+            a = bilerp(a00, a10, a01, a11);
 
             // Four neighbours, all four channels from each. Counted for either trace, see above.
             if (g_samplerTrace.enabled || g_cubeTrace.enabled) g_samplerTrace.texelFetches += 4;

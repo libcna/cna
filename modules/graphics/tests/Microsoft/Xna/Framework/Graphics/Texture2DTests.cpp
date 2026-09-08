@@ -591,10 +591,11 @@ protected:
 TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
 {
     // The two signed-normalized byte formats differ only in channel count, and EasyGL stores
-    // them through one branch -- NormalizedByte2 as RG8_SNORM beside NormalizedByte4's
-    // RGBA8_SNORM. Both need the ES 3 class of context that has SNORM at all, so this list
-    // is deliberately the same one NormalizedByte4Throws uses.
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2))
+    // them through one branch -- EasyGL widens the two-channel form to RGBA8_SNORM so every
+    // stock-effect shader sees XNA's missing-channel expansion, while Software retains signed
+    // float samples. Both are real format implementations, so this list is deliberately the
+    // same one NormalizedByte4Throws uses.
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte2));
     }
@@ -606,7 +607,7 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
 
 TEST_F(UnsupportedFormatConstructionTest, NormalizedByte4Throws)
 {
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2))
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte4));
     }
@@ -751,6 +752,15 @@ class HiDefFormatConstructionTest : public ::testing::Test
 protected:
     GraphicsDevice gd{GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
                       PresentationParameters()};
+
+    void ExpectConstructionMatchesRenderer(SurfaceFormat format)
+    {
+        const auto verdict = gd.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(format));
+        if (verdict == CNA::Internal::Renderers::RendererFormatVerdict::Supported)
+            EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, format));
+        else
+            EXPECT_THROW(Texture2D(gd, 2, 2, false, format), std::runtime_error);
+    }
 };
 
 TEST_F(HiDefFormatConstructionTest, TheProfileItselfRefusesNothing)
@@ -785,50 +795,57 @@ TEST_F(HiDefFormatConstructionTest, TheProfileItselfRefusesNothing)
 
 TEST_F(HiDefFormatConstructionTest, SingleIsTheRenderersCallOnHiDef)
 {
-    if (CNA_RENDERER_IS(Igl))
-        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Single));
-    else
-        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Single), std::runtime_error);
+    ExpectConstructionMatchesRenderer(SurfaceFormat::Single);
 }
 
 TEST_F(HiDefFormatConstructionTest, Vector2IsTheRenderersCallOnHiDef)
 {
-        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector2), std::runtime_error);
+    ExpectConstructionMatchesRenderer(SurfaceFormat::Vector2);
 }
 
 TEST_F(HiDefFormatConstructionTest, Vector4IsTheRenderersCallOnHiDef)
 {
-        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector4), std::runtime_error);
+    ExpectConstructionMatchesRenderer(SurfaceFormat::Vector4);
 }
 
 TEST_F(HiDefFormatConstructionTest, HalfSingleIsTheRenderersCallOnHiDef)
 {
-        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfSingle), std::runtime_error);
+    ExpectConstructionMatchesRenderer(SurfaceFormat::HalfSingle);
 }
 
 TEST_F(HiDefFormatConstructionTest, HalfVector2IsTheRenderersCallOnHiDef)
 {
-        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector2), std::runtime_error);
+    ExpectConstructionMatchesRenderer(SurfaceFormat::HalfVector2);
 }
 
 TEST_F(HiDefFormatConstructionTest, HalfVector4IsTheRenderersCallOnHiDef)
 {
-        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector4), std::runtime_error);
+    ExpectConstructionMatchesRenderer(SurfaceFormat::HalfVector4);
 }
 
 TEST_F(HiDefFormatConstructionTest, HdrBlendableIsTheRenderersCallOnHiDef)
 {
-        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HdrBlendable), std::runtime_error);
+    ExpectConstructionMatchesRenderer(SurfaceFormat::HdrBlendable);
 }
 
 TEST_F(HiDefFormatConstructionTest, Rgba1010102IsTheRenderersCallOnHiDef)
 {
-        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba1010102), std::runtime_error);
+    ExpectConstructionMatchesRenderer(SurfaceFormat::Rgba1010102);
 }
 
 TEST_F(HiDefFormatConstructionTest, Rgba64IsTheRenderersCallOnHiDef)
 {
-        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba64), std::runtime_error);
+    ExpectConstructionMatchesRenderer(SurfaceFormat::Rgba64);
+}
+
+TEST_F(HiDefFormatConstructionTest, Rg32IsTheRenderersCallOnHiDef)
+{
+    ExpectConstructionMatchesRenderer(SurfaceFormat::Rg32);
+}
+
+TEST_F(HiDefFormatConstructionTest, Alpha8IsTheRenderersCallOnHiDef)
+{
+    ExpectConstructionMatchesRenderer(SurfaceFormat::Alpha8);
 }
 
 // Task 290: exhaustive sweep over every SurfaceFormat value. This stays correct automatically if
@@ -876,7 +893,7 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
         // framework's own transfer rule, which ByteEXT, UShortEXT and HalfSingle would break.
         const bool igl = CNA_RENDERER_IS(Igl);
         const bool easyGlSignedNormalized =
-            CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2);
+            CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software);
         // REMED-GFX-244: the packed 16-bit formats Reach permits, promoted on the same ES 3
         // generation the signed-normalized pair needs and verified by a real sampled draw
         // (EasyGL_Packed16Format) rather than by a readback, which this renderer serves from a CPU

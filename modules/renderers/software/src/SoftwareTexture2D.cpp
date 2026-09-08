@@ -4,10 +4,14 @@
 #include "SoftwareTextureErrors.hpp"
 
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfTypeHelper.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 
 #include <algorithm>
+#include <bit>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -21,13 +25,6 @@ namespace CNA::Internal::Renderers::Software
     namespace
     {
         using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
-
-        [[nodiscard]] bool IsPacked16(int surfaceFormat) noexcept
-        {
-            const auto format = static_cast<SurfaceFormat>(surfaceFormat);
-            return format == SurfaceFormat::Bgr565 || format == SurfaceFormat::Bgra5551 ||
-                   format == SurfaceFormat::Bgra4444;
-        }
 
         [[nodiscard]] bool IsDxt(int surfaceFormat) noexcept
         {
@@ -43,7 +40,8 @@ namespace CNA::Internal::Renderers::Software
 
         [[nodiscard]] int BytesPerTexel(int surfaceFormat)
         {
-            return IsPacked16(surfaceFormat) ? 2 : 4;
+            return Microsoft::Xna::Framework::Graphics::Texture::GetFormatSizeEXT(
+                static_cast<SurfaceFormat>(surfaceFormat));
         }
 
         [[nodiscard]] std::size_t RawByteCount(int surfaceFormat, int width, int height)
@@ -58,15 +56,64 @@ namespace CNA::Internal::Renderers::Software
                 * static_cast<std::size_t>(BytesPerTexel(surfaceFormat));
         }
 
-        [[nodiscard]] std::uint8_t ExpandToByte(std::uint16_t value, std::uint16_t maximum)
+        [[nodiscard]] std::uint16_t Read16(const std::uint8_t* bytes) noexcept
         {
-            return static_cast<std::uint8_t>(
-                (static_cast<unsigned int>(value) * 255u + maximum / 2u) / maximum);
+            return static_cast<std::uint16_t>(bytes[0]) |
+                   static_cast<std::uint16_t>(static_cast<std::uint16_t>(bytes[1]) << 8u);
+        }
+
+        [[nodiscard]] std::uint32_t Read32(const std::uint8_t* bytes) noexcept
+        {
+            return static_cast<std::uint32_t>(bytes[0]) |
+                   (static_cast<std::uint32_t>(bytes[1]) << 8u) |
+                   (static_cast<std::uint32_t>(bytes[2]) << 16u) |
+                   (static_cast<std::uint32_t>(bytes[3]) << 24u);
+        }
+
+        [[nodiscard]] std::uint64_t Read64(const std::uint8_t* bytes) noexcept
+        {
+            return static_cast<std::uint64_t>(Read32(bytes)) |
+                   (static_cast<std::uint64_t>(Read32(bytes + 4)) << 32u);
+        }
+
+        [[nodiscard]] float ReadSingle(const std::uint8_t* bytes) noexcept
+        {
+            return std::bit_cast<float>(Read32(bytes));
+        }
+
+        [[nodiscard]] float DecodeSnorm8(std::uint8_t bits) noexcept
+        {
+            const int value = bits <= 127u ? static_cast<int>(bits)
+                                           : static_cast<int>(bits) - 256;
+            return value <= -127 ? -1.0f : static_cast<float>(value) / 127.0f;
+        }
+
+        [[nodiscard]] std::uint8_t FloatToByte(float value) noexcept
+        {
+            if (!(value > 0.0f)) return 0u;
+            if (value >= 1.0f) return 255u;
+            return static_cast<std::uint8_t>(value * 255.0f + 0.5f);
+        }
+
+        void StoreDecodedTexel(std::size_t texel, float r, float g, float b, float a,
+                               std::vector<std::uint8_t>& rgba8,
+                               std::vector<float>& samples)
+        {
+            const std::size_t offset = texel * 4u;
+            rgba8[offset + 0] = FloatToByte(r);
+            rgba8[offset + 1] = FloatToByte(g);
+            rgba8[offset + 2] = FloatToByte(b);
+            rgba8[offset + 3] = FloatToByte(a);
+            samples[offset + 0] = r;
+            samples[offset + 1] = g;
+            samples[offset + 2] = b;
+            samples[offset + 3] = a;
         }
 
         void DecodePixels(int surfaceFormat, const std::uint8_t* source, std::size_t sourceBytes,
                           int sourceStride, int width, int height,
-                          std::vector<std::uint8_t>& destination)
+                          std::vector<std::uint8_t>& destination,
+                          std::vector<float>& samples)
         {
             if (IsDxt(surfaceFormat))
             {
@@ -77,56 +124,143 @@ namespace CNA::Internal::Renderers::Software
                     : (format == SurfaceFormat::Dxt3
                         ? DxtUtil::DecompressDxt3(source, sourceBytes, width, height)
                         : DxtUtil::DecompressDxt5(source, sourceBytes, width, height));
+                samples.resize(destination.size());
+                for (std::size_t i = 0; i < destination.size(); ++i)
+                    samples[i] = destination[i] / 255.0f;
                 return;
             }
 
             destination.resize(
                 static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4u);
-            if (!IsPacked16(surfaceFormat))
-            {
-                const std::size_t rowBytes = static_cast<std::size_t>(width) * 4u;
-                for (int y = 0; y < height; ++y)
-                {
-                    std::memcpy(destination.data() + static_cast<std::size_t>(y) * rowBytes,
-                                source + static_cast<std::size_t>(y) * sourceStride, rowBytes);
-                }
-                return;
-            }
+            samples.resize(destination.size());
 
             const auto format = static_cast<SurfaceFormat>(surfaceFormat);
+            const int bytesPerTexel = BytesPerTexel(surfaceFormat);
+            using Microsoft::Xna::Framework::Graphics::PackedVector::HalfTypeHelper;
             for (int y = 0; y < height; ++y)
             {
                 const std::uint8_t* row = source + static_cast<std::size_t>(y) * sourceStride;
                 for (int x = 0; x < width; ++x)
                 {
-                    const std::size_t sourceOffset = static_cast<std::size_t>(x) * 2u;
-                    const std::uint16_t packed = static_cast<std::uint16_t>(row[sourceOffset]) |
-                        static_cast<std::uint16_t>(
-                            static_cast<std::uint16_t>(row[sourceOffset + 1]) << 8u);
-                    const std::size_t destinationOffset =
-                        (static_cast<std::size_t>(y) * static_cast<std::size_t>(width) +
-                         static_cast<std::size_t>(x)) * 4u;
-                    if (format == SurfaceFormat::Bgr565)
+                    const std::size_t sourceOffset =
+                        static_cast<std::size_t>(x) * static_cast<std::size_t>(bytesPerTexel);
+                    const std::uint8_t* texelBytes = row + sourceOffset;
+                    const std::size_t texel = static_cast<std::size_t>(y)
+                        * static_cast<std::size_t>(width) + static_cast<std::size_t>(x);
+                    float r = 0.0f;
+                    float g = 0.0f;
+                    float b = 0.0f;
+                    float a = 1.0f;
+                    switch (format)
                     {
-                        destination[destinationOffset + 0] = ExpandToByte((packed >> 11) & 31u, 31u);
-                        destination[destinationOffset + 1] = ExpandToByte((packed >> 5) & 63u, 63u);
-                        destination[destinationOffset + 2] = ExpandToByte(packed & 31u, 31u);
-                        destination[destinationOffset + 3] = 255u;
-                    }
-                    else if (format == SurfaceFormat::Bgra5551)
+                    case SurfaceFormat::Color:
+                        r = texelBytes[0] / 255.0f;
+                        g = texelBytes[1] / 255.0f;
+                        b = texelBytes[2] / 255.0f;
+                        a = texelBytes[3] / 255.0f;
+                        break;
+                    case SurfaceFormat::Bgr565:
                     {
-                        destination[destinationOffset + 0] = ExpandToByte((packed >> 10) & 31u, 31u);
-                        destination[destinationOffset + 1] = ExpandToByte((packed >> 5) & 31u, 31u);
-                        destination[destinationOffset + 2] = ExpandToByte(packed & 31u, 31u);
-                        destination[destinationOffset + 3] = (packed & 0x8000u) ? 255u : 0u;
+                        const std::uint16_t packed = Read16(texelBytes);
+                        r = static_cast<float>((packed >> 11) & 31u) / 31.0f;
+                        g = static_cast<float>((packed >> 5) & 63u) / 63.0f;
+                        b = static_cast<float>(packed & 31u) / 31.0f;
+                        break;
                     }
-                    else
+                    case SurfaceFormat::Bgra5551:
                     {
-                        destination[destinationOffset + 0] = ExpandToByte((packed >> 8) & 15u, 15u);
-                        destination[destinationOffset + 1] = ExpandToByte((packed >> 4) & 15u, 15u);
-                        destination[destinationOffset + 2] = ExpandToByte(packed & 15u, 15u);
-                        destination[destinationOffset + 3] = ExpandToByte((packed >> 12) & 15u, 15u);
+                        const std::uint16_t packed = Read16(texelBytes);
+                        r = static_cast<float>((packed >> 10) & 31u) / 31.0f;
+                        g = static_cast<float>((packed >> 5) & 31u) / 31.0f;
+                        b = static_cast<float>(packed & 31u) / 31.0f;
+                        a = (packed & 0x8000u) != 0u ? 1.0f : 0.0f;
+                        break;
                     }
+                    case SurfaceFormat::Bgra4444:
+                    {
+                        const std::uint16_t packed = Read16(texelBytes);
+                        r = static_cast<float>((packed >> 8) & 15u) / 15.0f;
+                        g = static_cast<float>((packed >> 4) & 15u) / 15.0f;
+                        b = static_cast<float>(packed & 15u) / 15.0f;
+                        a = static_cast<float>((packed >> 12) & 15u) / 15.0f;
+                        break;
+                    }
+                    case SurfaceFormat::NormalizedByte2:
+                        r = DecodeSnorm8(texelBytes[0]);
+                        g = DecodeSnorm8(texelBytes[1]);
+                        b = a = 1.0f;
+                        break;
+                    case SurfaceFormat::NormalizedByte4:
+                        r = DecodeSnorm8(texelBytes[0]);
+                        g = DecodeSnorm8(texelBytes[1]);
+                        b = DecodeSnorm8(texelBytes[2]);
+                        a = DecodeSnorm8(texelBytes[3]);
+                        break;
+                    case SurfaceFormat::Rgba1010102:
+                    {
+                        const std::uint32_t packed = Read32(texelBytes);
+                        r = static_cast<float>(packed & 1023u) / 1023.0f;
+                        g = static_cast<float>((packed >> 10) & 1023u) / 1023.0f;
+                        b = static_cast<float>((packed >> 20) & 1023u) / 1023.0f;
+                        a = static_cast<float>((packed >> 30) & 3u) / 3.0f;
+                        break;
+                    }
+                    case SurfaceFormat::Rg32:
+                    {
+                        const std::uint32_t packed = Read32(texelBytes);
+                        r = static_cast<float>(packed & 65535u) / 65535.0f;
+                        g = static_cast<float>(packed >> 16) / 65535.0f;
+                        b = a = 1.0f;
+                        break;
+                    }
+                    case SurfaceFormat::Rgba64:
+                    {
+                        const std::uint64_t packed = Read64(texelBytes);
+                        r = static_cast<float>(packed & 65535u) / 65535.0f;
+                        g = static_cast<float>((packed >> 16) & 65535u) / 65535.0f;
+                        b = static_cast<float>((packed >> 32) & 65535u) / 65535.0f;
+                        a = static_cast<float>((packed >> 48) & 65535u) / 65535.0f;
+                        break;
+                    }
+                    case SurfaceFormat::Alpha8:
+                        a = texelBytes[0] / 255.0f;
+                        break;
+                    case SurfaceFormat::Single:
+                        r = ReadSingle(texelBytes);
+                        g = b = a = 1.0f;
+                        break;
+                    case SurfaceFormat::Vector2:
+                        r = ReadSingle(texelBytes);
+                        g = ReadSingle(texelBytes + 4);
+                        b = a = 1.0f;
+                        break;
+                    case SurfaceFormat::Vector4:
+                        r = ReadSingle(texelBytes);
+                        g = ReadSingle(texelBytes + 4);
+                        b = ReadSingle(texelBytes + 8);
+                        a = ReadSingle(texelBytes + 12);
+                        break;
+                    case SurfaceFormat::HalfSingle:
+                        r = HalfTypeHelper::Convert(Read16(texelBytes));
+                        g = b = a = 1.0f;
+                        break;
+                    case SurfaceFormat::HalfVector2:
+                        r = HalfTypeHelper::Convert(Read16(texelBytes));
+                        g = HalfTypeHelper::Convert(Read16(texelBytes + 2));
+                        b = a = 1.0f;
+                        break;
+                    case SurfaceFormat::HalfVector4:
+                    case SurfaceFormat::HdrBlendable:
+                        r = HalfTypeHelper::Convert(Read16(texelBytes));
+                        g = HalfTypeHelper::Convert(Read16(texelBytes + 2));
+                        b = HalfTypeHelper::Convert(Read16(texelBytes + 4));
+                        a = HalfTypeHelper::Convert(Read16(texelBytes + 6));
+                        break;
+                    default:
+                        throw std::runtime_error(
+                            "SoftwareTextureRenderer: unsupported SurfaceFormat decode");
+                    }
+                    StoreDecodedTexel(texel, r, g, b, a, destination, samples);
                 }
             }
         }
@@ -157,7 +291,7 @@ namespace CNA::Internal::Renderers::Software
                               data.pixels.begin() + static_cast<std::ptrdiff_t>(rawBaseBytes));
             DecodePixels(surfaceFormat_, rawPixels_.data(), rawPixels_.size(),
                          IsDxt(surfaceFormat_) ? 0 : width_ * BytesPerTexel(surfaceFormat_),
-                         width_, height_, pixels_);
+                         width_, height_, pixels_, samplePixels_);
         }
         catch (const std::bad_alloc&)
         {
@@ -181,6 +315,7 @@ namespace CNA::Internal::Renderers::Software
         {
             pixels_.assign(layout.baseColorBytes, 0u);
             rawPixels_ = pixels_;
+            samplePixels_.assign(layout.baseColorBytes, 0.0f);
         }
         catch (const std::bad_alloc&)
         {
@@ -225,7 +360,7 @@ namespace CNA::Internal::Renderers::Software
                               * static_cast<std::ptrdiff_t>(rowBytes));
             }
             DecodePixels(surfaceFormat_, rawPixels_.data(), rawPixels_.size(),
-                         static_cast<int>(rowBytes), width_, height_, pixels_);
+                         static_cast<int>(rowBytes), width_, height_, pixels_, samplePixels_);
         }
         catch (const std::bad_alloc&)
         {
@@ -274,7 +409,7 @@ namespace CNA::Internal::Renderers::Software
                 rawPixels_.assign(rgba, rgba + rawBytes);
                 DecodePixels(surfaceFormat_, rawPixels_.data(), rawPixels_.size(),
                              IsDxt(surfaceFormat_) ? 0 : levelW * BytesPerTexel(surfaceFormat_),
-                             levelW, levelH, pixels_);
+                             levelW, levelH, pixels_, samplePixels_);
             }
             catch (const std::bad_alloc&)
             {
@@ -299,7 +434,7 @@ namespace CNA::Internal::Renderers::Software
             dst.rawPixels.assign(rgba, rgba + rawBytes);
             DecodePixels(surfaceFormat_, dst.rawPixels.data(), dst.rawPixels.size(),
                          IsDxt(surfaceFormat_) ? 0 : levelW * BytesPerTexel(surfaceFormat_),
-                         levelW, levelH, dst.pixels);
+                         levelW, levelH, dst.pixels, dst.samplePixels);
         }
         catch (const std::bad_alloc&)
         {
@@ -424,5 +559,22 @@ namespace CNA::Internal::Renderers::Software
     {
         if (level <= 0 || level > static_cast<int>(mipLevels_.size())) return pixels_;
         return mipLevels_[static_cast<std::size_t>(level - 1)].pixels;
+    }
+
+    void SoftwareTextureRenderer::FetchColorTexel(int level, int x, int y,
+                                                   float& r, float& g, float& b, float& a) const
+    {
+        const int levelWidth = ColorWidth(level);
+        const std::vector<float>& samples =
+            level <= 0 || level > static_cast<int>(mipLevels_.size())
+                ? samplePixels_
+                : mipLevels_[static_cast<std::size_t>(level - 1)].samplePixels;
+        const std::size_t offset =
+            (static_cast<std::size_t>(y) * static_cast<std::size_t>(levelWidth) +
+             static_cast<std::size_t>(x)) * 4u;
+        r = samples[offset + 0];
+        g = samples[offset + 1];
+        b = samples[offset + 2];
+        a = samples[offset + 3];
     }
 }
