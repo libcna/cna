@@ -58,6 +58,8 @@
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
@@ -1046,6 +1048,198 @@ protected:
                       " (want blue), at the origin " + Text(si[2]) +
                       " (want the clear colour; covered there means the BONE was dropped, and a "
                       "clear +0.75 means the per-instance matrix was)");
+        }
+
+        // ---- Z/AA: PbrEffect on an instanced draw --------------------------------------------
+        // plans/plan_vulkan.md VULKAN-232. Two claims, and the leg fails if either is false.
+        //
+        //   TRANSFORM. World = +0.25 in x composes with the three instances at -0.5/0/+0.5, so the
+        //     quads land at -0.25, +0.25 and +0.75 -- exactly the arrangement X/Y uses, for the
+        //     same reason: NDC +0.75 covered proves both transforms were applied, and NDC 0 empty
+        //     proves World was.
+        //   MATERIAL. The instanced pixel must equal the NON-instanced one, and that value must be
+        //     the PBR BRDF's rather than a full-bright quad. A white albedo at metallic 0,
+        //     roughness 1, one light at N.L = 1 and no ambient is a Lambert value well below
+        //     255 -- so a draw that silently fell back to the flat instanced program (which writes
+        //     the material colour, i.e. white) fails the second half even when it covers the right
+        //     pixels.
+        {
+            struct PbrGpuVertex {
+                float px, py, pz;
+                float nx, ny, nz;
+                float tx, ty, tz, tw;
+                float u, v;
+            };
+            static_assert(sizeof(PbrGpuVertex) == 48);
+            auto pv = [](float x, float y, float u, float v) {
+                return PbrGpuVertex{ x, y, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, u, v };
+            };
+            const PbrGpuVertex pq[4] = {
+                pv(-0.12f,  0.12f, 0.0f, 0.0f), pv(-0.12f, -0.12f, 0.0f, 1.0f),
+                pv( 0.12f, -0.12f, 1.0f, 1.0f), pv( 0.12f,  0.12f, 1.0f, 0.0f),
+            };
+            VertexBuffer pvb(dev, 4);
+            pvb.SetDataRaw(pq, 4, static_cast<int>(sizeof(PbrGpuVertex)));
+            Texture2D whiteP(dev, 1, 1, false, SurfaceFormat::Color);
+            const std::uint8_t wpxP[4] = { 255, 255, 255, 255 };
+            whiteP.SetDataRGBA(wpxP, 1);
+
+            auto pbr = [&](bool instanced) {
+                dev.Clear(Color(0, 255, 0, 255));
+                dev.SetDepthTestEnabled(false);
+                dev.setBlendStateProperty(BlendState::Opaque);
+                dev.setRasterizerStateProperty(RasterizerState::CullNone);
+                dev.getSamplerStatesProperty()[0] = SamplerState::PointClamp;
+                PbrEffect fx(dev);
+                // The analytic-witness colour-space contract the renderer's own PBR tests use, so
+                // the comparison is of one linear BRDF value against another.
+                fx.setBaseColorTextureIsSrgbEXTProperty(false);
+                fx.setEmissiveTextureIsSrgbEXTProperty(false);
+                fx.setEncodeOutputToSrgbEXTProperty(false);
+                fx.setTextureProperty(&whiteP);
+                fx.setNormalMapProperty(nullptr);
+                fx.setMetallicFactorProperty(0.0f);
+                fx.setRoughnessFactorProperty(1.0f);
+                fx.setAmbientLightColorProperty(Vector3::Zero);
+                fx.DirectionalLight0.setEnabledProperty(true);
+                fx.DirectionalLight0.setDirectionProperty(Vector3(0.0f, 0.0f, -1.0f));
+                fx.DirectionalLight0.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+                fx.DirectionalLight1.setEnabledProperty(false);
+                fx.DirectionalLight2.setEnabledProperty(false);
+                fx.setWorldProperty(Matrix::CreateTranslation(0.25f, 0.0f, 0.0f));
+                fx.setViewProperty(Matrix::getIdentityProperty());
+                fx.setProjectionProperty(Matrix::getIdentityProperty());
+                fx.Apply();
+                dev.SetVertexBuffer(&pvb);
+                dev.SetIndexBuffer(ib_.get());
+                if (instanced) {
+                    std::vector<VertexBufferBinding> bd = {
+                        VertexBufferBinding(&pvb,          0, 0),
+                        VertexBufferBinding(instVb_.get(), 0, 1),
+                    };
+                    dev.SetVertexBuffers(bd);
+                    dev.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2, 3);
+                } else {
+                    dev.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2);
+                }
+                return std::vector<Color>{ ReadPixel(dev, (kN * 5) / 8, kN / 2),
+                                           ReadPixel(dev, (kN * 7) / 8, kN / 2),
+                                           ReadPixel(dev, kN / 2,       kN / 2) };
+            };
+            const auto pn = pbr(false);
+            const auto pi = pbr(true);
+            auto shaded = [](const Color& c) {
+                // Neither the clear colour nor a full-bright quad: a real BRDF value.
+                return !IsClear(c) && c.getRProperty() > 20 && c.getRProperty() < 210;
+            };
+            auto same = [](const Color& a, const Color& b) {
+                return std::abs(a.getRProperty() - b.getRProperty()) <= 10 &&
+                       std::abs(a.getGProperty() - b.getGProperty()) <= 10 &&
+                       std::abs(a.getBProperty() - b.getBProperty()) <= 10;
+            };
+            check(shaded(pn[0]) && IsClear(pn[2]),
+                  "Z control: a NON-instanced PbrEffect draw shades by the BRDF and honours World "
+                  "-- at NDC +0.25 " + Text(pn[0]) +
+                      " (want a lit value, neither the clear colour nor full-bright), at the "
+                      "origin " + Text(pn[2]) + " (want the clear colour)");
+            check(shaded(pi[1]) && same(pi[1], pn[0]) && IsClear(pi[2]),
+                  "AA an INSTANCED one composes World with the per-instance matrix AND keeps the "
+                  "PBR material -- at NDC +0.75 " + Text(pi[1]) + " (want " + Text(pn[0]) +
+                      ", the control's own BRDF value), at the origin " + Text(pi[2]) +
+                      " (want the clear colour; a full-bright value here or at +0.75 is the flat "
+                      "instanced program's material colour, i.e. a silent fall-back out of PBR)");
+        }
+
+        // ---- AB/AC: SkinnedPbrEffect on an instanced draw ------------------------------------
+        // plans/plan_vulkan.md VULKAN-232's second family. Z/AA proved the rigid PBR pair; this is
+        // the skinned one, and it carries BOTH discriminators at once -- the bone (X/Y's) and the
+        // BRDF value (Z/AA's). One bone translating +0.25 replaces World this time, so the three
+        // quads again land at -0.25, +0.25 and +0.75.
+        {
+            struct SkinnedPbrGpuVertex {
+                float px, py, pz;
+                float nx, ny, nz;
+                float tx, ty, tz, tw;
+                float u, v;
+                float w0, w1, w2, w3;
+                std::uint8_t i0, i1, i2, i3;
+            };
+            static_assert(sizeof(SkinnedPbrGpuVertex) == 68);
+            auto spv = [](float x, float y, float u, float v) {
+                return SkinnedPbrGpuVertex{ x, y, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f,
+                                            u, v, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0 };
+            };
+            const SkinnedPbrGpuVertex spq[4] = {
+                spv(-0.12f,  0.12f, 0.0f, 0.0f), spv(-0.12f, -0.12f, 0.0f, 1.0f),
+                spv( 0.12f, -0.12f, 1.0f, 1.0f), spv( 0.12f,  0.12f, 1.0f, 0.0f),
+            };
+            VertexBuffer spvb(dev, 4);
+            spvb.SetDataRaw(spq, 4, static_cast<int>(sizeof(SkinnedPbrGpuVertex)));
+            Texture2D whiteSP(dev, 1, 1, false, SurfaceFormat::Color);
+            const std::uint8_t wpxSP[4] = { 255, 255, 255, 255 };
+            whiteSP.SetDataRGBA(wpxSP, 1);
+
+            auto skinnedPbr = [&](bool instanced) {
+                dev.Clear(Color(0, 255, 0, 255));
+                dev.SetDepthTestEnabled(false);
+                dev.setBlendStateProperty(BlendState::Opaque);
+                dev.setRasterizerStateProperty(RasterizerState::CullNone);
+                dev.getSamplerStatesProperty()[0] = SamplerState::PointClamp;
+                SkinnedPbrEffect fx(dev);
+                fx.setBaseColorTextureIsSrgbEXTProperty(false);
+                fx.setEmissiveTextureIsSrgbEXTProperty(false);
+                fx.setEncodeOutputToSrgbEXTProperty(false);
+                fx.setTextureProperty(&whiteSP);
+                fx.setNormalMapProperty(nullptr);
+                fx.setMetallicFactorProperty(0.0f);
+                fx.setRoughnessFactorProperty(1.0f);
+                fx.setAmbientLightColorProperty(Vector3::Zero);
+                fx.DirectionalLight0.setEnabledProperty(true);
+                fx.DirectionalLight0.setDirectionProperty(Vector3(0.0f, 0.0f, -1.0f));
+                fx.DirectionalLight0.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+                fx.DirectionalLight1.setEnabledProperty(false);
+                fx.DirectionalLight2.setEnabledProperty(false);
+                fx.setWorldProperty(Matrix::getIdentityProperty());
+                fx.setViewProperty(Matrix::getIdentityProperty());
+                fx.setProjectionProperty(Matrix::getIdentityProperty());
+                std::vector<Matrix> bones = { Matrix::CreateTranslation(0.25f, 0.0f, 0.0f) };
+                fx.SetBoneTransforms(bones);
+                fx.setWeightsPerVertexProperty(1);
+                fx.Apply();
+                dev.SetVertexBuffer(&spvb);
+                dev.SetIndexBuffer(ib_.get());
+                if (instanced) {
+                    std::vector<VertexBufferBinding> bd = {
+                        VertexBufferBinding(&spvb,         0, 0),
+                        VertexBufferBinding(instVb_.get(), 0, 1),
+                    };
+                    dev.SetVertexBuffers(bd);
+                    dev.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2, 3);
+                } else {
+                    dev.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2);
+                }
+                return std::vector<Color>{ ReadPixel(dev, (kN * 5) / 8, kN / 2),
+                                           ReadPixel(dev, (kN * 7) / 8, kN / 2),
+                                           ReadPixel(dev, kN / 2,       kN / 2) };
+            };
+            const auto spn = skinnedPbr(false);
+            const auto spi = skinnedPbr(true);
+            auto shadedSp = [](const Color& c) {
+                return !IsClear(c) && c.getRProperty() > 20 && c.getRProperty() < 210;
+            };
+            auto sameSp = [](const Color& a, const Color& b) {
+                return std::abs(a.getRProperty() - b.getRProperty()) <= 10 &&
+                       std::abs(a.getGProperty() - b.getGProperty()) <= 10 &&
+                       std::abs(a.getBProperty() - b.getBProperty()) <= 10;
+            };
+            check(shadedSp(spn[0]) && IsClear(spn[2]),
+                  "AB control: a NON-instanced SkinnedPbrEffect draw is moved +0.25 by its bone and "
+                  "shades by the BRDF -- at NDC +0.25 " + Text(spn[0]) +
+                      ", at the origin " + Text(spn[2]) + " (want the clear colour)");
+            check(shadedSp(spi[1]) && sameSp(spi[1], spn[0]) && IsClear(spi[2]),
+                  "AC an INSTANCED one composes the bone with the per-instance matrix AND keeps the "
+                  "PBR material -- at NDC +0.75 " + Text(spi[1]) + " (want " + Text(spn[0]) +
+                      "), at the origin " + Text(spi[2]) + " (want the clear colour)");
         }
 
         // ---- N/O: EnvironmentMapEffect on an instanced draw ---------------------------------

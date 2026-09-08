@@ -4055,6 +4055,8 @@ namespace CNA::Internal::Renderers::Vulkan
                                                VkImageView emissive, VkImageView occlusion,
                                                VkImageView specular, VkImageView specularColor,
                                                const VkSampler (&samplers)[7]);
+        // plans/plan_vulkan.md VULKAN-232: `instanced` selects the CNA_INSTANCED variant of the
+        // same source and adds binding 1, as in every other family.
         VkPipeline GetOrCreatePipelinePbr3D(std::size_t stride, VkPrimitiveTopology,
                                              bool depthTest, bool depthWrite,
                                              bool blend, int cullMode,
@@ -4062,7 +4064,8 @@ namespace CNA::Internal::Renderers::Vulkan
                                              bool msaa, const DepthStencilKeyParams& dsParams = {},
                                          const BlendKeyParams& blendParams = {},
                                          VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
-                                         const VulkanVertexInputLayoutEXT& vertexLayout = {});
+                                         const VulkanVertexInputLayoutEXT& vertexLayout = {},
+                                         bool instanced = false);
         void       EnsurePbrSkinnedResources();
         /// REMED-GFX-169: as GetOrCreatePbrDescSet, slots 0..6.
         VkDescriptorSet GetOrCreatePbrSkinnedDescSet(uint32_t frameIdx, VkImageView baseColor,
@@ -4077,7 +4080,8 @@ namespace CNA::Internal::Renderers::Vulkan
                                              bool msaa, const DepthStencilKeyParams& dsParams = {},
                                          const BlendKeyParams& blendParams = {},
                                          VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
-                                         const VulkanVertexInputLayoutEXT& vertexLayout = {});
+                                         const VulkanVertexInputLayoutEXT& vertexLayout = {},
+                                         bool instanced = false);
         void       EnsureDefaultWhiteTexture();
         /// VULKAN-254: creates @ref defaultWhiteVolumeImage_ and its view, once.
         void       EnsureDefaultWhiteVolumeTexture();

@@ -1246,11 +1246,16 @@ namespace
          "for (int wi = 0; wi < 16; ++wi) out[20 + wi] = p.worldColMajor[wi]",
          "gl_Position = pc.mvp * vec4(inPos, 1.0)",
          "gl_Position = pc.mvp * skinnedPos"},
+        // plans/plan_vulkan.md VULKAN-232: the Vulkan PBR vertex shaders are compiled twice from
+        // one source, and the per-instance transform is spelled CNA_INSTANCE_POSITION() -- the
+        // identity without CNA_INSTANCED, so the ordinary module's SPIR-V is byte-identical to
+        // what this row's literal used to describe. Same evidence, current spelling; `magnum`
+        // below already carries its own instancing spelling for the same reason.
         {"vulkan",
          "const Matrix wvp = world * view * projection",
          "FillExtPushConst(d.pushConst, wvp, params)",
          "for (int wi = 0; wi < 16; ++wi) out[16 + wi] = p.worldColMajor[wi]",
-         "gl_Position = pc.mvp * vec4(aPos, 1.0)",
+         "gl_Position = pc.mvp * CNA_INSTANCE_POSITION(vec4(aPos, 1.0))",
          "gl_Position = pc.mvp * skinnedPos"},
         {"webgpu",
          "const Matrix wvp = world * view * projection",
@@ -2715,8 +2720,12 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderComposesDirectionDeterminantsI
         {"sdl-gpu",
          "inTangent.w * cnaDirectionHandedness(mat3(lp.world))",
          "* cnaDirectionHandedness(skinNormalMat)"},
+        // plans/plan_vulkan.md VULKAN-232: the instance matrix is folded into World here, so the
+        // determinant this evidence is about now covers a mirroring INSTANCE too --
+        // sign(det(World x Instance)) == sign(det World) * sign(det Instance). Without
+        // CNA_INSTANCED the macro is the identity and the expression is the one that was here.
         {"vulkan",
-         "aTangent.w * cnaDirectionHandedness(mat3(pbr.world))",
+         "aTangent.w * cnaDirectionHandedness(mat3(CNA_INSTANCE_WORLD(pbr.world)))",
          "* cnaDirectionHandedness(skinNormalMat)"},
         {"webgpu",
          "input.tangent.w * directionHandedness(worldMat3)",

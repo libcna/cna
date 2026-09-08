@@ -10407,7 +10407,8 @@ namespace CNA::Internal::Renderers::Vulkan
         std::size_t stride, VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
-        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt, const VulkanVertexInputLayoutEXT& vertexLayout)
+        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt, const VulkanVertexInputLayoutEXT& vertexLayout,
+        bool instanced)
     {
         EnsurePbrResources();
 
@@ -10429,19 +10430,31 @@ namespace CNA::Internal::Renderers::Vulkan
         // stride cannot share a pipeline. Folded only when the layout is complete, which leaves
         // every stride-derived key exactly as it was.
         if (vertexLayout.IsComplete()) key.a = FoldPerVertexStrideIntoKey(key.a, recordStride);
+        // VULKAN-232: the instanced variant is its own pipeline, as in every other family.
+        if (instanced) key.vl ^= 0x9E3779B97F4A7C15ull;
         auto it = pipelinesPbr3D_.find(key);
         if (it != pipelinesPbr3D_.end()) return it->second;
 
         using namespace Shaders;
+        // VULKAN-232: shape outer, `instanced` inner -- the order VULKAN-228..231 established.
         VkShaderModule vert = dualUv
-            ? CreateShaderModule(kPbr3dDualUvVertSpv, kPbr3dDualUvVertSpv_size)
-            : CreateShaderModule(kPbr3dVertSpv, kPbr3dVertSpv_size);
+            ? (instanced
+               ? CreateShaderModule(kInstancedPbr3dDualUvVertSpv, kInstancedPbr3dDualUvVertSpv_size)
+               : CreateShaderModule(kPbr3dDualUvVertSpv, kPbr3dDualUvVertSpv_size))
+            : (instanced
+               ? CreateShaderModule(kInstancedPbr3dVertSpv, kInstancedPbr3dVertSpv_size)
+               : CreateShaderModule(kPbr3dVertSpv, kPbr3dVertSpv_size));
         VkShaderModule frag = dualUv
             ? CreateShaderModule(kPbr3dDualUvFragSpv, kPbr3dDualUvFragSpv_size)
             : CreateShaderModule(kPbr3dFragSpv, kPbr3dFragSpv_size);
 
-        VkVertexInputBindingDescription bind{ 0, static_cast<uint32_t>(stride), VK_VERTEX_INPUT_RATE_VERTEX };
-        VkVertexInputAttributeDescription attrs[6]{};
+        // VULKAN-232: two bindings when instanced -- 0 per-vertex, 1 per-instance at 64 bytes.
+        constexpr uint32_t kInstStride = 64;
+        VkVertexInputBindingDescription binds[2]{};
+        binds[0] = { 0, static_cast<uint32_t>(stride), VK_VERTEX_INPUT_RATE_VERTEX   };
+        binds[1] = { 1, kInstStride,                   VK_VERTEX_INPUT_RATE_INSTANCE };
+        // Ten: at most six per-vertex, then the four matrix columns.
+        VkVertexInputAttributeDescription attrs[10]{};
         attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT,    0  }; // aPos
         attrs[1] = { 1, 0, VK_FORMAT_R32G32B32_SFLOAT,    12 }; // aNormal
         attrs[2] = { 2, 0, VK_FORMAT_R32G32B32A32_SFLOAT, 24 }; // aTangent
@@ -10460,8 +10473,17 @@ namespace CNA::Internal::Renderers::Vulkan
         VkPipelineVertexInputStateCreateInfo vis{};
         vis.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
         uint32_t attrCount = dualUv ? 6u : 4u;
-        ApplyDeclaredVertexLayoutEXT(vertexLayout, attrs, std::size(attrs), attrCount);
-        vis.vertexBindingDescriptionCount   = 1; vis.pVertexBindingDescriptions   = &bind;
+        // The capacity is the PER-VERTEX one, 6 -- not std::size(attrs), which is now 10, so a
+        // declaration cannot claim the slots the instance columns are about to use (VULKAN-222).
+        ApplyDeclaredVertexLayoutEXT(vertexLayout, attrs, 6u, attrCount);
+        if (instanced) {
+            attrs[attrCount++] = { 12, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0  }; // aCnaInstCol0
+            attrs[attrCount++] = { 13, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 16 }; // aCnaInstCol1
+            attrs[attrCount++] = { 14, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 32 }; // aCnaInstCol2
+            attrs[attrCount++] = { 15, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 48 }; // aCnaInstCol3
+        }
+        vis.vertexBindingDescriptionCount   = instanced ? 2u : 1u;
+        vis.pVertexBindingDescriptions      = binds;
         vis.vertexAttributeDescriptionCount = attrCount;
         vis.pVertexAttributeDescriptions = attrs;
 
@@ -10745,7 +10767,8 @@ namespace CNA::Internal::Renderers::Vulkan
         std::size_t stride, VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
-        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt, const VulkanVertexInputLayoutEXT& vertexLayout)
+        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt, const VulkanVertexInputLayoutEXT& vertexLayout,
+        bool instanced)
     {
         EnsurePbrSkinnedResources();
 
@@ -10770,23 +10793,38 @@ namespace CNA::Internal::Renderers::Vulkan
         // stride cannot share a pipeline. Folded only when the layout is complete, which leaves
         // every stride-derived key exactly as it was.
         if (vertexLayout.IsComplete()) key.a = FoldPerVertexStrideIntoKey(key.a, recordStride);
+        // VULKAN-232: the instanced variant is its own pipeline, as in every other family.
+        if (instanced) key.vl ^= 0x9E3779B97F4A7C15ull;
         auto it = pipelinesPbrSkinned3D_.find(key);
         if (it != pipelinesPbrSkinned3D_.end()) return it->second;
 
         using namespace Shaders;
         VkShaderModule vert = colored
-            ? CreateShaderModule(kPbr3dSkinnedDualUvColorVertSpv, kPbr3dSkinnedDualUvColorVertSpv_size)
+            ? (instanced
+               ? CreateShaderModule(kInstancedPbr3dSkinnedDualUvColorVertSpv,
+                                    kInstancedPbr3dSkinnedDualUvColorVertSpv_size)
+               : CreateShaderModule(kPbr3dSkinnedDualUvColorVertSpv, kPbr3dSkinnedDualUvColorVertSpv_size))
             : dualUv
-            ? CreateShaderModule(kPbr3dSkinnedDualUvVertSpv, kPbr3dSkinnedDualUvVertSpv_size)
-            : CreateShaderModule(kPbr3dSkinnedVertSpv, kPbr3dSkinnedVertSpv_size);
+            ? (instanced
+               ? CreateShaderModule(kInstancedPbr3dSkinnedDualUvVertSpv,
+                                    kInstancedPbr3dSkinnedDualUvVertSpv_size)
+               : CreateShaderModule(kPbr3dSkinnedDualUvVertSpv, kPbr3dSkinnedDualUvVertSpv_size))
+            : (instanced
+               ? CreateShaderModule(kInstancedPbr3dSkinnedVertSpv, kInstancedPbr3dSkinnedVertSpv_size)
+               : CreateShaderModule(kPbr3dSkinnedVertSpv, kPbr3dSkinnedVertSpv_size));
         VkShaderModule frag = colored
             ? CreateShaderModule(kPbr3dSkinnedDualUvColorFragSpv, kPbr3dSkinnedDualUvColorFragSpv_size)
             : dualUv
             ? CreateShaderModule(kPbr3dSkinnedDualUvFragSpv, kPbr3dSkinnedDualUvFragSpv_size)
             : CreateShaderModule(kPbr3dSkinnedFragSpv, kPbr3dSkinnedFragSpv_size);
 
-        VkVertexInputBindingDescription bind{ 0, static_cast<uint32_t>(stride), VK_VERTEX_INPUT_RATE_VERTEX };
-        VkVertexInputAttributeDescription attrs[8]{};
+        // VULKAN-232: two bindings when instanced -- 0 per-vertex, 1 per-instance at 64 bytes.
+        constexpr uint32_t kInstStride = 64;
+        VkVertexInputBindingDescription binds[2]{};
+        binds[0] = { 0, static_cast<uint32_t>(stride), VK_VERTEX_INPUT_RATE_VERTEX   };
+        binds[1] = { 1, kInstStride,                   VK_VERTEX_INPUT_RATE_INSTANCE };
+        // Twelve: at most eight per-vertex, then the four matrix columns.
+        VkVertexInputAttributeDescription attrs[12]{};
         attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT,    0  }; // aPos
         attrs[1] = { 1, 0, VK_FORMAT_R32G32B32_SFLOAT,    12 }; // aNormal
         attrs[2] = { 2, 0, VK_FORMAT_R32G32B32A32_SFLOAT, 24 }; // aTangent
@@ -10801,8 +10839,16 @@ namespace CNA::Internal::Renderers::Vulkan
         VkPipelineVertexInputStateCreateInfo vis{};
         vis.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
         uint32_t attrCount = colored ? 8u : dualUv ? 7u : 6u;
-        ApplyDeclaredVertexLayoutEXT(vertexLayout, attrs, std::size(attrs), attrCount);
-        vis.vertexBindingDescriptionCount   = 1; vis.pVertexBindingDescriptions   = &bind;
+        // Per-vertex capacity 8, not std::size(attrs) -- see the rigid sibling (VULKAN-222/232).
+        ApplyDeclaredVertexLayoutEXT(vertexLayout, attrs, 8u, attrCount);
+        if (instanced) {
+            attrs[attrCount++] = { 12, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0  }; // aCnaInstCol0
+            attrs[attrCount++] = { 13, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 16 }; // aCnaInstCol1
+            attrs[attrCount++] = { 14, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 32 }; // aCnaInstCol2
+            attrs[attrCount++] = { 15, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 48 }; // aCnaInstCol3
+        }
+        vis.vertexBindingDescriptionCount   = instanced ? 2u : 1u;
+        vis.pVertexBindingDescriptions      = binds;
         vis.vertexAttributeDescriptionCount = attrCount;
         vis.pVertexAttributeDescriptions = attrs;
 
@@ -11952,11 +11998,13 @@ namespace CNA::Internal::Renderers::Vulkan
                 } else if (draw.usePbrSkinned) {
                     pipe = GetOrCreatePipelinePbrSkinned3D(draw.stride, draw.topology,
                                                         draw.depthTest, draw.depthWrite,
-                                                        draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt, draw.vertexLayout);
+                                                        draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt, draw.vertexLayout,
+                                                        draw.useInstanced);
                 } else if (draw.usePbr) {
                     pipe = GetOrCreatePipelinePbr3D(draw.stride, draw.topology,
                                                         draw.depthTest, draw.depthWrite,
-                                                        draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt, draw.vertexLayout);
+                                                        draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt, draw.vertexLayout,
+                                                        draw.useInstanced);
                 } else if (draw.useInstanced && !draw.useLitTextured) {
                     // VULKAN-224: a lit instanced draw falls through to the lit arm below, which
                     // now takes an `instanced` flag. This chain tests `useInstanced` BEFORE
@@ -15081,7 +15129,9 @@ namespace CNA::Internal::Renderers::Vulkan
         // stage and the replay branch are all that family's own, which is why this shape needed no
         // new plumbing where the lit one would (VULKAN-218).
         const bool instancedAlphaTest =
-            params.alphaTest[3] < 0.0f || params.alphaTest[2] < 0.0f;
+            // VULKAN-232: `!params.pbr`, because the ordinary routes compute
+            // `needsAlphaTest = !needsPbr && (...)` -- PBR is the outermost family there.
+            !params.pbr && (params.alphaTest[3] < 0.0f || params.alphaTest[2] < 0.0f);
         // VULKAN-224: and the lit family, on the same principle -- an instanced draw takes the
         // ORDINARY family's programs and adds a per-instance binding, rather than needing an
         // instanced program of its own.
@@ -15124,10 +15174,10 @@ namespace CNA::Internal::Renderers::Vulkan
         // VULKAN-225: the dual-texture family, on the same principle. Unlike the lit one this
         // needs no chain guard -- `useDualTexture` is already tested BEFORE `useInstanced` in both
         // the pipeline and descriptor chains, as `useAlphaTest` is.
-        const bool instancedDualTex = !instancedAlphaTest && params.dualTexture;
+        const bool instancedDualTex = !instancedAlphaTest && !params.pbr && params.dualTexture;
         // VULKAN-226: env-map, the last full family. Same cascade order as the ordinary route's.
         const bool instancedEnvMap =
-            !instancedAlphaTest && !instancedDualTex && params.envMapping;
+            !instancedAlphaTest && !instancedDualTex && !params.pbr && params.envMapping;
         // VULKAN-231: SkinnedEffect, in the ordinary route's own cascade position -- after
         // alpha-test, dual-texture and env-map, and only when PBR is not also set (the ordinary
         // route's `d.useSkinned = needsSkinned && !needsPbr`, mirroring EasyGL's SelectProgram
@@ -15136,6 +15186,12 @@ namespace CNA::Internal::Renderers::Vulkan
         const bool instancedSkinned =
             !instancedAlphaTest && !instancedDualTex && !instancedEnvMap
             && params.skinned && !params.pbr;
+        // VULKAN-232: PbrEffect and SkinnedPbrEffect. The ordinary routes split them the same way
+        // -- `usePbrSkinned = needsPbr && needsSkinned`, `usePbr = needsPbr && !needsSkinned` --
+        // and `needsPbr` there is `params.pbr` alone, tested before every other family, so PBR
+        // wins over alpha-test/dual-texture/env-map here exactly as it does there.
+        const bool instancedPbrSkinned = params.pbr && params.skinned;
+        const bool instancedPbr        = params.pbr && !params.skinned;
         VulkanVertexInputLayoutEXT instancedEnvMapLayout;
         if (instancedEnvMap)
             instancedEnvMapLayout = BuildVulkanVertexInputLayoutEXT(
@@ -15164,6 +15220,24 @@ namespace CNA::Internal::Renderers::Vulkan
                 pvStride, atInputCount);
             instancedAlphaTestLayout = BuildVulkanVertexInputLayoutEXT(
                 vbForLayout.GetDeclarationEXT(), atInputs, atInputCount);
+        }
+        // VULKAN-232: the PBR pair's own input tables, chosen by the same stride rule the two
+        // factories use -- the pairing rule VULKAN-230 recorded as a class.
+        VulkanVertexInputLayoutEXT instancedPbrLayout;
+        if (instancedPbr || instancedPbrSkinned) {
+            std::size_t pbrInputCount = 0;
+            const auto* pbrInputs =
+                PbrFamilyStockInputsEXT(instancedPbrSkinned, pvStride, pbrInputCount);
+            if (pbrInputs != nullptr)
+                instancedPbrLayout = BuildVulkanVertexInputLayoutEXT(
+                    vbForLayout.GetDeclarationEXT(), pbrInputs, pbrInputCount,
+                    uscaledVertexFormatSupported_);
+            // VULKAN-148/VULKAN-151: the same two refusals the ordinary routes make, at the same
+            // point, so an instanced PBR draw cannot become a refusal at Present() instead.
+            if (!instancedPbrLayout.IsComplete()) {
+                RequirePbrStrideEXT(pvStride, instancedPbrSkinned);
+                if (instancedPbrSkinned) RequireBoneIndexFormatEXT();
+            }
         }
         // VULKAN-231: the skinned family's own input table, chosen by the same stride rule the
         // factory uses -- the pairing rule VULKAN-230 recorded as a class.
@@ -15311,6 +15385,16 @@ namespace CNA::Internal::Renderers::Vulkan
                                      /*needsLitTextured=*/false, /*needsLitUntextured=*/false,
                                      /*needsLitColored=*/false);
             d.useDualTexture = true;
+        }
+        if (instancedPbr || instancedPbrSkinned) {
+            d.usePbr        = instancedPbr;
+            d.usePbrSkinned = instancedPbrSkinned;
+            d.vertexLayout  = instancedPbrLayout;
+            FillStockFamilyRecordEXT(d, params, /*needsPbr=*/true,
+                                     /*needsSkinned=*/instancedPbrSkinned,
+                                     /*needsEnvMap=*/false, /*needsDualTex=*/false,
+                                     /*needsLitTextured=*/false, /*needsLitUntextured=*/false,
+                                     /*needsLitColored=*/false);
         }
         if (instancedSkinned) {
             d.useSkinned   = true;

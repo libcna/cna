@@ -327,6 +327,15 @@ def main():
         ("skinned3d_color.vert.glsl",     VERTEX_SHADER, "kInstancedSkinned3dColorVertSpv"),
         ("skinned3d_vertexlit_color.vert.glsl", VERTEX_SHADER,
          "kInstancedSkinned3dVertexLitColorVertSpv"),
+        # plans/plan_vulkan.md VULKAN-232: PbrEffect and SkinnedPbrEffect, one instanced module
+        # per existing vertex-record variant and not one more -- stride 48/60 rigid, 68/76/80
+        # skinned. The fragment stages are unchanged, so no new pipeline layout or descriptor set.
+        ("pbr3d.vert.glsl",         VERTEX_SHADER, "kInstancedPbr3dVertSpv"),
+        ("pbr3d.vert.glsl",         VERTEX_SHADER, "kInstancedPbr3dDualUvVertSpv"),
+        ("pbr3d_skinned.vert.glsl", VERTEX_SHADER, "kInstancedPbr3dSkinnedVertSpv"),
+        ("pbr3d_skinned.vert.glsl", VERTEX_SHADER, "kInstancedPbr3dSkinnedDualUvVertSpv"),
+        ("pbr3d_skinned.vert.glsl", VERTEX_SHADER,
+         "kInstancedPbr3dSkinnedDualUvColorVertSpv"),
     ]
 
     # plans/plan_gltf.md GLTF-465: the PBR variants whose vertex record carries a packed COLOR_0 slot.
@@ -336,6 +345,8 @@ def main():
     VERTEX_COLOR_VARIANTS = {
         "kPbr3dDualUvVertSpv", "kPbr3dDualUvFragSpv",
         "kPbr3dSkinnedDualUvColorVertSpv", "kPbr3dSkinnedDualUvColorFragSpv",
+        # VULKAN-232: the instanced twins of the two above, on the same rule.
+        "kInstancedPbr3dDualUvVertSpv", "kInstancedPbr3dSkinnedDualUvColorVertSpv",
     }
 
     output_path = Path(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[1] == "--output" else \
