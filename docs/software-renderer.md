@@ -205,6 +205,12 @@ rather than always passing.
   includes mixed 2D/cube sets and distinct faces of one cube. The shared 22-check contract passes
   unchanged on both Software and EasyGL, including face-local 4x resolve, independent mip chains,
   cube depth ownership and bound-cube destruction with live-peer finalization (`SOFTWARE-135`).
+- **Classic packed-16 `Texture2D` formats are real** (`SOFTWARE-140`). `Bgr565`, `Bgra5551`
+  and `Bgra4444` retain their exact two-byte XNA layout for full, partial and mip transfers while
+  each supplied level is decoded into a separate RGBA8 CPU sampling plane. The same public transfer
+  contract and exact sampled-draw oracle pass on Software and Mesa EasyGL. DXT and the remaining
+  classic uncompressed formats are tracked separately by `SOFTWARE-141/142`; they are not silently
+  advertised or reinterpreted as Color.
 - **Complete classic `BlendState` equations are applied.** RGB and alpha source/destination
   factors and functions are independent; `BlendFactor`, `ColorWriteChannels` and
   `MultiSampleMask` are honored. All four MRT write-channel masks are retained; the classic stock

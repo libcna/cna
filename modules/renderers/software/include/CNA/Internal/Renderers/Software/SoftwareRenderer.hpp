@@ -298,9 +298,16 @@ namespace CNA::Internal::Renderers::Software
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
+        /** @brief Returns the exact SurfaceFormat ordinal retained by this texture. */
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
 
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
+        /** @brief Reports whether exact caller-visible bytes exist for a mip level. */
+        [[nodiscard]] bool HasDefinedMipLevel(int level) const noexcept override;
+        /** @brief Copies exact declared-format bytes from a texture rectangle. */
+        [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
 
         // SoftwareColorSurface -- real RGBA8 pixel storage, which the rasterizer's texture sampler
         // (Phase S5) reads directly from.
@@ -336,8 +343,12 @@ namespace CNA::Internal::Renderers::Software
             int height = 0;
             /** @brief Tightly packed RGBA8 pixels, row-major, top row first. */
             std::vector<std::uint8_t> pixels;
+            /** @brief Exact caller-visible bytes in the declared SurfaceFormat. */
+            std::vector<std::uint8_t> rawPixels;
         };
 
+        int surfaceFormat_ = 0;
+        std::vector<std::uint8_t> rawPixels_;
         /// Levels 1..N as supplied; index i holds level i+1.
         std::vector<MipLevel> mipLevels_;
         /// How many levels are stored CONTIGUOUSLY from 0. Always at least 1.
@@ -1056,6 +1067,12 @@ namespace CNA::Internal::Renderers::Software
         std::unique_ptr<IOcclusionQueryRenderer> CreateOcclusionQuery() override;
 
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
+        /** @brief Classifies formats whose complete CPU texture path is implemented. */
+        [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(
+            int surfaceFormat) const override;
+        /** @brief Prevents packed texture bytes from entering the Color transfer overload. */
+        [[nodiscard]] RendererFormatVerdict ClassifyColorTransferFormatEXT(
+            int surfaceFormat) const override;
 
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend, int colorDstBlend, int alphaDstBlend,
                              int colorBlendFunc, int alphaBlendFunc,

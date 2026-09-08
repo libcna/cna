@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/Internal/Renderers/Software/SoftwareRenderer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -110,6 +111,36 @@ namespace CNA::Internal::Renderers::Software
     std::unique_ptr<ITextureRenderer> SoftwareRenderer::CreateTexture(const ImageData& data)
     {
         return std::make_unique<SoftwareTextureRenderer>(data);
+    }
+
+    RendererFormatVerdict SoftwareRenderer::ClassifySurfaceFormatEXT(int surfaceFormat) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+            case SurfaceFormat::Color:
+            case SurfaceFormat::Bgr565:
+            case SurfaceFormat::Bgra5551:
+            case SurfaceFormat::Bgra4444:
+                return RendererFormatVerdict::Supported;
+            default:
+                return RendererFormatVerdict::Defer;
+        }
+    }
+
+    RendererFormatVerdict SoftwareRenderer::ClassifyColorTransferFormatEXT(
+        int surfaceFormat) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+            case SurfaceFormat::Bgr565:
+            case SurfaceFormat::Bgra5551:
+            case SurfaceFormat::Bgra4444:
+                return RendererFormatVerdict::Unsupported;
+            default:
+                return RendererFormatVerdict::Defer;
+        }
     }
     bool SoftwareRenderer::SupportsCapability(CNA::GraphicsCapability capability) const
     {

@@ -916,6 +916,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_Model_SkinnedAnimationPlayback
         COMMAND cna_test_software_model_skinned_animation TIMEOUT 30 LABELS "Software")
 
+    # SOFTWARE-140: exact Reach packed-16 transfer bytes decoded into CPU RGBA sampling storage.
+    # The source is EasyGL's public draw oracle and contains no renderer-internal dependency.
+    cna_software_test(cna_test_software_packed16_format
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_packed16_format_test.cpp)
+    cna_register_renderer_test(NAME Software_Packed16Format
+        COMMAND cna_test_software_packed16_format TIMEOUT 30 LABELS "Software")
+
     # SOFTWARE-104: a capability is a usable public promise, not a statement about what a CPU
     # renderer might eventually implement. False entries are paired with the current factory/API
     # boundary so unsupported queries, volume textures and custom shaders cannot masquerade as

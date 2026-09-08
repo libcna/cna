@@ -3,11 +3,13 @@
 #include "CNA/Internal/Renderers/Software/SoftwareRenderer.hpp"
 #include "SoftwareTextureErrors.hpp"
 
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <new>
 #include <stdexcept>
 #include <string>
@@ -15,6 +17,83 @@
 
 namespace CNA::Internal::Renderers::Software
 {
+    namespace
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+
+        [[nodiscard]] bool IsPacked16(int surfaceFormat) noexcept
+        {
+            const auto format = static_cast<SurfaceFormat>(surfaceFormat);
+            return format == SurfaceFormat::Bgr565 || format == SurfaceFormat::Bgra5551 ||
+                   format == SurfaceFormat::Bgra4444;
+        }
+
+        [[nodiscard]] int BytesPerTexel(int surfaceFormat)
+        {
+            return IsPacked16(surfaceFormat) ? 2 : 4;
+        }
+
+        [[nodiscard]] std::uint8_t ExpandToByte(std::uint16_t value, std::uint16_t maximum)
+        {
+            return static_cast<std::uint8_t>(
+                (static_cast<unsigned int>(value) * 255u + maximum / 2u) / maximum);
+        }
+
+        void DecodePixels(int surfaceFormat, const std::uint8_t* source, int sourceStride,
+                          int width, int height, std::vector<std::uint8_t>& destination)
+        {
+            destination.resize(
+                static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4u);
+            if (!IsPacked16(surfaceFormat))
+            {
+                const std::size_t rowBytes = static_cast<std::size_t>(width) * 4u;
+                for (int y = 0; y < height; ++y)
+                {
+                    std::memcpy(destination.data() + static_cast<std::size_t>(y) * rowBytes,
+                                source + static_cast<std::size_t>(y) * sourceStride, rowBytes);
+                }
+                return;
+            }
+
+            const auto format = static_cast<SurfaceFormat>(surfaceFormat);
+            for (int y = 0; y < height; ++y)
+            {
+                const std::uint8_t* row = source + static_cast<std::size_t>(y) * sourceStride;
+                for (int x = 0; x < width; ++x)
+                {
+                    const std::size_t sourceOffset = static_cast<std::size_t>(x) * 2u;
+                    const std::uint16_t packed = static_cast<std::uint16_t>(row[sourceOffset]) |
+                        static_cast<std::uint16_t>(
+                            static_cast<std::uint16_t>(row[sourceOffset + 1]) << 8u);
+                    const std::size_t destinationOffset =
+                        (static_cast<std::size_t>(y) * static_cast<std::size_t>(width) +
+                         static_cast<std::size_t>(x)) * 4u;
+                    if (format == SurfaceFormat::Bgr565)
+                    {
+                        destination[destinationOffset + 0] = ExpandToByte((packed >> 11) & 31u, 31u);
+                        destination[destinationOffset + 1] = ExpandToByte((packed >> 5) & 63u, 63u);
+                        destination[destinationOffset + 2] = ExpandToByte(packed & 31u, 31u);
+                        destination[destinationOffset + 3] = 255u;
+                    }
+                    else if (format == SurfaceFormat::Bgra5551)
+                    {
+                        destination[destinationOffset + 0] = ExpandToByte((packed >> 10) & 31u, 31u);
+                        destination[destinationOffset + 1] = ExpandToByte((packed >> 5) & 31u, 31u);
+                        destination[destinationOffset + 2] = ExpandToByte(packed & 31u, 31u);
+                        destination[destinationOffset + 3] = (packed & 0x8000u) ? 255u : 0u;
+                    }
+                    else
+                    {
+                        destination[destinationOffset + 0] = ExpandToByte((packed >> 8) & 15u, 15u);
+                        destination[destinationOffset + 1] = ExpandToByte((packed >> 4) & 15u, 15u);
+                        destination[destinationOffset + 2] = ExpandToByte(packed & 15u, 15u);
+                        destination[destinationOffset + 3] = ExpandToByte((packed >> 12) & 15u, 15u);
+                    }
+                }
+            }
+        }
+    }
+
     // GDI-076: GDI's own 16,384-per-axis ceiling made a single square RGBA8 level as large as
     // 1 GiB before this planner existed -- neither this constructor, GdiRenderer's
     // CreateTexture forward, nor the direct-ImageData boundary rejected it, and a caller-supplied
@@ -22,23 +101,26 @@ namespace CNA::Internal::Renderers::Software
     // out-of-bounds read waiting to happen the first time the rasterizer sampled past it.
     SoftwareTextureRenderer::SoftwareTextureRenderer(const ImageData& data)
         : width_(data.width), height_(data.height)
+        , surfaceFormat_(data.surfaceFormat)
         , declaredLevels_(data.mipLevels > 0 ? data.mipLevels : 1)
     {
         const SoftwareTextureAllocationRequest request{width_, height_, declaredLevels_};
         const SoftwareTextureAllocationLayout layout = PlanSoftwareTextureAllocation(request);
         if (!layout.IsValid())
             ThrowInvalidTextureLayout(request, layout.error);
-        if (data.pixels.size() < layout.baseColorBytes)
-            ThrowTexturePixelDataMismatch(width_, height_, layout.baseColorBytes,
+        const std::size_t rawBaseBytes = static_cast<std::size_t>(width_)
+            * static_cast<std::size_t>(height_)
+            * static_cast<std::size_t>(BytesPerTexel(surfaceFormat_));
+        if (data.pixels.size() < rawBaseBytes)
+            ThrowTexturePixelDataMismatch(width_, height_, rawBaseBytes,
                                          data.pixels.size());
 
         try
         {
-            // Only ever retain exactly one level 0 worth of bytes: a caller that supplied a
-            // larger buffer than width*height*4 must not have its excess silently retained.
-            pixels_.assign(data.pixels.begin(),
-                           data.pixels.begin() +
-                               static_cast<std::ptrdiff_t>(layout.baseColorBytes));
+            rawPixels_.assign(data.pixels.begin(),
+                              data.pixels.begin() + static_cast<std::ptrdiff_t>(rawBaseBytes));
+            DecodePixels(surfaceFormat_, rawPixels_.data(),
+                         width_ * BytesPerTexel(surfaceFormat_), width_, height_, pixels_);
         }
         catch (const std::bad_alloc&)
         {
@@ -61,6 +143,7 @@ namespace CNA::Internal::Renderers::Software
         try
         {
             pixels_.assign(layout.baseColorBytes, 0u);
+            rawPixels_ = pixels_;
         }
         catch (const std::bad_alloc&)
         {
@@ -76,7 +159,8 @@ namespace CNA::Internal::Renderers::Software
     {
         if (rgba == nullptr)
             throw std::runtime_error("SoftwareTextureRenderer::UpdatePixels: rgba must not be null");
-        const std::size_t rowBytes = static_cast<std::size_t>(width_) * 4u;
+        const std::size_t rowBytes = static_cast<std::size_t>(width_)
+            * static_cast<std::size_t>(BytesPerTexel(surfaceFormat_));
         // REMED-GFX-229: a positive pitch smaller than one complete RGBA8 row makes the
         // row-by-row copy overlap the prior row and read past the caller's final row. Validate it
         // before resizing or changing the authoritative texture bytes. Zero/negative retains the
@@ -85,11 +169,20 @@ namespace CNA::Internal::Renderers::Software
             throw System::ArgumentOutOfRangeException(
                 "stride", std::to_string(stride),
                 "A positive texture upload stride must be at least " +
-                    std::to_string(rowBytes) + " bytes (width * 4 for RGBA8).");
+                    std::to_string(rowBytes) + " bytes (width * format bytes per texel).");
         const std::size_t effectiveStride = stride > 0 ? static_cast<std::size_t>(stride) : rowBytes;
         try
         {
-            pixels_.resize(rowBytes * static_cast<std::size_t>(height_));
+            rawPixels_.resize(rowBytes * static_cast<std::size_t>(height_));
+            for (int y = 0; y < height_; ++y)
+            {
+                std::copy(rgba + static_cast<std::size_t>(y) * effectiveStride,
+                          rgba + static_cast<std::size_t>(y) * effectiveStride + rowBytes,
+                          rawPixels_.begin() + static_cast<std::ptrdiff_t>(y)
+                              * static_cast<std::ptrdiff_t>(rowBytes));
+            }
+            DecodePixels(surfaceFormat_, rawPixels_.data(), static_cast<int>(rowBytes),
+                         width_, height_, pixels_);
         }
         catch (const std::bad_alloc&)
         {
@@ -102,12 +195,6 @@ namespace CNA::Internal::Renderers::Software
             ThrowTextureAllocationFailure(
                 {width_, height_, declaredLevels_},
                 PlanSoftwareTextureAllocation({width_, height_, declaredLevels_}));
-        }
-        for (int y = 0; y < height_; ++y)
-        {
-            std::copy(rgba + static_cast<std::size_t>(y) * effectiveStride,
-                     rgba + static_cast<std::size_t>(y) * effectiveStride + rowBytes,
-                     pixels_.begin() + static_cast<std::ptrdiff_t>(y) * static_cast<std::ptrdiff_t>(rowBytes));
         }
     }
 
@@ -141,7 +228,12 @@ namespace CNA::Internal::Renderers::Software
         dst.height = levelH;
         try
         {
-            dst.pixels.assign(rgba, rgba + levelLayout.baseColorBytes);
+            const std::size_t rawBytes = static_cast<std::size_t>(levelW)
+                * static_cast<std::size_t>(levelH)
+                * static_cast<std::size_t>(BytesPerTexel(surfaceFormat_));
+            dst.rawPixels.assign(rgba, rgba + rawBytes);
+            DecodePixels(surfaceFormat_, dst.rawPixels.data(),
+                         levelW * BytesPerTexel(surfaceFormat_), levelW, levelH, dst.pixels);
         }
         catch (const std::bad_alloc&)
         {
@@ -160,6 +252,56 @@ namespace CNA::Internal::Renderers::Software
             ++contiguous;
         }
         storedLevels_ = contiguous;
+    }
+
+    bool SoftwareTextureRenderer::HasDefinedMipLevel(int level) const noexcept
+    {
+        if (level == 0) return !rawPixels_.empty();
+        return level > 0 && level <= static_cast<int>(mipLevels_.size())
+            && !mipLevels_[static_cast<std::size_t>(level - 1)].rawPixels.empty();
+    }
+
+    bool SoftwareTextureRenderer::GetData(int level, int x, int y, int w, int h,
+                                          void* data, int dataLength) const
+    {
+        if (data == nullptr || level < 0 || level >= declaredLevels_ ||
+            x < 0 || y < 0 || w <= 0 || h <= 0)
+            return false;
+
+        const int levelWidth = level == 0
+            ? width_ : (level <= static_cast<int>(mipLevels_.size())
+                ? mipLevels_[static_cast<std::size_t>(level - 1)].width : 0);
+        const int levelHeight = level == 0
+            ? height_ : (level <= static_cast<int>(mipLevels_.size())
+                ? mipLevels_[static_cast<std::size_t>(level - 1)].height : 0);
+        if (levelWidth <= 0 || levelHeight <= 0 ||
+            w > levelWidth || h > levelHeight ||
+            x > levelWidth - w || y > levelHeight - h)
+            return false;
+
+        const std::vector<std::uint8_t>& source = level == 0
+            ? rawPixels_ : mipLevels_[static_cast<std::size_t>(level - 1)].rawPixels;
+        const std::size_t bytesPerTexel =
+            static_cast<std::size_t>(BytesPerTexel(surfaceFormat_));
+        const std::size_t required = static_cast<std::size_t>(w)
+            * static_cast<std::size_t>(h) * bytesPerTexel;
+        const std::size_t fullRequired = static_cast<std::size_t>(levelWidth)
+            * static_cast<std::size_t>(levelHeight) * bytesPerTexel;
+        if (source.size() < fullRequired || dataLength < 0 ||
+            static_cast<std::size_t>(dataLength) < required)
+            return false;
+
+        auto* destination = static_cast<std::uint8_t*>(data);
+        const std::size_t copyBytes = static_cast<std::size_t>(w) * bytesPerTexel;
+        for (int row = 0; row < h; ++row)
+        {
+            const std::size_t sourceOffset =
+                (static_cast<std::size_t>(y + row) * static_cast<std::size_t>(levelWidth)
+                 + static_cast<std::size_t>(x)) * bytesPerTexel;
+            std::memcpy(destination + static_cast<std::size_t>(row) * copyBytes,
+                        source.data() + sourceOffset, copyBytes);
+        }
+        return true;
     }
 
     int SoftwareTextureRenderer::ColorWidth(int level) const

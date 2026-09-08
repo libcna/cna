@@ -28,6 +28,9 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgr565.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgra4444.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgra5551.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "System/Environment.hpp"
@@ -108,6 +111,64 @@ namespace
         EXPECT_EQ(actual.getGProperty(), expected.getGProperty());
         EXPECT_EQ(actual.getBProperty(), expected.getBProperty());
         EXPECT_EQ(actual.getAProperty(), expected.getAProperty());
+    }
+
+    template <typename Packed>
+    Packed Packed16Value(std::uint16_t value)
+    {
+        Packed result;
+        result.setPackedValueProperty(value);
+        return result;
+    }
+
+    template <typename Packed>
+    void ExpectPacked16TransferContract(GraphicsDevice& device, SurfaceFormat format)
+    {
+        Texture2D texture(device, 4, 4, true, format);
+
+        std::array<Packed, 16> base{};
+        for (std::size_t index = 0; index < base.size(); ++index)
+            base[index] = Packed16Value<Packed>(static_cast<std::uint16_t>(0x0123u + index * 0x0711u));
+        texture.SetData(base.data(), static_cast<int>(base.size()));
+
+        std::array<Packed, 16> fullReadback{};
+        texture.GetData(fullReadback.data(), static_cast<int>(fullReadback.size()));
+        for (std::size_t index = 0; index < base.size(); ++index)
+        {
+            EXPECT_EQ(fullReadback[index].getPackedValueProperty(),
+                      base[index].getPackedValueProperty());
+        }
+
+        const Rectangle rectangle(1, 1, 2, 2);
+        std::array<Packed, 6> patchSource{};
+        for (int index = 0; index < 4; ++index)
+        {
+            patchSource[static_cast<std::size_t>(index + 1)] =
+                Packed16Value<Packed>(static_cast<std::uint16_t>(0xF00Du - index * 0x1111u));
+        }
+        texture.SetData(0, &rectangle, patchSource.data(), 1, 4);
+
+        std::array<Packed, 7> patchReadback{};
+        texture.GetData(0, &rectangle, patchReadback.data(), 2, 4);
+        for (int index = 0; index < 4; ++index)
+        {
+            EXPECT_EQ(patchReadback[static_cast<std::size_t>(index + 2)].getPackedValueProperty(),
+                      patchSource[static_cast<std::size_t>(index + 1)].getPackedValueProperty());
+        }
+
+        std::array<Packed, 4> mip{{
+            Packed16Value<Packed>(0x0000u), Packed16Value<Packed>(0xFFFFu),
+            Packed16Value<Packed>(0x55AAu), Packed16Value<Packed>(0xAA55u),
+        }};
+        texture.SetData(1, nullptr, mip.data(), 0, static_cast<int>(mip.size()));
+
+        std::array<Packed, 4> mipReadback{};
+        texture.GetData(1, nullptr, mipReadback.data(), 0, static_cast<int>(mipReadback.size()));
+        for (std::size_t index = 0; index < mip.size(); ++index)
+        {
+            EXPECT_EQ(mipReadback[index].getPackedValueProperty(),
+                      mip[index].getPackedValueProperty());
+        }
     }
 
     std::vector<std::vector<Color>> PopulateEveryMip(Texture2D& texture, int width, int height)
@@ -431,7 +492,7 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte4Throws)
 TEST_F(UnsupportedFormatConstructionTest, Bgra5551Throws)
 {
     // REMED-GFX-244 promoted the packed 16-bit formats on EasyGL's ES 3 generation too.
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2))
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Bgra5551));
     }
@@ -439,6 +500,17 @@ TEST_F(UnsupportedFormatConstructionTest, Bgra5551Throws)
     {
         EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Bgra5551), std::runtime_error);
     }
+}
+
+TEST_F(UnsupportedFormatConstructionTest, Packed16FullPartialAndMipTransfersAreExact)
+{
+    if (!CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software))
+        GTEST_SKIP() << "The active renderer has not promoted packed-16 Texture2D storage";
+
+    using namespace Microsoft::Xna::Framework::Graphics::PackedVector;
+    ExpectPacked16TransferContract<Bgr565>(gd, SurfaceFormat::Bgr565);
+    ExpectPacked16TransferContract<Bgra5551>(gd, SurfaceFormat::Bgra5551);
+    ExpectPacked16TransferContract<Bgra4444>(gd, SurfaceFormat::Bgra4444);
 }
 
 TEST_F(UnsupportedFormatConstructionTest, SingleThrows)
@@ -670,7 +742,7 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
         // generation the signed-normalized pair needs and verified by a real sampled draw
         // (EasyGL_Packed16Format) rather than by a readback, which this renderer serves from a CPU
         // copy and which therefore cannot see a wrong channel order.
-        const bool easyGlPacked16 = CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2);
+        const bool packed16Renderer = CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software);
         // REMED-GFX-242: this fixture's device is Reach, and a format the profile excludes is
         // refused however capable the renderer is -- so the profile is a factor of "supported",
         // not an alternative to it.
@@ -679,7 +751,7 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
         const bool supported = profileAllows && (format == SurfaceFormat::Color
             || (easyGlSignedNormalized && (format == SurfaceFormat::NormalizedByte4
                                            || format == SurfaceFormat::NormalizedByte2))
-            || (easyGlPacked16 && (format == SurfaceFormat::Bgr565
+            || (packed16Renderer && (format == SurfaceFormat::Bgr565
                                    || format == SurfaceFormat::Bgra5551
                                    || format == SurfaceFormat::Bgra4444))
             // REMED-GFX-244: block-compressed content is accepted on every EasyGL profile, since
