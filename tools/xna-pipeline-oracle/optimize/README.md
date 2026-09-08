@@ -115,22 +115,57 @@ used face. With a seed pivot taken as the *last* minimum-live corner of the seed
 the first -- worth 18 probes on its own -- the reconstruction stands at **178 of 372**, nineteen
 below a reading that is wrong wherever the corpus can tell.
 
-## What is not settled## What is not settled
+## Round five: the method is `D3DXOptimizeFaces`, and the algorithm is published
 
-Two rules, both isolated to a single decision each:
+The reconstruction above was built decision by decision and stopped at 178 of 372, with two pairs
+of decisions that were identical in every feature the walk could read and came out differently.
+It did not need to be inferred.
 
-- **The seed.** "The highest-index unused face containing a vertex of minimum remaining live
-  count" reproduces most seeds, and preferring a vertex still in the cache reproduces most of the
-  rest, but `cfan_9` seeds at the *lowest* such face and `sphere_2x4_reversed` seeds at a face with
-  no minimum-live vertex at all.
-- **When a run ends.** Two pairs of decisions are identical in every feature the walk can read and
-  come out differently. `grid_4x4`'s first run and its second reach, after eight faces, the same
-  run length, the same live counts on the same-shaped candidates, the same cache ages, the same
-  absence of a preferred edge and the same available swap -- and the first restarts while the
-  second takes the swap. `bstrip_plain_at0` and `bstrip_plain_at2` glue one extra triangle to a
-  sixteen-face strip, at its end and two faces in; both seed at the triangle, both then have a
-  neighbouring face carrying a minimum-live vertex, and the first continues into it while the
-  second restarts at the strip's far end. No rule over live counts, cache position, run length,
-  remaining faces, face index or vertex index separates either pair, and the history probes rule
-  out the emitted count. Whatever separates them is not in the state this model keeps; a data
-  structure whose order depends on the order faces were added would.
+**Genuine XNA 4.0's `MeshHelper.OptimizeForCache` is the documented public `D3DXOptimizeFaces`,
+with the vertices renumbered in the order the reordered face list first reaches them.**
+`D3dxOptimizeOracle.c` runs the Microsoft D3DX9 redistributable over the same probe file the .NET
+oracle runs, `d3dx.py` scores the two against each other, and `heldout.py` generates 240 fresh
+probes -- grids, cylinders, fans, spheres and pseudo-random triangle soups, with random face
+orders, random corner rotations, half the triangles reversed, shared or unshared at random -- so
+that a disagreement is possible.  **616 probes, 7,481 held-out faces, no disagreement**, and the
+first-encounter vertex renumber reproduces XNA's vertex order on all 616.
+
+`D3DXOptimizeFaces` in turn implements a published algorithm: Hugues Hoppe, *Optimization of mesh
+locality for transparent vertex caching*, SIGGRAPH 1999, whose Figure 3 gives the pseudocode of the
+greedy strip-growing technique.  Microsoft's own public documentation for the same algorithm's
+later library gives the two constants the D3DX9 entry point used -- a simulated vertex cache of
+**12** and a restart threshold of **7** -- and the remap direction, `oldLoc = faceRemap[newLoc]`,
+which is what the corpus had already picked.  The queue `Q` of restart locations in that pseudocode
+is the "data structure whose order depends on the order faces were added" that round four
+concluded had to exist.
+
+`hoppe.py` implements it.  What the paper leaves to the implementation is measured here:
+
+| Rule | Measured | Evidence |
+|---|---|---|
+| **Adjacency.** A face has at most one neighbour per edge: the *first other face in input order* on that edge, and only when it is wound the opposite way.  A later face on the same edge is never reached. | exact | `ins_f8_at07` crosses, `ins_f8_at08` restarts although the consistently wound face is one index further on |
+| **Seed.** The unvisited face with the fewest such neighbours; the scan keeps the **last** minimum, which is why a mesh of disjoint triangles comes back exactly reversed. | **616 / 616** | every probe's first face, designed and held-out |
+| **Direction.** A face entered across edge `e` continues across edge `(e + 2) % 3`, and pushes `(e + 1) % 3` on Q.  A seed offers all three edges in index order and leaves by the first available. | **1,088 / 1,088** and **400 / 400** | every decision where both continuations were live; every seed with a neighbour |
+| **Restart target.** The first unvisited face of Q, FIFO, after which Q is cleared; a global reseed when Q holds none. | 545 / 577 probes | LIFO scores 409 against 461 |
+
+**What is not settled is when a strip is cut**, and the reconstruction stands at **461 of 616** on
+that alone.  Hoppe's published rule -- restart when `C(0) < C(i)` for every `i` in a lookahead of
+`k + 5` simulations -- is implemented and **falsified**: on a closed fan continuing and restarting
+cost exactly the same, so the strict form never fires, and genuine D3DX cuts a twelve-face fan
+after seven.  The non-strict form fires on 5,867 of 7,019 decisions that were not cuts.
+
+Two designed sweeps say what the cut actually tracks:
+
+- **Closed fans of 3 to 40 triangles.** Up to eight the fan comes back in one run; from nine on it
+  runs exactly **seven** faces and then takes the queued face.  The seed pushes on Q at the first
+  face.
+- **A row of twelve quads with one correctly wound pendant triangle glued to the bottom edge of
+  face `2j`.** The pendant seeds; for every `j >= 4` the first run is exactly **eight** faces.  The
+  push happens at the *second* face, not the first.  The same row with no pendant runs all
+  forty-eight faces in one strip, and never cuts at all.
+
+So the counter starts when a restart location is first queued, not when the strip starts.  Counting
+faces from the pushing face gives 7 for both sweeps, but over the whole corpus it takes values 6
+to 12; counting **cache misses** from the same point is tighter -- 5 or 6 in 322 of 371 cut strips
+-- and is not constant either.  371 cut strips are recorded; the rule that reproduces all of them
+is the one thing this method still owes.
