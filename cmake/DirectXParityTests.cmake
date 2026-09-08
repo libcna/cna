@@ -861,6 +861,18 @@ function(cna_register_d3d_parity_tests)
     cna_d3d_parity_fixture(
         NAME TransformMatrix_Translation TARGET transform_matrix DIRECTX12_ORDER 2220
         SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_transform_matrix_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME BackbufferReadbackDimension TARGET backbuffer_readback_dimension DIRECTX12_ORDER 2230
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/backbuffer_readback_dimension_test.cpp"
+        DIRECTX11_TIMEOUT 900 DIRECTX12_TIMEOUT 1200)
+    cna_d3d_parity_fixture(
+        NAME BackbufferFirstRead TARGET backbuffer_first_read DIRECTX12_ORDER 2240
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/backbuffer_first_read_test.cpp"
+        DIRECTX11_TIMEOUT 900 DIRECTX12_TIMEOUT 1200)
+    cna_d3d_parity_fixture(
+        NAME BackbufferReject TARGET backbuffer_reject DIRECTX12_ORDER 2250
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/backbuffer_headless_reject_test.cpp"
+        DIRECTX11_TIMEOUT 900 DIRECTX12_TIMEOUT 1200)
 
     list(SORT _cna_d3d_fixture_keys)
     foreach(_cna_d3d_fixture_key IN LISTS _cna_d3d_fixture_keys)
