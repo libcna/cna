@@ -2565,9 +2565,14 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrRendererHonorsCallerOwnedCullState)
                  {"MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode,",
                   "VkCullModeFlags vkCull = VK_CULL_MODE_NONE",
                   "rs.cullMode = vkCull"});
+    // plans/plan_vulkan.md VULKAN-234: the end marker was
+    // `VkPipeline VulkanRenderer::GetOrCreatePipelineInstanced3D(`, which no longer exists --
+    // instancing stopped having a program family of its own, and every instanced draw takes its
+    // effect family's pipelines. The scope this marker delimits is unchanged: it is still the next
+    // member definition after the skinned-PBR factory.
     expectScoped(vulkan,
                  "VkPipeline VulkanRenderer::GetOrCreatePipelinePbrSkinned3D(",
-                 "VkPipeline VulkanRenderer::GetOrCreatePipelineInstanced3D(",
+                 "uint32_t VulkanRenderer::FindMemoryType(",
                  {"MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode,",
                   "VkCullModeFlags vkCull = VK_CULL_MODE_NONE",
                   "rs.cullMode = vkCull"});

@@ -1345,6 +1345,72 @@ protected:
                   "AG an INSTANCED one is too: " + Text(fci) + " (want ~(128,0,128))" + whyF(fci));
         }
 
+        // ---- AH/AI: fog on the POSITION-ONLY instanced shape ---------------------------------
+        // plans/plan_vulkan.md VULKAN-234's measurement. A declaration naming ONLY a Position is
+        // the one BasicEffect record the fog-capable bundle has no program for on Vulkan, so it
+        // keeps the position-only `instanced3d` module -- which has no fog term. Whether that is a
+        // parity gap or a shared limit is a question for both renderers, not an inference.
+        {
+            struct P3 { float x, y, z; std::uint32_t pad; };
+            static_assert(sizeof(P3) == 16);
+            const P3 pq3[4] = {
+                { -0.12f,  0.12f, 0.45f, 0 }, { -0.12f, -0.12f, 0.45f, 0 },
+                {  0.12f, -0.12f, 0.45f, 0 }, {  0.12f,  0.12f, 0.45f, 0 },
+            };
+            const VertexDeclaration pq3Decl(16, {
+                VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            });
+            VertexBuffer pvb3(dev, pq3Decl, 4, BufferUsage::None);
+            pvb3.SetDataRaw(pq3, 4, static_cast<int>(sizeof(P3)));
+
+            auto fogPosOnly = [&](bool instanced) {
+                dev.Clear(Color(0, 255, 0, 255));
+                dev.SetDepthTestEnabled(false);
+                dev.setBlendStateProperty(BlendState::Opaque);
+                dev.setRasterizerStateProperty(RasterizerState::CullNone);
+                BasicEffect fx(dev);
+                fx.setWorldProperty(Matrix::getIdentityProperty());
+                fx.setViewProperty(Matrix::getIdentityProperty());
+                fx.setProjectionProperty(Matrix::getIdentityProperty());
+                fx.setLightingEnabledProperty(false);
+                fx.setVertexColorEnabledProperty(false);
+                fx.setTextureEnabledProperty(false);
+                fx.setDiffuseColorProperty(Vector3(0.0f, 0.0f, 1.0f));
+                fx.setAlphaProperty(1.0f);
+                fx.setFogEnabledProperty(true);
+                fx.setFogColorProperty(Vector3(1.0f, 0.0f, 0.0f));
+                fx.setFogStartProperty(0.0f);
+                fx.setFogEndProperty(-0.9f);
+                fx.Apply();
+                dev.SetVertexBuffer(&pvb3);
+                dev.SetIndexBuffer(ib_.get());
+                if (instanced) {
+                    std::vector<VertexBufferBinding> bd = {
+                        VertexBufferBinding(&pvb3,         0, 0),
+                        VertexBufferBinding(instVb_.get(), 0, 1),
+                    };
+                    dev.SetVertexBuffers(bd);
+                    dev.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2, 3);
+                } else {
+                    dev.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2);
+                }
+                return ReadPixel(dev, kN / 2, kN / 2);
+            };
+            auto halfFoggedP = [](const Color& c) {
+                return c.getRProperty() >= 100 && c.getRProperty() <= 160 &&
+                       c.getGProperty() <= 40 &&
+                       c.getBProperty() >= 100 && c.getBProperty() <= 160;
+            };
+            const Color fpn = fogPosOnly(false);
+            const Color fpi = fogPosOnly(true);
+            check(halfFoggedP(fpn),
+                  "AH control: a NON-instanced POSITION-ONLY declared draw is half-fogged: " +
+                      Text(fpn) + " (want ~(128,0,128))");
+            check(halfFoggedP(fpi),
+                  "AI an INSTANCED one is too: " + Text(fpi) + " (want ~(128,0,128); (0,0,255) is "
+                  "the position-only instanced program, which has no fog term)");
+        }
+
         // ---- N/O: EnvironmentMapEffect on an instanced draw ---------------------------------
         // A cube map whose every face is RED over a blue base texture, with
         // EnvironmentMapAmount = 1: the reflection wins outright, so the answer is red. If the

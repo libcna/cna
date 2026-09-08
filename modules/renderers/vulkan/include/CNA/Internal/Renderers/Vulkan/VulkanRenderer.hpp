@@ -2128,8 +2128,7 @@ namespace CNA::Internal::Renderers::Vulkan
                 + pipelinesLitTextured3D_.size() + pipelinesLitTextured3DVertexLit_.size()
                 + pipelinesFogColored3D_.size() + pipelinesFogTex3D_.size()
                 + pipelinesSkinned3D_.size() + pipelinesSkinned3DVertexLit_.size()
-                + pipelinesPbr3D_.size() + pipelinesPbrSkinned3D_.size()
-                + pipelinesInstanced3D_.size();
+                + pipelinesPbr3D_.size() + pipelinesPbrSkinned3D_.size();
         }
         /// REMED-GFX-212 diagnostic, mirroring the WebGPU renderer's own accessor of the same name.
         /// `BasicEffect.VertexColorEnabled` is NOT part of any pipeline key -- it travels in the
@@ -3051,7 +3050,6 @@ namespace CNA::Internal::Renderers::Vulkan
         std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash> pipelines2DByDepthFmt_;
         VkPipelineLayout      pipelineLayout3D_      = VK_NULL_HANDLE;
         std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash>             pipelines3D_;
-        VkPipelineLayout      pipelineLayoutExt3D_      = VK_NULL_HANDLE;
         VkPipelineLayout      pipelineLayoutAlphaTest3D_ = VK_NULL_HANDLE;
         std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash>             pipelinesAlphaTest3D_;
         VkDescriptorSetLayout descriptorSetLayout2Tex_     = VK_NULL_HANDLE;
@@ -3209,10 +3207,10 @@ namespace CNA::Internal::Renderers::Vulkan
         std::array<VkBuffer,       MaxFramesInFlight> skinnedFogUBO_    = {};
         std::array<VkDeviceMemory, MaxFramesInFlight> skinnedFogUBOMem_ = {};
         std::array<void*,          MaxFramesInFlight> skinnedFogUBOPtr_ = {};
-        // --- Instanced 3D pipeline (Task 111) ---
-        // Uses pipelineLayoutExt3D_ (128-byte PC: [0..15]=VP, [16..31]=ext params).
-        // Vertex binding=0: per-vertex VERTEX rate; binding=1: per-instance INSTANCE rate (stride=64).
-        std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash> pipelinesInstanced3D_;
+        // plans/plan_vulkan.md VULKAN-234: Task 111's `pipelinesInstanced3D_` and its
+        // `pipelineLayoutExt3D_` were here. An instanced draw takes its effect family's own
+        // pipelines now -- binding 0 per-vertex, binding 1 per-instance at stride 64, in whichever
+        // cache that family owns -- so there is no instanced cache and no instanced layout left.
 
         // PbrEffect resources (stride 48: VertexPositionNormalTangentTexture, or stride 60 with
         // the importer-appended TextureCoordinate1 channel).
@@ -3455,6 +3453,11 @@ namespace CNA::Internal::Renderers::Vulkan
             /// that family builds. It still selects the position-only `instanced3d` fallback when
             /// no family claimed the draw.
             bool                    useInstanced      = false;
+            /// plans/plan_vulkan.md VULKAN-234: this instanced draw's record declares only a
+            /// Position, so the BasicEffect colour program is compiled without its colour
+            /// input. Never set on a non-instanced draw -- the ordinary routes' shape
+            /// selector has no position-only answer.
+            bool                    instancedPositionOnly = false;
             std::vector<uint8_t>    instVbData;                // per-instance bytes (instanceCount × stride)
             std::size_t             instVbStride      = 64;    // bytes per instance (default = mat4)
             uint32_t                instanceCount     = 1;     // number of instances
@@ -4149,7 +4152,8 @@ namespace CNA::Internal::Renderers::Vulkan
                                          const BlendKeyParams& blendParams = {},
                                          VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED,
                                          const VulkanVertexInputLayoutEXT& vertexLayout = {},
-                                         bool instanced = false);
+                                         bool instanced = false,
+                                         bool positionOnly = false);
         VkPipeline GetOrCreatePipelineFogTex3D(std::size_t stride, bool colored, VkPrimitiveTopology,
                                                 bool depthTest, bool depthWrite,
                                                 bool blend, int cullMode,

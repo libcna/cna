@@ -2634,9 +2634,6 @@ namespace CNA::Internal::Renderers::Vulkan
         for (auto& [k, pipe] : pipelinesSkinned3DVertexLit_)
             if (pipe != VK_NULL_HANDLE) { vkDestroyPipeline(device_, pipe, nullptr); pipe = VK_NULL_HANDLE; }
         pipelinesSkinned3DVertexLit_.clear();
-        for (auto& [k, pipe] : pipelinesInstanced3D_)
-            if (pipe != VK_NULL_HANDLE) { vkDestroyPipeline(device_, pipe, nullptr); pipe = VK_NULL_HANDLE; }
-        pipelinesInstanced3D_.clear();
         for (auto& [k, pipe] : pipelinesPbr3D_)
             if (pipe != VK_NULL_HANDLE) { vkDestroyPipeline(device_, pipe, nullptr); pipe = VK_NULL_HANDLE; }
         pipelinesPbr3D_.clear();
@@ -2683,7 +2680,6 @@ namespace CNA::Internal::Renderers::Vulkan
         for (auto& [fmt, p] : pipelines2DByDepthFmt_) if (p != VK_NULL_HANDLE) vkDestroyPipeline(device_, p, nullptr);
         pipelines2DByDepthFmt_.clear();
         if (pipelineLayout3D_      != VK_NULL_HANDLE) { vkDestroyPipelineLayout(device_, pipelineLayout3D_, nullptr);       pipelineLayout3D_      = VK_NULL_HANDLE; }
-        if (pipelineLayoutExt3D_        != VK_NULL_HANDLE) { vkDestroyPipelineLayout(device_, pipelineLayoutExt3D_, nullptr);        pipelineLayoutExt3D_        = VK_NULL_HANDLE; }
         if (pipelineLayoutAlphaTest3D_  != VK_NULL_HANDLE) { vkDestroyPipelineLayout(device_, pipelineLayoutAlphaTest3D_, nullptr);  pipelineLayoutAlphaTest3D_  = VK_NULL_HANDLE; }
         if (pipelineLayoutDualTex3D_    != VK_NULL_HANDLE) { vkDestroyPipelineLayout(device_, pipelineLayoutDualTex3D_, nullptr);    pipelineLayoutDualTex3D_    = VK_NULL_HANDLE; }
         if (pipelineLayoutEnvMap3D_     != VK_NULL_HANDLE) { vkDestroyPipelineLayout(device_, pipelineLayoutEnvMap3D_, nullptr);     pipelineLayoutEnvMap3D_     = VK_NULL_HANDLE; }
@@ -6602,7 +6598,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // no-GpuDrawParams DrawColoredPrimitives()/DrawIndexedColoredPrimitives() path, which
         // has no fog data to forward anyway).
         VkShaderModule vert = CreateShaderModule(kColored3dLegacyVertSpv, kColored3dLegacyVertSpv_size);
-        VkShaderModule frag = CreateShaderModule(kInstanced3dFragSpv, kInstanced3dFragSpv_size);
+        VkShaderModule frag = CreateShaderModule(kColored3dLegacyFragSpv, kColored3dLegacyFragSpv_size);
 
         VkVertexInputBindingDescription bind{ 0, 16, VK_VERTEX_INPUT_RATE_VERTEX };
         VkVertexInputAttributeDescription attrs[2]{};
@@ -9397,7 +9393,7 @@ namespace CNA::Internal::Renderers::Vulkan
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
         const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt, const VulkanVertexInputLayoutEXT& vertexLayout,
-        bool instanced)
+        bool instanced, bool positionOnly)
     {
         EnsureFogTex3DResources();
 
@@ -9414,11 +9410,20 @@ namespace CNA::Internal::Renderers::Vulkan
         // VULKAN-233: the instanced variant is its own pipeline -- own module, second binding,
         // four more attributes -- as in every other family.
         if (instanced) key.vl ^= 0x9E3779B97F4A7C15ull;
+        // VULKAN-234: and the colour-less variant is another, for the same reason -- one fewer
+        // vertex input and a different module.
+        if (positionOnly) key.vl ^= 0xC2B2AE3D27D4EB4Full;
         auto it = pipelinesFogColored3D_.find(key);
         if (it != pipelinesFogColored3D_.end()) return it->second;
 
         using namespace Shaders;
-        VkShaderModule vert = instanced
+        // VULKAN-234: the position-only variant is only ever asked for by an instanced draw --
+        // the ordinary routes reach this factory through `SelectBasicProgramShapeEXT`, which never
+        // answers "position-only". Same fragment stage in every case.
+        VkShaderModule vert = positionOnly
+            ? CreateShaderModule(kInstancedPositionOnly3dVertSpv,
+                                 kInstancedPositionOnly3dVertSpv_size)
+            : instanced
             ? CreateShaderModule(kInstancedColored3dVertSpv, kInstancedColored3dVertSpv_size)
             : CreateShaderModule(kColored3dVertSpv, kColored3dVertSpv_size);
         VkShaderModule frag = CreateShaderModule(kColored3dFragSpv, kColored3dFragSpv_size);
@@ -9432,9 +9437,11 @@ namespace CNA::Internal::Renderers::Vulkan
         VkVertexInputAttributeDescription attrs[6]{};
         attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0  };
         attrs[1] = { 1, 0, VK_FORMAT_R8G8B8A8_UNORM,   12 };
-        uint32_t attrCount = 2;
-        // Per-vertex capacity 2, not std::size(attrs) -- see VULKAN-222/233.
-        ApplyDeclaredVertexLayoutEXT(vertexLayout, attrs, 2u, attrCount);
+        // VULKAN-234: one input, and the reason this variant exists -- binding a colour out of the
+        // four bytes after a declared Position is what the position-only record has none of.
+        uint32_t attrCount = positionOnly ? 1u : 2u;
+        // Per-vertex capacity, not std::size(attrs) -- see VULKAN-222/233.
+        ApplyDeclaredVertexLayoutEXT(vertexLayout, attrs, positionOnly ? 1u : 2u, attrCount);
         if (instanced) {
             attrs[attrCount++] = { 12, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0  }; // aCnaInstCol0
             attrs[attrCount++] = { 13, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 16 }; // aCnaInstCol1
@@ -10995,167 +11002,12 @@ namespace CNA::Internal::Renderers::Vulkan
         return pipe;
     }
 
-    // plans/plan_vulkan.md VULKAN-233: this factory is now the POSITION-ONLY fallback and nothing
-    // else. The colour, textured and colour-and-texture shapes are the ordinary fog-capable
-    // colored3d/textured3d/colored_textured3d bundle's, compiled with CNA_INSTANCED -- which is how
-    // instancing gained fog. What is left is the shape that bundle has no program for: a record
-    // whose declaration names neither a Colour nor a TextureCoordinate and whose stride is not one
-    // of 16/20/24. `instanced3d.frag.glsl` has no fog term and this is the one draw that still
-    // reaches it; the limit is documented rather than silent.
-    VkPipeline VulkanRenderer::GetOrCreatePipelineInstanced3D(
-        std::size_t pvStride, VkPrimitiveTopology topo,
-        bool depthTest, bool depthWrite, bool blend, int cullMode,
-        uint32_t colorAttachmentCount, bool wireframe, bool msaa,
-        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt,
-        const VulkanVertexInputLayoutEXT& vertexLayout)
-    {
-        // Ensure pipelineLayoutExt3D_ exists (128-byte PC + 1 descriptor set for future texture use).
-        if (pipelineLayoutExt3D_ == VK_NULL_HANDLE) {
-            VkPushConstantRange pcRange{ VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, 128 };
-            VkPipelineLayoutCreateInfo pli{};
-            pli.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-            pli.pushConstantRangeCount = 1; pli.pPushConstantRanges = &pcRange;
-            pli.setLayoutCount = 1; pli.pSetLayouts = &descriptorSetLayout_;
-            if (vkCreatePipelineLayout(device_, &pli, nullptr, &pipelineLayoutExt3D_) != VK_SUCCESS)
-                throw std::runtime_error("vkCreatePipelineLayout (Ext3D/Instanced) failed");
-        }
-
-        // REMED-GFX-212: the exact per-vertex stride, not MakeExt3DKey's bucket -- see
-        // FoldPerVertexStrideIntoKey. VertexColorEnabled itself is deliberately NOT in the key:
-        // it travels in the push constant (FillInstancedPushConst's pc[31]), exactly as it does
-        // for the ordinary colored3d pipeline, so toggling it never creates a pipeline variant.
-        PipelineKey key = { FoldPerVertexStrideIntoKey(FoldDepthFormatIntoKey(MakeExt3DKey(pvStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), pvStride), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), NarrowSampleMaskEXT(blendParams.sampleMask, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa))), vertexLayout.Hash() };
-        // VULKAN-216: the sample count is part of this pipeline's identity, not just of its render pass.
-        key.ms = static_cast<uint32_t>(RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
-        auto it = pipelinesInstanced3D_.find(key);
-        if (it != pipelinesInstanced3D_.end()) return it->second;
-
-        using namespace Shaders;
-        VkShaderModule vert = CreateShaderModule(kInstanced3dVertSpv, kInstanced3dVertSpv_size);
-        VkShaderModule frag = CreateShaderModule(kInstanced3dFragSpv, kInstanced3dFragSpv_size);
-
-        // Two vertex bindings: binding=0 per-vertex (VERTEX rate), binding=1 per-instance (INSTANCE rate).
-        constexpr uint32_t kInstStride = 64; // sizeof(mat4)
-        VkVertexInputBindingDescription binds[2]{};
-        binds[0] = { 0, static_cast<uint32_t>(pvStride), VK_VERTEX_INPUT_RATE_VERTEX   };
-        binds[1] = { 1, kInstStride,                      VK_VERTEX_INPUT_RATE_INSTANCE };
-
-        // Five: one per-vertex (position) and the four per-instance matrix columns. VULKAN-220's
-        // warning still applies to every factory that appends them -- sizing this array by the
-        // per-vertex count alone overflowed into `binds` there, and the layer reported an
-        // `inputRate` of 109, which is what a stomped VkVertexInputBindingDescription looks like.
-        VkVertexInputAttributeDescription attrs[5]{};
-        uint32_t attrCount = 0;
-        attrs[attrCount++] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0 }; // aPos (per-vertex)
-        // VULKAN-149: and the declaration's own offset and format replace it when it supplied one.
-        // Applied before the per-instance columns are appended, because the applicator overwrites
-        // from index 0 and resets the count -- binding 1's attributes are not declaration-derived.
-        ApplyDeclaredVertexLayoutEXT(vertexLayout, attrs, 1u, attrCount);
-        attrs[attrCount++] = { 12, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0  }; // aCnaInstCol0 (per-instance)
-        attrs[attrCount++] = { 13, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 16 }; // aCnaInstCol1
-        attrs[attrCount++] = { 14, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 32 }; // aCnaInstCol2
-        attrs[attrCount++] = { 15, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 48 }; // aCnaInstCol3
-
-        VkPipelineVertexInputStateCreateInfo vis{};
-        vis.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-        vis.vertexBindingDescriptionCount   = 2; vis.pVertexBindingDescriptions   = binds;
-        vis.vertexAttributeDescriptionCount = attrCount; vis.pVertexAttributeDescriptions = attrs;
-
-        VkPipelineShaderStageCreateInfo stages[2]{};
-        stages[0] = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
-                      VK_SHADER_STAGE_VERTEX_BIT,   vert, "main", nullptr };
-        stages[1] = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
-                      VK_SHADER_STAGE_FRAGMENT_BIT, frag, "main", nullptr };
-
-        VkPipelineInputAssemblyStateCreateInfo ias{};
-        ias.sType    = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-        ias.topology = topo;
-
-        VkPipelineViewportStateCreateInfo vpst{};
-        vpst.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-        vpst.viewportCount = 1; vpst.scissorCount = 1;
-
-        VkCullModeFlags vkCull = VK_CULL_MODE_NONE;
-        if (cullMode == 1) vkCull = VK_CULL_MODE_FRONT_BIT;
-        if (cullMode == 2) vkCull = VK_CULL_MODE_BACK_BIT;
-
-        VkPipelineRasterizationStateCreateInfo rs{};
-        rs.sType       = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-        rs.polygonMode = wireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL;
-        rs.cullMode    = vkCull;
-        rs.frontFace   = VK_FRONT_FACE_CLOCKWISE;
-        rs.lineWidth   = 1.f;
-        rs.depthBiasEnable = VK_TRUE;  // dynamic; values set via vkCmdSetDepthBias per draw
-
-        VkPipelineMultisampleStateCreateInfo ms{};
-        ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        ms.rasterizationSamples = MsaaSamplesForPipelinesEXT(msaa);  // VULKAN-216
-        // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
-        // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
-        // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
-        // VULKAN-162: narrowed to the samples this pipeline has, and compared in that same
-        // space -- so a fully-set mask still leaves pSampleMask null, which is Vulkan's own
-        // default, and what the KEY says can never drift from what the pipeline does.
-        const VkSampleMask cnaAllSamples_ = NarrowSampleMaskEXT(0xFFFFFFFFu, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
-        const VkSampleMask cnaSampleMask_ = NarrowSampleMaskEXT(blendParams.sampleMask, RasterSampleCountEXT(MsaaSamplesForPipelinesEXT(msaa)));
-        if (cnaSampleMask_ != cnaAllSamples_) ms.pSampleMask = &cnaSampleMask_;
-
-        VkPipelineDepthStencilStateCreateInfo dss{};
-        dss.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-        dss.depthTestEnable  = depthTest  ? VK_TRUE : VK_FALSE;
-        dss.depthWriteEnable = depthWrite ? VK_TRUE : VK_FALSE;
-        FillDepthStencilState(dss, dsParams);
-
-        const uint32_t nColor = std::max(colorAttachmentCount, 1u);
-        std::vector<VkPipelineColorBlendAttachmentState> blendAttachments(nColor);
-        for (size_t bi = 0; bi < blendAttachments.size(); ++bi) { auto& ba = blendAttachments[bi];
-            // Task 868: real per-BlendState mapping, replacing the previous hardcoded
-            // BlendState.NonPremultiplied-equivalent equation applied whenever blend was true.
-            FillBlendAttachmentState(ba, blend, blendParams, static_cast<int>(bi)); // REMED-GFX-077: per-MRT-slot write mask
-        }
-        VkPipelineColorBlendStateCreateInfo cbs{};
-        cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-        cbs.attachmentCount = nColor; cbs.pAttachments = blendAttachments.data();
-
-        VkDynamicState dynStates[7] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
-                                        VK_DYNAMIC_STATE_DEPTH_BIAS,
-                                        VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
-                                        VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
-                                        VK_DYNAMIC_STATE_STENCIL_REFERENCE };
-        const uint32_t dynStateCount =
-            AppendBlendConstantsDynamicState(dynStates, 6, blend, blendParams);
-        VkPipelineDynamicStateCreateInfo dyn{};
-        dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dyn.dynamicStateCount = dynStateCount; dyn.pDynamicStates = dynStates;
-
-        // Task 911: render pass selected per the target's own real depth format -- see
-        // PickRTPipelineRenderPass().
-        VkRenderPass rp = PickRTPipelineRenderPass(colorAttachmentCount, msaa, targetDepthFmt);
-
-        VkGraphicsPipelineCreateInfo pci{};
-        pci.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-        pci.stageCount          = 2; pci.pStages          = stages;
-        pci.pVertexInputState   = &vis;
-        pci.pInputAssemblyState = &ias;
-        pci.pViewportState      = &vpst;
-        pci.pRasterizationState = &rs;
-        pci.pMultisampleState   = &ms;
-        pci.pDepthStencilState  = &dss;
-        pci.pColorBlendState    = &cbs;
-        pci.pDynamicState       = &dyn;
-        pci.layout              = pipelineLayoutExt3D_;
-        pci.renderPass          = rp;
-
-        VkPipeline pipe = VK_NULL_HANDLE;
-        vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pci, nullptr, &pipe);
-        pipelinesInstanced3D_[key] = pipe;
-        // VULKAN-233: this factory IS the instanced position-only fallback -- always a variant.
-        ++instancedPipelineVariantsEXT_;
-
-        vkDestroyShaderModule(device_, vert, nullptr);
-        vkDestroyShaderModule(device_, frag, nullptr);
-        return pipe;
-    }
+    // plans/plan_vulkan.md VULKAN-233/VULKAN-234: `GetOrCreatePipelineInstanced3D` was here, and
+    // with it a program family that existed only because an instanced draw had nowhere else to go.
+    // Every instanced draw now takes its effect family's own programs with four per-instance
+    // columns added -- including the position-only record, which takes the BasicEffect colour
+    // program compiled without its colour input. The family's one distinguishing property was that
+    // its fragment shaders had no fog term, and that was the defect rather than the design.
 
     // Task 899: GetOrCreatePipelineExt3D (textured3d/colored_textured3d via the OLD, plain
     // pipelineLayoutExt3D_/descriptorSetLayout_) was removed here -- BasicEffect draws for
@@ -12006,15 +11858,6 @@ namespace CNA::Internal::Renderers::Vulkan
                                                         draw.depthTest, draw.depthWrite,
                                                         draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt, draw.vertexLayout,
                                                         draw.useInstanced);
-                } else if (draw.useInstanced && !draw.useLitTextured && !draw.useFogTex3D) {
-                    // VULKAN-224/VULKAN-233: this chain tests `useInstanced` BEFORE the two arms an
-                    // instanced draw can also take, so both are excluded here rather than reordered
-                    // -- a lit instanced draw belongs to the lit arm below and a BasicEffect one to
-                    // the fog-capable bundle, and each of those takes an `instanced` flag of its
-                    // own. What is left for this arm is VULKAN-233's position-only fallback.
-                    pipe = GetOrCreatePipelineInstanced3D(draw.stride, draw.topology,
-                                                          draw.depthTest, draw.depthWrite,
-                                                          draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt, draw.vertexLayout);
                 } else if (draw.useLitTextured) {
                     // Task 1103: same rationale as useSkinned above.
                     pipe = draw.preferVertexLit
@@ -12042,7 +11885,7 @@ namespace CNA::Internal::Renderers::Vulkan
                            ? GetOrCreatePipelineFogColored3D(draw.stride, draw.topology,
                                                              draw.depthTest, draw.depthWrite,
                                                              draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt, draw.vertexLayout,
-                                                             draw.useInstanced)
+                                                             draw.useInstanced, draw.instancedPositionOnly)
                            : GetOrCreatePipelineFogTex3D(draw.stride,
                                                          draw.basicShape == BasicProgramShapeEXT::None
                                                              ? draw.stride == 24
@@ -12219,28 +12062,6 @@ namespace CNA::Internal::Renderers::Vulkan
                         vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                                 pipelineLayoutPbr3D_, 0, 1,
                                                 &draw.pbrDescSet, 1, &uboOff);
-                    }
-                } else if (draw.useInstanced && !draw.useLitTextured && !draw.useFogTex3D) {
-                    // VULKAN-224/VULKAN-233: as in the pipeline chain above -- a lit or BasicEffect
-                    // instanced draw needs that family's push-constant layout, descriptor set and
-                    // dynamic UBO offset, not this one's.
-                    vkCmdPushConstants(cb, pipelineLayoutExt3D_,
-                                       VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-                                       0, 128, draw.pushConst);
-                    // VULKAN-217: this branch pushed constants and bound nothing, which was
-                    // consistent while every instanced fragment shader declared no descriptor --
-                    // instanced_textured3d.frag.glsl does, and the layer said so by name
-                    // ("statically uses descriptor set 0, but set 0 is not compatible ... 0x0").
-                    // Bound unconditionally rather than under `instancedTextured`, because
-                    // pipelineLayoutExt3D_ has always declared this one set layout and a shader
-                    // that ignores it is unaffected -- the same 1-binding descriptorSetLayout_ the
-                    // useAlphaTest branch below binds, with the same white fallback.
-                    {
-                        VkDescriptorSet ds = (draw.descSet != VK_NULL_HANDLE)
-                                             ? draw.descSet : defaultWhiteDescSet_;
-                        if (ds != VK_NULL_HANDLE)
-                            vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                                    pipelineLayoutExt3D_, 0, 1, &ds, 0, nullptr);
                     }
                 } else if (draw.useLitTextured) {
                     vkCmdPushConstants(cb, pipelineLayoutLitTextured3D_,
@@ -13287,7 +13108,6 @@ namespace CNA::Internal::Renderers::Vulkan
         clearPipelineCache(pipelinesSkinned3DVertexLit_);
         clearPipelineCache(pipelinesPbr3D_);
         clearPipelineCache(pipelinesPbrSkinned3D_);
-        clearPipelineCache(pipelinesInstanced3D_);
 
         sampleCount_ = newCount;
 
@@ -15420,10 +15240,14 @@ namespace CNA::Internal::Renderers::Vulkan
         // routes use -- no other family claimed the draw -- and the shape came from their own
         // selector above. The position-only fallback (shape None) keeps the fog-less
         // `instanced3d` program and is the one instanced draw that still has no fog.
-        d.useFogTex3D = !instancedAlphaTest && !instancedDualTex && !instancedEnvMap
-                      && !instancedSkinned && !instancedPbr && !instancedPbrSkinned
-                      && !instancedLit && instancedShape != BasicProgramShapeEXT::None;
-        d.basicShape  = instancedShape;
+        // VULKAN-234: including the position-only shape, which is why `instancedShape == None` no
+        // longer excludes it. That record takes the colour program compiled without its colour
+        // input, so `instanced3d.vert/frag` -- the one instanced module that had no fog term -- is
+        // retired outright and every instanced BasicEffect draw is now fogged.
+        d.useFogTex3D = instancedUsesFogTex3D;
+        d.basicShape  = instancedShape == BasicProgramShapeEXT::None
+                            ? BasicProgramShapeEXT::Colored : instancedShape;
+        d.instancedPositionOnly = instancedShape == BasicProgramShapeEXT::None;
         if (d.useFogTex3D) {
             // The shared fallback arm of the family dispatch: it fills `descSet`, and -- because
             // `useFogTex3D` is already true -- the fog descriptor set and the 8-float fog UBO too.

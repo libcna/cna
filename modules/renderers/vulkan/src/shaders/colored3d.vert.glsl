@@ -12,7 +12,15 @@
 // it stands.
 
 layout(location = 0) in vec3 inPos;
+// plans/plan_vulkan.md VULKAN-234: CNA_NO_VERTEX_COLOR compiles this program for a record that
+// declares only a Position. Vulkan cannot leave a declared vertex input unbound, so the input has
+// to go rather than merely be ignored; `pc.vertexColorEnabled` is 0 for such a draw anyway, which
+// is why the two variants agree pixel for pixel wherever both can run.
+#ifndef CNA_NO_VERTEX_COLOR
 layout(location = 1) in vec4 inColor;
+#else
+#define inColor vec4(1.0)
+#endif
 
 layout(location = 0) out vec4 fragColor;
 layout(location = 1) out float fragFogFactor;

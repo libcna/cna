@@ -189,6 +189,7 @@ def main():
         # (Task 899: colored3d.vert.glsl above now needs a fog UBO binding that
         # pipelineLayout3D_'s zero-descriptor-set layout doesn't provide).
         ("colored3d_legacy.vert.glsl",  VERTEX_SHADER,   "kColored3dLegacyVertSpv"),
+        ("colored3d_legacy.frag.glsl",  FRAGMENT_SHADER, "kColored3dLegacyFragSpv"),
         # Textured 3D pipeline — stride 20 (VertexPositionTexture)
         ("textured3d.vert.glsl",         VERTEX_SHADER,   "kTextured3dVertSpv"),
         ("textured3d.frag.glsl",         FRAGMENT_SHADER, "kTextured3dFragSpv"),
@@ -269,17 +270,16 @@ def main():
         # and Vulkan requires every shader input to have a vertex attribute description.
         ("pbr3d_skinned.vert.glsl",      VERTEX_SHADER,   "kPbr3dSkinnedDualUvColorVertSpv"),
         ("pbr3d_skinned.frag.glsl",      FRAGMENT_SHADER, "kPbr3dSkinnedDualUvColorFragSpv"),
-        # Instanced 3D pipeline — binding=0 per-vertex (pos only), binding=1 per-instance mat4.
-        # Dedicated FS (Task 899: previously reused colored3d's, but that now has a 2nd
-        # descriptor binding for fog, incompatible with Instanced3D's unmodified 1-binding layout).
-        ("instanced3d.vert.glsl",        VERTEX_SHADER,   "kInstanced3dVertSpv"),
-        ("instanced3d.frag.glsl",        FRAGMENT_SHADER, "kInstanced3dFragSpv"),
         # plans/plan_vulkan.md VULKAN-233: the three BasicEffect shapes an instanced draw can take
         # are the ORDINARY fog-capable bundle's own sources compiled again -- REMED-GFX-212's
         # colour shape, VULKAN-217's textured one and VULKAN-220's colour-and-texture one, which
         # used to be three separate fog-less copies. instanced3d above stays as the position-only
         # fallback, which that bundle has no program for.
         ("colored3d.vert.glsl",          VERTEX_SHADER, "kInstancedColored3dVertSpv"),
+        # plans/plan_vulkan.md VULKAN-234: the same program without the colour input, for the one
+        # BasicEffect record that declares only a Position. It replaces instanced3d.vert/frag,
+        # whose whole limitation was that it had no fog term.
+        ("colored3d.vert.glsl",          VERTEX_SHADER, "kInstancedPositionOnly3dVertSpv"),
         ("textured3d.vert.glsl",         VERTEX_SHADER, "kInstancedTextured3dVertSpv"),
         ("colored_textured3d.vert.glsl", VERTEX_SHADER,
          "kInstancedColoredTextured3dVertSpv"),
@@ -370,6 +370,9 @@ def main():
         # per-instance columns declared. No cname of a non-instanced module contains "Instanced".
         if "Instanced" in cname:
             defines += ("CNA_INSTANCED",)
+        # VULKAN-234: the colour-less variant of the BasicEffect colour program.
+        if "PositionOnly" in cname:
+            defines += ("CNA_NO_VERTEX_COLOR",)
         source = with_defines(source, defines)
         if kind == VERTEX_SHADER:
             source = with_instance_prologue(source)
