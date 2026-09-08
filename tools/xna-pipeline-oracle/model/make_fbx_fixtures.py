@@ -10,6 +10,7 @@ CNA's own content in a container CNA also wrote.
 
 Run:  python3 tools/xna-pipeline-oracle/model/make_fbx_fixtures.py
 """
+import math
 import os
 import sys
 
@@ -401,6 +402,44 @@ def main():
           [("Lamp", "Light", (1, 0, 0)), ("Pin", "Marker", (2, 0, 0)),
            ("Alpha", "Null", (3, 0, 0))],
           [("Lamp", "Scene"), ("Pin", "Scene"), ("Alpha", "Scene")])
+
+    # Polygons with more than three corners, which the corpus had never carried and which the
+    # FBX SDK inside XNA's importer triangulates its own way. A convex ring is enough: the answer
+    # does not depend on where the vertices are (a concave quad and a convex one answer the same),
+    # only on how many corners the polygon has (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-164).
+    def ring(n, radius=10.0, shift=0.0):
+        return [(round(math.cos(2 * math.pi * i / n) * radius + shift, 6),
+                 round(math.sin(2 * math.pi * i / n) * radius, 6), 0.0) for i in range(n)]
+
+    def polygon_mesh(filename, name, vertices, polygons):
+        write(os.path.join(out, filename),
+              {"count": 1, "models": 1, "materials": 0, "deformers": 0},
+              mesh_model(name, vertices, polygons),
+              '\tModel: "Model::%s", "Mesh" {\n\t}\n' % name,
+              '\tConnect: "OO", "Model::%s", "Model::Scene"\n' % name)
+
+    for corners in (4, 5, 6, 7, 8, 12):
+        polygon_mesh("fbx_polygon%d.fbx" % corners, "Polygon%d" % corners,
+                     ring(corners), [list(range(corners))])
+    # The same octagon walked from a different corner, and walked backwards: the triangulation is
+    # a function of the polygon's own corner order and of nothing else.
+    polygon_mesh("fbx_polygon8_rotated.fbx", "Polygon8Rotated", ring(8),
+                 [[(i + 4) % 8 for i in range(8)]])
+    polygon_mesh("fbx_polygon8_reversed.fbx", "Polygon8Reversed", ring(8),
+                 [list(reversed(range(8)))])
+    # A concave quad and a concave hexagon: the diagonal a triangulator would choose on the
+    # geometry is not the one this answers.
+    polygon_mesh("fbx_polygon_concave.fbx", "PolygonConcave",
+                 [(0, 0, 0), (4, 0, 0), (2, 1, 0), (4, 4, 0)], [[0, 1, 2, 3]])
+    polygon_mesh("fbx_polygon_concave6.fbx", "PolygonConcave6",
+                 [(0, 0, 0), (6, 0, 0), (6, 6, 0), (3, 2, 0), (0, 6, 0), (-1, 3, 0)],
+                 [[0, 1, 2, 3, 4, 5]])
+    # Polygons of different sizes in one mesh, and a triangle beside a quad: each polygon is
+    # triangulated on its own.
+    polygon_mesh("fbx_polygon_mixed.fbx", "PolygonMixed",
+                 ring(6) + ring(5, shift=40.0), [list(range(6)), [6, 7, 8, 9, 10]])
+    polygon_mesh("fbx_polygon_tri_quad.fbx", "PolygonTriQuad",
+                 ring(3) + ring(4, shift=40.0), [[0, 1, 2], [3, 4, 5, 6]])
 
     with open(os.path.join(out, "FBX-PROVENANCE.md"), "w", encoding="utf-8") as handle:
         handle.write("# FBX corpus (authored)\n\n")

@@ -718,11 +718,39 @@ TEST(XnaFbxImporter, EveryFileAnswersTheGraphXnaAnswers)
           // A `Light` and a `Marker` are not nodes, which no source in the corpus had ever carried
           // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-161`).
           "fbx_light_marker.fbx",
+          // A polygon with more than three corners is triangulated as a *strip*, not a fan, and
+          // what it answers is a function of the corner count alone: a concave quad and a convex
+          // one give the same triangles, and so does the same octagon walked from a different
+          // corner or backwards (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-164`).
+          "fbx_polygon4.fbx", "fbx_polygon5.fbx", "fbx_polygon6.fbx", "fbx_polygon7.fbx",
+          "fbx_polygon8.fbx", "fbx_polygon12.fbx", "fbx_polygon8_rotated.fbx",
+          "fbx_polygon8_reversed.fbx", "fbx_polygon_concave.fbx", "fbx_polygon_concave6.fbx",
+          "fbx_polygon_mixed.fbx", "fbx_polygon_tri_quad.fbx",
           "fbx_two_materials.fbx"})
     {
         ImporterContext context;
         ExpectSame(NormalizeTriangles(SortAnimations(ImportFbx(fixture, context))),
                    NormalizeTriangles(SortAnimations(Expected("fbx/" + fixture))), fixture);
+    }
+}
+
+// `EveryFileAnswersTheGraphXnaAnswers` rotates every triangle to start at its lowest index before
+// comparing, so it cannot tell `3,2,0` from `0,3,2`. Those are the same triangle wound the same
+// way, but they are *not* the same six bytes: `ModelProcessor` writes the index buffer verbatim
+// and a rotated corner is a differing `.xnb`. This is the comparison that keeps the corner order,
+// and the polygon fixtures are where the two readings part company -- a quad's second triangle
+// alone (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-164`).
+TEST(XnaFbxImporter, APolygonIsTriangulatedIntoXnasOwnCornerOrder)
+{
+    for (const std::string& fixture :
+         {"fbx_quad_polygon.fbx", "fbx_polygon4.fbx", "fbx_polygon5.fbx", "fbx_polygon6.fbx",
+          "fbx_polygon7.fbx", "fbx_polygon8.fbx", "fbx_polygon12.fbx",
+          "fbx_polygon8_rotated.fbx", "fbx_polygon8_reversed.fbx", "fbx_polygon_concave.fbx",
+          "fbx_polygon_concave6.fbx", "fbx_polygon_mixed.fbx", "fbx_polygon_tri_quad.fbx"})
+    {
+        ImporterContext context;
+        ExpectSame(SortAnimations(ImportFbx(fixture, context)),
+                   SortAnimations(Expected("fbx/" + fixture)), fixture);
     }
 }
 

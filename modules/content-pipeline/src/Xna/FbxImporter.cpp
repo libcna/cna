@@ -31,6 +31,76 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
     namespace
     {
         namespace Canon = CNA::Content::Pipeline;
+
+        /**
+         * @brief The corner triples XNA's FBX path triangulates an `n`-corner polygon into.
+         *
+         * Not a fan. The FBX SDK inside XNA's importer answers a strip, and what it answers is a
+         * function of the corner count alone: a concave quad and a convex one give the same
+         * triangles, and so does the same octagon walked from a different corner or backwards.
+         * Measured for 3 to 20 corners on `tests/assets/xna40/model/fbx_polygon*.fbx`
+         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-164`). The winding is reversed, which is
+         * the one thing FBX and `.x` differ on that changes what a triangle faces.
+         */
+        std::vector<std::array<std::size_t, 3>> TrianglesOfPolygon(const std::size_t cornerCount)
+        {
+            std::vector<std::array<std::size_t, 3>> triangles;
+            if (cornerCount < 3u)
+            {
+                return triangles;
+            }
+            triangles.reserve(cornerCount - 2u);
+            triangles.push_back({2u, 1u, 0u});
+            if (cornerCount >= 4u)
+            {
+                triangles.push_back({0u, 3u, 2u});
+                std::size_t low = 3u;
+                std::size_t high = cornerCount - 1u;
+                bool firstStep = true;
+                while (low < high)
+                {
+                    triangles.push_back({high, low, firstStep ? 0u : high + 1u});
+                    firstStep = false;
+                    if (low + 1u >= high)
+                    {
+                        break;
+                    }
+                    triangles.push_back({high, low + 1u, low});
+                    ++low;
+                    --high;
+                }
+            }
+            return triangles;
+        }
+
+        /**
+         * @brief The order that triangulation introduces each of a polygon's corners.
+         *
+         * The corners are numbered in this order rather than the order the polygon lists them:
+         * XNA answers a hexagon's control points as 0,1,2,3,5,4 and a twelve-gon's as
+         * 0,1,2,3,11,4,10,5,9,6,8,7, which is the strip's two pointers walking in from the ends.
+         */
+        std::vector<std::size_t> CornerVisitOrder(const std::size_t cornerCount)
+        {
+            std::vector<std::size_t> order;
+            order.reserve(cornerCount);
+            for (std::size_t c = 0; c < cornerCount && c < 4u; ++c)
+            {
+                order.push_back(c);
+            }
+            if (cornerCount > 4u)
+            {
+                std::size_t low = 4u;
+                std::size_t high = cornerCount - 1u;
+                bool takeHigh = true;
+                while (order.size() < cornerCount)
+                {
+                    order.push_back(takeHigh ? high-- : low++);
+                    takeHigh = !takeHigh;
+                }
+            }
+            return order;
+        }
         using Graphics::BasicMaterialContent;
         using Graphics::GeometryContent;
         using Graphics::MeshContent;
@@ -1128,8 +1198,13 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     }
                 }
 
-                // A mesh that declares no normals gets them computed: each polygon's own unit
-                // normal, summed onto every control point it names, normalized once at the end.
+                // A mesh that declares no normals gets them computed: each *triangle's* unit
+                // normal, summed onto the three control points it names, normalized once at the
+                // end. Per triangle rather than per polygon, because that is what the corpus can
+                // tell: `fbx_polygon_concave6.fbx` is a hexagon whose triangulation gives one
+                // control point two triangles wound against each other, and XNA answers the zero
+                // vector there -- which a polygon normal taken from three corners cannot produce
+                // and which no substitute may replace (XNASWEEP-164).
                 // Not weighted by area -- `fbx_generated_normals.fbx` and
                 // `fbx_generated_normals_area.fbx` are the same fold with one face four times the
                 // other's area, and XNA answers `(0, -0.707107, 0.707107)` on the shared edge for
@@ -1144,27 +1219,38 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     for (const Polygon& polygon : polygons)
                     {
                         if (polygon.controlPoints.size() < 3u) { continue; }
-                        const Vector3 a = positions[static_cast<SharpRuntime::intcs>(polygon.controlPoints[0])];
-                        const Vector3 b = positions[static_cast<SharpRuntime::intcs>(polygon.controlPoints[1])];
-                        const Vector3 c = positions[static_cast<SharpRuntime::intcs>(polygon.controlPoints[2])];
-                        const Vector3 face = Vector3::Cross(b - a, c - a);
-                        const float length = face.Length();
-                        if (!(length > 0.0f)) { continue; }
-                        const Vector3 unit(face.X / length, face.Y / length, face.Z / length);
-                        for (const std::size_t point : polygon.controlPoints)
+                        for (const std::array<std::size_t, 3>& triangle :
+                             TrianglesOfPolygon(polygon.controlPoints.size()))
                         {
-                            if (point < generatedNormals.size())
+                            const std::size_t p0 = polygon.controlPoints[triangle[0]];
+                            const std::size_t p1 = polygon.controlPoints[triangle[1]];
+                            const std::size_t p2 = polygon.controlPoints[triangle[2]];
+                            const Vector3 a = positions[static_cast<SharpRuntime::intcs>(p0)];
+                            const Vector3 b = positions[static_cast<SharpRuntime::intcs>(p1)];
+                            const Vector3 c = positions[static_cast<SharpRuntime::intcs>(p2)];
+                            // The triangulation is emitted with the winding reversed, and the
+                            // generated normal is not: `fbx_polygon*.fbx` are counter-clockwise
+                            // rings in the XY plane and XNA answers +Z on every one of them.
+                            const Vector3 face = Vector3::Cross(c - a, b - a);
+                            const float length = face.Length();
+                            if (!(length > 0.0f)) { continue; }
+                            const Vector3 unit(face.X / length, face.Y / length, face.Z / length);
+                            for (const std::size_t point : {p0, p1, p2})
                             {
-                                generatedNormals[point] = generatedNormals[point] + unit;
+                                if (point < generatedNormals.size())
+                                {
+                                    generatedNormals[point] = generatedNormals[point] + unit;
+                                }
                             }
                         }
                     }
                     for (Vector3& normal : generatedNormals)
                     {
                         const float length = normal.Length();
-                        normal = length > 0.0f
-                                     ? Vector3(normal.X / length, normal.Y / length, normal.Z / length)
-                                     : Vector3(0.0f, 0.0f, 1.0f);
+                        if (length > 0.0f)
+                        {
+                            normal = Vector3(normal.X / length, normal.Y / length, normal.Z / length);
+                        }
                     }
                 }
 
@@ -1220,8 +1306,14 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                         {
                             continue;
                         }
-                        std::vector<SharpRuntime::intcs> corners;
-                        for (std::size_t c = 0; c < polygon.controlPoints.size(); ++c)
+                        // The corners are numbered in the order the *triangulation* introduces
+                        // them, not in the order the polygon lists them: XNA answers a hexagon's
+                        // control points as 0,1,2,3,5,4 and a twelve-gon's as
+                        // 0,1,2,3,11,4,10,5,9,6,8,7, which is the strip's two pointers walking in
+                        // from the ends (XNASWEEP-164).
+                        const std::size_t cornerCount = polygon.controlPoints.size();
+                        std::vector<SharpRuntime::intcs> corners(cornerCount, 0);
+                        for (const std::size_t c : CornerVisitOrder(cornerCount))
                         {
                             const std::size_t controlPoint = polygon.controlPoints[c];
                             const std::size_t corner = polygon.corners[c];
@@ -1235,20 +1327,30 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                                 local.emplace(std::move(key), assigned);
                                 used.push_back(controlPoint);
                                 cornerOf.push_back(corner);
-                                corners.push_back(assigned);
+                                corners[c] = assigned;
                             }
                             else
                             {
-                                corners.push_back(found->second);
+                                corners[c] = found->second;
                             }
                         }
                         // The winding is reversed, which is the one thing FBX and .x differ on
                         // that changes what a triangle faces (measured: 0,1,2 answers 2,1,0).
-                        for (std::size_t c = 2; c < corners.size(); ++c)
+                        //
+                        // A polygon with more than three corners is not fanned. The FBX SDK inside
+                        // XNA's importer answers a *strip*, and what it answers is a function of
+                        // the corner count alone: a concave quad and a convex one give the same
+                        // triangles, and so does the same octagon walked from a different corner or
+                        // walked backwards. Measured for 3 to 20 corners on
+                        // tests/assets/xna40/model/fbx_polygon*.fbx (XNASWEEP-164). A fan and this
+                        // agree on triangles up to five corners and disagree from six, and they
+                        // disagree on a quad's *corner order* already.
+                        for (const std::array<std::size_t, 3>& triangle :
+                             TrianglesOfPolygon(cornerCount))
                         {
-                            indices.push_back(corners[c]);
-                            indices.push_back(corners[c - 1u]);
-                            indices.push_back(corners[0]);
+                            indices.push_back(corners[triangle[0]]);
+                            indices.push_back(corners[triangle[1]]);
+                            indices.push_back(corners[triangle[2]]);
                         }
                     }
                     if (used.empty())
