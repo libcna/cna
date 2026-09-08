@@ -1026,8 +1026,30 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     // fbx_quad_textured connects one and answers material=null).
                     batchMaterials.clear();
                 }
-                const std::size_t batches = batchMaterials.empty() ? 1u : batchMaterials.size();
-                for (std::size_t batch = 0; batch < batches; ++batch)
+                // A mesh's batches come out in the order its polygons *first name* each material,
+                // not in the order the materials are connected. SAMPLE-142's `France.FBX` settles
+                // it: `Object04` carries 25 materials and 3,354 polygons over 23 of them, and XNA's
+                // own build answers its batches with 840, 28, 28, 252, 56, 81, 179, 863, ...
+                // triangles -- which is the first-use order exactly, where the connection order
+                // would answer 200, 8, 863, 81, 131, 179, 466, ...
+                // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-155`).
+                std::vector<std::size_t> batchOrder;
+                if (batchMaterials.empty())
+                {
+                    batchOrder.push_back(0u);
+                }
+                else
+                {
+                    std::vector<bool> seen(batchMaterials.size(), false);
+                    for (const Polygon& polygon : polygons)
+                    {
+                        const std::size_t which = static_cast<std::size_t>(polygon.material);
+                        if (polygon.material < 0 || which >= seen.size() || seen[which]) { continue; }
+                        seen[which] = true;
+                        batchOrder.push_back(which);
+                    }
+                }
+                for (const std::size_t batch : batchOrder)
                 {
                     std::vector<std::size_t> used;
                     // A vertex is a control point *and* the channel values the corner carries, not

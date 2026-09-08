@@ -651,6 +651,11 @@ TEST(XnaFbxImporter, EveryFileAnswersTheGraphXnaAnswers)
           // `Lcl Rotation`, which is what settles that `R` comes before `Rpre`
           // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-152`).
           "fbx_pivots.fbx", "fbx_postrotation.fbx",
+          // A mesh's batches come out in the order its polygons first name each material, not the
+          // order the materials are connected: this one connects `First` then `Second` and its two
+          // polygons name them the other way round, and XNA answers `Second`'s batch first
+          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-155`).
+          "fbx_material_order.fbx",
           "fbx_split_vertices.fbx",
           // A `Texture` names its file twice and the two can name different directories; the
           // reference XNA writes is whichever one resolves. These two separate the branches:
