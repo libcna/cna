@@ -114,15 +114,16 @@ cmake --build cmake-build-software --target cna_diag_software cna_diag_compare
 cmake --build cmake-build-debug --target cna_diag_easygl
 SDL_VIDEODRIVER=x11 DISPLAY=:0 ./cmake-build-debug/cna_diag_easygl /tmp/easygl.rgba
 
-# 3. Compare (tolerance defaults to 40 if omitted)
-./cmake-build-software/cna_diag_compare /tmp/software.rgba /tmp/easygl.rgba 40
+# 3. Compare (the one-byte tolerance is explicit here and is also the default)
+./cmake-build-software/cna_diag_compare /tmp/software.rgba /tmp/easygl.rgba 1
 ```
 
 Verified 2026-07-13: `SOFTWARE` vs. `OPENGLES3` on this canonical scene gives a max per-channel
 diff of 1 (mean 0.139) — effectively identical, the residual being ordinary rounding noise, not a
 real rendering discrepancy. The comparator was also checked against a deliberately corrupted dump
 (one channel of one pixel flipped) to confirm it actually fails when the images genuinely differ,
-rather than always passing.
+rather than always passing. `SOFTWARE-156` reduced the historical default tolerance of 40 to the
+measured one-byte bound; a wider tolerance now has to be an explicit, evidence-backed choice.
 
 ## Known limitations (2026-09-08)
 

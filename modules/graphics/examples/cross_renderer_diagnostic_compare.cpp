@@ -4,7 +4,7 @@
 // and reports the per-channel max/mean absolute difference, exiting 1 if the max exceeds the
 // given tolerance.
 //
-// Usage: cna_diag_compare <fileA> <fileB> [tolerance=40]
+// Usage: cna_diag_compare <fileA> <fileB> [tolerance=1]
 
 #include <cmath>
 #include <cstdint>
@@ -42,10 +42,10 @@ int main(int argc, char** argv)
 {
     if (argc < 3)
     {
-        std::fprintf(stderr, "usage: cna_diag_compare <fileA> <fileB> [tolerance=40]\n");
+        std::fprintf(stderr, "usage: cna_diag_compare <fileA> <fileB> [tolerance=1]\n");
         return 2;
     }
-    const int tolerance = argc > 3 ? std::atoi(argv[3]) : 40;
+    const int tolerance = argc > 3 ? std::atoi(argv[3]) : 1;
 
     const std::vector<std::uint8_t> a = ReadFile(argv[1]);
     const std::vector<std::uint8_t> b = ReadFile(argv[2]);
