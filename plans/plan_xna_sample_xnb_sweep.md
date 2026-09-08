@@ -254,6 +254,7 @@ final qualification.
 | `XNASWEEP-162` | SAMPLE-138's `photograph.fbx`: a root whose scaling is divided out, and two mesh parts against three. | [x] **Fixed, and the reading in this row was wrong twice.** The three numbers on `root/bones[0]` are not `M * S^-1`: the file's `GlobalSettings` carries `UnitScaleFactor 100`, and 100 against the node's own `Lcl Scaling 0.01` is where the factor of a hundred comes from. Measured on the genuine **processor** (`ModelRootOracle`, which had to be repaired first -- its `Convert` override threw, so `ModelProcessor` failed with `NotSupportedException` before a single bone was reached): for a unit `U`, a node scaling `S`, a `ScalingPivot` `Sp` and a `ScalingOffset` `Soff`, XNA answers a basis of `U * S` and a translation of `U * (Soff + (1 - S) * Sp)`. Seven fixtures settle it, including that the unit reaches the nodes the scene connects and **not** their children. CNA multiplied `Lcl Scaling` and `Lcl Translation` by the unit *before* composing, which is the same thing only when there is no scaling pivot: under `U = 100` and `S = 0.01` the combined scale is exactly 1 and the pivot term `(1 - 1) * Sp` vanishes, where XNA answers `100 * 0.99 * Sp`. The unit now multiplies the composed transform. **The second reading that was wrong is precision**: with that fixed the root came back at 7.01e-06 against XNA's 2.35e-06, because CNA rounded every FBX transform term to `float` before composing and this file's offset and pivot cancel to eight significant figures. FBX writes them as doubles and XNA composes them as doubles; CNA now keeps them in `double` as far as the matrix. The root is bit-exact, and the mesh parts came right with `XNASWEEP-165`: `photograph.xnb` answers three parts, five shared resources, and 3 of 3 parts reproduce XNA's face order. What is left of that file is `XNASWEEP-149`. |
 | `XNASWEEP-164` | A polygon with more than three corners is triangulated as a strip, not a fan. | [x] **Fixed, and found by asking `XNASWEEP-149`'s question of real content.** `validate_model.py` hands CNA's own pre-optimisation face order to `D3DXOptimizeFaces` and compares the answer with the reference; on `France.FBX` 21 of its 26 mesh parts matched exactly and the other five did not have the same *triangles* to order -- a difference the sweep had been counting as "the vertex or index buffer differs", which is where `XNASWEEP-149` was assumed to own it. It does not. **The genuine `.x` importer fans a polygon from corner 0 and the genuine FBX importer does not**: it answers a strip, and what it answers is a function of the corner count alone -- a concave quad and a convex one give the same triangles, and so does the same octagon walked from a different corner or walked backwards. Measured for 3 to 20 corners: `(2,1,0)`, `(0,3,2)`, then two pointers walking in from the ends. A fan agrees with it up to five corners and disagrees from six, and disagrees on a **quad's corner order** already -- `3,2,0` against `0,3,2`, the same triangle wound the same way and not the same six bytes. Two more rules came with it: the corners are numbered in the order the triangulation introduces them (a hexagon's are `0,1,2,3,5,4`, a twelve-gon's `0,1,2,3,11,4,10,5,9,6,8,7`), and a generated normal is the sum of the unit normals of the *triangles* naming a control point, not of the polygons -- `fbx_polygon_concave6.fbx` gives one control point two triangles wound against each other and XNA answers the zero vector, where CNA substituted `(0, 0, 1)`. Thirteen fixtures, their genuine answers frozen, and a second test that keeps the corner order the existing one normalises away. `France.FBX` goes from 21 of 21 to **26 of 26**. |
 | `XNASWEEP-165` | A polygon whose material index names no connected material is not dropped. | [x] **Fixed; SAMPLE-138's `photograph.fbx` goes from two mesh parts to XNA's three.** `XNASWEEP-162` recorded that file as answering "three mesh parts and five shared resources where CNA answers two and four" without saying why. Its `LayerElementMaterial` names indices 0, 1 **and 2**, and only two materials are connected to `cube1`; CNA batched over the *connected* materials and silently dropped the 86 polygons that named 2, losing a whole mesh part and 154 vertices. XNA keeps them: three fixtures measured on the genuine importer settle the rule -- `fbx_material_gap.fbx` names 0, 1 and 2 with one material connected and answers two batches, `Only` and then **one** null-material batch holding both the 1 and the 2; `fbx_material_gap_negative.fbx` does the same for -1; and `fbx_material_gap_skip.fbx`, whose polygons name only out-of-range indices, answers a single null batch. So the batch key is the connected material a polygon names *or* "none", every "none" sharing one batch, still in first-use order (`XNASWEEP-155`). What is left of `photograph.fbx` is its root transform, which stays with `XNASWEEP-162`. |
+| `XNASWEEP-166` | `Yager.FBX`'s `Box01` carries a second texture coordinate CNA does not produce. | [ ] **Open, isolated, and one of only two models in the corpus that still differ by something other than order.** `validate_corpus.py` asked all 157 differing models whether their difference is the order `OptimizeForCache` puts their triangles in or the triangles themselves: **485 of 485 mesh parts whose geometry matches reproduce XNA's face order exactly**, and only four models have anything else -- SAMPLE-074's `tank.xnb` (processor parameters, `XNASWEEP-153`), `baseballbat.xnb` (float residue of 2.4e-07 on positions, same bounding box and bone), and these two. `Yager.xnb`: XNA answers **two** vertex buffers where CNA answers one, because `Box01`'s is stride 40 with `TextureCoordinate` usage index 0 **and 1**, and CNA's single stride-32 buffer has only index 0. The genuine importer answers that mesh with three channels, `TextureCoordinate0` and `TextureCoordinate1` carrying identical values. `Box01` is the one mesh in the file that declares `LayerElementTransparentUV` beside `LayerElementUV`, in one `Layer: 0` block, and `LayerElementTransparentTextures` beside `LayerElementTexture`. **The `TransparentUV` element alone is not the trigger**: three fixtures reproducing that declaration -- both elements, `ByPolygonVertex` with `IndexToDirect`, in Yager's own `Layer` order, and one with `TransparentUV` alone -- answer a single `TextureCoordinate0` from the genuine importer, and the `TransparentUV`-only one answers no texture coordinate at all. What is untested is the transparent *texture*: `Box01` has a material with a second texture connected through `LayerElementTransparentTextures`, and none of the fixtures had one. That is where the next attempt should start. `AircraftCarrier.xnb` is the other, and is the one the sweep already carried as its own case. |
 | `XNASWEEP-163` | The 367 references the sweep has no route to, as a coverage task of its own. | [ ] **Open, and deliberately separate from every behaviour row above.** `XNASWEEP-158` audited the two gap classes and is closed on what it set out to check; what it *found* -- that nine samples had their references built by a hand-written runner rather than a `.contentproj`, so `map_sources.py` reaches none of them -- is a property of this campaign's harness, not of CNA, and it kept being read as unfinished behavioural work. It is this row now. The remedy the audit named is a synthesized build unit per runner: read the runner's own asset list and the processor parameters it sets, write a `.contentproj` that names them, and stage it the way a reconstructed project already is. Until that exists the 367 stay `CORPUS_GAP`, which is an honest label -- the reference is genuine and CNA has never been asked to match it -- and no conclusion in this file rests on them. |
 
 
@@ -305,18 +306,30 @@ first run of this campaign was invalidated by a mid-run relink.
 | references in a sample with no `.contentproj` | 359 |
 | references whose item names a source the tree has not got | 43 |
 
-### 11.2 The sweep, run 17 (2026-09-08)
+### 11.2 The sweep, run 19 (2026-09-08)
 
 Run with everything through `XNASWEEP-161`. Run 3 is kept because it is what
 `XNASWEEP-104`--`110` were measured against, and run 16 because it is the last
 one before this day's importer work.
 
-| | run 1 | run 3 | run 10 | run 13 | run 16 | run 17 |
-|---|---:|---:|---:|---:|---:|---:|
-| byte-identical | 922 | 3,619 | 3,738 | 3,771 | 3,771 | **3,771** |
-| differing | 343 | 1,547 | 1,659 | 1,639 | 1,639 | 1,639 |
-| missing (CNA produced nothing) | 6,102 | 2,201 | 1,970 | 1,949 | 1,949 | **1,949** |
-| build units that finished | -- | 156 | 156 | 155 | 155 | 155 |
+| | run 1 | run 3 | run 10 | run 13 | run 16 | run 17 | run 19 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| byte-identical | 922 | 3,619 | 3,738 | 3,771 | 3,771 | 3,771 | **3,777** |
+| differing | 343 | 1,547 | 1,659 | 1,639 | 1,639 | 1,639 | 1,633 |
+| missing (CNA produced nothing) | 6,102 | 2,201 | 1,970 | 1,949 | 1,949 | 1,949 | **1,949** |
+| build units that finished | -- | 156 | 156 | 155 | 155 | 155 | 155 |
+
+**Run 19 is the first sweep after `XNASWEEP-164`, `XNASWEEP-165` and
+`XNASWEEP-162`, and its binary is the commit it is attributed to.** Six more
+references are byte-identical (3,771 to 3,777) and `UNEXPLAINED` falls from 175
+to 171. That is a small delta by the byte count and the wrong measure of the
+three fixes: a model whose triangles CNA now gets right is still not byte-equal
+while `XNASWEEP-149` leaves them in a different order. What the fixes did is
+visible in §11.3.1 instead -- `photograph.fbx`'s root transform and its third
+mesh part are gone, and `validate_corpus.py` puts **485 of 485** mesh parts on
+`XNASWEEP-149`'s side of the line, against the 21 of 26 `France.FBX` alone
+managed before them. Run 18, between the two, isolates `XNASWEEP-164`: it alone
+accounts for all six of the byte-identical gain.
 
 **Run 16's frozen binary was not built from the commit run 16 is attributed
 to, and run 17 is the first sweep this campaign can prove was.** Sixty-two font
@@ -353,13 +366,13 @@ and the rest are the font references the paragraph above disclaims.
 
 | class | count | what it means |
 |---|---:|---|
-| `IDENTICAL` | **3,771** | CNA's build is the reference, byte for byte. |
+| `IDENTICAL` | **3,777** | CNA's build is the reference, byte for byte. |
 | `SEMANTICALLY_IDENTICAL` | 728 | Everything a runtime reads is equal; the LZX stream is not. |
-| `ACCEPTED_DIFFERENCE` | 736 | Measured, understood, and not closable from here. |
+| `ACCEPTED_DIFFERENCE` | 734 | Measured, understood, and not closable from here. |
 | `CUSTOM_PIPELINE_GAP` | 1,370 | The asset needs a component the *sample* defines, in a .NET assembly C++ cannot load. |
 | `ENVIRONMENT_GAP` | 15 | This machine's, not CNA's: 10 effects the June-2010 fxc refuses and XNA's own D3DX9 accepted, and 5 fonts Windows has and this machine has not. |
 | `CORPUS_GAP` | 931 | The reference is in the corpus and the sweep has no way to build it (`XNASWEEP-158`). |
-| `UNEXPLAINED` | **175** | Everything else. |
+| `UNEXPLAINED` | **171** | Everything else. |
 
 The accepted differences, by reason:
 
@@ -369,31 +382,40 @@ The accepted differences, by reason:
 | 249 | Two rasterizers disagree about a glyph's ink by a pixel: GDI+ against FreeType. |
 | 91 | The effect blob carries its compiler's version string (`XNASWEEP-108`). |
 | 88 | Two conformant JPEG decoders inside an IDCT's tolerance. |
-| 48 | An Xbox 360 target: XMA has no publicly implementable encoder. |
+| 46 | An Xbox 360 target: XMA has no publicly implementable encoder. |
 | 4 | XNA re-encodes a song to WMA (`XNASWEEP-125`). |
 
 ### 11.3.1 What is still unexplained
 
-All 175 are model assets, and there is no unexplained reference outside `.fbx`
-and `.x` any more. By what differs:
+All 171 are model assets, and there is no unexplained reference outside `.fbx`
+and `.x`. By what differs, at run 19:
 
 | count | what differs |
 |---:|---|
-| 99 | The vertex or index buffer alone: `XNASWEEP-149`, and nothing else. |
-| 40 | A buffer *and* a bone transform. |
+| 112 | The vertex or index buffer alone: `XNASWEEP-149`, and nothing else. |
+| 28 | A buffer *and* a bone transform. |
 | 21 | A buffer *and* the bounding sphere computed over it. |
-| 9 | A bone transform alone: eight RobotGame mechs and `tank.fbx` (`XNASWEEP-153`). |
-| 5 | `photograph.fbx`: a root transform, a buffer, and two mesh parts against three (`XNASWEEP-162`). |
+| 9 | A bone transform alone: `tank.fbx`'s two back wheels (`XNASWEEP-153`). |
 | 1 | `AircraftCarrier.xnb`: mesh parts split at different vertices. |
 
-160 of the 175 carry a buffer difference, which is one question:
-`MeshHelper.OptimizeForCache`. The 21 bounding spheres are downstream of it --
-the sphere is computed over the vertices in the order the optimiser leaves them
--- and so are most of the 40.
+**161 of the 171 carry a buffer difference, and that is now one question with a
+known answer.** `MeshHelper.OptimizeForCache` **is** `D3DXOptimizeFaces`
+(`XNASWEEP-149`), measured on 616 probes with no disagreement, and
+`validate_corpus.py` asks the same question of the corpus rather than of probes:
+of the 157 differing models the sweep builds, **485 of 485 mesh parts whose
+geometry matches reproduce XNA's face order exactly**. Only four models differ
+by anything else, and each is named -- SAMPLE-074's `tank.xnb` (its project's
+`Scale 0.1` and `RotationY 180`), `baseballbat.xnb` (2.4e-07 of float residue on
+positions, same bounding box and bone), `Yager.xnb` (`XNASWEEP-166`) and
+`AircraftCarrier.xnb`.
 
-**The child-ordering family is gone.** `XNASWEEP-160`'s one reference was the
-only case in the corpus whose difference was a bone's child list, and the
-skeleton-root promotion closed it.
+Unexplained field-level differences: **2,706**, of 148,128 over the whole
+corpus (148,222 at run 17).
+
+**`photograph.fbx` is gone from this table's own row.** Its root transform and
+its third mesh part were `XNASWEEP-162` and `XNASWEEP-165`, both fixed; what is
+left of its five references is the buffer order, so they now sit in the first
+row with everything else `XNASWEEP-149` owns.
 
 **What is left on the eight mechs is float residue, characterised.** XNA's
 `Duskmas.FBX` root comes back as
