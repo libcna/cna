@@ -267,6 +267,11 @@ rather than always passing.
   rather than being truncated by the renderer interface's compatibility fallback. A shared
   Software/EasyGL fixture compares each direct draw with the equivalent `Begin` transform using
   byte-exact full-target images.
+- **The classic SpriteBatch/SpriteFont parity corpus executes on the CPU** (`SOFTWARE-138`).
+  Eighteen renderer-independent scenes shared with EasyGL cover flips, rotation/origin, both scale
+  overloads, source rectangles, layer sorting, transforms, render targets, viewports, scissor,
+  blend-state interactions, glyph placement, spacing, newline, fallback and text transforms. The
+  complete `Software_Sprite*` CTest selection passes 22/22.
 - **Custom `ShaderEffect` (arbitrary GLSL/HLSL/WGSL source) compiles but doesn't actually execute**
   — mirrors `HEADLESS-16`'s own precedent exactly: the source is accepted without compiling, and
   only effects whose `FillGpuDrawParams()` output matches one of this renderer's fixed stock-effect

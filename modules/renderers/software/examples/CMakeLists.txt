@@ -772,6 +772,99 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_SpriteBatchSubpixelContract
         COMMAND cna_test_software_spritebatch_subpixel TIMEOUT 30 LABELS "Software")
 
+    # SOFTWARE-138: compile the renderer-independent EasyGL SpriteBatch/SpriteFont public corpus
+    # unchanged for Software. Historical filenames remain beside their original EasyGL registrations;
+    # none of these sources reaches renderer internals.
+    cna_software_test(cna_test_software_sprite_effects_parity
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_sprite_effects_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteEffects_Parity
+        COMMAND cna_test_software_sprite_effects_parity TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_spritebatch_rotation_parity
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritebatch_rotation_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteBatch_RotationParity
+        COMMAND cna_test_software_spritebatch_rotation_parity TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_spritebatch_scale_parity
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritebatch_scale_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteBatch_ScaleParity
+        COMMAND cna_test_software_spritebatch_scale_parity TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_spritebatch_rt_size_parity
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritebatch_rendertarget_size_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteBatch_RenderTargetSizeParity
+        COMMAND cna_test_software_spritebatch_rt_size_parity TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_spritebatch_source_rect_parity
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritebatch_sourcerect_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteBatch_SourceRectangleParity
+        COMMAND cna_test_software_spritebatch_source_rect_parity TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_spritebatch_layer_depth_parity
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritebatch_layerdepth_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteBatch_LayerDepthParity
+        COMMAND cna_test_software_spritebatch_layer_depth_parity TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_spritebatch_transform_parity
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_transform_matrix_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteBatch_TransformParity
+        COMMAND cna_test_software_spritebatch_transform_parity TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_spritefont_single_glyph_parity
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritefont_single_glyph_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteFont_SingleGlyphParity
+        COMMAND cna_test_software_spritefont_single_glyph_parity TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_spritefont_spacing_parity
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritefont_multiglyph_spacing_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteFont_SpacingParity
+        COMMAND cna_test_software_spritefont_spacing_parity TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_spritefont_newline_parity
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritefont_newline_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteFont_NewlineParity
+        COMMAND cna_test_software_spritefont_newline_parity TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_spritefont_default_char_parity
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritefont_default_char_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteFont_DefaultCharacterParity
+        COMMAND cna_test_software_spritefont_default_char_parity TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_spritefont_flip_parity
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritefont_effects_flip_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteFont_FlipParity
+        COMMAND cna_test_software_spritefont_flip_parity TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_spritefont_rotation_scale_parity
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritefont_effects_rotation_scale_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteFont_RotationScaleParity
+        COMMAND cna_test_software_spritefont_rotation_scale_parity TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_spritebatch_blend_leak_parity
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritebatch_blendstate_leak_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteBatch_BlendStateLeakParity
+        COMMAND cna_test_software_spritebatch_blend_leak_parity TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_spritebatch_layered_blend_parity
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_sample_layered_blend_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteBatch_LayeredBlendParity
+        COMMAND cna_test_software_spritebatch_layered_blend_parity TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_spritebatch_viewport_switch_parity
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_viewport_switch_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteBatch_ViewportSwitchParity
+        COMMAND cna_test_software_spritebatch_viewport_switch_parity TIMEOUT 60 LABELS "Software")
+
+    cna_software_test(cna_test_software_spritebatch_custom_viewport_rt_parity
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_custom_viewport_rt_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteBatch_CustomViewportRtParity
+        COMMAND cna_test_software_spritebatch_custom_viewport_rt_parity TIMEOUT 60 LABELS "Software")
+
+    cna_software_test(cna_test_software_spritebatch_rasterizer_scissor_parity
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_begin_rasterizerstate_scissor_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteBatch_RasterizerScissorParity
+        COMMAND cna_test_software_spritebatch_rasterizer_scissor_parity TIMEOUT 60 LABELS "Software")
+
     # SOFTWARE-104: a capability is a usable public promise, not a statement about what a CPU
     # renderer might eventually implement. False entries are paired with the current factory/API
     # boundary so unsupported queries, volume textures and custom shaders cannot masquerade as
