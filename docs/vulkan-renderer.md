@@ -2,7 +2,7 @@
 
 ## Status of this document
 
-**Complete as of 2026-09-07 (`VULKAN-480`), and written after the re-audits it depends on**
+**Complete as of 2026-09-08 (`VULKAN-480`, updated by `REMED-GFX-203`), and written after the re-audits it depends on**
 (`VULKAN-470`–`VULKAN-474`) so that what it claims was checked rather than remembered. Every
 section names the row that put it there and the test that keeps it true; a claim with no test named
 beside it is not in here.
@@ -43,7 +43,7 @@ measures on (§*Environment* below).
 | `Texture3D` storage **and** sampling | supported | fixed |
 | Source-based `ShaderEffect` (SPIR-V) | supported | fixed |
 | `ShaderEffect` **source execution** | unsupported | fixed |
-| Multi-stream vertex input | **unsupported** | fixed |
+| Multi-stream vertex input | supported | fixed |
 | Compiled XNA `.fx` effects | **unsupported** here | fixed |
 | Compute shaders, compute image binding, indirect draw | **unsupported** | fixed |
 | Float32 / Float16 render targets, half-float linear filtering | **unsupported** | device |
@@ -64,8 +64,29 @@ Two entries need their sentence rather than a cell:
 | Limit | Value here | Origin |
 |---|---|---|
 | `MaxTextureDimension` | 16384 | device |
-| `MaxVertexStreams` | 1 | fixed — one binding at vertex rate (a per-instance second binding is a different thing; see `ShaderEffect` below) |
+| `MaxVertexStreams` | 16 | fixed — public streams of each input rate are packed into one immutable native snapshot |
 | Every compute limit | 0 | fixed — there is no compute path |
+
+### Multi-stream vertex input
+
+`REMED-GFX-203`. Vulkan accepts CNA's full 16-slot `VertexBufferBinding` surface. Because this
+renderer already copies vertex bytes into a host-visible arena when the draw is queued, it combines
+all public per-vertex records into one immutable interleaved snapshot and does the same separately
+for several per-instance streams. That preserves the existing one-native-binding-per-input-rate
+pipeline model and adds neither an arena buffer nor a submit.
+
+The copy applies every binding's `VertexOffset`, each per-instance `InstanceFrequency`, and the
+draw's `vertexStart` or `baseVertex`. Indexed draws scan the selected 16- or 32-bit index range so
+that `startIndex`, a declared `minVertexIndex` that differs from the actual minimum, and non-zero
+`baseVertex` retain their XNA meanings. Declarations are combined before stock-family or custom
+`ShaderEffect` layout selection, and the resulting bytes and declarations are owned by the queued
+draw rather than by the source buffers.
+
+**Tests:** the same `OrdinaryDrawMultiStreamTest` and `InstancedDrawMultiStreamTest` sources pass
+**48/48 on Vulkan and 48/48 on EasyGL**. They cover non-indexed and indexed draws, both index
+widths, offsets, deferred lifetime, mixed per-instance frequencies and invalid ranges. The Vulkan
+`ShaderEffect` 3D test passes **8/8**, including split declarations on both ordinary routes and a
+custom instanced draw, with no validation message.
 
 ### Surface formats
 
@@ -437,7 +458,6 @@ short form a reader needs before opening it.
 | Clip space is `[0, 1]`, EasyGL's is `[-1, 1]` | Vulkan's own convention; see the depth-range section, which also names who owns the half EasyGL does not cover. |
 | Set numbering for a custom effect's textures | Set 0 is the `SpriteBatch` texture, set 1 the effect's own. EasyGL's unit 0 *is* the sprite texture. Both are internally consistent; the shader is renderer-specific anyway. |
 | Array uniforms hold **72** elements | A fixed uniform-buffer block, where EasyGL's array is whatever length the GLSL declares. 72 is XNA's own `SkinnedEffect.MaxBones`; past it this renderer refuses by name rather than truncating. |
-| **Multi-stream vertex input is refused**, not emulated | Reported `false` with a written reason instead of silently drawing from stream 0, which is what a renderer that answers `true` and binds one stream does. |
 
 **Differences where this renderer does more:**
 

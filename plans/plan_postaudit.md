@@ -52,8 +52,8 @@ what trigger.*
 
 | State | Meaning | Example here |
 |---|---|---|
-| **Known and planned** | Recorded, evidenced, scheduled, not started | `REMED-GFX-203` … `REMED-GFX-208` |
-| **Safe declared capability boundary** | The unsupported request is rejected deterministically, before native submission, with a public exception, and a test asserts the boundary in both directions | `MultiStreamVertexInput = false` on Vulkan / Bgfx / WebGPU / SDL_GPU / D3D11 / D3D12 / D3D9 / Headless |
+| **Known and planned** | Recorded, evidenced, scheduled, not started | `REMED-GFX-204` … `REMED-GFX-208` |
+| **Safe declared capability boundary** | The unsupported request is rejected deterministically, before native submission, with a public exception, and a test asserts the boundary in both directions | `MultiStreamVertexInput = false` on Bgfx / WebGPU / SDL_GPU / D3D11 / D3D12 / D3D9 / Headless |
 | **Silent wrong result** | A supported public call is accepted, submitted, and renders or reports the wrong thing with no exception and no diagnostic | `REMED-GFX-211`, `-212`, `-213`, `-215` and `-216` — all five measured at pixel level on 2026-08-03, and **all five DONE**. `REMED-GFX-215` showed the class's sharpest lesson: a white-`DiffuseColor` oracle cannot see a `DiffuseColor` defect, so a defective backend was certified a correct control. `REMED-GFX-216` showed the next one: an oracle pointed only at the backend a ticket names cannot see that **every other backend has the same defect** — running it everywhere spawned `REMED-GFX-217` and `REMED-GFX-218`, both OPEN members of this class |
 | **Checkpoint blocker** | Must be resolved or explicitly accepted before the post-audit checkpoint is taken | see the `Checkpoint blocker` column — `YES` / `NO` / `REVIEW`, never assumed |
 
@@ -1036,12 +1036,14 @@ Full record: **`remediation/REMEDIATION_EXIT.md` §3.**
 Six tickets, one per native input-layout model, plus `REMED-GFX-213` where its triage lands on the
 capability side. **All six were narrowed, not widened, by `REMED-GFX-202`**: they no longer need to
 invent a transport, only to teach their backend to consume the array the shared layer already
-delivers. Their eventual implementation must additionally handle several **per-instance** streams,
-because `MultiStreamVertexInput` now gates both rates.
+delivers. `REMED-GFX-203` completed Vulkan on 2026-09-08; five backend tickets remain. Every
+implementation must additionally handle several **per-instance** streams, because
+`MultiStreamVertexInput` gates both rates.
 
 **Common to all six:**
 
-- **Present safe boundary:** reports `GraphicsCapability::MultiStreamVertexInput = false`. A
+- **Present safe boundary for the five remaining tickets:** reports
+  `GraphicsCapability::MultiStreamVertexInput = false`. A
   multi-stream ordinary draw, and since `REMED-GFX-202` an over-wide instanced binding set, is
   rejected deterministically with a public exception **before native submission** — never truncated,
   never collapsed to stream 0. `RejectUnsupportedStreamCombination` closes the harness-built path.
@@ -1054,7 +1056,7 @@ because `MultiStreamVertexInput` now gates both rates.
   `tests/Microsoft/Xna/Framework/Graphics/OrdinaryDrawMultiStreamTests.cpp` and
   `tests/Microsoft/Xna/Framework/Graphics/InstancedDrawMultiStreamTests.cpp`. Each backend's declared
   boundary legs **flip to positive assertions automatically** the moment it claims the capability — so
-  none of these six tickets needs a new fixture, and none can be closed without the existing one going
+  none of these tickets needs a new fixture, and none can be closed without the existing one going
   green.
 - **Checkpoint blocker: NO** for all six. **Integration blocker: NO** for all six.
 - **Suggested phase:** after the 19 branches are integrated and the tree is stabilized, and preferably
@@ -1062,7 +1064,7 @@ because `MultiStreamVertexInput` now gates both rates.
 
 | Ticket | Backend | Remaining native work | Scope |
 |---|---|---|---|
-| `REMED-GFX-203` | **Vulkan** | 16 separate pipeline builders each bake one `VkVertexInputBindingDescription{0, stride, VERTEX}` with combined-layout `VkVertexInputAttributeDescription.offset`s, and replay issues a single `vkCmdBindVertexBuffers(cb, 0, 1, …)`. Needs per-stream binding descriptions, `attribute.binding` re-slotted via `MapCombinedOffsetToStream`, the pipeline cache keyed on the combined layout, and the deferred command capturing every stream's byte range **by value**. | LARGE |
+| `REMED-GFX-203` | **Vulkan — DONE 2026-09-08** | The deferred renderer already copied every draw into a host-visible arena. It now interleaves each public stream of the same input rate into that immutable snapshot and synthesizes the combined declaration, so existing one-binding-per-rate pipelines and replay remain unchanged. Actual selected indices define the compact indexed window; per-binding offsets and mixed instance frequencies are applied while packing. Shared conformance: **48/48 Vulkan and 48/48 EasyGL**; custom SPIR-V: **8/8**, zero validation messages. | LARGE — **DONE** |
 | `REMED-GFX-204` | **Bgfx** | One `bgfx::VertexLayout` per byte stride, submitted through `setVertexBuffer(stream 0, …)`. Needs one layout and one stream index per public binding, bgfx's own maximum stream count surfaced through `GetMaxVertexStreams()`, and `REMED-GFX-065`/`-084` view segmentation plus `REMED-GFX-155`/`-157`/`-181` ordering preserved. | MEDIUM |
 | `REMED-GFX-205` | **WebGPU** | One `WGPUVertexBufferLayout` per pipeline with a single `arrayStride` and combined `shaderLocation` offsets. Needs a layout array, one `wgpuRenderPassEncoderSetVertexBuffer` slot per stream with its own byte offset and size, the pipeline key extended to the combined layout, and `REMED-GFX-116`/`-146`/`-159`/`-167`/`-172` deferred capture and ordering preserved. | MEDIUM |
 | `REMED-GFX-206` | **SDL_GPU** | One vertex buffer description and one `SDL_GPUVertexBufferBinding` per pipeline. Needs per-slot descriptions and bindings with each stream's own pitch and offset, the pipeline cache keyed on the combined layout, and `REMED-GFX-143`/`-145`/`-152`/`-156`/`-173`/`-176` pass segmentation and lifetime preserved **with no extra pass or submit**. | MEDIUM |
@@ -1079,12 +1081,10 @@ D3D11's own leg is unaffected and runs under Wine.
 **Suggested implementation order within this group** — advisory, and explicitly **not** an instruction
 to start any of them now:
 
-1. **Vulkan** (`REMED-GFX-203`) — the explicit-API reference. Its binding/attribute split is the
-   closest native model to the representation `GpuVertexStreamBinding` already describes, so it sets
-   the pattern the rest reuse.
-2. **WebGPU** and **SDL_GPU** (`-205`, `-206`) — modern explicit APIs with the same
-   layout-array-per-pipeline shape; they should follow Vulkan directly and can go in parallel with
-   each other.
+1. **Vulkan** (`REMED-GFX-203`) is complete. Its CPU-interleaved immutable-snapshot solution is the
+   reference for deferred backends that can preserve semantics without multiplying native bindings;
+   it is not a requirement that another backend use the same transport.
+2. **WebGPU** and **SDL_GPU** (`-205`, `-206`) — modern explicit APIs; they can proceed in parallel.
 3. **Bgfx** (`-204`) — the abstraction path; its ceiling has to be discovered and surfaced rather than
    assumed, and it interacts with the most prior ordering tickets.
 4. **D3D11 / D3D12** (`-207`) — two backends, two cache models, and the stale-slot rule; D3D12's proof
@@ -1356,11 +1356,11 @@ index owns everything else, and nothing below is moved here by this document.
 `PA` = this plan's post-audit priority. `CB` = checkpoint blocker. `IB` = integration blocker.
 Every ticket has its own row; `REMED-GFX-203` … `-208` are **not** collapsed, because they remain
 separately traceable per-backend tasks with different native models, different prior-ticket
-constraints and different scope.
+constraints and different scope. `REMED-GFX-203` is retained here as a completed row.
 
 | Ticket | Backend / subsystem | Finding class | Current safe behavior | Rec. | PA | CB | IB | Dependencies | Suggested trigger / phase | Scope | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| `REMED-GFX-203` | Vulkan — vertex input | Backend capability completion | **Safe declared boundary.** `MultiStreamVertexInput = false`; wider stream arrays rejected deterministically before native submission | MEDIUM / P2 | P2 | NO | NO | GFX-201, GFX-202 | Modularization, while touching the Vulkan module; first of the six | LARGE | 16 pipeline builders + single `vkCmdBindVertexBuffers`; sets the pattern for `-205`/`-206` |
+| `REMED-GFX-203` | Vulkan — vertex input | Backend capability completion | **DONE 2026-09-08.** `MultiStreamVertexInput = true`; up to 16 public streams are captured by value into one packed snapshot per input rate; shared conformance **48/48** | MEDIUM / P2 | P2 | NO | NO | GFX-201, GFX-202 | **DONE** | LARGE (completed) | Existing pipeline/replay binding model retained; indexed windows use actual selected indices; stock, instanced and custom paths covered |
 | `REMED-GFX-204` | Bgfx — vertex input | Backend capability completion | **Safe declared boundary**, same gate | MEDIUM / P2 | P2 | NO | NO | GFX-201, GFX-202 | Modularization, while touching the Bgfx module | MEDIUM | Must surface bgfx's real stream ceiling via `GetMaxVertexStreams()`; preserve GFX-065/084/155/157/181 |
 | `REMED-GFX-205` | WebGPU — vertex input | Backend capability completion | **Safe declared boundary**, same gate | MEDIUM / P2 | P2 | NO | NO | GFX-201, GFX-202; pattern from GFX-203 | Modularization, after Vulkan | MEDIUM | Preserve GFX-116/146/159/167/172 deferred capture and ordering |
 | `REMED-GFX-206` | SDL_GPU — vertex input | Backend capability completion | **Safe declared boundary**, same gate | MEDIUM / P2 | P2 | NO | NO | GFX-201, GFX-202; pattern from GFX-203 | Modularization, after Vulkan; parallel with `-205` | MEDIUM | No extra pass or submit; preserve GFX-143/145/152/156/173/176 |
@@ -1431,7 +1431,8 @@ or workspace** and are deliberately **not** counted — see the inventory docume
 
 **None of the 19 branches is a Vulkan, Bgfx, WebGPU, SDL_GPU, D3D11, D3D12 or D3D9 branch.** Those
 seven backends live on the mainline, so **no ticket in §5 has a branch-adaptation touchpoint at
-all** — `REMED-GFX-203` … `-208` are strictly post-integration or modularization work.
+all**. That remains the trigger for `REMED-GFX-204` … `-208`; Vulkan's `REMED-GFX-203` was completed
+separately on 2026-09-08 while correcting the Vulkan parity verdict.
 
 What the 19 branches *do* touch is the common layer those tickets were built on. Measured against
 each branch's merge base with `develop`:
@@ -1476,7 +1477,7 @@ For each integrated backend:
 | **Before branch integration** | ~~`REMED-GFX-211`, `REMED-GFX-212`, `REMED-GFX-213` triage (§4)~~ — triage done 2026-08-03, and **all three tickets are now DONE on every backend they name**. `REMED-GFX-215` and `REMED-GFX-216`, spawned in turn by `REMED-GFX-212` and `REMED-GFX-215`, were each triaged against §2, each confirmed a supported-path silent wrong result, each treated as an immediate checkpoint blocker, and **both are DONE (2026-08-03)**. **The checkpoint-blocker set inherited from this cluster is EMPTY.** `REMED-GFX-216` reclassified correctly on re-reading: bgfx accepted a supported single-stream draw, reached native submission, raised nothing, and rendered 27385 of 50752 pixels — deterministic and silently wrong, so P1 rather than deferred capability work. Its fix spawned **`REMED-GFX-217`** and **`REMED-GFX-218`**, which ARE of the same silent-wrong-result class on the other backends. ~~and must be triaged here before a checkpoint is taken~~ — **that triage ran on 2026-08-04 (§4.4).** Outcome: neither is a blocker in the "must be fully implemented" sense, but the checkpoint is **not honest without a bounded safety guard**, because both silently render supported public draws from the wrong bytes. The pre-checkpoint work is **one** Strategy-C task covering all eight affected rasterizing backends (seven stride-table + EasyGL's stock path) with no public API change; full declaration translation is deferred to modularization alongside `REMED-GFX-203` … `-208`. **Headless was removed from `REMED-GFX-217`'s scope at triage** — it rasterizes nothing. `REMED-GFX-214` (MEDIUM, OPEN) was triaged at the same time and is confirmed **not** a blocker: `QueueColoredDraw` throws before any command is queued, so the failure is loud, deterministic and pre-native — **DEFERRED** |
 | **While adapting a particular branch** | None of §5. Only the adaptation checklist above, plus `REMED-GFX-210` evidence-gathering when a branch adds a backend with no instanced path |
 | **After all 19 branches are integrated** | ~~`REMED-GFX-209`~~ — **DONE 2026-08-04**, the clean principal-suite baseline is established and the six known-cause reds are gone; `REMED-GFX-210`. `REMED-GFX-219`, spawned by it, is OPEN and blocks nothing |
-| **During modularization** | `REMED-GFX-203` … `REMED-GFX-208`, and `REMED-GFX-213`'s implementation if triage lands it on the capability side. **Added 2026-08-04:** `REMED-GFX-217`'s full per-backend declaration translation and `REMED-GFX-218`'s per-family semantic placement, both after their Strategy-C guard has shipped |
+| **During modularization** | `REMED-GFX-204` … `REMED-GFX-208` (`REMED-GFX-203` is DONE), and `REMED-GFX-213`'s implementation if triage lands it on the capability side. **Added 2026-08-04:** `REMED-GFX-217`'s full per-backend declaration translation and `REMED-GFX-218`'s per-family semantic placement, both after their Strategy-C guard has shipped |
 | **During NoXNA graphics-extension work** | Nothing from this plan is a prerequisite; see §12 |
 
 ### The exit sequence — the shortest honest path to the checkpoint
@@ -1519,7 +1520,8 @@ inventory and the branch inventory from refs as they stand at that moment, not f
 next single action is **re-run exit reconciliation**; take the signed checkpoint tag only if it
 confirms the blocker set is empty.
 
-**Explicitly NOT in the sequence:** `REMED-GFX-203` … `REMED-GFX-210` (deferred, unchanged);
+**Explicitly NOT in the original checkpoint sequence:** `REMED-GFX-204` … `REMED-GFX-210`
+(deferred, unchanged); `REMED-GFX-203` was completed later, on 2026-09-08;
 `REMED-GFX-214` (safe loud boundary, deferred); `REMED-GFX-217`'s seven native declaration
 translators; `REMED-GFX-218`'s per-family semantic placement. **No backend gains a declaration
 translator before the checkpoint.**
@@ -1528,9 +1530,9 @@ translator before the checkpoint.**
 every measured deviation and fails the moment a backend is corrected, so the *plan-level* boundary is
 already honest. What is not honest is the **runtime**: a caller passing a custom `VertexDeclaration`
 that collides with a built-in stride gets wrong pixels or a blank frame with no diagnostic on eight
-of ten backends. Custom vertex structs are core XNA, not an exotic corner. Step 1 is the smallest
-change that makes the runtime tell the truth, and it is strictly smaller than any one of
-`REMED-GFX-203` … `-208`.
+of ten backends. Custom vertex structs are core XNA, not an exotic corner. Step 1 was the smallest
+change that made the runtime tell the truth, and was strictly smaller than any one of
+`REMED-GFX-203` … `-208`; `REMED-GFX-203` has since completed and five remain.
 
 ---
 
@@ -1559,8 +1561,8 @@ Two properties make this seam worth preserving through modularization:
   measured single-stream native bindings byte-identical to their `REMED-GFX-200` form.
 - **The capability gate is the module's public contract.** `REMED-GFX-203` … `-208` are, in module
   terms, six independent implementations of one already-specified interface with one already-written
-  conformance suite. That is the cheapest possible shape for that work — which is the main argument
-  for doing it *during* modularization rather than before it.
+  conformance suite. Vulkan is complete; the same shape remains for the other five, which is the main
+  argument for doing them *during* modularization rather than before it.
 
 ---
 
@@ -1610,8 +1612,8 @@ Dependency-aware and **advisory**. This is not an instruction to begin any ticke
    conversion every branch needs.
 4. **Stabilize the integrated tree** — one principal-suite sweep per backend, every failure classified.
 5. **Begin modularization**, drawing the seam described in §11.
-6. **Implement the backend capability tickets while touching their backend modules** —
-   `REMED-GFX-203` (Vulkan reference) → `REMED-GFX-205` / `REMED-GFX-206` (modern explicit APIs) →
+6. **Implement the remaining backend capability tickets while touching their backend modules** —
+   using completed `REMED-GFX-203` (Vulkan) as a reference: `REMED-GFX-205` / `REMED-GFX-206` (modern explicit APIs) →
    `REMED-GFX-204` (abstraction path) → `REMED-GFX-207` (D3D11/D3D12) → `REMED-GFX-208` (D3D9
    historical path), plus `REMED-GFX-210` and `REMED-GFX-213`.
 7. **Begin NoXNA extensions on the modular architecture** (§12).

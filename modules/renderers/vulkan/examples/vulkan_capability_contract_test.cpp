@@ -15,11 +15,11 @@
 //   B  **A value that is not an enumerator was claimed too.** Casting an out-of-range int returned
 //      true. It must be refused.
 //
-// And the clause the whole exercise exists for (plan_vulkan.md section 6.2): a capability reported
-// FALSE must correspond to a refusal, not to a working path. Leg C drives each false answer into
-// the public API and requires a named exception:
+// And the clause the whole exercise exists for (plan_vulkan.md section 6.2): a capability report
+// must agree with the public path. Leg C drives the relevant answers into the public API: the
+// multi-stream capability is checked in both directions, while unsupported formats require a
+// named refusal.
 //
-//   * MultiStreamVertexInput -> two per-vertex bindings, then a draw -> NotSupportedException
 //   * FloatRenderTargets     -> RenderTarget2D(SurfaceFormat::Vector4)      -> refused
 //   * HalfFloatRenderTargets -> RenderTarget2D(SurfaceFormat::HdrBlendable) -> refused
 //
@@ -144,13 +144,15 @@ class VulkanCapabilityContractTest : public Game
               claimed ? "returned true" : "returned false");
     }
 
-    // ── Leg C: every FALSE answer has a real refusal behind it ───────────────
+    // ── Leg C: capability answers agree with their public paths ─────────────
 
-    void testFalseAnswersRefuse(GraphicsDevice& dev)
+    void testCapabilityBehaviour(GraphicsDevice& dev)
     {
         const VulkanRenderer& r = Renderer();
 
-        if (!r.SupportsCapability(GraphicsCapability::MultiStreamVertexInput))
+        // REMED-GFX-203 moved this answer to true. Keep this two-way probe here: if the
+        // implementation or report ever regresses independently, the capability contract names
+        // the disagreement even before the full pixel suite runs.
         {
             // The two declarations must be DISJOINT by semantic. XNA composes bound declarations
             // by (usage, usageIndex), and CNA's shared layer reproduces FNA3D's rule that a later
@@ -180,17 +182,21 @@ class VulkanCapabilityContractTest : public Game
             fx.Apply();
             dev.SetVertexBuffers(bindings);
 
-            bool refused = false;
+            bool accepted = true;
             std::string how = "the draw was accepted";
             try {
                 dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
             } catch (const System::NotSupportedException& e) {
-                refused = true; how = std::string("NotSupportedException: ") + e.what();
+                accepted = false; how = std::string("NotSupportedException: ") + e.what();
             } catch (const std::exception& e) {
-                how = std::string("wrong type: ") + e.what();
+                accepted = false; how = std::string("wrong type: ") + e.what();
             }
             dev.SetVertexBuffer(nullptr);
-            check(refused, "C MultiStreamVertexInput=false is a refusal, not a working path", how);
+            const bool reported = r.SupportsCapability(
+                GraphicsCapability::MultiStreamVertexInput);
+            check(accepted == reported,
+                  "C MultiStreamVertexInput matches the two-stream draw path",
+                  std::string("capability=") + (reported ? "true, " : "false, ") + how);
         }
 
         struct FloatCase { GraphicsCapability cap; SurfaceFormat format; const char* name; };
@@ -297,7 +303,7 @@ protected:
 
         testSeamAgreement(dev);
         testOutOfRange();
-        testFalseAnswersRefuse(dev);
+        testCapabilityBehaviour(dev);
         testMultiSampleAgreement();
 
         const auto& messages = Renderer().GetValidationMessagesEXT();

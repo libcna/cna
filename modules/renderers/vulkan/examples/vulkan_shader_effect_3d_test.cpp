@@ -29,12 +29,12 @@
 //      could pass on a shader that ignored its inputs.
 //   C  The indexed route reaches the same place. It is a separate hook in a separate function, so
 //      one leg cannot speak for both.
-//   D  A buffer with NO VertexDeclaration is refused BY NAME. The stock routes may fall back to a
+//   D  The same five attributes split across two vertex streams render on the non-indexed route.
+//   E  The split layout also renders on the indexed route, including its separate compaction path.
+//   F  A buffer with NO VertexDeclaration is refused BY NAME. The stock routes may fall back to a
 //      stride table; for a custom shader that table is a guess about someone else's program.
-//   E  `DrawInstancedPrimitives` with a ShaderEffect is refused by name -- this row does not cover
-//      the per-instance binding, and the alternative to refusing is drawing a game's own shader's
-//      geometry with a stock one.
-//   F  No validation message.
+//   G  `DrawInstancedPrimitives` consumes its per-instance binding through the custom shader.
+//   H  No validation message.
 //
 // The transform: the effect's `IEffectMatrices` properties supply world/view/projection, and this
 // renderer writes their product into the push-constant block's one matrix slot because it has no
@@ -239,6 +239,23 @@ struct CustomVertex
 };
 #pragma pack(pop)
 static_assert(sizeof(CustomVertex) == 48, "the declaration below promises a 48-byte stride");
+
+struct SplitPositionNormal
+{
+    float px, py, pz;
+    float nx, ny, nz;
+};
+static_assert(sizeof(SplitPositionNormal) == 24);
+
+#pragma pack(push, 1)
+struct SplitTangentTextureColor
+{
+    float tx, ty, tz;
+    float u, v;
+    std::uint8_t r, g, b, a;
+};
+#pragma pack(pop)
+static_assert(sizeof(SplitTangentTextureColor) == 24);
 }  // namespace
 
 class VulkanShaderEffect3DTest final : public Game
@@ -324,6 +341,58 @@ class VulkanShaderEffect3DTest final : public Game
         return p[kN * kN / 2];
     }
 
+    Color DrawSplitQuad(bool indexed)
+    {
+        auto& dev = getGraphicsDeviceProperty();
+        const VertexDeclaration positionNormal(24, {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector3, VertexElementUsage::Normal, 0),
+        });
+        const VertexDeclaration tangentTextureColor(24, {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Tangent, 0),
+            VertexElement(12, VertexElementFormat::Vector2,
+                          VertexElementUsage::TextureCoordinate, 0),
+            VertexElement(20, VertexElementFormat::Color, VertexElementUsage::Color, 0),
+        });
+        VertexBuffer a(dev, positionNormal, 4, BufferUsage::None);
+        VertexBuffer b(dev, tangentTextureColor, 4, BufferUsage::None);
+        const SplitPositionNormal av[4] = {
+            { -1.f,  1.f, 0.f, 0.2f, 0.f, 0.f },
+            { -1.f, -1.f, 0.f, 0.2f, 0.f, 0.f },
+            {  1.f, -1.f, 0.f, 0.2f, 0.f, 0.f },
+            {  1.f,  1.f, 0.f, 0.2f, 0.f, 0.f },
+        };
+        const SplitTangentTextureColor bv[4] = {
+            { 0.f, 0.4f, 0.f, 0.8f, 0.f, 153, 0, 0, 255 },
+            { 0.f, 0.4f, 0.f, 0.8f, 0.f, 153, 0, 0, 255 },
+            { 0.f, 0.4f, 0.f, 0.8f, 0.f, 153, 0, 0, 255 },
+            { 0.f, 0.4f, 0.f, 0.8f, 0.f, 153, 0, 0, 255 },
+        };
+        a.SetDataRaw(av, 4, sizeof(SplitPositionNormal));
+        b.SetDataRaw(bv, 4, sizeof(SplitTangentTextureColor));
+
+        RenderTarget2D rt(dev, kN, kN, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                          RenderTargetUsage::DiscardContents);
+        dev.setBlendStateProperty(BlendState::Opaque);
+        dev.setRasterizerStateProperty(RasterizerState::CullNone);
+        dev.SetRenderTarget(&rt);
+        dev.Clear(kClear);
+        fx_->Apply();
+        dev.SetVertexBuffers({ VertexBufferBinding(&a, 0, 0), VertexBufferBinding(&b, 0, 0) });
+        if (indexed) {
+            dev.setIndicesProperty(ib_.get());
+            dev.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2);
+            dev.setIndicesProperty(nullptr);
+        } else {
+            dev.DrawPrimitives(PrimitiveType::TriangleStrip, 0, 2);
+        }
+        dev.SetVertexBuffer(nullptr);
+        dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        std::vector<Color> p(static_cast<std::size_t>(kN * kN), Color(0, 0, 0, 0));
+        rt.GetData(p.data(), 0, kN * kN);
+        return p[kN * kN / 2];
+    }
+
 protected:
     void Draw(const GameTime&) override
     {
@@ -377,6 +446,20 @@ protected:
                       Text(got) + " (want ~(51,102,153,204))");
         }
         {
+            const Color got = DrawSplitQuad(/*indexed=*/false);
+            check(Near(got.getRProperty(), 51) && Near(got.getGProperty(), 102) &&
+                      Near(got.getBProperty(), 153) && Near(got.getAProperty(), 204),
+                  "D a custom non-indexed draw combines two vertex streams without dropping "
+                  "either declaration: " + Text(got) + " (want ~(51,102,153,204))");
+        }
+        {
+            const Color got = DrawSplitQuad(/*indexed=*/true);
+            check(Near(got.getRProperty(), 51) && Near(got.getGProperty(), 102) &&
+                      Near(got.getBProperty(), 153) && Near(got.getAProperty(), 204),
+                  "E a custom indexed draw combines the same two streams through its compact "
+                  "index window: " + Text(got) + " (want ~(51,102,153,204))");
+        }
+        {
             // No declaration: the VertexBuffer(device, count) convenience constructor.
             VertexBuffer bare(dev, 4);
             const CustomVertex v[4]{};
@@ -401,7 +484,7 @@ protected:
                 dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
             }
             check(threw && what.find("VertexDeclaration") != std::string::npos,
-                  "D a buffer with no VertexDeclaration is refused by name: " +
+                  "F a buffer with no VertexDeclaration is refused by name: " +
                       (threw ? what : std::string("NOT REFUSED")));
         }
         {
@@ -463,7 +546,7 @@ protected:
             const Color right = p[kN * (kN / 2) + 5];
             check(!threw && Near(left.getRProperty(), 51) && Near(left.getGProperty(), 204) &&
                       Near(right.getRProperty(), 204) && Near(right.getGProperty(), 51),
-                  "E an instanced draw through a ShaderEffect reads a DIFFERENT per-instance "
+                  "G an instanced draw through a ShaderEffect reads a DIFFERENT per-instance "
                   "record per instance: left=" + Text(left) + " right=" + Text(right) +
                       " (want ~(51,204,0) and ~(204,51,0)" +
                       (threw ? std::string("; threw: ") + what : std::string("")) + ")");
@@ -472,7 +555,7 @@ protected:
         {
             const std::size_t after = Renderer().GetValidationMessagesEXT().size();
             check(!VulkanRenderer::IsValidationActiveEXT() || after == messagesBefore,
-                  "F no validation message: " + std::to_string(messagesBefore) + " -> " +
+                  "H no validation message: " + std::to_string(messagesBefore) + " -> " +
                       std::to_string(after));
         }
 

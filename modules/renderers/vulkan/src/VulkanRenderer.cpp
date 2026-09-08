@@ -2116,12 +2116,11 @@ namespace CNA::Internal::Renderers::Vulkan
                 // degradation to source-over.
                 return true;
             case CNA::GraphicsCapability::MultiStreamVertexInput:
-                // REMED-GFX-201: not yet implemented here. Every 3D pipeline in this renderer bakes
-                // a single VkVertexInputBindingDescription at binding 0 with combined-layout
-                // attribute offsets, so a second per-vertex stream has no binding to reach and no
-                // attribute to claim. Reported honestly so an ordinary multi-stream draw is
-                // rejected before submission instead of rendering from stream 0 alone.
-                return false;
+                // REMED-GFX-203: each input rate is interleaved into the immutable host snapshot
+                // this deferred renderer already creates for every draw. The existing native
+                // binding then consumes one combined declaration per rate, preserving all public
+                // bindings without multiplying the arena buffers or pipeline binding layouts.
+                return true;
 
             // ---- Derived: answered above this switch by GraphicsDevice ----------------------
             // A game never reaches these cases -- GraphicsDevice::SupportsCapability answers all
@@ -6556,14 +6555,191 @@ namespace CNA::Internal::Renderers::Vulkan
     // for the shape and the attributes together, and goes through the fidelity guard.
     //
     // Only the one per-vertex input is built here. The per-instance matrix columns are a separate
-    // stream at locations 12..15 on binding 1, appended by the factory afterwards, and
-    // `MultiStreamVertexInput` stays false.
+    // stream at locations 12..15 on binding 1, appended by the factory afterwards. When either
+    // input rate has several public bindings, PackVulkanStreamsEXT first turns each rate into the
+    // same single packed declaration this builder has always consumed.
     static VulkanVertexInputLayoutEXT BuildInstancedVertexLayoutEXT(
         const CNA::Internal::Graphics::DeclaredVertexLayout& declared)
     {
         if (declared.IsEmpty()) return {};
         return BuildVulkanVertexInputLayoutEXT(declared, StockInputs::kInstanced,
                                                std::size(StockInputs::kInstanced));
+    }
+
+    // REMED-GFX-203: Vulkan's 3D route already snapshots vertex data into one host-visible arena
+    // before command recording. Preserve that model for several public bindings by interleaving
+    // their records at enqueue time. Each declaration's offsets are advanced by the preceding
+    // streams' strides, so the synthetic declaration is exactly the one packed binding that the
+    // existing pipeline builders already know how to consume.
+    struct VulkanPackedStreamsEXT
+    {
+        CNA::Internal::Graphics::DeclaredVertexLayout declaration;
+        std::vector<std::uint8_t> bytes;
+        std::size_t stride = 0;
+    };
+
+    struct VulkanIndexedStreamWindowEXT
+    {
+        int firstRecord = 0;
+        int recordCount = 0;
+        int nativeBaseVertex = 0;
+    };
+
+    // The public minVertexIndex/numVertices pair declares a legal range, but it does not alter
+    // index decoding and callers are not required to make the first selected index equal to the
+    // declared minimum. A compact snapshot must therefore derive its actual source window from
+    // the selected index elements. Record zero of the packed result represents
+    // baseVertex+minimumIndex, so the native draw rebases the unchanged indices by -minimumIndex.
+    [[nodiscard]] static VulkanIndexedStreamWindowEXT VulkanIndexedStreamWindow(
+        const void* indexData, std::size_t indexCount, VkIndexType indexType, int baseVertex)
+    {
+        if (indexData == nullptr || indexCount == 0)
+            throw System::NotSupportedException(
+                "CNA Vulkan: an indexed multi-stream draw contains no index data.");
+
+        std::uint32_t minimum = std::numeric_limits<std::uint32_t>::max();
+        std::uint32_t maximum = 0;
+        const auto* bytes = static_cast<const std::uint8_t*>(indexData);
+        for (std::size_t i = 0; i < indexCount; ++i)
+        {
+            std::uint32_t value = 0;
+            if (indexType == VK_INDEX_TYPE_UINT16)
+            {
+                std::uint16_t index = 0;
+                std::memcpy(&index, bytes + i * sizeof(index), sizeof(index));
+                value = index;
+            }
+            else if (indexType == VK_INDEX_TYPE_UINT32)
+            {
+                std::memcpy(&value, bytes + i * sizeof(value), sizeof(value));
+            }
+            else
+            {
+                throw System::NotSupportedException(
+                    "CNA Vulkan: the indexed multi-stream path supports only 16-bit and 32-bit "
+                    "index buffers.");
+            }
+            minimum = std::min(minimum, value);
+            maximum = std::max(maximum, value);
+        }
+
+        const std::uint64_t first = static_cast<std::uint64_t>(baseVertex) + minimum;
+        const std::uint64_t count = static_cast<std::uint64_t>(maximum) - minimum + 1u;
+        if (baseVertex < 0 || first > static_cast<std::uint64_t>(std::numeric_limits<int>::max()) ||
+            count > static_cast<std::uint64_t>(std::numeric_limits<int>::max()))
+        {
+            throw System::NotSupportedException(
+                "CNA Vulkan: the indexed multi-stream vertex window exceeds the renderer's "
+                "signed element range.");
+        }
+
+        return VulkanIndexedStreamWindowEXT{
+            static_cast<int>(first), static_cast<int>(count), -static_cast<int>(minimum)};
+    }
+
+    [[nodiscard]] static VulkanPackedStreamsEXT PackVulkanStreamsEXT(
+        const GpuDrawParams& params, bool instanceRate, int firstRecord, int recordCount)
+    {
+        using Microsoft::Xna::Framework::Graphics::VertexDeclaration;
+        using Microsoft::Xna::Framework::Graphics::VertexElement;
+
+        VulkanPackedStreamsEXT packed;
+        std::vector<VertexElement> elements;
+        for (int i = 0; i < params.vertexStreamCount; ++i)
+        {
+            const GpuVertexStreamBinding& stream = params.vertexStreams[i];
+            if ((stream.instanceFrequency > 0) != instanceRate)
+                continue;
+
+            if (stream.buffer == nullptr || stream.strideInBytes <= 0)
+                throw System::NotSupportedException(
+                    "CNA Vulkan: a multi-stream draw needs a non-empty VertexDeclaration and "
+                    "positive stride on every participating binding.");
+
+            const auto& buffer =
+                static_cast<const VulkanVertexBufferRenderer&>(*stream.buffer);
+            const auto& declared = buffer.GetDeclarationEXT();
+            if (declared.IsEmpty())
+                throw System::NotSupportedException(
+                    "CNA Vulkan: a multi-stream draw needs every participating VertexBuffer to "
+                    "carry its own VertexDeclaration.");
+
+            if (packed.stride > static_cast<std::size_t>(
+                                    std::numeric_limits<int>::max() - stream.strideInBytes))
+                throw System::NotSupportedException(
+                    "CNA Vulkan: the combined multi-stream vertex stride is too large.");
+
+            for (const VertexElement& source : declared.GetElements())
+            {
+                if (source.getOffsetProperty() < 0 ||
+                    static_cast<std::size_t>(source.getOffsetProperty()) >
+                        static_cast<std::size_t>(std::numeric_limits<int>::max()) - packed.stride)
+                    throw System::NotSupportedException(
+                        "CNA Vulkan: a multi-stream vertex element offset exceeds the "
+                        "renderer\'s signed byte range.");
+                VertexElement combined = source;
+                combined.setOffsetProperty(
+                    static_cast<int>(packed.stride) + source.getOffsetProperty());
+                elements.push_back(combined);
+            }
+            packed.stride += static_cast<std::size_t>(stream.strideInBytes);
+        }
+
+        if (packed.stride == 0 || elements.empty())
+            throw System::NotSupportedException(
+                "CNA Vulkan: a multi-stream draw did not contain any usable bindings.");
+        if (packed.stride > static_cast<std::size_t>(std::numeric_limits<int>::max()))
+            throw System::NotSupportedException(
+                "CNA Vulkan: the combined multi-stream vertex stride is too large.");
+
+        VertexDeclaration combinedDeclaration(
+            static_cast<int>(packed.stride), std::move(elements));
+        packed.declaration.Remember(combinedDeclaration);
+
+        if (recordCount <= 0)
+            return packed;
+
+        if (static_cast<std::size_t>(recordCount) >
+            std::numeric_limits<std::size_t>::max() / packed.stride)
+            throw System::NotSupportedException(
+                "CNA Vulkan: the combined multi-stream snapshot is too large.");
+        packed.bytes.assign(static_cast<std::size_t>(recordCount) * packed.stride, 0u);
+        std::size_t destinationBase = 0;
+        for (int i = 0; i < params.vertexStreamCount; ++i)
+        {
+            const GpuVertexStreamBinding& stream = params.vertexStreams[i];
+            if ((stream.instanceFrequency > 0) != instanceRate)
+                continue;
+
+            const auto& buffer =
+                static_cast<const VulkanVertexBufferRenderer&>(*stream.buffer);
+            const int frequency = instanceRate ? std::max(1, stream.instanceFrequency) : 1;
+            const int firstSource = stream.vertexOffset + firstRecord;
+            const int lastSource = instanceRate
+                ? stream.vertexOffset + (recordCount - 1) / frequency
+                : firstSource + recordCount - 1;
+            if (firstSource < 0 || lastSource < firstSource || lastSource >= stream.vertexCount)
+                throw System::NotSupportedException(
+                    "CNA Vulkan: a multi-stream draw would read outside the VertexBuffer bound "
+                    "to slot " + std::to_string(stream.slot) + '.');
+
+            const auto* source = static_cast<const std::uint8_t*>(buffer.GetMappedPtr());
+            const std::size_t streamStride =
+                static_cast<std::size_t>(stream.strideInBytes);
+            for (int record = 0; record < recordCount; ++record)
+            {
+                const int sourceRecord = instanceRate
+                    ? stream.vertexOffset + record / frequency
+                    : firstSource + record;
+                std::memcpy(
+                    packed.bytes.data() + static_cast<std::size_t>(record) * packed.stride +
+                        destinationBase,
+                    source + static_cast<std::size_t>(sourceRecord) * streamStride,
+                    streamStride);
+            }
+            destinationBase += streamStride;
+        }
+        return packed;
     }
 
     VkPipeline VulkanRenderer::GetOrCreatePipeline3D(VkPrimitiveTopology topo,
@@ -8730,14 +8906,13 @@ namespace CNA::Internal::Renderers::Vulkan
     void VulkanRenderer::PrepareCompiledEffectDrawEXT(
         Pending3DDraw& d, const IVertexBufferRenderer& vb_in, const GpuDrawParams& params)
     {
-        // This renderer binds one vertex stream, and reports MultiStreamVertexInput false, so a
-        // wider binding set is refused by GraphicsDevice first. Draw*PrimitivesEx is still a public
-        // entry point a harness can call directly, and a silently truncated binding list looks
-        // exactly like a correct draw of the wrong data.
-        RejectUnsupportedStreamCombination(params, "CNA Vulkan compiled-effect drawing");
-
         const auto& vb = static_cast<const VulkanVertexBufferRenderer&>(vb_in);
-        const auto& declaration = vb.GetDeclarationEXT();
+        VulkanPackedStreamsEXT packedVertexStreams;
+        if (HasMultipleVertexStreams(params))
+            packedVertexStreams = PackVulkanStreamsEXT(
+                params, /*instanceRate=*/false, /*firstRecord=*/0, /*recordCount=*/0);
+        const auto& declaration = HasMultipleVertexStreams(params)
+            ? packedVertexStreams.declaration : vb.GetDeclarationEXT();
         if (declaration.IsEmpty())
         {
             throw System::NotSupportedException(
@@ -14025,7 +14200,25 @@ namespace CNA::Internal::Renderers::Vulkan
         int instanceFrequency, int instanceCount)
     {
         const auto& vb = static_cast<const VulkanVertexBufferRenderer&>(vb_in);
-        const std::size_t stride = vb.GetStride();
+        const uint32_t drawCount =
+            static_cast<uint32_t>(VertexCountForPrimitives(primitive, primitiveCount));
+        const bool packsVertexStreams = HasMultipleVertexStreams(params);
+        VulkanPackedStreamsEXT packedVertexStreams;
+        VulkanIndexedStreamWindowEXT indexedWindow;
+        if (packsVertexStreams)
+        {
+            const bool indexed = indexData != nullptr;
+            if (indexed)
+                indexedWindow = VulkanIndexedStreamWindow(
+                    indexData, drawCount, indexType, params.baseVertex);
+            const int firstRecord = indexed ? indexedWindow.firstRecord : params.vertexStart;
+            const int recordCount = indexed
+                ? indexedWindow.recordCount : static_cast<int>(drawCount);
+            packedVertexStreams = PackVulkanStreamsEXT(
+                params, /*instanceRate=*/false, firstRecord, recordCount);
+        }
+        const std::size_t stride = packsVertexStreams
+            ? packedVertexStreams.stride : vb.GetStride();
         // The draw's OWN effect, not the renderer's last-bound one. `activeCustomEffect_` is
         // sticky state a SpriteBatch clears at End(); `params.customEffectRenderer` is what the
         // shared layer says THIS draw was issued with, which is the same thing EasyGL reads.
@@ -14039,7 +14232,8 @@ namespace CNA::Internal::Renderers::Vulkan
         // but the declaration. The stock routes may fall back to a stride table; here that table
         // would be a guess about someone else's shader, which is the silent mis-bind this renderer
         // has removed everywhere else (VULKAN-156, VULKAN-165, VULKAN-265).
-        const CNA::Internal::Graphics::DeclaredVertexLayout& declared = vb.GetDeclarationEXT();
+        const CNA::Internal::Graphics::DeclaredVertexLayout& declared = packsVertexStreams
+            ? packedVertexStreams.declaration : vb.GetDeclarationEXT();
         if (declared.IsEmpty())
             throw System::NotSupportedException(
                 "CNA Vulkan: a 3D draw with a ShaderEffect needs the VertexBuffer's own "
@@ -14066,11 +14260,21 @@ namespace CNA::Internal::Renderers::Vulkan
         VulkanVertexInputLayoutEXT instanceLayout;
         std::size_t instanceStride = 0;
         const VulkanVertexBufferRenderer* instVb = nullptr;
+        const bool packsInstanceStreams = HasMultipleInstanceStreams(params);
+        VulkanPackedStreamsEXT packedInstanceStreams;
+        if (packsInstanceStreams)
+        {
+            packedInstanceStreams = PackVulkanStreamsEXT(
+                params, /*instanceRate=*/true, /*firstRecord=*/0,
+                std::max(1, instanceCount));
+        }
         if (instVb_in != nullptr) {
             instVb = static_cast<const VulkanVertexBufferRenderer*>(instVb_in);
-            instanceStride = instVb->GetStride();
+            instanceStride = packsInstanceStreams
+                ? packedInstanceStreams.stride : instVb->GetStride();
             const CNA::Internal::Graphics::DeclaredVertexLayout& instDeclared =
-                instVb->GetDeclarationEXT();
+                packsInstanceStreams
+                    ? packedInstanceStreams.declaration : instVb->GetDeclarationEXT();
             if (instDeclared.IsEmpty())
                 throw System::NotSupportedException(
                     "CNA Vulkan: the per-instance VertexBuffer driving a ShaderEffect carries no "
@@ -14108,23 +14312,35 @@ namespace CNA::Internal::Renderers::Vulkan
         d.indexType = indexType;
 
         if (indexData != nullptr) {
-            const int vertexCount = vb.GetVertexCount();
-            d.vbData.resize(static_cast<std::size_t>(vertexCount) * stride);
-            std::memcpy(d.vbData.data(), vb.GetMappedPtr(),
-                        static_cast<std::size_t>(vertexCount) * stride);
+            if (packsVertexStreams)
+            {
+                d.vbData = std::move(packedVertexStreams.bytes);
+                d.baseVertex = indexedWindow.nativeBaseVertex;
+            }
+            else
+            {
+                const int vertexCount = vb.GetVertexCount();
+                d.vbData.resize(static_cast<std::size_t>(vertexCount) * stride);
+                std::memcpy(d.vbData.data(), vb.GetMappedPtr(),
+                            static_cast<std::size_t>(vertexCount) * stride);
+                d.baseVertex = static_cast<int32_t>(params.baseVertex);
+            }
             d.ibData.resize(indexBytes);
             std::memcpy(d.ibData.data(), indexData, indexBytes);
-            d.baseVertex = static_cast<int32_t>(params.baseVertex);
-            d.drawCount  = static_cast<uint32_t>(
-                VertexCountForPrimitives(primitive, primitiveCount));
+            d.drawCount = drawCount;
         } else {
-            const uint32_t drawCount =
-                static_cast<uint32_t>(VertexCountForPrimitives(primitive, primitiveCount));
-            d.vbData.resize(drawCount * stride);
-            std::memcpy(d.vbData.data(),
-                        static_cast<const uint8_t*>(vb.GetMappedPtr()) +
-                            params.vertexStart * stride,
-                        drawCount * stride);
+            if (packsVertexStreams)
+            {
+                d.vbData = std::move(packedVertexStreams.bytes);
+            }
+            else
+            {
+                d.vbData.resize(drawCount * stride);
+                std::memcpy(d.vbData.data(),
+                            static_cast<const uint8_t*>(vb.GetMappedPtr()) +
+                                params.vertexStart * stride,
+                            drawCount * stride);
+            }
             d.drawCount = drawCount;
         }
 
@@ -14135,7 +14351,14 @@ namespace CNA::Internal::Renderers::Vulkan
         // VULKAN-168: one destination record per instance, expanding InstanceFrequency here the
         // way the stock instanced route does -- Vulkan 1.1 with no divisor extension keeps binding
         // 1 at the implicit divisor of 1, so the grouping is a data-copy concern.
-        if (instVb != nullptr && instanceStride > 0) {
+        if (packsInstanceStreams)
+        {
+            d.useInstanced = true;
+            d.instVbStride = instanceStride;
+            d.instanceCount = static_cast<uint32_t>(std::max(1, instanceCount));
+            d.instVbData = std::move(packedInstanceStreams.bytes);
+        }
+        else if (instVb != nullptr && instanceStride > 0) {
             const int count = std::max(1, instanceCount);
             const int frequency = std::max(1, instanceFrequency);
             const int lastRecord = instanceVertexOffset + (count - 1) / frequency;
@@ -14212,6 +14435,12 @@ namespace CNA::Internal::Renderers::Vulkan
                 "CNA Vulkan: the ShaderEffect driving this 3D draw has no compiled program, so no "
                 "pipeline could be built for it. Refused rather than drawing with a stock shader.");
 
+        // The stock instanced route used to reach this allocation before dispatching here. The
+        // custom route now branches before stock-family inference, so it owns the same prerequisite
+        // itself; otherwise replay would copy the captured instance snapshot through a null mapped
+        // arena on the first custom instanced draw.
+        if (d.useInstanced)
+            EnsureFrame3DInstBuffers();
         NoteSampledSourcesEXT(params);
         PushPending3DDraw(std::move(d));
     }
@@ -14434,8 +14663,8 @@ namespace CNA::Internal::Renderers::Vulkan
         // and the draw params -- nothing here has a side effect, which is what makes hoisting them
         // above the guard safe. Everything that does have one still happens after it.
         const auto& vb = static_cast<const VulkanVertexBufferRenderer&>(vb_in);
-        const std::size_t stride = vb.GetStride() > 0 ? vb.GetStride() : 20;
-
+        const uint32_t drawCount =
+            static_cast<uint32_t>(VertexCountForPrimitives(primitive, primitiveCount));
         // plan_vulkan.md VULKAN-255: a ShaderEffect owns the whole program, so it replaces the
         // stock stride-dispatched selection rather than layering on it -- and the decision has to
         // come BEFORE the declaration guard below, because that guard asks whether the stock
@@ -14446,6 +14675,18 @@ namespace CNA::Internal::Renderers::Vulkan
                                        params, nullptr, 0, VK_INDEX_TYPE_UINT16);
             return;
         }
+
+        const bool packsVertexStreams = HasMultipleVertexStreams(params);
+        VulkanPackedStreamsEXT packedVertexStreams;
+        if (packsVertexStreams)
+            packedVertexStreams = PackVulkanStreamsEXT(
+                params, /*instanceRate=*/false, params.vertexStart,
+                static_cast<int>(drawCount));
+        const std::size_t stride = packsVertexStreams
+            ? packedVertexStreams.stride
+            : (vb.GetStride() > 0 ? vb.GetStride() : 20);
+        const auto& declaredForDraw = packsVertexStreams
+            ? packedVertexStreams.declaration : vb.GetDeclarationEXT();
 
         const bool needsPbr        = params.pbr;
         const bool needsAlphaTest  = !needsPbr &&
@@ -14460,8 +14701,8 @@ namespace CNA::Internal::Renderers::Vulkan
         // that names no Normal cannot be one, whatever its stride, and the lit programs have no
         // colour input for it to fall back on. An absent declaration keeps the stride's answer.
         const bool declaresNormal =
-            vb.GetDeclarationEXT().IsEmpty() ||
-            DeclarationNamesUsageEXT(vb.GetDeclarationEXT(),
+            declaredForDraw.IsEmpty() ||
+            DeclarationNamesUsageEXT(declaredForDraw,
                                      Microsoft::Xna::Framework::Graphics::VertexElementUsage::Normal);
         const bool otherFamily = needsAlphaTest || needsDualTex || needsEnvMap || needsSkinned
                                || needsPbr;
@@ -14471,15 +14712,15 @@ namespace CNA::Internal::Renderers::Vulkan
         // without one there is nothing to distinguish the two 24-byte meanings, so the stride's
         // historical answer stands. Set-exact rather than "has a Normal, has no UV" -- see
         // DeclarationIsPositionNormalOnlyEXT for the silent drop the loose form would allow.
-        const bool needsLitUntextured = !vb.GetDeclarationEXT().IsEmpty() && !otherFamily
-                                      && DeclarationIsPositionNormalOnlyEXT(vb.GetDeclarationEXT());
+        const bool needsLitUntextured = !declaredForDraw.IsEmpty() && !otherFamily
+                                      && DeclarationIsPositionNormalOnlyEXT(declaredForDraw);
         // plan_vulkan.md VULKAN-200 (F-37): the stock ModelProcessor's colour-carrying mesh --
         // Position+Normal+Colour+TexCoord, 36 bytes -- which no lit program here could bind, so
         // the draw was refused outright. Set-exact for the same reason as its sibling above.
-        const bool needsLitColored = !vb.GetDeclarationEXT().IsEmpty() && !otherFamily
+        const bool needsLitColored = !declaredForDraw.IsEmpty() && !otherFamily
                                    && !needsLitUntextured && params.lightingEnabled
                                    && DeclarationIsPositionNormalColorTextureOnlyEXT(
-                                          vb.GetDeclarationEXT());
+                                          declaredForDraw);
         const bool needsLitTextured = (stride == 32) && declaresNormal && !otherFamily
                                      && !needsLitUntextured && !needsLitColored;
         const bool usesFogTex3D = !otherFamily && !needsLitTextured && !needsLitUntextured
@@ -14487,7 +14728,7 @@ namespace CNA::Internal::Renderers::Vulkan
 
         const BasicProgramShapeEXT basicShape = SelectBasicProgramShapeEXT(
             usesFogTex3D, needsLitTextured, needsLitUntextured, needsLitColored, stride,
-            vb.GetDeclarationEXT());
+            declaredForDraw);
         VulkanVertexInputLayoutEXT declaredLayout;
         {
             std::size_t inputCount = 0;
@@ -14501,14 +14742,14 @@ namespace CNA::Internal::Renderers::Vulkan
                 inputs = PbrFamilyStockInputsEXT(needsSkinned, stride, inputCount);
             if (inputs != nullptr)
                 declaredLayout = BuildVulkanVertexInputLayoutEXT(
-                    vb.GetDeclarationEXT(), inputs, inputCount,
+                    declaredForDraw, inputs, inputCount,
                     // VULKAN-151: lets a `Byte4`-spelled BLENDINDICES bind to the skinned shaders'
                     // `vec4` input, on a device that can carry it.
                     uscaledVertexFormatSupported_);
             // VULKAN-150: DualTextureEffect has its own builder rather than a table, because its
             // second coordinate set is aliased onto the first when the record declares only one.
             if (needsDualTex)
-                declaredLayout = BuildDualTextureVertexLayoutEXT(vb.GetDeclarationEXT(),
+                declaredLayout = BuildDualTextureVertexLayoutEXT(declaredForDraw,
                                                                 stride == 24);
         }
         // VULKAN-146: the guard is for a route that infers its input from the stride. A family
@@ -14516,14 +14757,19 @@ namespace CNA::Internal::Renderers::Vulkan
         // does -- the pipeline is keyed and built from the declaration's own offsets. Anything
         // else still goes through the guard unchanged, including a converted family whose
         // declaration left an input unsupplied.
-        if (!declaredLayout.IsComplete())
-            RequireFaithfulDeclarationEXT(vb_in, "ordinary-nonindexed", /*positionOnlyFallback=*/false,
-                                          params.compiledEffectRuntime != nullptr);
+        if (!declaredLayout.IsComplete()) {
+            if (packsVertexStreams)
+                throw System::NotSupportedException(
+                    "CNA Vulkan: the combined multi-stream declaration does not supply every "
+                    "input of the selected stock shader.");
+            RequireFaithfulDeclarationEXT(
+                vb_in, "ordinary-nonindexed", /*positionOnlyFallback=*/false,
+                params.compiledEffectRuntime != nullptr);
+        }
         // REMED-GFX-151: record which render targets this draw SAMPLES, so a mid-frame readback
         // flush replays their producing cycles before this one. See NoteSampledSourcesEXT.
         NoteSampledSourcesEXT(params);
         EnsureDefaultWhiteTexture();
-        const uint32_t drawCount = static_cast<uint32_t>(VertexCountForPrimitives(primitive, primitiveCount));
 
         Pending3DDraw d{};
         // VULKAN-097: XNA's D3D9 pixel-centre convention, post-multiplied in row-vector order.
@@ -14538,10 +14784,18 @@ namespace CNA::Internal::Renderers::Vulkan
             FillExtPushConst(d.pushConst, wvp, params);  // covers ext, lit-textured, skinned, and pbr (same PC)
         }
 
-        d.vbData.resize(drawCount * stride);
-        std::memcpy(d.vbData.data(),
-                    static_cast<const uint8_t*>(vb.GetMappedPtr()) + params.vertexStart * stride,
-                    drawCount * stride);
+        if (packsVertexStreams)
+        {
+            d.vbData = std::move(packedVertexStreams.bytes);
+        }
+        else
+        {
+            d.vbData.resize(drawCount * stride);
+            std::memcpy(d.vbData.data(),
+                        static_cast<const uint8_t*>(vb.GetMappedPtr()) +
+                            params.vertexStart * stride,
+                        drawCount * stride);
+        }
 
         d.topology       = ToVkTopology(primitive);
         d.drawCount      = drawCount;
@@ -14634,8 +14888,11 @@ namespace CNA::Internal::Renderers::Vulkan
         // above the guard safe. Everything that does have one still happens after it.
         const auto& vb = static_cast<const VulkanVertexBufferRenderer&>(vb_in);
         const auto& ib = static_cast<const VulkanIndexBufferRenderer&>(ib_in);
-        const std::size_t stride  = vb.GetStride() > 0 ? vb.GetStride() : 20;
-
+        const uint32_t indexCount =
+            static_cast<uint32_t>(VertexCountForPrimitives(primitive, primitiveCount));
+        const int indexSize = ib.IsThirtyTwoBit() ? 4 : 2;
+        const auto* selectedIndices =
+            static_cast<const std::uint8_t*>(ib.GetMappedPtr()) + params.startIndex * indexSize;
         // plan_vulkan.md VULKAN-255: see DrawPrimitivesEx's twin above for why this precedes the
         // declaration guard rather than following the family selection.
         if (params.customEffectRequested) {
@@ -14650,6 +14907,25 @@ namespace CNA::Internal::Renderers::Vulkan
             return;
         }
 
+        const bool packsVertexStreams = HasMultipleVertexStreams(params);
+        VulkanPackedStreamsEXT packedVertexStreams;
+        VulkanIndexedStreamWindowEXT indexedWindow;
+        if (packsVertexStreams)
+        {
+            indexedWindow = VulkanIndexedStreamWindow(
+                selectedIndices, indexCount,
+                ib.IsThirtyTwoBit() ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16,
+                params.baseVertex);
+            packedVertexStreams = PackVulkanStreamsEXT(
+                params, /*instanceRate=*/false,
+                indexedWindow.firstRecord, indexedWindow.recordCount);
+        }
+        const std::size_t stride = packsVertexStreams
+            ? packedVertexStreams.stride
+            : (vb.GetStride() > 0 ? vb.GetStride() : 20);
+        const auto& declaredForDraw = packsVertexStreams
+            ? packedVertexStreams.declaration : vb.GetDeclarationEXT();
+
         const bool needsPbr       = params.pbr;
         const bool needsAlphaTest = !needsPbr &&
                                     (params.alphaTest[3] < 0.0f || params.alphaTest[2] < 0.0f);
@@ -14660,8 +14936,8 @@ namespace CNA::Internal::Renderers::Vulkan
         // that names no Normal cannot be one, whatever its stride, and the lit programs have no
         // colour input for it to fall back on. An absent declaration keeps the stride's answer.
         const bool declaresNormal =
-            vb.GetDeclarationEXT().IsEmpty() ||
-            DeclarationNamesUsageEXT(vb.GetDeclarationEXT(),
+            declaredForDraw.IsEmpty() ||
+            DeclarationNamesUsageEXT(declaredForDraw,
                                      Microsoft::Xna::Framework::Graphics::VertexElementUsage::Normal);
         const bool otherFamily = needsAlphaTest || needsDualTex || needsEnvMap || needsSkinned
                                || needsPbr;
@@ -14671,15 +14947,15 @@ namespace CNA::Internal::Renderers::Vulkan
         // without one there is nothing to distinguish the two 24-byte meanings, so the stride's
         // historical answer stands. Set-exact rather than "has a Normal, has no UV" -- see
         // DeclarationIsPositionNormalOnlyEXT for the silent drop the loose form would allow.
-        const bool needsLitUntextured = !vb.GetDeclarationEXT().IsEmpty() && !otherFamily
-                                      && DeclarationIsPositionNormalOnlyEXT(vb.GetDeclarationEXT());
+        const bool needsLitUntextured = !declaredForDraw.IsEmpty() && !otherFamily
+                                      && DeclarationIsPositionNormalOnlyEXT(declaredForDraw);
         // plan_vulkan.md VULKAN-200 (F-37): the stock ModelProcessor's colour-carrying mesh --
         // Position+Normal+Colour+TexCoord, 36 bytes -- which no lit program here could bind, so
         // the draw was refused outright. Set-exact for the same reason as its sibling above.
-        const bool needsLitColored = !vb.GetDeclarationEXT().IsEmpty() && !otherFamily
+        const bool needsLitColored = !declaredForDraw.IsEmpty() && !otherFamily
                                    && !needsLitUntextured && params.lightingEnabled
                                    && DeclarationIsPositionNormalColorTextureOnlyEXT(
-                                          vb.GetDeclarationEXT());
+                                          declaredForDraw);
         const bool needsLitTextured = (stride == 32) && declaresNormal && !otherFamily
                                      && !needsLitUntextured && !needsLitColored;
         const bool usesFogTex3D = !otherFamily && !needsLitTextured && !needsLitUntextured
@@ -14687,7 +14963,7 @@ namespace CNA::Internal::Renderers::Vulkan
 
         const BasicProgramShapeEXT basicShape = SelectBasicProgramShapeEXT(
             usesFogTex3D, needsLitTextured, needsLitUntextured, needsLitColored, stride,
-            vb.GetDeclarationEXT());
+            declaredForDraw);
         VulkanVertexInputLayoutEXT declaredLayout;
         {
             std::size_t inputCount = 0;
@@ -14701,14 +14977,14 @@ namespace CNA::Internal::Renderers::Vulkan
                 inputs = PbrFamilyStockInputsEXT(needsSkinned, stride, inputCount);
             if (inputs != nullptr)
                 declaredLayout = BuildVulkanVertexInputLayoutEXT(
-                    vb.GetDeclarationEXT(), inputs, inputCount,
+                    declaredForDraw, inputs, inputCount,
                     // VULKAN-151: lets a `Byte4`-spelled BLENDINDICES bind to the skinned shaders'
                     // `vec4` input, on a device that can carry it.
                     uscaledVertexFormatSupported_);
             // VULKAN-150: DualTextureEffect has its own builder rather than a table, because its
             // second coordinate set is aliased onto the first when the record declares only one.
             if (needsDualTex)
-                declaredLayout = BuildDualTextureVertexLayoutEXT(vb.GetDeclarationEXT(),
+                declaredLayout = BuildDualTextureVertexLayoutEXT(declaredForDraw,
                                                                 stride == 24);
         }
         // VULKAN-146: the guard is for a route that infers its input from the stride. A family
@@ -14716,14 +14992,19 @@ namespace CNA::Internal::Renderers::Vulkan
         // does -- the pipeline is keyed and built from the declaration's own offsets. Anything
         // else still goes through the guard unchanged, including a converted family whose
         // declaration left an input unsupplied.
-        if (!declaredLayout.IsComplete())
-            RequireFaithfulDeclarationEXT(vb_in, "ordinary-indexed", /*positionOnlyFallback=*/false,
-                                          params.compiledEffectRuntime != nullptr);
+        if (!declaredLayout.IsComplete()) {
+            if (packsVertexStreams)
+                throw System::NotSupportedException(
+                    "CNA Vulkan: the combined multi-stream declaration does not supply every "
+                    "input of the selected stock shader.");
+            RequireFaithfulDeclarationEXT(
+                vb_in, "ordinary-indexed", /*positionOnlyFallback=*/false,
+                params.compiledEffectRuntime != nullptr);
+        }
         // REMED-GFX-151: record which render targets this draw SAMPLES, so a mid-frame readback
         // flush replays their producing cycles before this one. See NoteSampledSourcesEXT.
         NoteSampledSourcesEXT(params);
         EnsureDefaultWhiteTexture();
-        const uint32_t indexCount = static_cast<uint32_t>(VertexCountForPrimitives(primitive, primitiveCount));
         const int vertexCount     = vb.GetVertexCount();
 
         Pending3DDraw d{};
@@ -14739,16 +15020,21 @@ namespace CNA::Internal::Renderers::Vulkan
             FillExtPushConst(d.pushConst, wvp, params);  // covers ext, lit-textured, skinned, and pbr (same PC)
         }
 
-        d.vbData.resize(static_cast<std::size_t>(vertexCount) * stride);
-        std::memcpy(d.vbData.data(), vb.GetMappedPtr(),
-                    static_cast<std::size_t>(vertexCount) * stride);
-        const int indexSize = ib.IsThirtyTwoBit() ? 4 : 2;
+        if (packsVertexStreams)
+        {
+            d.vbData = std::move(packedVertexStreams.bytes);
+            d.baseVertex = indexedWindow.nativeBaseVertex;
+        }
+        else
+        {
+            d.vbData.resize(static_cast<std::size_t>(vertexCount) * stride);
+            std::memcpy(d.vbData.data(), vb.GetMappedPtr(),
+                        static_cast<std::size_t>(vertexCount) * stride);
+            d.baseVertex = static_cast<int32_t>(params.baseVertex);
+        }
         d.ibData.resize(static_cast<std::size_t>(indexCount) * indexSize);
-        std::memcpy(d.ibData.data(),
-                    static_cast<const uint8_t*>(ib.GetMappedPtr()) + params.startIndex * indexSize,
+        std::memcpy(d.ibData.data(), selectedIndices,
                     static_cast<std::size_t>(indexCount) * indexSize);
-        d.baseVertex = static_cast<int32_t>(params.baseVertex);
-
         d.topology      = ToVkTopology(primitive);
         d.drawCount     = indexCount;
         d.depthTest     = depthTestEnabled_;
@@ -14837,8 +15123,6 @@ namespace CNA::Internal::Renderers::Vulkan
             DrawIndexedPrimitivesEx(vb_in, ib_in, world, view, projection, primitive, primitiveCount, params);
             return;
         }
-        // REMED-GFX-202: one stream of each rate (REMED-GFX-203 tracks widening it).
-        RejectUnsupportedStreamCombination(params, "The Vulkan renderer");
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
         const bool compiledEffectDraw = params.compiledEffectRuntime != nullptr;
 #else
@@ -14851,6 +15135,27 @@ namespace CNA::Internal::Renderers::Vulkan
                 "stock shader instead.");
         }
 #endif
+        const auto& ib = static_cast<const VulkanIndexBufferRenderer&>(ib_in);
+        const uint32_t indexCount =
+            static_cast<uint32_t>(VertexCountForPrimitives(primitive, primitiveCount));
+        const int indexSize = ib.IsThirtyTwoBit() ? 4 : 2;
+        const auto* selectedIndices =
+            static_cast<const std::uint8_t*>(ib.GetMappedPtr()) + params.startIndex * indexSize;
+        // A custom program owns its input locations. QueueCustomEffect3DDrawEXT builds the
+        // combined declarations and immutable stream snapshots before any stock-family inference.
+        if (params.customEffectRequested) {
+            const int indexSize = ib.IsThirtyTwoBit() ? 4 : 2;
+            const std::size_t indexCount =
+                static_cast<std::size_t>(VertexCountForPrimitives(primitive, primitiveCount));
+            QueueCustomEffect3DDrawEXT(
+                vb_in, world, view, projection, primitive, primitiveCount, params,
+                static_cast<const uint8_t*>(ib.GetMappedPtr()) + params.startIndex * indexSize,
+                indexCount * static_cast<std::size_t>(indexSize),
+                ib.IsThirtyTwoBit() ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16,
+                instanceStream->buffer, instanceStream->vertexOffset,
+                instanceStream->instanceFrequency, instanceCount);
+            return;
+        }
         // REMED-GFX-DECL-GUARD: the geometry stream's declaration, against the Instanced3D
         // module's own inferred layout -- which binds a packed colour only at the two strides
         // PackedColorOffsetForStride lists and is position-only everywhere else. plans/plan_fx.md
@@ -14858,9 +15163,26 @@ namespace CNA::Internal::Renderers::Vulkan
         // declarations rather than from the stride, so any declaration it can satisfy is faithful
         // by construction.
         const auto& vbForLayout = static_cast<const VulkanVertexBufferRenderer&>(vb_in);
+        const bool packsVertexStreams = HasMultipleVertexStreams(params);
+        VulkanPackedStreamsEXT packedVertexStreams;
+        VulkanIndexedStreamWindowEXT indexedWindow;
+        if (packsVertexStreams)
+        {
+            indexedWindow = VulkanIndexedStreamWindow(
+                selectedIndices, indexCount,
+                ib.IsThirtyTwoBit() ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16,
+                params.baseVertex);
+            packedVertexStreams = PackVulkanStreamsEXT(
+                params, /*instanceRate=*/false,
+                indexedWindow.firstRecord, indexedWindow.recordCount);
+        }
         // The record stride the hoisted family predicates below need. Defined here rather than
         // with its siblings further down, because those come after the guard and these do not.
-        const std::size_t pvStride = vbForLayout.GetStride() > 0 ? vbForLayout.GetStride() : 20;
+        const std::size_t pvStride = packsVertexStreams
+            ? packedVertexStreams.stride
+            : (vbForLayout.GetStride() > 0 ? vbForLayout.GetStride() : 20);
+        const auto& declaredForDraw = packsVertexStreams
+            ? packedVertexStreams.declaration : vbForLayout.GetDeclarationEXT();
         // VULKAN-233: every stock family's predicate is computed HERE, above the declaration
         // guard, for the reason the two ordinary routes state where they do the same thing: they
         // are pure functions of the stride, the declaration and the draw params, so hoisting them
@@ -14889,7 +15211,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // non-instanced draw of the same buffer cannot land in different shapes. Both are
         // set-exact for the reason those helpers state: `IsComplete()` cannot notice a declared
         // element the shader ignores, so a looser test would silently drop one.
-        const auto& declaredForLit = vbForLayout.GetDeclarationEXT();
+        const auto& declaredForLit = declaredForDraw;
         const bool otherInstancedFamily =
             instancedAlphaTest || params.dualTexture || params.envMapping || params.skinned
             || params.pbr;
@@ -14941,7 +15263,7 @@ namespace CNA::Internal::Renderers::Vulkan
         VulkanVertexInputLayoutEXT instancedEnvMapLayout;
         if (instancedEnvMap)
             instancedEnvMapLayout = BuildVulkanVertexInputLayoutEXT(
-                vbForLayout.GetDeclarationEXT(), StockInputs::kEnvMapped,
+                declaredForDraw, StockInputs::kEnvMapped,
                 std::size(StockInputs::kEnvMapped));
         VulkanVertexInputLayoutEXT instancedDualTexLayout;
         if (instancedDualTex)
@@ -14951,7 +15273,7 @@ namespace CNA::Internal::Renderers::Vulkan
             // this family has a builder rather than a table: at stride 24 the record carries one
             // coordinate set and the shader's second UV input is aliased onto it.
             instancedDualTexLayout = BuildDualTextureVertexLayoutEXT(
-                vbForLayout.GetDeclarationEXT(), pvStride == 24);
+                declaredForDraw, pvStride == 24);
         // VULKAN-229: the alpha-test family's own input table, chosen by the SAME `stride == 24`
         // predicate `GetOrCreatePipelineAlphaTest3D` uses for its module and its baked attribute
         // set, so the layout and the shader cannot disagree. `BuildInstancedVertexLayoutEXT`'s
@@ -14965,7 +15287,7 @@ namespace CNA::Internal::Renderers::Vulkan
                 /*needsAlphaTest=*/true, /*needsEnvMap=*/false, /*needsSkinned=*/false,
                 pvStride, atInputCount);
             instancedAlphaTestLayout = BuildVulkanVertexInputLayoutEXT(
-                vbForLayout.GetDeclarationEXT(), atInputs, atInputCount);
+                declaredForDraw, atInputs, atInputCount);
         }
         // VULKAN-232: the PBR pair's own input tables, chosen by the same stride rule the two
         // factories use -- the pairing rule VULKAN-230 recorded as a class.
@@ -14976,7 +15298,7 @@ namespace CNA::Internal::Renderers::Vulkan
                 PbrFamilyStockInputsEXT(instancedPbrSkinned, pvStride, pbrInputCount);
             if (pbrInputs != nullptr)
                 instancedPbrLayout = BuildVulkanVertexInputLayoutEXT(
-                    vbForLayout.GetDeclarationEXT(), pbrInputs, pbrInputCount,
+                    declaredForDraw, pbrInputs, pbrInputCount,
                     uscaledVertexFormatSupported_);
             // VULKAN-148/VULKAN-151: the same two refusals the ordinary routes make, at the same
             // point, so an instanced PBR draw cannot become a refusal at Present() instead.
@@ -14994,7 +15316,7 @@ namespace CNA::Internal::Renderers::Vulkan
                 /*needsAlphaTest=*/false, /*needsEnvMap=*/false, /*needsSkinned=*/true,
                 pvStride, skInputCount);
             instancedSkinnedLayout = BuildVulkanVertexInputLayoutEXT(
-                vbForLayout.GetDeclarationEXT(), skInputs, skInputCount,
+                declaredForDraw, skInputs, skInputCount,
                 // VULKAN-151: lets a `Byte4`-spelled BLENDINDICES bind to the skinned shaders'
                 // `vec4` input, on a device that can carry it.
                 uscaledVertexFormatSupported_);
@@ -15037,7 +15359,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // supplies no UV, and the draw is refused -- which is what the ordinary routes do and what
         // `VULKAN-149` deliberately made this route better than. A declaration answers the question
         // outright, so it is asked; the stride table answers only when there is no declaration.
-        const auto& declaredForShape = vbForLayout.GetDeclarationEXT();
+        const auto& declaredForShape = declaredForDraw;
         const bool declaresColor = !declaredForShape.IsEmpty() && DeclarationNamesUsageEXT(
             declaredForShape, Microsoft::Xna::Framework::Graphics::VertexElementUsage::Color);
         const bool declaresUv = !declaredForShape.IsEmpty() && DeclarationNamesUsageEXT(
@@ -15073,20 +15395,25 @@ namespace CNA::Internal::Renderers::Vulkan
             : instancedSkinned                ? instancedSkinnedLayout
             : instancedLit                    ? instancedLitLayout
             : instancedShape == BasicProgramShapeEXT::None
-                ? BuildInstancedVertexLayoutEXT(vbForLayout.GetDeclarationEXT())
+                ? BuildInstancedVertexLayoutEXT(declaredForDraw)
                 : [&] {
                       std::size_t n = 0;
                       const auto* inputs = BasicShapeStockInputsEXT(instancedShape, n);
                       return BuildVulkanVertexInputLayoutEXT(
-                          vbForLayout.GetDeclarationEXT(), inputs, n);
+                          declaredForDraw, inputs, n);
                   }();
         // VULKAN-149: as on the ordinary routes -- the guard is for a route that infers its input
         // from the stride, and a declaration that supplied every per-vertex input of the program
         // it selected means this one no longer does. Everything else still goes through it
         // unchanged, including a declaration that left one of those two inputs unsupplied.
-        if (!instancedLayout.IsComplete())
-            RequireFaithfulDeclarationEXT(vb_in, "instanced", /*positionOnlyFallback=*/true,
-                                          compiledEffectDraw);
+        if (!instancedLayout.IsComplete()) {
+            if (packsVertexStreams)
+                throw System::NotSupportedException(
+                    "CNA Vulkan: the combined multi-stream declaration does not supply every "
+                    "input of the selected instanced stock shader.");
+            RequireFaithfulDeclarationEXT(
+                vb_in, "instanced", /*positionOnlyFallback=*/true, compiledEffectDraw);
+        }
 
         // REMED-GFX-151: as in the two Ex draws above. The `instanceVb == nullptr` branch already
         // returned through DrawIndexedPrimitivesEx, which notes them itself.
@@ -15095,38 +15422,26 @@ namespace CNA::Internal::Renderers::Vulkan
         EnsureFrame3DInstBuffers();
 
         const auto& vb       = static_cast<const VulkanVertexBufferRenderer&>(vb_in);
-        const auto& ib       = static_cast<const VulkanIndexBufferRenderer&>(ib_in);
         const auto& instVb   =
             static_cast<const VulkanVertexBufferRenderer&>(*instanceStream->buffer);
-        const std::size_t instStride = instVb.GetStride() > 0 ? instVb.GetStride() : 64;
-        const uint32_t indexCount    = static_cast<uint32_t>(VertexCountForPrimitives(primitive, primitiveCount));
-        // plan_vulkan.md VULKAN-168: `VULKAN-255` refused this combination because the custom
-        // pipeline declared one vertex binding; it declares two now, the second at instance rate
-        // with its own declaration's attributes continuing after the mesh's. Same hook position and
-        // same reason as the other two routes -- before the stock declaration guard.
-        if (params.customEffectRequested) {
-            const int indexSize2 = ib.IsThirtyTwoBit() ? 4 : 2;
-            QueueCustomEffect3DDrawEXT(
-                vb_in, world, view, projection, primitive, primitiveCount, params,
-                static_cast<const uint8_t*>(ib.GetMappedPtr()) + params.startIndex * indexSize2,
-                static_cast<std::size_t>(indexCount) * static_cast<std::size_t>(indexSize2),
-                ib.IsThirtyTwoBit() ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16,
-                instanceStream->buffer, instanceStream->vertexOffset,
-                instanceStream->instanceFrequency, instanceCount);
-            return;
-        }
+        const bool packsInstanceStreams = HasMultipleInstanceStreams(params);
+        VulkanPackedStreamsEXT packedInstanceStreams;
+        if (packsInstanceStreams)
+            packedInstanceStreams = PackVulkanStreamsEXT(
+                params, /*instanceRate=*/true, /*firstRecord=*/0,
+                std::max(1, instanceCount));
+        const std::size_t instStride = packsInstanceStreams
+            ? packedInstanceStreams.stride
+            : (instVb.GetStride() > 0 ? instVb.GetStride() : 64);
         const int vertexCount        = vb.GetVertexCount();
         const int instCountClamped   = std::max(1, instanceCount);
 
-        // REMED-GFX-211: the GEOMETRY binding's own VertexOffset, which this route dropped. The
-        // deferred arena copies the whole per-vertex buffer and binds it at the draw's own packed
-        // arena offset, so binding 0 has no per-binding native offset channel to carry it -- but
-        // vkCmdDrawIndexed's `vertexOffset` is added to every decoded index, which is exactly the
-        // term this stream owes, and it is applied to the per-vertex binding only. The route binds
-        // exactly one per-vertex stream (RejectUnsupportedStreamCombination above), so folding it
-        // into baseVertex advances that stream and nothing else, exactly once: the fetched element
-        // becomes `VertexOffset + baseVertex + index`. The index buffer is untouched -- startIndex
-        // stays an index-element offset, already applied to the index copy below.
+        // REMED-GFX-211: on the classic single-stream path the GEOMETRY binding's own VertexOffset
+        // rides vkCmdDrawIndexed's `vertexOffset` term. A packed multi-stream snapshot has already
+        // applied every binding's own offset while copying the actual selected-index window, so
+        // its native base is instead rebased by that window's minimum index below.
+        // The index buffer itself is untouched -- startIndex stays an index-element offset,
+        // already applied to the index copy below.
         const GpuVertexStreamBinding* perVertexStream = FirstPerVertexStream(params);
         const int perVertexOffset = perVertexStream != nullptr ? perVertexStream->vertexOffset : 0;
 
@@ -15140,15 +15455,17 @@ namespace CNA::Internal::Renderers::Vulkan
         const int instanceFrequency = std::max(1, instanceStream->instanceFrequency);
         const int lastInstanceRecord =
             instanceStream->vertexOffset + (instCountClamped - 1) / instanceFrequency;
-        if (perVertexOffset < 0 || perVertexOffset > vertexCount ||
-            params.baseVertex > vertexCount - perVertexOffset)
+        if (!packsVertexStreams &&
+            (perVertexOffset < 0 || perVertexOffset > vertexCount ||
+             params.baseVertex > vertexCount - perVertexOffset))
         {
             throw std::runtime_error(
                 "The Vulkan renderer: the per-vertex VertexBufferBinding.VertexOffset bound to slot " +
                 std::to_string(perVertexStream != nullptr ? perVertexStream->slot : 0) +
                 " leaves its own vertex buffer.");
         }
-        if (instanceStream->vertexOffset < 0 || lastInstanceRecord >= instVb.GetVertexCount())
+        if (!packsInstanceStreams &&
+            (instanceStream->vertexOffset < 0 || lastInstanceRecord >= instVb.GetVertexCount()))
         {
             throw std::runtime_error(
                 "The Vulkan renderer: the per-instance VertexBufferBinding bound to slot " +
@@ -15168,16 +15485,21 @@ namespace CNA::Internal::Renderers::Vulkan
             FillInstancedPushConst(d.pushConst, world, view,
                                    projection * XnaPixelCenterCorrectionEXT(primitive), params);
 
-        // Copy per-vertex data (all vertices)
-        d.vbData.resize(static_cast<std::size_t>(vertexCount) * pvStride);
-        std::memcpy(d.vbData.data(), vb.GetMappedPtr(),
-                    static_cast<std::size_t>(vertexCount) * pvStride);
+        if (packsVertexStreams)
+        {
+            d.vbData = std::move(packedVertexStreams.bytes);
+        }
+        else
+        {
+            // The single-stream path preserves its established whole-buffer snapshot.
+            d.vbData.resize(static_cast<std::size_t>(vertexCount) * pvStride);
+            std::memcpy(d.vbData.data(), vb.GetMappedPtr(),
+                        static_cast<std::size_t>(vertexCount) * pvStride);
+        }
 
         // Copy index data (with startIndex offset)
-        const int indexSize = ib.IsThirtyTwoBit() ? 4 : 2;
         d.ibData.resize(static_cast<std::size_t>(indexCount) * indexSize);
-        std::memcpy(d.ibData.data(),
-                    static_cast<const uint8_t*>(ib.GetMappedPtr()) + params.startIndex * indexSize,
+        std::memcpy(d.ibData.data(), selectedIndices,
                     static_cast<std::size_t>(indexCount) * indexSize);
 
         // Copy per-instance data: one destination record per instance, exactly as before -- only
@@ -15194,16 +15516,23 @@ namespace CNA::Internal::Renderers::Vulkan
         // route already fills. Nothing about the native binding, the pipeline or its cache key
         // changes, and no frequency reaches them -- the divisor is a data-copy concern only.
         // Frequency 1 stays the single bulk copy it has always been.
-        d.instVbData.resize(static_cast<std::size_t>(instCountClamped) * instStride);
-        const auto* instSrc = static_cast<const uint8_t*>(instVb.GetMappedPtr()) +
-                              static_cast<std::size_t>(instanceStream->vertexOffset) * instStride;
-        if (instanceFrequency == 1) {
-            std::memcpy(d.instVbData.data(), instSrc, d.instVbData.size());
-        } else {
-            for (int i = 0; i < instCountClamped; ++i)
-                std::memcpy(d.instVbData.data() + static_cast<std::size_t>(i) * instStride,
-                            instSrc + static_cast<std::size_t>(i / instanceFrequency) * instStride,
-                            instStride);
+        if (packsInstanceStreams)
+        {
+            d.instVbData = std::move(packedInstanceStreams.bytes);
+        }
+        else
+        {
+            d.instVbData.resize(static_cast<std::size_t>(instCountClamped) * instStride);
+            const auto* instSrc = static_cast<const uint8_t*>(instVb.GetMappedPtr()) +
+                                  static_cast<std::size_t>(instanceStream->vertexOffset) * instStride;
+            if (instanceFrequency == 1) {
+                std::memcpy(d.instVbData.data(), instSrc, d.instVbData.size());
+            } else {
+                for (int i = 0; i < instCountClamped; ++i)
+                    std::memcpy(d.instVbData.data() + static_cast<std::size_t>(i) * instStride,
+                                instSrc + static_cast<std::size_t>(i / instanceFrequency) * instStride,
+                                instStride);
+            }
         }
 
         d.topology     = ToVkTopology(primitive);
@@ -15225,10 +15554,12 @@ namespace CNA::Internal::Renderers::Vulkan
         d.stride       = pvStride;
         d.instVbStride = instStride;
         d.instanceCount = static_cast<uint32_t>(instCountClamped);
-        // REMED-GFX-211: the geometry binding's VertexOffset rides the native draw's own
-        // vertexOffset term alongside baseVertex; captured by value here, so a later
-        // SetVertexBuffers cannot reach this queued draw.
-        d.baseVertex   = static_cast<int32_t>(params.baseVertex + perVertexOffset);
+        // A multi-stream snapshot starts at the requested min vertex; rebase unchanged indices
+        // onto that compact window. The classic path still folds its one binding offset into the
+        // native draw term, captured by value so a later SetVertexBuffers cannot reach it.
+        d.baseVertex   = packsVertexStreams
+            ? indexedWindow.nativeBaseVertex
+            : static_cast<int32_t>(params.baseVertex + perVertexOffset);
         d.useInstanced = true;
         // VULKAN-149: taken at DRAW time, like every other route's, because the record is replayed
         // at Present() by which time the buffer's declaration may have been replaced.
@@ -15337,8 +15668,10 @@ namespace CNA::Internal::Renderers::Vulkan
         // so nothing there changes.
         if (compiledEffectDraw)
         {
-            const auto& pvDeclaration = vb.GetDeclarationEXT();
-            const auto& instDeclaration = instVb.GetDeclarationEXT();
+            const auto& pvDeclaration = packsVertexStreams
+                ? packedVertexStreams.declaration : vb.GetDeclarationEXT();
+            const auto& instDeclaration = packsInstanceStreams
+                ? packedInstanceStreams.declaration : instVb.GetDeclarationEXT();
             if (pvDeclaration.IsEmpty() || instDeclaration.IsEmpty())
             {
                 throw System::NotSupportedException(

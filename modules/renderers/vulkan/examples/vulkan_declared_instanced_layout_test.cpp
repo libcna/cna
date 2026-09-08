@@ -11,7 +11,9 @@
 //   * a padded position-only record at stride 16 gets a colour attribute aimed at its padding.
 //
 // The per-INSTANCE stream is untouched: its four matrix columns are a second binding at locations
-// 4..7, are not declaration-derived, and `MultiStreamVertexInput` stays false.
+// 4..7, are not declaration-derived. REMED-GFX-203 may first pack several public streams of one
+// input rate into that same immutable declaration and snapshot; this test still isolates the
+// single-stream declaration-driven path.
 //
 // Every leg draws the same full-screen quad, one identity instance, VertexColorEnabled = true and
 // DiffuseColor = white, so the pixel is the vertex colour when one is bound and white when none
