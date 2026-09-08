@@ -656,6 +656,16 @@ function(cna_register_d3d_parity_tests)
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/graphicsdevice_default_state_occlusion_test.cpp"
         DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 600)
     cna_d3d_parity_fixture(
+        NAME RenderTargetCube_SampleAfterUnbind TARGET rendertargetcube_sample
+        DIRECTX12_ORDER 2140
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_rendertargetcube_sample_test.cpp"
+        DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 600)
+    cna_d3d_parity_fixture(
+        NAME RenderTargetCube_DepthFormat TARGET rendertargetcube_depthformat
+        DIRECTX12_ORDER 2150
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_rendertargetcube_depthformat_test.cpp"
+        DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 600)
+    cna_d3d_parity_fixture(
         NAME CompressedTexture_StorageContract TARGET compressed_texture_storage DIRECTX12_ORDER 1892
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/d3d_compressed_texture_contract_test.cpp"
         DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 600)
