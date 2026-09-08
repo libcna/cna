@@ -455,6 +455,10 @@ TEST(XnaXImporter, EveryFileAnswersTheGraphXnaAnswers)
           // this quad's two triangles name one normal each and the genuine importer answers six
           // vertices for four positions (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-144`).
           "normal_per_face.x",
+          // Two normal entries holding the same three numbers are one normal: this file writes the
+          // same normal six times under six indices, and XNA answers four vertices, not six
+          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-148`).
+          "normal_duplicate_values.x",
           "oblique_normals.x", "quad_textured.x", "transform_z.x", "two_materials.x",
           "with_templates.x", "zero_power.x"})
     {
@@ -631,6 +635,11 @@ TEST(XnaFbxImporter, EveryFileAnswersTheGraphXnaAnswers)
           // material of the same name and reading the objects by identity reversed the three
           // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-145`).
           "fbx_scene_order.fbx",
+          // The geometry's own offset -- `GeometricScaling`, `GeometricRotation` and
+          // `GeometricTranslation` -- is folded into the node's transform and undone again on its
+          // child, and the `PreRotation` this file also carries is *not* applied because it does
+          // not set `RotationActive` (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-146`).
+          "fbx_geometric_offset.fbx",
           "fbx_split_vertices.fbx",
           // A `Texture` names its file twice and the two can name different directories; the
           // reference XNA writes is whichever one resolves. These two separate the branches:

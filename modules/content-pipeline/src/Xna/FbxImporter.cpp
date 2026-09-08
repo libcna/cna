@@ -80,6 +80,12 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             Vector3 rotation{0.0f, 0.0f, 0.0f};
             Vector3 preRotation{0.0f, 0.0f, 0.0f};
             Vector3 scaling{1.0f, 1.0f, 1.0f};
+            /** @brief `RotationActive`, which is what decides whether `PreRotation` counts. */
+            bool rotationActive = false;
+            /** @brief The geometry's own offset from the node, FBX's `Geometric*` properties. */
+            Vector3 geometricTranslation{0.0f, 0.0f, 0.0f};
+            Vector3 geometricRotation{0.0f, 0.0f, 0.0f};
+            Vector3 geometricScaling{1.0f, 1.0f, 1.0f};
             bool attached = false;
             /** @brief Whether a `Connect` names this object as a child of the scene root. */
             bool inScene = false;
@@ -203,78 +209,136 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          * @param object The FBX object.
          * @return The local transform.
          */
-        [[nodiscard]] Matrix LocalTransform(const Object& object)
+        /** @brief A 4x4 in double, row-vector convention, the way the genuine importer composes. */
+        using Rows = std::array<std::array<double, 4>, 4>;
+
+        /** @brief The identity. */
+        [[nodiscard]] Rows IdentityRows()
         {
-            // Composed in double and narrowed once at the end, because the genuine importer's is.
-            // A quarter turn is the case that shows it: `cos` of a float pi/2 is -4.371e-08, of a
-            // double pi/2 it is 6.123e-17, and `Cube.fbx`'s `PreRotation -90` reaches XNA's own
-            // `Cube.xnb` as 2.54 * 6.123e-17 = 1.5553e-16 -- so a float rotation lands seven orders
-            // of magnitude away from XNA's on the two entries a quarter turn zeroes
-            // (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-121).
-            using Rows = std::array<std::array<double, 4>, 4>;
-            const auto multiply = [](const Rows& left, const Rows& right)
+            return Rows{{{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}}};
+        }
+
+        /** @brief `left` times `right`, row-vector order. */
+        [[nodiscard]] Rows Multiply(const Rows& left, const Rows& right)
+        {
+            Rows product{};
+            for (std::size_t row = 0; row < 4; ++row)
             {
-                Rows product{};
-                for (std::size_t row = 0; row < 4; ++row)
+                for (std::size_t column = 0; column < 4; ++column)
                 {
-                    for (std::size_t column = 0; column < 4; ++column)
-                    {
-                        double sum = 0.0;
-                        for (std::size_t k = 0; k < 4; ++k) { sum += left[row][k] * right[k][column]; }
-                        product[row][column] = sum;
-                    }
+                    double sum = 0.0;
+                    for (std::size_t k = 0; k < 4; ++k) { sum += left[row][k] * right[k][column]; }
+                    product[row][column] = sum;
                 }
-                return product;
-            };
-            const Rows identity{{{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}}};
-            // The three axis rotations XNA's own `Matrix::CreateRotation*` write, in double.
-            const auto rotationX = [&identity](double radians)
+            }
+            return product;
+        }
+
+        /**
+         * @brief The three axis rotations XNA's own `Matrix::CreateRotation*` write, in double.
+         *
+         * Composed in double and narrowed once at the end, because the genuine importer's is. A
+         * quarter turn is the case that shows it: `cos` of a float pi/2 is -4.371e-08, of a double
+         * pi/2 it is 6.123e-17, and `Cube.fbx`'s `PreRotation -90` reaches XNA's own `Cube.xnb` as
+         * 2.54 * 6.123e-17 = 1.5553e-16 -- so a float rotation lands seven orders of magnitude away
+         * from XNA's on the two entries a quarter turn zeroes
+         * (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-121).
+         */
+        [[nodiscard]] Rows EulerRows(const Vector3& degrees)
+        {
+            const double toRadians = 0.017453292519943295;
+            const auto rotationX = [](double radians)
             {
-                Rows m = identity;
+                Rows m = IdentityRows();
                 m[1][1] = std::cos(radians);
                 m[1][2] = std::sin(radians);
                 m[2][1] = -m[1][2];
                 m[2][2] = m[1][1];
                 return m;
             };
-            const auto rotationY = [&identity](double radians)
+            const auto rotationY = [](double radians)
             {
-                Rows m = identity;
+                Rows m = IdentityRows();
                 m[0][0] = std::cos(radians);
                 m[0][2] = -std::sin(radians);
                 m[2][0] = -m[0][2];
                 m[2][2] = m[0][0];
                 return m;
             };
-            const auto rotationZ = [&identity](double radians)
+            const auto rotationZ = [](double radians)
             {
-                Rows m = identity;
+                Rows m = IdentityRows();
                 m[0][0] = std::cos(radians);
                 m[0][1] = std::sin(radians);
                 m[1][0] = -m[0][1];
                 m[1][1] = m[0][0];
                 return m;
             };
-            const double toRadians = 0.017453292519943295;
-            const auto euler = [&](const Vector3& degrees)
+            return Multiply(Multiply(rotationX(static_cast<double>(degrees.X) * toRadians),
+                                     rotationY(static_cast<double>(degrees.Y) * toRadians)),
+                            rotationZ(static_cast<double>(degrees.Z) * toRadians));
+        }
+
+        /** @brief A scaling. */
+        [[nodiscard]] Rows ScaleRows(const Vector3& scale)
+        {
+            Rows m = IdentityRows();
+            m[0][0] = scale.X;
+            m[1][1] = scale.Y;
+            m[2][2] = scale.Z;
+            return m;
+        }
+
+        /** @brief A translation, in the last row. */
+        [[nodiscard]] Rows TranslationRows(const Vector3& offset)
+        {
+            Rows m = IdentityRows();
+            m[3][0] = offset.X;
+            m[3][1] = offset.Y;
+            m[3][2] = offset.Z;
+            return m;
+        }
+
+        /**
+         * @brief The geometry's own offset from its node: `GeometricScaling`, then
+         *        `GeometricRotation`, then `GeometricTranslation`.
+         *
+         * FBX calls this the geometric transform, and it belongs to the geometry rather than to the
+         * node: a child does not inherit it. The genuine importer folds it into the node's own
+         * `Transform` and undoes it again on every child, which is what `LocalTransform` does with
+         * the inverse (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-146`).
+         */
+        [[nodiscard]] Rows GeometricRows(const Object& object)
+        {
+            return Multiply(Multiply(ScaleRows(object.geometricScaling),
+                                     EulerRows(object.geometricRotation)),
+                            TranslationRows(object.geometricTranslation));
+        }
+
+        /** @brief `GeometricRows` undone: `T(-t)`, then the rotation transposed, then `1/s`. */
+        [[nodiscard]] Rows InverseGeometricRows(const Object& object)
+        {
+            const Vector3 scale = object.geometricScaling;
+            const Vector3 reciprocal(scale.X == 0.0f ? 0.0f : 1.0f / scale.X,
+                                     scale.Y == 0.0f ? 0.0f : 1.0f / scale.Y,
+                                     scale.Z == 0.0f ? 0.0f : 1.0f / scale.Z);
+            const Rows rotation = EulerRows(object.geometricRotation);
+            Rows transposed = IdentityRows();
+            for (std::size_t row = 0; row < 3; ++row)
             {
-                return multiply(multiply(rotationX(static_cast<double>(degrees.X) * toRadians),
-                                         rotationY(static_cast<double>(degrees.Y) * toRadians)),
-                                rotationZ(static_cast<double>(degrees.Z) * toRadians));
-            };
-            Rows scale = identity;
-            scale[0][0] = object.scaling.X;
-            scale[1][1] = object.scaling.Y;
-            scale[2][2] = object.scaling.Z;
-            Rows translation = identity;
-            translation[3][0] = object.translation.X;
-            translation[3][1] = object.translation.Y;
-            translation[3][2] = object.translation.Z;
+                for (std::size_t column = 0; column < 3; ++column)
+                {
+                    transposed[row][column] = rotation[column][row];
+                }
+            }
+            const Vector3 back(-object.geometricTranslation.X, -object.geometricTranslation.Y,
+                               -object.geometricTranslation.Z);
+            return Multiply(Multiply(TranslationRows(back), transposed), ScaleRows(reciprocal));
+        }
 
-            const Rows composed = multiply(
-                multiply(multiply(scale, euler(object.preRotation)), euler(object.rotation)),
-                translation);
-
+        /** @brief Narrow a composed row matrix to the XNA one, once, at the end. */
+        [[nodiscard]] Matrix ToMatrix(const Rows& composed)
+        {
             Matrix result;
             result.M11 = static_cast<float>(composed[0][0]);
             result.M12 = static_cast<float>(composed[0][1]);
@@ -293,6 +357,27 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             result.M43 = static_cast<float>(composed[3][2]);
             result.M44 = static_cast<float>(composed[3][3]);
             return result;
+        }
+
+        /**
+         * @brief One node's local transform: the geometry's offset, then scaling, `PreRotation`,
+         *        `Lcl Rotation` and the translation, with the parent's geometric offset undone.
+         *
+         * `PreRotation` counts only where `RotationActive` is set, which is FBX's own rule and
+         * measurable: `fbx_prerotation_units.fbx` sets it and the quarter turn is in XNA's answer,
+         * `fbx_geometric_offset.fbx` does not and the same `PreRotation -90` is not
+         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-146`).
+         */
+        [[nodiscard]] Matrix LocalTransform(const Object& object, const Rows& parentGeometricInverse)
+        {
+            const Rows local = Multiply(
+                Multiply(Multiply(ScaleRows(object.scaling),
+                                  object.rotationActive ? EulerRows(object.preRotation)
+                                                        : IdentityRows()),
+                         EulerRows(object.rotation)),
+                TranslationRows(object.translation));
+            return ToMatrix(
+                Multiply(Multiply(GeometricRows(object), local), parentGeometricInverse));
         }
 
         /** @brief Whatever a layer element holds, resolved through its mapping and reference. */
@@ -471,6 +556,13 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 object.translation = PropertyVector(node, "Lcl Translation", Vector3(0.0f, 0.0f, 0.0f));
                 object.rotation = PropertyVector(node, "Lcl Rotation", Vector3(0.0f, 0.0f, 0.0f));
                 object.preRotation = PropertyVector(node, "PreRotation", Vector3(0.0f, 0.0f, 0.0f));
+                object.rotationActive = PropertyNumber(node, "RotationActive", 0.0) != 0.0;
+                object.geometricTranslation =
+                    PropertyVector(node, "GeometricTranslation", Vector3(0.0f, 0.0f, 0.0f));
+                object.geometricRotation =
+                    PropertyVector(node, "GeometricRotation", Vector3(0.0f, 0.0f, 0.0f));
+                object.geometricScaling =
+                    PropertyVector(node, "GeometricScaling", Vector3(1.0f, 1.0f, 1.0f));
                 object.scaling = PropertyVector(node, "Lcl Scaling", Vector3(1.0f, 1.0f, 1.0f));
                 byFullName[node.Text(0)] = identity;
                 byName.emplace(object.name, identity);
@@ -700,7 +792,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             return copy;
         };
 
-        const auto build = [&](const std::int64_t identity, auto&& self) -> std::shared_ptr<NodeContent>
+        const auto build = [&](const std::int64_t identity, const Rows& parentGeometricInverse,
+                               auto&& self) -> std::shared_ptr<NodeContent>
         {
             const Object& object = objects.at(identity);
             std::shared_ptr<NodeContent> node;
@@ -1052,14 +1145,15 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 node = std::make_shared<NodeContent>();
             }
             node->setNameProperty(object.name);
-            node->setTransformProperty(LocalTransform(object));
+            node->setTransformProperty(LocalTransform(object, parentGeometricInverse));
+            const Rows geometricInverse = InverseGeometricRows(object);
             for (const std::int64_t child : object.children)
             {
                 if (objects.count(child) == 0 || !IsSceneNode(objects.at(child).kind))
                 {
                     continue;
                 }
-                node->getChildrenProperty().Add(self(child, self));
+                node->getChildrenProperty().Add(self(child, geometricInverse, self));
             }
             return node;
         };
@@ -1139,13 +1233,13 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         if (roots.size() == 1u && topLevel == 1u)
         {
             // One top-level model answers as the root itself, as the .x route's single frame does.
-            return build(roots.front(), build);
+            return build(roots.front(), IdentityRows(), build);
         }
         auto root = std::make_shared<NodeContent>();
         root->setNameProperty("RootNode");
         for (const std::int64_t identity : roots)
         {
-            root->getChildrenProperty().Add(build(identity, build));
+            root->getChildrenProperty().Add(build(identity, IdentityRows(), build));
         }
         return root;
     }
