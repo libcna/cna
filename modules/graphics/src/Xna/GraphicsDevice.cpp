@@ -2617,6 +2617,35 @@ namespace Microsoft::Xna::Framework::Graphics
                              ? static_cast<std::uint64_t>(vertexStorageBlocks)
                              : UINT64_C(0));
 
+        const auto setNonNegativeLimit = [&](const CNA::RendererLimit limit, const int value) {
+            profile.SetLimit(limit, value >= 0,
+                             value >= 0 ? static_cast<std::uint64_t>(value) : UINT64_C(0));
+        };
+        profile.SetLimit(CNA::RendererLimit::MaxStorageBufferBytes, true,
+                         renderer.GetMaxStorageBufferBytesEXT());
+        profile.SetLimit(CNA::RendererLimit::MaxUniformBufferBytes, true,
+                         renderer.GetMaxUniformBufferBytesEXT());
+        setNonNegativeLimit(CNA::RendererLimit::MaxComputeStorageBufferBindings,
+                            renderer.GetMaxComputeStorageBufferBindingsEXT());
+        setNonNegativeLimit(CNA::RendererLimit::MaxTextureArrayLayers,
+                            renderer.GetMaxTextureArrayLayersEXT());
+        setNonNegativeLimit(CNA::RendererLimit::MaxSampledTexturesPerShaderStage,
+                            renderer.GetMaxSampledTexturesPerShaderStageEXT());
+        setNonNegativeLimit(CNA::RendererLimit::MaxStorageImagesPerShaderStage,
+                            renderer.GetMaxStorageImagesPerShaderStageEXT());
+        setNonNegativeLimit(CNA::RendererLimit::MaxVertexInputBindings,
+                            renderer.GetMaxVertexInputBindingsEXT());
+        setNonNegativeLimit(CNA::RendererLimit::MaxVertexInputAttributes,
+                            renderer.GetMaxVertexInputAttributesEXT());
+        setNonNegativeLimit(CNA::RendererLimit::MaxColorAttachments,
+                            renderer.GetMaxColorAttachmentsEXT());
+        profile.SetLimit(CNA::RendererLimit::MinStorageBufferOffsetAlignment, true,
+                         renderer.GetMinStorageBufferOffsetAlignmentEXT());
+        profile.SetLimit(CNA::RendererLimit::MinUniformBufferOffsetAlignment, true,
+                         renderer.GetMinUniformBufferOffsetAlignmentEXT());
+        profile.SetLimit(CNA::RendererLimit::TimestampPeriodPicoseconds, true,
+                         renderer.GetTimestampPeriodPicosecondsEXT());
+
         constexpr std::uint32_t classifiedFormatUsages =
             static_cast<std::uint32_t>(CNA::RendererFormatUsage::TextureStorage) |
             static_cast<std::uint32_t>(CNA::RendererFormatUsage::RenderTarget) |

@@ -56,7 +56,19 @@ namespace CNA
             RendererLimit::MaxComputeWorkGroupSizeY,
             RendererLimit::MaxComputeWorkGroupSizeZ,
             RendererLimit::MaxComputeWorkGroupInvocations,
-            RendererLimit::MaxVertexShaderStorageBlocks
+            RendererLimit::MaxVertexShaderStorageBlocks,
+            RendererLimit::MaxStorageBufferBytes,
+            RendererLimit::MaxUniformBufferBytes,
+            RendererLimit::MaxComputeStorageBufferBindings,
+            RendererLimit::MaxTextureArrayLayers,
+            RendererLimit::MaxSampledTexturesPerShaderStage,
+            RendererLimit::MaxStorageImagesPerShaderStage,
+            RendererLimit::MaxVertexInputBindings,
+            RendererLimit::MaxVertexInputAttributes,
+            RendererLimit::MaxColorAttachments,
+            RendererLimit::MinStorageBufferOffsetAlignment,
+            RendererLimit::MinUniformBufferOffsetAlignment,
+            RendererLimit::TimestampPeriodPicoseconds
         };
 
         [[nodiscard]] constexpr bool ValidFeature(const RendererFeature feature)
@@ -179,7 +191,7 @@ namespace CNA
         std::ostringstream out;
         out << "Renderer capability report\n"
             << "Renderer: " << (rendererName_.empty() ? "UNKNOWN" : rendererName_) << "\n"
-            << "Profile schema: 1\n\n"
+            << "Profile schema: 2\n\n"
             << "Detailed features\n";
 
         for (const RendererFeature feature : Features)
@@ -378,6 +390,24 @@ namespace CNA
                 return "MaxComputeWorkGroupInvocations";
             case RendererLimit::MaxVertexShaderStorageBlocks:
                 return "MaxVertexShaderStorageBlocks";
+            case RendererLimit::MaxStorageBufferBytes: return "MaxStorageBufferBytes";
+            case RendererLimit::MaxUniformBufferBytes: return "MaxUniformBufferBytes";
+            case RendererLimit::MaxComputeStorageBufferBindings:
+                return "MaxComputeStorageBufferBindings";
+            case RendererLimit::MaxTextureArrayLayers: return "MaxTextureArrayLayers";
+            case RendererLimit::MaxSampledTexturesPerShaderStage:
+                return "MaxSampledTexturesPerShaderStage";
+            case RendererLimit::MaxStorageImagesPerShaderStage:
+                return "MaxStorageImagesPerShaderStage";
+            case RendererLimit::MaxVertexInputBindings: return "MaxVertexInputBindings";
+            case RendererLimit::MaxVertexInputAttributes: return "MaxVertexInputAttributes";
+            case RendererLimit::MaxColorAttachments: return "MaxColorAttachments";
+            case RendererLimit::MinStorageBufferOffsetAlignment:
+                return "MinStorageBufferOffsetAlignment";
+            case RendererLimit::MinUniformBufferOffsetAlignment:
+                return "MinUniformBufferOffsetAlignment";
+            case RendererLimit::TimestampPeriodPicoseconds:
+                return "TimestampPeriodPicoseconds";
             case RendererLimit::Count: break;
         }
         return "UnknownRendererLimit";

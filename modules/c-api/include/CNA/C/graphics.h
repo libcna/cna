@@ -415,8 +415,32 @@ typedef uint32_t CNA_RendererLimit;
 #define CNA_RENDERER_LIMIT_MAX_COMPUTE_WORK_GROUP_INVOCATIONS UINT32_C(8)
 /** @brief Maximum storage-buffer bindings readable by a vertex shader. */
 #define CNA_RENDERER_LIMIT_MAX_VERTEX_SHADER_STORAGE_BLOCKS UINT32_C(9)
+/** @brief Maximum byte range addressable through one storage-buffer binding. */
+#define CNA_RENDERER_LIMIT_MAX_STORAGE_BUFFER_BYTES UINT32_C(10)
+/** @brief Maximum byte range addressable through one uniform-buffer binding. */
+#define CNA_RENDERER_LIMIT_MAX_UNIFORM_BUFFER_BYTES UINT32_C(11)
+/** @brief Maximum storage-buffer bindings visible to one compute shader. */
+#define CNA_RENDERER_LIMIT_MAX_COMPUTE_STORAGE_BUFFER_BINDINGS UINT32_C(12)
+/** @brief Maximum sampled two-dimensional texture-array layer count. */
+#define CNA_RENDERER_LIMIT_MAX_TEXTURE_ARRAY_LAYERS UINT32_C(13)
+/** @brief Maximum sampled textures visible to one shader stage. */
+#define CNA_RENDERER_LIMIT_MAX_SAMPLED_TEXTURES_PER_SHADER_STAGE UINT32_C(14)
+/** @brief Maximum storage images visible to one shader stage. */
+#define CNA_RENDERER_LIMIT_MAX_STORAGE_IMAGES_PER_SHADER_STAGE UINT32_C(15)
+/** @brief Maximum native vertex-buffer bindings consumed by one draw. */
+#define CNA_RENDERER_LIMIT_MAX_VERTEX_INPUT_BINDINGS UINT32_C(16)
+/** @brief Maximum vertex attributes consumed by one draw. */
+#define CNA_RENDERER_LIMIT_MAX_VERTEX_INPUT_ATTRIBUTES UINT32_C(17)
+/** @brief Maximum colour attachments written by one graphics draw. */
+#define CNA_RENDERER_LIMIT_MAX_COLOR_ATTACHMENTS UINT32_C(18)
+/** @brief Required storage-buffer binding-offset alignment in bytes. */
+#define CNA_RENDERER_LIMIT_MIN_STORAGE_BUFFER_OFFSET_ALIGNMENT UINT32_C(19)
+/** @brief Required uniform-buffer binding-offset alignment in bytes. */
+#define CNA_RENDERER_LIMIT_MIN_UNIFORM_BUFFER_OFFSET_ALIGNMENT UINT32_C(20)
+/** @brief GPU timestamp tick duration in picoseconds; zero when unavailable. */
+#define CNA_RENDERER_LIMIT_TIMESTAMP_PERIOD_PICOSECONDS UINT32_C(21)
 /** @brief Largest currently defined numeric renderer-limit identity. */
-#define CNA_RENDERER_LIMIT_MAXIMUM CNA_RENDERER_LIMIT_MAX_VERTEX_SHADER_STORAGE_BLOCKS
+#define CNA_RENDERER_LIMIT_MAXIMUM CNA_RENDERER_LIMIT_TIMESTAMP_PERIOD_PICOSECONDS
 
 /** @brief Fixed-width usage masks for per-surface-format support. */
 typedef uint32_t CNA_RendererFormatUsageFlags;

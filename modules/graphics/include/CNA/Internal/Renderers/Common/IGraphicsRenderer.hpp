@@ -2454,6 +2454,84 @@ namespace CNA::Internal::Renderers
         /// The largest product of a compute shader's local sizes.
         [[nodiscard]] virtual int GetMaxComputeWorkGroupInvocationsEXT() const { return 0; }
 
+        /**
+         * @brief Returns the largest byte range usable by one storage-buffer binding.
+         * @return Maximum bytes, or zero when storage buffers are unavailable or unclassified.
+         */
+        [[nodiscard]] virtual std::uint64_t GetMaxStorageBufferBytesEXT() const { return 0; }
+
+        /**
+         * @brief Returns the largest byte range usable by one uniform/constant-buffer binding.
+         * @return Maximum bytes, or zero when constant buffers are unavailable or unclassified.
+         */
+        [[nodiscard]] virtual std::uint64_t GetMaxUniformBufferBytesEXT() const { return 0; }
+
+        /**
+         * @brief Returns the maximum compute-stage storage-buffer binding count.
+         * @return Maximum binding count, or zero when unsupported or unclassified.
+         */
+        [[nodiscard]] virtual int GetMaxComputeStorageBufferBindingsEXT() const { return 0; }
+
+        /**
+         * @brief Returns the maximum sampled two-dimensional texture-array layer count.
+         * @return Maximum layer count, or zero when texture arrays are unsupported or unclassified.
+         */
+        [[nodiscard]] virtual int GetMaxTextureArrayLayersEXT() const { return 0; }
+
+        /**
+         * @brief Returns the maximum sampled-texture count visible to one shader stage.
+         * @return Maximum sampled textures, or zero when unsupported or unclassified.
+         */
+        [[nodiscard]] virtual int GetMaxSampledTexturesPerShaderStageEXT() const { return 0; }
+
+        /**
+         * @brief Returns the maximum storage-image count visible to one shader stage.
+         * @return Maximum storage images, or zero when unsupported or unclassified.
+         */
+        [[nodiscard]] virtual int GetMaxStorageImagesPerShaderStageEXT() const { return 0; }
+
+        /**
+         * @brief Returns the maximum native vertex-buffer bindings consumed by one draw.
+         * @return Maximum vertex bindings, or zero when unsupported or unclassified.
+         */
+        [[nodiscard]] virtual int GetMaxVertexInputBindingsEXT() const { return 0; }
+
+        /**
+         * @brief Returns the maximum vertex attributes consumed by one draw.
+         * @return Maximum attributes, or zero when unsupported or unclassified.
+         */
+        [[nodiscard]] virtual int GetMaxVertexInputAttributesEXT() const { return 0; }
+
+        /**
+         * @brief Returns the maximum colour attachments writable by one graphics draw.
+         * @return Maximum colour attachments, or zero when unsupported or unclassified.
+         */
+        [[nodiscard]] virtual int GetMaxColorAttachmentsEXT() const { return 0; }
+
+        /**
+         * @brief Returns required storage-buffer binding-offset alignment in bytes.
+         * @return Required alignment, or zero when storage buffers are unavailable or unclassified.
+         */
+        [[nodiscard]] virtual std::uint64_t GetMinStorageBufferOffsetAlignmentEXT() const
+        {
+            return 0;
+        }
+
+        /**
+         * @brief Returns required uniform/constant-buffer binding-offset alignment in bytes.
+         * @return Required alignment, or zero when constant buffers are unavailable or unclassified.
+         */
+        [[nodiscard]] virtual std::uint64_t GetMinUniformBufferOffsetAlignmentEXT() const
+        {
+            return 0;
+        }
+
+        /**
+         * @brief Returns one GPU timestamp tick's duration in picoseconds.
+         * @return Picoseconds per tick, rounded to the nearest integer, or zero when unavailable.
+         */
+        [[nodiscard]] virtual std::uint64_t GetTimestampPeriodPicosecondsEXT() const { return 0; }
+
         /// Activates a specific face of a cube-map render target for rendering.
         /// Pass nullptr to restore the default back buffer.
         virtual void SetRenderTargetCubeFace(IRenderTargetCubeRenderer* rt, int face)

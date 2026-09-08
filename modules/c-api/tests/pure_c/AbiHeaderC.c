@@ -49,7 +49,9 @@ _Static_assert(sizeof(CNA_RendererFeatureSupport) == sizeof(uint32_t) &&
                "CNA renderer-feature support identities must remain stable");
 _Static_assert(sizeof(CNA_RendererLimit) == sizeof(uint32_t) &&
                    CNA_RENDERER_LIMIT_MAX_TEXTURE_DIMENSION == UINT32_C(0) &&
-                   CNA_RENDERER_LIMIT_MAXIMUM == UINT32_C(9),
+                   CNA_RENDERER_LIMIT_MAX_VERTEX_SHADER_STORAGE_BLOCKS == UINT32_C(9) &&
+                   CNA_RENDERER_LIMIT_TIMESTAMP_PERIOD_PICOSECONDS == UINT32_C(21) &&
+                   CNA_RENDERER_LIMIT_MAXIMUM == UINT32_C(21),
                "CNA renderer-limit identities must remain stable");
 _Static_assert(sizeof(CNA_RendererFormatUsageFlags) == sizeof(uint32_t) &&
                    CNA_RENDERER_FORMAT_USAGE_COLOR_TRANSFER == (UINT32_C(1) << 12) &&

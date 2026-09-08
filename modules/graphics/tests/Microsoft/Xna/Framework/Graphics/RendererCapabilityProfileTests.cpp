@@ -24,7 +24,8 @@ static_assert(static_cast<std::uint8_t>(CNA::RendererFeatureSupport::Unknown) ==
 static_assert(static_cast<std::uint8_t>(CNA::RendererFeatureSupport::Restricted) == 3);
 static_assert(static_cast<std::uint32_t>(CNA::RendererLimit::MaxTextureDimension) == 0);
 static_assert(static_cast<std::uint32_t>(CNA::RendererLimit::MaxVertexShaderStorageBlocks) == 9);
-static_assert(static_cast<std::uint32_t>(CNA::RendererLimit::Count) == 10);
+static_assert(static_cast<std::uint32_t>(CNA::RendererLimit::TimestampPeriodPicoseconds) == 21);
+static_assert(static_cast<std::uint32_t>(CNA::RendererLimit::Count) == 22);
 
 namespace
 {
@@ -190,6 +191,11 @@ TEST(RendererCapabilityProfileTest, DeviceSnapshotExposesLimitsAndHonestFormatKn
     EXPECT_EQ(textureLimit.value,
               static_cast<std::uint64_t>(device.GetMaxTextureDimension()));
     EXPECT_TRUE(device.GetRendererLimitEXT(CNA::RendererLimit::MaxVertexStreams).known);
+    for (const CNA::RendererLimit limit : CNA::AllRendererLimits())
+    {
+        const CNA::RendererLimitValue value = device.GetRendererLimitEXT(limit);
+        EXPECT_TRUE(value.known) << CNA::GetRendererLimitName(limit);
+    }
     EXPECT_FALSE(device.GetRendererLimitEXT(static_cast<CNA::RendererLimit>(999)).known);
 
     constexpr std::uint32_t classified =

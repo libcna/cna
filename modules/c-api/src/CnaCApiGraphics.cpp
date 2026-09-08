@@ -293,6 +293,8 @@ static_assert(
     static_cast<uint32_t>(CNA::RendererLimit::MaxComputeWorkGroupInvocations) ==
         CNA_RENDERER_LIMIT_MAX_COMPUTE_WORK_GROUP_INVOCATIONS &&
     static_cast<uint32_t>(CNA::RendererLimit::MaxVertexShaderStorageBlocks) ==
+        CNA_RENDERER_LIMIT_MAX_VERTEX_SHADER_STORAGE_BLOCKS &&
+    static_cast<uint32_t>(CNA::RendererLimit::TimestampPeriodPicoseconds) ==
         CNA_RENDERER_LIMIT_MAXIMUM &&
     static_cast<uint32_t>(CNA::RendererLimit::Count) ==
         CNA_RENDERER_LIMIT_MAXIMUM + UINT32_C(1));

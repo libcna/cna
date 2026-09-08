@@ -134,6 +134,24 @@ TEST(RendererCapabilityDefaultsTest, AdditionalLimitationsDefaultToNoRendererSpe
     EXPECT_TRUE(renderer.GetAdditionalLimitationsTextEXT().empty());
 }
 
+TEST(RendererCapabilityDefaultsTest, ModernGpuLimitsDefaultToExplicitlyUnavailable)
+{
+    DefaultsOnlyRenderer renderer;
+
+    EXPECT_EQ(renderer.GetMaxStorageBufferBytesEXT(), 0U);
+    EXPECT_EQ(renderer.GetMaxUniformBufferBytesEXT(), 0U);
+    EXPECT_EQ(renderer.GetMaxComputeStorageBufferBindingsEXT(), 0);
+    EXPECT_EQ(renderer.GetMaxTextureArrayLayersEXT(), 0);
+    EXPECT_EQ(renderer.GetMaxSampledTexturesPerShaderStageEXT(), 0);
+    EXPECT_EQ(renderer.GetMaxStorageImagesPerShaderStageEXT(), 0);
+    EXPECT_EQ(renderer.GetMaxVertexInputBindingsEXT(), 0);
+    EXPECT_EQ(renderer.GetMaxVertexInputAttributesEXT(), 0);
+    EXPECT_EQ(renderer.GetMaxColorAttachmentsEXT(), 0);
+    EXPECT_EQ(renderer.GetMinStorageBufferOffsetAlignmentEXT(), 0U);
+    EXPECT_EQ(renderer.GetMinUniformBufferOffsetAlignmentEXT(), 0U);
+    EXPECT_EQ(renderer.GetTimestampPeriodPicosecondsEXT(), 0U);
+}
+
 TEST(RendererCapabilityDefaultsTest, AppliedMultiSampleCountEchoesTheRequest)
 {
     // The identity default is the whole point: it is what every renderer except GDI did. Answering
