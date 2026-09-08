@@ -2701,6 +2701,156 @@ namespace Cna.Xna40.GraphicsOracle
                 });
             }
 
+            // XNASWEEP-139 again, the second round: probes built to separate the parts of the
+            // reorder the first ten could not. Disjoint quads give a mesh where every strip is two
+            // faces long, so every choice after the second is a restart made from a cache whose
+            // contents are known exactly; the odd-sided grids pin where a strip stops when the row
+            // is longer or shorter than the cap; and the two permuted grids ask the only question a
+            // single face order cannot -- whether the answer is a property of the topology or of
+            // the order the faces arrive in.
+            for (int caseIndex = 0; caseIndex < 7; caseIndex++)
+            {
+                int which = caseIndex;
+                string label;
+                MeshContent probe;
+                if (which == 0)
+                {
+                    label = "meshhelper/optimize_quads_6";
+                    var positions = new List<Vector3>();
+                    var triangles = new List<int[]>();
+                    for (int q = 0; q < 6; q++)
+                    {
+                        int a = positions.Count;
+                        positions.Add(new Vector3(2 * q, 0, 0));
+                        positions.Add(new Vector3(2 * q + 1, 0, 0));
+                        positions.Add(new Vector3(2 * q, 1, 0));
+                        positions.Add(new Vector3(2 * q + 1, 1, 0));
+                        triangles.Add(new int[] { a, a + 1, a + 3 });
+                        triangles.Add(new int[] { a, a + 3, a + 2 });
+                    }
+                    probe = SharedSoupMesh("Quads", positions.ToArray(), triangles.ToArray(), false);
+                }
+                else if (which == 1 || which == 2)
+                {
+                    int side = which == 1 ? 3 : 5;
+                    label = "meshhelper/optimize_shared_grid_" + side;
+                    probe = SharedSoupMesh("Grid", GridPositions(side), GridTriangles(side), false);
+                }
+                else if (which == 3 || which == 4)
+                {
+                    // The same 4x4 grid, its faces handed over in a different order: face i of this
+                    // list is face (7*i)%32 of the plain one, and the reversed one is the plain one
+                    // back to front. Every vertex, every adjacency and every valence is identical.
+                    int[][] plain = GridTriangles(4);
+                    var triangles = new List<int[]>();
+                    if (which == 3)
+                    {
+                        label = "meshhelper/optimize_shared_grid_4_permuted";
+                        for (int i = 0; i < plain.Length; i++) triangles.Add(plain[(7 * i) % plain.Length]);
+                    }
+                    else
+                    {
+                        label = "meshhelper/optimize_shared_grid_4_reversed";
+                        for (int i = plain.Length - 1; i >= 0; i--) triangles.Add(plain[i]);
+                    }
+                    probe = SharedSoupMesh("Grid", GridPositions(4), triangles.ToArray(), false);
+                }
+                else if (which == 5)
+                {
+                    // A closed fan: eight triangles around one centre, their rim a closed ring.
+                    label = "meshhelper/optimize_fan_8";
+                    var positions = new List<Vector3>();
+                    positions.Add(new Vector3(0, 0, 0));
+                    for (int i = 0; i < 8; i++) positions.Add(new Vector3(i, 1, 0));
+                    var triangles = new List<int[]>();
+                    for (int i = 0; i < 8; i++)
+                        triangles.Add(new int[] { 0, 1 + i, 1 + (i + 1) % 8 });
+                    probe = SharedSoupMesh("Fan", positions.ToArray(), triangles.ToArray(), false);
+                }
+                else
+                {
+                    // Two 3x3 grids that share no vertex: the restart has to leave one component.
+                    label = "meshhelper/optimize_two_grids_3";
+                    Vector3[] one = GridPositions(3);
+                    int[][] tri = GridTriangles(3);
+                    var positions = new List<Vector3>();
+                    foreach (Vector3 v in one) positions.Add(v);
+                    foreach (Vector3 v in one) positions.Add(new Vector3(v.X + 10, v.Y, v.Z));
+                    var triangles = new List<int[]>();
+                    foreach (int[] t in tri) triangles.Add(new int[] { t[0], t[1], t[2] });
+                    foreach (int[] t in tri)
+                        triangles.Add(new int[] { t[0] + one.Length, t[1] + one.Length, t[2] + one.Length });
+                    probe = SharedSoupMesh("Grids", positions.ToArray(), triangles.ToArray(), false);
+                }
+                Record(label, () =>
+                {
+                    MeshHelper.OptimizeForCache(probe);
+                    return DescribeMeshFull(probe);
+                });
+            }
+
+            // XNASWEEP-139, third round: which of the two numberings the answer depends on. The
+            // first of these renumbers the *vertices* of the 4x4 grid and leaves the face order
+            // alone; the second permutes the faces of a mesh whose vertices are not shared, where
+            // the answer had been the plain reverse. One asks whether the walk is driven by vertex
+            // index, the other whether it is driven by face index; a mesh's topology is untouched
+            // by either.
+            for (int caseIndex = 0; caseIndex < 3; caseIndex++)
+            {
+                int which = caseIndex;
+                string label;
+                MeshContent probe;
+                if (which == 0)
+                {
+                    // Vertex v of the plain grid becomes vertex (24-v): the same grid, numbered
+                    // from the other corner, with every face still in its original place.
+                    label = "meshhelper/optimize_shared_grid_4_vertexflip";
+                    Vector3[] plain = GridPositions(4);
+                    var positions = new Vector3[plain.Length];
+                    for (int i = 0; i < plain.Length; i++) positions[plain.Length - 1 - i] = plain[i];
+                    var triangles = new List<int[]>();
+                    foreach (int[] t in GridTriangles(4))
+                        triangles.Add(new int[] { plain.Length - 1 - t[0], plain.Length - 1 - t[1],
+                                                  plain.Length - 1 - t[2] });
+                    probe = SharedSoupMesh("Grid", positions, triangles.ToArray(), false);
+                }
+                else if (which == 1)
+                {
+                    // The six disjoint quads, their faces handed over as (5*i)%12.
+                    label = "meshhelper/optimize_quads_6_permuted";
+                    var positions = new List<Vector3>();
+                    var plain = new List<int[]>();
+                    for (int q = 0; q < 6; q++)
+                    {
+                        int a = positions.Count;
+                        positions.Add(new Vector3(2 * q, 0, 0));
+                        positions.Add(new Vector3(2 * q + 1, 0, 0));
+                        positions.Add(new Vector3(2 * q, 1, 0));
+                        positions.Add(new Vector3(2 * q + 1, 1, 0));
+                        plain.Add(new int[] { a, a + 1, a + 3 });
+                        plain.Add(new int[] { a, a + 3, a + 2 });
+                    }
+                    var triangles = new List<int[]>();
+                    for (int i = 0; i < plain.Count; i++) triangles.Add(plain[(5 * i) % plain.Count]);
+                    probe = SharedSoupMesh("Quads", positions.ToArray(), triangles.ToArray(), false);
+                }
+                else
+                {
+                    // The 2x4 sphere, its faces handed over as (7*i)%16.
+                    label = "meshhelper/optimize_shared_sphere_2x4_permuted";
+                    Vector3[] positions;
+                    int[][] plain = SphereTriangles(2, 4, out positions);
+                    var triangles = new List<int[]>();
+                    for (int i = 0; i < plain.Length; i++) triangles.Add(plain[(7 * i) % plain.Length]);
+                    probe = SharedSoupMesh("Sphere", positions, triangles.ToArray(), false);
+                }
+                Record(label, () =>
+                {
+                    MeshHelper.OptimizeForCache(probe);
+                    return DescribeMeshFull(probe);
+                });
+            }
+
             Record("meshhelper/optimize_for_cache_grid", () =>
             {
                 MeshContent mesh = Grid(3);
@@ -3988,6 +4138,30 @@ namespace Cna.Xna40.GraphicsOracle
         }
 
         /** The triangles of a strip of @p count quads laid along x, in file order. */
+        /** A square grid's positions: `(side+1)^2` of them, row by row. */
+        private static Vector3[] GridPositions(int side)
+        {
+            var positions = new List<Vector3>();
+            for (int y = 0; y <= side; y++)
+                for (int x = 0; x <= side; x++)
+                    positions.Add(new Vector3(x, y, 0));
+            return positions.ToArray();
+        }
+
+        /** A square grid's triangles: two per quad, row by row. */
+        private static int[][] GridTriangles(int side)
+        {
+            var triangles = new List<int[]>();
+            for (int y = 0; y < side; y++)
+                for (int x = 0; x < side; x++)
+                {
+                    int a = y * (side + 1) + x, b = a + 1, c = a + side + 1, e = c + 1;
+                    triangles.Add(new int[] { a, b, e });
+                    triangles.Add(new int[] { a, e, c });
+                }
+            return triangles.ToArray();
+        }
+
         private static int[][] StripTriangles(int count)
         {
             var triangles = new List<int[]>();
