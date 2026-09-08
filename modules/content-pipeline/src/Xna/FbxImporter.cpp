@@ -558,9 +558,14 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         std::map<std::string, std::int64_t> byFullName;
         std::map<std::string, std::int64_t> byName;
         // Objects are keyed by a descending synthetic identity, so the map's own order is the
-        // reverse of the file's. The scene lists its children in the order the file declares them,
-        // which is this.
+        // reverse of the file's. The declaration order is the fallback for a file whose objects no
+        // `Connect` line names at all.
         std::vector<std::int64_t> declarationOrder;
+        // The order the `Connect` lines put objects in the scene, which is the one XNA answers.
+        // SAMPLE-142's `France.FBX` separates the two: it declares `Sky` before `Object04` and
+        // connects `Object04` to the scene first, and XNA's own build answers `Object04` as the
+        // first bone under the root (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-154`).
+        std::vector<std::int64_t> sceneOrder;
         std::int64_t nextSynthetic = -1;
         if (const Canon::FbxNode* block = parsed.Find("Objects"); block != nullptr)
         {
@@ -659,6 +664,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     // connects none of them, which is why `Cone.fbx` answers its mesh as the root
                     // where `fbx_cameras.fbx`, whose cameras *are* connected, answers a
                     // `RootNode` (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-111`).
+                    if (!childObject->second.inScene) { sceneOrder.push_back(child); }
                     childObject->second.inScene = true;
                     continue;
                 }
@@ -1270,7 +1276,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         }
         std::vector<std::int64_t> roots;
         std::size_t topLevel = 0u;
-        for (const std::int64_t identity : declarationOrder)
+        for (const std::int64_t identity : (anyInScene ? sceneOrder : declarationOrder))
         {
             const Object& object = objects.at(identity);
             const bool top = anyInScene ? object.inScene : !object.attached;

@@ -1,7 +1,7 @@
 ; FBX 6.1.0 project file
 ; Written for this repository, plans/plan_xna_sample_xnb_sweep.md XNASWEEP-145.
-; Three meshes connected to the scene in file order, and a material whose name is the same
-; string as the second mesh's -- the shape SAMPLE-047's table.FBX has.
+; Three meshes whose declaration order is not their connection order, and a material whose name
+; is the same string as the second mesh's. The scene lists them the way the connections do.
 ;----------------------------------------------------
 
 FBXHeaderExtension:  {
@@ -34,6 +34,35 @@ Definitions:  {
 }
 
 Objects:  {
+	Model: "Model::Gamma", "Mesh" {
+		Version: 232
+		Properties60:  {
+			Property: "Lcl Translation", "Lcl Translation", "A+",4,0,0
+			Property: "Lcl Rotation", "Lcl Rotation", "A+",0,0,0
+			Property: "Lcl Scaling", "Lcl Scaling", "A+",1,1,1
+		}
+		MultiLayer: 0
+		MultiTake: 1
+		Shading: Y
+		Culling: "CullingOff"
+		Vertices: -1,-1,0,1,-1,0,1,1,0
+		PolygonVertexIndex: 0,1,-3
+		GeometryVersion: 124
+		LayerElementMaterial: 0 {
+			Version: 101
+			Name: ""
+			MappingInformationType: "AllSame"
+			ReferenceInformationType: "IndexToDirect"
+			Materials: 0
+		}
+		Layer: 0 {
+			Version: 100
+			LayerElement:  {
+				Type: "LayerElementMaterial"
+				TypedIndex: 0
+			}
+		}
+	}
 	Model: "Model::Alpha", "Mesh" {
 		Version: 232
 		Properties60:  {
@@ -67,35 +96,6 @@ Objects:  {
 		Version: 232
 		Properties60:  {
 			Property: "Lcl Translation", "Lcl Translation", "A+",2,0,0
-			Property: "Lcl Rotation", "Lcl Rotation", "A+",0,0,0
-			Property: "Lcl Scaling", "Lcl Scaling", "A+",1,1,1
-		}
-		MultiLayer: 0
-		MultiTake: 1
-		Shading: Y
-		Culling: "CullingOff"
-		Vertices: -1,-1,0,1,-1,0,1,1,0
-		PolygonVertexIndex: 0,1,-3
-		GeometryVersion: 124
-		LayerElementMaterial: 0 {
-			Version: 101
-			Name: ""
-			MappingInformationType: "AllSame"
-			ReferenceInformationType: "IndexToDirect"
-			Materials: 0
-		}
-		Layer: 0 {
-			Version: 100
-			LayerElement:  {
-				Type: "LayerElementMaterial"
-				TypedIndex: 0
-			}
-		}
-	}
-	Model: "Model::Gamma", "Mesh" {
-		Version: 232
-		Properties60:  {
-			Property: "Lcl Translation", "Lcl Translation", "A+",4,0,0
 			Property: "Lcl Rotation", "Lcl Rotation", "A+",0,0,0
 			Property: "Lcl Scaling", "Lcl Scaling", "A+",1,1,1
 		}
