@@ -265,59 +265,85 @@ first run of this campaign was invalidated by a mid-run relink.
 | references in a sample with no `.contentproj` | 359 |
 | references whose item names a source the tree has not got | 43 |
 
-### 11.2 The sweep, run 3 (2026-09-07)
+### 11.2 The sweep, run 8 (2026-09-08)
 
-Run with the binary as of `34506a3f8`, so it does **not** carry the PNG gamma,
-`.x` normal, `.x` specular-power or effect debug-mode fixes committed after it.
+Run with everything through `XNASWEEP-130`. Run 3 is kept because it is what
+`XNASWEEP-104`--`110` were measured against.
 
-| | run 1 | run 2 | run 3 |
-|---|---:|---:|---:|
-| byte-identical | 922 | 3,524 | **3,619** |
-| differing | 343 | 1,444 | 1,547 |
-| missing (CNA produced nothing) | 6,102 | 2,399 | 2,201 |
+| | run 1 | run 2 | run 3 | run 6 | run 7 | run 8 |
+|---|---:|---:|---:|---:|---:|---:|
+| byte-identical | 922 | 3,524 | 3,619 | 3,711 | 3,718 | **3,718** |
+| differing | 343 | 1,444 | 1,547 | 1,510 | 1,599 | 1,679 |
+| missing (CNA produced nothing) | 6,102 | 2,399 | 2,201 | 2,146 | 2,050 | **1,970** |
+| build units that finished | -- | -- | 156 | 156 | 146 | 156 |
 
-By source extension, run 3 (`identical / differing / missing`):
+*Differing* going up while *missing* goes down is the shape of progress here: an
+asset that could not be built at all is now built and compared. 231 references
+moved out of "nothing was produced" between run 3 and run 8.
+
+By source extension, run 8 (`identical / differing / missing`):
 
 | extension | identical | differing | missing | identical % |
 |---|---:|---:|---:|---:|
-| `.png` | 3,096 | 834 | 55 | 77.7 |
-| `.xml` | 1 | 0 | 1,219 | 0.1 |
-| (model side output) | 0 | 16 | 730 | 0.0 |
-| `.fbx` | 0 | 174 | 126 | 0.0 |
-| `.wav` | 279 | 9 | 7 | 94.6 |
-| `.spritefont` | 0 | 242 | 17 | 0.0 |
+| `.png` | 3,167 | 785 | 33 | 79.5 |
+| `.xml` | 2 | 0 | 1,218 | 0.2 |
+| (model side output) | 0 | 204 | 542 | 0.0 |
+| `.fbx` | 0 | 175 | 125 | 0.0 |
+| `.wav` | 290 | 5 | 0 | 98.3 |
+| `.spritefont` | 0 | 250 | 9 | 0.0 |
 | `.tga` | 167 | 7 | 0 | 96.0 |
-| `.fx` | 0 | 89 | 14 | 0.0 |
+| `.fx` | 0 | 92 | 11 | 0.0 |
 | `.jpg` | 0 | 88 | 8 | 0.0 |
-| `.bmp` | 54 | 30 | 9 | 58.1 |
-| `.x` | 0 | 52 | 11 | 0.0 |
+| `.bmp` | 55 | 30 | 8 | 59.1 |
+| `.x` | **15** | 37 | 11 | 23.8 |
 | `.wma` | 14 | 1 | 0 | 93.3 |
 | `.dds` | 8 | 3 | 0 | 72.7 |
 
-### 11.3 What the categories are
+`.x` had no identical reference at all in run 3.
 
-* **`.xml`, 1,219 missing** -- `CUSTOM_PIPELINE_GAP`. Every one names a
-  game-defined type (`RolePlayingGameData.Armor`, `ParticlesSettings.ParticleSystemSettings`,
-  `MovipaLibrary.LayoutInfo`), which is what the extension is *for*. XNA loads
-  the game's pipeline assembly; C++ has none, and the documented route is a C++
-  equivalent registered in code. `modules/content-pipeline/examples/xna-custom-pipeline.cpp`
-  is the shape one takes.
-* **730 model side outputs missing** -- a texture a `ModelProcessor` builds for a
-  material, named `<stem>_<n>`, which no project item names. They are missing
-  because their *model* is missing, which is mostly the custom-processor gap
-  above.
-* **LZX** -- 719 of the 862 differing `.png` references of run 2 are compressed,
-  and the first one examined has a byte-identical decompressed payload. Two
-  conforming LZX encoders do not agree on a byte; `classify.py` separates that
-  from a real difference.
-* **`.spritefont`, 242 differing** -- the atlas and the glyph boxes.
-  `decisions.json`'s `xbox_font_description` records the measurement: over 95
-  glyphs, 40 boxes identical, 50 one pixel wider, four two wider, never
-  narrower, while every ABC width and the line spacing agree exactly. XNA draws
-  through GDI+ and CNA through FreeType.
-* **`.fx`, 89 differing** -- the compiler's own version string is inside the
-  blob (`XNASWEEP-108`), and XNA's is a D3DX9 this machine has not got.
-* **`.jpg`, 88 differing** -- GDI+'s JPEG decoder against stb_image's.
+### 11.3 Every reference, classified
+
+`taxonomy.py` puts all 7,734 into one class each, with the reason beside it.
+
+| class | count | what it means |
+|---|---:|---|
+| `IDENTICAL` | **3,718** | CNA's build is the reference, byte for byte. |
+| `SEMANTICALLY_IDENTICAL` | 727 | Everything a runtime reads is equal. 717 are LZX -- two conforming encoders, one payload -- and 10 are numbers agreeing to within 6e-08 of the larger magnitude. |
+| `ACCEPTED_DIFFERENCE` | 726 | Measured, understood, and not closable from here. |
+| `CUSTOM_PIPELINE_GAP` | 1,370 | The asset needs a component the *sample* defines, in a .NET assembly C++ cannot load. |
+| `ENVIRONMENT_GAP` | 15 | This machine's, not CNA's: 10 effects the June-2010 fxc refuses and XNA's own D3DX9 accepted, and 5 fonts Windows has and this machine has not. |
+| `CORPUS_GAP` | 946 | The reference is in the corpus and the sweep has no way to build it. |
+| `UNEXPLAINED` | **232** | Everything else. |
+
+The accepted differences, by reason:
+
+| count | reason |
+|---:|---|
+| 250 | Two rasterizers disagree about a glyph's ink by a pixel: GDI+ against FreeType. |
+| 244 | Generated mip levels only, from the dither in XNA's own filter (`XNASWEEP-123`). |
+| 92 | The effect blob carries its compiler's version string (`XNASWEEP-108`). |
+| 88 | Two conformant JPEG decoders inside an IDCT's tolerance. |
+| 48 | An Xbox 360 target: XMA has no publicly implementable encoder. |
+| 4 | XNA re-encodes a song to WMA (`XNASWEEP-125`). |
+
+The custom-pipeline gap is 1,215 `.xml` documents naming a game's own type and
+155 assets whose project names one of 25 processors or importers no XNA assembly
+defines -- `NormalMappingModelProcessor` (26), `SkinnedModelProcessor` (20),
+`TrianglePickingProcessor` (20), `CustomEffectModelProcessor` (8) and twenty-one
+more. The corpus gap is 542 model side outputs whose model is itself missing,
+367 references under no build unit this run reaches, and 37 whose project item
+names a source file the tree has not got.
+
+### 11.3.1 What is still unexplained
+
+All 232, by what produced them:
+
+| count | processor | what differs |
+|---:|---|---|
+| 182 | `ModelProcessor` | `XNASWEEP-129`: bounding-sphere centres and bone translations at 1e-7, and the vertex-buffer digests that follow from 7% of one mesh's texture coordinates. |
+| 34 | `FontTextureProcessor` | The sheet, not the glyphs: XNA answers a 128x156 atlas where CNA answers 256x256, and XNA crops each glyph's transparent border where CNA keeps the whole cell. No rasterizer is involved in this route -- the glyphs are cut out of a bitmap the game drew -- so unlike `.spritefont` this one is closable. |
+| 15 | `TextureProcessor` | `.png` and `.dds` pairs whose difference is neither the mip dither nor the payload. |
+| 1 | `PassThroughProcessor` | One `.xml` asset. |
 
 ### 11.4 The read-only roots, re-audited 2026-09-08
 
