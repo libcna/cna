@@ -111,6 +111,18 @@ TEST(RendererCapabilityDefaultsTest, FormatClassifiersDefaultToDefer)
     }
 }
 
+TEST(RendererCapabilityDefaultsTest, DetailedFormatUsagesDefaultToUnknown)
+{
+    DefaultsOnlyRenderer renderer;
+    for (int format = 0; format < 32; ++format)
+    {
+        const CNA::RendererFormatSupport support =
+            renderer.GetSurfaceFormatUsageSupportEXT(format);
+        EXPECT_EQ(support.knownUsages, 0U) << "format ordinal " << format;
+        EXPECT_EQ(support.supportedUsages, 0U) << "format ordinal " << format;
+    }
+}
+
 TEST(RendererCapabilityDefaultsTest, CompressedTransferDefaultsToFalseForEveryFormat)
 {
     DefaultsOnlyRenderer renderer;

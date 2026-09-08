@@ -31,6 +31,7 @@
 #include "CNA/Internal/Graphics/ImageData.hpp"
 #include "CNA/DisplayColorSpace.hpp"
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/RendererCapabilityProfile.hpp"
 #include "CNA/Internal/Renderers/Common/ICompiledEffectRuntime.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics { class Effect; }
@@ -2158,6 +2159,23 @@ namespace CNA::Internal::Renderers
         {
             (void)surfaceFormat;
             return false;
+        }
+
+        /**
+         * @brief Returns audited usage support for one `SurfaceFormat` ordinal.
+         *
+         * `knownUsages` and `supportedUsages` use `CNA::RendererFormatUsage` bits. The default
+         * leaves every usage unknown. A renderer sets a known bit only when both its native
+         * device and its implemented CNA path have been checked; native availability alone is
+         * not a support promise.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal to classify.
+         * @return Known and supported usage masks; supported is always a subset of known.
+         */
+        [[nodiscard]] virtual CNA::RendererFormatSupport GetSurfaceFormatUsageSupportEXT(
+            int /*surfaceFormat*/) const
+        {
+            return {};
         }
 
         /**

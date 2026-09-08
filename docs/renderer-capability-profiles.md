@@ -1,7 +1,7 @@
 # Detailed renderer capability profiles
 
 Status: implemented as `MOD-2203` on 2026-08-22; numeric inventory extended by `MOD-2220`
-on 2026-09-08.
+and detailed format plumbing by `MOD-2221` on 2026-09-08.
 
 CNA has two capability-discovery levels. `GraphicsCapability` remains the small compatibility
 summary used by existing code. `RendererCapabilityProfile` is the detailed, immutable snapshot for
@@ -47,11 +47,13 @@ integer number of **picoseconds** so the public/C ABI snapshot stays fixed-width
 Vulkan's fractional nanosecond values. A zero is the explicit unsupported/unimplemented result;
 the separate `known` bit remains available for a renderer that cannot classify a value.
 
-The initial format section classifies the three facts the existing
-renderer boundary can answer honestly: texture storage, render-target creation and `Color`-shaped
-transfer. The remaining usage identities already have stable names but stay unknown. Completing
-the broader native format probes remains tracked by `MOD-2221`; renderer-specific numeric values
-are populated only by their owning rollout rows rather than inferred from renderer names.
+The common format boundary covers texture storage, sampling, linear filtering, render-target and
+blend attachment use, storage read/write/atomic use, transfer source/destination, mipmapping,
+multisampling and `Color`-shaped transfer. A renderer returns separate known and supported masks
+for one `SurfaceFormat`; its audited facts override the three older framework classifications for
+the same bits, while every omitted bit remains unknown. The false-by-default renderer hook therefore
+cannot turn native availability into an accidental CNA promise. Renderer-specific values and format
+facts are populated only by their owning rollout rows rather than inferred from renderer names.
 
 ## English limitations and complete report
 

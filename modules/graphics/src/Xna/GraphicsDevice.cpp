@@ -2654,6 +2654,7 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             const SurfaceFormat format = CapabilitySurfaceFormats[i];
             const int ordinal = static_cast<int>(format);
+            std::uint32_t known = classifiedFormatUsages;
             std::uint32_t supported = 0;
             if (ResolveFormatVerdict(renderer.ClassifySurfaceFormatEXT(ordinal),
                                      format == SurfaceFormat::Color))
@@ -2664,9 +2665,15 @@ namespace Microsoft::Xna::Framework::Graphics
             if (ResolveFormatVerdict(renderer.ClassifyColorTransferFormatEXT(ordinal),
                                      Texture::GetFormatSizeEXT(format) % 4 == 0))
                 supported |= static_cast<std::uint32_t>(CNA::RendererFormatUsage::ColorTransfer);
+            const CNA::RendererFormatSupport rendererSupport =
+                renderer.GetSurfaceFormatUsageSupportEXT(ordinal);
+            const std::uint32_t rendererKnown = rendererSupport.knownUsages;
+            supported = (supported & ~rendererKnown) |
+                        (rendererSupport.supportedUsages & rendererKnown);
+            known |= rendererKnown;
             profile.SetSurfaceFormat(static_cast<std::uint32_t>(ordinal),
                                      CapabilitySurfaceFormatNames[i],
-                                     {classifiedFormatUsages, supported});
+                                     {known, supported});
         }
 
         profile.additionalLimitationsText_ =
