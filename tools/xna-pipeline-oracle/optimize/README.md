@@ -103,10 +103,13 @@ That rule is exact on this family, and putting it into `model.py` moves the reco
 135 of 372 probes to **179** -- so it is not only about pendant triangles. Three readings of "the
 face across this edge" were scored: taking the first face listed on the edge and ending the run
 where it is used or wrongly wound scores 179; skipping the face the walk stands on first scores
-160; taking the first *unused* face, which is what a plain adjacency walk does, scores 135. The
-first reading is the one kept, and it is what an edge-to-face table with one slot and first-write-
-wins would do. It still ends a closed fan's run after one face, which the corpus says it should
-not, so it is a better reading and not the whole of it.
+160; taking the first *unused* face, which is what a plain adjacency walk does, scores 135. A fourth, skipping only the *used* faces and
+still ending the run on a wrongly wound first survivor, scores 178. The first reading is the one
+kept -- it is what an edge-to-face table with one slot and first-write-wins would do -- and with a
+seed pivot taken as the *last* minimum-live corner of the seed face rather than the first, the
+reconstruction reaches **197 of 372**. What it still gets wrong is visible: `grid_4x4` leaves its
+first run after two faces because the edge it wants lists the face it just emitted first, and a
+closed fan of nine turns the wrong way at its seventh.
 
 ## What is not settled## What is not settled
 

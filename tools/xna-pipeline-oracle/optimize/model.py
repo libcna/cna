@@ -30,7 +30,7 @@ class Mesh:
 
 
 def walk(faces, seed_rule="minlive_highest_face", stop_rule="minlive_tie",
-         cache_size=32, run_cap=None):
+         cache_size=32, run_cap=None, pivot_rule="first"):
     m = Mesh(faces)
     used = [False] * m.n
     live = {v: len(f) for v, f in m.of_vertex.items()}
@@ -99,7 +99,16 @@ def walk(faces, seed_rule="minlive_highest_face", stop_rule="minlive_tie",
         # the pivot is the minimal-live vertex the seed was chosen for
         triple = faces[chosen]
         pivots = [v for v in triple if live[v] == low]
-        pivot = pivots[0] if pivots else triple[2]
+        if not pivots:
+            pivot = triple[2]
+        elif pivot_rule == "last":
+            pivot = pivots[-1]
+        elif pivot_rule == "lowest":
+            pivot = min(pivots)
+        elif pivot_rule == "highest":
+            pivot = max(pivots)
+        else:
+            pivot = pivots[0]
         k = triple.index(pivot)
         return chosen, (triple[(k + 1) % 3], triple[(k + 2) % 3])
 
@@ -174,14 +183,15 @@ def main() -> int:
                                       "build/xna-sample-sweep/optimize/answers%s.txt" % n))
     print("%d measured probes" % len(everything))
     for seed_rule in ("minlive_highest_face", "minlive_cached_first"):
-        for stop_rule in ("minlive_tie", "never", "fresh_vertex", "fresh_vertex_pair"):
-            for cap in (None, 7, 8):
+        for stop_rule in ("minlive_tie", "never"):
+            for pivot_rule in ("first", "last", "lowest", "highest"):
                 exact, total, misses = score(everything, seed_rule=seed_rule,
-                                             stop_rule=stop_rule, run_cap=cap)
-                print("%-22s %-12s cap=%-5s %3d / %d" % (seed_rule, stop_rule, cap, exact, total))
+                                             stop_rule=stop_rule, pivot_rule=pivot_rule)
+                print("%-22s %-12s pivot=%-8s %3d / %d"
+                      % (seed_rule, stop_rule, pivot_rule, exact, total))
     if len(sys.argv) > 1:
         exact, total, misses = score(everything, seed_rule=sys.argv[1], stop_rule=sys.argv[2],
-                                     run_cap=None if sys.argv[3] == "none" else int(sys.argv[3]))
+                                     pivot_rule=sys.argv[3])
         for name, div, n in misses:
             print("   %-28s diverges at %d/%d" % (name, div, n))
     return 0
