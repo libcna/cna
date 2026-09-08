@@ -504,17 +504,30 @@ parity can ever mean here:
 
 ### 12.3 What a next pass should do
 
-In the order the measurements suggest:
+Everything that is still unexplained is in the model family, and almost all of it
+is one question.
 
-1. `XNASWEEP-129` -- 7% of one FBX mesh's texture coordinates. 182 of the 204
-   unexplained references sit behind it, and the channel is already isolated.
-2. The last six `FontTextureProcessor` references, which `XNASWEEP-131` did not
-   reach when the other 34 became identical.
-3. The 15 `TextureProcessor` pairs whose difference is neither the mip dither nor
-   the container.
+1. **`MeshHelper.OptimizeForCache` (`XNASWEEP-149`).** The order it puts a mesh's
+   triangles in decides the vertex and index buffers, the digests that follow
+   them and the bounding sphere computed over them. Twenty probes are committed
+   with the graphics oracle -- strips, grids of five sizes, four UV spheres,
+   disjoint quads, a closed fan, two disjoint grids, and four meshes whose faces
+   or vertices are renumbered without changing the topology. What is known: the
+   answer depends on the order the faces arrive in; a strip walks a *generalized*
+   triangle strip with an ordered leading edge and one allowed swap; and when a
+   strip ends the next face is the **highest-indexed unused face containing a
+   vertex of minimum remaining valence**, which reproduces nine of the twenty
+   exactly. What is not: what stops a strip that could still be continued, and
+   why a closed surface's two symmetric poles are not symmetric to it.
+2. **The root bone XNA answers as the identity (`XNASWEEP-150`).** Fifteen
+   references, and `photograph.fbx` gives the relation a number: the translation
+   is the local one divided by the scaling that went missing.
+3. **One float in `tank.fbx` (`XNASWEEP-153`).** Ten references, one component
+   each, one unit of last place, and five parsing routes ruled out.
+4. **The 367 the sweep cannot reach (`XNASWEEP-158`).** Nine samples built by a
+   hand-written runner rather than a content project.
 
-`XNASWEEP-130` is now answered rather than open: the sprite-font packer grew tall
-where XNA grows wide because it was a shelf packer, and `XNASWEEP-131` replaced it
-with XNA's own. Those atlases will not make a `.spritefont` identical while the
-rasterizer differs, but the packer underneath them is no longer the reason.
-
+`XNASWEEP-129` and `XNASWEEP-130` are answered rather than open, and so are the
+15 `TextureProcessor` pairs, the 6 `FontTextureProcessor` references and the one
+`PassThroughProcessor` document that stood here before: the classification of
+2026-09-08 has no unexplained reference outside `.fbx` and `.x`.
