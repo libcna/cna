@@ -26,6 +26,20 @@ namespace Cna.Xna40.ModelOracle
         private static string OutputDirectory = ".";
         private static string FixtureDirectory = ".";
 
+        /**
+         * Which case this process is to measure: null for every one of them, "--list" to print the
+         * names in order and measure nothing, or one case's name.
+         *
+         * One process per case is not a convenience. The FBX SDK inside XNA's importer keeps state
+         * across imports in one process, and it is observable: `fbx_texture_second_batch.fbx`
+         * answers a material with no texture when it is imported after the fixtures that were there
+         * before 2026-09-08, and a material *with* its texture when one unrelated file is added to
+         * the same directory. Measured both ways, twice each, deterministic in each direction
+         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-147`). A measurement that moves when a
+         * file it never names is added is not a measurement, so each one now gets its own process.
+         */
+        private static string Mode = null;
+
         private static string Escape(string text)
         {
             return text.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\r", "\\r").Replace("\n", "\\n");
@@ -33,6 +47,8 @@ namespace Cna.Xna40.ModelOracle
 
         private static void Record(string name, Func<string> measurement)
         {
+            if (Mode == "--list") { Console.WriteLine(name); return; }
+            if (Mode != null && Mode != name) { return; }
             try
             {
                 Cases.Add("  {\"case\": \"" + name + "\", \"result\": \"" + Escape(measurement()) + "\"}");
@@ -47,6 +63,7 @@ namespace Cna.Xna40.ModelOracle
 
         private static void Publish()
         {
+            if (Mode == "--list") { return; }
             File.WriteAllText(Path.Combine(OutputDirectory, "model-import-oracle.json"), Document());
         }
 
@@ -221,6 +238,7 @@ namespace Cna.Xna40.ModelOracle
             Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
             OutputDirectory = args.Length > 0 ? args[0] : ".";
             FixtureDirectory = args.Length > 1 ? args[1] : ".";
+            Mode = args.Length > 2 && args[2].Length > 0 ? args[2] : null;
             Directory.CreateDirectory(OutputDirectory);
 
             Record("attribute/x", delegate { return DescribeAttribute(typeof(XImporter)); });

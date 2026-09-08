@@ -56,13 +56,51 @@ rm -rf "$build/out" "$build/fixtures"; mkdir -p "$build/out" "$build/fixtures"
 cp -a "$fixtures/." "$build/fixtures/"
 win_out="$(env WINEPREFIX="$prefix" WINEDEBUG=-all wine winepath -w "$build/out" 2>/dev/null)"
 win_fix="$(env WINEPREFIX="$prefix" WINEDEBUG=-all wine winepath -w "$build/fixtures" 2>/dev/null)"
+drive() {
+    # $1 is the case to measure, "--list" to print the names, and "" for all of them at once.
+    timeout "${CNA_MODEL_ORACLE_TIMEOUT:-900}" \
+      env -u WAYLAND_DISPLAY DISPLAY="${CNA_XNA40_DISPLAY:-:99}" WINEPREFIX="$prefix" WINEDEBUG=-all \
+      wine "$build/ModelImportOracle.exe" "$2" "$win_fix" "$1"
+}
+
+# One process per case. The FBX SDK inside XNA's importer carries state from one import to the
+# next, and it changes the answer: `fbx_texture_second_batch.fbx` comes back with a texture or
+# without one depending on whether an unrelated fixture is in the directory beside it, twice each
+# way (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-147`). Measuring each case alone is what makes
+# the reference a measurement of the file rather than of the directory.
 status=0
-timeout "${CNA_MODEL_ORACLE_TIMEOUT:-900}" \
-  env -u WAYLAND_DISPLAY DISPLAY="${CNA_XNA40_DISPLAY:-:99}" WINEPREFIX="$prefix" WINEDEBUG=-all \
-  wine "$build/ModelImportOracle.exe" "$win_out" "$win_fix" || status=$?
-if [ "$status" -ne 0 ]; then
-    echo "run-model-oracle: driver exited $status; publishing what it recorded before that" >&2
-fi
+names="$(drive --list "$win_out" 2>/dev/null | tr -d '\r')" || status=$?
+[ -n "$names" ] || { echo "run-model-oracle: the driver listed no cases" >&2; exit 4; }
+rm -rf "$build/cases"; mkdir -p "$build/cases"
+index=0
+for name in $names; do
+    index=$((index + 1))
+    slug="$(printf '%04d' "$index")"
+    mkdir -p "$build/cases/$slug"
+    win_case="$(env WINEPREFIX="$prefix" WINEDEBUG=-all wine winepath -w "$build/cases/$slug" 2>/dev/null)"
+    drive "$name" "$win_case" >/dev/null 2>&1 || \
+        echo "run-model-oracle: $name exited nonzero; keeping what it wrote" >&2
+done
+
+python3 - "$build/cases" "$build/out/model-import-oracle.json" <<'MERGE'
+import json, os, sys
+root, target = sys.argv[1], sys.argv[2]
+cases = []
+producer = runtime = None
+for slug in sorted(os.listdir(root)):
+    path = os.path.join(root, slug, "model-import-oracle.json")
+    if not os.path.exists(path):
+        continue
+    with open(path, encoding="utf-8", errors="replace") as handle:
+        document = json.loads(handle.read().replace("\r", ""))
+    producer = producer or document.get("producer")
+    runtime = runtime or document.get("runtime")
+    cases.extend(document.get("cases", []))
+lines = ["  " + json.dumps(case, sort_keys=True) for case in cases]
+with open(target, "w", encoding="utf-8") as handle:
+    handle.write('{\n "producer": %s,\n "runtime": %s,\n "cases": [\n%s\n ]\n}\n'
+                 % (json.dumps(producer), json.dumps(runtime), ",\n".join(lines)))
+MERGE
 
 find "$out" -maxdepth 1 -type f -name '*.json' -delete
 for f in "$build"/out/*; do
