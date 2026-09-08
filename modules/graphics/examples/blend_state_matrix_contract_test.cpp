@@ -243,6 +243,26 @@ protected:
                          std::string("independent alpha function ") + kFunctionNames[i]);
         }
 
+        // FNA3D's GL and D3D11 drivers derive BlendEnable from the four blend factors only.
+        // One/Zero on both colour and alpha therefore bypasses the equation completely, even for
+        // ReverseSubtract or Min. This is an observable XNA/FNA fixed-function quirk, not the
+        // mathematical result of applying the selected function to source and zero.
+        for (std::size_t i = 0; i < kFunctions.size(); ++i)
+        {
+            BlendState state;
+            state.setColorSourceBlendProperty(Blend::One);
+            state.setColorDestinationBlendProperty(Blend::Zero);
+            state.setAlphaSourceBlendProperty(Blend::One);
+            state.setAlphaDestinationBlendProperty(Blend::Zero);
+            state.setColorBlendFunctionProperty(kFunctions[i]);
+            state.setAlphaBlendFunctionProperty(kFunctions[i]);
+            const Color actual = Render(device, state);
+            CheckChannel(actual.getRProperty(), kSource.getRProperty(),
+                         std::string("opaque-factor RGB bypasses ") + kFunctionNames[i]);
+            CheckChannel(actual.getAProperty(), kSource.getAProperty(),
+                         std::string("opaque-factor alpha bypasses ") + kFunctionNames[i]);
+        }
+
         std::printf("=== %d/%d PASS ===\n", passed_, total_);
         result_ = passed_ == total_ ? 0 : 1;
         Exit();

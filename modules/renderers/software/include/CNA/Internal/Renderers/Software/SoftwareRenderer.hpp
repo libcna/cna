@@ -401,12 +401,17 @@ namespace CNA::Internal::Renderers::Software
         int colorFunction = 0;
         int alphaFunction = 0;
 
-        /** @brief Whether this is the exact Opaque identity, including both functions. */
+        /**
+         * @brief Whether XNA/FNA disables blending for this factor combination.
+         *
+         * FNA3D derives BlendEnable from the four factors only. Consequently One/Zero on both
+         * channels bypasses even a non-Add blend function; Software preserves that observable
+         * fixed-function rule instead of evaluating an equation the reference never enables.
+         */
         [[nodiscard]] bool IsOpaqueIdentity() const
         {
             return colorSource == 0 && alphaSource == 0 &&
-                   colorDestination == 1 && alphaDestination == 1 &&
-                   colorFunction == 0 && alphaFunction == 0;
+                   colorDestination == 1 && alphaDestination == 1;
         }
     };
 
