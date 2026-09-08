@@ -726,6 +726,11 @@ TEST(XnaFbxImporter, EveryFileAnswersTheGraphXnaAnswers)
           "fbx_polygon8.fbx", "fbx_polygon12.fbx", "fbx_polygon8_rotated.fbx",
           "fbx_polygon8_reversed.fbx", "fbx_polygon_concave.fbx", "fbx_polygon_concave6.fbx",
           "fbx_polygon_mixed.fbx", "fbx_polygon_tri_quad.fbx",
+          // A `Materials` array that names an index no connected material answers. Those polygons
+          // are not dropped: XNA answers all of them in one batch with no material at all, whatever
+          // index each named, and a mesh whose polygons name only out-of-range indices comes back
+          // as a single null-material batch (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-165`).
+          "fbx_material_gap.fbx", "fbx_material_gap_negative.fbx", "fbx_material_gap_skip.fbx",
           "fbx_two_materials.fbx"})
     {
         ImporterContext context;
@@ -746,7 +751,8 @@ TEST(XnaFbxImporter, APolygonIsTriangulatedIntoXnasOwnCornerOrder)
          {"fbx_quad_polygon.fbx", "fbx_polygon4.fbx", "fbx_polygon5.fbx", "fbx_polygon6.fbx",
           "fbx_polygon7.fbx", "fbx_polygon8.fbx", "fbx_polygon12.fbx",
           "fbx_polygon8_rotated.fbx", "fbx_polygon8_reversed.fbx", "fbx_polygon_concave.fbx",
-          "fbx_polygon_concave6.fbx", "fbx_polygon_mixed.fbx", "fbx_polygon_tri_quad.fbx"})
+          "fbx_polygon_concave6.fbx", "fbx_polygon_mixed.fbx", "fbx_polygon_tri_quad.fbx",
+          "fbx_material_gap.fbx", "fbx_material_gap_negative.fbx", "fbx_material_gap_skip.fbx"})
     {
         ImporterContext context;
         ExpectSame(SortAnimations(ImportFbx(fixture, context)),

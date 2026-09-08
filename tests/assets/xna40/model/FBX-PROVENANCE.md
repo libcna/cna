@@ -18,6 +18,9 @@ is third-party content.
 | `fbx_empty.fbx` | 0 |
 | `fbx_hierarchy.fbx` | 2058 |
 | `fbx_light_marker.fbx` | 1946 |
+| `fbx_material_gap.fbx` | 2046 |
+| `fbx_material_gap_negative.fbx` | 2047 |
+| `fbx_material_gap_skip.fbx` | 2050 |
 | `fbx_not_fbx.fbx` | 31 |
 | `fbx_not_fbx_large.fbx` | 1024 |
 | `fbx_oblique.fbx` | 1787 |

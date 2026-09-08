@@ -441,6 +441,27 @@ def main():
     polygon_mesh("fbx_polygon_tri_quad.fbx", "PolygonTriQuad",
                  ring(3) + ring(4, shift=40.0), [[0, 1, 2], [3, 4, 5, 6]])
 
+    # A `Materials` array that names an index no connected material answers. XNA does not drop
+    # those polygons: it answers them in one batch with no material at all, whatever index each
+    # named (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-165).
+    gap_vertices = [(0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0),
+                    (2, 0, 0), (2, 1, 0), (3, 0, 0), (3, 1, 0)]
+    gap_polygons = [[0, 1, 2, 3], [1, 4, 5, 2], [4, 6, 7, 5]]
+
+    def material_gap(filename, name, per_polygon):
+        write(os.path.join(out, filename),
+              {"count": 2, "models": 1, "materials": 1, "deformers": 0},
+              mesh_model(name, gap_vertices, gap_polygons, materials_per_polygon=per_polygon) +
+              material("Only", (1, 0, 0), (0, 0, 0), (0, 0, 0), 1.0, 1.0),
+              '\tModel: "Model::%s", "Mesh" {\n\t}\n'
+              '\tMaterial: "Material::Only", "" {\n\t}\n' % name,
+              '\tConnect: "OO", "Model::%s", "Model::Scene"\n'
+              '\tConnect: "OO", "Material::Only", "Model::%s"\n' % (name, name))
+
+    material_gap("fbx_material_gap.fbx", "MatGap", [0, 1, 2])
+    material_gap("fbx_material_gap_negative.fbx", "MatNeg", [0, -1, 0])
+    material_gap("fbx_material_gap_skip.fbx", "MatSkip", [2, 1, 2])
+
     with open(os.path.join(out, "FBX-PROVENANCE.md"), "w", encoding="utf-8") as handle:
         handle.write("# FBX corpus (authored)\n\n")
         handle.write("Written by `tools/xna-pipeline-oracle/model/make_fbx_fixtures.py`, in FBX 6.1\n")

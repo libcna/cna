@@ -1268,20 +1268,52 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 // triangles -- which is the first-use order exactly, where the connection order
                 // would answer 200, 8, 863, 81, 131, 179, 466, ...
                 // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-155`).
-                std::vector<std::size_t> batchOrder;
-                if (batchMaterials.empty())
+                //
+                // A polygon whose index names no connected material is *not* dropped: XNA answers
+                // every one of them in a single batch carrying no material at all, whatever index
+                // each named. `fbx_material_gap.fbx` names 0, 1 and 2 with one material connected
+                // and answers two batches -- `Only`, then one null-material batch holding both the
+                // 1 and the 2; `fbx_material_gap_negative.fbx` does the same for -1; and
+                // `fbx_material_gap_skip.fbx`, whose polygons name only out-of-range indices,
+                // answers a single null batch. SAMPLE-138's `photograph.fbx` is the corpus's own
+                // case: its `Materials` array names 0, 1 and 2 with two materials connected, and
+                // dropping the 86 polygons that named 2 lost a whole mesh part and 154 vertices
+                // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-165`).
+                constexpr std::size_t NoMaterial = static_cast<std::size_t>(-1);
+                const auto batchOf = [&](const Polygon& polygon) -> std::size_t
                 {
-                    batchOrder.push_back(0u);
-                }
-                else
+                    if (batchMaterials.empty())
+                    {
+                        return NoMaterial;
+                    }
+                    const auto which = static_cast<std::size_t>(polygon.material);
+                    return (polygon.material >= 0 && which < batchMaterials.size()) ? which
+                                                                                    : NoMaterial;
+                };
+                std::vector<std::size_t> batchOrder;
                 {
                     std::vector<bool> seen(batchMaterials.size(), false);
+                    bool seenNone = false;
                     for (const Polygon& polygon : polygons)
                     {
-                        const std::size_t which = static_cast<std::size_t>(polygon.material);
-                        if (polygon.material < 0 || which >= seen.size() || seen[which]) { continue; }
-                        seen[which] = true;
-                        batchOrder.push_back(which);
+                        const std::size_t which = batchOf(polygon);
+                        if (which == NoMaterial)
+                        {
+                            if (!seenNone)
+                            {
+                                seenNone = true;
+                                batchOrder.push_back(NoMaterial);
+                            }
+                        }
+                        else if (!seen[which])
+                        {
+                            seen[which] = true;
+                            batchOrder.push_back(which);
+                        }
+                    }
+                    if (batchOrder.empty())
+                    {
+                        batchOrder.push_back(NoMaterial);
                     }
                 }
                 for (const std::size_t batch : batchOrder)
@@ -1302,7 +1334,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     std::vector<std::size_t> cornerOf;      // the polygon-vertex each local vertex came from
                     for (const Polygon& polygon : polygons)
                     {
-                        if (!batchMaterials.empty() && polygon.material != batch)
+                        if (batchOf(polygon) != batch)
                         {
                             continue;
                         }
