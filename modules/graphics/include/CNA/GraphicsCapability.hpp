@@ -37,7 +37,7 @@ namespace CNA
         /** @brief RasterizerState.FillMode = FillMode::WireFrame. */
         WireFrame,
 
-        /** @brief Real GPU occlusion queries (OcclusionQuery.Begin/End/PixelCount). */
+        /** @brief Real raster-sample occlusion queries (OcclusionQuery.Begin/End/PixelCount). */
         OcclusionQuery,
 
         /** @brief A custom (non-stock) Effect passed to SpriteBatch.Begin(). */

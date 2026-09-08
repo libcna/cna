@@ -110,9 +110,9 @@ namespace CNA::Internal::Renderers::Software
                 // after an oblique-minification fixture proves a real anisotropic implementation.
                 return false;
             case CNA::GraphicsCapability::OcclusionQuery:
-                // CreateOcclusionQuery() still has the shared null default. SOFTWARE-122 will
-                // provide a deterministic surviving-sample counter and restore this capability.
-                return false;
+                // SOFTWARE-122: the CPU query counts the exact samples surviving coverage,
+                // MultiSampleMask, alpha, depth and stencil through the shared fragment path.
+                return true;
             case CNA::GraphicsCapability::CustomEffects:
                 // SoftwareEffectRenderer accepts source for resource compatibility, but the CPU
                 // rasterizer never executes that source. Its fixed stock-effect path is not custom

@@ -57,8 +57,8 @@ namespace
                   "MultipleRenderTargets is false until SOFTWARE-120 lands");
             Check(!device.SupportsCapability(CNA::GraphicsCapability::AnisotropicFiltering),
                   "AnisotropicFiltering is false while Anisotropic maps to linear");
-            Check(!device.SupportsCapability(CNA::GraphicsCapability::OcclusionQuery),
-                  "OcclusionQuery is false while its factory is absent");
+            Check(device.SupportsCapability(CNA::GraphicsCapability::OcclusionQuery),
+                  "OcclusionQuery is advertised with its exact CPU counter");
             Check(!device.SupportsCapability(CNA::GraphicsCapability::CustomEffects),
                   "CustomEffects is false because supplied shader source is not executed");
             Check(!device.SupportsCapability(CNA::GraphicsCapability::Texture3D),
@@ -69,11 +69,11 @@ namespace
             OcclusionQuery query(device);
             query.Begin();
             query.End();
-            Check(!query.HasRenderer(),
-                  "an unsupported OcclusionQuery owns no fake renderer");
-            Check(!query.getIsCompleteProperty() && query.getPixelCountProperty() == 0 &&
-                      !query.isPixelCountPreciseEXT(),
-                  "an unsupported OcclusionQuery cannot fabricate a completed result");
+            Check(query.HasRenderer(),
+                  "OcclusionQuery owns a real Software renderer object");
+            Check(query.getIsCompleteProperty() && query.getPixelCountProperty() == 0 &&
+                      query.isPixelCountPreciseEXT(),
+                  "an empty CPU query completes synchronously with an exact zero result");
 
             bool texture3DRejected = false;
             try

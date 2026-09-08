@@ -221,6 +221,13 @@ rather than always passing.
   triangle depth is evaluated at each covered location, and resolve deterministically averages the
   surviving colors. The renderer-neutral mask/depth/stencil contract also exposed and repaired
   EasyGL's former silent omission of non-default sample masks.
+- **`OcclusionQuery` is an exact CPU raster query** (`SOFTWARE-122`). `Begin` starts a fresh
+  measurement, `End` completes synchronously, and `PixelCount` is the number of raster samples
+  surviving clipping, scissor, geometric coverage, `MultiSampleMask`, alpha test, depth and
+  stencil. Color-write masks do not suppress visibility, 4× MSAA counts individual selected
+  samples, and deferred SpriteBatch draws participate in the same interval. The three existing
+  EasyGL public lifecycle/visible/occluded scenes compile unchanged for Software, while the CPU
+  exact contract passes 43/43 checks.
 - **`SpriteBatch` honors a custom `GraphicsDevice.Viewport`** (`REMED-GFX-073`) — sprite
   coordinates are viewport-local (sprite `(0,0)` = the viewport's top-left), the result is placed at
   `Viewport.X/Y`, and pixels outside the viewport rectangle are clipped, matching real XNA/FNA and

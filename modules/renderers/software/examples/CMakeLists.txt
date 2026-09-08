@@ -744,6 +744,26 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
         COMMAND cna_test_software_capability_contract
         TIMEOUT 30 LABELS "Software")
 
+    # SOFTWARE-122: compile the existing public EasyGL query lifecycle/visible/occluded scenes
+    # unchanged for Software, then add a CPU-exact contract for every fragment gate and 4x sample
+    # accounting. These are real public OcclusionQuery draws, not direct counter-unit tests.
+    cna_software_test(cna_test_software_occlusion_query_cycle
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/occlusion_query_test.cpp)
+    cna_register_renderer_test(NAME Software_OcclusionQuery_Cycle
+        COMMAND cna_test_software_occlusion_query_cycle TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_occlusion_query_visible
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_occlusion_query_visible_quad_test.cpp)
+    cna_register_renderer_test(NAME Software_OcclusionQuery_VisibleQuad
+        COMMAND cna_test_software_occlusion_query_visible TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_occlusion_query_occluded
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_occlusion_query_occluded_quad_test.cpp)
+    cna_register_renderer_test(NAME Software_OcclusionQuery_OccludedQuad
+        COMMAND cna_test_software_occlusion_query_occluded TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_occlusion_query_contract
+        software_occlusion_query_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_OcclusionQuery_ExactContract
+        COMMAND cna_test_software_occlusion_query_contract TIMEOUT 30 LABELS "Software")
+
     # SOFTWARE-108: declarations, not byte stride, identify stock-effect vertex attributes.
     # The fixture covers every XNA VertexElementFormat, reordered equal-stride records, a public
     # VertexBufferBinding offset and two independent per-vertex streams through pixel readback.

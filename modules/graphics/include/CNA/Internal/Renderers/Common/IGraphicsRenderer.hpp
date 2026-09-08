@@ -182,7 +182,7 @@ namespace CNA::Internal::Renderers
     };
 
     /**
-     * @brief Renderer handle for a GPU occlusion query.
+     * @brief Renderer handle for an occlusion query answered by the active rasterizer.
      *
      * On OpenGL ES 3.0 (EasyGL), uses GL_ANY_SAMPLES_PASSED — so PixelCount()
      * returns 0 (no visible samples) or 1 (at least one visible sample), not an
@@ -2170,7 +2170,7 @@ namespace CNA::Internal::Renderers
         }
 
         /// Creates a renderer occlusion query object. Returns nullptr on
-        /// renderers that do not support hardware occlusion queries.
+        /// renderers that do not support raster-sample occlusion queries.
         virtual std::unique_ptr<IOcclusionQueryRenderer> CreateOcclusionQuery() { return nullptr; }
         virtual std::unique_ptr<ITexture3DRenderer> CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) { return nullptr; }
         virtual std::unique_ptr<ITextureCubeRenderer> CreateTextureCube(int size, bool mipMap, int surfaceFormat) { return nullptr; }

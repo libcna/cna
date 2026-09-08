@@ -282,7 +282,8 @@ namespace CNA::Internal::Renderers::Software
             SoftwareFramebuffer& fb, const RasterDepthState& depthState,
             const RasterStencilState& stencilState, std::size_t pixelIndex,
             unsigned int activeSamples, float centerDepth,
-            const std::array<float, 4>* sampleDepths = nullptr)
+            const std::array<float, 4>* sampleDepths,
+            SoftwareOcclusionQueryRenderer* occlusionQuery)
         {
             if (!fb.HasMultiSampleColor())
             {
@@ -321,6 +322,8 @@ namespace CNA::Internal::Renderers::Software
                                  stencilState.passOperation);
                 if (depthState.testEnabled)
                     WritePassingDepth(fb.depthBuffer[pixelIndex], depthState, centerDepth);
+                if (occlusionQuery != nullptr)
+                    occlusionQuery->RecordPassingSamples(1u);
                 return 1u;
             }
 
@@ -371,6 +374,8 @@ namespace CNA::Internal::Renderers::Software
                                       sampleDepth);
                 passingSamples |= sampleBit;
             }
+            if (occlusionQuery != nullptr)
+                occlusionQuery->RecordPassingSamples(passingSamples);
             return passingSamples;
         }
 
@@ -1906,6 +1911,7 @@ namespace CNA::Internal::Renderers::Software
                                          const RasterClipRect& clip, int x, int y,
                                          float depth, float invW, float pr, float pg, float pb, float pa,
                                          int colorWriteMask, unsigned int multiSampleMask,
+                                         SoftwareOcclusionQueryRenderer* occlusionQuery,
                                          unsigned int coverageMask = 0xFFFFFFFFu,
                                          const std::array<float, 4>* sampleDepths = nullptr)
         {
@@ -1920,7 +1926,8 @@ namespace CNA::Internal::Renderers::Software
             const std::size_t pixelIndex = static_cast<std::size_t>(y) * static_cast<std::size_t>(fb.width) +
                                            static_cast<std::size_t>(x);
             const unsigned int passingSamples = ApplyFragmentTests(
-                fb, depthState, stencilState, pixelIndex, activeSamples, depth, sampleDepths);
+                fb, depthState, stencilState, pixelIndex, activeSamples, depth, sampleDepths,
+                occlusionQuery);
             if (passingSamples == 0u)
                 return;
             const float r = pr / invW, g = pg / invW, b = pb / invW, a = pa / invW;
@@ -1964,6 +1971,7 @@ namespace CNA::Internal::Renderers::Software
                                const RasterClipRect& clip,
                                const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2,
                                int colorWriteMask, unsigned int multiSampleMask,
+                               SoftwareOcclusionQueryRenderer* occlusionQuery,
                                bool wireframe = false, unsigned edgeMask = kEdgeAll)
         {
             const float area = EdgeFunction(v0.x, v0.y, v1.x, v1.y, v2.x, v2.y);
@@ -1992,7 +2000,7 @@ namespace CNA::Internal::Renderers::Software
                         WriteColoredFragment(fb, depthState, faceStencil, clip, x, y, depth, invW,
                                              A.r + t * (B.r - A.r), A.g + t * (B.g - A.g),
                                              A.b + t * (B.b - A.b), A.a + t * (B.a - A.a),
-                                             colorWriteMask, multiSampleMask);
+                                             colorWriteMask, multiSampleMask, occlusionQuery);
                     });
                 };
                 if (edgeMask & kEdgeV0V1) drawEdge(v0, v1);
@@ -2079,7 +2087,7 @@ namespace CNA::Internal::Renderers::Software
                                          lambda0 * v0.g + lambda1 * v1.g + lambda2 * v2.g,
                                          lambda0 * v0.b + lambda1 * v1.b + lambda2 * v2.b,
                                          lambda0 * v0.a + lambda1 * v1.a + lambda2 * v2.a,
-                                         colorWriteMask, multiSampleMask, coverageMask,
+                                         colorWriteMask, multiSampleMask, occlusionQuery, coverageMask,
                                          fb.HasMultiSampleColor() ? &sampleDepths : nullptr);
                 }
             }
@@ -2580,6 +2588,8 @@ namespace CNA::Internal::Renderers::Software
             RasterStencilState stencilState; // GDI-026: per-draw 8-bit stencil snapshot
             int colorWriteMask;           // REMED-GFX-077: raw XNA ColorWriteChannels (bit0=R..bit3=A)
             unsigned int multiSampleMask; // REMED-GFX-077: single-sample ⇒ only bit 0 is meaningful
+            /// SOFTWARE-122: query open when this draw was submitted, or null outside Begin/End.
+            SoftwareOcclusionQueryRenderer* occlusionQuery;
             // REMED-GFX-150: the SamplerState of each bound texture slot, resolved once per draw so
             // no fragment can consult a later live state, plus this triangle's magnification
             // classification for each (only XNA filters 5..8 read it).
@@ -2742,7 +2752,7 @@ namespace CNA::Internal::Renderers::Software
             // depth/stencil operation. Only samples surviving those operations reach colour.
             const unsigned int passingSamples = ApplyFragmentTests(
                 fb, ctx.depthState, ctx.stencilState, pixelIndex, activeSamples, depth,
-                sampleDepths);
+                sampleDepths, ctx.occlusionQuery);
             if (passingSamples == 0u)
                 return;
 
@@ -2859,7 +2869,8 @@ namespace CNA::Internal::Renderers::Software
             const RasterStencilState& stencilState, const SoftwareBlendState& blendState,
             const std::array<float, 4>& blendFactor, int colorWriteMask,
             unsigned int multiSampleMask, const SoftwareSamplerState& sampler0,
-            const SoftwareSamplerState& sampler1)
+            const SoftwareSamplerState& sampler1,
+            SoftwareOcclusionQueryRenderer* occlusionQuery)
         {
             const auto* texture0 = dynamic_cast<const SoftwareColorSurface*>(params.texture0);
             const auto* texture1 = dynamic_cast<const SoftwareColorSurface*>(params.texture1);
@@ -2878,7 +2889,7 @@ namespace CNA::Internal::Renderers::Software
                                 (params.textureEnabled && texture0 != nullptr);
             return ShadedContext{params, texture0, texture1, envMap, useDualTexture, useEnvMap,
                                  needUV, blendState, blendFactor, depthState, stencilState,
-                                 colorWriteMask, multiSampleMask, sampler0, sampler1,
+                                 colorWriteMask, multiSampleMask, occlusionQuery, sampler0, sampler1,
                                  true, true, 0.0f, 0.0f, true, 0.0f};
         }
 
@@ -2890,11 +2901,12 @@ namespace CNA::Internal::Renderers::Software
             const std::array<float, 4>& blendFactor, const GpuDrawParams& params,
             const RasterClipRect& clip, const RasterVertex& a, const RasterVertex& b,
             int colorWriteMask, unsigned int multiSampleMask,
-            const SoftwareSamplerState& sampler0, const SoftwareSamplerState& sampler1)
+            const SoftwareSamplerState& sampler0, const SoftwareSamplerState& sampler1,
+            SoftwareOcclusionQueryRenderer* occlusionQuery)
         {
             const ShadedContext ctx = MakeLinearShadedContext(
                 params, depthState, stencilState, blendState, blendFactor, colorWriteMask,
-                multiSampleMask, sampler0, sampler1);
+                multiSampleMask, sampler0, sampler1, occlusionQuery);
             WalkWireEdge(clip, a, b, [&](int x, int y, float t) {
                 const float invW = a.invW + t * (b.invW - a.invW);
                 WriteShadedFragment(
@@ -2923,13 +2935,14 @@ namespace CNA::Internal::Renderers::Software
             const std::array<float, 4>& blendFactor, const GpuDrawParams& params,
             const RasterClipRect& clip, const RasterVertex& point, int colorWriteMask,
             unsigned int multiSampleMask, const SoftwareSamplerState& sampler0,
-            const SoftwareSamplerState& sampler1)
+            const SoftwareSamplerState& sampler1,
+            SoftwareOcclusionQueryRenderer* occlusionQuery)
         {
             if (!std::isfinite(point.x) || !std::isfinite(point.y))
                 return;
             const ShadedContext ctx = MakeLinearShadedContext(
                 params, depthState, stencilState, blendState, blendFactor, colorWriteMask,
-                multiSampleMask, sampler0, sampler1);
+                multiSampleMask, sampler0, sampler1, occlusionQuery);
             WriteShadedFragment(fb, ctx, clip,
                                 static_cast<int>(std::floor(point.x)),
                                 static_cast<int>(std::floor(point.y)),
@@ -2962,6 +2975,7 @@ namespace CNA::Internal::Renderers::Software
                                      int colorWriteMask, unsigned int multiSampleMask,
                                      const SoftwareSamplerState& sampler0,
                                      const SoftwareSamplerState& sampler1,
+                                     SoftwareOcclusionQueryRenderer* occlusionQuery,
                                      bool wireframe = false, unsigned edgeMask = kEdgeAll)
         {
             const float area = EdgeFunction(v0.x, v0.y, v1.x, v1.y, v2.x, v2.y);
@@ -3017,7 +3031,7 @@ namespace CNA::Internal::Renderers::Software
             const ShadedContext ctx{params, texture0, texture1, envMap, useDualTexture, useEnvMap,
                                     needUV, blendState, blendFactor,
                                     depthState, faceStencil, colorWriteMask, multiSampleMask,
-                                    sampler0, sampler1, magnify0, magnify1,
+                                    occlusionQuery, sampler0, sampler1, magnify0, magnify1,
                                     LodFromTexelRate(rho0), LodFromTexelRate(rho1),
                                     !(rhoCube > 1.0f), LodFromTexelRate(rhoCube)};
 
@@ -3552,6 +3566,60 @@ namespace CNA::Internal::Renderers::Software
 
 #endif
 
+    // ---- SoftwareOcclusionQueryRenderer (SOFTWARE-122) ----
+
+    SoftwareOcclusionQueryRenderer::SoftwareOcclusionQueryRenderer(SoftwareRenderer& owner)
+        : owner_(&owner)
+    {
+    }
+
+    SoftwareOcclusionQueryRenderer::~SoftwareOcclusionQueryRenderer()
+    {
+        if (active_ && owner_ != nullptr)
+            owner_->ReleaseOcclusionQuery(this);
+    }
+
+    void SoftwareOcclusionQueryRenderer::Begin()
+    {
+        // Native XNA/FNA exposes no public sequence validation. A repeated Begin on this query
+        // keeps the interval open, while a different already-active query owns the renderer-wide
+        // slot until it ends. Neither case throws or corrupts the active measurement.
+        if (active_ || owner_ == nullptr || !owner_->TryActivateOcclusionQuery(this))
+            return;
+        pixelCount_ = 0;
+        complete_ = false;
+        active_ = true;
+    }
+
+    void SoftwareOcclusionQueryRenderer::End()
+    {
+        if (!active_)
+            return;
+        active_ = false;
+        complete_ = true;
+        if (owner_ != nullptr)
+            owner_->ReleaseOcclusionQuery(this);
+    }
+
+    bool SoftwareRenderer::TryActivateOcclusionQuery(SoftwareOcclusionQueryRenderer* query)
+    {
+        if (activeOcclusionQuery_ != nullptr && activeOcclusionQuery_ != query)
+            return false;
+        activeOcclusionQuery_ = query;
+        return true;
+    }
+
+    void SoftwareRenderer::ReleaseOcclusionQuery(SoftwareOcclusionQueryRenderer* query)
+    {
+        if (activeOcclusionQuery_ == query)
+            activeOcclusionQuery_ = nullptr;
+    }
+
+    std::unique_ptr<IOcclusionQueryRenderer> SoftwareRenderer::CreateOcclusionQuery()
+    {
+        return std::make_unique<SoftwareOcclusionQueryRenderer>(*this);
+    }
+
     // ---- SoftwareEffectRenderer ----
 
 #ifndef CNA_SOFTWARE_2D_ONLY
@@ -3648,12 +3716,12 @@ namespace CNA::Internal::Renderers::Software
                                 cullMode, depthBias, slopeScaleDepthBias,
                                 spriteParams, clip, rv0, rv1, rv2,
                                 GetColorWriteMask(), GetMultiSampleMask(),
-                                spriteSampler, spriteSampler, wire, kEdgeAll);
+                                spriteSampler, spriteSampler, activeOcclusionQuery_, wire, kEdgeAll);
         RasterizeTriangleShaded(fb, depthState, stencilState, blendState, blendFactor,
                                 cullMode, depthBias, slopeScaleDepthBias,
                                 spriteParams, clip, rv2, rv3, rv0,
                                 GetColorWriteMask(), GetMultiSampleMask(),
-                                spriteSampler, spriteSampler, wire, kEdgeAll);
+                                spriteSampler, spriteSampler, activeOcclusionQuery_, wire, kEdgeAll);
     }
 
     std::unique_ptr<ITextureCubeRenderer> SoftwareRenderer::CreateTextureCube(int size, bool mipMap, int)
@@ -3804,7 +3872,8 @@ namespace CNA::Internal::Renderers::Software
                                   depthBias_, slopeScaleDepthBias_, clip,
                                   rv[0], rv[static_cast<std::size_t>(fan)],
                                   rv[static_cast<std::size_t>(fan + 1)],
-                                  colorWriteMask_, multiSampleMask_, wire, edgeMask);
+                                  colorWriteMask_, multiSampleMask_, activeOcclusionQuery_,
+                                  wire, edgeMask);
             }
         }
     }
@@ -3893,7 +3962,8 @@ namespace CNA::Internal::Renderers::Software
                                   depthBias_, slopeScaleDepthBias_, clip,
                                   rv[0], rv[static_cast<std::size_t>(fan)],
                                   rv[static_cast<std::size_t>(fan + 1)],
-                                  colorWriteMask_, multiSampleMask_, wire, edgeMask);
+                                  colorWriteMask_, multiSampleMask_, activeOcclusionQuery_,
+                                  wire, edgeMask);
             }
         }
     }
@@ -4011,7 +4081,7 @@ namespace CNA::Internal::Renderers::Software
                     RasterizePointShaded(
                         fb, depthState, stencilState, blendState, blendFactor, params,
                         clip, ClipVertexToRasterVertex(cv, vpT), colorWriteMask_, multiSampleMask_,
-                        GetSamplerState(0), GetSamplerState(1));
+                        GetSamplerState(0), GetSamplerState(1), activeOcclusionQuery_);
                 continue;
             }
             if (primitive == PrimitiveType::LineList || primitive == PrimitiveType::LineStrip)
@@ -4026,7 +4096,8 @@ namespace CNA::Internal::Renderers::Software
                     RasterizeLineShaded(
                         fb, depthState, stencilState, blendState, blendFactor, params, clip,
                         ClipVertexToRasterVertex(a, vpT), ClipVertexToRasterVertex(b, vpT),
-                        colorWriteMask_, multiSampleMask_, GetSamplerState(0), GetSamplerState(1));
+                        colorWriteMask_, multiSampleMask_, GetSamplerState(0), GetSamplerState(1),
+                        activeOcclusionQuery_);
                 continue;
             }
 
@@ -4064,7 +4135,7 @@ namespace CNA::Internal::Renderers::Software
                                         clip, rv[0], rv[static_cast<std::size_t>(fan)],
                                         rv[static_cast<std::size_t>(fan + 1)],
                                         colorWriteMask_, multiSampleMask_, GetSamplerState(0),
-                                        GetSamplerState(1), wire, edgeMask);
+                                        GetSamplerState(1), activeOcclusionQuery_, wire, edgeMask);
             }
         }
     }
@@ -4179,7 +4250,7 @@ namespace CNA::Internal::Renderers::Software
                     RasterizePointShaded(
                         fb, depthState, stencilState, blendState, blendFactor, params,
                         clip, ClipVertexToRasterVertex(cv, vpT), colorWriteMask_, multiSampleMask_,
-                        GetSamplerState(0), GetSamplerState(1));
+                        GetSamplerState(0), GetSamplerState(1), activeOcclusionQuery_);
                 continue;
             }
             if (primitive == PrimitiveType::LineList || primitive == PrimitiveType::LineStrip)
@@ -4194,7 +4265,8 @@ namespace CNA::Internal::Renderers::Software
                     RasterizeLineShaded(
                         fb, depthState, stencilState, blendState, blendFactor, params, clip,
                         ClipVertexToRasterVertex(a, vpT), ClipVertexToRasterVertex(b, vpT),
-                        colorWriteMask_, multiSampleMask_, GetSamplerState(0), GetSamplerState(1));
+                        colorWriteMask_, multiSampleMask_, GetSamplerState(0), GetSamplerState(1),
+                        activeOcclusionQuery_);
                 continue;
             }
 
@@ -4232,7 +4304,7 @@ namespace CNA::Internal::Renderers::Software
                                         clip, rv[0], rv[static_cast<std::size_t>(fan)],
                                         rv[static_cast<std::size_t>(fan + 1)],
                                         colorWriteMask_, multiSampleMask_, GetSamplerState(0),
-                                        GetSamplerState(1), wire, edgeMask);
+                                        GetSamplerState(1), activeOcclusionQuery_, wire, edgeMask);
             }
         }
     }

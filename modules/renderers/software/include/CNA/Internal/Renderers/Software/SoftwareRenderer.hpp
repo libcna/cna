@@ -7,11 +7,14 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <vector>
 
 namespace CNA::Internal::Renderers::Software
 {
+    class SoftwareRenderer;
+
     /**
      * @brief Real CPU-owned RGBA8 colour, depth and optional resolved 4x MSAA storage.
      *
@@ -514,11 +517,69 @@ namespace CNA::Internal::Renderers::Software
         std::array<int, 6> faceLevels_{1, 1, 1, 1, 1, 1};
     };
 
-    // Cube-map render targets, Texture3D, and CPU occlusion queries are tracked parity gaps --
-    // CreateRenderTargetCube/CreateTexture3D/CreateOcclusionQuery currently keep IGraphicsRenderer's
-    // shared default (returns nullptr). REMED-CONTENT-004: Texture3D's own absence is reported via
-    // SupportsCapability(GraphicsCapability::Texture3D) => false, so Texture3D's constructor fails
-    // cleanly instead of a caller's SetData()/GetData() calls silently discarding data.
+    // Cube-map render targets and Texture3D remain tracked parity gaps. REMED-CONTENT-004:
+    // Texture3D's absence is reported via SupportsCapability(GraphicsCapability::Texture3D) =>
+    // false, so its constructor fails cleanly instead of later SetData()/GetData() calls silently
+    // discarding data.
+
+    /** @brief Deterministic CPU implementation of an XNA occlusion query. */
+    class SoftwareOcclusionQueryRenderer final : public IOcclusionQueryRenderer
+    {
+    public:
+        /**
+         * @brief Creates a query owned by the specified Software renderer.
+         *
+         * @param owner Renderer whose passing raster samples are measured.
+         */
+        explicit SoftwareOcclusionQueryRenderer(SoftwareRenderer& owner);
+
+        /** @brief Releases an active query slot before destruction. */
+        ~SoftwareOcclusionQueryRenderer() override;
+
+        /** @brief Starts a fresh synchronous CPU sample measurement. */
+        void Begin() override;
+
+        /** @brief Ends the current measurement and makes its result complete. */
+        void End() override;
+
+        /**
+         * @brief Gets whether the most recently ended measurement is complete.
+         *
+         * @return true after a matching End call.
+         */
+        [[nodiscard]] bool IsComplete() const override { return complete_ && !active_; }
+
+        /**
+         * @brief Gets the exact number of samples that passed the raster tests.
+         *
+         * @return Saturating exact sample count from the latest measurement.
+         */
+        [[nodiscard]] int PixelCount() const override { return pixelCount_; }
+
+        /**
+         * @brief Adds the set bits in a passing single-sample or 4x MSAA mask.
+         *
+         * @param passingSamples Mask returned by the shared fragment-test state machine.
+         */
+        void RecordPassingSamples(unsigned int passingSamples) noexcept
+        {
+            const int increment =
+                static_cast<int>((passingSamples >> 0u) & 1u) +
+                static_cast<int>((passingSamples >> 1u) & 1u) +
+                static_cast<int>((passingSamples >> 2u) & 1u) +
+                static_cast<int>((passingSamples >> 3u) & 1u);
+            if (pixelCount_ > std::numeric_limits<int>::max() - increment)
+                pixelCount_ = std::numeric_limits<int>::max();
+            else
+                pixelCount_ += increment;
+        }
+
+    private:
+        SoftwareRenderer* owner_ = nullptr;
+        int pixelCount_ = 0;
+        bool active_ = false;
+        bool complete_ = false;
+    };
 
     class SoftwareEffectRenderer final : public IEffectRenderer
     {
@@ -634,6 +695,7 @@ namespace CNA::Internal::Renderers::Software
                                                              const std::string& fragSrc) override;
         std::unique_ptr<ITextureCubeRenderer> CreateTextureCube(int size, bool mipMap,
                                                                 int surfaceFormat) override;
+        std::unique_ptr<IOcclusionQueryRenderer> CreateOcclusionQuery() override;
 
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
 
@@ -823,6 +885,12 @@ namespace CNA::Internal::Renderers::Software
 
     private:
         friend class SoftwareSpriteBatchRenderer;
+        friend class SoftwareOcclusionQueryRenderer;
+
+        /** @brief Claims the renderer-wide active query slot for @p query. */
+        [[nodiscard]] bool TryActivateOcclusionQuery(SoftwareOcclusionQueryRenderer* query);
+        /** @brief Releases the renderer-wide active query slot when owned by @p query. */
+        void ReleaseOcclusionQuery(SoftwareOcclusionQueryRenderer* query);
 
         /// Submits one already-transformed SpriteBatch quad to the shared CPU triangle rasterizer.
         /// Keeping this narrow bridge private lets SoftwareSpriteBatchRenderer own the public draw
@@ -852,6 +920,8 @@ namespace CNA::Internal::Renderers::Software
 
         SoftwareFramebuffer backbuffer_;
         SoftwareRenderTargetRenderer* currentRenderTarget_ = nullptr;
+        /// The one query whose Begin/End interval currently receives passing raster samples.
+        SoftwareOcclusionQueryRenderer* activeOcclusionQuery_ = nullptr;
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
         bool depthTestEnabled_ = true;

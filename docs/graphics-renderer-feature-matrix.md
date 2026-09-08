@@ -63,7 +63,7 @@ for a meaningful column, but the active XNA/Core parity campaign has since added
 declaration-driven vertex input, six-plane clipping, top-left rasterization, complete blend and
 stencil state, sample-correct 4x MSAA, mip/address filtering, classic stock-effect fog, and full
 BasicEffect/EnvironmentMapEffect/SkinnedEffect lighting. Texture3D, RenderTargetCube, MRT,
-OcclusionQuery and the broader SpriteBatch/Model audits remain open, so a project-wide column is
+anisotropic filtering, instancing and the broader SpriteBatch/Model audits remain open, so a project-wide column is
 still deferred until those rows close. See `docs/software-renderer.md` and the evidence ledger for
 the measured current boundary.
 

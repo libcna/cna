@@ -12,7 +12,7 @@ namespace CNA::Internal::Renderers
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    /** @brief A GPU query that counts the number of visible pixels rendered between Begin and End. */
+    /** @brief A raster query that counts visible samples rendered between Begin and End. */
     class OcclusionQuery : public GraphicsResource
     {
     public:
@@ -61,7 +61,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Begins the occlusion query; all draw calls until End() are counted. */
         void Begin();
 
-        /** @brief Ends the occlusion query and submits it to the GPU for evaluation. */
+        /** @brief Ends the occlusion query and makes or submits its result for evaluation. */
         void End();
 
         /** @brief Returns true while the native query renderer is still alive (CNA extension). */
