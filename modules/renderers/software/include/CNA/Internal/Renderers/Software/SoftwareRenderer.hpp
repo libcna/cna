@@ -519,10 +519,66 @@ namespace CNA::Internal::Renderers::Software
         std::array<int, 6> faceLevels_{1, 1, 1, 1, 1, 1};
     };
 
-    // Cube-map render targets and Texture3D remain tracked parity gaps. REMED-CONTENT-004:
-    // Texture3D's absence is reported via SupportsCapability(GraphicsCapability::Texture3D) =>
-    // false, so its constructor fails cleanly instead of later SetData()/GetData() calls silently
-    // discarding data.
+    /** @brief SOFTWARE-118 CPU-owned RGBA8 storage for an XNA volume texture and all mip levels. */
+    class SoftwareTexture3DRenderer final : public ITexture3DRenderer
+    {
+    public:
+        /**
+         * @brief Allocates zeroed storage for the requested volume and optional full mip chain.
+         *
+         * XNA/FNA determine the number of levels from width and height; depth still halves at each
+         * allocated level.
+         *
+         * @param width Volume width at level zero.
+         * @param height Volume height at level zero.
+         * @param depth Volume depth at level zero.
+         * @param mipMap Whether to allocate the full XNA mip chain.
+         */
+        SoftwareTexture3DRenderer(int width, int height, int depth, bool mipMap);
+
+        /**
+         * @brief Copies a tightly packed RGBA8 box into one mip level.
+         *
+         * @return True only when the complete box was stored.
+         */
+        [[nodiscard]] bool SetData(int level, int x, int y, int z,
+                                   int w, int h, int depth,
+                                   const void* data, int dataLength) override;
+
+        /**
+         * @brief Copies a tightly packed RGBA8 box out of one mip level.
+         *
+         * @return True only when the complete box was returned.
+         */
+        [[nodiscard]] bool GetData(int level, int x, int y, int z,
+                                   int w, int h, int depth,
+                                   void* data, int dataLength) const override;
+
+        /**
+         * @brief Reports the level-zero volume dimensions to renderer-side consumers.
+         *
+         * @param width Receives the width.
+         * @param height Receives the height.
+         * @param depth Receives the depth.
+         */
+        void GetDimensionsEXT(int& width, int& height, int& depth) const noexcept override;
+
+    private:
+        [[nodiscard]] int LevelWidth(int level) const;
+        [[nodiscard]] int LevelHeight(int level) const;
+        [[nodiscard]] int LevelDepth(int level) const;
+
+        int width_ = 0;
+        int height_ = 0;
+        int depth_ = 0;
+        int levelCount_ = 1;
+        /// levels_[level] is slice-major, row-major, tightly packed RGBA8 storage.
+        std::vector<std::vector<std::uint8_t>> levels_;
+    };
+
+    // Cube-map render targets remain a tracked parity gap. SOFTWARE-118 gives Texture3D an exact
+    // CPU storage/transfer implementation; shader sampling is a separate CNAEXT-only surface in
+    // the current repository and is not advertised by the storage capability.
 
     /** @brief Deterministic CPU implementation of an XNA occlusion query. */
     class SoftwareOcclusionQueryRenderer final : public IOcclusionQueryRenderer
@@ -698,6 +754,8 @@ namespace CNA::Internal::Renderers::Software
                               int count) override;
         std::unique_ptr<IEffectRenderer> CreateEffectRenderer(const std::string& vertSrc,
                                                              const std::string& fragSrc) override;
+        std::unique_ptr<ITexture3DRenderer> CreateTexture3D(int w, int h, int depth, bool mipMap,
+                                                            int surfaceFormat) override;
         std::unique_ptr<ITextureCubeRenderer> CreateTextureCube(int size, bool mipMap,
                                                                 int surfaceFormat) override;
         std::unique_ptr<IOcclusionQueryRenderer> CreateOcclusionQuery() override;

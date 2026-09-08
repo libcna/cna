@@ -97,13 +97,10 @@ namespace CNA::Internal::Renderers::Software
     {
         switch (capability)
         {
-            // REMED-CONTENT-004: Texture3D remains an explicit, documented v1 scope boundary for
-            // this renderer (see this header's own "Boundaries" comment) -- CreateTexture3D() keeps
-            // IGraphicsRenderer's shared default (returns nullptr). Reported here so Texture3D's own
-            // constructor can fail cleanly instead of silently discarding every SetData()/GetData()
-            // call.
             case CNA::GraphicsCapability::Texture3D:
-                return false;
+                // SOFTWARE-118: every declared RGBA8 mip owns exact CPU volume storage, including
+                // partial box upload/readback. This flag intentionally promises storage only.
+                return true;
             case CNA::GraphicsCapability::AnisotropicFiltering:
                 // SOFTWARE-117: the CPU sampler resolves the full directional texel footprint,
                 // selects LOD from its minor axis and averages up to 16 taps along its major axis.

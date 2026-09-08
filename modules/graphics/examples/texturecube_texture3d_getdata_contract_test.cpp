@@ -116,13 +116,9 @@ namespace
     constexpr Contract kContract{"HEADLESS", true, Support::Unsupported, Support::Unsupported,
                                  false, Support::Unsupported, Support::Unsupported, false};
 #elif defined(CNA_RENDERER_SOFTWARE)
-    // SOFTWARE-82 gives this renderer real 6-face RGBA8 cube storage. REMED-GFX-135 extended it to
-    // every mip level TextureCube declares (previously only level 0 was allocated, so this entry
-    // read `Support::Unsupported` for mips), which is what makes a mipmapped cube's LevelCount a
-    // claim the storage can actually back. Texture3D is an explicit documented v1 scope boundary,
-    // refused at construction.
+    // SOFTWARE-82/118 provide exact CPU storage for every declared cube and volume mip level.
     constexpr Contract kContract{"SOFTWARE", true, Support::Exact, Support::Exact,
-                                 false, Support::Unsupported, Support::Unsupported, false};
+                                 true, Support::Exact, Support::Exact, false};
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr Contract kContract{"EASYGL", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact, false};

@@ -177,15 +177,16 @@ rather than always passing.
   - `SkinnedEffect`: real `WeightsPerVertex`-gated 1/2/4-bone position and normal blending,
     inverse-transpose World normals, full classic lighting in vertex/pixel modes, texture, alpha
     and fog.
-- **No MRT, no 3D textures, and no render-target cube maps.** Ordinary `Texture2D` and
-  `TextureCube` mip storage and sampling are real.
+- **No MRT and no render-target cube maps.** Ordinary `Texture2D` and `TextureCube` mip
+  storage and sampling are real. `Texture3D` has exact CPU RGBA8 storage for its full XNA mip
+  chain plus bounded full/partial `SetData` and `GetData`; this storage capability does not imply
+  CNAEXT `ShaderEffect` volume sampling.
   `RenderTarget2D` does implement an actual four-sample CPU colour plane and generated mip levels.
   Unbind resolves the samples before mip generation; a level-zero `GetData` while the target is
   active snapshots the live samples without unbinding it, while generated levels remain unavailable
   until the pass ends. Requests other than 0 or 4 samples still fall back to single-sample storage.
-  `CreateRenderTargetCube`/`CreateTexture3D` still return `nullptr` (the shared `IGraphicsRenderer`
-  default — this renderer doesn't override them); only plain (non-render-target) `TextureCube`s are
-  real.
+  `CreateRenderTargetCube` still returns `nullptr`; plain (non-render-target) `TextureCube`s and
+  `Texture3D` transfer resources are real.
 - **Complete classic `BlendState` equations are applied.** RGB and alpha source/destination
   factors and functions are independent; `BlendFactor`, `ColorWriteChannels` and
   `MultiSampleMask` are honored. Per-target write channels remain coupled to the pending MRT task.

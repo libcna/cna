@@ -137,13 +137,10 @@ namespace
                                  false, Support::Unsupported, Support::Unsupported,
                                  Support::Unsupported, false};
 #elif defined(CNA_RENDERER_SOFTWARE)
-    // SOFTWARE-82 gives this renderer real 6-face RGBA8 cube storage. REMED-GFX-135 extends it to
-    // every mip level TextureCube declares, so a mipmapped cube's LevelCount is no longer a claim
-    // the storage cannot back (a mipmapped cube .xnb loads and reads back completely here now).
-    // Texture3D remains an explicit documented v1 scope boundary, refused at construction, and
-    // cube-map render targets are equally out of scope (CreateRenderTargetCube returns nullptr).
+    // SOFTWARE-82/118 provide exact CPU storage for every declared cube and volume mip level.
+    // Cube-map render targets remain independently tracked by SOFTWARE-119.
     constexpr Contract kContract{"SOFTWARE", true, Support::Exact, Support::Exact,
-                                 false, Support::Unsupported, Support::Unsupported,
+                                 true, Support::Exact, Support::Exact,
                                  Support::Unsupported, false};
 #elif defined(CNA_RENDERER_EASYGL)
     // EasyGL uploads into the shared GL cube texture and normalizes its differing row convention.

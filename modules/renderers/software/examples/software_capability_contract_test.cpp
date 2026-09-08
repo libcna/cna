@@ -9,10 +9,10 @@
 #include "Microsoft/Xna/Framework/Graphics/OcclusionQuery.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
-#include "System/NotSupportedException.hpp"
 
 #include <cstdio>
 #include <memory>
+#include <vector>
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -61,8 +61,8 @@ namespace
                   "OcclusionQuery is advertised with its exact CPU counter");
             Check(!device.SupportsCapability(CNA::GraphicsCapability::CustomEffects),
                   "CustomEffects is false because supplied shader source is not executed");
-            Check(!device.SupportsCapability(CNA::GraphicsCapability::Texture3D),
-                  "Texture3D is false while its storage factory is absent");
+            Check(device.SupportsCapability(CNA::GraphicsCapability::Texture3D),
+                  "Texture3D is advertised with exact CPU volume storage");
             Check(!device.SupportsCapability(CNA::GraphicsCapability::Instancing),
                   "Instancing is false while its draw path is absent");
 
@@ -75,17 +75,13 @@ namespace
                       query.isPixelCountPreciseEXT(),
                   "an empty CPU query completes synchronously with an exact zero result");
 
-            bool texture3DRejected = false;
-            try
-            {
-                Texture3D texture(device, 2, 2, 2, false, SurfaceFormat::Color);
-            }
-            catch (const System::NotSupportedException&)
-            {
-                texture3DRejected = true;
-            }
-            Check(texture3DRejected,
-                  "Texture3D construction is rejected instead of creating a null-backed resource");
+            Texture3D texture(device, 2, 2, 2, false, SurfaceFormat::Color);
+            const std::vector<Color> uploaded(8, Color(17, 31, 47, 191));
+            std::vector<Color> readback(8, Color::Transparent);
+            texture.SetData(uploaded.data(), static_cast<int>(uploaded.size()));
+            texture.GetData(readback.data(), static_cast<int>(readback.size()));
+            Check(readback == uploaded,
+                  "Texture3D capability is backed by an exact SetData/GetData resource");
 
             std::printf("=== %d/%d PASS ===\n", passed_, checks_);
             result_ = passed_ == checks_ ? 0 : 1;

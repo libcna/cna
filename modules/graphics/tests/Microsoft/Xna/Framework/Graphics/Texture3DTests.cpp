@@ -12,8 +12,8 @@
 //   • SetDataPointerEXT null-data guard.
 //   • Dispose marks the resource as disposed.
 //
-// Happy-path SetData/GetData round-trip coverage (per-slice colour verification) lives in
-// the EasyGL pixel-readback integration test: modules/renderers/easygl/examples/easygl_texture3d_slices_test.cpp.
+// Happy-path SetData/GetData round-trip coverage also lives in the shared renderer contracts and
+// EasyGL pixel-readback integration tests.
 //
 // plans/plan_graphics.md Task 863: Texture3D now inherits Texture (matching FNA), instead of
 // GraphicsResource directly, so it can be assigned into GraphicsDevice.Textures/VertexTextures
@@ -21,6 +21,7 @@
 // See the "TextureCollection assignment / Texture base class (Task 863)" section below.
 
 #include <gtest/gtest.h>
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <stdexcept>
@@ -74,13 +75,9 @@ namespace
 // Constructor / properties
 // -----------------------------------------------------------------------
 
-// REMED-CONTENT-004: Texture3D is a documented, renderer-dependent capability -- Headless has no
-// real GPU resource of any kind, and Software's Texture3D support is an explicit v1 scope boundary
-// (plans/plan_software.md Boundaries). Every test below constructs a real Texture3D, so on a renderer that
-// doesn't support it the constructor now throws System::NotSupportedException before any test body
-// logic runs -- skip cleanly rather than fail, matching this project's own hardware-capability-skip
-// convention (e.g. Accelerometer/Gyroscope). See Texture3DUnsupportedRendererTest below for the
-// positive verification that the new throw behavior actually fires on such a renderer.
+// REMED-CONTENT-004: Texture3D is a documented, renderer-dependent capability. Every test below
+// constructs a real Texture3D, so a renderer without volume storage skips this fixture; the
+// mirror-image unsupported-renderer test below verifies the constructor's exception contract.
 class Texture3DTest : public ::testing::Test
 {
 protected:
@@ -318,6 +315,25 @@ TEST_F(Texture3DTest, SetDataBoxFrontNotLessThanBackThrowsOutOfRange)
     EXPECT_THROW(tex.SetData(0, 0, 0, 2, 2, 1, 1, buf.data(), 0, 4), std::out_of_range);
 }
 
+TEST_F(Texture3DTest, SetDataRejectsLevelAndBoxesOutsideMipBoundsWithoutMutation)
+{
+    Texture3D tex(gd, 4, 4, 4, true, SurfaceFormat::Color);
+    std::vector<Color> baseline(8, Color(10, 20, 30, 40));
+    std::vector<Color> replacement(27, Color(90, 80, 70, 60));
+    tex.SetData(1, 0, 0, 2, 2, 0, 2, baseline.data(), 0, 8);
+
+    EXPECT_THROW(tex.SetData(3, 0, 0, 1, 1, 0, 1, replacement.data(), 0, 1), std::out_of_range);
+    EXPECT_THROW(tex.SetData(1, 0, 0, 3, 2, 0, 2, replacement.data(), 0, 12), std::out_of_range);
+    EXPECT_THROW(tex.SetData(1, 0, 0, 2, 3, 0, 2, replacement.data(), 0, 12), std::out_of_range);
+    EXPECT_THROW(tex.SetData(1, 0, 0, 2, 2, 0, 3, replacement.data(), 0, 12), std::out_of_range);
+
+    if (!VolumeReadbackSupported()) return;
+    std::vector<Color> got(8);
+    tex.GetData(1, 0, 0, 2, 2, 0, 2, got.data(), 0, 8);
+    for (const Color& color : got)
+        EXPECT_EQ(color.getPackedValueProperty(), baseline[0].getPackedValueProperty());
+}
+
 // REMED-GFX-135: was a bare EXPECT_NO_THROW. It now proves the sub-box landed on slice 0 only and
 // left slice 1 untouched -- a write that flattened the volume or duplicated the slice fails.
 TEST_F(Texture3DTest, SetDataBoxWithinBoundsStoresOnlyThatSlice)
@@ -408,6 +424,27 @@ TEST_F(Texture3DTest, GetDataBoxLeftNotLessThanRightThrowsOutOfRange)
     Texture3D tex(gd, 2, 2, 2, false, SurfaceFormat::Color);
     std::vector<Color> buf(4, Color(0, 0, 0, 0));
     EXPECT_THROW(tex.GetData(0, 2, 0, 2, 2, 0, 1, buf.data(), 0, 4), std::out_of_range);
+}
+
+TEST_F(Texture3DTest, GetDataRejectsLevelAndBoxesOutsideMipBoundsWithoutMutation)
+{
+    Texture3D tex(gd, 4, 4, 4, true, SurfaceFormat::Color);
+    const Color sentinel(0xCD, 0xCD, 0xCD, 0xCD);
+    std::vector<Color> destination(27, sentinel);
+
+    const auto rejectedWithoutMutation = [&](int level, int right, int bottom, int back, int count)
+    {
+        std::fill(destination.begin(), destination.end(), sentinel);
+        EXPECT_THROW(tex.GetData(level, 0, 0, right, bottom, 0, back,
+                                 destination.data(), 0, count), std::out_of_range);
+        for (const Color& color : destination)
+            EXPECT_EQ(color.getPackedValueProperty(), sentinel.getPackedValueProperty());
+    };
+
+    rejectedWithoutMutation(3, 1, 1, 1, 1);
+    rejectedWithoutMutation(1, 3, 2, 2, 12);
+    rejectedWithoutMutation(1, 2, 3, 2, 12);
+    rejectedWithoutMutation(1, 2, 2, 3, 12);
 }
 
 // REMED-GFX-130 false-positive audit: this test used to be a bare EXPECT_NO_THROW, which asserted

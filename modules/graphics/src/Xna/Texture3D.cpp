@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <limits>
 #include <stdexcept>
 #include <vector>
 
@@ -25,6 +26,11 @@ namespace Microsoft::Xna::Framework::Graphics
         int levels = 1;
         while (w > 1 || h > 1) { w = std::max(1, w / 2); h = std::max(1, h / 2); ++levels; }
         return levels;
+    }
+
+    static int MipDimension(int base, int level)
+    {
+        return std::max(1, base >> level);
     }
 
     // D9-103 follow-up: D9-100's own table -- GraphicsProfile.Reach does not support volume
@@ -59,14 +65,9 @@ namespace Microsoft::Xna::Framework::Graphics
         , depth_(depth)
         , renderer_(nullptr)
     {
-        // REMED-CONTENT-004: Headless and Software both leave IGraphicsRenderer::CreateTexture3D()
-        // at its shared default (returns nullptr) -- Headless has no real GPU resource of any kind
-        // by design; Software's Texture3D support is an explicit, documented v1 scope boundary
-        // (plans/plan_software.md Boundaries), not an oversight. Previously this left renderer_ null and
-        // every subsequent SetData()/GetData() call silently no-op'd instead of failing -- a caller
-        // had no way to know their data was silently discarded. Checked ahead of renderer creation,
-        // matching this file's own D3D9 profile-ceiling check immediately below and the
-        // GraphicsCapability doc's own "query before relying on the feature" convention.
+        // REMED-CONTENT-004: renderers without real volume storage leave CreateTexture3D() at its
+        // null shared default. Previously that let every subsequent SetData()/GetData() call
+        // silently no-op, so the capability is checked before renderer creation instead.
         if (!device.SupportsCapability(CNA::GraphicsCapability::Texture3D))
         {
             throw System::NotSupportedException(
@@ -134,18 +135,24 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::out_of_range("Texture3D::SetData: elementCount must be > 0");
         if (startIndex < 0)
             throw std::out_of_range("Texture3D::SetData: startIndex must be >= 0");
-        if (level < 0)
-            throw std::out_of_range("Texture3D::SetData: level must be >= 0");
+        if (level < 0 || level >= levelCount_)
+            throw std::out_of_range("Texture3D::SetData: level is outside the mip chain");
         if (left < 0 || left >= right || top < 0 || top >= bottom || front < 0 || front >= back)
             throw std::out_of_range("Texture3D::SetData: box position/size is invalid");
-        const int boxVoxels = (right - left) * (bottom - top) * (back - front);
-        if (elementCount < boxVoxels)
+        if (right > MipDimension(width_, level) || bottom > MipDimension(height_, level) ||
+            back > MipDimension(depth_, level))
+            throw std::out_of_range("Texture3D::SetData: box is outside the mip level");
+        const std::size_t boxVoxels =
+            static_cast<std::size_t>(right - left) * static_cast<std::size_t>(bottom - top) *
+            static_cast<std::size_t>(back - front);
+        if (static_cast<std::size_t>(elementCount) < boxVoxels ||
+            boxVoxels > static_cast<std::size_t>((std::numeric_limits<int>::max)()))
             throw std::out_of_range("Texture3D::SetData: elementCount is less than the number of voxels in the requested region");
 
         // REMED-GFX-135 -- see TextureCube::SetData's identical note: converted to the REQUESTED
         // BOX rather than to elementCount, so the call never reads source elements it does not
         // upload and the buffer length always matches the region the renderer is told to write.
-        const auto rgba = colorsToRgba(data, startIndex, boxVoxels);
+        const auto rgba = colorsToRgba(data, startIndex, static_cast<int>(boxVoxels));
         SetDataPointerEXT(level, left, top, right, bottom, front, back,
                           rgba.data(), static_cast<int>(rgba.size()));
     }
@@ -208,25 +215,30 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::out_of_range("Texture3D::GetData: elementCount must be > 0");
         if (startIndex < 0)
             throw std::out_of_range("Texture3D::GetData: startIndex must be >= 0");
-        if (level < 0)
-            throw std::out_of_range("Texture3D::GetData: level must be >= 0");
+        if (level < 0 || level >= levelCount_)
+            throw std::out_of_range("Texture3D::GetData: level is outside the mip chain");
         if (left < 0 || left >= right || top < 0 || top >= bottom || front < 0 || front >= back)
             throw std::out_of_range("Texture3D::GetData: box position/size is invalid");
+        if (right > MipDimension(width_, level) || bottom > MipDimension(height_, level) ||
+            back > MipDimension(depth_, level))
+            throw std::out_of_range("Texture3D::GetData: box is outside the mip level");
 
         const int boxW = right - left;
         const int boxH = bottom - top;
         const int boxD = back - front;
-        if (elementCount < boxW * boxH * boxD)
+        const std::size_t boxVoxels =
+            static_cast<std::size_t>(boxW) * static_cast<std::size_t>(boxH) *
+            static_cast<std::size_t>(boxD);
+        if (static_cast<std::size_t>(elementCount) < boxVoxels ||
+            boxVoxels > static_cast<std::size_t>((std::numeric_limits<int>::max)()))
             throw std::out_of_range("Texture3D::GetData: elementCount is less than the number of voxels in the requested region");
         Texture::ValidateGetDataFormat(format_, 4);
 
         // REMED-GFX-130 -- see TextureCube::GetData for the full reasoning. `rgba` is scratch memory
         // this layer zero-initializes, so it is never handed to the caller unless the renderer
         // reports it filled the whole box; otherwise the caller's `data` stays byte-for-byte as it
-        // was and the missing capability is raised. A null renderer (ASCII keeps
-        // IGraphicsRenderer::CreateTexture3D's nullptr default while still reporting
-        // GraphicsCapability::Texture3D through SupportsCapability's own `return true` default) is
-        // the same answer one step earlier: no volume storage exists, so there is nothing to read.
+        // was and the missing capability is raised. A null renderer is the same answer one step
+        // earlier: no volume storage exists, so there is nothing to read.
         if (!renderer_)
         {
             throw System::NotSupportedException(
@@ -246,6 +258,6 @@ namespace Microsoft::Xna::Framework::Graphics
                 "Texture3D::GetData: this graphics renderer cannot read a volume texture back to the "
                 "CPU at the requested mip level");
         }
-        rgbaToColors(rgba, data, startIndex, boxW * boxH * boxD);
+        rgbaToColors(rgba, data, startIndex, static_cast<int>(boxVoxels));
     }
 }

@@ -51,11 +51,8 @@ namespace CNA
          * though Skia separately offers a narrow, opt-in shader-sampling extension
          * (`cnaSampleCubeEXT`/`cnaSampleVolumeEXT`, `docs/skia-cube-volume-sampling-contract.md`)
          * that this flag does not represent and that does not imply general/stock 3D or effect
-         * support. Headless has no real GPU resource of any kind by design; Software's Texture3D
-         * support is an explicit, documented v1 scope boundary (`plans/plan_software.md` Boundaries) --
-         * both currently leave `IGraphicsRenderer::CreateTexture3D()` at its shared default (returns
-         * `nullptr`), which previously let `Texture3D::SetData()`/`GetData()` silently no-op
-         * instead of failing cleanly (REMED-CONTENT-004).
+         * support. Headless has no real texture resource by design; Software provides exact CPU
+         * volume storage and transfer without advertising a CNAEXT shader-sampling path.
          */
         Texture3D,
 
