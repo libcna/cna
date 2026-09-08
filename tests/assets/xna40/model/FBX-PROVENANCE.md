@@ -42,4 +42,11 @@ is third-party content.
 | `fbx_split_vertices.fbx` | 1546 |
 | `fbx_truncated.fbx` | 400 |
 | `fbx_two_materials.fbx` | 2484 |
+| `fbx_unit_scale_both.fbx` | 1749 |
+| `fbx_unit_scale_child.fbx` | 2340 |
+| `fbx_unit_scale_offset.fbx` | 1755 |
+| `fbx_unit_scale_pivot.fbx` | 1752 |
+| `fbx_unit_scale_plain.fbx` | 1743 |
+| `fbx_unit_scale_siblings.fbx` | 2322 |
+| `fbx_unit_scale_two.fbx` | 1741 |
 | `fbx_wrapped_values.fbx` | 1278 |

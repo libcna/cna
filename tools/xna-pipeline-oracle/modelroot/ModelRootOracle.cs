@@ -52,9 +52,16 @@ internal static class ModelRootOracle
         public override GraphicsProfile TargetProfile { get { return GraphicsProfile.HiDef; } }
         public override void AddDependency(string filename) { }
         public override void AddOutputFile(string filename) { }
+        // `ModelProcessor` converts every material through this, so throwing here fails the whole
+        // process with `NotSupportedException` before a single bone is reached. What the root
+        // transform is does not depend on what a material converts to, so the input is handed
+        // straight back where the types allow and a default otherwise.
         public override TOutput Convert<TInput, TOutput>(TInput input, string processorName,
                                                          OpaqueDataDictionary processorParameters)
-        { throw new NotSupportedException(); }
+        {
+            if (input is TOutput) { return (TOutput)(object)input; }
+            return default(TOutput);
+        }
         public override TOutput BuildAndLoadAsset<TInput, TOutput>(ExternalReference<TInput> source,
             string processorName, OpaqueDataDictionary processorParameters, string importerName)
         { return default(TOutput); }

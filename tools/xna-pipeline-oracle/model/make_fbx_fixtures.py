@@ -462,6 +462,57 @@ def main():
     material_gap("fbx_material_gap_negative.fbx", "MatNeg", [0, -1, 0])
     material_gap("fbx_material_gap_skip.fbx", "MatSkip", [2, 1, 2])
 
+    # The scene's `UnitScaleFactor` against a node's own `Lcl Scaling` and its scaling pivot.
+    # The unit multiplies the *composed* transform, basis and translation both, and it reaches only
+    # the nodes the scene connects (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-162).
+    unit_triangle = [(0, 0, 0), (10, 0, 0), (0, 10, 0)]
+
+    def scaled_mesh(name, scaling, pivot, offset, translation=(0, 0, 0)):
+        text = '\tModel: "Model::%s", "Mesh" {\n\t\tVersion: 232\n' % name
+        text += ('\t\tProperties60:  {\n'
+                 '\t\t\tProperty: "Lcl Translation", "Lcl Translation", "A+",%s\n'
+                 '\t\t\tProperty: "Lcl Rotation", "Lcl Rotation", "A+",0,0,0\n'
+                 '\t\t\tProperty: "Lcl Scaling", "Lcl Scaling", "A+",%s\n'
+                 '\t\t\tProperty: "ScalingPivot", "Vector3D", "",%s\n'
+                 '\t\t\tProperty: "ScalingOffset", "Vector3D", "",%s\n'
+                 '\t\t}\n' % (numbers(translation), numbers(scaling), numbers(pivot),
+                              numbers(offset)))
+        text += '\t\tMultiLayer: 0\n\t\tMultiTake: 1\n\t\tShading: Y\n\t\tCulling: "CullingOff"\n'
+        text += "\t\tVertices: %s\n" % numbers(flatten(unit_triangle))
+        text += "\t\tPolygonVertexIndex: 0,1,-3\n\t\tGeometryVersion: 124\n\t}\n"
+        return text
+
+    def unit_scene(filename, unit, models, connections):
+        """`models` is [(name, body)]; the scene declares GlobalSettings so the unit is read."""
+        write(os.path.join(out, filename),
+              {"count": len(models) + 1, "models": len(models), "materials": 0, "deformers": 0,
+               "globals": '\tObjectType: "GlobalSettings" {\n\t\tCount: 1\n\t}\n'},
+              "".join(body for _, body in models) + global_settings(unit),
+              "".join('\tModel: "Model::%s", "Mesh" {\n\t}\n' % n for n, _ in models),
+              connections)
+
+    def one_node(filename, name, unit, scaling, pivot, offset):
+        unit_scene(filename, unit, [(name, scaled_mesh(name, scaling, pivot, offset))],
+                   '\tConnect: "OO", "Model::%s", "Model::Scene"\n' % name)
+
+    one_node("fbx_unit_scale_pivot.fbx", "UnitPivot", 100, (0.01,) * 3, (4, 5, 6), (0, 0, 0))
+    one_node("fbx_unit_scale_offset.fbx", "UnitOffset", 100, (0.01,) * 3, (0, 0, 0), (7, 8, 9))
+    one_node("fbx_unit_scale_both.fbx", "UnitBoth", 100, (0.01,) * 3, (4, 5, 6), (7, 8, 9))
+    one_node("fbx_unit_scale_plain.fbx", "UnitPlain", 100, (1, 1, 1), (4, 5, 6), (0, 0, 0))
+    one_node("fbx_unit_scale_two.fbx", "UnitTwo", 2, (0.5,) * 3, (4, 5, 6), (7, 8, 9))
+    # A child does not take the unit: the parent's transform already carries it.
+    unit_scene("fbx_unit_scale_child.fbx", 100,
+               [("UnitPapa", scaled_mesh("UnitPapa", (0.01,) * 3, (4, 5, 6), (7, 8, 9))),
+                ("UnitKid", scaled_mesh("UnitKid", (2, 2, 2), (1, 1, 1), (0, 0, 0), (3, 4, 5)))],
+               '\tConnect: "OO", "Model::UnitPapa", "Model::Scene"\n'
+               '\tConnect: "OO", "Model::UnitKid", "Model::UnitPapa"\n')
+    # Two top-level nodes: both take it.
+    unit_scene("fbx_unit_scale_siblings.fbx", 100,
+               [("UnitA", scaled_mesh("UnitA", (0.01,) * 3, (4, 5, 6), (0, 0, 0))),
+                ("UnitB", scaled_mesh("UnitB", (1, 1, 1), (0, 0, 0), (0, 0, 0), (3, 4, 5)))],
+               '\tConnect: "OO", "Model::UnitA", "Model::Scene"\n'
+               '\tConnect: "OO", "Model::UnitB", "Model::Scene"\n')
+
     with open(os.path.join(out, "FBX-PROVENANCE.md"), "w", encoding="utf-8") as handle:
         handle.write("# FBX corpus (authored)\n\n")
         handle.write("Written by `tools/xna-pipeline-oracle/model/make_fbx_fixtures.py`, in FBX 6.1\n")

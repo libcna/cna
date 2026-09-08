@@ -731,6 +731,14 @@ TEST(XnaFbxImporter, EveryFileAnswersTheGraphXnaAnswers)
           // index each named, and a mesh whose polygons name only out-of-range indices comes back
           // as a single null-material batch (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-165`).
           "fbx_material_gap.fbx", "fbx_material_gap_negative.fbx", "fbx_material_gap_skip.fbx",
+          // The scene's `UnitScaleFactor` multiplies the *composed* transform, basis and
+          // translation both, and not the `Lcl Scaling` and `Lcl Translation` it is built from --
+          // which is only the same thing when the node has no scaling pivot. It reaches the nodes
+          // the scene connects and not their children
+          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-162`).
+          "fbx_unit_scale_pivot.fbx", "fbx_unit_scale_offset.fbx", "fbx_unit_scale_both.fbx",
+          "fbx_unit_scale_plain.fbx", "fbx_unit_scale_two.fbx", "fbx_unit_scale_child.fbx",
+          "fbx_unit_scale_siblings.fbx",
           "fbx_two_materials.fbx"})
     {
         ImporterContext context;

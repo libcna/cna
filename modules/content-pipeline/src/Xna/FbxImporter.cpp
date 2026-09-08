@@ -33,6 +33,18 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         namespace Canon = CNA::Content::Pipeline;
 
         /**
+         * @brief One of FBX's transform values, kept in the precision the file writes it in.
+         *
+         * FBX writes every transform term as a `double` and XNA's importer composes them as
+         * doubles; rounding each to `float` first is visible wherever two of them cancel.
+         * SAMPLE-138's `photograph.fbx` is the corpus's case: a `ScalingOffset` of
+         * 1.05205948463126 against a `ScalingPivot` of -1.06268632411957 under a scaling of 0.01
+         * leaves 2.35e-08, and a `float` pivot leaves three times that
+         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-162`).
+         */
+        using Triple = std::array<double, 3>;
+
+        /**
          * @brief The corner triples XNA's FBX path triangulates an `n`-corner polygon into.
          *
          * Not a fan. The FBX SDK inside XNA's importer answers a strip, and what it answers is a
@@ -149,15 +161,26 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             std::vector<std::int64_t> materials;
             /** @brief `Texture` objects a `Connect` names against this one, in file order. */
             std::vector<std::int64_t> textures;
-            Vector3 translation{0.0f, 0.0f, 0.0f};
-            Vector3 rotation{0.0f, 0.0f, 0.0f};
-            Vector3 preRotation{0.0f, 0.0f, 0.0f};
-            Vector3 postRotation{0.0f, 0.0f, 0.0f};
-            Vector3 rotationOffset{0.0f, 0.0f, 0.0f};
-            Vector3 rotationPivot{0.0f, 0.0f, 0.0f};
-            Vector3 scalingOffset{0.0f, 0.0f, 0.0f};
-            Vector3 scalingPivot{0.0f, 0.0f, 0.0f};
-            Vector3 scaling{1.0f, 1.0f, 1.0f};
+            Triple translation{0.0, 0.0, 0.0};
+            Triple rotation{0.0, 0.0, 0.0};
+            Triple preRotation{0.0, 0.0, 0.0};
+            Triple postRotation{0.0, 0.0, 0.0};
+            Triple rotationOffset{0.0, 0.0, 0.0};
+            Triple rotationPivot{0.0, 0.0, 0.0};
+            Triple scalingOffset{0.0, 0.0, 0.0};
+            Triple scalingPivot{0.0, 0.0, 0.0};
+            Triple scaling{1.0, 1.0, 1.0};
+            /**
+             * @brief The scene's `UnitScaleFactor`, on the top-level nodes it reaches.
+             *
+             * It multiplies the *composed* local transform and not the `Lcl Scaling` and
+             * `Lcl Translation` it is built from, which is only the same thing when the node has no
+             * scaling pivot: `G100S01Piv.fbx` is a scale of 0.01 under a unit of 100 with a
+             * `ScalingPivot` of (4, 5, 6), and folding the unit into the scaling first makes the
+             * combined scale exactly 1 and the pivot term `(1 - 1) * Sp` vanish, where XNA answers
+             * `100 * (1 - 0.01) * Sp = (396, 495, 594)` (XNASWEEP-162).
+             */
+            double unitScale = 1.0;
             /** @brief `RotationActive`, which is what decides whether `PreRotation` counts. */
             bool rotationActive = false;
             /**
@@ -172,9 +195,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
              */
             bool isGeometryData = false;
             /** @brief The geometry's own offset from the node, FBX's `Geometric*` properties. */
-            Vector3 geometricTranslation{0.0f, 0.0f, 0.0f};
-            Vector3 geometricRotation{0.0f, 0.0f, 0.0f};
-            Vector3 geometricScaling{1.0f, 1.0f, 1.0f};
+            Triple geometricTranslation{0.0, 0.0, 0.0};
+            Triple geometricRotation{0.0, 0.0, 0.0};
+            Triple geometricScaling{1.0, 1.0, 1.0};
             bool attached = false;
             /** @brief Whether a `Connect` names this object as a child of the scene root. */
             bool inScene = false;
@@ -392,6 +415,31 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                            static_cast<float>(numbers[numbers.size() - 1u]));
         }
 
+        /** @brief The same property, kept in the `double` the file writes it in. */
+        [[nodiscard]] Triple PropertyTriple(const Canon::FbxNode& object, const std::string& name,
+                                            const Triple fallback)
+        {
+            const Canon::FbxNode* property = FindProperty(object, name);
+            if (property == nullptr)
+            {
+                return fallback;
+            }
+            std::vector<double> numbers;
+            for (const Canon::FbxProperty& one : property->properties)
+            {
+                if (const double* value = std::get_if<double>(&one); value != nullptr)
+                {
+                    numbers.push_back(*value);
+                }
+            }
+            if (numbers.size() < 3u)
+            {
+                return fallback;
+            }
+            return Triple{numbers[numbers.size() - 3u], numbers[numbers.size() - 2u],
+                          numbers[numbers.size() - 1u]};
+        }
+
         /**
          * @brief One node's local transform: scaling, then `PreRotation`, then `Lcl Rotation`.
          *
@@ -440,7 +488,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          * from XNA's on the two entries a quarter turn zeroes
          * (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-121).
          */
-        [[nodiscard]] Rows EulerRows(const Vector3& degrees)
+        [[nodiscard]] Rows EulerRows(const Triple& degrees)
         {
             const double toRadians = 0.017453292519943295;
             const auto rotationX = [](double radians)
@@ -470,28 +518,28 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 m[1][1] = m[0][0];
                 return m;
             };
-            return Multiply(Multiply(rotationX(static_cast<double>(degrees.X) * toRadians),
-                                     rotationY(static_cast<double>(degrees.Y) * toRadians)),
-                            rotationZ(static_cast<double>(degrees.Z) * toRadians));
+            return Multiply(Multiply(rotationX(degrees[0] * toRadians),
+                                     rotationY(degrees[1] * toRadians)),
+                            rotationZ(degrees[2] * toRadians));
         }
 
         /** @brief A scaling. */
-        [[nodiscard]] Rows ScaleRows(const Vector3& scale)
+        [[nodiscard]] Rows ScaleRows(const Triple& scale)
         {
             Rows m = IdentityRows();
-            m[0][0] = scale.X;
-            m[1][1] = scale.Y;
-            m[2][2] = scale.Z;
+            m[0][0] = scale[0];
+            m[1][1] = scale[1];
+            m[2][2] = scale[2];
             return m;
         }
 
         /** @brief A translation, in the last row. */
-        [[nodiscard]] Rows TranslationRows(const Vector3& offset)
+        [[nodiscard]] Rows TranslationRows(const Triple& offset)
         {
             Rows m = IdentityRows();
-            m[3][0] = offset.X;
-            m[3][1] = offset.Y;
-            m[3][2] = offset.Z;
+            m[3][0] = offset[0];
+            m[3][1] = offset[1];
+            m[3][2] = offset[2];
             return m;
         }
 
@@ -514,10 +562,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         /** @brief `GeometricRows` undone: `T(-t)`, then the rotation transposed, then `1/s`. */
         [[nodiscard]] Rows InverseGeometricRows(const Object& object)
         {
-            const Vector3 scale = object.geometricScaling;
-            const Vector3 reciprocal(scale.X == 0.0f ? 0.0f : 1.0f / scale.X,
-                                     scale.Y == 0.0f ? 0.0f : 1.0f / scale.Y,
-                                     scale.Z == 0.0f ? 0.0f : 1.0f / scale.Z);
+            const Triple& scale = object.geometricScaling;
+            const Triple reciprocal{scale[0] == 0.0 ? 0.0 : 1.0 / scale[0],
+                                    scale[1] == 0.0 ? 0.0 : 1.0 / scale[1],
+                                    scale[2] == 0.0 ? 0.0 : 1.0 / scale[2]};
             const Rows rotation = EulerRows(object.geometricRotation);
             Rows transposed = IdentityRows();
             for (std::size_t row = 0; row < 3; ++row)
@@ -527,8 +575,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     transposed[row][column] = rotation[column][row];
                 }
             }
-            const Vector3 back(-object.geometricTranslation.X, -object.geometricTranslation.Y,
-                               -object.geometricTranslation.Z);
+            const Triple back{-object.geometricTranslation[0], -object.geometricTranslation[1],
+                              -object.geometricTranslation[2]};
             return Multiply(Multiply(TranslationRows(back), transposed), ScaleRows(reciprocal));
         }
 
@@ -579,11 +627,11 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             // `fbx_postrotation.fbx` (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-152`); the
             // second of those also settles that `R` comes *before* `Rpre` here, which no fixture
             // that sets only one of them could say.
-            const Vector3 negate[4] = {
-                Vector3(-object.scalingPivot.X, -object.scalingPivot.Y, -object.scalingPivot.Z),
-                Vector3(-object.rotationPivot.X, -object.rotationPivot.Y, -object.rotationPivot.Z),
-                Vector3(-object.postRotation.X, -object.postRotation.Y, -object.postRotation.Z),
-                Vector3(0.0f, 0.0f, 0.0f)};
+            const Triple negate[4] = {
+                {-object.scalingPivot[0], -object.scalingPivot[1], -object.scalingPivot[2]},
+                {-object.rotationPivot[0], -object.rotationPivot[1], -object.rotationPivot[2]},
+                {-object.postRotation[0], -object.postRotation[1], -object.postRotation[2]},
+                {0.0, 0.0, 0.0}};
             const Rows rotations = Multiply(
                 Multiply(object.rotationActive ? EulerRows(negate[2]) : IdentityRows(),
                          EulerRows(object.rotation)),
@@ -597,8 +645,15 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                          Multiply(rotations, Multiply(TranslationRows(object.rotationPivot),
                                                       TranslationRows(object.rotationOffset)))),
                 TranslationRows(object.translation));
-            return ToMatrix(
-                Multiply(Multiply(GeometricRows(object), local), parentGeometricInverse));
+            const Rows placed =
+                Multiply(Multiply(GeometricRows(object), local), parentGeometricInverse);
+            // The scene's unit multiplies the whole composed transform -- basis and translation
+            // both -- and it reaches only the nodes the scene connects.
+            return ToMatrix(object.unitScale == 1.0
+                                ? placed
+                                : Multiply(placed, ScaleRows(Triple{object.unitScale,
+                                                                    object.unitScale,
+                                                                    object.unitScale})));
         }
 
         /** @brief Whatever a layer element holds, resolved through its mapping and reference. */
@@ -779,26 +834,26 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 {
                     object.kind = "Texture";
                 }
-                object.translation = PropertyVector(node, "Lcl Translation", Vector3(0.0f, 0.0f, 0.0f));
-                object.rotation = PropertyVector(node, "Lcl Rotation", Vector3(0.0f, 0.0f, 0.0f));
-                object.preRotation = PropertyVector(node, "PreRotation", Vector3(0.0f, 0.0f, 0.0f));
-                object.postRotation = PropertyVector(node, "PostRotation", Vector3(0.0f, 0.0f, 0.0f));
+                object.translation = PropertyTriple(node, "Lcl Translation", Triple{0.0, 0.0, 0.0});
+                object.rotation = PropertyTriple(node, "Lcl Rotation", Triple{0.0, 0.0, 0.0});
+                object.preRotation = PropertyTriple(node, "PreRotation", Triple{0.0, 0.0, 0.0});
+                object.postRotation = PropertyTriple(node, "PostRotation", Triple{0.0, 0.0, 0.0});
                 object.rotationOffset =
-                    PropertyVector(node, "RotationOffset", Vector3(0.0f, 0.0f, 0.0f));
+                    PropertyTriple(node, "RotationOffset", Triple{0.0, 0.0, 0.0});
                 object.rotationPivot =
-                    PropertyVector(node, "RotationPivot", Vector3(0.0f, 0.0f, 0.0f));
+                    PropertyTriple(node, "RotationPivot", Triple{0.0, 0.0, 0.0});
                 object.scalingOffset =
-                    PropertyVector(node, "ScalingOffset", Vector3(0.0f, 0.0f, 0.0f));
+                    PropertyTriple(node, "ScalingOffset", Triple{0.0, 0.0, 0.0});
                 object.scalingPivot =
-                    PropertyVector(node, "ScalingPivot", Vector3(0.0f, 0.0f, 0.0f));
+                    PropertyTriple(node, "ScalingPivot", Triple{0.0, 0.0, 0.0});
                 object.rotationActive = PropertyNumber(node, "RotationActive", 0.0) != 0.0;
                 object.geometricTranslation =
-                    PropertyVector(node, "GeometricTranslation", Vector3(0.0f, 0.0f, 0.0f));
+                    PropertyTriple(node, "GeometricTranslation", Triple{0.0, 0.0, 0.0});
                 object.geometricRotation =
-                    PropertyVector(node, "GeometricRotation", Vector3(0.0f, 0.0f, 0.0f));
+                    PropertyTriple(node, "GeometricRotation", Triple{0.0, 0.0, 0.0});
                 object.geometricScaling =
-                    PropertyVector(node, "GeometricScaling", Vector3(1.0f, 1.0f, 1.0f));
-                object.scaling = PropertyVector(node, "Lcl Scaling", Vector3(1.0f, 1.0f, 1.0f));
+                    PropertyTriple(node, "GeometricScaling", Triple{1.0, 1.0, 1.0});
+                object.scaling = PropertyTriple(node, "Lcl Scaling", Triple{1.0, 1.0, 1.0});
                 byFullName[node.Text(0)] = identity;
                 byName.emplace(object.name, identity);
                 declarationOrder.push_back(identity);
@@ -1543,7 +1598,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         // genuine importer answers a basis of 2.54 with the node's own translation multiplied by
         // it too -- -0.000101717 becoming -0.000258362. Every other model in the corpus declares
         // 1, where this changes nothing (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-113`).
-        float unitScale = 1.0f;
+        double unitScale = 1.0;
         // FBX 6 nests `GlobalSettings` inside `Objects`; FBX 7 has it at the top level.
         const Canon::FbxNode* settings = parsed.Find("GlobalSettings");
         if (settings == nullptr)
@@ -1570,7 +1625,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         if (settings != nullptr && globalsDeclared)
         {
             const double factor = PropertyNumber(*settings, "UnitScaleFactor", 1.0);
-            if (factor > 0.0) { unitScale = static_cast<float>(factor); }
+            if (factor > 0.0) { unitScale = factor; }
         }
 
         // Whether the scene answers its single child directly or a synthesized `RootNode` is
@@ -1598,15 +1653,12 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         if (unitScale != 1.0f)
         {
             // Only the top-level nodes: a child's transform is already expressed in its parent's
-            // space, and scaling it again would compound the conversion down the chain.
+            // space, and scaling it again would compound the conversion down the chain. `Hier.fbx`
+            // measures exactly that -- a parent under a unit of 100 comes back scaled and its child
+            // comes back with its own scale and its own pivot-composed translation, untouched.
             for (const std::int64_t identity : roots)
             {
-                Object& object = objects.at(identity);
-                object.scaling = Vector3(object.scaling.X * unitScale, object.scaling.Y * unitScale,
-                                         object.scaling.Z * unitScale);
-                object.translation =
-                    Vector3(object.translation.X * unitScale, object.translation.Y * unitScale,
-                            object.translation.Z * unitScale);
+                objects.at(identity).unitScale = unitScale;
             }
         }
         if (roots.size() == 1u && topLevel == 1u)

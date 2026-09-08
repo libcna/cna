@@ -169,3 +169,53 @@ faces from the pushing face gives 7 for both sweeps, but over the whole corpus i
 to 12; counting **cache misses** from the same point is tighter -- 5 or 6 in 322 of 371 cut strips
 -- and is not constant either.  371 cut strips are recorded; the rule that reproduces all of them
 is the one thing this method still owes.
+
+## Where the cut rule stands, and the two facts that narrow it
+
+Everything above except *when a strip is cut* is exact.  These are the measurements a next attempt
+should start from rather than repeat.
+
+**A strip is only ever cut where it has to turn.**  Over all 616 probes there are 9,645 mid-strip
+decisions with at least one live candidate, and they split by which candidate is available:
+
+| available | queue | what truth did |
+|---|---|---|
+| the preferred edge `(e+2) % 3` | either | took it, 2,706 times, **never cut** |
+| both edges | either | took the preferred one, 2,129 times, **never cut** |
+| only `(e+1) % 3` | empty | took it 2,340 times, cut 3 |
+| only `(e+1) % 3` | live | took it 2,118 times, **cut 349** |
+
+So the decision is not "should this strip end" asked before every face.  It is asked once, at the
+face where the strip can no longer go straight, and it is a choice between the turn and the queued
+restart.  Every one of the 371 cut strips ends at such a face.
+
+**The counter starts when a restart location is first queued, not when the strip starts.**  Two
+designed sweeps:
+
+- closed fans of 3 to 40 triangles -- up to eight the fan comes back whole; from nine on it runs
+  exactly **seven** faces and takes the queued face.  Its seed pushes on Q at the first face.
+- a row of twelve quads with one correctly wound pendant triangle glued to the bottom edge of face
+  `2j` -- the pendant seeds, the push happens at the *second* face, and for every `j >= 4` the run
+  is exactly **eight**.  The same row without the pendant never pushes and never cuts: all
+  forty-eight faces come back in one strip.
+
+Both are seven faces counted from the pushing face.  Over the whole corpus that count takes values
+6 to 12, and counting cache misses from the same point takes 5 or 6 in 322 of 371 cut strips, so
+neither is the counter by itself.
+
+**Ruled out by implementation and measurement**, so that none of it is tried again:
+
+| candidate | result |
+|---|---|
+| Hoppe's published test, `C(0) < C(i)` over `k + 5` simulations | fires on 15 of 208 cuts; on a closed fan continuing and restarting cost exactly the same, so the strict form can never fire, and D3DX cuts a twelve-face fan after seven |
+| the same, non-strict | fires on 5,867 of the 7,019 decisions that were *not* cuts |
+| the same, gated on a minimum strip length, over horizons 12/13/17, sims 7/12/17, average or total misses | best 276 of 370 designed probes -- worse than no lookahead at all |
+| a hard cap on strip length | best at 7, and worse than the queue-aware rule; `row_24` runs 48 faces |
+| a k-face lookahead at the turning face, comparing the turn against the queued restart | catches 239-299 of 349 with 546-1,088 false positives, at every horizon from 4 to 17 |
+| LIFO instead of FIFO on Q | 409 of 616 against 461 |
+| favouring a restart seed whose vertices are still cached, as the paper says | worse in every configuration tried |
+| a threshold on faces since the push, misses since the push, cache occupancy, queue length, the queued face's cached vertices, or how close they are to eviction | none separates; several are non-monotonic, which no threshold can be |
+
+The current reconstruction cuts `restart` faces after the first push and reaches **461 of 616**.
+Production is unchanged, and should stay unchanged: a reorder fitted to part of a corpus is a guess
+dressed as a fix, and the 160 references this method owns are still owed an exact one.
