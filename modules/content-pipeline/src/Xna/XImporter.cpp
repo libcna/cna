@@ -8,6 +8,7 @@
 #include <fstream>
 #include <iterator>
 #include <map>
+#include <tuple>
 #include <set>
 #include <vector>
 
@@ -325,6 +326,21 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     normalFaces.push_back(std::move(face));
                 }
             }
+            // Two normal entries holding the same three numbers are one normal. A corner names an
+            // index into the list, but what separates two vertices is the *value*: SAMPLE-057's
+            // `cylinder.x` writes 418 normal entries over 21 distinct values, and XNA answers 135
+            // vertices -- the distinct (position, normal value) pairs -- where keying on the index
+            // gives 418, one per entry (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-148`).
+            std::vector<std::size_t> canonicalNormal(normals.size());
+            {
+                std::map<std::tuple<float, float, float>, std::size_t> first;
+                for (std::size_t i = 0; i < normals.size(); ++i)
+                {
+                    const std::tuple<float, float, float> key{normals[i].X, normals[i].Y,
+                                                              normals[i].Z};
+                    canonicalNormal[i] = first.emplace(key, i).first->second;
+                }
+            }
             const std::vector<Vector3> generated =
                 normals.empty() ? generateNormals(positions, faces) : std::vector<Vector3>{};
             std::vector<Vector2> textureCoordinates;
@@ -480,7 +496,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                         {
                             normalIndex = normalFaces[face][corner];
                         }
-                        const std::pair<std::size_t, std::size_t> key{vertex, normalIndex};
+                        const std::size_t normalKey = normalIndex < canonicalNormal.size()
+                                                          ? canonicalNormal[normalIndex]
+                                                          : normalIndex;
+                        const std::pair<std::size_t, std::size_t> key{vertex, normalKey};
                         const auto found = local.find(key);
                         if (found == local.end())
                         {
