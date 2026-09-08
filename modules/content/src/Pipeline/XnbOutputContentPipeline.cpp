@@ -1013,14 +1013,17 @@ namespace CNA::Content::Pipeline
             result.rootBone = static_cast<std::int32_t>(model.rootBone);
 
             // Schema 2 stores vertex buffers, index buffers and effects as three separate tables;
-            // XNB stores one flat shared-resource list, so the three are concatenated in that
-            // order and each part's references are rebased onto the flat numbering.
-            const std::size_t vertexBase = 0u;
-            const std::size_t indexBase = model.vertexBuffers.size();
-            const std::size_t effectBase = indexBase + model.indexBuffers.size();
-
-            for (const Cnb::CnbModelV2VertexBuffer& buffer : model.vertexBuffers)
+            // XNB stores one flat shared-resource list, and the order is **first reference**, not
+            // the three tables concatenated. XNA's own writer emits a shared resource the first
+            // time the graph names it, so a model whose meshes carry two vertex declarations
+            // answers `vertex buffer, index buffer, every effect of the first group, the second
+            // vertex buffer, its effects` -- SAMPLE-142's `France.FBX` reaches XNA's own build
+            // exactly that way, its second vertex buffer at identifier 26 behind twenty-three
+            // effects (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-157`).
+            const auto vertexResource = [&](std::size_t index)
             {
+                if (index >= model.vertexBuffers.size()) { return std::size_t{0}; }
+                const Cnb::CnbModelV2VertexBuffer& buffer = model.vertexBuffers[index];
                 if (buffer.declaration >= model.vertexDeclarations.size())
                 {
                     throw XnbWriteException(
@@ -1036,18 +1039,73 @@ namespace CNA::Content::Pipeline
                 converted.bytes = buffer.bytes;
                 result.sharedResources.push_back(
                     {"Microsoft.Xna.Framework.Content.VertexBufferReader", std::move(converted)});
-            }
-            for (const Cnb::CnbModelV2IndexBuffer& buffer : model.indexBuffers)
+                return result.sharedResources.size() - 1u;
+            };
+            const auto indexResource = [&](std::size_t index)
             {
+                if (index >= model.indexBuffers.size()) { return std::size_t{0}; }
                 Xnb::XnbIndexBufferData converted;
-                converted.indexElementSize = buffer.indexElementSize;
-                converted.bytes = buffer.bytes;
+                converted.indexElementSize = model.indexBuffers[index].indexElementSize;
+                converted.bytes = model.indexBuffers[index].bytes;
                 result.sharedResources.push_back(
                     {"Microsoft.Xna.Framework.Content.IndexBufferReader", std::move(converted)});
-            }
-            for (const Cnb::CnbModelV2Effect& effect : model.effects)
+                return result.sharedResources.size() - 1u;
+            };
+            const auto effectResource = [&](std::size_t index)
             {
-                result.sharedResources.push_back(ConvertEffect(effect, logicalName));
+                if (index >= model.effects.size()) { return std::size_t{0}; }
+                result.sharedResources.push_back(ConvertEffect(model.effects[index], logicalName));
+                return result.sharedResources.size() - 1u;
+            };
+            std::map<std::size_t, std::size_t> vertexFlat;
+            std::map<std::size_t, std::size_t> indexFlat;
+            std::map<std::size_t, std::size_t> effectFlat;
+            for (const Cnb::CnbModelV2Mesh& mesh : model.meshes)
+            {
+                for (const Cnb::CnbModelV2Part& part : mesh.parts)
+                {
+                    if (part.vertexBuffer >= model.vertexBuffers.size() ||
+                        part.indexBuffer >= model.indexBuffers.size() ||
+                        part.effect >= model.effects.size())
+                    {
+                        continue;  // reported below, where the part is converted
+                    }
+                    if (vertexFlat.find(part.vertexBuffer) == vertexFlat.end())
+                    {
+                        vertexFlat.emplace(part.vertexBuffer, vertexResource(part.vertexBuffer));
+                    }
+                    if (indexFlat.find(part.indexBuffer) == indexFlat.end())
+                    {
+                        indexFlat.emplace(part.indexBuffer, indexResource(part.indexBuffer));
+                    }
+                    if (effectFlat.find(part.effect) == effectFlat.end())
+                    {
+                        effectFlat.emplace(part.effect, effectResource(part.effect));
+                    }
+                }
+            }
+            // Anything the graph never names still belongs in the table: a Model that carries an
+            // unreferenced buffer is unusual but not invalid, and dropping it would lose it.
+            for (std::size_t index = 0u; index < model.vertexBuffers.size(); ++index)
+            {
+                if (vertexFlat.find(index) == vertexFlat.end())
+                {
+                    vertexFlat.emplace(index, vertexResource(index));
+                }
+            }
+            for (std::size_t index = 0u; index < model.indexBuffers.size(); ++index)
+            {
+                if (indexFlat.find(index) == indexFlat.end())
+                {
+                    indexFlat.emplace(index, indexResource(index));
+                }
+            }
+            for (std::size_t index = 0u; index < model.effects.size(); ++index)
+            {
+                if (effectFlat.find(index) == effectFlat.end())
+                {
+                    effectFlat.emplace(index, effectResource(index));
+                }
             }
 
             result.meshes.reserve(model.meshes.size());
@@ -1079,11 +1137,11 @@ namespace CNA::Content::Pipeline
                     convertedPart.startIndex = static_cast<std::int32_t>(part.startIndex);
                     convertedPart.primitiveCount = static_cast<std::int32_t>(part.primitiveCount);
                     convertedPart.vertexBufferResource =
-                        static_cast<std::int32_t>(vertexBase + part.vertexBuffer);
+                        static_cast<std::int32_t>(vertexFlat.at(part.vertexBuffer));
                     convertedPart.indexBufferResource =
-                        static_cast<std::int32_t>(indexBase + part.indexBuffer);
+                        static_cast<std::int32_t>(indexFlat.at(part.indexBuffer));
                     convertedPart.effectResource =
-                        static_cast<std::int32_t>(effectBase + part.effect);
+                        static_cast<std::int32_t>(effectFlat.at(part.effect));
                     converted.parts.push_back(convertedPart);
                 }
                 result.meshes.push_back(std::move(converted));

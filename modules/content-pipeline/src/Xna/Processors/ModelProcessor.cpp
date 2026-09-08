@@ -319,7 +319,17 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
                                         *batchBuffer->getVertexDeclarationProperty());
                     if (!mergeable)
                     {
+                        // A new *vertex* buffer, not a new index buffer: the index buffer is one
+                        // for the whole model whatever the declarations do. SAMPLE-142's
+                        // `France.FBX` carries a 36-byte mesh and three 32-byte ones, and XNA's own
+                        // build answers two vertex buffers and **one** index buffer of 24,855
+                        // indices, whose `startIndex` runs 0, 17,811, 18,591, 24,423 straight
+                        // through the second vertex buffer's meshes
+                        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-157`).
                         vertexBuffer = batchBuffer;
+                    }
+                    if (indexBuffer == nullptr)
+                    {
                         indexBuffer = std::make_shared<Graphics::IndexCollection>();
                     }
                     const SharpRuntime::intcs vertexOffset =
