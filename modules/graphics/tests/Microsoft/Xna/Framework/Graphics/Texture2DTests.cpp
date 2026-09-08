@@ -1192,21 +1192,23 @@ TEST(Texture2DTest, GetDataLevelNoCpuPixelsThrowsRuntimeError)
 }
 
 // -----------------------------------------------------------------------
-// SetData(const Color*, int) — no renderer, returns early (no throw)
+// SetData(const Color*, int) — the convenience overload retains the same
+// public argument contract as the full level/rectangle overload.
 // -----------------------------------------------------------------------
 
-TEST(Texture2DTest, SetDataSimpleWithNullDataDoesNotThrow)
+TEST(Texture2DTest, SetDataSimpleWithNullDataThrowsInvalidArgument)
 {
-    // graphicsDevice_ is null → early return, null data check skipped
-    Texture2D tex;
-    EXPECT_NO_THROW(tex.SetData(nullptr, 0));
+    GraphicsDevice device;
+    Texture2D texture(device, 1, 1);
+    EXPECT_THROW(texture.SetData(nullptr, 1), std::invalid_argument);
 }
 
-TEST(Texture2DTest, SetDataSimpleWithZeroCountDoesNotThrow)
+TEST(Texture2DTest, SetDataSimpleWithZeroCountThrowsInvalidArgument)
 {
-    Texture2D tex;
-    Color buf[1] = { Color(0,0,0,0) };
-    EXPECT_NO_THROW(tex.SetData(buf, 0));
+    GraphicsDevice device;
+    Texture2D texture(device, 1, 1);
+    Color value(0, 0, 0, 0);
+    EXPECT_THROW(texture.SetData(&value, 0), std::invalid_argument);
 }
 
 TEST(Texture2DTest, TransfersAfterDisposeThrowObjectDisposedException)
@@ -1321,6 +1323,43 @@ TEST(Texture2DTest, SetDataLevelRectNegativeYThrowsOutOfRange)
     Color buf[1] = { Color(0,0,0,0) };
     const Rectangle rect(0, -1, 1, 1);
     EXPECT_THROW(tex.SetData(0, &rect, buf, 0, 1), std::out_of_range);
+}
+
+TEST(Texture2DTest, SetDataLevelRectZeroExtentThrowsOutOfRange)
+{
+    GraphicsDevice device;
+    Texture2D texture(device, 2, 2);
+    Color value(1, 2, 3, 4);
+    const Rectangle zeroWidth(0, 0, 0, 1);
+    const Rectangle zeroHeight(0, 0, 1, 0);
+
+    EXPECT_THROW(texture.SetData(0, &zeroWidth, &value, 0, 1), std::out_of_range);
+    EXPECT_THROW(texture.SetData(0, &zeroHeight, &value, 0, 1), std::out_of_range);
+}
+
+TEST(Texture2DTest, SetDataLevelRectNegativeExtentThrowsOutOfRange)
+{
+    GraphicsDevice device;
+    Texture2D texture(device, 2, 2);
+    Color value(1, 2, 3, 4);
+    const Rectangle negativeExtents(1, 1, -1, -1);
+
+    EXPECT_THROW(texture.SetData(0, &negativeExtents, &value, 0, 1), std::out_of_range);
+}
+
+TEST(Texture2DTest, GetDataLevelRectNonPositiveExtentThrowsOutOfRange)
+{
+    GraphicsDevice device;
+    Texture2D texture(device, 2, 2);
+    std::array<Color, 4> source{Color::Red, Color::Green, Color::Blue, Color::White};
+    texture.SetData(source.data(), static_cast<int>(source.size()));
+    Color destination(9, 8, 7, 6);
+    const Rectangle zeroWidth(0, 0, 0, 1);
+    const Rectangle negativeExtents(1, 1, -1, -1);
+
+    EXPECT_THROW(texture.GetData(0, &zeroWidth, &destination, 0, 1), std::out_of_range);
+    EXPECT_THROW(texture.GetData(0, &negativeExtents, &destination, 0, 1), std::out_of_range);
+    EXPECT_EQ(destination, Color(9, 8, 7, 6));
 }
 
 TEST(Texture2DTest, SetDataLevelRectWithinBoundsDoesNotThrow)

@@ -386,10 +386,12 @@ namespace Microsoft::Xna::Framework::Graphics
         if (!IsColorTransferFormatEXT(graphicsDevice_, format_))
             throw std::invalid_argument(
                 "Texture2D::SetData: Color data requires a Color-compatible 32-bit format");
-        if (!graphicsDevice_ || !data || elementCount <= 0) return;
+        if (!data || elementCount <= 0)
+            throw std::invalid_argument(
+                "Texture2D::SetData: data must not be null and elementCount must be > 0");
+        if (!graphicsDevice_) return;
         const int total = width * height;
-        if (elementCount < total)
-            throw std::out_of_range("Texture2D::SetData: elementCount is less than the number of pixels in the texture");
+        validateTransferWindow("Texture2D::SetData", 0, elementCount, total);
         ImageData img;
         img.width     = width;
         img.height    = height;
@@ -452,10 +454,10 @@ namespace Microsoft::Xna::Framework::Graphics
             x = rect->X; y = rect->Y;
             w = rect->Width; h = rect->Height;
         }
-        if (x < 0 || y < 0 || x + w > levelW || y + h > levelH)
+        if (x < 0 || y < 0 || w <= 0 || h <= 0
+            || w > levelW || h > levelH || x > levelW - w || y > levelH - h)
             throw std::out_of_range("Texture2D::SetData: rectangle out of texture bounds");
-        if (elementCount < w * h)
-            throw std::out_of_range("Texture2D::SetData: elementCount is less than the number of pixels in the requested region");
+        validateTransferWindow("Texture2D::SetData", startIndex, elementCount, w * h);
 
         // getMipBuffer(0) lazily re-creates cpuPixels_ as a zero-filled buffer when it has
         // been freed (context recovery disabled — see MaybeFreeCpuPixels). If the requested
@@ -600,9 +602,8 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::out_of_range("Texture2D::SetData: rectangle out of texture bounds");
         }
         const int requiredElements = w * h;
-        if (elementCount < requiredElements)
-            throw std::out_of_range(
-                "Texture2D::SetData: elementCount is less than the requested region");
+        validateTransferWindow(
+            "Texture2D::SetData", startIndex, elementCount, requiredElements);
 
         const bool coversFullLevel = x == 0 && y == 0 && w == levelW && h == levelH;
         if (gpuOnlyContent_)
@@ -1499,7 +1500,9 @@ namespace Microsoft::Xna::Framework::Graphics
                 const int levelH = mipDim(height, level);
                 int x = 0, y = 0, w = levelW, h = levelH;
                 if (rect) { x = rect->X; y = rect->Y; w = rect->Width; h = rect->Height; }
-                if (x < 0 || y < 0 || w <= 0 || h <= 0 || x + w > levelW || y + h > levelH)
+                if (x < 0 || y < 0 || w <= 0 || h <= 0
+                    || w > levelW || h > levelH
+                    || x > levelW - w || y > levelH - h)
                     throw std::out_of_range("Texture2D::GetData: rectangle out of texture bounds");
                 // REMED-GFX-149: the required element count comes from THIS rectangle's own
                 // dimensions at THIS mip level -- never from level 0 and never from the full
@@ -1541,7 +1544,8 @@ namespace Microsoft::Xna::Framework::Graphics
             w = rect->Width; h = rect->Height;
         }
 
-        if (x < 0 || y < 0 || x + w > levelW || y + h > levelH)
+        if (x < 0 || y < 0 || w <= 0 || h <= 0
+            || w > levelW || h > levelH || x > levelW - w || y > levelH - h)
             throw std::out_of_range("Texture2D::GetData: rectangle out of texture bounds");
         // REMED-GFX-149: as above -- this rectangle's own dimensions at this mip level, and an
         // overflow-safe destination window.
