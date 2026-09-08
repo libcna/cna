@@ -987,6 +987,16 @@ namespace CNA::Internal::Renderers::DirectX12
                                     depthStencilViewEXT_, DXGI_FORMAT_D24_UNORM_S8_UINT);
     }
 
+    bool DirectX12Renderer::IsRenderTargetActiveEXT(
+        const IRenderTargetRenderer* target) const noexcept
+    {
+        if (target == nullptr) return false;
+        if (currentCustomRT_ == target) return true;
+        for (int i = 0; i < currentMrtCount_; ++i)
+            if (currentMrtTargets_[i] == target) return true;
+        return false;
+    }
+
     void DirectX12Renderer::NotifyRenderTargetDestroyedEXT(
         IRenderTargetRenderer* target) noexcept
     {

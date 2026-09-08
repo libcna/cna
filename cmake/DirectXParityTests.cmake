@@ -666,6 +666,11 @@ function(cna_register_d3d_parity_tests)
         SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_rendertargetcube_depthformat_test.cpp"
         DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 600)
     cna_d3d_parity_fixture(
+        NAME RenderTarget_ActiveMsaaReadback TARGET active_msaa_readback
+        DIRECTX12_ORDER 2160
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_active_msaa_readback_test.cpp"
+        DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 600)
+    cna_d3d_parity_fixture(
         NAME CompressedTexture_StorageContract TARGET compressed_texture_storage DIRECTX12_ORDER 1892
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/d3d_compressed_texture_contract_test.cpp"
         DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 600)

@@ -984,6 +984,16 @@ namespace CNA::Internal::Renderers::DirectX11
         RebindRasterizerState();
     }
 
+    bool DirectX11Renderer::IsRenderTargetActiveEXT(
+        const D3D11RenderTargetRenderer* target) const noexcept
+    {
+        if (target == nullptr) return false;
+        if (currentCustomRT_ == target) return true;
+        for (int i = 0; i < currentMRTCount_; ++i)
+            if (currentMRTTargets_[i] == target) return true;
+        return false;
+    }
+
     void DirectX11Renderer::RestoreBackBufferRenderTargetEXT()
     {
         ID3D11RenderTargetView* rtv = backBufferRTV_.Get();

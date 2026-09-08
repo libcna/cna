@@ -2173,6 +2173,12 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             cna_register_renderer_test(NAME EasyGL_GFX164_BoundMsaaAlpha
                 COMMAND cna_test_easygl_gfx164_bound_msaa_alpha
                 TIMEOUT 900 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+            cna_easygl_test(cna_test_easygl_active_msaa_readback
+                ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_active_msaa_readback_test.cpp)
+            cna_register_renderer_test(NAME EasyGL_RenderTarget_ActiveMsaaReadback
+                COMMAND cna_test_easygl_active_msaa_readback
+                TIMEOUT 900 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
         endif()
 
         # REMED-GFX-186 cross-renderer control: the same PUBLIC generated-mip readback contract on this

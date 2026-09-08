@@ -129,9 +129,9 @@ namespace CNA::Internal::Renderers::DirectX12
         /// resolved single-sample resource.
         [[nodiscard]] ID3D12Resource* GetColorResourceEXT() const { return colorResource_.Get(); }
         /// The resource tests/shaders should actually read from -- `resolveResource_` when MSAA
-        /// (post-`ResolveSubresource()`, only valid after `UnbindAsRenderTarget()` has run at least
-        /// once), else the same object `GetColorResourceEXT()` already returns (CNAEXT, mirrors
-        /// D3D11RenderTargetRenderer's own `GetSampleableTextureEXT()` naming/behavior exactly).
+        /// (post-`ResolveSubresource()`, refreshed by either `UnbindAsRenderTarget()` or an active
+        /// public `GetData`), else the same object `GetColorResourceEXT()` already returns (CNAEXT,
+        /// mirrors D3D11RenderTargetRenderer's own `GetSampleableTextureEXT()` naming/behavior).
         [[nodiscard]] ID3D12Resource* GetSampleableColorResourceEXT() const
         {
             return isMsaa_ ? resolveResource_.Get() : colorResource_.Get();
@@ -161,11 +161,11 @@ namespace CNA::Internal::Renderers::DirectX12
     private:
         /// DX-144: CPU box-filter downsample cascade, base level (0) -> levelCount_-1, called from
         /// UnbindAsRenderTarget(). No-op when mipMap_ is false or levelCount_ is 1.
-        void GenerateMipsEXT();
+        void GenerateMipsEXT() const;
         /// DX-117 MSAA follow-up: ResolveSubresource() the MSAA color resource into
-        /// resolveResource_, called from UnbindAsRenderTarget() before GenerateMipsEXT(). No-op
-        /// when isMsaa_ is false.
-        void ResolveMsaaEXT();
+        /// resolveResource_, called from UnbindAsRenderTarget() and active GetData before
+        /// GenerateMipsEXT(). No-op when isMsaa_ is false.
+        void ResolveMsaaEXT() const;
 
         DirectX12Renderer* owner_ = nullptr;
         std::weak_ptr<void> ownerLifetime_;

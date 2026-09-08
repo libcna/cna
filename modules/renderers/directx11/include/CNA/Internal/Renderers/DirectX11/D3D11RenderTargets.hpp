@@ -91,7 +91,7 @@ namespace CNA::Internal::Renderers::DirectX11
         /// also triggering UnbindAsRenderTarget()'s own back-buffer-restore side effect (MRT's own
         /// caller already handles that once, not per-target). UnbindAsRenderTarget() itself now
         /// just calls this plus the restore, so single-target behavior is unchanged. CNAEXT.
-        void ResolveAndGenerateMipsEXT();
+        void ResolveAndGenerateMipsEXT() const;
 
         /// Real ID3D11RenderTargetView for this target's color attachment (CNAEXT).
         [[nodiscard]] ID3D11RenderTargetView* GetRTVEXT() const { return rtv_.Get(); }
@@ -101,7 +101,8 @@ namespace CNA::Internal::Renderers::DirectX11
         [[nodiscard]] ID3D11ShaderResourceView* GetShaderResourceViewEXT() const { return srv_.Get(); }
         [[nodiscard]] bool IsMsaaEXT() const { return isMsaa_; }
         /// The texture srv_ actually points at -- resolveTexture_ when isMsaa_, else colorTexture_
-        /// itself (CNAEXT, test/diagnostics readback).
+        /// itself. An active public GetData refreshes this copy before reading it (CNAEXT,
+        /// test/diagnostics readback).
         [[nodiscard]] ID3D11Texture2D* GetSampleableTextureEXT() const
         {
             return isMsaa_ ? resolveTexture_.Get() : colorTexture_.Get();

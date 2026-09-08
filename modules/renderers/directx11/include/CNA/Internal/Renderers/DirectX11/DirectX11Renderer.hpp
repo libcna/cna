@@ -237,6 +237,9 @@ namespace CNA::Internal::Renderers::DirectX11
         void NotifyRenderTargetDestroyedEXT(D3D11RenderTargetRenderer* target) noexcept;
         /** @brief Detaches a dying cube target from the non-owning current cube binding. */
         void NotifyRenderTargetCubeDestroyedEXT(D3D11RenderTargetCubeRenderer* target) noexcept;
+        /** @brief Reports whether a 2D target occupies the active single-target or MRT binding. */
+        [[nodiscard]] bool IsRenderTargetActiveEXT(
+            const D3D11RenderTargetRenderer* target) const noexcept;
         /** @brief Returns a weak token that expires before this renderer can be dereferenced. */
         [[nodiscard]] std::weak_ptr<void> GetLifetimeTokenEXT() const noexcept
         {

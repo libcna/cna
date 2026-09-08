@@ -164,7 +164,7 @@ namespace CNA::Internal::Renderers::DirectX11
         if (owner_) owner_->TrackCurrentRenderTargetEXT(&rtv, 1, dsv_.Get());
     }
 
-    void D3D11RenderTargetRenderer::ResolveAndGenerateMipsEXT()
+    void D3D11RenderTargetRenderer::ResolveAndGenerateMipsEXT() const
     {
         if (isMsaa_ && resolveTexture_)
         {
@@ -215,6 +215,14 @@ namespace CNA::Internal::Renderers::DirectX11
                 "dataLength", std::to_string(dataLength),
                 "The destination holds fewer than the " + std::to_string(requiredBytes) +
                     " bytes the requested rectangle needs.");
+
+        // The sampleable resource is a distinct resolve texture under MSAA. If this target is
+        // still active, the normal target-switch finalization boundary has not happened yet, so
+        // refresh it synchronously before claiming a successful readback. The owner query avoids
+        // re-resolving an idle target, whose sampleable storage may have been updated separately.
+        if (isMsaa_ && owner_ && !ownerLifetime_.expired() &&
+            owner_->IsRenderTargetActiveEXT(this))
+            ResolveAndGenerateMipsEXT();
 
         ID3D11Texture2D* const source = GetSampleableTextureEXT();
         if (!device_ || !context_ || !source || data == nullptr)

@@ -485,7 +485,7 @@ namespace CNA::Internal::Renderers::DirectX12
         if (owner_) owner_->RestoreBackBufferRenderTargetEXT();
     }
 
-    void D3D12RenderTargetRenderer::ResolveMsaaEXT()
+    void D3D12RenderTargetRenderer::ResolveMsaaEXT() const
     {
         if (!isMsaa_ || !resolveResource_ || !owner_) return;
 
@@ -554,6 +554,16 @@ namespace CNA::Internal::Renderers::DirectX12
                 "The destination holds fewer than the " + std::to_string(requiredBytes) +
                     " bytes the requested rectangle needs.");
 
+        // An active MSAA target has not crossed the ordinary unbind/resolve boundary yet. Refresh
+        // only that active attachment before readback; an idle target's sampleable resource may
+        // have been updated independently and must not be overwritten from an old MSAA surface.
+        if (isMsaa_ && owner_ && !ownerLifetime_.expired() &&
+            owner_->IsRenderTargetActiveEXT(this))
+        {
+            ResolveMsaaEXT();
+            GenerateMipsEXT();
+        }
+
         ID3D12Resource* const source = GetSampleableColorResourceEXT();
         if (!owner_ || !device_ || !source || data == nullptr)
             return false;
@@ -576,7 +586,7 @@ namespace CNA::Internal::Renderers::DirectX12
         return true;
     }
 
-    void D3D12RenderTargetRenderer::GenerateMipsEXT()
+    void D3D12RenderTargetRenderer::GenerateMipsEXT() const
     {
         if (!mipMap_ || levelCount_ <= 1 || !owner_) return;
 
