@@ -3625,6 +3625,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // render-state update can otherwise leave the old GPU state active.
         blendState_ = value;
         blendFactor_ = value.getBlendFactorProperty();
+        multiSampleMask_ = value.getMultiSampleMaskProperty();
     }
 
     DepthStencilState& GraphicsDevice::getDepthStencilStateProperty() { return depthStencilState_; }
@@ -3708,7 +3709,37 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
     int GraphicsDevice::getMultiSampleMaskProperty() const { return multiSampleMask_; }
-    void GraphicsDevice::setMultiSampleMaskProperty(int value) { multiSampleMask_ = value; }
+    void GraphicsDevice::setMultiSampleMaskProperty(int value)
+    {
+        if (renderer_)
+        {
+            // SOFTWARE-166: this is a standalone XNA GraphicsDevice property, just like
+            // BlendFactor and ReferenceStencil. Re-apply the current blend equation and colour
+            // masks with only the coverage mask replaced; mutating blendState_ would incorrectly
+            // rewrite the caller-visible BlendState object that supplied the rest of the state.
+            CNA::Internal::Renderers::BlendWriteState writeState;
+            writeState.colorWriteChannels[0] =
+                static_cast<int>(blendState_.getColorWriteChannelsProperty());
+            writeState.colorWriteChannels[1] =
+                static_cast<int>(blendState_.getColorWriteChannels1Property());
+            writeState.colorWriteChannels[2] =
+                static_cast<int>(blendState_.getColorWriteChannels2Property());
+            writeState.colorWriteChannels[3] =
+                static_cast<int>(blendState_.getColorWriteChannels3Property());
+            writeState.multiSampleMask = static_cast<unsigned int>(value);
+            renderer_->ApplyBlendState(
+                static_cast<int>(blendState_.getColorSourceBlendProperty()),
+                static_cast<int>(blendState_.getAlphaSourceBlendProperty()),
+                static_cast<int>(blendState_.getColorDestinationBlendProperty()),
+                static_cast<int>(blendState_.getAlphaDestinationBlendProperty()),
+                static_cast<int>(blendState_.getColorBlendFunctionProperty()),
+                static_cast<int>(blendState_.getAlphaBlendFunctionProperty()),
+                writeState);
+        }
+        // Preserve transactional state application: an incapable renderer may reject a
+        // non-default mask, in which case the public cache continues to describe installed state.
+        multiSampleMask_ = value;
+    }
 
     int GraphicsDevice::getReferenceStencilProperty() const { return referenceStencil_; }
     void GraphicsDevice::setReferenceStencilProperty(int value)

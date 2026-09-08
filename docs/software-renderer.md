@@ -302,7 +302,10 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   factors, every GL/FNA-valid destination factor and all five RGB/alpha functions in 35/35 checks
   on both Software and EasyGL. Seven unchanged EasyGL preset/separate-state scenes also pass on
   Software. All four MRT write-channel masks are retained; the classic stock effect paths consume
-  slot zero's mask because their sole fragment output is `COLOR0`.
+  slot zero's mask because their sole fragment output is `COLOR0`. The independent
+  `GraphicsDevice.MultiSampleMask` property is also live (`SOFTWARE-166`): mask 0/1/all output,
+  restoration and synchronization after assigning a whole BlendState pass the expanded 18/18
+  Software/desktop-EasyGL MSAA contract.
 - **Classic 2D/cube sampler state is applied.** Point/linear minification and magnification,
   point/linear mip selection, independent U/V Wrap/Clamp/Mirror and per-slot state are covered by
   shared contracts. `TextureFilter::Anisotropic` computes the directional texel footprint, selects

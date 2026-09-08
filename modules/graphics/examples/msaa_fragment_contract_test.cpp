@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// SOFTWARE-110/SOFTWARE-160: renderer-neutral 4x coverage, mask, depth, stencil and
-// RasterizerState.MultiSampleAntiAlias contract.
+// SOFTWARE-110/SOFTWARE-160/SOFTWARE-166: renderer-neutral 4x coverage, mask, depth, stencil,
+// RasterizerState.MultiSampleAntiAlias and GraphicsDevice.MultiSampleMask contract.
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -269,6 +269,46 @@ class MsaaFragmentContractTest final : public Game
         }
     }
 
+    void CheckDeviceMultiSampleMask(GraphicsDevice& device)
+    {
+        const auto render = [&](unsigned int deviceMask, const BlendState& blendState) {
+            Begin(device);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setBlendStateProperty(blendState);
+            device.setMultiSampleMaskProperty(static_cast<int>(deviceMask));
+            DrawQuad(device, kFullGreen, 0.5f);
+            return FinishAndRead(device);
+        };
+
+        const Color oneSample = render(0x1u, SampleMask(0xFu));
+        Check(device.getMultiSampleMaskProperty() == 1,
+              "GraphicsDevice.MultiSampleMask getter reports the independently assigned value");
+        Check(NearByte(oneSample.getGProperty(), 63) && oneSample.getRProperty() == 0,
+              "GraphicsDevice.MultiSampleMask=1 immediately limits a full-coverage draw to one "
+              "sample: " + Text(oneSample));
+
+        Begin(device);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(SampleMask(0x5u));
+        DrawQuad(device, kFullGreen, 0.5f);
+        const Color fromWholeState = FinishAndRead(device);
+        Check(device.getMultiSampleMaskProperty() == 5,
+              "assigning a whole BlendState synchronizes GraphicsDevice.MultiSampleMask");
+        Check(NearByte(fromWholeState.getGProperty(), 127) &&
+                  fromWholeState.getRProperty() == 0,
+              "a whole BlendState restores its own two-sample mask after an independent device "
+              "assignment: " + Text(fromWholeState));
+
+        const Color noSamples = render(0x0u, SampleMask(0xFu));
+        Check(noSamples == kBlack,
+              "GraphicsDevice.MultiSampleMask=0 preserves the clear color: " +
+                  Text(noSamples));
+        const Color allSamples = render(0xFu, SampleMask(0x0u));
+        Check(allSamples == kFullGreen,
+              "independent GraphicsDevice.MultiSampleMask overrides the current BlendState mask "
+              "and restores all samples: " + Text(allSamples));
+    }
+
 protected:
     void Draw(const GameTime&) override
     {
@@ -294,6 +334,7 @@ protected:
         CheckDepthAtCoveredSamples(device);
         CheckIndependentStencilSamples(device);
         CheckMultiSampleAntiAliasToggle(device);
+        CheckDeviceMultiSampleMask(device);
 
         std::printf("=== %d/%d PASS ===\n", passed_, total_);
         result_ = passed_ == total_ ? 0 : 1;

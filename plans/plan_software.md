@@ -175,12 +175,13 @@ its own tests and plan evidence in the same commit.
 | SOFTWARE-163 | Execute compiled-effect vertex shaders through Software vertex input and clipping | ⬜ | Implement the classic SM1-3 vertex register/instruction semantics required by committed XNA fixtures, declaration-semantic binding, output saturation rules, ordinary/indexed/user/buffer draws, multiple streams, base vertex, offsets and instancing. Feed declared shader outputs into the existing homogeneous clipper and perspective interpolator. |
 | SOFTWARE-164 | Execute compiled-effect pixel shaders with classic texture/sampler/MRT semantics | ⬜ | Implement scalar/quad pixel execution, control flow, discard, derivatives and implicit/explicit LOD needed by SM1-3; bind 2D/cube/volume samplers with Filter, U/V/W addressing, anisotropy, max mip and LOD bias; publish COLOR0-3 to MRT and preserve depth/stencil/blend/MSAA ordering. The EasyGL shared sampler, SpriteBatch, render-target, cube/volume and draw contracts must execute rather than skip. This task closes `SOFTWARE-159`'s observable AddressW dependency. |
 | SOFTWARE-165 | Complete classic compiled-effect conformance and enable the capability | ⬜ | Close remaining SM1/SM2/SM3 instruction/profile cases, malformed-input and lifecycle behavior, SpriteBatch multi-pass/custom-effect routing, EffectMaterial/model-content draws, stress/fuzz coverage and performance bounds. Run the full shared compiled-effect contract against Software and EasyGL. Set `GraphicsCapability::CompiledEffects=true` only after no supported EasyGL classic-effect contract remains refused or stock-substituted. |
+| SOFTWARE-166 | Make the independent `GraphicsDevice.MultiSampleMask` property affect rendering | ✅ | Completed 2026-09-08. The property was a cache-only setter even though FNA immediately calls `FNA3D_SetMultiSampleMask`; only `BlendState.MultiSampleMask` reached CNA renderers. The expanded shared MSAA contract failed four of its six new assertions before repair: device mask 1 and 0 did not change output, assigning a whole BlendState left the device getter stale, and a device mask could not override the state's mask. GraphicsDevice now reapplies the current blend equation/write channels with the independent mask, commits its cache only after renderer acceptance, and synchronizes the device getter when a whole BlendState is assigned. Software and Mesa desktop EasyGL both pass 18/18, with exact quarter/two/all/no-sample output and state restoration. |
 
 ### Current dependency order
 
-Tasks through `SOFTWARE-161` are complete except for the intentionally historical `SOFTWARE-85/86`
-and the independently blocked `SOFTWARE-100`. `SOFTWARE-162..165` are the dependency-ordered
-compiled-effect implementation backlog. `SOFTWARE-100` remains yellow for the previously recorded
+Tasks through `SOFTWARE-161` plus `SOFTWARE-166` are complete except for the intentionally
+historical `SOFTWARE-85/86` and the independently blocked `SOFTWARE-100`. `SOFTWARE-162..165` are
+the dependency-ordered compiled-effect implementation backlog. `SOFTWARE-100` remains yellow for the previously recorded
 repository-wide blockers; that status does not excuse any renderer gap found here.
 
 ---
