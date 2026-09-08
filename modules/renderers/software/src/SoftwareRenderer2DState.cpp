@@ -185,6 +185,9 @@ namespace CNA::Internal::Renderers::Software
         switch (static_cast<SurfaceFormat>(surfaceFormat))
         {
             case SurfaceFormat::Color:
+            case SurfaceFormat::Rgba1010102:
+            case SurfaceFormat::Rg32:
+            case SurfaceFormat::Rgba64:
             case SurfaceFormat::Single:
             case SurfaceFormat::Vector2:
             case SurfaceFormat::Vector4:
@@ -201,9 +204,6 @@ namespace CNA::Internal::Renderers::Software
             case SurfaceFormat::Dxt5:
             case SurfaceFormat::NormalizedByte2:
             case SurfaceFormat::NormalizedByte4:
-            case SurfaceFormat::Rgba1010102:
-            case SurfaceFormat::Rg32:
-            case SurfaceFormat::Rgba64:
             case SurfaceFormat::Alpha8:
                 return RendererFormatVerdict::Unsupported;
             default:

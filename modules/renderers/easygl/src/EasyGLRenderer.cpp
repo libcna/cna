@@ -1368,6 +1368,14 @@ if (ProfileIsDesktopCore())
         return ProfileIsDesktopCore() || ::metagl::HasExtension("GL_EXT_texture_norm16");
     }
 
+    /// GL_RG16 is supplied by desktop GL and GL_EXT_texture_norm16, but the GLES-generated
+    /// metagl enum intentionally names only core formats. Keep the extension token local to the
+    /// capability-gated path that uses it.
+    [[nodiscard]] inline ::metagl::InternalFormat Rg16InternalFormatEXT()
+    {
+        return static_cast<::metagl::InternalFormat>(0x822C);
+    }
+
     static void SetOrdinaryTextureDefaults(::easygl::Texture& texture)
     {
         texture.set_parameter(::easygl::TextureTarget::Texture2D,
@@ -3551,8 +3559,8 @@ else
     // this GL context can render to the format at all.
     //
     // The formats CNA actually allocates are listed. Everything else is deliberately absent and
-    // refused rather than silently substituted. Rgba64 is desktop-only RGBA16 UNORM storage: FNA's
-    // adapter query promises it and the original Racing Game Kit uses the exact selected format.
+    // refused rather than silently substituted. The two 16-bit normalized layouts are selected
+    // only after the runtime texture-norm16/completeness checks below.
     struct RenderTargetColorStorage
     {
         ::metagl::InternalFormat internalFormat;
@@ -3571,6 +3579,14 @@ else
         case SurfaceFormat::Color:
             out = {RgbaTexImageInternalFormat(), ::metagl::PixelFormat::Rgba,
                    ::metagl::PixelType::UnsignedByte, false, false, 4};
+            return true;
+        case SurfaceFormat::Rgba1010102:
+            out = {::metagl::InternalFormat::Rgb10A2, ::metagl::PixelFormat::Rgba,
+                   ::metagl::PixelType::UnsignedInt2101010Rev, false, false, 4};
+            return true;
+        case SurfaceFormat::Rg32:
+            out = {Rg16InternalFormatEXT(), ::metagl::PixelFormat::Rg,
+                   ::metagl::PixelType::UnsignedShort, false, false, 4};
             return true;
         case SurfaceFormat::Rgba64:
             out = {::metagl::InternalFormat::Rgba16, ::metagl::PixelFormat::Rgba,
@@ -3606,6 +3622,187 @@ else
         default:
             return false;
         }
+    }
+
+    static void ApplyRenderTargetChannelSwizzle(
+        ::easygl::Texture& texture, ::easygl::TextureTarget target, int surfaceFormat)
+    {
+        using ::Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat);
+        const bool oneChannel = format == SurfaceFormat::Single ||
+                                format == SurfaceFormat::HalfSingle;
+        const bool twoChannel = format == SurfaceFormat::Vector2 ||
+                                format == SurfaceFormat::HalfVector2 ||
+                                format == SurfaceFormat::Rg32;
+        if (!oneChannel && !twoChannel)
+            return;
+
+        const int one = static_cast<int>(::metagl::TextureSwizzle::One);
+        if (oneChannel)
+            texture.set_parameter(target, ::easygl::TextureParameterSetter::SwizzleG, one);
+        texture.set_parameter(target, ::easygl::TextureParameterSetter::SwizzleB, one);
+        texture.set_parameter(target, ::easygl::TextureParameterSetter::SwizzleA, one);
+    }
+
+    [[nodiscard]] static bool ProbeNormalized16MsaaResolve(
+        const RenderTargetColorStorage& storage, int samples, bool cubeTarget)
+    {
+        GLint previousReadFbo = 0;
+        GLint previousDrawFbo = 0;
+        GLboolean previousMask[4]{};
+        ::metagl::glGetIntegerv(::metagl::GetParameter::ReadFramebufferBinding,
+                                &previousReadFbo);
+        ::metagl::glGetIntegerv(::metagl::GetParameter::DrawFramebufferBinding,
+                                &previousDrawFbo);
+        ::metagl::glGetBooleanv(::metagl::GetParameter::ColorWritemask, previousMask);
+        const bool scissorWasEnabled =
+            ::metagl::glIsEnabled(::metagl::Capability::ScissorTest) != 0;
+
+        ::easygl::Texture resolveTexture;
+        ::easygl::Renderbuffer multisampleColor;
+        ::easygl::Framebuffer multisampleFbo;
+        ::easygl::Framebuffer resolveFbo;
+        resolveTexture.create();
+        const ::easygl::TextureTarget resolveTarget = cubeTarget
+            ? ::easygl::TextureTarget::TextureCubeMap
+            : ::easygl::TextureTarget::Texture2D;
+        resolveTexture.bind(resolveTarget);
+        if (cubeTarget)
+        {
+            for (int face = 0; face < 6; ++face)
+            {
+                resolveTexture.set_image_2d(kCubeFaceTargets[face], 0,
+                                            storage.internalFormat, 4, 4,
+                                            storage.pixelFormat, storage.pixelType, nullptr);
+            }
+        }
+        else
+        {
+            resolveTexture.set_image_2d(::easygl::TextureTarget::Texture2D, 0,
+                                        storage.internalFormat, 4, 4,
+                                        storage.pixelFormat, storage.pixelType, nullptr);
+        }
+        multisampleColor.create();
+        multisampleColor.bind();
+        multisampleColor.set_storage_multisample(samples, storage.internalFormat, 4, 4);
+        multisampleFbo.create();
+        multisampleFbo.bind(::easygl::FramebufferTarget::Framebuffer);
+        multisampleFbo.attach_renderbuffer(
+            ::easygl::FramebufferTarget::Framebuffer,
+            ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
+            multisampleColor);
+        resolveFbo.create();
+        resolveFbo.bind(::easygl::FramebufferTarget::Framebuffer);
+        resolveFbo.attach_texture_2d(
+            ::easygl::FramebufferTarget::Framebuffer,
+            ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
+            cubeTarget ? kCubeFaceTargets[0] : ::easygl::TextureTarget::Texture2D,
+            resolveTexture, 0);
+
+        bool succeeded = multisampleFbo.is_complete() && resolveFbo.is_complete();
+        std::array<std::uint8_t, 4> pixel{};
+        if (succeeded)
+        {
+            if (scissorWasEnabled)
+                ::metagl::glDisable(::metagl::Capability::ScissorTest);
+            ::metagl::glColorMask(true, true, true, true);
+            multisampleFbo.bind(::easygl::FramebufferTarget::DrawFramebuffer);
+            const GLfloat clear[4]{0.25f, 0.5f, 0.75f, 1.0f};
+            ::metagl::glClearBufferfv(::metagl::FloatClearBuffer::Color, 0, clear);
+            multisampleFbo.bind(::easygl::FramebufferTarget::ReadFramebuffer);
+            resolveFbo.bind(::easygl::FramebufferTarget::DrawFramebuffer);
+            ::easygl::Framebuffer::blit(0, 0, 4, 4, 0, 0, 4, 4,
+                                        ::metagl::ClearBufferBit::Color,
+                                        ::metagl::BlitFilter::Nearest);
+            resolveFbo.bind(::easygl::FramebufferTarget::ReadFramebuffer);
+            ::metagl::glReadBuffer(
+                ::metagl::to_read_buffer(::metagl::ColorAttachment::Color0));
+            ::metagl::glReadPixels(0, 0, 1, 1, ::metagl::PixelFormat::Rgba,
+                                   ::metagl::PixelType::UnsignedByte, pixel.data());
+            succeeded = GlUploadSucceeded() && pixel[0] > 32u && pixel[1] > 96u;
+        }
+
+        ::metagl::glColorMask(previousMask[0], previousMask[1],
+                              previousMask[2], previousMask[3]);
+        if (scissorWasEnabled)
+            ::metagl::glEnable(::metagl::Capability::ScissorTest);
+        ::metagl::glBindFramebuffer(
+            ::metagl::FramebufferTarget::ReadFramebuffer,
+            ::metagl::FramebufferId{static_cast<unsigned int>(previousReadFbo)});
+        ::metagl::glBindFramebuffer(
+            ::metagl::FramebufferTarget::DrawFramebuffer,
+            ::metagl::FramebufferId{static_cast<unsigned int>(previousDrawFbo)});
+        DrainGlErrors();
+        return succeeded;
+    }
+
+    [[nodiscard]] static int ClampRenderTargetSamples(
+        const RenderTargetColorStorage& storage, int requested, bool cubeTarget)
+    {
+        if (requested <= 1 || ProfileIsEs2ApiGeneration())
+            return 0;
+        std::array<GLint, 16> supported{};
+        ::metagl::glGetInternalformativ(
+            ::metagl::InternalFormatTarget::Renderbuffer, storage.internalFormat,
+            ::metagl::InternalFormatParameter::Samples,
+            static_cast<GLsizei>(supported.size()), supported.data());
+        int applied = 0;
+        for (const GLint count : supported)
+        {
+            if (count > 1 && count <= requested)
+                applied = std::max(applied, static_cast<int>(count));
+        }
+        DrainGlErrors();
+        const bool normalized16 = !storage.isFloat &&
+            (storage.internalFormat == Rg16InternalFormatEXT() ||
+             storage.internalFormat == ::metagl::InternalFormat::Rgba16);
+        if (normalized16 && applied > 0)
+        {
+            if (!ProbeNormalized16MsaaResolve(storage, applied, cubeTarget))
+                return 0;
+        }
+        return applied;
+    }
+
+    [[nodiscard]] static bool ReadRenderTargetPixels(
+        int surfaceFormat, const RenderTargetColorStorage& storage,
+        int x, int y, int width, int height, void* data)
+    {
+        using ::Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        DrainGlErrors();
+        if (static_cast<SurfaceFormat>(surfaceFormat) == SurfaceFormat::Rg32)
+        {
+            // GLES permits RG16 attachments through EXT_texture_norm16, but its core ReadPixels
+            // table still requires the RGBA format. Read the four normalized channels and retain
+            // the two channels XNA's Rg32 actually stores, without narrowing either to 8 bits.
+            std::vector<std::uint16_t> expanded(
+                static_cast<std::size_t>(width) * height * 4u);
+            ::metagl::glPixelStorei(::metagl::PixelStoreParam::PackAlignment, 8);
+            ::metagl::glReadPixels(x, y, width, height,
+                                   ::metagl::PixelFormat::Rgba,
+                                   ::metagl::PixelType::UnsignedShort,
+                                   expanded.data());
+            ::metagl::glPixelStorei(::metagl::PixelStoreParam::PackAlignment, 4);
+            if (!GlUploadSucceeded())
+                return false;
+            auto* destination = static_cast<std::uint8_t*>(data);
+            const std::size_t texels = static_cast<std::size_t>(width) * height;
+            for (std::size_t index = 0; index < texels; ++index)
+            {
+                std::memcpy(destination + index * 4u,
+                            &expanded[index * 4u], 2u);
+                std::memcpy(destination + index * 4u + 2u,
+                            &expanded[index * 4u + 1u], 2u);
+            }
+            return true;
+        }
+
+        ::metagl::glPixelStorei(::metagl::PixelStoreParam::PackAlignment,
+                                std::min(8, storage.bytesPerPixel));
+        ::metagl::glReadPixels(x, y, width, height,
+                               storage.pixelFormat, storage.pixelType, data);
+        ::metagl::glPixelStorei(::metagl::PixelStoreParam::PackAlignment, 4);
+        return GlUploadSucceeded();
     }
 
     EasyGLRenderTargetRenderer::EasyGLRenderTargetRenderer(int w, int h, int depthFormat,
@@ -3741,6 +3938,8 @@ if (ProfileIsEs2ApiGeneration())
                 levelH = std::max(1, levelH / 2);
             }
         }
+        ApplyRenderTargetChannelSwizzle(
+            colorTex_, ::easygl::TextureTarget::Texture2D, surfaceFormat_);
 if (ProfileIsEs2ApiGeneration())
 {
         // GLES 2.0 has no GL_TEXTURE_MAX_LEVEL -- the same completeness problem REMED-GFX-174
@@ -3793,6 +3992,8 @@ else
             metagl::glGetIntegerv(::metagl::GetParameter::MaxSamples, &maxSamples);
             if (maxSamples > 0 && multiSampleCount_ > static_cast<int>(maxSamples))
                 multiSampleCount_ = static_cast<int>(maxSamples);
+            multiSampleCount_ = ClampRenderTargetSamples(
+                colorStorage, multiSampleCount_, false);
         }
 
         fbo_.create();
@@ -3997,10 +4198,10 @@ if (!ProfileIsEs2ApiGeneration())
         ::metagl::glReadBuffer(
             ::metagl::to_read_buffer(::metagl::ColorAttachment::Color0));
 }
-        ::metagl::glReadPixels(
-            x, levelHeight - y - h, w, h,
-            colorStorage.pixelFormat,
-            colorStorage.pixelType, data);
+        if (!ReadRenderTargetPixels(surfaceFormat_, colorStorage,
+                                    x, levelHeight - y - h, w, h, data))
+            throw std::runtime_error(
+                "EasyGLRenderTargetRenderer::GetData: GL rejected the exact-format readback.");
 
         const int rowBytes = w * colorStorage.bytesPerPixel;
         auto* pixels = static_cast<std::uint8_t*>(data);
@@ -4272,6 +4473,8 @@ if (ProfileIsEs2ApiGeneration())
                 levelSize = std::max(1, levelSize / 2);
             }
         }
+        ApplyRenderTargetChannelSwizzle(
+            cubeTex_, ::easygl::TextureTarget::TextureCubeMap, surfaceFormat_);
 if (ProfileIsEs2ApiGeneration())
 {
         // GLES 2.0 has no GL_TEXTURE_MAX_LEVEL -- see EasyGLRenderTargetRenderer::CreateResources.
@@ -4304,6 +4507,8 @@ else
             metagl::glGetIntegerv(::metagl::GetParameter::MaxSamples, &maxSamples);
             if (maxSamples > 0 && multiSampleCount_ > static_cast<int>(maxSamples))
                 multiSampleCount_ = static_cast<int>(maxSamples);
+            multiSampleCount_ = ClampRenderTargetSamples(
+                cubeStorage, multiSampleCount_, true);
         }
 
         fbo_.create();
@@ -4445,7 +4650,7 @@ else
         ::easygl::Framebuffer::blit(0, 0, size_, size_,
                                     0, 0, size_, size_,
                                     ::metagl::ClearBufferBit::Color,
-                                    ::metagl::BlitFilter::Linear);
+                                    ::metagl::BlitFilter::Nearest);
     }
 
     void EasyGLRenderTargetCubeRenderer::UnbindMRTFace(int face)
@@ -4453,7 +4658,14 @@ else
         TargetTrace("cube.unbind.mrt", this,
                     TraceNativeDetailEXT() + " mrtFace=" + std::to_string(face));
         if (multiSampleCount_ > 0)
+        {
             ResolveFaceEXT(face, "cube.resolve.mrt");
+            // The resolve leaves this cube face attached to the current DRAW framebuffer. Detach
+            // it before generating its mip chain: keeping a texture simultaneously attached and
+            // used as glGenerateMipmap's source is a feedback hazard, and Mesa GLES left RGBA16
+            // cube levels unchanged even though the preceding resolve itself succeeded.
+            ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::Framebuffer);
+        }
         // Regenerate the mip chain for all 6 faces from their just-rendered (and possibly
         // just-resolved) level-0 content.
         if (levelCount_ > 1)
@@ -4483,36 +4695,63 @@ else
     bool EasyGLRenderTargetCubeRenderer::SetData(int face, int level, int x, int y, int w, int h,
                                                  const void* data, int dataLength)
     {
-        // REMED-GFX-135: same completion contract as EasyGLTextureCubeRenderer::SetData -- this is
-        // the one render-target cube that really stores CPU pixels rather than inheriting
-        // IRenderTargetCubeRenderer::SetData's refusal.
+        return SetDataBytesEXT(face, level, x, y, w, h, data, dataLength);
+    }
+
+    bool EasyGLRenderTargetCubeRenderer::SetDataBytesEXT(
+        int face, int level, int x, int y, int w, int h,
+        const void* data, int dataLength)
+    {
         if (face < 0 || face >= 6 || data == nullptr || w <= 0 || h <= 0) return false;
         if (level < 0 || level >= levelCount_) return false;
         const int levelSize = std::max(1, size_ >> level);
         if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
-        if (dataLength < w * h * 4) return false;
+        RenderTargetColorStorage storage{};
+        if (!MapRenderTargetColorFormat(surfaceFormat_, storage)) return false;
+        const int rowBytes = w * storage.bytesPerPixel;
+        if (dataLength < rowBytes * h) return false;
+
+        // A render-target face uses the same bottom-up logical storage convention as a 2D target.
+        // Map both the row order and a partial rectangle's Y coordinate before the GL upload, so
+        // SetData/GetData remain exact even after the same face has also been rasterized.
+        const auto* source = static_cast<const std::uint8_t*>(data);
+        std::vector<std::uint8_t> bottomUp(static_cast<std::size_t>(rowBytes) * h);
+        for (int row = 0; row < h; ++row)
+        {
+            std::copy_n(source + static_cast<std::size_t>(row) * rowBytes, rowBytes,
+                        bottomUp.data() + static_cast<std::size_t>(h - 1 - row) * rowBytes);
+        }
 
         DrainGlErrors();
         cubeTex_.bind(::easygl::TextureTarget::TextureCubeMap);
-        cubeTex_.set_sub_image_2d(kCubeFaceTargets[face], level, x, y, w, h,
-                                   ::metagl::PixelFormat::Rgba,
-                                   ::metagl::PixelType::UnsignedByte,
-                                   data);
+        ::metagl::glPixelStorei(::metagl::PixelStoreParam::UnpackAlignment,
+                                std::min(8, storage.bytesPerPixel));
+        cubeTex_.set_sub_image_2d(kCubeFaceTargets[face], level, x,
+                                  levelSize - y - h, w, h,
+                                  storage.pixelFormat, storage.pixelType,
+                                  bottomUp.data());
+        ::metagl::glPixelStorei(::metagl::PixelStoreParam::UnpackAlignment, 4);
         return GlUploadSucceeded();
     }
 
     bool EasyGLRenderTargetCubeRenderer::GetData(int face, int level, int x, int y, int w, int h,
                                                  void* data, int dataLength) const
     {
-        // REMED-GFX-134: closes the refusal this class inherited from
-        // IRenderTargetCubeRenderer/ITextureCubeRenderer. Same temporary-FBO mechanism
-        // EasyGLTextureCubeRenderer::GetData already uses, plus the bottom-up correction a
-        // RENDERED attachment needs (EasyGLRenderTargetRenderer::GetData's own).
+        return GetDataBytesEXT(face, level, x, y, w, h, data, dataLength);
+    }
+
+    bool EasyGLRenderTargetCubeRenderer::GetDataBytesEXT(
+        int face, int level, int x, int y, int w, int h,
+        void* data, int dataLength) const
+    {
         if (face < 0 || face >= 6 || data == nullptr || w <= 0 || h <= 0) return false;
         if (level < 0 || level >= levelCount_) return false;
         const int levelSize = std::max(1, size_ >> level);
         if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
-        if (dataLength < w * h * 4) return false;
+        RenderTargetColorStorage storage{};
+        if (!MapRenderTargetColorFormat(surfaceFormat_, storage)) return false;
+        const int rowBytes = w * storage.bytesPerPixel;
+        if (dataLength < rowBytes * h) return false;
 
 GLint previousFramebuffer = 0;  // plans/plan_runtimerenderer.md P11: hoisted -- read by a separate runtime-gated block below
 if (ProfileIsEs2ApiGeneration())
@@ -4536,21 +4775,22 @@ if (!ProfileIsEs2ApiGeneration())
 }
 
         const bool complete = fbo.is_complete(ReadbackFramebufferTarget());
-        if (complete)
+        bool readSucceeded = complete;
+        if (readSucceeded)
         {
-            ::metagl::glReadPixels(x, levelSize - y - h, w, h,
-                                   ::metagl::PixelFormat::Rgba,
-                                   ::metagl::PixelType::UnsignedByte,
-                                   data);
-            const std::size_t rowBytes = static_cast<std::size_t>(w) * 4u;
+            readSucceeded = ReadRenderTargetPixels(
+                surfaceFormat_, storage, x, levelSize - y - h, w, h, data);
+        }
+        if (readSucceeded)
+        {
             auto* pixels = static_cast<std::uint8_t*>(data);
-            std::vector<std::uint8_t> row(rowBytes);
+            std::vector<std::uint8_t> row(static_cast<std::size_t>(rowBytes));
             for (int topRow = 0; topRow < h / 2; ++topRow)
             {
-                auto* top    = pixels + static_cast<std::size_t>(topRow) * rowBytes;
+                auto* top = pixels + static_cast<std::size_t>(topRow) * rowBytes;
                 auto* bottom = pixels + static_cast<std::size_t>(h - 1 - topRow) * rowBytes;
-                std::copy(top, top + rowBytes, row.data());
-                std::copy(bottom, bottom + rowBytes, top);
+                std::copy_n(top, rowBytes, row.data());
+                std::copy_n(bottom, rowBytes, top);
                 std::copy(row.begin(), row.end(), bottom);
             }
         }
@@ -4564,7 +4804,7 @@ else
 {
         ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::ReadFramebuffer);
 }
-        return complete;
+        return readSucceeded;
     }
 
     void EasyGLRenderTargetCubeRenderer::release_gl_handle_only()
@@ -5495,7 +5735,17 @@ if (ProfileUsesGlslEs100())
                       // plans/plan_modern.md MOD-117: render targets are no longer Color-only, and the
                       // answer is driver-dependent, so it is probed rather than asserted.
                       << "; render-target SurfaceFormat: Color"
-                      << (ProfileIsDesktopCore() ? " + Rgba64 (RGBA16 UNORM)" : "")
+                      << (ProbeNormalizedRenderTargetSupportEXT(static_cast<int>(
+                              Microsoft::Xna::Framework::Graphics::SurfaceFormat::Rgba1010102))
+                              ? " + Rgba1010102 (RGB10_A2)" : "")
+                      << (ContextHasTextureNorm16EXT() &&
+                          ProbeNormalizedRenderTargetSupportEXT(static_cast<int>(
+                              Microsoft::Xna::Framework::Graphics::SurfaceFormat::Rg32))
+                              ? " + Rg32 (RG16 UNORM)" : "")
+                      << (ContextHasTextureNorm16EXT() &&
+                          ProbeNormalizedRenderTargetSupportEXT(static_cast<int>(
+                              Microsoft::Xna::Framework::Graphics::SurfaceFormat::Rgba64))
+                              ? " + Rgba64 (RGBA16 UNORM)" : "")
                       << (ProbeFloatRenderTargetSupportEXT(false) ? " + half-float (RGBA16F)" : "")
                       << (ProbeFloatRenderTargetSupportEXT(true) ? " + float (RGBA32F)" : "");
             CNA::Logger::Info(capabilityMessage.str(), CNA::LogCategory::RENDER);
@@ -5654,6 +5904,7 @@ if (ProfileUsesGlslEs100())
         wireframeIboCreated_ = false;
         probedFullFloatRenderable_.reset();
         probedHalfFloatRenderable_.reset();
+        probedNormalizedRenderTargets_.fill(std::nullopt);
 
         if (ProfileIsEs2ApiGeneration())
             Es2TextureLevelCounts().clear();
@@ -6284,18 +6535,26 @@ if (!ProfileIsEs2ApiGeneration())
 
     RendererFormatVerdict EasyGLRenderer::ClassifyRenderTargetFormatEXT(int surfaceFormat) const
     {
-        // plans/plan_modern.md MOD-104/MOD-117. Color and the float formats are this renderer's own
-        // answer; everything else defers to the framework rule, exactly as before this change --
-        // widening the verdict beyond what CreateResources can actually allocate would put the
-        // caller back in the "asked for one format, silently got another" position.
+        // Color, the three classic normalized/packed targets and the float formats are this
+        // renderer's own answer. Every non-Color attachment is runtime-probed so capability
+        // reporting cannot outrun the exact resource CreateResources will allocate.
         RenderTargetColorStorage storage{};
         if (!MapRenderTargetColorFormat(surfaceFormat, storage))
             return RendererFormatVerdict::Defer;
-        if (static_cast<SurfaceFormat>(surfaceFormat) == SurfaceFormat::Rgba64 &&
-            !ProfileIsDesktopCore())
-            return RendererFormatVerdict::Unsupported;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat);
+        if (format == SurfaceFormat::Color)
+            return RendererFormatVerdict::Supported;
         if (!storage.isFloat)
-            return RendererFormatVerdict::Supported;   // Color: every profile, always.
+        {
+            if (ProfileIsEs2ApiGeneration())
+                return RendererFormatVerdict::Unsupported;
+            if ((format == SurfaceFormat::Rg32 || format == SurfaceFormat::Rgba64) &&
+                !ContextHasTextureNorm16EXT())
+                return RendererFormatVerdict::Unsupported;
+            return ProbeNormalizedRenderTargetSupportEXT(surfaceFormat)
+                ? RendererFormatVerdict::Supported
+                : RendererFormatVerdict::Unsupported;
+        }
         return ProbeFloatRenderTargetSupportEXT(storage.isFullFloat)
             ? RendererFormatVerdict::Supported
             : RendererFormatVerdict::Unsupported;
@@ -6537,6 +6796,62 @@ if (!ProfileIsEs2ApiGeneration())
         return complete;
     }
 
+    bool EasyGLRenderer::ProbeNormalizedRenderTargetSupportEXT(int surfaceFormat) const
+    {
+        using ::Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat);
+        std::size_t cacheIndex = 0;
+        switch (format)
+        {
+            case SurfaceFormat::Rgba1010102: cacheIndex = 0; break;
+            case SurfaceFormat::Rg32: cacheIndex = 1; break;
+            case SurfaceFormat::Rgba64: cacheIndex = 2; break;
+            default: return false;
+        }
+        auto& cache = probedNormalizedRenderTargets_[cacheIndex];
+        if (cache.has_value())
+            return *cache;
+        if (ProfileIsEs2ApiGeneration() ||
+            ((format == SurfaceFormat::Rg32 || format == SurfaceFormat::Rgba64) &&
+             !ContextHasTextureNorm16EXT()))
+        {
+            cache = false;
+            return false;
+        }
+
+        RenderTargetColorStorage storage{};
+        if (!MapRenderTargetColorFormat(surfaceFormat, storage))
+        {
+            cache = false;
+            return false;
+        }
+
+        int previousFbo = 0;
+        metagl::glGetIntegerv(::metagl::GetParameter::FramebufferBinding, &previousFbo);
+        ::easygl::Texture probeTex;
+        ::easygl::Framebuffer probeFbo;
+        probeTex.create();
+        probeTex.bind(::easygl::TextureTarget::Texture2D);
+        probeTex.set_image_2d(::easygl::TextureTarget::Texture2D, 0,
+                              storage.internalFormat, 1, 1,
+                              storage.pixelFormat, storage.pixelType, nullptr);
+        probeFbo.create();
+        probeFbo.bind(::easygl::FramebufferTarget::Framebuffer);
+        probeFbo.attach_texture_2d(
+            ::easygl::FramebufferTarget::Framebuffer,
+            ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
+            ::easygl::TextureTarget::Texture2D, probeTex, 0);
+        const bool complete =
+            probeFbo.check_status(::easygl::FramebufferTarget::Framebuffer) ==
+            ::metagl::FramebufferStatus::Complete;
+        metagl::glBindFramebuffer(
+            ::metagl::FramebufferTarget::Framebuffer,
+            ::metagl::FramebufferId{static_cast<unsigned int>(previousFbo)});
+        DrainGlErrors();
+        cache = complete;
+        return complete;
+    }
+
     std::unique_ptr<IRenderTargetCubeRenderer> EasyGLRenderer::CreateRenderTargetCube(int size, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
         EnsureCallingThreadContext();
@@ -6650,7 +6965,11 @@ if (!ProfileIsEs2ApiGeneration())
         if (!rt) { SetRenderTarget2D(nullptr); return; }
         FinalizeCurrentMRT();
         if (bound_->rt2D) bound_->rt2D->UnbindAsRenderTarget();
-        if (bound_->cube && bound_->cube != rt) bound_->cube->UnbindAsRenderTarget();
+        // A different face of the same cube is a different render-target subresource. Finalize
+        // the currently bound face before BindAsRenderTargetFace overwrites its lastFace_ record;
+        // comparing only the owning cube pointer loses every intermediate MSAA resolve and mip
+        // generation in a face-to-face sequence.
+        if (bound_->cube) bound_->cube->UnbindAsRenderTarget();
         bound_->rt2D   = nullptr;
         bound_->cube = rt;
         bound_->width = rt->GetSize();

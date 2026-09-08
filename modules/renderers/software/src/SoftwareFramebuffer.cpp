@@ -33,6 +33,18 @@ namespace CNA::Internal::Renderers::Software
             std::memcpy(data, &value, sizeof(value));
         }
 
+        [[nodiscard]] std::uint32_t ReadUInt32(const void* data)
+        {
+            std::uint32_t value = 0;
+            std::memcpy(&value, data, sizeof(value));
+            return value;
+        }
+
+        void WriteUInt32(void* data, std::uint32_t value)
+        {
+            std::memcpy(data, &value, sizeof(value));
+        }
+
         [[nodiscard]] float ReadFloat(const void* data)
         {
             float value = 0.0f;
@@ -48,6 +60,12 @@ namespace CNA::Internal::Renderers::Software
         [[nodiscard]] std::uint8_t ToUnorm8(float value)
         {
             return static_cast<std::uint8_t>(std::clamp(value, 0.0f, 1.0f) * 255.0f);
+        }
+
+        [[nodiscard]] std::uint32_t ToUnorm(float value, std::uint32_t maximum)
+        {
+            return static_cast<std::uint32_t>(
+                std::clamp(value, 0.0f, 1.0f) * static_cast<float>(maximum) + 0.5f);
         }
 
         [[nodiscard]] float QuantizeHalf(float value)
@@ -195,12 +213,15 @@ namespace CNA::Internal::Renderers::Software
         switch (static_cast<SurfaceFormat>(surfaceFormat))
         {
             case SurfaceFormat::Color:
+            case SurfaceFormat::Rgba1010102:
+            case SurfaceFormat::Rg32:
             case SurfaceFormat::Single:
             case SurfaceFormat::HalfVector2:
                 return 4;
             case SurfaceFormat::HalfSingle:
                 return 2;
             case SurfaceFormat::Vector2:
+            case SurfaceFormat::Rgba64:
             case SurfaceFormat::HalfVector4:
             case SurfaceFormat::HdrBlendable:
                 return 8;
@@ -223,6 +244,19 @@ namespace CNA::Internal::Renderers::Software
                         ToUnorm8(value[1]) / 255.0f,
                         ToUnorm8(value[2]) / 255.0f,
                         ToUnorm8(value[3]) / 255.0f};
+            case SurfaceFormat::Rgba1010102:
+                return {ToUnorm(value[0], 1023u) / 1023.0f,
+                        ToUnorm(value[1], 1023u) / 1023.0f,
+                        ToUnorm(value[2], 1023u) / 1023.0f,
+                        ToUnorm(value[3], 3u) / 3.0f};
+            case SurfaceFormat::Rg32:
+                return {ToUnorm(value[0], 65535u) / 65535.0f,
+                        ToUnorm(value[1], 65535u) / 65535.0f, 1.0f, 1.0f};
+            case SurfaceFormat::Rgba64:
+                return {ToUnorm(value[0], 65535u) / 65535.0f,
+                        ToUnorm(value[1], 65535u) / 65535.0f,
+                        ToUnorm(value[2], 65535u) / 65535.0f,
+                        ToUnorm(value[3], 65535u) / 65535.0f};
             case SurfaceFormat::Single:
                 return {value[0], 1.0f, 1.0f, 1.0f};
             case SurfaceFormat::Vector2:
@@ -251,6 +285,22 @@ namespace CNA::Internal::Renderers::Software
             case SurfaceFormat::Color:
                 return {bytes[0] / 255.0f, bytes[1] / 255.0f,
                         bytes[2] / 255.0f, bytes[3] / 255.0f};
+            case SurfaceFormat::Rgba1010102:
+            {
+                const std::uint32_t packed = ReadUInt32(bytes);
+                return {static_cast<float>(packed & 0x3FFu) / 1023.0f,
+                        static_cast<float>((packed >> 10u) & 0x3FFu) / 1023.0f,
+                        static_cast<float>((packed >> 20u) & 0x3FFu) / 1023.0f,
+                        static_cast<float>((packed >> 30u) & 0x3u) / 3.0f};
+            }
+            case SurfaceFormat::Rg32:
+                return {ReadUInt16(bytes) / 65535.0f,
+                        ReadUInt16(bytes + 2) / 65535.0f, 1.0f, 1.0f};
+            case SurfaceFormat::Rgba64:
+                return {ReadUInt16(bytes) / 65535.0f,
+                        ReadUInt16(bytes + 2) / 65535.0f,
+                        ReadUInt16(bytes + 4) / 65535.0f,
+                        ReadUInt16(bytes + 6) / 65535.0f};
             case SurfaceFormat::Single:
                 return {ReadFloat(bytes), 1.0f, 1.0f, 1.0f};
             case SurfaceFormat::Vector2:
@@ -287,6 +337,27 @@ namespace CNA::Internal::Renderers::Software
                 bytes[1] = ToUnorm8(stored[1]);
                 bytes[2] = ToUnorm8(stored[2]);
                 bytes[3] = ToUnorm8(stored[3]);
+                return;
+            case SurfaceFormat::Rgba1010102:
+                WriteUInt32(bytes,
+                            ToUnorm(stored[0], 1023u) |
+                            (ToUnorm(stored[1], 1023u) << 10u) |
+                            (ToUnorm(stored[2], 1023u) << 20u) |
+                            (ToUnorm(stored[3], 3u) << 30u));
+                return;
+            case SurfaceFormat::Rg32:
+                WriteUInt16(bytes, static_cast<std::uint16_t>(ToUnorm(stored[0], 65535u)));
+                WriteUInt16(bytes + 2,
+                            static_cast<std::uint16_t>(ToUnorm(stored[1], 65535u)));
+                return;
+            case SurfaceFormat::Rgba64:
+                WriteUInt16(bytes, static_cast<std::uint16_t>(ToUnorm(stored[0], 65535u)));
+                WriteUInt16(bytes + 2,
+                            static_cast<std::uint16_t>(ToUnorm(stored[1], 65535u)));
+                WriteUInt16(bytes + 4,
+                            static_cast<std::uint16_t>(ToUnorm(stored[2], 65535u)));
+                WriteUInt16(bytes + 6,
+                            static_cast<std::uint16_t>(ToUnorm(stored[3], 65535u)));
                 return;
             case SurfaceFormat::Single:
                 WriteFloat(bytes, stored[0]);

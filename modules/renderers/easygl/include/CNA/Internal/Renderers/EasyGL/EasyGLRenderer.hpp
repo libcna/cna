@@ -362,17 +362,42 @@ namespace CNA::Internal::Renderers::EasyGL
         // ITextureCubeRenderer — bind and upload to the shared cube texture.
         void BindGL(int unit) const override;
         /**
-         * @brief Uploads CPU pixels into a rendered cube face's mip level.
+         * @brief Uploads declared-format texels into a rendered cube face's mip level.
          *
          * REMED-GFX-135: the only render-target cube in CNA that implements this rather than
          * inheriting `IRenderTargetCubeRenderer::SetData`'s refusal -- the FBO's colour attachment
          * IS a normal GL cube texture here, so glTexSubImage2D reaches it directly.
          *
+         * @param face Cube face index.
+         * @param level Mip level beginning at zero.
+         * @param x Left edge of the destination rectangle.
+         * @param y Top edge of the destination rectangle.
+         * @param w Rectangle width.
+         * @param h Rectangle height.
+         * @param data Source texels in the target's declared format.
+         * @param dataLength Available source bytes.
          * @return True once the whole region has been uploaded with no GL error; false for an
          *         out-of-range face/level/region or a driver-rejected upload.
          */
         [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
                                    const void* data, int dataLength) override;
+
+        /**
+         * @brief Uploads exact declared-format texels into a rendered cube face.
+         *
+         * @param face Cube face index.
+         * @param level Mip level beginning at zero.
+         * @param x Left edge of the destination rectangle.
+         * @param y Top edge of the destination rectangle.
+         * @param w Rectangle width.
+         * @param h Rectangle height.
+         * @param data Source texels in the target's declared format.
+         * @param dataLength Available source bytes.
+         * @return True once the complete region has been uploaded in the target's real format.
+         */
+        [[nodiscard]] bool SetDataBytesEXT(
+            int face, int level, int x, int y, int w, int h,
+            const void* data, int dataLength) override;
 
         /**
          * @brief Reads a RENDERED cube face's mip level back to the CPU.
@@ -396,13 +421,30 @@ namespace CNA::Internal::Renderers::EasyGL
          * @param y          Top edge of the requested region, in texels.
          * @param w          Width of the requested region, in texels.
          * @param h          Height of the requested region, in texels.
-         * @param data       Destination for tightly packed RGBA8 rows, top row first.
-         * @param dataLength Size of @p data in bytes; at least w * h * 4.
+         * @param data       Destination for tightly packed declared-format rows, top row first.
+         * @param dataLength Size of @p data in bytes.
          * @return True once the whole region was read; false for an out-of-range face/level/region
          *         or an incomplete framebuffer.
          */
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
+
+        /**
+         * @brief Reads exact declared-format texels from a rendered cube face.
+         *
+         * @param face Cube face index.
+         * @param level Mip level beginning at zero.
+         * @param x Left edge of the source rectangle.
+         * @param y Top edge of the source rectangle.
+         * @param w Rectangle width.
+         * @param h Rectangle height.
+         * @param data Destination for texels in the target's declared format.
+         * @param dataLength Available destination bytes.
+         * @return True once the complete region has been returned in top-row-first order.
+         */
+        [[nodiscard]] bool GetDataBytesEXT(
+            int face, int level, int x, int y, int w, int h,
+            void* data, int dataLength) const override;
 
         void release_gl_handle_only() override;
         void recreate_gl_resource()   override;
@@ -1264,11 +1306,20 @@ namespace CNA::Internal::Renderers::EasyGL
         /// Restores the previously bound framebuffer and drains the error queue before returning.
         [[nodiscard]] bool ProbeFloatRenderTargetSupportEXT(bool fullFloat) const;
 
+        /**
+         * @brief Probes one normalized or packed render-target attachment for completeness.
+         *
+         * @param surfaceFormat Raw SurfaceFormat ordinal for Rgba1010102, Rg32 or Rgba64.
+         * @return True when this context can render to the exact requested format.
+         */
+        [[nodiscard]] bool ProbeNormalizedRenderTargetSupportEXT(int surfaceFormat) const;
+
         /// Cached results of that probe. Mutable because the query is const and a caller may make
         /// it per frame; the answer cannot change without a new GL context, and a new context means
         /// a new renderer.
         mutable std::optional<bool> probedFullFloatRenderable_;
         mutable std::optional<bool> probedHalfFloatRenderable_;
+        mutable std::array<std::optional<bool>, 3> probedNormalizedRenderTargets_{};
 
         // FillMode::WireFrame emulation (OpenGL ES has no glPolygonMode):
         // when active, triangle draws are re-expanded into GL_LINES.

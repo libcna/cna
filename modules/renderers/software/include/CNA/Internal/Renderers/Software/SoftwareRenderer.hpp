@@ -901,7 +901,7 @@ namespace CNA::Internal::Renderers::Software
         [[nodiscard]] bool HasRealStencilBuffer(bool requested) const override
         { return requested && depthFormat_ == 3; }
         /**
-         * @brief Uploads a tightly packed RGBA8 rectangle to one face and mip level.
+         * @brief Uploads a tightly packed declared-format rectangle to one face and mip level.
          *
          * @param face Raw CubeMapFace ordinal.
          * @param level Mip level beginning at zero.
@@ -909,14 +909,33 @@ namespace CNA::Internal::Renderers::Software
          * @param y Top edge of the destination rectangle.
          * @param w Rectangle width.
          * @param h Rectangle height.
-         * @param data Source pixels.
+         * @param data Source texels in the target's declared format.
          * @param dataLength Available source bytes.
          * @return True when the complete validated upload was performed.
          */
         [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
                                    const void* data, int dataLength) override;
         /**
-         * @brief Reads a tightly packed RGBA8 rectangle from one face and mip level.
+         * @brief Uploads exact declared-format texels to one cube-target face.
+         *
+         * @param face Raw CubeMapFace ordinal.
+         * @param level Mip level beginning at zero.
+         * @param x Left edge of the destination rectangle.
+         * @param y Top edge of the destination rectangle.
+         * @param w Rectangle width.
+         * @param h Rectangle height.
+         * @param data Source texels in the target's declared format.
+         * @param dataLength Available source bytes.
+         * @return True when the complete validated region was stored.
+         */
+        [[nodiscard]] bool SetDataBytesEXT(
+            int face, int level, int x, int y, int w, int h,
+            const void* data, int dataLength) override
+        {
+            return SetData(face, level, x, y, w, h, data, dataLength);
+        }
+        /**
+         * @brief Reads a tightly packed declared-format rectangle from one face and mip level.
          *
          * @param face Raw CubeMapFace ordinal.
          * @param level Mip level beginning at zero.
@@ -924,12 +943,31 @@ namespace CNA::Internal::Renderers::Software
          * @param y Top edge of the source rectangle.
          * @param w Rectangle width.
          * @param h Rectangle height.
-         * @param data Destination pixels.
+         * @param data Destination texels in the target's declared format.
          * @param dataLength Available destination bytes.
          * @return True when the complete validated readback was performed.
          */
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
+        /**
+         * @brief Reads exact declared-format texels from one cube-target face.
+         *
+         * @param face Raw CubeMapFace ordinal.
+         * @param level Mip level beginning at zero.
+         * @param x Left edge of the source rectangle.
+         * @param y Top edge of the source rectangle.
+         * @param w Rectangle width.
+         * @param h Rectangle height.
+         * @param data Destination texels in the target's declared format.
+         * @param dataLength Available destination bytes.
+         * @return True when the complete validated region was returned.
+         */
+        [[nodiscard]] bool GetDataBytesEXT(
+            int face, int level, int x, int y, int w, int h,
+            void* data, int dataLength) const override
+        {
+            return GetData(face, level, x, y, w, h, data, dataLength);
+        }
 
         /**
          * @brief Returns the level-zero edge length.
