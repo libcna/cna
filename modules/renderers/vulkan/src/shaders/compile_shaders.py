@@ -298,6 +298,16 @@ def main():
         ("lit_textured3d.vert.glsl", VERTEX_SHADER, "kInstancedLitTextured3dVertSpv"),
         ("lit_textured3d_vertexlit.vert.glsl", VERTEX_SHADER,
          "kInstancedLitTextured3dVertexLitVertSpv"),
+        # plans/plan_vulkan.md VULKAN-228: the lit family's other two vertex shapes, which
+        # VULKAN-224 deliberately left out -- Position+Normal with TextureEnabled false, and the
+        # stock ModelProcessor's Position+Normal+Colour+TextureCoordinate mesh. Both variants of
+        # each, for the PreferPerPixelLighting reason above.
+        ("lit_untextured3d.vert.glsl", VERTEX_SHADER, "kInstancedLitUntextured3dVertSpv"),
+        ("lit_untextured3d_vertexlit.vert.glsl", VERTEX_SHADER,
+         "kInstancedLitUntextured3dVertexLitVertSpv"),
+        ("lit_textured3d_color.vert.glsl", VERTEX_SHADER, "kInstancedLitTextured3dColorVertSpv"),
+        ("lit_textured3d_vertexlit_color.vert.glsl", VERTEX_SHADER,
+         "kInstancedLitTextured3dVertexLitColorVertSpv"),
         ("dual_texture3d.vert.glsl", VERTEX_SHADER, "kInstancedDualTexture3dVertSpv"),
         ("env_map3d.vert.glsl",      VERTEX_SHADER, "kInstancedEnvMap3dVertSpv"),
     ]

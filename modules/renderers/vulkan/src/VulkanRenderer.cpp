@@ -8264,16 +8264,25 @@ namespace CNA::Internal::Renderers::Vulkan
         using namespace Shaders;
         // plan_vulkan.md VULKAN-199: same FRAGMENT stage either way -- it gates its sample on
         // pc.textureEnabled -- and a vertex stage that either reads a UV or writes zero.
-        // VULKAN-224: the instanced module carries the same outputs and the same UBO, so
-        // the fragment stage below and the pipeline layout are unchanged. It has no
-        // untextured or coloured sibling yet -- those shapes stay with VULKAN-218.
-        VkShaderModule vert = instanced
-            ? CreateShaderModule(kInstancedLitTextured3dVertSpv, kInstancedLitTextured3dVertSpv_size)
-            : (untextured
-            ? CreateShaderModule(kLitUntextured3dVertSpv, kLitUntextured3dVertSpv_size)
+        // VULKAN-224/VULKAN-228: the instanced module carries the same outputs and the same UBO, so
+        // the fragment stage below and the pipeline layout are unchanged.
+        //
+        // The SHAPE is the outer decision and `instanced` the inner one, deliberately. VULKAN-224
+        // wrote this the other way round, which was correct only while the textured shape was the
+        // one instanced module that existed: an instanced untextured or coloured draw would have
+        // taken the textured module and bound an attribute nothing feeds. Nesting it this way makes
+        // that class of mistake unrepresentable rather than merely absent.
+        VkShaderModule vert = untextured
+            ? (instanced
+               ? CreateShaderModule(kInstancedLitUntextured3dVertSpv, kInstancedLitUntextured3dVertSpv_size)
+               : CreateShaderModule(kLitUntextured3dVertSpv, kLitUntextured3dVertSpv_size))
             : colored
-            ? CreateShaderModule(kLitTextured3dColorVertSpv, kLitTextured3dColorVertSpv_size)
-            : CreateShaderModule(kLitTextured3dVertSpv,   kLitTextured3dVertSpv_size));
+            ? (instanced
+               ? CreateShaderModule(kInstancedLitTextured3dColorVertSpv, kInstancedLitTextured3dColorVertSpv_size)
+               : CreateShaderModule(kLitTextured3dColorVertSpv, kLitTextured3dColorVertSpv_size))
+            : (instanced
+               ? CreateShaderModule(kInstancedLitTextured3dVertSpv, kInstancedLitTextured3dVertSpv_size)
+               : CreateShaderModule(kLitTextured3dVertSpv, kLitTextured3dVertSpv_size));
         // plan_vulkan.md VULKAN-200: the per-pixel family needs its own FRAGMENT stage too. FNA
         // applies the vertex colour to the whole lit bracket, emissive included, and this renderer
         // carries the material diffuse in fragTint -- so the colour cannot be folded into it.
@@ -8437,17 +8446,24 @@ namespace CNA::Internal::Renderers::Vulkan
         using namespace Shaders;
         // plan_vulkan.md VULKAN-199: see the per-pixel sibling -- same fragment stage, UV-less
         // vertex stage.
-        // VULKAN-224: the instanced module carries the same outputs and the same UBO, so
-        // the fragment stage below and the pipeline layout are unchanged. It has no
-        // untextured or coloured sibling yet -- those shapes stay with VULKAN-218.
-        VkShaderModule vert = instanced
-            ? CreateShaderModule(kInstancedLitTextured3dVertexLitVertSpv, kInstancedLitTextured3dVertexLitVertSpv_size)
-            : (untextured
-            ? CreateShaderModule(kLitUntextured3dVertexLitVertSpv, kLitUntextured3dVertexLitVertSpv_size)
+        // VULKAN-224/VULKAN-228: the instanced module carries the same outputs and the same UBO, so
+        // the fragment stage below and the pipeline layout are unchanged. Shape outer, `instanced`
+        // inner, for the reason the per-pixel sibling states.
+        VkShaderModule vert = untextured
+            ? (instanced
+               ? CreateShaderModule(kInstancedLitUntextured3dVertexLitVertSpv,
+                                    kInstancedLitUntextured3dVertexLitVertSpv_size)
+               : CreateShaderModule(kLitUntextured3dVertexLitVertSpv, kLitUntextured3dVertexLitVertSpv_size))
             : colored
-            ? CreateShaderModule(kLitTextured3dVertexLitColorVertSpv,
-                                 kLitTextured3dVertexLitColorVertSpv_size)
-            : CreateShaderModule(kLitTextured3dVertexLitVertSpv,   kLitTextured3dVertexLitVertSpv_size));
+            ? (instanced
+               ? CreateShaderModule(kInstancedLitTextured3dVertexLitColorVertSpv,
+                                    kInstancedLitTextured3dVertexLitColorVertSpv_size)
+               : CreateShaderModule(kLitTextured3dVertexLitColorVertSpv,
+                                    kLitTextured3dVertexLitColorVertSpv_size))
+            : (instanced
+               ? CreateShaderModule(kInstancedLitTextured3dVertexLitVertSpv,
+                                    kInstancedLitTextured3dVertexLitVertSpv_size)
+               : CreateShaderModule(kLitTextured3dVertexLitVertSpv, kLitTextured3dVertexLitVertSpv_size));
         VkShaderModule frag = CreateShaderModule(kLitTextured3dVertexLitFragSpv, kLitTextured3dVertexLitFragSpv_size);
 
         // VULKAN-224: two bindings when instanced -- 0 per-vertex, 1 per-instance at 64 bytes.
@@ -15005,14 +15021,29 @@ namespace CNA::Internal::Renderers::Vulkan
             params.alphaTest[3] < 0.0f || params.alphaTest[2] < 0.0f;
         // VULKAN-224: and the lit family, on the same principle -- an instanced draw takes the
         // ORDINARY family's programs and adds a per-instance binding, rather than needing an
-        // instanced program of its own. Scoped to the textured lit shape (`kLitTextured`,
-        // Position+Normal+TextureCoordinate), which is the one `VULKAN-218` measured broken; the
-        // untextured and coloured lit shapes keep that row.
+        // instanced program of its own.
+        //
+        // VULKAN-228: all THREE of that family's vertex shapes, not just the textured one. The
+        // untextured and coloured predicates are the ORDINARY routes' own, called on the same
+        // declaration -- `DeclarationIsPositionNormalOnlyEXT` and
+        // `DeclarationIsPositionNormalColorTextureOnlyEXT` -- so an instanced draw and a
+        // non-instanced draw of the same buffer cannot land in different shapes. Both are
+        // set-exact for the reason those helpers state: `IsComplete()` cannot notice a declared
+        // element the shader ignores, so a looser test would silently drop one.
         const auto& declaredForLit = vbForLayout.GetDeclarationEXT();
-        const bool instancedLit =
-            !instancedAlphaTest && !params.dualTexture && !params.envMapping &&
+        const bool otherInstancedFamily =
+            instancedAlphaTest || params.dualTexture || params.envMapping || params.skinned
+            || params.pbr;
+        const bool instancedLitUntextured =
+            !otherInstancedFamily && !declaredForLit.IsEmpty()
+            && DeclarationIsPositionNormalOnlyEXT(declaredForLit);
+        const bool instancedLitColored =
+            !otherInstancedFamily && !instancedLitUntextured && params.lightingEnabled
+            && !declaredForLit.IsEmpty()
+            && DeclarationIsPositionNormalColorTextureOnlyEXT(declaredForLit);
+        const bool instancedLitTextured =
+            !otherInstancedFamily && !instancedLitUntextured && !instancedLitColored &&
             params.lightingEnabled &&
-            !params.dualTexture && !params.envMapping && !params.skinned && !params.pbr &&
             !declaredForLit.IsEmpty() &&
             DeclarationNamesUsageEXT(
                 declaredForLit, Microsoft::Xna::Framework::Graphics::VertexElementUsage::Normal) &&
@@ -15021,6 +15052,12 @@ namespace CNA::Internal::Renderers::Vulkan
                 Microsoft::Xna::Framework::Graphics::VertexElementUsage::TextureCoordinate) &&
             !DeclarationNamesUsageEXT(
                 declaredForLit, Microsoft::Xna::Framework::Graphics::VertexElementUsage::Color);
+        // VULKAN-228: the untextured shape is a lit LAYOUT rather than a lit EFFECT -- the ordinary
+        // route selects `needsLitUntextured` from the declaration alone, without asking
+        // `lightingEnabled`, because the untextured lit program is also the only one that can bind
+        // a Position+Normal record at all. Kept identical here on purpose.
+        const bool instancedLit =
+            instancedLitUntextured || instancedLitColored || instancedLitTextured;
         // VULKAN-225: the dual-texture family, on the same principle. Unlike the lit one this
         // needs no chain guard -- `useDualTexture` is already tested BEFORE `useInstanced` in both
         // the pipeline and descriptor chains, as `useAlphaTest` is.
@@ -15039,9 +15076,20 @@ namespace CNA::Internal::Renderers::Vulkan
                 vbForLayout.GetDeclarationEXT(), StockInputs::kDualTexture,
                 std::size(StockInputs::kDualTexture));
         VulkanVertexInputLayoutEXT instancedLitLayout;
-        if (instancedLit)
-            instancedLitLayout = BuildVulkanVertexInputLayoutEXT(
-                declaredForLit, StockInputs::kLitTextured, std::size(StockInputs::kLitTextured));
+        if (instancedLit) {
+            // VULKAN-228: the shape's own input table, in the shape's own location order. The
+            // coloured one is NOT the record's byte order -- see StockInputs::kLitColTextured,
+            // which records what listing it the record's way binds where.
+            std::size_t litInputCount = 0;
+            const auto* litInputs =
+                instancedLitUntextured
+                ? (litInputCount = std::size(StockInputs::kLitUntextured), StockInputs::kLitUntextured)
+                : instancedLitColored
+                ? (litInputCount = std::size(StockInputs::kLitColTextured), StockInputs::kLitColTextured)
+                : (litInputCount = std::size(StockInputs::kLitTextured), StockInputs::kLitTextured);
+            instancedLitLayout =
+                BuildVulkanVertexInputLayoutEXT(declaredForLit, litInputs, litInputCount);
+        }
         // VULKAN-097: the correction rides on the projection half of the product. VULKAN-219: the
         // world half is now the effect's own `World`, with the per-instance matrix applied inside
         // it by the shader.
@@ -15152,17 +15200,24 @@ namespace CNA::Internal::Renderers::Vulkan
             d.useDualTexture = true;
         }
         if (instancedLit) {
+            // plan_vulkan.md VULKAN-199: one family, two vertex stages, and the replay asks
+            // `litUntextured`/`litColored` which module to bind -- exactly as the ordinary routes
+            // set them, so an instanced lit draw cannot describe itself differently.
             d.useLitTextured  = true;
-            d.litUntextured   = false;
-            d.litColored      = false;
+            d.litUntextured   = instancedLitUntextured;
+            d.litColored      = instancedLitColored;
             // Task 1103: XNA's real default is PreferPerPixelLighting=false, and an instanced draw
             // must not silently move a game to the other variant.
             d.preferVertexLit = !params.preferPerPixelLighting;
             d.vertexLayout    = instancedLitLayout;
+            // VULKAN-228: the untextured and coloured shapes take the SAME arm of the family
+            // dispatch as the textured one -- same descriptor set, same 64-float UBO, same
+            // fragment stage. VULKAN-199 already made that arm accept all three.
             FillStockFamilyRecordEXT(d, params, /*needsPbr=*/false, /*needsSkinned=*/false,
                                      /*needsEnvMap=*/false, /*needsDualTex=*/false,
-                                     /*needsLitTextured=*/true, /*needsLitUntextured=*/false,
-                                     /*needsLitColored=*/false);
+                                     /*needsLitTextured=*/instancedLitTextured,
+                                     /*needsLitUntextured=*/instancedLitUntextured,
+                                     /*needsLitColored=*/instancedLitColored);
         }
         {
             const auto* vs = params.texture0

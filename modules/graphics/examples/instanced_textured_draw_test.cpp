@@ -468,6 +468,7 @@ protected:
                       "routed to a program without one looks like)");
         }
 
+
         // ---- J/K: LIGHTING on an instanced draw ---------------------------------------------
         // One directional light at N.L = 0.5 over a white texture with a white DiffuseColor, so the
         // correct answer is mid-grey and an unlit (255,255,255) quad is unmistakable.
@@ -545,6 +546,170 @@ protected:
                   "K an INSTANCED lit draw shades the same way: " + Text(li) +
                       " (want ~(128,128,128); (255,255,255) is an unlit full-bright quad, which is "
                       "what a draw routed to a program with no Normal input looks like)");
+        }
+
+        // ---- P/Q: the UNTEXTURED lit shape --------------------------------------------------
+        // plans/plan_vulkan.md VULKAN-228. J/K drive Position+Normal+TextureCoordinate, which is
+        // one of the lit family's THREE vertex shapes. This is the second: an exactly
+        // Position+Normal declaration with BasicEffect.TextureEnabled false -- XNA's Primitives3D
+        // vertex, and the shape a game gets from a mesh with no UVs at all. Same light and same
+        // white DiffuseColor as J/K, so mid-grey is again the arithmetic answer and (255,255,255)
+        // is again the unmistakable signature of a draw that never reached a lit program.
+        {
+            struct PN { float x, y, z, nx, ny, nz; };
+            static_assert(sizeof(PN) == 24);
+            const PN uq[4] = {
+                { -0.12f,  0.12f, 0.0f, 0.0f, 0.0f, 1.0f },
+                { -0.12f, -0.12f, 0.0f, 0.0f, 0.0f, 1.0f },
+                {  0.12f, -0.12f, 0.0f, 0.0f, 0.0f, 1.0f },
+                {  0.12f,  0.12f, 0.0f, 0.0f, 0.0f, 1.0f },
+            };
+            const VertexDeclaration uqDecl(24, {
+                VertexElement(0,  VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+                VertexElement(12, VertexElementFormat::Vector3, VertexElementUsage::Normal, 0),
+            });
+            VertexBuffer uvb(dev, uqDecl, 4, BufferUsage::None);
+            uvb.SetDataRaw(uq, 4, static_cast<int>(sizeof(PN)));
+
+            auto litUntextured = [&](bool instanced) {
+                dev.Clear(Color(0, 255, 0, 255));
+                dev.SetDepthTestEnabled(false);
+                dev.setBlendStateProperty(BlendState::Opaque);
+                dev.setRasterizerStateProperty(RasterizerState::CullNone);
+                BasicEffect fx(dev);
+                fx.setWorldProperty(Matrix::getIdentityProperty());
+                fx.setViewProperty(Matrix::getIdentityProperty());
+                fx.setProjectionProperty(Matrix::getIdentityProperty());
+                fx.setLightingEnabledProperty(true);
+                fx.setAmbientLightColorProperty(Vector3(0.0f, 0.0f, 0.0f));
+                fx.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+                fx.setSpecularColorProperty(Vector3(0.0f, 0.0f, 0.0f));
+                fx.setTextureEnabledProperty(false);
+                fx.setVertexColorEnabledProperty(false);
+                fx.setAlphaProperty(1.0f);
+                auto& l0 = fx.getDirectionalLight0Property();
+                l0.setEnabledProperty(true);
+                l0.setDirectionProperty(Vector3(0.0f, -0.866f, -0.5f));  // N.L = 0.5
+                l0.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+                l0.setSpecularColorProperty(Vector3(0.0f, 0.0f, 0.0f));
+                fx.getDirectionalLight1Property().setEnabledProperty(false);
+                fx.getDirectionalLight2Property().setEnabledProperty(false);
+                fx.Apply();
+                dev.SetVertexBuffer(&uvb);
+                dev.SetIndexBuffer(ib_.get());
+                if (instanced) {
+                    std::vector<VertexBufferBinding> bd = {
+                        VertexBufferBinding(&uvb,          0, 0),
+                        VertexBufferBinding(instVb_.get(), 0, 1),
+                    };
+                    dev.SetVertexBuffers(bd);
+                    dev.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2, 3);
+                } else {
+                    dev.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2);
+                }
+                return ReadPixel(dev, kN / 2, kN / 2);
+            };
+            const Color un = litUntextured(false);
+            const Color ui = litUntextured(true);
+            auto midGrey = [](const Color& c) {
+                const int r = c.getRProperty();
+                return r >= 100 && r <= 155 && std::abs(r - c.getGProperty()) <= 6 &&
+                       std::abs(r - c.getBProperty()) <= 6;
+            };
+            check(midGrey(un),
+                  "P control: a NON-instanced UNTEXTURED lit draw (Position+Normal, "
+                  "TextureEnabled=false) shades by N.L: " + Text(un) +
+                      " (want ~(128,128,128))");
+            check(midGrey(ui),
+                  "Q an INSTANCED one does too: " + Text(ui) +
+                      " (want ~(128,128,128); (255,255,255) is the flat instanced program drawing "
+                      "the material colour with no Normal input at all)");
+        }
+
+        // ---- R/S: the COLOURED lit shape ----------------------------------------------------
+        // plans/plan_vulkan.md VULKAN-228, the lit family's third vertex shape:
+        // Position+Normal+Colour+TextureCoordinate with VertexColorEnabled -- the stock
+        // ModelProcessor's colour-carrying mesh. RED vertex colour under the same N.L = 0.5 light
+        // over a white texture, so the three outcomes are all distinct: (128,0,0) is correct,
+        // (255,0,0) means lighting was dropped, and (128,128,128) means the vertex colour was.
+        {
+            struct PNCT { float x, y, z, nx, ny, nz; std::uint8_t r, g, b, a; float u, v; };
+            static_assert(sizeof(PNCT) == 36);
+            const PNCT cq[4] = {
+                { -0.12f,  0.12f, 0.0f, 0.0f, 0.0f, 1.0f, 255, 0, 0, 255, 0.0f, 0.0f },
+                { -0.12f, -0.12f, 0.0f, 0.0f, 0.0f, 1.0f, 255, 0, 0, 255, 0.0f, 1.0f },
+                {  0.12f, -0.12f, 0.0f, 0.0f, 0.0f, 1.0f, 255, 0, 0, 255, 1.0f, 1.0f },
+                {  0.12f,  0.12f, 0.0f, 0.0f, 0.0f, 1.0f, 255, 0, 0, 255, 1.0f, 0.0f },
+            };
+            const VertexDeclaration cqDecl(36, {
+                VertexElement(0,  VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+                VertexElement(12, VertexElementFormat::Vector3, VertexElementUsage::Normal, 0),
+                VertexElement(24, VertexElementFormat::Color,   VertexElementUsage::Color, 0),
+                VertexElement(28, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+            });
+            VertexBuffer cvb(dev, cqDecl, 4, BufferUsage::None);
+            cvb.SetDataRaw(cq, 4, static_cast<int>(sizeof(PNCT)));
+            Texture2D white2(dev, 1, 1, false, SurfaceFormat::Color);
+            const std::uint8_t wpx2[4] = { 255, 255, 255, 255 };
+            white2.SetDataRGBA(wpx2, 1);
+
+            auto litColored = [&](bool instanced) {
+                dev.Clear(Color(0, 255, 0, 255));
+                dev.SetDepthTestEnabled(false);
+                dev.setBlendStateProperty(BlendState::Opaque);
+                dev.setRasterizerStateProperty(RasterizerState::CullNone);
+                dev.getSamplerStatesProperty()[0] = SamplerState::PointClamp;
+                BasicEffect fx(dev);
+                fx.setWorldProperty(Matrix::getIdentityProperty());
+                fx.setViewProperty(Matrix::getIdentityProperty());
+                fx.setProjectionProperty(Matrix::getIdentityProperty());
+                fx.setLightingEnabledProperty(true);
+                fx.setAmbientLightColorProperty(Vector3(0.0f, 0.0f, 0.0f));
+                fx.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+                fx.setSpecularColorProperty(Vector3(0.0f, 0.0f, 0.0f));
+                fx.setTextureEnabledProperty(true);
+                fx.setTextureProperty(&white2);
+                fx.setVertexColorEnabledProperty(true);
+                fx.setAlphaProperty(1.0f);
+                auto& l0 = fx.getDirectionalLight0Property();
+                l0.setEnabledProperty(true);
+                l0.setDirectionProperty(Vector3(0.0f, -0.866f, -0.5f));  // N.L = 0.5
+                l0.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+                l0.setSpecularColorProperty(Vector3(0.0f, 0.0f, 0.0f));
+                fx.getDirectionalLight1Property().setEnabledProperty(false);
+                fx.getDirectionalLight2Property().setEnabledProperty(false);
+                fx.Apply();
+                dev.SetVertexBuffer(&cvb);
+                dev.SetIndexBuffer(ib_.get());
+                if (instanced) {
+                    std::vector<VertexBufferBinding> bd = {
+                        VertexBufferBinding(&cvb,          0, 0),
+                        VertexBufferBinding(instVb_.get(), 0, 1),
+                    };
+                    dev.SetVertexBuffers(bd);
+                    dev.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2, 3);
+                } else {
+                    dev.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2);
+                }
+                return ReadPixel(dev, kN / 2, kN / 2);
+            };
+            const Color cn = litColored(false);
+            const Color ci2 = litColored(true);
+            auto litRed = [](const Color& c) {
+                return c.getRProperty() >= 100 && c.getRProperty() <= 155 &&
+                       c.getGProperty() <= 40 && c.getBProperty() <= 40;
+            };
+            auto why = [](const Color& c) {
+                if (c.getGProperty() > 60 && c.getRProperty() > 60)
+                    return " -- the vertex colour was dropped";
+                if (c.getRProperty() > 200) return " -- lighting was dropped";
+                return "";
+            };
+            check(litRed(cn),
+                  "R control: a NON-instanced COLOURED lit draw multiplies the RED vertex colour "
+                  "by N.L: " + Text(cn) + " (want ~(128,0,0))" + why(cn));
+            check(litRed(ci2),
+                  "S an INSTANCED one does too: " + Text(ci2) + " (want ~(128,0,0))" + why(ci2));
         }
 
         // ---- L/M: DualTextureEffect on an instanced draw ------------------------------------
