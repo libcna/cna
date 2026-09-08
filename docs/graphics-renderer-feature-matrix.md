@@ -69,7 +69,8 @@ four-slot 2D/cube-face CPU MRT with independent clear/finalization and slot-zero
 the same 22-check public MRT contract passes on Software and EasyGL. Classic indexed instancing now
 expands every declared per-instance matrix stream deterministically through the CPU stock-effect
 pipeline. Every classic `Texture2D` format now has exact typed CPU storage and format-aware
-sampling, including signed-normalized and HDR ranges. SpriteBatch/SpriteFont and classic rigid and
+sampling, including signed-normalized and HDR ranges; DXT1/3/5 cube faces now retain independent
+block planes per mip and feed the same environment-map sampler. SpriteBatch/SpriteFont and classic rigid and
 skinned Model paths also have shared public proof; the remaining render-target/cube-format and
 device-lifecycle audits still defer a project-wide column. See `docs/software-renderer.md` and the
 evidence ledger for the measured current boundary.

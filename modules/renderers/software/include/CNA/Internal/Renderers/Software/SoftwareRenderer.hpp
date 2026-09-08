@@ -528,8 +528,9 @@ namespace CNA::Internal::Renderers::Software
          *
          * @param size   Edge length of one cube face at mip 0, in texels.
          * @param mipMap Allocate the full mip chain down to 1x1 as well as level 0.
+         * @param surfaceFormat Raw XNA SurfaceFormat ordinal retained by the cube.
          */
-        SoftwareTextureCubeRenderer(int size, bool mipMap);
+        SoftwareTextureCubeRenderer(int size, bool mipMap, int surfaceFormat);
 
         /**
          * @brief Copies one face's RGBA8 sub-rectangle into this renderer's CPU storage.
@@ -543,6 +544,22 @@ namespace CNA::Internal::Renderers::Software
          */
         [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
                                    const void* data, int dataLength) override;
+        /**
+         * @brief Stores exact DXT blocks and refreshes the decoded CPU sampling face.
+         *
+         * @param face Raw CubeMapFace ordinal.
+         * @param level Mip level beginning at zero.
+         * @param x Block-aligned destination x coordinate in texels.
+         * @param y Block-aligned destination y coordinate in texels.
+         * @param w Region width in texels, block-aligned or reaching the mip edge.
+         * @param h Region height in texels, block-aligned or reaching the mip edge.
+         * @param data Exact DXT block payload.
+         * @param dataLength Available payload bytes.
+         * @return True when the complete region was retained and decoded.
+         */
+        [[nodiscard]] bool SetCompressedDataEXT(
+            int face, int level, int x, int y, int w, int h,
+            const void* data, int dataLength) override;
         /**
          * @brief Reads one face's stored RGBA8 sub-rectangle back from this renderer's CPU shadow.
          *
@@ -642,9 +659,12 @@ namespace CNA::Internal::Renderers::Software
         [[nodiscard]] int LevelDim(int level) const;
 
         int size_ = 0;
+        int surfaceFormat_ = 0;
         int levelCount_ = 1;
         /// levels_[level][face] -- one tightly packed RGBA8 buffer per face per allocated mip level.
         std::vector<std::array<std::vector<std::uint8_t>, 6>> levels_;
+        /// Exact face/mip DXT blocks; empty for an uncompressed cube.
+        std::vector<std::array<std::vector<std::uint8_t>, 6>> compressedLevels_;
         /// REMED-GFX-182: supplied_[level][face] -- whether the FULL face rectangle at that level
         /// has been written. Level 0 of every face counts as supplied from construction, matching
         /// SoftwareTextureRenderer's own `storedLevels_ = 1` starting point.
@@ -1121,6 +1141,9 @@ namespace CNA::Internal::Renderers::Software
             int surfaceFormat) const override;
         /** @brief Reports the DXT formats whose exact 4x4 blocks Software preserves and decodes. */
         [[nodiscard]] bool IsCompressedTransferFormatEXT(int surfaceFormat) const override;
+        /** @brief Reports DXT cube formats whose exact blocks Software retains and decodes. */
+        [[nodiscard]] bool IsCompressedCubeTransferFormatEXT(
+            int surfaceFormat) const override;
         /** @brief Keeps loader-provided DXT blocks so the Software texture owns exact bytes. */
         [[nodiscard]] bool LoadsCompressedContentNativelyEXT() const override { return true; }
 

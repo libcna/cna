@@ -183,6 +183,16 @@ namespace CNA::Internal::Renderers::Software
                format == SurfaceFormat::Dxt5;
     }
 
+    bool SoftwareRenderer::IsCompressedCubeTransferFormatEXT(int surfaceFormat) const
+    {
+#ifdef CNA_SOFTWARE_2D_ONLY
+        (void)surfaceFormat;
+        return false;
+#else
+        return IsCompressedTransferFormatEXT(surfaceFormat);
+#endif
+    }
+
     bool SoftwareRenderer::SupportsCapability(CNA::GraphicsCapability capability) const
     {
         switch (capability)

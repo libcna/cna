@@ -209,13 +209,15 @@ rather than always passing.
   and `Bgra4444` retain their exact two-byte XNA layout for full, partial and mip transfers while
   each supplied level is decoded into a separate RGBA8 CPU sampling plane. The same public transfer
   contract and exact sampled-draw oracle pass on Software and Mesa EasyGL.
-- **Classic DXT textures are real CPU resources** (`SOFTWARE-141`). DXT1, DXT3 and DXT5 retain
+- **Classic DXT textures are real CPU resources** (`SOFTWARE-141`, `SOFTWARE-145`). DXT1, DXT3 and DXT5 retain
   exact padded 4x4 block streams at every supplied mip for full and block-aligned partial readback,
   including NPOT right/bottom tails, while `DxtUtil` produces the RGBA8 sampling planes. DDS/XNB
   content keeps its compressed format and complete mip chain instead of being expanded by the
   loader. Shared transfer and unchanged sampled-draw probes pass on Software and Mesa EasyGL; the
   same evidence also repaired EasyGL's previously missing compressed readback/context-restoration
-  shadow.
+  shadow. `TextureCube` retains independent blocks per face and mip as well; shared tests prove
+  DXT1/3/5 decode, a non-zero partial block update, a non-zero face mip and real
+  `EnvironmentMapEffect` sampling.
 - **Every classic uncompressed `Texture2D` format has real typed storage and sampling**
   (`SOFTWARE-142`). In addition to Color and the packed-16 formats, Software accepts
   `NormalizedByte2/4`, `Rgba1010102`, `Rg32`, `Rgba64`, `Alpha8`, `Single`, `Vector2/4`,

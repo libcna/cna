@@ -14,6 +14,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Alpha8.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfSingle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfVector2.hpp"
@@ -33,9 +34,12 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
@@ -180,6 +184,54 @@ namespace
         target.GetData(pixels.data(), static_cast<int>(pixels.size()));
         return pixels[static_cast<std::size_t>(size / 2) * size + size / 2];
     }
+
+    [[nodiscard]] Color DrawWithEnvironmentMap(GraphicsDevice& device, TextureCube& cube)
+    {
+        constexpr int size = 8;
+        const VertexPositionNormalTexture vertices[6] = {
+            {Vector3(-1.0f,  1.0f, -2.0f), Vector3(0.0f, 0.0f, 1.0f), Vector2(0.0f, 0.0f)},
+            {Vector3(-1.0f, -1.0f, -2.0f), Vector3(0.0f, 0.0f, 1.0f), Vector2(0.0f, 1.0f)},
+            {Vector3( 1.0f,  1.0f, -2.0f), Vector3(0.0f, 0.0f, 1.0f), Vector2(1.0f, 0.0f)},
+            {Vector3( 1.0f,  1.0f, -2.0f), Vector3(0.0f, 0.0f, 1.0f), Vector2(1.0f, 0.0f)},
+            {Vector3(-1.0f, -1.0f, -2.0f), Vector3(0.0f, 0.0f, 1.0f), Vector2(0.0f, 1.0f)},
+            {Vector3( 1.0f, -1.0f, -2.0f), Vector3(0.0f, 0.0f, 1.0f), Vector2(1.0f, 1.0f)},
+        };
+        VertexBuffer buffer(device, VertexPositionNormalTexture::getVertexDeclarationStatic(),
+                            6, BufferUsage::None);
+        buffer.SetData(vertices, 6);
+        Texture2D white(device, 1, 1, false, SurfaceFormat::Color);
+        const Color whitePixel = Color::White;
+        white.SetData(&whitePixel, 1);
+        RenderTarget2D target(device, size, size, false, SurfaceFormat::Color,
+                              DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Black);
+        device.getSamplerStatesProperty()[1] = SamplerState::PointClamp;
+        device.setBlendStateProperty(BlendState::Opaque);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        EnvironmentMapEffect effect(device);
+        effect.setTextureProperty(&white);
+        effect.setEnvironmentMapProperty(&cube);
+        effect.setEnvironmentMapAmountProperty(1.0f);
+        effect.setFresnelFactorProperty(0.0f);
+        effect.setDiffuseColorProperty(Vector3::One);
+        effect.setAmbientLightColorProperty(Vector3::Zero);
+        effect.setEmissiveColorProperty(Vector3::One);
+        effect.getDirectionalLight0Property().setEnabledProperty(false);
+        effect.getDirectionalLight1Property().setEnabledProperty(false);
+        effect.getDirectionalLight2Property().setEnabledProperty(false);
+        effect.setProjectionProperty(Microsoft::Xna::Framework::Matrix::CreatePerspectiveFieldOfView(
+            1.5707963f, 1.0f, 0.1f, 100.0f));
+        effect.Apply();
+        device.SetVertexBuffer(&buffer);
+        device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+        device.SetVertexBuffer(nullptr);
+        device.SetRenderTarget(nullptr);
+
+        std::vector<Color> pixels(static_cast<std::size_t>(size) * size);
+        target.GetData(pixels.data(), static_cast<int>(pixels.size()));
+        return pixels[static_cast<std::size_t>(size / 2) * size + size / 2];
+    }
 }
 
 TEST(ClassicTextureFormat, EveryPromotedFormatPreservesFullPartialAndMipBytesExactly)
@@ -296,4 +348,23 @@ TEST(ClassicTextureFormat, PointSamplingExpandsChannelsAndPreservesDeclaredRange
         EXPECT_NEAR(signedPixel.getGProperty(), 0, 2);
         EXPECT_NEAR(signedPixel.getBProperty(), 0, 2);
     }
+}
+
+TEST(ClassicTextureFormat, DxtCubeBlocksFeedThePublicEnvironmentMapSampler)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    if (!device.GetRenderer().IsCompressedCubeTransferFormatEXT(
+            static_cast<int>(SurfaceFormat::Dxt1)))
+        GTEST_SKIP() << "this renderer has no compressed cube transfer route";
+
+    TextureCube cube(device, 4, false, SurfaceFormat::Dxt1);
+    const std::uint8_t redBlock[8] = {0x00, 0xF8, 0x00, 0xF8, 0, 0, 0, 0};
+    cube.SetData(CubeMapFace::PositiveZ, redBlock, 8);
+
+    const Color sampled = DrawWithEnvironmentMap(device, cube);
+    EXPECT_NEAR(sampled.getRProperty(), 255, 2);
+    EXPECT_NEAR(sampled.getGProperty(), 0, 2);
+    EXPECT_NEAR(sampled.getBProperty(), 0, 2);
+    EXPECT_NEAR(sampled.getAProperty(), 255, 2);
 }

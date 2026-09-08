@@ -31,8 +31,10 @@
 // Lets CNA_RENDERER_IS name identities bare, matching the compile-time guards it replaced.
 using namespace CNA::Testing::Renderers;
 #include <cstdint>
+#include <iterator>
 #include <memory>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -320,6 +322,100 @@ TEST_F(TextureCubeTest, SetDataCompressedBytesUploadsAnEntireDxt1Face)
     ASSERT_NO_THROW(tex.GetData(CubeMapFace::PositiveX, pixels.data(), 16));
     for (const Color& pixel : pixels)
         EXPECT_EQ(pixel, Color(255, 0, 0, 255));
+}
+
+TEST_F(TextureCubeTest, SetDataCompressedBytesDecodesEveryClassicDxtFormat)
+{
+    if (!gd.GetRenderer().IsCompressedCubeTransferFormatEXT(
+            static_cast<int>(SurfaceFormat::Dxt1)))
+        GTEST_SKIP() << "The active renderer has no compressed cube transfer route.";
+
+    const std::vector<std::pair<SurfaceFormat, std::vector<std::uint8_t>>> cases{
+        {SurfaceFormat::Dxt1,
+         {0x00, 0xF8, 0x00, 0xF8, 0, 0, 0, 0}},
+        {SurfaceFormat::Dxt3,
+         {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+          0x00, 0xF8, 0x00, 0xF8, 0, 0, 0, 0}},
+        {SurfaceFormat::Dxt5,
+         {0xFF, 0xFF, 0, 0, 0, 0, 0, 0,
+          0x00, 0xF8, 0x00, 0xF8, 0, 0, 0, 0}},
+    };
+
+    for (const auto& [format, block] : cases)
+    {
+        SCOPED_TRACE(static_cast<int>(format));
+        ASSERT_TRUE(gd.GetRenderer().IsCompressedCubeTransferFormatEXT(
+            static_cast<int>(format)));
+        TextureCube texture(gd, 4, false, format);
+        ASSERT_NO_THROW(texture.SetData(CubeMapFace::NegativeY, block.data(),
+                                        static_cast<int>(block.size())));
+        std::vector<Color> pixels(16, Color::Transparent);
+        ASSERT_NO_THROW(texture.GetData(CubeMapFace::NegativeY, pixels.data(), 16));
+        for (const Color& pixel : pixels)
+            EXPECT_EQ(pixel, Color::Red);
+    }
+}
+
+TEST_F(TextureCubeTest, SetDataCompressedPartialBlockPreservesTheRestOfTheFace)
+{
+    if (!gd.GetRenderer().IsCompressedCubeTransferFormatEXT(
+            static_cast<int>(SurfaceFormat::Dxt1)))
+        GTEST_SKIP() << "The active renderer has no compressed cube transfer route.";
+
+    TextureCube texture(gd, 8, false, SurfaceFormat::Dxt1);
+    const std::uint8_t redBlock[8] = {0x00, 0xF8, 0x00, 0xF8, 0, 0, 0, 0};
+    std::vector<std::uint8_t> redFace;
+    for (int block = 0; block < 4; ++block)
+        redFace.insert(redFace.end(), std::begin(redBlock), std::end(redBlock));
+    texture.SetData(CubeMapFace::PositiveZ, redFace.data(),
+                    static_cast<int>(redFace.size()));
+
+    const std::uint8_t greenBlock[8] = {0xE0, 0x07, 0xE0, 0x07, 0, 0, 0, 0};
+    const Rectangle upperRight(4, 0, 4, 4);
+    texture.SetData(CubeMapFace::PositiveZ, 0, &upperRight,
+                    greenBlock, 0, 8);
+
+    std::vector<Color> pixels(64, Color::Transparent);
+    texture.GetData(CubeMapFace::PositiveZ, pixels.data(), 64);
+    for (int y = 0; y < 8; ++y)
+    {
+        for (int x = 0; x < 8; ++x)
+        {
+            const Color expected = x >= 4 && y < 4 ? Color::Lime : Color::Red;
+            EXPECT_EQ(pixels[static_cast<std::size_t>(y * 8 + x)], expected);
+        }
+    }
+}
+
+TEST_F(TextureCubeTest, SetDataCompressedNpotTailUpdatesOnlyTheEdgeBlock)
+{
+    if (!gd.GetRenderer().IsCompressedCubeTransferFormatEXT(
+            static_cast<int>(SurfaceFormat::Dxt1)))
+        GTEST_SKIP() << "The active renderer has no compressed cube transfer route.";
+
+    TextureCube texture(gd, 7, false, SurfaceFormat::Dxt1);
+    const std::uint8_t redBlock[8] = {0x00, 0xF8, 0x00, 0xF8, 0, 0, 0, 0};
+    std::vector<std::uint8_t> redFace;
+    for (int block = 0; block < 4; ++block)
+        redFace.insert(redFace.end(), std::begin(redBlock), std::end(redBlock));
+    texture.SetData(CubeMapFace::NegativeX, redFace.data(),
+                    static_cast<int>(redFace.size()));
+
+    const std::uint8_t greenBlock[8] = {0xE0, 0x07, 0xE0, 0x07, 0, 0, 0, 0};
+    const Rectangle bottomRightTail(4, 4, 3, 3);
+    texture.SetData(CubeMapFace::NegativeX, 0, &bottomRightTail,
+                    greenBlock, 0, 8);
+
+    std::vector<Color> pixels(49, Color::Transparent);
+    texture.GetData(CubeMapFace::NegativeX, pixels.data(), 49);
+    for (int y = 0; y < 7; ++y)
+    {
+        for (int x = 0; x < 7; ++x)
+        {
+            const Color expected = x >= 4 && y >= 4 ? Color::Lime : Color::Red;
+            EXPECT_EQ(pixels[static_cast<std::size_t>(y * 7 + x)], expected);
+        }
+    }
 }
 
 TEST_F(TextureCubeTest, SetDataCompressedBytesUploadsRequestedFaceMip)

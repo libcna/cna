@@ -1,6 +1,8 @@
 #include "CNA/Internal/Renderers/Software/SoftwareRenderer.hpp"
+#include "CNA/Internal/Graphics/DxtUtil.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ColorMatrixEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfTypeHelper.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "System/ArgumentNullException.hpp"
@@ -3650,11 +3652,20 @@ namespace CNA::Internal::Renderers::Software
         return std::max(1, size_ >> level);
     }
 
-    SoftwareTextureCubeRenderer::SoftwareTextureCubeRenderer(int size, bool mipMap)
+    SoftwareTextureCubeRenderer::SoftwareTextureCubeRenderer(
+        int size, bool mipMap, int surfaceFormat)
         : size_(size)
+        , surfaceFormat_(surfaceFormat)
         , levelCount_(mipMap ? CalculateCubeMipLevels(size) : 1)
     {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const auto format = static_cast<SurfaceFormat>(surfaceFormat_);
+        const bool compressed = format == SurfaceFormat::Dxt1 ||
+                                format == SurfaceFormat::Dxt3 ||
+                                format == SurfaceFormat::Dxt5;
         levels_.resize(static_cast<std::size_t>(levelCount_));
+        if (compressed)
+            compressedLevels_.resize(static_cast<std::size_t>(levelCount_));
         supplied_.assign(static_cast<std::size_t>(levelCount_), std::array<bool, 6>{});
         for (int level = 0; level < levelCount_; ++level)
         {
@@ -3662,6 +3673,15 @@ namespace CNA::Internal::Renderers::Software
             const std::size_t faceBytes = static_cast<std::size_t>(dim) * static_cast<std::size_t>(dim) * 4u;
             for (auto& face : levels_[static_cast<std::size_t>(level)])
                 face.assign(faceBytes, 0u);
+            if (compressed)
+            {
+                const std::size_t blockBytes = format == SurfaceFormat::Dxt1 ? 8u : 16u;
+                const std::size_t compressedBytes =
+                    static_cast<std::size_t>((dim + 3) / 4) *
+                    static_cast<std::size_t>((dim + 3) / 4) * blockBytes;
+                for (auto& face : compressedLevels_[static_cast<std::size_t>(level)])
+                    face.assign(compressedBytes, 0u);
+            }
         }
     }
 
@@ -3683,6 +3703,11 @@ namespace CNA::Internal::Renderers::Software
     bool SoftwareTextureCubeRenderer::SetData(int face, int level, int x, int y, int w, int h,
                                              const void* data, int dataLength)
     {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const auto format = static_cast<SurfaceFormat>(surfaceFormat_);
+        if (format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
+            format == SurfaceFormat::Dxt5)
+            return false;
         // REMED-GFX-135: `level != 0` used to be a silent early `return` -- the shared layer had no
         // way to tell that apart from a completed upload, so a mipmapped cube accepted every level
         // and kept only level 0. Every level TextureCube declares now has real storage, and
@@ -3720,6 +3745,79 @@ namespace CNA::Internal::Renderers::Software
             for (int l = 1; l < levelCount_; ++l)
             {
                 if (!supplied_[static_cast<std::size_t>(l)][static_cast<std::size_t>(face)]) break;
+                ++contiguous;
+            }
+            faceLevels_[static_cast<std::size_t>(face)] = contiguous;
+        }
+        return true;
+    }
+
+    bool SoftwareTextureCubeRenderer::SetCompressedDataEXT(
+        int face, int level, int x, int y, int w, int h,
+        const void* data, int dataLength)
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        using CNA::Internal::Graphics::DxtUtil;
+        const auto format = static_cast<SurfaceFormat>(surfaceFormat_);
+        if (format != SurfaceFormat::Dxt1 && format != SurfaceFormat::Dxt3 &&
+            format != SurfaceFormat::Dxt5)
+            return false;
+        if (data == nullptr || face < 0 || face > 5 || level < 0 || level >= levelCount_ ||
+            w <= 0 || h <= 0)
+            return false;
+
+        const int dim = LevelDim(level);
+        if (x < 0 || y < 0 || w > dim || h > dim || x > dim - w || y > dim - h ||
+            (x % 4) != 0 || (y % 4) != 0 ||
+            ((w % 4) != 0 && x + w != dim) ||
+            ((h % 4) != 0 && y + h != dim))
+            return false;
+
+        const std::size_t blockBytes = format == SurfaceFormat::Dxt1 ? 8u : 16u;
+        const int levelBlockColumns = (dim + 3) / 4;
+        const int regionBlockColumns = (w + 3) / 4;
+        const int regionBlockRows = (h + 3) / 4;
+        const std::size_t required = static_cast<std::size_t>(regionBlockColumns) *
+                                     static_cast<std::size_t>(regionBlockRows) * blockBytes;
+        if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required)
+            return false;
+
+        std::vector<std::uint8_t>& blocks =
+            compressedLevels_[static_cast<std::size_t>(level)][static_cast<std::size_t>(face)];
+        std::vector<std::uint8_t> replacement = blocks;
+        const auto* source = static_cast<const std::uint8_t*>(data);
+        for (int row = 0; row < regionBlockRows; ++row)
+        {
+            const std::size_t destinationOffset =
+                (static_cast<std::size_t>(y / 4 + row) *
+                     static_cast<std::size_t>(levelBlockColumns) +
+                 static_cast<std::size_t>(x / 4)) * blockBytes;
+            const std::size_t sourceOffset =
+                static_cast<std::size_t>(row) *
+                static_cast<std::size_t>(regionBlockColumns) * blockBytes;
+            std::copy_n(source + sourceOffset,
+                        static_cast<std::size_t>(regionBlockColumns) * blockBytes,
+                        replacement.begin() + static_cast<std::ptrdiff_t>(destinationOffset));
+        }
+
+        std::vector<std::uint8_t> decoded = format == SurfaceFormat::Dxt1
+            ? DxtUtil::DecompressDxt1(replacement.data(), replacement.size(), dim, dim)
+            : (format == SurfaceFormat::Dxt3
+                   ? DxtUtil::DecompressDxt3(replacement.data(), replacement.size(), dim, dim)
+                   : DxtUtil::DecompressDxt5(replacement.data(), replacement.size(), dim, dim));
+        blocks = std::move(replacement);
+        levels_[static_cast<std::size_t>(level)][static_cast<std::size_t>(face)] =
+            std::move(decoded);
+
+        if (x == 0 && y == 0 && w == dim && h == dim)
+        {
+            supplied_[static_cast<std::size_t>(level)][static_cast<std::size_t>(face)] = true;
+            int contiguous = 1;
+            for (int candidate = 1; candidate < levelCount_; ++candidate)
+            {
+                if (!supplied_[static_cast<std::size_t>(candidate)]
+                              [static_cast<std::size_t>(face)])
+                    break;
                 ++contiguous;
             }
             faceLevels_[static_cast<std::size_t>(face)] = contiguous;
@@ -3931,17 +4029,19 @@ namespace CNA::Internal::Renderers::Software
 #endif
     }
 
-    std::unique_ptr<ITextureCubeRenderer> SoftwareRenderer::CreateTextureCube(int size, bool mipMap, int)
+    std::unique_ptr<ITextureCubeRenderer> SoftwareRenderer::CreateTextureCube(
+        int size, bool mipMap, int surfaceFormat)
     {
 #ifdef CNA_SOFTWARE_2D_ONLY
         (void)size;
         (void)mipMap;
+        (void)surfaceFormat;
         throw System::NotSupportedException(
             "Software's GDI 2D compilation unit does not include TextureCube resources.");
 #else
         // REMED-GFX-135: `mipMap` used to be discarded here, so a mipmapped TextureCube reported a
         // LevelCount whose storage did not exist and every mip upload was dropped in silence.
-        return std::make_unique<SoftwareTextureCubeRenderer>(size, mipMap);
+        return std::make_unique<SoftwareTextureCubeRenderer>(size, mipMap, surfaceFormat);
 #endif
     }
 
