@@ -8,4 +8,4 @@
 file(GLOB CNA_PHONE_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 cna_add_module(cna_phone Phone ${CNA_PHONE_SOURCES})
 target_link_libraries(cna_phone PUBLIC cna_runtime cna_core_headers)
-cna_link_sharp_runtime(cna_phone PUBLIC Core.Base Collections.Core)
+cna_link_sharp_runtime(cna_phone PUBLIC Core.Base Collections.Core Uri)
