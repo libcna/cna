@@ -79,6 +79,11 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             Vector3 translation{0.0f, 0.0f, 0.0f};
             Vector3 rotation{0.0f, 0.0f, 0.0f};
             Vector3 preRotation{0.0f, 0.0f, 0.0f};
+            Vector3 postRotation{0.0f, 0.0f, 0.0f};
+            Vector3 rotationOffset{0.0f, 0.0f, 0.0f};
+            Vector3 rotationPivot{0.0f, 0.0f, 0.0f};
+            Vector3 scalingOffset{0.0f, 0.0f, 0.0f};
+            Vector3 scalingPivot{0.0f, 0.0f, 0.0f};
             Vector3 scaling{1.0f, 1.0f, 1.0f};
             /** @brief `RotationActive`, which is what decides whether `PreRotation` counts. */
             bool rotationActive = false;
@@ -381,11 +386,36 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          */
         [[nodiscard]] Matrix LocalTransform(const Object& object, const Rows& parentGeometricInverse)
         {
-            const Rows local = Multiply(
-                Multiply(Multiply(ScaleRows(object.scaling),
-                                  object.rotationActive ? EulerRows(object.preRotation)
-                                                        : IdentityRows()),
+            // FBX's own transform formula, all ten terms of it. Written the way a row vector meets
+            // them, which is the reverse of the order the SDK's documentation lists:
+            //
+            //   Sp^-1 . S . Sp . Soff . Rp^-1 . Rpost^-1 . R . Rpre . Rp . Roff . T
+            //
+            // A scaling, a rotation and a translation reach four of those ten, which is all CNA
+            // composed. SAMPLE-138's `photograph.fbx` needs the other six: its mesh carries a
+            // `ScalingPivot` of about -(1.06, 6.89, 6.43) against a `ScalingOffset` that nearly
+            // cancels it, and XNA's own build holds what is left over -- (2.35e-06, 1.53e-05,
+            // -1.42e-05) -- where CNA held a clean zero. Measured on `fbx_pivots.fbx` and
+            // `fbx_postrotation.fbx` (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-152`); the
+            // second of those also settles that `R` comes *before* `Rpre` here, which no fixture
+            // that sets only one of them could say.
+            const Vector3 negate[4] = {
+                Vector3(-object.scalingPivot.X, -object.scalingPivot.Y, -object.scalingPivot.Z),
+                Vector3(-object.rotationPivot.X, -object.rotationPivot.Y, -object.rotationPivot.Z),
+                Vector3(-object.postRotation.X, -object.postRotation.Y, -object.postRotation.Z),
+                Vector3(0.0f, 0.0f, 0.0f)};
+            const Rows rotations = Multiply(
+                Multiply(object.rotationActive ? EulerRows(negate[2]) : IdentityRows(),
                          EulerRows(object.rotation)),
+                object.rotationActive ? EulerRows(object.preRotation) : IdentityRows());
+            const Rows local = Multiply(
+                Multiply(Multiply(Multiply(TranslationRows(negate[0]),
+                                           Multiply(ScaleRows(object.scaling),
+                                                    TranslationRows(object.scalingPivot))),
+                                  Multiply(TranslationRows(object.scalingOffset),
+                                           TranslationRows(negate[1]))),
+                         Multiply(rotations, Multiply(TranslationRows(object.rotationPivot),
+                                                      TranslationRows(object.rotationOffset)))),
                 TranslationRows(object.translation));
             return ToMatrix(
                 Multiply(Multiply(GeometricRows(object), local), parentGeometricInverse));
@@ -568,6 +598,15 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 object.translation = PropertyVector(node, "Lcl Translation", Vector3(0.0f, 0.0f, 0.0f));
                 object.rotation = PropertyVector(node, "Lcl Rotation", Vector3(0.0f, 0.0f, 0.0f));
                 object.preRotation = PropertyVector(node, "PreRotation", Vector3(0.0f, 0.0f, 0.0f));
+                object.postRotation = PropertyVector(node, "PostRotation", Vector3(0.0f, 0.0f, 0.0f));
+                object.rotationOffset =
+                    PropertyVector(node, "RotationOffset", Vector3(0.0f, 0.0f, 0.0f));
+                object.rotationPivot =
+                    PropertyVector(node, "RotationPivot", Vector3(0.0f, 0.0f, 0.0f));
+                object.scalingOffset =
+                    PropertyVector(node, "ScalingOffset", Vector3(0.0f, 0.0f, 0.0f));
+                object.scalingPivot =
+                    PropertyVector(node, "ScalingPivot", Vector3(0.0f, 0.0f, 0.0f));
                 object.rotationActive = PropertyNumber(node, "RotationActive", 0.0) != 0.0;
                 object.geometricTranslation =
                     PropertyVector(node, "GeometricTranslation", Vector3(0.0f, 0.0f, 0.0f));

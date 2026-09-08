@@ -645,6 +645,12 @@ TEST(XnaFbxImporter, EveryFileAnswersTheGraphXnaAnswers)
           // `marble`, where reading the `Geometry` as a node answers two
           // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-151`).
           "fbx7_geometry.fbx",
+          // The six terms of FBX's transform formula a scaling, a rotation and a translation do
+          // not reach. The first sets `RotationOffset`, `RotationPivot`, `ScalingOffset` and
+          // `ScalingPivot`; the second sets `PostRotation` beside a `PreRotation` and an
+          // `Lcl Rotation`, which is what settles that `R` comes before `Rpre`
+          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-152`).
+          "fbx_pivots.fbx", "fbx_postrotation.fbx",
           "fbx_split_vertices.fbx",
           // A `Texture` names its file twice and the two can name different directories; the
           // reference XNA writes is whichever one resolves. These two separate the branches:
