@@ -632,6 +632,12 @@ TEST(XnaFbxImporter, EveryFileAnswersTheGraphXnaAnswers)
           // where taking the first *non-negative* id would have given it one
           // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-141`).
           "fbx_texture_second_batch.fbx",
+          // A UV set's channel index is its `Layer` block's own number, and two sets in one block
+          // take consecutive indices: the first of these declares its only UV in `Layer: 1` and
+          // answers `TextureCoordinate1`, the second declares a `LayerElementUV` and a
+          // `LayerElementReflectionUV` in `Layer: 0` and answers both indices
+          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-143`).
+          "fbx_uv_layer_one.fbx", "fbx_uv_two_sets.fbx",
           "fbx_two_materials.fbx"})
     {
         ImporterContext context;

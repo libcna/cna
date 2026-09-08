@@ -708,7 +708,79 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 }
                 const Layer normals = ReadLayer(*geometry, "LayerElementNormal", "Normals",
                                                 "NormalsIndex", 3u);
-                const Layer uvs = ReadLayer(*geometry, "LayerElementUV", "UV", "UVIndex", 2u);
+                // Every UV set the mesh declares, and the channel index each one takes.
+                //
+                // A UV set is a `LayerElementUV` -- or a `LayerElementReflectionUV`, which is what
+                // an older Maya exporter writes and which the SDK reads as one too. SAMPLE-131's
+                // `p1_piece.fbx` declares only the second, and XNA's build carries a
+                // `TextureCoordinate0` for it where CNA carried none: a 32-byte vertex against
+                // CNA's 24, and 237 vertices against 194 because the missing channel merged
+                // corners XNA keeps apart. Its sibling `p1_piece_tile.fbx` declares *both*, in one
+                // `Layer` block, and XNA answers `TextureCoordinate0` and `TextureCoordinate1`.
+                //
+                // The index is the **`Layer` block's own number**, and where two sets share a
+                // block the second takes the next free index. SAMPLE-035's `SphereHighPoly.fbx` is
+                // what says the first half: its single UV set is declared in `Layer: 1` rather
+                // than `Layer: 0`, and XNA's vertex declaration carries `TextureCoordinate`
+                // usage index **1** (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-143`).
+                struct UvSet
+                {
+                    Layer layer;
+                    std::size_t index = 0u;
+                };
+                std::vector<UvSet> uvSets;
+                {
+                    std::vector<std::pair<std::size_t, std::string>> declared;  // (layer, element)
+                    for (const Canon::FbxNode& child : geometry->children)
+                    {
+                        if (child.name != "Layer") { continue; }
+                        const std::size_t layerNumber =
+                            child.properties.empty()
+                                ? 0u
+                                : static_cast<std::size_t>(std::max(0.0, child.Number(0, 0.0)));
+                        for (const Canon::FbxNode& element : child.children)
+                        {
+                            if (element.name != "LayerElement") { continue; }
+                            const Canon::FbxNode* type = element.Find("Type");
+                            if (type == nullptr) { continue; }
+                            const std::string spelled = type->Text(0);
+                            if (spelled == "LayerElementUV" || spelled == "LayerElementReflectionUV")
+                            {
+                                declared.emplace_back(layerNumber, spelled);
+                            }
+                        }
+                    }
+                    if (declared.empty())
+                    {
+                        // No `Layer` block names one: read whichever element is present, at zero.
+                        for (const char* element : {"LayerElementUV", "LayerElementReflectionUV"})
+                        {
+                            Layer read = ReadLayer(*geometry, element, "UV", "UVIndex", 2u);
+                            if (read.stride != 0u && !read.values.empty())
+                            {
+                                uvSets.push_back(UvSet{std::move(read), uvSets.size()});
+                            }
+                        }
+                    }
+                    else
+                    {
+                        std::vector<std::size_t> taken;
+                        for (const auto& [layerNumber, element] : declared)
+                        {
+                            Layer read = ReadLayer(*geometry, element, "UV", "UVIndex", 2u);
+                            if (read.stride == 0u || read.values.empty()) { continue; }
+                            std::size_t index = layerNumber;
+                            while (std::find(taken.begin(), taken.end(), index) != taken.end())
+                            {
+                                ++index;
+                            }
+                            taken.push_back(index);
+                            uvSets.push_back(UvSet{std::move(read), index});
+                        }
+                    }
+                }
+                const Layer& uvs = uvSets.empty() ? normals : uvSets.front().layer;
+                (void)uvs;
                 const Layer colors = ReadLayer(*geometry, "LayerElementColor", "Colors",
                                                "ColorIndex", 4u);
                 // A material layer's `Materials` array IS the per-polygon index, whatever its
@@ -723,6 +795,11 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 // second one (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-141`).
                 Layer textureLayer = ReadLayer(*geometry, "LayerElementTexture", "TextureId",
                                                "", 1u);
+                if (textureLayer.stride == 0u)
+                {
+                    textureLayer = ReadLayer(*geometry, "LayerElementReflectionTextures",
+                                             "TextureId", "", 1u);
+                }
                 textureLayer.reference = "Direct";
 
                 // Walk the polygons, gathering each one's control points and which material it uses.
@@ -855,7 +932,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                             // first material's are all -1: XNA leaves that first batch without a
                             // texture and CNA gave it one (`XNASWEEP-141`).
                             std::int64_t texture = 0;
-                            if (geometry->Find("LayerElementTexture") != nullptr)
+                            if (geometry->Find("LayerElementTexture") != nullptr ||
+                                geometry->Find("LayerElementReflectionTextures") != nullptr)
                             {
                                 int identifier = -1;
                                 for (const Polygon& polygon : polygons)
@@ -910,12 +988,12 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                             VertexChannelNames::Normal(), channel);
                     };
                     if (declaresNormals) { addNormals(); }
-                    if (uvs.stride != 0u && !uvs.values.empty())
+                    for (const UvSet& set : uvSets)
                     {
                         std::vector<Vector2> channel;
                         for (std::size_t v = 0; v < used.size(); ++v)
                         {
-                            const std::vector<double> value = uvs.At(cornerOf[v], used[v], 0u);
+                            const std::vector<double> value = set.layer.At(cornerOf[v], used[v], 0u);
                             // V is flipped: 0.2 answers 0.8 (measured, fbx_oblique).
                             channel.push_back(value.size() >= 2u
                                                   ? Vector2(static_cast<float>(value[0]),
@@ -923,7 +1001,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                                                   : Vector2(0.0f, 0.0f));
                         }
                         batchContent->getVerticesProperty().getChannelsProperty().Add<Vector2>(
-                            VertexChannelNames::TextureCoordinate(0), channel);
+                            VertexChannelNames::TextureCoordinate(
+                                static_cast<SharpRuntime::intcs>(set.index)),
+                            channel);
                     }
                     if (colors.stride != 0u && !colors.values.empty())
                     {
