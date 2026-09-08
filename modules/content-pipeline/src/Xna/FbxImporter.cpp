@@ -421,7 +421,20 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         // its `Model::Name` string; FBX 7 gives it a 64-bit identity and connects by that, so both
         // are keyed the same way here -- by identity where there is one, by name otherwise.
         std::map<std::int64_t, Object> objects;
+        // An FBX 6 file has no identities, so a connection names an object by the string it was
+        // declared under -- `"Model::TableTop"`, prefix and all. The prefix is part of the name and
+        // not decoration: SAMPLE-047's `table.FBX` declares `Model::TableTop` and
+        // `Material::TableTop`, and keying on the bare `TableTop` lets the material answer for the
+        // model, which loses the model from the scene entirely
+        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-145`). The bare name stays as a fallback
+        // for a file that connects without the prefix, first declaration winning so a later object
+        // cannot shadow an earlier one.
+        std::map<std::string, std::int64_t> byFullName;
         std::map<std::string, std::int64_t> byName;
+        // Objects are keyed by a descending synthetic identity, so the map's own order is the
+        // reverse of the file's. The scene lists its children in the order the file declares them,
+        // which is this.
+        std::vector<std::int64_t> declarationOrder;
         std::int64_t nextSynthetic = -1;
         if (const Canon::FbxNode* block = parsed.Find("Objects"); block != nullptr)
         {
@@ -459,7 +472,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 object.rotation = PropertyVector(node, "Lcl Rotation", Vector3(0.0f, 0.0f, 0.0f));
                 object.preRotation = PropertyVector(node, "PreRotation", Vector3(0.0f, 0.0f, 0.0f));
                 object.scaling = PropertyVector(node, "Lcl Scaling", Vector3(1.0f, 1.0f, 1.0f));
-                byName[object.name] = identity;
+                byFullName[node.Text(0)] = identity;
+                byName.emplace(object.name, identity);
+                declarationOrder.push_back(identity);
                 objects.emplace(identity, std::move(object));
             }
         }
@@ -476,10 +491,16 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 }
                 else
                 {
-                    const auto childName = byName.find(BareName(connection.Text(1)));
-                    const auto parentName = byName.find(BareName(connection.Text(2)));
-                    child = childName == byName.end() ? 0 : childName->second;
-                    parent = parentName == byName.end() ? 0 : parentName->second;
+                    const auto resolve = [&byFullName, &byName](const std::string& text) {
+                        if (const auto full = byFullName.find(text); full != byFullName.end())
+                        {
+                            return full->second;
+                        }
+                        const auto bare = byName.find(BareName(text));
+                        return bare == byName.end() ? static_cast<std::int64_t>(0) : bare->second;
+                    };
+                    child = resolve(connection.Text(1));
+                    parent = resolve(connection.Text(2));
                 }
                 const auto childObject = objects.find(child);
                 if (childObject == objects.end())
@@ -1093,8 +1114,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         }
         std::vector<std::int64_t> roots;
         std::size_t topLevel = 0u;
-        for (const auto& [identity, object] : objects)
+        for (const std::int64_t identity : declarationOrder)
         {
+            const Object& object = objects.at(identity);
             const bool top = anyInScene ? object.inScene : !object.attached;
             if (!top || object.kind == "Material") { continue; }
             ++topLevel;

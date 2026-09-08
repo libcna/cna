@@ -624,7 +624,14 @@ TEST(XnaFbxImporter, EveryFileAnswersTheGraphXnaAnswers)
          {"fbx_bare_mesh.fbx", "fbx_cameras.fbx", "fbx_hierarchy.fbx",
           "fbx_material_factor_texture.fbx", "fbx_material_legacy.fbx",
           "fbx_oblique.fbx", "fbx_prerotation_units.fbx",
-          "fbx_quad_polygon.fbx", "fbx_quad_textured.fbx", "fbx_split_vertices.fbx",
+          "fbx_quad_polygon.fbx", "fbx_quad_textured.fbx",
+          // The scene lists its children in the order the file connects them, and a `Material`
+          // sharing a `Model`'s bare name is a different object: this one's three meshes come
+          // back as `Alpha`, `Beta`, `Gamma`, where keying on the bare name lost `Beta` to the
+          // material of the same name and reading the objects by identity reversed the three
+          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-145`).
+          "fbx_scene_order.fbx",
+          "fbx_split_vertices.fbx",
           // A `Texture` names its file twice and the two can name different directories; the
           // reference XNA writes is whichever one resolves. These two separate the branches:
           // the first's `FileName` names a directory that is there and its `RelativeFilename`
