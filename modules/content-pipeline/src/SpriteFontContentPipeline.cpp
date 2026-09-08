@@ -420,9 +420,29 @@ namespace CNA::Content::Pipeline
                                  return glyphs[left].width > glyphs[right].width;
                              });
 
-            std::uint32_t penX = kMargin;
-            std::uint32_t penY = kMargin;
-            std::uint32_t shelfHeight = 0u;
+            // Each glyph goes at the lowest row it fits in and the leftmost column of that row,
+            // not on a shelf. The two are not the same packer and the difference is visible in
+            // every real font: a shelf is as tall as its tallest member and leaves the space under
+            // a short glyph unused, where this drops the next glyph into it. Measured against
+            // XNA's own output -- this reproduces **every** placement of SAMPLE-062's
+            // `NetRumbleFont` (95 of 95) and of the four sheets in the differential corpus (3, 10,
+            // 3 and 2 of them), where the shelf packer matched only the small ones
+            // (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-131).
+            //
+            // A candidate row is `kMargin` or the bottom of something already placed, and a
+            // candidate column is `kMargin` or the right edge of something already placed: a
+            // position that is free while the one a texel above or to its left is not can only be
+            // one of those, so scanning them is scanning every position that can win.
+            struct Placed
+            {
+                std::uint32_t x = 0u;
+                std::uint32_t y = 0u;
+                std::uint32_t width = 0u;
+                std::uint32_t height = 0u;
+            };
+            std::vector<Placed> placed;
+            placed.reserve(glyphs.size());
+            std::uint32_t usedBottom = kMargin;
             for (const std::size_t index : order)
             {
                 const RasterGlyph& glyph = glyphs[index];
@@ -431,18 +451,45 @@ namespace CNA::Content::Pipeline
                 {
                     return false;
                 }
-                if (penX + glyph.width + kMargin > width)
+                std::vector<std::uint32_t> rows{kMargin};
+                for (const Placed& one : placed) { rows.push_back(one.y + one.height + kGap); }
+                std::sort(rows.begin(), rows.end());
+                rows.erase(std::unique(rows.begin(), rows.end()), rows.end());
+
+                bool found = false;
+                std::uint32_t chosenX = 0u;
+                std::uint32_t chosenY = 0u;
+                for (const std::uint32_t row : rows)
                 {
-                    penX = kMargin;
-                    penY += shelfHeight + kGap;
-                    shelfHeight = 0u;
+                    if (row + glyph.height + kMargin > maximumHeight) { continue; }
+                    std::vector<std::uint32_t> columns{kMargin};
+                    for (const Placed& one : placed) { columns.push_back(one.x + one.width + kGap); }
+                    std::sort(columns.begin(), columns.end());
+                    columns.erase(std::unique(columns.begin(), columns.end()), columns.end());
+                    for (const std::uint32_t column : columns)
+                    {
+                        if (column + glyph.width + kMargin > width) { continue; }
+                        const auto clash = [&](const Placed& one)
+                        {
+                            return column < one.x + one.width + kGap &&
+                                   one.x < column + glyph.width + kGap &&
+                                   row < one.y + one.height + kGap &&
+                                   one.y < row + glyph.height + kGap;
+                        };
+                        if (std::any_of(placed.begin(), placed.end(), clash)) { continue; }
+                        chosenX = column;
+                        chosenY = row;
+                        found = true;
+                        break;
+                    }
+                    if (found) { break; }
                 }
-                if (penY + glyph.height + kMargin > maximumHeight) { return false; }
-                placements[index] = {penX, penY};
-                penX += glyph.width + kGap;
-                shelfHeight = std::max(shelfHeight, glyph.height);
+                if (!found) { return false; }
+                placements[index] = {chosenX, chosenY};
+                placed.push_back({chosenX, chosenY, glyph.width, glyph.height});
+                usedBottom = std::max(usedBottom, chosenY + glyph.height + kMargin);
             }
-            usedHeight = penY + shelfHeight + kMargin;
+            usedHeight = usedBottom;
             return true;
         }
 
@@ -1638,12 +1685,21 @@ namespace CNA::Content::Pipeline
 
         Cnb::CnbSpriteFontData font;
         font.atlas.width = side;
-        // The height is rounded to a power of two, which five genuine builds of a sheet agree on
-        // (`fonttexture/*` in the differential corpus) and SAMPLE-062's `NetRumbleFont` does not:
-        // that one answers 128x**156** where this rounds to 128x256. Something distinguishes the
-        // two and this campaign did not find it, so the rule five measurements support is the one
-        // kept (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-131).
-        font.atlas.height = RoundUpToPowerOfTwo(usedHeight);
+        // The height is the rows used, rounded up to a multiple of four -- and then to a power of
+        // two while it is still no more than 32.
+        //
+        // Seventeen genuine builds say so and none disagrees. Thirteen real fonts in the sample
+        // corpus are *exactly* the used height rounded to a multiple of four and only one of them
+        // is a power of two at all: `DebugFont` 64x112 from 111 rows, `NetRumbleFont` 128x156 from
+        // 154, `LargeGameFont` 512x348 from 346. The four sheets in the differential corpus are
+        // small enough for the second half to show: 16 rows answer 16, and 18 and 30 both answer
+        // 32, where a multiple of four alone would answer 20 and 32
+        // (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-131).
+        //
+        // The threshold is where the evidence runs out: "no more than 32 rows" and "narrower than
+        // 64 texels" separate the same seventeen files, and nothing here distinguishes them.
+        font.atlas.height = (usedHeight + 3u) & ~3u;
+        if (font.atlas.height <= 32u) { font.atlas.height = RoundUpToPowerOfTwo(font.atlas.height); }
         font.atlas.depth = 1u;
         font.atlas.faceCount = 1u;
         font.atlas.mipCount = 1u;
@@ -1762,6 +1818,42 @@ namespace CNA::Content::Pipeline
         Cnb::CnbSpriteFontData font = BuildFontFromTextureSheet(
             sheet.width, sheet.height, sheet.rgbaPixels, firstCharacter,
             CNA::Internal::ContentPathToUtf8(context.SourcePath()));
+
+        // `PremultiplyAlpha` is this processor's own property and its default is True, which the
+        // atlas shows: SAMPLE-062's `NetRumbleFont.png` pads its cells with *transparent white*
+        // and XNA's atlas holds (0,0,0,0) there, not (255,255,255,0). CNA validated the parameter
+        // and never applied it (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-131).
+        bool premultiply = true;
+        if (const ContentProcessorParameterValue* named =
+                context.Parameters().Find(TexturePremultiplyAlphaParameter);
+            named != nullptr)
+        {
+            if (const bool* value = std::get_if<bool>(named); value != nullptr)
+            {
+                premultiply = *value;
+            }
+            else if (const std::string* text = std::get_if<std::string>(named); text != nullptr)
+            {
+                std::string wanted = *text;
+                std::transform(wanted.begin(), wanted.end(), wanted.begin(),
+                               [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                premultiply = wanted != "false" && wanted != "0";
+            }
+        }
+        if (premultiply && !font.atlas.representations.empty() &&
+            !font.atlas.representations.front().levels.empty())
+        {
+            std::vector<std::uint8_t>& texels = font.atlas.representations.front().levels.front();
+            for (std::size_t at = 0u; at + 3u < texels.size(); at += 4u)
+            {
+                const std::uint32_t alpha = texels[at + 3u];
+                for (std::size_t channel = 0u; channel < 3u; ++channel)
+                {
+                    texels[at + channel] = static_cast<std::uint8_t>(
+                        (static_cast<std::uint32_t>(texels[at + channel]) * alpha) / 255u);
+                }
+            }
+        }
         context.LogInfo("found " + std::to_string(font.characters.size()) +
                         " glyph(s) in the sheet and packed them into a " +
                         std::to_string(font.atlas.width) + "x" +
