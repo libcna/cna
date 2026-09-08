@@ -210,7 +210,7 @@ typedef uint32_t CNA_GraphicsCapability;
  */
 #define CNA_GRAPHICS_CAPABILITY_MAXIMUM CNA_GRAPHICS_CAPABILITY_INDIRECT_DRAW
 
-/** @brief Fixed-width identity of the shading dialect a custom effect's sources must use. */
+/** @brief Fixed-width identity of the shader payload a custom effect must supply. */
 typedef uint32_t CNA_ShaderDialect;
 
 /** @brief The active renderer has not declared a dialect; do not guess one. */
@@ -227,13 +227,15 @@ typedef uint32_t CNA_ShaderDialect;
 #define CNA_SHADER_DIALECT_MSL UINT32_C(5)
 /** @brief WebGPU Shading Language. */
 #define CNA_SHADER_DIALECT_WGSL UINT32_C(6)
+/** @brief Already-compiled SPIR-V bytecode, not Vulkan GLSL source text. @since ABI 0.25.0 */
+#define CNA_SHADER_DIALECT_SPIRV UINT32_C(7)
 /**
  * @brief Largest defined shading-dialect identity.
  *
  * The identities occupy the closed range @ref CNA_SHADER_DIALECT_UNKNOWN through this value with
  * no gaps, so a caller can enumerate them without naming each one.
  */
-#define CNA_SHADER_DIALECT_MAXIMUM CNA_SHADER_DIALECT_WGSL
+#define CNA_SHADER_DIALECT_MAXIMUM CNA_SHADER_DIALECT_SPIRV
 
 /** @brief Fixed-width bit set containing zero or more graphics capabilities. */
 typedef uint64_t CNA_GraphicsCapabilityFlags;
@@ -900,20 +902,21 @@ CNA_C_API CNA_Result cna_graphics_device_copy_capability_report_ext(
     uint64_t* out_bytes);
 
 /**
- * @brief Gets the shading dialect a custom effect's sources must be written in.
+ * @brief Gets the shader payload dialect a custom effect must supply.
  *
  * @param graphics_device Callback-scoped borrowed graphics-device handle.
  * @param out_dialect Receives one `CNA_SHADER_DIALECT_*` identity.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
- * A source-based effect (`cna_shader_effect_create`) is renderer-specific text, and the renderer
- * identity is not a safe way to infer which text to supply: it is wrong in a build carrying
- * several renderers, and meaningless for a renderer that picks its native API per process. Ask
- * here instead.
+ * A custom effect (`cna_shader_effect_create`) is renderer-specific. Most renderers consume source
+ * text, while `CNA_SHADER_DIALECT_SPIRV` means its two byte views must contain already-compiled
+ * SPIR-V. The renderer identity is not a safe way to infer which payload to supply: it is wrong in
+ * a build carrying several renderers, and meaningless for a renderer that picks its native API per
+ * process. Ask here instead.
  *
  * `CNA_SHADER_DIALECT_UNKNOWN` means the active renderer has not declared one. Read that as "do
- * not guess", not as "no shaders": it is the answer a caller should refuse to build sources from,
- * rather than one to fall back on.
+ * not guess", not as "no shaders": it is the answer a caller should refuse to build a payload
+ * from, rather than one to fall back on.
  */
 CNA_C_API CNA_Result cna_graphics_device_get_shader_dialect_ext(
     CNA_Handle graphics_device,

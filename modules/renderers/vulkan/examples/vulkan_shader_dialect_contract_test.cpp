@@ -7,17 +7,11 @@
 // VulkanEffectRenderer::CompileProgram accepted nothing but SPIR-V words -- so the one query whose
 // job is to stop a caller guessing answered "guess".
 //
-//   A  The dialect is declared, and it is GlslVulkan.
-//   B  The declared dialect is ACTIONABLE, at least far enough to reject the wrong payload: GLSL
-//      source text -- the thing a caller who read "GlslVulkan" would most plausibly send -- is
-//      refused, with a compile error, rather than accepted and drawn from nothing.
-//   C  And the reason B matters is recorded as an assertion rather than a comment. IGL's Vulkan
-//      backend reports the SAME enumerator and takes GLSL source (igl_spritebatch_shadereffect_
-//      test.cpp gates on exactly this value before handing it a GLSL string), while this renderer
-//      takes compiled bytecode. So the enumerator does not distinguish source from bytecode, and
-//      a caller acting on it alone is still guessing. VULKAN-264 owns narrowing that, which is a
-//      C-ABI change. This leg pins the ambiguity so that if a future enumerator resolves it, this
-//      test goes red and says so instead of quietly continuing to describe the old world.
+//   A  The dialect is declared, and it is the bytecode-specific SpirV identity.
+//   B  The declared dialect is actionable: GLSL source text is refused with a SPIR-V diagnostic,
+//      rather than accepted and drawn from nothing.
+//   C  IGL's Vulkan backend remains source-based and reports GlslVulkan, so this renderer must not
+//      report that identity. VULKAN-264 appends SpirV without changing any existing ordinal.
 //
 // That a VALID SPIR-V pair is accepted and renders is not re-proved here -- Vulkan_ShaderEffect_SpirV
 // owns that end to end, with a real tinted draw.
@@ -84,10 +78,10 @@ protected:
         check(dialect != ShaderDialectEXT::Unknown,
               "A the renderer declares a shader dialect instead of leaving it Unknown",
               "ordinal " + std::to_string(static_cast<int>(dialect)));
-        check(dialect == ShaderDialectEXT::GlslVulkan,
-              "A the declared dialect is GlslVulkan",
+        check(dialect == ShaderDialectEXT::SpirV,
+              "A the declared dialect is already-compiled SpirV bytecode",
               "ordinal " + std::to_string(static_cast<int>(dialect)) + ", expected "
-                  + std::to_string(static_cast<int>(ShaderDialectEXT::GlslVulkan)));
+                  + std::to_string(static_cast<int>(ShaderDialectEXT::SpirV)));
 
         // B + C: the payload a caller acting on that answer would most plausibly send.
         ShaderEffect glslEffect(dev, std::string(kVulkanGlslVert), std::string(kVulkanGlslFrag));
@@ -117,12 +111,11 @@ protected:
                                                                       : paddedError)));
         }
 
-        check(!accepted,
-              "C the GlslVulkan enumerator does not distinguish source from bytecode -- IGL's "
-              "Vulkan backend reports the same value and compiles this exact source (VULKAN-264)",
-              accepted ? "this renderer now accepts GLSL source too; the ambiguity is gone and "
-                         "VULKAN-264's premise needs re-reading"
-                       : "still bytecode-only here, source-only there");
+        check(dialect != ShaderDialectEXT::GlslVulkan,
+              "C bytecode-only Vulkan is distinct from IGL's GLSL-consuming Vulkan backend",
+              dialect == ShaderDialectEXT::SpirV
+                  ? "SpirV here; GlslVulkan remains the source identity"
+                  : "unexpected ordinal " + std::to_string(static_cast<int>(dialect)));
 
         std::printf("=== %d/%d PASS ===\n", pass_, pass_ + fail_);
         Exit();

@@ -1736,13 +1736,11 @@ namespace CNA::Internal::Renderers::Vulkan
          * SPIR-V words, so leaving this at the shared `Unknown` default made the one query that
          * exists to stop an application guessing answer "guess".
          *
-         * `GlslVulkan` is the closest honest value the enumeration currently has -- and it is not
-         * a precise one. See `VULKAN-264`: IGL's Vulkan backend reports the SAME enumerator and
-         * takes GLSL **source**, while this renderer takes compiled **bytecode**, so the answer
-         * still does not tell a caller which of the two to send. Narrowing that needs a new
-         * enumerator, which is a C-ABI change and belongs with `plans/plan_binding.md`.
+         * `VULKAN-264` added a distinct bytecode identity after measuring that IGL's Vulkan backend
+         * reports `GlslVulkan` and compiles GLSL source, while this renderer consumes the compiled
+         * product. Existing source-dialect ordinals were left unchanged.
          *
-         * @return `ShaderDialectEXT::GlslVulkan`.
+         * @return `ShaderDialectEXT::SpirV`.
          */
         [[nodiscard]] CNA::Internal::Renderers::ShaderDialectEXT
             GetShaderDialectEXT() const override;

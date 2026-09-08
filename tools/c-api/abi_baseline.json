@@ -1,10 +1,10 @@
 {
  "abi_version": {
-  "encoded": 6144,
+  "encoded": 6400,
   "major": 0,
-  "minor": 24,
+  "minor": 25,
   "patch": 0,
-  "runtime": 5888
+  "runtime": 6400
  },
  "colors": {
   "CNA_COLOR_ALICE_BLUE": [
@@ -4913,9 +4913,9 @@
   "cna_write_leaderboards_event_info_init"
  ],
  "integers": {
-  "CNA_ABI_VERSION": 6144,
+  "CNA_ABI_VERSION": 6400,
   "CNA_ABI_VERSION_MAJOR": 0,
-  "CNA_ABI_VERSION_MINOR": 24,
+  "CNA_ABI_VERSION_MINOR": 25,
   "CNA_ABI_VERSION_PATCH": 0,
   "CNA_ALPHA_MODE_BLEND_EXT": 2,
   "CNA_ALPHA_MODE_MASK_EXT": 1,
@@ -6316,8 +6316,9 @@
   "CNA_SHADER_DIALECT_GLSL_ES": 2,
   "CNA_SHADER_DIALECT_GLSL_VULKAN": 3,
   "CNA_SHADER_DIALECT_HLSL": 4,
-  "CNA_SHADER_DIALECT_MAXIMUM": 6,
+  "CNA_SHADER_DIALECT_MAXIMUM": 7,
   "CNA_SHADER_DIALECT_MSL": 5,
+  "CNA_SHADER_DIALECT_SPIRV": 7,
   "CNA_SHADER_DIALECT_UNKNOWN": 0,
   "CNA_SHADER_DIALECT_WGSL": 6,
   "CNA_SHADER_STAGE_PIXEL": 0,

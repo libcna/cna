@@ -301,11 +301,12 @@ in three shared sources. And one row changed this renderer because EasyGL was ri
 `Vulkan_ShaderEffect_BoundTexture`, `Vulkan_ShaderEffect_UniformArrays`, `Vulkan_ShaderEffect_3D`,
 `Vulkan_Texture3DAddressW`
 
-`ShaderEffect` takes **renderer-specific** shader source by contract, and this renderer's is
-compiled **SPIR-V**. `GraphicsDevice::GetShaderDialectEXT()` reports `GlslVulkan`, which names the
-source language the bytecode was compiled *from* — it does not mean this renderer compiles that
-source. Hand it GLSL text and the effect is refused with a message that says so; the check is the
-SPIR-V magic word, not the payload's length. That distinction is not pedantry: until `VULKAN-256`
+`ShaderEffect` takes a **renderer-specific payload** by contract, and this renderer's is compiled
+**SPIR-V**. Since `VULKAN-264`, `GraphicsDevice::GetShaderDialectEXT()` reports `SpirV`, explicitly
+distinguishing this bytecode intake from IGL's Vulkan backend, which reports `GlslVulkan` and
+compiles source. Hand native CNA Vulkan GLSL text and the effect is refused with a message that says
+so; the check is the SPIR-V magic word, not the payload's length. That distinction is not pedantry:
+until `VULKAN-256`
 the refusal was a *length* check, so GLSL whose byte count happened to be a multiple of four went
 to `vkCreateShaderModule` — which **accepted it** on llvmpipe, leaving an effect that reported
 itself valid and drew from text.

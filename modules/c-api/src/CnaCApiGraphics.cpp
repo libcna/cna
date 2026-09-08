@@ -153,6 +153,7 @@ struct ResolvedSpriteCommand final {
         case ShaderDialectEXT::Hlsl:        return CNA_SHADER_DIALECT_HLSL;
         case ShaderDialectEXT::Msl:         return CNA_SHADER_DIALECT_MSL;
         case ShaderDialectEXT::Wgsl:        return CNA_SHADER_DIALECT_WGSL;
+        case ShaderDialectEXT::SpirV:       return CNA_SHADER_DIALECT_SPIRV;
     }
     return CNA_SHADER_DIALECT_UNKNOWN;
 }

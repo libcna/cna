@@ -73,6 +73,7 @@ namespace
             case D::Hlsl:        return "Hlsl";
             case D::Msl:         return "Msl";
             case D::Wgsl:        return "Wgsl";
+            case D::SpirV:       return "SpirV";
         }
         return "?";
     }
@@ -172,7 +173,7 @@ namespace
         { "query.maxComputeWorkGroupInvocations", "0", Origin::Fixed },
         { "query.maxTextureDimension", "16384", Origin::Device },
         { "query.rendererName", "VULKAN", Origin::Fixed },
-        { "query.shaderDialect", "GlslVulkan", Origin::Fixed },
+        { "query.shaderDialect", "SpirV", Origin::Fixed },
         { "query.supportsImageBasedLighting", "false", Origin::Fixed },
         { "query.supportsShadowSampling", "false", Origin::Fixed },
         { "renderTargetFormat.Alpha8", "false", Origin::Device },
@@ -451,6 +452,25 @@ protected:
               measured["limit.MaxTextureDimension"] + " vs " + measured["query.maxTextureDimension"]);
         check(measured["renderTargetFormat.Color"] == "true",
               "C SurfaceFormat::Color is usable as a render target", measured["renderTargetFormat.Color"]);
+        const char* const sourceDialectFeatures[] = {
+            "feature.ShaderDialectGlslDesktop",
+            "feature.ShaderDialectGlslEs",
+            "feature.ShaderDialectGlslVulkan",
+            "feature.ShaderDialectHlsl",
+            "feature.ShaderDialectMsl",
+            "feature.ShaderDialectWgsl",
+        };
+        bool everySourceDialectUnsupported = true;
+        for (const char* const name : sourceDialectFeatures) {
+            everySourceDialectUnsupported =
+                everySourceDialectUnsupported && measured[name] == "unsupported";
+        }
+        check(measured["query.shaderDialect"] == "SpirV"
+                  && measured["query.executesShaderEffectSource"] == "false"
+                  && everySourceDialectUnsupported,
+              "C the declared SPIR-V bytecode payload agrees with the source-dialect profile",
+              "query=" + measured["query.shaderDialect"] + " sourceExecution="
+                  + measured["query.executesShaderEffectSource"]);
 
         std::printf("=== %d/%d PASS ===\n", pass_, pass_ + fail_);
         std::fflush(stdout);

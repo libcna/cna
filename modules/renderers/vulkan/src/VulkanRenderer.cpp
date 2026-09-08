@@ -2150,7 +2150,7 @@ namespace CNA::Internal::Renderers::Vulkan
     {
         // VULKAN-250. Not device-dependent and not build-dependent: this renderer has exactly one
         // custom-effect intake, and CompileProgram rejects anything that is not SPIR-V words.
-        return CNA::Internal::Renderers::ShaderDialectEXT::GlslVulkan;
+        return CNA::Internal::Renderers::ShaderDialectEXT::SpirV;
     }
 
     void VulkanRenderer::RequirePbrStrideEXT(std::size_t stride, bool skinned) const
@@ -4551,8 +4551,7 @@ namespace CNA::Internal::Renderers::Vulkan
             if (blob.size() < 4) {
                 compileError_ = std::string("the ") + stage +
                     " shader is empty or shorter than one SPIR-V word. This renderer's ShaderEffect "
-                    "takes compiled SPIR-V, not GLSL source (GetShaderDialectEXT reports "
-                    "GlslVulkan, which names the SOURCE language the bytecode was compiled from).";
+                    "takes compiled SPIR-V, not GLSL source (GetShaderDialectEXT reports SpirV).";
                 return true;
             }
             if (blob.size() % 4 != 0) {

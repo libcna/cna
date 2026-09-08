@@ -2,7 +2,20 @@
 
 ## ABI identity
 
-The ABI is `0.24.0`. It adds **one detailed renderer-feature identity**,
+The ABI is `0.25.0`. It appends **one shader-payload identity**,
+`CNA_SHADER_DIALECT_SPIRV` (`7`), for renderers that require already-compiled SPIR-V bytecode
+rather than Vulkan GLSL source. The distinction is observable: native CNA Vulkan consumes SPIR-V
+words, while IGL's Vulkan backend compiles GLSL source, and both previously reported
+`CNA_SHADER_DIALECT_GLSL_VULKAN`. Existing identities retain values `0` through `6`; only
+`CNA_SHADER_DIALECT_MAXIMUM` moves from `6` to `7`. The minor increments because the closed
+enumerable range changed, and `plans/plan_vulkan.md` `VULKAN-264` records the renderer-side
+contract and tests.
+
+A caller that handles `0.24.0` dialects by name is unchanged. A caller that iterates through
+`CNA_SHADER_DIALECT_MAXIMUM` sees one additional identity and can now choose the correct payload
+without inferring it from a renderer name.
+
+`0.24.0` added **one detailed renderer-feature identity**,
 `CNA_RENDERER_FEATURE_TEXTURE_3D_SAMPLING` (`30`), which asks whether a `Texture3D` bound to a
 custom effect is actually **sampled** by that shader. `CNA_RENDERER_FEATURE_TEXTURE_3D_STORAGE`
 answers only that a volume can be uploaded and read back, and the two came apart in practice: the

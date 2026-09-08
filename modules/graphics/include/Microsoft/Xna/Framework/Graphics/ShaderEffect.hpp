@@ -64,13 +64,13 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Declares the std140 uniform block this effect's parameters live in. CNAEXT.
          *
-         * Required on a renderer whose shading dialect has no loose (non-block) uniforms -- every
-         * SPIR-V target, which today means IGL's Vulkan backend. Harmlessly ignored everywhere
-         * else, so the same call can sit unconditionally beside the effect's construction.
+         * Required on a source-compiling renderer whose shading dialect has no loose (non-block)
+         * uniforms -- today IGL's Vulkan backend. Harmlessly ignored everywhere else, so the same
+         * call can sit unconditionally beside the effect's construction.
          *
-         * Ask @ref GraphicsDevice::GetShaderDialectEXT which dialect the active renderer wants;
-         * an application that needs both generally supplies two shader sources and one of these
-         * declarations describing the Vulkan one.
+         * Ask @ref GraphicsDevice::GetShaderDialectEXT which payload dialect the active renderer
+         * wants; an application that needs both generally supplies two shader payload pairs and
+         * one of these declarations describing the source-compiled Vulkan one.
          *
          * @param blockSizeBytes Size of the whole block in bytes, std140-padded.
          * @param names          Member names, `count` of them.
