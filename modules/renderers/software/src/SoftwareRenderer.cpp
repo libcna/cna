@@ -1455,6 +1455,27 @@ namespace CNA::Internal::Renderers::Software
             return params.lightingEnabled && !params.envMapping && !params.pbr;
         }
 
+        /// SOFTWARE-153: BasicEffect, AlphaTestEffect and DualTextureEffect all route their
+        /// material colour through Common.fxh's COLOR0 vertex output. D3D9 saturates that semantic
+        /// before interpolation. Compiled/custom effects own their own output rules; the lit,
+        /// environment, skinned and PBR families have separate preparation paths below.
+        [[nodiscard]] bool UsesUnlitCommonDiffuseOutput(const GpuDrawParams& params)
+        {
+            return !params.lightingEnabled && !params.envMapping && !params.skinned && !params.pbr &&
+                   !params.customEffectRequested && params.customEffectRenderer == nullptr &&
+                   params.compiledEffectRuntime == nullptr;
+        }
+
+        void PrepareUnlitCommonDiffuseVertex(ClipVertex& vertex, const GpuDrawParams& params)
+        {
+            if (!UsesUnlitCommonDiffuseOutput(params))
+                return;
+            vertex.r = std::clamp(vertex.r * params.diffuseColor[0], 0.0f, 1.0f);
+            vertex.g = std::clamp(vertex.g * params.diffuseColor[1], 0.0f, 1.0f);
+            vertex.b = std::clamp(vertex.b * params.diffuseColor[2], 0.0f, 1.0f);
+            vertex.a = std::clamp(vertex.a * params.diffuseColor[3], 0.0f, 1.0f);
+        }
+
         struct ClassicLightingResult
         {
             float diffuse[3] = {0.0f, 0.0f, 0.0f};
@@ -2574,6 +2595,7 @@ namespace CNA::Internal::Renderers::Software
             {
                 out.r = out.g = out.b = out.a = 1.0f;
             }
+            PrepareUnlitCommonDiffuseVertex(out, params);
             PrepareEnvironmentMapVertex(out, position, normal, haveNormal, params);
             PrepareClassicLightingVertex(out, position, normal, haveNormal, params);
             return out;
@@ -2672,6 +2694,7 @@ namespace CNA::Internal::Renderers::Software
 
             if (!params.vertexColorEnabled)
                 out.r = out.g = out.b = out.a = 1.0f;
+            PrepareUnlitCommonDiffuseVertex(out, params);
             PrepareEnvironmentMapVertex(out, position, normal, haveNormal, params);
             PrepareClassicLightingVertex(out, position, normal, haveNormal, params);
             return out;
@@ -2908,7 +2931,7 @@ namespace CNA::Internal::Renderers::Software
                 g += specularG * a;
                 b += specularB * a;
             }
-            else if (!ctx.params.envMapping)
+            else if (!ctx.params.envMapping && !UsesUnlitCommonDiffuseOutput(ctx.params))
             {
                 r *= ctx.params.diffuseColor[0];
                 g *= ctx.params.diffuseColor[1];

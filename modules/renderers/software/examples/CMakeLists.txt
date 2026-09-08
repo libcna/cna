@@ -142,6 +142,21 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_BasicEffectLightingContract
         COMMAND cna_test_software_basic_effect_lighting_contract TIMEOUT 30 LABELS "Software")
 
+    # SOFTWARE-153: compile two unchanged EasyGL public scenes plus one renderer-neutral contract
+    # for the complete unlit BasicEffect material/texture matrix and D3D9 COLOR saturation point.
+    cna_software_test(cna_test_software_basiceffect_combinations
+        ${CNA_EASYGL_PUBLIC_STENCIL_DIR}/easygl_basiceffect_combinations_test.cpp)
+    cna_register_renderer_test(NAME Software_BasicEffectCombinations
+        COMMAND cna_test_software_basiceffect_combinations TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_basiceffect_vertex_color_clamp
+        ${CNA_EASYGL_PUBLIC_STENCIL_DIR}/easygl_basiceffect_vertex_color_clamp_test.cpp)
+    cna_register_renderer_test(NAME Software_BasicEffectVertexColorClamp
+        COMMAND cna_test_software_basiceffect_vertex_color_clamp TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_basic_effect_unlit_contract
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/basic_effect_unlit_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_BasicEffectUnlitContract
+        COMMAND cna_test_software_basic_effect_unlit_contract TIMEOUT 30 LABELS "Software")
+
     # SOFTWARE-114: renderer-neutral FNA/XNA EnvironmentMapEffect vertex-lighting contract.
     cna_software_test(cna_test_software_environment_map_effect_contract
         ${CNA_GRAPHICS_EXAMPLES_DIR}/environment_map_effect_contract_test.cpp)

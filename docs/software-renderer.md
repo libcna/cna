@@ -148,6 +148,13 @@ rather than always passing.
   `SkinnedEffect` deliberately keep their textured program selected with no base map; SOFTWARE
   preserves the vertex/factor colour in that case, matching the white fallback used by native
   shader renderers. A missing second DualTexture map or environment cube remains a clear error.
+- **Unlit classic stock material output matches XNA's vertex boundary** (`SOFTWARE-153`).
+  `BasicEffect`, `AlphaTestEffect` and `DualTextureEffect` fold material alpha into diffuse colour
+  exactly as FNA does, multiply any enabled vertex colour, and saturate the D3D9 `COLOR0` value
+  before clipping and interpolation. Texture sampling follows that boundary, so a material value
+  of two multiplied by a 0.4 texture produces 0.4, not 0.8. The shared 8/8 public contract also
+  covers `(DiffuseColor+EmissiveColor)*Alpha`, disabled vertex colour, disabled texture, real
+  texture and the opaque-white null-texture fallback on both Software and EasyGL.
 - **`BasicEffect` lighting is complete** (`SOFTWARE-113`). Software evaluates FNA's three-light
   Blinn–Phong equation with ambient, diffuse, emissive and specular material terms, including
   `EnableDefaultLighting`, per-light enable/colour/direction, `SpecularPower`, texture, vertex
@@ -292,7 +299,8 @@ rather than always passing.
 - **Complete `AlphaTestEffect` comparisons** (`SOFTWARE-111`) — all eight XNA `CompareFunction`
   values use FNA's half-byte threshold encoding after texture, vertex and effect alpha are
   multiplied. A rejected fragment is discarded before colour, depth or stencil writes; a null
-  texture contributes opaque white, matching the stock-effect path on EasyGL.
+  texture contributes opaque white, matching the stock-effect path on EasyGL. Its common material
+  output is also saturated per vertex before texture sampling (`SOFTWARE-153`).
 - **Complete XNA stencil state** (`SOFTWARE-121`) — the CPU fragment paths honor all eight
   comparisons and operations, read/write masks, `GraphicsDevice.ReferenceStencil`, the distinct
   counter-clockwise tuple, and the stencil-fail/depth-fail/pass ordering. This applies to colored

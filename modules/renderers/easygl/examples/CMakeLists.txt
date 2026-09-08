@@ -1386,6 +1386,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_BasicEffectCombinations COMMAND cna_test_easygl_basiceffect_combinations
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # SOFTWARE-153: the same public unlit BasicEffect material/texture and vertex-output
+        # contract is compiled against both reference EasyGL and the independent CPU renderer.
+        cna_easygl_test(cna_test_easygl_basic_effect_unlit_contract
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/basic_effect_unlit_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_BasicEffectUnlitContract
+            COMMAND cna_test_easygl_basic_effect_unlit_contract
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 364: BasicEffect pixel test — VertexColorEnabled=false, no texture, diffuse color only
         cna_easygl_test(cna_test_easygl_basiceffect_vertexcolor_disabled
                         easygl_basiceffect_vertexcolor_disabled_test.cpp)
