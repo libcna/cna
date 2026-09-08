@@ -36,6 +36,40 @@ using Microsoft::Xna::Framework::Graphics::Texture2D;
 using Microsoft::Xna::Framework::Graphics::VertexBuffer;
 using Microsoft::Xna::Framework::Graphics::VertexBufferBinding;
 
+TEST(GraphicsDeviceLifecycleTest, RendererFacingOperationsRejectUseAfterDeviceDisposal)
+{
+    GraphicsDevice gd;
+    gd.Dispose();
+
+    EXPECT_THROW(gd.Clear(Color::Black), System::ObjectDisposedException);
+    EXPECT_THROW(gd.Present(), System::ObjectDisposedException);
+    EXPECT_THROW(gd.Reset(), System::ObjectDisposedException);
+    EXPECT_THROW(gd.setBlendStateProperty(
+                     Microsoft::Xna::Framework::Graphics::BlendState::Opaque),
+                 System::ObjectDisposedException);
+    EXPECT_THROW(gd.setDepthStencilStateProperty(
+                     Microsoft::Xna::Framework::Graphics::DepthStencilState::None),
+                 System::ObjectDisposedException);
+    EXPECT_THROW(gd.setRasterizerStateProperty(
+                     Microsoft::Xna::Framework::Graphics::RasterizerState::CullNone),
+                 System::ObjectDisposedException);
+    EXPECT_THROW(gd.setViewportProperty(Microsoft::Xna::Framework::Graphics::Viewport(0, 0, 1, 1)),
+                 System::ObjectDisposedException);
+    EXPECT_THROW(gd.setScissorRectangleProperty(Microsoft::Xna::Framework::Rectangle(0, 0, 1, 1)),
+                 System::ObjectDisposedException);
+    EXPECT_THROW(gd.SetVertexBuffer(nullptr), System::ObjectDisposedException);
+    EXPECT_THROW(gd.SetVertexBuffers({}), System::ObjectDisposedException);
+    EXPECT_THROW(gd.SetIndexBuffer(nullptr), System::ObjectDisposedException);
+    EXPECT_THROW(gd.SetRenderTargets({}), System::ObjectDisposedException);
+    EXPECT_THROW(gd.DrawPrimitives(PrimitiveType::TriangleList, 0, 1),
+                 System::ObjectDisposedException);
+    Color pixel = Color::Magenta;
+    const Microsoft::Xna::Framework::Rectangle pixelRegion(0, 0, 1, 1);
+    EXPECT_THROW(gd.GetBackBufferData(&pixelRegion, &pixel, 0, 1),
+                 System::ObjectDisposedException);
+    EXPECT_EQ(pixel, Color::Magenta);
+}
+
 // =============================================================================
 // TextureCollection — index bounds
 // =============================================================================
@@ -121,6 +155,27 @@ namespace
             return false;
         }
     }
+}
+
+TEST(GraphicsDeviceLifecycleTest, DisposalIsReentrantAndReleasesABoundRenderTarget)
+{
+    GraphicsDevice gd;
+    RenderTarget2D target(gd, 4, 4);
+    if (!BindOrSkip(gd, target))
+        GTEST_SKIP() << "this renderer does not support RenderTarget2D";
+
+    int disposingEvents = 0;
+    gd.Disposing += [&](System::Object*, const System::EventArgs&)
+    {
+        ++disposingEvents;
+        EXPECT_TRUE(gd.getIsDisposedProperty());
+        EXPECT_NO_THROW(gd.Dispose());
+        EXPECT_THROW(gd.Clear(Color::Black), System::ObjectDisposedException);
+    };
+
+    EXPECT_NO_THROW(gd.Dispose());
+    EXPECT_EQ(disposingEvents, 1);
+    EXPECT_TRUE(target.getIsDisposedProperty());
 }
 
 TEST(TextureCollectionValidationTest, ActiveRenderTargetCannotBindToPixelTextureSlot)

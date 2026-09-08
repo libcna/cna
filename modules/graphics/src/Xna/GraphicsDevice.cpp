@@ -381,6 +381,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::setViewportProperty(const Viewport& value)
     {
+        ThrowIfDisposed();
         if (renderer_)
         {
             // The public Viewport is logical; the renderer seam is not. See
@@ -416,6 +417,12 @@ namespace Microsoft::Xna::Framework::Graphics
         return isDisposed_;
     }
 
+    void GraphicsDevice::ThrowIfDisposed() const
+    {
+        if (isDisposed_)
+            throw System::ObjectDisposedException("GraphicsDevice");
+    }
+
     void GraphicsDevice::Clear(const Color& color)
     {
         // Task 928: real XNA/FNA's single-argument overload clears the target, depth buffer,
@@ -430,6 +437,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::Clear(float r, float g, float b, float a)
     {
+        ThrowIfDisposed();
         if (renderer_ != nullptr)
         {
             auto contextLease = AcquireRendererThreadContextLease();
@@ -439,6 +447,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::Clear(ClearOptions options, const Color& color, float depth, int stencil)
     {
+        ThrowIfDisposed();
         if (renderer_ == nullptr)
         {
             return;
@@ -559,6 +568,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::Present()
     {
+        ThrowIfDisposed();
         if (renderTargetBound_)
             throw System::InvalidOperationException("Cannot present while render targets are bound");
 
@@ -595,6 +605,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::Reset(const PresentationParameters& presentationParameters, GraphicsAdapter* adapter)
     {
+        ThrowIfDisposed();
         const PresentationParameters previousPresentationParameters =
             presentationParameters_.Clone();
         GraphicsAdapter* const previousAdapter = adapter_;
@@ -694,6 +705,13 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
 
+        // Match FNA's lifecycle boundary: the device becomes disposed before callbacks or owned
+        // resources run. This makes reentrant Dispose idempotent and prevents a Disposing handler
+        // from issuing work against native objects that are in the process of being torn down.
+        isDisposed_ = true;
+
+        Disposing.Raise(this, System::EventArgs::Empty);
+
         // Copy and clear the resource list before iterating.
         // This makes RemoveResourceReference a no-op when called re-entrantly
         // from within the resources' own Dispose() methods (matches FNA pattern).
@@ -703,11 +721,9 @@ namespace Microsoft::Xna::Framework::Graphics
         for (GraphicsResource* res : toDispose)
             static_cast<System::IDisposable*>(res)->Dispose();
 
-        Disposing.Raise(this, System::EventArgs::Empty);
         // Order matters: the window goes first, because the video subsystem is what backs it.
         destroyNativeResources();
         setVideoSubsystemAcquired(false);
-        isDisposed_ = true;
     }
 
     void GraphicsDevice::OnResourceCreated(System::Object* resource)
@@ -783,6 +799,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::SetIndexBuffer(const IndexBuffer* indexBuffer)
     {
+        ThrowIfDisposed();
         if (indexBuffer && indexBuffer->getIsDisposedProperty())
             throw System::ObjectDisposedException(indexBuffer->getNameProperty());
         currentIndexBuffer_ = indexBuffer;
@@ -1117,6 +1134,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::DrawPrimitives(PrimitiveType primitiveType, int vertexStart, int primitiveCount)
     {
+        ThrowIfDisposed();
         if (renderer_ == nullptr)
             return;
         renderer_->Ensure3DSupported("GraphicsDevice::DrawPrimitives");
@@ -1189,6 +1207,7 @@ namespace Microsoft::Xna::Framework::Graphics
         int primitiveCount
     )
     {
+        ThrowIfDisposed();
         if (renderer_ == nullptr)
             return;
         renderer_->Ensure3DSupported("GraphicsDevice::DrawIndexedPrimitives");
@@ -1278,6 +1297,7 @@ namespace Microsoft::Xna::Framework::Graphics
         int instanceCount
     )
     {
+        ThrowIfDisposed();
         if (renderer_ == nullptr)
             return;
         renderer_->Ensure3DSupported("GraphicsDevice::DrawInstancedPrimitives");
@@ -1403,6 +1423,7 @@ namespace Microsoft::Xna::Framework::Graphics
         const CNA::Internal::Renderers::IStorageBufferRenderer& argumentBuffer,
         const int argumentByteOffset)
     {
+        ThrowIfDisposed();
         if (renderer_ == nullptr)
             return;
         renderer_->Ensure3DSupported("GraphicsDevice::DrawPrimitivesIndirectEXT");
@@ -1446,6 +1467,7 @@ namespace Microsoft::Xna::Framework::Graphics
         const CNA::Internal::Renderers::IStorageBufferRenderer& argumentBuffer,
         const int argumentByteOffset)
     {
+        ThrowIfDisposed();
         if (renderer_ == nullptr)
             return;
         renderer_->Ensure3DSupported("GraphicsDevice::DrawIndexedPrimitivesIndirectEXT");
@@ -1493,6 +1515,7 @@ namespace Microsoft::Xna::Framework::Graphics
         int primitiveCount
     )
     {
+        ThrowIfDisposed();
         if (renderer_ == nullptr)
             return;
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
@@ -1558,6 +1581,7 @@ namespace Microsoft::Xna::Framework::Graphics
         int primitiveCount
     )
     {
+        ThrowIfDisposed();
         if (renderer_ == nullptr)
             return;
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
@@ -1744,7 +1768,11 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::DrawUserPrimitives(PrimitiveType type,
                                             const VertexPositionColor* data, int offset, int count)
     {
-        if (!renderer_) return;
+        if (!renderer_)
+        {
+            ThrowIfDisposed();
+            return;
+        }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
@@ -1769,7 +1797,11 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::DrawUserPrimitives(PrimitiveType type,
                                             const VertexPositionTexture* data, int offset, int count)
     {
-        if (!renderer_) return;
+        if (!renderer_)
+        {
+            ThrowIfDisposed();
+            return;
+        }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
@@ -1794,7 +1826,11 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::DrawUserPrimitives(PrimitiveType type,
                                             const VertexPositionColorTexture* data, int offset, int count)
     {
-        if (!renderer_) return;
+        if (!renderer_)
+        {
+            ThrowIfDisposed();
+            return;
+        }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
@@ -1819,7 +1855,11 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::DrawUserPrimitives(PrimitiveType type,
                                             const VertexPositionNormalTexture* data, int offset, int count)
     {
-        if (!renderer_) return;
+        if (!renderer_)
+        {
+            ThrowIfDisposed();
+            return;
+        }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
@@ -1851,7 +1891,11 @@ namespace Microsoft::Xna::Framework::Graphics
                                             int primitiveCount,
                                             const VertexDeclaration& vertexDeclaration)
     {
-        if (!renderer_) return;
+        if (!renderer_)
+        {
+            ThrowIfDisposed();
+            return;
+        }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
@@ -1881,7 +1925,11 @@ namespace Microsoft::Xna::Framework::Graphics
         const VertexDeclaration& vertexDeclaration)
     {
         using Stream = CNA::Internal::Graphics::VertexStream<VertexT>;
-        if (!renderer_) return;
+        if (!renderer_)
+        {
+            ThrowIfDisposed();
+            return;
+        }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
@@ -1966,7 +2014,11 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const VertexPositionColor* vertices, int vOffset, int numVerts,
                                                    const std::uint16_t* indices, int iOffset, int primCount)
     {
-        if (!renderer_) return;
+        if (!renderer_)
+        {
+            ThrowIfDisposed();
+            return;
+        }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
@@ -1995,7 +2047,11 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const VertexPositionTexture* vertices, int vOffset, int numVerts,
                                                    const std::uint16_t* indices, int iOffset, int primCount)
     {
-        if (!renderer_) return;
+        if (!renderer_)
+        {
+            ThrowIfDisposed();
+            return;
+        }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
@@ -2024,7 +2080,11 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const VertexPositionColorTexture* vertices, int vOffset, int numVerts,
                                                    const std::uint16_t* indices, int iOffset, int primCount)
     {
-        if (!renderer_) return;
+        if (!renderer_)
+        {
+            ThrowIfDisposed();
+            return;
+        }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
@@ -2053,7 +2113,11 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const VertexPositionNormalTexture* vertices, int vOffset, int numVerts,
                                                    const std::uint16_t* indices, int iOffset, int primCount)
     {
-        if (!renderer_) return;
+        if (!renderer_)
+        {
+            ThrowIfDisposed();
+            return;
+        }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
@@ -2084,7 +2148,11 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const VertexPositionColor* vertices, int vOffset, int numVerts,
                                                    const std::uint32_t* indices, int iOffset, int primCount)
     {
-        if (!renderer_) return;
+        if (!renderer_)
+        {
+            ThrowIfDisposed();
+            return;
+        }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
@@ -2113,7 +2181,11 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const VertexPositionTexture* vertices, int vOffset, int numVerts,
                                                    const std::uint32_t* indices, int iOffset, int primCount)
     {
-        if (!renderer_) return;
+        if (!renderer_)
+        {
+            ThrowIfDisposed();
+            return;
+        }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
@@ -2142,7 +2214,11 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const VertexPositionColorTexture* vertices, int vOffset, int numVerts,
                                                    const std::uint32_t* indices, int iOffset, int primCount)
     {
-        if (!renderer_) return;
+        if (!renderer_)
+        {
+            ThrowIfDisposed();
+            return;
+        }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
@@ -2171,7 +2247,11 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const VertexPositionNormalTexture* vertices, int vOffset, int numVerts,
                                                    const std::uint32_t* indices, int iOffset, int primCount)
     {
-        if (!renderer_) return;
+        if (!renderer_)
+        {
+            ThrowIfDisposed();
+            return;
+        }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
@@ -2206,7 +2286,11 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const std::uint16_t* indexData, int iOffset, int primCount,
                                                    const VertexDeclaration& vd)
     {
-        if (!renderer_) return;
+        if (!renderer_)
+        {
+            ThrowIfDisposed();
+            return;
+        }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
@@ -2237,7 +2321,11 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const std::uint32_t* indexData, int iOffset, int primCount,
                                                    const VertexDeclaration& vd)
     {
-        if (!renderer_) return;
+        if (!renderer_)
+        {
+            ThrowIfDisposed();
+            return;
+        }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
@@ -2274,7 +2362,11 @@ namespace Microsoft::Xna::Framework::Graphics
         const VertexDeclaration& vertexDeclaration)
     {
         using Stream = CNA::Internal::Graphics::VertexStream<VertexT>;
-        if (!renderer_) return;
+        if (!renderer_)
+        {
+            ThrowIfDisposed();
+            return;
+        }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
@@ -3511,7 +3603,11 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::applySamplerStatesToRenderer()
     {
-        if (!renderer_) return;
+        if (!renderer_)
+        {
+            ThrowIfDisposed();
+            return;
+        }
 
         // FNA reapplies RasterizerState at every draw, rather than only when the property object is
         // assigned. The current state is publicly mutable through GraphicsDevice.RasterizerState,
@@ -3611,6 +3707,7 @@ namespace Microsoft::Xna::Framework::Graphics
     const BlendState& GraphicsDevice::getBlendStateProperty() const { return blendState_; }
     void GraphicsDevice::setBlendStateProperty(const BlendState& value)
     {
+        ThrowIfDisposed();
         if (renderer_)
         {
             // REMED-GFX-077: the four per-MRT colour write masks + the coverage sample mask travel
@@ -3646,6 +3743,7 @@ namespace Microsoft::Xna::Framework::Graphics
     const DepthStencilState& GraphicsDevice::getDepthStencilStateProperty() const { return depthStencilState_; }
     void GraphicsDevice::setDepthStencilStateProperty(const DepthStencilState& value)
     {
+        ThrowIfDisposed();
         if (renderer_)
         {
             renderer_->ApplyDepthStencilState(
@@ -3677,6 +3775,7 @@ namespace Microsoft::Xna::Framework::Graphics
     const RasterizerState& GraphicsDevice::getRasterizerStateProperty() const { return rasterizerState_; }
     void GraphicsDevice::setRasterizerStateProperty(const RasterizerState& value)
     {
+        ThrowIfDisposed();
         if (renderer_)
         {
             renderer_->ApplyRasterizerState(
@@ -3694,6 +3793,7 @@ namespace Microsoft::Xna::Framework::Graphics
     Rectangle GraphicsDevice::getScissorRectangleProperty() const { return scissorRectangle_; }
     void GraphicsDevice::setScissorRectangleProperty(const Rectangle& value)
     {
+        ThrowIfDisposed();
         if (renderer_)
         {
             // Same logical-versus-drawable split as the Viewport setter above: EasyGL, Magnum and
@@ -3713,6 +3813,7 @@ namespace Microsoft::Xna::Framework::Graphics
     Color GraphicsDevice::getBlendFactorProperty() const { return blendFactor_; }
     void GraphicsDevice::setBlendFactorProperty(const Color& value)
     {
+        ThrowIfDisposed();
         blendFactor_ = value;
         if (renderer_)
             renderer_->SetBlendFactor(
@@ -3725,6 +3826,7 @@ namespace Microsoft::Xna::Framework::Graphics
     int GraphicsDevice::getMultiSampleMaskProperty() const { return multiSampleMask_; }
     void GraphicsDevice::setMultiSampleMaskProperty(int value)
     {
+        ThrowIfDisposed();
         if (renderer_)
         {
             // SOFTWARE-166: this is a standalone XNA GraphicsDevice property, just like
@@ -3758,6 +3860,7 @@ namespace Microsoft::Xna::Framework::Graphics
     int GraphicsDevice::getReferenceStencilProperty() const { return referenceStencil_; }
     void GraphicsDevice::setReferenceStencilProperty(int value)
     {
+        ThrowIfDisposed();
         if (renderer_)
             renderer_->SetReferenceStencil(value);
         // Match the other state setters: a renderer rejection must not leave the public cache
@@ -3787,6 +3890,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::GetBackBufferData(const Rectangle* rect, Color* data, int startIndex, int elementCount)
     {
+        ThrowIfDisposed();
         if (data == nullptr)
             throw std::invalid_argument("data");
         if (startIndex < 0)
@@ -3949,6 +4053,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::SetRenderTargets(const std::vector<RenderTargetBinding>& renderTargets)
     {
+        ThrowIfDisposed();
         if (renderTargets.size() > MAX_RENDERTARGET_BINDINGS)
             throw std::invalid_argument("SetRenderTargets: at most " +
                 std::to_string(MAX_RENDERTARGET_BINDINGS) + " render targets may be bound at once.");
@@ -4118,6 +4223,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::SetVertexBuffer(const VertexBuffer* vertexBuffer, int vertexOffset)
     {
+        ThrowIfDisposed();
         System::ArgumentOutOfRangeException::ThrowIfNegative(vertexOffset, "vertexOffset");
         if (vertexBuffer && vertexBuffer->getIsDisposedProperty())
             throw System::ObjectDisposedException(vertexBuffer->getNameProperty());
@@ -4133,6 +4239,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::SetVertexBuffers(const std::vector<VertexBufferBinding>& vertexBuffers)
     {
+        ThrowIfDisposed();
         constexpr int kMaxVertexBufferBindings = 16; // XNA4 HiDef spec limit
         if (static_cast<int>(vertexBuffers.size()) > kMaxVertexBufferBindings)
             throw System::ArgumentOutOfRangeException(

@@ -1445,6 +1445,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // avoiding a heap allocation on every draw call once capacity has grown to fit.
         std::vector<std::uint8_t> userVertexScratch_;
         std::vector<std::uint8_t> userIndexScratch_;
+        void ThrowIfDisposed() const;
         [[nodiscard]] void* AcquireUserVertexScratch(std::size_t bytes);
         [[nodiscard]] void* AcquireUserIndexScratch(std::size_t bytes);
 

@@ -137,7 +137,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void RenderTarget2D::Dispose(bool disposing)
     {
-        if (!isDisposed_ && graphicsDevice_ != nullptr)
+        if (!isDisposed_ && graphicsDevice_ != nullptr &&
+            !graphicsDevice_->getIsDisposedProperty())
         {
             for (const auto& binding : graphicsDevice_->GetRenderTargets())
             {
