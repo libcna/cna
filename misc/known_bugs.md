@@ -165,11 +165,30 @@ print left in the sprite flush because the next person needs it too):
 ```
 
 Everything the renderer does is now right: the rasterizer viewport IS the letterbox rectangle and
-the projection IS the logical size. **The test's remaining failure is a readback question, not a
-raster one** — `GetBackBufferData` addresses the *logical* backbuffer by its own contract, and this
-test reads at *physical* coordinates (`box.x + box.width/2`). Those agree only when the two spaces
-coincide. Whether the test or the readback is wrong is the open question; do not "fix" the renderer
-to satisfy it without settling that first.
+the projection IS the logical size.
+
+**The remaining failure is the test's, and it is measured.** With `CNA_BACKBUFFER_READ_TRACE=1`:
+
+```
+[GFX-165] GetBackBufferData backbuffer=800x480 viewport=240x240 region=(400,240,1x1)
+```
+
+The back buffer is 800x480 while the renderer's logical size is 240x240 — a state **no game can
+produce**. `GraphicsDevice::SetVirtualResolution()` sets both the renderer's virtual resolution and
+`PresentationParameters.BackBufferWidth/Height` together, so in any real game the back buffer IS the
+logical surface. That is also the XNA-faithful reading: the back buffer is what the game asked for.
+This test bypasses it, calling `renderer.SetVirtualResolution()` directly because the device's own
+setter is private, and then reads physical drawable coordinates out of a back buffer a real game
+would have made 240x240.
+
+XNA cannot arbitrate between the two spaces, because it has no virtual resolution: its back buffer
+and its drawable are the same thing. Worth establishing rather than assuming — it is why the answer
+has to come from CNA's own contract instead.
+
+**So the correction belongs in the test, not in `GetBackBufferData`**: give it a way to set the
+virtual resolution through `GraphicsDevice` so the two stay in step, then read in back-buffer
+coordinates. Do not change the readback to satisfy an assertion built on a state the framework
+cannot reach.
 
 **A second, real defect is still open, and it is the one a user sees.** SAMPLE-077 at 960x800 now
 draws in the right place — the content moved from the drawable origin back to the letterbox
