@@ -454,6 +454,10 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
 - **Compiled numeric-array setters reject structures** (`SOFTWARE-269`) — bool, int and float
   arrays accept only reflected Scalar, Vector or Matrix classes, as Microsoft XNA does, rather
   than overwriting the raw backing cells of a Structure parameter.
+- **Compiled typed getters enforce reflected shape and conversion** (`SOFTWARE-270`) — scalar
+  reads convert float/int/bool storage instead of reinterpreting bits; scalar parameters broadcast
+  to vector, Quaternion and Matrix results; incompatible aggregate widths/classes and non-array
+  Matrix-array reads throw `InvalidCastException`, matching recovered Microsoft IL.
 - **The classic SpriteBatch/SpriteFont parity corpus executes on the CPU** (`SOFTWARE-138`).
   Eighteen renderer-independent scenes shared with EasyGL cover flips, rotation/origin, both scale
   overloads, source rectangles, layer sorting, transforms, render targets, viewports, scissor,

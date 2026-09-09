@@ -122,6 +122,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Gets the value of this parameter as a boolean.
          *
          * @return The boolean value stored in this parameter.
+         * @throws System::InvalidCastException If a reflected compiled parameter cannot be read
+         *         as a scalar value.
          */
         [[nodiscard]] bool GetValueBoolean() const;
 
@@ -138,6 +140,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Gets the value of this parameter as a 32-bit integer.
          *
          * @return The integer value stored in this parameter.
+         * @throws System::InvalidCastException If a reflected compiled parameter cannot be read
+         *         as a scalar value.
          */
         [[nodiscard]] int GetValueInt32() const;
 
@@ -154,6 +158,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Gets the value of this parameter as a single-precision float.
          *
          * @return The float value stored in this parameter.
+         * @throws System::InvalidCastException If a reflected compiled parameter cannot be read
+         *         as a scalar value.
          */
         [[nodiscard]] float GetValueSingle() const;
 
@@ -179,6 +185,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Gets the value as a Matrix by unpacking column-major effect storage.
          *
          * @return The Matrix value stored in this parameter.
+         * @throws System::InvalidCastException If a reflected compiled parameter is neither a
+         *         scalar nor a matrix-compatible value.
          */
         [[nodiscard]] Matrix GetValueMatrix() const;
 
@@ -188,6 +196,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param count Number of matrices to retrieve.
          * @return Vector of Matrix values.
          * @throws System::ArgumentOutOfRangeException If @p count is not positive.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a Matrix
+         *         array.
          */
         [[nodiscard]] std::vector<Matrix> GetValueMatrixArray(int count) const;
 
@@ -195,6 +205,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Gets the transposed value by reading effect storage in row-major order.
          *
          * @return The transposed Matrix value stored in this parameter.
+         * @throws System::InvalidCastException If a reflected compiled parameter is neither a
+         *         scalar nor a matrix-compatible value.
          */
         [[nodiscard]] Matrix GetValueMatrixTranspose() const;
 
@@ -204,6 +216,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param count Number of matrices to retrieve.
          * @return Vector of transposed Matrix values.
          * @throws System::ArgumentOutOfRangeException If @p count is not positive.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a Matrix
+         *         array.
          */
         [[nodiscard]] std::vector<Matrix> GetValueMatrixTransposeArray(int count) const;
 
@@ -211,6 +225,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Gets the value of this parameter as a Quaternion.
          *
          * @return The Quaternion value stored in this parameter.
+         * @throws System::InvalidCastException If a reflected compiled parameter cannot be read
+         *         as a four-component vector.
          */
         [[nodiscard]] Quaternion GetValueQuaternion() const;
 
@@ -227,6 +243,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Gets the value of this parameter as a Vector2.
          *
          * @return The Vector2 value stored in this parameter.
+         * @throws System::InvalidCastException If a reflected compiled parameter cannot be read
+         *         as a two-component vector.
          */
         [[nodiscard]] Vector2 GetValueVector2() const;
 
@@ -243,6 +261,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Gets the value of this parameter as a Vector3.
          *
          * @return The Vector3 value stored in this parameter.
+         * @throws System::InvalidCastException If a reflected compiled parameter cannot be read
+         *         as a three-component vector.
          */
         [[nodiscard]] Vector3 GetValueVector3() const;
 
@@ -259,6 +279,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Gets the value of this parameter as a Vector4.
          *
          * @return The Vector4 value stored in this parameter.
+         * @throws System::InvalidCastException If a reflected compiled parameter cannot be read
+         *         as a four-component vector.
          */
         [[nodiscard]] Vector4 GetValueVector4() const;
 
@@ -536,6 +558,13 @@ namespace Microsoft::Xna::Framework::Graphics
                                     std::size_t valueCount,
                                     bool enforceElementCount) const;
         void RequireCompiledNumericArrayClass() const;
+        void RequireCompiledScalarGetterShape() const;
+        [[nodiscard]] bool RequireCompiledVectorGetterShape(int columnCount) const;
+        [[nodiscard]] bool RequireCompiledMatrixGetterShape() const;
+        [[nodiscard]] int ReadCompiledNumericCellAsInt(
+            std::size_t relativeOffset = 0) const;
+        [[nodiscard]] float ReadCompiledNumericCellAsFloat(
+            std::size_t relativeOffset = 0) const;
         void SetCompiledScalarValue(float floatingValue, int integerValue,
                                     bool sourceIsInteger);
         void RequireTextureGetterParameter(EffectParameterType requestedType) const;

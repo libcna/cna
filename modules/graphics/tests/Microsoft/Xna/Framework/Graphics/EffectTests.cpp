@@ -478,6 +478,65 @@ TEST(EffectTest, CompiledNumericArraySettersRejectStructureParameters)
                  System::InvalidCastException);
 }
 
+TEST(EffectTest, CompiledTypedGettersValidateShapeBroadcastAndConvert)
+{
+    GraphicsDevice gd;
+    const auto bytes = LoadConformanceCompiledEffectFixture();
+    ASSERT_FALSE(bytes.empty());
+
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+    {
+        GTEST_SKIP() << "renderer does not execute compiled effects";
+    }
+
+    Effect effect(gd, bytes);
+    auto& parameters = effect.getParametersProperty();
+    auto* gain = parameters["Gain"];
+    auto* tint = parameters["Tint"];
+    auto* transform = parameters["Transform"];
+    auto* lighting = parameters["Lighting"];
+    ASSERT_NE(gain, nullptr);
+    ASSERT_NE(tint, nullptr);
+    ASSERT_NE(transform, nullptr);
+    ASSERT_NE(lighting, nullptr);
+
+    gain->SetValue(3.0f);
+    EXPECT_TRUE(gain->GetValueBoolean());
+    EXPECT_EQ(gain->GetValueInt32(), 3);
+    EXPECT_FLOAT_EQ(gain->GetValueSingle(), 3.0f);
+    EXPECT_EQ(gain->GetValueVector2(), Vector2(3.0f));
+    EXPECT_EQ(gain->GetValueVector3(), Vector3(3.0f));
+    EXPECT_EQ(gain->GetValueVector4(), Vector4(3.0f));
+    EXPECT_EQ(gain->GetValueQuaternion(), Quaternion(3.0f, 3.0f, 3.0f, 3.0f));
+    EXPECT_EQ(gain->GetValueMatrix(),
+              Matrix(3.0f, 3.0f, 3.0f, 3.0f,
+                     3.0f, 3.0f, 3.0f, 3.0f,
+                     3.0f, 3.0f, 3.0f, 3.0f,
+                     3.0f, 3.0f, 3.0f, 3.0f));
+
+    tint->SetValue(Vector4(1.0f, 2.0f, 3.0f, 4.0f));
+    EXPECT_EQ(tint->GetValueVector4(), Vector4(1.0f, 2.0f, 3.0f, 4.0f));
+    EXPECT_EQ(tint->GetValueQuaternion(), Quaternion(1.0f, 2.0f, 3.0f, 4.0f));
+    EXPECT_THROW((void) tint->GetValueBoolean(), System::InvalidCastException);
+    EXPECT_THROW((void) tint->GetValueInt32(), System::InvalidCastException);
+    EXPECT_THROW((void) tint->GetValueSingle(), System::InvalidCastException);
+    EXPECT_THROW((void) tint->GetValueVector2(), System::InvalidCastException);
+    EXPECT_THROW((void) tint->GetValueVector3(), System::InvalidCastException);
+    EXPECT_THROW((void) tint->GetValueMatrix(), System::InvalidCastException);
+
+    EXPECT_THROW((void) transform->GetValueVector4(), System::InvalidCastException);
+    EXPECT_THROW((void) transform->GetValueMatrixArray(1), System::InvalidCastException);
+    EXPECT_THROW((void) lighting->GetValueSingle(), System::InvalidCastException);
+
+    const auto stockBytes = LoadValidCompiledEffectFixture();
+    ASSERT_FALSE(stockBytes.empty());
+    Effect stock(gd, stockBytes);
+    auto* shaderIndex = stock.getParametersProperty()["ShaderIndex"];
+    ASSERT_NE(shaderIndex, nullptr);
+    shaderIndex->SetValue(7);
+    EXPECT_FLOAT_EQ(shaderIndex->GetValueSingle(), 7.0f);
+}
+
 TEST(EffectTest, AuthenticXna4EffectAcceptsRepeatedAndAuxiliaryObjectRecords)
 {
     GraphicsDevice gd;

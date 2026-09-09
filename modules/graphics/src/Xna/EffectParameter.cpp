@@ -144,7 +144,12 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         RequireNumericParameter("GetValueBoolean");
         if (compiledStorage_)
-            return ReadCell<int>(compiledStorage_->bytes, compiledByteOffset_) != 0;
+        {
+            RequireCompiledScalarGetterShape();
+            return paramType_ == EffectParameterType::Single
+                ? ReadCompiledNumericCellAsFloat() != 0.0f
+                : ReadCompiledNumericCellAsInt() != 0;
+        }
         return !intData_.empty() && intData_[0] != 0;
     }
     std::vector<bool> EffectParameter::GetValueBooleanArray(int count) const
@@ -175,7 +180,10 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         RequireNumericParameter("GetValueInt32");
         if (compiledStorage_)
-            return ReadCell<int>(compiledStorage_->bytes, compiledByteOffset_);
+        {
+            RequireCompiledScalarGetterShape();
+            return ReadCompiledNumericCellAsInt();
+        }
         return intData_.empty() ? 0 : intData_[0];
     }
     std::vector<int> EffectParameter::GetValueInt32Array(int count) const
@@ -205,7 +213,10 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         RequireNumericParameter("GetValueSingle");
         if (compiledStorage_)
-            return ReadCell<float>(compiledStorage_->bytes, compiledByteOffset_);
+        {
+            RequireCompiledScalarGetterShape();
+            return ReadCompiledNumericCellAsFloat();
+        }
         return floatData_.empty() ? 0.0f : floatData_[0];
     }
     std::vector<float> EffectParameter::GetValueSingleArray(int count) const
@@ -323,6 +334,52 @@ namespace Microsoft::Xna::Framework::Graphics
             throw System::InvalidCastException();
     }
 
+    void EffectParameter::RequireCompiledScalarGetterShape() const
+    {
+        if (paramClass_ != EffectParameterClass::Scalar &&
+            elements_->getCountProperty() == 0)
+            throw System::InvalidCastException();
+    }
+
+    bool EffectParameter::RequireCompiledVectorGetterShape(int columnCount) const
+    {
+        if (elements_->getCountProperty() != 0) return false;
+        if (paramClass_ == EffectParameterClass::Scalar) return true;
+        if (paramClass_ == EffectParameterClass::Vector && rowCount_ == 1 &&
+            columnCount_ == columnCount)
+            return false;
+        throw System::InvalidCastException();
+    }
+
+    bool EffectParameter::RequireCompiledMatrixGetterShape() const
+    {
+        if (elements_->getCountProperty() != 0) return false;
+        if (paramClass_ == EffectParameterClass::Scalar) return true;
+        if (paramClass_ == EffectParameterClass::Matrix) return false;
+        throw System::InvalidCastException();
+    }
+
+    int EffectParameter::ReadCompiledNumericCellAsInt(std::size_t relativeOffset) const
+    {
+        if (paramType_ == EffectParameterType::Single)
+            return static_cast<int>(ReadCell<float>(compiledStorage_->bytes,
+                                                    compiledByteOffset_ + relativeOffset));
+        if (paramType_ == EffectParameterType::Int32 || paramType_ == EffectParameterType::Bool)
+            return ReadCell<int>(compiledStorage_->bytes, compiledByteOffset_ + relativeOffset);
+        throw System::InvalidCastException();
+    }
+
+    float EffectParameter::ReadCompiledNumericCellAsFloat(std::size_t relativeOffset) const
+    {
+        if (paramType_ == EffectParameterType::Single)
+            return ReadCell<float>(compiledStorage_->bytes,
+                                   compiledByteOffset_ + relativeOffset);
+        if (paramType_ == EffectParameterType::Int32 || paramType_ == EffectParameterType::Bool)
+            return static_cast<float>(ReadCell<int>(compiledStorage_->bytes,
+                                                    compiledByteOffset_ + relativeOffset));
+        throw System::InvalidCastException();
+    }
+
     void EffectParameter::SetCompiledScalarValue(float floatingValue, int integerValue,
                                                  bool sourceIsInteger)
     {
@@ -414,8 +471,18 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         RequireNumericParameter("GetValueMatrix");
         if (compiledStorage_)
+        {
+            if (RequireCompiledMatrixGetterShape())
+            {
+                const float value = ReadCompiledNumericCellAsFloat();
+                return Matrix(value, value, value, value,
+                              value, value, value, value,
+                              value, value, value, value,
+                              value, value, value, value);
+            }
             return ReadCompiledMatrix(compiledStorage_->bytes, compiledByteOffset_,
                                       compiledByteSize_, rowCount_, columnCount_, false);
+        }
         if (floatData_.size() < 16) return Matrix::getIdentityProperty();
         return Matrix(floatData_[0], floatData_[4], floatData_[8],  floatData_[12],
                       floatData_[1], floatData_[5], floatData_[9],  floatData_[13],
@@ -428,6 +495,9 @@ namespace Microsoft::Xna::Framework::Graphics
         RequireNumericParameter("GetValueMatrixArray");
         if (compiledStorage_)
         {
+            if (paramClass_ != EffectParameterClass::Matrix ||
+                elements_->getCountProperty() == 0)
+                throw System::InvalidCastException();
             std::vector<Matrix> result;
             const std::size_t stride = static_cast<std::size_t>(std::max(rowCount_, 1)) * 16;
             for (int i = 0; i < count; ++i)
@@ -455,8 +525,18 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         RequireNumericParameter("GetValueMatrixTranspose");
         if (compiledStorage_)
+        {
+            if (RequireCompiledMatrixGetterShape())
+            {
+                const float value = ReadCompiledNumericCellAsFloat();
+                return Matrix(value, value, value, value,
+                              value, value, value, value,
+                              value, value, value, value,
+                              value, value, value, value);
+            }
             return ReadCompiledMatrix(compiledStorage_->bytes, compiledByteOffset_,
                                       compiledByteSize_, rowCount_, columnCount_, true);
+        }
         return Matrix::Transpose(GetValueMatrix());
     }
     std::vector<Matrix> EffectParameter::GetValueMatrixTransposeArray(int count) const
@@ -465,6 +545,9 @@ namespace Microsoft::Xna::Framework::Graphics
         RequireNumericParameter("GetValueMatrixTransposeArray");
         if (compiledStorage_)
         {
+            if (paramClass_ != EffectParameterClass::Matrix ||
+                elements_->getCountProperty() == 0)
+                throw System::InvalidCastException();
             std::vector<Matrix> result;
             const std::size_t stride = static_cast<std::size_t>(std::max(rowCount_, 1)) * 16;
             for (int i = 0; i < count; ++i)
@@ -486,11 +569,16 @@ namespace Microsoft::Xna::Framework::Graphics
         RequireNumericParameter("GetValueQuaternion");
         if (compiledStorage_)
         {
+            if (RequireCompiledVectorGetterShape(4))
+            {
+                const float value = ReadCompiledNumericCellAsFloat();
+                return {value, value, value, value};
+            }
             return {
-                ReadCell<float>(compiledStorage_->bytes, compiledByteOffset_),
-                ReadCell<float>(compiledStorage_->bytes, compiledByteOffset_ + 4),
-                ReadCell<float>(compiledStorage_->bytes, compiledByteOffset_ + 8),
-                ReadCell<float>(compiledStorage_->bytes, compiledByteOffset_ + 12, 1.0f)
+                ReadCompiledNumericCellAsFloat(),
+                ReadCompiledNumericCellAsFloat(4),
+                ReadCompiledNumericCellAsFloat(8),
+                ReadCompiledNumericCellAsFloat(12)
             };
         }
         if (floatData_.size() < 4) return {0.0f, 0.0f, 0.0f, 1.0f};
@@ -528,8 +616,14 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         RequireNumericParameter("GetValueVector2");
         if (compiledStorage_)
-            return {ReadCell<float>(compiledStorage_->bytes, compiledByteOffset_),
-                    ReadCell<float>(compiledStorage_->bytes, compiledByteOffset_ + 4)};
+        {
+            if (RequireCompiledVectorGetterShape(2))
+            {
+                const float value = ReadCompiledNumericCellAsFloat();
+                return {value, value};
+            }
+            return {ReadCompiledNumericCellAsFloat(), ReadCompiledNumericCellAsFloat(4)};
+        }
         if (floatData_.size() < 2) return {};
         return {floatData_[0], floatData_[1]};
     }
@@ -560,9 +654,15 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         RequireNumericParameter("GetValueVector3");
         if (compiledStorage_)
-            return {ReadCell<float>(compiledStorage_->bytes, compiledByteOffset_),
-                    ReadCell<float>(compiledStorage_->bytes, compiledByteOffset_ + 4),
-                    ReadCell<float>(compiledStorage_->bytes, compiledByteOffset_ + 8)};
+        {
+            if (RequireCompiledVectorGetterShape(3))
+            {
+                const float value = ReadCompiledNumericCellAsFloat();
+                return {value, value, value};
+            }
+            return {ReadCompiledNumericCellAsFloat(), ReadCompiledNumericCellAsFloat(4),
+                    ReadCompiledNumericCellAsFloat(8)};
+        }
         if (floatData_.size() < 3) return {};
         return {floatData_[0], floatData_[1], floatData_[2]};
     }
@@ -594,10 +694,15 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         RequireNumericParameter("GetValueVector4");
         if (compiledStorage_)
-            return {ReadCell<float>(compiledStorage_->bytes, compiledByteOffset_),
-                    ReadCell<float>(compiledStorage_->bytes, compiledByteOffset_ + 4),
-                    ReadCell<float>(compiledStorage_->bytes, compiledByteOffset_ + 8),
-                    ReadCell<float>(compiledStorage_->bytes, compiledByteOffset_ + 12, 1.0f)};
+        {
+            if (RequireCompiledVectorGetterShape(4))
+            {
+                const float value = ReadCompiledNumericCellAsFloat();
+                return {value, value, value, value};
+            }
+            return {ReadCompiledNumericCellAsFloat(), ReadCompiledNumericCellAsFloat(4),
+                    ReadCompiledNumericCellAsFloat(8), ReadCompiledNumericCellAsFloat(12)};
+        }
         if (floatData_.size() < 4) return {0.0f, 0.0f, 0.0f, 1.0f};
         return {floatData_[0], floatData_[1], floatData_[2], floatData_[3]};
     }

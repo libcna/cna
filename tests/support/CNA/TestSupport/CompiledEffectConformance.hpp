@@ -589,8 +589,10 @@ namespace CNA::TestSupport
         const std::vector<float> tintCells = parameters["Tint"]->GetValueSingleArray(4);
         ASSERT_EQ(tintCells.size(), 4u);
         EXPECT_FLOAT_EQ(tintCells[2], 3.0f);
-        EXPECT_FLOAT_EQ(parameters["Tint"]->GetValueVector2().Y, 2.0f);
-        EXPECT_FLOAT_EQ(parameters["Tint"]->GetValueVector3().Z, 3.0f);
+        EXPECT_THROW((void) parameters["Tint"]->GetValueVector2(),
+                     System::InvalidCastException);
+        EXPECT_THROW((void) parameters["Tint"]->GetValueVector3(),
+                     System::InvalidCastException);
 
         // Matrix. The transpose variants must round-trip through their own storage order, which is
         // the one place a packing mistake is invisible to the non-transposed getter.
