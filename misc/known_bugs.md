@@ -3,6 +3,9 @@
 Defects that are **measured and reproducible** but deliberately left unfixed, with the reason. A
 row leaves this file when it is fixed, or when it is disproved.
 
+Capabilities CNA simply does not have are **not** bugs and live in
+[`known_gaps.md`](known_gaps.md) beside this file.
+
 This is not a backlog of suspicions. Every entry names what was measured, against what reference,
 and what the correction would be — so picking one up is a matter of doing the work, not of
 rediscovering the problem.
