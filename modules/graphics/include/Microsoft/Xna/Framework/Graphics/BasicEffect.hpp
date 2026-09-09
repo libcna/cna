@@ -35,6 +35,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Creates a clone of this effect.
          *
          * @return Pointer to the cloned Effect.
+         * @throws System::ObjectDisposedException If this effect has been disposed.
          */
         [[nodiscard]] Effect* Clone() override;
 

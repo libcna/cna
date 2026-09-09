@@ -123,6 +123,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @return Owning pointer to the cloned effect, with the same concrete runtime type as
          * this object. Caller takes ownership.
+         * @throws System::ObjectDisposedException If this effect has been disposed.
          *
          * @note CNAEXT return-type deviation — FNA's Clone() returns a GC-managed Effect
          * reference; CNA has no garbage collector, so ownership is transferred to the caller
@@ -236,6 +237,13 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param disposing True if called from Dispose(); false if called from a finalizer.
          */
         void Dispose(bool disposing) override;
+
+        /**
+         * @brief Throws when this effect cannot be used as a clone source because it is disposed.
+         *
+         * @throws System::ObjectDisposedException If this effect has been disposed.
+         */
+        CNAEXT void ThrowIfDisposedForCloneInternal() const;
 
         /**
          * @brief Constructs an effect that is a clone of @p cloneSource.

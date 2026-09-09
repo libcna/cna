@@ -21,6 +21,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     Effect* SpriteEffect::Clone()
     {
+        ThrowIfDisposedForCloneInternal();
         return new SpriteEffect(*this);
     }
 

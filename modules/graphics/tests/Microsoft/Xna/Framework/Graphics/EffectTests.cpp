@@ -11,8 +11,15 @@
 #include <memory>
 
 #include "CNA/GraphicsCapability.hpp"
+#include "Microsoft/Xna/Framework/Graphics/AlphaTestEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectMaterial.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
@@ -134,7 +141,7 @@ namespace
         explicit TestEffect(GraphicsDevice& device) : Effect(device) {}
         TestEffect(GraphicsDevice& device, const std::vector<SharpRuntime::bytecs>& effectCode)
             : Effect(device, effectCode) {}
-        explicit TestEffect(const TestEffect& src) : Effect(src.getGraphicsDeviceInternal()) {}
+        explicit TestEffect(const TestEffect& src) : Effect(src) {}
 
         int applyCount = 0;
 
@@ -704,20 +711,40 @@ TEST(EffectTest, CloneGetsIndependentTechniqueNotAliasedToOriginal)
     EXPECT_EQ(fx.applyCount, 0);
 }
 
-TEST(EffectTest, CloneAfterDisposeDoesNotThrow)
+TEST(EffectTest, CloneAfterDisposeThrowsObjectDisposedException)
 {
-    // Unlike Apply() (which CNA deliberately guards with ObjectDisposedException,
-    // a documented safety improvement over FNA's UB), Clone() touches no renderer
-    // GPU handle at all in CNA's implementation — there is nothing for disposal
-    // to invalidate, so cloning a disposed effect is well-defined and safe.
-    // Matches every currently-shipped concrete Clone() (none of which guard on
-    // IsDisposed either); if a future Clone() implementation starts touching
-    // renderer state, this expectation should be revisited.
     GraphicsDevice gd;
     TestEffect fx(gd);
     fx.Dispose();
 
-    std::unique_ptr<Effect> clone;
-    EXPECT_NO_THROW(clone.reset(fx.Clone()));
-    EXPECT_NE(clone, nullptr);
+    EXPECT_THROW(std::unique_ptr<Effect>(fx.Clone()), System::ObjectDisposedException);
+}
+
+TEST(EffectTest, StockEffectClonesRejectDisposedSources)
+{
+    GraphicsDevice gd;
+    Microsoft::Xna::Framework::Graphics::AlphaTestEffect alphaTest(gd);
+    Microsoft::Xna::Framework::Graphics::BasicEffect basic(gd);
+    Microsoft::Xna::Framework::Graphics::DualTextureEffect dualTexture(gd);
+    Microsoft::Xna::Framework::Graphics::EnvironmentMapEffect environmentMap(gd);
+    Microsoft::Xna::Framework::Graphics::SkinnedEffect skinned(gd);
+    Microsoft::Xna::Framework::Graphics::SpriteEffect sprite(gd);
+    TestEffect materialSource(gd);
+    Microsoft::Xna::Framework::Graphics::EffectMaterial material(materialSource);
+
+    alphaTest.Dispose();
+    basic.Dispose();
+    dualTexture.Dispose();
+    environmentMap.Dispose();
+    skinned.Dispose();
+    sprite.Dispose();
+    material.Dispose();
+
+    EXPECT_THROW(std::unique_ptr<Effect>(alphaTest.Clone()), System::ObjectDisposedException);
+    EXPECT_THROW(std::unique_ptr<Effect>(basic.Clone()), System::ObjectDisposedException);
+    EXPECT_THROW(std::unique_ptr<Effect>(dualTexture.Clone()), System::ObjectDisposedException);
+    EXPECT_THROW(std::unique_ptr<Effect>(environmentMap.Clone()), System::ObjectDisposedException);
+    EXPECT_THROW(std::unique_ptr<Effect>(skinned.Clone()), System::ObjectDisposedException);
+    EXPECT_THROW(std::unique_ptr<Effect>(sprite.Clone()), System::ObjectDisposedException);
+    EXPECT_THROW(std::unique_ptr<Effect>(material.Clone()), System::ObjectDisposedException);
 }

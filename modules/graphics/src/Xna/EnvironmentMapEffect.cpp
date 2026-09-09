@@ -82,6 +82,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     Effect* EnvironmentMapEffect::Clone()
     {
+        ThrowIfDisposedForCloneInternal();
         return new EnvironmentMapEffect(*this);
     }
 

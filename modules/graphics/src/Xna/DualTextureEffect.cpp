@@ -62,6 +62,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     Effect* DualTextureEffect::Clone()
     {
+        ThrowIfDisposedForCloneInternal();
         return new DualTextureEffect(*this);
     }
 

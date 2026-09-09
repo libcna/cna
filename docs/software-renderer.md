@@ -416,6 +416,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
 - **`EffectPass.Apply` validates lifetime before technique membership** (`SOFTWARE-258`) — a
   disposed Effect consistently reports `ObjectDisposedException`, including when the requested
   pass is also outside the current technique.
+- **Disposed Effects cannot be clone sources** (`SOFTWARE-259`) — the base Effect clone paths,
+  every classic stock-effect override and EffectMaterial reject `Clone()` with
+  `ObjectDisposedException`, following Microsoft's clone-constructor lifetime check.
 - **The classic SpriteBatch/SpriteFont parity corpus executes on the CPU** (`SOFTWARE-138`).
   Eighteen renderer-independent scenes shared with EasyGL cover flips, rotation/origin, both scale
   overloads, source rectangles, layer sorting, transforms, render targets, viewports, scissor,

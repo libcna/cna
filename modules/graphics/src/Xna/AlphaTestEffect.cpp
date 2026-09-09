@@ -60,6 +60,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     Effect* AlphaTestEffect::Clone()
     {
+        ThrowIfDisposedForCloneInternal();
         return new AlphaTestEffect(*this);
     }
 

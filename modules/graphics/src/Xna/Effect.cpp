@@ -845,6 +845,7 @@ namespace Microsoft::Xna::Framework::Graphics
         : GraphicsResource(cloneSource.device_)
         , device_(cloneSource.device_)
     {
+        cloneSource.ThrowIfDisposedForCloneInternal();
         if (!cloneSource.compiledRuntime_)
         {
             // A source with no compiled runtime -- a stock effect, or one built by the
@@ -901,6 +902,12 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
     GraphicsDevice& Effect::getGraphicsDeviceInternal() const { return *device_; }
+
+    void Effect::ThrowIfDisposedForCloneInternal() const
+    {
+        if (isDisposed_)
+            throw System::ObjectDisposedException(getNameProperty());
+    }
 
     EffectTechnique* Effect::getCurrentTechniqueProperty() const { return currentTechnique_; }
 
@@ -1030,6 +1037,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     Effect* Effect::Clone()
     {
+        ThrowIfDisposedForCloneInternal();
         if (!compiledRuntime_)
         {
             return new Effect(*device_);

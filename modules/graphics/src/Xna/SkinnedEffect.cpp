@@ -96,6 +96,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     Effect* SkinnedEffect::Clone()
     {
+        ThrowIfDisposedForCloneInternal();
         return new SkinnedEffect(*this);
     }
 
