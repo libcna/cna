@@ -229,8 +229,8 @@ namespace Microsoft::Xna::Framework::Graphics
             CompareFunction depthBufferFunction = CompareFunction::LessEqual;
             bool stencilEnable = false;
             CompareFunction stencilFunction = CompareFunction::Always;
-            int stencilMask = 0x7FFFFFFF;
-            int stencilWriteMask = 0x7FFFFFFF;
+            int stencilMask = -1;
+            int stencilWriteMask = -1;
             int referenceStencil = 0;
             StencilOperation stencilFail = StencilOperation::Keep;
             StencilOperation stencilDepthBufferFail = StencilOperation::Keep;
