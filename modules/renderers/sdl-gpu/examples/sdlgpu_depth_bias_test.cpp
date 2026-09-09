@@ -7,7 +7,7 @@
 // FillRasterizerState omitted them. Every queued draw therefore replayed through the same
 // zero-bias native pipeline.
 //
-// This is deliberately a public rendering regression first: moderately sized factors and exact
+// This is deliberately a public rendering regression first: normalized XNA factors and exact
 // or near-coplanar, distinct-colour geometry make the depth winner deterministic. It does not use
 // the old Vulkan -1e6 flat-bias llvmpipe diagnostic as its oracle. Cache-cardinality checks then
 // prove that each genuinely static SDL_GPU state gets exactly one reusable pipeline, while
@@ -68,10 +68,11 @@ namespace
     constexpr int kTargetWidth = 96;
     constexpr int kTargetHeight = 72;
 
-    // On the preferred D24 target, 4096 r-units is about 0.000244 of normalized depth: comfortably
-    // observable for exact-coplanar tests without being an extreme clamp-to-an-endpoint value.
+    // XNA expresses the constant in normalized depth, not native rasterizer r-units. This value is
+    // deliberately large enough to separate nearby surfaces without clipping either endpoint.
+    // Passing it straight to the native API (the pre-SDLGPU-65 bug) is many orders of magnitude too small.
     // A slope factor of 2 acts on a real ~0.007/pixel screen-depth slope in this small target.
-    constexpr float kConstantBias = 4096.0f;
+    constexpr float kConstantBias = 0.0005f;
     constexpr float kSlopeBias = 2.0f;
 
     const Color kRed(255, 0, 0, 255);
@@ -117,7 +118,7 @@ namespace
 
     const char* kCustomVertexSource = R"GLSL(
 #version 450
-layout(location = 0) in vec2 inPos;
+layout(location = 0) in vec3 inPos;
 layout(location = 1) in vec2 inUV;
 layout(location = 2) in vec4 inColor;
 layout(location = 0) out vec2 fragUV;
@@ -128,8 +129,8 @@ layout(set = 1, binding = 0) uniform PC {
     vec4 slot0_pad;
 } pc;
 void main() {
-    vec2 ndc = (inPos / pc.vpSize_pad.xy) * 2.0 - 1.0;
-    gl_Position = vec4(ndc.x, -ndc.y, 0.0, 1.0);
+    vec2 ndc = (inPos.xy / pc.vpSize_pad.xy) * 2.0 - 1.0;
+    gl_Position = vec4(ndc.x, -ndc.y, inPos.z, 1.0);
     fragUV = inUV;
 }
 )GLSL";
@@ -154,6 +155,7 @@ void main() {
 class SdlGpuDepthBiasTest final : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> graphics_;
+    std::unique_ptr<Texture2D> redTexture_;
     std::unique_ptr<Texture2D> greenTexture_;
     std::unique_ptr<ShaderEffect> customEffect_;
     int frame_ = 0;
@@ -320,13 +322,15 @@ class SdlGpuDepthBiasTest final : public Game
     Color RenderSprite(
         GraphicsDevice& device, RenderTarget2D& target,
         const RasterizerState& spriteRasterizer,
-        Microsoft::Xna::Framework::Graphics::Effect* customEffect = nullptr)
+        Microsoft::Xna::Framework::Graphics::Effect* customEffect = nullptr,
+        float referenceDepth = 0.5f,
+        float layerDepth = 0.0f)
     {
         BeginTarget(device, target, DepthStencilState::Default);
         device.setRasterizerStateProperty(BiasState(0.0f, 0.0f));
-        // Stock/custom sprite shaders emit clip-space z=0. Use the same reference depth here;
-        // only positive bias is asserted for SpriteBatch, so near-plane clamping is irrelevant.
-        DrawTriangle(device, false, kRed, /*indexed=*/false, /*flatDepth=*/0.0f);
+        DrawTriangle(
+            device, false, kRed,
+            /*indexed=*/false, referenceDepth);
 
         SpriteBatch sprites(device);
         SamplerState point = SamplerState::PointClamp;
@@ -339,7 +343,37 @@ class SdlGpuDepthBiasTest final : public Game
             *greenTexture_,
             Rectangle(0, 0, target.getWidthProperty(), target.getHeightProperty()),
             Rectangle(0, 0, 1, 1),
-            Color::White);
+            Color::White, 0.0f, Vector2::Zero,
+            SpriteEffects::None, layerDepth);
+        sprites.End();
+
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        return ReadCenter(target);
+    }
+
+    Color RenderSpritePair(
+        GraphicsDevice& device, RenderTarget2D& target,
+        const RasterizerState& secondRasterizer,
+        const Matrix& transform)
+    {
+        BeginTarget(device, target, DepthStencilState::Default);
+        SamplerState point = SamplerState::PointClamp;
+        DepthStencilState depth = DepthStencilState::Default;
+        const RasterizerState zero = BiasState(0.0f, 0.0f);
+        const Rectangle destination(
+            0, 0, target.getWidthProperty(), target.getHeightProperty());
+        const Rectangle source(0, 0, 1, 1);
+
+        SpriteBatch sprites(device);
+        sprites.Begin(
+            SpriteSortMode::Immediate, BlendState::Opaque, &point,
+            &depth, &zero, nullptr, transform);
+        sprites.Draw(*redTexture_, destination, source, Color::White);
+        sprites.End();
+        sprites.Begin(
+            SpriteSortMode::Immediate, BlendState::Opaque, &point,
+            &depth, &secondRasterizer, nullptr, transform);
+        sprites.Draw(*greenTexture_, destination, source, Color::White);
         sprites.End();
 
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
@@ -612,18 +646,64 @@ class SdlGpuDepthBiasTest final : public Game
             "stock SpriteBatch positive bias creates one enabled-bias variant");
 
         Check(
+            IsRed(RenderSprite(
+                device, target, zero, nullptr,
+                /*referenceDepth=*/0.49975f)),
+            "stock SpriteBatch zero bias stays behind nearer geometry");
+        Check(
+            IsGreen(RenderSprite(
+                device, target, negativeConstant, nullptr,
+                /*referenceDepth=*/0.49975f)),
+            "stock SpriteBatch negative constant bias pulls its triangles forward");
+        Check(
+            renderer.GetSpritePipelineCacheSizeEXT() == 3,
+            "stock SpriteBatch negative bias creates one enabled-bias variant");
+
+        Check(
             IsGreen(RenderSprite(device, target, zero)),
             "stock SpriteBatch A->B->A restores zero bias");
         Check(
-            renderer.GetSpritePipelineCacheSizeEXT() == 2,
-            "stock SpriteBatch A->B->A reuses both variants");
+            renderer.GetSpritePipelineCacheSizeEXT() == 3,
+            "stock SpriteBatch A->B->A reuses its existing variants");
 
         Check(
             IsGreen(RenderSprite(device, target, positiveSlope)),
             "stock SpriteBatch flat triangles get zero slope contribution");
         Check(
-            renderer.GetSpritePipelineCacheSizeEXT() == 3,
+            renderer.GetSpritePipelineCacheSizeEXT() == 4,
             "stock SpriteBatch slope-only state adds one legitimate variant");
+
+        Check(
+            IsRed(RenderSprite(device, target, combined)),
+            "stock SpriteBatch combined positive constant+slope bias moves a flat sprite away");
+        Check(
+            renderer.GetSpritePipelineCacheSizeEXT() == 5,
+            "stock SpriteBatch combined bias adds one legitimate variant");
+
+        Check(
+            IsRed(RenderSprite(
+                device, target, zero, nullptr,
+                /*referenceDepth=*/0.1f,
+                /*layerDepth=*/0.5f)),
+            "SpriteBatch layerDepth is projected instead of hardcoded to the near plane");
+
+        Matrix slopedSpriteTransform = Matrix::getIdentityProperty();
+        slopedSpriteTransform.M13 = 0.0025f;
+        Check(
+            IsRed(RenderSpritePair(
+                device, target, positiveSlope, slopedSpriteTransform)),
+            "stock SpriteBatch positive slope bias pushes a sloped sprite away");
+        Check(
+            IsGreen(RenderSpritePair(
+                device, target, negativeSlope, slopedSpriteTransform)),
+            "stock SpriteBatch negative slope bias pulls a sloped sprite forward");
+        Check(
+            IsRed(RenderSpritePair(
+                device, target, combined, slopedSpriteTransform)),
+            "stock SpriteBatch combined bias pushes a sloped sprite away");
+        Check(
+            renderer.GetSpritePipelineCacheSizeEXT() == 6,
+            "sloped SpriteBatch cases reuse all but the new negative-slope variant");
 
         Check(
             customEffect_->IsEffectValid(),
@@ -678,6 +758,10 @@ protected:
     void LoadContent() override
     {
         auto& device = getGraphicsDeviceProperty();
+        redTexture_ = std::make_unique<Texture2D>(
+            Texture2D::CreateFromPixels(
+                device, 1, 1,
+                std::vector<std::uint8_t>{255, 0, 0, 255}));
         greenTexture_ = std::make_unique<Texture2D>(
             Texture2D::CreateFromPixels(
                 device, 1, 1,

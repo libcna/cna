@@ -1,6 +1,6 @@
 #version 450
 
-layout(location = 0) in vec2 inPos;
+layout(location = 0) in vec3 inPos;
 layout(location = 1) in vec2 inUV;
 layout(location = 2) in vec4 inColor;
 
@@ -19,8 +19,8 @@ void main() {
     // clip-space Y internally so shaders present a consistent cross-renderer NDC convention
     // (confirmed empirically: without this negation, a texture's top row renders at the bottom
     // of the sprite) -- negate Y here to cancel that out and keep pixel-space Y-down semantics.
-    vec2 ndc = (inPos / ubo.viewportSize) * 2.0 - 1.0;
-    gl_Position = vec4(ndc.x, -ndc.y, 0.0, 1.0);
+    vec2 ndc = (inPos.xy / ubo.viewportSize) * 2.0 - 1.0;
+    gl_Position = vec4(ndc.x, -ndc.y, inPos.z, 1.0);
     fragUV = inUV;
     fragColor = inColor;
 }

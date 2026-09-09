@@ -4,7 +4,7 @@
 > REACHED.** The current renderer is a substantial, real Vulkan-backed implementation, but live
 > source and pixel tests demonstrate ordinary-XNA gaps in semantic vertex declarations,
 > instancing/multiple streams, wireframe, texture/render-target formats, independent MRT outputs,
-> sampler propagation, SpriteBatch depth bias and cube-face command ordering. The inherited
+> sampler propagation and cube-face command ordering. The inherited
 > capability default also advertises features SDL GPU does not implement. This verdict supersedes
 > historical completion banners below; those remain as implementation history, not current truth.
 
@@ -22,7 +22,7 @@
 | SDL GPU registered integration tests | 85 CTests before parity-fixture registration |
 | Shared EasyGL parity fixtures available | 30 renderer-neutral sources in `modules/graphics/examples/parity` |
 | Tasks created by this audit | 28 (`SDLGPU-55`–`SDLGPU-82`) |
-| Completed / open / proven unavoidable | 3 / 25 / 0; `SDLGPU-80` is a candidate limitation, not yet counted complete |
+| Completed / open / proven unavoidable | 4 / 24 / 0; `SDLGPU-80` is a candidate limitation, not yet counted complete |
 | SDL GPU build | Stable `cmake-build-sdlgpu`, Debug, `CNA_GRAPHICS_RENDERER=SDL_GPU`, tests/examples ON |
 | EasyGL oracle build | Stable `cmake-build-debug`, Debug, `CNA_GRAPHICS_RENDERER=OPENGL33`, tests/examples ON |
 | Runtime driver | SDL 3.5.0 SDL_gpu Vulkan on AMD Radeon 780M / Mesa RADV 25.0.7; Khronos validation layer 1.4.309 present |
@@ -45,7 +45,8 @@ hidden:
 2. `SdlGpu_SkinnedEffect_Fog`: classic `SkinnedEffect` legs pass; only CNAEXT `PbrEffect` and
    `SkinnedPbrEffect` half-fog expectations fail. This is recorded as an existing out-of-scope
    regression and must not be worsened.
-3. `SdlGpu_DepthBias`: 56/57; the SpriteBatch positive-bias discriminator fails (`SDLGPU-65`).
+3. `SdlGpu_DepthBias`: the initial 56/57 SpriteBatch positive-bias failure is resolved by
+   `SDLGPU-65`; the expanded test is now 67/67.
 4. `SdlGpu_StockEffectSamplerContract` and `SdlGpu_DualTextureSlotSamplerContract`: the valid
    stride-28 independent-UV declaration is refused, then fixture unwinding reaches `Present` with
    an RT bound (`SDLGPU-59`; cleanup robustness is part of the oracle fix).
@@ -85,7 +86,7 @@ underlying limitation with no correct reasonable emulation; `out` excluded moder
 | Stencil masks/ops/two-sided/reference | Full front/back state | Full descriptor and dynamic reference | `~` — shared exhaustive oracle/cache A→B→A pending; `SDLGPU-58` |
 | Cull/scissor/viewport/depth range | Full GL state | Deferred snapshots, most targeted tests pass | `~` — shared cross-renderer oracle pending; `SDLGPU-58`, `68` |
 | FillMode.WireFrame | Renderer-side triangle-edge expansion | Accepted through inherited capability but no implementation | `∅` — feasible renderer-side emulation; `SDLGPU-61` |
-| Constant/slope depth bias | GL polygon offset | Pipeline-static SDL GPU bias | `≠` for SpriteBatch; `SDLGPU-65` |
+| Constant/slope depth bias | GL polygon offset with XNA normalization | Per-format normalized-to-native conversion in every immutable pipeline; SpriteBatch uses projected layer depth | `=` — expanded 67/67 pixel/cache oracle, validation clean; `SDLGPU-65` |
 | Sampler filter/address/anisotropy | All stock/effect slots | Descriptor key contains them | `≠` — capacity and propagation failures; `SDLGPU-63`, `64` |
 | MaxMipLevel/LOD bias/AddressW | Applied on ordinary draws | cached, but stock commands omit MaxMipLevel/LOD bias and volume AddressW | `≠`; `SDLGPU-64` |
 | Texture2D Color/mips/partial/NPOT/readback | Real upload + CPU/GPU read paths | Real RGBA8 upload; shared CPU shadow; authored mips | `=` for Color baseline; lifecycle sweep `SDLGPU-69`, `81` |
@@ -326,7 +327,7 @@ underlying API limitation proven after reasonable emulation analysis.
 - **Acceptance/test:** shared filter/max-mip/LOD-bias/sprite-state fixtures plus AddressU/V/W and
   anisotropy slot tests yield deliberately different mip/edge colors.
 
-### SDLGPU-65 — honor SpriteBatch depth and slope bias ⬜
+### SDLGPU-65 — honor SpriteBatch depth and slope bias ✅
 
 - **Problem/public behavior:** SpriteBatch under a positive depth bias fails to move behind the
   reference geometry.
@@ -334,6 +335,20 @@ underlying API limitation proven after reasonable emulation analysis.
 - **Location:** sprite pipeline key/descriptor depth-bias fields.
 - **Acceptance/test:** positive, negative, slope and combined sprite cases pass against coplanar and
   sloped geometry, target-format A→B→A, validation clean.
+- **Result (2026-09-09):** accepted for every currently supported depth attachment. FNA3D's own
+  SDL_gpu driver showed the missing semantic conversion: XNA supplies normalized depth, while
+  SDL_gpu consumes native r-units (`D16: 2^16−1`, `D24: 2^24−1`, `D32F: 2^23−1`). Every SDL GPU
+  pipeline now converts against its actual depth format, includes the converted value in immutable
+  cache identity, and explicitly enables XNA depth clipping. Sprite vertices now carry their
+  projected `layerDepth` (`0.5 - depth/2`) instead of the old hard-coded near-plane Z=0. The
+  discriminators use a normalized `0.0005` constant that would be ineffective if passed through,
+  and cover positive/negative/combined bias, flat slope, A→B→A, deferred state lifetime and
+  nonzero layer depth and positive/negative/combined bias on a public transform-created sloped
+  sprite. Incremental build succeeded; `SdlGpu_DepthBias` passes 67/67 on Vulkan/D32F
+  with validation enabled. Focused `SdlGpu_Smoke`, `SdlGpu_2D`, `SdlGpu_3D`, and
+  `SdlGpu_ShaderEffect` regressions also pass. Cross-format A→B→A remains assigned to the format
+  tasks because this baseline exposes only D32F/S8 and SDL GPU does not yet create other requested
+  depth formats.
 
 ### SDLGPU-66 — isolate ordered clears and draws per cube face ⬜
 

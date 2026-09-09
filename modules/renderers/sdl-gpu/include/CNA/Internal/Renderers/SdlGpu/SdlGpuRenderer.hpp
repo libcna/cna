@@ -831,7 +831,7 @@ namespace CNA::Internal::Renderers::SdlGpu
      *
      * Fixed vertex contract, matching every other renderer's own custom-`ShaderEffect` convention
      * (`VulkanEffectRenderer`/`D3D11EffectRenderer`/`D3D12EffectRenderer`): `SpriteVertex`-shaped
-     * (pos `vec2` @0, uv `vec2` @8, color `vec4` @16, 32 bytes) -- a `SpriteBatch`-custom-shader
+     * (pos `vec3` @0, uv `vec2` @12, color `vec4` @20, 36 bytes) -- a `SpriteBatch`-custom-shader
      * facility, not a general arbitrary-vertex-format one (see
      * `ISpriteBatchRenderer::SetCustomEffect`'s own doc comment).
      *
@@ -1023,10 +1023,10 @@ namespace CNA::Internal::Renderers::SdlGpu
         friend struct SdlGpuSampledTextureState;
         friend class SdlGpuEffectRenderer;
     public:
-        /** @brief Vertex layout for the `sprite2d` pipeline: position, UV, RGBA color (32 bytes). */
+        /** @brief Vertex layout for the `sprite2d` pipeline: 3D position, UV, RGBA color (36 bytes). */
         struct SpriteVertex
         {
-            float x, y;
+            float x, y, z;
             float u, v;
             float r, g, b, a;
         };
