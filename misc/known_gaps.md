@@ -62,3 +62,32 @@ equally unusable, because CNA has no importer for the format.
 **Closing it** means a processor that takes an image, splits glyphs on the marker colour, and emits
 the same `SpriteFont` the description route already emits. The runtime side needs nothing: the
 `SpriteFont` it would produce is the one CNA already loads.
+
+---
+
+## 3. `IntermediateSerializer` XML is read for exactly one schema
+
+**Found:** 2026-09-09, through SAMPLE-093 (CurveEditor).
+
+XNA's content pipeline can take a `.xml` source asset in `IntermediateSerializer` form — an
+`<XnaContent><Asset Type="...">` document — and import **any** type it names. That is how a project
+ships hand-authored or tool-authored content: a `Curve`, a level description, a custom data class.
+
+CNA reads that envelope for **one** asset type. `ParseFontDescription`
+(`modules/content-pipeline/src/SpriteFontContentPipeline.cpp:115`) checks the root really is
+`XnaContent`, finds `<Asset>`, and then requires its `Type` attribute to be a font description,
+reading `<Size>`, `<Style>` and the character regions by hand. It is a bespoke parser for the
+`.spritefont` schema, not a reader of the format.
+
+There is no `IntermediateSerializer` anywhere else in the tree: the name appears once, in a comment
+in `ReflectiveTypeReader.hpp` explaining why XNB field order is what it is.
+
+**What that costs.** Every `.xml` content asset that is not a `.spritefont` is unimportable, whatever
+produced it. SAMPLE-093's editor round-trips `IntermediateSerializer<Curve>` XML with keys,
+tangents, continuity and loop types — CNA has the whole `Curve` type family and loads curves happily
+from **XNB**, so only the authoring format is missing, not the runtime.
+
+**Closing it** means a general reader over the envelope CNA already parses, dispatching on the
+`Type` attribute the way `ReflectiveTypeReader` already dispatches for XNB. The two would then agree
+on one type table.
+
