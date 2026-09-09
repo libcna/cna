@@ -315,6 +315,55 @@ namespace Microsoft::Xna::Framework::Graphics
             throw System::InvalidCastException();
     }
 
+    void EffectParameter::SetCompiledScalarValue(float floatingValue, int integerValue,
+                                                 bool sourceIsInteger)
+    {
+        if (elements_->getCountProperty() != 0)
+            throw System::InvalidCastException();
+
+        int rows = 1;
+        int columns = 1;
+        if (paramClass_ == EffectParameterClass::Vector)
+        {
+            if (rowCount_ != 1 || columnCount_ < 2 || columnCount_ > 4)
+                throw System::InvalidCastException();
+            columns = columnCount_;
+        }
+        else if (paramClass_ == EffectParameterClass::Matrix)
+        {
+            if (rowCount_ < 1 || rowCount_ > 4 || columnCount_ < 1 || columnCount_ > 4)
+                throw System::InvalidCastException();
+            rows = rowCount_;
+            columns = columnCount_;
+        }
+        else if (paramClass_ != EffectParameterClass::Scalar)
+        {
+            throw System::InvalidCastException();
+        }
+
+        const bool storesFloat = paramType_ == EffectParameterType::Single;
+        if (!storesFloat && paramType_ != EffectParameterType::Int32 &&
+            paramType_ != EffectParameterType::Bool)
+            throw System::InvalidCastException();
+
+        const int convertedInteger = sourceIsInteger
+            ? integerValue : static_cast<int>(floatingValue);
+        bool wrote = false;
+        for (int row = 0; row < rows; ++row)
+        {
+            for (int column = 0; column < columns; ++column)
+            {
+                const std::size_t offset = compiledByteOffset_ +
+                    static_cast<std::size_t>(row) * 16u +
+                    static_cast<std::size_t>(column) * 4u;
+                wrote |= storesFloat
+                    ? WriteCell(compiledStorage_->bytes, offset, floatingValue)
+                    : WriteCell(compiledStorage_->bytes, offset, convertedInteger);
+            }
+        }
+        if (wrote) compiledStorage_->dirty = true;
+    }
+
     void EffectParameter::RequireTextureGetterParameter(EffectParameterType requestedType) const
     {
         if (paramType_ == EffectParameterType::Texture || paramType_ == requestedType) return;
@@ -595,8 +644,7 @@ namespace Microsoft::Xna::Framework::Graphics
         if (compiledStorage_)
         {
             const int cell = value ? 1 : 0;
-            if (WriteCell(compiledStorage_->bytes, compiledByteOffset_, cell))
-                compiledStorage_->dirty = true;
+            SetCompiledScalarValue(static_cast<float>(cell), cell, true);
             return;
         }
         intData_ = {value ? 1 : 0};
@@ -626,10 +674,7 @@ namespace Microsoft::Xna::Framework::Graphics
         RequireNumericParameter("SetValue(int)");
         if (compiledStorage_)
         {
-            const bool wrote = paramType_ == EffectParameterType::Single
-                ? WriteCell(compiledStorage_->bytes, compiledByteOffset_, static_cast<float>(value))
-                : WriteCell(compiledStorage_->bytes, compiledByteOffset_, value);
-            if (wrote) compiledStorage_->dirty = true;
+            SetCompiledScalarValue(static_cast<float>(value), value, true);
             return;
         }
         intData_ = {value};
@@ -657,8 +702,7 @@ namespace Microsoft::Xna::Framework::Graphics
         RequireNumericParameter("SetValue(float)");
         if (compiledStorage_)
         {
-            if (WriteCell(compiledStorage_->bytes, compiledByteOffset_, value))
-                compiledStorage_->dirty = true;
+            SetCompiledScalarValue(value, 0, false);
             return;
         }
         floatData_ = {value};

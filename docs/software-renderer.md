@@ -447,6 +447,10 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   Vector2/3/4 and Quaternion scalar/array overloads reject incompatible class, dimensions and
   scalar-versus-array use exactly where recovered Microsoft IL does. The corrected synthetic
   fixture also matches fxc/FNA reflection for ordinary versus array structure members.
+- **Compiled scalar EffectParameter setters broadcast by reflected shape** (`SOFTWARE-268`) — the
+  bool, int and float overloads reject array parents and broadcast their converted value across
+  every reflected vector or matrix component, matching recovered Microsoft XNA behavior instead
+  of changing only the first register cell. Standalone CNA/C API parameters remain lenient.
 - **The classic SpriteBatch/SpriteFont parity corpus executes on the CPU** (`SOFTWARE-138`).
   Eighteen renderer-independent scenes shared with EasyGL cover flips, rotation/origin, both scale
   overloads, source rectangles, layer sorting, transforms, render targets, viewports, scissor,

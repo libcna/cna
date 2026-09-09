@@ -416,6 +416,45 @@ TEST(EffectTest, CompiledTypedValueSettersValidateReflectedShape)
                  System::InvalidCastException);
 }
 
+TEST(EffectTest, CompiledScalarSettersBroadcastAndRejectArrayParents)
+{
+    GraphicsDevice gd;
+    const auto bytes = LoadConformanceCompiledEffectFixture();
+    ASSERT_FALSE(bytes.empty());
+
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+    {
+        GTEST_SKIP() << "renderer does not execute compiled effects";
+    }
+
+    Effect effect(gd, bytes);
+    auto& parameters = effect.getParametersProperty();
+    auto* tint = parameters["Tint"];
+    auto* transform = parameters["Transform"];
+    auto* weights = parameters["Weights"];
+    ASSERT_NE(tint, nullptr);
+    ASSERT_NE(transform, nullptr);
+    ASSERT_NE(weights, nullptr);
+
+    tint->SetValue(0.25f);
+    EXPECT_EQ(tint->GetValueVector4(), Vector4(0.25f));
+    tint->SetValue(3);
+    EXPECT_EQ(tint->GetValueVector4(), Vector4(3.0f));
+    tint->SetValue(true);
+    EXPECT_EQ(tint->GetValueVector4(), Vector4::One);
+
+    transform->SetValue(2.0f);
+    const Matrix two = transform->GetValueMatrix();
+    EXPECT_EQ(two, Matrix(2.0f, 2.0f, 2.0f, 2.0f,
+                          2.0f, 2.0f, 2.0f, 2.0f,
+                          2.0f, 2.0f, 2.0f, 2.0f,
+                          2.0f, 2.0f, 2.0f, 2.0f));
+
+    EXPECT_THROW(weights->SetValue(1.0f), System::InvalidCastException);
+    EXPECT_THROW(weights->SetValue(1), System::InvalidCastException);
+    EXPECT_THROW(weights->SetValue(true), System::InvalidCastException);
+}
+
 TEST(EffectTest, AuthenticXna4EffectAcceptsRepeatedAndAuxiliaryObjectRecords)
 {
     GraphicsDevice gd;

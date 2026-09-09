@@ -1344,6 +1344,7 @@ pass. That is the line `CompiledEffects == true` is a promise about.
 | `EffectParameter` texture access through an incompatible reflected type | Was **Case 1**, shared layer; **closed** -- dimension getters accept generic `Texture` or their exact dimension and the base setter accepts only texture types, otherwise `InvalidCastException` | works | works | works | `SOFTWARE-264` |
 | `EffectParameter.SetValue(Texture)` with a disposed texture or active render target | Was **Case 1**, shared layer; **closed** -- compiled parameters reject the resource before reflected-type validation with XNA's `ObjectDisposedException`/`InvalidOperationException` precedence | works | works | works | `SOFTWARE-266` |
 | Typed Matrix/Vector/Quaternion setters on a mismatched reflected shape | Was **Case 1**, shared layer; **closed** -- compiled parameters validate class, dimensions and scalar/array shape before mutation with XNA's `InvalidCastException` | works | works | works | `SOFTWARE-267` |
+| Scalar bool/int/float setter on a compiled Vector, Matrix or array parent | Was **Case 1**, shared layer; **closed** -- scalar sources broadcast across every Vector/Matrix component after reflected-type conversion, while array parents and incompatible classes/types throw `InvalidCastException` | works | works | works | `SOFTWARE-268` |
 
 ## 11. Recommended critical path
 

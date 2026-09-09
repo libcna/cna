@@ -304,6 +304,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the value of this parameter from a boolean.
          *
          * @param value The boolean value to store.
+         * @throws System::InvalidCastException If a reflected compiled parameter is an array or
+         *         cannot receive a scalar value.
          */
         void SetValue(bool value);
 
@@ -318,6 +320,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the value of this parameter from a 32-bit integer.
          *
          * @param value The integer value to store.
+         * @throws System::InvalidCastException If a reflected compiled parameter is an array or
+         *         cannot receive a scalar value.
          */
         void SetValue(int value);
 
@@ -332,6 +336,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the value of this parameter from a single-precision float.
          *
          * @param value The float value to store.
+         * @throws System::InvalidCastException If a reflected compiled parameter is an array or
+         *         cannot receive a scalar value.
          */
         void SetValue(float value);
 
@@ -526,6 +532,8 @@ namespace Microsoft::Xna::Framework::Graphics
         void RequireArrayValueShape(EffectParameterClass parameterClass,
                                     std::size_t valueCount,
                                     bool enforceElementCount) const;
+        void SetCompiledScalarValue(float floatingValue, int integerValue,
+                                    bool sourceIsInteger);
         void RequireTextureGetterParameter(EffectParameterType requestedType) const;
         void RequireTextureSetterParameter() const;
         void RequireTextureValueUsable(Texture* value) const;
