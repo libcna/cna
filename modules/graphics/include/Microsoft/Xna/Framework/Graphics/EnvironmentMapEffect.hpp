@@ -152,6 +152,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets whether per-vertex lighting is enabled.
          *
          * @param value True to enable lighting.
+         * @throws System::NotSupportedException If @p value is false because this effect requires lighting.
          */
         void setLightingEnabledProperty(bool value) override;
 

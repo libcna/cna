@@ -9,7 +9,7 @@
 #include <gtest/gtest.h>
 
 #include <memory>
-#include <stdexcept>
+#include <typeinfo>
 #include <vector>
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
@@ -20,6 +20,10 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/NotSupportedException.hpp"
 
 using CNA::Internal::Renderers::GpuDrawParams;
 using Microsoft::Xna::Framework::Matrix;
@@ -109,7 +113,7 @@ TEST_F(SkinnedEffectDefaultsTest, LightingEnabledIsAlwaysTrue)
 
 TEST_F(SkinnedEffectDefaultsTest, SetLightingEnabledFalseThrows)
 {
-    EXPECT_THROW(fx.setLightingEnabledProperty(false), std::runtime_error);
+    EXPECT_THROW(fx.setLightingEnabledProperty(false), System::NotSupportedException);
 }
 
 TEST_F(SkinnedEffectDefaultsTest, SetLightingEnabledTrueDoesNotThrow)
@@ -126,7 +130,7 @@ TEST_F(SkinnedEffectDefaultsTest, LightingEnabledFalseThrowsThroughIEffectLights
     IEffectLights& lights = fx;
 
     EXPECT_TRUE(lights.getLightingEnabledProperty());
-    EXPECT_THROW(lights.setLightingEnabledProperty(false), std::runtime_error);
+    EXPECT_THROW(lights.setLightingEnabledProperty(false), System::NotSupportedException);
     EXPECT_TRUE(lights.getLightingEnabledProperty());
 }
 
@@ -317,13 +321,30 @@ TEST_F(SkinnedEffectDefaultsTest, GetBoneTransformsReturnsIndependentCopy)
 
 TEST_F(SkinnedEffectDefaultsTest, SetBoneTransformsThrowsOnEmpty)
 {
-    EXPECT_THROW(fx.SetBoneTransforms(std::vector<Matrix>{}), std::invalid_argument);
+    try
+    {
+        fx.SetBoneTransforms(std::vector<Matrix>{});
+        FAIL() << "Expected ArgumentNullException";
+    }
+    catch (const System::ArgumentNullException& exception)
+    {
+        EXPECT_EQ(exception.getParamNameProperty(), "boneTransforms");
+    }
 }
 
 TEST_F(SkinnedEffectDefaultsTest, SetBoneTransformsThrowsWhenExceedingMaxBones)
 {
     std::vector<Matrix> tooMany(SkinnedEffect::MaxBones + 1, Matrix::getIdentityProperty());
-    EXPECT_THROW(fx.SetBoneTransforms(tooMany), std::invalid_argument);
+    try
+    {
+        fx.SetBoneTransforms(tooMany);
+        FAIL() << "Expected ArgumentException";
+    }
+    catch (const System::ArgumentException& exception)
+    {
+        EXPECT_EQ(typeid(exception), typeid(System::ArgumentException));
+        EXPECT_TRUE(exception.getParamNameProperty().empty());
+    }
 }
 
 TEST_F(SkinnedEffectDefaultsTest, SetBoneTransformsAcceptsExactlyMaxBones)
@@ -334,17 +355,26 @@ TEST_F(SkinnedEffectDefaultsTest, SetBoneTransformsAcceptsExactlyMaxBones)
 
 TEST_F(SkinnedEffectDefaultsTest, GetBoneTransformsThrowsOnZeroCount)
 {
-    EXPECT_THROW((void)fx.GetBoneTransforms(0), std::out_of_range);
+    try
+    {
+        (void)fx.GetBoneTransforms(0);
+        FAIL() << "Expected ArgumentOutOfRangeException";
+    }
+    catch (const System::ArgumentOutOfRangeException& exception)
+    {
+        EXPECT_EQ(exception.getParamNameProperty(), "count");
+    }
 }
 
 TEST_F(SkinnedEffectDefaultsTest, GetBoneTransformsThrowsOnNegativeCount)
 {
-    EXPECT_THROW((void)fx.GetBoneTransforms(-1), std::out_of_range);
+    EXPECT_THROW((void)fx.GetBoneTransforms(-1), System::ArgumentOutOfRangeException);
 }
 
 TEST_F(SkinnedEffectDefaultsTest, GetBoneTransformsThrowsWhenExceedingMaxBones)
 {
-    EXPECT_THROW((void)fx.GetBoneTransforms(SkinnedEffect::MaxBones + 1), std::out_of_range);
+    EXPECT_THROW((void)fx.GetBoneTransforms(SkinnedEffect::MaxBones + 1),
+                 System::ArgumentOutOfRangeException);
 }
 
 TEST_F(SkinnedEffectDefaultsTest, WeightsPerVertexAcceptsOneTwoAndFour)
@@ -359,8 +389,16 @@ TEST_F(SkinnedEffectDefaultsTest, WeightsPerVertexAcceptsOneTwoAndFour)
 
 TEST_F(SkinnedEffectDefaultsTest, WeightsPerVertexThrowsOnInvalidValue)
 {
-    EXPECT_THROW(fx.setWeightsPerVertexProperty(3), std::out_of_range);
-    EXPECT_THROW(fx.setWeightsPerVertexProperty(0), std::out_of_range);
+    try
+    {
+        fx.setWeightsPerVertexProperty(3);
+        FAIL() << "Expected ArgumentOutOfRangeException";
+    }
+    catch (const System::ArgumentOutOfRangeException& exception)
+    {
+        EXPECT_EQ(exception.getParamNameProperty(), "value");
+    }
+    EXPECT_THROW(fx.setWeightsPerVertexProperty(0), System::ArgumentOutOfRangeException);
 }
 
 // -----------------------------------------------------------------------

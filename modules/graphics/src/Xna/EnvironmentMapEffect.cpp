@@ -7,8 +7,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
-
-#include <stdexcept>
+#include "System/NotSupportedException.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -171,7 +170,8 @@ namespace Microsoft::Xna::Framework::Graphics
     void EnvironmentMapEffect::setLightingEnabledProperty(bool value)
     {
         if (!value)
-            throw std::runtime_error("EnvironmentMapEffect does not support setting LightingEnabled to false.");
+            throw System::NotSupportedException(
+                "EnvironmentMapEffect does not support setting LightingEnabled to false.");
     }
 
     DirectionalLight& EnvironmentMapEffect::getDirectionalLight0Property() { return DirectionalLight0; }

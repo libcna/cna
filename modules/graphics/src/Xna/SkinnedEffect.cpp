@@ -9,8 +9,10 @@
 #include "Microsoft/Xna/Framework/Graphics/EffectParameterType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
-
-#include <stdexcept>
+#include "System/ArgumentException.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/NotSupportedException.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -215,7 +217,8 @@ namespace Microsoft::Xna::Framework::Graphics
     void SkinnedEffect::setLightingEnabledProperty(bool value)
     {
         if (!value)
-            throw std::runtime_error("SkinnedEffect does not support setting LightingEnabled to false.");
+            throw System::NotSupportedException(
+                "SkinnedEffect does not support setting LightingEnabled to false.");
     }
 
     DirectionalLight& SkinnedEffect::getDirectionalLight0Property() { return DirectionalLight0; }
@@ -289,7 +292,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void SkinnedEffect::setWeightsPerVertexProperty(int v)
     {
         if (v != 1 && v != 2 && v != 4)
-            throw std::out_of_range("WeightsPerVertex must be 1, 2, or 4.");
+            throw System::ArgumentOutOfRangeException("value");
         weightsPerVertex_ = v;
         dirtyFlags_ |= DirtyShaderIndex;
     }
@@ -297,9 +300,9 @@ namespace Microsoft::Xna::Framework::Graphics
     void SkinnedEffect::SetBoneTransforms(const std::vector<Matrix>& boneTransforms)
     {
         if (boneTransforms.empty())
-            throw std::invalid_argument("boneTransforms must not be empty.");
+            throw System::ArgumentNullException("boneTransforms");
         if (static_cast<int>(boneTransforms.size()) > MaxBones)
-            throw std::invalid_argument("boneTransforms exceeds MaxBones.");
+            throw System::ArgumentException();
 
         if (bonesParam_) bonesParam_->SetValue(boneTransforms);
     }
@@ -307,7 +310,7 @@ namespace Microsoft::Xna::Framework::Graphics
     std::vector<Matrix> SkinnedEffect::GetBoneTransforms(int count) const
     {
         if (count <= 0 || count > MaxBones)
-            throw std::out_of_range("count must be in range [1, MaxBones].");
+            throw System::ArgumentOutOfRangeException("count");
 
         std::vector<Matrix> bones = bonesParam_
             ? bonesParam_->GetValueMatrixArray(count)

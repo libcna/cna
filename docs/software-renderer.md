@@ -425,6 +425,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
 - **EffectParameter array getters require a positive count** (`SOFTWARE-261`) — all nine classic
   `GetValue*Array` families reject zero and negative counts with `ArgumentOutOfRangeException`
   before checking whether the reflected parameter can provide a numeric value.
+- **Stock-effect validation reports the XNA exception types** (`SOFTWARE-262`) —
+  `EnvironmentMapEffect`/`SkinnedEffect` required-lighting, bone-palette and skin-weight guards use
+  the recovered `NotSupportedException`/`Argument*Exception` contracts and parameter names.
 - **The classic SpriteBatch/SpriteFont parity corpus executes on the CPU** (`SOFTWARE-138`).
   Eighteen renderer-independent scenes shared with EasyGL cover flips, rotation/origin, both scale
   overloads, source rectangles, layer sorting, transforms, render targets, viewports, scissor,

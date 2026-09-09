@@ -199,6 +199,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets whether per-vertex lighting is enabled.
          *
          * @param value True to enable lighting.
+         * @throws System::NotSupportedException If @p value is false because this effect requires lighting.
          */
         void setLightingEnabledProperty(bool value) override;
 
@@ -329,6 +330,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the number of bone weights used per vertex (1, 2, or 4).
          *
          * @param value The new weights-per-vertex count.
+         * @throws System::ArgumentOutOfRangeException If @p value is not 1, 2, or 4.
          */
         void setWeightsPerVertexProperty(int value);
 
@@ -336,6 +338,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the array of bone transform matrices.
          *
          * @param boneTransforms Vector of bone-space-to-world-space matrices; size must not exceed MaxBones.
+         * @throws System::ArgumentNullException If @p boneTransforms is empty.
+         * @throws System::ArgumentException If @p boneTransforms contains more than MaxBones entries.
          */
         void SetBoneTransforms(const std::vector<Matrix>& boneTransforms);
 
@@ -344,6 +348,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param count Number of bone matrices to retrieve.
          * @return Vector of the first @p count bone matrices.
+         * @throws System::ArgumentOutOfRangeException If @p count is not in the range [1, MaxBones].
          */
         [[nodiscard]] std::vector<Matrix> GetBoneTransforms(int count) const;
 
