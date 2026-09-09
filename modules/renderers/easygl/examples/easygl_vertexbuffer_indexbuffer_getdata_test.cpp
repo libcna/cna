@@ -22,6 +22,7 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <array>
@@ -184,8 +185,8 @@ protected:
             VertexBuffer vb(dev, VertexPositionColor::getVertexDeclarationStatic(), 3, BufferUsage::None);
             vb.SetData(src, 3);
             VertexPositionColor dstOver[5]{};
-            check(throwsType<System::ArgumentOutOfRangeException>([&]{ vb.GetData(dstOver, 0, 5); }),
-                  "VertexBuffer: out-of-range GetData throws ArgumentOutOfRangeException");
+            check(throwsType<System::InvalidOperationException>([&]{ vb.GetData(dstOver, 0, 5); }),
+                  "VertexBuffer: oversized GetData throws InvalidOperationException");
         }
 
         // --- IndexBuffer: 16-bit ---
@@ -211,8 +212,8 @@ protected:
                   "IndexBuffer u16: GetData on WriteOnly buffer throws NotSupportedException");
 
             std::uint16_t dstOver[6]{};
-            check(throwsType<System::ArgumentOutOfRangeException>([&]{ ib.GetData(dstOver, 0, 6); }),
-                  "IndexBuffer u16: out-of-range GetData throws ArgumentOutOfRangeException");
+            check(throwsType<System::InvalidOperationException>([&]{ ib.GetData(dstOver, 0, 6); }),
+                  "IndexBuffer u16: oversized GetData throws InvalidOperationException");
         }
 
         // --- IndexBuffer: 32-bit ---
@@ -238,8 +239,8 @@ protected:
                   "IndexBuffer u32: GetData on WriteOnly buffer throws NotSupportedException");
 
             std::uint32_t dstOver[6]{};
-            check(throwsType<System::ArgumentOutOfRangeException>([&]{ ib.GetData(dstOver, 0, 6); }),
-                  "IndexBuffer u32: out-of-range GetData throws ArgumentOutOfRangeException");
+            check(throwsType<System::InvalidOperationException>([&]{ ib.GetData(dstOver, 0, 6); }),
+                  "IndexBuffer u32: oversized GetData throws InvalidOperationException");
         }
 
         std::printf("=== %d/%d PASS ===\n", pass_, pass_ + fail_);

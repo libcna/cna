@@ -210,11 +210,8 @@ namespace Microsoft::Xna::Framework::Graphics
         if (data == nullptr)
             throw System::ArgumentNullException("data");
         if (elementCount > vertexCount_)
-        {
-            throw System::ArgumentOutOfRangeException(
-                "elementCount", std::to_string(elementCount),
-                "The upload exceeds the VertexBuffer's logical capacity.");
-        }
+            throw System::InvalidOperationException(
+                "The data is not the correct size for this VertexBuffer.");
         return true;
     }
 
@@ -243,6 +240,11 @@ namespace Microsoft::Xna::Framework::Graphics
             CheckedByteCount(elementCount, uploadStride, "elementCount");
         const auto* bytes = static_cast<const std::uint8_t*>(data);
         cpuShadow_.assign(bytes, bytes + byteCount);
+        const int declarationStride = vertexDeclaration_.getVertexStrideProperty();
+        const std::size_t bufferStride =
+            declarationStride > 0 ? static_cast<std::size_t>(declarationStride) : uploadStride;
+        cpuShadow_.resize(
+            CheckedByteCount(vertexCount_, bufferStride, "vertexCount"), 0U);
     }
 
     void VertexBuffer::ThrowIfSetDataResourceInUse(SetDataOptions options,
@@ -1113,9 +1115,8 @@ namespace Microsoft::Xna::Framework::Graphics
             CheckedByteCount(vertexCount_, bufferStride, "vertexCount");
         const std::size_t destinationOffset = static_cast<std::size_t>(offsetInBytes);
         if (destinationOffset > capacity)
-            throw System::ArgumentOutOfRangeException(
-                "offsetInBytes", std::to_string(offsetInBytes),
-                "The destination offset exceeds the VertexBuffer's logical capacity.");
+            throw System::InvalidOperationException(
+                "The data is not the correct size for this VertexBuffer.");
         if (elementCount == 0)
             return;
         if (data == nullptr)
@@ -1133,9 +1134,8 @@ namespace Microsoft::Xna::Framework::Graphics
         const std::size_t transferSpan =
             (unsignedCount - 1) * resolvedStride + elementSize;
         if (transferSpan > capacity - destinationOffset)
-            throw System::ArgumentOutOfRangeException(
-                "elementCount", std::to_string(elementCount),
-                "The strided upload exceeds the VertexBuffer's logical capacity.");
+            throw System::InvalidOperationException(
+                "The data is not the correct size for this VertexBuffer.");
 
         if (cpuShadow_.size() < capacity)
             cpuShadow_.resize(capacity, 0U);
@@ -1184,9 +1184,8 @@ namespace Microsoft::Xna::Framework::Graphics
         if (elementCount == 0)
         {
             if (sourceOffset > cpuShadow_.size())
-                throw System::ArgumentOutOfRangeException(
-                    "offsetInBytes", std::to_string(offsetInBytes),
-                    "The source offset is outside the data this VertexBuffer holds.");
+                throw System::InvalidOperationException(
+                    "The data is not the correct size for this VertexBuffer.");
             return;
         }
         if (data == nullptr)
@@ -1205,9 +1204,8 @@ namespace Microsoft::Xna::Framework::Graphics
         if (sourceOffset > cpuShadow_.size() ||
             transferSpan > cpuShadow_.size() - sourceOffset)
         {
-            throw System::ArgumentOutOfRangeException(
-                "elementCount", std::to_string(elementCount),
-                "The requested strided window is outside the data this VertexBuffer holds.");
+            throw System::InvalidOperationException(
+                "The data is not the correct size for this VertexBuffer.");
         }
 
         auto* destination = static_cast<std::uint8_t*>(data) + destinationByteOffset;

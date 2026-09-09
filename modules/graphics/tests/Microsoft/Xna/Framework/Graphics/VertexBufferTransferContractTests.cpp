@@ -17,6 +17,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "System/InvalidOperationException.hpp"
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Vector3;
@@ -160,4 +161,28 @@ TEST(VertexBufferTransferContractTest, BuiltInValuesPackForWindowsAndUseDestinat
     EXPECT_EQ(destination[2], initial[0]);
     EXPECT_EQ(destination[3], replacement[1]);
     EXPECT_EQ(destination[4], initial[2]);
+}
+
+TEST(VertexBufferTransferContractTest, BufferCapacityFailuresUseInvalidOperationAndPreserveData)
+{
+    GraphicsDevice device;
+    VertexBuffer buffer(device, CompactDeclaration(8), 2, BufferUsage::None);
+    const std::array<CompactVertex, 2> initial{
+        CompactVertex{1.0f, 2.0f}, CompactVertex{3.0f, 4.0f}};
+    buffer.SetData(initial.data(), static_cast<int>(initial.size()));
+
+    const std::array<CompactVertex, 3> oversized{
+        CompactVertex{10.0f, 20.0f},
+        CompactVertex{30.0f, 40.0f},
+        CompactVertex{50.0f, 60.0f},
+    };
+    EXPECT_THROW(buffer.SetData(oversized.data(), static_cast<int>(oversized.size())),
+                 System::InvalidOperationException);
+    std::array<CompactVertex, 3> destination{};
+    EXPECT_THROW(buffer.GetData(destination.data(), static_cast<int>(destination.size())),
+                 System::InvalidOperationException);
+
+    std::array<CompactVertex, 2> result{};
+    buffer.GetData(result.data(), static_cast<int>(result.size()));
+    EXPECT_EQ(result, initial);
 }

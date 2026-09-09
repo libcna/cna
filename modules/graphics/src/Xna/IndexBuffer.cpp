@@ -243,9 +243,8 @@ namespace Microsoft::Xna::Framework::Graphics
             CheckedByteCount(indexCount_, nativeElementSize, "indexCount");
         const std::size_t destinationOffset = static_cast<std::size_t>(offsetInBytes);
         if (destinationOffset > capacity || byteCount > capacity - destinationOffset)
-            throw System::ArgumentOutOfRangeException(
-                "elementCount", std::to_string(elementCount),
-                "The upload exceeds the IndexBuffer's logical byte capacity.");
+            throw System::InvalidOperationException(
+                "The data is not the correct size for this IndexBuffer.");
 
         const auto* source = static_cast<const std::uint8_t*>(data) + sourceByteOffset;
         if (destinationOffset == 0 && elementSize == nativeElementSize)
@@ -270,6 +269,7 @@ namespace Microsoft::Xna::Framework::Graphics
                     renderer_->SetData16(source, elementCount);
             }
             cpuShadow_.assign(source, source + byteCount);
+            cpuShadow_.resize(capacity, 0U);
             return;
         }
 
@@ -296,57 +296,12 @@ namespace Microsoft::Xna::Framework::Graphics
                                       SetDataOptions options,
                                       bool useOptions)
     {
-        if (getIsDisposedProperty())
-            throw System::ObjectDisposedException("IndexBuffer");
-
         const std::size_t elementSize =
             dataElementSize == IndexElementSize::ThirtyTwoBits
                 ? sizeof(std::uint32_t)
                 : sizeof(std::uint16_t);
-        const std::size_t byteOffset = CheckedByteOffset(startIndex, elementSize);
-        const std::size_t byteCount = CheckedByteCount(
-            elementCount, elementSize, "elementCount");
-
-        if (dataElementSize != indexElementSize_)
-            throw System::ArgumentException(
-                "The source index width does not match the IndexBuffer element size.", "data");
-
-        // Empty ranges are a real no-op. In particular, return before pointer arithmetic,
-        // renderer dispatch, native allocation/write, or the CPU shadow's memcpy/assign path.
-        if (elementCount == 0)
-            return;
-        if (data == nullptr)
-            throw System::ArgumentNullException("data");
-        ThrowIfSetDataResourceInUse(options, useOptions);
-        if (elementCount > indexCount_)
-            throw System::ArgumentOutOfRangeException(
-                "elementCount", std::to_string(elementCount),
-                "The upload exceeds the IndexBuffer's logical capacity.");
-
-        // CABI-15: clear loss only after every front-end failure, including resource-in-use, has
-        // been rejected and a real write is about to occur.
-        if (auto* const losable = dynamic_cast<CNA::Internal::Graphics::IContentLosable*>(this)) {
-            losable->ClearContentLostEXT();
-        }
-
-        const auto* source = static_cast<const std::uint8_t*>(data) + byteOffset;
-        if (dataElementSize == IndexElementSize::ThirtyTwoBits)
-        {
-            if (useOptions)
-                renderer_->SetData32WithOptions(source, elementCount, options);
-            else
-                renderer_->SetData32(source, elementCount);
-        }
-        else
-        {
-            if (useOptions)
-                renderer_->SetData16WithOptions(source, elementCount, options);
-            else
-                renderer_->SetData16(source, elementCount);
-        }
-
-        // Task 930: cache exactly the logical source bytes for a future GetData() call.
-        cpuShadow_.assign(source, source + byteCount);
+        SetDataBytesAtInternal(
+            0, data, startIndex, elementCount, elementSize, options, useOptions);
     }
 
     void IndexBuffer::ThrowIfSetDataResourceInUse(SetDataOptions options,
@@ -376,9 +331,6 @@ namespace Microsoft::Xna::Framework::Graphics
             dataElementSize == IndexElementSize::ThirtyTwoBits
                 ? sizeof(std::uint32_t)
                 : sizeof(std::uint16_t);
-        if (dataElementSize != indexElementSize_)
-            throw System::ArgumentException(
-                "The destination index width does not match the IndexBuffer element size.", "data");
         GetDataBytesAtInternal(0, data, startIndex, elementCount, elementSize);
     }
 
@@ -410,9 +362,8 @@ namespace Microsoft::Xna::Framework::Graphics
         if (sourceByteOffset > cpuShadow_.size() ||
             byteCount > cpuShadow_.size() - sourceByteOffset)
         {
-            throw System::ArgumentOutOfRangeException(
-                "elementCount", std::to_string(elementCount),
-                "This parameter must be a valid index within the array.");
+            throw System::InvalidOperationException(
+                "The data is not the correct size for this IndexBuffer.");
         }
 
         // As with SetData, an empty range is valid with a null pointer and must not reach memcpy.

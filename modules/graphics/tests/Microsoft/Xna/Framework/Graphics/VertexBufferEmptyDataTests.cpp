@@ -450,13 +450,13 @@ TEST_F(VertexBufferEmptyDataTest, EmptyRangeAndBeyondCapacityRemainDistinct)
 
     // A real range extends beyond that logical end even if a native renderer pads its allocation.
     EXPECT_THROW(staticBuffer.SetData(&vertex, 2),
-                 System::ArgumentOutOfRangeException);
+                 System::InvalidOperationException);
     EXPECT_THROW(dynamicBuffer.SetData(
                      &vertex, 0, 2, SetDataOptions::NoOverwrite),
-                 System::ArgumentOutOfRangeException);
+                 System::InvalidOperationException);
     const std::array<std::uint8_t, 32> raw{};
     EXPECT_THROW(rawBuffer.SetDataRaw(raw.data(), 2, 16),
-                 System::ArgumentOutOfRangeException);
+                 System::InvalidOperationException);
     EXPECT_EQ(1, staticBuffer.getVertexCountProperty());
     EXPECT_EQ(1, dynamicBuffer.getVertexCountProperty());
     EXPECT_EQ(1, rawBuffer.getVertexCountProperty());
@@ -905,7 +905,7 @@ TEST_F(VertexBufferEmptyDataTest, WindowedIndexUploadRejectsAnUnusableWindow)
     IndexBuffer buffer(device, IndexElementSize::SixteenBits, 3, BufferUsage::None);
 
     EXPECT_THROW(buffer.SetDataAtEXT(6, window.data(), 0, 1),
-                 System::ArgumentOutOfRangeException);
+                 System::InvalidOperationException);
     // Not on an index boundary.
     EXPECT_THROW(buffer.SetDataAtEXT(1, window.data(), 0, 1), System::ArgumentException);
     // Not this buffer's element width.

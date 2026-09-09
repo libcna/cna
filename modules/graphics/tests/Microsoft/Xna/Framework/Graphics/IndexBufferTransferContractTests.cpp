@@ -8,6 +8,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DynamicIndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SetDataOptions.hpp"
@@ -16,6 +17,7 @@
 using Microsoft::Xna::Framework::Graphics::BufferUsage;
 using Microsoft::Xna::Framework::Graphics::DynamicIndexBuffer;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
 using Microsoft::Xna::Framework::Graphics::IndexBuffer;
 using Microsoft::Xna::Framework::Graphics::IndexElementSize;
 using Microsoft::Xna::Framework::Graphics::SetDataOptions;
@@ -85,4 +87,64 @@ TEST(IndexBufferTransferContractTest, OrdinaryGenericWindowStillRejectsABoundBuf
     const std::array<std::uint8_t, 1> byte{9};
     EXPECT_THROW(buffer.SetData(1, byte.data(), 0, 1),
                  System::InvalidOperationException);
+}
+
+TEST(IndexBufferTransferContractTest, TransferElementTypeIsIndependentOfDrawIndexWidth)
+{
+    GraphicsDevice device;
+    device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
+
+    IndexBuffer sixteenBitBuffer(
+        device, IndexElementSize::SixteenBits, 4, BufferUsage::None);
+    const std::array<std::uint32_t, 2> wideSource{0x11223344U, 0x55667788U};
+    EXPECT_NO_THROW(sixteenBitBuffer.SetData(
+        wideSource.data(), static_cast<int>(wideSource.size())));
+    std::array<std::uint32_t, 2> wideResult{};
+    EXPECT_NO_THROW(sixteenBitBuffer.GetData(
+        wideResult.data(), static_cast<int>(wideResult.size())));
+    EXPECT_EQ(wideResult, wideSource);
+
+    IndexBuffer thirtyTwoBitBuffer(
+        device, IndexElementSize::ThirtyTwoBits, 2, BufferUsage::None);
+    const std::array<std::uint16_t, 4> narrowSource{1, 2, 3, 4};
+    EXPECT_NO_THROW(thirtyTwoBitBuffer.SetData(
+        narrowSource.data(), static_cast<int>(narrowSource.size())));
+    std::array<std::uint16_t, 4> narrowResult{};
+    EXPECT_NO_THROW(thirtyTwoBitBuffer.GetData(
+        narrowResult.data(), static_cast<int>(narrowResult.size())));
+    EXPECT_EQ(narrowResult, narrowSource);
+}
+
+TEST(IndexBufferTransferContractTest, DynamicTypedTransferAlsoIgnoresDrawIndexWidth)
+{
+    GraphicsDevice device;
+    device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
+    DynamicIndexBuffer buffer(
+        device, IndexElementSize::ThirtyTwoBits, 2, BufferUsage::None);
+    const std::array<std::uint16_t, 4> source{10, 20, 30, 40};
+
+    EXPECT_NO_THROW(buffer.SetData(
+        source.data(), 0, 4, SetDataOptions::Discard));
+    std::array<std::uint16_t, 4> result{};
+    EXPECT_NO_THROW(buffer.GetData(result.data(), static_cast<int>(result.size())));
+    EXPECT_EQ(result, source);
+}
+
+TEST(IndexBufferTransferContractTest, BufferCapacityFailuresUseInvalidOperationAndPreserveData)
+{
+    GraphicsDevice device;
+    IndexBuffer buffer(device, IndexElementSize::SixteenBits, 2, BufferUsage::None);
+    const std::array<std::uint16_t, 2> initial{12, 34};
+    buffer.SetData(initial.data(), static_cast<int>(initial.size()));
+
+    const std::array<std::uint16_t, 3> oversized{90, 91, 92};
+    EXPECT_THROW(buffer.SetData(oversized.data(), static_cast<int>(oversized.size())),
+                 System::InvalidOperationException);
+    std::array<std::uint16_t, 3> destination{};
+    EXPECT_THROW(buffer.GetData(destination.data(), static_cast<int>(destination.size())),
+                 System::InvalidOperationException);
+
+    std::array<std::uint16_t, 2> result{};
+    buffer.GetData(result.data(), static_cast<int>(result.size()));
+    EXPECT_EQ(result, initial);
 }
