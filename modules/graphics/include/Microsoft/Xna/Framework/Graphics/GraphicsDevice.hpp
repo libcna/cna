@@ -126,6 +126,20 @@ namespace Microsoft::Xna::Framework::Graphics
 
         // --- State properties ---
         /** @brief Returns true if this device has been disposed. */
+        /**
+         * @brief The size of the surface the game actually draws into, in logical units.
+         *
+         * @note CNAEXT — CNA extension, not XNA API. Under a virtual resolution this is NOT the
+         * window: `GraphicsDevice` letterboxes the logical surface inside the drawable, so the two
+         * disagree whenever bars exist. Anything that reasons about the shape of what the game
+         * draws — `GameWindow`'s orientation, for one — has to ask this rather than the window.
+         *
+         * @param width  Receives the logical width.
+         * @param height Receives the logical height.
+         * @return true when a renderer answered with usable dimensions.
+         */
+        CNAEXT [[nodiscard]] bool GetLogicalSizeEXT(int& width, int& height) const;
+
         [[nodiscard]] bool getIsDisposedProperty() const;
         /** @brief Returns the current device status. */
         [[nodiscard]] GraphicsDeviceStatus getGraphicsDeviceStatusProperty() const;

@@ -347,7 +347,24 @@ namespace Microsoft::Xna::Framework
             screenDeviceName_ = queriedScreenDeviceName;
         }
 
-        const DisplayOrientation newOrientation = orientationFromBounds(clientBounds_);
+        // Orientation describes the shape of what the game DRAWS, not the shape of the window
+        // around it. With a virtual resolution the two differ by exactly the letterbox bars, and
+        // taking the window's shape told SAMPLE-077 it had gone landscape while its surface was
+        // still 480x800 portrait -- so it moved its menu off the surface. A desktop window resize
+        // is not a device rotation, and XNA reports none for one.
+        Rectangle orientationBounds = clientBounds_;
+        if (logicalSizeProvider_)
+        {
+            int logicalWidth = 0;
+            int logicalHeight = 0;
+            if (logicalSizeProvider_(logicalWidth, logicalHeight)
+                && logicalWidth > 0 && logicalHeight > 0)
+            {
+                orientationBounds = Rectangle(0, 0, logicalWidth, logicalHeight);
+            }
+        }
+
+        const DisplayOrientation newOrientation = orientationFromBounds(orientationBounds);
         if (orientationIsSupported(newOrientation))
         {
             currentOrientation_ = newOrientation;
@@ -396,6 +413,11 @@ namespace Microsoft::Xna::Framework
 
         const std::string displayName = window_->GetDisplayName();
         return displayName.empty() ? screenDeviceName_ : String(displayName);
+    }
+
+    void GameWindow::SetLogicalSizeProviderEXT(std::function<bool(int&, int&)> provider)
+    {
+        logicalSizeProvider_ = std::move(provider);
     }
 
     DisplayOrientation GameWindow::orientationFromBounds(const Rectangle& bounds) const

@@ -411,6 +411,18 @@ namespace Microsoft::Xna::Framework::Graphics
         SetIndexBuffer(indexBuffer);
     }
 
+    bool GraphicsDevice::GetLogicalSizeEXT(int& width, int& height) const
+    {
+        width = 0;
+        height = 0;
+        if (renderer_ == nullptr)
+        {
+            return false;
+        }
+        renderer_->GetViewportSize(width, height);
+        return width > 0 && height > 0;
+    }
+
     bool GraphicsDevice::getIsDisposedProperty() const
     {
         return isDisposed_;

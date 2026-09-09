@@ -276,6 +276,24 @@ On Windows Phone an orientation change rotates the **back buffer** with the devi
 drawing surface always agree. CNA keeps the virtual resolution fixed and letterboxes, so reporting
 the change without swapping tells the game something its own surface contradicts.
 
+### Fixed on 2026-09-09
+
+`GameWindow` now takes the shape from the surface the game draws into: `GraphicsDeviceManager`
+installs a logical-size provider at construction — not in `ApplyChanges()`, which returns early
+whenever nothing changed and so cannot be relied on to run — and `refreshCachedPlatformState` asks
+it before deriving the orientation, falling back to the client bounds when nothing answers.
+
+| window | menu-panel pixels, before | after |
+|---|---|---|
+| 480x800 (native) | 10 000 | 10 000 |
+| 700x900 (portrait) | 12 656 | 12 656 |
+| 960x800 (landscape) | **200** | **10 000** |
+
+Option 1 below was taken. The argument that settled it is that a desktop window resize is not a
+device rotation: XNA swaps the back buffer when the *device* rotates, and reports nothing for a
+window that merely got wider. Option 2 stays the right answer for a real mobile target, and is
+written up below for whoever builds one.
+
 ### The correction — a decision, not just a patch
 
 Two coherent answers, and they are not equivalent:
