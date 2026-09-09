@@ -187,6 +187,10 @@ resource correctly.
 - Tests must dispose each modern resource immediately after enqueue, mix XNA and modern calls in
   one frame, mutate source state after enqueue, read back a dependency closure, and verify bounded
   retirement without routine global waits.
+- Vulkan's permanent `Vulkan_ModernResourceLifetime` matrix applies this to buffers, programs,
+  dedicated/render-target storage images, arrays and timestamp pools across presentation, a real
+  swapchain resize and explicit device-first teardown; it passes with zero validation messages on
+  RADV and llvmpipe (`MOD-2252`).
 - `docs/graphics-resource-lifetime.md` describes the public wrapper/event rules; this ADR is
   normative when that overview or an older renderer note conflicts with it.
 

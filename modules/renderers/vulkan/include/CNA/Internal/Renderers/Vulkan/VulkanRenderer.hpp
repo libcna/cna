@@ -491,6 +491,10 @@ namespace CNA::Internal::Renderers::Vulkan
         {
             return owner_ == owner;
         }
+        /** @brief Returns whether this record is still connected to a live renderer. */
+        [[nodiscard]] bool HasOwnerEXT() const noexcept { return owner_ != nullptr; }
+        /** @brief Returns the native image, or null after renderer teardown. */
+        [[nodiscard]] VkImage GetVkImageEXT() const noexcept { return image_; }
         /** @brief Returns whether the immutable resource declaration includes @p bits. */
         [[nodiscard]] bool HasUsageEXT(std::uint32_t bits) const noexcept
         {
@@ -633,6 +637,10 @@ namespace CNA::Internal::Renderers::Vulkan
         {
             return pass_ != nullptr ? pass_->storageImageView : VK_NULL_HANDLE;
         }
+        /** @brief Returns the native colour image, or null after renderer teardown. */
+        [[nodiscard]] VkImage GetVkImageEXT() const noexcept { return colorImage_; }
+        /** @brief Returns whether this record is still connected to a live renderer. */
+        [[nodiscard]] bool HasOwnerEXT() const noexcept { return owner_ != nullptr; }
         /** @brief Records the exact prior-use to compute dependency for mip zero. */
         void PrepareForComputeEXT(VkCommandBuffer commandBuffer, int accessMode);
         /** @brief Records the exact prior-use to sampled-read dependency for every mip. */
@@ -655,7 +663,18 @@ namespace CNA::Internal::Renderers::Vulkan
                                    void* data, int dataLength) const override;
 
         void ReleaseVulkanResources();
-        void DisconnectOwner() { owner_ = nullptr; }
+        /** @brief Disconnects this record and invalidates its non-owning pass description. */
+        void DisconnectOwner()
+        {
+            owner_ = nullptr;
+            if (pass_ != nullptr)
+            {
+                pass_->framebuffer = VK_NULL_HANDLE;
+                pass_->trackedColorImage = VK_NULL_HANDLE;
+                pass_->storageImageView = VK_NULL_HANDLE;
+                pass_->colorUsageStates.clear();
+            }
+        }
 
     private:
         int                     width_            = 0;
@@ -1519,6 +1538,8 @@ namespace CNA::Internal::Renderers::Vulkan
         {
             return owner_ == owner;
         }
+        /** @brief Returns whether this record is still connected to a live renderer. */
+        [[nodiscard]] bool HasOwnerEXT() const noexcept { return owner_ != nullptr; }
 
         /** @brief Hands live Vulkan handles to fence-safe deferred retirement. */
         void ReleaseVulkanResources();
@@ -1622,6 +1643,16 @@ namespace CNA::Internal::Renderers::Vulkan
 
         /** @brief Returns whether module and compute pipeline creation succeeded. */
         [[nodiscard]] bool IsValid() const override { return pipeline_ != VK_NULL_HANDLE; }
+
+        /** @brief Returns whether this record is still connected to a live renderer. */
+        [[nodiscard]] bool HasOwnerEXT() const noexcept { return owner_ != nullptr; }
+        /** @brief Returns the native pipeline, or null after renderer teardown. */
+        [[nodiscard]] VkPipeline GetVkPipelineEXT() const noexcept { return pipeline_; }
+        /** @brief Returns the descriptor pool, or null after renderer teardown. */
+        [[nodiscard]] VkDescriptorPool GetVkDescriptorPoolEXT() const noexcept
+        {
+            return descriptorPool_;
+        }
 
         /** @brief Returns the precise refusal or Vulkan creation error from the last compile. */
         [[nodiscard]] std::string GetCompileError() const override { return compileError_; }
@@ -1911,6 +1942,11 @@ namespace CNA::Internal::Renderers::Vulkan
          * @return Elapsed nanoseconds, or zero while unavailable.
          */
         [[nodiscard]] std::uint64_t ElapsedNanoseconds() const override;
+
+        /** @brief Returns whether this record is still connected to a live renderer. */
+        [[nodiscard]] bool HasOwnerEXT() const noexcept { return owner_ != nullptr; }
+        /** @brief Returns the timestamp query pool, or null after renderer teardown. */
+        [[nodiscard]] VkQueryPool GetVkQueryPoolEXT() const noexcept { return pool_; }
 
         /** @brief Retires the native query pool while the owning device is alive. */
         void ReleaseVulkanResources();
@@ -3356,6 +3392,36 @@ namespace CNA::Internal::Renderers::Vulkan
         CNAEXT [[nodiscard]] uint64_t GetRetiredTexture2DArrayCountEXT() const noexcept
         {
             return retiredTexture2DArrayCountEXT_;
+        }
+        /** @brief Returns the number of live renderer-owned storage-buffer records. */
+        CNAEXT [[nodiscard]] std::size_t GetLiveStorageBufferCountEXT() const noexcept
+        {
+            return liveStorageBuffers_.size();
+        }
+        /** @brief Returns the number of live renderer-owned storage-image records. */
+        CNAEXT [[nodiscard]] std::size_t GetLiveStorageTexture2DCountEXT() const noexcept
+        {
+            return liveStorageTexture2Ds_.size();
+        }
+        /** @brief Returns the number of live renderer-owned compute-program records. */
+        CNAEXT [[nodiscard]] std::size_t GetLiveComputeShaderCountEXT() const noexcept
+        {
+            return liveComputeShaders_.size();
+        }
+        /** @brief Returns the number of live renderer-owned GPU timer records. */
+        CNAEXT [[nodiscard]] std::size_t GetLiveGpuTimerCountEXT() const noexcept
+        {
+            return liveGpuTimers_.size();
+        }
+        /** @brief Returns the number of live renderer-owned two-dimensional render targets. */
+        CNAEXT [[nodiscard]] std::size_t GetLiveRenderTargetCountEXT() const noexcept
+        {
+            return liveRenderTargets_.size();
+        }
+        /** @brief Returns the number of modern commands awaiting command-buffer recording. */
+        CNAEXT [[nodiscard]] std::size_t GetPendingModernCommandCountEXT() const noexcept
+        {
+            return pendingModernCommands_.size();
         }
         /**
          * @brief Test-only: how many deferred 3D draws are still queued for the next submit.

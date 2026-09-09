@@ -1485,6 +1485,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             cna_register_renderer_test(NAME Vulkan_GpuTimerDebug
                 COMMAND cna_test_vulkan_gpu_timer_debug
                 TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+            # plans/plan_modern.md MOD-2252: every modern native record survives ordinary submit
+            # and swapchain recreation, queued work owns pre-present disposals, and device teardown
+            # disconnects externally retained records before destroying VkDevice.
+            cna_vulkan_test(cna_test_vulkan_modern_resource_lifetime
+                            vulkan_modern_resource_lifetime_test.cpp)
+            cna_register_renderer_test(NAME Vulkan_ModernResourceLifetime
+                COMMAND cna_test_vulkan_modern_resource_lifetime
+                TIMEOUT 90 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
         endif()
 
         # plans/plan_vulkan.md VULKAN-098 (F-19): this renderer's clip-space depth range is XNA's

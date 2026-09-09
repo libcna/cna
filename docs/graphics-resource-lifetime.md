@@ -190,10 +190,10 @@ Some resources (e.g. `BlendState`, `SamplerState`) may be constructed without a
 - The disposal order guaranteed by `GraphicsDevice::Dispose()` (resources first, device
   renderer second) satisfies this requirement automatically.
 - Existing XNA textures, buffers, effects, render targets and queries detach deferred wrapper
-  pointers and retire referenced native handles after the consuming frame fence. Applications must
-  not call `vkDeviceWaitIdle` (nor can they access the native device). New modern resources join the
-  same mechanism under `MOD-2252`; until then their unsupported paths remain unavailable rather
-  than shifting in-flight safety to the caller.
+  pointers and retire referenced native handles after the consuming frame fence. `MOD-2252` proves
+  that storage buffers, compute programs, storage images, texture arrays and GPU timers use the same
+  mechanism across submit, resize and device-first teardown. Applications must not call
+  `vkDeviceWaitIdle` (nor can they access the native device).
 
 ### Bgfx
 

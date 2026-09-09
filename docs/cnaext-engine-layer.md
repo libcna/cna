@@ -2224,6 +2224,11 @@ if (device.SupportsCapability(GraphicsCapability::ComputeShaders)) {
   how the *rest of the pipeline* will read the data — a buffer about to be drawn as vertices needs
   `VertexAttribArray`, a texture about to be sampled needs `TextureFetch` — and that is
   `ComputeShader::barrier`.
+- **Vulkan lifetime**: accepted commands retain renderer-owned records, not public wrappers.
+  Destroying a buffer, program, dedicated image or render-target bridge before `Present()` therefore
+  cannot invalidate the command. The same records survive swapchain recreation unchanged and are
+  released/disconnected before terminal device teardown; `Vulkan_ModernResourceLifetime` verifies
+  all modern resource families on RADV and llvmpipe.
 - **`Texture2D::GetData` never shows compute writes.** It answers from the CPU pixels the texture
   was uploaded with. Compute output reaches the CPU through a storage buffer, or reaches the screen
   by being sampled in a draw.

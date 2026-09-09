@@ -309,12 +309,14 @@ separate application-visible ordering model: XNA work, modern copies/compute/ind
 presentation form one public-call order on the selected graphics/compute queue. The renderer, not
 the application, owns pipeline barriers, image layouts, render-pass breaks and fence values.
 
-The existing XNA Vulkan paths already snapshot mutable draw state, retain deferred render-target
+The existing XNA Vulkan paths snapshot mutable draw state, retain deferred render-target
 destinations independently of their public wrappers, evict descriptor entries that mention dying
 views and retire images, buffers, views, pipelines, layouts, descriptors and queries only after the
-consuming frame fence. Applications neither receive the `VkDevice` nor wait it idle before
-disposal. Every Phase 22 resource must join those mechanisms; an unsupported modern resource stays
-unavailable until it does.
+consuming frame fence. `MOD-2252` applies and verifies the same path for storage buffers, compute
+programs, dedicated and render-target storage images, texture arrays and timestamp pools. Commands
+retain internal records through command recording; resize preserves their handles; terminal device
+teardown releases handles and disconnects externally retained records before destroying `VkDevice`.
+Applications neither receive the native device nor wait it idle before disposal.
 
 `MOD-2225` supplies the public `Texture2DArray` facade and immutable descriptor. `MOD-2226` adds
 strict layer/mip/rectangle transfers plus `ShaderEffect` binding, and Vulkan now reports its live
@@ -333,7 +335,8 @@ retain its shared internal record, SPIR-V reflection validates the exact descrip
 access qualifier, and the sampled `ShaderEffect` route reuses the ordinary four `sampler2D` slots
 rather than adding descriptors beyond the established fragment-stage ceiling. Its storage and
 sampled views are evicted/retired with the owning image, and renderer teardown disconnects surviving
-records before destroying the Vulkan device.
+records before destroying the Vulkan device. `Vulkan_ModernResourceLifetime` verifies the complete
+submit/resize/device-teardown matrix 10/10 on both RADV and llvmpipe with validation enabled.
 
 One current implementation gap is stated rather than normalized into the contract:
 
