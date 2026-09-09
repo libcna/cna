@@ -930,6 +930,19 @@ namespace CNA::Internal::Renderers::SdlGpu
         void SetSamplerFilter(int textureFilter) override { textureFilter_ = textureFilter; }
         void SetSamplerAddressMode(int addressU, int addressV) override { addressU_ = addressU; addressV_ = addressV; }
         /**
+         * @brief Captures every sampler property supplied to `SpriteBatch::Begin`.
+         *
+         * @param textureFilter Raw `TextureFilter` ordinal.
+         * @param addressU Raw `TextureAddressMode` ordinal for U.
+         * @param addressV Raw `TextureAddressMode` ordinal for V.
+         * @param addressW Raw `TextureAddressMode` ordinal for W.
+         * @param maxAnisotropy Requested maximum anisotropy.
+         * @param maxMipLevel Most detailed mip level the sampler may use.
+         * @param lodBias Mipmap level-of-detail bias.
+         */
+        void SetSamplerState(int textureFilter, int addressU, int addressV, int addressW,
+                             int maxAnisotropy, int maxMipLevel, float lodBias) override;
+        /**
          * @brief Records whether this batch is in `SpriteSortMode::Immediate`.
          *
          * plans/plan_fx.md FX-102: the two modes need different compiled-Effect pass granularity, and
@@ -959,6 +972,10 @@ namespace CNA::Internal::Renderers::SdlGpu
         int textureFilter_ = 0;
         int addressU_ = 1;
         int addressV_ = 1;
+        int addressW_ = 1;
+        int maxAnisotropy_ = 4;
+        int maxMipLevel_ = 0;
+        float lodBias_ = 0.0f;
         /// Set at Begin() time (SetCustomEffect), cleared at End() -- SDLGPU-42/43. Resolved to the
         /// concrete SdlGpuEffectRenderer* and snapshotted per-sprite at Draw() time (see QueueSprite),
         /// not read again at Present() time, so later SetUniform* calls on the same live effect
@@ -1244,14 +1261,11 @@ namespace CNA::Internal::Renderers::SdlGpu
             int addressV = 0;
             int maxAnisotropy = 4;
             /// plans/plan_fx.md FX-083: XNA's SamplerState.MaxMipLevel and MipMapLevelOfDetailBias,
-            /// recorded by ApplySamplerMipState. Consumed by the compiled-effect draw route, which
-            /// is where an Effect's own `sampler_state` block lands.
+            /// recorded by ApplySamplerMipState and captured by every stock/compiled draw route.
             int maxMipLevel = 0;
             float lodBias = 0.0f;
             /// plans/plan_fx.md FX-091: XNA's SamplerState.AddressW, recorded by ApplySamplerAddressW.
-            /// This renderer samples 2D textures only, so W never reaches the hardware -- it is
-            /// recorded and carried into the sampler key anyway, so the day a volume texture is
-            /// sampled here it cannot be handed a sampler built for a different W mode.
+            /// Carried to SDL_gpu's native W address mode, observable for volume sampling.
             int addressW = 1;
         };
 
@@ -1313,6 +1327,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
+            int maxAnisotropy = 4;
+            int maxMipLevel = 0;
+            float lodBias = 0.0f;
+            int addressW = 1;
             DrawTarget target;  ///< default = swapchain
             // SDLGPU-42/43: non-null if this sprite was queued during a SetCustomEffect(effect)
             // Begin/End cycle with a validly-compiled custom shader -- customUniforms is a snapshot
@@ -1410,6 +1428,9 @@ namespace CNA::Internal::Renderers::SdlGpu
             /// REMED-GFX-170: captured with the filter, so a queued draw cannot observe a
             /// later ApplySamplerState. XNA SamplerState.MaxAnisotropy default.
             int maxAnisotropy = 4;
+            int maxMipLevel = 0;
+            float lodBias = 0.0f;
+            int addressW = 1;
             bool hasVertexColor = false;  ///< stride 24 vs stride 20
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
@@ -1442,6 +1463,9 @@ namespace CNA::Internal::Renderers::SdlGpu
             /// REMED-GFX-170: captured with the filter, so a queued draw cannot observe a
             /// later ApplySamplerState. XNA SamplerState.MaxAnisotropy default.
             int maxAnisotropy = 4;
+            int maxMipLevel = 0;
+            float lodBias = 0.0f;
+            int addressW = 1;
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
@@ -1475,6 +1499,9 @@ namespace CNA::Internal::Renderers::SdlGpu
             /// REMED-GFX-170: captured with the filter, so a queued draw cannot observe a
             /// later ApplySamplerState. XNA SamplerState.MaxAnisotropy default.
             int maxAnisotropy = 4;
+            int maxMipLevel = 0;
+            float lodBias = 0.0f;
+            int addressW = 1;
             std::size_t stride = 20;  ///< 20, 24, or 32 -- selects vertex layout + shader
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
@@ -1510,10 +1537,16 @@ namespace CNA::Internal::Renderers::SdlGpu
             int texture0AddressU = 0;
             int texture0AddressV = 0;
             int texture0MaxAnisotropy = 4;  ///< REMED-GFX-170: captured with the filter
+            int texture0MaxMipLevel = 0;
+            float texture0LodBias = 0.0f;
+            int texture0AddressW = 1;
             int texture1Filter = 0;
             int texture1AddressU = 0;
             int texture1AddressV = 0;
             int texture1MaxAnisotropy = 4;  ///< REMED-GFX-170: captured with the filter
+            int texture1MaxMipLevel = 0;
+            float texture1LodBias = 0.0f;
+            int texture1AddressW = 1;
             ///@}
             bool hasVertexColor = false;  ///< stride 24 vs stride 20
             DrawTarget target;  ///< default = swapchain
@@ -1553,6 +1586,9 @@ namespace CNA::Internal::Renderers::SdlGpu
             /// REMED-GFX-170: captured with the filter, so a queued draw cannot observe a
             /// later ApplySamplerState. XNA SamplerState.MaxAnisotropy default.
             int maxAnisotropy = 4;
+            int maxMipLevel = 0;
+            float lodBias = 0.0f;
+            int addressW = 1;
             ///@}
             ///@{ REMED-GFX-173: the reflection cube's own GraphicsDevice.SamplerStates[1], captured
             /// independently of slot 0 and by value -- exactly the shape DualTextureDrawCommand
@@ -1562,6 +1598,9 @@ namespace CNA::Internal::Renderers::SdlGpu
             int envMapAddressU = 0;
             int envMapAddressV = 0;
             int envMapMaxAnisotropy = 4;
+            int envMapMaxMipLevel = 0;
+            float envMapLodBias = 0.0f;
+            int envMapAddressW = 1;
             ///@}
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
@@ -1606,6 +1645,9 @@ namespace CNA::Internal::Renderers::SdlGpu
             /// REMED-GFX-170: captured with the filter, so a queued draw cannot observe a
             /// later ApplySamplerState. XNA SamplerState.MaxAnisotropy default.
             int maxAnisotropy = 4;
+            int maxMipLevel = 0;
+            float lodBias = 0.0f;
+            int addressW = 1;
             bool hasVertexColor = false;  ///< stride 56 vs stride 52
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
@@ -1657,6 +1699,9 @@ namespace CNA::Internal::Renderers::SdlGpu
             /// REMED-GFX-170: captured with the filter, so a queued draw cannot observe a
             /// later ApplySamplerState. XNA SamplerState.MaxAnisotropy default.
             int maxAnisotropy = 4;
+            int maxMipLevel = 0;
+            float lodBias = 0.0f;
+            int addressW = 1;
             SamplerSlotState specularSampler;       ///< GraphicsDevice.SamplerStates[5]
             SamplerSlotState specularColorSampler;  ///< GraphicsDevice.SamplerStates[6]
             DrawTarget target;  ///< default = swapchain
@@ -2049,6 +2094,10 @@ namespace CNA::Internal::Renderers::SdlGpu
                                 int textureFilter,
                                 int addressU,
                                 int addressV,
+                                int addressW,
+                                int maxAnisotropy,
+                                int maxMipLevel,
+                                float lodBias,
                                 SdlGpuEffectRenderer* customEffect = nullptr,
                                 ICompiledEffectRuntime* compiledEffect = nullptr);
 

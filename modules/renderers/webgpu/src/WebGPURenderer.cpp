@@ -3380,6 +3380,19 @@ namespace CNA::Internal::Renderers::WebGPU
         owner_->activeSpriteCustomEffect_ = effectRenderer;
     }
 
+    void WebGPUSpriteBatchRenderer::SetSamplerState(int textureFilter, int addressU, int addressV,
+                                                     int addressW, int maxAnisotropy,
+                                                     int maxMipLevel, float lodBias)
+    {
+        textureFilter_ = textureFilter;
+        addressU_ = addressU;
+        addressV_ = addressV;
+        addressW_ = addressW;
+        maxAnisotropy_ = maxAnisotropy;
+        maxMipLevel_ = maxMipLevel;
+        lodBias_ = lodBias;
+    }
+
     void WebGPUSpriteBatchRenderer::Draw(const ITextureRenderer& texture, float x, float y)
     {
         const Rectangle source{0, 0, texture.GetWidth(), texture.GetHeight()};
@@ -3416,7 +3429,7 @@ namespace CNA::Internal::Renderers::WebGPU
             throw std::invalid_argument("CNA WebGPU: SpriteBatch received a texture from another graphics renderer");
         owner_->QueueSprite(texture, *samplable, destinationRectangle, sourceRectangle, color, rotation,
                             origin, effects, layerDepth, transform_, textureFilter_, addressU_, addressV_,
-                            blendSnapshot_);
+                            addressW_, maxAnisotropy_, maxMipLevel_, lodBias_, blendSnapshot_);
     }
 
     WebGPURenderer::WebGPURenderer(const GraphicsRendererCreateArgs& args)
@@ -4168,7 +4181,7 @@ namespace CNA::Internal::Renderers::WebGPU
         shaderDescriptor.nextInChain = &wgsl.chain;
         spriteShader_ = wgpuDeviceCreateShaderModule(device_, &shaderDescriptor);
 
-        std::array<WGPUBindGroupLayoutEntry, 2> layoutEntries{};
+        std::array<WGPUBindGroupLayoutEntry, 3> layoutEntries{};
         layoutEntries[0].binding = 0;
         layoutEntries[0].visibility = WGPUShaderStage_Fragment;
         layoutEntries[0].sampler.type = WGPUSamplerBindingType_Filtering;
@@ -4177,6 +4190,10 @@ namespace CNA::Internal::Renderers::WebGPU
         layoutEntries[1].texture.sampleType = WGPUTextureSampleType_Float;
         layoutEntries[1].texture.viewDimension = WGPUTextureViewDimension_2D;
         layoutEntries[1].texture.multisampled = false;
+        layoutEntries[2].binding = 2;
+        layoutEntries[2].visibility = WGPUShaderStage_Fragment;
+        layoutEntries[2].buffer.type = WGPUBufferBindingType_Uniform;
+        layoutEntries[2].buffer.minBindingSize = 16;
         WGPUBindGroupLayoutDescriptor bindLayoutDescriptor{};
         bindLayoutDescriptor.label = StringView("CNA WebGPU SpriteBatch BindGroupLayout");
         bindLayoutDescriptor.entryCount = layoutEntries.size();
@@ -6754,6 +6771,10 @@ namespace CNA::Internal::Renderers::WebGPU
                                              int textureFilter,
                                              int addressU,
                                              int addressV,
+                                             int addressW,
+                                             int maxAnisotropy,
+                                             int maxMipLevel,
+                                             float lodBias,
                                              const WebGPUSpriteBlendSnapshot& blendSnapshot)
     {
         if (destination.Width == 0 || destination.Height == 0 || source.Width == 0 || source.Height == 0)
@@ -6887,6 +6908,10 @@ namespace CNA::Internal::Renderers::WebGPU
         command.textureFilter = textureFilter;
         command.addressU = addressU;
         command.addressV = addressV;
+        command.addressW = addressW;
+        command.maxAnisotropy = maxAnisotropy;
+        command.maxMipLevel = maxMipLevel;
+        command.lodBias = lodBias;
         command.blend = blendSnapshot;
         // WEBGPU-154: this sprite's OWN fill mode, captured for the same reason its viewport and
         // scissor are -- a RasterizerState set after the batch but before the flush must not
@@ -7218,21 +7243,33 @@ namespace CNA::Internal::Renderers::WebGPU
         ApplyDrawViewport(pass, command.viewport);
         // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
         ApplyDrawScissor(pass, command.scissor);
-        std::array<WGPUBindGroupEntry, 2> entries{};
+        const std::array<float, 4> samplerUniforms{{command.lodBias, 0.0f, 0.0f, 0.0f}};
+        WGPUBufferDescriptor samplerUboDescriptor{};
+        samplerUboDescriptor.label = StringView("CNA WebGPU SpriteBatch Sampler UBO");
+        samplerUboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+        samplerUboDescriptor.size = sizeof(samplerUniforms);
+        WGPUBuffer samplerUniformBuffer =
+            AcquireTransientBuffer(samplerUboDescriptor.usage, samplerUboDescriptor.size);
+        wgpuQueueWriteBuffer(queue_, samplerUniformBuffer, 0, samplerUniforms.data(),
+                             sizeof(samplerUniforms));
+
+        std::array<WGPUBindGroupEntry, 3> entries{};
         entries[0].binding = 0;
         // REMED-GFX-170: the SAME authoritative translation the 3D families use. This path used to
         // resolve its own sampler with `textureFilter == 0 ? Linear : Nearest`, which is correct
         // only for Linear(0) and Point(1) and turned Anisotropic(2), LinearMipPoint(3),
         // MinPointMagLinearMipLinear(7) and MinPointMagLinearMipPoint(8) into a POINT
-        // magnification they do not name. MaxAnisotropy is the XNA SamplerState default (4)
-        // because ISpriteBatchRenderer::SetSamplerFilter carries the filter ordinal alone -- see
-        // that declaration's own note; it is a constant here, so it is trivially immutable per
-        // queued sprite.
+        // magnification they do not name. The complete SpriteBatch sampler is captured per command,
+        // including anisotropy, mip clamp, W addressing and the shader-side LOD bias above.
         entries[0].sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU,
-                                                    command.addressV, command.addressW, command.maxMipLevel, kSpriteBatchMaxAnisotropy,
+                                                    command.addressV, command.addressW,
+                                                    command.maxMipLevel, command.maxAnisotropy,
                                                     "SpriteBatch");
         entries[1].binding = 1;
         entries[1].textureView = command.texture.View();
+        entries[2].binding = 2;
+        entries[2].buffer = samplerUniformBuffer;
+        entries[2].size = sizeof(samplerUniforms);
         WGPUBindGroupDescriptor descriptor{};
         descriptor.label = StringView("CNA WebGPU SpriteBatch BindGroup");
         descriptor.layout = spriteBindGroupLayout_;
@@ -7257,6 +7294,7 @@ namespace CNA::Internal::Renderers::WebGPU
             wgpuRenderPassEncoderDraw(pass, 6, 1, spriteIndex * 6u, 0);
         }
         wgpuBindGroupRelease(bindGroup);
+        pendingBufferReleases_.push_back(samplerUniformBuffer);
     }
 
     void WebGPURenderer::Begin3DDrawState(WGPURenderPassEncoder pass, ReplayState& state)
@@ -9616,11 +9654,10 @@ namespace CNA::Internal::Renderers::WebGPU
         // WGPUSamplerDescriptor carries no lodBias field, but WGSL's textureSampleBias applies XNA's
         // semantic exactly, and every stock 3D family does so; WEBGPU-208 extended the same semantic
         // to compiled XNA Effects by rewriting their SPIR-V rather than their (absent) sampler
-        // descriptor. What this text exists for is the three routes that do NOT,
+        // descriptor. What this text exists for is the two routes that do NOT,
         // because the row's rule is that a route which cannot apply the state says so by name rather
-        // than ignoring it quietly. SpriteBatch's reason is deliberately named as a FRAMEWORK one:
-        // measuring it showed the value never reaches any renderer, so calling it a WebGPU
-        // limitation would send a reader looking for the fix in the wrong file.
+        // than ignoring it quietly. SDLGPU-64 closed the former shared SpriteBatch gap by carrying
+        // the complete SamplerState through the common renderer contract.
         // WEBGPU-184: the decision this row asked to be made and recorded, in the place a caller
         // reads. NormalizedByte2/4 were implemented natively rather than refused; the three packed
         // 16-bit colour formats were not, and the reason is stated so the choice is auditable.
@@ -9639,15 +9676,11 @@ namespace CNA::Internal::Renderers::WebGPU
             "MojoShader-emitted SPIR-V is rewritten so each implicit sample consumes its own D3D9 "
             "sampler register's bias (WEBGPU-208) -- the same module on both targets, so the native "
             "and browser routes cannot disagree about it. WGSL clamps a sample bias to roughly "
-            "[-16, +16), so a larger magnitude saturates rather than extrapolating. Three routes do "
-            "not apply it: SpriteBatch, which never receives the value in the first place -- "
-            "SpriteBatch::Begin forwards only the filter and the two address modes through "
-            "ISpriteBatchRenderer, so MipMapLevelOfDetailBias, MaxMipLevel, MaxAnisotropy and "
-            "AddressW are dropped in the framework on every renderer, not here (measured by the "
-            "shared parity fixture sprite_sampler_state; recorded as plan_graphics.md row 1119); a "
-            "custom CNAEXT ShaderEffect, which supplies its own WGSL and therefore its own sampling "
+            "[-16, +16), so a larger magnitude saturates rather than extrapolating. Two routes do "
+            "not apply it: a custom CNAEXT ShaderEffect, which supplies its own WGSL and therefore "
+            "its own sampling "
             "calls; and the metallic-roughness PbrEffect/SkinnedPbrEffect families, which are the "
-            "glTF route rather than an XNA stock effect. On those three the bias is accepted and has "
+            "glTF route rather than an XNA stock effect. On those two the bias is accepted and has "
             "no effect.");
 
         // WEBGPU-201: Rgba64, the one entry here that is a platform boundary rather than a missing

@@ -1006,6 +1006,27 @@ namespace CNA::Internal::Renderers
          */
         virtual void SetSamplerAddressMode(int /*addressU*/, int /*addressV*/) {}
         /**
+         * @brief Sets every public `SamplerState` property for the current batch.
+         *
+         * The default preserves older renderers by forwarding the filter and two historically
+         * exposed address axes through their existing virtual hooks. Renderers that can express
+         * anisotropy, mip clamps, LOD bias, or the W axis override this complete-state hook.
+         *
+         * @param textureFilter Raw `TextureFilter` ordinal.
+         * @param addressU Raw `TextureAddressMode` ordinal for U.
+         * @param addressV Raw `TextureAddressMode` ordinal for V.
+         * @param addressW Raw `TextureAddressMode` ordinal for W.
+         * @param maxAnisotropy Requested maximum anisotropy.
+         * @param maxMipLevel Most detailed mip level the sampler may use.
+         * @param lodBias Mipmap level-of-detail bias.
+         */
+        virtual void SetSamplerState(int textureFilter, int addressU, int addressV, int /*addressW*/,
+                                     int /*maxAnisotropy*/, int /*maxMipLevel*/, float /*lodBias*/)
+        {
+            SetSamplerFilter(textureFilter);
+            SetSamplerAddressMode(addressU, addressV);
+        }
+        /**
          * @brief CNAEXT. Tells the renderer whether the batch SpriteBatch::Begin() just started is
          *        SpriteSortMode::Immediate.
          *

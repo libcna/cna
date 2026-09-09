@@ -753,6 +753,10 @@ namespace CNA::Internal::Renderers::EasyGL
         int pendingFilter_    = 0; // TextureFilter::Linear
         int pendingAddressU_  = 1; // TextureAddressMode::Clamp
         int pendingAddressV_  = 1; // TextureAddressMode::Clamp
+        int pendingAddressW_ = 1;  // TextureAddressMode::Clamp
+        int pendingMaxAnisotropy_ = 4;
+        int pendingMaxMipLevel_ = 0;
+        float pendingLodBias_ = 0.0f;
 
     public:
         explicit EasyGLSpriteBatchRenderer(::easygl::Device& device, std::shared_ptr<::easygl::ResourceRegistry> registry,
@@ -765,6 +769,19 @@ namespace CNA::Internal::Renderers::EasyGL
         void SetCustomEffect(Effect* effect) override;
         void SetSamplerFilter(int textureFilter) override;
         void SetSamplerAddressMode(int addressU, int addressV) override;
+        /**
+         * @brief Captures every sampler property supplied to `SpriteBatch::Begin`.
+         *
+         * @param textureFilter Raw `TextureFilter` ordinal.
+         * @param addressU Raw `TextureAddressMode` ordinal for U.
+         * @param addressV Raw `TextureAddressMode` ordinal for V.
+         * @param addressW Raw `TextureAddressMode` ordinal for W.
+         * @param maxAnisotropy Requested maximum anisotropy.
+         * @param maxMipLevel Most detailed mip level the sampler may use.
+         * @param lodBias Mipmap level-of-detail bias.
+         */
+        void SetSamplerState(int textureFilter, int addressU, int addressV, int addressW,
+                             int maxAnisotropy, int maxMipLevel, float lodBias) override;
         void Draw(const ITextureRenderer& texture, float x, float y) override;
         void Draw(const ITextureRenderer& texture,
                   const Rectangle& destinationRectangle,

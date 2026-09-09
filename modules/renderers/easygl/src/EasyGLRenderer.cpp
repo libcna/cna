@@ -4229,6 +4229,19 @@ if (ProfileUsesGlslEs100())
         pendingAddressV_ = addressV;
     }
 
+    void EasyGLSpriteBatchRenderer::SetSamplerState(int textureFilter, int addressU, int addressV,
+                                                     int addressW, int maxAnisotropy,
+                                                     int maxMipLevel, float lodBias)
+    {
+        pendingFilter_ = textureFilter;
+        pendingAddressU_ = addressU;
+        pendingAddressV_ = addressV;
+        pendingAddressW_ = addressW;
+        pendingMaxAnisotropy_ = maxAnisotropy;
+        pendingMaxMipLevel_ = maxMipLevel;
+        pendingLodBias_ = lodBias;
+    }
+
     void EasyGLSpriteBatchRenderer::End()
     {
         FlushBatch();
@@ -4336,7 +4349,12 @@ if (ProfileUsesGlslEs100())
         current_texture_->BindGL();
         ApplyChannelExpansion(prog, current_texture_->GetSurfaceFormatEXT());
         if (graphicsRenderer_)
-            graphicsRenderer_->ApplySamplerState(0, pendingFilter_, pendingAddressU_, pendingAddressV_, 1);
+        {
+            graphicsRenderer_->ApplySamplerState(0, pendingFilter_, pendingAddressU_, pendingAddressV_,
+                                                  pendingMaxAnisotropy_);
+            graphicsRenderer_->ApplySamplerMipState(0, pendingMaxMipLevel_, pendingLodBias_);
+            graphicsRenderer_->ApplySamplerAddressW(0, pendingAddressW_);
+        }
 
         vbo_.bind(::easygl::BufferTarget::Array);
         vbo_.set_data(::easygl::BufferTarget::Array,
@@ -4503,8 +4521,10 @@ if (ProfileUsesGlslEs100())
             if (physW > 0 && physH > 0) device_.set_viewport(0, 0, physW, physH);
             graphicsRenderer_->getLogicalSize(logicalWidth, logicalHeight);
         }
-        graphicsRenderer_->ApplySamplerState(0, pendingFilter_, pendingAddressU_,
-                                             pendingAddressV_, 1);
+        graphicsRenderer_->ApplySamplerState(0, pendingFilter_, pendingAddressU_, pendingAddressV_,
+                                             pendingMaxAnisotropy_);
+        graphicsRenderer_->ApplySamplerMipState(0, pendingMaxMipLevel_, pendingLodBias_);
+        graphicsRenderer_->ApplySamplerAddressW(0, pendingAddressW_);
 
         EasyGLRenderer::CompiledEffectStreamEXT stream;
         stream.buffer = easyVertexBuffer;

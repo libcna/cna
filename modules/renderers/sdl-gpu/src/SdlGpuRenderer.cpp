@@ -3216,6 +3216,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         SDL_GPUSamplerCreateInfo createInfo{};
         FillSdlGpuSamplerCreateInfo(createInfo, textureFilter, addressU, addressV, clampedAniso);
+        createInfo.address_mode_w = ToAddressMode(addressW);
         createInfo.min_lod = minLod;
         createInfo.max_lod = std::max(createInfo.max_lod, minLod);
         createInfo.mip_lod_bias = lodBias;
@@ -3399,8 +3400,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUTextureSamplerBinding samplerBinding{};
         samplerBinding.texture = command.texture.texture;
         samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU,
-                                                   command.addressV, kSpriteBatchMaxAnisotropy,
-                                                   "SpriteBatch");
+                                                   command.addressV, command.maxAnisotropy,
+                                                   "SpriteBatch", command.maxMipLevel,
+                                                   command.lodBias, command.addressW);
         SDL_BindGPUFragmentSamplers(pass, 0, &samplerBinding, 1);
 
         SDL_DrawGPUPrimitives(pass, 6, 1, 0, 0);
@@ -3418,6 +3420,10 @@ namespace CNA::Internal::Renderers::SdlGpu
                                              int textureFilter,
                                              int addressU,
                                              int addressV,
+                                             int addressW,
+                                             int maxAnisotropy,
+                                             int maxMipLevel,
+                                             float lodBias,
                                              SdlGpuEffectRenderer* customEffect,
                                              ICompiledEffectRuntime* compiledEffect)
     {
@@ -3507,6 +3513,10 @@ namespace CNA::Internal::Renderers::SdlGpu
         command.textureFilter = textureFilter;
         command.addressU = addressU;
         command.addressV = addressV;
+        command.addressW = addressW;
+        command.maxAnisotropy = maxAnisotropy;
+        command.maxMipLevel = maxMipLevel;
+        command.lodBias = lodBias;
         command.target = CurrentDrawTarget();
         // SDLGPU-18/19/20: snapshot the current BlendState/DepthStencilState/RasterizerState NOW,
         // matching every 3D Queue*Draw's own identical per-command snapshot convention.
@@ -4135,6 +4145,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         command.addressU = samplerSlots_[0].addressU;
         command.addressV = samplerSlots_[0].addressV;
         command.maxAnisotropy = samplerSlots_[0].maxAnisotropy;  // REMED-GFX-170
+        command.maxMipLevel = samplerSlots_[0].maxMipLevel;
+        command.lodBias = samplerSlots_[0].lodBias;
+        command.addressW = samplerSlots_[0].addressW;
 
         if (ib != nullptr)
         {
@@ -4191,6 +4204,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         command.addressU = samplerSlots_[0].addressU;
         command.addressV = samplerSlots_[0].addressV;
         command.maxAnisotropy = samplerSlots_[0].maxAnisotropy;  // REMED-GFX-170
+        command.maxMipLevel = samplerSlots_[0].maxMipLevel;
+        command.lodBias = samplerSlots_[0].lodBias;
+        command.addressW = samplerSlots_[0].addressW;
 
         if (ib != nullptr)
         {
@@ -4943,6 +4959,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         command.addressU = samplerSlots_[0].addressU;
         command.addressV = samplerSlots_[0].addressV;
         command.maxAnisotropy = samplerSlots_[0].maxAnisotropy;  // REMED-GFX-170
+        command.maxMipLevel = samplerSlots_[0].maxMipLevel;
+        command.lodBias = samplerSlots_[0].lodBias;
+        command.addressW = samplerSlots_[0].addressW;
 
         if (ib != nullptr)
         {
@@ -4995,10 +5014,16 @@ namespace CNA::Internal::Renderers::SdlGpu
         command.texture0AddressU = samplerSlots_[0].addressU;
         command.texture0AddressV = samplerSlots_[0].addressV;
         command.texture0MaxAnisotropy = samplerSlots_[0].maxAnisotropy;  // REMED-GFX-170
+        command.texture0MaxMipLevel = samplerSlots_[0].maxMipLevel;
+        command.texture0LodBias = samplerSlots_[0].lodBias;
+        command.texture0AddressW = samplerSlots_[0].addressW;
         command.texture1Filter = samplerSlots_[1].filter;
         command.texture1AddressU = samplerSlots_[1].addressU;
         command.texture1AddressV = samplerSlots_[1].addressV;
         command.texture1MaxAnisotropy = samplerSlots_[1].maxAnisotropy;  // REMED-GFX-170
+        command.texture1MaxMipLevel = samplerSlots_[1].maxMipLevel;
+        command.texture1LodBias = samplerSlots_[1].lodBias;
+        command.texture1AddressW = samplerSlots_[1].addressW;
 
         if (ib != nullptr)
         {
@@ -5062,10 +5087,16 @@ namespace CNA::Internal::Renderers::SdlGpu
         command.addressU = samplerSlots_[0].addressU;
         command.addressV = samplerSlots_[0].addressV;
         command.maxAnisotropy = samplerSlots_[0].maxAnisotropy;  // REMED-GFX-170
+        command.maxMipLevel = samplerSlots_[0].maxMipLevel;
+        command.lodBias = samplerSlots_[0].lodBias;
+        command.addressW = samplerSlots_[0].addressW;
         command.envMapFilter = samplerSlots_[1].filter;
         command.envMapAddressU = samplerSlots_[1].addressU;
         command.envMapAddressV = samplerSlots_[1].addressV;
         command.envMapMaxAnisotropy = samplerSlots_[1].maxAnisotropy;
+        command.envMapMaxMipLevel = samplerSlots_[1].maxMipLevel;
+        command.envMapLodBias = samplerSlots_[1].lodBias;
+        command.envMapAddressW = samplerSlots_[1].addressW;
 
         if (ib != nullptr)
         {
@@ -5146,6 +5177,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         command.addressU = samplerSlots_[0].addressU;
         command.addressV = samplerSlots_[0].addressV;
         command.maxAnisotropy = samplerSlots_[0].maxAnisotropy;  // REMED-GFX-170
+        command.maxMipLevel = samplerSlots_[0].maxMipLevel;
+        command.lodBias = samplerSlots_[0].lodBias;
+        command.addressW = samplerSlots_[0].addressW;
 
         if (ib != nullptr)
         {
@@ -5229,6 +5263,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         command.addressU = samplerSlots_[0].addressU;
         command.addressV = samplerSlots_[0].addressV;
         command.maxAnisotropy = samplerSlots_[0].maxAnisotropy;  // REMED-GFX-170
+        command.maxMipLevel = samplerSlots_[0].maxMipLevel;
+        command.lodBias = samplerSlots_[0].lodBias;
+        command.addressW = samplerSlots_[0].addressW;
         command.specularSampler = samplerSlots_[5];
         command.specularColorSampler = samplerSlots_[6];
 
@@ -5668,7 +5705,8 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                  : defaultWhiteTexture_->Texture();
         samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU,
                                                    command.addressV, command.maxAnisotropy,
-                                                   "AlphaTest3D");
+                                                   "AlphaTest3D", command.maxMipLevel,
+                                                   command.lodBias, command.addressW);
         SDL_BindGPUFragmentSamplers(pass, 0, &samplerBinding, 1);
 
         if (command.indexed && command.uploadedIndexBuffer != nullptr)
@@ -5712,12 +5750,18 @@ namespace CNA::Internal::Renderers::SdlGpu
         samplerBindings[0].sampler = GetOrCreateSampler(command.texture0Filter, command.texture0AddressU,
                                                       command.texture0AddressV,
                                                       command.texture0MaxAnisotropy,
-                                                      "DualTexture3D/slot0");
+                                                      "DualTexture3D/slot0",
+                                                      command.texture0MaxMipLevel,
+                                                      command.texture0LodBias,
+                                                      command.texture0AddressW);
         samplerBindings[1].texture = command.texture1.texture;
         samplerBindings[1].sampler = GetOrCreateSampler(command.texture1Filter, command.texture1AddressU,
                                                       command.texture1AddressV,
                                                       command.texture1MaxAnisotropy,
-                                                      "DualTexture3D/slot1");
+                                                      "DualTexture3D/slot1",
+                                                      command.texture1MaxMipLevel,
+                                                      command.texture1LodBias,
+                                                      command.texture1AddressW);
         SDL_BindGPUFragmentSamplers(pass, 0, samplerBindings, 2);
 
         if (command.indexed && command.uploadedIndexBuffer != nullptr)
@@ -5766,12 +5810,16 @@ namespace CNA::Internal::Renderers::SdlGpu
         samplerBindings[0].texture = command.texture.texture;
         samplerBindings[0].sampler = GetOrCreateSampler(command.textureFilter, command.addressU,
                                                       command.addressV, command.maxAnisotropy,
-                                                      "EnvironmentMap3D");
+                                                      "EnvironmentMap3D", command.maxMipLevel,
+                                                      command.lodBias, command.addressW);
         samplerBindings[1].texture = command.envMapTexture.texture;
         samplerBindings[1].sampler = GetOrCreateSampler(command.envMapFilter, command.envMapAddressU,
                                                        command.envMapAddressV,
                                                        command.envMapMaxAnisotropy,
-                                                       "EnvironmentMap3D/cube");
+                                                       "EnvironmentMap3D/cube",
+                                                       command.envMapMaxMipLevel,
+                                                       command.envMapLodBias,
+                                                       command.envMapAddressW);
         SDL_BindGPUFragmentSamplers(pass, 0, samplerBindings, 2);
         // REMED-GFX-173: the whole two-slot binding on one line -- both public slots, both native
         // samplers and both texture identities together, so "the cube got slot 0's sampler" or
@@ -5847,7 +5895,8 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                  : defaultWhiteTexture_->Texture();
         samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU,
                                                    command.addressV, command.maxAnisotropy,
-                                                   "Skinned3D");
+                                                   "Skinned3D", command.maxMipLevel,
+                                                   command.lodBias, command.addressW);
         SDL_BindGPUFragmentSamplers(pass, 0, &samplerBinding, 1);
 
         if (command.indexed && command.uploadedIndexBuffer != nullptr)
@@ -5901,7 +5950,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUTextureSamplerBinding samplerBindings[7]{};
         SDL_GPUSampler* sampler = GetOrCreateSampler(command.textureFilter, command.addressU,
                                                     command.addressV, command.maxAnisotropy,
-                                                    "Pbr3D");
+                                                    "Pbr3D", command.maxMipLevel,
+                                                    command.lodBias, command.addressW);
         // plans/plan_gltf.md GLTF-465: slot 0 was the one PBR map with no fallback, so a material
         // with only a baseColorFactor -- glTF's own default material, and what both COLOR_0
         // corpus fixtures author -- had to be refused upstream instead of multiplying the
@@ -5921,11 +5971,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUSampler* specularSampler = GetOrCreateSampler(
             command.specularSampler.filter, command.specularSampler.addressU,
             command.specularSampler.addressV, command.specularSampler.maxAnisotropy,
-            "Pbr3D.Specular");
+            "Pbr3D.Specular", command.specularSampler.maxMipLevel,
+            command.specularSampler.lodBias, command.specularSampler.addressW);
         SDL_GPUSampler* specularColorSampler = GetOrCreateSampler(
             command.specularColorSampler.filter, command.specularColorSampler.addressU,
             command.specularColorSampler.addressV, command.specularColorSampler.maxAnisotropy,
-            "Pbr3D.SpecularColor");
+            "Pbr3D.SpecularColor", command.specularColorSampler.maxMipLevel,
+            command.specularColorSampler.lodBias, command.specularColorSampler.addressW);
         samplerBindings[5].texture = command.specularMap
             ? command.specularMap.texture : defaultWhiteTexture_->Texture();
         samplerBindings[5].sampler = specularSampler;
@@ -6160,7 +6212,8 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                  : defaultWhiteTexture_->Texture();
         samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU,
                                                    command.addressV, command.maxAnisotropy,
-                                                   "Textured3D");
+                                                   "Textured3D", command.maxMipLevel,
+                                                   command.lodBias, command.addressW);
         SDL_BindGPUFragmentSamplers(pass, 0, &samplerBinding, 1);
 
         if (command.indexed && command.uploadedIndexBuffer != nullptr)
@@ -6209,7 +6262,8 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                  : defaultWhiteTexture_->Texture();
         samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU,
                                                    command.addressV, command.maxAnisotropy,
-                                                   "LitTextured3D");
+                                                   "LitTextured3D", command.maxMipLevel,
+                                                   command.lodBias, command.addressW);
         SDL_BindGPUFragmentSamplers(pass, 0, &samplerBinding, 1);
 
         if (command.indexed && command.uploadedIndexBuffer != nullptr)
@@ -8167,6 +8221,19 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
     }
 
+    void SdlGpuSpriteBatchRenderer::SetSamplerState(int textureFilter, int addressU, int addressV,
+                                                     int addressW, int maxAnisotropy,
+                                                     int maxMipLevel, float lodBias)
+    {
+        textureFilter_ = textureFilter;
+        addressU_ = addressU;
+        addressV_ = addressV;
+        addressW_ = addressW;
+        maxAnisotropy_ = maxAnisotropy;
+        maxMipLevel_ = maxMipLevel;
+        lodBias_ = lodBias;
+    }
+
     void SdlGpuSpriteBatchRenderer::Begin()
     {
         if (begun_)
@@ -8241,7 +8308,8 @@ namespace CNA::Internal::Renderers::SdlGpu
                     owner_->QueueSprite(*sprite.texture, sprite.nativeTexture, sprite.destination,
                                         sprite.source, sprite.color, sprite.rotation, sprite.origin,
                                         sprite.effects, sprite.layerDepth, transform_,
-                                        textureFilter_, addressU_, addressV_, nullptr, runtime);
+                                        textureFilter_, addressU_, addressV_, addressW_,
+                                        maxAnisotropy_, maxMipLevel_, lodBias_, nullptr, runtime);
                 }
             }
             runStart = runEnd;
@@ -8334,15 +8402,16 @@ namespace CNA::Internal::Renderers::SdlGpu
                 technique->getPassesProperty()[pass].Apply();
                 owner_->QueueSprite(texture, nativeTexture, destinationRectangle, sourceRectangle,
                                     color, rotation, origin, effects, layerDepth, transform_,
-                                    textureFilter_, addressU_, addressV_, customEffectRenderer,
-                                    compiledEffectRuntime);
+                                    textureFilter_, addressU_, addressV_, addressW_, maxAnisotropy_,
+                                    maxMipLevel_, lodBias_, customEffectRenderer, compiledEffectRuntime);
             }
             return;
         }
 #endif
         owner_->QueueSprite(texture, nativeTexture, destinationRectangle, sourceRectangle, color, rotation,
                             origin, effects, layerDepth, transform_, textureFilter_, addressU_, addressV_,
-                            customEffectRenderer, compiledEffectRuntime);
+                            addressW_, maxAnisotropy_, maxMipLevel_, lodBias_, customEffectRenderer,
+                            compiledEffectRuntime);
     }
 
 }

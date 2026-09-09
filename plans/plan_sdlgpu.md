@@ -3,8 +3,7 @@
 > **Current verdict (audit opened 2026-09-09): B. CLASSIC SDL GPU ↔ EASYGL PARITY NOT YET
 > REACHED.** The current renderer is a substantial, real Vulkan-backed implementation, but live
 > source and pixel tests demonstrate ordinary-XNA gaps in semantic vertex declarations,
-> instancing/multiple streams, texture/render-target formats, independent MRT outputs,
-> sampler propagation and cube-face command ordering. The inherited
+> instancing/multiple streams, texture/render-target formats and independent MRT outputs. The inherited
 > capability default also advertises features SDL GPU does not implement. This verdict supersedes
 > historical completion banners below; those remain as implementation history, not current truth.
 
@@ -19,15 +18,15 @@
 | Renderer under test | `modules/renderers/sdl-gpu/{include,src,tests,examples}` |
 | EasyGL / SDL GPU example sources | 246 / 38 `.cpp` files (source count, not capability count) |
 | EasyGL / SDL GPU renderer unit-test sources | 2 / 2 `.cpp` files |
-| SDL GPU registered integration tests | 86 CTests (85 baseline plus the first shared parity fixture) |
+| SDL GPU registered integration tests | 90 CTests (85 baseline plus five shared parity fixtures) |
 | Shared EasyGL parity fixtures available | 30 renderer-neutral sources in `modules/graphics/examples/parity` |
-| Shared parity fixtures registered for SDL GPU | 1/30 (`parity_fill_mode_wireframe`) |
+| Shared parity fixtures registered for SDL GPU | 5/30 (wireframe plus four sampler fixtures) |
 | Tasks created by this audit | 30 (`SDLGPU-55`–`SDLGPU-84`) |
-| Completed / open / proven unavoidable | 10 / 20 / 0; `SDLGPU-80` is a candidate limitation, not yet counted complete |
+| Completed / open / proven unavoidable | 11 / 19 / 0; `SDLGPU-80` is a candidate limitation, not yet counted complete |
 | SDL GPU build | Stable `cmake-build-sdlgpu`, Debug, `CNA_GRAPHICS_RENDERER=SDL_GPU`, tests/examples ON |
 | EasyGL oracle build | Stable `cmake-build-debug`, Debug, `CNA_GRAPHICS_RENDERER=OPENGL33`, tests/examples ON |
 | Runtime driver | SDL 3.5.0 SDL_gpu Vulkan on AMD Radeon 780M / Mesa RADV 25.0.7; Khronos validation layer 1.4.309 present |
-| Display constraint | Host `:0` is unavailable. SDL `offscreen` successfully creates the real Vulkan GPU device; Xvfb lacks DRI3 for Vulkan. The test-driver cache setting defaults to `x11` and is locally set to `offscreen`. |
+| Display constraint | Sandboxed tests cannot access host `:0`; SDL `offscreen` successfully creates the real Vulkan GPU device. Escalated preservation checks can use host `:0` (WebGPU), while EasyGL uses Xvfb `:179`. The SDL GPU test-driver cache setting defaults to `x11` and is locally set to `offscreen`. |
 | Validation | Debug mode is enabled in current source. The offscreen 85-test baseline emitted no captured `VUID`, `Validation Error`, or `Validation Warning`; all new GPU regressions must retain fatal validation regexes. |
 | Focused EasyGL oracle baseline | 27/27 selected tests pass on Xvfb/llvmpipe: five stock-effect goldens, blend/depth/raster goldens, packed/DXT formats, surface-format refusal, 2D/cube RT properties, volume/cube data paths, MRT, instancing and occlusion lifecycle/rendering |
 
@@ -91,8 +90,8 @@ underlying limitation with no correct reasonable emulation; `out` excluded moder
 | Cull/scissor/viewport/depth range | Full GL state | Deferred snapshots, most targeted tests pass | `~` — shared cross-renderer oracle pending; `SDLGPU-58`, `68` |
 | FillMode.WireFrame | Renderer-side triangle-edge expansion | Native `SDL_GPU_FILLMODE_LINE` in every ordinary pipeline | `=` — shared asymmetric three-edge fixture passes; `SDLGPU-61` |
 | Constant/slope depth bias | GL polygon offset with XNA normalization | Per-format normalized-to-native conversion in every immutable pipeline; SpriteBatch uses projected layer depth | `=` — expanded 67/67 pixel/cache oracle, validation clean; `SDLGPU-65` |
-| Sampler filter/address/anisotropy | All stock/effect slots | Descriptor key contains them | `~` — descriptor identity/capacity is exact; full stock-field propagation remains `SDLGPU-64` |
-| MaxMipLevel/LOD bias/AddressW | Applied on ordinary draws | cached, but stock commands omit MaxMipLevel/LOD bias and volume AddressW | `≠`; `SDLGPU-64` |
+| Sampler filter/address/anisotropy | All stock/effect slots | Every stock, compiled-effect and SpriteBatch command captures the complete state | `=` — shared pixel oracles plus 29/29 descriptor-capacity checks; `SDLGPU-64` |
+| MaxMipLevel/LOD bias/AddressW | Applied on ordinary draws | MaxMipLevel/bias pixel-verified on stock 3D and SpriteBatch; W reaches the native descriptor | `=` for 2D/cube state delivery; volume AddressW remains `~` pending the sampling route in `SDLGPU-71/79` |
 | Texture2D Color/mips/partial/NPOT/readback | Real upload + CPU/GPU read paths | Real RGBA8 upload; shared CPU shadow; authored mips | `=` for Color baseline including 3D PointClamp; lifecycle sweep `SDLGPU-69`, `81` |
 | Texture2D ordinary non-Color formats | Packed, DXT native-or-decode, SNORM | classifier inherited and native resource hard-coded RGBA8 | `∅` though SDL has corresponding formats; `SDLGPU-69` |
 | Texture3D Color/mips/boxes/readback | Native volume path | Native RGBA8 path | `~` — format and volume-sampling sweep remains `SDLGPU-71` |
@@ -168,7 +167,7 @@ were checked individually in the declarations and implementations.
 | `IRenderTargetRenderer::{Bind/Unbind,GetData,GetMultiSampleCount,GetAppliedDepthStencilFormatEXT,HasRealDepthBuffer,DepthBufferBitsEXT,HasRealStencilBuffer}` | explicit where native facts differ | bind/read/MSAA/depth-present explicit; applied depth/bits/stencil use defaults | classic properties and behavior (`SDLGPU-72/74`) |
 | `IRenderTargetCubeRenderer::{GetSize,BindFace,Unbind,GetData,GetMultiSampleCount,depth/stencil facts}` | explicit where native facts differ | size/bind/read/MSAA explicit; depth/stencil facts partly default | classic (`SDLGPU-66/73/74`) |
 | `IEffectRenderer` compile/bind/unbind, uniform scalar/vector/matrix/arrays, 2D/cube/3D texture binds | all explicit | compile and scalar/vector/matrix explicit; bind/unbind no-op by design; array and texture defaults are covered by renderer-owned compiled path only | ShaderEffect is CNAEXT; ordinary compiled effect separately in scope (`SDLGPU-79`) |
-| `ISpriteBatchRenderer::{Begin,End,SetTransformMatrix,SetCustomEffect,SetSampler*,SetImmediateMode,Draw overloads}` | explicit except default immediate hook | explicit for all public stock paths | classic; broad behavior still `~` (`SDLGPU-64/65/76`) |
+| `ISpriteBatchRenderer::{Begin,End,SetTransformMatrix,SetCustomEffect,SetSampler*,SetImmediateMode,Draw overloads}` | explicit except default immediate hook | explicit for all public stock paths, including complete sampler state | classic; broad behavior still `~` (`SDLGPU-65/76`) |
 | `AcquireThreadContextLeaseEXT`, surface changed/invalidated, context-loss hooks | context/registry explicit | inherited defaults | lease and simulated recovery are EasyGL-specific/CNAEXT; ordinary resize/lifecycle remains in `SDLGPU-68/81` |
 | `Clear`, all six depth/stencil variants, legacy depth/blend/write toggles | explicit | explicit | classic; discriminating sweep (`SDLGPU-58/66`) |
 | `Present`, viewport/default viewport, virtual resolution, presentation mode, swap interval, MSAA/application-format facts | explicit including default viewport and runtime facts | present/size/virtual/mode/interval explicit; default viewport and applied-format hooks inherited | classic observable through GDM/PP/reset (`SDLGPU-68`) |
@@ -176,7 +175,7 @@ were checked individually in the declarations and implementations.
 | coordinate transforms and `ReadBackbuffer` | explicit | explicit | classic; readback baseline passes (`SDLGPU-68`) |
 | texture/sprite/RT2D/RTCube/Texture3D/TextureCube factories, including format-bearing `*EXT` RT factories | explicit | base factories explicit, format-bearing factories inherited and drop format | classic observable (`SDLGPU-69–74`) |
 | `SetRenderTarget2D`, `SetRenderTargetCubeFace`, `SetRenderTargets` | all explicit | 2D and plural explicit; single cube-face hook inherited and delegates to plural | classic; cube ordering verified, MRT semantics remain `SDLGPU-75` |
-| blend/depth/raster/sampler applications; BlendFactor/reference/scissor/viewport | all explicit | all explicit | classic; immutable-key and propagation verification (`SDLGPU-58/63–65`) |
+| blend/depth/raster/sampler applications; BlendFactor/reference/scissor/viewport | all explicit | all explicit | classic; immutable-key and propagation verification (`SDLGPU-58/63/65`) |
 | buffer factories and colored/extended primitive/indexed draw hooks | explicit | explicit | classic (`SDLGPU-59/78`) |
 | `DrawInstancedPrimitivesEx`, `GetMaxVertexStreams`, multistream capability | explicit | draw inherited throw, max-stream/capability inherited false | classic XNA 4.0 (`SDLGPU-60`) |
 | `SupportsDepth*`, `Ensure3DSupported`, unsupported-call behavior, `CanBeginDrawEXT` | runtime-aware | depth/stencil availability is now exposed through explicit capability answers; other defaults retained where semantically applicable | classic capability/profile truthfulness (`SDLGPU-57`) |
@@ -352,15 +351,41 @@ underlying API limitation proven after reasonable emulation analysis.
   Vulkan validation errors and warnings are now fatal for this contract. No production defect was
   present and no renderer code was changed.
 
-### SDLGPU-64 — propagate every ordinary sampler field on every stock path ⬜
+### SDLGPU-64 — propagate every ordinary sampler field on every stock path ✅
 
 - **Problem/public behavior:** MaxMipLevel, MipMapLevelOfDetailBias and volume AddressW are accepted
   but not captured by all stock/SpriteBatch commands.
 - **Evidence:** EasyGL effect corpus varies these; SDL header explicitly says only compiled effects
   receive extended mip state while stock commands snapshot filter/address/anisotropy.
 - **Location:** sampler snapshots in all stock effect and sprite command records, volume sampling.
-- **Acceptance/test:** shared filter/max-mip/LOD-bias/sprite-state fixtures plus AddressU/V/W and
-  anisotropy slot tests yield deliberately different mip/edge colors.
+- **Acceptance/test:** shared filter/max-mip/LOD-bias/sprite-state fixtures plus AddressU/V and
+  anisotropy slot tests yield deliberately different mip/edge colors; AddressW reaches the native
+  descriptor without aliasing. The three-colour volume observation is retained by the dependent
+  volume-sampling tasks `SDLGPU-71/79`, because this task does not invent a new public shader API.
+- **Result (2026-09-09):** every SDL GPU stock command now snapshots filter, U/V/W address modes,
+  anisotropy, MaxMipLevel and LOD bias per texture slot and passes the complete description to the
+  already lossless native sampler cache. This includes both `DualTextureEffect` slots, the base and
+  cube samplers of `EnvironmentMapEffect`, every built-in textured family, PBR preservation paths,
+  and SpriteBatch. `SDL_GPUSamplerCreateInfo::address_mode_w` now uses the captured W mode rather
+  than a hard-coded clamp. The shared SpriteBatch contract was also corrected: `Begin` assigns the
+  resolved sampler to `GraphicsDevice.SamplerStates[0]` as FNA does, and a new complete common hook
+  carries all seven properties instead of silently dropping four. EasyGL and WebGPU adopted the
+  hook in the same task to preserve their ordinary-XNA behavior; WebGPU's sprite shader uses its
+  existing `textureSampleBias` emulation.
+
+  Verification is discriminating, not construction-only. On the real SDL_gpu Vulkan path the four
+  shared sampler fixtures pass, including authored mip colours under natural, +1 and -2 bias and a
+  MaxMipLevel clamp; the revised SpriteBatch fixture also compares all seven retained device
+  properties. Existing `SdlGpu_SamplerState`, both environment-map cube sampler contracts and the
+  29-check descriptor-capacity/lifetime stress all pass (**8/8 CTests total**) with validation
+  diagnostics fatal. The same four fixtures pass on EasyGL. WebGPU shader validation and the
+  corrected fixture pass on the host GPU, and direct EasyGL↔WebGPU frame comparison is byte-exact
+  (max difference 0). The pre-existing stock/dual sampler contracts still abort only when
+  `SDLGPU-59` refuses their valid stride-28 semantic declaration; their earlier sampler legs pass,
+  so that unrelated declaration blocker is not counted as sampler evidence. AddressW is delivered
+  to the native descriptor, but a three-colour volume pixel oracle cannot run until SDL GPU has the
+  ordinary compiled/volume sampling path tracked by `SDLGPU-71/79`; those rows retain that final
+  end-to-end proof rather than leaving it unowned.
 
 ### SDLGPU-65 — honor SpriteBatch depth and slope bias ✅
 
