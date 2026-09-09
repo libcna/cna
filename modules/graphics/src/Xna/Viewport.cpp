@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
+#include <sstream>
 #include <string>
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -17,7 +18,7 @@ namespace Microsoft::Xna::Framework::Graphics
     IMPL_PROP(int, X,         getter1, setter1, member0, static0, constret1, ref1, constmet1, Viewport, nothing)
 
     Viewport::Viewport()
-        : Height_(0), MaxDepth_(1.0f), MinDepth_(0.0f), Width_(0), Y_(0), X_(0)
+        : Height_(0), MaxDepth_(0.0f), MinDepth_(0.0f), Width_(0), Y_(0), X_(0)
     {
     }
 
@@ -107,11 +108,13 @@ namespace Microsoft::Xna::Framework::Graphics
 
     std::string Viewport::ToString() const
     {
-        return "{X:" + std::to_string(X_) +
-               " Y:" + std::to_string(Y_) +
-               " Width:" + std::to_string(Width_) +
-               " Height:" + std::to_string(Height_) +
-               " MinDepth:" + std::to_string(MinDepth_) +
-               " MaxDepth:" + std::to_string(MaxDepth_) + "}";
+        std::ostringstream result;
+        result << "{X:" << X_
+               << " Y:" << Y_
+               << " Width:" << Width_
+               << " Height:" << Height_
+               << " MinDepth:" << MinDepth_
+               << " MaxDepth:" << MaxDepth_ << '}';
+        return result.str();
     }
 }
