@@ -60,9 +60,9 @@ function(cna_register_d3d_parity_tests)
     # D3D11's existing registrations define the declaration order. DIRECTX12_ORDER
     # preserves D3D12's independently-established CTest order during this refactor.
     cna_d3d_parity_fixture(
-        NAME GraphicsDevice_DepthContract TARGET depth_contract
+        NAME GraphicsDevice_DepthContract TARGET depth_contract DIRECTX12_ORDER 2400
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/graphicsdevice_depth_contract_test.cpp"
-        DIRECTX11_ONLY REASON "D3D12 adoption is tracked by DX-227 and DX-236")
+        DIRECTX12_TIMEOUT 600)
     cna_d3d_parity_fixture(
         NAME Common TARGET common SOURCE directx11_common_test.cpp
         DIRECTX11_TIMEOUT 30 DIRECTX11_ENVIRONMENT "CNA_D3D11_SKIP_DXVK_GATE=1"
@@ -242,9 +242,9 @@ function(cna_register_d3d_parity_tests)
         NAME SkinnedEffect_LightingConformance TARGET skinnedeffect_lighting_conformance DIRECTX12_ORDER 1060
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/skinnedeffect_lighting_conformance_test.cpp")
     cna_d3d_parity_fixture(
-        NAME ViewSpaceFog TARGET viewspace_fog
+        NAME ViewSpaceFog TARGET viewspace_fog DIRECTX12_ORDER 2410
         SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/vulkan/examples/vulkan_viewspace_fog_test.cpp"
-        DIRECTX11_ONLY REASON "D3D12 stock-effect corpus adoption is tracked by DX-230 and DX-236")
+        DIRECTX12_TIMEOUT 600)
     cna_d3d_parity_fixture(
         NAME AlphaTest_Fog TARGET alphatest_fog DIRECTX12_ORDER 800
         SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_alphatest_fog_test.cpp")
@@ -695,9 +695,9 @@ function(cna_register_d3d_parity_tests)
         NAME SurfaceFormat_Throws TARGET surface_format_throws DIRECTX12_ORDER 1910
         SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_surface_format_throws_test.cpp")
     cna_d3d_parity_fixture(
-        NAME SpriteBatch_CustomViewport TARGET spritebatch_custom_viewport
+        NAME SpriteBatch_CustomViewport TARGET spritebatch_custom_viewport DIRECTX12_ORDER 2420
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_custom_viewport_test.cpp"
-        DIRECTX11_ONLY REASON "D3D12 presentation-corpus adoption is tracked by DX-234 and DX-236")
+        DIRECTX12_TIMEOUT 600)
     cna_d3d_parity_fixture(
         NAME Texture2D_GetDataContract TARGET texture2d_getdata_contract DIRECTX12_ORDER 30
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/texture2d_getdata_contract_test.cpp")
@@ -787,10 +787,9 @@ function(cna_register_d3d_parity_tests)
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/backbuffer_pass_order_test.cpp"
         DIRECTX11_TIMEOUT 120)
     cna_d3d_parity_fixture(
-        NAME Deferred_Viewport TARGET deferred_viewport
+        NAME Deferred_Viewport TARGET deferred_viewport DIRECTX12_ORDER 2430
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/deferred_viewport_capture_test.cpp"
-        DIRECTX11_TIMEOUT 120 DIRECTX11_ONLY
-        REASON "D3D12 presentation-corpus adoption is tracked by DX-234 and DX-236")
+        DIRECTX11_TIMEOUT 120 DIRECTX12_TIMEOUT 1200)
     cna_d3d_parity_fixture(
         NAME Deferred_Scissor TARGET deferred_scissor DIRECTX12_ORDER 270
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/deferred_scissor_capture_test.cpp"
