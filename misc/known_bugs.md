@@ -166,3 +166,66 @@ GL profile the build selected, so a build that cannot honour `SamplerState.MipMa
 still gets a test that asserts it does. The fix belongs to the parity framework, not to EasyGL:
 either gate these two on the profile, or give a fixture the documented-divergence route
 `fill_mode_wireframe` already uses. Until then these two are expected red in any EasyGL ES build.
+
+---
+
+## 4. Three real XNA 4.0 members of `NetworkSession` are marked `CNAEXT`
+
+**Found:** 2026-09-09, through SAMPLE-096 (Invites).
+**Open in:** `modules/net/include/Microsoft/Xna/Framework/Net/NetworkSession.hpp:69,71,388`.
+
+```cpp
+CNAEXT static constexpr int MaxSupportedGamers = 31;
+CNAEXT static constexpr int MaxPreviousGamers = 100;
+CNAEXT static System::EventHandler<GamerServices::InviteAcceptedEventArgs> InviteAccepted;
+```
+
+`CNAEXT` marks API that is **not part of XNA 4.0**. All three of these are.
+
+### The measurement
+
+The real `Microsoft.Xna.Framework.Net.dll` from the XNA 4.0 install on this machine
+(`~/.wine-cna-xna40/.../GAC_MSIL/Microsoft.Xna.Framework.Net/v4.0_4.0.0.0__842cf8be1de50553/`)
+carries all three names, and for the event the accessor pair a public event compiles to:
+
+```
+MaxSupportedGamers   MaxPreviousGamers
+add_InviteAccepted   remove_InviteAccepted   OnInviteAccepted
+```
+
+CNA's values for the two constants are XNA's documented ones, 31 and 100. SAMPLE-096's unchanged
+source is a second witness for the event: `InvitesGame.cs:68` does
+`NetworkSession.InviteAccepted += InviteAcceptedEventHandler;`, and that sample compiles against
+the official assemblies, so the member is public and static there.
+
+A fourth `CNAEXT` in the same file, `NetworkEvent::Sender` (`:112`), is **correctly** marked — its
+own comment says it is not part of FNA's design, and it is a field of a CNA-internal nested struct.
+
+### Why it matters beyond tidiness
+
+`CNAEXT` is not only a comment. Under `CNA_STRICT_XNA_API` it expands to
+`[[deprecated("CNAEXT: not part of the XNA 4.0 API surface")]]`
+(`modules/core/include/CNA/CNAHelper.hpp:22-26`), and the `cna_strict_xna_api_check` target
+compiles with `-Werror=deprecated-declarations` precisely so that touching an extension fails the
+build. So in strict mode a game that subscribes to `NetworkSession::InviteAccepted` — doing exactly
+what XNA documents, exactly what SAMPLE-096 does — is rejected by the check that exists to prove it
+is portable.
+
+The same line also tells any reader auditing XNA parity that these members are CNA's own invention
+and could be dropped without breaking parity. They cannot.
+
+(The C-API coverage tooling is *not* affected: `tools/c-api/generate_coverage_inventory.py` passes
+`CNAEXT=` to Doxygen's `PREDEFINED`, which erases the token rather than partitioning on it.)
+
+### The correction
+
+Delete the `CNAEXT` token on those three lines. Each doc comment above them already says the true
+thing. `CNAEXT` expands to nothing in a normal build, so the change is source-compatible and
+ABI-neutral; the one build it changes is the strict-mode check, which is the point.
+
+Worth doing as a sweep rather than three edits: this was found by reading one module for one
+sample, and the same mistake is plausible wherever a member was added late. The measurement is
+cheap — every `CNAEXT`-marked public member whose name appears in the matching official XNA
+assembly in the local GAC is a candidate.
+
+Not done here because this audit's task was to measure SAMPLE-096, not to change the Net module.

@@ -93,3 +93,52 @@ from **XNB**, so only the authoring format is missing, not the runtime.
 `Type` attribute the way `ReflectiveTypeReader` already dispatches for XNB. The two would then agree
 on one type table.
 
+
+---
+
+## 4. `PlayerMatch` and `Ranked` sessions are accepted, where XNA refuses them
+
+**Found:** 2026-09-09, through SAMPLE-096 (Invites).
+
+CNA implements real transport for exactly one `NetworkSessionType`. `ENetBackend::
+RealNetworkingEnabled` (`modules/net/src/Internal/ENetBackend.cpp:1147`) is
+
+```cpp
+return sessionType == NetworkSessionType::SystemLink;
+```
+
+and `Local`, `LocalWithLeaderboards`, `PlayerMatch` and `Ranked` are what the codebase calls
+**synthetic** types: `NetworkSessionTypePolicyTests.cpp` sweeps all four and asserts no port is
+bound, no discovery runs, `Update()` never throws and no wire traffic exists. That much is a
+deliberate, tested boundary, and it is not what this entry is about.
+
+What this entry is about is the **shape of the refusal**, because there is not one.
+
+| | `NetworkSession.Create(PlayerMatch, 4, 16)`, one local profile signed in, offline |
+|---|---|
+| Real XNA 4.0 | **throws**; the message names the signed-in-gamer and LIVE-profile requirement |
+| CNA `next` | **succeeds**; returns a session whose `SessionType` is `PlayerMatch`, with no port, no discovery and no peer that can ever arrive |
+
+The XNA half is a capture, not a reading: SAMPLE-096's unchanged `Invites.exe` under the local
+XNA 4.0 install on an isolated offline Xvfb signs in `Player1`, reaches the A/B menu, and answers A
+with that error —
+`/rv/tmp/samples/SAMPLE-096-InvitesSample_4_0/evidence/original-windows-reach/02-after-local-sign-in.png`
+and `03-offline-player-match-create.png`.
+
+`NetworkSession::JoinInvited` behaves the same way. It does not refuse: it builds a
+`NetworkSession` of type `PlayerMatch` out of nothing (`NetworkSession.cpp`, `EndJoinInvited`),
+with no invitation token, no host address and no transport. A caller that follows XNA's own
+contract — subscribe to `InviteAccepted`, call `JoinInvited` from the handler — therefore gets a
+session object back rather than an error, and simply never sees another gamer.
+
+**Why this is a gap and not a bug.** Nothing here is broken relative to its own design; the
+synthetic-type policy is deliberate and covered by tests. But this project's platform rule is that
+*capabilities are promises: unsupported behavior refuses explicitly*, and these two entry points
+promise a matchmaking session and deliver an empty room. Closing it is a decision, not a repair.
+
+**Closing it** means picking the refusal and stating it once: throw from `BeginCreate`/`BeginFind`
+for `PlayerMatch`/`Ranked`, and from `BeginJoinInvited` when no invitation is pending, with an
+exception a game can catch and display — which is exactly what SAMPLE-096 does with the message.
+The four `NetworkSessionTypePolicyTest` cases that construct synthetic sessions would move to
+asserting the refusal instead; `Local` and `LocalWithLeaderboards` are a separate question, since
+XNA genuinely supports both offline.
