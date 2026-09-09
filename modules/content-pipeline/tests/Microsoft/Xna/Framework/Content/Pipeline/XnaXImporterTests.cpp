@@ -636,16 +636,17 @@ TEST(XnaXImporter, ASignedZeroInANormalIsTheMatrixsOwn)
 }
 
 // plans/plan_xna_sample_xnb_sweep.md XNASWEEP-189: the sign of a zero in a converted transform,
-// which the committed oracle cannot carry either. The basis change is `B M B` with
-// `B = diag(1, 1, -1, 1)`, as two matrix multiplications; negating the third row and the third
-// column instead is equal in value and answers a negative zero wherever the entry it negated was
-// a positive one. `B`'s own zeros are signed too -- `M24` and `M42` negative, the other ten
-// positive -- and each of the nine frames below is one a search over all 4,096 assignments needs:
-// flip any single sign and at least one of them stops matching. `Car` is SAMPLE-028's own shape,
-// and `Dense` is the negative control, with no zero in its upper 3x3 at all.
+// which the committed oracle cannot carry either. The basis change is `B_L M B_R`, two matrix
+// multiplications by two matrices that are `diag(1, 1, -1, 1)` in value and *not* the same in the
+// signs of their zeros; negating the third row and the third column instead is equal in value and
+// answers a negative zero wherever the entry it negated was a positive one. Over 144 measured
+// matrices in three independent batches the negations reproduce 3, one shared basis 142, and this
+// all 144. The last two frames are what a shared basis cannot answer -- every term of one dot
+// product is a negative zero there -- `Car` is SAMPLE-028's own shape, and `Dense` is the negative
+// control, with no zero in its upper 3x3 at all.
 TEST(XnaXImporter, TheBasisChangeIsAMultiplicationRatherThanFiveNegations)
 {
-    static constexpr std::array<std::array<std::uint32_t, 16>, 9> expected = {{
+    static constexpr std::array<std::array<std::uint32_t, 16>, 11> expected = {{
         // Car
         {{0x3EBBC2FCu, 0x00000000u, 0x00000000u, 0x00000000u,
          0x00000000u, 0x3EBBC2FCu, 0x00000000u, 0x00000000u,
@@ -691,6 +692,16 @@ TEST(XnaXImporter, TheBasisChangeIsAMultiplicationRatherThanFiveNegations)
          0x40200000u, 0x00000000u, 0x00000000u, 0x40200000u,
          0x00000000u, 0x00000000u, 0x00000000u, 0x3FC00000u,
          0xBFC00000u, 0x40200000u, 0x00000000u, 0x00000000u}},
+        // RowAllNegative
+        {{0xBFC00000u, 0xBFC00000u, 0xC0200000u, 0x40200000u,
+         0xBFC00000u, 0x00000000u, 0x3FC00000u, 0x40200000u,
+         0x3FC00000u, 0x3FC00000u, 0x00000000u, 0x00000000u,
+         0x00000000u, 0x00000000u, 0xC0200000u, 0x00000000u}},
+        // ColumnAllNegative
+        {{0x00000000u, 0xBFC00000u, 0x3FC00000u, 0x00000000u,
+         0xBFC00000u, 0x40200000u, 0x3FC00000u, 0x40200000u,
+         0x80000000u, 0xC0200000u, 0x40200000u, 0xC0200000u,
+         0x00000000u, 0xBFC00000u, 0x00000000u, 0xBFC00000u}},
     }};
 
     ImporterContext context;

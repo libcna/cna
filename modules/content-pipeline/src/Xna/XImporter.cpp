@@ -145,38 +145,59 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         }
 
         /**
-         * @brief The basis matrix the `.x` importer changes a transform with.
+         * @brief The matrix the `.x` importer multiplies a transform by on the left.
          *
-         * `diag(1, 1, -1, 1)` in value, and its zeros carry a sign: `M24` and `M42` are negative
-         * zeros and the other ten are positive. That is not decoration either -- a zero times a
-         * negative number is a negative zero, so which of a dot product's four terms is negative
-         * decides the sign of a zero entry in the answer (`XNASWEEP-189`).
+         * `diag(1, 1, -1, 1)` in value, and its zeros carry a sign: `M24` and `M31` are negative
+         * zeros. That is not decoration -- a zero times a negative number is a negative zero, so
+         * which of a dot product's four terms is negative decides the sign of a zero in the
+         * answer. Those two are what 144 measured matrices pin down; `M12`, `M13`, `M14` and the
+         * fourth row are not constrained by any of them, and are written positive here except
+         * `M43`, which cannot be, because no assignment with all three of the fourth row's zeros
+         * positive fits (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-189`).
          */
-        [[nodiscard]] Matrix BasisChange()
+        [[nodiscard]] Matrix BasisChangeLeft()
         {
             static constexpr float kNegativeZero = -0.0f;
             Matrix basis = Matrix::getIdentityProperty();
             basis.M33 = -1.0f;
             basis.M24 = kNegativeZero;
-            basis.M42 = kNegativeZero;
+            basis.M31 = kNegativeZero;
+            basis.M43 = kNegativeZero;
+            return basis;
+        }
+
+        /**
+         * @brief The matrix it multiplies by on the right, which is not the same one.
+         *
+         * That the two sides differ is the whole of what a third measured batch added: with one
+         * shared basis, two of 144 matrices come out with the wrong sign of zero and no assignment
+         * of its twelve signs fixes them. Here `M32` is the negative zero and everything else is
+         * positive -- the first and third columns because the measurements say so, the fourth
+         * because nothing constrains it (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-189`).
+         */
+        [[nodiscard]] Matrix BasisChangeRight()
+        {
+            static constexpr float kNegativeZero = -0.0f;
+            Matrix basis = Matrix::getIdentityProperty();
+            basis.M33 = -1.0f;
+            basis.M32 = kNegativeZero;
             return basis;
         }
 
         /**
          * @brief The left-handed matrix as the right-handed pipeline holds it.
          *
-         * The basis change `B M B`, as two matrix multiplications in that order, and *not* the
+         * The basis change `B_L M B_R`, as two matrix multiplications in that order, and *not* the
          * five negations it is equal to in value: the third row and the third column are negated
          * and `M33` is left alone because it is negated twice, but negating an entry on its own
          * turns a zero into a negative zero where a dot product's sum of four terms does not.
-         * Measured over 96 random sign patterns, where the negations reproduce 3 of 96 matrices
-         * and this reproduces all 96 to the bit (plans/plan_xna_sample_xnb_sweep.md
-         * `XNASWEEP-189`).
+         * Measured over 144 random sign patterns in three independent batches: the negations
+         * reproduce 3 of 144, one shared basis 142, and this all 144 to the bit
+         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-189`).
          */
         [[nodiscard]] Matrix Convert(const Matrix& m)
         {
-            const Matrix basis = BasisChange();
-            return Matrix::Multiply(Matrix::Multiply(basis, m), basis);
+            return Matrix::Multiply(Matrix::Multiply(BasisChangeLeft(), m), BasisChangeRight());
         }
 
         [[nodiscard]] const Canon::DirectXFileObject* Find(const Canon::DirectXFileObject& parent,

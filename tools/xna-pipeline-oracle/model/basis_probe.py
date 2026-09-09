@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-189: which basis matrix the `.x` importer multiplies by.
+"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-189: which matrices the `.x` conversion multiplies by.
 
 A converted `FrameTransformMatrix` differs from XNA's only in the sign of its zeros, and a sign of
 zero is not something a value can show: `-0 == +0`, and .NET's `ToString` prints both as `0`. What
 does show it is the arithmetic that produced it, so this measures the arithmetic. `--write` puts a
 corpus of `FrameTransformMatrix` values whose entries are drawn from `{+0, -0, -1.5, +2.5}` in a
 directory; run the genuine importer over it with `CNA_MODEL_ORACLE_BITS=1`, and `--fit` searches
-every candidate for the basis matrix `B` such that the answer is `B M B`:
+for the pair `(B_L, B_R)` such that the answer is `(B_L M) B_R`.
 
-  * both orders the two multiplications can be written in, `(B M) B` and `B (M B)`;
-  * both shapes a dot product's four terms can be added in, left to right and in pairs;
-  * all 4,096 sign assignments of `B`'s twelve off-diagonal zeros.
+The two are *not* the same matrix, which is why the search is a pair. It would be 16.7 million
+combinations taken together, but it factorises: an entry of `(B_L M) B_R` depends only on `B_L`'s
+row and `B_R`'s column, so each of the sixteen entries is decided by eight sign assignments against
+eight, and the consistent whole pairs follow from those sixteen sets. `--fit` reports both -- the
+per-entry sets and the pairs -- and also scores the single-basis reading `B M B` over all 4,096 of
+its assignments, which is the reading two of the first ninety-six matrices could not distinguish.
 
 Every value involved is exactly representable, so Python's own floats are the float32 arithmetic
 and no rounding step is needed.
@@ -24,6 +27,7 @@ and no rounding step is needed.
 from __future__ import annotations
 
 import argparse
+import itertools
 import json
 import os
 import random
@@ -139,6 +143,42 @@ def read_oracle(path: str):
     return out
 
 
+def row_vector(i: int, signs):
+    """`B_L`'s row `i`: the diagonal entry, and one sign per off-diagonal zero."""
+    out = [0.0] * 4
+    at = 0
+    for j in range(4):
+        if i == j:
+            out[j] = DIAGONAL[i]
+        else:
+            out[j] = -0.0 if signs[at] else 0.0
+            at += 1
+    return out
+
+
+def column_vector(j: int, signs):
+    """`B_R`'s column `j`, the same way."""
+    out = [0.0] * 4
+    at = 0
+    for i in range(4):
+        if i == j:
+            out[i] = DIAGONAL[j]
+        else:
+            out[i] = -0.0 if signs[at] else 0.0
+            at += 1
+    return out
+
+
+def one_entry(m, row, column):
+    """`((B_L M) B_R)[i][j]` from `B_L`'s row `i` and `B_R`'s column `j`."""
+    middle = [0.0] * 4
+    for k in range(4):
+        p = [row[j] * m[j][k] for j in range(4)]
+        middle[k] = (p[0] + p[1]) + (p[2] + p[3])
+    p = [middle[k] * column[k] for k in range(4)]
+    return (p[0] + p[1]) + (p[2] + p[3])
+
+
 def fit(directory: str, oracle: str) -> int:
     source = read_manifest(os.path.join(directory, "manifest.txt"))
     answered = read_oracle(oracle)
@@ -148,33 +188,64 @@ def fit(directory: str, oracle: str) -> int:
     cases = [([[source[n][r * 4 + c] for c in range(4)] for r in range(4)],
               [[answered[n][r * 4 + c] for c in range(4)] for r in range(4)]) for n in names]
     print("%d matrices, %d entries" % (len(cases), len(cases) * 16))
-    solutions = []
+
+    # The single-basis reading first, over all 4,096 assignments, so its best is on the record.
+    best = None
     for shape, multiply in SHAPES:
         for order in ("(B M) B", "B (M B)"):
             for mask in range(1 << 12):
                 candidate = basis(mask)
-                if all(all(bits(got[i][j]) == bits(want[i][j])
-                           for i in range(4) for j in range(4))
-                       for got, want in
-                       (((multiply(multiply(candidate, m), candidate) if order == "(B M) B"
-                          else multiply(candidate, multiply(m, candidate))), want)
-                        for m, want in cases)):
-                    solutions.append((shape, order, mask))
-    print("solutions: %d" % len(solutions))
-    for shape, order, mask in solutions:
-        print("  %s, %s, mask 0x%03X" % (order, shape, mask))
-        for row in basis(mask):
-            print("      " + " ".join(("-0" if bits(v) == 0x80000000 else
-                                       ("+0" if v == 0 else "%+g" % v)) for v in row))
-    for solution in solutions[:1]:
-        mask = solution[2]
-        free = [(i, j) for bit, (i, j) in enumerate(OFF)
-                if all(all(bits((multiply_paired(multiply_paired(basis(mask ^ (1 << bit)), m),
-                                                 basis(mask ^ (1 << bit))))[i2][j2])
-                           == bits(want[i2][j2]) for i2 in range(4) for j2 in range(4))
-                       for m, want in cases)]
-        print("signs no measured matrix constrains: %s" % (free or "none"))
-    return 0 if solutions else 1
+                wrong = 0
+                for m, want in cases:
+                    got = multiply(multiply(candidate, m), candidate) if order == "(B M) B" \
+                        else multiply(candidate, multiply(m, candidate))
+                    wrong += sum(1 for i in range(4) for j in range(4)
+                                 if bits(got[i][j]) != bits(want[i][j]))
+                if best is None or wrong < best[0]:
+                    best = (wrong, order, shape, mask)
+    print("one shared basis, best of 4,096: %d entries wrong (%s, %s, mask 0x%03X)"
+          % (best[0], best[1], best[2], best[3]))
+
+    # The pair. Each entry is decided by one row of B_L against one column of B_R, so the sixteen
+    # sets below are the whole constraint and the consistent pairs follow from them.
+    assignments = list(itertools.product((0, 1), repeat=3))
+    allowed = {}
+    for i in range(4):
+        for j in range(4):
+            allowed[(i, j)] = {
+                (left, right) for left in assignments for right in assignments
+                if all(bits(one_entry(m, row_vector(i, left), column_vector(j, right)))
+                       == bits(want[i][j]) for m, want in cases)}
+            if not allowed[(i, j)]:
+                print("entry (%d,%d) has no assignment at all" % (i, j))
+    if any(not v for v in allowed.values()):
+        return 1
+    pairs = [(L, R) for L in itertools.product(assignments, repeat=4)
+             for R in itertools.product(assignments, repeat=4)
+             if all((L[i], R[j]) in allowed[(i, j)] for i in range(4) for j in range(4))]
+    print("consistent (B_L, B_R) pairs: %d" % len(pairs))
+    if not pairs:
+        return 1
+    for name, index, vectors in (("B_L rows", 0, [p[0] for p in pairs]),
+                                 ("B_R columns", 1, [p[1] for p in pairs])):
+        for k in range(4):
+            options = sorted({v[k] for v in vectors})
+            print("  %s %d: %d option(s) %s" % (name, k, len(options), options))
+    left, right = pairs[0]
+    for label, build, vectors in (("B_L", row_vector, left), ("B_R", column_vector, right)):
+        print("  one solution, %s:" % label)
+        rows = [[0.0] * 4 for _ in range(4)]
+        for k in range(4):
+            v = build(k, vectors[k])
+            for at in range(4):
+                if label == "B_L":
+                    rows[k][at] = v[at]
+                else:
+                    rows[at][k] = v[at]
+        for row in rows:
+            print("     " + " ".join(("-0" if bits(x) == 0x80000000 else
+                                      ("+0" if x == 0 else "%+g" % x)) for x in row))
+    return 0
 
 
 def main(argv=None) -> int:

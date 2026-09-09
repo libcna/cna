@@ -8,10 +8,12 @@ negations it equals in value. The two differ only in the sign of a zero: negatin
 `-0`, where a dot product of four terms answers whatever its four signed zeros add up to, and IEEE
 addition makes `(-0) + (+0)` positive.
 
-The basis matrix's own zeros carry a sign too -- `M24` and `M42` are negative and the other ten
-positive -- because a zero coefficient times a negative entry is a negative zero. Each of the seven
-sign patterns below is one a search over all 4,096 sign assignments needs: flip any single one of
-the twelve and at least one of these frames stops matching what the genuine importer answers.
+The basis matrices' own zeros carry a sign too, because a zero coefficient times a negative entry
+is a negative zero -- and the two multiplications do **not** carry the same signs. What 144 measured
+matrices pin down is `B_L`'s `M24` and `M31`, both negative zeros, and every off-diagonal zero of
+`B_R`'s first and third columns, all positive; the rest is not constrained by any of them. Each sign
+pattern below is one the fit needs, and the last two are what separates the two sides: every term of
+one dot product is a negative zero there, and one basis used twice answers the wrong sign.
 
 `Car` is the shape SAMPLE-028's `Car.x` actually has, and `Dense` is the negative control -- no zero
 anywhere in its upper 3x3, so it measures the plain negation and nothing else.
@@ -61,6 +63,16 @@ FRAMES = [
                 2.5, -0.0, -0.0, 2.5,
                 0.0, 0.0, -0.0, -1.5,
                 -1.5, 2.5, 0.0, -0.0]),
+    # The two a single shared basis could not answer: every term of one dot product is a negative
+    # zero there, which is what separates the two multiplications' own sign patterns.
+    ("RowAllNegative", [-1.5, -1.5, 2.5, 2.5,
+                        -1.5, -0.0, -1.5, 2.5,
+                        -1.5, -1.5, -0.0, 0.0,
+                        -0.0, 0.0, 2.5, 0.0]),
+    ("ColumnAllNegative", [0.0, -1.5, -1.5, -0.0,
+                           -1.5, 2.5, -1.5, 2.5,
+                           0.0, 2.5, 2.5, 2.5,
+                           -0.0, -1.5, -0.0, -1.5]),
 ]
 
 MESH = """  Mesh Point {
