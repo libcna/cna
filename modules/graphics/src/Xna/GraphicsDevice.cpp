@@ -4454,8 +4454,7 @@ namespace Microsoft::Xna::Framework::Graphics
             SetRenderTargets({});
             return;
         }
-        SetRenderTargets({RenderTargetBinding(
-            static_cast<Texture*>(renderTarget), cubeMapFace)});
+        SetRenderTargets({RenderTargetBinding(renderTarget, cubeMapFace)});
     }
 
     void GraphicsDevice::SetRenderTargets(const std::vector<RenderTargetBinding>& renderTargets)

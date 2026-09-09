@@ -1,10 +1,23 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
 #include "System/ArgumentNullException.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
     RenderTargetBinding::RenderTargetBinding() = default;
+
+    RenderTargetBinding::RenderTargetBinding(RenderTarget2D* renderTarget)
+        : RenderTargetBinding(static_cast<Texture*>(renderTarget), 0)
+    {
+    }
+
+    RenderTargetBinding::RenderTargetBinding(
+        RenderTargetCube* renderTarget, CubeMapFace cubeMapFace)
+        : RenderTargetBinding(static_cast<Texture*>(renderTarget), cubeMapFace)
+    {
+    }
 
     RenderTargetBinding::RenderTargetBinding(Texture* renderTarget, int arraySlice)
         : renderTarget_(renderTarget), arraySlice_(arraySlice)
