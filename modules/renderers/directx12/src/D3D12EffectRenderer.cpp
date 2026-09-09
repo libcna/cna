@@ -234,8 +234,7 @@ namespace CNA::Internal::Renderers::DirectX12
     }
 
     ID3D12PipelineState* D3D12EffectRenderer::GetOrCreatePipelineStateEXT(
-        D3D12PipelineStateDesc desc, const DXGI_FORMAT rtvFormat,
-        const DXGI_FORMAT dsvFormat)
+        D3D12PipelineStateDesc desc)
     {
         (void) owner_.Get();
         if (!valid_ || !rootSignature_ || !vsBytecode_ || !psBytecode_)
@@ -245,8 +244,7 @@ namespace CNA::Internal::Renderers::DirectX12
         desc.customVertexShaderBytecodeSize = vsBytecode_->GetBufferSize();
         desc.customPixelShaderBytecode = psBytecode_->GetBufferPointer();
         desc.customPixelShaderBytecodeSize = psBytecode_->GetBufferSize();
-        pso_ = owner_->psoCache_.GetOrCreate(
-            device_, rootSignature_.Get(), desc, rtvFormat, dsvFormat);
+        pso_ = owner_->psoCache_.GetOrCreate(device_, rootSignature_.Get(), desc);
         return pso_.Get();
     }
 

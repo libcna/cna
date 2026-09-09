@@ -1091,6 +1091,7 @@ namespace CNA::Internal::Renderers::DirectX12
         boundColorHeight_ = height;
         boundDsv_ = dsv;
         boundDsvFormat_ = dsvFormat;
+        extraMrtCount_ = 0;
         // REMED-GFX-064: binding a target resets the custom Viewport to that target's full size
         // (mirrors XNA's SetRenderTarget reset; here viewportSet_=false => the full-target fallback
         // in GetEffectiveViewportEXT). In production GraphicsDevice re-sets it explicitly right
@@ -1200,7 +1201,30 @@ namespace CNA::Internal::Renderers::DirectX12
         {
             extraMrtResources_[i] = resources[i + 1];
             extraMrtRtvs_[i] = rtvs[i + 1];
+            extraMrtFormats_[i] = resources[i + 1]->GetDesc().Format;
         }
+    }
+
+    void DirectX12Renderer::TransitionAndBindRenderTargetsEXT(
+        ID3D12GraphicsCommandList* commandList)
+    {
+        if (commandList == nullptr || boundColorResource_ == nullptr)
+            return;
+
+        std::array<D3D12_CPU_DESCRIPTOR_HANDLE,
+                   D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT> rtvs{};
+        rtvs[0] = boundColorRtv_;
+        resourceStates_.TransitionTo(
+            commandList, boundColorResource_, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        for (int i = 0; i < extraMrtCount_; ++i)
+        {
+            rtvs[static_cast<std::size_t>(i + 1)] = extraMrtRtvs_[i];
+            resourceStates_.TransitionTo(
+                commandList, extraMrtResources_[i], D3D12_RESOURCE_STATE_RENDER_TARGET);
+        }
+        commandList->OMSetRenderTargets(
+            static_cast<UINT>(extraMrtCount_ + 1), rtvs.data(), FALSE,
+            boundDsv_.ptr != 0 ? &boundDsv_ : nullptr);
     }
 
     void DirectX12Renderer::RestoreBackBufferRenderTargetEXT()
@@ -1597,11 +1621,8 @@ namespace CNA::Internal::Renderers::DirectX12
         const float clearColor[4] = {r, g, b, a};
         cmdList->ClearRenderTargetView(boundColorRtv_, clearColor, 0, nullptr);
 
-        // DX-117: real MRT -- independently transition+clear every additional bound target too
-        // (SetRenderTargets()'s own real multi-target bind), matching D3D11's own DX-46 proof
-        // shape. Draws themselves remain single-target (boundColorRtv_ only) -- no CNA shader
-        // declares more than one SV_Target output, the same honest scope boundary this project's
-        // own D3D11 MRT work already established.
+        // DX-117/DX-224: independently transition and clear every additional bound target, using
+        // the same ordered set TransitionAndBindRenderTargetsEXT supplies to every draw.
         for (int i = 0; i < extraMrtCount_; ++i)
         {
             resourceStates_.TransitionTo(cmdList, extraMrtResources_[i], D3D12_RESOURCE_STATE_RENDER_TARGET);
@@ -2145,10 +2166,10 @@ namespace CNA::Internal::Renderers::DirectX12
         currentAlphaDstBlend_ = alphaDstBlend;
         currentColorBlendFunc_ = colorBlendFunc;
         currentAlphaBlendFunc_ = alphaBlendFunc;
-        // REMED-GFX-077: both are STATIC PSO state, folded into the PSO cache key + desc at draw
-        // time (see the three psoDesc fill sites). D3D12 draws are single-target here, so only
-        // ColorWriteChannels slot 0 applies.
-        currentColorWriteMask_ = writeState.colorWriteChannels[0];
+        // REMED-GFX-077/DX-224: all four MRT masks are static PSO state. Tracking the complete
+        // array is required because D3D12 cannot change one attachment's mask after PSO creation.
+        for (std::size_t i = 0; i < currentColorWriteMasks_.size(); ++i)
+            currentColorWriteMasks_[i] = writeState.colorWriteChannels[i];
         currentSampleMask_ = writeState.multiSampleMask;
     }
 
@@ -2218,7 +2239,7 @@ namespace CNA::Internal::Renderers::DirectX12
         psoDesc.alphaDstBlend = currentAlphaDstBlend_;
         psoDesc.colorBlendFunc = currentColorBlendFunc_;
         psoDesc.alphaBlendFunc = currentAlphaBlendFunc_;
-        psoDesc.colorWriteMask = currentColorWriteMask_; // REMED-GFX-077 (static PSO state)
+        psoDesc.colorWriteMasks = currentColorWriteMasks_; // REMED-GFX-077/DX-224
         psoDesc.sampleMask = currentSampleMask_;         // REMED-GFX-077 (static PSO state)
         psoDesc.depthEnable = currentDepthEnable_;
         psoDesc.depthWriteEnable = currentDepthWriteEnable_;
@@ -2247,6 +2268,17 @@ namespace CNA::Internal::Renderers::DirectX12
         // with -- D3D12 has no equivalent of D3D11's uncoupled model -- so it comes from the bound
         // target rather than from a constant.
         psoDesc.sampleCount = GetBoundColorSampleCountEXT();
+        psoDesc.renderTargetCount = boundColorResource_ == nullptr
+            ? 0u : static_cast<unsigned int>(extraMrtCount_ + 1);
+        psoDesc.renderTargetFormats.fill(DXGI_FORMAT_UNKNOWN);
+        if (boundColorResource_ != nullptr)
+        {
+            psoDesc.renderTargetFormats[0] = boundColorFormat_;
+            for (int i = 0; i < extraMrtCount_; ++i)
+                psoDesc.renderTargetFormats[static_cast<std::size_t>(i + 1)] =
+                    extraMrtFormats_[i];
+        }
+        psoDesc.depthStencilFormat = boundDsvFormat_;
     }
 
     void DirectX12Renderer::ApplyRasterizerState(int cullMode, int fillMode,
@@ -2382,7 +2414,7 @@ namespace CNA::Internal::Renderers::DirectX12
         // debug-layer error available on this dev loop -- why depthEnable=false/cullMode=None
         // became this path's safe starting default in the first place.
         FillPsoStateFromCurrentEXT(psoDesc);
-        auto pso = psoCache_.GetOrCreate(device_.Get(), rootSig.Get(), psoDesc, boundColorFormat_, boundDsvFormat_);
+        auto pso = psoCache_.GetOrCreate(device_.Get(), rootSig.Get(), psoDesc);
         if (!pso)
             throw std::runtime_error("DrawColoredPrimitives: failed to create colored3d PSO");
 
@@ -2411,8 +2443,7 @@ namespace CNA::Internal::Renderers::DirectX12
         // share this exact command-list submission with the draw below.
         if (activeOcclusionQueryHeap_) cmdList->BeginQuery(activeOcclusionQueryHeap_, D3D12_QUERY_TYPE_OCCLUSION, 0);
 
-        resourceStates_.TransitionTo(cmdList, boundColorResource_, D3D12_RESOURCE_STATE_RENDER_TARGET);
-        cmdList->OMSetRenderTargets(1, &boundColorRtv_, FALSE, boundDsv_.ptr != 0 ? &boundDsv_ : nullptr);
+        TransitionAndBindRenderTargetsEXT(cmdList);
 
         D3D12_VIEWPORT viewport = GetEffectiveViewportEXT();  // REMED-GFX-064: honor custom Viewport
         D3D12_RECT scissor = GetEffectiveScissorEXT(); // DX-201
@@ -2479,7 +2510,7 @@ namespace CNA::Internal::Renderers::DirectX12
         // DX-118: depth/cull/blend state is now real and runtime-settable -- see
         // DrawColoredPrimitives's own equivalent block for the full rationale/history.
         FillPsoStateFromCurrentEXT(psoDesc);
-        auto pso = psoCache_.GetOrCreate(device_.Get(), rootSig.Get(), psoDesc, boundColorFormat_, boundDsvFormat_);
+        auto pso = psoCache_.GetOrCreate(device_.Get(), rootSig.Get(), psoDesc);
         if (!pso)
             throw std::runtime_error("DrawIndexedColoredPrimitives: failed to create colored3d PSO");
 
@@ -2506,8 +2537,7 @@ namespace CNA::Internal::Renderers::DirectX12
         // share this exact command-list submission with the draw below.
         if (activeOcclusionQueryHeap_) cmdList->BeginQuery(activeOcclusionQueryHeap_, D3D12_QUERY_TYPE_OCCLUSION, 0);
 
-        resourceStates_.TransitionTo(cmdList, boundColorResource_, D3D12_RESOURCE_STATE_RENDER_TARGET);
-        cmdList->OMSetRenderTargets(1, &boundColorRtv_, FALSE, boundDsv_.ptr != 0 ? &boundDsv_ : nullptr);
+        TransitionAndBindRenderTargetsEXT(cmdList);
 
         D3D12_VIEWPORT viewport = GetEffectiveViewportEXT();  // REMED-GFX-064: honor custom Viewport
         D3D12_RECT scissor = GetEffectiveScissorEXT(); // DX-201
@@ -2597,7 +2627,7 @@ namespace CNA::Internal::Renderers::DirectX12
             customState.topologyType = static_cast<int>(ToD3D12TopologyType(primitive));
             FillPsoStateFromCurrentEXT(customState);
             ID3D12PipelineState* customPso = customEffect->GetOrCreatePipelineStateEXT(
-                std::move(customState), boundColorFormat_, boundDsvFormat_);
+                std::move(customState));
             ID3D12RootSignature* customRootSignature = customEffect->GetRootSignatureEXT();
             if (customPso == nullptr || customRootSignature == nullptr)
                 throw System::NotSupportedException(
@@ -2627,10 +2657,7 @@ namespace CNA::Internal::Renderers::DirectX12
             if (activeOcclusionQueryHeap_)
                 cmdList->BeginQuery(activeOcclusionQueryHeap_, D3D12_QUERY_TYPE_OCCLUSION, 0);
 
-            resourceStates_.TransitionTo(
-                cmdList, boundColorResource_, D3D12_RESOURCE_STATE_RENDER_TARGET);
-            cmdList->OMSetRenderTargets(
-                1, &boundColorRtv_, FALSE, boundDsv_.ptr != 0 ? &boundDsv_ : nullptr);
+            TransitionAndBindRenderTargetsEXT(cmdList);
             const D3D12_VIEWPORT viewport = GetEffectiveViewportEXT();
             const D3D12_RECT scissor = GetEffectiveScissorEXT();
             cmdList->RSSetViewports(1, &viewport);
@@ -2920,7 +2947,7 @@ namespace CNA::Internal::Renderers::DirectX12
         // DX-118: depth/cull/blend state is now real and runtime-settable -- see
         // DrawColoredPrimitives's own equivalent block for the full rationale/history.
         FillPsoStateFromCurrentEXT(psoDesc);
-        auto pso = psoCache_.GetOrCreate(device_.Get(), rootSig.Get(), psoDesc, boundColorFormat_, boundDsvFormat_);
+        auto pso = psoCache_.GetOrCreate(device_.Get(), rootSig.Get(), psoDesc);
         if (!pso)
             throw std::runtime_error("DrawPrimitivesEx: failed to create PSO for the selected variant");
 
@@ -3432,8 +3459,7 @@ namespace CNA::Internal::Renderers::DirectX12
         // share this exact command-list submission with the draw below.
         if (activeOcclusionQueryHeap_) cmdList->BeginQuery(activeOcclusionQueryHeap_, D3D12_QUERY_TYPE_OCCLUSION, 0);
 
-        resourceStates_.TransitionTo(cmdList, boundColorResource_, D3D12_RESOURCE_STATE_RENDER_TARGET);
-        cmdList->OMSetRenderTargets(1, &boundColorRtv_, FALSE, boundDsv_.ptr != 0 ? &boundDsv_ : nullptr);
+        TransitionAndBindRenderTargetsEXT(cmdList);
 
         D3D12_VIEWPORT viewport = GetEffectiveViewportEXT();  // REMED-GFX-064: honor custom Viewport
         D3D12_RECT scissor = GetEffectiveScissorEXT(); // DX-201
@@ -3575,8 +3601,7 @@ namespace CNA::Internal::Renderers::DirectX12
         psoDesc.vertexInputElements = inputElements;
         psoDesc.topologyType = static_cast<int>(ToD3D12TopologyType(primitive));
         FillPsoStateFromCurrentEXT(psoDesc);
-        auto pso = psoCache_.GetOrCreate(
-            device_.Get(), rootSig.Get(), psoDesc, boundColorFormat_, boundDsvFormat_);
+        auto pso = psoCache_.GetOrCreate(device_.Get(), rootSig.Get(), psoDesc);
         if (!pso)
             throw std::runtime_error("DrawInstancedPrimitivesEx: failed to create instanced3d PSO");
 
@@ -3603,9 +3628,7 @@ namespace CNA::Internal::Renderers::DirectX12
         // share this exact command-list submission with the draw below.
         if (activeOcclusionQueryHeap_) cmdList->BeginQuery(activeOcclusionQueryHeap_, D3D12_QUERY_TYPE_OCCLUSION, 0);
 
-        resourceStates_.TransitionTo(cmdList, boundColorResource_, D3D12_RESOURCE_STATE_RENDER_TARGET);
-        cmdList->OMSetRenderTargets(
-            1, &boundColorRtv_, FALSE, boundDsv_.ptr != 0 ? &boundDsv_ : nullptr);
+        TransitionAndBindRenderTargetsEXT(cmdList);
 
         D3D12_VIEWPORT viewport = GetEffectiveViewportEXT();  // REMED-GFX-064: honor custom Viewport
         D3D12_RECT scissor = GetEffectiveScissorEXT(); // DX-201

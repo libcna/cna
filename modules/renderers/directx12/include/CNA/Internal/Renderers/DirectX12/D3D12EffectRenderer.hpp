@@ -60,7 +60,7 @@ namespace CNA::Internal::Renderers::DirectX12
         [[nodiscard]] ID3D12PipelineState* GetPipelineStateEXT() const { return pso_.Get(); }
         /** @brief Resolves a custom PSO through the renderer's complete state cache. */
         [[nodiscard]] ID3D12PipelineState* GetOrCreatePipelineStateEXT(
-            D3D12PipelineStateDesc desc, DXGI_FORMAT rtvFormat, DXGI_FORMAT dsvFormat);
+            D3D12PipelineStateDesc desc);
         /** @brief Returns this program's reflected root signature. */
         [[nodiscard]] ID3D12RootSignature* GetRootSignatureEXT() const { return rootSignature_.Get(); }
         /** @brief Returns a reflected constant-buffer resource by b-register. */

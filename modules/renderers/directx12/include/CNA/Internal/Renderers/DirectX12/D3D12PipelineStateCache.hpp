@@ -33,6 +33,7 @@
 #include <d3d12.h>
 #include <wrl/client.h>
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <map>
@@ -123,12 +124,10 @@ namespace CNA::Internal::Renderers::DirectX12
         // "the rectangle covers the whole target" -- command-list state, not pipeline state. See
         // DirectX12Renderer::GetEffectiveScissorEXT (DX-201).
 
-        // REMED-GFX-077: BlendState output-merger write state. Both are STATIC parts of the D3D12
-        // PSO (RenderTarget[0].RenderTargetWriteMask and D3D12_GRAPHICS_PIPELINE_STATE_DESC::
-        // SampleMask), so both participate in the PSO cache key. D3D12 draws are single-target here
-        // (no CNA shader emits >1 SV_Target), so only ColorWriteChannels slot 0 applies. XNA
+        // REMED-GFX-077/DX-224: BlendState output-merger write state. The four XNA MRT masks and
+        // SampleMask are STATIC parts of a D3D12 PSO, so all participate in the cache key. XNA
         // ColorWriteChannels (R=1,G=2,B=4,A=8) is bit-identical to D3D12_COLOR_WRITE_ENABLE_*.
-        int colorWriteMask = 15;             // ColorWriteChannels.All
+        std::array<int, 4> colorWriteMasks{15, 15, 15, 15};
         unsigned int sampleMask = 0xFFFFFFFFu; // MultiSampleMask == -1 (all samples)
         // plans/plan_dx.md DX-207: the bound render target's real sample count. D3D12 requires a pipeline
         // state's SampleDesc.Count to MATCH the render target it is used with -- unlike D3D11, which
@@ -136,6 +135,16 @@ namespace CNA::Internal::Renderers::DirectX12
         // RenderTarget2D/RenderTargetCube illegal, however correctly that target was created. 1 is
         // the non-MSAA case and keeps every existing single-sample PSO byte-identical.
         unsigned int sampleCount = 1;
+        // DX-224: D3D12 bakes the complete active MRT shape into each PSO. Defaults preserve the
+        // historical one-RGBA8-target behavior for direct cache clients such as the smoke test;
+        // renderer draw paths overwrite these fields from the actual bound target set.
+        unsigned int renderTargetCount = 1;
+        std::array<DXGI_FORMAT, D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT> renderTargetFormats{
+            DXGI_FORMAT_R8G8B8A8_UNORM,
+            DXGI_FORMAT_UNKNOWN, DXGI_FORMAT_UNKNOWN, DXGI_FORMAT_UNKNOWN,
+            DXGI_FORMAT_UNKNOWN, DXGI_FORMAT_UNKNOWN, DXGI_FORMAT_UNKNOWN,
+            DXGI_FORMAT_UNKNOWN};
+        DXGI_FORMAT depthStencilFormat = DXGI_FORMAT_UNKNOWN;
         // plans/plan_dx.md DX-208: the pipeline state's primitive topology CLASS. D3D12 bakes this in and
         // requires it to agree with the topology the command list sets, which is the whole reason
         // LineList/LineStrip/PointListEXT used to throw here. TRIANGLE keeps every existing
@@ -159,7 +168,9 @@ namespace CNA::Internal::Renderers::DirectX12
                                    twoSidedStencilMode, ccwStencilFunc, ccwStencilPass,
                                    ccwStencilFail, ccwStencilDepthFail,
                                    cullMode, fillMode, depthBias, slopeScaleDepthBias,
-                                   colorWriteMask, sampleMask, sampleCount, topologyType);
+                                   colorWriteMasks, sampleMask, sampleCount,
+                                   renderTargetCount, renderTargetFormats, depthStencilFormat,
+                                   topologyType);
         }
     };
 
@@ -173,18 +184,17 @@ namespace CNA::Internal::Renderers::DirectX12
         /// D3D12 input layout for @p desc.strideInBytes, and @p desc's blend/depth/rasterizer
         /// fields mapped through D3DStateMapping. @p rootSignature must already be a real, live
         /// object (see D3D12RootSignatureCache) -- this cache does not create root signatures
-        /// itself. @p rtvFormat/@p dsvFormat describe the render target(s)/depth-stencil buffer
-        /// this PSO will be used against (D3D12 bakes these into the PSO, unlike D3D11's dynamic
-        /// OMSetRenderTargets binding) -- pass DXGI_FORMAT_UNKNOWN for @p dsvFormat if no depth
-        /// buffer is bound.
+        /// itself. The descriptor's renderTargetCount, renderTargetFormats, and
+        /// depthStencilFormat describe the output-merger views; D3D12 bakes all of them into the
+        /// PSO, unlike D3D11's dynamic binding.
         ///
         /// Returns a null ComPtr (does not throw) if the shader variant's DXBC bytecode is missing,
         /// the stride isn't one of the 5 established layouts, or CreateGraphicsPipelineState()
         /// itself fails -- callers check the returned ComPtr, matching this project's established
         /// D3DShaderCache/D3D11*Cache error-handling convention.
-        ComPtr<ID3D12PipelineState> GetOrCreate(ID3D12Device* device, ID3D12RootSignature* rootSignature,
-                                                 const D3D12PipelineStateDesc& desc,
-                                                 DXGI_FORMAT rtvFormat, DXGI_FORMAT dsvFormat);
+        ComPtr<ID3D12PipelineState> GetOrCreate(ID3D12Device* device,
+                                                ID3D12RootSignature* rootSignature,
+                                                const D3D12PipelineStateDesc& desc);
 
         /// Number of distinct PSOs created so far (CNAEXT diagnostics).
         [[nodiscard]] std::size_t GetCacheSizeEXT() const { return cache_.size(); }
@@ -193,12 +203,9 @@ namespace CNA::Internal::Renderers::DirectX12
         // DX-202: the key is derived from the desc rather than re-listed field by field. A hand-written
         // tuple type plus a hand-written brace initialiser is two places to forget a new field, and
         // forgetting one there is silent -- two genuinely different pipeline states would collide on
-        // one cache entry and the second draw would quietly get the first one's state. AsCacheKeyEXT()
-        // is the single list; the render-target formats are appended here because they are arguments
-        // to GetOrCreate(), not properties of the desc.
-        using Key = decltype(std::tuple_cat(
-            std::declval<const D3D12PipelineStateDesc&>().AsCacheKeyEXT(),
-            std::make_tuple(0u, 0u)));
+        // one cache entry and the second draw would quietly get the first one's state.
+        using Key = decltype(
+            std::declval<const D3D12PipelineStateDesc&>().AsCacheKeyEXT());
         std::map<Key, ComPtr<ID3D12PipelineState>> cache_;
     };
 }

@@ -22,6 +22,7 @@
 #include <dxgi1_5.h>
 #include <wrl/client.h>
 
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <vector>
@@ -607,8 +608,8 @@ namespace CNA::Internal::Renderers::DirectX12
         /** @brief DX-117: real MRT bind -- @p resources[0]/@p rtvs[0] become the primary bound
          *  target via BindOffscreenColorTargetEXT() (so every existing single-target draw path is
          *  completely unaffected), and @p resources[1..count-1]/@p rtvs[1..count-1] (up to 7 more)
-         *  are recorded as additional targets Clear() also independently clears. Every resource
-         *  must already be registered with GetResourceStateTrackerEXT() by its owner (same
+         *  are recorded as additional targets every clear and draw binds in the same order. Every
+         *  resource must already be registered with GetResourceStateTrackerEXT() by its owner (same
          *  convention BindOffscreenColorTargetEXT() itself documents). CNAEXT. */
         void BindOffscreenColorTargetsEXT(ID3D12Resource* const* resources,
                                           const D3D12_CPU_DESCRIPTOR_HANDLE* rtvs,
@@ -827,9 +828,14 @@ namespace CNA::Internal::Renderers::DirectX12
         /// how the stencil half stayed missing from all three at once. A single function is also
         /// what keeps a *new* PSO field from being wired into two sites and forgotten in the third --
         /// a mistake whose only symptom would be one draw route silently using another's state.
-        /// The variant, stride and render-target formats stay per-site: they are properties of the
-        /// draw, not of the device's current state.
+        /// The variant and vertex layout stay per-site; the complete bound RTV/DSV format set is
+        /// copied here because D3D12 bakes it into the PSO.
         void FillPsoStateFromCurrentEXT(D3D12PipelineStateDesc& psoDesc) const;
+
+        /// DX-224: transitions every active colour target and binds the complete ordered RTV set
+        /// with target zero's depth-stencil view. Every draw path uses this one operation so PSO
+        /// target shape and output-merger binding cannot diverge.
+        void TransitionAndBindRenderTargetsEXT(ID3D12GraphicsCommandList* commandList);
 
         std::unique_ptr<PlatformRendererSurfaceState> surface_;
         HWND hwnd_ = nullptr;
@@ -1030,8 +1036,8 @@ namespace CNA::Internal::Renderers::DirectX12
         int currentAlphaDstBlend_ = 1;   // Blend::Zero
         int currentColorBlendFunc_ = 0;  // BlendFunction::Add
         int currentAlphaBlendFunc_ = 0;  // BlendFunction::Add
-        // REMED-GFX-077: BlendState output-merger write state, folded into the PSO cache key/desc.
-        int currentColorWriteMask_ = 15;              // ColorWriteChannels.All (bit0=R..bit3=A)
+        // REMED-GFX-077/DX-224: all four XNA MRT output masks, folded into the PSO key/desc.
+        std::array<int, 4> currentColorWriteMasks_{15, 15, 15, 15};
         unsigned int currentSampleMask_ = 0xFFFFFFFFu; // MultiSampleMask == -1 (all samples)
         bool currentDepthEnable_ = false;
         bool currentDepthWriteEnable_ = false;
@@ -1074,12 +1080,12 @@ namespace CNA::Internal::Renderers::DirectX12
         float currentDepthBias_ = 0.0f;
         float currentSlopeScaleDepthBias_ = 0.0f;
 
-        // DX-117: additional MRT targets beyond the primary (index 0, tracked by boundColor*_
-        // above) -- Clear() independently transitions+clears each; draws remain single-target
-        // (boundColorRtv_ only), see BindOffscreenColorTargetsEXT's own doc comment for why.
+        // DX-117/DX-224: additional MRT targets beyond the primary (index 0, tracked by
+        // boundColor*_ above). Clear and every draw transition and bind the complete ordered set.
         static constexpr int kMaxExtraMrtTargets = 7; // 8 total (D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT) - 1 primary
         ID3D12Resource* extraMrtResources_[kMaxExtraMrtTargets] = {};
         D3D12_CPU_DESCRIPTOR_HANDLE extraMrtRtvs_[kMaxExtraMrtTargets]{};
+        DXGI_FORMAT extraMrtFormats_[kMaxExtraMrtTargets]{};
         int extraMrtCount_ = 0;
 
         /// plans/plan_dx.md DX-255: the render targets a SetRenderTargets() call bound, so each one's own

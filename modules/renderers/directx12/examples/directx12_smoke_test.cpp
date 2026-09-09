@@ -747,18 +747,15 @@ int main()
         desc.variant = D3DShaderVariant::Colored3d;
         desc.strideInBytes = 16;
 
-        auto pso = psoCache.GetOrCreate(device, rootSigColored3d.Get(), desc,
-                                        DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_UNKNOWN);
+        auto pso = psoCache.GetOrCreate(device, rootSigColored3d.Get(), desc);
         Check(pso != nullptr, "I1: real ID3D12PipelineState created for colored3d/stride16/default state");
 
-        auto psoAgain = psoCache.GetOrCreate(device, rootSigColored3d.Get(), desc,
-                                             DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_UNKNOWN);
+        auto psoAgain = psoCache.GetOrCreate(device, rootSigColored3d.Get(), desc);
         Check(psoAgain.Get() == pso.Get(), "I2: identical desc returns the SAME cached PSO object");
 
         D3D12PipelineStateDesc desc2 = desc;
         desc2.cullMode = 1; // CullMode::None -- a genuinely different rasterizer state.
-        auto psoDifferent = psoCache.GetOrCreate(device, rootSigColored3d.Get(), desc2,
-                                                 DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_UNKNOWN);
+        auto psoDifferent = psoCache.GetOrCreate(device, rootSigColored3d.Get(), desc2);
         Check(psoDifferent != nullptr && psoDifferent.Get() != pso.Get(),
               "I3: a genuinely different state tuple returns a real, DIFFERENT PSO object");
     }
@@ -4596,8 +4593,8 @@ int main()
             effectState.cullMode = 0;
             effectState.topologyType =
                 static_cast<int>(D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE);
-            ID3D12PipelineState* effectPso = d3dEffect->GetOrCreatePipelineStateEXT(
-                std::move(effectState), DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_UNKNOWN);
+            ID3D12PipelineState* effectPso =
+                d3dEffect->GetOrCreatePipelineStateEXT(std::move(effectState));
             ID3D12RootSignature* rootSig = d3dEffect->GetRootSignatureEXT();
             Check(effectPso != nullptr && rootSig != nullptr,
                   "BB2a: reflected custom PSO and root signature resolve for the actual draw layout");

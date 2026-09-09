@@ -93,14 +93,10 @@ namespace CNA::Internal::Renderers::DirectX12
         D3D12VertexBufferRenderer vb_;
         D3D12IndexBufferRenderer ib_;
         /// plans/plan_dx.md DX-210: the key is the renderer's whole tracked pipeline state
-        /// (`D3D12PipelineStateDesc::AsCacheKeyEXT()`, which is the one place every such field is
-        /// listed) plus the two things only the sprite path decides -- the render-target format and
-        /// the depth-stencil format. Spelling the fields out again here is how the depth and
-        /// stencil halves came to be missing in the first place; deriving the key means a field
-        /// added to the desc cannot be forgotten by this cache.
-        using SpritePsoKey = decltype(std::tuple_cat(
-            std::declval<const CNA::Internal::Renderers::DirectX12::D3D12PipelineStateDesc&>().AsCacheKeyEXT(),
-            std::make_tuple(0u, 0u)));
+        /// (`D3D12PipelineStateDesc::AsCacheKeyEXT()`, which includes the complete MRT/DSV format
+        /// shape). Spelling fields out again is how depth and stencil went missing originally.
+        using SpritePsoKey = decltype(
+            std::declval<const D3D12PipelineStateDesc&>().AsCacheKeyEXT());
         std::map<SpritePsoKey, ComPtr<ID3D12PipelineState>> sprite2DPsos_;
         ComPtr<ID3D12Resource> perDrawConstantBuffer_;
         void* perDrawConstantBufferMapped_ = nullptr;

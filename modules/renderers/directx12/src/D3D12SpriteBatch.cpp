@@ -11,8 +11,10 @@
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <iterator>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -120,11 +122,7 @@ namespace CNA::Internal::Renderers::DirectX12
         state.variant = D3DShaderVariant::Sprite2d;
         state.strideInBytes = sizeof(Sprite2DVertex);
         state.topologyType = static_cast<int>(D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE);
-        const DXGI_FORMAT spriteDsvFormat = owner_->GetBoundDsvFormatEXT();
-        const SpritePsoKey key = std::tuple_cat(
-            state.AsCacheKeyEXT(),
-            std::make_tuple(static_cast<unsigned int>(owner_->GetBoundColorFormatEXT()),
-                            static_cast<unsigned int>(spriteDsvFormat)));
+        const SpritePsoKey key = state.AsCacheKeyEXT();
         if (const auto it = sprite2DPsos_.find(key); it != sprite2DPsos_.end())
             return it->second.Get();
 
@@ -161,19 +159,28 @@ namespace CNA::Internal::Renderers::DirectX12
         desc.RasterizerState.FrontCounterClockwise = FALSE;
         desc.RasterizerState.DepthClipEnable = TRUE;
 
-        D3D12_RENDER_TARGET_BLEND_DESC& rt0 = desc.BlendState.RenderTarget[0];
         const bool colorOpaque = owner_->currentColorSrcBlend_ == 0 && owner_->currentColorDstBlend_ == 1;
         const bool alphaOpaque = owner_->currentAlphaSrcBlend_ == 0 && owner_->currentAlphaDstBlend_ == 1;
-        rt0.BlendEnable = !(colorOpaque && alphaOpaque);
-        rt0.SrcBlend = static_cast<D3D12_BLEND>(BlendToD3D11(owner_->currentColorSrcBlend_));
-        rt0.DestBlend = static_cast<D3D12_BLEND>(BlendToD3D11(owner_->currentColorDstBlend_));
-        rt0.BlendOp = static_cast<D3D12_BLEND_OP>(BlendFunctionToD3D11(owner_->currentColorBlendFunc_));
-        rt0.SrcBlendAlpha = static_cast<D3D12_BLEND>(BlendToD3D11(owner_->currentAlphaSrcBlend_));
-        rt0.DestBlendAlpha = static_cast<D3D12_BLEND>(BlendToD3D11(owner_->currentAlphaDstBlend_));
-        rt0.BlendOpAlpha = static_cast<D3D12_BLEND_OP>(BlendFunctionToD3D11(owner_->currentAlphaBlendFunc_));
-        rt0.LogicOpEnable = FALSE;
-        rt0.LogicOp = D3D12_LOGIC_OP_NOOP;
-        rt0.RenderTargetWriteMask = static_cast<UINT8>(owner_->currentColorWriteMask_ & 0xF);
+        desc.BlendState.IndependentBlendEnable =
+            (state.colorWriteMasks[1] != state.colorWriteMasks[0]
+             || state.colorWriteMasks[2] != state.colorWriteMasks[0]
+             || state.colorWriteMasks[3] != state.colorWriteMasks[0]) ? TRUE : FALSE;
+        D3D12_RENDER_TARGET_BLEND_DESC rtTemplate{};
+        rtTemplate.BlendEnable = !(colorOpaque && alphaOpaque);
+        rtTemplate.SrcBlend = static_cast<D3D12_BLEND>(BlendToD3D11(owner_->currentColorSrcBlend_));
+        rtTemplate.DestBlend = static_cast<D3D12_BLEND>(BlendToD3D11(owner_->currentColorDstBlend_));
+        rtTemplate.BlendOp = static_cast<D3D12_BLEND_OP>(BlendFunctionToD3D11(owner_->currentColorBlendFunc_));
+        rtTemplate.SrcBlendAlpha = static_cast<D3D12_BLEND>(BlendToD3D11(owner_->currentAlphaSrcBlend_));
+        rtTemplate.DestBlendAlpha = static_cast<D3D12_BLEND>(BlendToD3D11(owner_->currentAlphaDstBlend_));
+        rtTemplate.BlendOpAlpha = static_cast<D3D12_BLEND_OP>(BlendFunctionToD3D11(owner_->currentAlphaBlendFunc_));
+        rtTemplate.LogicOpEnable = FALSE;
+        rtTemplate.LogicOp = D3D12_LOGIC_OP_NOOP;
+        for (std::size_t i = 0; i < std::size(desc.BlendState.RenderTarget); ++i)
+        {
+            desc.BlendState.RenderTarget[i] = rtTemplate;
+            desc.BlendState.RenderTarget[i].RenderTargetWriteMask =
+                static_cast<UINT8>(state.colorWriteMasks[std::min<std::size_t>(i, 3)] & 0xF);
+        }
         desc.SampleMask = owner_->currentSampleMask_;
 
         // plans/plan_dx.md DX-210: the device's real DepthStencilState, not a hardcoded "off". XNA's
@@ -209,11 +216,13 @@ namespace CNA::Internal::Renderers::DirectX12
             sds.BackFace = sds.FrontFace;
         }
 
-        desc.NumRenderTargets = 1;
-        desc.RTVFormats[0] = owner_->GetBoundColorFormatEXT();
+        desc.NumRenderTargets = std::min<UINT>(
+            state.renderTargetCount, D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT);
+        for (UINT i = 0; i < desc.NumRenderTargets; ++i)
+            desc.RTVFormats[i] = state.renderTargetFormats[i];
         // DX-210: a pipeline state that uses depth or stencil must name the format of the view it
         // will be used with; DXGI_FORMAT_UNKNOWN here is legal only when neither is enabled.
-        desc.DSVFormat = spriteDsvFormat;
+        desc.DSVFormat = state.depthStencilFormat;
 
         ComPtr<ID3D12PipelineState> pso;
         HRESULT hr = device_->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(pso.ReleaseAndGetAddressOf()));
@@ -325,9 +334,7 @@ namespace CNA::Internal::Renderers::DirectX12
             state.fillMode = 0;
             state.depthBias = 0;
             state.slopeScaleDepthBias = 0.0f;
-            pso = customRenderer->GetOrCreatePipelineStateEXT(
-                std::move(state), owner_->GetBoundColorFormatEXT(),
-                owner_->GetBoundDsvFormatEXT());
+            pso = customRenderer->GetOrCreatePipelineStateEXT(std::move(state));
             rootSignature = customRenderer->GetRootSignatureEXT();
             constantBufferCount = customRenderer->GetConstantBufferCountEXT();
             shaderResourceCount = customRenderer->GetShaderResourceCountEXT();
@@ -360,14 +367,7 @@ namespace CNA::Internal::Renderers::DirectX12
         allocator->Reset();
         cmdList->Reset(allocator, pso);
 
-        owner_->GetResourceStateTrackerEXT().TransitionTo(cmdList, owner_->GetBoundColorResourceEXT(),
-                                                           D3D12_RESOURCE_STATE_RENDER_TARGET);
-        D3D12_CPU_DESCRIPTOR_HANDLE rtv = owner_->GetBoundColorRtvEXT();
-        // plans/plan_dx.md DX-210: bind the device's depth-stencil view too, so a sprite pipeline state that
-        // enables depth or stencil has something to test against. Null when nothing is bound, which
-        // is byte-identical to the previous unconditional nullptr.
-        D3D12_CPU_DESCRIPTOR_HANDLE spriteDsv = owner_->GetBoundDsvEXT();
-        cmdList->OMSetRenderTargets(1, &rtv, FALSE, spriteDsv.ptr != 0 ? &spriteDsv : nullptr);
+        owner_->TransitionAndBindRenderTargetsEXT(cmdList);
 
         // REMED-GFX-064: honor a custom GraphicsDevice.Viewport for sprite draws (the GPU viewport
         // rectangle). REMED-GFX-072: the SAME effective viewport now also drives the ViewportSize

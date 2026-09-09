@@ -4,6 +4,9 @@
 #include "CNA/Internal/Renderers/D3DCommon/D3DStateMapping.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DVertexFormatHelper.hpp"
 
+#include <algorithm>
+#include <iterator>
+
 namespace CNA::Internal::Renderers::DirectX12
 {
     using namespace CNA::Internal::Renderers::D3DCommon;
@@ -25,12 +28,9 @@ namespace CNA::Internal::Renderers::DirectX12
 
     ComPtr<ID3D12PipelineState> D3D12PipelineStateCache::GetOrCreate(ID3D12Device* device,
                                                                       ID3D12RootSignature* rootSignature,
-                                                                      const D3D12PipelineStateDesc& desc,
-                                                                      DXGI_FORMAT rtvFormat, DXGI_FORMAT dsvFormat)
+                                                                      const D3D12PipelineStateDesc& desc)
     {
-        const Key key = std::tuple_cat(
-            desc.AsCacheKeyEXT(),
-            std::make_tuple(static_cast<unsigned>(rtvFormat), static_cast<unsigned>(dsvFormat)));
+        const Key key = desc.AsCacheKeyEXT();
         auto it = cache_.find(key);
         if (it != cache_.end())
             return it->second;
@@ -117,20 +117,32 @@ namespace CNA::Internal::Renderers::DirectX12
         rs.DepthBiasClamp = 0.0f;
         rs.SlopeScaledDepthBias = desc.slopeScaleDepthBias;
 
-        // Blend -- single render target, same DeriveBlendEnable heuristic D3D11BlendStateCache uses.
+        // Blend -- DX-224 mirrors D3D11BlendStateCache's independent ColorWriteChannels0..3
+        // handling while keeping the common colour/alpha blend equation for every attachment.
         D3D12_BLEND_DESC& bs = psoDesc.BlendState;
-        D3D12_RENDER_TARGET_BLEND_DESC& rt0 = bs.RenderTarget[0];
-        rt0.BlendEnable = DeriveBlendEnable(desc.colorSrcBlend, desc.colorDstBlend, desc.alphaSrcBlend, desc.alphaDstBlend);
-        rt0.SrcBlend = static_cast<D3D12_BLEND>(BlendToD3D11(desc.colorSrcBlend));
-        rt0.DestBlend = static_cast<D3D12_BLEND>(BlendToD3D11(desc.colorDstBlend));
-        rt0.BlendOp = static_cast<D3D12_BLEND_OP>(BlendFunctionToD3D11(desc.colorBlendFunc));
-        rt0.SrcBlendAlpha = static_cast<D3D12_BLEND>(BlendToD3D11(desc.alphaSrcBlend));
-        rt0.DestBlendAlpha = static_cast<D3D12_BLEND>(BlendToD3D11(desc.alphaDstBlend));
-        rt0.BlendOpAlpha = static_cast<D3D12_BLEND_OP>(BlendFunctionToD3D11(desc.alphaBlendFunc));
-        rt0.LogicOpEnable = FALSE;
-        rt0.LogicOp = D3D12_LOGIC_OP_NOOP;
-        // REMED-GFX-077: BlendState.ColorWriteChannels slot 0 (bit-identical to D3D12_COLOR_WRITE_ENABLE_*).
-        rt0.RenderTargetWriteMask = static_cast<UINT8>(desc.colorWriteMask & 0xF);
+        bs.IndependentBlendEnable =
+            (desc.colorWriteMasks[1] != desc.colorWriteMasks[0]
+             || desc.colorWriteMasks[2] != desc.colorWriteMasks[0]
+             || desc.colorWriteMasks[3] != desc.colorWriteMasks[0]) ? TRUE : FALSE;
+        D3D12_RENDER_TARGET_BLEND_DESC rtTemplate{};
+        rtTemplate.BlendEnable = DeriveBlendEnable(
+            desc.colorSrcBlend, desc.colorDstBlend,
+            desc.alphaSrcBlend, desc.alphaDstBlend);
+        rtTemplate.SrcBlend = static_cast<D3D12_BLEND>(BlendToD3D11(desc.colorSrcBlend));
+        rtTemplate.DestBlend = static_cast<D3D12_BLEND>(BlendToD3D11(desc.colorDstBlend));
+        rtTemplate.BlendOp = static_cast<D3D12_BLEND_OP>(BlendFunctionToD3D11(desc.colorBlendFunc));
+        rtTemplate.SrcBlendAlpha = static_cast<D3D12_BLEND>(BlendToD3D11(desc.alphaSrcBlend));
+        rtTemplate.DestBlendAlpha = static_cast<D3D12_BLEND>(BlendToD3D11(desc.alphaDstBlend));
+        rtTemplate.BlendOpAlpha = static_cast<D3D12_BLEND_OP>(BlendFunctionToD3D11(desc.alphaBlendFunc));
+        rtTemplate.LogicOpEnable = FALSE;
+        rtTemplate.LogicOp = D3D12_LOGIC_OP_NOOP;
+        for (std::size_t i = 0; i < std::size(bs.RenderTarget); ++i)
+        {
+            bs.RenderTarget[i] = rtTemplate;
+            const std::size_t maskIndex = std::min<std::size_t>(i, 3);
+            bs.RenderTarget[i].RenderTargetWriteMask =
+                static_cast<UINT8>(desc.colorWriteMasks[maskIndex] & 0xF);
+        }
 
         // Depth and stencil. plans/plan_dx.md DX-202: the stencil half is a field-for-field mirror of
         // D3D11DepthStencilStateCache::GetOrCreate, through the same D3DCommon mapping tables, so
@@ -166,9 +178,11 @@ namespace CNA::Internal::Renderers::DirectX12
             ds.BackFace = ds.FrontFace;
         }
 
-        psoDesc.NumRenderTargets = (rtvFormat == DXGI_FORMAT_UNKNOWN) ? 0 : 1;
-        psoDesc.RTVFormats[0] = rtvFormat;
-        psoDesc.DSVFormat = dsvFormat;
+        psoDesc.NumRenderTargets = std::min<UINT>(
+            desc.renderTargetCount, D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT);
+        for (UINT i = 0; i < psoDesc.NumRenderTargets; ++i)
+            psoDesc.RTVFormats[i] = desc.renderTargetFormats[i];
+        psoDesc.DSVFormat = desc.depthStencilFormat;
 
         HRESULT hr = device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(pso.ReleaseAndGetAddressOf()));
         if (FAILED(hr))
