@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 //
-// CNAEXT. A renderer-agnostic sprite benchmark, deliberately written against nothing but the public
-// XNA API (no CNA::Internal::Renderers::* include, no renderer-specific hook) so the identical
-// source produces a genuine like-for-like comparison. In browsers it retains the original
+// CNAEXT. A renderer-agnostic workload written against the public XNA API so the identical source
+// produces a genuine like-for-like comparison. The D3D12 build additionally reads internal
+// synchronization counters after the workload; that diagnostic does not alter what is drawn.
+// In browsers it retains the original
 // CANVAS/EasyGL/HTML_DOM reporting contract. On native hosts it is also the PLAT-7/PLAT-120 fixed
 // scene: build the target once per selected renderer and compare its raw per-frame JSON samples.
 //
@@ -45,10 +46,15 @@
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
 // The only "which renderer am I" this file needs -- a compile-time constant already computed from
 // the CNA_RENDERER_* define RendererSelection.cmake sets, the same value every renderer's own
@@ -58,11 +64,17 @@
 // configure step that builds it selected.
 #include "CNA/GraphicsRendererType.hpp"
 
+#if defined(CNA_RENDERER_DIRECTX12)
+#include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
+#endif
+
+#include <array>
 #include <cmath>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -76,6 +88,20 @@ using namespace Microsoft::Xna::Framework::Graphics;
 namespace
 {
     constexpr int kSpriteCount = 500;
+
+    int MeshDrawCount()
+    {
+#if defined(__EMSCRIPTEN__)
+        return 0;
+#else
+        const char* configured = std::getenv("CNA_BENCH_MESH_DRAWS");
+        if (configured == nullptr)
+            return 0;
+
+        const long value = std::strtol(configured, nullptr, 10);
+        return value >= 0 && value <= 10000 ? static_cast<int>(value) : 0;
+#endif
+    }
 
 #if defined(__EMSCRIPTEN__)
     constexpr int kWarmupFrames = 1;
@@ -166,18 +192,19 @@ namespace
     }
 
     void PrintNativeSamples(const std::string& renderer, const char* phase, const char* metric,
-                            const std::vector<double>& samples)
+                            int meshDrawCount, const std::vector<double>& samples)
     {
 #if !defined(__EMSCRIPTEN__)
         std::printf("{\"schema\":1,\"renderer\":\"%s\",\"phase\":\"%s\","
-                    "\"metric\":\"%s\",\"sprites\":%d,\"samples_ms\":",
-                    renderer.c_str(), phase, metric, kSpriteCount);
+                    "\"metric\":\"%s\",\"sprites\":%d,\"meshes\":%d,\"samples_ms\":",
+                    renderer.c_str(), phase, metric, kSpriteCount, meshDrawCount);
         PrintJsonArray(samples);
         std::puts("}");
 #else
         (void)renderer;
         (void)phase;
         (void)metric;
+        (void)meshDrawCount;
         (void)samples;
 #endif
     }
@@ -188,7 +215,10 @@ class GraphicsRendererBenchmark : public Game
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     std::unique_ptr<SpriteBatch> spriteBatch_;
     std::unique_ptr<Texture2D> texture_;
+    std::unique_ptr<VertexBuffer> meshVertices_;
+    std::unique_ptr<BasicEffect> meshEffect_;
     const int phaseFrames_ = PhaseFrames();
+    const int meshDrawCount_ = MeshDrawCount();
     int frame_ = 0;
     double lastFrameStart_ = -1.0;
 
@@ -203,6 +233,17 @@ class GraphicsRendererBenchmark : public Game
     int churnFramesTimed_ = 0;
     std::vector<double> churnSubmissionSamples_;
     std::vector<double> churnEndToEndSamples_;
+
+#if defined(CNA_RENDERER_DIRECTX12)
+    CNA::Internal::Renderers::DirectX12::DirectX12Renderer& GetD3D12Renderer()
+    {
+        auto* renderer = dynamic_cast<CNA::Internal::Renderers::DirectX12::DirectX12Renderer*>(
+            &getGraphicsDeviceProperty().GetRenderer());
+        if (renderer == nullptr)
+            throw std::runtime_error("DIRECTX12 benchmark did not receive DirectX12Renderer");
+        return *renderer;
+    }
+#endif
 
     // plans/plan_html_dom.md HTMLDOM-111: draws kSpriteCount sprites, all moving every frame (this
     // renderer's own documented sweet spot on the position side regardless of workload). `churnTint`
@@ -227,6 +268,24 @@ class GraphicsRendererBenchmark : public Game
         spriteBatch_->End();
     }
 
+    void DrawMeshes()
+    {
+        if (meshDrawCount_ == 0)
+            return;
+
+        auto& device = getGraphicsDeviceProperty();
+        device.SetVertexBuffer(meshVertices_.get());
+        for (int i = 0; i < meshDrawCount_; ++i)
+        {
+            const float x = static_cast<float>((i % 10) - 5) * 0.03f;
+            const float y = static_cast<float>((i / 10) - 2) * 0.03f;
+            meshEffect_->setWorldProperty(Matrix::CreateTranslation(x, y, 0.0f));
+            meshEffect_->Apply();
+            device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
+        }
+        device.SetVertexBuffer(nullptr);
+    }
+
 protected:
     void LoadContent() override
     {
@@ -236,6 +295,24 @@ protected:
                 255, 255, 255, 255,  255, 255, 255, 255,
                 255, 255, 255, 255,  255, 255, 255, 255,
             }));
+
+        if (meshDrawCount_ > 0)
+        {
+            const std::array<VertexPositionColor, 3> triangle{{
+                {Vector3(-0.025f, -0.025f, 0.5f), Color(255, 96, 32, 255)},
+                {Vector3( 0.000f,  0.025f, 0.5f), Color(32, 255, 96, 255)},
+                {Vector3( 0.025f, -0.025f, 0.5f), Color(96, 32, 255, 255)},
+            }};
+            meshVertices_ = std::make_unique<VertexBuffer>(
+                getGraphicsDeviceProperty(), VertexPositionColor::getVertexDeclarationStatic(),
+                static_cast<int>(triangle.size()), BufferUsage::None);
+            meshVertices_->SetData(triangle.data(), static_cast<int>(triangle.size()));
+            meshEffect_ = std::make_unique<BasicEffect>(getGraphicsDeviceProperty());
+            meshEffect_->setViewProperty(Matrix::getIdentityProperty());
+            meshEffect_->setProjectionProperty(Matrix::getIdentityProperty());
+            meshEffect_->VertexColorEnabled = true;
+            meshEffect_->setLightingEnabledProperty(false);
+        }
     }
 
     void Draw(const GameTime&) override
@@ -253,8 +330,14 @@ protected:
         const bool inStablePhase = frame_ > kWarmupFrames && frame_ <= stableEnd;
         const bool inChurnPhase = frame_ > stableEnd && frame_ <= churnEnd;
 
+#if defined(CNA_RENDERER_DIRECTX12)
+        if (frame_ == kWarmupFrames + 1)
+            GetD3D12Renderer().ResetSynchronizationCountersEXT();
+#endif
+
         const double subT0 = (inStablePhase || inChurnPhase) ? JsNow() : 0.0;
         DrawSprites(/*churnTint=*/inChurnPhase);
+        DrawMeshes();
         if (inStablePhase || inChurnPhase)
         {
             const double subMs = JsNow() - subT0;
@@ -299,8 +382,9 @@ protected:
                 churnFramesTimed_ > 0 ? churnEndToEndTotalMs_ / churnFramesTimed_ : -1.0;
 
             const auto rendererName = CNA::getCurrentGraphicsRendererName();
-            std::printf("=== [%.*s] %d sprites/frame ===\n",
-                        static_cast<int>(rendererName.size()), rendererName.data(), kSpriteCount);
+            std::printf("=== [%.*s] %d sprites + %d stock-effect meshes/frame ===\n",
+                        static_cast<int>(rendererName.size()), rendererName.data(), kSpriteCount,
+                        meshDrawCount_);
             std::printf("    stable tint : submission %.4f ms/frame | end-to-end %.4f ms/frame "
                         "(%.1f real fps)\n",
                         stableSubAvg, stableE2eAvg, stableE2eAvg > 0 ? 1000.0 / stableE2eAvg : 0.0);
@@ -310,13 +394,33 @@ protected:
             std::printf("    (submission = SpriteBatch Begin/Draw/End CPU time only; end-to-end "
                         "= wall-clock gap between successive Draw calls, including the host "
                         "loop's event/update/present work)\n");
+
+#if defined(CNA_RENDERER_DIRECTX12)
+            auto& renderer = GetD3D12Renderer();
+            const std::uint64_t measuredFrames = static_cast<std::uint64_t>(2 * phaseFrames_);
+            const std::uint64_t frameWaits = renderer.GetFrameFenceWaitCountEXT();
+            std::printf("    D3D12 sync  : frame_waits=%llu gpu_waits=%llu frame_submissions=%llu "
+                        "immediate_submissions=%llu measured_frames=%llu\n",
+                        static_cast<unsigned long long>(frameWaits),
+                        static_cast<unsigned long long>(renderer.GetGpuWaitCountEXT()),
+                        static_cast<unsigned long long>(renderer.GetFrameSubmissionCountEXT()),
+                        static_cast<unsigned long long>(renderer.GetImmediateSubmissionCountEXT()),
+                        static_cast<unsigned long long>(measuredFrames));
+            if (meshDrawCount_ >= 50 && frameWaits > measuredFrames)
+                throw std::runtime_error(
+                    "DX-237 failed: more than one frame-fence wait per measured frame");
+#endif
             std::fflush(stdout);
 
             const std::string rendererNameStr(rendererName);
-            PrintNativeSamples(rendererNameStr, "stable", "submission", stableSubmissionSamples_);
-            PrintNativeSamples(rendererNameStr, "stable", "end_to_end", stableEndToEndSamples_);
-            PrintNativeSamples(rendererNameStr, "churn", "submission", churnSubmissionSamples_);
-            PrintNativeSamples(rendererNameStr, "churn", "end_to_end", churnEndToEndSamples_);
+            PrintNativeSamples(rendererNameStr, "stable", "submission", meshDrawCount_,
+                               stableSubmissionSamples_);
+            PrintNativeSamples(rendererNameStr, "stable", "end_to_end", meshDrawCount_,
+                               stableEndToEndSamples_);
+            PrintNativeSamples(rendererNameStr, "churn", "submission", meshDrawCount_,
+                               churnSubmissionSamples_);
+            PrintNativeSamples(rendererNameStr, "churn", "end_to_end", meshDrawCount_,
+                               churnEndToEndSamples_);
             JsPublishResult(rendererNameStr.c_str(), stableSubAvg, stableE2eAvg, churnSubAvg, churnE2eAvg);
             Exit();
         }

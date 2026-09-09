@@ -80,10 +80,7 @@ namespace CNA::Internal::Renderers::DirectX12
         // The EndQuery() itself already happened inside the intervening draw call's own command
         // list (see Begin()'s own doc comment) -- this submission only resolves the now-complete
         // query result into the CPU-readable readback buffer.
-        ID3D12CommandAllocator* allocator = renderer_->GetCommandAllocatorEXT(0);
-        ID3D12GraphicsCommandList* cmdList = renderer_->GetCommandListEXT();
-        allocator->Reset();
-        cmdList->Reset(allocator, nullptr);
+        ID3D12GraphicsCommandList* cmdList = renderer_->BeginImmediateCommandsEXT();
 
         cmdList->ResolveQueryData(queryHeap_.Get(), D3D12_QUERY_TYPE_OCCLUSION, 0, 1, readbackBuffer_.Get(), 0);
 

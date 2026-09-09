@@ -129,10 +129,7 @@ namespace CNA::Internal::Renderers::DirectX12
         ComPtr<ID3D12Resource> staging =
             CreateAndFillUploadBuffer(renderer_->GetDeviceEXT(), data, byteCount, "D3D12VertexBufferRenderer");
 
-        ID3D12CommandAllocator* allocator = renderer_->GetCommandAllocatorEXT(0);
-        ID3D12GraphicsCommandList* cmdList = renderer_->GetCommandListEXT();
-        allocator->Reset();
-        cmdList->Reset(allocator, nullptr);
+        ID3D12GraphicsCommandList* cmdList = renderer_->BeginImmediateCommandsEXT();
 
         auto& tracker = renderer_->GetResourceStateTrackerEXT();
         tracker.TransitionTo(cmdList, buffer_.Get(), D3D12_RESOURCE_STATE_COPY_DEST);
@@ -246,10 +243,7 @@ namespace CNA::Internal::Renderers::DirectX12
         ComPtr<ID3D12Resource> staging =
             CreateAndFillUploadBuffer(renderer_->GetDeviceEXT(), data, byteCount, "D3D12IndexBufferRenderer");
 
-        ID3D12CommandAllocator* allocator = renderer_->GetCommandAllocatorEXT(0);
-        ID3D12GraphicsCommandList* cmdList = renderer_->GetCommandListEXT();
-        allocator->Reset();
-        cmdList->Reset(allocator, nullptr);
+        ID3D12GraphicsCommandList* cmdList = renderer_->BeginImmediateCommandsEXT();
 
         auto& tracker = renderer_->GetResourceStateTrackerEXT();
         tracker.TransitionTo(cmdList, buffer_.Get(), D3D12_RESOURCE_STATE_COPY_DEST);

@@ -85,7 +85,6 @@ namespace CNA::Internal::Renderers::DirectX12
     private:
         void FlushBatch();
         ID3D12PipelineState* GetOrCreateSprite2DPso(ID3D12RootSignature* rootSig);
-        ID3D12Resource* GetOrCreatePerDrawConstantBuffer();
 
         D3D12RendererReference owner_;
         ComPtr<ID3D12Device> device_;
@@ -98,8 +97,6 @@ namespace CNA::Internal::Renderers::DirectX12
         using SpritePsoKey = decltype(
             std::declval<const D3D12PipelineStateDesc&>().AsCacheKeyEXT());
         std::map<SpritePsoKey, ComPtr<ID3D12PipelineState>> sprite2DPsos_;
-        ComPtr<ID3D12Resource> perDrawConstantBuffer_;
-        void* perDrawConstantBufferMapped_ = nullptr;
 
         std::vector<Sprite2DVertex> pendingVertices_;
         std::vector<uint16_t> pendingIndices_;

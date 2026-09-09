@@ -169,10 +169,7 @@ namespace CNA::Internal::Renderers::DirectX12
 
     void D3D12Texture3DRenderer::TransitionToShaderReadableEXT()
     {
-        ID3D12CommandAllocator* allocator = renderer_->GetCommandAllocatorEXT(0);
-        ID3D12GraphicsCommandList* cmdList = renderer_->GetCommandListEXT();
-        allocator->Reset();
-        cmdList->Reset(allocator, nullptr);
+        ID3D12GraphicsCommandList* cmdList = renderer_->BeginImmediateCommandsEXT();
 
         renderer_->GetResourceStateTrackerEXT().TransitionTo(cmdList, texture_.Get(), kTextureShaderReadableState);
 
@@ -303,10 +300,7 @@ namespace CNA::Internal::Renderers::DirectX12
         srcLoc.PlacedFootprint.Footprint.Depth = static_cast<UINT>(depth);
         srcLoc.PlacedFootprint.Footprint.RowPitch = rowPitch;
 
-        ID3D12CommandAllocator* allocator = renderer_->GetCommandAllocatorEXT(0);
-        ID3D12GraphicsCommandList* cmdList = renderer_->GetCommandListEXT();
-        allocator->Reset();
-        cmdList->Reset(allocator, nullptr);
+        ID3D12GraphicsCommandList* cmdList = renderer_->BeginImmediateCommandsEXT();
 
         auto& tracker = renderer_->GetResourceStateTrackerEXT();
         tracker.TransitionTo(cmdList, texture_.Get(), D3D12_RESOURCE_STATE_COPY_DEST);
@@ -412,10 +406,7 @@ namespace CNA::Internal::Renderers::DirectX12
         srcBox.bottom = static_cast<UINT>(y + h);
         srcBox.back = static_cast<UINT>(z + depth);
 
-        ID3D12CommandAllocator* allocator = renderer_->GetCommandAllocatorEXT(0);
-        ID3D12GraphicsCommandList* cmdList = renderer_->GetCommandListEXT();
-        allocator->Reset();
-        cmdList->Reset(allocator, nullptr);
+        ID3D12GraphicsCommandList* cmdList = renderer_->BeginImmediateCommandsEXT();
 
         auto& tracker = renderer_->GetResourceStateTrackerEXT();
         const D3D12_RESOURCE_STATES priorState = tracker.GetTrackedStateEXT(texture_.Get());

@@ -13,9 +13,9 @@
 // GenerateMips() equivalent the way D3D11 does; rather than a manual compute/pixel-shader mip
 // cascade (real additional pipeline/shader infrastructure), this uses a synchronous CPU box-filter
 // downsample cascade -- read a level back via a READBACK-heap CopyTextureRegion, box-filter it on
-// the CPU, upload the result to the next level via an UPLOAD-heap CopyTextureRegion -- the same
-// ExecuteCommandListAndWaitEXT-synchronous discipline this renderer's own D3D12Textures.cpp/
-// D3D12Buffers.cpp already establish for every other real upload/readback path. Triggered from
+// the CPU, upload the result to the next level via an UPLOAD-heap CopyTextureRegion. This remains an
+// explicit immediate-list synchronization boundary while ordinary resolves stay frame-scoped.
+// Triggered from
 // UnbindAsRenderTarget(), mirroring D3D11RenderTargetRenderer's own GenerateMips()-on-unbind timing.
 //
 // plans/plan_dx.md DX-117 MSAA follow-up: real, device-queried MSAA is now supported for

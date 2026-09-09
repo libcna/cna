@@ -16,16 +16,10 @@ namespace CNA::Internal::Renderers::DirectX12
     class DirectX12Renderer;
 
     /// Real ID3D12QueryHeap(D3D12_QUERY_HEAP_TYPE_OCCLUSION)-backed occlusion query (DX-120).
-    /// Unlike D3D11's ID3D11Query (queried asynchronously via GetData(DONOTFLUSH), which can
-    /// genuinely return "not ready yet" while GPU work is still in flight), every operation this
-    /// whole D3D12 renderer performs is already synchronous (record -> Close -> Execute -> wait for
-    /// the fence, ExecuteCommandListAndWaitEXT) -- so End() only ever returns after the GPU has
-    /// actually finished resolving the query result, making IsComplete() trivially true once End()
-    /// has run and false before it. A deliberate, honest simplification consistent with this
-    /// renderer's existing synchronous-submission design (matches
-    /// DirectX12Renderer::CreateUploadConstantBuffer's own "safe because every draw submits
-    /// synchronously" note) -- real overlapped/async query polling is a future concern once this
-    /// renderer does real per-frame pipelining, not something DX-120 needs to solve.
+    /// The renderer now records draws on a frame-scoped list, but this class preserves DX-120's
+    /// one-draw query behavior by synchronously resolving at End(). IsComplete() is therefore true
+    /// after End() and false before it. DX-240 replaces this compatibility path with query-boundary
+    /// commands, multi-draw accumulation and an asynchronous fence-completion check.
     class D3D12OcclusionQueryRenderer final : public IOcclusionQueryRenderer
     {
     public:

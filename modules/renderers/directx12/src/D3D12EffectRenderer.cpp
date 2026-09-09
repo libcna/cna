@@ -42,13 +42,6 @@ namespace CNA::Internal::Renderers::DirectX12
         vsBytecode_.Reset();
         psBytecode_.Reset();
         reflection_.Reset();
-        for (std::size_t i = 0; i < constantBuffers_.size(); ++i)
-        {
-            if (constantBuffers_[i] && constantBufferMappings_[i] != nullptr)
-                constantBuffers_[i]->Unmap(0, nullptr);
-        }
-        constantBuffers_ = {};
-        constantBufferMappings_ = {};
         textures_ = {};
         programId_ = 0;
 
@@ -93,44 +86,6 @@ namespace CNA::Internal::Renderers::DirectX12
             return false;
         }
 
-        for (int slot = 0; slot < reflection_.GetConstantBufferCount(); ++slot)
-        {
-            const auto& reflected = reflection_.GetConstantBuffer(slot);
-            if (!reflected.present)
-                continue;
-
-            D3D12_HEAP_PROPERTIES heapProps{};
-            heapProps.Type = D3D12_HEAP_TYPE_UPLOAD;
-            D3D12_RESOURCE_DESC cbDesc{};
-            cbDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-            cbDesc.Width = std::max<std::size_t>(
-                256, (reflected.data.size() + 255u) & ~255u);
-            cbDesc.Height = 1;
-            cbDesc.DepthOrArraySize = 1;
-            cbDesc.MipLevels = 1;
-            cbDesc.Format = DXGI_FORMAT_UNKNOWN;
-            cbDesc.SampleDesc.Count = 1;
-            cbDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-
-            hr = device_->CreateCommittedResource(
-                &heapProps, D3D12_HEAP_FLAG_NONE, &cbDesc,
-                D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
-                IID_PPV_ARGS(constantBuffers_[static_cast<std::size_t>(slot)].ReleaseAndGetAddressOf()));
-            if (FAILED(hr))
-            {
-                compileError_ = "Constant buffer CreateCommittedResource failed, hr=" + FormatHr(hr);
-                return false;
-            }
-            const D3D12_RANGE readRange{0, 0};
-            hr = constantBuffers_[static_cast<std::size_t>(slot)]->Map(
-                0, &readRange, &constantBufferMappings_[static_cast<std::size_t>(slot)]);
-            if (FAILED(hr))
-            {
-                compileError_ = "Constant buffer Map failed, hr=" + FormatHr(hr);
-                return false;
-            }
-        }
-
         programId_ = nextProgramId.fetch_add(1, std::memory_order_relaxed);
         valid_ = true;
         return true;
@@ -139,14 +94,7 @@ namespace CNA::Internal::Renderers::DirectX12
     void D3D12EffectRenderer::Bind()
     {
         (void) owner_.Get();
-        if (!valid_) return;
-        for (int slot = 0; slot < reflection_.GetConstantBufferCount(); ++slot)
-        {
-            const auto& reflected = reflection_.GetConstantBuffer(slot);
-            void* mapped = constantBufferMappings_[static_cast<std::size_t>(slot)];
-            if (reflected.present && mapped != nullptr)
-                std::memcpy(mapped, reflected.data.data(), reflected.data.size());
-        }
+        // Uniforms stay in reflection_. Each consuming draw snapshots them into its own frame range.
     }
 
     void D3D12EffectRenderer::Unbind()
@@ -248,11 +196,15 @@ namespace CNA::Internal::Renderers::DirectX12
         return pso_.Get();
     }
 
-    ID3D12Resource* D3D12EffectRenderer::GetConstantBufferEXT(const int slot) const
+    D3D12_GPU_VIRTUAL_ADDRESS D3D12EffectRenderer::GetConstantBufferGpuAddressEXT(const int slot)
     {
-        if (slot < 0 || slot >= static_cast<int>(constantBuffers_.size()))
-            return nullptr;
-        return constantBuffers_[static_cast<std::size_t>(slot)].Get();
+        if (slot < 0 || slot >= reflection_.GetConstantBufferCount())
+            return 0;
+        const auto& reflected = reflection_.GetConstantBuffer(slot);
+        if (!reflected.present || reflected.data.empty())
+            return 0;
+        return owner_->AllocateFrameConstantDataEXT(
+            reflected.data.data(), reflected.data.size());
     }
 
     bool D3D12EffectRenderer::HasTextureBindingEXT(const int unit) const
@@ -261,7 +213,7 @@ namespace CNA::Internal::Renderers::DirectX12
                textures_[static_cast<std::size_t>(unit)].explicitlySet;
     }
 
-    D3D12_GPU_DESCRIPTOR_HANDLE D3D12EffectRenderer::GetTextureGpuHandleEXT(const int unit) const
+    D3D12_GPU_DESCRIPTOR_HANDLE D3D12EffectRenderer::GetTextureGpuHandleEXT(const int unit)
     {
         if (!HasTextureBindingEXT(unit) || !reflection_.HasShaderResource(unit))
             return {};
@@ -271,23 +223,38 @@ namespace CNA::Internal::Renderers::DirectX12
             case TextureKind::Texture2D:
                 if (const auto* texture = dynamic_cast<const D3D12TextureRenderer*>(
                         static_cast<ITextureRenderer*>(binding.texture)))
+                {
+                    owner_->RetainFrameObjectEXT(texture->GetResourceEXT());
                     return texture->GetShaderResourceViewGpuHandleEXT();
+                }
                 if (const auto* target = dynamic_cast<const D3D12RenderTargetRenderer*>(
                         static_cast<ITextureRenderer*>(binding.texture)))
+                {
+                    owner_->RetainFrameObjectEXT(target->GetSampleableColorResourceEXT());
                     return target->GetShaderResourceViewGpuHandleEXT();
+                }
                 break;
             case TextureKind::TextureCube:
                 if (const auto* texture = dynamic_cast<const D3D12TextureCubeRenderer*>(
                         static_cast<ITextureCubeRenderer*>(binding.texture)))
+                {
+                    owner_->RetainFrameObjectEXT(texture->GetResourceEXT());
                     return texture->GetShaderResourceViewGpuHandleEXT();
+                }
                 if (const auto* target = dynamic_cast<const D3D12RenderTargetCubeRenderer*>(
                         static_cast<ITextureCubeRenderer*>(binding.texture)))
+                {
+                    owner_->RetainFrameObjectEXT(target->GetSampleableColorResourceEXT());
                     return target->GetShaderResourceViewGpuHandleEXT();
+                }
                 break;
             case TextureKind::Texture3D:
                 if (const auto* texture = dynamic_cast<const D3D12Texture3DRenderer*>(
                         static_cast<ITexture3DRenderer*>(binding.texture)))
+                {
+                    owner_->RetainFrameObjectEXT(texture->GetResourceEXT());
                     return texture->GetShaderResourceViewGpuHandleEXT();
+                }
                 break;
             case TextureKind::None:
                 break;

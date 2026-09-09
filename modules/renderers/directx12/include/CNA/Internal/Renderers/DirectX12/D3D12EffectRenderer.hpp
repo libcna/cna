@@ -31,9 +31,7 @@ namespace CNA::Internal::Renderers::DirectX12
         explicit D3D12EffectRenderer(DirectX12Renderer* owner);
 
         bool CompileProgram(const std::string& vertSrc, const std::string& fragSrc) override;
-        /// Updates the mapped constant buffers with the current uniform values. D3D12 has no
-        /// separate shader bind; the consuming draw resolves a PSO for its actual layout/state and
-        /// records the reflected root bindings on its command list.
+        /// Finalizes CPU-side reflected values. The consuming draw allocates immutable frame ranges.
         void Bind() override;
         void Unbind() override;
         [[nodiscard]] bool IsValid() const override { return valid_; }
@@ -63,8 +61,8 @@ namespace CNA::Internal::Renderers::DirectX12
             D3D12PipelineStateDesc desc);
         /** @brief Returns this program's reflected root signature. */
         [[nodiscard]] ID3D12RootSignature* GetRootSignatureEXT() const { return rootSignature_.Get(); }
-        /** @brief Returns a reflected constant-buffer resource by b-register. */
-        [[nodiscard]] ID3D12Resource* GetConstantBufferEXT(int slot = 0) const;
+        /** @brief Copies a reflected cbuffer into a frame-owned range and returns its GPU address. */
+        [[nodiscard]] D3D12_GPU_VIRTUAL_ADDRESS GetConstantBufferGpuAddressEXT(int slot = 0);
         /** @brief Returns one plus the highest reflected b-register. */
         [[nodiscard]] int GetConstantBufferCountEXT() const
         {
@@ -80,7 +78,7 @@ namespace CNA::Internal::Renderers::DirectX12
         /** @brief Reports whether the caller explicitly bound a texture at @p unit. */
         [[nodiscard]] bool HasTextureBindingEXT(int unit) const;
         /** @brief Resolves the current texture binding at one reflected t-register. */
-        [[nodiscard]] D3D12_GPU_DESCRIPTOR_HANDLE GetTextureGpuHandleEXT(int unit) const;
+        [[nodiscard]] D3D12_GPU_DESCRIPTOR_HANDLE GetTextureGpuHandleEXT(int unit);
 
     private:
         enum class TextureKind
@@ -105,10 +103,6 @@ namespace CNA::Internal::Renderers::DirectX12
         ComPtr<ID3DBlob> vsBytecode_;
         ComPtr<ID3DBlob> psBytecode_;
         D3DCommon::D3DProgramReflection reflection_;
-        std::array<ComPtr<ID3D12Resource>,
-                   D3DCommon::D3DProgramReflection::kMaxConstantBuffers> constantBuffers_{};
-        std::array<void*,
-                   D3DCommon::D3DProgramReflection::kMaxConstantBuffers> constantBufferMappings_{};
         std::array<TextureBinding,
                    D3DCommon::D3DProgramReflection::kMaxShaderResources> textures_{};
         std::uint64_t programId_ = 0;

@@ -138,10 +138,7 @@ namespace CNA::Internal::Renderers::DirectX12
             src.PlacedFootprint.Footprint.Depth = 1;
             src.PlacedFootprint.Footprint.RowPitch = rowPitch;
 
-            ID3D12CommandAllocator* allocator = owner->GetCommandAllocatorEXT(0);
-            ID3D12GraphicsCommandList* cmdList = owner->GetCommandListEXT();
-            allocator->Reset();
-            cmdList->Reset(allocator, nullptr);
+            ID3D12GraphicsCommandList* cmdList = owner->BeginImmediateCommandsEXT();
 
             auto& tracker = owner->GetResourceStateTrackerEXT();
             const D3D12_RESOURCE_STATES prior = tracker.GetTrackedStateEXT(resource);
@@ -526,7 +523,7 @@ namespace CNA::Internal::Renderers::DirectX12
         // against it). Found by DX-146's own depth/stencil pixel proofs.
         owner_->BindOffscreenColorTargetEXT(colorResource_.Get(), rtv_,
                                             dxgiFormat_, width_, height_,
-                                            dsv_, dsvFormat_);
+                                            dsv_, dsvFormat_, depthResource_.Get());
     }
 
     void D3D12RenderTargetRenderer::UnbindAsRenderTarget()
@@ -551,10 +548,9 @@ namespace CNA::Internal::Renderers::DirectX12
                 static_cast<int>(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE) |
                 static_cast<int>(D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
 
-        ID3D12CommandAllocator* allocator = owner_->GetCommandAllocatorEXT(0);
-        ID3D12GraphicsCommandList* cmdList = owner_->GetCommandListEXT();
-        allocator->Reset();
-        cmdList->Reset(allocator, nullptr);
+        ID3D12GraphicsCommandList* cmdList = owner_->GetFrameCommandListEXT();
+        owner_->RetainFrameObjectEXT(colorResource_.Get());
+        owner_->RetainFrameObjectEXT(resolveResource_.Get());
 
         auto& tracker = owner_->GetResourceStateTrackerEXT();
         const D3D12_RESOURCE_STATES priorColorState = tracker.GetTrackedStateEXT(colorResource_.Get());
@@ -569,8 +565,6 @@ namespace CNA::Internal::Renderers::DirectX12
         tracker.TransitionTo(cmdList, colorResource_.Get(), priorColorState);
         tracker.TransitionTo(cmdList, resolveResource_.Get(), kShaderReadableState);
 
-        if (FAILED(cmdList->Close())) return;
-        owner_->ExecuteCommandListAndWaitEXT(cmdList);
     }
 
     bool D3D12RenderTargetRenderer::GetData(int level, int x, int y, int w, int h,
@@ -827,7 +821,7 @@ namespace CNA::Internal::Renderers::DirectX12
         // (rendertarget_depthstencil_usage_test U2).
         owner_->BindOffscreenColorTargetEXT(colorResource_.Get(), rtv_[face],
                                             dxgiFormat_, size_, size_,
-                                            dsv_, dsvFormat_);
+                                            dsv_, dsvFormat_, depthResource_.Get());
     }
 
     void D3D12RenderTargetCubeRenderer::ResolveMsaaEXT()
@@ -839,10 +833,9 @@ namespace CNA::Internal::Renderers::DirectX12
                 static_cast<int>(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE) |
                 static_cast<int>(D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
 
-        ID3D12CommandAllocator* allocator = owner_->GetCommandAllocatorEXT(0);
-        ID3D12GraphicsCommandList* cmdList = owner_->GetCommandListEXT();
-        allocator->Reset();
-        cmdList->Reset(allocator, nullptr);
+        ID3D12GraphicsCommandList* cmdList = owner_->GetFrameCommandListEXT();
+        owner_->RetainFrameObjectEXT(colorResource_.Get());
+        owner_->RetainFrameObjectEXT(resolveResource_.Get());
 
         // Only the currently-active face -- matches GenerateMipsEXT()'s own existing "only one
         // face is ever the active draw target at a time" convention. The MSAA source has one
@@ -859,8 +852,6 @@ namespace CNA::Internal::Renderers::DirectX12
         tracker.TransitionTo(cmdList, colorResource_.Get(), priorColorState);
         tracker.TransitionTo(cmdList, resolveResource_.Get(), kShaderReadableState);
 
-        if (FAILED(cmdList->Close())) return;
-        owner_->ExecuteCommandListAndWaitEXT(cmdList);
     }
 
     bool D3D12RenderTargetCubeRenderer::GetData(int face, int level, int x, int y, int w, int h,
@@ -934,10 +925,7 @@ namespace CNA::Internal::Renderers::DirectX12
         srcBox.bottom = static_cast<UINT>(y + h);
         srcBox.back = 1;
 
-        ID3D12CommandAllocator* allocator = owner_->GetCommandAllocatorEXT(0);
-        ID3D12GraphicsCommandList* cmdList = owner_->GetCommandListEXT();
-        allocator->Reset();
-        cmdList->Reset(allocator, nullptr);
+        ID3D12GraphicsCommandList* cmdList = owner_->BeginImmediateCommandsEXT();
 
         auto& tracker = owner_->GetResourceStateTrackerEXT();
         const D3D12_RESOURCE_STATES priorState = tracker.GetTrackedStateEXT(source);

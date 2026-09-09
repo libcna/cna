@@ -233,37 +233,6 @@ namespace CNA::Internal::Renderers::DirectX12
         return result;
     }
 
-    ID3D12Resource* D3D12SpriteBatchRenderer::GetOrCreatePerDrawConstantBuffer()
-    {
-        if (perDrawConstantBuffer_)
-            return perDrawConstantBuffer_.Get();
-
-        D3D12_HEAP_PROPERTIES heapProps{};
-        heapProps.Type = D3D12_HEAP_TYPE_UPLOAD;
-
-        D3D12_RESOURCE_DESC desc{};
-        desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-        desc.Width = sizeof(D3DSprite2DConstants);
-        desc.Height = 1;
-        desc.DepthOrArraySize = 1;
-        desc.MipLevels = 1;
-        desc.Format = DXGI_FORMAT_UNKNOWN;
-        desc.SampleDesc.Count = 1;
-        desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-
-        HRESULT hr = device_->CreateCommittedResource(
-            &heapProps, D3D12_HEAP_FLAG_NONE, &desc,
-            D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(perDrawConstantBuffer_.ReleaseAndGetAddressOf()));
-        if (FAILED(hr))
-            throw std::runtime_error("D3D12SpriteBatchRenderer: constant buffer CreateCommittedResource failed, hr=" + FormatHr(hr));
-
-        const D3D12_RANGE readRange{0, 0};
-        hr = perDrawConstantBuffer_->Map(0, &readRange, &perDrawConstantBufferMapped_);
-        if (FAILED(hr))
-            throw std::runtime_error("D3D12SpriteBatchRenderer: constant buffer Map failed, hr=" + FormatHr(hr));
-        return perDrawConstantBuffer_.Get();
-    }
-
     void D3D12SpriteBatchRenderer::FlushBatch()
     {
         if (pendingVertices_.empty()) return;
@@ -303,7 +272,8 @@ namespace CNA::Internal::Renderers::DirectX12
         ComPtr<ID3D12RootSignature> stockRootSignature;
         ID3D12RootSignature* rootSignature = nullptr;
         ID3D12PipelineState* pso = nullptr;
-        ID3D12Resource* cb = nullptr;
+        D3DSprite2DConstants stockConstants{};
+        bool useStockConstants = false;
         int constantBufferCount = 1;
         int shaderResourceCount = 1;
         int samplerCount = 1;
@@ -352,20 +322,28 @@ namespace CNA::Internal::Renderers::DirectX12
                 throw std::runtime_error(
                     "D3D12SpriteBatchRenderer: failed to create sprite2d root signature");
             pso = GetOrCreateSprite2DPso(rootSignature);
-            D3DSprite2DConstants c{};
-            c.ViewportSize[0] = static_cast<float>(vpW);
-            c.ViewportSize[1] = static_cast<float>(vpH);
-            cb = GetOrCreatePerDrawConstantBuffer();
-            std::memcpy(perDrawConstantBufferMapped_, &c, sizeof(c));
+            stockConstants.ViewportSize[0] = static_cast<float>(vpW);
+            stockConstants.ViewportSize[1] = static_cast<float>(vpH);
+            useStockConstants = true;
         }
 
+        // DX-238 will make these uploads frame-owned. Until then they deliberately finish before
+        // this batch opens its frame command list, preserving SetData's synchronous contract.
         vb_.SetData(pendingVertices_.data(), static_cast<int>(pendingVertices_.size()), sizeof(Sprite2DVertex));
         ib_.SetData16(pendingIndices_.data(), static_cast<int>(pendingIndices_.size()));
 
-        ID3D12CommandAllocator* allocator = owner_->GetCommandAllocatorEXT(0);
-        ID3D12GraphicsCommandList* cmdList = owner_->GetCommandListEXT();
-        allocator->Reset();
-        cmdList->Reset(allocator, pso);
+        ID3D12GraphicsCommandList* cmdList = owner_->GetFrameCommandListEXT();
+        owner_->RetainFrameObjectEXT(vb_.GetResourceEXT());
+        owner_->RetainFrameObjectEXT(ib_.GetResourceEXT());
+        owner_->RetainFrameObjectEXT(rootSignature);
+        owner_->RetainFrameObjectEXT(pso);
+        if (const auto* texture = dynamic_cast<const D3D12TextureRenderer*>(currentTexture_))
+            owner_->RetainFrameObjectEXT(texture->GetResourceEXT());
+        else if (const auto* target = dynamic_cast<const D3D12RenderTargetRenderer*>(currentTexture_))
+            owner_->RetainFrameObjectEXT(target->GetSampleableColorResourceEXT());
+
+        const D3D12_GPU_VIRTUAL_ADDRESS stockConstantAddress = useStockConstants
+            ? owner_->AllocateFrameConstantDataEXT(&stockConstants, sizeof(stockConstants)) : 0;
 
         owner_->TransitionAndBindRenderTargetsEXT(cmdList);
 
@@ -403,14 +381,16 @@ namespace CNA::Internal::Renderers::DirectX12
         {
             for (int slot = 0; slot < constantBufferCount; ++slot)
             {
-                if (ID3D12Resource* buffer = customRenderer->GetConstantBufferEXT(slot))
+                const D3D12_GPU_VIRTUAL_ADDRESS address =
+                    customRenderer->GetConstantBufferGpuAddressEXT(slot);
+                if (address != 0)
                     cmdList->SetGraphicsRootConstantBufferView(
-                        static_cast<UINT>(slot), buffer->GetGPUVirtualAddress());
+                        static_cast<UINT>(slot), address);
             }
         }
         else
         {
-            cmdList->SetGraphicsRootConstantBufferView(0, cb->GetGPUVirtualAddress());
+            cmdList->SetGraphicsRootConstantBufferView(0, stockConstantAddress);
         }
 
         // DX-133: pendingFilter_/pendingAddressU_/pendingAddressV_ (set via SetSamplerFilter()/
@@ -462,11 +442,6 @@ namespace CNA::Internal::Renderers::DirectX12
         }
 
         cmdList->DrawIndexedInstanced(static_cast<UINT>(pendingIndices_.size()), 1, 0, 0, 0);
-
-        HRESULT hr = cmdList->Close();
-        if (FAILED(hr))
-            throw std::runtime_error("D3D12SpriteBatchRenderer::FlushBatch: command list Close failed, hr=" + FormatHr(hr));
-        owner_->ExecuteCommandListAndWaitEXT(cmdList);
 
         pendingVertices_.clear();
         pendingIndices_.clear();
