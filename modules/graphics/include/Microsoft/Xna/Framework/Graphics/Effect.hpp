@@ -70,6 +70,9 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the currently active technique.
          *
          * @param value Pointer to the technique to activate.
+         * @throws System::ObjectDisposedException If this effect has been disposed.
+         * @throws System::ArgumentNullException If @p value is null.
+         * @throws System::InvalidOperationException If @p value belongs to another effect.
          */
         void setCurrentTechniqueProperty(EffectTechnique* value);
 

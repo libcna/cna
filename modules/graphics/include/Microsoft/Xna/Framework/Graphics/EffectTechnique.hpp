@@ -90,8 +90,11 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT [[nodiscard]] std::uint32_t getIndexInternal() const;
 
     private:
+        friend class Effect;
+
         static std::uint64_t NextId();
 
+        Effect* owner_ = nullptr;
         std::string name_;
         EffectPassCollection passes_;
         EffectAnnotationCollection annotations_;

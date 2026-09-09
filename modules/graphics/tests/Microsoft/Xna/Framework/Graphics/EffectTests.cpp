@@ -24,6 +24,7 @@
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "System/NotSupportedException.hpp"
+#include "System/ArgumentNullException.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
@@ -389,29 +390,39 @@ TEST(EffectTest, RejectsOutOfRangeObjectReferencesBeforeNativeParser)
 }
 
 // -----------------------------------------------------------------------
-// CurrentTechnique — FNA's setter performs zero validation (any
-// EffectTechnique* is accepted, even one not owned by this Effect).
+// CurrentTechnique — recovered Microsoft XNA validates the Effect lifetime,
+// rejects null, and requires the technique to belong to the receiving Effect.
 // -----------------------------------------------------------------------
 
-TEST(EffectTest, SetCurrentTechniqueAcceptsAnyPointerWithoutValidation)
+TEST(EffectTest, SetCurrentTechniqueRejectsTechniqueOwnedByAnotherEffect)
 {
     GraphicsDevice gd;
     TestEffect fx(gd);
-    EffectTechnique unrelated(nullptr, "Unrelated");
+    TestEffect other(gd);
 
-    fx.setCurrentTechniqueProperty(&unrelated);
-
-    EXPECT_EQ(fx.getCurrentTechniqueProperty(), &unrelated);
+    EXPECT_THROW(fx.setCurrentTechniqueProperty(other.getCurrentTechniqueProperty()),
+                 System::InvalidOperationException);
+    EXPECT_EQ(fx.getCurrentTechniqueProperty(), fx.getTechniquesProperty()[0]);
 }
 
-TEST(EffectTest, SetCurrentTechniqueAcceptsNull)
+TEST(EffectTest, SetCurrentTechniqueRejectsNull)
 {
     GraphicsDevice gd;
     TestEffect fx(gd);
 
-    fx.setCurrentTechniqueProperty(nullptr);
+    EXPECT_THROW(fx.setCurrentTechniqueProperty(nullptr), System::ArgumentNullException);
+    EXPECT_EQ(fx.getCurrentTechniqueProperty(), fx.getTechniquesProperty()[0]);
+}
 
-    EXPECT_EQ(fx.getCurrentTechniqueProperty(), nullptr);
+TEST(EffectTest, SetCurrentTechniqueAfterDisposeThrowsEvenForCurrentValue)
+{
+    GraphicsDevice gd;
+    TestEffect fx(gd);
+    EffectTechnique* current = fx.getCurrentTechniqueProperty();
+    fx.Dispose();
+
+    EXPECT_THROW(fx.setCurrentTechniqueProperty(current), System::ObjectDisposedException);
+    EXPECT_EQ(fx.getCurrentTechniqueProperty(), current);
 }
 
 // -----------------------------------------------------------------------
@@ -551,24 +562,12 @@ TEST_F(EffectApplyTest, ApplyOnPassOfCurrentTechniqueSucceedsAndInvokesOnApply)
 TEST_F(EffectApplyTest, ApplyOnPassNotInCurrentTechniqueThrowsInvalidOperationException)
 {
     EffectPass& originalPass = *fx.getTechniquesProperty()[0]->getPassesProperty()[0];
-    EffectTechnique unrelated(nullptr, "Unrelated");
+    fx.getTechniquesProperty().Add(EffectTechnique(&fx, "Second"));
 
-    fx.setCurrentTechniqueProperty(&unrelated);
+    fx.setCurrentTechniqueProperty(fx.getTechniquesProperty()[1]);
 
     EXPECT_THROW(originalPass.Apply(), System::InvalidOperationException);
     EXPECT_EQ(fx.applyCount, 0);
-}
-
-TEST_F(EffectApplyTest, ApplyWithNullCurrentTechniqueThrowsInvalidOperationException)
-{
-    EffectPass& p0 = *fx.getTechniquesProperty()[0]->getPassesProperty()[0];
-
-    fx.setCurrentTechniqueProperty(nullptr);
-
-    // FNA dereferences CurrentTechnique.TechniquePointer unconditionally here and would
-    // crash with a NullReferenceException; CNA maps that to this same, defined exception
-    // instead of undefined behavior (an intentional, documented deviation).
-    EXPECT_THROW(p0.Apply(), System::InvalidOperationException);
 }
 
 TEST_F(EffectApplyTest, ApplyIsConsistentAcrossInterleavedTechniqueSwitches)
@@ -596,13 +595,8 @@ TEST_F(EffectApplyTest, ApplyIsConsistentAcrossInterleavedTechniqueSwitches)
 // EffectPassCollection is "the applied one" — accessed *through*
 // CurrentTechnique itself (getCurrentTechniqueProperty()->getPassesProperty()),
 // not via a directly-held technique index as Task 355's test above does.
-// Confirms FNA's CurrentTechnique.set (Effect.cs) has no additional hidden
-// state beyond the plain pointer swap CNA already performs: FNA's setter also
-// calls FNA3D_SetEffectTechnique, a native call into the compiled-effect
-// renderer with no C#-observable side effect beyond what INTERNAL_applyEffect
-// later reads — CNA has no compiled-technique GPU representation yet
-// (Phase 74), so the plain pointer swap already provides the complete
-// C#-visible contract.
+// The separate validation tests above cover Microsoft's null, ownership and
+// disposal checks; this block covers successful owned-technique transitions.
 // -----------------------------------------------------------------------
 
 TEST_F(EffectApplyTest, CurrentTechniquePropertyPassCollectionTracksSelectedTechnique)

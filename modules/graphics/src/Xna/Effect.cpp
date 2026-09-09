@@ -3,6 +3,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "System/ArgumentException.hpp"
+#include "System/ArgumentNullException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
@@ -905,18 +906,20 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void Effect::setCurrentTechniqueProperty(EffectTechnique* value)
     {
-        currentTechnique_ = value;
-        if (compiledRuntime_ && value != nullptr)
+        if (isDisposed_)
+            throw System::ObjectDisposedException(getNameProperty());
+        if (value == nullptr)
+            throw System::ArgumentNullException("value");
+        if (value->owner_ != this)
+            throw System::InvalidOperationException();
+        if (value == currentTechnique_)
+            return;
+
+        if (compiledRuntime_)
         {
-            for (int i = 0; i < techniques_.getCountProperty(); ++i)
-            {
-                if (techniques_[i] == value)
-                {
-                    compiledRuntime_->SetTechnique(value->getIndexInternal());
-                    break;
-                }
-            }
+            compiledRuntime_->SetTechnique(value->getIndexInternal());
         }
+        currentTechnique_ = value;
     }
 
     EffectParameterCollection& Effect::getParametersProperty() { return parameters_; }

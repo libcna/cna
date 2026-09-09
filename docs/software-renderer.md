@@ -410,6 +410,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   const `GetParameterBySemantic` overloads follow recovered Microsoft XNA's
   `StringComparison::OrdinalIgnoreCase` rule and retain first-declaration wins for duplicates;
   the separate name indexer remains case-sensitive.
+- **`Effect.CurrentTechnique` enforces the Microsoft object boundary** (`SOFTWARE-257`) — setting
+  null, a technique owned by another Effect, or any value after disposal throws the recovered XNA
+  exception before changing either the public selection or a compiled renderer runtime.
 - **The classic SpriteBatch/SpriteFont parity corpus executes on the CPU** (`SOFTWARE-138`).
   Eighteen renderer-independent scenes shared with EasyGL cover flips, rotation/origin, both scale
   overloads, source rectangles, layer sorting, transforms, render targets, viewports, scissor,

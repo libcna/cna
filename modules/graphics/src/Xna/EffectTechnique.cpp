@@ -19,7 +19,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     EffectTechnique::EffectTechnique(Effect* owner, std::string name,
                                      std::uint32_t techniqueIndex, bool addDefaultPass)
-        : name_(std::move(name)), techniqueIndex_(techniqueIndex)
+        : owner_(owner), name_(std::move(name)), techniqueIndex_(techniqueIndex)
     {
         if (addDefaultPass)
         {
