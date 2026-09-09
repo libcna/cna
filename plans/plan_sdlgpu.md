@@ -22,7 +22,7 @@
 | SDL GPU registered integration tests | 85 CTests before parity-fixture registration |
 | Shared EasyGL parity fixtures available | 30 renderer-neutral sources in `modules/graphics/examples/parity` |
 | Tasks created by this audit | 28 (`SDLGPU-55`–`SDLGPU-82`) |
-| Completed / open / proven unavoidable | 1 / 27 / 0; `SDLGPU-80` is a candidate limitation, not yet counted complete |
+| Completed / open / proven unavoidable | 2 / 26 / 0; `SDLGPU-80` is a candidate limitation, not yet counted complete |
 | SDL GPU build | Stable `cmake-build-sdlgpu`, Debug, `CNA_GRAPHICS_RENDERER=SDL_GPU`, tests/examples ON |
 | EasyGL oracle build | Stable `cmake-build-debug`, Debug, `CNA_GRAPHICS_RENDERER=OPENGL33`, tests/examples ON |
 | Runtime driver | SDL 3.5.0 SDL_gpu Vulkan on AMD Radeon 780M / Mesa RADV 25.0.7; Khronos validation layer 1.4.309 present |
@@ -223,7 +223,7 @@ underlying API limitation proven after reasonable emulation analysis.
   27/27; the classification checker reports 246 rows and zero unclassified; `git diff --check`
   passes. No clean rebuild was used.
 
-### SDLGPU-56 — repair the constructor exception-safety oracle ⬜
+### SDLGPU-56 — repair the constructor exception-safety oracle ✅
 
 - **Problem/public behavior:** the test stops after 23 shaders although construction now owns 25,
   leaving two allocation failure points untested; production transactionality is public lifecycle
@@ -233,6 +233,12 @@ underlying API limitation proven after reasonable emulation analysis.
 - **Location:** SDL GPU construction failure enum/test and renderer construction shader list.
 - **Acceptance/test:** derive or explicitly share the authoritative count, inject every acquisition,
   prove zero leaked handles and successful recovery, with validation fatal.
+- **Result (2026-09-09):** accepted. Added distinct failure points for the PBR vertex-color and
+  skinned-PBR vertex-color shader acquisitions (they previously reused earlier points and were
+  unreachable by injection), tied production `ConstructionShader::Count` to the public-internal
+  contiguous failure-point count with `static_assert`, and made the test derive both its case count
+  and success expectation from that value. Incremental target build succeeded;
+  `SdlGpu_ConstructorExceptionSafety` passes in 14.93 s on offscreen/Vulkan with validation fatal.
 
 ### SDLGPU-57 — make capability and numeric-limit reporting truthful ⬜
 

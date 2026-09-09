@@ -66,7 +66,7 @@ namespace
         const char* label;
     };
 
-    constexpr std::array<FailureCase, 30> kConstructionFailures{{
+    constexpr std::array<FailureCase, 32> kConstructionFailures{{
         {SdlGpuFailurePointEXT::DeviceCreation, "device creation"},
         {SdlGpuFailurePointEXT::WindowClaim, "window claiming"},
         {SdlGpuFailurePointEXT::SwapchainSetup, "swapchain setup"},
@@ -93,11 +93,14 @@ namespace
         {SdlGpuFailurePointEXT::SkinnedColoredFragmentShaderCreation, "skinned-colored fragment shader"},
         {SdlGpuFailurePointEXT::PbrVertexShaderCreation, "PBR vertex shader"},
         {SdlGpuFailurePointEXT::PbrSkinnedVertexShaderCreation, "skinned PBR vertex shader"},
+        {SdlGpuFailurePointEXT::PbrColorVertexShaderCreation, "PBR vertex-color shader"},
+        {SdlGpuFailurePointEXT::PbrSkinnedColorVertexShaderCreation, "skinned PBR vertex-color shader"},
         {SdlGpuFailurePointEXT::PbrFragmentShaderCreation, "PBR fragment shader"},
         {SdlGpuFailurePointEXT::WindowMetricsInitialization, "window metrics"},
         {SdlGpuFailurePointEXT::RendererRegistration, "renderer registration"},
         {SdlGpuFailurePointEXT::AfterRendererRegistration, "post-registration commit"}
     }};
+    static_assert(kConstructionFailures.size() == SdlGpuConstructionShaderCountEXT + 7);
 
     class TestRun
     {
@@ -178,9 +181,12 @@ namespace
                       successTracker.Released(SdlGpuResourceKindEXT::Device) == 1 &&
                       successTracker.Acquired(SdlGpuResourceKindEXT::WindowClaim) == 1 &&
                       successTracker.Released(SdlGpuResourceKindEXT::WindowClaim) == 1 &&
-                      successTracker.Acquired(SdlGpuResourceKindEXT::Shader) == 23 &&
-                      successTracker.Released(SdlGpuResourceKindEXT::Shader) == 23,
-                  prefix + " succeeding renderer owns one device/claim and 23 shaders");
+                      successTracker.Acquired(SdlGpuResourceKindEXT::Shader) ==
+                          static_cast<int>(SdlGpuConstructionShaderCountEXT) &&
+                      successTracker.Released(SdlGpuResourceKindEXT::Shader) ==
+                          static_cast<int>(SdlGpuConstructionShaderCountEXT),
+                  prefix + " succeeding renderer owns one device/claim and " +
+                      std::to_string(SdlGpuConstructionShaderCountEXT) + " shaders");
         }
 
         void ExerciseLazyFailure(SDL_Window* window, SdlGpuFailurePointEXT point,

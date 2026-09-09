@@ -131,6 +131,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         SkinnedColoredFragmentShaderCreation,
         PbrVertexShaderCreation,
         PbrSkinnedVertexShaderCreation,
+        PbrColorVertexShaderCreation,
+        PbrSkinnedColorVertexShaderCreation,
         PbrFragmentShaderCreation,
         WindowMetricsInitialization,
         RendererRegistration,
@@ -141,6 +143,11 @@ namespace CNA::Internal::Renderers::SdlGpu
         DefaultWhiteTextureCreation,
         DefaultFlatNormalTextureCreation
     };
+
+    /** @brief Number of distinct shaders acquired during transactional renderer construction. CNAEXT. */
+    inline constexpr std::size_t SdlGpuConstructionShaderCountEXT =
+        static_cast<std::size_t>(SdlGpuFailurePointEXT::PbrFragmentShaderCreation) -
+        static_cast<std::size_t>(SdlGpuFailurePointEXT::SpriteVertexShaderCreation) + 1;
 
     /** @brief Resource categories reported by SdlGpuTestHooksEXT. CNAEXT. */
     enum class SdlGpuResourceKindEXT : std::uint8_t

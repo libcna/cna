@@ -106,12 +106,15 @@ namespace CNA::Internal::Renderers::SdlGpu
             SkinnedColoredFragment,
             PbrVertex,
             PbrSkinnedVertex,
-            PbrFragment,
             // plans/plan_gltf.md GLTF-462/GLTF-463: stride-60 and stride-80 twins that declare COLOR_0.
             PbrColorVertex,
             PbrSkinnedColorVertex,
+            PbrFragment,
             Count
         };
+
+        static_assert(static_cast<std::size_t>(ConstructionShader::Count) ==
+                      SdlGpuConstructionShaderCountEXT);
 
         [[nodiscard]] const char* FailurePointName(SdlGpuFailurePointEXT point)
         {
@@ -143,6 +146,8 @@ namespace CNA::Internal::Renderers::SdlGpu
                 case SdlGpuFailurePointEXT::SkinnedColoredFragmentShaderCreation: return "skinned-colored fragment shader creation";
                 case SdlGpuFailurePointEXT::PbrVertexShaderCreation: return "PBR vertex shader creation";
                 case SdlGpuFailurePointEXT::PbrSkinnedVertexShaderCreation: return "skinned PBR vertex shader creation";
+                case SdlGpuFailurePointEXT::PbrColorVertexShaderCreation: return "PBR vertex-color shader creation";
+                case SdlGpuFailurePointEXT::PbrSkinnedColorVertexShaderCreation: return "skinned PBR vertex-color shader creation";
                 case SdlGpuFailurePointEXT::PbrFragmentShaderCreation: return "PBR fragment shader creation";
                 case SdlGpuFailurePointEXT::WindowMetricsInitialization: return "window metrics initialization";
                 case SdlGpuFailurePointEXT::RendererRegistration: return "renderer registration";
@@ -4632,7 +4637,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         colorVsInfo.code_size = Shaders::kPbr3dColorVertSpv_size;
         resources.CreateShader(
             ConstructionShader::PbrColorVertex,
-            SdlGpuFailurePointEXT::PbrVertexShaderCreation, colorVsInfo,
+            SdlGpuFailurePointEXT::PbrColorVertexShaderCreation, colorVsInfo,
             "CNA SDL_GPU: failed to create pbr3d (vertex colour) vertex shader: ");
 
         SDL_GPUShaderCreateInfo skinnedColorVsInfo = skinnedVsInfo;
@@ -4640,7 +4645,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         skinnedColorVsInfo.code_size = Shaders::kPbrSkinned3dColorVertSpv_size;
         resources.CreateShader(
             ConstructionShader::PbrSkinnedColorVertex,
-            SdlGpuFailurePointEXT::PbrSkinnedVertexShaderCreation, skinnedColorVsInfo,
+            SdlGpuFailurePointEXT::PbrSkinnedColorVertexShaderCreation, skinnedColorVsInfo,
             "CNA SDL_GPU: failed to create pbr_skinned3d (vertex colour) vertex shader: ");
 
         SDL_GPUShaderCreateInfo fsInfo{};
