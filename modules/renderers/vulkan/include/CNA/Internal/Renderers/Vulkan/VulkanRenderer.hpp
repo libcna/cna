@@ -28,6 +28,7 @@ namespace CNA::Internal::Renderers::Vulkan
     class VulkanRenderTargetCubeRenderer;    // forward
     class VulkanStorageBufferRenderer;       // forward
     class VulkanComputeShaderRenderer;       // forward
+    class VulkanTexture2DArrayRenderer;      // forward
 
     // -------------------------------------------------------------------------
     // Vertex types (internal to the Vulkan renderer)
@@ -224,6 +225,15 @@ namespace CNA::Internal::Renderers::Vulkan
         virtual VkImageView GetVkVolumeImageView() const = 0;
     };
 
+    /** @brief Native sampled-view contract for a Vulkan two-dimensional texture array. */
+    struct IVulkanArraySamplable
+    {
+        /** @brief Releases the dimensional sampled-view contract. */
+        virtual ~IVulkanArraySamplable() = default;
+        /** @brief Returns a `VK_IMAGE_VIEW_TYPE_2D_ARRAY` view over every layer and mip. */
+        virtual VkImageView GetVkArrayImageView() const = 0;
+    };
+
     // -------------------------------------------------------------------------
     // VulkanTextureRenderer
     // -------------------------------------------------------------------------
@@ -297,6 +307,67 @@ namespace CNA::Internal::Renderers::Vulkan
         /// always comes from `owner_->descriptorPool_`, so it must be freed from its own pool.
         VkDescriptorPool    descriptorPool_ = VK_NULL_HANDLE;
         VulkanRenderer* owner_      = nullptr;
+    };
+
+    /** @brief Vulkan-owned image record behind `CNA::Graphics::Texture2DArray`. */
+    class VulkanTexture2DArrayRenderer final
+        : public ITexture2DArrayRenderer
+        , public IVulkanArraySamplable
+    {
+    public:
+        /**
+         * @brief Allocates an array image and one full-array sampled view.
+         *
+         * @param owner Owning renderer.
+         * @param width Level-zero width.
+         * @param height Level-zero height.
+         * @param layerCount Array-layer count.
+         * @param mipLevelCount Allocated mip-level count.
+         * @param surfaceFormat Public `SurfaceFormat` ordinal.
+         * @param usage Public texture-array usage bits.
+         */
+        VulkanTexture2DArrayRenderer(
+            VulkanRenderer* owner, int width, int height, int layerCount, int mipLevelCount,
+            int surfaceFormat, std::uint32_t usage);
+        /** @brief Retires the native image, view and memory. */
+        ~VulkanTexture2DArrayRenderer() override;
+
+        /** @copydoc ITexture2DArrayRenderer::SetData */
+        [[nodiscard]] bool SetData(
+            int layer, int mipLevel, int x, int y, int width, int height,
+            const void* data, std::size_t byteCount) override;
+        /** @copydoc ITexture2DArrayRenderer::GetData */
+        [[nodiscard]] bool GetData(
+            int layer, int mipLevel, int x, int y, int width, int height,
+            void* data, std::size_t byteCount) const override;
+        /** @copydoc IVulkanArraySamplable::GetVkArrayImageView */
+        [[nodiscard]] VkImageView GetVkArrayImageView() const override { return imageView_; }
+        /** @brief Returns whether linear filtering was declared and device-validated. */
+        [[nodiscard]] bool IsFilterableEXT() const noexcept { return (usage_ & UINT32_C(2)) != 0; }
+
+        /** @brief Retires all live Vulkan handles while the owner is still available. */
+        void ReleaseVulkanResources();
+        /** @brief Disconnects this record from an owner that is being destroyed. */
+        void DisconnectOwner() noexcept { owner_ = nullptr; }
+
+    private:
+        void RecordTransition(
+            VkCommandBuffer commandBuffer, int layer, int mipLevel,
+            VkImageLayout oldLayout, VkImageLayout newLayout) const;
+
+        VulkanRenderer* owner_ = nullptr;
+        int width_ = 0;
+        int height_ = 0;
+        int layerCount_ = 0;
+        int mipLevelCount_ = 0;
+        int surfaceFormat_ = 0;
+        std::uint32_t usage_ = 0;
+        VkFormat vkFormat_ = VK_FORMAT_UNDEFINED;
+        int bytesPerTexel_ = 0;
+        int blockExtent_ = 1;
+        VkImage image_ = VK_NULL_HANDLE;
+        VkDeviceMemory memory_ = VK_NULL_HANDLE;
+        VkImageView imageView_ = VK_NULL_HANDLE;
     };
 
     // -------------------------------------------------------------------------
@@ -564,6 +635,9 @@ namespace CNA::Internal::Renderers::Vulkan
         /** @brief As @ref BindTexture, for a volume. @throws System::NotSupportedException always. */
         void BindTexture3D(int unit,
                            CNA::Internal::Renderers::ITexture3DRenderer* texture) override;
+        /** @copydoc IEffectRenderer::BindTexture2DArrayEXT */
+        [[nodiscard]] bool BindTexture2DArrayEXT(
+            int unit, std::shared_ptr<ITexture2DArrayRenderer> texture) override;
 
         /// @param dsParams   plan_vulkan.md VULKAN-058: the batch's DepthStencilState. A custom
         ///                   effect's sprite pipeline honours it exactly as the built-in one does;
@@ -654,8 +728,13 @@ namespace CNA::Internal::Renderers::Vulkan
         static constexpr int kEffectVec3ArrayBinding  = kEffectFloatArrayBinding + 2;
         static constexpr int kEffectMat4ArrayBinding  = kEffectFloatArrayBinding + 3;
         static constexpr int kEffectArrayBindingCount = 4;
+        /// MOD-2226: three sampler2DArray bindings follow the stable uniform-array range. Together
+        /// with the twelve existing set-1 samplers and set 0's sprite sampler this keeps the
+        /// fragment-stage pipeline-layout total at Vulkan's guaranteed minimum of sixteen.
+        static constexpr int kEffectTextureArrayBindingBase = kEffectMat4ArrayBinding + 1;
+        static constexpr int kEffectTextureArrayBindingCount = kMaxEffectBoundTextures - 1;
         static constexpr int kEffectBoundBindingCount =
-            kEffectFloatArrayBinding + kEffectArrayBindingCount;
+            kEffectTextureArrayBindingBase + kEffectTextureArrayBindingCount;
         /// VULKAN-252: elements per array, all four kinds. 72 is XNA's own `SkinnedEffect.MaxBones`,
         /// so the array a custom effect most plausibly wants -- a bone palette -- fits exactly, and
         /// the whole block is 8448 bytes against the 16384 every Vulkan device must allow.
@@ -703,6 +782,9 @@ namespace CNA::Internal::Renderers::Vulkan
                          boundCubes_{};
         std::array<CNA::Internal::Renderers::ITexture3DRenderer*, kMaxEffectBoundTextures>
                          boundVolumes_{};
+        /// MOD-2226: shared lifetime prevents deferred array descriptors from naming dead views.
+        std::array<std::shared_ptr<ITexture2DArrayRenderer>, kMaxEffectBoundTextures>
+                         boundTextureArrays_{};
         VkDescriptorSetLayout boundLayout_    = VK_NULL_HANDLE;
         VkDescriptorSet       boundSet_       = VK_NULL_HANDLE;
         VkDescriptorPool      boundSetPool_   = VK_NULL_HANDLE;
@@ -1913,6 +1995,7 @@ namespace CNA::Internal::Renderers::Vulkan
         friend class VulkanMRTProxy;
         friend class VulkanStorageBufferRenderer;
         friend class VulkanComputeShaderRenderer;
+        friend class VulkanTexture2DArrayRenderer;
 
     public:
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
@@ -3253,6 +3336,9 @@ namespace CNA::Internal::Renderers::Vulkan
         std::unique_ptr<IOcclusionQueryRenderer> CreateOcclusionQuery() override;
         std::unique_ptr<ITexture3DRenderer>  CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) override;
         std::unique_ptr<ITextureCubeRenderer> CreateTextureCube(int size, bool mipMap, int surfaceFormat) override;
+        std::unique_ptr<ITexture2DArrayRenderer> CreateTexture2DArrayEXT(
+            int width, int height, int layerCount, int mipLevelCount,
+            int surfaceFormat, std::uint32_t usage) override;
         std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCube(int size, int depthFormat, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) override;
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
                               int count) override;
@@ -3876,6 +3962,7 @@ namespace CNA::Internal::Renderers::Vulkan
         VkImage               defaultWhiteImage_     = VK_NULL_HANDLE;
         VkDeviceMemory        defaultWhiteMemory_    = VK_NULL_HANDLE;
         VkImageView           defaultWhiteView_      = VK_NULL_HANDLE;
+        VkImageView           defaultWhiteArrayView_ = VK_NULL_HANDLE;
         VkDescriptorSet       defaultWhiteDescSet_   = VK_NULL_HANDLE;
 
         // Default 1×1 "flat" tangent-space normal texture (128,128,255,255 -> decodes to
@@ -3895,6 +3982,7 @@ namespace CNA::Internal::Renderers::Vulkan
 
         // --- Lifetime tracking for externally-owned Vulkan resources ---
         std::vector<VulkanTextureRenderer*>       liveTextures_;
+        std::vector<VulkanTexture2DArrayRenderer*> liveTexture2DArrays_;
         std::vector<VulkanVertexBufferRenderer*>  liveVertexBuffers_;
         std::vector<VulkanIndexBufferRenderer*>   liveIndexBuffers_;
         std::vector<VulkanRenderTargetRenderer*>  liveRenderTargets_;

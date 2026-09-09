@@ -10,6 +10,9 @@
 #include <memory>
 
 namespace CNA::Internal::Renderers { class IEffectRenderer; }
+#ifdef CNA_CNAEXT
+namespace CNA::Graphics { class Texture2DArray; }
+#endif
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -155,6 +158,31 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param texture Volume texture to bind.
          */
         CNAEXT void SetTexture(int unit, Texture3D& texture);
+
+#ifdef CNA_CNAEXT
+        /**
+         * @brief Binds a sampled two-dimensional texture array to a custom shader.
+         *
+         * Texture-array bindings occupy their own renderer-defined descriptor range; they never
+         * alias a `Texture2D`, cube or volume binding with an incompatible native view type.
+         *
+         * @param unit Zero-based texture-array sampler unit.
+         * @param texture Live texture-array resource to bind.
+         * @throws System::ObjectDisposedException If @p texture has been disposed.
+         * @throws System::NotSupportedException If the active renderer does not implement array
+         *         sampling or refuses @p unit.
+         */
+        CNAEXT void SetTextureArrayEXT(int unit, CNA::Graphics::Texture2DArray& texture);
+
+        /**
+         * @brief Clears a previously bound texture array from a custom shader.
+         *
+         * @param unit Zero-based texture-array sampler unit.
+         * @throws System::NotSupportedException If the active renderer does not implement array
+         *         sampling or refuses @p unit.
+         */
+        CNAEXT void ClearTextureArrayEXT(int unit);
+#endif
 
         /**
          * @brief Task 1079: enables a `ShaderEffect` to drive a real 3D `GraphicsDevice::

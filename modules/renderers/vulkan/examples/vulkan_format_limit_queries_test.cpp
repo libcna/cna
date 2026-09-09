@@ -210,9 +210,18 @@ protected:
             const bool expectedBlend = expectedRenderTarget &&
                 (renderTargetProperties.optimalTilingFeatures &
                  VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT) != 0;
-            const bool expectedTransferSource = expectedRenderTarget &&
-                (renderTargetProperties.optimalTilingFeatures &
-                 VK_FORMAT_FEATURE_TRANSFER_SRC_BIT) != 0;
+            VkImageFormatProperties transferSourceProperties{};
+            constexpr VkImageUsageFlags transferSourceUsage =
+                VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+            const bool nativeTextureTransferSource = expectedStorage &&
+                (properties.optimalTilingFeatures & VK_FORMAT_FEATURE_TRANSFER_SRC_BIT) != 0 &&
+                vkGetPhysicalDeviceImageFormatProperties(
+                    physical, format.vulkan, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
+                    transferSourceUsage, 0, &transferSourceProperties) == VK_SUCCESS;
+            const bool expectedTransferSource = nativeTextureTransferSource ||
+                (expectedRenderTarget &&
+                 (renderTargetProperties.optimalTilingFeatures &
+                  VK_FORMAT_FEATURE_TRANSFER_SRC_BIT) != 0);
             VkImageFormatProperties renderTargetImageProperties{};
             constexpr VkImageUsageFlags renderTargetUsage =
                 VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
@@ -504,7 +513,7 @@ protected:
             ? std::min(limits.maxPerStageDescriptorStorageBuffers,
                        limits.maxDescriptorSetStorageBuffers)
             : 0;
-        constexpr std::uint32_t implementedSampledBindings = 12;
+        constexpr std::uint32_t implementedSampledBindings = 15;
         constexpr std::uint64_t largestImplementedUniformBinding =
             UINT64_C(72) * UINT64_C(16) * sizeof(float);
         const std::uint64_t expectedSampled = std::min({
@@ -520,6 +529,13 @@ protected:
             const CNA::RendererLimitValue actual = device.GetRendererLimitEXT(name);
             return actual.known && actual.value == expected;
         };
+        VkImageFormatProperties arrayProperties{};
+        constexpr VkImageUsageFlags arrayUsage = VK_IMAGE_USAGE_SAMPLED_BIT;
+        const std::uint64_t expectedArrayLayers =
+            vkGetPhysicalDeviceImageFormatProperties(
+                physical, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D,
+                VK_IMAGE_TILING_OPTIMAL, arrayUsage, 0, &arrayProperties) == VK_SUCCESS
+                ? arrayProperties.maxArrayLayers : 0;
         const bool limitsExact =
             EqualLimit(CNA::RendererLimit::MaxTextureDimension,
                        ClampToInt(limits.maxImageDimension2D)) &&
@@ -531,7 +547,7 @@ protected:
                                                limits.maxUniformBufferRange)) &&
             EqualLimit(CNA::RendererLimit::MaxComputeStorageBufferBindings,
                        expectedComputeBindings) &&
-            EqualLimit(CNA::RendererLimit::MaxTextureArrayLayers, 0) &&
+            EqualLimit(CNA::RendererLimit::MaxTextureArrayLayers, expectedArrayLayers) &&
             EqualLimit(CNA::RendererLimit::MaxSampledTexturesPerShaderStage,
                        expectedSampled) &&
             EqualLimit(CNA::RendererLimit::MaxStorageImagesPerShaderStage, 0) &&
@@ -548,16 +564,17 @@ protected:
             EqualLimit(CNA::RendererLimit::TimestampPeriodPicoseconds, 0);
         Check(limitsExact, "I every new published limit equals this physical-device snapshot");
 
-        const bool nativeOnlyLimitsExist = limits.maxImageArrayLayers > 0 &&
+        const bool remainingNativeOnlyLimitsExist =
             limits.maxPerStageDescriptorStorageImages > 0 &&
             renderer->GetPhysicalDevicePropertiesEXT().limits.timestampPeriod > 0.0F;
-        Check(nativeOnlyLimitsExist &&
-                  device.GetRendererLimitEXT(CNA::RendererLimit::MaxTextureArrayLayers).value == 0 &&
+        Check(remainingNativeOnlyLimitsExist && expectedArrayLayers > 0 &&
+                  device.GetRendererLimitEXT(
+                      CNA::RendererLimit::MaxTextureArrayLayers).value == expectedArrayLayers &&
                   device.GetRendererLimitEXT(
                       CNA::RendererLimit::MaxStorageImagesPerShaderStage).value == 0 &&
                   device.GetRendererLimitEXT(
                       CNA::RendererLimit::TimestampPeriodPicoseconds).value == 0,
-              "J native array/storage-image/timestamp facts stay zero until CNA implements them");
+              "J implemented array limits publish while storage-image/timestamp gaps stay zero");
 
         Check(renderer->GetValidationMessagesEXT().empty(),
               "K capability queries and constructor contracts emit no Vulkan validation message",

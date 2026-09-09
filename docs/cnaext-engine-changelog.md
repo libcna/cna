@@ -14,6 +14,20 @@ something breaks.
 
 ---
 
+## Revision 4 — 2026-09-09
+
+### Texture-array transfers and sampled binding (`MOD-2226`)
+
+- `Texture2DArray::setData` and `getData` address one layer, mip and optional rectangle using
+  tightly packed native-format bytes. The public layer validates subresource bounds, exact byte
+  counts, overflow and compressed-block alignment before the renderer sees the request.
+- `ShaderEffect::SetTextureArrayEXT` binds a live array record and
+  `ClearTextureArrayEXT` releases it. Renderer work is shared independently of the disposed public
+  `GraphicsResource`, and an unimplemented backend refuses instead of discarding the bind.
+- Vulkan supplies the first native implementation and oracle. Revision 4 defines the portable
+  public contract; the separate `MOD-2243` audit still owns closing every Vulkan-specific native
+  allocation, view, retirement and device-fact acceptance criterion.
+
 ## Revision 3 — 2026-09-09
 
 ### New sampled texture-array resource (`MOD-2225`)
@@ -47,9 +61,10 @@ module; the last two are private.
 | `DepthEffect::EnsurePaletteTextures` (private) | `ensurePaletteTextures` |
 | `RenderPipeline::DrawSkybox` (private) | `drawSkybox` |
 
-Nothing else was renamed, and nothing was removed. Ten XNA/.NET-shaped names are deliberately
+Nothing else was renamed, and nothing was removed. Fourteen XNA/.NET-shaped names are deliberately
 **unchanged** and are listed with their reasons in `scripts/check_cnaext_naming.py` — the `Effect`
-overrides, `PbrMaterial::GetHashCode`/`ToString`, and `AsciiPostProcessEffect::Draw` /
+and `Texture2DArray` overrides, `PbrMaterial::GetHashCode`/`ToString`, and
+`AsciiPostProcessEffect::Draw` /
 `GetLastGridDimensions`, which are part of the C ABI surface.
 
 ### New types

@@ -182,7 +182,7 @@ fixed from the descriptor's own request.
 |---|---|
 | Custom `ShaderEffect` (GLSL/HLSL source) | `CreateEffectRenderer` returns null; `CustomEffects` is false. FNA3D compiles no shader source. |
 | `DrawMeshEXT` | Inherits the shared refusal — that is Skia's bounded `SkVertices` ABI. |
-| Render-target array slices | `SetRenderTargets` throws for a non-zero `arraySlice`; CNA exposes no texture arrays and FNA3D's binding has no slice field. |
+| Render-target array slices | `SetRenderTargets` throws for a non-zero `arraySlice`; CNA's sampled `Texture2DArray` extension is not a render target, and FNA3D's binding has no slice field. |
 | Unknown vertex stride with no `VertexDeclaration` | Throws, naming the stride. FNA3D binds real per-stream declarations and this renderer will not guess a layout. |
 | Out-of-contract state ordinals | Throw, naming the state and the ordinal, instead of casting into an undefined FNA3D enumerator. |
 | Instanced stock-effect drawing | `DrawInstancedPrimitivesEx` throws because stock shaders declare no instance input. A compatible compiled effect uses native instancing when the driver reports it. |

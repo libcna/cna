@@ -32,6 +32,8 @@ EXEMPT = {
     "PbrMaterial::ToString": "mirrors System.Object.ToString",
     "PbrMaterialExtensions::GetHashCode": "mirrors System.Object.GetHashCode, as PbrMaterial does",
     "PbrMaterialExtensions::ToString": "mirrors System.Object.ToString, as PbrMaterial does",
+    "Texture2DArray::GetTypeName": "override of System.Object.GetTypeName",
+    "Texture2DArray::Dispose": "override of GraphicsResource.Dispose",
     # Predates the engine layer and its naming rule, and is exposed through the C ABI
     # (modules/c-api/src/CnaCApiGraphicsExt.cpp), so the name is not this layer's to change.
     "AsciiPostProcessEffect::Draw": "predates MOD-6 and is part of the C ABI surface",

@@ -52,7 +52,7 @@ need content, audio, media, storage or the engine extension module.
 | `GraphicsDevice::DrawPrimitivesIndirectEXT`, `DrawIndexedPrimitivesIndirectEXT` | `modules/graphics` | Existing indirect public routes backed by a `StorageBuffer`; EasyGL implements them, Vulkan/OpenGL4 refuse. |
 | `CNA::DisplayColorSpace` and device queries | `modules/graphics` | Existing sRGB/scRGB/HDR10 vocabulary; all measured renderers still expose only sRGB presentation. |
 
-There is no public `ShaderCodeEXT`, `ShaderPackageEXT`, `Texture2DArray`, `StorageTexture2D`,
+There is no public `ShaderCodeEXT`, `ShaderPackageEXT`, `StorageTexture2D`,
 constant buffer, independently creatable indirect-argument buffer, resource usage/access
 descriptor, fence or native image/buffer/view type. Those names must therefore extend the surface
 above rather than duplicate a hidden implementation.
@@ -181,8 +181,9 @@ are still zero; those are classification gaps, not permission to assume unlimite
   facts. EasyGL reports nine texture-storage formats and eight render-target formats. OpenGL4
   reports only `Color` for texture storage and render targets.
 - No measured renderer reports storage-image read/write/atomic support through the detailed format
-  profile. Texture-array layer support is also zero on all three. These are the live gaps owned by
-  `MOD-2225` through `MOD-2228`, `MOD-2243`/`MOD-2244` and `MOD-2261`.
+  profile. Vulkan now publishes its implemented sampled texture-array layer limit; EasyGL and
+  OpenGL4 remain zero. The open storage-image and cross-renderer array work belongs to
+  `MOD-2227`/`MOD-2228`, `MOD-2244` and `MOD-2261`.
 
 ## Per-task reconciliation
 
@@ -210,8 +211,8 @@ tree, not about native API potential.
 | MOD-2222 | Supplied | Vulkan derives implemented format/limit promises from physical-device facts. |
 | MOD-2223 | Supplied | Vulkan has exact float/HDR `RenderTarget2D` storage, rendering and readback. |
 | MOD-2224 | Supplied | Default and Vulkan constructor/format/limit contract suites are permanent. |
-| MOD-2225 | Supplied | Immutable `Texture2DArrayDescriptor`, usage mask and tracked `Texture2DArray` facade validate cached live limits/format usages before a false-by-default renderer factory. No native handle is exposed; Vulkan allocation remains `MOD-2243`. |
-| MOD-2226 | Absent | No array layer/mip transfer or sampled-binding API. |
+| MOD-2225 | Supplied | Immutable `Texture2DArrayDescriptor`, usage mask and tracked `Texture2DArray` facade validate cached live limits/format usages before a false-by-default renderer factory. No native handle is exposed. |
+| MOD-2226 | Supplied | Exact layer/mip/rectangle upload and readback validate native-format bytes and compressed blocks before dispatch. `ShaderEffect` array binding retains only the internal record and refuses unsupported renderers; Vulkan samples bindings 16..18. |
 | MOD-2227 | Absent | No dedicated storage texture resource. |
 | MOD-2228 | Partial | `ComputeShader::bindImage(Texture2D&)` exists; the storage-texture overload, retention and portable path do not. |
 | MOD-2229 | Partial | Basic compute-gated `StorageBuffer` exists without usage/access intent, ranges, staging policy or resource tracking. |
@@ -222,7 +223,7 @@ tree, not about native API potential.
 | MOD-2240 | Supplied | Vulkan discovery separates supported and enabled facts and records its ordered queue. |
 | MOD-2241 | Supplied | Vulkan implements the existing compute/storage-buffer baseline. |
 | MOD-2242 | Supplied | Vulkan reflects bounded SSBO/push-constant bindings and reuses descriptors. |
-| MOD-2243 | Absent | No Vulkan array image/view/transfer/sampling implementation. |
+| MOD-2243 | Partial | Vulkan allocation, full-array views, subresource transfers, sampled descriptors and retirement are implemented and pass the functional oracle; the independent raw-limit/factory/device-teardown verification is still open. |
 | MOD-2244 | Partial | Vulkan has XNA images and refuses reflected image descriptors; it has no legal storage-image bridge. |
 | MOD-2245 | Partial | Public indirect routes and native feature discovery exist; Vulkan truthfully reports unsupported and submits no indirect command. |
 | MOD-2246 | Partial | Shared `GpuTimer` exists; Vulkan has no timestamp-query implementation and publishes zero period. |
@@ -242,6 +243,7 @@ tree, not about native API potential.
 | MOD-2265 | Partial | Existing performance notes/timer support do not cover all Phase 22 paths or three measured backends. |
 | MOD-2266 | Absent | Mandatory Vulkan paths, applicable OpenGL4 portability, shared gates and no-stall evidence are not complete. |
 
-The portable contract prerequisite is now supplied by `MOD-2202`. The next texture-array work is
-`MOD-2226` plus Vulkan's native allocation/view/retirement path in `MOD-2243`; neither may weaken
-the descriptor's reject-before-native-mutation rule.
+The portable contract prerequisite is supplied by `MOD-2202`, and `MOD-2226` now supplies the
+texture-array transfer/binding surface plus its Vulkan functional oracle. `MOD-2243` still owns the
+independent native limit/factory/device-teardown audit; it may not weaken the descriptor's
+reject-before-native-mutation rule.

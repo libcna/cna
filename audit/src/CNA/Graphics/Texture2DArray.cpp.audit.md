@@ -14,13 +14,14 @@
 
 ## Purpose
 
-Descriptor validation, capability-gated resource construction, device tracking and disposal for
-the sampled texture-array facade.
+Descriptor/transfer validation, capability-gated resource construction, sampled-effect binding,
+device tracking and disposal for the sampled texture-array facade.
 
 ## Executive Verdict
 
 Not yet independently audited. This work-queue entry was added with `MOD-2225`; the implementation
-landed with focused public-contract tests and deterministic unsupported behavior.
+landed with focused public-contract tests, deterministic unsupported behavior and a native Vulkan
+oracle.
 
 ## Checklist Results
 
@@ -32,13 +33,14 @@ Pending.
 
 ## Cross-File Observations
 
-Pending. Vulkan native allocation, views and retirement are intentionally separate `MOD-2243`
-work; layer/mip transfers and sampled binding are `MOD-2226`.
+Pending. `MOD-2226` supplies the layer/mip transfers and sampled binding; Vulkan's independent
+raw-device/ownership/teardown verification remains separate `MOD-2243` work.
 
 ## Missing or Weak Tests
 
-Pending independent audit. The starting suite is
-`modules/graphics-ext/tests/CNA/Graphics/Texture2DArrayTests.cpp`.
+Pending independent audit. The starting suite is the nine-case
+`modules/graphics-ext/tests/CNA/Graphics/Texture2DArrayTests.cpp`, plus the two-layer Vulkan native
+legs in `vulkan_effect_bound_texture_test.cpp`.
 
 ## Positive Findings
 

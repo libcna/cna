@@ -140,9 +140,10 @@ For a format it allocates, the verdict comes from the device's `VkFormatProperti
 exact `vkGetPhysicalDeviceImageFormatProperties` query for the usage combination CNA creates. The
 detailed profile then intersects sampling, linear filtering, transfer, mip and attachment facts
 with those implemented paths. Native storage-image support is deliberately reported unsupported
-until `MOD-2244`; likewise texture-array layers and timestamp period remain zero until
-`MOD-2243`/`MOD-2246`. `Vulkan_FormatLimitQueries` compares every answer with the raw properties at
-runtime and verifies these native-only negative controls. Since `MOD-2224`, it also attempts the
+until `MOD-2244`, and timestamp period remains zero until `MOD-2246`; texture-array layers now
+publish the sampled 2D-array image limit implemented by `MOD-2226`. `Vulkan_FormatLimitQueries`
+compares every answer with the raw properties at runtime and keeps the remaining native-only
+negative controls. Since `MOD-2224`, it also attempts the
 public base, full-mip-chain and highest-supported-MSAA `RenderTarget2D` constructor for all 27
 formats at 7×5. The capability snapshot, public format predicate and constructor must agree; the
 llvmpipe reference run creates the same nine formats and refuses the same eighteen on all three
@@ -207,11 +208,16 @@ consuming frame fence. Applications neither receive the `VkDevice` nor wait it i
 disposal. Every Phase 22 resource must join those mechanisms; an unsupported modern resource stays
 unavailable until it does.
 
-`MOD-2225` now supplies the public `Texture2DArray` facade, immutable descriptor and
-reject-before-allocation checks. Vulkan deliberately still reports `MaxTextureArrayLayers == 0`
-and inherits the null `CreateTexture2DArrayEXT` factory: native array availability is not a CNA
-feature until `MOD-2243` implements allocation, image views and fence-safe retirement, and
-`MOD-2226` adds observable layer/mip transfer and sampling oracles.
+`MOD-2225` supplies the public `Texture2DArray` facade and immutable descriptor. `MOD-2226` adds
+strict layer/mip/rectangle transfers plus `ShaderEffect` binding, and Vulkan now reports its live
+sampled-array layer limit, allocates every declared layer/mip, exposes only a full
+`VK_IMAGE_VIEW_TYPE_2D_ARRAY` internally, transfers exact subresources and samples arrays through
+descriptor set 1 bindings 16..18. Together with the twelve pre-existing set-1 samplers and set
+0's sprite sampler, that keeps the fragment-stage layout at Vulkan's guaranteed limit of sixteen.
+Unbound array slots use a dimensional 2D-array white view rather than the incompatible ordinary 2D
+filler. The 7x5/two-layer native oracle covers distinct upload, readback and shader results with no
+validation message. `MOD-2243` remains open only for its
+independent raw-limit/factory/device-teardown and retirement audit.
 
 Two current implementation gaps are stated rather than normalized into the contract:
 

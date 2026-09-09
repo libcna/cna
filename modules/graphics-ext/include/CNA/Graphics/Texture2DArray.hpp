@@ -4,16 +4,23 @@
 #ifdef CNA_CNAEXT
 
 #include "CNA/CNAHelper.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsResource.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 
 #include <cstdint>
+#include <cstddef>
 #include <memory>
 #include <string>
 
 namespace CNA::Internal::Renderers
 {
     class ITexture2DArrayRenderer;
+}
+
+namespace Microsoft::Xna::Framework::Graphics
+{
+    class ShaderEffect;
 }
 
 namespace CNA::Graphics
@@ -192,6 +199,48 @@ namespace CNA::Graphics
         [[nodiscard]] const Texture2DArrayDescriptor& getDescriptor() const;
 
         /**
+         * @brief Uploads tightly packed native-format bytes to one layer and mip rectangle.
+         *
+         * A null rectangle addresses the complete mip level. Compressed rectangles begin on a
+         * block boundary; their width/height are whole blocks unless that edge reaches the mip
+         * boundary. The byte count must exactly match the addressed texels or blocks.
+         *
+         * @param layer Zero-based array layer.
+         * @param mipLevel Zero-based mip level.
+         * @param rectangle Rectangle in mip-level texels, or null for the complete level.
+         * @param data Source bytes in the descriptor's native `SurfaceFormat` representation.
+         * @param byteCount Exact number of source bytes.
+         * @throws System::ObjectDisposedException If this resource has been disposed.
+         * @throws System::NotSupportedException If transfer-destination usage was not declared or
+         *         the renderer refuses the transfer.
+         * @throws std::out_of_range If a subresource or rectangle lies outside the resource.
+         * @throws std::invalid_argument If data, compression alignment or byte count is invalid.
+         */
+        CNAEXT void setData(
+            int layer, int mipLevel, const Microsoft::Xna::Framework::Rectangle* rectangle,
+            const void* data, std::size_t byteCount);
+
+        /**
+         * @brief Reads tightly packed native-format bytes from one layer and mip rectangle.
+         *
+         * Rectangle, compression and exact-size rules are identical to @ref setData.
+         *
+         * @param layer Zero-based array layer.
+         * @param mipLevel Zero-based mip level.
+         * @param rectangle Rectangle in mip-level texels, or null for the complete level.
+         * @param data Destination for native-format bytes.
+         * @param byteCount Exact destination size in bytes.
+         * @throws System::ObjectDisposedException If this resource has been disposed.
+         * @throws System::NotSupportedException If transfer-source usage was not declared or the
+         *         renderer refuses the transfer.
+         * @throws std::out_of_range If a subresource or rectangle lies outside the resource.
+         * @throws std::invalid_argument If data, compression alignment or byte count is invalid.
+         */
+        CNAEXT void getData(
+            int layer, int mipLevel, const Microsoft::Xna::Framework::Rectangle* rectangle,
+            void* data, std::size_t byteCount) const;
+
+        /**
          * @brief Returns the fully qualified CNA type name.
          * @return `"CNA.Graphics.Texture2DArray"`.
          */
@@ -205,13 +254,15 @@ namespace CNA::Graphics
         void Dispose(bool disposing) override;
 
     private:
+        friend class Microsoft::Xna::Framework::Graphics::ShaderEffect;
+
         struct Prepared
         {
             Texture2DArrayDescriptor descriptor;
             std::shared_ptr<CNA::Internal::Renderers::ITexture2DArrayRenderer> renderer;
         };
 
-        static Prepared Prepare(
+        static Prepared prepare(
             Microsoft::Xna::Framework::Graphics::GraphicsDevice& device,
             const Texture2DArrayDescriptor& descriptor);
 

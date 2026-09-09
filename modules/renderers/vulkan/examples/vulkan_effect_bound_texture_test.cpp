@@ -28,6 +28,12 @@
 //      own binding range because a descriptor's view type has to match the dimensionality the
 //      shader declares -- a 2D filler cannot stand in for an unbound `samplerCube`, so sharing one
 //      range of four would have made every unused unit a usage error rather than a white texel.
+//   G  Texture2DArray upload/readback preserves two distinct layers byte-for-byte.
+//   H  The same transfer path preserves an odd-sized nonzero mip subresource.
+//   I  A custom sampler2DArray shader reads layer 0 through binding 16.
+//   J  The same native array view exposes independently uploaded layer 1.
+//   K  Array unit 3 is refused because the three set-1 array slots plus the other thirteen
+//      fragment-stage samplers exactly consume Vulkan's guaranteed minimum of sixteen.
 //
 // Exit code 0 = all PASS, 1 = any FAIL.
 
@@ -50,6 +56,9 @@
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "System/NotSupportedException.hpp"
+#ifdef CNA_CNAEXT
+#include "CNA/Graphics/Texture2DArray.hpp"
+#endif
 
 #include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
 
@@ -58,6 +67,7 @@
 #include <cstdio>
 #include <exception>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -190,6 +200,40 @@ constexpr int kN = 8;
 const Color kWhite(255, 255, 255, 255);
 const Color kBlue(0, 0, 255, 255);
 const Color kGreen(0, 255, 0, 255);
+
+#ifdef CNA_CNAEXT
+std::string ArrayFragmentSpirV(const float layer)
+{
+    std::vector<std::uint32_t> words(std::begin(kVolumeFragSpv), std::end(kVolumeFragSpv));
+    bool patchedBinding = false;
+    bool patchedType = false;
+    bool patchedCoordinate = false;
+    for (std::size_t i = 0; i < words.size(); ++i)
+    {
+        if (i + 3 < words.size() && words[i] == 0x00040047 &&
+            words[i + 1] == 0x0000000d && words[i + 2] == 0x00000021)
+        {
+            words[i + 3] = 16;
+            patchedBinding = true;
+        }
+        if (i + 8 < words.size() && words[i] == 0x00090019)
+        {
+            words[i + 3] = 1; // Dim2D
+            words[i + 5] = 1; // arrayed
+            patchedType = true;
+        }
+        if (i + 3 < words.size() && words[i] == 0x0004002b &&
+            words[i + 1] == 0x00000006 && words[i + 3] == 0x3f000000)
+        {
+            words[i + 3] = layer < 0.5f ? 0x00000000 : 0x3f800000;
+            patchedCoordinate = true;
+        }
+    }
+    if (!patchedBinding || !patchedType || !patchedCoordinate)
+        throw std::runtime_error("the embedded sampler3D SPIR-V patch contract drifted");
+    return {reinterpret_cast<const char*>(words.data()), words.size() * sizeof(words[0])};
+}
+#endif
 }  // namespace
 
 class VulkanEffectBoundTextureTest final : public Game
@@ -337,6 +381,79 @@ protected:
                   "F a bound Texture3D reaches sampler3D at binding 8: " + Text(got) +
                       " (want " + Text(kBlue) + ")");
         }
+
+#ifdef CNA_CNAEXT
+        // G/H/I/J. MOD-2226: real array storage, two distinct layers and an odd mip chain.
+        // ArrayFragmentSpirV changes the proven volume payload above into sampler2DArray at
+        // set 1 binding 16 without introducing a build-time shader-compiler dependency.
+        {
+            using CNA::Graphics::Texture2DArray;
+            using CNA::Graphics::Texture2DArrayDescriptor;
+            using CNA::Graphics::Texture2DArrayUsage;
+            constexpr auto usage =
+                Texture2DArrayUsage::Sampled | Texture2DArrayUsage::Filterable |
+                Texture2DArrayUsage::TransferSource |
+                Texture2DArrayUsage::TransferDestination;
+            Texture2DArray array(
+                dev, Texture2DArrayDescriptor(7, 5, 2, 3, SurfaceFormat::Color, usage));
+
+            const auto solidBytes = [](const Color& color, const int width, const int height) {
+                std::vector<std::uint8_t> bytes(
+                    static_cast<std::size_t>(width * height * 4));
+                for (std::size_t i = 0; i < bytes.size(); i += 4) {
+                    bytes[i] = color.getRProperty();
+                    bytes[i + 1] = color.getGProperty();
+                    bytes[i + 2] = color.getBProperty();
+                    bytes[i + 3] = color.getAProperty();
+                }
+                return bytes;
+            };
+            const std::vector<std::uint8_t> layer0 = solidBytes(kBlue, 7, 5);
+            const std::vector<std::uint8_t> layer1 = solidBytes(kGreen, 7, 5);
+            const std::vector<std::uint8_t> mipLayer0 =
+                solidBytes(Color(255, 0, 0, 255), 3, 2);
+            const std::vector<std::uint8_t> mipLayer1 =
+                solidBytes(Color(255, 255, 0, 255), 3, 2);
+            array.setData(0, 0, nullptr, layer0.data(), layer0.size());
+            array.setData(1, 0, nullptr, layer1.data(), layer1.size());
+            array.setData(0, 1, nullptr, mipLayer0.data(), mipLayer0.size());
+            array.setData(1, 1, nullptr, mipLayer1.data(), mipLayer1.size());
+
+            std::vector<std::uint8_t> readLayer0(layer0.size());
+            std::vector<std::uint8_t> readLayer1(layer1.size());
+            std::vector<std::uint8_t> readMip1(mipLayer1.size());
+            array.getData(0, 0, nullptr, readLayer0.data(), readLayer0.size());
+            array.getData(1, 0, nullptr, readLayer1.data(), readLayer1.size());
+            array.getData(1, 1, nullptr, readMip1.data(), readMip1.size());
+            check(readLayer0 == layer0 && readLayer1 == layer1,
+                  "G upload/readback preserves two distinct array layers byte-for-byte");
+            check(readMip1 == mipLayer1,
+                  "H upload/readback preserves layer 1 of odd 7x5 image's 3x2 mip");
+
+            ShaderEffect layer0Effect(dev, vert, ArrayFragmentSpirV(0.0f));
+            ShaderEffect layer1Effect(dev, vert, ArrayFragmentSpirV(1.0f));
+            layer0Effect.SetTextureArrayEXT(0, array);
+            layer1Effect.SetTextureArrayEXT(0, array);
+            const Color sampled0 = DrawThrough(dev, layer0Effect, *white);
+            const Color sampled1 = DrawThrough(dev, layer1Effect, *white);
+            check(Is(sampled0, kBlue),
+                  "I sampler2DArray reads layer 0 at set 1 binding 16: " + Text(sampled0));
+            check(Is(sampled1, kGreen),
+                  "J sampler2DArray reads layer 1 at set 1 binding 16: " + Text(sampled1));
+
+            bool unitThreeRefused = false;
+            try
+            {
+                layer0Effect.SetTextureArrayEXT(3, array);
+            }
+            catch (const System::NotSupportedException&)
+            {
+                unitThreeRefused = true;
+            }
+            check(unitThreeRefused,
+                  "K texture-array unit 3 is refused before it can alias a missing descriptor");
+        }
+#endif
 
         {
             const std::size_t after = Renderer().GetValidationMessagesEXT().size();

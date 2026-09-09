@@ -548,8 +548,8 @@ namespace CNA::Internal::Renderers
      * `CNA::Graphics::Texture2DArray` owns this record through shared lifetime identity so future
      * sampled bindings can retain internal work safely without retaining or dereferencing the
      * public `GraphicsResource`. The interface intentionally exposes no native image/view handle.
-     * Layer and mip transfers are added by plans/plan_modern.md `MOD-2226`; this first contract
-     * supplies ownership and deterministic unsupported defaults only.
+     * Layer and mip transfers are part of plans/plan_modern.md `MOD-2226`; defaults refuse them
+     * so a renderer cannot claim success by silently discarding bytes.
      */
     class ITexture2DArrayRenderer
         : public std::enable_shared_from_this<ITexture2DArrayRenderer>
@@ -557,6 +557,30 @@ namespace CNA::Internal::Renderers
     public:
         /** @brief Releases the renderer-owned texture-array record. */
         virtual ~ITexture2DArrayRenderer() = default;
+
+        /**
+         * @brief Uploads one validated rectangle of one array subresource.
+         *
+         * @return True only after the entire byte range has been accepted by the renderer.
+         */
+        [[nodiscard]] virtual bool SetData(
+            int /*layer*/, int /*mipLevel*/, int /*x*/, int /*y*/, int /*width*/, int /*height*/,
+            const void* /*data*/, std::size_t /*byteCount*/)
+        {
+            return false;
+        }
+
+        /**
+         * @brief Reads one validated rectangle of one array subresource.
+         *
+         * @return True only after the entire requested byte range has been written.
+         */
+        [[nodiscard]] virtual bool GetData(
+            int /*layer*/, int /*mipLevel*/, int /*x*/, int /*y*/, int /*width*/, int /*height*/,
+            void* /*data*/, std::size_t /*byteCount*/) const
+        {
+            return false;
+        }
     };
 
     /**
@@ -999,6 +1023,22 @@ namespace CNA::Internal::Renderers
         /// simultaneously since each occupies a distinct binding target; the shader's own sampler
         /// type (`sampler2D`/`samplerCube`/`sampler3D`) determines which one is actually sampled.
         virtual void BindTexture3D(int unit, ITexture3DRenderer* texture) {}
+        /**
+         * @brief Binds or clears a sampled two-dimensional texture array.
+         *
+         * The shared record is intentional: an accepted deferred draw must not retain the public
+         * `GraphicsResource`, but its renderer work must remain alive until the consumer releases
+         * it. A null record clears the unit. False means the renderer did not implement this path.
+         *
+         * @param unit Zero-based texture-array sampler unit.
+         * @param texture Renderer-owned array record, or null to clear the unit.
+         * @return True when the binding operation was implemented and accepted.
+         */
+        [[nodiscard]] virtual bool BindTexture2DArrayEXT(
+            int /*unit*/, std::shared_ptr<ITexture2DArrayRenderer> /*texture*/)
+        {
+            return false;
+        }
     };
 
     class ISpriteBatchRenderer

@@ -734,6 +734,252 @@ namespace CNA::Internal::Renderers::Vulkan
     }
 
     // =========================================================================
+    // MOD-2226 / MOD-2243: VulkanTexture2DArrayRenderer
+    // =========================================================================
+
+    VulkanTexture2DArrayRenderer::VulkanTexture2DArrayRenderer(
+        VulkanRenderer* owner, const int width, const int height, const int layerCount,
+        const int mipLevelCount, const int surfaceFormat, const std::uint32_t usage)
+        : owner_(owner)
+        , width_(width)
+        , height_(height)
+        , layerCount_(layerCount)
+        , mipLevelCount_(mipLevelCount)
+        , surfaceFormat_(surfaceFormat)
+        , usage_(usage)
+    {
+        if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE)
+            throw std::runtime_error("Vulkan texture array: renderer device is unavailable");
+
+        VulkanRenderer::VulkanSurfaceFormatStorageEXT storage{};
+        if (!owner_->MapSurfaceFormatToStorageEXT(surfaceFormat_, storage))
+            throw System::NotSupportedException(
+                "Vulkan texture array: SurfaceFormat has no implemented native storage");
+        vkFormat_ = storage.format;
+        bytesPerTexel_ = storage.bytesPerTexel;
+        blockExtent_ = storage.blockExtent;
+
+        VkImageUsageFlags imageUsage = VK_IMAGE_USAGE_SAMPLED_BIT;
+        if ((usage_ & UINT32_C(4)) != 0) imageUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+        if ((usage_ & UINT32_C(8)) != 0) imageUsage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+
+        VkImageCreateInfo imageInfo{};
+        imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        imageInfo.imageType = VK_IMAGE_TYPE_2D;
+        imageInfo.format = vkFormat_;
+        imageInfo.extent = {static_cast<std::uint32_t>(width_),
+                            static_cast<std::uint32_t>(height_), 1};
+        imageInfo.mipLevels = static_cast<std::uint32_t>(mipLevelCount_);
+        imageInfo.arrayLayers = static_cast<std::uint32_t>(layerCount_);
+        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+        imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+        imageInfo.usage = imageUsage;
+        imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        if (vkCreateImage(owner_->device_, &imageInfo, nullptr, &image_) != VK_SUCCESS)
+            throw std::runtime_error("Vulkan texture array: vkCreateImage failed");
+
+        try
+        {
+            VkMemoryRequirements requirements{};
+            vkGetImageMemoryRequirements(owner_->device_, image_, &requirements);
+            VkMemoryAllocateInfo allocation{};
+            allocation.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+            allocation.allocationSize = requirements.size;
+            allocation.memoryTypeIndex = owner_->FindMemoryType(
+                requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+            if (vkAllocateMemory(owner_->device_, &allocation, nullptr, &memory_) != VK_SUCCESS)
+                throw std::runtime_error("Vulkan texture array: vkAllocateMemory failed");
+            if (vkBindImageMemory(owner_->device_, image_, memory_, 0) != VK_SUCCESS)
+                throw std::runtime_error("Vulkan texture array: vkBindImageMemory failed");
+
+            VkCommandBuffer commandBuffer = owner_->BeginOneTimeCommands();
+            VkImageMemoryBarrier barrier{};
+            barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.image = image_;
+            barrier.subresourceRange = {
+                VK_IMAGE_ASPECT_COLOR_BIT, 0, static_cast<std::uint32_t>(mipLevelCount_),
+                0, static_cast<std::uint32_t>(layerCount_)};
+            barrier.srcAccessMask = 0;
+            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            vkCmdPipelineBarrier(
+                commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+            owner_->EndOneTimeCommands(commandBuffer);
+
+            VkImageViewCreateInfo viewInfo{};
+            viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+            viewInfo.image = image_;
+            viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+            viewInfo.format = vkFormat_;
+            viewInfo.subresourceRange = barrier.subresourceRange;
+            if (vkCreateImageView(owner_->device_, &viewInfo, nullptr, &imageView_) != VK_SUCCESS)
+                throw std::runtime_error("Vulkan texture array: vkCreateImageView failed");
+        }
+        catch (...)
+        {
+            if (imageView_ != VK_NULL_HANDLE)
+                vkDestroyImageView(owner_->device_, imageView_, nullptr);
+            if (image_ != VK_NULL_HANDLE)
+                vkDestroyImage(owner_->device_, image_, nullptr);
+            if (memory_ != VK_NULL_HANDLE)
+                vkFreeMemory(owner_->device_, memory_, nullptr);
+            imageView_ = VK_NULL_HANDLE;
+            memory_ = VK_NULL_HANDLE;
+            image_ = VK_NULL_HANDLE;
+            throw;
+        }
+    }
+
+    void VulkanTexture2DArrayRenderer::RecordTransition(
+        const VkCommandBuffer commandBuffer, const int layer, const int mipLevel,
+        const VkImageLayout oldLayout, const VkImageLayout newLayout) const
+    {
+        VkImageMemoryBarrier barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.oldLayout = oldLayout;
+        barrier.newLayout = newLayout;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = image_;
+        barrier.subresourceRange = {
+            VK_IMAGE_ASPECT_COLOR_BIT, static_cast<std::uint32_t>(mipLevel), 1,
+            static_cast<std::uint32_t>(layer), 1};
+
+        VkPipelineStageFlags sourceStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        VkPipelineStageFlags destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        if (oldLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+        {
+            barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            barrier.dstAccessMask = newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+                ? VK_ACCESS_TRANSFER_READ_BIT : VK_ACCESS_TRANSFER_WRITE_BIT;
+        }
+        else
+        {
+            barrier.srcAccessMask = oldLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+                ? VK_ACCESS_TRANSFER_READ_BIT : VK_ACCESS_TRANSFER_WRITE_BIT;
+            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        }
+        vkCmdPipelineBarrier(commandBuffer, sourceStage, destinationStage, 0,
+                             0, nullptr, 0, nullptr, 1, &barrier);
+    }
+
+    bool VulkanTexture2DArrayRenderer::SetData(
+        const int layer, const int mipLevel, const int x, const int y,
+        const int width, const int height, const void* data, const std::size_t byteCount)
+    {
+        if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE || image_ == VK_NULL_HANDLE ||
+            data == nullptr || (usage_ & UINT32_C(8)) == 0)
+            return false;
+
+        VkBuffer stagingBuffer = VK_NULL_HANDLE;
+        VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
+        void* mapped = nullptr;
+        owner_->CreateBuffer(
+            static_cast<VkDeviceSize>(byteCount), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            stagingBuffer, stagingMemory, &mapped);
+        std::memcpy(mapped, data, byteCount);
+        vkUnmapMemory(owner_->device_, stagingMemory);
+
+        VkCommandBuffer commandBuffer = owner_->BeginOneTimeCommands();
+        RecordTransition(commandBuffer, layer, mipLevel, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+        VkBufferImageCopy copy{};
+        copy.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT,
+                                 static_cast<std::uint32_t>(mipLevel),
+                                 static_cast<std::uint32_t>(layer), 1};
+        copy.imageOffset = {x, y, 0};
+        copy.imageExtent = {static_cast<std::uint32_t>(width),
+                            static_cast<std::uint32_t>(height), 1};
+        vkCmdCopyBufferToImage(commandBuffer, stagingBuffer, image_,
+                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+        RecordTransition(commandBuffer, layer, mipLevel, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        owner_->EndOneTimeCommands(commandBuffer);
+
+        vkDestroyBuffer(owner_->device_, stagingBuffer, nullptr);
+        vkFreeMemory(owner_->device_, stagingMemory, nullptr);
+        return true;
+    }
+
+    bool VulkanTexture2DArrayRenderer::GetData(
+        const int layer, const int mipLevel, const int x, const int y,
+        const int width, const int height, void* data, const std::size_t byteCount) const
+    {
+        if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE || image_ == VK_NULL_HANDLE ||
+            data == nullptr || (usage_ & UINT32_C(4)) == 0)
+            return false;
+
+        VkBuffer stagingBuffer = VK_NULL_HANDLE;
+        VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
+        owner_->CreateBuffer(
+            static_cast<VkDeviceSize>(byteCount), VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            stagingBuffer, stagingMemory);
+
+        VkCommandBuffer commandBuffer = owner_->BeginOneTimeCommands();
+        RecordTransition(commandBuffer, layer, mipLevel, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+        VkBufferImageCopy copy{};
+        copy.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT,
+                                 static_cast<std::uint32_t>(mipLevel),
+                                 static_cast<std::uint32_t>(layer), 1};
+        copy.imageOffset = {x, y, 0};
+        copy.imageExtent = {static_cast<std::uint32_t>(width),
+                            static_cast<std::uint32_t>(height), 1};
+        vkCmdCopyImageToBuffer(commandBuffer, image_, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                               stagingBuffer, 1, &copy);
+        RecordTransition(commandBuffer, layer, mipLevel, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        owner_->EndOneTimeCommands(commandBuffer);
+
+        void* mapped = nullptr;
+        if (vkMapMemory(owner_->device_, stagingMemory, 0,
+                        static_cast<VkDeviceSize>(byteCount), 0, &mapped) != VK_SUCCESS)
+        {
+            vkDestroyBuffer(owner_->device_, stagingBuffer, nullptr);
+            vkFreeMemory(owner_->device_, stagingMemory, nullptr);
+            return false;
+        }
+        std::memcpy(data, mapped, byteCount);
+        vkUnmapMemory(owner_->device_, stagingMemory);
+        vkDestroyBuffer(owner_->device_, stagingBuffer, nullptr);
+        vkFreeMemory(owner_->device_, stagingMemory, nullptr);
+        return true;
+    }
+
+    void VulkanTexture2DArrayRenderer::ReleaseVulkanResources()
+    {
+        if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE) return;
+        VulkanRenderer::RetiredResources retired;
+        owner_->EvictSampledViewFromCaches(imageView_, retired);
+        if (imageView_ != VK_NULL_HANDLE) retired.imageViews.push_back(imageView_);
+        if (image_ != VK_NULL_HANDLE) retired.images.push_back(image_);
+        if (memory_ != VK_NULL_HANDLE) retired.memories.push_back(memory_);
+        imageView_ = VK_NULL_HANDLE;
+        image_ = VK_NULL_HANDLE;
+        memory_ = VK_NULL_HANDLE;
+        owner_->RetireResources(std::move(retired));
+    }
+
+    VulkanTexture2DArrayRenderer::~VulkanTexture2DArrayRenderer()
+    {
+        if (owner_ != nullptr)
+        {
+            auto& live = owner_->liveTexture2DArrays_;
+            live.erase(std::remove(live.begin(), live.end(), this), live.end());
+        }
+        ReleaseVulkanResources();
+    }
+
+    // =========================================================================
     // VulkanRenderTargetRenderer
     // =========================================================================
 
@@ -2661,6 +2907,14 @@ namespace CNA::Internal::Renderers::Vulkan
             (optimal & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) != 0;
         const bool transferDestination = hasImplementedStorage &&
             (optimal & VK_FORMAT_FEATURE_TRANSFER_DST_BIT) != 0;
+        VkImageFormatProperties transferSourceImageProperties{};
+        constexpr VkImageUsageFlags transferSourceTextureUsage =
+            VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+        const bool transferSource = hasImplementedStorage &&
+            (optimal & VK_FORMAT_FEATURE_TRANSFER_SRC_BIT) != 0 &&
+            vkGetPhysicalDeviceImageFormatProperties(
+                physicalDevice_, semanticFormat, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
+                transferSourceTextureUsage, 0, &transferSourceImageProperties) == VK_SUCCESS;
         setSupported(RendererFormatUsage::TextureStorage, hasImplementedStorage);
         setSupported(RendererFormatUsage::Sampled, sampled);
         setSupported(RendererFormatUsage::Filterable,
@@ -2704,9 +2958,10 @@ namespace CNA::Internal::Renderers::Vulkan
                          (renderTargetProperties.optimalTilingFeatures &
                           VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT) != 0);
         setSupported(RendererFormatUsage::TransferSource,
-                     renderTarget &&
-                         (renderTargetProperties.optimalTilingFeatures &
-                          VK_FORMAT_FEATURE_TRANSFER_SRC_BIT) != 0);
+                     transferSource ||
+                         (renderTarget &&
+                          (renderTargetProperties.optimalTilingFeatures &
+                           VK_FORMAT_FEATURE_TRANSFER_SRC_BIT) != 0));
         VkImageFormatProperties renderTargetImageProperties{};
         constexpr VkImageUsageFlags renderTargetUsage =
             VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
@@ -2843,6 +3098,11 @@ namespace CNA::Internal::Renderers::Vulkan
         // Externally-owned textures.
         for (auto* tex : liveTextures_) { tex->ReleaseVulkanResources(); tex->DisconnectOwner(); }
         liveTextures_.clear();
+        for (auto* array : liveTexture2DArrays_) {
+            array->ReleaseVulkanResources();
+            array->DisconnectOwner();
+        }
+        liveTexture2DArrays_.clear();
         // VULKAN-407: the three classes that used to be in no list at all. A Texture3D, TextureCube
         // or RenderTargetCube can outlive its GraphicsDevice -- MetalResourceHealth's own
         // base-move test exists to document exactly that -- and until this loop existed such an
@@ -2973,6 +3233,7 @@ namespace CNA::Internal::Renderers::Vulkan
         if (defaultWhiteCubeImage_ != VK_NULL_HANDLE) { vkDestroyImage(device_, defaultWhiteCubeImage_, nullptr);   defaultWhiteCubeImage_ = VK_NULL_HANDLE; }
         if (defaultWhiteCubeMem_  != VK_NULL_HANDLE) { vkFreeMemory(device_, defaultWhiteCubeMem_, nullptr);       defaultWhiteCubeMem_  = VK_NULL_HANDLE; }
         // Default white texture (no free of descriptorSet — will be freed with the pool).
+        if (defaultWhiteArrayView_ != VK_NULL_HANDLE) { vkDestroyImageView(device_, defaultWhiteArrayView_, nullptr); defaultWhiteArrayView_ = VK_NULL_HANDLE; }
         if (defaultWhiteView_   != VK_NULL_HANDLE) { vkDestroyImageView(device_, defaultWhiteView_, nullptr);  defaultWhiteView_   = VK_NULL_HANDLE; }
         if (defaultWhiteImage_  != VK_NULL_HANDLE) { vkDestroyImage(device_, defaultWhiteImage_, nullptr);     defaultWhiteImage_  = VK_NULL_HANDLE; }
         if (defaultWhiteMemory_ != VK_NULL_HANDLE) { vkFreeMemory(device_, defaultWhiteMemory_, nullptr);       defaultWhiteMemory_ = VK_NULL_HANDLE; }
@@ -5058,18 +5319,19 @@ namespace CNA::Internal::Renderers::Vulkan
         if (boundLayout_ != VK_NULL_HANDLE || !owner_ || owner_->device_ == VK_NULL_HANDLE) return;
         std::array<VkDescriptorSetLayoutBinding, kEffectBoundBindingCount> lb{};
         for (int i = 0; i < kEffectBoundBindingCount; ++i) {
-            const bool isArray = i >= kEffectFloatArrayBinding;
+            const bool isUniformArray =
+                i >= kEffectFloatArrayBinding && i < kEffectTextureArrayBindingBase;
             lb[static_cast<std::size_t>(i)].binding         = static_cast<uint32_t>(i);
             lb[static_cast<std::size_t>(i)].descriptorType  =
-                isArray ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER
-                        : VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+                isUniformArray ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER
+                               : VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             lb[static_cast<std::size_t>(i)].descriptorCount = 1;
             // VULKAN-252: the arrays are visible to BOTH stages. The one array a custom effect is
             // most likely to want is a bone palette, which is read in the vertex shader; declaring
             // them fragment-only would have made the headline use case impossible.
             lb[static_cast<std::size_t>(i)].stageFlags      =
-                isArray ? (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
-                        : VK_SHADER_STAGE_FRAGMENT_BIT;
+                isUniformArray ? (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
+                               : VK_SHADER_STAGE_FRAGMENT_BIT;
         }
         VkDescriptorSetLayoutCreateInfo lci{};
         lci.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -5185,7 +5447,8 @@ namespace CNA::Internal::Renderers::Vulkan
         const VkDescriptorPoolSize sizes[] = {
             { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
               static_cast<uint32_t>(VulkanRenderer::kEffectPoolMaxSets
-                                    * kEffectFloatArrayBinding) },
+                                    * (kEffectFloatArrayBinding +
+                                       kEffectTextureArrayBindingCount)) },
             // VULKAN-252: four uniform-buffer descriptors per set, sized with the samplers so a
             // pool that can hold N sets can hold N of BOTH kinds -- an under-sized second pool
             // size fails the allocation just as surely as an under-sized first one.
@@ -5215,7 +5478,8 @@ namespace CNA::Internal::Renderers::Vulkan
         // array bindings need a real buffer even for an effect that never set an array. It then
         // holds zeros, which is what a shader reading an array nothing was written to should see.
         EnsureUniformArrayStorageEXT();
-        std::array<VkDescriptorImageInfo, kEffectFloatArrayBinding> infos{};
+        std::array<VkDescriptorImageInfo,
+                   kEffectFloatArrayBinding + kEffectTextureArrayBindingCount> infos{};
         std::array<VkWriteDescriptorSet, kEffectBoundBindingCount>  writes{};
         for (int i = 0; i < kEffectFloatArrayBinding; ++i) {
             const int unit = i % kMaxEffectBoundTextures;
@@ -5287,6 +5551,32 @@ namespace CNA::Internal::Renderers::Vulkan
             w.descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
             w.pBufferInfo     = &bufInfos[static_cast<std::size_t>(i)];
         }
+        // MOD-2226: sampler2DArray has its own bindings and its own dimensional filler. A 2D view
+        // in one of these descriptors is invalid even if it refers to the same 1x1 image.
+        for (int unit = 0; unit < kEffectTextureArrayBindingCount; ++unit) {
+            auto* vk = dynamic_cast<VulkanTexture2DArrayRenderer*>(
+                boundTextureArrays_[static_cast<std::size_t>(unit)].get());
+            if (vk != nullptr && !vk->IsFilterableEXT() &&
+                owner_->samplerSlotState_[static_cast<std::size_t>(unit)].filter != 1)
+            {
+                throw System::NotSupportedException(
+                    "CNA Vulkan: a Texture2DArray without Filterable usage was paired with a "
+                    "linear or anisotropic sampler in unit " + std::to_string(unit));
+            }
+            const std::size_t infoIndex =
+                static_cast<std::size_t>(kEffectFloatArrayBinding + unit);
+            infos[infoIndex] = {
+                wantSamplers[static_cast<std::size_t>(unit)],
+                vk != nullptr ? vk->GetVkArrayImageView() : owner_->defaultWhiteArrayView_,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+            auto& w = writes[static_cast<std::size_t>(kEffectTextureArrayBindingBase + unit)];
+            w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            w.dstSet = set;
+            w.dstBinding = static_cast<std::uint32_t>(kEffectTextureArrayBindingBase + unit);
+            w.descriptorCount = 1;
+            w.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            w.pImageInfo = &infos[infoIndex];
+        }
         vkUpdateDescriptorSets(owner_->device_, kEffectBoundBindingCount, writes.data(), 0,
                                nullptr);
 
@@ -5332,6 +5622,22 @@ namespace CNA::Internal::Renderers::Vulkan
                 " was asked for. Refused rather than binding it somewhere else.");
         boundVolumes_[static_cast<std::size_t>(unit)] = texture;
         boundSetDirty_ = true;
+    }
+
+    bool VulkanEffectRenderer::BindTexture2DArrayEXT(
+        const int unit, std::shared_ptr<ITexture2DArrayRenderer> texture)
+    {
+        if (unit < 0 || unit >= kEffectTextureArrayBindingCount)
+            throw System::NotSupportedException(
+                "The Vulkan renderer accepts texture-array sampler units 0.." +
+                std::to_string(kEffectTextureArrayBindingCount - 1) + "; unit " +
+                std::to_string(unit) + " was asked for");
+        if (texture != nullptr &&
+            dynamic_cast<IVulkanArraySamplable*>(texture.get()) == nullptr)
+            return false;
+        boundTextureArrays_[static_cast<std::size_t>(unit)] = std::move(texture);
+        boundSetDirty_ = true;
+        return true;
     }
 
     void VulkanEffectRenderer::SetUniformInt(const char* /*name*/, int value)
@@ -7489,7 +7795,11 @@ namespace CNA::Internal::Renderers::Vulkan
         vci.viewType = VK_IMAGE_VIEW_TYPE_2D;
         vci.format   = VK_FORMAT_R8G8B8A8_UNORM;
         vci.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-        vkCreateImageView(dev, &vci, nullptr, &defaultWhiteView_);
+        if (vkCreateImageView(dev, &vci, nullptr, &defaultWhiteView_) != VK_SUCCESS)
+            throw std::runtime_error("vkCreateImageView (default white 2D) failed");
+        vci.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+        if (vkCreateImageView(dev, &vci, nullptr, &defaultWhiteArrayView_) != VK_SUCCESS)
+            throw std::runtime_error("vkCreateImageView (default white 2D array) failed");
 
         // Descriptor set.
         VkDescriptorSetAllocateInfo dsAI{};
@@ -13691,6 +14001,55 @@ namespace CNA::Internal::Renderers::Vulkan
         return tex;
     }
 
+    std::unique_ptr<ITexture2DArrayRenderer> VulkanRenderer::CreateTexture2DArrayEXT(
+        const int width, const int height, const int layerCount, const int mipLevelCount,
+        const int surfaceFormat, const std::uint32_t usage)
+    {
+        constexpr std::uint32_t allowedUsage = UINT32_C(1) | UINT32_C(2) |
+                                               UINT32_C(4) | UINT32_C(8);
+        if (device_ == VK_NULL_HANDLE || physicalDevice_ == VK_NULL_HANDLE || width <= 0 ||
+            height <= 0 || layerCount <= 0 || mipLevelCount <= 0 ||
+            (usage & UINT32_C(1)) == 0 || (usage & ~allowedUsage) != 0)
+            return nullptr;
+
+        VulkanSurfaceFormatStorageEXT storage{};
+        if (!MapSurfaceFormatToStorageEXT(surfaceFormat, storage)) return nullptr;
+
+        VkFormatProperties formatProperties{};
+        vkGetPhysicalDeviceFormatProperties(physicalDevice_, storage.format, &formatProperties);
+        VkFormatFeatureFlags requiredFeatures = VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT;
+        VkImageUsageFlags imageUsage = VK_IMAGE_USAGE_SAMPLED_BIT;
+        if ((usage & UINT32_C(2)) != 0)
+            requiredFeatures |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
+        if ((usage & UINT32_C(4)) != 0)
+        {
+            requiredFeatures |= VK_FORMAT_FEATURE_TRANSFER_SRC_BIT;
+            imageUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+        }
+        if ((usage & UINT32_C(8)) != 0)
+        {
+            requiredFeatures |= VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
+            imageUsage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        }
+        if ((formatProperties.optimalTilingFeatures & requiredFeatures) != requiredFeatures)
+            return nullptr;
+
+        VkImageFormatProperties imageProperties{};
+        if (vkGetPhysicalDeviceImageFormatProperties(
+                physicalDevice_, storage.format, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
+                imageUsage, 0, &imageProperties) != VK_SUCCESS ||
+            static_cast<std::uint32_t>(width) > imageProperties.maxExtent.width ||
+            static_cast<std::uint32_t>(height) > imageProperties.maxExtent.height ||
+            static_cast<std::uint32_t>(layerCount) > imageProperties.maxArrayLayers ||
+            static_cast<std::uint32_t>(mipLevelCount) > imageProperties.maxMipLevels)
+            return nullptr;
+
+        auto array = std::make_unique<VulkanTexture2DArrayRenderer>(
+            this, width, height, layerCount, mipLevelCount, surfaceFormat, usage);
+        liveTexture2DArrays_.push_back(array.get());
+        return array;
+    }
+
     // =========================================================================
     // MOD-2241: Vulkan compute shaders and storage buffers
     // =========================================================================
@@ -14527,7 +14886,19 @@ namespace CNA::Internal::Renderers::Vulkan
 
     int VulkanRenderer::GetMaxTextureArrayLayersEXT() const
     {
-        return 0;
+        if (physicalDevice_ == VK_NULL_HANDLE) return 0;
+        VulkanSurfaceFormatStorageEXT storage{};
+        if (!MapSurfaceFormatToStorageEXT(
+                static_cast<int>(Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color),
+                storage))
+            return 0;
+        VkImageFormatProperties properties{};
+        constexpr VkImageUsageFlags usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+        if (vkGetPhysicalDeviceImageFormatProperties(
+                physicalDevice_, storage.format, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
+                usage, 0, &properties) != VK_SUCCESS)
+            return 0;
+        return ClampVulkanLimitToInt(properties.maxArrayLayers);
     }
 
     int VulkanRenderer::GetMaxSampledTexturesPerShaderStageEXT() const
@@ -14535,7 +14906,9 @@ namespace CNA::Internal::Renderers::Vulkan
         if (device_ == VK_NULL_HANDLE) return 0;
         const auto& limits = physicalDeviceProperties_.limits;
         constexpr std::uint32_t implementedSampledBindings =
-            static_cast<std::uint32_t>(VulkanEffectRenderer::kMaxEffectBoundTextures * 3);
+            static_cast<std::uint32_t>(
+                VulkanEffectRenderer::kMaxEffectBoundTextures * 3 +
+                VulkanEffectRenderer::kEffectTextureArrayBindingCount);
         return ClampVulkanLimitToInt(std::min({
             implementedSampledBindings,
             limits.maxPerStageDescriptorSamplers,

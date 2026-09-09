@@ -70,6 +70,22 @@ namespace
             const Microsoft::Xna::Framework::Matrix&,
             Microsoft::Xna::Framework::Graphics::PrimitiveType, int) override {}
     };
+
+    class DefaultsOnlyTexture2DArrayRenderer final
+        : public CNA::Internal::Renderers::ITexture2DArrayRenderer
+    {
+    };
+
+    class DefaultsOnlyEffectRenderer final
+        : public CNA::Internal::Renderers::IEffectRenderer
+    {
+    public:
+        bool CompileProgram(const std::string&, const std::string&) override { return false; }
+        void Bind() override {}
+        void Unbind() override {}
+        [[nodiscard]] bool IsValid() const override { return false; }
+        [[nodiscard]] std::string GetCompileError() const override { return {}; }
+    };
 }
 
 TEST(RendererCapabilityDefaultsTest, ProfileCeilingsDefaultToNoCeiling)
@@ -195,6 +211,17 @@ TEST(RendererCapabilityDefaultsTest, TextureArrayFactoryDefaultsToUnsupported)
 {
     DefaultsOnlyRenderer renderer;
     EXPECT_EQ(renderer.CreateTexture2DArrayEXT(4, 3, 2, 1, 0, UINT32_C(1)), nullptr);
+}
+
+TEST(RendererCapabilityDefaultsTest, TextureArrayOperationsAndBindingDefaultToUnsupported)
+{
+    DefaultsOnlyTexture2DArrayRenderer texture;
+    DefaultsOnlyEffectRenderer effect;
+    unsigned char bytes[4]{};
+
+    EXPECT_FALSE(texture.SetData(0, 0, 0, 0, 1, 1, bytes, sizeof(bytes)));
+    EXPECT_FALSE(texture.GetData(0, 0, 0, 0, 1, 1, bytes, sizeof(bytes)));
+    EXPECT_FALSE(effect.BindTexture2DArrayEXT(0, {}));
 }
 
 TEST(RendererCapabilityDefaultsTest, AppliedMultiSampleCountEchoesTheRequest)
