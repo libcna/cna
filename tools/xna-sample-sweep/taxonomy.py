@@ -20,6 +20,9 @@ exactly one class, so that the campaign's question has an answer with no remaind
   * `ENVIRONMENT_GAP`       -- neither CNA nor the corpus, but this machine: a font Windows has and
                                this one has not, or an effect the only D3DX9 available here refuses
                                and XNA's own accepted.
+  * `REFERENCE_REMOVED`     -- the frozen reference is no longer in the read-only tree. Not CNA's
+                               and not a gap in the sweep: another session deleted it after the
+                               corpus was frozen, and the bytes survive at a sibling path.
   * `UNEXPLAINED`           -- everything else. The campaign's target for this class is zero.
 
 Every class but the first two carries the reason it was assigned, and the reasons are matched on
@@ -92,6 +95,30 @@ def refusedByCompiler(unit, source):
     return ("\'%s\': the effect compiler" % name) in log
 
 
+_CUSTOM_COMPONENT = re.compile(r'Cannot find content (?:processor|importer) "([^"]+)"')
+_FAILED_ASSET = re.compile(r"^error: (\S.*) \[([^\]]+)\]$", re.M)
+
+
+def customComponentsOnly(unit):
+    """The custom components a unit refused, when they are the only reason anything failed.
+
+    A reference the project names no item for is a *nested* output -- a model's own texture, an
+    effect a material clones -- and only the item that names it can produce one. When every asset
+    a unit failed on failed because a component the sample defines could not be loaded, the nested
+    outputs those items would have produced are that same gap rather than a hole in the sweep's
+    mapping (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-185`).
+
+    Returns the sorted component names, or an empty list when the unit also failed for another
+    reason -- in which case the reference keeps the mapper's own verdict rather than being
+    attributed to a refusal that may not be its.
+    """
+    log = (unit.get("stderrTail") or "")
+    names = sorted(set(_CUSTOM_COMPONENT.findall(log)))
+    if not names or _FAILED_ASSET.search(log):
+        return []
+    return names
+
+
 def missingFont(unit, source):
     """Whether the unit's log says the description's font is not on this machine."""
     if not (source.get("source") or "").lower().endswith(".spritefont"):
@@ -146,6 +173,16 @@ def main(argv=None):
             if row["result"] == "identical":
                 assign(reference, "IDENTICAL")
                 continue
+            if row["result"] == "reference-removed":
+                # Not CNA's and not the sweep's: the reference file itself is no longer on disk.
+                # `/rv/tmp/samples` is not this campaign's tree, and another session's
+                # `prune-completed-sample.sh` removed 21 of the frozen references on 2026-09-09.
+                # It has its own class so it can never be read as a comparison that passed
+                # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-190`, §11.4).
+                assign(reference, "REFERENCE_REMOVED",
+                       "the frozen reference was deleted from the read-only tree by another "
+                       "session after this corpus was frozen")
+                continue
             if row["result"] == "missing":
                 importer = source.get("importer")
                 if importer and importer not in BUILT_IN_IMPORTERS:
@@ -163,6 +200,11 @@ def main(argv=None):
                 elif extension == ".xml":
                     assign(reference, "CUSTOM_PIPELINE_GAP",
                            "the document names a type the game's own assembly defines")
+                elif (source.get("status") == "no-item" and customComponentsOnly(unit)):
+                    assign(reference, "CUSTOM_PIPELINE_GAP",
+                           "no item names it, and every asset this unit failed on failed for a "
+                           "component the sample defines: " +
+                           ", ".join("'%s'" % name for name in customComponentsOnly(unit)))
                 else:
                     assign(reference, *WhyNothingWasBuilt(source))
                 continue

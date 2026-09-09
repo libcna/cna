@@ -32,8 +32,27 @@ from contentproj import ContentProject  # noqa: E402
 PLATFORM_NAMES = {"w": "Windows", "m": "WindowsPhone", "x": "Xbox360"}
 
 
-def sample_projects(root, sample):
-    """Every `.contentproj` of one sample, outside anybody else's output."""
+def project_reference(path, root):
+    """The project's path as the map records it: relative to the sample tree, or absolute.
+
+    A synthesized project lives in the repository's own build directory rather than in the
+    read-only sample tree, and a relative path out of one root and into another says nothing;
+    `os.path.join` with an absolute second argument answers the absolute one, which is what
+    `sweep.py` does with this (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-186`).
+    """
+    absolute = os.path.abspath(path)
+    inside = os.path.abspath(root) + os.sep
+    return os.path.relpath(absolute, root) if absolute.startswith(inside) else absolute
+
+
+def sample_projects(root, sample, synthesized=None):
+    """Every `.contentproj` of one sample, outside anybody else's output.
+
+    A sample whose references were produced by a hand-written `BuildContent` runner ships no
+    project at all, and `synthesize_projects.py` writes the one the runner describes beside a copy
+    of its sources. Those are used only when the sample's own tree has none, so a real project is
+    never displaced by a reconstruction of one (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-186`).
+    """
     found = []
     base = os.path.join(root, sample)
     for directory, subdirs, files in os.walk(base):
@@ -42,6 +61,16 @@ def sample_projects(root, sample):
         for name in sorted(files):
             if name.lower().endswith(".contentproj"):
                 found.append(os.path.join(directory, name))
+    if found or not synthesized:
+        return found
+    staged = os.path.join(synthesized, sample)
+    if not os.path.isdir(staged):
+        return found
+    for directory, subdirs, files in os.walk(staged):
+        subdirs[:] = sorted(subdirs)
+        for name in sorted(files):
+            if name.lower().endswith(".contentproj"):
+                found.append(os.path.abspath(os.path.join(directory, name)))
     return found
 
 
@@ -51,6 +80,9 @@ def main(argv=None):
     parser.add_argument("--provenance", default=None,
                         help="runner-provenance.json; without it a project's parameters are used")
     parser.add_argument("--out", required=True)
+    parser.add_argument("--synthesized", default=None,
+                        help="directory of projects synthesize_projects.py wrote for samples "
+                             "whose references came from a hand-written runner")
     args = parser.parse_args(argv)
 
     with open(args.manifest, encoding="utf-8") as handle:
@@ -71,11 +103,11 @@ def main(argv=None):
         references = by_sample[sample]
         paths = {e["relative"]: e for e in references}
         projects = {}
-        for path in sample_projects(root, sample):
+        for path in sample_projects(root, sample, args.synthesized):
             try:
                 projects[path] = ContentProject(path)
             except Exception as error:  # noqa: BLE001 - a project that will not parse is a finding
-                project_errors.append({"project": os.path.relpath(path, root),
+                project_errors.append({"project": project_reference(path, root),
                                        "error": "%s: %s" % (type(error).__name__, error)})
 
         # An asset name is a path suffix of its output. Every (root, project, item) agreement.
@@ -92,7 +124,9 @@ def main(argv=None):
                 suffix = "/" + name.lower() + ".xnb"
                 for relative in by_basename.get(posixpath.basename(name).lower() + ".xnb", ()):
                     if relative.lower().endswith(suffix):
-                        roots[relative[:len(relative) - len(suffix) + 1]][project_path][name] = item
+                        # Keyed without regard to case; see the lookup below for why.
+                        found = relative[:len(relative) - len(suffix) + 1]
+                        roots[found][project_path][name.lower()] = item
 
         # One project owns each root: the one that explains the most of its files, then the one
         # that is the sample's own rather than a diagnostic copy of it, then the one whose name
@@ -154,8 +188,8 @@ def main(argv=None):
             unit = {
                 "sample": sample,
                 "outputRoot": output_root.rstrip("/"),
-                "project": os.path.relpath(owner, root),
-                "projectDirectory": os.path.relpath(projects[owner].directory, root),
+                "project": project_reference(owner, root),
+                "projectDirectory": project_reference(projects[owner].directory, root),
                 "items": len(project.compile_items),
                 "referencesUnderRoot": len(under),
                 "explained": best,
@@ -174,12 +208,20 @@ def main(argv=None):
             owned = roots[output_root][owner]
             for relative in sorted(under):
                 name = relative[len(output_root):-len(".xnb")]
-                item = owned.get(name)
+                # Without regard to case, because the reference tree's own filesystem was.
+                # Spacewar's project names `Textures\B1_nebula01.jpg`, so the item's asset name is
+                # `Textures/B1_nebula01`; its `asteroid1.x` names `..\textures\asteroid1.tga`, so
+                # the nested texture's is `textures/asteroid1_0`. On the Windows filesystem the
+                # reference build ran on those are one directory, and the corpus has exactly one:
+                # `bin/Content/textures/` holding both. Matching the item's authored case against
+                # the reference's lost 115 references to `no-item` that the project does name
+                # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-184`).
+                item = owned.get(name.lower())
                 if item is None:
                     # Another project of the same sample may still name it.
                     for other_path, items in roots[output_root].items():
-                        if name in items:
-                            item = items[name]
+                        if name.lower() in items:
+                            item = items[name.lower()]
                             break
                 record = {
                     "reference": relative,
@@ -213,7 +255,7 @@ def main(argv=None):
                     parameters = overrides.get(posixpath.basename(item.source), {})
                     parameterSource = "runner:" + runner["kind"]
                 record.update({
-                    "project": os.path.relpath(owner, root),
+                    "project": project_reference(owner, root),
                     "source": item.source,
                     "sourceRelative": os.path.relpath(source, root) if os.path.exists(source) else None,
                     "importer": item.get("Importer"),

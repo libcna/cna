@@ -19,6 +19,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import collections
 import concurrent.futures
 import hashlib
 import json
@@ -184,14 +185,27 @@ def compare_unit(unit, root, build, references):
     prefix = unit["outputRoot"] + "/"
     rows = []
     produced = set()
+    # The same output path without regard to case, because the reference tree's own filesystem was
+    # case-insensitive: Spacewar's project items go to `Textures/` and its models' nested textures
+    # to `textures/`, and the corpus has one `textures/` holding both. A folded name with two
+    # different CNA outputs under it is left alone rather than guessed at
+    # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-184`).
+    folded = collections.defaultdict(list)
     for directory, _, files in os.walk(output):
         for name in files:
             if name.lower().endswith(".xnb"):
-                produced.add(os.path.relpath(os.path.join(directory, name), output)
-                             .replace(os.sep, "/"))
+                relative = os.path.relpath(os.path.join(directory, name), output)
+                relative = relative.replace(os.sep, "/")
+                produced.add(relative)
+                folded[relative.lower()].append(relative)
     for reference in references:
         relative = reference["reference"][len(prefix):]
         mine = os.path.join(output, relative.replace("/", os.sep))
+        if not os.path.isfile(mine):
+            candidates = folded.get(relative.lower(), [])
+            if len(candidates) == 1 and candidates[0] != relative:
+                relative = candidates[0]
+                mine = os.path.join(output, relative.replace("/", os.sep))
         row = {
             "reference": reference["reference"],
             "asset": relative[:-len(".xnb")],
@@ -199,6 +213,16 @@ def compare_unit(unit, root, build, references):
             "referenceSha256": reference.get("sha256"),
             "rootReader": reference.get("rootReader"),
         }
+        # The reference itself may be gone: `/rv/tmp/samples` is not this campaign's tree and
+        # another session's `prune-completed-sample.sh` removed 21 of the frozen references on
+        # 2026-09-09. A reference that is no longer on disk is a *finding* rather than a crash,
+        # and it is not CNA's: the sweep says so and carries on
+        # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-190`, §11.4).
+        if not os.path.isfile(os.path.join(root, reference["reference"])):
+            row["result"] = "reference-removed"
+            produced.discard(relative)
+            rows.append(row)
+            continue
         if not os.path.isfile(mine):
             row["result"] = "missing"
             rows.append(row)

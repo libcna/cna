@@ -71,8 +71,8 @@ def main(argv=None):
     totals = collections.Counter(r["result"] for r in counted)
     print("=== totals (%d rows, %d suppressed as a selective root's extras) ==="
           % (len(counted), len(rows) - len(counted)))
-    for key in ("identical", "differs", "missing", "extra"):
-        print("  %-10s %6d" % (key, totals.get(key, 0)))
+    for key in ("identical", "differs", "missing", "extra", "reference-removed"):
+        print("  %-18s %6d" % (key, totals.get(key, 0)))
 
     def table(title, key, statuses=("identical", "differs", "missing")):
         print("\n=== %s ===" % title)
