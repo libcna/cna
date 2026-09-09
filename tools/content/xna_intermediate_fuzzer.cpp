@@ -33,6 +33,7 @@
 #include "Microsoft/Xna/Framework/Content/Pipeline/Serialization/Intermediate/IntermediateSerializer.hpp"
 #include "Microsoft/Xna/Framework/Curve.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "System/Collections/Generic/OrderedDictionary.hpp"
 #include "System/Object.hpp"
 #include "System/Xml/XmlException.hpp"
 #include "System/Xml/XmlReader.hpp"
@@ -104,7 +105,7 @@ namespace
         std::vector<std::int32_t> Packed;
         std::vector<std::string> Items;
         std::vector<std::shared_ptr<FuzzLeaf>> Leaves;
-        std::map<std::string, std::int32_t> Map;
+        System::Collections::Generic::OrderedDictionary<std::string, std::int32_t> Map;
         std::optional<std::int32_t> Nullable;
         std::shared_ptr<FuzzLeaf> Leaf;
         std::shared_ptr<FuzzLeaf> Shared;
