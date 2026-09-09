@@ -7,11 +7,13 @@
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
 #include "System/IO/Stream.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/ArgumentException.hpp"
 #include "System/FormatException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 #include <algorithm>
+#include <bit>
 #include <cstdint>
 #include <cstring>
 #include <limits>
@@ -94,6 +96,29 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
+    [[nodiscard]] static bool IsClassicDxtFormat(SurfaceFormat format) noexcept
+    {
+        return format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
+               format == SurfaceFormat::Dxt5;
+    }
+
+    static void ValidateTextureCubeCreationShapeEXT(
+        const GraphicsDevice& device, int size, SurfaceFormat format)
+    {
+        if (device.getGraphicsProfileProperty() == GraphicsProfile::Reach &&
+            !std::has_single_bit(static_cast<unsigned int>(size)))
+        {
+            throw System::NotSupportedException(
+                "Non-power-of-two TextureCube resources are not supported by the Reach graphics "
+                "profile.");
+        }
+        if (IsClassicDxtFormat(format) && (size & 3) != 0)
+        {
+            throw System::ArgumentException(
+                "DXT cube texture dimensions must be multiples of four.");
+        }
+    }
+
     TextureCube::~TextureCube() = default;
 
     TextureCube::TextureCube(GraphicsDevice& device, int size, bool mipMap, SurfaceFormat format)
@@ -103,6 +128,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         ValidateCubeSizeForProfileEXT(device, size);
         ValidateTextureCubeFormatEXT(device, format);
+        ValidateTextureCubeCreationShapeEXT(device, size, format);
         format_     = format;
         levelCount_ = mipMap ? CalculateMipLevels(size, size) : 1;
         renderer_ = device.GetRenderer().CreateTextureCube(size, mipMap, static_cast<int>(format));

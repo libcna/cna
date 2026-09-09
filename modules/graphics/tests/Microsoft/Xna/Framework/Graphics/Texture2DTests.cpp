@@ -211,20 +211,6 @@ namespace
                         static_cast<int>(mipReadback.size()));
         EXPECT_EQ(mipReadback, mip);
 
-        Texture2D npot(device, 7, 5, false, format);
-        const std::vector<std::uint8_t> npotBase = DxtBytes(4, blockBytes, 0x25u);
-        npot.SetData(npotBase.data(), static_cast<int>(npotBase.size()));
-        std::vector<std::uint8_t> npotReadback(npotBase.size(), 0u);
-        npot.GetData(npotReadback.data(), static_cast<int>(npotReadback.size()));
-        EXPECT_EQ(npotReadback, npotBase);
-
-        const Rectangle npotTail(4, 0, 3, 5);
-        const std::vector<std::uint8_t> tail = DxtBytes(2, blockBytes, 0xE1u);
-        npot.SetData(0, &npotTail, tail.data(), 0, static_cast<int>(tail.size()));
-        std::vector<std::uint8_t> tailReadback(tail.size(), 0u);
-        npot.GetData(0, &npotTail, tailReadback.data(), 0,
-                     static_cast<int>(tailReadback.size()));
-        EXPECT_EQ(tailReadback, tail);
     }
 
     std::vector<std::vector<Color>> PopulateEveryMip(Texture2D& texture, int width, int height)
@@ -388,6 +374,7 @@ TEST_F(LevelCountTest, MipMapTrueNonSquarePowerOfTwo)
 
 TEST_F(LevelCountTest, MipMapTrueNonPowerOfTwo)
 {
+    gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
 #if defined(CNA_RENDERER_TINYGL) || defined(CNA_RENDERER_NANOVG)
     EXPECT_THROW(Texture2D(gd, 3, 5, true, SurfaceFormat::Color), System::NotSupportedException);
     EXPECT_THROW(Texture2D(gd, 7, 11, true, SurfaceFormat::Color), System::NotSupportedException);
@@ -399,6 +386,7 @@ TEST_F(LevelCountTest, MipMapTrueNonPowerOfTwo)
 
 TEST_F(LevelCountTest, NpotFullPartialRowsAndEveryMipRoundTripExactly)
 {
+    gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
 #if defined(CNA_RENDERER_TINYGL) || defined(CNA_RENDERER_NANOVG)
     GTEST_SKIP() << "this renderer deliberately has no mipmapped Texture2D storage";
 #else
@@ -481,6 +469,7 @@ TEST(Texture2DMipLevelValidationTest, EveryValidMipKeepsItsDimensionsContentsAnd
     constexpr int kWidth = 13;
     constexpr int kHeight = 7;
     GraphicsDevice gd;
+    gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
 #if defined(CNA_RENDERER_TINYGL) || defined(CNA_RENDERER_NANOVG)
     // These renderers own level 0 only, so the mipmapped texture this test needs cannot be
     // constructed at all -- the refusal itself is the contract worth asserting here (see
@@ -654,7 +643,7 @@ TEST_F(UnsupportedFormatConstructionTest, Packed16FullPartialAndMipTransfersAreE
     ExpectPacked16TransferContract<Bgra4444>(gd, SurfaceFormat::Bgra4444);
 }
 
-TEST_F(UnsupportedFormatConstructionTest, DxtFullPartialMipAndNpotTailTransfersAreExact)
+TEST_F(UnsupportedFormatConstructionTest, DxtFullPartialAndMipTransfersAreExact)
 {
     if (!gd.GetRenderer().IsCompressedTransferFormatEXT(static_cast<int>(SurfaceFormat::Dxt1)) ||
         !gd.GetRenderer().IsCompressedTransferFormatEXT(static_cast<int>(SurfaceFormat::Dxt3)) ||

@@ -42,12 +42,14 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "System/FormatException.hpp"
+#include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/IO/MemoryStream.hpp"
 #include "System/NotSupportedException.hpp"
@@ -57,6 +59,7 @@ using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Rectangle;
 using Microsoft::Xna::Framework::Graphics::CubeMapFace;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 using Microsoft::Xna::Framework::Graphics::Texture;
 using Microsoft::Xna::Framework::Graphics::TextureCube;
@@ -212,6 +215,7 @@ TEST_F(TextureCubeTest, GetTypeNameReturnsFullyQualifiedName)
 
 TEST_F(TextureCubeTest, MipMapFalseIsAlwaysOne)
 {
+    gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     EXPECT_EQ(TextureCube(gd, 8, false, SurfaceFormat::Color).getLevelCountProperty(), 1);
     EXPECT_EQ(TextureCube(gd, 3, false, SurfaceFormat::Color).getLevelCountProperty(), 1);
 }
@@ -225,6 +229,7 @@ TEST_F(TextureCubeTest, MipMapTruePowerOfTwo)
 
 TEST_F(TextureCubeTest, MipMapTrueNonPowerOfTwo)
 {
+    gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     EXPECT_EQ(TextureCube(gd, 3, true, SurfaceFormat::Color).getLevelCountProperty(), 2);
     EXPECT_EQ(TextureCube(gd, 7, true, SurfaceFormat::Color).getLevelCountProperty(), 3);
 }
@@ -398,35 +403,11 @@ TEST_F(TextureCubeTest, SetDataCompressedPartialBlockPreservesTheRestOfTheFace)
     }
 }
 
-TEST_F(TextureCubeTest, SetDataCompressedNpotTailUpdatesOnlyTheEdgeBlock)
+TEST_F(TextureCubeTest, CompressedNpotConstructionIsRejected)
 {
-    if (!gd.GetRenderer().IsCompressedCubeTransferFormatEXT(
-            static_cast<int>(SurfaceFormat::Dxt1)))
-        GTEST_SKIP() << "The active renderer has no compressed cube transfer route.";
-
-    TextureCube texture(gd, 7, false, SurfaceFormat::Dxt1);
-    const std::uint8_t redBlock[8] = {0x00, 0xF8, 0x00, 0xF8, 0, 0, 0, 0};
-    std::vector<std::uint8_t> redFace;
-    for (int block = 0; block < 4; ++block)
-        redFace.insert(redFace.end(), std::begin(redBlock), std::end(redBlock));
-    texture.SetData(CubeMapFace::NegativeX, redFace.data(),
-                    static_cast<int>(redFace.size()));
-
-    const std::uint8_t greenBlock[8] = {0xE0, 0x07, 0xE0, 0x07, 0, 0, 0, 0};
-    const Rectangle bottomRightTail(4, 4, 3, 3);
-    texture.SetData(CubeMapFace::NegativeX, 0, &bottomRightTail,
-                    greenBlock, 0, 8);
-
-    std::vector<Color> pixels(49, Color::Transparent);
-    texture.GetData(CubeMapFace::NegativeX, pixels.data(), 49);
-    for (int y = 0; y < 7; ++y)
-    {
-        for (int x = 0; x < 7; ++x)
-        {
-            const Color expected = x >= 4 && y >= 4 ? Color::Lime : Color::Red;
-            EXPECT_EQ(pixels[static_cast<std::size_t>(y * 7 + x)], expected);
-        }
-    }
+    gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
+    EXPECT_THROW((void)TextureCube(gd, 7, false, SurfaceFormat::Dxt1),
+                 System::ArgumentException);
 }
 
 TEST_F(TextureCubeTest, SetDataCompressedBytesUploadsRequestedFaceMip)

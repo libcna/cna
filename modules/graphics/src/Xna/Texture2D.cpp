@@ -18,6 +18,7 @@
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/ArgumentException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Alpha8.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgr565.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgra5551.hpp"
@@ -133,6 +134,43 @@ namespace Microsoft::Xna::Framework::Graphics
             case CNA::Internal::Renderers::RendererFormatVerdict::Defer:
                 Texture::ValidateFormat(format);
                 return;
+        }
+    }
+
+    [[nodiscard]] static bool IsClassicDxtFormat(SurfaceFormat format) noexcept
+    {
+        return format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
+               format == SurfaceFormat::Dxt5;
+    }
+
+    static void ValidateTexture2DCreationShapeEXT(
+        const GraphicsDevice& device, int width, int height, bool mipMap, SurfaceFormat format)
+    {
+        const bool nonPowerOfTwo =
+            !std::has_single_bit(static_cast<unsigned int>(width)) ||
+            !std::has_single_bit(static_cast<unsigned int>(height));
+        const bool compressed = IsClassicDxtFormat(format);
+
+        if (device.getGraphicsProfileProperty() == GraphicsProfile::Reach && nonPowerOfTwo)
+        {
+            if (mipMap)
+            {
+                throw System::NotSupportedException(
+                    "Mipmapped non-power-of-two Texture2D resources are not supported by the "
+                    "Reach graphics profile.");
+            }
+            if (compressed)
+            {
+                throw System::NotSupportedException(
+                    "Compressed non-power-of-two Texture2D resources are not supported by the "
+                    "Reach graphics profile.");
+            }
+        }
+
+        if (compressed && ((width & 3) != 0 || (height & 3) != 0))
+        {
+            throw System::ArgumentException(
+                "DXT texture dimensions must be multiples of four.");
         }
     }
 
@@ -310,6 +348,7 @@ namespace Microsoft::Xna::Framework::Graphics
         ValidateTextureSizeForProfileEXT(graphicsDevice, w, h);
         ValidateTextureDimensionEXT(graphicsDevice, w, h);
         ValidateTexture2DFormatEXT(&graphicsDevice, format);
+        ValidateTexture2DCreationShapeEXT(graphicsDevice, w, h, mipMap, format);
         format_     = format;
         levelCount_ = mipMap ? CalculateMipLevels(w, h) : 1;
         ImageData data;

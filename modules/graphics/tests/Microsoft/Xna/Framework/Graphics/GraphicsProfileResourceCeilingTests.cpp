@@ -30,6 +30,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "System/NotSupportedException.hpp"
+#include "System/ArgumentException.hpp"
 
 using Microsoft::Xna::Framework::Graphics::GraphicsAdapter;
 using Microsoft::Xna::Framework::Color;
@@ -136,6 +137,47 @@ TEST(GraphicsProfileResourceCeilingTest, BackBufferReadbackIsHiDefOnly)
     const Rectangle onePixel(0, 0, 1, 1);
     EXPECT_NO_THROW(hiDef.GetBackBufferData(&onePixel, &pixel, 0, 1));
     EXPECT_EQ(Color::CornflowerBlue, pixel);
+}
+
+TEST(GraphicsProfileResourceCeilingTest, ReachAllowsOnlyConditionalNpotTexture2DResources)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+    PresentationParameters parameters;
+    {
+        GraphicsDevice reach(
+            GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach, parameters);
+        EXPECT_NO_THROW((void)Texture2D(reach, 3, 5, false, SurfaceFormat::Color));
+        EXPECT_THROW((void)Texture2D(reach, 3, 5, true, SurfaceFormat::Color),
+                     System::NotSupportedException);
+        EXPECT_THROW((void)Texture2D(reach, 7, 5, false, SurfaceFormat::Dxt1),
+                     System::NotSupportedException);
+    }
+
+    GraphicsDevice hiDef(
+        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef, parameters);
+    EXPECT_NO_THROW((void)Texture2D(hiDef, 3, 5, true, SurfaceFormat::Color));
+    EXPECT_NO_THROW((void)Texture2D(hiDef, 8, 4, false, SurfaceFormat::Dxt1));
+    EXPECT_THROW((void)Texture2D(hiDef, 7, 5, false, SurfaceFormat::Dxt1),
+                 System::ArgumentException);
+}
+
+TEST(GraphicsProfileResourceCeilingTest, CubePowerOfTwoAndDxtAlignmentFollowXnaProfiles)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+    PresentationParameters parameters;
+    {
+        GraphicsDevice reach(
+            GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach, parameters);
+        EXPECT_THROW((void)TextureCube(reach, 3, false, SurfaceFormat::Color),
+                     System::NotSupportedException);
+    }
+
+    GraphicsDevice hiDef(
+        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef, parameters);
+    EXPECT_NO_THROW((void)TextureCube(hiDef, 3, true, SurfaceFormat::Color));
+    EXPECT_NO_THROW((void)TextureCube(hiDef, 4, false, SurfaceFormat::Dxt1));
+    EXPECT_THROW((void)TextureCube(hiDef, 6, false, SurfaceFormat::Dxt1),
+                 System::ArgumentException);
 }
 
 TEST(GraphicsProfileResourceCeilingTest, VertexBuffersRespectTheSharedSixtyFourMiBMinusOneLimit)
