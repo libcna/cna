@@ -29,10 +29,10 @@ namespace Microsoft::Xna::Framework::Graphics
     /**
      * @brief GPU vertex buffer for storing vertex data.
      *
-     * CNA's current typed and raw overloads upload at destination byte offset zero. A validated
-     * zero-element upload is a no-op and may use a null source pointer; a real upload requires a
-     * non-null source and must fit the buffer's logical vertex capacity. Native allocation
-     * padding never changes that public capacity.
+     * Typed transfers support XNA's whole-array, array-slice, and strided buffer-window forms.
+     * A validated zero-element upload is a no-op and may use a null source pointer; a real upload
+     * requires a non-null source and must fit the buffer's logical byte capacity. Native
+     * allocation padding never changes that public capacity.
      */
     class VertexBuffer : public GraphicsResource
     {
@@ -367,7 +367,66 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             static_assert(std::is_trivially_copyable_v<TVertex>,
                           "VertexBuffer::SetData<T> requires a trivially-copyable vertex type");
-            SetDataRaw(data, count, static_cast<int>(sizeof(TVertex)));
+            SetDataElementsAtInternal(0, data, 0, count, sizeof(TVertex), sizeof(TVertex),
+                                      SetDataOptions::None, false);
+        }
+
+        /**
+         * @brief Uploads a source-array slice of an application-defined XNA vertex type.
+         *
+         * @tparam TVertex Application-defined, trivially-copyable vertex type.
+         * @param data Pointer to the source vertex array.
+         * @param startIndex First source-array element to read.
+         * @param elementCount Number of vertices to upload.
+         */
+        template<typename TVertex>
+        void SetData(const TVertex* data, int startIndex, int elementCount)
+        {
+            static_assert(std::is_trivially_copyable_v<TVertex>,
+                          "VertexBuffer::SetData<T> requires a trivially-copyable vertex type");
+            SetDataElementsAtInternal(0, data, startIndex, elementCount,
+                                      sizeof(TVertex), sizeof(TVertex),
+                                      SetDataOptions::None, false);
+        }
+
+        /**
+         * @brief Uploads source vertices into a byte window with an explicit destination stride.
+         *
+         * Each tightly packed source element contributes `sizeof(TVertex)` bytes. Successive
+         * destination elements are separated by @p vertexStride, matching XNA's generic transfer.
+         * Built-in XNA vertex values are packed into their declaration-defined GPU layout first.
+         *
+         * @tparam TVertex Source vertex type.
+         * @param offsetInBytes Destination byte offset in this buffer.
+         * @param data Pointer to the source vertex array.
+         * @param startIndex First source-array element to read.
+         * @param elementCount Number of source elements to upload.
+         * @param vertexStride Byte distance between destination elements; zero uses the packed
+         *        element size.
+         */
+        template<typename TVertex>
+        void SetData(int offsetInBytes,
+                     const TVertex* data,
+                     int startIndex,
+                     int elementCount,
+                     int vertexStride)
+        {
+            if constexpr (std::is_same_v<TVertex, VertexPositionColor> ||
+                          std::is_same_v<TVertex, VertexPositionColorTexture> ||
+                          std::is_same_v<TVertex, VertexPositionNormalTexture> ||
+                          std::is_same_v<TVertex, VertexPositionTexture>)
+            {
+                SetDataAtInternal(offsetInBytes, data, startIndex, elementCount, vertexStride,
+                                  SetDataOptions::None, false);
+            }
+            else
+            {
+                static_assert(std::is_trivially_copyable_v<TVertex>,
+                              "VertexBuffer::SetData<T> requires a trivially-copyable vertex type");
+                SetDataElementsAtInternal(offsetInBytes, data, startIndex, elementCount,
+                                          sizeof(TVertex), vertexStride,
+                                          SetDataOptions::None, false);
+            }
         }
 
         /**
@@ -389,7 +448,59 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             static_assert(std::is_trivially_copyable_v<TVertex>,
                           "VertexBuffer::GetData<T> requires a trivially-copyable vertex type");
-            GetDataRawEXT(0, data, count, static_cast<int>(sizeof(TVertex)));
+            GetDataElementsAtInternal(0, data, 0, count, sizeof(TVertex), sizeof(TVertex));
+        }
+
+        /**
+         * @brief Reads application-defined vertices into a destination-array slice.
+         *
+         * @tparam TVertex Application-defined, trivially-copyable vertex type.
+         * @param data Pointer to the destination vertex array.
+         * @param startIndex First destination-array element to write.
+         * @param elementCount Number of vertices to read.
+         */
+        template<typename TVertex>
+        void GetData(TVertex* data, int startIndex, int elementCount)
+        {
+            static_assert(std::is_trivially_copyable_v<TVertex>,
+                          "VertexBuffer::GetData<T> requires a trivially-copyable vertex type");
+            GetDataElementsAtInternal(0, data, startIndex, elementCount,
+                                      sizeof(TVertex), sizeof(TVertex));
+        }
+
+        /**
+         * @brief Reads a strided byte window into a destination-array slice.
+         *
+         * @tparam TVertex Destination vertex type.
+         * @param offsetInBytes Source byte offset in this buffer.
+         * @param data Pointer to the destination vertex array.
+         * @param startIndex First destination-array element to write.
+         * @param elementCount Number of elements to read.
+         * @param vertexStride Byte distance between source elements; zero uses the packed element
+         *        size.
+         */
+        template<typename TVertex>
+        void GetData(int offsetInBytes,
+                     TVertex* data,
+                     int startIndex,
+                     int elementCount,
+                     int vertexStride)
+        {
+            if constexpr (std::is_same_v<TVertex, VertexPositionColor> ||
+                          std::is_same_v<TVertex, VertexPositionColorTexture> ||
+                          std::is_same_v<TVertex, VertexPositionNormalTexture> ||
+                          std::is_same_v<TVertex, VertexPositionTexture>)
+            {
+                GetDataAtInternal(
+                    offsetInBytes, data, startIndex, elementCount, vertexStride);
+            }
+            else
+            {
+                static_assert(std::is_trivially_copyable_v<TVertex>,
+                              "VertexBuffer::GetData<T> requires a trivially-copyable vertex type");
+                GetDataElementsAtInternal(offsetInBytes, data, startIndex, elementCount,
+                                          sizeof(TVertex), vertexStride);
+            }
         }
 
         /**
@@ -538,6 +649,28 @@ namespace Microsoft::Xna::Framework::Graphics
         void SetDataRawAtWithOptions(int offsetInBytes, const void* data, int startIndex,
                                      int elementCount, int stride, SetDataOptions options);
 
+        void SetDataElementsAtInternal(int offsetInBytes,
+                                       const void* data,
+                                       int startIndex,
+                                       int elementCount,
+                                       std::size_t elementSize,
+                                       int vertexStride,
+                                       SetDataOptions options,
+                                       bool useOptions);
+
+        void SetDataAtInternal(int offsetInBytes, const VertexPositionColor* data,
+                               int startIndex, int elementCount, int vertexStride,
+                               SetDataOptions options, bool useOptions);
+        void SetDataAtInternal(int offsetInBytes, const VertexPositionColorTexture* data,
+                               int startIndex, int elementCount, int vertexStride,
+                               SetDataOptions options, bool useOptions);
+        void SetDataAtInternal(int offsetInBytes, const VertexPositionNormalTexture* data,
+                               int startIndex, int elementCount, int vertexStride,
+                               SetDataOptions options, bool useOptions);
+        void SetDataAtInternal(int offsetInBytes, const VertexPositionTexture* data,
+                               int startIndex, int elementCount, int vertexStride,
+                               SetDataOptions options, bool useOptions);
+
         /**
          * @brief Protected constructor used by DynamicVertexBuffer to pass the dynamic flag.
          *
@@ -577,6 +710,20 @@ namespace Microsoft::Xna::Framework::Graphics
                                  SetDataOptions options,
                                  bool useOptions);
         void ThrowIfSetDataResourceInUse(SetDataOptions options, bool useOptions) const;
+        void GetDataElementsAtInternal(int offsetInBytes,
+                                       void* data,
+                                       int startIndex,
+                                       int elementCount,
+                                       std::size_t elementSize,
+                                       int vertexStride) const;
+        void GetDataAtInternal(int offsetInBytes, VertexPositionColor* data,
+                               int startIndex, int elementCount, int vertexStride) const;
+        void GetDataAtInternal(int offsetInBytes, VertexPositionColorTexture* data,
+                               int startIndex, int elementCount, int vertexStride) const;
+        void GetDataAtInternal(int offsetInBytes, VertexPositionNormalTexture* data,
+                               int startIndex, int elementCount, int vertexStride) const;
+        void GetDataAtInternal(int offsetInBytes, VertexPositionTexture* data,
+                               int startIndex, int elementCount, int vertexStride) const;
         void SetDataRawAtInternal(int offsetInBytes,
                                   const void* data,
                                   int count,

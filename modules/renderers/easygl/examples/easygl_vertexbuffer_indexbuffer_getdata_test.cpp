@@ -74,9 +74,9 @@ protected:
                   "VertexPositionColor: GetData(count) round-trips SetData");
 
             VertexPositionColor dstSlice[2]{};
-            vb.GetData(dstSlice, 1, 2);
+            vb.GetData(16, dstSlice, 0, 2, 16);
             check(dstSlice[0] == src[1] && dstSlice[1] == src[2],
-                  "VertexPositionColor: GetData(startIndex, count) round-trips slice");
+                  "VertexPositionColor: GetData(offset, startIndex, count, stride) round-trips window");
         }
 
         // --- VertexPositionColorTexture ---
@@ -96,9 +96,9 @@ protected:
                   "VertexPositionColorTexture: GetData(count) round-trips SetData");
 
             VertexPositionColorTexture dstSlice[2] = {zero, zero};
-            vb.GetData(dstSlice, 1, 2);
+            vb.GetData(24, dstSlice, 0, 2, 24);
             check(dstSlice[0] == src[1] && dstSlice[1] == src[2],
-                  "VertexPositionColorTexture: GetData(startIndex, count) round-trips slice");
+                  "VertexPositionColorTexture: GetData(offset, startIndex, count, stride) round-trips window");
         }
 
         // --- VertexPositionNormalTexture ---
@@ -117,9 +117,9 @@ protected:
                   "VertexPositionNormalTexture: GetData(count) round-trips SetData");
 
             VertexPositionNormalTexture dstSlice[2]{};
-            vb.GetData(dstSlice, 1, 2);
+            vb.GetData(32, dstSlice, 0, 2, 32);
             check(dstSlice[0] == src[1] && dstSlice[1] == src[2],
-                  "VertexPositionNormalTexture: GetData(startIndex, count) round-trips slice");
+                  "VertexPositionNormalTexture: GetData(offset, startIndex, count, stride) round-trips window");
         }
 
         // --- VertexPositionTexture ---
@@ -138,9 +138,9 @@ protected:
                   "VertexPositionTexture: GetData(count) round-trips SetData");
 
             VertexPositionTexture dstSlice[2]{};
-            vb.GetData(dstSlice, 1, 2);
+            vb.GetData(20, dstSlice, 0, 2, 20);
             check(dstSlice[0] == src[1] && dstSlice[1] == src[2],
-                  "VertexPositionTexture: GetData(startIndex, count) round-trips slice");
+                  "VertexPositionTexture: GetData(offset, startIndex, count, stride) round-trips window");
         }
 
         // --- VertexPositionNormalTextureSkinned (CNAEXT) ---

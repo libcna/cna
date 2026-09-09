@@ -209,10 +209,22 @@ namespace Microsoft::Xna::Framework::Graphics
                      int vertexStride,
                      SetDataOptions options)
         {
-            static_assert(std::is_trivially_copyable_v<TVertex>,
-                          "DynamicVertexBuffer::SetData<T> requires a trivially-copyable vertex type");
-            VertexBuffer::SetDataRawAtWithOptions(
-                offsetInBytes, data, startIndex, elementCount, vertexStride, options);
+            if constexpr (std::is_same_v<TVertex, VertexPositionColor> ||
+                          std::is_same_v<TVertex, VertexPositionColorTexture> ||
+                          std::is_same_v<TVertex, VertexPositionNormalTexture> ||
+                          std::is_same_v<TVertex, VertexPositionTexture>)
+            {
+                VertexBuffer::SetDataAtInternal(
+                    offsetInBytes, data, startIndex, elementCount, vertexStride, options, true);
+            }
+            else
+            {
+                static_assert(std::is_trivially_copyable_v<TVertex>,
+                              "DynamicVertexBuffer::SetData<T> requires a trivially-copyable vertex type");
+                VertexBuffer::SetDataElementsAtInternal(
+                    offsetInBytes, data, startIndex, elementCount, sizeof(TVertex),
+                    vertexStride, options, true);
+            }
         }
 
     private:
