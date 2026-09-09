@@ -1703,10 +1703,17 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                         for (std::size_t v = 0; v < used.size(); ++v)
                         {
                             const std::vector<double> value = set.layer.At(cornerOf[v], used[v], 0u);
-                            // V is flipped: 0.2 answers 0.8 (measured, fbx_oblique).
+                            // V is flipped, and the subtraction happens in `double`: FBX writes a
+                            // UV as a double and XNA answers `float(1.0 - v)`, not
+                            // `1.0f - float(v)`. SAMPLE-037's `head.fbx` has a `v` of
+                            // `0.427853971719742` and XNA answers `0.57214599847793579` where
+                            // narrowing first answers `0.57214605808258057`, one ulp away -- 483
+                            // of that model's 8,591 vertices differ by exactly that
+                            // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-169`; the flip itself
+                            // is `fbx_oblique`, 0.2 answers 0.8).
                             channel.push_back(value.size() >= 2u
                                                   ? Vector2(static_cast<float>(value[0]),
-                                                            1.0f - static_cast<float>(value[1]))
+                                                            static_cast<float>(1.0 - value[1]))
                                                   : Vector2(0.0f, 0.0f));
                         }
                         batchContent->getVerticesProperty().getChannelsProperty().Add<Vector2>(

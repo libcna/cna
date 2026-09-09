@@ -243,10 +243,14 @@ final qualification.
 | `XNASWEEP-151` | An FBX 7 mesh is two objects, and the second is not a node. | [x] **Fixed.** FBX 6 writes a mesh's `Vertices` inside its `Model`; FBX 7 splits them into a `Geometry` object connected to it. SAMPLE-061's `marble.FBX` is the second shape -- version 7100, binary -- and XNA's build answers **one** bone, `marble`, carrying the mesh. CNA answered **two**: `marble` with no mesh, and a nameless child that had it, because the importer read every `Geometry` as a node of its own. A `Geometry` object is now marked as the mesh data of the model it connects to: it never becomes a node, never becomes a root, and the model it hangs off builds its mesh from it. Measured on `fbx7_geometry.fbx`, this repository's first FBX 7 fixture, written in 7100 ASCII; XNA answers `/marble` as a `MeshContent` with the geometry's three positions. Authoring it turned up a rule of the format worth writing down: the SDK links the geometry to the model only where the model's `Properties70` carries `DefaultAttributeIndex`, and without it XNA answers the same node as a bare `NodeContent` with no mesh at all -- measured both ways. Regression: it joins `XnaFbxImporter.EveryFileAnswersTheGraphXnaAnswers`, and reading `Geometry` as a node again fails it. |
 | `XNASWEEP-152` | A node's transform has ten terms, and CNA composed four. | [x] **Fixed.** FBX's own formula, in the order a row vector meets them, is `Sp^-1 . S . Sp . Soff . Rp^-1 . Rpost^-1 . R . Rpre . Rp . Roff . T`. CNA composed `S . Rpre . R . T`, which is four of the ten, and the missing six are not decoration: SAMPLE-138's `photograph.fbx` gives its only mesh a `ScalingPivot` of about `-(1.06, 6.89, 6.43)` against a `ScalingOffset` that nearly cancels it, and XNA's own build holds what is left over -- `(2.35e-06, 1.53e-05, -1.42e-05)` -- where CNA held a clean zero. Measured on two fixtures. `fbx_pivots.fbx` sets `RotationOffset (1,0,0)`, `RotationPivot (0,2,0)`, `ScalingOffset (0,0,3)` and `ScalingPivot (4,0,0)` beside a scaling of 2, a 30-degree turn about Z and a translation of `(5,6,7)`, and XNA answers the translation `(3.535898, 4.267949, 10)` -- which the formula reproduces exactly, term by term, and `S . R . T` cannot. `fbx_postrotation.fbx` sets `PostRotation (0,0,15)` beside `PreRotation (20,0,0)` and `Lcl Rotation (0,0,30)`, and its answer settles something no earlier fixture could: **`R` comes before `Rpre`**, because every fixture until now set only one of the two. CNA had them the other way round. `PostRotation` is gated by `RotationActive` alongside `PreRotation`. Regressions: both fixtures join `XnaFbxImporter.EveryFileAnswersTheGraphXnaAnswers`; dropping the six terms fails the first and only the first, and putting `Rpre` back before `R` fails the second and only the second. |
 | `XNASWEEP-154` | The scene's order is the order it is *connected* in, not the order it is declared in. | [x] **Fixed; a correction to `XNASWEEP-145`, caught by the corpus and not by the fixture.** 145 replaced a reversed root list with the order the `Objects` block declares, and `table.FBX` -- whose declaration order and connection order are the same -- could not tell the two apart. Run 14 could: four SAMPLE-142 models got *worse*, `Hammer.FBX` by 279 differences, `MaomingT1.FBX` by 235, `France.FBX` by 102 and `AircraftCarrier.FBX` by 45. `France.FBX` says why: it declares `Sky` before `Object04` and connects `Object04` to `Model::Scene` first, and XNA's own build answers `RootNode` with `Object04, Sandbag20, Box_Big03, Truck06, Barricade_11` -- the connection order, with `Sky` (which nothing connects to the scene) absent. The roots are now collected in the order the `Connect` lines put them in the scene, with the declaration order kept only as the fallback for a file that connects nothing at all. `France.FBX`'s bone list and mesh list now match XNA's exactly; what is left of that model is a mesh-part difference, which is its own question. `fbx_scene_order.fbx` was re-authored so its three meshes are declared `Gamma, Alpha, Beta` and connected `Alpha, Beta, Gamma`: XNA answers the connection order, and the declaration order fails the fixture. |
-| `XNASWEEP-153` | One number in `tank.fbx` comes back one float apart, and it is not the parser. | [ ] **Open, and wider than this row said.** The account here was one component of one translation; the built `.xnb` differs in **80** numbers, and the shape of most of them is not a translation at all. `tank.xnb`'s `bones[0]` is XNA `[?, ?, -5.09e-15, ?, ?, 0.9999999403953552, ...]` against CNA's `[..., 0.0, ..., 1.0, ...]`: the root basis XNA answers is `diag(1, 0.99999994, 0.99999994)` with `+-5e-15` off its diagonal, where CNA answers the identity. The file's root, `tank_geo`, carries `Lcl Scaling 0.00999999977648258` -- which is `float(0.01)` written back as a double -- under `UnitScaleFactor 100`, and `0.99999994` is one unit of last place below one. The original observation stands and is still unexplained: the two back wheels' `Lcl Translation` Z, written `-234.273040771484`, comes back as the adjacent float toward zero. Ruled out here in addition to the five parsing routes the row already names: eight more decimal routes (mantissa over a power of ten, digitwise in float and in double, repeated division, repeated multiplication by 0.1), a float and a double round trip through the parent's translation, and every single float multiplier near one that a `0.01`-and-`100` pair can make -- each rounds to exactly `1.0f` and changes nothing. **One expression does reproduce it exactly**, `float(float(v * 0.01f) * 100f)`, and it is *rejected*: over the file's sixty translation components it changes ten where XNA changes two, and two of the ten are the same wheels' Y, which XNA answers exactly. Ten references. **Measured again, and the row above is wrong in two places.** (1) There are **two** tank models in the corpus. Eighteen references share one, and the genuine processor answers its `tank_geo` as the **exact identity** -- which CNA already answers. The `diag(1, 0.99999994, 0.99999994)` root with `+-5e-15` belongs to one reference, SAMPLE-074's `windows-hidef`, whose project builds `tank.fbx` with `ProcessorParameters_Scale 0.1` and `ProcessorParameters_RotationY 180`. Those two parameters are where its residue comes from and the row never mentioned them: it is a processor-parameter path, not a parsing question, and the same file built with default parameters answers the identity. (2) The common tank does not differ in 80 numbers. Of the 36 translation components across its twelve bones, **34 are exactly `float` of the file's own decimal** in XNA's answer and in CNA's, and the two that differ are the two back wheels' Z -- the same decimal `-234.273040771484`, twice -- which XNA answers one ulp toward zero. Everything else in that file is `XNASWEEP-149`: **12 of 12 mesh parts** reproduce XNA's face order under `D3DXOptimizeFaces`, with no geometry difference. Ruled out for the one ulp, in addition to what the row already names: rounding the decimal toward zero (26 of 36), reading only *k* significant digits for every *k* from 5 to 17 (best 34 of 36, the same two wrong), and the float scale round trip `float(float(v * S) * U)` with the file's own `S` -- which does reproduce both wheels exactly and breaks eight other components, so it is not the rule. | | **Third reading, and it is not the importer at all.** The genuine *importer* answers `float(-234.273040771484)` exactly -- `ModelImportOracle.cs` grew a `CNA_MODEL_ORACLE_EXACT=1` mode that prints a transform at round-trip precision, because the rounded form this campaign has always printed cannot tell one float from the one below it -- and the genuine `.xnb` carries the neighbour toward zero. So the ulp is the **`ModelProcessor`'s**, not the parser's, and the row's whole earlier search was in the wrong component. **A synthetic replica reproduces it exactly**: twelve nodes carrying the tank's own translations in the tank's own parent chain, with the root's own `Lcl Scaling 0.00999999977648258` under `UnitScaleFactor 100`, answers 34 of 36 components exactly and the two back wheels' Z one ulp toward zero -- the same two, the same direction. Take the root's scaling away and the two come back exact; take the unit away and eight *other* components move instead. **What the mechanism is**, narrowed to one sentence and measured on a chain of four identical translations with no scaling anywhere: a bone's transform is not the node's own local transform but is recomputed from the absolute ones, in `float`. `local = absolute * Invert(parent.absolute)` reproduces that chain's answer at all four depths exactly -- depth 1 and 2 exact, depth 3 and 4 off by an ulp and by two, which is what a difference of accumulated absolutes gives. Over the tank the same model in a hand-written float32 `Matrix.Multiply`/`Matrix.Invert` gets 5 of the 8 nodes right and misses three, so the composition's own arithmetic is not yet the exact one; the mechanism is settled and the last step is which order XNA's matrix product and cofactor inverse take. Ten references. |
+| `XNASWEEP-153` | One number in `tank.fbx` comes back one float apart, and it is not the parser. | [ ] **Open, and wider than this row said.** The account here was one component of one translation; the built `.xnb` differs in **80** numbers, and the shape of most of them is not a translation at all. `tank.xnb`'s `bones[0]` is XNA `[?, ?, -5.09e-15, ?, ?, 0.9999999403953552, ...]` against CNA's `[..., 0.0, ..., 1.0, ...]`: the root basis XNA answers is `diag(1, 0.99999994, 0.99999994)` with `+-5e-15` off its diagonal, where CNA answers the identity. The file's root, `tank_geo`, carries `Lcl Scaling 0.00999999977648258` -- which is `float(0.01)` written back as a double -- under `UnitScaleFactor 100`, and `0.99999994` is one unit of last place below one. The original observation stands and is still unexplained: the two back wheels' `Lcl Translation` Z, written `-234.273040771484`, comes back as the adjacent float toward zero. Ruled out here in addition to the five parsing routes the row already names: eight more decimal routes (mantissa over a power of ten, digitwise in float and in double, repeated division, repeated multiplication by 0.1), a float and a double round trip through the parent's translation, and every single float multiplier near one that a `0.01`-and-`100` pair can make -- each rounds to exactly `1.0f` and changes nothing. **One expression does reproduce it exactly**, `float(float(v * 0.01f) * 100f)`, and it is *rejected*: over the file's sixty translation components it changes ten where XNA changes two, and two of the ten are the same wheels' Y, which XNA answers exactly. Ten references. **Measured again, and the row above is wrong in two places.** (1) There are **two** tank models in the corpus. Eighteen references share one, and the genuine processor answers its `tank_geo` as the **exact identity** -- which CNA already answers. The `diag(1, 0.99999994, 0.99999994)` root with `+-5e-15` belongs to one reference, SAMPLE-074's `windows-hidef`, whose project builds `tank.fbx` with `ProcessorParameters_Scale 0.1` and `ProcessorParameters_RotationY 180`. Those two parameters are where its residue comes from and the row never mentioned them: it is a processor-parameter path, not a parsing question, and the same file built with default parameters answers the identity. (2) The common tank does not differ in 80 numbers. Of the 36 translation components across its twelve bones, **34 are exactly `float` of the file's own decimal** in XNA's answer and in CNA's, and the two that differ are the two back wheels' Z -- the same decimal `-234.273040771484`, twice -- which XNA answers one ulp toward zero. Everything else in that file is `XNASWEEP-149`: **12 of 12 mesh parts** reproduce XNA's face order under `D3DXOptimizeFaces`, with no geometry difference. Ruled out for the one ulp, in addition to what the row already names: rounding the decimal toward zero (26 of 36), reading only *k* significant digits for every *k* from 5 to 17 (best 34 of 36, the same two wrong), and the float scale round trip `float(float(v * S) * U)` with the file's own `S` -- which does reproduce both wheels exactly and breaks eight other components, so it is not the rule. | | **Third reading, and the mechanism is found: it is the unit-scale path in the importer, and a synthetic replica reproduces it exactly.** `ModelImportOracle.cs` grew a `CNA_MODEL_ORACLE_EXACT=1` mode that prints a transform at round-trip precision, because the rounded form this campaign has always printed cannot tell one float from the one below it. **The replica**: twelve nodes carrying the tank's own translations in the tank's own parent chain, with the root's own `Lcl Scaling 0.00999999977648258` under `UnitScaleFactor 100`, answers 34 of 36 components exactly and the two back wheels' Z one ulp toward zero -- the same two, the same direction, from the genuine importer and again from the genuine `ModelProcessor`. Take the root's scaling away and the two come back exact; take the unit away and eight *other* components move instead; give the root scaling 1 with the unit and the wheels' X and Y move and their Z does not. So the ulp is not the parser's and not a property of the decimal: it is what the scene's unit and the root's scaling do to a *child's* transform, and the row's whole earlier search was in the wrong component. **One trap, recorded because it cost an hour**: a probe whose `Definitions` does not declare `ObjectType: "GlobalSettings"` has its `UnitScaleFactor` ignored entirely, and such a probe says the importer is innocent. It is not. **What is still owed** is the exact arithmetic. A chain of four identical translations with no scaling anywhere shows the general shape -- depth 1 and 2 exact, depth 3 off by an ulp and depth 4 by two -- and `local = absolute - parentAbsolute` in `float32` reproduces that chain's twelve numbers exactly; over the tank, that form and the scaled forms `(a - pa) * (1/S)` and `a * (1/S) - pa * (1/S)` each miss, getting between 27 and 30 of the 36 right rather than 34. Ten references. |
 | `XNASWEEP-155` | A mesh's batches come out in the order its polygons first name a material. | [x] **Fixed.** CNA walked a mesh's materials in the order they are connected, index 0 upward. XNA walks them in the order the *polygons* first name them. SAMPLE-142's `France.FBX` settles it beyond argument: `Object04` carries 25 connected materials and 3,354 polygons over 23 of them, and XNA's own build answers batches of 840, 28, 28, 252, 56, 81, 179, 863, 221, 200, ... triangles, which is the first-use order of the material indices `14, 16, 15, 17, 18, 8, 6, 3, 12, 0, ...` -- computed from the file's own `Materials` array and matching all twenty-three, in order. The connection order answers 200, 8, 863, 81, ... , which is what CNA held. The batches themselves were already right; only their order was not, which is why the difference reads as a permutation of the same vertex and primitive counts and a renumbering of every shared resource that follows. Measured on `fbx_material_order.fbx`: two triangles, `First` and `Second` connected in that order, the polygons naming them the other way, and XNA answers `Second`'s batch first. Regression: it joins `XnaFbxImporter.EveryFileAnswersTheGraphXnaAnswers`, and walking the connection order fails it. |
 | `XNASWEEP-156` | A mesh with no normals got a constant `(0,0,1)`, which is right only in the XY plane. | [x] **Fixed.** CNA wrote `(0, 0, 1)` into the normal channel of every FBX mesh that declares none. Every fixture the campaign had was drawn in the XY plane, where that constant happens to *be* the answer, so nothing caught it -- it took a triangle out of the plane, `fbx_float_rounding.fbx`, whose XNB XNA fills with `(0.5773503, 0.5773503, 0.5773503)` and CNA filled with `(0, 0, 1)`. XNA computes them: each polygon's own unit normal, `(b-a) x (c-a)` normalized, summed onto every control point the polygon names and normalized once at the end -- a per-control-point average, not per corner, so the vertices do not split. Measured on `fbx_generated_normals.fbx`, two triangles sharing an edge with face normals `(0,0,1)` and `(0,-1,0)`: XNA answers `(0, -0.707107, 0.707107)` on the two shared positions and each face's own normal on the other two, and four vertices rather than six. `fbx_generated_normals_area.fbx` is the same fold with one face **four times** the other's area and XNA answers the *same* normal, which rules area weighting out -- an area-weighted average would be `(0, -0.970143, 0.242536)`. Regression: both join `XnaFbxImporter.EveryFileAnswersTheGraphXnaAnswers`, and the constant fails both and only those two. |
-| `XNASWEEP-157` | One index buffer for the model, and a shared-resource table in first-reference order. | [x] **Fixed, two rules, and SAMPLE-142's `France.FBX` went from 52 differences to 3.** **(1)** `ModelProcessor` started a new *index* buffer whenever a batch's vertex declaration did not match the one it was merging into. XNA starts a new vertex buffer there and keeps the one index buffer: `France.FBX` carries a 36-byte mesh and three 32-byte ones, and XNA's own build answers **two** vertex buffers and **one** index buffer of 24,855 indices whose `startIndex` runs 0, 17,811, 18,591, 24,423 straight through the second vertex buffer's meshes. CNA answered two of each with the second mesh group's `startIndex` restarting at 0. **(2)** The schema-2 `Model` -> XNB conversion concatenated its three tables -- every vertex buffer, then every index buffer, then every effect -- where XNA's writer emits a shared resource the **first time the graph names it**. For `France.FBX` that is `vertex buffer (1), index buffer (2), the first mesh's twenty-three effects (3..25), the second vertex buffer (26), three more effects`, and CNA's grouping put its second vertex buffer at 2 and shifted every effect and index-buffer reference after it. The conversion now walks the meshes and their parts and emits each buffer and effect the first time it is referenced, with anything the graph never names appended after, so no table entry is lost. What is left of `France.FBX` is three buffer digests, which is `XNASWEEP-149`. |
+| `XNASWEEP-157` | One index buffer for the model, and a shared-resource table in first-reference order. |
+| `XNASWEEP-149` | `MeshHelper.OptimizeForCache` is `D3DXOptimizeFaces`, and the triangle order every model carries. |
+| `XNASWEEP-166` | A UV set is any `LayerElement...UV` a `Layer` names beside a texture element, not only `LayerElementUV`. |
+| `XNASWEEP-167` | `ModelProcessor` normalized every declared normal, because it ran `TransformScene` with the identity; and two `.x` rules that call had been hiding. |
+| `XNASWEEP-169` | A texture coordinate's V flip is `float(1.0 - v)`, not `1.0f - float(v)`. | [x] **Fixed, two rules, and SAMPLE-142's `France.FBX` went from 52 differences to 3.** **(1)** `ModelProcessor` started a new *index* buffer whenever a batch's vertex declaration did not match the one it was merging into. XNA starts a new vertex buffer there and keeps the one index buffer: `France.FBX` carries a 36-byte mesh and three 32-byte ones, and XNA's own build answers **two** vertex buffers and **one** index buffer of 24,855 indices whose `startIndex` runs 0, 17,811, 18,591, 24,423 straight through the second vertex buffer's meshes. CNA answered two of each with the second mesh group's `startIndex` restarting at 0. **(2)** The schema-2 `Model` -> XNB conversion concatenated its three tables -- every vertex buffer, then every index buffer, then every effect -- where XNA's writer emits a shared resource the **first time the graph names it**. For `France.FBX` that is `vertex buffer (1), index buffer (2), the first mesh's twenty-three effects (3..25), the second vertex buffer (26), three more effects`, and CNA's grouping put its second vertex buffer at 2 and shifted every effect and index-buffer reference after it. The conversion now walks the meshes and their parts and emits each buffer and effect the first time it is referenced, with anything the graph never names appended after, so no table entry is lost. What is left of `France.FBX` is three buffer digests, which is `XNASWEEP-149`. |
 | `XNASWEEP-158` | The two gap classes, audited rather than asserted. | [x] **Audited; both hold, and one of them names its own remedy.** `CUSTOM_PIPELINE_GAP` (1,370): a random twelve were opened and every one checks out -- `Maps/Chests/BronzeGear.xml` declares `<Asset Type="RolePlayingGameData.Chest">`, a type only SAMPLE-070's own assembly defines, and SAMPLE-048's `TrianglePickingProcessor` is a class in that sample's own `TrianglePickingPipeline/TrianglePickingProcessor.cs`. Neither can be built without loading a .NET assembly, which is the boundary, not a defect. `CORPUS_GAP` (931) splits three ways. **527** are a model's side outputs -- `cat_0.xnb`, `lizardeye_diff_0.xnb` -- under a project's output root that no project item names, and they exist only because the model that names them does; where that model is itself a custom-pipeline gap, so is its texture. **37** name a source file the tree has not got. The remaining **367 are the sweep's own tooling**, and they are concentrated: `SAMPLE-145-SoundLab` (172), `SAMPLE-141-Riemers` (112), `SAMPLE-140-RedistributableTTFs` (28), `SAMPLE-113-AvatarAnimPack` (21), `SAMPLE-120-ButtonImages` (15) and four smaller ones. **None of the nine has a `.contentproj` outside its `cna-*` trees** -- six were built by a hand-written `XnaPipelineRunner.cs` that enumerates a directory and assigns an importer and a processor per file (SAMPLE-120's picks `FontTextureProcessor` for the one asset named `xboxControllerSpriteFont` and `TextureProcessor` for the other fourteen), and three by something else again. `map_sources.py` maps projects, so it maps none of them. Reaching them means synthesizing a build unit from each runner's own enumeration, which is per-sample work rather than one rule -- named here so it is a job rather than a gap. |
 | `XNASWEEP-159` | `XNASWEEP-142` changed one of the two colour-key routes, and the other suite noticed. | [x] **Fixed.** `CnaContentTests` runs `CnjContentPipelineTest.Texture2DConvergesOnTheExistingTextureProcessorAndWriter`, which compiles one `.cnj` -- `"colorKey":[7,26,45]` over a 4x3 PNG -- through the content pipeline and through `CompileCnjToCnb`, and compares the bytes. `XNASWEEP-142` made the pipeline's key match on four channels and left `CnbSourceImport`'s at three, so the two routes keyed out different pixels and the suite went from its five recorded environmental failures to six. `CnbSourceImport` matches on four now, a three-component document key standing for an alpha of 255, which is the same reading the pipeline uses. The suite is back to exactly the five `HEADLESS` failures §33.1 of `plan_xnapipeline_parity.md` records -- the ones where the headless renderer stores no `TextureCube` or `Texture3D` texels at all. Worth recording as its own row rather than folding into 142: a fix measured against the sample corpus broke a contract only the *other* suite asserts, and the campaign's own regression run is what found it. |
 | `XNASWEEP-160` | One scene puts its children in an order none of the file's three lists gives. | [x] **Fixed, and the rule is the importer's own, in its own words.** Synthetic scenes hand the genuine importer one variable at a time: `co_hammer_names_plain` makes both objects `Null` and the connection order survives, so the leading space is not it; `co_root_then_null` and `co_null_then_root` swap the connection order of a `Root`-class model and a `Null` and both answer the null first, so the model's **class** is it. A `Root` and a `LimbNode` both come back as `BoneContent`, and **the first bone a depth-first walk reaches is moved to be the last child of the scene's root**, with its transform re-expressed against that root: `cd_deep_bone` puts a bone two levels down and it comes back at the root carrying the transform it had in the world; `cb_four_mixed` has two bones and only the first moves; `cb_two_limbs_rev` says "first" means first *connected*, not first declared. XNA says so itself -- a scene with two skeletons logs `Multiple skeletons were found in the file. The first skeleton, named "{0}" has been moved to be a child of the scene root. The other, "{1}", will be ignored.`, placeholders and all. `Hammer.FBX` is exactly that shape. Five fixtures and the warning are in the differential; the test harness now records warnings, which it discarded before. |
@@ -257,6 +261,7 @@ final qualification.
 | `XNASWEEP-166` | `Yager.FBX`'s `Box01` carries a second texture coordinate CNA does not produce. | [x] **Fixed; the account below is how it was found and the last paragraph is the rule.** It was open, isolated, and one of only two models in the corpus that still differ by something other than order.** `validate_corpus.py` asked all 157 differing models whether their difference is the order `OptimizeForCache` puts their triangles in or the triangles themselves: **485 of 485 mesh parts whose geometry matches reproduce XNA's face order exactly**, and only four models have anything else -- SAMPLE-074's `tank.xnb` (processor parameters, `XNASWEEP-153`), `baseballbat.xnb` (float residue of 2.4e-07 on positions, same bounding box and bone), and these two. `Yager.xnb`: XNA answers **two** vertex buffers where CNA answers one, because `Box01`'s is stride 40 with `TextureCoordinate` usage index 0 **and 1**, and CNA's single stride-32 buffer has only index 0. The genuine importer answers that mesh with three channels, `TextureCoordinate0` and `TextureCoordinate1` carrying identical values. `Box01` is the one mesh in the file that declares `LayerElementTransparentUV` beside `LayerElementUV`, in one `Layer: 0` block, and `LayerElementTransparentTextures` beside `LayerElementTexture`. **The `TransparentUV` element alone is not the trigger**: three fixtures reproducing that declaration -- both elements, `ByPolygonVertex` with `IndexToDirect`, in Yager's own `Layer` order, and one with `TransparentUV` alone -- answer a single `TextureCoordinate0` from the genuine importer, and the `TransparentUV`-only one answers no texture coordinate at all. What is untested is the transparent *texture*: `Box01` has a material with a second texture connected through `LayerElementTransparentTextures`, and none of the fixtures had one. That is where the next attempt should start. `AircraftCarrier.xnb` is the other, and is the one the sweep already carried as its own case. | | **Fixed, and the transparent *texture* was where it started.** Forty-one probes on the genuine importer settle a rule the earlier fixtures could not see because none of them had a texture. **A UV set is not only `LayerElementUV`**: every `LayerElement...UV` a `Layer` block names is one, taken in the block's own order and indexed by the block's number the way `XNASWEEP-143` already had it -- but a set other than the diffuse one is read **only when that same `Layer` block also names a texture element**, whichever one, and whether or not a texture is connected to the mesh. `uv2b_transpuv_diffuse_only` has no transparency texture at all and answers two channels; `uv2d_tex_not_in_layer` declares the texture element and does not name it and answers one; `uv2d_texelem_no_texture` names a `LayerElementTexture` whose `TextureId` no connected texture answers and gets two. A `Layer` naming one UV type twice at two `TypedIndex`es is **one** channel carrying the second (`uv2d_two_transpuv`), and a mesh whose only UV set is the transparency one takes index 0 (`uv2b_transpuv_alone`). `Box01` is the corpus's only mesh with two textures and it is the only one that declares `LayerElementTransparentUV` beside its texture -- hence stride 40. Thirty-five corpus files carry such a set: 108 `BumpUV`, 104 `SpecularUV`, 30 `EmissiveUV`, 16 `TransparentUV`, 8 `ReflectionUV`, and **every one of the 64 `Layer` blocks holding one also names a texture element**, so all of them are channels XNA writes and CNA wrote none: SAMPLE-146's `ship1.xnb` carries `TextureCoordinate` usage index 0, 1 **and** 2. **A second measurement came with it**: the other texture layer elements are material textures. `LayerElementAmbientTextures` is `Ambient`, `SpecularTextures` `Specular`, `ShininessTextures` `SpecularPower`, `NormalMapTextures` `NormalMap`, `BumpTextures` `Bump`, `TransparentTextures` `Transparency`, `ReflectionTextures` `Reflection` -- in that order whatever order the `Layer` names them in, and `Emissive`, `Diffuse` and `Displacement` produce nothing at all. **Only the diffuse channel is produced**, and that is deliberate: on SAMPLE-037's `head.fbx` the specular channel's `TextureId` names a `Head_Spec.TGA` the sample does not ship, and the genuine build answers `Head_Diff_0.xnb` and no error -- so whatever XNA resolves that channel against is narrower than "the texture the polygon's `TextureId` names among those connected to the mesh", and producing it makes `MaterialProcessor` build a file that is not there. The names stay in the importer's own table so a next attempt starts from the measurement. Six fixtures are committed with their genuine answers, each declaring only `LayerElementTexture`, so what they pin is the UV rule and not a channel production does not make. |
 | `XNASWEEP-167` | `ModelProcessor` normalized every declared normal, because it ran `TransformScene` with the identity. | [x] **Fixed, and it is what was left of the buffers after `XNASWEEP-149`.** With the face order right, `SphereLowPoly.xnb` went from 2,812 differing bytes to **51**, and all 51 are in the `Normal` channel: 17 of its 89 normals come out one or two ulp longer than XNA's. XNA's are the `.fbx`'s own floats bit for bit; CNA's are exactly what `1.0f / sqrt(x*x + y*y + z*z)` gives for them, so CNA normalized a normal the file had already written and XNA did not. **`MeshHelper.TransformScene` is not the culprit and does normalize**: `ModelRootOracle.cs` grew a `CNA_MODELROOT_TRANSFORM_SCENE` mode that calls the genuine method over an imported graph, and a declared `(0, 0, 2)` comes back `(0, 0, 1)`. What XNA does not do is *call* it when there is nothing to apply: with `Scale` 1 and the three rotations 0 the adjustment is the exact identity, and running it anyway is not the no-op it looks like because normalizing is not one. `ModelProcessor` now skips it there. SAMPLE-003 alone goes from four differing models to one: `Cone`, `SphereHighPoly` and `SphereLowPoly` are byte-identical and `Cylinder` falls from 110 differing bytes to 9. **Two things the `.x` route had been getting for free from that call came out with it, and both are now where they belong.** The genuine `XImporter` *does* normalize what `MeshNormals` declares -- an entry of `(0, 0, 2)` comes back `(0, 0, -1)` and `0.801785` comes back `0.801784` -- where the genuine `FbxImporter` does not, so the normalizing moved into the `.x` importer where it is measured rather than sitting in a method every model went through. And the `.x` handedness conversion negated Z on its own, which turns a vertex at `z = 0` into `-0`; XNA applies the basis change as a transform, so every component ends in a sum with a zero term and IEEE addition makes the sign positive again. `TransformScene` had been washing that out for every model in the corpus. Both were invisible until the call went away, and the seven `.x` cases of the 112-case differential corpus are what found them. |
 | `XNASWEEP-168` | A mesh's bounding-sphere centre differs from `CreateFromPoints` over the same points, in the last few ulp. | [ ] **Open, isolated to one call, and what is left of `Cylinder.xnb` after `XNASWEEP-167`.** Nine bytes, all three of `meshes[0]/boundingSphere` centre: CNA answers `(1.0133e-07, 9.5367e-08, -1.8839e-07)` where XNA answers `(-1.1422e-08, 9.5367e-08, -1.1921e-07)`, the radius agreeing. Both are noise around a cylinder centred on the origin, so what differs is the order the growth pass touches its points in or the arithmetic it uses, not the geometry. **CNA's answer is reproduced exactly** by `BoundingSphere::CreateFromPoints` over the genuine importer's own positions, measured at round-trip precision through `CNA_MODEL_ORACLE_EXACT=1`, and the mesh's 122 control points, its one batch's 170 vertices in importer order, and every batch concatenated all give that same answer -- so the input is not what differs. Ruled out for XNA's: the `.xnb`'s own vertex order (`-2.979e-09, -7.105e-15, -1.452e-07`) and the control points sorted. `XNASWEEP-134` measured `CreateFromPoints` exactly over 560 point sets, so the next attempt should start from what `ModelProcessor` hands it rather than from the method, and the 21 references the sweep classes as "a buffer *and* the bounding sphere computed over it" are what it owns. |
+| `XNASWEEP-169` | A texture coordinate's V flip narrowed to `float` before subtracting. | [x] **Fixed, one expression, and it is in every textured model in the corpus.** FBX writes a UV as a double and XNA answers `float(1.0 - v)`; CNA answered `1.0f - float(v)`, which is the same number except when narrowing `v` first loses what the subtraction needed. SAMPLE-037's `head.fbx` carries `v = 0.427853971719742`: XNA answers `0.57214599847793579` and narrowing first answers `0.57214605808258057`, one ulp away, on 483 of that model's 8,591 vertices. With it, `head.xnb`'s vertex buffer and index buffer are byte-identical to the reference's -- 8,591 vertices of stride 40 and 98,256 index bytes, the same payload -- where before the fix the whole `TextureCoordinate0` and `TextureCoordinate1` columns carried the residue. Found by asking what was left of a still-differing model once `XNASWEEP-149`, `166` and `167` had taken the order, the channels and the normals out of it. |
 | `XNASWEEP-163` | The 367 references the sweep has no route to, as a coverage task of its own. | [ ] **Open, and deliberately separate from every behaviour row above.** `XNASWEEP-158` audited the two gap classes and is closed on what it set out to check; what it *found* -- that nine samples had their references built by a hand-written runner rather than a `.contentproj`, so `map_sources.py` reaches none of them -- is a property of this campaign's harness, not of CNA, and it kept being read as unfinished behavioural work. It is this row now. The remedy the audit named is a synthesized build unit per runner: read the runner's own asset list and the processor parameters it sets, write a `.contentproj` that names them, and stage it the way a reconstructed project already is. Until that exists the 367 stay `CORPUS_GAP`, which is an honest label -- the reference is genuine and CNA has never been asked to match it -- and no conclusion in this file rests on them. |
 
 
@@ -308,75 +313,55 @@ first run of this campaign was invalidated by a mid-run relink.
 | references in a sample with no `.contentproj` | 359 |
 | references whose item names a source the tree has not got | 43 |
 
-### 11.2 The sweep, run 19 (2026-09-08)
+### 11.2 The sweep, run 25 (2026-09-09)
 
-Run with everything through `XNASWEEP-161`. Run 3 is kept because it is what
-`XNASWEEP-104`--`110` were measured against, and run 16 because it is the last
-one before this day's importer work.
+Run 3 is kept because it is what `XNASWEEP-104`--`110` were measured against,
+run 19 because it is the last one of the previous day, and runs 21 and 24
+because each isolates one of this day's fixes.
 
-| | run 1 | run 3 | run 10 | run 13 | run 16 | run 17 | run 19 |
+| | run 1 | run 3 | run 13 | run 19 | run 21 | run 24 | run 25 |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| byte-identical | 922 | 3,619 | 3,738 | 3,771 | 3,771 | 3,771 | **3,777** |
-| differing | 343 | 1,547 | 1,659 | 1,639 | 1,639 | 1,639 | 1,633 |
-| missing (CNA produced nothing) | 6,102 | 2,201 | 1,970 | 1,949 | 1,949 | 1,949 | **1,949** |
-| build units that finished | -- | 156 | 156 | 155 | 155 | 155 | 155 |
+| byte-identical | 922 | 3,619 | 3,771 | 3,777 | 3,777 | 3,832 | **3,879** |
+| differing | 343 | 1,547 | 1,639 | 1,633 | 1,633 | 1,578 | **1,531** |
+| missing (CNA produced nothing) | 6,102 | 2,201 | 1,949 | 1,949 | 1,949 | 1,949 | **1,949** |
+| build units that finished | -- | 156 | 155 | 155 | 155 | 155 | 155 |
+| `UNEXPLAINED` | -- | -- | -- | 171 | 171 | 114 | **56** |
 
-**Run 19 is the first sweep after `XNASWEEP-164`, `XNASWEEP-165` and
-`XNASWEEP-162`, and its binary is the commit it is attributed to.** Six more
-references are byte-identical (3,771 to 3,777) and `UNEXPLAINED` falls from 175
-to 171. That is a small delta by the byte count and the wrong measure of the
-three fixes: a model whose triangles CNA now gets right is still not byte-equal
-while `XNASWEEP-149` leaves them in a different order. What the fixes did is
-visible in §11.3.1 instead -- `photograph.fbx`'s root transform and its third
-mesh part are gone, and `validate_corpus.py` puts **485 of 485** mesh parts on
-`XNASWEEP-149`'s side of the line, against the 21 of 26 `France.FBX` alone
-managed before them. Run 18, between the two, isolates `XNASWEEP-164`: it alone
-accounts for all six of the byte-identical gain.
+**Run 21 is `XNASWEEP-149` alone, and its byte count does not move.** Not one
+reference became byte-identical, which is the right answer and not a
+disappointment: a model whose triangles are finally in XNA's order still differs
+if anything else in its vertices does, and something else did. What moved is
+what the bytes cannot show -- `SphereLowPoly.xnb` went from 2,812 differing
+bytes to 51 and `tank.xnb` from 684,885 to 13,671, and 192 model outputs changed
+in all. Reading the 51 is what found `XNASWEEP-167`, and reading what was left
+after that found `XNASWEEP-169`. **This is the shape of the whole day**: the
+face order had to be right before anything underneath it could be seen.
 
-**Run 16's frozen binary was not built from the commit run 16 is attributed
-to, and run 17 is the first sweep this campaign can prove was.** Sixty-two font
-references and the five `photograph.xnb` ones change between the two runs, and
-this session's only production change is `FbxImporter.cpp`, which no font and
-no camera-only FBX ever reaches. It was checked rather than argued: building
-`SAMPLE-071`'s `ScoreFont.spritefont` three times running gives one byte
-sequence, building it once more with `FbxImporter.cpp` reverted to `a41fd22ca`
-gives that same sequence, and `git log --name-only` over the session's commits
-names two files, one of them a test. So a run-16-to-run-17 delta is not this
-session's alone, and nothing below is attributed to a change on the strength of
-the delta by itself.
+Run 24 adds `XNASWEEP-166` and `XNASWEEP-167` (55 references become identical,
+`UNEXPLAINED` 171 to 114) and run 25 adds `XNASWEEP-169` (47 more, 114 to 56).
+Nothing that was byte-identical stopped being so in any of the three runs.
 
-What *is* attributable, because the same change is visible in the committed
-model differential: every RobotGame mech's root bone. `Duskmas.xnb`'s
-`bones[0]` was the file's quarter turn against XNA's identity and is now the
-identity, and the file went from 103 differing numbers to 95; `Tiger` 28 to 23,
-`Hammer` 352 to 346, `PhantomBoss` 318 to 314, `Yager` 378 to 373, `Kiev` 379 to
-374, `cameleerT1` 253 to 250. What is left on those bones is float residue XNA
-carries and CNA writes as zero -- `9.157e-17` and `-2.35e-41` against an
-identity -- which §11.3.1 accounts for.
-
-Over the whole corpus the field-level difference count fell from 149,777 to
-148,222, 151 references improved and 15 got worse; of the fifteen, five are
-`spaceship.xnb` going from *structurally absent* (1 bone where XNA has 2, no
-mesh at all, no shared resources) to structurally right with eight numbers out,
-one is `MaomingT1.xnb` going from 25 bones and 6 meshes to XNA's 26 and 7 --
-both counted as "worse" only because there is finally something to compare --
-and the rest are the font references the paragraph above disclaims.
+One regression happened and was caught by the sweep rather than by a test:
+`XNASWEEP-166`'s first form produced a material texture for every texture layer
+element, and SAMPLE-037's `head.fbx` names a `Head_Spec.TGA` the sample does not
+ship, so four units failed to build. Run 24 is the corrected form; the row says
+what was measured and why only the diffuse channel is produced.
 
 ### 11.3 Every reference, classified
 
 `taxonomy.py` puts all 7,726 into one class each, with the reason beside it.
 
-| class | count | what it means |
-|---|---:|---|
-| `IDENTICAL` | **3,777** | CNA's build is the reference, byte for byte. |
-| `SEMANTICALLY_IDENTICAL` | 728 | Everything a runtime reads is equal; the LZX stream is not. |
-| `ACCEPTED_DIFFERENCE` | 734 | Measured, understood, and not closable from here. |
-| `CUSTOM_PIPELINE_GAP` | 1,370 | The asset needs a component the *sample* defines, in a .NET assembly C++ cannot load. |
-| `ENVIRONMENT_GAP` | 15 | This machine's, not CNA's: 10 effects the June-2010 fxc refuses and XNA's own D3DX9 accepted, and 5 fonts Windows has and this machine has not. |
-| `CORPUS_GAP` | 931 | The reference is in the corpus and the sweep has no way to build it (`XNASWEEP-158`). |
-| `UNEXPLAINED` | **171** | Everything else. |
+| class | run 19 | run 25 | what it means |
+|---|---:|---:|---|
+| `IDENTICAL` | 3,777 | **3,879** | CNA's build is the reference, byte for byte. |
+| `SEMANTICALLY_IDENTICAL` | 728 | 759 | Everything a runtime reads is equal; the LZX stream is not. |
+| `ACCEPTED_DIFFERENCE` | 734 | 716 | Measured, understood, and not closable from here. |
+| `CUSTOM_PIPELINE_GAP` | 1,370 | 1,370 | The asset needs a component the *sample* defines, in a .NET assembly C++ cannot load. |
+| `ENVIRONMENT_GAP` | 15 | 15 | This machine's, not CNA's: 10 effects the June-2010 fxc refuses and XNA's own D3DX9 accepted, and 5 fonts Windows has and this machine has not. |
+| `CORPUS_GAP` | 931 | 931 | The reference is in the corpus and the sweep has no way to build it (`XNASWEEP-163`). |
+| `UNEXPLAINED` | 171 | **56** | Everything else. |
 
-The accepted differences, by reason:
+The accepted differences, by reason, at run 25:
 
 | count | reason |
 |---:|---|
@@ -384,54 +369,57 @@ The accepted differences, by reason:
 | 249 | Two rasterizers disagree about a glyph's ink by a pixel: GDI+ against FreeType. |
 | 91 | The effect blob carries its compiler's version string (`XNASWEEP-108`). |
 | 88 | Two conformant JPEG decoders inside an IDCT's tolerance. |
-| 46 | An Xbox 360 target: XMA has no publicly implementable encoder. |
+| 28 | An Xbox 360 target: XMA has no publicly implementable encoder. |
 | 4 | XNA re-encodes a song to WMA (`XNASWEEP-125`). |
 
 ### 11.3.1 What is still unexplained
 
-All 171 are model assets, and there is no unexplained reference outside `.fbx`
-and `.x`. By what differs, at run 19:
+All 56 are model assets, and there is no unexplained reference outside `.fbx`
+and `.x`. By what differs, at run 25:
 
 | count | what differs |
 |---:|---|
-| 112 | The vertex or index buffer alone: `XNASWEEP-149`, and nothing else. |
-| 28 | A buffer *and* a bone transform. |
-| 21 | A buffer *and* the bounding sphere computed over it. |
-| 9 | A bone transform alone: `tank.fbx`'s two back wheels (`XNASWEEP-153`). |
+| 24 | The vertex or index buffer alone. |
+| 14 | A buffer *and* the bounding sphere computed over it (`XNASWEEP-168`). |
+| 9 | A buffer *and* a bone transform. |
+| 7 | A bone transform alone: `tank.fbx`'s two back wheels (`XNASWEEP-153`). |
+| 1 | The bounding sphere alone (`XNASWEEP-168`). |
 | 1 | `AircraftCarrier.xnb`: mesh parts split at different vertices. |
 
-**161 of the 171 carry a buffer difference, and that is now one question with a
-known answer.** `MeshHelper.OptimizeForCache` **is** `D3DXOptimizeFaces`
-(`XNASWEEP-149`), measured on 616 probes with no disagreement, and
-`validate_corpus.py` asks the same question of the corpus rather than of probes:
-of the 157 differing models the sweep builds, **485 of 485 mesh parts whose
-geometry matches reproduce XNA's face order exactly**. Only four models differ
-by anything else, and each is named -- SAMPLE-074's `tank.xnb` (its project's
-`Scale 0.1` and `RotationY 180`), `baseballbat.xnb` (2.4e-07 of float residue on
-positions, same bounding box and bone), `Yager.xnb` (`XNASWEEP-166`) and
-`AircraftCarrier.xnb`.
+Unexplained field-level differences: **2,215**, of 147,780 over the whole
+corpus (2,706 of 148,128 at run 19).
 
-Unexplained field-level differences: **2,706**, of 148,128 over the whole
-corpus (148,222 at run 17).
+**Thirty of the 56 are SAMPLE-014's Spacewar models and eight are RobotGame's
+mechs.** The rest are three or fewer per sample. `SAMPLE-074`'s tank -- the one
+built with `Scale 0.1` and `RotationY 180` -- is down to a single reference.
 
-**`photograph.fbx` is gone from this table's own row.** Its root transform and
-its third mesh part were `XNASWEEP-162` and `XNASWEEP-165`, both fixed; what is
-left of its five references is the buffer order, so they now sit in the first
-row with everything else `XNASWEEP-149` owns.
+**What the day's four fixes did, in order.** `XNASWEEP-149` put the triangles in
+XNA's order and moved no byte count at all; `XNASWEEP-167` stopped the
+processor normalizing declared normals and took 55 references to byte-identical;
+`XNASWEEP-166` gave the models the texture-coordinate channels XNA writes; and
+`XNASWEEP-169` moved the UV's V flip into `double` and took 47 more. Each was
+found by reading what was left of a model after the one before it, which is why
+none of them could have been found first.
 
-**What is left on the eight mechs is float residue, characterised.** XNA's
-`Duskmas.FBX` root comes back as
-`[1 0 0 0  0 1 -0 0  0 -2.347e-41 1 0  9.157e-17 5.607e-33 0 1]` where CNA
-writes the exact identity; `9.157e-17` is `1.4954437 * 6.123234e-17`, the
-double cosine of a right angle, and `5.607e-33` is the same times that cosine
-again. It is **not** what `M * Invert(M)` leaves: XNA's own inverse is the
-cofactor formula in `float`, that formula was reimplemented here in strict
-`float32` over XNA's own `M`, and the product is the exact identity, zeros and
-all. Whatever sequence leaves those residues also reaches the bone's children
--- `cs_bonekid_dusk`'s child answers a basis of `+-6.123234e-17` where its file
-gives it none -- so it is not one multiplication either.
+### 11.4 The read-only roots, re-audited 2026-09-09 (third pass)
 
-### 11.4 The read-only roots, re-audited 2026-09-08 (second pass)
+The one check that does not depend on a baseline file, and is therefore the one
+worth stating first: **every one of the 7,726 corpus references still hashes to
+the `sha256` `corpus_inventory.py` froze it with, and none is missing.**
+`/rv/tmp/XNAGameStudio` has no file with a modification time inside this
+session's window at all. Under `/rv/tmp/samples` 39 files do, and all 39 are
+another session's: `SAMPLE-078-LocalizationSample_4_0/scripts/capture-original.sh`
+and its `evidence/original-windows-reach/` captures, written at 11:02 on
+2026-09-09 while this session was running its sweep. `evidence/` is not a
+reference directory (§1) and no `.xnb` under it is in the corpus. Nothing this
+session ran writes into either root: the sweep stages every project it builds
+into `build/xna-sample-sweep/staged/` and writes its output under
+`build/xna-sample-sweep/out/`.
+
+The second pass's account, taken 2026-09-08, is kept below because it is what
+the baseline diff says and this pass did not re-take it.
+
+### 11.4.1 The second pass, 2026-09-08
 
 `build/xna-sample-sweep/audit/` holds the `find . -printf '%y %s %T@ %p'`
 baseline of both roots, taken before any work at 17:54 on 2026-09-07, and the
@@ -468,7 +456,7 @@ Nothing this session does writes into either root: the sweep builds into
 the differential oracle into `build/xna-pipeline-oracle/`, and `find` over both
 roots returns no `cna-buildcontent.json` at all.
 
-### 11.4.1 The final qualification, 2026-09-08 (second pass)
+### 11.4.2 The final qualification, 2026-09-08 (second pass)
 
 | run | result |
 |---|---|
@@ -490,34 +478,35 @@ sequence every time.
 
 ### 11.5 Next
 
-In the order the measurements put them:
+1. **The 24 references whose buffers still differ, and nothing else.** Thirty of
+   the 56 are SAMPLE-014's Spacewar models. The instrument that found the last
+   three buffer rules is the same one to use again: build the model, decode both
+   vertex buffers with `tools/xna-pipeline-oracle/optimize/buffers.py`, and ask
+   which *column* differs -- position, normal, texture coordinate, colour --
+   before asking why. Every one of `XNASWEEP-167`, `XNASWEEP-169` and the two
+   `.x` rules came out of that question and none of them out of a byte count.
 
-1. **`XNASWEEP-149`.** 160 of the 175 unexplained references turn on the order
-   `MeshHelper.OptimizeForCache` puts a mesh's triangles in, or on a number
-   that follows from it. 372 probes are now measured against the genuine method
-   and frozen under `tests/reference/xna40/optimize/`; what they settle and what
-   they do not is in the row and in
-   `tools/xna-pipeline-oracle/optimize/README.md`. The sharpest open form: a
-   strip with one pendant triangle glued to its face `T`, with that face moved
-   to index `j`, continues into it for every `j < T` and restarts for every
-   `j >= T`, and no live count, cache age, valence or vertex number this
-   campaign can compute moves with the threshold.
-2. **`XNASWEEP-162`.** SAMPLE-138's `photograph.fbx`, five references: the
-   genuine *importer* answers the file's own `0.01` scaling, so what divides it
-   out is in the processor. `tools/xna-pipeline-oracle/modelroot/` runs the
-   genuine `FbxImporter` **and** `ModelProcessor` over a directory of FBX files
-   and prints every bone at round-trip precision, which is the instrument that
-   question needs.
-3. **`XNASWEEP-153`.** `tank.fbx`, ten references. The row's account was
-   narrower than the data: the built `.xnb` differs in 80 numbers, not one, and
-   they are not all translations -- `bones[0]/transform[5]` is XNA's
-   `0.9999999403953552` against CNA's `1.0`, on a file whose root carries
-   `Lcl Scaling 0.00999999977648258` under `UnitScaleFactor 100`.
-4. **`XNASWEEP-163`'s 367.** The corpus-coverage row, separated from the
-   behaviour rows so that it stops being read as unfinished parity work.
+2. **`XNASWEEP-168`, the bounding sphere.** Fifteen references, and the row
+   names what is ruled out: it is not the point list, because the control
+   points, the vertices in importer order and every batch concatenated all give
+   CNA's answer, and not the precision of the growth pass, because eight
+   variants of it were scored.
 
-The partial `OptimizeForCache` model is still deliberately **not** shipped.
+3. **`XNASWEEP-153`, the tank's two back wheels.** Seven references. The
+   mechanism is found -- the scene's unit against the root's scaling, in the
+   importer -- and a replica reproduces it exactly; what is owed is the
+   arithmetic.
 
+4. **`AircraftCarrier.xnb`.** One reference, and the only one whose mesh parts
+   split at different vertices. It is one of the 35 files carrying a non-diffuse
+   UV set, so `XNASWEEP-166` changed what it produces; the row should be
+   re-measured before it is reasoned about.
+
+5. **`XNASWEEP-163`'s 931.** The corpus-coverage row, unchanged by any of this
+   and deliberately separate from every behaviour row above.
+
+The partial `OptimizeForCache` model is still deliberately **not** shipped -- what
+ships is Microsoft's own algorithm with the adjacency the corpus measured.
 
 ---
 
@@ -530,18 +519,19 @@ for this campaign, and all 7,726 still match the digest it froze them with. The
 number was 7,734 until `XNASWEEP-132` found eight of them were MonoGame's output
 rather than XNA's and the inventory stopped counting them.
 
-**The answer.** 3,771 of them are byte for byte what CNA's product pipeline
-produces from the same source, up from 922 when the sweep first ran and 3,619 at
-the run the earlier fixes were measured against. Another 728 differ only in ways
-nothing a runtime does can see. 736 differ for a reason that is written down and
-cannot be closed from here. 1,370 need a component the *sample* defines and .NET
-loads from an assembly. 931 the sweep has no way to build at all, and 15 are this
-machine's fault rather than CNA's. **175 are unexplained**, every one of them a
-model, and §11.3.1 says exactly what differs in each.
+**The answer, at run 25.** 3,879 of them are byte for byte what CNA's product
+pipeline produces from the same source, up from 922 when the sweep first ran,
+3,619 at the run the earlier fixes were measured against, and 3,777 the day
+before. Another 759 differ only in ways nothing a runtime does can see. 716
+differ for a reason that is written down and cannot be closed from here. 1,370
+need a component the *sample* defines and .NET loads from an assembly. 931 the
+sweep has no way to build at all, and 15 are this machine's fault rather than
+CNA's. **56 are unexplained**, every one of them a model, and §11.3.1 says
+exactly what differs in each.
 
 ### 12.1 What the corpus found that one project could not
 
-Twenty-eight framework defects, each fixed in the component that owns it, each
+Thirty-two framework defects, each fixed in the component that owns it, each
 with its own regression test. None of them is sample-specific and none of them
 was visible from the API surface, the differential corpus, or Platformer:
 
@@ -571,6 +561,10 @@ was visible from the API surface, the differential corpus, or Platformer:
 | `XNASWEEP-155` | A mesh's batches come out in the order its polygons first name a material. |
 | `XNASWEEP-156` | A mesh with no normals got a constant `(0,0,1)`, right only in the XY plane. |
 | `XNASWEEP-157` | One index buffer for the model, and a shared-resource table in first-reference order. |
+| `XNASWEEP-149` | `MeshHelper.OptimizeForCache` is `D3DXOptimizeFaces`, and the triangle order every model carries. |
+| `XNASWEEP-166` | A UV set is any `LayerElement...UV` a `Layer` names beside a texture element, not only `LayerElementUV`. |
+| `XNASWEEP-167` | `ModelProcessor` normalized every declared normal, because it ran `TransformScene` with the identity; and two `.x` rules that call had been hiding. |
+| `XNASWEEP-169` | A texture coordinate's V flip is `float(1.0 - v)`, not `1.0f - float(v)`. |
 | `XNASWEEP-126` | A model's meshes were listed parent-first and each carried its own buffers. |
 | `XNASWEEP-127/128` | An FBX material's colour factors, its two property tables, and the texture never read. |
 | `XNASWEEP-131` | A font sheet's glyph is the ink in the cell, packed the way XNA packs it, premultiplied. |
