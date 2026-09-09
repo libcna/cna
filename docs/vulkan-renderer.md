@@ -2,7 +2,7 @@
 
 ## Status of this document
 
-**Complete as of 2026-09-08 (`VULKAN-480`, updated by `REMED-GFX-203`, `MOD-2222`–`MOD-2223` and `MOD-2240`–`MOD-2242`), and written after the re-audits it depends on**
+**Complete as of 2026-09-08 (`VULKAN-480`, updated by `REMED-GFX-203`, `MOD-2222`–`MOD-2223`, `MOD-2240`–`MOD-2243` and `MOD-2228`), and written after the re-audits it depends on**
 (`VULKAN-470`–`VULKAN-474`) so that what it claims was checked rather than remembered. Every
 section names the row that put it there and the test that keeps it true; a claim with no test named
 beside it is not in here.
@@ -45,8 +45,8 @@ measures on (§*Environment* below).
 | `ShaderEffect` **source execution** | unsupported | fixed |
 | Multi-stream vertex input | supported | fixed |
 | Compiled XNA `.fx` effects | **unsupported** here | fixed |
-| SPIR-V compute shaders and storage buffers | supported | device |
-| Compute image binding and indirect draw | **unsupported** | fixed |
+| SPIR-V compute shaders, storage buffers and dedicated `rgba8` storage images | supported | device |
+| Legacy XNA `Texture2D` compute-image binding and indirect draw | **unsupported** | fixed |
 | Float32 / Float16 `RenderTarget2D`, half-float linear filtering | supported | device |
 | GPU timers, shadow sampling, image-based lighting | **unsupported** | fixed |
 
@@ -67,14 +67,19 @@ Two entries need their sentence rather than a cell:
 | `MaxTextureDimension` | 16384 | device |
 | `MaxVertexStreams` | 16 | fixed — public streams of each input rate are packed into one immutable native snapshot |
 | Compute group counts, local sizes and invocations | selected device's `VkPhysicalDeviceLimits` | device |
+| `MaxTextureArrayLayers` | exact sampled-2D-array image limit | device |
+| `MaxSampledTexturesPerShaderStage` | min(15 implemented slots, native limits) | device |
+| `MaxStorageImagesPerShaderStage` | min(per-stage, descriptor-set storage-image limits) | device |
 
-### Compute and storage buffers
+### Compute, storage buffers and storage textures
 
 `MOD-2241`–`MOD-2242`. **Test:** `Vulkan_ComputeStorageBuffer` — raw SPIR-V compute bytecode runs on
 the renderer’s existing graphics/compute queue. Internal reflection builds descriptor set 0 from
-the storage-buffer bindings the module actually declares, including sparse slot numbers; there is
-no public descriptor API and no fixed four-slot layout. Named signed-int32 and float32 members of a
-SPIR-V push-constant `Block` map to `ComputeShader::setUniform`, with names, member offsets,
+the storage-buffer and format-qualified storage-image bindings the module actually declares,
+including sparse slot numbers; there is no public descriptor API and no fixed four-slot layout.
+Image reflection accepts only set-0, non-arrayed, single-sample `image2D` declarations and retains
+their SPIR-V format plus `NonReadable`/`NonWritable` access contract. Named signed-int32 and float32
+members of a SPIR-V push-constant `Block` map to `ComputeShader::setUniform`, with names, offsets,
 four-byte alignment, types, range size and the device limit validated before native object
 creation. Other constant shapes and non-storage descriptors are rejected precisely rather than
 accepted and ignored. The permanent oracle proves all 256 elements of `C = A + B`, then uses sparse
@@ -85,8 +90,18 @@ dispatches, snapshots resource/scalar bindings at dispatch issue time, and recla
 destruction. Test-only live/cumulative native counters prove that 33 repeated dispatches allocate
 nothing further and that the live counts return to their baseline. Invalid or name-stripped
 bytecode, a missing or
-undeclared slot, an unknown/mistyped scalar and unsupported image operations all fail explicitly
-instead of becoming a silent no-op or a validation error.
+undeclared slot, an unknown/mistyped scalar, an access mismatch and unsupported descriptor shapes
+all fail explicitly instead of becoming a silent no-op or a validation error.
+
+`MOD-2228` adds `ComputeShader::bindStorageTexture` without changing the legacy
+`bindImage(Texture2D&)` contract. Vulkan currently allocates only exact `SurfaceFormat::Color` /
+`VK_FORMAT_R8G8B8A8_UNORM` storage images, whose `Rgba8` SPIR-V format does not require the optional
+`shaderStorageImageExtendedFormats` feature. The immutable resource declaration controls storage
+read/write, sampling/filtering and transfer flags; the factory intersects the complete requested
+usage with format features and `vkGetPhysicalDeviceImageFormatProperties`. A mip-zero storage view
+and optional full-chain sampled view remain internal. The `Vulkan_ShaderEffect_BoundTexture`
+oracle writes `(0.25, 0.5, 0.75, 1)` in compute, reads back the exact quantised bytes and samples the
+same texel through a later fragment draw, while also testing slot/access refusal and binding clear.
 
 The v1 compute implementation is transitionally synchronous at **every dispatch**: it records
 host-write → shader read/write and shader-write → host-read dependencies, submits on the existing
@@ -94,8 +109,9 @@ queue and waits before `dispatch` returns, even when no `StorageBuffer::getBytes
 stronger than correctness requires and is not the accepted final contract.
 `docs/adr/0001-modern-gpu-ordering-lifetime.md` permits blocking only at a requested synchronous
 readback boundary; `MOD-2247`–`MOD-2253` own integration into deferred public-call ordering,
-resource-tracked barriers, fence-safe retirement and removal of this routine wait. Storage images
-remain `MOD-2244` work and are not claimed here.
+resource-tracked barriers, fence-safe retirement and removal of this routine wait. Optional
+extended storage-image formats and legal bridges from existing XNA textures/render targets remain
+`MOD-2244`; the dedicated `StorageTexture2D` path is claimed here.
 
 ### Multi-stream vertex input
 
@@ -139,9 +155,10 @@ DDS and XNB loaders preserve the native blocks and complete mip chains on those 
 For a format it allocates, the verdict comes from the device's `VkFormatProperties` **and** an
 exact `vkGetPhysicalDeviceImageFormatProperties` query for the usage combination CNA creates. The
 detailed profile then intersects sampling, linear filtering, transfer, mip and attachment facts
-with those implemented paths. Native storage-image support is deliberately reported unsupported
-until `MOD-2244`, and timestamp period remains zero until `MOD-2246`; texture-array layers now
-publish the sampled 2D-array image limit implemented by `MOD-2226`. `Vulkan_FormatLimitQueries`
+with those implemented paths. Storage read/write is published only for the exact `Color`/`Rgba8`
+path implemented by `MOD-2228`; storage atomics and optional extended formats remain unsupported.
+Timestamp period remains zero until `MOD-2246`, while texture-array layers publish the sampled
+2D-array image limit implemented by `MOD-2226`. `Vulkan_FormatLimitQueries`
 compares every answer with the raw properties at runtime and keeps the remaining native-only
 negative controls. Since `MOD-2224`, it also attempts the
 public base, full-mip-chain and highest-supported-MSAA `RenderTarget2D` constructor for all 27
@@ -220,10 +237,17 @@ validation message. `MOD-2243` independently verifies all 27 formats against fiv
 exact native image/view identity, over-limit refusal, rebind retirement and a record that outlives
 explicit `GraphicsDevice` teardown. It passes 11/11 on both RADV and llvmpipe with validation.
 
+`MOD-2227`/`MOD-2228` similarly keep `StorageTexture2D` renderer-neutral and tracked. Compute binds
+retain its shared internal record, SPIR-V reflection validates the exact descriptor slot, format and
+access qualifier, and the sampled `ShaderEffect` route reuses the ordinary four `sampler2D` slots
+rather than adding descriptors beyond the established fragment-stage ceiling. Its storage and
+sampled views are evicted/retired with the owning image, and renderer teardown disconnects surviving
+records before destroying the Vulkan device.
+
 Two current implementation gaps are stated rather than normalized into the contract:
 
-- compute dispatch uses a one-time command buffer and waits immediately (`MOD-2247`/`MOD-2249`/
-  `MOD-2253`); and
+- compute dispatch and the current storage-image sampling transition use one-time command buffers
+  and wait immediately (`MOD-2247`/`MOD-2249`/`MOD-2251`/`MOD-2253`); and
 - off-screen dependency readback currently begins with `DeviceWaitIdleEXT` instead of waiting only
   for the requested dependency closure's submission (`MOD-2253`).
 

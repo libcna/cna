@@ -234,6 +234,7 @@ namespace CNA::Internal::Renderers
     };
 
     class ITextureRenderer;
+    class IStorageTexture2DRenderer;
 
     /**
      * @brief A GPU buffer a compute shader reads and writes (an SSBO, in GL terms).
@@ -327,6 +328,25 @@ namespace CNA::Internal::Renderers
          */
         virtual void BindImageTexture(int /*unit*/, ITextureRenderer* /*texture*/,
                                       int /*accessMode*/) {}
+
+        /**
+         * @brief Binds a tracked storage texture to a compute image slot.
+         *
+         * The shared record, rather than the public resource, is retained so deferred work can
+         * safely outlive public disposal. Returning false is the renderer-neutral refusal path;
+         * implementations must not accept and discard the binding.
+         *
+         * @param unit Direct image binding declared by the compute program.
+         * @param texture Renderer-owned storage texture record, or null to clear the slot.
+         * @param accessMode A `CNA::GraphicsImageAccess` ordinal.
+         * @return True when the binding was implemented and accepted.
+         */
+        [[nodiscard]] virtual bool BindStorageTexture2DEXT(
+            int /*unit*/, std::shared_ptr<IStorageTexture2DRenderer> /*texture*/,
+            int /*accessMode*/)
+        {
+            return false;
+        }
 
         /**
          * @brief Binds a texture to a sampler unit the program can sample.
@@ -1088,6 +1108,18 @@ namespace CNA::Internal::Renderers
          */
         [[nodiscard]] virtual bool BindTexture2DArrayEXT(
             int /*unit*/, std::shared_ptr<ITexture2DArrayRenderer> /*texture*/)
+        {
+            return false;
+        }
+
+        /**
+         * @brief Binds or clears a storage texture through an ordinary sampled `texture2D` slot.
+         * @param unit Zero-based 2D sampler unit.
+         * @param texture Shared renderer record, or null to clear the unit.
+         * @return True when sampled storage textures are implemented and the request was accepted.
+         */
+        [[nodiscard]] virtual bool BindStorageTexture2DEXT(
+            int /*unit*/, std::shared_ptr<IStorageTexture2DRenderer> /*texture*/)
         {
             return false;
         }

@@ -22,6 +22,7 @@ namespace CNA::Graphics {
  */
 
     class StorageBuffer;
+    class StorageTexture2D;
 
     /**
      * @brief One compute program, and the dispatches of it.
@@ -126,6 +127,26 @@ namespace CNA::Graphics {
          */
         void bindImage(int unit, Microsoft::Xna::Framework::Graphics::Texture2D& texture,
                        CNA::GraphicsImageAccess access);
+
+        /**
+         * @brief Binds a tracked storage texture for compute reads, writes, or both.
+         *
+         * The requested access must be a subset of the immutable usage declared when the texture
+         * was created. The renderer retains only the texture's internal shared record, so an
+         * accepted deferred dispatch never dereferences a disposed public resource.
+         *
+         * @param unit Direct image binding declared by the compute program.
+         * @param texture Storage texture owned by the same graphics device.
+         * @param access Exact access the program will perform.
+         * @throws std::invalid_argument If @p unit or @p access is invalid, the texture belongs to
+         *         another device, or its immutable usage does not declare the requested access.
+         * @throws std::out_of_range If @p unit is not declared by the compiled program.
+         * @throws System::ObjectDisposedException If @p texture is disposed.
+         * @throws System::NotSupportedException If the renderer refuses the slot, format, or
+         *         binding operation.
+         */
+        void bindStorageTexture(
+            int unit, StorageTexture2D& texture, CNA::GraphicsImageAccess access);
 
         /**
          * @brief Runs the program over a grid of work groups.

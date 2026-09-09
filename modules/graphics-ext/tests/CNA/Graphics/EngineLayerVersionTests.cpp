@@ -23,12 +23,12 @@ TEST(EngineLayerVersionTest, TheHeaderAndTheLibraryAgree)
     EXPECT_EQ(CNA::Graphics::getEngineLayerVersion(), CNA_CNAEXT_ENGINE_VERSION);
 }
 
-TEST(EngineLayerVersionTest, TheCurrentRevisionIsFiveAndNeverGoesBackwards)
+TEST(EngineLayerVersionTest, TheCurrentRevisionIsSixAndNeverGoesBackwards)
 {
     // The literal is deliberate: bumping the macro without touching this line is not possible, so
     // a bump is always a decision. Every revision is described in
     // docs/cnaext-engine-changelog.md.
-    EXPECT_EQ(CNA_CNAEXT_ENGINE_VERSION, 5);
+    EXPECT_EQ(CNA_CNAEXT_ENGINE_VERSION, 6);
     EXPECT_GE(CNA::Graphics::getEngineLayerVersion(), 1) << "the revision never goes below its "
                                                             "first published value";
 }
@@ -37,7 +37,7 @@ TEST(EngineLayerVersionTest, TheStringFormIsStableAndCarriesTheNumber)
 {
     // Spelled out rather than built from the macro: a test that re-derives the implementation
     // measures nothing. This line moves by hand on each bump, which is the intended cost.
-    EXPECT_EQ(CNA::Graphics::getEngineLayerVersionString(), "CNA engine layer 5");
+    EXPECT_EQ(CNA::Graphics::getEngineLayerVersionString(), "CNA engine layer 6");
 }
 
 TEST(EngineLayerVersionTest, TheAnswerDoesNotChangeBetweenCalls)

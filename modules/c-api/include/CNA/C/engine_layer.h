@@ -39,7 +39,7 @@ extern "C" {
  * built with. When the two disagree, a header and a library from different builds have been mixed.
  * This is a revision marker, not an ABI compatibility promise.
  */
-#define CNA_ENGINE_LAYER_VERSION INT32_C(2)
+#define CNA_ENGINE_LAYER_VERSION INT32_C(6)
 
 /**
  * @brief Returns the engine-layer revision the linked library was built with.

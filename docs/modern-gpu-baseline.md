@@ -180,10 +180,11 @@ are still zero; those are classification gaps, not permission to assume unlimite
 - EasyGL and OpenGL4 still populate only the older texture-storage, render-target and color-transfer
   facts. EasyGL reports nine texture-storage formats and eight render-target formats. OpenGL4
   reports only `Color` for texture storage and render targets.
-- No measured renderer reports storage-image read/write/atomic support through the detailed format
-  profile. Vulkan now publishes its implemented sampled texture-array layer limit; EasyGL and
-  OpenGL4 remain zero. The open storage-image and cross-renderer array work belongs to
-  `MOD-2227`/`MOD-2228`, `MOD-2244` and `MOD-2261`.
+- Vulkan reports storage-image read/write support only for its implemented, format-qualified
+  `Color`/SPIR-V `Rgba8` path; storage atomics and every extended storage-image format remain
+  unsupported. Vulkan also publishes its implemented sampled texture-array layer limit. EasyGL
+  and OpenGL4 still report no storage-image or texture-array path; their portability work and the
+  remaining Vulkan formats/bridges belong to `MOD-2244` and `MOD-2261`.
 
 ## Per-task reconciliation
 
@@ -214,7 +215,7 @@ tree, not about native API potential.
 | MOD-2225 | Supplied | Immutable `Texture2DArrayDescriptor`, usage mask and tracked `Texture2DArray` facade validate cached live limits/format usages before a false-by-default renderer factory. No native handle is exposed. |
 | MOD-2226 | Supplied | Exact layer/mip/rectangle upload and readback validate native-format bytes and compressed blocks before dispatch. `ShaderEffect` array binding retains only the internal record and refuses unsupported renderers; Vulkan samples bindings 16..18. |
 | MOD-2227 | Supplied | Immutable `StorageTexture2DDescriptor`, declared storage/sampling/transfer usage and tracked `StorageTexture2D` validate live limits plus combined format facts before a false-by-default renderer factory; exact mip/rectangle transfers expose no native handle or barrier. |
-| MOD-2228 | Partial | `ComputeShader::bindImage(Texture2D&)` exists; the storage-texture overload, retention and portable path do not. |
+| MOD-2228 | Supplied | `ComputeShader::bindStorageTexture` validates explicit access/device/lifetime and forwards the retained internal record through a false-by-default renderer seam. Vulkan reflects exact SPIR-V image slot/format/access metadata; the live oracle proves compute write to byte-exact readback and a sampled draw. |
 | MOD-2229 | Partial | Basic compute-gated `StorageBuffer` exists without usage/access intent, ranges, staging policy or resource tracking. |
 | MOD-2230 | Absent | No typed constant-buffer wrapper or binding. |
 | MOD-2231 | Partial | Canonical argument structs and indirect draw calls exist, but argument storage cannot be created independently of compute support. |
@@ -224,7 +225,7 @@ tree, not about native API potential.
 | MOD-2241 | Supplied | Vulkan implements the existing compute/storage-buffer baseline. |
 | MOD-2242 | Supplied | Vulkan reflects bounded SSBO/push-constant bindings and reuses descriptors. |
 | MOD-2243 | Supplied | Vulkan allocation, full-array views, subresource transfers, sampled descriptors and retirement pass both the functional oracle and an independent 27-format × 5-usage raw-device/factory/lifetime matrix on RADV and llvmpipe. |
-| MOD-2244 | Partial | Vulkan has XNA images and refuses reflected image descriptors; it has no legal storage-image bridge. |
+| MOD-2244 | Partial | Vulkan now has the dedicated format-qualified `rgba8` storage-image path used by `MOD-2228`; optional extended formats and legal bridges from supported existing XNA textures/render targets remain open. |
 | MOD-2245 | Partial | Public indirect routes and native feature discovery exist; Vulkan truthfully reports unsupported and submits no indirect command. |
 | MOD-2246 | Partial | Shared `GpuTimer` exists; Vulkan has no timestamp-query implementation and publishes zero period. |
 | MOD-2247 | Partial | XNA Vulkan work has ordered submission, but the current compute slice uses a separate synchronous submission boundary. |

@@ -6,6 +6,7 @@
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/RendererCapabilityProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
@@ -352,6 +353,44 @@ namespace CNA::Graphics
         if (getIsDisposedProperty()) return;
         renderer_.reset();
         GraphicsResource::Dispose(disposing);
+    }
+}
+
+namespace Microsoft::Xna::Framework::Graphics
+{
+    void ShaderEffect::SetStorageTextureEXT(
+        const int unit, CNA::Graphics::StorageTexture2D& texture)
+    {
+        if (texture.getIsDisposedProperty())
+            throw System::ObjectDisposedException("StorageTexture2D");
+        if (texture.getGraphicsDeviceProperty() != getGraphicsDeviceProperty())
+            throw std::invalid_argument(
+                "ShaderEffect::SetStorageTextureEXT: the texture belongs to another "
+                "GraphicsDevice");
+        if ((texture.descriptor_.getUsage() & CNA::Graphics::StorageTexture2DUsage::Sampled) ==
+            CNA::Graphics::StorageTexture2DUsage::None)
+        {
+            throw std::invalid_argument(
+                "ShaderEffect::SetStorageTextureEXT: Sampled usage was not declared");
+        }
+        if (effectRenderer_ == nullptr ||
+            !effectRenderer_->BindStorageTexture2DEXT(unit, texture.renderer_))
+        {
+            throw System::NotSupportedException(
+                "ShaderEffect::SetStorageTextureEXT: the active renderer refused sampled storage "
+                "texture unit " + std::to_string(unit));
+        }
+    }
+
+    void ShaderEffect::ClearStorageTextureEXT(const int unit)
+    {
+        if (effectRenderer_ == nullptr ||
+            !effectRenderer_->BindStorageTexture2DEXT(unit, nullptr))
+        {
+            throw System::NotSupportedException(
+                "ShaderEffect::ClearStorageTextureEXT: the active renderer refused sampled "
+                "storage texture unit " + std::to_string(unit));
+        }
     }
 }
 

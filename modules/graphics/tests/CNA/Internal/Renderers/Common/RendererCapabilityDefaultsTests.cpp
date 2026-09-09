@@ -91,6 +91,16 @@ namespace
         [[nodiscard]] bool IsValid() const override { return false; }
         [[nodiscard]] std::string GetCompileError() const override { return {}; }
     };
+
+    class DefaultsOnlyComputeRenderer final
+        : public CNA::Internal::Renderers::IComputeShaderRenderer
+    {
+    public:
+        bool CompileProgram(const std::string&) override { return false; }
+        void Bind() override {}
+        [[nodiscard]] bool IsValid() const override { return false; }
+        [[nodiscard]] std::string GetCompileError() const override { return {}; }
+    };
 }
 
 TEST(RendererCapabilityDefaultsTest, ProfileCeilingsDefaultToNoCeiling)
@@ -235,13 +245,17 @@ TEST(RendererCapabilityDefaultsTest, TextureArrayOperationsAndBindingDefaultToUn
     EXPECT_FALSE(effect.BindTexture2DArrayEXT(0, {}));
 }
 
-TEST(RendererCapabilityDefaultsTest, StorageTextureTransfersDefaultToUnsupported)
+TEST(RendererCapabilityDefaultsTest, StorageTextureOperationsAndBindingsDefaultToUnsupported)
 {
     DefaultsOnlyStorageTexture2DRenderer texture;
+    DefaultsOnlyEffectRenderer effect;
+    DefaultsOnlyComputeRenderer compute;
     unsigned char bytes[4]{};
 
     EXPECT_FALSE(texture.SetData(0, 0, 0, 1, 1, bytes, sizeof(bytes)));
     EXPECT_FALSE(texture.GetData(0, 0, 0, 1, 1, bytes, sizeof(bytes)));
+    EXPECT_FALSE(effect.BindStorageTexture2DEXT(0, {}));
+    EXPECT_FALSE(compute.BindStorageTexture2DEXT(0, {}, 1));
 }
 
 TEST(RendererCapabilityDefaultsTest, AppliedMultiSampleCountEchoesTheRequest)

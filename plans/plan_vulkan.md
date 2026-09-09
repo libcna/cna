@@ -229,6 +229,11 @@ implementation tasks.**
   sampled binding (`MOD-2226`) are complete. Vulkan allocation/view/transfer/sampling plus its
   independent raw-device and teardown/retirement audit are complete (`MOD-2243`, 11/11 on both
   RADV and llvmpipe with validation). Bindless resources and VRS remain outside;
+- the renderer-neutral storage-texture facade and its compute/sampled binding are complete
+  (`MOD-2227`/`MOD-2228`). Vulkan has a device-queried, format-qualified `Color`/`Rgba8` path with
+  exact compute-write → readback/sampled-draw evidence; optional extended formats, legal bridges
+  from existing XNA textures/render targets and deferred-order integration remain owned by
+  `MOD-2244`/`MOD-2247`–`MOD-2253` in the modern plan;
 - ray tracing (`MOD-2096`) and mesh shaders (`MOD-2097`) — `MOD-2096`'s text names
   `plan_vulkan.md` as the place such a capability question *would* be asked; that reference does
   **not** transfer ownership, and this plan deliberately declines it as modern-GPU work;

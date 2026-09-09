@@ -29,6 +29,7 @@ namespace CNA::Internal::Renderers::Vulkan
     class VulkanStorageBufferRenderer;       // forward
     class VulkanComputeShaderRenderer;       // forward
     class VulkanTexture2DArrayRenderer;      // forward
+    class VulkanStorageTexture2DRenderer;    // forward
 
     // -------------------------------------------------------------------------
     // Vertex types (internal to the Vulkan renderer)
@@ -404,6 +405,82 @@ namespace CNA::Internal::Renderers::Vulkan
         VkImageView imageView_ = VK_NULL_HANDLE;
     };
 
+    /** @brief Vulkan image record behind `CNA::Graphics::StorageTexture2D`. */
+    class VulkanStorageTexture2DRenderer final : public IStorageTexture2DRenderer
+    {
+    public:
+        /**
+         * @brief Allocates one storage-capable 2D image and mip-zero storage view.
+         * @param owner Owning Vulkan renderer.
+         * @param width Level-zero width.
+         * @param height Level-zero height.
+         * @param mipLevelCount Allocated mip count.
+         * @param surfaceFormat Public `SurfaceFormat` ordinal.
+         * @param usage Immutable `StorageTexture2DUsage` bits.
+         */
+        VulkanStorageTexture2DRenderer(
+            VulkanRenderer* owner, int width, int height, int mipLevelCount,
+            int surfaceFormat, std::uint32_t usage);
+        /** @brief Retires the native views, image, and memory. */
+        ~VulkanStorageTexture2DRenderer() override;
+
+        /** @copydoc IStorageTexture2DRenderer::SetData */
+        [[nodiscard]] bool SetData(
+            int mipLevel, int x, int y, int width, int height,
+            const void* data, std::size_t byteCount) override;
+        /** @copydoc IStorageTexture2DRenderer::GetData */
+        [[nodiscard]] bool GetData(
+            int mipLevel, int x, int y, int width, int height,
+            void* data, std::size_t byteCount) const override;
+
+        /** @brief Records a dependency and transitions mip zero to compute `GENERAL` layout. */
+        void PrepareForComputeEXT(VkCommandBuffer commandBuffer, int accessMode);
+        /** @brief Synchronously makes every mip visible to subsequent fragment sampling. */
+        [[nodiscard]] bool PrepareForSamplingEXT();
+        /** @brief Returns the single-mip view used by storage-image descriptors. */
+        [[nodiscard]] VkImageView GetStorageImageViewEXT() const noexcept { return storageView_; }
+        /** @brief Returns the full-mip view used by sampled descriptors. */
+        [[nodiscard]] VkImageView GetSampledImageViewEXT() const noexcept { return sampledView_; }
+        /** @brief Returns the exact native storage format. */
+        [[nodiscard]] VkFormat GetVkFormatEXT() const noexcept { return vkFormat_; }
+        /** @brief Returns whether this record belongs to the supplied renderer. */
+        [[nodiscard]] bool IsOwnedByEXT(const VulkanRenderer* owner) const noexcept
+        {
+            return owner_ == owner;
+        }
+        /** @brief Returns whether the immutable resource declaration includes @p bits. */
+        [[nodiscard]] bool HasUsageEXT(std::uint32_t bits) const noexcept
+        {
+            return (usage_ & bits) == bits;
+        }
+        /** @brief Returns whether linear filtering was declared and device-validated. */
+        [[nodiscard]] bool IsFilterableEXT() const noexcept { return (usage_ & UINT32_C(8)) != 0; }
+
+        /** @brief Retires every native handle while the owner is live. */
+        void ReleaseVulkanResources();
+        /** @brief Disconnects this record during renderer teardown. */
+        void DisconnectOwner() noexcept { owner_ = nullptr; }
+
+    private:
+        void RecordTransition(
+            VkCommandBuffer commandBuffer, int mipLevel, VkImageLayout newLayout) const;
+
+        VulkanRenderer* owner_ = nullptr;
+        int width_ = 0;
+        int height_ = 0;
+        int mipLevelCount_ = 0;
+        int surfaceFormat_ = 0;
+        std::uint32_t usage_ = 0;
+        VkFormat vkFormat_ = VK_FORMAT_UNDEFINED;
+        int bytesPerTexel_ = 0;
+        VkImageUsageFlags imageUsage_ = 0;
+        VkImage image_ = VK_NULL_HANDLE;
+        VkDeviceMemory memory_ = VK_NULL_HANDLE;
+        VkImageView storageView_ = VK_NULL_HANDLE;
+        VkImageView sampledView_ = VK_NULL_HANDLE;
+        mutable std::vector<VkImageLayout> mipLayouts_;
+    };
+
     // -------------------------------------------------------------------------
     // VulkanRenderTargetRenderer
     // -------------------------------------------------------------------------
@@ -672,6 +749,9 @@ namespace CNA::Internal::Renderers::Vulkan
         /** @copydoc IEffectRenderer::BindTexture2DArrayEXT */
         [[nodiscard]] bool BindTexture2DArrayEXT(
             int unit, std::shared_ptr<ITexture2DArrayRenderer> texture) override;
+        /** @copydoc IEffectRenderer::BindStorageTexture2DEXT */
+        [[nodiscard]] bool BindStorageTexture2DEXT(
+            int unit, std::shared_ptr<IStorageTexture2DRenderer> texture) override;
 
         /// @param dsParams   plan_vulkan.md VULKAN-058: the batch's DepthStencilState. A custom
         ///                   effect's sprite pipeline honours it exactly as the built-in one does;
@@ -819,6 +899,9 @@ namespace CNA::Internal::Renderers::Vulkan
         /// MOD-2226: shared lifetime prevents deferred array descriptors from naming dead views.
         std::array<std::shared_ptr<ITexture2DArrayRenderer>, kMaxEffectBoundTextures>
                          boundTextureArrays_{};
+        /// MOD-2228: a storage texture samples through the existing sampler2D binding range.
+        std::array<std::shared_ptr<VulkanStorageTexture2DRenderer>, kMaxEffectBoundTextures>
+                         boundStorageTextures_{};
         VkDescriptorSetLayout boundLayout_    = VK_NULL_HANDLE;
         VkDescriptorSet       boundSet_       = VK_NULL_HANDLE;
         VkDescriptorPool      boundSetPool_   = VK_NULL_HANDLE;
@@ -1314,9 +1397,9 @@ namespace CNA::Internal::Renderers::Vulkan
     /**
      * @brief SPIR-V compute pipeline implementing CNA's existing compute-shader seam.
      *
-     * plans/plan_modern.md MOD-2241/MOD-2242. SPIR-V reflection creates only the set-zero storage
-     * slots the module declares and maps named 32-bit scalar push-constant members. Image/sampler
-     * bindings remain an explicit MOD-2244 refusal; they are never accepted and ignored.
+     * plans/plan_modern.md MOD-2241/MOD-2242/MOD-2228. SPIR-V reflection creates only the set-zero
+     * storage-buffer and storage-image slots the module declares, maps named 32-bit scalar push
+     * constants, and preserves image format/access metadata for deterministic binding validation.
      */
     class VulkanComputeShaderRenderer final : public IComputeShaderRenderer
     {
@@ -1379,6 +1462,11 @@ namespace CNA::Internal::Renderers::Vulkan
          */
         void BindImageTexture(int unit, ITextureRenderer* texture, int accessMode) override;
 
+        /** @copydoc IComputeShaderRenderer::BindStorageTexture2DEXT */
+        [[nodiscard]] bool BindStorageTexture2DEXT(
+            int unit, std::shared_ptr<IStorageTexture2DRenderer> texture,
+            int accessMode) override;
+
         /**
          * @brief Refuses sampled-texture binding until the Vulkan compute layout describes it.
          *
@@ -1418,6 +1506,11 @@ namespace CNA::Internal::Renderers::Vulkan
             ScalarKind kind = ScalarKind::Int32;
             uint32_t offset = 0;
         };
+        struct StorageImageSlot
+        {
+            uint32_t spirvImageFormat = 0;
+            int accessMode = 2;
+        };
 
         void ReleaseProgramEXT();
 
@@ -1430,6 +1523,10 @@ namespace CNA::Internal::Renderers::Vulkan
         VkPipeline pipeline_ = VK_NULL_HANDLE;
         std::vector<uint32_t> storageBindingSlots_;
         std::unordered_map<uint32_t, VulkanStorageBufferRenderer*> storageBuffers_;
+        std::vector<uint32_t> storageImageBindingSlots_;
+        std::unordered_map<uint32_t, StorageImageSlot> storageImageSlots_;
+        std::unordered_map<uint32_t, std::shared_ptr<VulkanStorageTexture2DRenderer>>
+            storageImages_;
         std::unordered_map<std::string, ScalarSlot> scalarSlots_;
         std::vector<uint8_t> pushConstantBytes_;
         std::string compileError_;
@@ -2030,6 +2127,7 @@ namespace CNA::Internal::Renderers::Vulkan
         friend class VulkanStorageBufferRenderer;
         friend class VulkanComputeShaderRenderer;
         friend class VulkanTexture2DArrayRenderer;
+        friend class VulkanStorageTexture2DRenderer;
 
     public:
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
@@ -3385,6 +3483,9 @@ namespace CNA::Internal::Renderers::Vulkan
         std::unique_ptr<ITexture2DArrayRenderer> CreateTexture2DArrayEXT(
             int width, int height, int layerCount, int mipLevelCount,
             int surfaceFormat, std::uint32_t usage) override;
+        std::unique_ptr<IStorageTexture2DRenderer> CreateStorageTexture2DEXT(
+            int width, int height, int mipLevelCount,
+            int surfaceFormat, std::uint32_t usage) override;
         std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCube(int size, int depthFormat, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) override;
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
                               int count) override;
@@ -4031,6 +4132,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // --- Lifetime tracking for externally-owned Vulkan resources ---
         std::vector<VulkanTextureRenderer*>       liveTextures_;
         std::vector<VulkanTexture2DArrayRenderer*> liveTexture2DArrays_;
+        std::vector<VulkanStorageTexture2DRenderer*> liveStorageTexture2Ds_;
         std::vector<VulkanVertexBufferRenderer*>  liveVertexBuffers_;
         std::vector<VulkanIndexBufferRenderer*>   liveIndexBuffers_;
         std::vector<VulkanRenderTargetRenderer*>  liveRenderTargets_;

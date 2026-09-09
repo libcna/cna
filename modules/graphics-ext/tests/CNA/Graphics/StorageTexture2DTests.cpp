@@ -5,6 +5,8 @@
 #include <gtest/gtest.h>
 
 #include "CNA/Graphics/StorageTexture2D.hpp"
+#include "CNA/Graphics/ComputeShader.hpp"
+#include "CNA/GraphicsImageAccess.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/RendererCapabilityProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -25,6 +27,8 @@
 using CNA::Graphics::StorageTexture2D;
 using CNA::Graphics::StorageTexture2DDescriptor;
 using CNA::Graphics::StorageTexture2DUsage;
+using CNA::Graphics::ComputeShader;
+using CNA::GraphicsImageAccess;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::ResourceCreatedEventArgs;
 using Microsoft::Xna::Framework::Graphics::ResourceDestroyedEventArgs;
@@ -71,6 +75,42 @@ namespace
         TransferCall upload;
         TransferCall readback;
         std::vector<std::uint8_t> readbackBytes;
+        bool acceptComputeBinding = true;
+        int computeBindCalls = 0;
+        int computeBindUnit = -1;
+        int computeBindAccess = -1;
+        std::shared_ptr<CNA::Internal::Renderers::IStorageTexture2DRenderer>
+            retainedComputeTexture;
+    };
+
+    class RecordingComputeShaderRenderer final
+        : public CNA::Internal::Renderers::IComputeShaderRenderer
+    {
+    public:
+        explicit RecordingComputeShaderRenderer(std::shared_ptr<StorageTextureTestState> state)
+            : state_(std::move(state))
+        {
+        }
+
+        bool CompileProgram(const std::string&) override { return true; }
+        void Bind() override {}
+        [[nodiscard]] bool BindStorageTexture2DEXT(
+            const int unit,
+            std::shared_ptr<CNA::Internal::Renderers::IStorageTexture2DRenderer> texture,
+            const int accessMode) override
+        {
+            ++state_->computeBindCalls;
+            state_->computeBindUnit = unit;
+            state_->computeBindAccess = accessMode;
+            if (!state_->acceptComputeBinding) return false;
+            state_->retainedComputeTexture = std::move(texture);
+            return true;
+        }
+        [[nodiscard]] bool IsValid() const override { return true; }
+        [[nodiscard]] std::string GetCompileError() const override { return {}; }
+
+    private:
+        std::shared_ptr<StorageTextureTestState> state_;
     };
 
     class RecordingStorageTexture2DRenderer final
@@ -200,6 +240,14 @@ namespace
             return std::make_unique<RecordingStorageTexture2DRenderer>(
                 *nativeDestructions_, state);
         }
+        [[nodiscard]] bool SupportsComputeShadersEXT() const override { return true; }
+        std::unique_ptr<CNA::Internal::Renderers::IComputeShaderRenderer> CreateComputeShader(
+            const std::string&) override
+        {
+            return std::make_unique<RecordingComputeShaderRenderer>(state);
+        }
+        void DispatchCompute(
+            CNA::Internal::Renderers::IComputeShaderRenderer*, int, int, int) override {}
 
         int maxDimension = 8;
         int maxStorageImages = 2;
@@ -554,6 +602,87 @@ TEST(StorageTexture2DTest, TracksDisposesAndReleasesItsRendererRecordInDeviceOrd
     EXPECT_EQ(destructions, 2);
     EXPECT_THROW((void)deviceOwned->getDescriptor(), System::ObjectDisposedException);
     EXPECT_THROW(StorageTexture2D(device, descriptor), System::ObjectDisposedException);
+}
+
+TEST(StorageTexture2DTest, ComputeBindingValidatesSlotDeviceAccessAndRendererAcceptance)
+{
+    GraphicsDevice device;
+    int nativeDestructions = 0;
+    auto renderer = MakeRenderer(nativeDestructions);
+    StorageTextureContractRenderer* const view = renderer.get();
+    CNA::Internal::StorageTexture2DGraphicsDeviceTestPeer::ReplaceRenderer(
+        device, std::move(renderer));
+    ComputeShader shader(device, "recording compute program");
+    StorageTexture2D texture(
+        device, StorageTexture2DDescriptor(
+            4, 4, 1, SurfaceFormat::Color,
+            StorageTexture2DUsage::StorageRead | StorageTexture2DUsage::StorageWrite));
+
+    // Descriptor limits count resources, not the largest legal binding ordinal. A shader may use
+    // sparse binding 7 even though this mock device reports only two storage images per stage.
+    shader.bindStorageTexture(7, texture, GraphicsImageAccess::ReadWrite);
+    EXPECT_EQ(view->state->computeBindCalls, 1);
+    EXPECT_EQ(view->state->computeBindUnit, 7);
+    EXPECT_EQ(view->state->computeBindAccess, static_cast<int>(GraphicsImageAccess::ReadWrite));
+    EXPECT_NE(view->state->retainedComputeTexture, nullptr);
+
+    EXPECT_THROW(shader.bindStorageTexture(-1, texture, GraphicsImageAccess::ReadOnly),
+                 std::invalid_argument);
+    EXPECT_THROW(shader.bindStorageTexture(
+                     0, texture, static_cast<GraphicsImageAccess>(99)),
+                 std::invalid_argument);
+
+    StorageTexture2D readOnly(
+        device, StorageTexture2DDescriptor(
+            4, 4, 1, SurfaceFormat::Color, StorageTexture2DUsage::StorageRead));
+    EXPECT_THROW(shader.bindStorageTexture(0, readOnly, GraphicsImageAccess::WriteOnly),
+                 std::invalid_argument);
+    EXPECT_EQ(view->state->computeBindCalls, 1);
+
+    view->state->acceptComputeBinding = false;
+    EXPECT_THROW(shader.bindStorageTexture(0, readOnly, GraphicsImageAccess::ReadOnly),
+                 System::NotSupportedException);
+    EXPECT_EQ(view->state->computeBindCalls, 2);
+
+    readOnly.Dispose();
+    EXPECT_THROW(shader.bindStorageTexture(0, readOnly, GraphicsImageAccess::ReadOnly),
+                 System::ObjectDisposedException);
+
+    GraphicsDevice otherDevice;
+    int otherDestructions = 0;
+    auto otherRenderer = MakeRenderer(otherDestructions);
+    CNA::Internal::StorageTexture2DGraphicsDeviceTestPeer::ReplaceRenderer(
+        otherDevice, std::move(otherRenderer));
+    StorageTexture2D foreign(
+        otherDevice, StorageTexture2DDescriptor(
+            4, 4, 1, SurfaceFormat::Color, StorageTexture2DUsage::StorageRead));
+    EXPECT_THROW(shader.bindStorageTexture(0, foreign, GraphicsImageAccess::ReadOnly),
+                 std::invalid_argument);
+}
+
+TEST(StorageTexture2DTest, ComputeBindingRetainsNativeWorkWithoutRetainingPublicResource)
+{
+    GraphicsDevice device;
+    int nativeDestructions = 0;
+    auto renderer = MakeRenderer(nativeDestructions);
+    StorageTextureContractRenderer* const view = renderer.get();
+    CNA::Internal::StorageTexture2DGraphicsDeviceTestPeer::ReplaceRenderer(
+        device, std::move(renderer));
+
+    {
+        ComputeShader shader(device, "recording compute program");
+        auto texture = std::make_unique<StorageTexture2D>(
+            device, StorageTexture2DDescriptor(
+                4, 4, 1, SurfaceFormat::Color, StorageTexture2DUsage::StorageWrite));
+        shader.bindStorageTexture(0, *texture, GraphicsImageAccess::WriteOnly);
+        texture->Dispose();
+        texture.reset();
+        EXPECT_EQ(nativeDestructions, 0)
+            << "the public resource must not own the deferred native lifetime after binding";
+        EXPECT_NE(view->state->retainedComputeTexture, nullptr);
+    }
+    view->state->retainedComputeTexture.reset();
+    EXPECT_EQ(nativeDestructions, 1);
 }
 
 #endif // CNA_CNAEXT

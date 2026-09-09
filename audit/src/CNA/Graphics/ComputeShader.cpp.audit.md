@@ -11,7 +11,7 @@
   `CNA_CNAEXT` CMake option (default OFF) and every file in it is `#ifdef CNA_CNAEXT`-guarded,
   which `scripts/check_cnaext_guards.sh` enforces.
 - Graphics renderer relevance: none directly — the engine layer talks to `GraphicsDevice` and the renderer contracts, never to a renderer implementation
-- Plan rows: `MOD-1524`
+- Plan rows: `MOD-1524`, `MOD-2228`
 
 ## Purpose
 

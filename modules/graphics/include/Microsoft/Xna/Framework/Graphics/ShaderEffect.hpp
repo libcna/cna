@@ -11,7 +11,7 @@
 
 namespace CNA::Internal::Renderers { class IEffectRenderer; }
 #ifdef CNA_CNAEXT
-namespace CNA::Graphics { class Texture2DArray; }
+namespace CNA::Graphics { class Texture2DArray; class StorageTexture2D; }
 #endif
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -182,6 +182,25 @@ namespace Microsoft::Xna::Framework::Graphics
          *         sampling or refuses @p unit.
          */
         CNAEXT void ClearTextureArrayEXT(int unit);
+
+        /**
+         * @brief Binds a sampled storage texture to an ordinary two-dimensional sampler unit.
+         * @param unit Zero-based 2D sampler unit.
+         * @param texture Live storage texture with `Sampled` usage declared.
+         * @throws System::ObjectDisposedException If @p texture is disposed.
+         * @throws std::invalid_argument If the texture belongs to another graphics device or was
+         *         not created with sampled usage.
+         * @throws System::NotSupportedException If the renderer refuses the sampled binding.
+         */
+        CNAEXT void SetStorageTextureEXT(
+            int unit, CNA::Graphics::StorageTexture2D& texture);
+
+        /**
+         * @brief Clears a sampled storage texture from a two-dimensional sampler unit.
+         * @param unit Zero-based 2D sampler unit.
+         * @throws System::NotSupportedException If the renderer refuses the clear operation.
+         */
+        CNAEXT void ClearStorageTextureEXT(int unit);
 #endif
 
         /**

@@ -14,6 +14,24 @@ something breaks.
 
 ---
 
+## Revision 6 — 2026-09-09
+
+### Storage-texture compute and sampled binding (`MOD-2228`)
+
+- `ComputeShader::bindStorageTexture` binds the tracked `StorageTexture2D` record with explicit
+  read-only, write-only or read-write intent. It validates disposal, device ownership and immutable
+  usage before the backend validates the SPIR-V slot, image format and access qualifier.
+- `ShaderEffect::SetStorageTextureEXT` and `ClearStorageTextureEXT` expose the later sampled-read
+  half without leaking a native view or image layout. The binding retains only renderer-owned work,
+  so disposal of the public wrapper cannot invalidate an accepted deferred operation.
+- Renderer interfaces refuse both bindings by default. Vulkan implements format-qualified
+  `rgba8` storage images, descriptor reflection, upload/readback and compute-to-sampling visibility;
+  optional extended storage formats and legacy XNA texture/render-target bridges remain bounded by
+  `MOD-2244`.
+
+The C header's mirrored revision marker is also synchronized from its stale value 2 to 6; the
+existing compile-time assertion and pure-C runtime check keep the two public version reports equal.
+
 ## Revision 5 — 2026-09-09
 
 ### Dedicated storage-texture resource (`MOD-2227`)
@@ -28,8 +46,9 @@ something breaks.
   counts, overflow and compressed-block alignment. The tracked public resource owns only a shared
   renderer-neutral record; native images, layouts and barriers remain hidden.
 
-Revision 5 publishes the portable allocation/transfer/lifetime contract. The default factory and
-transfers refuse; compute binding is `MOD-2228` and Vulkan allocation is `MOD-2244`.
+Revision 5 published the portable allocation/transfer/lifetime contract. Revision 6 adds compute
+and sampled binding; broader Vulkan format support and legal XNA-resource bridges remain
+`MOD-2244`.
 
 ## Revision 4 — 2026-09-09
 

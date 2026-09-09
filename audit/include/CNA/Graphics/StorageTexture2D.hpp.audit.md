@@ -10,7 +10,7 @@
 - XNA/FNA relevance: N/A — this is a CNA extension and does not change XNA `Texture2D`
 - Graphics renderer relevance: renderer-neutral public facade over
   `IStorageTexture2DRenderer`; native implementations remain backend-owned
-- Plan rows: `MOD-2227`, with compute binding in `MOD-2228`
+- Plan rows: `MOD-2227`, `MOD-2228`
 
 ## Purpose
 
@@ -32,12 +32,14 @@ Pending.
 
 ## Cross-File Observations
 
-Pending file audit. Compute binding and backend-native allocation remain separate plan rows.
+Pending file audit. Compute/sampled binding arrived in `MOD-2228`; broader Vulkan formats and legal
+XNA-resource bridges remain in `MOD-2244`.
 
 ## Missing or Weak Tests
 
 Pending independent audit. The starting suite is the eight-case
-`modules/graphics-ext/tests/CNA/Graphics/StorageTexture2DTests.cpp` plus two renderer-default tests.
+`modules/graphics-ext/tests/CNA/Graphics/StorageTexture2DTests.cpp`, two renderer-default tests and
+the Vulkan compute-write/readback/sampled-draw oracle.
 
 ## Positive Findings
 

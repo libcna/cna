@@ -34,6 +34,10 @@
 //   J  The same native array view exposes independently uploaded layer 1.
 //   K  Array unit 3 is refused because the three set-1 array slots plus the other thirteen
 //      fragment-stage samplers exactly consume Vulkan's guaranteed minimum of sixteen.
+//   L  MOD-2228: compute writes a tracked storage image; public readback and a later sampled draw
+//      both observe the exact quantised texel.
+//   M  A sparse undeclared image slot and access that differs from SPIR-V qualifiers are refused.
+//   N  Clearing the sampled storage binding restores the ordinary 2D white filler.
 //
 // Exit code 0 = all PASS, 1 = any FAIL.
 
@@ -58,6 +62,8 @@
 #include "System/NotSupportedException.hpp"
 #ifdef CNA_CNAEXT
 #include "CNA/Graphics/Texture2DArray.hpp"
+#include "CNA/Graphics/ComputeShader.hpp"
+#include "CNA/Graphics/StorageTexture2D.hpp"
 #endif
 
 #include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
@@ -194,6 +200,46 @@ static const uint32_t kVolumeFragSpv[] = {
     0x00000009, 0x00000012, 0x000100fd, 0x00010038,
 };
 
+// SPIR-V 1.0 for a one-invocation compute shader with
+//   layout(set=0,binding=0,rgba8) writeonly uniform image2D outputImage;
+//   imageStore(outputImage, ivec2(0), vec4(0.25, 0.5, 0.75, 1.0));
+// Kept deliberately minimal so the native metadata pass is tested independently of a runtime
+// shader compiler.
+static const uint32_t kStorageImageWriteSpv[] = {
+    0x07230203, 0x00010000, 0x00000000, 0x00000014, 0x00000000,
+    0x00020011, 0x00000001,
+    0x0003000e, 0x00000000, 0x00000001,
+    0x0005000f, 0x00000005, 0x0000000a, 0x6e69616d, 0x00000000,
+    0x00060010, 0x0000000a, 0x00000011, 0x00000001, 0x00000001, 0x00000001,
+    0x00030047, 0x00000009, 0x00000019,
+    0x00040047, 0x00000009, 0x00000021, 0x00000000,
+    0x00040047, 0x00000009, 0x00000022, 0x00000000,
+    0x00020013, 0x00000001,
+    0x00030021, 0x00000002, 0x00000001,
+    0x00030016, 0x00000003, 0x00000020,
+    0x00040017, 0x00000004, 0x00000003, 0x00000004,
+    0x00040015, 0x00000005, 0x00000020, 0x00000001,
+    0x00040017, 0x00000006, 0x00000005, 0x00000002,
+    0x00090019, 0x00000007, 0x00000003, 0x00000001, 0x00000000,
+                0x00000000, 0x00000000, 0x00000002, 0x00000004,
+    0x00040020, 0x00000008, 0x00000000, 0x00000007,
+    0x0004003b, 0x00000008, 0x00000009, 0x00000000,
+    0x0004002b, 0x00000003, 0x0000000b, 0x3e800000,
+    0x0004002b, 0x00000003, 0x0000000c, 0x3f000000,
+    0x0004002b, 0x00000003, 0x0000000d, 0x3f400000,
+    0x0004002b, 0x00000003, 0x0000000e, 0x3f800000,
+    0x0007002c, 0x00000004, 0x0000000f, 0x0000000b, 0x0000000c,
+                0x0000000d, 0x0000000e,
+    0x0004002b, 0x00000005, 0x00000010, 0x00000000,
+    0x0005002c, 0x00000006, 0x00000011, 0x00000010, 0x00000010,
+    0x00050036, 0x00000001, 0x0000000a, 0x00000000, 0x00000002,
+    0x000200f8, 0x00000012,
+    0x0004003d, 0x00000007, 0x00000013, 0x00000009,
+    0x00040063, 0x00000013, 0x00000011, 0x0000000f,
+    0x000100fd,
+    0x00010038,
+};
+
 namespace
 {
 constexpr int kN = 8;
@@ -318,6 +364,57 @@ protected:
         auto white = Solid(dev, kWhite);
         auto blue  = Solid(dev, kBlue);
         auto green = Solid(dev, kGreen);
+
+#ifdef CNA_CNAEXT
+        {
+            using CNA::Graphics::ComputeShader;
+            using CNA::Graphics::StorageTexture2D;
+            using CNA::Graphics::StorageTexture2DDescriptor;
+            using CNA::Graphics::StorageTexture2DUsage;
+            const auto usage = StorageTexture2DUsage::StorageRead |
+                               StorageTexture2DUsage::StorageWrite |
+                               StorageTexture2DUsage::Sampled |
+                               StorageTexture2DUsage::TransferSource;
+            StorageTexture2D storage(
+                dev, StorageTexture2DDescriptor(1, 1, 1, SurfaceFormat::Color, usage));
+            const std::string compute(
+                reinterpret_cast<const char*>(kStorageImageWriteSpv),
+                sizeof(kStorageImageWriteSpv));
+            ComputeShader writer(dev, compute);
+            bool sparseSlotRefused = false;
+            bool mismatchedAccessRefused = false;
+            try {
+                writer.bindStorageTexture(7, storage, CNA::GraphicsImageAccess::WriteOnly);
+            } catch (const std::out_of_range&) {
+                sparseSlotRefused = true;
+            }
+            try {
+                writer.bindStorageTexture(0, storage, CNA::GraphicsImageAccess::ReadWrite);
+            } catch (const std::invalid_argument&) {
+                mismatchedAccessRefused = true;
+            }
+            writer.bindStorageTexture(0, storage, CNA::GraphicsImageAccess::WriteOnly);
+            writer.dispatch(1);
+
+            std::array<std::uint8_t, 4> readbackBytes{};
+            storage.getData(0, nullptr, readbackBytes.data(), readbackBytes.size());
+            const Color readback(
+                readbackBytes[0], readbackBytes[1], readbackBytes[2], readbackBytes[3]);
+            const Color expected(64, 128, 191, 255);
+            effect.SetStorageTextureEXT(0, storage);
+            const Color drawn = DrawThrough(dev, effect, *white);
+            check(Is(readback, expected) && Is(drawn, expected),
+                  "L compute-write is visible to storage readback and sampled draw: read=" +
+                      Text(readback) + " draw=" + Text(drawn) + " want=" + Text(expected));
+            check(sparseSlotRefused && mismatchedAccessRefused,
+                  "M reflected storage-image slot and access qualifier are enforced");
+            effect.ClearStorageTextureEXT(0);
+            const Color cleared = DrawThrough(dev, effect, *white);
+            check(Is(cleared, kWhite),
+                  "N clearing a sampled storage texture restores the dimensional white filler: " +
+                      Text(cleared));
+        }
+#endif
 
         // A. The sprite's own texture is WHITE and the effect samples only set 1. If the binding
         //    never reached the shader, the unbound unit's filler is white too -- so white is the

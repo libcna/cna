@@ -110,6 +110,13 @@ namespace
         }
         return 0;
     }
+
+    constexpr bool HasStorageImageSpirvFormat(const SurfaceFormat format)
+    {
+        // Rgba8 needs no optional storage-image-format feature. Extended formats stay outside
+        // this implemented path until their feature is enabled and verified by MOD-2244.
+        return format == SurfaceFormat::Color;
+    }
 }
 
 class VulkanFormatLimitQueriesTest final : public Game
@@ -169,7 +176,7 @@ protected:
         const VkPhysicalDevice physical = renderer->GetPhysicalDeviceHandleEXT();
         const VkFormat renderTargetFormat = renderer->GetRenderTargetVkFormatEXT();
         bool masksExact = physical != VK_NULL_HANDLE && renderTargetFormat != VK_FORMAT_UNDEFINED;
-        bool storageImageNativeButRefused = false;
+        bool storageImagePathObserved = false;
         bool bcNeedsEnabledFeature = true;
         std::string firstMaskError;
 
@@ -197,6 +204,13 @@ protected:
             const bool expectedStorage = allocationMapped && nativeTexture &&
                 (properties.optimalTilingFeatures & requiredTextureFeatures) ==
                     requiredTextureFeatures;
+            VkImageFormatProperties storageImageProperties{};
+            const bool expectedStorageImage = expectedStorage && storage.blockExtent == 1 &&
+                HasStorageImageSpirvFormat(format.surface) &&
+                (properties.optimalTilingFeatures & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) != 0 &&
+                vkGetPhysicalDeviceImageFormatProperties(
+                    physical, format.vulkan, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
+                    VK_IMAGE_USAGE_STORAGE_BIT, 0, &storageImageProperties) == VK_SUCCESS;
             const bool expectedRenderTarget =
                 renderer->ClassifyRenderTargetFormatEXT(ordinal) ==
                     RendererFormatVerdict::Supported;
@@ -233,6 +247,7 @@ protected:
                     &renderTargetImageProperties) == VK_SUCCESS;
             const bool expectedMips =
                 (expectedStorage && textureProperties.maxMipLevels > 1) ||
+                (expectedStorageImage && storageImageProperties.maxMipLevels > 1) ||
                 (nativeRenderTargetImage && renderTargetImageProperties.maxMipLevels > 1 &&
                  (renderTargetProperties.optimalTilingFeatures &
                   (VK_FORMAT_FEATURE_BLIT_SRC_BIT | VK_FORMAT_FEATURE_BLIT_DST_BIT |
@@ -272,8 +287,10 @@ protected:
                 support.Supports(CNA::RendererFormatUsage::Filterable) == expectedFilter &&
                 support.Supports(CNA::RendererFormatUsage::RenderTarget) == expectedRenderTarget &&
                 support.Supports(CNA::RendererFormatUsage::Blendable) == expectedBlend &&
-                !support.Supports(CNA::RendererFormatUsage::StorageRead) &&
-                !support.Supports(CNA::RendererFormatUsage::StorageWrite) &&
+                support.Supports(CNA::RendererFormatUsage::StorageRead) ==
+                    expectedStorageImage &&
+                support.Supports(CNA::RendererFormatUsage::StorageWrite) ==
+                    expectedStorageImage &&
                 !support.Supports(CNA::RendererFormatUsage::StorageAtomic) &&
                 support.Supports(CNA::RendererFormatUsage::TransferSource) ==
                     expectedTransferSource &&
@@ -288,10 +305,7 @@ protected:
                 firstMaskError = format.name;
             masksExact = masksExact && oneExact;
 
-            storageImageNativeButRefused = storageImageNativeButRefused ||
-                ((properties.optimalTilingFeatures & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) != 0 &&
-                 !support.Supports(CNA::RendererFormatUsage::StorageRead) &&
-                 !support.Supports(CNA::RendererFormatUsage::StorageWrite));
+            storageImagePathObserved = storageImagePathObserved || expectedStorageImage;
             if ((format.surface == SurfaceFormat::Dxt1 ||
                  format.surface == SurfaceFormat::Dxt3 ||
                  format.surface == SurfaceFormat::Dxt5) && expectedStorage)
@@ -304,8 +318,8 @@ protected:
         Check(masksExact, "C detailed usage masks equal raw format/image facts plus CNA paths",
               firstMaskError.empty() ? "all formats; invalid ordinal remains unknown"
                                      : "first mismatch: " + firstMaskError);
-        Check(storageImageNativeButRefused,
-              "D native-only storage-image support is not advertised as a CNA path");
+        Check(storageImagePathObserved,
+              "D storage-image support is advertised only for an exact CNA/SPIR-V path");
         Check(bcNeedsEnabledFeature,
               "E compressed storage is never advertised without the enabled BC feature");
 
@@ -513,6 +527,10 @@ protected:
             ? std::min(limits.maxPerStageDescriptorStorageBuffers,
                        limits.maxDescriptorSetStorageBuffers)
             : 0;
+        const std::uint64_t expectedStorageImages = compute
+            ? std::min(limits.maxPerStageDescriptorStorageImages,
+                       limits.maxDescriptorSetStorageImages)
+            : 0;
         constexpr std::uint32_t implementedSampledBindings = 15;
         constexpr std::uint64_t largestImplementedUniformBinding =
             UINT64_C(72) * UINT64_C(16) * sizeof(float);
@@ -550,7 +568,8 @@ protected:
             EqualLimit(CNA::RendererLimit::MaxTextureArrayLayers, expectedArrayLayers) &&
             EqualLimit(CNA::RendererLimit::MaxSampledTexturesPerShaderStage,
                        expectedSampled) &&
-            EqualLimit(CNA::RendererLimit::MaxStorageImagesPerShaderStage, 0) &&
+            EqualLimit(CNA::RendererLimit::MaxStorageImagesPerShaderStage,
+                       expectedStorageImages) &&
             EqualLimit(CNA::RendererLimit::MaxVertexInputBindings,
                        std::min(UINT32_C(16), limits.maxVertexInputBindings)) &&
             EqualLimit(CNA::RendererLimit::MaxVertexInputAttributes,
@@ -565,16 +584,16 @@ protected:
         Check(limitsExact, "I every new published limit equals this physical-device snapshot");
 
         const bool remainingNativeOnlyLimitsExist =
-            limits.maxPerStageDescriptorStorageImages > 0 &&
             renderer->GetPhysicalDevicePropertiesEXT().limits.timestampPeriod > 0.0F;
         Check(remainingNativeOnlyLimitsExist && expectedArrayLayers > 0 &&
                   device.GetRendererLimitEXT(
                       CNA::RendererLimit::MaxTextureArrayLayers).value == expectedArrayLayers &&
                   device.GetRendererLimitEXT(
-                      CNA::RendererLimit::MaxStorageImagesPerShaderStage).value == 0 &&
+                      CNA::RendererLimit::MaxStorageImagesPerShaderStage).value ==
+                          expectedStorageImages &&
                   device.GetRendererLimitEXT(
                       CNA::RendererLimit::TimestampPeriodPicoseconds).value == 0,
-              "J implemented array limits publish while storage-image/timestamp gaps stay zero");
+              "J array/storage-image limits publish while the timestamp gap stays zero");
 
         Check(renderer->GetValidationMessagesEXT().empty(),
               "K capability queries and constructor contracts emit no Vulkan validation message",

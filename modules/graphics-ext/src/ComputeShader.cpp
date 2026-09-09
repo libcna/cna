@@ -4,11 +4,13 @@
 #ifdef CNA_CNAEXT
 
 #include "CNA/Graphics/StorageBuffer.hpp"
+#include "CNA/Graphics/StorageTexture2D.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "System/NotSupportedException.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 #include <stdexcept>
 
@@ -94,6 +96,54 @@ namespace CNA::Graphics {
                   "instead");
         renderer_->Bind();
         renderer_->BindImageTexture(unit, &texture.GetRenderer(), static_cast<int>(access));
+    }
+
+    void ComputeShader::bindStorageTexture(
+        const int unit, StorageTexture2D& texture, const CNA::GraphicsImageAccess access)
+    {
+        if (unit < 0)
+            throw std::invalid_argument(
+                "CNA::Graphics::ComputeShader::bindStorageTexture: the image unit must not be "
+                "negative");
+        if (texture.getIsDisposedProperty())
+            throw System::ObjectDisposedException("StorageTexture2D");
+        if (texture.getGraphicsDeviceProperty() != &device_)
+            throw std::invalid_argument(
+                "CNA::Graphics::ComputeShader::bindStorageTexture: the texture belongs to "
+                "another GraphicsDevice");
+
+        const StorageTexture2DUsage usage = texture.getDescriptor().getUsage();
+        StorageTexture2DUsage required = StorageTexture2DUsage::None;
+        switch (access)
+        {
+            case CNA::GraphicsImageAccess::ReadOnly:
+                required = StorageTexture2DUsage::StorageRead;
+                break;
+            case CNA::GraphicsImageAccess::WriteOnly:
+                required = StorageTexture2DUsage::StorageWrite;
+                break;
+            case CNA::GraphicsImageAccess::ReadWrite:
+                required = StorageTexture2DUsage::StorageRead |
+                           StorageTexture2DUsage::StorageWrite;
+                break;
+            default:
+                throw std::invalid_argument(
+                    "CNA::Graphics::ComputeShader::bindStorageTexture: access is not a declared "
+                    "GraphicsImageAccess value");
+        }
+        if ((usage & required) != required)
+            throw std::invalid_argument(
+                "CNA::Graphics::ComputeShader::bindStorageTexture: the texture's immutable usage "
+                "does not declare every requested storage access");
+
+        renderer_->Bind();
+        if (!renderer_->BindStorageTexture2DEXT(
+                unit, texture.renderer_, static_cast<int>(access)))
+        {
+            throw System::NotSupportedException(
+                "CNA::Graphics::ComputeShader::bindStorageTexture: the renderer refused image "
+                "unit " + std::to_string(unit));
+        }
     }
 
     void ComputeShader::dispatch(const int groupsX, const int groupsY, const int groupsZ)

@@ -17,6 +17,10 @@ namespace CNA::Internal::Renderers
 {
     class IStorageTexture2DRenderer;
 }
+namespace Microsoft::Xna::Framework::Graphics
+{
+    class ShaderEffect;
+}
 
 namespace CNA::Graphics
 {
@@ -229,6 +233,7 @@ namespace CNA::Graphics
 
     private:
         friend class ComputeShader;
+        friend class Microsoft::Xna::Framework::Graphics::ShaderEffect;
 
         struct Prepared
         {
