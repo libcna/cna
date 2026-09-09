@@ -219,12 +219,13 @@ implementation tasks.**
 - indirect drawing (`DrawPrimitivesIndirectEXT` / `DrawIndexedPrimitivesIndirectEXT`);
 - GPU timers (`IGpuTimerRenderer`, `SupportsGpuTimerEXT`) and debug-region APIs owned by the
   engine layer;
-- float/HDR render-target ownership remains in the modern plan. Its `RenderTarget2D` half is now
-  implemented by `MOD-2223`; `MOD-2224` permanently cross-checks all 27 format capabilities
-  against odd-sized base/mip/MSAA construction (**11/11**, 9 accepted and 18 refused on llvmpipe)
-  and runs actual odd-sized float resolve/mip pixels. Float/HDR `CreateRenderTargetCubeEXT` remains
-  outside this plan and unimplemented (`MOD-104`, `MOD-107`, `MOD-123`). Display colour spaces
-  remain `MOD-2092`;
+- float/HDR render-target ownership remains in the modern plan. `MOD-2223` implements the
+  `RenderTarget2D` half; `MOD-2224` permanently cross-checks all 27 format capabilities against
+  odd-sized base/mip/MSAA construction (**11/11**, 9 accepted and 18 refused on llvmpipe) and runs
+  actual odd-sized float resolve/mip pixels. `MOD-2234` closes the later audit finding that Vulkan
+  still inherited the format-dropping `CreateRenderTargetCubeEXT` default: all nine implemented
+  formats now reach exact cube-compatible storage, with all advertised allocations and six distinct
+  RGBA16F faces exercised on RADV and llvmpipe. Display colour spaces remain `MOD-2092`;
 - the renderer-neutral sampled texture-array facade (`MOD-2225`) and layer/mip transfers plus
   sampled binding (`MOD-2226`) are complete. Vulkan allocation/view/transfer/sampling plus its
   independent raw-device and teardown/retirement audit are complete (`MOD-2243`, 11/11 on both
@@ -1130,7 +1131,7 @@ Classifications: `PARITY` · `VULKAN_STRONGER` · `TEST_GAP` · `IMPLEMENTATION_
 | Block-compressed formats (`Dxt1`/`Dxt3`/`Dxt5`) | `EasyGL_DxtFormat`, `_DXT1_FromStream_Readback`, `EasyGL_DxtTextureCube` | `Texture2D` stores BC1_RGBA/BC2/BC3 natively since `VULKAN-172`; `TextureCube` does the same since `VULKAN-240`. Both are gated on `textureCompressionBC`. `VULKAN-241` also lets the DDS and XNB loaders preserve those native blocks instead of always expanding them to `Color`. `Vulkan_DxtFormat` verifies adjacent 2D blocks; `Vulkan_DxtTextureCube` verifies all three cube formats through readback and real `EnvironmentMapEffect` sampling, a partial replacement, and DXT1/DXT5 DDS/XNB formats plus complete mip counts. `Vulkan_Dxt1FromStream` separately verifies the rendered DDS result. A device without BC claims no direct compressed storage: construction refuses it, while content loaders retain their shared decode-to-`Color` fallback | `PARITY`, with a recorded divergence: `ClassifyColorTransferFormatEXT` refuses a `Color`-shaped transfer for the three where EasyGL defers | `VULKAN-170` ✅, `VULKAN-172` ✅, `VULKAN-240` ✅, `VULKAN-241` ✅, `VULKAN-171` |
 | Packed 16-bit formats (`Bgr565`/`Bgra5551`/`Bgra4444`) | `EasyGL_Packed16Format` | all three stored natively and **pixel-verified in a real draw** (`Vulkan_Packed16Format`, the same source): `Bgr565`/`Bgra5551` as core-1.0 packed formats since `VULKAN-173`, `Bgra4444` through `VK_EXT_4444_formats` since `VULKAN-179`, refused by name on a device that does not offer it | `PARITY` | `VULKAN-173` ✅, `VULKAN-179` ✅ |
 | `NormalizedByte2`/`NormalizedByte4` | classified `Supported` | stored natively since `VULKAN-174` as `R8G8_SNORM`/`R8G8B8A8_SNORM` and **pixel-verified including a negative texel**, which is what separates SNORM storage from UNORM storage of the same bytes; `ClassifyColorTransferFormatEXT` refuses a `Color`-shaped transfer for both | `PARITY` | `VULKAN-174` ✅ |
-| Non-`Color` `RenderTarget2D` formats | `ClassifyRenderTargetFormatEXT` real (incl. float probe); exact `Color`/`Rgba64` + seven float/HDR allocation table | real since `MOD-2223`: the same nine exact formats reach Vulkan image/view allocation, render-pass and pipeline compatibility, mixed-format MRT, sampling and width-correct readback. Support is intersected with the selected device's exact format/image/sample facts; unsupported formats and sample pairs are refused without substituting `Color`. `Vulkan_FloatRenderTarget` proves clear/readback above 1.0 for `Vector4` and `HalfVector4`, HalfVector4 sampling into a Vector4 draw, mixed Vector4+Color MRT, MSAA resolve and mips | `PARITY` for `RenderTarget2D`, delivered by the modern plan without transferring ownership here. Float/HDR `RenderTargetCube` remains out of scope and unimplemented | `VULKAN-171` ✅, `MOD-2223` ✅ |
+| Non-`Color` render-target formats | `ClassifyRenderTargetFormatEXT` real (incl. float probe); exact `Color`/`Rgba64` + seven float/HDR allocation table for 2D and cube targets | real since `MOD-2223` for `RenderTarget2D` and `MOD-2234` for `RenderTargetCube`: the same nine exact formats reach image/view allocation, render-pass and pipeline compatibility, sampling, mips and MSAA. Support is intersected with the selected device's exact format/image/sample facts; cube creation additionally checks cube compatibility, six layers and the complete mip chain. Unsupported formats and sample pairs are refused without substituting `Color`. `Vulkan_FloatRenderTarget` proves unclamped 2D operations, every advertised cube allocation and six exact RGBA16F faces | `PARITY`, delivered by the modern plan without transferring ownership here | `VULKAN-171` ✅, `MOD-2223` ✅, `MOD-2234` ✅ |
 | sRGB | — | `Vulkan_Texture2D_ColorFormat_Linear`, `Vulkan_Pbr_SrgbTransfer`, `Vulkan_ColorSpace_MidTone` | `VULKAN_STRONGER` | — |
 | Texture lifetime, disposed-texture behaviour, bound-resource disposal | `EasyGL_DisposedResource`, `_BoundResourceDispose`, `_HandleRelease`, `_ResourceLeak` | `Vulkan_BoundTargetLifetime`, `_DeferredResourceLifetime`, `_DeferredSourceLifetime`, and since `VULKAN-177` the two shared sources plus `Vulkan_DisposedTextureEviction` — which is the Vulkan-specific half neither shared source reaches, and whose cache-size legs catch a defect the pixels and the validation layer both miss | `PARITY` | `VULKAN-177` ✅ |
 | `HasDefinedMipLevel` | not overridden | not overridden | `PARITY` | — |
@@ -1140,7 +1141,7 @@ Classifications: `PARITY` · `VULKAN_STRONGER` · `TEST_GAP` · `IMPLEMENTATION_
 | Area | EasyGL evidence | Vulkan evidence | Classification | Tasks |
 |---|---|---|---|---|
 | `RenderTarget2D` create/bind/clear/readback/unbind | `EasyGL_RenderTarget2D_Readback`, `_RT_Roundtrip` | `Vulkan_RenderTarget2D_FullCycle`, `_ClearOnlyRoundtrip`, `_RT_Roundtrip`, `_Properties` | `PARITY` | — |
-| `RenderTargetCube` per-face, sample-after-unbind | `EasyGL_RenderTargetCube_SampleAfterUnbind`, `_Properties` | `Vulkan_RenderTargetCube_PerFace`, `_SampleAfterUnbind`, `_Properties`, `_PluralBinding`, `_PluralMRT` | `VULKAN_STRONGER` | — |
+| `RenderTargetCube` per-face, exact formats, sample-after-unbind | `EasyGL_RenderTargetCube_SampleAfterUnbind`, `_Properties`, `HdrRenderTargetRoundTripTests` | `Vulkan_RenderTargetCube_PerFace`, `_SampleAfterUnbind`, `_Properties`, `_PluralBinding`, `_PluralMRT`; `Vulkan_FloatRenderTarget` constructs every advertised exact format and reads six distinct RGBA16F faces | `VULKAN_STRONGER` on coverage, `PARITY` on behavior | `MOD-2234` ✅ |
 | Mip chains on both target types | `EasyGL_RenderTarget2D_MipComplete` | `Vulkan_RenderTarget2D_MipChain`, `_RenderTargetCube_MipChain`, `_MrtMipFinalization`, `_MsaaMipReadback` | `VULKAN_STRONGER` | — |
 | MSAA, requested vs applied sample count, resolve | `EasyGL_RenderTarget2D_MsaaResolve`, `_GFX164_BoundMsaaAlpha` | `Vulkan_RenderTarget2D_MsaaResolve`, `_RenderTargetCube_MsaaResolve`, `_MsaaFace`, `_MRT_MsaaResolve`, `_MsaaFirstReadback`, `_MsaaDepthContract` | `VULKAN_STRONGER`; `GFX164_BoundMsaaAlpha` is EasyGL-only | `TEST_GAP` → `VULKAN-210` |
 | Per-instance depth/stencil format fidelity | `EasyGL_DepthFormat`, `_RenderTargetCube_DepthFormat` | `Vulkan_RenderTarget2D_DepthFormatFidelity`, `_RenderTarget2D_DepthBuffer`, `_RenderTarget_DepthStencilUsage` | `PARITY`; the cube half is EasyGL-only | `TEST_GAP` → `VULKAN-211` |
@@ -1401,9 +1402,9 @@ re-audits from the current tree rather than from that sentence.
 ## 17. Phase 5 — Textures (`VULKAN-170`–`VULKAN-209`)
 
 The block-compressed and packed-format rows are one coherent feature, split into independently
-committable pieces. They are **not** the modern engine layer's float-format work (`MOD-2223`), whose
-`RenderTarget2D` implementation has since landed through its owning plan and is recorded here only
-to keep the capability matrix truthful. Float/HDR `RenderTargetCube` work stays out of scope.
+committable pieces. They are **not** the modern engine layer's float-format work (`MOD-2223` and
+`MOD-2234`), whose `RenderTarget2D` and `RenderTargetCube` implementations landed through their
+owning plan and are recorded here only to keep the capability matrix truthful.
 
 | ID | Task | Status | Acceptance criterion |
 |---|---|---|---|
@@ -1955,8 +1956,8 @@ the language and base-instance queries.**
 
 | Group | 2026-09-05 | 2026-09-06 | 2026-09-07 | `VULKAN-241` | Current | Meaning |
 |---|---|---|---|---|---|---|
-| Both override | 102 | 106 | **114** | **117** | **141** | Vulkan implements what EasyGL implements. |
-| **EasyGL overrides, Vulkan does not** | **54** | **50** | **44** | **41** | **23** | The live survivor set — table A.1. |
+| Both override | 102 | 106 | **114** | **117** | **142** | Vulkan implements what EasyGL implements. |
+| **EasyGL overrides, Vulkan does not** | **54** | **50** | **44** | **41** | **22** | The live survivor set — table A.1. |
 | Vulkan overrides, EasyGL does not | 3 | 7 | **8** | **8** | **24** | Renderer-specific answers and modern rollout queries. |
 | Neither overrides | 27 | 23 | **23** | **23** | **21** | Both take the shared default, so there is no Vulkan-specific divergence. |
 | *total virtuals* | *186* | *186* | ***189*** | ***189*** | ***209*** | |
@@ -2008,15 +2009,17 @@ changed. `MOD-2225`–`MOD-2229` subsequently added five false-by-default facade
 live tool output at that point was **207 / 127 both / 31 EasyGL-only / 28 Vulkan-only / 21
 neither**.
 
-The current rerun reports **209 / 141 both / 23 EasyGL-only / 24 Vulkan-only / 21 neither**.
+The current rerun reports **209 / 142 both / 22 EasyGL-only / 24 Vulkan-only / 21 neither**.
 Two new counted virtuals explain the total: `MOD-2210` added
 `SupportsShaderLanguageEXT` with both overrides, while `MOD-2232` added the Vulkan-only
-`SupportsBaseInstanceDrawingEXT`. Fourteen movements into *both* are also explicit: the six older
+`SupportsBaseInstanceDrawingEXT`. Fifteen movements into *both* are also explicit: the six older
 `VULKAN-170`/`171`/`172`/`331` rows already named above were missing only from A.2's printed table;
 `MOD-2245` moved indirect support plus both draw routes, `MOD-2246` moved timer support and
 creation, `MOD-2250` moved vertex-stage storage-buffer limits/binding, `MOD-2244`/`MOD-2251`
 moved compute-image support, and the modern shared-buffer/language work moved
 `CreateStorageBufferEXT`, both storage/uniform range queries, uniform alignment and shader dialect.
+`MOD-2234` accounts for the final move: `CreateRenderTargetCubeEXT` left EasyGL-only after the
+format-dropping forwarding default was replaced by Vulkan's exact-format factory.
 
 The census tool intentionally retains its original eleven classic interface boundaries. The new
 `IComputeShaderRenderer::BindConstantBufferEXT` seam from `MOD-2230` is therefore outside the 209;
@@ -2034,9 +2037,9 @@ because the deferred draw model copies vertex and index bytes at draw time; and
 `CreateRenderTarget2DEXT` looks like a dropped `SurfaceFormat` but cannot be, because Vulkan's
 `Defer` verdict reduces to *Color only* and a non-`Color` render target is refused one layer above.
 
-### A.1 EasyGL overrides, Vulkan does not (23 current; 41 at `VULKAN-241`)
+### A.1 EasyGL overrides, Vulkan does not (22 current; 41 at `VULKAN-241`)
 
-The table below still has **50** rows. Twenty-seven of them are struck through in their Classification
+The table below still has **50** rows. Twenty-eight of them are struck through in their Classification
 cell and marked **NO LONGER IN A.1**: those virtuals moved into A.2 when the rows named in §31's
 movement table gave Vulkan its own override. They stay here because why a virtual was once a
 survivor — and what justified leaving it that way — is the history this appendix exists to keep;
@@ -2069,7 +2072,7 @@ deleting the row would leave the count smaller with no account of why.
 | `IGraphicsRenderer` | `LoadsCompressedContentNativelyEXT` | default | `return false` | ~~UNSUPPORTED_HONEST~~ → **NO LONGER IN A.1** | The old classification was wrong: `VULKAN-172` supplied native BC `Texture2D` storage and `VULKAN-240` supplied the cube route, but the inherited `false` kept both unreachable from DDS/XNB content. `VULKAN-241` returns the device's BC feature and moves this virtual into the *both* column, with direct loader-format and mip-count evidence. |
 | `IGraphicsRenderer` | `CreateRenderTarget2DEXT` | default | forwards to `CreateRenderTarget2D`, dropping `surfaceFormat` | ~~DEFAULT_CORRECT~~ → **NO LONGER IN A.1** | `MOD-2223` adds Vulkan's override and carries all nine implemented formats into exact native storage; `Vulkan_FloatRenderTarget` proves the previously dropped argument now changes allocation and pixels. |
 | `IGraphicsRenderer` | `SupportsHalfFloatTextureLinearFilteringEXT` | default | `return false` | ~~DEFAULT_CORRECT~~ → **NO LONGER IN A.1** | `MOD-2223` answers from the implemented `HalfVector4` target path and the selected device's `SAMPLED_IMAGE_FILTER_LINEAR` feature. |
-| `IGraphicsRenderer` | `CreateRenderTargetCubeEXT` | default | forwards to `CreateRenderTargetCube` | DEFAULT_CORRECT | Same reduction as `CreateRenderTarget2DEXT`. |
+| `IGraphicsRenderer` | `CreateRenderTargetCubeEXT` | default | forwards to `CreateRenderTargetCube`, dropping `surfaceFormat` | ~~DEFAULT_CORRECT~~ → **NO LONGER IN A.1** | The old classification became false when `MOD-2223` taught Vulkan's shared render-target verdict about eight wider formats: a cube could pass validation, report `HdrBlendable`, then allocate swapchain-format storage. `MOD-2234` adds the exact-format factory and a two-driver native oracle. |
 | `IGraphicsRenderer` | `CreateComputeShader` | default | `return nullptr` | ~~CNAEXT_OUT_OF_SCOPE~~ → **NO LONGER IN A.1** | `MOD-2242` creates reflected SPIR-V compute pipelines on Vulkan. |
 | `IGraphicsRenderer` | `CreateStorageBuffer` | default | `return nullptr` | ~~CNAEXT_OUT_OF_SCOPE~~ → **NO LONGER IN A.1** | `MOD-2241` implements host-visible storage buffers with validated ranges and exact device limits. |
 | `IGraphicsRenderer` | `DispatchCompute` | default | no-op | ~~CNAEXT_OUT_OF_SCOPE~~ → **NO LONGER IN A.1** | `MOD-2242` snapshots bindings/uniforms and records a real Vulkan dispatch. |
@@ -2095,7 +2098,7 @@ deleting the row would leave the count smaller with no account of why.
 | `IGraphicsRenderer` | `DebugSimulateContextLoss` | default | no-op | OWNED_ELSEWHERE | Owned by `VULKAN-334`. |
 | `IGraphicsRenderer` | `DebugRestoreContext` | default | no-op | OWNED_ELSEWHERE | Owned by `VULKAN-334`. |
 
-### A.2 Both renderers override (141 current; 114 at `VULKAN-207`)
+### A.2 Both renderers override (142 current; 114 at `VULKAN-207`)
 
 Listed for completeness; no divergence to classify.
 
@@ -2125,6 +2128,7 @@ Listed for completeness; no divergence to classify.
 | `IGraphicsRenderer` | `IsCompressedCubeTransferFormatEXT` | default | *(Vulkan override by `VULKAN-240`)* |
 | `IGraphicsRenderer` | `LoadsCompressedContentNativelyEXT` | default | *(Vulkan override by `VULKAN-241`)* |
 | `IGraphicsRenderer` | `CreateRenderTarget2DEXT` | default | *(Vulkan override by `MOD-2223`)* |
+| `IGraphicsRenderer` | `CreateRenderTargetCubeEXT` | default | *(Vulkan override by `MOD-2234`)* |
 | `IGraphicsRenderer` | `SupportsHalfFloatTextureLinearFilteringEXT` | default | *(Vulkan override by `MOD-2223`)* |
 | `IGraphicsRenderer` | `CreateComputeShader` | default | *(Vulkan override by `MOD-2242`)* |
 | `IGraphicsRenderer` | `CreateStorageBuffer` | default | *(Vulkan override by `MOD-2241`)* |

@@ -2071,9 +2071,21 @@ namespace CNA::Internal::Renderers::Vulkan
         // shared by all six) and GetOrCreateRTRenderPassMsaa() has gained the LOAD variant it
         // never had, so a multisampled cube face is preserved across bind cycles exactly like a
         // single-sample one.
+        /**
+         * @brief Creates one exact-format six-face Vulkan render target.
+         *
+         * @param owner Owning live Vulkan renderer.
+         * @param size Width and height of every square face.
+         * @param depthFormat Requested XNA depth-format ordinal.
+         * @param preserveContents Whether earlier face contents must survive a later bind.
+         * @param mipMap Whether to allocate and regenerate the complete mip chain.
+         * @param requestedMultiSampleCount Preferred multisample count.
+         * @param surfaceFormat Requested XNA surface-format ordinal.
+         */
         VulkanRenderTargetCubeRenderer(VulkanRenderer* owner, int size, int depthFormat,
                                        bool preserveContents = false,
-                                       bool mipMap = false, int requestedMultiSampleCount = 0);
+                                       bool mipMap = false, int requestedMultiSampleCount = 0,
+                                       int surfaceFormat = 0);
         ~VulkanRenderTargetCubeRenderer() override;
 
         /**
@@ -2129,6 +2141,35 @@ namespace CNA::Internal::Renderers::Vulkan
         }
         [[nodiscard]] VkImageView GetDepthViewEXT() const { return depthView_; }
         [[nodiscard]] VkFormat GetDepthFormatEXT() const { return depthVkFormat_; }
+        /**
+         * @brief Returns the exact native colour format allocated for every cube face.
+         * @return The target's Vulkan colour format.
+         */
+        [[nodiscard]] VkFormat GetVkFormatEXT() const noexcept { return colorVkFormat_; }
+        /**
+         * @brief Returns the requested public surface-format ordinal.
+         * @return The target's `SurfaceFormat` ordinal.
+         */
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept { return surfaceFormat_; }
+        /**
+         * @brief Reads exact native texel bytes from one rendered cube face.
+         *
+         * This internal diagnostic route preserves float/HDR values that the legacy
+         * `ITextureCubeRenderer::GetData` RGBA8 contract cannot represent.
+         *
+         * @param face Cube face index.
+         * @param level Mip level to read.
+         * @param x Left edge in texels.
+         * @param y Top edge in texels.
+         * @param w Width in texels.
+         * @param h Height in texels.
+         * @param data Destination for exact native-format bytes.
+         * @param dataLength Destination size in bytes.
+         * @return True when the complete region was read.
+         */
+        [[nodiscard]] bool GetNativeDataEXT(
+            int face, int level, int x, int y, int w, int h,
+            void* data, int dataLength) const;
         [[nodiscard]] VkSampleCountFlagBits GetColorSampleCountEXT() const
         {
             return static_cast<VkSampleCountFlagBits>(
@@ -2214,6 +2255,9 @@ namespace CNA::Internal::Renderers::Vulkan
         int                        size_      = 0;
         int                        levelCount_ = 1;
         int                        appliedMultiSampleCount_ = 0;
+        int                        surfaceFormat_ = 0;
+        int                        bytesPerTexel_ = 4;
+        VkFormat                   colorVkFormat_ = VK_FORMAT_R8G8B8A8_UNORM;
         /// REMED-GFX-136: this target's own RenderTargetUsage, collapsed by
         /// RenderTargetUsagePreservesContentsEXT(). Read once, in the constructor, to pick the
         /// face render pass; nothing mutates it afterwards, so a pass can never be built against a
@@ -4100,6 +4144,20 @@ namespace CNA::Internal::Renderers::Vulkan
             int width, int height, int mipLevelCount,
             int surfaceFormat, std::uint32_t usage) override;
         std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCube(int size, int depthFormat, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) override;
+        /**
+         * @brief Creates a cube render target in the exact requested surface format.
+         *
+         * @param size Face width and height in texels.
+         * @param depthFormat Requested depth-format ordinal.
+         * @param preserveContents Whether face contents survive a later bind.
+         * @param mipMap Whether to allocate and regenerate the full mip chain.
+         * @param multiSampleCount Preferred sample count.
+         * @param surfaceFormat Requested surface-format ordinal.
+         * @return The exact-format Vulkan cube target.
+         */
+        std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCubeEXT(
+            int size, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount, int surfaceFormat) override;
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
                               int count) override;
 

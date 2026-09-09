@@ -4434,7 +4434,8 @@ namespace CNA::Internal::Renderers::Vulkan
                       << "; independent MRT blend/write state: "
                       << (independentBlendSupported_ ? "supported" : "NOT supported")
                       << "; render-target formats: Color plus device-queried Rgba64/float/HDR "
-                         "storage (MOD-2223); detailed format usage: 27 formats classified"
+                         "2D and cube storage (MOD-2223/MOD-2234); detailed format usage: "
+                         "27 formats classified"
                       << std::endl;
         }
     }
@@ -20732,7 +20733,8 @@ namespace CNA::Internal::Renderers::Vulkan
             this, size, mipMap, surfaceFormat);
     }
 
-    std::unique_ptr<IRenderTargetCubeRenderer> VulkanRenderer::CreateRenderTargetCube(int size, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
+    std::unique_ptr<IRenderTargetCubeRenderer> VulkanRenderer::CreateRenderTargetCube(
+        int size, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
         // REMED-GFX-136: preserveContents is the public RenderTargetUsage, reaching a cube target
         // for the first time -- see VulkanRenderTargetCubeRenderer's own constructor comment.
@@ -20743,9 +20745,102 @@ namespace CNA::Internal::Renderers::Vulkan
         // sampleCount_" one before that), applied per cube face via a shared MSAA color image
         // (see VulkanRenderTargetCubeRenderer's constructor). depthFormat (Task 877) now gets true per-instance fidelity (Task 911),
         // mirroring VulkanRenderTargetRenderer's identical treatment.
-        return std::make_unique<VulkanRenderTargetCubeRenderer>(this, size, depthFormat,
-                                                               preserveContents, mipMap,
-                                                               multiSampleCount);
+        return CreateRenderTargetCubeEXT(
+            size, depthFormat, preserveContents, mipMap, multiSampleCount,
+            static_cast<int>(Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color));
+    }
+
+    std::unique_ptr<IRenderTargetCubeRenderer> VulkanRenderer::CreateRenderTargetCubeEXT(
+        int size, int depthFormat, bool preserveContents, bool mipMap,
+        int multiSampleCount, int surfaceFormat)
+    {
+        if (ClassifyRenderTargetFormatEXT(surfaceFormat) != RendererFormatVerdict::Supported)
+        {
+            throw std::runtime_error(
+                "Vulkan: SurfaceFormat ordinal " + std::to_string(surfaceFormat) +
+                " is not supported as a RenderTargetCube on this device");
+        }
+
+        VulkanSurfaceFormatStorageEXT storage{};
+        if (!MapRenderTargetFormatToStorageEXT(surfaceFormat, storage))
+            throw std::runtime_error("Vulkan: RenderTargetCube format mapping is unavailable");
+
+        constexpr VkImageUsageFlags cubeUsage =
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        VkImageFormatProperties cubeProperties{};
+        const int mipLevels = mipMap ? CalculateVulkanRTMipLevels(size, size) : 1;
+        if (vkGetPhysicalDeviceImageFormatProperties(
+                physicalDevice_, storage.format, VK_IMAGE_TYPE_2D,
+                VK_IMAGE_TILING_OPTIMAL, cubeUsage,
+                VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT, &cubeProperties) != VK_SUCCESS ||
+            cubeProperties.maxExtent.width < static_cast<std::uint32_t>(size) ||
+            cubeProperties.maxExtent.height < static_cast<std::uint32_t>(size) ||
+            cubeProperties.maxArrayLayers < 6 ||
+            cubeProperties.maxMipLevels < static_cast<std::uint32_t>(mipLevels))
+        {
+            throw std::runtime_error(
+                "Vulkan: requested RenderTargetCube format/extent/mip chain is unsupported");
+        }
+
+        VkFormatProperties formatProperties{};
+        vkGetPhysicalDeviceFormatProperties(physicalDevice_, storage.format, &formatProperties);
+        if (mipMap)
+        {
+            constexpr VkFormatFeatureFlags mipFeatures =
+                VK_FORMAT_FEATURE_BLIT_SRC_BIT | VK_FORMAT_FEATURE_BLIT_DST_BIT |
+                VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
+            if ((formatProperties.optimalTilingFeatures & mipFeatures) != mipFeatures)
+            {
+                throw std::runtime_error(
+                    "Vulkan: requested RenderTargetCube format cannot generate a linear mip chain");
+            }
+        }
+
+        if (multiSampleCount > 1)
+        {
+            VkImageFormatProperties colorProperties{};
+            const VkImageUsageFlags colorUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                (preserveContents ? 0u : VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT);
+            VkSampleCountFlags available = 0;
+            if (vkGetPhysicalDeviceImageFormatProperties(
+                    physicalDevice_, storage.format, VK_IMAGE_TYPE_2D,
+                    VK_IMAGE_TILING_OPTIMAL, colorUsage, 0,
+                    &colorProperties) == VK_SUCCESS && colorProperties.maxArrayLayers >= 6)
+            {
+                available = colorProperties.sampleCounts &
+                            physicalDeviceProperties_.limits.framebufferColorSampleCounts;
+            }
+            if (static_cast<DepthFormat>(depthFormat) != DepthFormat::None)
+            {
+                const VkFormat depthVkFormat = PickDepthFormat(
+                    physicalDevice_, static_cast<DepthFormat>(depthFormat));
+                VkImageFormatProperties depthProperties{};
+                if (vkGetPhysicalDeviceImageFormatProperties(
+                        physicalDevice_, depthVkFormat, VK_IMAGE_TYPE_2D,
+                        VK_IMAGE_TILING_OPTIMAL,
+                        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                        0, &depthProperties) != VK_SUCCESS)
+                {
+                    available = 0;
+                }
+                else
+                {
+                    available &= depthProperties.sampleCounts &
+                                 physicalDeviceProperties_.limits.framebufferDepthSampleCounts;
+                }
+            }
+            if (PickSampleCountFromFlags(available, multiSampleCount) ==
+                VK_SAMPLE_COUNT_1_BIT)
+            {
+                throw std::runtime_error(
+                    "Vulkan: requested RenderTargetCube format/depth/sample-count combination "
+                    "has no multisample support");
+            }
+        }
+
+        return std::make_unique<VulkanRenderTargetCubeRenderer>(
+            this, size, depthFormat, preserveContents, mipMap, multiSampleCount, surfaceFormat);
     }
 
     void VulkanRenderer::SetRenderTargets(
@@ -21939,10 +22034,18 @@ namespace CNA::Internal::Renderers::Vulkan
     VulkanRenderTargetCubeRenderer::VulkanRenderTargetCubeRenderer(VulkanRenderer* owner, int size,
                                                                   int depthFormat,
                                                                   bool preserveContents, bool mipMap,
-                                                                  int requestedMultiSampleCount)
-        : owner_(owner), size_(size), preserveContents_(preserveContents)
+                                                                  int requestedMultiSampleCount,
+                                                                  int surfaceFormat)
+        : owner_(owner), size_(size), surfaceFormat_(surfaceFormat),
+          preserveContents_(preserveContents)
     {
         if (!owner_ || owner_->device_ == VK_NULL_HANDLE) return;
+        VulkanRenderer::VulkanSurfaceFormatStorageEXT colorStorage{};
+        if (!owner_->MapRenderTargetFormatToStorageEXT(surfaceFormat_, colorStorage))
+            throw std::runtime_error(
+                "VulkanRenderTargetCubeRenderer: requested SurfaceFormat is not implemented");
+        colorVkFormat_ = colorStorage.format;
+        bytesPerTexel_ = colorStorage.bytesPerTexel;
         VkDevice    dev  = owner_->device_;
         const auto  us   = static_cast<uint32_t>(size);
         levelCount_ = mipMap ? CalculateVulkanRTMipLevels(size, size) : 1;
@@ -21961,11 +22064,41 @@ namespace CNA::Internal::Renderers::Vulkan
         // the same reason -- XNA's RenderTargetCube also takes preferredMultiSampleCount per
         // instance. Task 903 mirrored the old "piggyback on the renderer's own sampleCount_"
         // decision; it mirrors the replacement now.
-        const VkSampleCountFlagBits rtSamples =
-            requestedMultiSampleCount > 0
-                ? PickSampleCount(owner_->physicalDeviceProperties_.limits,
-                                  requestedMultiSampleCount)
-                : VK_SAMPLE_COUNT_1_BIT;
+        VkImageFormatProperties colorSampleProperties{};
+        const VkImageUsageFlags colorSampleUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+            (preserveContents_ ? 0u : VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT);
+        VkSampleCountFlags availableSamples = VK_SAMPLE_COUNT_1_BIT;
+        if (vkGetPhysicalDeviceImageFormatProperties(
+                owner_->physicalDevice_, colorVkFormat_, VK_IMAGE_TYPE_2D,
+                VK_IMAGE_TILING_OPTIMAL, colorSampleUsage, 0,
+                &colorSampleProperties) == VK_SUCCESS &&
+            colorSampleProperties.maxArrayLayers >= 6)
+        {
+            availableSamples = colorSampleProperties.sampleCounts &
+                               owner_->physicalDeviceProperties_.limits
+                                   .framebufferColorSampleCounts;
+        }
+        if (hasDepth)
+        {
+            VkImageFormatProperties depthSampleProperties{};
+            if (vkGetPhysicalDeviceImageFormatProperties(
+                    owner_->physicalDevice_, depthVkFormat_, VK_IMAGE_TYPE_2D,
+                    VK_IMAGE_TILING_OPTIMAL,
+                    VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                    0, &depthSampleProperties) != VK_SUCCESS)
+            {
+                availableSamples = 0;
+            }
+            else
+            {
+                availableSamples &= depthSampleProperties.sampleCounts &
+                                    owner_->physicalDeviceProperties_.limits
+                                        .framebufferDepthSampleCounts;
+            }
+        }
+        const VkSampleCountFlagBits rtSamples = requestedMultiSampleCount > 0
+            ? PickSampleCountFromFlags(availableSamples, requestedMultiSampleCount)
+            : VK_SAMPLE_COUNT_1_BIT;
         const bool wantsMsaa = rtSamples > VK_SAMPLE_COUNT_1_BIT;
 
         // --- Color image: 6-layer cube-compatible, color attachment + sampled ---
@@ -21973,7 +22106,7 @@ namespace CNA::Internal::Renderers::Vulkan
         colorInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
         colorInfo.flags         = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
         colorInfo.imageType     = VK_IMAGE_TYPE_2D;
-        colorInfo.format        = owner_->swapchainFormat_;
+        colorInfo.format        = colorVkFormat_;
         colorInfo.extent        = { us, us, 1 };
         colorInfo.mipLevels     = static_cast<uint32_t>(levelCount_);
         colorInfo.arrayLayers   = 6;
@@ -22012,7 +22145,7 @@ namespace CNA::Internal::Renderers::Vulkan
             cv.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
             cv.image    = image_;
             cv.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
-            cv.format   = owner_->swapchainFormat_;
+            cv.format   = colorVkFormat_;
             cv.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, static_cast<uint32_t>(levelCount_), 0, 6 };
             if (vkCreateImageView(dev, &cv, nullptr, &cubeView_) != VK_SUCCESS)
                 throw std::runtime_error("VulkanRenderTargetCubeRenderer: vkCreateImageView (cube) failed");
@@ -22024,7 +22157,7 @@ namespace CNA::Internal::Renderers::Vulkan
             fv.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
             fv.image    = image_;
             fv.viewType = VK_IMAGE_VIEW_TYPE_2D;
-            fv.format   = owner_->swapchainFormat_;
+            fv.format   = colorVkFormat_;
             fv.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1,
                                     static_cast<uint32_t>(face), 1 };
             if (vkCreateImageView(dev, &fv, nullptr, &faceViews_[face]) != VK_SUCCESS)
@@ -22166,7 +22299,7 @@ namespace CNA::Internal::Renderers::Vulkan
             VkImageCreateInfo msaaColorInfo{};
             msaaColorInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
             msaaColorInfo.imageType     = VK_IMAGE_TYPE_2D;
-            msaaColorInfo.format        = owner_->swapchainFormat_;
+            msaaColorInfo.format        = colorVkFormat_;
             msaaColorInfo.extent        = { us, us, 1 };
             msaaColorInfo.mipLevels     = 1;
             msaaColorInfo.arrayLayers   = 6;
@@ -22197,7 +22330,7 @@ namespace CNA::Internal::Renderers::Vulkan
                 msaaColorView.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
                 msaaColorView.image    = msaaColorImage_;
                 msaaColorView.viewType = VK_IMAGE_VIEW_TYPE_2D;
-                msaaColorView.format   = owner_->swapchainFormat_;
+                msaaColorView.format   = colorVkFormat_;
                 msaaColorView.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1,
                                                    static_cast<uint32_t>(face), 1 };
                 if (vkCreateImageView(dev, &msaaColorView, nullptr, &msaaColorViews_[face]) != VK_SUCCESS)
@@ -22247,7 +22380,7 @@ namespace CNA::Internal::Renderers::Vulkan
                 VkFramebufferCreateInfo fbInfo{};
                 fbInfo.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
                 fbInfo.renderPass      = owner_->GetOrCreateRTRenderPassMsaa(
-                    owner_->swapchainFormat_, depthVkFormat_, !preserveContents_, rtSamples);
+                    colorVkFormat_, depthVkFormat_, !preserveContents_, rtSamples);
                 fbInfo.attachmentCount = hasDepth ? 3u : 2u;
                 fbInfo.pAttachments    = atts;
                 fbInfo.width           = us;
@@ -22258,7 +22391,7 @@ namespace CNA::Internal::Renderers::Vulkan
 
                 facePasses_[face]->framebuffer = msaaFramebuffers_[face];
                 facePasses_[face]->renderPass  = owner_->GetOrCreateRTRenderPassMsaa(
-                    owner_->swapchainFormat_, depthVkFormat_, !preserveContents_, rtSamples);
+                    colorVkFormat_, depthVkFormat_, !preserveContents_, rtSamples);
                 facePasses_[face]->msaa        = true;
                 facePasses_[face]->samples     = rtSamples;
             }
@@ -22276,7 +22409,7 @@ namespace CNA::Internal::Renderers::Vulkan
                 // this adds at most one more cached render pass per distinct depth format, never a
                 // per-target or per-face one.
                 fbInfo.renderPass      = owner_->GetOrCreateRTRenderPass(
-                    owner_->swapchainFormat_, depthVkFormat_, !preserveContents_);
+                    colorVkFormat_, depthVkFormat_, !preserveContents_);
                 fbInfo.attachmentCount = hasDepth ? 2u : 1u;
                 fbInfo.pAttachments    = atts;
                 fbInfo.width           = us;
@@ -22287,7 +22420,7 @@ namespace CNA::Internal::Renderers::Vulkan
 
                 facePasses_[face]->framebuffer = framebuffers_[face];
                 facePasses_[face]->renderPass  = owner_->GetOrCreateRTRenderPass(
-                    owner_->swapchainFormat_, depthVkFormat_, !preserveContents_);
+                    colorVkFormat_, depthVkFormat_, !preserveContents_);
                 facePasses_[face]->msaa        = false;
             }
 
@@ -22297,7 +22430,7 @@ namespace CNA::Internal::Renderers::Vulkan
             facePasses_[face]->mipLevels   = levelCount_;
             facePasses_[face]->mipLayer    = static_cast<uint32_t>(face);
             facePasses_[face]->depthFormat = depthVkFormat_;
-            facePasses_[face]->colorFormat = owner_->swapchainFormat_;
+            facePasses_[face]->colorFormat = colorVkFormat_;
             // REMED-GFX-129: the face needs the same usage the render pass above was picked with,
             // so it can report whether its colour attachment is cleared or loaded on entry.
             facePasses_[face]->loadOpIsClear = !preserveContents_;
@@ -22397,13 +22530,26 @@ namespace CNA::Internal::Renderers::Vulkan
                                                 void* data, int dataLength) const
     {
         // REMED-GFX-134: closes the refusal this class inherited from ITextureCubeRenderer's
-        // `return false` default. Same staging-copy mechanism as VulkanTextureCubeRenderer::GetData.
+        // `return false` default. Its contract is RGBA8, so wider float/HDR storage stays on the
+        // exact-byte diagnostic route below until TextureCube gains matching typed overloads.
+        if (surfaceFormat_ != static_cast<int>(
+                Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color) ||
+            bytesPerTexel_ != 4)
+            return false;
+        return GetNativeDataEXT(face, level, x, y, w, h, data, dataLength);
+    }
+
+    bool VulkanRenderTargetCubeRenderer::GetNativeDataEXT(
+        int face, int level, int x, int y, int w, int h,
+        void* data, int dataLength) const
+    {
         if (!owner_ || image_ == VK_NULL_HANDLE || !data || dataLength <= 0) return false;
         if (face < 0 || face >= 6) return false;
         if (level < 0 || level >= levelCount_ || w <= 0 || h <= 0) return false;
         const int levelSize = std::max(1, size_ >> level);
         if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
-        const std::size_t regionBytes = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u;
+        const std::size_t regionBytes = static_cast<std::size_t>(w) *
+            static_cast<std::size_t>(h) * static_cast<std::size_t>(bytesPerTexel_);
         if (static_cast<std::size_t>(dataLength) < regionBytes) return false;
 
         // REMED-GFX-074/GFX-194 readback flush, keyed by this face's exact immutable pass and the
@@ -22468,17 +22614,10 @@ namespace CNA::Internal::Renderers::Vulkan
                     &toRead);
             });
 
-        // A cube RENDER TARGET carries the swapchain format (see the constructor), not a plain
-        // TextureCube's fixed RGBA8 -- the same correction VulkanRenderTargetRenderer::GetData makes.
-        const bool isBGRA = (owner_->swapchainFormat_ == VK_FORMAT_B8G8R8A8_UNORM ||
-                             owner_->swapchainFormat_ == VK_FORMAT_B8G8R8A8_SRGB);
-        auto*       dst = static_cast<uint8_t*>(data);
-        const auto* src = static_cast<const uint8_t*>(mapped);
-        for (std::size_t i = 0; i < regionBytes / 4u; ++i) {
-            const std::size_t o = i * 4u;
-            if (isBGRA) { dst[o+0] = src[o+2]; dst[o+1] = src[o+1]; dst[o+2] = src[o+0]; dst[o+3] = src[o+3]; }
-            else        { dst[o+0] = src[o+0]; dst[o+1] = src[o+1]; dst[o+2] = src[o+2]; dst[o+3] = src[o+3]; }
-        }
+        // Cube targets use the same canonical exact-format table as 2D targets. In particular,
+        // Color is RGBA8 rather than the presentation surface's possibly-BGRA format, and wider
+        // integer/float formats are copied byte-for-byte in their public storage layout.
+        std::memcpy(data, mapped, regionBytes);
 
         vkDestroyBuffer(dev, stagingBuf, nullptr);
         vkFreeMemory(dev, stagingMem, nullptr);

@@ -2,7 +2,7 @@
 
 ## Status of this document
 
-**Complete as of 2026-09-10 (`VULKAN-480`, updated by `REMED-GFX-203`, `MOD-2222`–`MOD-2233`, `MOD-2240`–`MOD-2244`), and written after the re-audits it depends on**
+**Complete as of 2026-09-10 (`VULKAN-480`, updated by `REMED-GFX-203`, `MOD-2222`–`MOD-2234`, `MOD-2240`–`MOD-2244`), and written after the re-audits it depends on**
 (`VULKAN-470`–`VULKAN-474`) so that what it claims was checked rather than remembered. Every
 section names the row that put it there and the test that keeps it true; a claim with no test named
 beside it is not in here.
@@ -296,8 +296,17 @@ exact colour format and selected depth format share a supported sample count; un
 throw instead of becoming single-sampled or `Color`. `Vulkan_FloatRenderTarget` proves the live
 clear/draw/sample/readback path, values above 1.0, mixed MRT, MSAA resolve and mips. Its MSAA and
 mip pixel legs use odd dimensions, including the complete `7×5 → 3×2 → 1×1` chain, so
-the constructor contract is backed by rendered contents rather than allocation alone. Float/HDR
-`RenderTargetCube` remains unsupported.
+the constructor contract is backed by rendered contents rather than allocation alone.
+
+`MOD-2234` carries that same table into `CreateRenderTargetCubeEXT`. The factory additionally asks
+the selected physical device about the exact cube-compatible six-layer image, complete mip chain
+and requested colour/depth/MSAA combination before allocation. Image and face views, render passes,
+framebuffers, resolve storage and pipeline metadata all retain the requested format; `Color` cubes
+use canonical `R8G8B8A8_UNORM` storage rather than inheriting the swapchain's possibly BGRA format.
+`Vulkan_FloatRenderTarget` constructs every advertised format and reads six independently rendered
+`HdrBlendable` faces back as exact RGBA16F bytes. Public `TextureCube::GetData` remains the existing
+RGBA8-only XNA route, so the wider-format assertion uses an internal exact-byte diagnostic rather
+than pretending HDR data is `Color`.
 
 **Colour transfer** — `GetData`/`SetData` shaped as `Color` — refuses
 `NormalizedByte4` and `NormalizedByte2` explicitly even though the framework's four-byte rule would

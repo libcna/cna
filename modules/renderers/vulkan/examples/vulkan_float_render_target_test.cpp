@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_modern.md MOD-2223: real Vulkan float/HDR RenderTarget2D allocation, rendering,
-// sampling and readback must preserve values above 1.0 without substituting Color storage.
+// plans/plan_modern.md MOD-2223/MOD-2234: real Vulkan float/HDR RenderTarget2D and
+// RenderTargetCube storage must preserve exact native formats and values above 1.0.
 
 #include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -10,10 +10,12 @@
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfVector4.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
@@ -30,6 +32,7 @@ using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 using Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector4;
 using CNA::Internal::Renderers::Vulkan::VulkanRenderer;
+using CNA::Internal::Renderers::Vulkan::VulkanRenderTargetCubeRenderer;
 using CNA::Internal::Renderers::Vulkan::VulkanRenderTargetRenderer;
 
 namespace
@@ -284,6 +287,96 @@ protected:
         Check(mipCreated == mipAdvertised && (!mipCreated || mipPreserved),
               "K odd-sized HalfVector4 mip chain agrees with generated content",
               std::string("advertised=") + (mipAdvertised ? "true" : "false"));
+
+        bool cubeAllocationsMatch = true;
+        int cubeSupportedCount = 0;
+        const auto verifyCubeAllocation = [&](const SurfaceFormat surface,
+                                              const VkFormat nativeFormat)
+        {
+            if (!device.SupportsSurfaceFormatAsRenderTargetEXT(surface)) return;
+            ++cubeSupportedCount;
+            try
+            {
+                RenderTargetCube cube(
+                    device, kSize, false, surface, DepthFormat::None);
+                auto* native = dynamic_cast<VulkanRenderTargetCubeRenderer*>(
+                    &cube.GetRenderer());
+                cubeAllocationsMatch = cubeAllocationsMatch && native != nullptr &&
+                    native->GetVkFormatEXT() == nativeFormat &&
+                    native->GetSurfaceFormatEXT() == static_cast<int>(surface);
+            }
+            catch (...)
+            {
+                cubeAllocationsMatch = false;
+            }
+        };
+        verifyCubeAllocation(SurfaceFormat::Color, VK_FORMAT_R8G8B8A8_UNORM);
+        for (const auto& item : expected)
+            verifyCubeAllocation(item.surface, item.native);
+        Check(cubeAllocationsMatch && cubeSupportedCount > 0,
+              "L every advertised cube target allocates its requested VkFormat",
+              std::to_string(cubeSupportedCount) + " formats supported by this device");
+
+        const bool hasHdr =
+            device.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HdrBlendable);
+        bool cubePreserved = true;
+        std::string cubeDetail = hasHdr ? "advertised and exercised" :
+                                          "HdrBlendable unavailable on this device";
+        if (hasHdr)
+        {
+            try
+            {
+                RenderTargetCube cube(
+                    device, kSize, false, SurfaceFormat::HdrBlendable, DepthFormat::None);
+                auto* native = dynamic_cast<VulkanRenderTargetCubeRenderer*>(
+                    &cube.GetRenderer());
+                cubePreserved = native != nullptr &&
+                    native->GetVkFormatEXT() == VK_FORMAT_R16G16B16A16_SFLOAT &&
+                    native->GetSurfaceFormatEXT() ==
+                        static_cast<int>(SurfaceFormat::HdrBlendable);
+
+                constexpr std::array<CubeMapFace, 6> faces{
+                    CubeMapFace::PositiveX, CubeMapFace::NegativeX,
+                    CubeMapFace::PositiveY, CubeMapFace::NegativeY,
+                    CubeMapFace::PositiveZ, CubeMapFace::NegativeZ};
+                for (std::size_t face = 0; face < faces.size(); ++face)
+                {
+                    device.SetRenderTarget(&cube, faces[face]);
+                    device.Clear(static_cast<float>(face + 2), 1.0f, 0.5f, 1.0f);
+                }
+                device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+                for (std::size_t face = 0; face < faces.size(); ++face)
+                {
+                    std::vector<std::uint8_t> bytes(
+                        static_cast<std::size_t>(kSize) * kSize * sizeof(std::uint64_t));
+                    cubePreserved = cubePreserved && native != nullptr &&
+                        native->GetNativeDataEXT(
+                            static_cast<int>(faces[face]), 0, 0, 0, kSize, kSize,
+                            bytes.data(), static_cast<int>(bytes.size()));
+                    const std::uint64_t expected = HalfVector4(
+                        static_cast<float>(face + 2), 1.0f, 0.5f, 1.0f)
+                        .getPackedValueProperty();
+                    for (std::size_t texel = 0;
+                         texel < static_cast<std::size_t>(kSize) * kSize; ++texel)
+                    {
+                        std::uint64_t actual = 0;
+                        for (std::size_t byte = 0; byte < sizeof(actual); ++byte)
+                            actual |= static_cast<std::uint64_t>(
+                                bytes[texel * sizeof(actual) + byte]) << (byte * 8u);
+                        cubePreserved = cubePreserved && actual == expected;
+                    }
+                }
+            }
+            catch (const std::exception& error)
+            {
+                cubePreserved = false;
+                cubeDetail = error.what();
+            }
+        }
+        Check(!hasHdr || cubePreserved,
+              "M HdrBlendable cube preserves six distinct unclamped HDR faces",
+              cubeDetail);
 
         std::printf("RESULT: %d passed, %d failed\n", pass_, fail_);
         Exit();

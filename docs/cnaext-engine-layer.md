@@ -131,9 +131,10 @@ whole phase exists to remove, so there is no downgrade policy to choose between.
 
 ### The format table
 
-The internal formats below are EasyGL's, which is the reference implementation. Since `MOD-2223`,
-the Vulkan column is also the format the live implementation allocates; the D3D column remains the
-intended mapping rather than an implementation claim.
+The internal formats below are EasyGL's, which is the reference implementation. Since `MOD-2223`
+for 2D targets and `MOD-2234` for cube targets, the Vulkan column is also the format the live
+implementation allocates; the D3D column remains the intended mapping rather than an implementation
+claim.
 
 | `SurfaceFormat` | Channels × bits | EasyGL internal format | Bytes/texel | Vulkan equivalent | D3D equivalent |
 |---|---|---|---|---|---|
@@ -181,7 +182,7 @@ the default is honest rather than merely conservative.
 | Renderer | Float render targets | Note |
 |---|---|---|
 | `OpenGLES3`, `OpenGL33`, `OpenGLES2`, `OpenGL4`, `WebGL1`, `WebGL2` (EasyGL) | ✅ all seven float formats | Verified against Mesa llvmpipe (ES 3.2) by `HdrRenderTargetRoundTripTests`. What a *driver* supports is still asked at run time, so an ES 2 profile that lacks float FBOs reports false rather than failing later. |
-| `Vulkan` | ✅ all seven float formats | `MOD-2223`: exact native attachments are queried from the selected device and exercised by `Vulkan_FloatRenderTarget` through clear, draw, sample, readback, MSAA and mips. Float cube targets remain unsupported. |
+| `Vulkan` | ✅ all seven float formats | `MOD-2223`/`MOD-2234`: exact native 2D and cube attachments are queried from the selected device. `Vulkan_FloatRenderTarget` exercises clear, draw, sample, readback, MSAA and mips, plus exact allocation for every advertised cube format and six unclamped RGBA16F faces. |
 | Every other renderer | ⬜ defers → `Color` only | No `ClassifyRenderTargetFormatEXT` override, so the framework rule applies. The 2D-only and fixed-function identities are ⛔ by their own nature — see the per-identity matrix below. |
 
 ## Per-renderer support matrix
@@ -198,7 +199,7 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 | Subsystem | EasyGL (reference) | Vulkan | D3D11 | Other renderers |
 |---|---|---|---|---|
 | Post-process effects (`DepthEffect`, `CRTEffect`) | ✅ GLSL | ⛔ its `ShaderEffect` takes SPIR-V, not the passes' GLSL | ⬜ | `AsciiPostProcessEffect` is CPU-side and runs everywhere |
-| Float/HDR render targets | ✅ RGBA16F + RGBA32F, runtime-probed | ✅ exact Float16/Float32 `RenderTarget2D`, device-probed (`MOD-2223`) | ⬜ | ⬜ — each reports `false` and `RenderTarget2D` refuses the format rather than substituting `Color` |
+| Float/HDR render targets | ✅ exact 2D/cube targets, runtime-probed | ✅ exact Float16/Float32 `RenderTarget2D` and `RenderTargetCube`, device-probed (`MOD-2223`/`MOD-2234`) | ⬜ | ⬜ — each reports `false` and the target constructor refuses the format rather than substituting `Color` |
 | `RenderPipeline` + post-process passes | ✅ | 🟨 runs and copies through — measured, frame identical to no pipeline | ⬜ | The passes need `GraphicsCapability::CustomEffects`; without it each copies its input and the frame still renders |
 | Shadow maps (directional, PCF) | ✅ generation + reception on all four lit effects | ⬜ `SupportsShadowSamplingEXT()` false | ⬜ | ⬜ — an effect accepts the shadow state and a renderer without the shader ignores it, so the frame renders unshadowed rather than failing |
 | Cascaded shadow maps (2-4, atlas) | ✅ same four programs, one shared shader path | ⬜ | ⬜ | ⬜ — same accepted-and-ignored convention |
