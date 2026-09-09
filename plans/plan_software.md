@@ -1,6 +1,6 @@
 # Software (CPU) Rasterizer Graphics Backend — Implementation Plan
 
-> **Current status (Software <-> EasyGL XNA/Core parity campaign, 2026-09-07..08): HIGH PARITY; SPECIFIC CLASSIC-XNA GAPS REMAIN.**
+> **Current status (Software <-> EasyGL XNA/Core parity campaign, 2026-09-07..09): HIGH PARITY; SPECIFIC CLASSIC-XNA GAPS REMAIN.**
 > The original `SOFTWARE-1..86` rows below remain the historical record of the deliberately small
 > v1 renderer. They are not the current completion boundary. The authorized target is now an
 > independent, deterministic CPU implementation of the classic XNA 4.0/core graphics behavior on
@@ -207,6 +207,7 @@ its own tests and plan evidence in the same commit.
 | SOFTWARE-193 | Reject disposed buffers in plural vertex bindings | ✅ | Completed 2026-09-09. Singular `SetVertexBuffer` rejected a disposed buffer, but `SetVertexBuffers` validated only the binding count and stored every buffer without inspecting resource lifetime. A disposed secondary-stream probe failed both assertions before repair: no exception was raised and the previous live binding was replaced by the invalid two-stream set. The shared plural setter now scans every non-null resource before committing any state, throws `ObjectDisposedException`, and preserves the old binding transactionally. All four plural binding validation/empty-unbind tests pass on Software and desktop EasyGL. |
 | SOFTWARE-194 | Reject renderer-facing GraphicsDevice use after disposal | ✅ | Completed 2026-09-09. After `GraphicsDevice::Dispose` destroyed the renderer, representative classic operations—including Clear, Present, Reset, state setters, buffer/target binds, draw and backbuffer readback—silently returned or mutated cached state. All thirteen original discriminator operations raised no exception before repair. The common device path now applies a centralized `ObjectDisposedException` guard before renderer-facing work or cache mutation. Disposal also follows FNA's critical ordering by setting the flag and raising `Disposing` before owned-resource teardown, making reentrant disposal idempotent and allowing a currently bound render target to be released during device teardown without its normal live-device binding rejection. Both lifecycle regressions plus the affected validation/readback slice pass 9/9 on Software and desktop EasyGL. |
 | SOFTWARE-195 | Reject draws through buffers disposed after binding | ✅ | Completed 2026-09-09. `SetVertexBuffer`/`SetIndexBuffer` rejected an already disposed resource, but disposing a live resource after binding left the GraphicsDevice cache pointing at it. The next classic non-indexed draw exited with SIGSEGV 139 at the unchecked null renderer dereference before repair; the indexed route had the same static defect. GraphicsDevice now validates the primary and every plural vertex binding plus the index binding before range inspection or renderer submission, including the two indirect extension routes that share those caches. The two public regressions pass on Software and desktop EasyGL, and the 113-test Software lifecycle/indexed/non-indexed/multi-stream/instancing selection passes 111 with its two named renderer-selector skips. |
+| SOFTWARE-196 | Close the adversarial property, capability, inherited-default and skip audit | ✅ | Completed 2026-09-09. The parity ledger now names every public SamplerState, RasterizerState, BlendState and DepthStencilState property, its EasyGL/Software consumption path, behavioral proof and verdict. It separately audits all 19 capability entries and every inherited classic renderer-default family. All 55 baseline Software `CnaGraphicsTests` skips are classified by exact family and count: 49 are negative controls, foreign-renderer selectors, platform-only or CNAEXT; the remaining six are all compiled-Effect evidence for SOFTWARE-162..165. The audit found no unrecorded Software-only stock-effect state omission. `AddressW` and MRT masks 1-3 remain explicitly dependent on the compiled pixel executor, public vertex samplers remain SOFTWARE-168, non-Color volume formats remain SOFTWARE-173 and EasyGL ES/WebGL wireframe remains SOFTWARE-178. |
 
 ### Current dependency order
 
@@ -226,7 +227,9 @@ GraphicsDeviceManager preference ineffective despite advertised support.
 `SOFTWARE-183/184` close the public texture-transfer validation holes, `SOFTWARE-185` restores
 mutable rasterizer application timing, and `SOFTWARE-186..194` record the subsequent compiled-
 effect, SpriteBatch, capability, validation and lifecycle findings from the final hostile pass;
-`SOFTWARE-195` closes the bound-buffer use-after-dispose crash found in its resource review.
+`SOFTWARE-195` closes the bound-buffer use-after-dispose crash found in its resource review, and
+`SOFTWARE-196` closes the required property/capability/default-method/skip evidence audit without
+misclassifying the four still-open classic dependency groups as parity.
 `SOFTWARE-100` remains yellow for the previously recorded
 repository-wide blockers; that status does not excuse any renderer gap found here.
 

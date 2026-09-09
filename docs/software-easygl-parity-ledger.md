@@ -214,6 +214,153 @@ a shader VM, not a reasonably bounded repair; SOFTWARE-168 is the separate share
 The final classification must account for both gaps after the remaining state/resource/default/skip
 audit rather than describing compiled Effects as the only remaining defect.
 
+### Property-level graphics-state audit
+
+The tables below distinguish a property that merely survives a getter/setter round trip from one
+that changes rendered output. Unless a row says otherwise, the named fixture is compiled from the
+same public source for Software and EasyGL and passed on both. `PARITY` means the property has an
+observable classic stock-effect path; it does not promote a CNAEXT shader facility into scope.
+
+#### `SamplerState`
+
+| Property | XNA/Core relevance | EasyGL / Software consumption | Behavioral evidence | Verdict/task |
+|---|---|---|---|---|
+| `Filter` | Classic XNA | EasyGL selects the GL min/mag/mip modes; Software selects point, linear, mip and anisotropic CPU paths | `TextureFilterOrdinalContract`, `SamplerComponentIsolation` and `TextureFilterMipContract` distinguish every ordinal, minification and transitions | PARITY, SOFTWARE-116/150 ✅ |
+| `AddressU` | Classic XNA | Both address the horizontal coordinate before texel lookup | `TextureAddressMode` plus `SamplerComponentIsolation` cover Clamp/Wrap/Mirror, coordinates beyond both ends and U-only transitions | PARITY, SOFTWARE-116/150 ✅ |
+| `AddressV` | Classic XNA | Both address the vertical coordinate independently of U | The same contracts use asymmetric textures and V-only transitions, including negative Mirror/Wrap coordinates | PARITY, SOFTWARE-116/150 ✅ |
+| `AddressW` | Classic XNA when a volume sampler is used | EasyGL applies `GL_TEXTURE_WRAP_R` and its enabled compiled-effect volume test observes it; Software inherits the no-op because no stock effect samples a volume | `SharedCubeAndVolumeSamplerContract` is positive EasyGL proof. A Software stock test would be fictitious; the missing observable route is the compiled pixel executor | GAP DEPENDENCY, SOFTWARE-159 ✅ audit / SOFTWARE-164 ⬜ |
+| `MaxAnisotropy` | Classic XNA | EasyGL applies the driver anisotropy parameter; Software sizes and averages its directional footprint up to the requested limit | `AnisotropicFilterContract` distinguishes 1, 2, 4 and 16 taps from trilinear output and restores the state | PARITY, SOFTWARE-117 ✅ |
+| `MaxMipLevel` | Classic XNA | Both apply it as FNA3D's lower mip bound after resource clamping; SpriteBatch publishes and consumes the same value | Self-identifying red/green/blue mip images cover lower-bound, oversized clamp, restoration and SpriteBatch | PARITY after repair, SOFTWARE-158 ✅ |
+| `MipMapLevelOfDetailBias` | Classic XNA | Desktop EasyGL maps it to the GL LOD bias; Software adds it before mip selection/clamping. GL ES has no FNA3D-equivalent control | The same mip contract distinguishes positive/negative bias, trilinear boundaries and bias combined with `MaxMipLevel`; GLES explicitly omits only the unrepresentable bias legs | PARITY for Software and desktop EasyGL after repair, SOFTWARE-158 ✅ |
+
+#### `RasterizerState`
+
+| Property | XNA/Core relevance | EasyGL / Software consumption | Behavioral evidence | Verdict/task |
+|---|---|---|---|---|
+| `CullMode` | Classic XNA | Both classify post-transform winding and apply None/CW/CCW on indexed and non-indexed draws | `RasterizerState_CullMode`, camera and indexed BasicEffect contracts plus `Software_Culling` | PARITY, SOFTWARE-81/130 ✅ |
+| `FillMode` | Classic XNA | Software fills or emits clipped polygon boundaries; desktop EasyGL uses native polygon mode. ES/WebGL still has a partial line-expansion fallback | `Software_Wireframe`, the shared wireframe/depth-bias oracle and EasyGL fill-mode transitions | Software/desktop parity; ES/WebGL gap SOFTWARE-178 ⬜ |
+| `DepthBias` | Classic XNA | Both convert the public normalized value for the active Depth16/Depth24 storage | `RasterizerDepthBiasContract` switches backbuffer/2D targets and proves realistic positive and negative bias | PARITY after repair, SOFTWARE-176 ✅ |
+| `SlopeScaleDepthBias` | Classic XNA | Both multiply the maximum screen-space depth slope and combine it with constant bias | `Software_DepthBias` and `EasyGL_DepthBias` independently distinguish flat versus sloped geometry, sign and state restoration | PARITY, SOFTWARE-83/176 ✅ |
+| `ScissorTestEnable` | Classic XNA | Both gate the stored `ScissorRectangle`, independently of viewport clipping | `Software_Scissor`, `EasyGL_Scissor`, render-target viewport/scissor reset and mutable-state transitions | PARITY, SOFTWARE-80/185 ✅ |
+| `MultiSampleAntiAlias` | Classic XNA | Software selects independent sample positions versus one replicated pixel-center decision; desktop EasyGL toggles native multisampling | The 4x boundary oracle distinguishes partial edge pixels under true from none under false and proves true/false/true restoration | PARITY after repair where representable, SOFTWARE-160 ✅ |
+
+#### `BlendState`
+
+| Property | XNA/Core relevance | EasyGL / Software consumption | Behavioral evidence | Verdict/task |
+|---|---|---|---|---|
+| `ColorSourceBlend` | Classic XNA | Both apply all 13 factors to RGB | `BlendState_Matrix` analytically checks every factor, including constant factor, source-alpha-saturation and opaque-factor bypass | PARITY, SOFTWARE-152/169/170 ✅ |
+| `ColorDestinationBlend` | Classic XNA | Both apply all 13 destination factors to RGB | Same 49-case matrix, with non-neutral source/destination values | PARITY, SOFTWARE-152/169/170 ✅ |
+| `ColorBlendFunction` | Classic XNA | Both implement Add/Subtract/ReverseSubtract/Min/Max; Min/Max ignore factors | Same matrix explicitly crosses functions with opaque and zero factors | PARITY after repairs, SOFTWARE-169/170 ✅ |
+| `AlphaSourceBlend` | Classic XNA | Both apply every legal alpha factor independently of RGB | Same matrix uses different source RGB/alpha and equations | PARITY, SOFTWARE-152 ✅ |
+| `AlphaDestinationBlend` | Classic XNA | Both apply every legal alpha destination factor independently | Same matrix and the four preset blend fixtures | PARITY, SOFTWARE-152 ✅ |
+| `AlphaBlendFunction` | Classic XNA | Both select the alpha function independently of the RGB function | `BlendState_SeparateFunctions` and matrix Min/Max/opaque discriminators | PARITY after repairs, SOFTWARE-152/169/170 ✅ |
+| `BlendFactor` | Classic XNA state and independent device property | Whole-state assignment and `GraphicsDevice.BlendFactor` both reach each renderer without rewriting the other blend fields | `BlendState_BlendFactor`, matrix constant-factor cases and `GraphicsDeviceOrderedClear`'s direct-property clear-boundary discriminator | PARITY, SOFTWARE-152 ✅ |
+| `ColorWriteChannels` | Classic XNA | Both mask target 0 after fragment/depth/stencil evaluation and before storage | `Software_ColorWriteChannels`, `EasyGL_ColorWriteChannels`, occlusion ordering and `MrtStockEffectContract` | PARITY, SOFTWARE-120 ✅ |
+| `ColorWriteChannels1` | Classic XNA MRT | EasyGL's multi-output shader path proves slot 1. Software stores the mask, but stock effects correctly emit only COLOR0 and cannot exercise it | EasyGL `Mrt` writes distinct outputs and verifies the slot-1 mask; the shared stock contract proves that COLOR0 is not incorrectly copied there | GAP DEPENDENCY on a real multi-output compiled pixel program, SOFTWARE-164 ⬜ |
+| `ColorWriteChannels2` | Classic XNA MRT | Same as slot 1 for attachment 2 | EasyGL `Mrt` slot-2 output/mask discriminator; shared stock no-redirection control | GAP DEPENDENCY, SOFTWARE-164 ⬜ |
+| `ColorWriteChannels3` | Classic XNA MRT | Same as slot 1 for attachment 3 | EasyGL `Mrt` slot-3 combined-channel discriminator; shared stock no-redirection control | GAP DEPENDENCY, SOFTWARE-164 ⬜ |
+| `MultiSampleMask` | Classic XNA state and independent device property | Both gate coverage samples before depth/stencil/color. Whole-state and direct device assignments remain independent | `MsaaFragmentContract` and the extended device-property matrix prove masks 0, 1, 2, all, restoration and exact quarter-sample resolves | PARITY after repair, SOFTWARE-110/166 ✅ |
+
+#### `DepthStencilState`
+
+| Property | XNA/Core relevance | EasyGL / Software consumption | Behavioral evidence | Verdict/task |
+|---|---|---|---|---|
+| `DepthBufferEnable` | Classic XNA | Both bypass comparison and writes when false | `DepthState` and `DepthStencilState_WriteEnable` use overlapping near/far layers | PARITY, SOFTWARE-91 ✅ |
+| `DepthBufferWriteEnable` | Classic XNA | Both compare without modifying stored depth in read-only mode | `DepthStencilState_WriteEnable` separates disabled writes from disabled testing | PARITY, SOFTWARE-91/130 ✅ |
+| `DepthBufferFunction` | Classic XNA | Both implement all eight `CompareFunction` values | `DepthStencilState_CompareFunction` plus `Software_DepthState` cover equal/near/far inputs | PARITY, SOFTWARE-91/130 ✅ |
+| `StencilEnable` | Classic XNA | Both gate the entire stencil tuple while leaving depth/color live | `DepthStencilState_StencilEnable` stamps then enables/disables a rejecting gate | PARITY, SOFTWARE-121 ✅ |
+| `StencilFunction` | Classic XNA | Both implement all eight comparisons with masked reference/storage | `DepthStencilState_StencilMatrix` exhausts the comparison matrix | PARITY, SOFTWARE-121 ✅ |
+| `StencilPass` | Classic XNA | Both execute the clockwise/front tuple after stencil and depth pass | `StencilOps` and 39-check `StencilMatrix` distinguish Keep/Zero/Replace/inc/dec/invert/wrap | PARITY, SOFTWARE-121 ✅ |
+| `StencilFail` | Classic XNA | Both execute it only when stencil comparison fails | Same operation/matrix contracts use a deliberate reference mismatch | PARITY, SOFTWARE-121 ✅ |
+| `StencilDepthBufferFail` | Classic XNA | Both execute it only after stencil passes and depth rejects | Same operation/matrix contracts place a nearer depth occluder | PARITY, SOFTWARE-121 ✅ |
+| `TwoSidedStencilMode` | Classic XNA | Both choose the separate CCW tuple only when enabled | `DepthStencilState_StencilTwoSided` renders opposite windings in one target | PARITY, SOFTWARE-121 ✅ |
+| `CounterClockwiseStencilFunction` | Classic XNA | Both select the CCW comparison by post-transform facing | Two-sided and matrix fixtures distinguish it from the clockwise function | PARITY, SOFTWARE-121 ✅ |
+| `CounterClockwiseStencilPass` | Classic XNA | Both select the CCW pass operation | Two-sided and matrix fixtures | PARITY, SOFTWARE-121 ✅ |
+| `CounterClockwiseStencilFail` | Classic XNA | Both select the CCW stencil-fail operation | Two-sided and matrix fixtures | PARITY, SOFTWARE-121 ✅ |
+| `CounterClockwiseStencilDepthBufferFail` | Classic XNA | Both select the CCW depth-fail operation | Two-sided and matrix fixtures | PARITY, SOFTWARE-121 ✅ |
+| `ReferenceStencil` | Classic XNA state and independent device property | Whole-state assignment and `GraphicsDevice.ReferenceStencil` both update comparisons immediately | `GraphicsDeviceReferenceStencil`, clear/stencil tests and the shared presentation reset gate | PARITY, SOFTWARE-121 ✅ |
+| `StencilMask` | Classic XNA | Both mask stored and reference values before comparison | `DepthStencilState_StencilMask` uses high-bit noise to distinguish masked from raw compare | PARITY, SOFTWARE-121 ✅ |
+| `StencilWriteMask` | Classic XNA | Both merge operation output with the previous byte under the write mask | `DepthStencilState_StencilMask` and matrix tests preserve deliberately excluded bits | PARITY, SOFTWARE-121 ✅ |
+
+The property audit therefore finds no unrecorded Software-only state omission. Its two unresolved
+property groups are not paper exceptions: `AddressW` and MRT write masks 1-3 require the missing
+classic compiled pixel-shader execution path and are explicit SOFTWARE-164 acceptance criteria.
+The separate renderer-wide vertex-stage collections remain SOFTWARE-168. EasyGL ES/WebGL's
+wireframe limitation remains SOFTWARE-178.
+
+### Capability truth table
+
+`SupportsCapability` is treated as a stable renderer ability query; whether the *currently bound*
+target actually owns depth or stencil is separately proven by target-format tests. That distinction
+is necessary because the enum cannot truthfully change when an application switches targets.
+
+| Capability | Software answer | Concrete proof or exact boundary | Verdict |
+|---|---:|---|---|
+| `ThreeD` | true | Rasterizer, all six stock-effect contracts and declaration/buffer draws render/read back | truthful |
+| `DepthStencilBuffer` | true | `DepthState`, `DepthFormat`, target depth/stencil usage and SOFTWARE-181's no-depth/depth/stencil differential | truthful as renderer ability |
+| `MultiSampleAntiAliasing` | true | `MsaaFragmentContract`, target/cube resolve and manager-preference output use four independent samples | truthful |
+| `MultipleRenderTargets` | true | `MrtStockEffectContract` binds four ordered CPU attachments, clears/finalizes each and gives slot 0 depth ownership | truthful for stock output; arbitrary COLOR1-3 depends on SOFTWARE-164 |
+| `AnisotropicFiltering` | true | `AnisotropicFilterContract` distinguishes the directional multi-tap result | truthful |
+| `WireFrame` | true | `Software_Wireframe`, clipping/bias/cull transitions and capability positive arm | truthful |
+| `OcclusionQuery` | true | exact 43-check Software contract counts surviving 1x/4x samples after alpha/depth/stencil/mask | truthful |
+| `CustomEffects` | false | Software accepts CNAEXT `ShaderEffect` resource source but does not execute it; EasyGL does. Modern source shaders are outside this campaign | honest false, deferred CNAEXT |
+| `Texture3D` | true | Color full/mip/partial-box Set/Get storage passes; the flag promises storage, not shader sampling | truthful for its documented meaning; format backlog SOFTWARE-173 |
+| `MultiStreamVertexInput` | true | declaration, split semantic, mixed-rate instancing, offsets and frequency contracts execute | truthful |
+| `Instancing` | true | ordinary/16/32-bit/multi-stream/frequency/offset CPU instances rasterize exact pixels | truthful |
+| `StencilBuffer` | true | full comparison/operation/mask/two-sided matrix and target format switching | truthful |
+| `AdditiveBlending` | true | preset and analytic blend matrix produce exact additive RGB/alpha | truthful |
+| `CompiledEffects` | false | valid compiler-produced/authentic bytes reject; enabled EasyGL passes 39 execution tests | honest false and material classic gap, SOFTWARE-162..165 |
+| `FloatRenderTargets` | true (derived) | Single/Vector2/Vector4 targets retain values above one through raster, blend, resolve, mip and typed readback | truthful |
+| `HalfFloatRenderTargets` | true (derived) | HalfSingle/HalfVector2/HalfVector4/HdrBlendable run the same target-domain contracts | truthful |
+| `HalfFloatTextureLinearFiltering` | true (derived) | `HalfVector4LinearFilteringMatchesTheAdvertisedCapability` produces the midpoint purple result | truthful after SOFTWARE-190 |
+| `ComputeShaders` | false (derived) | no CPU compute executor or storage-buffer contract is advertised; EasyGL support is CNAEXT-modern | honest false, out of scope |
+| `IndirectDraw` | false (derived) | no GPU command-buffer execution is advertised; Software's guarded extension routes do not pretend to be indirect hardware draws | honest false, out of scope |
+
+### Inherited/default renderer-method audit
+
+The classic part of `IGraphicsRenderer` was checked method-by-method against both concrete headers.
+Software explicitly overrides backbuffer readback; 2D/cube/volume and render-target factories;
+single/cube/plural target binding; 16/32-bit buffers; every clear combination; every ordinary,
+indexed, user and instanced stock draw route; blend/depth/stencil/rasterizer/MSAA state; U/V/filter,
+anisotropy and mip sampler state; blend factor; reference stencil; scissor; viewport; and the
+occlusion query factory. The inherited/default cases that remain are classified here.
+
+| Inherited/default family | Why the default is or is not valid | Verdict/task |
+|---|---|---|
+| `ApplySamplerAddressW` | Not observable through any XNA stock effect. It is observable through EasyGL's classic compiled volume sampler and must be consumed by the Software shader runtime | real dependency, SOFTWARE-159/164 |
+| `CreateCompiledEffect` / `SupportsCompiledEffects` | Null/false accurately prevents stock substitution, but EasyGL supports the same classic public bytes | honest boundary, material gap SOFTWARE-162..165 |
+| `SupportsDepthStencil` / `SupportsDepthBuffer` / `SupportsStencilBuffer` | The inherited true answer describes renderer ability. Active `DepthFormat::None`, Depth16/24 and Depth24Stencil8 behavior is selected by the Software framebuffer and tested separately | correct default |
+| Window/logical-coordinate/surface callbacks | Software intentionally owns no platform window or swapchain. GraphicsDevice's renderer-neutral logical state and resize/reset behavior still execute | not applicable to headless CPU presentation |
+| Display color space | The default sRGB answer is the only presentation space Software exposes | correct default; HDR swapchains are CNAEXT/platform behavior |
+| Shader-source, shadow/IBL, compute/storage/indirect/timer methods | These are CNAEXT-modern facilities and their false/null/no-op defaults match the capability answers | out of campaign scope, truthful |
+
+No other inherited no-op, null factory or optimistic classic capability remains unexplained.
+
+### Exact Software `CnaGraphicsTests` skip classification
+
+The challenge baseline contained 55 skips. Every skip was inspected by name and message; only six
+are evidence of an in-scope missing capability.
+
+| Exact family/tests | Count | Classification and reason |
+|---|---:|---|
+| `EffectMaterialTest.*` (five named clone/parameter/technique/texture cases) and `EffectTest.AuthenticXna4ShaderStateIdentifiersSurvivePassApplication` | 6 | **REAL CLASSIC GAP:** all require compiled Effects; SOFTWARE-162..165 |
+| `GraphicsDeviceSubsystemLifecycleTest.AWindowedDeviceTakesExactlyOneVideoReference`, `.AnInitialisationFailureFollowedByASuccessBalances` | 2 | Build-shape/platform restriction: Software needs no video subsystem and this configuration has only one compiled renderer. The renderer-neutral zero-video-reference and lifecycle tests run |
+| `GraphicsDeviceWindowDescriptionTest.XnaOwnedWindowIsNonResizableFromCreation` and all five `GraphicsDevicePlatformWindowTests.*` | 6 | Not applicable: Software creates no native window. Reset, viewport, presentation parameters and device lifecycle are covered without inventing one |
+| `BuiltInVertexLayoutTest.SdlGpuObjectArrayWithStaticDeclarationRendersIntoATarget` | 1 | Exact SDL_GPU selector; equivalent public Software declaration/layout positives run |
+| all 27 `SdlGpuIndexedDrawRangeTest.*` | 27 | Exact SDL_GPU/deferred-command implementation tests. Shared indexed/range/topology/effect-family tests run on Software; one PBR member is also CNAEXT |
+| `EasyGlIndexedDeviceLifecycleTest.ThirtyTwoBitDrawDoesNotPoisonNextDesktopContext` | 1 | Exact desktop-EasyGL GL-dispatch regression, SOFTWARE-175; Software has no GL context |
+| `InstancedDrawRangeTest.EasyGLHonorsBindingOffsetsAndInstanceFrequency`, `.D3DHonorsBindingOffsetsAndInstanceFrequency` | 2 | Renderer-selector probes. The renderer-neutral Software instancing/multi-stream/frequency matrix runs |
+| `PointListPrimitiveTest.NonIndexedPointListHonorsVertexStartAndExactCount`, `.SdlGpuPointListRendersExactRenderTargetPixels` | 2 | Renderer-selector tests for `PointListEXT`, which is CNAEXT rather than an XNA `PrimitiveType`; Software has separate extension coverage |
+| `GraphicsAdapterTest.QueryRenderTargetFormatDoesNotPromiseRgba64OnGles` | 1 | GLES-only negative capability test; Software's positive normalized/float target matrix runs |
+| `GraphicsDeviceCapabilityTest.WireFrameIsRefusedDeterministicallyOnThisRenderer` | 1 | Negative control for renderers without wireframe. Software runs the positive output contract |
+| `Texture3DUnsupportedRendererTest.ConstructorThrowsNotSupportedExceptionWhenRendererLacksTexture3D` | 1 | Negative control for renderers without volume storage. Software runs positive full/mip/box transfers |
+| four declaration-refusal tests in `DeclarationGuardTest` | 4 | Negative controls for renderers that infer/refuse layouts. Software translates them and runs `TheTranslatingRendererStillRendersEveryCollidingDeclaration` |
+| `DeclarationGuardTest.CustomShaderEffectKeepsItsElementIndexConvention` | 1 | CNAEXT custom-source shader selector; Software truthfully reports it does not execute source |
+
+Thus 49 of 55 skips are exact negative controls, foreign-renderer selectors, platform-only tests or
+CNAEXT facilities. The remaining six all identify the same acknowledged compiled-Effect gap; no
+skip conceals an additional Software stock-effect/state/resource feature.
+
 ## Deferred EasyGL example families
 
 The following EasyGL families were explicitly classified rather than silently treated as parity
