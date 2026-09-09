@@ -323,23 +323,33 @@ first run of this campaign was invalidated by a mid-run relink.
 | references in a sample with no `.contentproj` | 359 |
 | references whose item names a source the tree has not got | 43 |
 
-### 11.2 The sweep, run 33 (2026-09-09)
+### 11.2 The sweep, run 35 (2026-09-09)
 
 Run 3 is kept because it is what `XNASWEEP-104`--`110` were measured against,
 run 19 because it is the last one of the previous day, and the rest because each
 isolates one fix or one falsified attempt.
 
-| | run 1 | run 3 | run 19 | run 25 | run 27 | run 28 | run 29 | run 30 | run 31 | run 32 | run 33 |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| byte-identical | 922 | 3,619 | 3,777 | 3,879 | 3,893 | 3,900 | 3,900 | 3,886 | 3,916 | 3,918 | **3,918** |
-| differing | 343 | 1,547 | 1,633 | 1,531 | 1,517 | 1,510 | 1,510 | 1,524 | 1,494 | 1,492 | **1,492** |
-| missing (CNA produced nothing) | 6,102 | 2,201 | 1,949 | 1,949 | 1,949 | 1,949 | 1,949 | 1,949 | 1,949 | 1,949 | **1,949** |
-| `UNEXPLAINED` | -- | -- | 171 | 56 | 34 | 33 | 33 | 51 | 18 | 16 | **16** |
-| differing fields | -- | -- | 148,128 | 147,780 | 147,746 | 147,725 | 147,565 | 147,769 | 147,477 | 147,469 | **147,451** |
+| | run 1 | run 3 | run 19 | run 25 | run 27 | run 28 | run 29 | run 30 | run 31 | run 32 | run 33 | run 34 | run 35 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| byte-identical | 922 | 3,619 | 3,777 | 3,879 | 3,893 | 3,900 | 3,900 | 3,886 | 3,916 | 3,918 | 3,918 | 3,919 | **3,919** |
+| differing | 343 | 1,547 | 1,633 | 1,531 | 1,517 | 1,510 | 1,510 | 1,524 | 1,494 | 1,492 | 1,492 | 1,489 | **1,491** |
+| missing (CNA produced nothing) | 6,102 | 2,201 | 1,949 | 1,949 | 1,949 | 1,949 | 1,949 | 1,949 | 1,949 | 1,949 | 1,949 | 1,951 | **1,949** |
+| build units that finished | -- | 156 | 155 | 155 | 155 | 155 | 155 | 155 | 155 | 155 | 155 | 154 | **155** |
+| `UNEXPLAINED` | -- | -- | 171 | 56 | 34 | 33 | 33 | 51 | 18 | 16 | 16 | 15 | **15** |
+| differing fields | -- | -- | 148,128 | 147,780 | 147,746 | 147,725 | 147,565 | 147,769 | 147,477 | 147,469 | 147,451 | 147,397 | **147,443** |
 
 What each run isolates: 27 is `XNASWEEP-170`, 28 `XNASWEEP-168`, 29
 `XNASWEEP-172`, 31 `XNASWEEP-171`+`175`+`177` and the first half of `173`, 32
-the second half of `173`, 33 `XNASWEEP-178`.
+the second half of `173`, 33 `XNASWEEP-178`, 35 `XNASWEEP-179`.
+
+**Run 34 is the second falsified attempt, and its shape is why the build unit
+count is in this table.** It carried `XNASWEEP-179` *and* `XNASWEEP-174`'s
+importer half, and its numbers look better than run 35's -- one more reference
+byte-identical, 46 fewer differing fields. They are not: the `.x`
+`EffectInstance` made SAMPLE-028's model ask for its effect through `BuildAsset`,
+CNA's runner has no processor under XNA's own name for it, and **the unit stopped
+building** -- two references went from `differs` to `missing` and `unitsBuilt`
+from 155 to 154. Run 35 is `XNASWEEP-179` alone.
 
 **Run 30 is a falsified attempt and is kept as one.** `XNASWEEP-173`'s first form
 keyed a vertex on the merged position and its normal, which is what
@@ -393,18 +403,17 @@ The accepted differences, by reason, at run 25:
 
 ### 11.3.1 What is still unexplained
 
-All 16 are model assets, and there is no unexplained reference outside `.fbx`
-and `.x`. By what differs, at run 33:
+All 15 are model assets, and there is no unexplained reference outside `.fbx`
+and `.x`. By what differs, at run 35:
 
 | count | what differs |
 |---:|---|
-| 6 | A bone transform, on RobotGame's six mechs (`XNASWEEP-176`). |
+| 6 | A bone transform, on RobotGame's six mechs (`XNASWEEP-176`) -- 1,860 of the 1,915 fields. |
 | 6 | A vertex buffer's digest alone -- SAMPLE-041's `terrain.xnb` and SAMPLE-055's `baseballbat.xnb`, three copies each, whose positions carry `XNASWEEP-176`'s residue through `TransformScene`. |
 | 2 | SAMPLE-028's `Car.xnb`: a `.x` `EffectInstance`, which CNA reads as a plain material (`XNASWEEP-174`). |
-| 1 | SAMPLE-005's `tank.xnb`: two bone translations, one ulp (`XNASWEEP-176`). |
-| 1 | SAMPLE-142's `AircraftCarrier.xnb`: a vertex declaration's channel order (`XNASWEEP-179`). |
+| 1 | SAMPLE-074's `tank.xnb`: three bone translations, one ulp each (`XNASWEEP-176`). |
 
-Unexplained field-level differences: **1,931**, of 147,451 over the whole corpus
+Unexplained field-level differences: **1,915**, of 147,443 over the whole corpus
 (2,215 of 147,780 at run 25, 2,706 of 148,128 at run 19). Almost all of them are
 the six mechs: `Kiev.xnb` and `Yager.xnb` carry 372 each.
 
@@ -511,11 +520,7 @@ sequence every time.
    whose opaque data is the effect reference and the instance's parameters in
    file order, with a string parameter becoming a *texture* under its own name.
 
-3. **`XNASWEEP-179`, a vertex declaration's channel order.** One reference. The
-   colour goes after the first texture-coordinate set and the rest follow, which
-   is measured on a fixture; what is owed is the corpus run.
-
-4. **`XNASWEEP-163`'s 931.** The corpus-coverage row, unchanged by any of this
+3. **`XNASWEEP-163`'s 931.** The corpus-coverage row, unchanged by any of this
    and deliberately separate from every behaviour row above.
 
 The partial `OptimizeForCache` model is still deliberately **not** shipped -- what
