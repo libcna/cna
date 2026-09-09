@@ -458,6 +458,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   reads convert float/int/bool storage instead of reinterpreting bits; scalar parameters broadcast
   to vector, Quaternion and Matrix results; incompatible aggregate widths/classes and non-array
   Matrix-array reads throw `InvalidCastException`, matching recovered Microsoft IL.
+- **Compiled array getters preserve requested length and flat packing** (`SOFTWARE-271`) — every
+  positive `count` produces that many zero-initialized results, available values are converted and
+  packed from the reflected logical stream, and Matrix/transpose arrays zero-pad their tail.
 - **The classic SpriteBatch/SpriteFont parity corpus executes on the CPU** (`SOFTWARE-138`).
   Eighteen renderer-independent scenes shared with EasyGL cover flips, rotation/origin, both scale
   overloads, source rectangles, layer sorting, transforms, render targets, viewports, scissor,

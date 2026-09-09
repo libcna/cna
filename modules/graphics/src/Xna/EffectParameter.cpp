@@ -47,6 +47,14 @@ namespace
         if (count <= 0)
             throw System::ArgumentOutOfRangeException();
     }
+
+    bool TryGetCompiledFlatCellOffset(std::size_t logicalIndex, int columnCount,
+                                      std::size_t byteSize, std::size_t& offset)
+    {
+        const std::size_t columns = static_cast<std::size_t>(std::max(columnCount, 1));
+        offset = (logicalIndex / columns) * 16u + (logicalIndex % columns) * 4u;
+        return offset <= byteSize && sizeof(std::uint32_t) <= byteSize - offset;
+    }
 }
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -158,16 +166,16 @@ namespace Microsoft::Xna::Framework::Graphics
         RequireNumericParameter("GetValueBooleanArray");
         if (compiledStorage_)
         {
-            std::vector<bool> result;
-            result.reserve(static_cast<std::size_t>(std::max(count, 0)));
-            const int columns = std::max(columnCount_, 1);
+            std::vector<bool> result(static_cast<std::size_t>(count), false);
             for (int i = 0; i < count; ++i)
             {
-                const std::size_t cell = static_cast<std::size_t>(i / columns) * 16 +
-                                         static_cast<std::size_t>(i % columns) * 4;
-                if (cell + sizeof(int) > compiledByteSize_) break;
-                result.push_back(ReadCell<int>(compiledStorage_->bytes,
-                                                compiledByteOffset_ + cell) != 0);
+                std::size_t cell = 0;
+                if (!TryGetCompiledFlatCellOffset(static_cast<std::size_t>(i), columnCount_,
+                                                  compiledByteSize_, cell))
+                    break;
+                result[static_cast<std::size_t>(i)] = paramType_ == EffectParameterType::Single
+                    ? ReadCompiledNumericCellAsFloat(cell) != 0.0f
+                    : ReadCompiledNumericCellAsInt(cell) != 0;
             }
             return result;
         }
@@ -192,16 +200,14 @@ namespace Microsoft::Xna::Framework::Graphics
         RequireNumericParameter("GetValueInt32Array");
         if (compiledStorage_)
         {
-            std::vector<int> result;
-            result.reserve(static_cast<std::size_t>(std::max(count, 0)));
-            const int columns = std::max(columnCount_, 1);
+            std::vector<int> result(static_cast<std::size_t>(count), 0);
             for (int i = 0; i < count; ++i)
             {
-                const std::size_t cell = static_cast<std::size_t>(i / columns) * 16 +
-                                         static_cast<std::size_t>(i % columns) * 4;
-                if (cell + sizeof(int) > compiledByteSize_) break;
-                result.push_back(ReadCell<int>(compiledStorage_->bytes,
-                                               compiledByteOffset_ + cell));
+                std::size_t cell = 0;
+                if (!TryGetCompiledFlatCellOffset(static_cast<std::size_t>(i), columnCount_,
+                                                  compiledByteSize_, cell))
+                    break;
+                result[static_cast<std::size_t>(i)] = ReadCompiledNumericCellAsInt(cell);
             }
             return result;
         }
@@ -225,16 +231,14 @@ namespace Microsoft::Xna::Framework::Graphics
         RequireNumericParameter("GetValueSingleArray");
         if (compiledStorage_)
         {
-            std::vector<float> result;
-            result.reserve(static_cast<std::size_t>(std::max(count, 0)));
-            const int columns = std::max(columnCount_, 1);
+            std::vector<float> result(static_cast<std::size_t>(count), 0.0f);
             for (int i = 0; i < count; ++i)
             {
-                const std::size_t cell = static_cast<std::size_t>(i / columns) * 16 +
-                                         static_cast<std::size_t>(i % columns) * 4;
-                if (cell + sizeof(float) > compiledByteSize_) break;
-                result.push_back(ReadCell<float>(compiledStorage_->bytes,
-                                                 compiledByteOffset_ + cell));
+                std::size_t cell = 0;
+                if (!TryGetCompiledFlatCellOffset(static_cast<std::size_t>(i), columnCount_,
+                                                  compiledByteSize_, cell))
+                    break;
+                result[static_cast<std::size_t>(i)] = ReadCompiledNumericCellAsFloat(cell);
             }
             return result;
         }
@@ -498,15 +502,16 @@ namespace Microsoft::Xna::Framework::Graphics
             if (paramClass_ != EffectParameterClass::Matrix ||
                 elements_->getCountProperty() == 0)
                 throw System::InvalidCastException();
-            std::vector<Matrix> result;
+            std::vector<Matrix> result(static_cast<std::size_t>(count));
             const std::size_t stride = static_cast<std::size_t>(std::max(rowCount_, 1)) * 16;
-            for (int i = 0; i < count; ++i)
+            const int available = std::min(count, elements_->getCountProperty());
+            for (int i = 0; i < available; ++i)
             {
                 const std::size_t matrixOffset = static_cast<std::size_t>(i) * stride;
                 if (matrixOffset + stride > compiledByteSize_) break;
-                result.push_back(ReadCompiledMatrix(
+                result[static_cast<std::size_t>(i)] = ReadCompiledMatrix(
                     compiledStorage_->bytes, compiledByteOffset_ + matrixOffset,
-                    stride, rowCount_, columnCount_, false));
+                    stride, rowCount_, columnCount_, false);
             }
             return result;
         }
@@ -548,15 +553,16 @@ namespace Microsoft::Xna::Framework::Graphics
             if (paramClass_ != EffectParameterClass::Matrix ||
                 elements_->getCountProperty() == 0)
                 throw System::InvalidCastException();
-            std::vector<Matrix> result;
+            std::vector<Matrix> result(static_cast<std::size_t>(count));
             const std::size_t stride = static_cast<std::size_t>(std::max(rowCount_, 1)) * 16;
-            for (int i = 0; i < count; ++i)
+            const int available = std::min(count, elements_->getCountProperty());
+            for (int i = 0; i < available; ++i)
             {
                 const std::size_t matrixOffset = static_cast<std::size_t>(i) * stride;
                 if (matrixOffset + stride > compiledByteSize_) break;
-                result.push_back(ReadCompiledMatrix(
+                result[static_cast<std::size_t>(i)] = ReadCompiledMatrix(
                     compiledStorage_->bytes, compiledByteOffset_ + matrixOffset,
-                    stride, rowCount_, columnCount_, true));
+                    stride, rowCount_, columnCount_, true);
             }
             return result;
         }
@@ -590,17 +596,22 @@ namespace Microsoft::Xna::Framework::Graphics
         RequireNumericParameter("GetValueQuaternionArray");
         if (compiledStorage_)
         {
-            std::vector<Quaternion> result;
+            std::vector<Quaternion> result(static_cast<std::size_t>(count));
+            std::size_t logicalIndex = 0;
             for (int i = 0; i < count; ++i)
             {
-                const std::size_t offset = static_cast<std::size_t>(i) * 16;
-                if (offset + 16 > compiledByteSize_) break;
-                result.push_back({
-                    ReadCell<float>(compiledStorage_->bytes, compiledByteOffset_ + offset),
-                    ReadCell<float>(compiledStorage_->bytes, compiledByteOffset_ + offset + 4),
-                    ReadCell<float>(compiledStorage_->bytes, compiledByteOffset_ + offset + 8),
-                    ReadCell<float>(compiledStorage_->bytes, compiledByteOffset_ + offset + 12)
-                });
+                float* components[4] = {&result[static_cast<std::size_t>(i)].X,
+                                        &result[static_cast<std::size_t>(i)].Y,
+                                        &result[static_cast<std::size_t>(i)].Z,
+                                        &result[static_cast<std::size_t>(i)].W};
+                for (float* component : components)
+                {
+                    std::size_t cell = 0;
+                    if (!TryGetCompiledFlatCellOffset(logicalIndex++, columnCount_,
+                                                      compiledByteSize_, cell))
+                        return result;
+                    *component = ReadCompiledNumericCellAsFloat(cell);
+                }
             }
             return result;
         }
@@ -633,15 +644,20 @@ namespace Microsoft::Xna::Framework::Graphics
         RequireNumericParameter("GetValueVector2Array");
         if (compiledStorage_)
         {
-            std::vector<Vector2> result;
+            std::vector<Vector2> result(static_cast<std::size_t>(count));
+            std::size_t logicalIndex = 0;
             for (int i = 0; i < count; ++i)
             {
-                const std::size_t offset = static_cast<std::size_t>(i) * 16;
-                if (offset + 8 > compiledByteSize_) break;
-                result.push_back({
-                    ReadCell<float>(compiledStorage_->bytes, compiledByteOffset_ + offset),
-                    ReadCell<float>(compiledStorage_->bytes, compiledByteOffset_ + offset + 4)
-                });
+                float* components[2] = {&result[static_cast<std::size_t>(i)].X,
+                                        &result[static_cast<std::size_t>(i)].Y};
+                for (float* component : components)
+                {
+                    std::size_t cell = 0;
+                    if (!TryGetCompiledFlatCellOffset(logicalIndex++, columnCount_,
+                                                      compiledByteSize_, cell))
+                        return result;
+                    *component = ReadCompiledNumericCellAsFloat(cell);
+                }
             }
             return result;
         }
@@ -672,16 +688,21 @@ namespace Microsoft::Xna::Framework::Graphics
         RequireNumericParameter("GetValueVector3Array");
         if (compiledStorage_)
         {
-            std::vector<Vector3> result;
+            std::vector<Vector3> result(static_cast<std::size_t>(count));
+            std::size_t logicalIndex = 0;
             for (int i = 0; i < count; ++i)
             {
-                const std::size_t offset = static_cast<std::size_t>(i) * 16;
-                if (offset + 12 > compiledByteSize_) break;
-                result.push_back({
-                    ReadCell<float>(compiledStorage_->bytes, compiledByteOffset_ + offset),
-                    ReadCell<float>(compiledStorage_->bytes, compiledByteOffset_ + offset + 4),
-                    ReadCell<float>(compiledStorage_->bytes, compiledByteOffset_ + offset + 8)
-                });
+                float* components[3] = {&result[static_cast<std::size_t>(i)].X,
+                                        &result[static_cast<std::size_t>(i)].Y,
+                                        &result[static_cast<std::size_t>(i)].Z};
+                for (float* component : components)
+                {
+                    std::size_t cell = 0;
+                    if (!TryGetCompiledFlatCellOffset(logicalIndex++, columnCount_,
+                                                      compiledByteSize_, cell))
+                        return result;
+                    *component = ReadCompiledNumericCellAsFloat(cell);
+                }
             }
             return result;
         }
@@ -712,17 +733,22 @@ namespace Microsoft::Xna::Framework::Graphics
         RequireNumericParameter("GetValueVector4Array");
         if (compiledStorage_)
         {
-            std::vector<Vector4> result;
+            std::vector<Vector4> result(static_cast<std::size_t>(count));
+            std::size_t logicalIndex = 0;
             for (int i = 0; i < count; ++i)
             {
-                const std::size_t offset = static_cast<std::size_t>(i) * 16;
-                if (offset + 16 > compiledByteSize_) break;
-                result.push_back({
-                    ReadCell<float>(compiledStorage_->bytes, compiledByteOffset_ + offset),
-                    ReadCell<float>(compiledStorage_->bytes, compiledByteOffset_ + offset + 4),
-                    ReadCell<float>(compiledStorage_->bytes, compiledByteOffset_ + offset + 8),
-                    ReadCell<float>(compiledStorage_->bytes, compiledByteOffset_ + offset + 12)
-                });
+                float* components[4] = {&result[static_cast<std::size_t>(i)].X,
+                                        &result[static_cast<std::size_t>(i)].Y,
+                                        &result[static_cast<std::size_t>(i)].Z,
+                                        &result[static_cast<std::size_t>(i)].W};
+                for (float* component : components)
+                {
+                    std::size_t cell = 0;
+                    if (!TryGetCompiledFlatCellOffset(logicalIndex++, columnCount_,
+                                                      compiledByteSize_, cell))
+                        return result;
+                    *component = ReadCompiledNumericCellAsFloat(cell);
+                }
             }
             return result;
         }

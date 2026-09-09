@@ -106,6 +106,14 @@ namespace
         return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
     }
 
+    std::vector<SharpRuntime::bytecs> LoadSkinnedCompiledEffectFixture()
+    {
+        const std::filesystem::path path =
+            CNA::TestSupport::CompiledEffectDirectory() / "SkinnedEffect.fxb";
+        std::ifstream input(path, std::ios::binary);
+        return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+    }
+
     std::size_t FindFirstPassRenderStateOffset(
         const std::vector<SharpRuntime::bytecs>& bytes)
     {
@@ -535,6 +543,70 @@ TEST(EffectTest, CompiledTypedGettersValidateShapeBroadcastAndConvert)
     ASSERT_NE(shaderIndex, nullptr);
     shaderIndex->SetValue(7);
     EXPECT_FLOAT_EQ(shaderIndex->GetValueSingle(), 7.0f);
+}
+
+TEST(EffectTest, CompiledArrayGettersReturnRequestedLengthAndPackedValues)
+{
+    GraphicsDevice gd;
+    const auto bytes = LoadConformanceCompiledEffectFixture();
+    ASSERT_FALSE(bytes.empty());
+
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+    {
+        GTEST_SKIP() << "renderer does not execute compiled effects";
+    }
+
+    Effect effect(gd, bytes);
+    auto& parameters = effect.getParametersProperty();
+    auto* gain = parameters["Gain"];
+    auto* tint = parameters["Tint"];
+    ASSERT_NE(gain, nullptr);
+    ASSERT_NE(tint, nullptr);
+
+    gain->SetValue(3.0f);
+    const auto booleans = gain->GetValueBooleanArray(3);
+    const auto integers = gain->GetValueInt32Array(3);
+    const auto singles = gain->GetValueSingleArray(3);
+    ASSERT_EQ(booleans.size(), 3u);
+    ASSERT_EQ(integers.size(), 3u);
+    ASSERT_EQ(singles.size(), 3u);
+    EXPECT_TRUE(booleans[0]);
+    EXPECT_FALSE(booleans[1]);
+    EXPECT_EQ(integers, (std::vector<int>{3, 0, 0}));
+    EXPECT_EQ(singles, (std::vector<float>{3.0f, 0.0f, 0.0f}));
+
+    tint->SetValue(Vector4(1.0f, 2.0f, 3.0f, 4.0f));
+    const auto vector2s = tint->GetValueVector2Array(3);
+    const auto vector3s = tint->GetValueVector3Array(2);
+    const auto vector4s = tint->GetValueVector4Array(2);
+    const auto quaternions = tint->GetValueQuaternionArray(2);
+    ASSERT_EQ(vector2s.size(), 3u);
+    ASSERT_EQ(vector3s.size(), 2u);
+    ASSERT_EQ(vector4s.size(), 2u);
+    ASSERT_EQ(quaternions.size(), 2u);
+    EXPECT_EQ(vector2s[0], Vector2(1.0f, 2.0f));
+    EXPECT_EQ(vector2s[1], Vector2(3.0f, 4.0f));
+    EXPECT_EQ(vector2s[2], Vector2::Zero);
+    EXPECT_EQ(vector3s[0], Vector3(1.0f, 2.0f, 3.0f));
+    EXPECT_EQ(vector3s[1], Vector3(4.0f, 0.0f, 0.0f));
+    EXPECT_EQ(vector4s[0], Vector4(1.0f, 2.0f, 3.0f, 4.0f));
+    EXPECT_EQ(vector4s[1], Vector4::Zero);
+    EXPECT_EQ(quaternions[0], Quaternion(1.0f, 2.0f, 3.0f, 4.0f));
+    EXPECT_EQ(quaternions[1], Quaternion());
+
+    const auto skinnedBytes = LoadSkinnedCompiledEffectFixture();
+    ASSERT_FALSE(skinnedBytes.empty());
+    Effect skinned(gd, skinnedBytes);
+    auto* bones = skinned.getParametersProperty()["Bones"];
+    ASSERT_NE(bones, nullptr);
+    const int boneCount = bones->getElementsProperty().getCountProperty();
+    ASSERT_GT(boneCount, 0);
+    const auto matrices = bones->GetValueMatrixArray(boneCount + 1);
+    const auto transposed = bones->GetValueMatrixTransposeArray(boneCount + 1);
+    ASSERT_EQ(matrices.size(), static_cast<std::size_t>(boneCount + 1));
+    ASSERT_EQ(transposed.size(), static_cast<std::size_t>(boneCount + 1));
+    EXPECT_EQ(matrices.back(), Matrix());
+    EXPECT_EQ(transposed.back(), Matrix());
 }
 
 TEST(EffectTest, AuthenticXna4EffectAcceptsRepeatedAndAuxiliaryObjectRecords)

@@ -1347,6 +1347,7 @@ pass. That is the line `CompiledEffects == true` is a promise about.
 | Scalar bool/int/float setter on a compiled Vector, Matrix or array parent | Was **Case 1**, shared layer; **closed** -- scalar sources broadcast across every Vector/Matrix component after reflected-type conversion, while array parents and incompatible classes/types throw `InvalidCastException` | works | works | works | `SOFTWARE-268` |
 | Numeric bool/int/float array setter on a compiled Structure | Was **Case 1**, shared layer; **closed** -- only Scalar, Vector and Matrix reflected classes accept these arrays; Structure and other classes throw `InvalidCastException` | works | works | works | `SOFTWARE-269` |
 | Compiled scalar/vector/Quaternion/Matrix getters on convertible or mismatched reflected shapes | Was **Case 1**, shared layer; **closed** -- destination-typed scalar conversion, scalar-to-aggregate broadcast and Microsoft's aggregate shape checks replace raw bit reinterpretation and permissive cross-width reads | works | works | works | `SOFTWARE-270` |
+| Compiled numeric/vector/Quaternion/Matrix array getters beyond reflected storage or across widths | Was **Case 1**, shared layer; **closed** -- every positive count returns that many zero-initialized results and available reflected values are converted and packed from one flat logical stream | works | works | works | `SOFTWARE-271` |
 
 ## 11. Recommended critical path
 
