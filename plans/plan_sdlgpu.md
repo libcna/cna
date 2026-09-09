@@ -23,7 +23,7 @@
 | Shared EasyGL parity fixtures available | 30 renderer-neutral sources in `modules/graphics/examples/parity` |
 | Shared parity fixtures registered for SDL GPU | 1/30 (`parity_fill_mode_wireframe`) |
 | Tasks created by this audit | 30 (`SDLGPU-55`–`SDLGPU-84`) |
-| Completed / open / proven unavoidable | 9 / 21 / 0; `SDLGPU-80` is a candidate limitation, not yet counted complete |
+| Completed / open / proven unavoidable | 10 / 20 / 0; `SDLGPU-80` is a candidate limitation, not yet counted complete |
 | SDL GPU build | Stable `cmake-build-sdlgpu`, Debug, `CNA_GRAPHICS_RENDERER=SDL_GPU`, tests/examples ON |
 | EasyGL oracle build | Stable `cmake-build-debug`, Debug, `CNA_GRAPHICS_RENDERER=OPENGL33`, tests/examples ON |
 | Runtime driver | SDL 3.5.0 SDL_gpu Vulkan on AMD Radeon 780M / Mesa RADV 25.0.7; Khronos validation layer 1.4.309 present |
@@ -51,8 +51,10 @@ hidden:
 4. `SdlGpu_StockEffectSamplerContract` and `SdlGpu_DualTextureSlotSamplerContract`: the valid
    stride-28 independent-UV declaration is refused, then fixture unwinding reaches `Present` with
    an RT bound (`SDLGPU-59`; cleanup robustness is part of the oracle fix).
-5. `SdlGpu_DescriptorCapacityContract`: 27-state and 256-texture sampler rotations interpolate
-   instead of remaining point-exact (`SDLGPU-63`).
+5. `SdlGpu_DescriptorCapacityContract`: the apparent 12/27 and 114/256 "exactness" failure was a
+   baseline-reading defect, resolved by `SDLGPU-63`. Those are the deliberately Point-like cases;
+   the other 15/27 and 142/256 deliberately Linear/Anisotropic cases must interpolate. All 29
+   adversarial capacity/lifetime checks pass with zero wrong samples.
 6. `SdlGpu_PointSamplingContract`: the initial 145/146 result is resolved by `SDLGPU-62`; the
   3D non-integer 3×3→10×10 PointClamp mapping now matches all 100 EasyGL/XNA texels.
 7. `SdlGpu_GraphicsDevice_OrderedClear`: the initial 45/46 result was an oracle defect, resolved by
@@ -89,7 +91,7 @@ underlying limitation with no correct reasonable emulation; `out` excluded moder
 | Cull/scissor/viewport/depth range | Full GL state | Deferred snapshots, most targeted tests pass | `~` — shared cross-renderer oracle pending; `SDLGPU-58`, `68` |
 | FillMode.WireFrame | Renderer-side triangle-edge expansion | Native `SDL_GPU_FILLMODE_LINE` in every ordinary pipeline | `=` — shared asymmetric three-edge fixture passes; `SDLGPU-61` |
 | Constant/slope depth bias | GL polygon offset with XNA normalization | Per-format normalized-to-native conversion in every immutable pipeline; SpriteBatch uses projected layer depth | `=` — expanded 67/67 pixel/cache oracle, validation clean; `SDLGPU-65` |
-| Sampler filter/address/anisotropy | All stock/effect slots | Descriptor key contains them | `≠` — capacity and propagation failures; `SDLGPU-63`, `64` |
+| Sampler filter/address/anisotropy | All stock/effect slots | Descriptor key contains them | `~` — descriptor identity/capacity is exact; full stock-field propagation remains `SDLGPU-64` |
 | MaxMipLevel/LOD bias/AddressW | Applied on ordinary draws | cached, but stock commands omit MaxMipLevel/LOD bias and volume AddressW | `≠`; `SDLGPU-64` |
 | Texture2D Color/mips/partial/NPOT/readback | Real upload + CPU/GPU read paths | Real RGBA8 upload; shared CPU shadow; authored mips | `=` for Color baseline including 3D PointClamp; lifecycle sweep `SDLGPU-69`, `81` |
 | Texture2D ordinary non-Color formats | Packed, DXT native-or-decode, SNORM | classifier inherited and native resource hard-coded RGBA8 | `∅` though SDL has corresponding formats; `SDLGPU-69` |
@@ -328,14 +330,27 @@ underlying API limitation proven after reasonable emulation analysis.
   unrelated invalid negative-Z depth fixture left latent by `SDLGPU-65`; it is isolated as
   `SDLGPU-84`. Native validation diagnostics are fatal.
 
-### SDLGPU-63 — preserve sampler identity at descriptor capacity ⬜
+### SDLGPU-63 — verify sampler identity at descriptor capacity ✅
 
-- **Problem/public behavior:** rotating 27 sampler states or 256 textures changes Point samples into
-  interpolated results.
-- **Evidence:** baseline exactness is 12/27 and 114/256; smaller sampler tests pass.
+- **Problem/public behavior:** determine whether rotating 27 sampler states or 256 live textures
+  aliases native sampler/texture bindings or exhausts a hidden descriptor pool.
+- **Evidence:** the initial audit incorrectly read 12/27 and 114/256 exact samples as failures. The
+  fixture intentionally rotates all nine `TextureFilter` values: five magnify linearly, so 15/27
+  sampler-only draws and 142/256 non-uniform texture draws must interpolate; the remaining Point-like
+  cases must reproduce byte-encoded identities exactly.
 - **Location:** sampler cache key, binding tables, descriptor-capacity rollover and resource cycling.
 - **Acceptance/test:** every adversarial sample remains exact across capacity/rollover and A→B→A;
   bounded cache/resource behavior and validation cleanliness are proved.
+- **Result (2026-09-09):** all **29/29** checks pass on the real Vulkan SDL_gpu path. The test proves
+  1/2/31/32/63/64/65/66/96/128/256 simultaneously-live textures; all 27 filter/address
+  combinations; 256 live texture+sampler pairs; Point-vs-Linear native distinctness; repeated
+  identical state; 256 create/draw/read/destroy cycles; 65 live render targets; 96 DualTexture,
+  70 AlphaTest and 70 EnvironmentMap effect resources; 96 SpriteBatch flushes and one 96-sprite
+  batch; indexed/non-indexed/user draws; 320 released-resource cycles; recreation/interleaving; and
+  70 live cubes. Every wrong/unreadable counter is zero. `SamplerCacheKeyEXT` compares and hashes
+  filter, U/V/W address modes, clamped anisotropy, MaxMipLevel and the exact LOD-bias bit pattern.
+  Vulkan validation errors and warnings are now fatal for this contract. No production defect was
+  present and no renderer code was changed.
 
 ### SDLGPU-64 — propagate every ordinary sampler field on every stock path ⬜
 

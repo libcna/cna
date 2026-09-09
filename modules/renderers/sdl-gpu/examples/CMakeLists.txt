@@ -468,6 +468,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         ${CNA_GRAPHICS_EXAMPLES_DIR}/descriptor_capacity_contract_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_DescriptorCapacityContract COMMAND cna_test_sdlgpu_descriptor_capacity
         TIMEOUT 900 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    set_tests_properties(SdlGpu_DescriptorCapacityContract PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
     cna_sdlgpu_test(cna_test_sdlgpu_point_sampling
         ${CNA_GRAPHICS_EXAMPLES_DIR}/point_sampling_contract_test.cpp)
