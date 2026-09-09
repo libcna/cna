@@ -181,6 +181,54 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_BufferPoolStress COMMAND cna_test_webgpu_buffer_pool_stress
         TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plans/plan_webgpu.md WEBGPU-197 step (a): re-measures the WEBGPU-58 finding that a shader
+    # module / bind-group layout / pipeline layout reused across a sample-count change silently
+    # renders wrong on this pin. WEBGPU-197 made that reuse reachable (pipelines are now built at the
+    # bound pass's sample count from shared modules), and WEBGPU-165 is what would make it live, so
+    # the answer has to be measured rather than assumed in either direction. Drives wgpu-native
+    # directly off the renderer's own device/queue, so it also links WebGPU::WebGPU.
+    cna_webgpu_test(cna_test_webgpu_msaa_module_reuse_probe webgpu_msaa_module_reuse_probe_test.cpp)
+    target_link_libraries(cna_test_webgpu_msaa_module_reuse_probe PRIVATE WebGPU::WebGPU)
+    cna_register_renderer_test(NAME WebGPU_MsaaModuleReuseProbe COMMAND cna_test_webgpu_msaa_module_reuse_probe
+        TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plans/plan_webgpu.md WEBGPU-200: the two optional 32-bit-float adapter features. Every adapter
+    # available here HAS both, so the paths that depend on their absence would be branches no test
+    # executes; this one forces the renderer to report them absent and checks that the refusal fires,
+    # names the feature, and stays narrow. Reads the concrete WebGPURenderer, so it links
+    # WebGPU::WebGPU.
+    cna_webgpu_test(cna_test_webgpu_float32_features webgpu_float32_features_test.cpp)
+    target_link_libraries(cna_test_webgpu_float32_features PRIVATE WebGPU::WebGPU)
+    cna_register_renderer_test(NAME WebGPU_Float32Features COMMAND cna_test_webgpu_float32_features
+        TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plans/plan_webgpu.md WEBGPU-181: the CPU-side half of the device-loss contract --
+    # CanBeginDrawEXT()'s baseline, and that the renderer SHARES the framework's pixel buffer by
+    # pointer rather than copying it. Reads the concrete WebGPURenderer, so it links WebGPU::WebGPU.
+    cna_webgpu_test(cna_test_webgpu_context_recovery webgpu_context_recovery_test.cpp)
+    target_link_libraries(cna_test_webgpu_context_recovery PRIVATE WebGPU::WebGPU)
+    cna_register_renderer_test(NAME WebGPU_ContextRecovery COMMAND cna_test_webgpu_context_recovery
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plans/plan_webgpu.md WEBGPU-191: resource lifetime against the deferred replay -- a resource
+    # disposed between its queued draw and the flush. Reads the renderer's own uncaptured-error
+    # count as the oracle, so it links WebGPU::WebGPU.
+    cna_webgpu_test(cna_test_webgpu_resource_lifetime_stress webgpu_resource_lifetime_stress_test.cpp)
+    target_link_libraries(cna_test_webgpu_resource_lifetime_stress PRIVATE WebGPU::WebGPU)
+    cna_register_renderer_test(NAME WebGPU_ResourceLifetimeStress
+        COMMAND cna_test_webgpu_resource_lifetime_stress
+        TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plans/plan_webgpu.md WEBGPU-192: a REAL window resize, driven through GameWindow's public
+    # XNA BeginScreenDeviceChange/EndScreenDeviceChange rather than a native windowing call, so no
+    # platform-boundary edge is opened for a renderer example. Reads the renderer's uncaptured-error
+    # count to prove the surface was reconfigured, so it links WebGPU::WebGPU.
+    cna_webgpu_test(cna_test_webgpu_real_window_resize webgpu_real_window_resize_test.cpp)
+    target_link_libraries(cna_test_webgpu_real_window_resize PRIVATE WebGPU::WebGPU)
+    cna_register_renderer_test(NAME WebGPU_RealWindowResize
+        COMMAND cna_test_webgpu_real_window_resize
+        TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # Task 1105 (plans/plan_graphics.md Phase 80): GetOrCreatePipelineLitTextured3DVertexLit /
     # BasicEffect.PreferPerPixelLighting real dispatch.
     cna_webgpu_test(cna_test_webgpu_basiceffect_preferperpixellighting webgpu_basiceffect_preferperpixellighting_test.cpp)
@@ -979,6 +1027,18 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
                     ${CNA_GRAPHICS_EXAMPLES_DIR}/backbuffer_headless_reject_test.cpp)
     cna_register_renderer_test(NAME WebGPU_BackbufferReject COMMAND cna_test_webgpu_backbuffer_reject
         TIMEOUT 300 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plans/plan_webgpu.md WEBGPU-207: the shared cross-renderer behavioural parity fixtures. The SAME
+    # renderer-neutral sources EasyGL builds (modules/renderers/easygl/examples/CMakeLists.txt), listed
+    # once in ParityFixtures.cmake -- so a Phase 70 behavioural row adds one fixture rather than a
+    # WebGPU test, an EasyGL test and two oracles that can disagree.
+    include(${CNA_GRAPHICS_EXAMPLES_DIR}/parity/ParityFixtures.cmake)
+    cna_register_parity_fixtures(
+        BUILDER cna_webgpu_test
+        TARGET_SUFFIX webgpu
+        TEST_PREFIX WebGPU
+        LABELS "Parity;WebGPU"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
 
 # plans/plan_webgpu.md WEBGPU-121: browser shader coverage. The native effect suites above prove
@@ -1015,6 +1075,33 @@ if(EMSCRIPTEN AND CNA_BUILD_EXAMPLES AND CNA_GRAPHICS_RENDERER STREQUAL "WEBGPU"
     # and EASYGL build it, so the WebGPU output can be pixel-compared against another backend's dump
     # with cna_diag_compare. Under Emscripten it writes into MEMFS; scripts/run-webgpu-parity-test.sh
     # extracts the dump and runs the comparison.
+    # plans/plan_webgpu.md WEBGPU-196: the five behaviours whose browser answer is not implied by
+    # their native one -- wireframe (153/154), semantic vertex layouts (155), multi-stream input
+    # (172), the custom-WGSL ShaderEffect route compiled by Tint rather than Naga, and device loss
+    # (182). One page, one check per frame; see the file's header for why each is here.
+    cna_webgpu_effect_page(cna_webgpu_coverage_page webgpu_browser_coverage_test.cpp)
+    target_link_libraries(cna_webgpu_coverage_page PRIVATE WebGPU::WebGPU)
+
+    # plans/plan_webgpu.md WEBGPU-203: compiled XNA Effects, in a browser. The native suites prove
+    # the translator and every shared contract through it, but two things are open until this runs:
+    # whether TINT (not Naga) accepts the generated WGSL, and whether MojoShader's C parser and
+    # SPIR-V emitter behave when compiled to WebAssembly. Built only where the compiled-effect
+    # option is on, because without it there is no route to exercise.
+    if(CNA_WEBGPU_COMPILED_EFFECTS)
+        cna_webgpu_effect_page(cna_webgpu_compiled_effect_page
+                               webgpu_browser_compiled_effect_test.cpp)
+        # The synthetic fixture builders are header-only and build their bytecode in code, so this
+        # page needs no preloaded asset -- which is what keeps it drivable by the same harness as
+        # every other page here.
+        target_include_directories(cna_webgpu_compiled_effect_page PRIVATE
+            "${CMAKE_SOURCE_DIR}/tests/support")
+        # Same reason cna_webgpu_coverage_page needs it: this page includes the renderer's own
+        # public headers, which include webgpu.h and (for the compiled-effect half) mojoshader.h,
+        # and CNA keeps both PRIVATE on the renderer target.
+        target_link_libraries(cna_webgpu_compiled_effect_page PRIVATE
+            WebGPU::WebGPU cna_mojoshader)
+    endif()
+
     cna_webgpu_effect_page(cna_diag_webgpu ${CNA_GRAPHICS_EXAMPLES_DIR}/cross_renderer_diagnostic_scene.cpp)
     # The scene writes its dump into MEMFS; export FS so the driver page (run-webgpu-parity-test.sh)
     # can read the bytes back out of the browser without modifying the renderer-agnostic scene.

@@ -261,7 +261,7 @@ The recorded outer command was (verbatim, with the paths it actually ran with; t
 partition is gone, and its replacements are `build-probe/` and `/rv/cnaccache`):
 
 ```text
-CCACHE_DIR=/media/robertvokac/claude/tmp/cna/ccache cmake -S /rv/data/development/github.com/openeggbert/cnaglide -B /media/robertvokac/claude/tmp/cna/cmake-build-glide-pre -G Ninja -DCMAKE_TOOLCHAIN_FILE=/rv/data/development/github.com/openeggbert/cnaglide/cmake/toolchains/mingw-w64-i686.cmake -DCNA_GRAPHICS_BACKEND=GLIDE -DCNA_BUILD_TESTS=ON -DCNA_USE_CCACHE=ON -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+CCACHE_DIR=$HOME/.cache/ccache cmake -S /rv/data/development/github.com/openeggbert/cnaglide -B build-probe/cmake-build-glide-pre -G Ninja -DCMAKE_TOOLCHAIN_FILE=/rv/data/development/github.com/openeggbert/cnaglide/cmake/toolchains/mingw-w64-i686.cmake -DCNA_GRAPHICS_BACKEND=GLIDE -DCNA_BUILD_TESTS=ON -DCNA_USE_CCACHE=ON -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 ```
 
 During configure, `_cna_build_sdl_dep` expanded its helper command once for each missing pinned

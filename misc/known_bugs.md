@@ -95,3 +95,71 @@ Wine with DXVK — the recipe is in the memory notes and in `docs/`. `directx11`
 of the six, because it does not merely weaken the bias, it deletes it.
 
 `CLAUDE.md`: where XNA and FNA disagree, XNA wins. This is measured against real XNA.
+
+---
+
+## 2. EasyGL does not fill the letterbox rectangle with a default viewport
+
+**Found:** 2026-09-09, by merging `webgpu` into `next` and running that branch's
+renderer-neutral presentation tests in an EasyGL build for the first time.
+**Open in:** `easygl` (measured on the `OPENGLES3` profile).
+**Not affected:** `webgpu`, which passes the same test (`plans/plan_webgpu.md` `WEBGPU-162`).
+
+### The measurement
+
+`PresentationRectangleTest.ALetterboxedDefaultViewportIsNotACustomSubViewport`
+(`modules/graphics/tests/CNA/Internal/Renderers/Common/PresentationRectangleTests.cpp`), OPENGLES3
+Debug `build/`, Xvfb `:99`, an 800x480 drawable:
+
+| | |
+|---|---|
+| Presentation mode | `Letterbox`, virtual resolution 240x240 |
+| Rectangle the renderer itself reports | `(160,0,480x480)` — **correct** |
+| `GraphicsDevice.Viewport`, in logical units | `(0,0,240,240)` |
+| Sprite drawn | `Rectangle(0,0,240,240)`, i.e. the whole logical area |
+| Where the ink landed | `(0,245)-(792,476)` — the full width of the drawable, bottom half |
+
+The renderer's own `GetDefaultViewportRect()` answer is right, which rules out the presentation
+state: the mode, the virtual resolution and the computed rectangle are all what they should be. The
+error is downstream of that, between the logical viewport and the rasterizer.
+
+### Why it was not found before
+
+The test is renderer-neutral but its sixth case is new with `WEBGPU-162`, and that row's evidence is
+a **WEBGPU** build (`6/6`) plus the five older cases on `OPENGL33`. The `webgpu` branch never ran
+this case against EasyGL, and `next` did not have the case. The merge is the first time the two met.
+Every file the test exercises — `GraphicsDevice.cpp`, `SpriteBatch.cpp` and all of
+`modules/renderers/easygl` — is byte-identical to `next`, so this is `next`'s EasyGL behaviour, not
+a merge interaction.
+
+### What the correction is likely to be — **not** measured
+
+`WEBGPU-162` names three parts, and EasyGL demonstrably has the first (`EasyGLSurfaceState::
+GetDefaultViewportRect()` predates it and its answer is correct above). The two untested candidates
+are the same row's other two: the `customViewport` discriminator asking whether the viewport *is*
+the presentation rectangle rather than whether it merely differs from the target extent, and the
+sprite bake's divisor, which must be the LOGICAL extent where the rasterizer viewport already
+carries the presentation scale. The observed shape — full drawable width, half height — is
+consistent with the rectangle not reaching the rasterizer at all, which neither candidate fully
+explains. Diagnose before changing anything.
+
+---
+
+## 3. Two parity fixtures are registered on EasyGL profiles that cannot pass them
+
+**Found:** 2026-09-09, same run as §2.
+**Open in:** the fixture registration, not in a renderer.
+
+`EasyGL_Parity_sampler_lod_bias` and `EasyGL_Parity_sprite_sampler_state` fail in an `OPENGLES3`
+build, and **only on their LOD-bias legs and the discriminators derived from them** — every leg
+that does not involve a bias passes, including both fixtures' "an unbiased sprite and an unbiased 3D
+quad agree on the natural level" and "`SpriteBatch.Begin`'s `MipMapLevelOfDetailBias` does NOT reach
+the sprite" arms. That is not a defect being reported: `EasyGLRenderer.cpp` already states it in the source, at the site that would apply
+it, because `GL_TEXTURE_LOD_BIAS` does not exist in OpenGL ES at all. It is desktop-GL only, and
+`docs/cross-renderer-parity-fixtures.md`'s own recipe runs the EasyGL half on an `OPENGL33` build.
+
+`cna_register_parity_fixtures()` registers every fixture for the EasyGL family regardless of which
+GL profile the build selected, so a build that cannot honour `SamplerState.MipMapLevelOfDetailBias`
+still gets a test that asserts it does. The fix belongs to the parity framework, not to EasyGL:
+either gate these two on the profile, or give a fixture the documented-divergence route
+`fill_mode_wireframe` already uses. Until then these two are expected red in any EasyGL ES build.

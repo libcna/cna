@@ -124,7 +124,59 @@ change what the GPU samples. That was true of **every** renderer except FNA3D un
 | EasyGL, `OPENGL33` | **implemented** — `GL_TEXTURE_MIN_LOD` | **implemented** — `GL_TEXTURE_LOD_BIAS` |
 | EasyGL, ES 2 profiles (`OPENGLES2`, `WEBGL1`) | **not representable**: no sampler objects and no `GL_TEXTURE_MIN_LOD` | not representable |
 | EasyGL `AddressW` | **implemented on the ES 3 and desktop profiles** since FX-092 — sampler-object `GL_TEXTURE_WRAP_R`; not representable on the ES 2 profiles, which have neither sampler objects nor volume textures | — |
+| WebGPU | **implemented** (`WEBGPU-161`) — `WGPUSamplerDescriptor::lodMinClamp`, and part of the 64-bit sampler cache key | **implemented** — by WGSL `textureSampleBias` on every stock 3D route (`WEBGPU-205`) and, by rewriting the compiled shader's SPIR-V, on compiled XNA Effects too (`WEBGPU-208`); `WGPUSamplerDescriptor` has no `lodBias` field at all, so both are shader emulations |
+| WebGPU `AddressW` | **implemented** (`WEBGPU-160`) — `WGPUSamplerDescriptor::addressModeW`, through the same ordinal table U and V use | — |
 | every other renderer | default no-op | default no-op |
+
+### WebGPU's LOD bias is a SHADER emulation, and its boundary is named
+
+`WGPUSamplerDescriptor` carries `addressModeU/V/W`, `magFilter`, `minFilter`, `mipmapFilter`,
+`lodMinClamp`, `lodMaxClamp`, `compare` and `maxAnisotropy` — and nothing else. That absence was
+once taken as proof the state had to stay unsupported; `WEBGPU-205` rejected that reasoning as the
+same argument already disproved for `FillMode::WireFrame`, because an absent *state field* is not an
+absent *capability*. WGSL's `textureSampleBias(t, s, coords, bias)` applies exactly XNA's semantic —
+a bias added to the computed level of detail — in the fragment stage, which is where every one of
+that renderer's sampling calls already sits. The value travels in the per-draw uniform block
+(widened 160→176 bytes for it, as `WEBGPU-149` widened it for fog).
+
+Two things a caller needs to know, and both are reported through
+`GetAdditionalLimitationsTextEXT()` rather than left to be discovered from pixels:
+
+* **WGSL clamps a sample bias to roughly [-16, +16)**, so a larger magnitude saturates rather than
+  extrapolating. CNA clamps to that range on the way in instead of leaving the edges
+  implementation-defined.
+* **Three routes do not apply it**: `SpriteBatch`, which never receives the value at all (see the
+  next paragraph -- this one is a framework gap, not a renderer one); a custom CNAEXT
+  `ShaderEffect`, which supplies its own WGSL and therefore its own sampling calls; and the
+  metallic-roughness `PbrEffect`/`SkinnedPbrEffect` families, which are the glTF route rather than
+  an XNA stock effect.
+
+**Compiled XNA Effects apply it too, since `WEBGPU-208` (2026-09-06).** They were a fourth route on
+that list for one day. A compiled pass's sampling call comes from MojoShader, not from a shader CNA
+writes, so the emulation moves one level down: `MojoShaderEffect::InjectSamplerLodBias` rewrites the
+normalized SPIR-V so each implicit sample carries a `Bias` image operand fed from **its own D3D9
+sampler register's** slot in a small renderer-owned uniform block. Because the rewrite happens
+before the native and browser routes diverge, both targets execute the same semantic -- natively
+naga lowers the SPIR-V operand, and in a browser `SpirvToWgsl` renders it as `textureSampleBias`
+for Tint. The shared compiled-effect sampler pixel contract runs on both routes with
+`supportsLodBias` true.
+
+**`SpriteBatch` drops four `SamplerState` fields before any renderer sees them**
+(`plans/plan_graphics.md` row 1119, measured 2026-09-06). `SpriteBatch::Begin` applies the blend,
+depth-stencil and rasterizer states through the `GraphicsDevice` properties exactly as FNA does, but
+routes the sampler around the device into `ISpriteBatchRenderer::SetSamplerFilter(int)` and
+`SetSamplerAddressMode(int, int)` -- the whole sampler channel that interface has. So
+`MipMapLevelOfDetailBias`, `MaxMipLevel`, `MaxAnisotropy` and `AddressW` stop in
+`modules/graphics/src/Xna/SpriteBatch.cpp`, and `GraphicsDevice.SamplerStates[0]` is left holding
+whatever the game last put there rather than the batch's own state. XNA assigns it
+(`SpriteBatch.PrepRenderState`), so all six fields apply there. The shared fixture
+`parity_sprite_sampler_state` measures this on both renderers -- four sprite columns under three
+different batch biases all read the same mip level, while the same three biases on a 3D quad move it
+by a level each -- and the two frames are byte-identical, which is what makes it a framework row.
+
+Note this makes WebGPU's coverage *broader* than the reference renderer's, which implements the bias
+only on desktop core (`GL_TEXTURE_LOD_BIAS` does not exist in OpenGL ES at all). The shared parity
+fixture `parity_sampler_lod_bias` therefore compares against the `OPENGL33` profile.
 
 Why `GL_TEXTURE_MIN_LOD` rather than FNA3D's `GL_TEXTURE_BASE_LEVEL`: base level is texture-object
 state, and CNA's contract is per **slot**. Two slots sampling one texture with different

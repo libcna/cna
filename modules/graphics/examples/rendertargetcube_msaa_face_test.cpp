@@ -160,9 +160,12 @@ namespace
     constexpr Contract kContract{"VULKAN", true, Support::Exact, true,
                                  Support::Exact, true, false};
 #elif defined(CNA_RENDERER_WEBGPU)
-    // `msaaEngages` false: WebGPURenderer::CreateRenderTargetCube ignores multiSampleCount
-    // outright, so there is no multisampled cube storage to share OR to isolate here.
-    constexpr Contract kContract{"WEBGPU", true, Support::Exact, false,
+    // `msaaEngages` TRUE as of WEBGPU-165: CreateRenderTargetCube used to ignore multiSampleCount
+    // outright -- every pipeline baked one renderer-global sample count until WEBGPU-197, so a cube
+    // that asked for its own would have been pipeline-incompatible -- and there was no multisampled
+    // cube storage to share or isolate. It now allocates a per-face multisampled attachment at its
+    // own applied count.
+    constexpr Contract kContract{"WEBGPU", true, Support::Exact, true,
                                  Support::Exact, false, false};
 #elif defined(CNA_RENDERER_SDL_GPU)
     // Pre-fix: ONE single-layer scratch texture that had to be cycled on every pass. Post-fix: six

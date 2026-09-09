@@ -185,15 +185,12 @@ namespace
     /**
      * @brief Whether a render target may be built with a mip chain here.
      *
-     * False on WEBGPU, whose `RenderTarget2D` constructor raises a catchable `std::runtime_error`
-     * for `mipMap=true` (WEBGPU-53/54) -- a separately tracked boundary, not this task's subject.
+     * True everywhere. It was false on WEBGPU while that renderer's `RenderTarget2D`
+     * constructor raised a catchable `std::runtime_error` for `mipMap=true`;
+     * `plans/plan_webgpu.md` `WEBGPU-164` allocates the chain and regenerates it from level 0
+     * on unbind, so the legs below measure a value there rather than a refusal.
      */
-    constexpr bool kMipMappedTargetSupported =
-#if defined(CNA_RENDERER_WEBGPU)
-        false;
-#else
-        true;
-#endif
+    constexpr bool kMipMappedTargetSupported = true;
 
     // ---- the asymmetric pattern -------------------------------------------------------------
     //

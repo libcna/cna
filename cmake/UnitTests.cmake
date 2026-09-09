@@ -39,6 +39,10 @@ if(CNA_BUILD_TESTS)
     file(GLOB_RECURSE CNA_TEST_SOURCES CONFIGURE_DEPENDS
             "modules/*/tests/*.cpp"
             "modules/renderers/*/tests/*.cpp"
+            # The shared renderer halves (modules/renderers/common/<name>) sit one directory
+            # deeper than a renderer family, and `*` does not cross a separator, so their tests
+            # need their own entry. plans/plan_fx.md FX-134 put the first suite there.
+            "modules/renderers/common/*/tests/*.cpp"
             "tests/*.cpp"
     )
 
@@ -627,7 +631,11 @@ if(CNA_BUILD_TESTS)
     # mojoshader.h. The focused object groups copy renderer include directories above, but include
     # directories alone do not carry MojoShader's required public compile definitions (notably
     # MOJOSHADER_NO_VERSION_INCLUDE for its ungenerated source-tree version header).
-    if(CNA_EASYGL_COMPILED_EFFECTS AND TARGET cna_mojoshader)
+    # plans/plan_webgpu.md WEBGPU-167: the same is now true of WebGPU's compiled-effect headers,
+    # which the renderer header includes unconditionally once the option is on -- so the condition
+    # is the presence of the MojoShader target, not one family's option. Any family that configured
+    # it has public headers a test TU can reach.
+    if(TARGET cna_mojoshader)
         target_link_libraries(cna_test_build_config INTERFACE cna_mojoshader)
     endif()
 

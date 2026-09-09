@@ -406,7 +406,9 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
     // them through one branch -- NormalizedByte2 as RG8_SNORM beside NormalizedByte4's
     // RGBA8_SNORM. Both need the ES 3 class of context that has SNORM at all, so this list
     // is deliberately the same one NormalizedByte4Throws uses.
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2))
+    // plans/plan_webgpu.md WEBGPU-184 added WEBGPU to this list: core WebGPU has `rg8snorm` and
+    // `rgba8snorm`, so the format is stored natively there too, with no expansion.
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte2));
     }
@@ -418,7 +420,7 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
 
 TEST_F(UnsupportedFormatConstructionTest, NormalizedByte4Throws)
 {
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2))
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte4));
     }
@@ -664,8 +666,11 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
         // to end on both its backends, and only if its texel is a multiple of four bytes -- the
         // framework's own transfer rule, which ByteEXT, UShortEXT and HalfSingle would break.
         const bool igl = CNA_RENDERER_IS(Igl);
+        // WEBGPU-184: WEBGPU joins the signed-normalized set -- `rg8snorm`/`rgba8snorm` are core
+        // WebGPU formats, stored natively. The name keeps its EasyGL prefix only because the list
+        // began there; what it selects is "renderers that store SNORM", which now includes this one.
         const bool easyGlSignedNormalized =
-            CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2);
+            CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU);
         // REMED-GFX-244: the packed 16-bit formats Reach permits, promoted on the same ES 3
         // generation the signed-normalized pair needs and verified by a real sampled draw
         // (EasyGL_Packed16Format) rather than by a readback, which this renderer serves from a CPU
@@ -676,7 +681,26 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
         // not an alternative to it.
         const bool profileAllows =
             Texture::IsFormatAllowedByProfileEXT(GraphicsProfile::Reach, format);
+        // plans/plan_webgpu.md WEBGPU-144 stored block-compressed content GPU-natively on WebGPU --
+        // the raw BC blocks go to a BC texture and the GPU decodes at sample time
+        // (webgpu_compressed_texture_test proves both the sampled draw and a byte-exact GetData
+        // round-trip). This list was never told, so from that commit until now the loop demanded a
+        // throw from six formats the renderer genuinely supports, and failed on WEBGPU for exactly
+        // as long as both halves had their current contents -- the same shape of contradiction the
+        // Skia note below records.
+        //
+        // Unlike every other clause here this one is not a hardcoded list ANDed with an identity:
+        // BC is an OPTIONAL adapter feature, so "supported" is a runtime question on this renderer
+        // and a build-time list would be wrong on an adapter without it. The renderer is asked the
+        // separate question it already answers -- "do you transfer this format as blocks?", which
+        // carries its own device-feature gate -- and the assertion is that the two halves of the
+        // contract agree: a format the renderer stores as blocks must construct, and one it does
+        // not must throw.
+        const bool webgpuBlockCompressed =
+            CNA_RENDERER_IS(WebGPU) &&
+            gd.GetRenderer().IsCompressedTransferFormatEXT(static_cast<int>(format));
         const bool supported = profileAllows && (format == SurfaceFormat::Color
+            || webgpuBlockCompressed
             || (easyGlSignedNormalized && (format == SurfaceFormat::NormalizedByte4
                                            || format == SurfaceFormat::NormalizedByte2))
             || (easyGlPacked16 && (format == SurfaceFormat::Bgr565

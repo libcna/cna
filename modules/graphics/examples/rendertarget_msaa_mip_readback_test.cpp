@@ -163,17 +163,13 @@ namespace
     /**
      * @brief Whether a render target may be built with a mip chain here.
      *
-     * False on WEBGPU, whose `RenderTarget2D` constructor raises a catchable `std::runtime_error`
-     * for `mipMap=true` (WEBGPU-53/54) -- a separately tracked boundary, not this task's subject.
-     * The legs still run: they assert the refusal is a catchable public exception rather than an
-     * abort, which is the only thing this file can honestly claim there.
+     * True everywhere. This was false on WEBGPU while its `RenderTarget2D` constructor raised a
+     * catchable `std::runtime_error` for `mipMap=true`; `plans/plan_webgpu.md` `WEBGPU-164`
+     * allocates the chain and regenerates it from level 0 on unbind, the same timing FNA3D's
+     * `ResolveTarget` uses, so the legs below now measure content on that renderer instead of
+     * measuring a refusal.
      */
-    constexpr bool kMipMappedTargetSupported =
-#if defined(CNA_RENDERER_WEBGPU)
-        false;
-#else
-        true;
-#endif
+    constexpr bool kMipMappedTargetSupported = true;
 
     /**
      * @brief Whether GENERATED mip CONTENT of a render target is asserted on this renderer.
