@@ -919,6 +919,20 @@ function(cna_register_d3d_parity_tests)
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/renderer_capability_truth_test.cpp"
         DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 600)
     cna_d3d_parity_fixture(
+        NAME PresentInterval TARGET present_interval DIRECTX12_ORDER 2360
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_present_interval_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME GraphicsDeviceManager_Vsync TARGET graphicsdevicemanager_vsync DIRECTX12_ORDER 2370
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_graphicsdevicemanager_vsync_test.cpp")
+    cna_d3d_parity_fixture(
+        NAME BackbufferResize TARGET backbuffer_resize DIRECTX12_ORDER 2380
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_backbuffer_resize_test.cpp"
+        DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 900 DIRECTX12_PROTON)
+    cna_d3d_parity_fixture(
+        NAME RealWindowResize TARGET real_window_resize DIRECTX12_ORDER 2390
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_real_window_resize_test.cpp"
+        DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 900 DIRECTX12_PROTON)
+    cna_d3d_parity_fixture(
         NAME ViewportResetAfterResize TARGET viewport_reset_after_resize
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/viewport_reset_after_resize_test.cpp"
         DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 900 DIRECTX12_PROTON)
