@@ -1342,6 +1342,7 @@ pass. That is the line `CompiledEffects == true` is a promise about.
 | `SamplerState.MaxMipLevel`/`MipMapLevelOfDetailBias` on SDL_GPU's **stock** draw families | **Case 1**, and the inverse of the usual direction: the compiled route carries both, the stock families still capture only filter/addressing/anisotropy | works | stock families only | works | `docs/sampler-state-support.md` §6b |
 | `EffectParameter`'s numeric accessors on an object parameter | Was **Case 1**, shared layer; **closed** -- `RequireNumericParameter` refuses them with `InvalidCastException`, as XNA does | works | works | works | `FX-105` |
 | `EffectParameter` texture access through an incompatible reflected type | Was **Case 1**, shared layer; **closed** -- dimension getters accept generic `Texture` or their exact dimension and the base setter accepts only texture types, otherwise `InvalidCastException` | works | works | works | `SOFTWARE-264` |
+| `EffectParameter.SetValue(Texture)` with a disposed texture or active render target | Was **Case 1**, shared layer; **closed** -- compiled parameters reject the resource before reflected-type validation with XNA's `ObjectDisposedException`/`InvalidOperationException` precedence | works | works | works | `SOFTWARE-266` |
 
 ## 11. Recommended critical path
 

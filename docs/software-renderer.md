@@ -439,6 +439,10 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
 - **Compiled-Effect conformance declares its HiDef prerequisite** (`SOFTWARE-265`) — its deliberate
   separate-alpha state is not legal under Reach. All backend wrappers now select HiDef and the
   shared helper guards that assumption, keeping the EasyGL reference evidence executable.
+- **Compiled Effect texture assignment enforces XNA resource lifetime** (`SOFTWARE-266`) — a
+  disposed texture or currently bound render target is rejected before reflected parameter-type
+  validation, matching Microsoft's observable exception order. The shared fix is exercised on
+  compiled-capable EasyGL; Software retains its honest compiled-effect capability skip.
 - **The classic SpriteBatch/SpriteFont parity corpus executes on the CPU** (`SOFTWARE-138`).
   Eighteen renderer-independent scenes shared with EasyGL cover flips, rotation/origin, both scale
   overloads, source rectangles, layer sorting, transforms, render targets, viewports, scissor,

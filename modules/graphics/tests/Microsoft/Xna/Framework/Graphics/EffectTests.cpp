@@ -27,6 +27,8 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
@@ -303,6 +305,40 @@ TEST(EffectTest, CompiledTextureAccessorsValidateTheReflectedParameterType)
     EXPECT_EQ(genericTexture->GetValueTexture2D(), nullptr);
     EXPECT_EQ(genericTexture->GetValueTexture3D(), nullptr);
     EXPECT_EQ(genericTexture->GetValueTextureCube(), nullptr);
+}
+
+TEST(EffectTest, CompiledTextureSetterRejectsDisposedAndActiveRenderTargetsBeforeType)
+{
+    GraphicsDevice gd;
+    const auto bytes = LoadValidCompiledEffectFixture();
+    ASSERT_FALSE(bytes.empty());
+
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+    {
+        GTEST_SKIP() << "renderer does not execute compiled effects";
+    }
+
+    TestEffect effect(gd, bytes);
+    auto* scalar = effect.getParametersProperty()["DiffuseColor"];
+    auto* texture2D = effect.getParametersProperty()["Texture"];
+    ASSERT_NE(scalar, nullptr);
+    ASSERT_NE(texture2D, nullptr);
+
+    Microsoft::Xna::Framework::Graphics::Texture2D disposed(gd, 1, 1);
+    disposed.Dispose();
+    EXPECT_THROW(texture2D->SetValue(&disposed), System::ObjectDisposedException);
+    EXPECT_THROW(scalar->SetValue(&disposed), System::ObjectDisposedException)
+        << "texture lifetime validation precedes reflected parameter-type validation";
+
+    Microsoft::Xna::Framework::Graphics::RenderTarget2D active(gd, 1, 1);
+    gd.SetRenderTarget(&active);
+    EXPECT_THROW(texture2D->SetValue(&active), System::InvalidOperationException);
+    EXPECT_THROW(scalar->SetValue(&active), System::InvalidOperationException)
+        << "active-target validation precedes reflected parameter-type validation";
+    gd.SetRenderTarget(nullptr);
+
+    EXPECT_NO_THROW(texture2D->SetValue(&active));
+    EXPECT_EQ(texture2D->GetValueTexture2D(), &active);
 }
 
 TEST(EffectTest, AuthenticXna4EffectAcceptsRepeatedAndAuxiliaryObjectRecords)

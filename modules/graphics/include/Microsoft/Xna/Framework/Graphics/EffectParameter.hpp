@@ -441,6 +441,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param value Pointer to the texture to bind.
          * @throws System::InvalidCastException If a reflected compiled parameter is not a
          *         texture parameter.
+         * @throws System::ObjectDisposedException If @p value has been disposed.
+         * @throws System::InvalidOperationException If @p value is an active render target.
          */
         void SetValue(Texture* value);
 
@@ -450,6 +452,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param value Pointer to the Texture2D to bind.
          * @throws System::InvalidCastException If a reflected compiled parameter is not a
          *         texture parameter.
+         * @throws System::ObjectDisposedException If @p value has been disposed.
+         * @throws System::InvalidOperationException If @p value is an active render target.
          */
         void SetValue(Texture2D* value);
 
@@ -459,6 +463,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param value Pointer to the Texture3D to bind.
          * @throws System::InvalidCastException If a reflected compiled parameter is not a
          *         texture parameter.
+         * @throws System::ObjectDisposedException If @p value has been disposed.
+         * @throws System::InvalidOperationException If @p value is an active render target.
          */
         void SetValue(Texture3D* value);
 
@@ -468,6 +474,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param value Pointer to the TextureCube to bind.
          * @throws System::InvalidCastException If a reflected compiled parameter is not a
          *         texture parameter.
+         * @throws System::ObjectDisposedException If @p value has been disposed.
+         * @throws System::InvalidOperationException If @p value is an active render target.
          */
         void SetValue(TextureCube* value);
 
@@ -491,6 +499,7 @@ namespace Microsoft::Xna::Framework::Graphics
         void RequireNumericParameter(const char* operation) const;
         void RequireTextureGetterParameter(EffectParameterType requestedType) const;
         void RequireTextureSetterParameter() const;
+        void RequireTextureValueUsable(Texture* value) const;
 
         [[nodiscard]] bool IsCompiledInternal() const noexcept;
         [[nodiscard]] const void* GetRawValueInternal() const noexcept;

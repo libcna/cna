@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/EffectParameter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameterCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidCastException.hpp"
+#include "System/InvalidOperationException.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 #include <algorithm>
 #include <cstring>
@@ -310,6 +313,23 @@ namespace Microsoft::Xna::Framework::Graphics
                 return;
             default:
                 throw System::InvalidCastException();
+        }
+    }
+
+    void EffectParameter::RequireTextureValueUsable(Texture* value) const
+    {
+        if (value == nullptr) return;
+        if (value->getIsDisposedProperty())
+            throw System::ObjectDisposedException(value->getNameProperty());
+
+        GraphicsDevice* const device = value->getGraphicsDeviceProperty();
+        if (device == nullptr) return;
+        for (const auto& binding : device->GetRenderTargets())
+        {
+            if (binding.getRenderTargetProperty() == value)
+                throw System::InvalidOperationException(
+                    "An active render target must be resolved before it can be assigned to an "
+                    "EffectParameter.");
         }
     }
 
@@ -663,6 +683,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (compiledStorage_)
         {
+            RequireTextureValueUsable(v);
             RequireTextureSetterParameter();
             compiledStorage_->texture = v;
             compiledStorage_->dirty = true;
