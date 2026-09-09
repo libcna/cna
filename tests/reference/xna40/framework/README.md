@@ -13,3 +13,19 @@ truncate instead -- is written up in `plans/plan_bindings_upstream.md` (`XNAPACK
 reproduces every case in
 `modules/graphics/tests/Microsoft/Xna/Framework/Graphics/PackedVector/XnaFrameworkPackingTests.cpp`,
 which also fails if a case here gains no reproduction. Regenerate rather than edit.
+
+## The other two corpora in this directory
+
+* `bounding-sphere-oracle.txt` — `BoundingSphere.CreateFromPoints` over the point sets of
+  `tests/assets/xna40/framework/bounding-sphere-points.txt`, produced by
+  `tools/xna-pipeline-oracle/framework/run-bounding-sphere-oracle.sh` and reproduced in
+  `modules/math/tests/Microsoft/Xna/Framework/BoundingSphereOracleTests.cpp` (`XNASWEEP-134`,
+  `XNASWEEP-168`).
+* `matrix-oracle.txt` — `Matrix.Multiply`, `Matrix.Invert`, `Matrix.CreateRotation*`,
+  `Vector3.Transform`, `Vector3.TransformNormal` and `MathHelper.ToRadians` over the cases of
+  `tests/assets/xna40/framework/matrix-cases.txt`, produced by
+  `tools/xna-pipeline-oracle/framework/run-matrix-oracle.sh` and reproduced in
+  `modules/math/tests/Microsoft/Xna/Framework/MatrixOracleTests.cpp` (`XNASWEEP-172`). Every value
+  is a raw IEEE-754 word, because what these settle is a single bit of rounding.
+
+Regenerate rather than edit, in both cases.

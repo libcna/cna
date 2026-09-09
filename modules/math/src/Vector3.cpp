@@ -434,9 +434,18 @@ namespace Microsoft::Xna::Framework
 
     void Vector3::Transform(const Vector3& position, const Matrix& matrix, Vector3& result)
     {
-        const float x = (position.X * matrix.M11) + (position.Y * matrix.M21) + (position.Z * matrix.M31) + matrix.M41;
-        const float y = (position.X * matrix.M12) + (position.Y * matrix.M22) + (position.Z * matrix.M32) + matrix.M42;
-        const float z = (position.X * matrix.M13) + (position.Y * matrix.M23) + (position.Z * matrix.M33) + matrix.M43;
+        // Accumulated wider than `float` and narrowed once per component, which is what XNA's
+        // 32-bit x87 arithmetic does. Measured over 60 cases: a `float` accumulation reproduces 8
+        // of them (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-172`).
+        const double px = position.X;
+        const double py = position.Y;
+        const double pz = position.Z;
+        const float x = static_cast<float>(((px * matrix.M11) + (py * matrix.M21)) +
+                                           ((pz * matrix.M31) + matrix.M41));
+        const float y = static_cast<float>(((px * matrix.M12) + (py * matrix.M22)) +
+                                           ((pz * matrix.M32) + matrix.M42));
+        const float z = static_cast<float>(((px * matrix.M13) + (py * matrix.M23)) +
+                                           ((pz * matrix.M33) + matrix.M43));
         result.X = x;
         result.Y = y;
         result.Z = z;
@@ -489,9 +498,14 @@ namespace Microsoft::Xna::Framework
 
     Vector3 Vector3::TransformNormal(Vector3 normal, const Matrix& matrix)
     {
-        return Vector3((normal.X * matrix.M11) + (normal.Y * matrix.M21) + (normal.Z * matrix.M31),
-                       (normal.X * matrix.M12) + (normal.Y * matrix.M22) + (normal.Z * matrix.M32),
-                       (normal.X * matrix.M13) + (normal.Y * matrix.M23) + (normal.Z * matrix.M33));
+        // Wide for the same reason `Transform` is, and measured with it (`XNASWEEP-172`).
+        const double nx = normal.X;
+        const double ny = normal.Y;
+        const double nz = normal.Z;
+        return Vector3(
+            static_cast<float>(((nx * matrix.M11) + (ny * matrix.M21)) + (nz * matrix.M31)),
+            static_cast<float>(((nx * matrix.M12) + (ny * matrix.M22)) + (nz * matrix.M32)),
+            static_cast<float>(((nx * matrix.M13) + (ny * matrix.M23)) + (nz * matrix.M33)));
     }
 
     void Vector3::TransformNormal(const Vector3& normal, const Matrix& matrix, Vector3& result)
