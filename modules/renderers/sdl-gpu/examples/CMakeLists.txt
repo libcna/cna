@@ -17,6 +17,11 @@ include_directories(${CNA_GRAPHICS_EXAMPLES_DIR})
 if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     enable_testing()
 
+    set(CNA_SDLGPU_TEST_VIDEO_DRIVER "x11" CACHE STRING
+        "SDL video driver used by SDL_GPU renderer integration tests")
+    set(CNA_SDLGPU_TEST_ENVIRONMENT
+        "SDL_VIDEODRIVER=${CNA_SDLGPU_TEST_VIDEO_DRIVER};DISPLAY=${CNA_TEST_DISPLAY}")
+
     macro(cna_sdlgpu_test target src)
         add_executable(${target} ${src})
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
@@ -33,7 +38,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
 
     cna_sdlgpu_test(cna_test_sdlgpu_smoke sdlgpu_smoke_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_Smoke COMMAND cna_test_sdlgpu_smoke
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-028: every real constructor acquisition is transactional, failed objects never
     # enter the window registry, and lazy command/pipeline/sampler/fallback failures remain
@@ -44,14 +49,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_ConstructorExceptionSafety
         COMMAND cna_test_sdlgpu_constructor_exception_safety
         TIMEOUT 240 LABELS "SdlGpu"
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
     set_tests_properties(SdlGpu_ConstructorExceptionSafety PROPERTIES
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
     # plans/plan_sdlgpu.md SDLGPU-22..25: 2D vertical slice -- real Texture2D + SpriteBatch.
     cna_sdlgpu_test(cna_test_sdlgpu_2d sdlgpu_2d_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_2D COMMAND cna_test_sdlgpu_2d
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # Ad-hoc manual diagnostic (not a CTest) -- see the file's own header comment.
     cna_sdlgpu_test(cna_diag_sdlgpu_single_sprite sdlgpu_diag_single_sprite.cpp)
@@ -59,22 +64,22 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     # plans/plan_sdlgpu.md SDLGPU-26..30: core 3D vertex formats and BasicEffect.
     cna_sdlgpu_test(cna_test_sdlgpu_3d sdlgpu_3d_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_3D COMMAND cna_test_sdlgpu_3d
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # plans/plan_sdlgpu.md SDLGPU-31/32: AlphaTestEffect and DualTextureEffect.
     cna_sdlgpu_test(cna_test_sdlgpu_effects sdlgpu_effects_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_Effects COMMAND cna_test_sdlgpu_effects
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # plans/plan_sdlgpu.md SDLGPU-35: RenderTarget2D.
     cna_sdlgpu_test(cna_test_sdlgpu_rendertarget2d sdlgpu_rendertarget2d_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_RenderTarget2D COMMAND cna_test_sdlgpu_rendertarget2d
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # plans/plan_sdlgpu.md SDLGPU-36: RenderTargetCube.
     cna_sdlgpu_test(cna_test_sdlgpu_rendertargetcube sdlgpu_rendertargetcube_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_RenderTargetCube COMMAND cna_test_sdlgpu_rendertargetcube
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-188: mipMap and MSAA are independent on RenderTargetCube. The resolved cube owns
     # every public level, each one-level face attachment resolves before that face's chain is
@@ -85,7 +90,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_RenderTargetCube_MsaaMip
         COMMAND cna_test_sdlgpu_rendertargetcube_msaa_mip
         TIMEOUT 300 LABELS "SdlGpu"
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
     set_tests_properties(SdlGpu_RenderTargetCube_MsaaMip PROPERTIES
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
@@ -97,7 +102,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_RenderTargetCube_PluralBinding
         COMMAND cna_test_sdlgpu_rendertargetcube_plural_binding
         TIMEOUT 60 LABELS "SdlGpu"
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-097: a depthless cube-face SpriteBatch draw must use a graphics pipeline whose
     # target info also has no depth/stencil target. Pixel checks prove exact face selection; make
@@ -108,14 +113,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_DepthlessCube_SpriteBatchCompatibility
         COMMAND cna_test_sdlgpu_depthless_cube_spritebatch_compatibility
         TIMEOUT 60 LABELS "SdlGpu"
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
     set_tests_properties(SdlGpu_DepthlessCube_SpriteBatchCompatibility PROPERTIES
         FAIL_REGULAR_EXPRESSION "VUID-vkCmdDraw-renderPass-02684")
 
     # plans/plan_sdlgpu.md SDLGPU-37: Multiple Render Targets (MRT).
     cna_sdlgpu_test(cna_test_sdlgpu_mrt sdlgpu_mrt_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_MRT COMMAND cna_test_sdlgpu_mrt
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
     # REMED-GFX-098: pixels alone were always correct; a color-attachment render-pass
     # compatibility VUID is fatal for this regression.
     set_tests_properties(SdlGpu_MRT PROPERTIES
@@ -124,12 +129,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     # plans/plan_sdlgpu.md SDLGPU-38: RenderTarget2D MSAA.
     cna_sdlgpu_test(cna_test_sdlgpu_rendertarget2d_msaa sdlgpu_rendertarget2d_msaa_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_RenderTarget2DMSAA COMMAND cna_test_sdlgpu_rendertarget2d_msaa
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # plans/plan_sdlgpu.md SDLGPU-40/41: Texture3D + mipmaps.
     cna_sdlgpu_test(cna_test_sdlgpu_texture3d sdlgpu_texture3d_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_Texture3D COMMAND cna_test_sdlgpu_texture3d
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-099: the first invalid event occurs while constructing a mipmapped Texture3D,
     # before upload/readback. Keep the create-only discriminator separate from the larger data
@@ -139,7 +144,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_Texture3D_Validity
         COMMAND cna_test_sdlgpu_texture3d_validity
         TIMEOUT 60 LABELS "SdlGpu"
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
     set_tests_properties(SdlGpu_Texture3D SdlGpu_Texture3D_Validity PROPERTIES
         FAIL_REGULAR_EXPRESSION
             "VUID-(VkImageViewCreateInfo-image-02724|VkImageViewCreateInfo-subresourceRange-02725|vkCmdBlitImage-dstOffset-00251|vkCmdBlitImage-pRegions-00216|vkCmdBlitImage-srcOffset-00246|vkCmdBlitImage-pRegions-00215);Validation (Error|Warning)")
@@ -147,24 +152,24 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     # plans/plan_sdlgpu.md SDLGPU-51: plain, non-render-target TextureCube.
     cna_sdlgpu_test(cna_test_sdlgpu_texturecube sdlgpu_texturecube_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_TextureCube COMMAND cna_test_sdlgpu_texturecube
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # plans/plan_sdlgpu.md SDLGPU-33: EnvironmentMapEffect.
     cna_sdlgpu_test(cna_test_sdlgpu_envmap sdlgpu_envmap_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_EnvMap COMMAND cna_test_sdlgpu_envmap
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-007: EnvironmentMapEffect must add EmissiveColor UNSCALED (FNA Lighting.fxh), not
     # (Emissive+lightSum)*Diffuse -- which also squares Alpha (both operands are CPU-prefolded).
     # Discriminating non-white-Diffuse / non-zero-Emissive / Alpha=0.5 cases; linear RT readback.
     cna_sdlgpu_test(cna_test_sdlgpu_envmap_emissive sdlgpu_environmentmapeffect_emissive_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_EnvMapEmissive COMMAND cna_test_sdlgpu_envmap_emissive
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # plans/plan_sdlgpu.md SDLGPU-34: SkinnedEffect.
     cna_sdlgpu_test(cna_test_sdlgpu_skinned sdlgpu_skinned_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_Skinned COMMAND cna_test_sdlgpu_skinned
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # PbrEffect/SkinnedPbrEffect (metallic-roughness BRDF, stride 48/68) and SkinnedEffect's
     # stride-56 VertexColorEnabled path -- porting EasyGL's own PBR + skinned-vertex-color shader
@@ -172,28 +177,28 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     # GetOrCreatePipelinePbr3D() and GetOrCreatePipelineSkinned3D's hasVertexColor parameter).
     cna_sdlgpu_test(cna_test_sdlgpu_pbreffect sdlgpu_pbreffect_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_PbrEffect COMMAND cna_test_sdlgpu_pbreffect
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     cna_sdlgpu_test(cna_test_sdlgpu_skinnedpbreffect sdlgpu_skinnedpbreffect_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_SkinnedPbrEffect COMMAND cna_test_sdlgpu_skinnedpbreffect
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # GLTF-213: exact PBR sRGB transfer witnesses on rigid and identity-skinned pipelines.
     cna_sdlgpu_test(cna_test_sdlgpu_pbr_srgb_transfer
                     ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_srgb_transfer_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_Pbr_SrgbTransfer COMMAND cna_test_sdlgpu_pbr_srgb_transfer
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # GLTF-343/344: KHR_materials_ior and factor-only KHR_materials_specular must alter both
     # dielectric Schlick endpoints on rigid and identity-skinned PBR pipelines.
     cna_sdlgpu_test(cna_test_sdlgpu_pbr_fresnel_factors
                     ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_fresnel_factors_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_Pbr_FresnelFactors COMMAND cna_test_sdlgpu_pbr_fresnel_factors
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     cna_sdlgpu_test(cna_test_sdlgpu_skinnedeffect_vertexcolor sdlgpu_skinnedeffect_vertexcolor_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_SkinnedEffectVertexColor COMMAND cna_test_sdlgpu_skinnedeffect_vertexcolor
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-006: SkinnedEffect world-space normal transform under non-identity World (rotation,
     # non-uniform scale, and both) -- the cases every existing skinned test, all of which use
@@ -201,37 +206,37 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     # segfaults on this renderer, SDLGPU-39).
     cna_sdlgpu_test(cna_test_sdlgpu_skinnedeffect_world_normal sdlgpu_skinnedeffect_world_normal_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_SkinnedEffect_WorldNormal COMMAND cna_test_sdlgpu_skinnedeffect_world_normal
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-009: stock-effect fog (previously a total absence on this renderer). Blue geometry +
     # red fog, FogStart=0/FogEnd=-0.9 -> keep=1/0.5/0 at Z=0/0.45/0.9; linear RT readback. One file
     # per effect group covering all 13 fog-capable shader families.
     cna_sdlgpu_test(cna_test_sdlgpu_basiceffect_fog sdlgpu_basiceffect_fog_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_BasicEffect_Fog COMMAND cna_test_sdlgpu_basiceffect_fog
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     cna_sdlgpu_test(cna_test_sdlgpu_effects_fog sdlgpu_effects_fog_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_Effects_Fog COMMAND cna_test_sdlgpu_effects_fog
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     cna_sdlgpu_test(cna_test_sdlgpu_skinnedeffect_fog sdlgpu_skinnedeffect_fog_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_SkinnedEffect_Fog COMMAND cna_test_sdlgpu_skinnedeffect_fog
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-010: transformed-camera view-space fog conformance (fails pre-fix).
     cna_sdlgpu_test(cna_test_sdlgpu_viewspace_fog sdlgpu_viewspace_fog_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_ViewSpace_Fog COMMAND cna_test_sdlgpu_viewspace_fog
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # plans/plan_sdlgpu.md SDLGPU-42/43: custom ShaderEffect (runtime GLSL->SPIR-V via libshaderc).
     cna_sdlgpu_test(cna_test_sdlgpu_shadereffect sdlgpu_shadereffect_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_ShaderEffect COMMAND cna_test_sdlgpu_shadereffect
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # plans/plan_sdlgpu.md SDLGPU-18/19/20: dynamic BlendState/DepthStencilState/RasterizerState.
     cna_sdlgpu_test(cna_test_sdlgpu_renderstate sdlgpu_renderstate_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_RenderState COMMAND cna_test_sdlgpu_renderstate
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-051: RasterizerState.DepthBias/SlopeScaleDepthBias are pipeline-static in SDL 3.5.
     # Exact/near-coplanar flat+sloped triangles prove both signs and combined bias through stock
@@ -239,48 +244,48 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     # target-independent cache identity. Any Vulkan validation category is fatal.
     cna_sdlgpu_test(cna_test_sdlgpu_depth_bias sdlgpu_depth_bias_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_DepthBias COMMAND cna_test_sdlgpu_depth_bias
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
     set_tests_properties(SdlGpu_DepthBias PROPERTIES
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
     # plans/plan_sdlgpu.md SDLGPU-21: dynamic SamplerState for direct 3D draws.
     cna_sdlgpu_test(cna_test_sdlgpu_samplerstate sdlgpu_samplerstate_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_SamplerState COMMAND cna_test_sdlgpu_samplerstate
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # plans/plan_sdlgpu.md: real chronological draw-order proof (adversarial-review finding #4).
     cna_sdlgpu_test(cna_test_sdlgpu_draworder sdlgpu_draworder_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_DrawOrder COMMAND cna_test_sdlgpu_draworder
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # plans/plan_sdlgpu.md SDLGPU-11: hard swapchain-acquisition-failure recovery proof.
     cna_sdlgpu_test(cna_test_sdlgpu_swapchain_recovery sdlgpu_swapchain_recovery_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_SwapchainRecovery COMMAND cna_test_sdlgpu_swapchain_recovery
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # plans/plan_sdlgpu.md: render-target-destroyed-before-flush use-after-free regression proof.
     cna_sdlgpu_test(cna_test_sdlgpu_rt_lifetime sdlgpu_rendertarget_lifetime_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_RenderTargetLifetime COMMAND cna_test_sdlgpu_rt_lifetime
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-064: GraphicsDevice.Viewport honored per-draw in RenderTarget2D passes.
     cna_sdlgpu_test(cna_test_sdlgpu_rt_viewport sdlgpu_rendertarget_viewport_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_RenderTargetViewport COMMAND cna_test_sdlgpu_rt_viewport
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-068: GraphicsDevice.ScissorRectangle honored per-draw in RenderTarget2D passes
     # (deferred-model analog of Vulkan GFX-013; scissor was applied once per pass from the live
     # post-unbind full-backbuffer state, so an RT-bound scissor no longer clipped at replay).
     cna_sdlgpu_test(cna_test_sdlgpu_rt_scissor sdlgpu_rendertarget_scissor_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_RenderTargetScissor COMMAND cna_test_sdlgpu_rt_scissor
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-069: GraphicsDevice.BlendFactor (constant blend color) reaches the GPU per-draw in
     # RenderTarget2D passes (blend-constant analog of GFX-064/068; SdlGpu never overrode the base
     # SetBlendFactor / called SDL_SetGPUBlendConstants, so constant-color blends used SDL's (0,0,0,0)).
     cna_sdlgpu_test(cna_test_sdlgpu_rt_blendfactor sdlgpu_rendertarget_blendfactor_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_RenderTargetBlendFactor COMMAND cna_test_sdlgpu_rt_blendfactor
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-072: SpriteBatch clip space must be built from the active GraphicsDevice.Viewport
     # (Viewport.Width/Height), not the full target -- the sprite2d viewportSize uniform was fed the
@@ -291,21 +296,21 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     # (per-QueuedDrawRef) and transformMatrix cases.
     cna_sdlgpu_test(cna_test_sdlgpu_spritebatch_custom_viewport ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_custom_viewport_rt_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_SpriteBatch_CustomViewport COMMAND cna_test_sdlgpu_spritebatch_custom_viewport
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-081: SpriteBatch.Begin must apply its RasterizerState argument (shared fix in
     # SpriteBatch.cpp). Deferred-renderer control: the scissor state must reach the QueuedDrawRef
     # through Begin, not only via a direct GraphicsDevice.RasterizerState assignment.
     cna_sdlgpu_test(cna_test_sdlgpu_spritebatch_begin_rasterizerstate ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_begin_rasterizerstate_scissor_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_SpriteBatch_BeginRasterizerState COMMAND cna_test_sdlgpu_spritebatch_begin_rasterizerstate
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-077: BlendState.ColorWriteChannels (RT0) via SDL_GPUColorTargetBlendState
     # .color_write_mask (pipeline cache key). MultiSampleMask is NOT compiled in: SDL 3.5.0 reserves
     # SDL_GPUMultisampleState::sample_mask as non-functional (REMED-GFX-086). Generic 3D path.
     cna_sdlgpu_test(cna_test_sdlgpu_colorwritechannels ${CNA_GRAPHICS_EXAMPLES_DIR}/gfx077_colorwritechannels_3d_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_ColorWriteChannels COMMAND cna_test_sdlgpu_colorwritechannels
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-127: every public Texture2D::GetData call must return the resource's real content or
     # reject the request deterministically -- never fabricate one. Pre-fix the shared render-target
@@ -321,13 +326,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_colorspace_midtone
         ${CNA_GRAPHICS_EXAMPLES_DIR}/colorspace_midtone_contract_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_ColorSpace_MidTone COMMAND cna_test_sdlgpu_colorspace_midtone
-        TIMEOUT 120 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 120 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     cna_sdlgpu_test(cna_test_sdlgpu_additive_blend_contract
         ${CNA_GRAPHICS_EXAMPLES_DIR}/additive_blend_contract_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_AdditiveBlendContract
         COMMAND cna_test_sdlgpu_additive_blend_contract
-        TIMEOUT 120 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 120 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-147: a RenderTarget2D used as a texture must sample in the same logical orientation
     # as an ordinary Texture2D holding identical bytes. Registered here as a cross-renderer control:
@@ -338,7 +343,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_rt_sampling_orientation
         ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_sampling_orientation_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_RenderTarget_SamplingOrientation COMMAND cna_test_sdlgpu_rt_sampling_orientation
-        TIMEOUT 120 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 120 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-153 cross-renderer source-selection and render-target-destination control. SDL_GPU's
     # established missing swapchain-download boundary is asserted separately inside the fixture.
@@ -346,7 +351,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         ${CNA_GRAPHICS_EXAMPLES_DIR}/source_rectangle_orientation_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_GFX153_SourceRectangleOrientation
         COMMAND cna_test_sdlgpu_gfx153_source_rectangle
-        TIMEOUT 180 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 180 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
 
 
@@ -360,7 +365,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_stock_effect_sampler
         ${CNA_GRAPHICS_EXAMPLES_DIR}/stock_effect_sampler_contract_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_StockEffectSamplerContract COMMAND cna_test_sdlgpu_stock_effect_sampler
-        TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-150 cross-renderer control: TextureFilter::Point must select exactly ONE texel and
     # TextureAddressMode must decide which one, on SpriteBatch and on the device SamplerStates[0] 3D
@@ -379,7 +384,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_texture_filter_ordinal
         ${CNA_GRAPHICS_EXAMPLES_DIR}/texture_filter_ordinal_contract_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_TextureFilterOrdinalContract COMMAND cna_test_sdlgpu_texture_filter_ordinal
-        TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-175 cross-renderer control: the MIPMAP component of a TextureFilter ordinal.
     # EasyGL mapped ordinals 0 and 1 onto a GL filter with no mipmap term and Software had no
@@ -388,7 +393,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_texture_filter_mip_contract
         ${CNA_GRAPHICS_EXAMPLES_DIR}/texture_filter_mip_contract_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_TextureFilterMipContract COMMAND cna_test_sdlgpu_texture_filter_mip_contract
-        TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-176: the question UNDERNEATH the filter contract above. SdlGpuTextureRenderer
     # hardcoded num_levels = 1 and declared no UpdatePixelsLevel override, so a mipMap=true
@@ -398,7 +403,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_texture2d_mip_storage
         sdlgpu_texture2d_mip_storage_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_Texture2DMipStorage COMMAND cna_test_sdlgpu_texture2d_mip_storage
-        TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-173: EnvironmentMapEffect samples TWO independent resources -- the ordinary 2D
     # texture through GraphicsDevice.SamplerStates[0] and the reflection cube through
@@ -411,7 +416,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_envmap_cube_sampler
         ${CNA_GRAPHICS_EXAMPLES_DIR}/envmap_cube_sampler_contract_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_EnvMapCubeSamplerContract COMMAND cna_test_sdlgpu_envmap_cube_sampler
-        TIMEOUT 600 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 600 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-172 cross-renderer control: DualTextureEffect's two layers have INDEPENDENT public
     # sampler slots -- FNA's DualTextureEffect.fx declares DECLARE_TEXTURE(Texture, 0) and
@@ -423,7 +428,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_dualtexture_slot_sampler
         ${CNA_GRAPHICS_EXAMPLES_DIR}/dualtexture_slot_sampler_contract_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_DualTextureSlotSamplerContract COMMAND cna_test_sdlgpu_dualtexture_slot_sampler
-        TIMEOUT 600 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 600 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-182 cross-renderer control: the slot-1 sampler questions the fixture above does not
     # ask -- returning to a previous sampler, interleaving with an unrelated effect, sweeping either
@@ -434,7 +439,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_envmap_cube_sampler_state
         ${CNA_GRAPHICS_EXAMPLES_DIR}/envmap_cube_sampler_state_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_EnvMapCubeSamplerState COMMAND cna_test_sdlgpu_envmap_cube_sampler_state
-        TIMEOUT 600 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 600 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-177 cross-renderer control: descriptor/binding bookkeeping must be a function of what
     # is LIVE, never of what has ever existed. D3D12 owned four fixed-capacity heaps with a monotonic
@@ -445,12 +450,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_descriptor_capacity
         ${CNA_GRAPHICS_EXAMPLES_DIR}/descriptor_capacity_contract_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_DescriptorCapacityContract COMMAND cna_test_sdlgpu_descriptor_capacity
-        TIMEOUT 900 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 900 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     cna_sdlgpu_test(cna_test_sdlgpu_point_sampling
         ${CNA_GRAPHICS_EXAMPLES_DIR}/point_sampling_contract_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_PointSamplingContract COMMAND cna_test_sdlgpu_point_sampling
-        TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-151 cross-renderer control: the canonical XNA render-to-texture sequence -- render
     # into a target, unbind it, sample it -- must complete in ONE public frame with no intervening
@@ -461,7 +466,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_rt_producer_consumer
         ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_producer_consumer_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_RenderTarget_ProducerConsumer COMMAND cna_test_sdlgpu_rt_producer_consumer
-        TIMEOUT 120 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 120 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-155 cross-renderer control: a render target produced and unbound earlier in a public
     # frame must be visible to a consumer that draws on the BACKBUFFER later in that same frame. The
@@ -472,7 +477,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_rt_backbuffer_consumer
         ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_backbuffer_consumer_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_RenderTarget_BackbufferConsumer COMMAND cna_test_sdlgpu_rt_backbuffer_consumer
-        TIMEOUT 180 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 180 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-158's control: a RenderTarget2D constructed during a public frame must be usable in
     # that same frame -- bound, cleared and/or drawn into, unbound and observed -- with no warm-up
@@ -483,7 +488,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_rt_first_use
         ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_first_use_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_RenderTarget_FirstUse COMMAND cna_test_sdlgpu_rt_first_use
-        TIMEOUT 180 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 180 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-152: a RenderTarget2D handed to a stock or custom 3D effect as its Texture must be
     # sampled, not reinterpreted. The defect was SDL_GPU-local and fatal -- thirteen sites
@@ -494,7 +499,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_rt_effect_source
         ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_effect_source_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_RenderTarget_EffectSource COMMAND cna_test_sdlgpu_rt_effect_source
-        TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-167 deferred-source lifetime: a resource sampled by a draw that has only been
     # QUEUED must stay bindable until that draw actually renders, and destroying the public wrapper
@@ -507,7 +512,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_deferred_source_lifetime
         ${CNA_GRAPHICS_EXAMPLES_DIR}/deferred_source_lifetime_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_DeferredSourceLifetime COMMAND cna_test_sdlgpu_deferred_source_lifetime
-        TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-168 cross-renderer control: destroying a RenderTarget2D that is STILL the bound
     # render target must never make the next SetRenderTarget transition unsafe, and must leave the
@@ -520,7 +525,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_bound_target_lifetime
         ${CNA_GRAPHICS_EXAMPLES_DIR}/bound_target_lifetime_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_BoundTargetLifetime COMMAND cna_test_sdlgpu_bound_target_lifetime
-        TIMEOUT 600 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 600 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-180: the public render-target -> Present lifecycle contract. `SdlGpu_RenderState`
     # aborted with `Cannot present while render targets are bound`, which is the SECOND event in a
@@ -532,7 +537,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_present_lifecycle
         ${CNA_GRAPHICS_EXAMPLES_DIR}/present_lifecycle_contract_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_PresentLifecycle COMMAND cna_test_sdlgpu_present_lifecycle
-        TIMEOUT 900 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 900 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-163 cross-renderer control: the same public depth-backed MULTISAMPLED
     # RenderTarget2D construction and lifecycle that aborted the process on Bgfx. Only Bgfx
@@ -541,7 +546,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_msaa_depth_contract
         ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_msaa_depth_contract_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_MsaaDepthContract COMMAND cna_test_sdlgpu_msaa_depth_contract
-        TIMEOUT 900 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 900 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-154 cross-renderer control: the same PUBLIC first-readback contract on this
     # renderer. The defect was Bgfx-only and only Bgfx production changed; running the identical
@@ -549,7 +554,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_msaa_first_readback
         ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_msaa_first_readback_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_MsaaFirstReadback COMMAND cna_test_sdlgpu_msaa_first_readback
-        TIMEOUT 900 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 900 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-186: reading a NONZERO MIP LEVEL of a mipmapped MULTISAMPLED RenderTarget2D.
     # Level 0 of the same target read back exactly while GetData(1, ...) died by SIGSEGV, so this
@@ -558,7 +563,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_msaa_mip_readback
         ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_msaa_mip_readback_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_MsaaMipReadback COMMAND cna_test_sdlgpu_msaa_mip_readback
-        TIMEOUT 1200 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 1200 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
     # REMED-GFX-189 cross-renderer control: the same PUBLIC invalid-mip-level contract on this
     # renderer. The fabrication was Vulkan-only and only Vulkan production changed; this renderer
     # adopted the identical guard in REMED-GFX-186, so running the same fixture here is what keeps
@@ -566,7 +571,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_invalid_mip_level
         ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_invalid_mip_level_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_InvalidMipLevel COMMAND cna_test_sdlgpu_invalid_mip_level
-        TIMEOUT 1200 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 1200 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
     # REMED-GFX-157: a stock 3D draw issued AFTER a SpriteBatch inside ONE render-target bind cycle
     # must execute after it rather than be dropped. REMED-GFX-155's leg I0 measured the region it
     # drew into still holding the cycle's clear colour on BGFX, VULKAN, SOFTWARE and EASYGL, with
@@ -576,7 +581,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_spritebatch_3d_order
         ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_3d_order_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_SpriteBatch3DOrder COMMAND cna_test_sdlgpu_spritebatch_3d_order
-        TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-160: the XNA/FNA front-face winding contract. FNA's SpriteBatch emits
     # CLOCKWISE-as-displayed triangles and they must survive RasterizerState.CullCounterClockwise --
@@ -586,19 +591,19 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_frontface_winding
         ${CNA_GRAPHICS_EXAMPLES_DIR}/frontface_winding_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_FrontFaceWinding COMMAND cna_test_sdlgpu_frontface_winding
-        TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-183 cross-renderer control: the complete TriangleStrip parity/culling matrix.
     cna_sdlgpu_test(cna_test_sdlgpu_triangle_strip_winding
         ${CNA_GRAPHICS_EXAMPLES_DIR}/triangle_strip_winding_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_TriangleStripWinding
         COMMAND cna_test_sdlgpu_triangle_strip_winding
-        TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     cna_sdlgpu_test(cna_test_sdlgpu_texture2d_getdata_contract
                     ${CNA_GRAPHICS_EXAMPLES_DIR}/texture2d_getdata_contract_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_Texture2D_GetDataContract COMMAND cna_test_sdlgpu_texture2d_getdata_contract
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-149 (and REMED-GFX-128, the same expression): the exact XNA-compatible
     # startIndex/elementCount contract of every public Texture2D::GetData overload. startIndex is a
@@ -609,7 +614,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_texture2d_getdata_transfer_range
                     ${CNA_GRAPHICS_EXAMPLES_DIR}/texture2d_getdata_transfer_range_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_Texture2D_GetDataTransferRange COMMAND cna_test_sdlgpu_texture2d_getdata_transfer_range
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-130: the TextureCube/Texture3D half of REMED-GFX-127's finding. Both public cube and
     # volume GetData paths converted their own zero-initialized scratch buffer for the caller
@@ -618,7 +623,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_cube_volume_getdata_contract
                     ${CNA_GRAPHICS_EXAMPLES_DIR}/texturecube_texture3d_getdata_contract_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_CubeVolume_GetDataContract COMMAND cna_test_sdlgpu_cube_volume_getdata_contract
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-134: `RenderTargetCube::GetData` must return the face that was really rendered or
     # reject the request deterministically. REMED-GFX-130 made the reporting honest but left the
@@ -629,7 +634,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_rendertargetcube_getdata_contract
                     ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertargetcube_getdata_contract_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_RenderTargetCube_GetDataContract COMMAND cna_test_sdlgpu_rendertargetcube_getdata_contract
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-136: IGraphicsRenderer::CreateRenderTargetCube had no `preserveContents` parameter,
     # unlike CreateRenderTarget2D, so a RenderTargetCube's real RenderTargetUsage never reached the
@@ -640,7 +645,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_rendertargetcube_usage
                     ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertargetcube_usage_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_RenderTargetCube_Usage COMMAND cna_test_sdlgpu_rendertargetcube_usage
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-141: a MULTISAMPLED RenderTargetCube shared ONE multisample colour attachment
     # across all six faces on EasyGL, Vulkan and SdlGpu, so a PreserveContents face reloaded whichever
@@ -651,7 +656,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_rendertargetcube_msaa_face
                     ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertargetcube_msaa_face_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_RenderTargetCube_MsaaFace COMMAND cna_test_sdlgpu_rendertargetcube_msaa_face
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-142: RenderTargetUsage's DEPTH and STENCIL half. FNA3D's own header documents
     # `preserveTargetContents` as storing the "color/depth/stencil" contents, and FNA's DiscardContents
@@ -662,7 +667,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_rendertarget_depthstencil_usage
                     ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_depthstencil_usage_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_RenderTarget_DepthStencilUsage COMMAND cna_test_sdlgpu_rendertarget_depthstencil_usage
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-140: every public render-target bind/unbind cycle must be its own logical pass.
     # `VulkanRenderer::RecordCommandBuffer` collected ONE render pass per unique render-target
@@ -674,13 +679,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_rendertarget_pass_boundary
                     ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_pass_boundary_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_RenderTarget_PassBoundary COMMAND cna_test_sdlgpu_rendertarget_pass_boundary
-        TIMEOUT 90 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 90 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-129: cross-renderer control for Vulkan's ordered-Clear correction.
     cna_sdlgpu_test(cna_test_sdlgpu_ordered_clear
                     ${CNA_GRAPHICS_EXAMPLES_DIR}/graphicsdevice_ordered_clear_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_GraphicsDevice_OrderedClear COMMAND cna_test_sdlgpu_ordered_clear
-        TIMEOUT 120 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 120 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-143: backbuffer work and render-target work must replay in ONE ordered stream.
     # REMED-GFX-140 (Vulkan) and REMED-GFX-145 (SdlGpu) gave every render-target bind cycle its own
@@ -692,7 +697,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_backbuffer_pass_order
                     ${CNA_GRAPHICS_EXAMPLES_DIR}/backbuffer_pass_order_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_Backbuffer_PassOrder COMMAND cna_test_sdlgpu_backbuffer_pass_order
-        TIMEOUT 120 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 120 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-116 cross-renderer control: every deferred draw must execute under the
     # GraphicsDevice.Viewport active at its own public call. WebGPU resolved it live when it
@@ -701,7 +706,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_deferred_viewport
                     ${CNA_GRAPHICS_EXAMPLES_DIR}/deferred_viewport_capture_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_Deferred_Viewport COMMAND cna_test_sdlgpu_deferred_viewport
-        TIMEOUT 120 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 120 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-146 cross-renderer control: every deferred draw must execute under the
     # GraphicsDevice.ScissorRectangle and RasterizerState.ScissorTestEnable active at its own
@@ -711,7 +716,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_deferred_scissor
                     ${CNA_GRAPHICS_EXAMPLES_DIR}/deferred_scissor_capture_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_Deferred_Scissor COMMAND cna_test_sdlgpu_deferred_scissor
-        TIMEOUT 120 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 120 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-145: the SDL_GPU-specific half of the same contract. The shared oracle above drives
     # SpriteBatch only and scopes itself to colour, so it cannot see a segment filter that works for
@@ -723,7 +728,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_pass_boundary_upload
                     sdlgpu_pass_boundary_upload_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_PassBoundary_Upload COMMAND cna_test_sdlgpu_pass_boundary_upload
-        TIMEOUT 90 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 90 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-135: the WRITE half of the same finding. `TextureCube::SetData`/`Texture3D::SetData`
     # kept the pre-REMED-GFX-127 shape -- a `void` renderer method behind `if (renderer_)` -- so an
@@ -731,7 +736,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_cube_volume_setdata_contract
                     ${CNA_GRAPHICS_EXAMPLES_DIR}/texturecube_texture3d_setdata_contract_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_CubeVolume_SetDataContract COMMAND cna_test_sdlgpu_cube_volume_setdata_contract
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-165: a rectangle-less GetBackBufferData must address the whole logical backbuffer
     # (PresentationParameters W x H) from the first observable frame, with no SetRenderTarget round
@@ -741,21 +746,21 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_backbuffer_readback_dimension
                     ${CNA_GRAPHICS_EXAMPLES_DIR}/backbuffer_readback_dimension_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_BackbufferReadbackDimension COMMAND cna_test_sdlgpu_backbuffer_readback_dimension
-        TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-161: cross-renderer control for the first-read completion contract (preserves the
     # GFX-165 lazy-proxy backbuffer read; no SDL_GPU production change here).
     cna_sdlgpu_test(cna_test_sdlgpu_backbuffer_first_read
                     ${CNA_GRAPHICS_EXAMPLES_DIR}/backbuffer_first_read_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_BackbufferFirstRead COMMAND cna_test_sdlgpu_backbuffer_first_read
-        TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # REMED-GFX-162 cross-renderer control: SdlGpu's lazy-proxy GetBackBufferData (GFX-165) SUCCEEDS
     # and fully writes the requested range, so the Headless rejection is specific, not universal.
     cna_sdlgpu_test(cna_test_sdlgpu_backbuffer_reject
                     ${CNA_GRAPHICS_EXAMPLES_DIR}/backbuffer_headless_reject_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_BackbufferReject COMMAND cna_test_sdlgpu_backbuffer_reject
-        TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 endif()
 
 # Module-local tests get the same headless-safe skip convention the root one-shot
