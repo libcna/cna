@@ -294,6 +294,10 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param data         Output array to receive pixel data.
          * @param elementCount Number of Color elements to read.
          * @throws System::NotSupportedException under the Reach graphics profile.
+         * @throws System::ArgumentNullException if @p data is null.
+         * @throws System::ArgumentOutOfRangeException if @p elementCount is not positive.
+         * @throws System::ArgumentException if @p elementCount does not equal the back-buffer pixel count.
+         * @throws System::InvalidOperationException if a render target is active.
          */
         void GetBackBufferData(Color* data, int elementCount);
         /**
@@ -302,6 +306,10 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param startIndex   First element index in @p data to write to.
          * @param elementCount Number of Color elements to read.
          * @throws System::NotSupportedException under the Reach graphics profile.
+         * @throws System::ArgumentNullException if @p data is null.
+         * @throws System::ArgumentOutOfRangeException if the destination range is invalid.
+         * @throws System::ArgumentException if @p elementCount does not equal the back-buffer pixel count.
+         * @throws System::InvalidOperationException if a render target is active.
          */
         void GetBackBufferData(Color* data, int startIndex, int elementCount);
         /**
@@ -311,6 +319,10 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param startIndex   First element index in @p data to write to.
          * @param elementCount Number of Color elements to read.
          * @throws System::NotSupportedException under the Reach graphics profile.
+         * @throws System::ArgumentNullException if @p data is null.
+         * @throws System::ArgumentOutOfRangeException if the destination range is invalid.
+         * @throws System::ArgumentException if @p rect is invalid or @p elementCount does not match it.
+         * @throws System::InvalidOperationException if a render target is active.
          */
         void GetBackBufferData(const Rectangle* rect, Color* data, int startIndex, int elementCount);
 

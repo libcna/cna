@@ -15,7 +15,12 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/InvalidOperationException.hpp"
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Rectangle;
@@ -23,6 +28,7 @@ using Microsoft::Xna::Framework::Graphics::GraphicsAdapter;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
 using Microsoft::Xna::Framework::Graphics::PresentationParameters;
+using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 
 namespace
@@ -84,13 +90,41 @@ TEST(BackBufferFormatContractTest, ReadbackRejectsMalformedDestinationAndRectang
     const Rectangle overflowingX(std::numeric_limits<int>::max(), 0, 1, 1);
     const Rectangle overflowingY(0, std::numeric_limits<int>::max(), 1, 1);
 
+    EXPECT_THROW(device.GetBackBufferData(
+                     &onePixel, static_cast<Color*>(nullptr), 0, 1),
+                 System::ArgumentNullException);
     EXPECT_THROW(device.GetBackBufferData(&onePixel, pixels.data() + 1, -1, 1),
-                 std::out_of_range);
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW(device.GetBackBufferData(&onePixel, pixels.data(), 0, 0),
+                 System::ArgumentOutOfRangeException);
     EXPECT_THROW(device.GetBackBufferData(&onePixel, pixels.data(),
                                           std::numeric_limits<int>::max(), 1),
-                 std::out_of_range);
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW(device.GetBackBufferData(&onePixel, pixels.data(), 0, 2),
+                 System::ArgumentException);
     EXPECT_THROW(device.GetBackBufferData(&overflowingX, pixels.data(), 0, 1),
-                 std::out_of_range);
+                 System::ArgumentException);
     EXPECT_THROW(device.GetBackBufferData(&overflowingY, pixels.data(), 0, 1),
-                 std::out_of_range);
+                 System::ArgumentException);
+}
+
+TEST(BackBufferFormatContractTest, ReadbackRejectsAnActiveRenderTarget)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+
+    PresentationParameters parameters = RequestedPackedBackbuffer(SurfaceFormat::Color);
+    GraphicsDevice device(
+        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef, parameters);
+    RenderTarget2D target(device, 1, 1);
+    Color pixel = Color::Magenta;
+    const Rectangle onePixel(0, 0, 1, 1);
+
+    device.SetRenderTarget(&target);
+    EXPECT_THROW(device.GetBackBufferData(&onePixel, &pixel, 0, 1),
+                 System::InvalidOperationException);
+    EXPECT_EQ(pixel, Color::Magenta);
+    ASSERT_EQ(device.GetRenderTargets().size(), 1u);
+    EXPECT_EQ(device.GetRenderTargets()[0].getRenderTargetProperty(), &target);
+
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 }

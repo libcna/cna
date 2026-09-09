@@ -4294,10 +4294,20 @@ namespace Microsoft::Xna::Framework::Graphics
             throw System::NotSupportedException(
                 "GetBackBufferData is not supported by the Reach graphics profile.");
         }
-        if (data == nullptr)
-            throw std::invalid_argument("data");
-        if (startIndex < 0)
-            throw std::out_of_range("GetBackBufferData: startIndex must be >= 0");
+        System::ArgumentNullException::ThrowIfNull(data, "data");
+        System::ArgumentOutOfRangeException::ThrowIfNegative(startIndex, "startIndex");
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(
+            elementCount, "elementCount");
+        if (static_cast<std::int64_t>(startIndex) + static_cast<std::int64_t>(elementCount) >
+            static_cast<std::int64_t>((std::numeric_limits<int>::max)()))
+        {
+            throw System::ArgumentOutOfRangeException("elementCount");
+        }
+        if (!currentRenderTargets_.empty())
+        {
+            throw System::InvalidOperationException(
+                "The back buffer cannot be read while a render target is active.");
+        }
 
         // REMED-GFX-165: the read region is derived from the AUTHORITATIVE backbuffer description --
         // PresentationParameters -- never from the renderer's live viewport. A rectangle-less call
@@ -4324,7 +4334,7 @@ namespace Microsoft::Xna::Framework::Graphics
             if (w <= 0 || h <= 0 || x < 0 || y < 0 ||
                 w > backBufferWidth || h > backBufferHeight ||
                 x > backBufferWidth - w || y > backBufferHeight - h)
-                throw std::out_of_range(
+                throw System::ArgumentException(
                     "GetBackBufferData: rectangle is outside the backbuffer bounds");
         }
         else
@@ -4349,15 +4359,9 @@ namespace Microsoft::Xna::Framework::Graphics
         }
 
         const int pixelCount = w * h;
-        if (elementCount < pixelCount)
-            throw std::out_of_range(
-                "GetBackBufferData: elementCount is less than the requested pixel count");
-        if (static_cast<std::int64_t>(startIndex) + static_cast<std::int64_t>(elementCount) >
-            static_cast<std::int64_t>((std::numeric_limits<int>::max)()))
-        {
-            throw std::out_of_range(
-                "GetBackBufferData: startIndex + elementCount does not fit in a 32-bit element index");
-        }
+        if (elementCount != pixelCount)
+            throw System::ArgumentException(
+                "GetBackBufferData: elementCount does not match the requested pixel count");
         Texture::ValidateGetDataFormat(presentationParameters_.getBackBufferFormatProperty(), 4);
 
         // Color inherits a vtable pointer, so its first byte is NOT the R component.
