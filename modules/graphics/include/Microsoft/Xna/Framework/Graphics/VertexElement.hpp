@@ -128,9 +128,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /**
          * @brief Returns a hash code for this element.
-         * @return 0 (consistent with FNA's TODO implementation).
+         * @return A hash code derived from the element fields.
          */
-        [[nodiscard]] std::size_t GetHashCode() const { return 0; }
+        [[nodiscard]] std::size_t GetHashCode() const;
 
         /**
          * @brief Returns a human-readable description of this element.

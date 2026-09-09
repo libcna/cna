@@ -3,8 +3,16 @@
 
 #include <string>
 
+#include "VertexValueHash.hpp"
+
 namespace Microsoft::Xna::Framework::Graphics
 {
+    std::size_t VertexElement::GetHashCode() const
+    {
+        return CNA::Internal::Graphics::SmartVertexHash(
+            offset_, vertexElementFormat_, vertexElementUsage_, usageIndex_);
+    }
+
     std::string VertexElement::ToString() const
     {
         auto fmtName = [](VertexElementFormat f) -> std::string {

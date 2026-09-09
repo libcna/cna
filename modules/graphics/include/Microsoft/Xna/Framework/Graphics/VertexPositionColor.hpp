@@ -81,10 +81,10 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] bool Equals(const VertexPositionColor& other) const { return *this == other; }
 
         /**
-         * @brief Returns a hash code. Consistent with FNA (always 0).
-         * @return 0.
+         * @brief Returns a hash code derived from this vertex's fields.
+         * @return The hash code.
          */
-        [[nodiscard]] std::size_t GetHashCode() const { return 0; }
+        [[nodiscard]] std::size_t GetHashCode() const;
 
         /**
          * @brief Returns a human-readable description of this vertex.

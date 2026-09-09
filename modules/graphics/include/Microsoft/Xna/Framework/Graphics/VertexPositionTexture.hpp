@@ -71,10 +71,10 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         [[nodiscard]] bool Equals(const VertexPositionTexture& other) const { return *this == other; }
         /**
-         * @brief Returns a hash code for this vertex.
-         * @return Always returns 0 (FNA TODO).
+         * @brief Returns a hash code derived from this vertex's fields.
+         * @return The hash code.
          */
-        [[nodiscard]] std::size_t GetHashCode() const { return 0; }
+        [[nodiscard]] std::size_t GetHashCode() const;
         /**
          * @brief Returns a string representation of this vertex.
          * @return A string listing Position and TextureCoordinate values.
