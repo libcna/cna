@@ -419,6 +419,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
 - **Disposed Effects cannot be clone sources** (`SOFTWARE-259`) — the base Effect clone paths,
   every classic stock-effect override and EffectMaterial reject `Clone()` with
   `ObjectDisposedException`, following Microsoft's clone-constructor lifetime check.
+- **`EffectMaterial.Clone()` uses the inherited base result** (`SOFTWARE-260`) — Microsoft XNA and
+  FNA do not override this virtual method. CNA therefore returns an independent base `Effect`
+  while preserving cloned compiled parameters, techniques and current selection.
 - **The classic SpriteBatch/SpriteFont parity corpus executes on the CPU** (`SOFTWARE-138`).
   Eighteen renderer-independent scenes shared with EasyGL cover flips, rotation/origin, both scale
   overloads, source rectangles, layer sorting, transforms, render targets, viewports, scissor,

@@ -33,14 +33,6 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
         /**
-         * @brief Creates a clone of this effect.
-         *
-         * @return Pointer to the cloned Effect.
-         * @throws System::ObjectDisposedException If this effect has been disposed.
-         */
-        [[nodiscard]] Effect* Clone() override;
-
-        /**
          * @brief Takes ownership of a texture this material's parameters point at.
          *
          * `EffectParameter` stores a raw `Texture*`, so something has to keep the object

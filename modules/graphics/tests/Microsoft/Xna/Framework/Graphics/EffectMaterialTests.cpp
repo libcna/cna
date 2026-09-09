@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// Task 883: EffectMaterial::Clone() — the last of the 8 concrete Effect
-// subclasses (6 XNA stock effects + EffectMaterial + the CNAEXT ShaderEffect
-// extension) to gain a Clone() override once Effect::Clone() became a pure
-// virtual base-class contract.
+// EffectMaterial deliberately has no Clone override in XNA: calling the
+// inherited Effect.Clone returns an independent base Effect.
 
 #include <gtest/gtest.h>
 
@@ -26,18 +24,17 @@ using Microsoft::Xna::Framework::Graphics::Effect;
 using Microsoft::Xna::Framework::Graphics::EffectMaterial;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 
-TEST(EffectMaterialTest, CloneReturnsIndependentEffectMaterial)
+TEST(EffectMaterialTest, InheritedCloneReturnsIndependentBaseEffect)
 {
     GraphicsDevice gd;
     BasicEffect source(gd);
     EffectMaterial material(source);
 
     std::unique_ptr<Effect> cloned(material.Clone());
-    auto* clone = dynamic_cast<EffectMaterial*>(cloned.get());
-
-    ASSERT_NE(clone, nullptr);
-    EXPECT_NE(static_cast<Effect*>(clone), static_cast<Effect*>(&material));
-    EXPECT_EQ(clone->GetTypeName(), "Microsoft.Xna.Framework.Graphics.EffectMaterial");
+    ASSERT_NE(cloned, nullptr);
+    EXPECT_EQ(dynamic_cast<EffectMaterial*>(cloned.get()), nullptr);
+    EXPECT_NE(cloned.get(), static_cast<Effect*>(&material));
+    EXPECT_EQ(cloned->GetTypeName(), "Microsoft.Xna.Framework.Graphics.Effect");
 }
 
 
@@ -63,6 +60,28 @@ namespace
             : Effect(device, effectCode) {}
         Effect* Clone() override { return nullptr; }
     };
+}
+
+TEST(EffectMaterialTest, InheritedCloneCarriesIndependentCompiledState)
+{
+    GraphicsDevice gd;
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+        GTEST_SKIP() << "renderer does not support compiled effects";
+
+    const auto bytes = LoadCompiledEffectFixture();
+    ASSERT_FALSE(bytes.empty());
+    CompiledSourceEffect source(gd, bytes);
+    EffectMaterial material(source);
+
+    std::unique_ptr<Effect> clone(material.Clone());
+    ASSERT_NE(clone, nullptr);
+    EXPECT_EQ(dynamic_cast<EffectMaterial*>(clone.get()), nullptr);
+    EXPECT_EQ(clone->getParametersProperty().getCountProperty(),
+              material.getParametersProperty().getCountProperty());
+    EXPECT_EQ(clone->getTechniquesProperty().getCountProperty(),
+              material.getTechniquesProperty().getCountProperty());
+    EXPECT_NE(clone->getParametersProperty()[0], material.getParametersProperty()[0]);
+    EXPECT_NE(clone->getCurrentTechniqueProperty(), material.getCurrentTechniqueProperty());
 }
 
 // SAMPLE-028: EffectMaterial used to construct through Effect(GraphicsDevice), which

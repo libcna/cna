@@ -121,8 +121,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * clone's own identity, not copied from the original), with the same current values;
          * mutating a parameter on either the clone or the original never affects the other.
          *
-         * @return Owning pointer to the cloned effect, with the same concrete runtime type as
-         * this object. Caller takes ownership.
+         * @return Owning pointer to the cloned effect. Caller takes ownership.
          * @throws System::ObjectDisposedException If this effect has been disposed.
          *
          * @note CNAEXT return-type deviation — FNA's Clone() returns a GC-managed Effect

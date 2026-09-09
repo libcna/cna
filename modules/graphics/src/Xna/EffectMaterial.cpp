@@ -28,11 +28,6 @@ namespace Microsoft::Xna::Framework::Graphics
         return name;
     }
 
-    Effect* EffectMaterial::Clone()
-    {
-        return new EffectMaterial(static_cast<Effect&>(*this));
-    }
-
     void EffectMaterial::OnApply()
     {
     }
