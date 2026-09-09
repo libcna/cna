@@ -413,6 +413,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
 - **`Effect.CurrentTechnique` enforces the Microsoft object boundary** (`SOFTWARE-257`) — setting
   null, a technique owned by another Effect, or any value after disposal throws the recovered XNA
   exception before changing either the public selection or a compiled renderer runtime.
+- **`EffectPass.Apply` validates lifetime before technique membership** (`SOFTWARE-258`) — a
+  disposed Effect consistently reports `ObjectDisposedException`, including when the requested
+  pass is also outside the current technique.
 - **The classic SpriteBatch/SpriteFont parity corpus executes on the CPU** (`SOFTWARE-138`).
   Eighteen renderer-independent scenes shared with EasyGL cover flips, rotation/origin, both scale
   overloads, source rectangles, layer sorting, transforms, render targets, viewports, scissor,

@@ -3,6 +3,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectTechnique.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -22,6 +23,8 @@ namespace Microsoft::Xna::Framework::Graphics
     void EffectPass::Apply()
     {
         if (!owner_) return;
+        if (owner_->getIsDisposedProperty())
+            throw System::ObjectDisposedException(owner_->getNameProperty());
 
         const EffectTechnique* current = owner_->getCurrentTechniqueProperty();
         if (current == nullptr || current->getIdInternal() != techniqueId_)

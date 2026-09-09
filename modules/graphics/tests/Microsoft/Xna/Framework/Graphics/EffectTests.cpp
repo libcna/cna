@@ -542,6 +542,16 @@ TEST_F(EffectApplyTest, ApplyOnPassThrowsObjectDisposedExceptionWhenOwnerEffectD
     EXPECT_THROW(p0.Apply(), System::ObjectDisposedException);
 }
 
+TEST_F(EffectApplyTest, DisposedEffectWinsBeforeNonCurrentPassValidation)
+{
+    EffectPass& originalPass = *fx.getTechniquesProperty()[0]->getPassesProperty()[0];
+    fx.getTechniquesProperty().Add(EffectTechnique(&fx, "Second"));
+    fx.setCurrentTechniqueProperty(fx.getTechniquesProperty()[1]);
+    fx.Dispose();
+
+    EXPECT_THROW(originalPass.Apply(), System::ObjectDisposedException);
+}
+
 // -----------------------------------------------------------------------
 // Task 355: EffectPass::Apply() must throw System::InvalidOperationException
 // ("Applied a pass not in the current technique!") when applied while it is
