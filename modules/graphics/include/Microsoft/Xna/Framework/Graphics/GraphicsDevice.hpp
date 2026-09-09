@@ -1034,10 +1034,10 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         CNAEXT void SetGraphicsProfileEXT(GraphicsProfile profile);
         /**
-         * @brief Disables GL context-loss recovery (CPU shadow copies + ResourceRegistry).
+         * @brief Enables or disables native context/device-loss resource recovery.
          *
-         * Must be called before the device is initialized. Safe on desktop where
-         * context loss never occurs; saves approximately one copy of texture RAM per loaded texture.
+         * Must be called before the device is initialized. Disabling recovery avoids the renderer's
+         * CPU shadows on platforms where context or device loss cannot occur.
          *
          * @param enabled Pass false to disable context recovery.
          */

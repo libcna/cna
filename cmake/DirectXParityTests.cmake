@@ -867,6 +867,19 @@ function(cna_register_d3d_parity_tests)
         NAME DeviceResetEvents TARGET device_reset_events DIRECTX12_ORDER 2210
         SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_device_reset_events_test.cpp")
     cna_d3d_parity_fixture(
+        NAME ContextRecoveryContract TARGET context_recovery_contract DIRECTX12_ORDER 2215
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/d3d_context_recovery_contract_test.cpp"
+        DIRECTX11_TIMEOUT 900 DIRECTX12_TIMEOUT 1200)
+    cna_d3d_parity_fixture(
+        NAME ContextRecovery_Model TARGET context_recovery_model DIRECTX12_ORDER 2216
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_gltf_context_loss_test.cpp"
+        DIRECTX11_TIMEOUT 900 DIRECTX12_TIMEOUT 1200
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    cna_d3d_parity_fixture(
+        NAME ContentLostProbe TARGET content_lost_probe DIRECTX12_ORDER 2217
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/content_lost_probe.cpp"
+        DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 600)
+    cna_d3d_parity_fixture(
         NAME TransformMatrix_Translation TARGET transform_matrix DIRECTX12_ORDER 2220
         SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_transform_matrix_test.cpp")
     cna_d3d_parity_fixture(

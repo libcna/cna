@@ -341,24 +341,32 @@ namespace CNA::Internal::Renderers::DirectX12
         , surfaceFormat_(surfaceFormat)
         , dxgiFormat_(D3DCommon::SurfaceFormatToDxgi(surfaceFormat))
         , bytesPerTexel_(D3DCommon::SurfaceFormatBytesPerTexel(surfaceFormat))
+        , depthFormat_(depthFormat)
+        , requestedMultiSampleCount_(multiSampleCount)
     {
         if (dxgiFormat_ == DXGI_FORMAT_UNKNOWN || bytesPerTexel_ <= 0)
             throw std::invalid_argument("D3D12RenderTargetRenderer: unsupported SurfaceFormat " +
                                         std::to_string(surfaceFormat));
-        appliedMultiSampleCount_ = ClampMultiSampleCount(device, dxgiFormat_, multiSampleCount);
+        appliedMultiSampleCount_ = ClampMultiSampleCount(
+            device_.Get(), dxgiFormat_, requestedMultiSampleCount_);
         isMsaa_ = appliedMultiSampleCount_ > 0;
         // The multisampled draw resource has one level; its single-sample resolve resource owns
         // the public mip chain and is the CPU downsample source/destination.
         mipMap_ = mipMap;
         levelCount_ = mipMap_ ? CalculateMipLevels(w, h) : 1;
+        CreateDeviceResources();
+        owner_->RegisterRecoverableResourceEXT(this);
+    }
 
+    void D3D12RenderTargetRenderer::CreateDeviceResources()
+    {
         D3D12_HEAP_PROPERTIES heapProps{};
         heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
 
         D3D12_RESOURCE_DESC colorDesc{};
         colorDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-        colorDesc.Width = static_cast<UINT64>(w);
-        colorDesc.Height = static_cast<UINT>(h);
+        colorDesc.Width = static_cast<UINT64>(width_);
+        colorDesc.Height = static_cast<UINT>(height_);
         colorDesc.DepthOrArraySize = 1;
         colorDesc.MipLevels = isMsaa_ ? 1 : static_cast<UINT16>(levelCount_);
         colorDesc.Format = dxgiFormat_;
@@ -427,14 +435,14 @@ namespace CNA::Internal::Renderers::DirectX12
                                                   &srvDesc, cpu);
             });
 
-        const DXGI_FORMAT depthDxgiFormat = D3DCommon::DepthFormatToDxgi(depthFormat);
+        const DXGI_FORMAT depthDxgiFormat = D3DCommon::DepthFormatToDxgi(depthFormat_);
         hasDepth_ = depthDxgiFormat != DXGI_FORMAT_UNKNOWN;
         if (hasDepth_)
         {
             D3D12_RESOURCE_DESC depthDesc{};
             depthDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-            depthDesc.Width = static_cast<UINT64>(w);
-            depthDesc.Height = static_cast<UINT>(h);
+            depthDesc.Width = static_cast<UINT64>(width_);
+            depthDesc.Height = static_cast<UINT>(height_);
             depthDesc.DepthOrArraySize = 1;
             depthDesc.MipLevels = 1;
             depthDesc.Format = depthDxgiFormat;
@@ -463,11 +471,51 @@ namespace CNA::Internal::Renderers::DirectX12
 
     D3D12RenderTargetRenderer::~D3D12RenderTargetRenderer()
     {
-        if (owner_) owner_->NotifyRenderTargetDestroyedEXT(this);
-        if (!heaps_) return;
-        heaps_->cbvSrvUav.Free(srvIndex_);
-        heaps_->rtv.Free(rtv_);
-        if (hasDepth_) heaps_->dsv.Free(dsv_);
+        ReleaseDeviceResourcesEXT();
+        if (owner_)
+            owner_->UnregisterRecoverableResourceEXT(this);
+    }
+
+    void D3D12RenderTargetRenderer::ReleaseDeviceResourcesEXT() noexcept
+    {
+        if (owner_)
+        {
+            owner_->NotifyRenderTargetDestroyedEXT(this);
+            auto& tracker = owner_->GetResourceStateTrackerEXT();
+            if (colorResource_)
+                tracker.UntrackResource(colorResource_.Get());
+            if (resolveResource_)
+                tracker.UntrackResource(resolveResource_.Get());
+            if (depthResource_)
+                tracker.UntrackResource(depthResource_.Get());
+        }
+        if (heaps_)
+        {
+            if (srvIndex_ != D3D12ShaderVisibleDescriptorAllocator::kInvalidIndex)
+                heaps_->cbvSrvUav.Free(srvIndex_);
+            if (rtv_.ptr != 0)
+                heaps_->rtv.Free(rtv_);
+            if (hasDepth_ && dsv_.ptr != 0)
+                heaps_->dsv.Free(dsv_);
+        }
+        srvIndex_ = D3D12ShaderVisibleDescriptorAllocator::kInvalidIndex;
+        rtv_ = D3D12_CPU_DESCRIPTOR_HANDLE{};
+        dsv_ = D3D12_CPU_DESCRIPTOR_HANDLE{};
+        dsvFormat_ = DXGI_FORMAT_UNKNOWN;
+        depthResource_.Reset();
+        resolveResource_.Reset();
+        colorResource_.Reset();
+        heaps_.reset();
+        device_.Reset();
+    }
+
+    void D3D12RenderTargetRenderer::RecreateDeviceResourcesEXT()
+    {
+        device_ = owner_->GetDeviceEXT();
+        appliedMultiSampleCount_ = ClampMultiSampleCount(
+            device_.Get(), dxgiFormat_, requestedMultiSampleCount_);
+        isMsaa_ = appliedMultiSampleCount_ > 0;
+        CreateDeviceResources();
     }
 
     void D3D12RenderTargetRenderer::BindAsRenderTarget()

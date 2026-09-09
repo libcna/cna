@@ -2920,15 +2920,12 @@ namespace CNA::Internal::Renderers
         /// vkCmdInsertDebugUtilsLabelEXT when VK_EXT_debug_utils is available.
         virtual void SetStringMarkerEXT(const char* /*marker*/) {}
 
-        /// Simulates an OpenGL context loss.
-        /// On Web (Emscripten): triggers WEBGL_lose_context.loseContext().
-        /// On desktop: destroys the SDL GL context and immediately recreates it,
-        /// forcing all GPU resources to be re-initialised.
+        /// Simulates a native graphics context or device loss.
+        /// Renderer implementations may recover atomically or remain unavailable until
+        /// DebugRestoreContext() is called.
         virtual void DebugSimulateContextLoss() {}
 
-        /// Simulates an OpenGL context restore after a previous DebugSimulateContextLoss().
-        /// On Web: triggers WEBGL_lose_context.restoreContext().
-        /// On desktop: equivalent to DebugSimulateContextLoss() (destroy + recreate).
+        /// Restores a native context or device after DebugSimulateContextLoss().
         virtual void DebugRestoreContext() {}
 
         // ---- Window id → renderer registry ----

@@ -496,12 +496,11 @@ int main()
 
     // ---- K: device recreation ---------------------------------------------------------------------
     {
-        // A resource created against the OLD device must still be destructible after the device is
-        // recreated: it holds its own reference to the old allocator set, so freeing its slot cannot
-        // touch the new device's index space.
+        // A resource created against the old device must migrate to the replacement device. Its old
+        // descriptor is released before the allocator set is retired, and destruction later releases
+        // the replacement descriptor rather than touching the old set.
         auto survivor = std::make_unique<D3D12TextureRenderer>(&renderer, TinyImage());
         const std::shared_ptr<D3D12DescriptorHeaps> oldHeaps = renderer.GetDescriptorHeapsEXT();
-        const std::uint32_t survivorIndex = survivor->GetShaderResourceViewIndexEXT();
 
         bool recreated = true;
         try
@@ -523,23 +522,26 @@ int main()
             const std::shared_ptr<D3D12DescriptorHeaps>& newHeaps = renderer.GetDescriptorHeapsEXT();
             Check(newHeaps != oldHeaps,
                   "K1: device recreation builds a brand-new allocator set");
+            Check(oldHeaps->cbvSrvUav.GetStatsEXT().live == 0,
+                  "K2: recreation releases the survivor's descriptor from the old set");
             Check(newHeaps->cbvSrvUav.GetStatsEXT().capacity == 64 &&
-                      newHeaps->cbvSrvUav.GetStatsEXT().live == 0,
-                  "K2: the new set starts empty at the starting capacity (" +
+                      newHeaps->cbvSrvUav.GetStatsEXT().live == 1,
+                  "K3: the survivor is recreated in the new set at its starting capacity (" +
                       Describe("srv", newHeaps->cbvSrvUav.GetStatsEXT()) + ")");
+            Check(survivor->GetShaderResourceViewGpuHandleEXT().ptr != 0,
+                  "K4: the surviving texture resolves through the replacement heap");
 
-            const std::uint32_t oldLiveBefore = oldHeaps->cbvSrvUav.GetStatsEXT().live;
+            const std::uint32_t newLiveBefore = newHeaps->cbvSrvUav.GetStatsEXT().live;
             survivor.reset();
-            Check(oldHeaps->cbvSrvUav.GetStatsEXT().live == oldLiveBefore - 1,
-                  "K3: a resource outliving the device frees into the OLD set, not the new one "
-                  "(freed index " + std::to_string(survivorIndex) + ")");
-            Check(newHeaps->cbvSrvUav.GetStatsEXT().live == 0,
-                  "K4: and left the new device's index space untouched");
+            Check(newHeaps->cbvSrvUav.GetStatsEXT().live == newLiveBefore - 1,
+                  "K5: destroying the recovered resource frees its replacement descriptor");
+            Check(oldHeaps->cbvSrvUav.GetStatsEXT().live == 0,
+                  "K6: recovered-resource destruction leaves the retired set untouched");
 
             // The recreated device must be usable.
             D3D12TextureRenderer fresh(&renderer, TinyImage());
             Check(fresh.GetShaderResourceViewGpuHandleEXT().ptr != 0,
-                  "K5: a texture created after recreation resolves in the new heap");
+                  "K7: a texture created after recreation resolves in the new heap");
         }
     }
 

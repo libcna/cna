@@ -261,6 +261,8 @@ namespace CNA::Internal::Renderers::DirectX12
         : virtualWidth_(args.virtualWidth)
         , virtualHeight_(args.virtualHeight)
         , requestedMultiSampleCount_(args.multiSampleCount)
+        , contextRecoveryEnabled_(args.contextRecoveryEnabled)
+        , deviceEventCallback_(args.deviceEventCallback)
     {
         if (args.surface.windowId != 0 || CNA::Platform::HasNativeWindow(args.surface.nativeHandle))
         {
@@ -342,6 +344,50 @@ namespace CNA::Internal::Renderers::DirectX12
             CloseHandle(fenceEvent_);
             fenceEvent_ = nullptr;
         }
+    }
+
+    void DirectX12Renderer::SetContextRecoveryEnabled(bool enabled)
+    {
+        contextRecoveryEnabled_ = enabled;
+    }
+
+    void DirectX12Renderer::RegisterRecoverableResourceEXT(
+        D3DCommon::ID3DDeviceRecoverableEXT* resource)
+    {
+        if (!contextRecoveryEnabled_ || resource == nullptr)
+            return;
+        if (std::find(recoverableResources_.begin(), recoverableResources_.end(), resource) ==
+            recoverableResources_.end())
+        {
+            recoverableResources_.push_back(resource);
+        }
+    }
+
+    void DirectX12Renderer::UnregisterRecoverableResourceEXT(
+        D3DCommon::ID3DDeviceRecoverableEXT* resource) noexcept
+    {
+        std::erase(recoverableResources_, resource);
+    }
+
+    void DirectX12Renderer::DebugSimulateContextLoss()
+    {
+        if (deviceLost_)
+            return;
+        deviceLost_ = true;
+        if (deviceEventCallback_)
+            deviceEventCallback_(RendererDeviceEvent::Lost);
+    }
+
+    void DirectX12Renderer::DebugRestoreContext()
+    {
+        if (!deviceLost_)
+            return;
+        if (deviceEventCallback_)
+            deviceEventCallback_(RendererDeviceEvent::Resetting);
+        RecreateDeviceEXT();
+        deviceLost_ = false;
+        if (deviceEventCallback_)
+            deviceEventCallback_(RendererDeviceEvent::Reset);
     }
 
     void DirectX12Renderer::CreateDeviceResources()
@@ -983,18 +1029,25 @@ namespace CNA::Internal::Renderers::DirectX12
         return valueToSignal;
     }
 
-    void DirectX12Renderer::CheckDeviceRemovedEXT(HRESULT hr) const
+    void DirectX12Renderer::CheckDeviceRemovedEXT(HRESULT hr)
     {
         if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
         {
             const HRESULT reason = device_ ? device_->GetDeviceRemovedReason() : hr;
             CNA::Logger::Error("D3D12 device removed/reset; reason=" + FormatHr(reason),
                                CNA::LogCategory::RENDER);
+            if (!deviceLost_)
+            {
+                deviceLost_ = true;
+                if (deviceEventCallback_)
+                    deviceEventCallback_(RendererDeviceEvent::Lost);
+            }
         }
     }
 
     void DirectX12Renderer::RecreateDeviceEXT()
     {
+        const auto resources = recoverableResources_;
         // Best-effort drain of anything in flight before tearing down -- mirrors the destructor's
         // own drain (it's not safe to release a fence/allocator/command list the GPU may still be
         // referencing, even on a real device-removed event, since the removal only affects future
@@ -1009,6 +1062,11 @@ namespace CNA::Internal::Renderers::DirectX12
                     WaitForSingleObject(fenceEvent_, INFINITE);
                 }
             }
+        }
+        for (D3DCommon::ID3DDeviceRecoverableEXT* resource : resources)
+        {
+            if (resource != nullptr)
+                resource->ReleaseDeviceResourcesEXT();
         }
 
         // Drop every ComPtr tied to the (possibly removed) device -- further calls against a
@@ -1075,11 +1133,9 @@ namespace CNA::Internal::Renderers::DirectX12
         pbrLightsConstantBufferMapped_ = nullptr;
         defaultWhiteTexture_.reset();
         defaultFlatNormalTexture_.reset();
-        // REMED-GFX-123: every cached step-rate PSO is device-tied, so the whole map goes, not just
-        // the one that happened to be built last.
-        // The bound off-screen color target (if any) was owned by the caller and lived on the old
-        // device -- it's gone too; the caller must recreate its render target and rebind after
-        // calling RecreateDeviceEXT(), same as it must recreate any of its own DX-109 resources.
+        // Any bound off-screen target has already released its old native handles through the
+        // recovery registry. Drop the binding now; the same public target object is reconstructed
+        // below and can be rebound by the caller after DeviceReset.
         UnbindOffscreenColorTargetEXT();
 
         // REMED-GFX-177: nothing to reset here any more -- heaps_ was released above and
@@ -1089,13 +1145,8 @@ namespace CNA::Internal::Renderers::DirectX12
         debugLayerEnabled_ = false;
         allowTearingSupported_ = false;
 
-        // Every previously-tracked resource's real D3D12 object is gone along with the removed
-        // device -- DX-109's own vertex/index buffers and textures would need to be recreated by
-        // their owning Texture2D/VertexBuffer/etc. wrapper objects (out of this renderer's own
-        // scope -- GraphicsDevice-level content-reload is a separate, larger concern XNA itself
-        // handles via GraphicsDevice::DeviceReset, not something this constructor-time recreation
-        // can or should attempt), so the tracker itself must be cleared rather than left holding
-        // stale pointers into freed memory.
+        // Every old native object was released above. Clear stale pointer identities before the
+        // registered public resources create and track their replacement objects below.
         resourceStates_.Clear();
 
         // Recreate every device-lifetime group from scratch, identical to construction.
@@ -1112,6 +1163,28 @@ namespace CNA::Internal::Renderers::DirectX12
         }
         if (!swapChainAvailable_)
             CreateOffscreenBackBufferResources(); // DX-241, same rule as construction
+
+        std::vector<std::string> failures;
+        for (D3DCommon::ID3DDeviceRecoverableEXT* resource : resources)
+        {
+            if (resource == nullptr)
+                continue;
+            try
+            {
+                resource->RecreateDeviceResourcesEXT();
+            }
+            catch (const std::exception& error)
+            {
+                failures.emplace_back(error.what());
+            }
+        }
+        if (!failures.empty())
+        {
+            throw std::runtime_error(
+                "D3D12 device recovery failed to recreate " +
+                std::to_string(failures.size()) + " resource(s); first failure: " +
+                failures.front());
+        }
 
         CNA::Logger::Info(
             "D3D12 device resources recreated after device removal; feature level " +

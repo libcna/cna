@@ -44,6 +44,7 @@
 // against a bound render target is DX-118's job, same as it is for the back buffer.
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/ID3DDeviceRecoverableEXT.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12RendererReference.hpp"
 #include "D3D12DescriptorHeaps.hpp"
 
@@ -60,7 +61,8 @@ namespace CNA::Internal::Renderers::DirectX12
     class DirectX12Renderer;
 
     /// Real D3D12 2D render-target renderer (DX-117).
-    class D3D12RenderTargetRenderer final : public IRenderTargetRenderer
+    class D3D12RenderTargetRenderer final : public IRenderTargetRenderer,
+                                            public D3DCommon::ID3DDeviceRecoverableEXT
     {
     public:
         D3D12RenderTargetRenderer(DirectX12Renderer* owner, ID3D12Device* device,
@@ -159,7 +161,11 @@ namespace CNA::Internal::Renderers::DirectX12
         [[nodiscard]] D3D12_CPU_DESCRIPTOR_HANDLE GetDsvEXT() const { return dsv_; }
         [[nodiscard]] DXGI_FORMAT GetDsvFormatEXT() const { return dsvFormat_; }
 
+        void ReleaseDeviceResourcesEXT() noexcept override;
+        void RecreateDeviceResourcesEXT() override;
+
     private:
+        void CreateDeviceResources();
         /// DX-144: CPU box-filter downsample cascade, base level (0) -> levelCount_-1, called from
         /// UnbindAsRenderTarget(). No-op when mipMap_ is false or levelCount_ is 1.
         void GenerateMipsEXT() const;
@@ -191,6 +197,8 @@ namespace CNA::Internal::Renderers::DirectX12
         int surfaceFormat_ = 0;
         DXGI_FORMAT dxgiFormat_ = DXGI_FORMAT_R8G8B8A8_UNORM;
         int bytesPerTexel_ = 4;
+        int depthFormat_ = 0;
+        int requestedMultiSampleCount_ = 0;
         bool mipMap_ = false;
         int levelCount_ = 1;
         bool isMsaa_ = false;

@@ -94,6 +94,17 @@ namespace CNA::Internal::Renderers::DirectX12
                     "D3D12VertexBufferRenderer"),
           capacity_(vertex_capacity)
     {
+        renderer_->RegisterRecoverableResourceEXT(this);
+    }
+
+    D3D12VertexBufferRenderer::~D3D12VertexBufferRenderer()
+    {
+        if (renderer_)
+        {
+            if (buffer_)
+                renderer_->GetResourceStateTrackerEXT().UntrackResource(buffer_.Get());
+            renderer_->UnregisterRecoverableResourceEXT(this);
+        }
     }
 
     void D3D12VertexBufferRenderer::EnsureCapacity(std::size_t requiredBytes)
@@ -146,7 +157,25 @@ namespace CNA::Internal::Renderers::DirectX12
         const std::size_t byteCount = static_cast<std::size_t>(vertex_count) * stride_in_bytes;
         EnsureCapacity(byteCount);
         UploadAndCopy(data, byteCount);
+        cpuData_.assign(static_cast<const std::uint8_t*>(data),
+                        static_cast<const std::uint8_t*>(data) + byteCount);
         vertexCount_ = vertex_count;
+    }
+
+    void D3D12VertexBufferRenderer::ReleaseDeviceResourcesEXT() noexcept
+    {
+        if (renderer_ && buffer_)
+            renderer_->GetResourceStateTrackerEXT().UntrackResource(buffer_.Get());
+        buffer_.Reset();
+        byteWidth_ = 0;
+    }
+
+    void D3D12VertexBufferRenderer::RecreateDeviceResourcesEXT()
+    {
+        if (cpuData_.empty())
+            return;
+        EnsureCapacity(cpuData_.size());
+        UploadAndCopy(cpuData_.data(), cpuData_.size());
     }
 
     D3D12_VERTEX_BUFFER_VIEW D3D12VertexBufferRenderer::GetViewEXT() const
@@ -171,6 +200,17 @@ namespace CNA::Internal::Renderers::DirectX12
                     "D3D12IndexBufferRenderer"),
           capacity_(index_capacity), thirtyTwoBit_(thirtyTwoBit)
     {
+        renderer_->RegisterRecoverableResourceEXT(this);
+    }
+
+    D3D12IndexBufferRenderer::~D3D12IndexBufferRenderer()
+    {
+        if (renderer_)
+        {
+            if (buffer_)
+                renderer_->GetResourceStateTrackerEXT().UntrackResource(buffer_.Get());
+            renderer_->UnregisterRecoverableResourceEXT(this);
+        }
     }
 
     DXGI_FORMAT D3D12IndexBufferRenderer::GetFormatEXT() const
@@ -224,6 +264,22 @@ namespace CNA::Internal::Renderers::DirectX12
         indexCount_ = static_cast<int>(byteCount / (dataIsThirtyTwoBit ? sizeof(std::uint32_t) : sizeof(std::uint16_t)));
     }
 
+    void D3D12IndexBufferRenderer::ReleaseDeviceResourcesEXT() noexcept
+    {
+        if (renderer_ && buffer_)
+            renderer_->GetResourceStateTrackerEXT().UntrackResource(buffer_.Get());
+        buffer_.Reset();
+        byteWidth_ = 0;
+    }
+
+    void D3D12IndexBufferRenderer::RecreateDeviceResourcesEXT()
+    {
+        if (cpuData_.empty())
+            return;
+        EnsureCapacity(cpuData_.size());
+        UploadAndCopy(cpuData_.data(), cpuData_.size(), thirtyTwoBit_);
+    }
+
     void D3D12IndexBufferRenderer::SetData16(const void* data, int index_count)
     {
         SetData16WithOptions(data, index_count, SetDataOptions::None);
@@ -236,12 +292,18 @@ namespace CNA::Internal::Renderers::DirectX12
 
     void D3D12IndexBufferRenderer::SetData16WithOptions(const void* data, int index_count, SetDataOptions /*options*/)
     {
-        UploadAndCopy(data, static_cast<std::size_t>(index_count) * sizeof(std::uint16_t), false);
+        const std::size_t byteCount = static_cast<std::size_t>(index_count) * sizeof(std::uint16_t);
+        UploadAndCopy(data, byteCount, false);
+        cpuData_.assign(static_cast<const std::uint8_t*>(data),
+                        static_cast<const std::uint8_t*>(data) + byteCount);
     }
 
     void D3D12IndexBufferRenderer::SetData32WithOptions(const void* data, int index_count, SetDataOptions /*options*/)
     {
-        UploadAndCopy(data, static_cast<std::size_t>(index_count) * sizeof(std::uint32_t), true);
+        const std::size_t byteCount = static_cast<std::size_t>(index_count) * sizeof(std::uint32_t);
+        UploadAndCopy(data, byteCount, true);
+        cpuData_.assign(static_cast<const std::uint8_t*>(data),
+                        static_cast<const std::uint8_t*>(data) + byteCount);
     }
 
     D3D12_INDEX_BUFFER_VIEW D3D12IndexBufferRenderer::GetViewEXT() const

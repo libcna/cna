@@ -9,6 +9,7 @@
 // owner_ pattern, for the identical reason).
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/ID3DDeviceRecoverableEXT.hpp"
 
 #include <d3d11.h>
 #include <wrl/client.h>
@@ -32,7 +33,8 @@ namespace CNA::Internal::Renderers::DirectX11
     /// every UnbindAsRenderTarget() call -- the D3D11 equivalent of EasyGL's glGenerateMipmap-on-
     /// unbind / FNA3D's OPENGL_ResolveTarget, and much simpler than Vulkan's manual per-level
     /// vkCmdBlitImage cascade since D3D11 exposes this as one built-in device call).
-    class D3D11RenderTargetRenderer final : public IRenderTargetRenderer
+    class D3D11RenderTargetRenderer final : public IRenderTargetRenderer,
+                                            public D3DCommon::ID3DDeviceRecoverableEXT
     {
     public:
         D3D11RenderTargetRenderer(DirectX11Renderer* owner, ID3D11Device* device, ID3D11DeviceContext* context,
@@ -110,7 +112,11 @@ namespace CNA::Internal::Renderers::DirectX11
         /// Real mip-chain level count (1 when `mipMap` was false) -- CNAEXT, DX-144 subresource math.
         [[nodiscard]] int GetLevelCountEXT() const { return levelCount_; }
 
+        void ReleaseDeviceResourcesEXT() noexcept override;
+        void RecreateDeviceResourcesEXT() override;
+
     private:
+        void CreateDeviceResources();
         DirectX11Renderer* owner_ = nullptr;
         std::weak_ptr<void> ownerLifetime_;
         ComPtr<ID3D11Device> device_;
@@ -128,6 +134,8 @@ namespace CNA::Internal::Renderers::DirectX11
         int surfaceFormat_ = 0;
         DXGI_FORMAT dxgiFormat_ = DXGI_FORMAT_R8G8B8A8_UNORM;
         int bytesPerTexel_ = 4;
+        int depthFormat_ = 0;
+        int requestedMultiSampleCount_ = 0;
         bool mipMap_ = false;
         int levelCount_ = 1;
         bool isMsaa_ = false;

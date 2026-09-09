@@ -5,6 +5,7 @@
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Renderers/Common/PlatformRendererSurfaceState.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/ID3DDeviceRecoverableEXT.hpp"
 #include "D3D11InputLayoutCache.hpp"
 #include "D3D11SamplerCache.hpp"
 #include "D3D11StateObjectCache.hpp"
@@ -14,7 +15,9 @@
 #include <wrl/client.h>
 
 #include <cstddef>
+#include <functional>
 #include <memory>
+#include <vector>
 
 namespace CNA::Internal::Renderers::DirectX11
 {
@@ -94,6 +97,14 @@ namespace CNA::Internal::Renderers::DirectX11
         [[nodiscard]] int GetAppliedDepthStencilFormatEXT(int requestedFormat) const override;
         void SetPresentationMode(int mode) override;
         void SetSwapInterval(int interval) override;
+        /** @brief Enables registration of subsequently-created resources for device recovery. */
+        void SetContextRecoveryEnabled(bool enabled) override;
+        /** @brief Reports whether the renderer currently accepts drawing commands. */
+        [[nodiscard]] bool CanBeginDrawEXT() const override { return !deviceLost_; }
+        /** @brief Enters the deterministic lost-device state used by lifecycle tests. */
+        void DebugSimulateContextLoss() override;
+        /** @brief Recreates the device and registered resources after a simulated loss. */
+        void DebugRestoreContext() override;
         /**
          * @brief Returns the most recently requested DXGI presentation interval.
          * @return The exact interval most recently passed to SetSwapInterval.
@@ -165,6 +176,17 @@ namespace CNA::Internal::Renderers::DirectX11
         /// draw calls without duplicating this renderer's own context-creation path (CNAEXT,
         /// DX-30/DX-31's buffer renderers both need this).
         [[nodiscard]] ID3D11DeviceContext* GetContextEXT() const { return context_.Get(); }
+        /** @brief Registers a live resource for D3D11 device recreation. */
+        void RegisterRecoverableResourceEXT(D3DCommon::ID3DDeviceRecoverableEXT* resource);
+        /** @brief Removes a live resource from the D3D11 recovery registry. */
+        void UnregisterRecoverableResourceEXT(D3DCommon::ID3DDeviceRecoverableEXT* resource) noexcept;
+        /** @brief Returns the number of resources currently tracked for recovery. */
+        [[nodiscard]] std::size_t GetRecoverableResourceCountEXT() const noexcept
+        {
+            return recoverableResources_.size();
+        }
+        /** @brief Recreates the D3D11 device domain and every registered resource. */
+        void RecreateDeviceEXT();
         /**
          * @brief Returns the active SpriteBatch projection size in logical viewport units.
          * @param width Receives the logical viewport width.
@@ -368,8 +390,8 @@ namespace CNA::Internal::Renderers::DirectX11
         /// existing swap chain. Called lazily from Present() when the platform surface size no longer
         /// matches the swap chain's own cached size.
         void EnsureSwapChainSize();
-        /// DX-27: device-lost/removed detection (not full automatic recovery yet).
-        void CheckDeviceRemoved(HRESULT hr) const;
+        /// Routes a native device-removed result into the shared lost-device state.
+        void CheckDeviceRemoved(HRESULT hr);
 
         /// DX-62/DX-63/DX-64: shared implementation for DrawPrimitivesEx/DrawIndexedPrimitivesEx --
         /// @p ib is nullptr for the non-indexed path (context_->Draw), non-null for the indexed path
@@ -395,6 +417,10 @@ namespace CNA::Internal::Renderers::DirectX11
         bool allowTearingSupported_ = false;
         bool debugLayerEnabled_ = false;
         D3D_FEATURE_LEVEL featureLevel_ = D3D_FEATURE_LEVEL_11_0;
+        bool contextRecoveryEnabled_ = true;
+        bool deviceLost_ = false;
+        std::function<void(RendererDeviceEvent)> deviceEventCallback_;
+        std::vector<D3DCommon::ID3DDeviceRecoverableEXT*> recoverableResources_;
 
         // Swap-chain lifetime.
         ComPtr<IDXGISwapChain1> swapChain_;

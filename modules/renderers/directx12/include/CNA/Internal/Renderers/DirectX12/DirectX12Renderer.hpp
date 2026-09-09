@@ -11,6 +11,7 @@
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Renderers/Common/PlatformRendererSurfaceState.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/ID3DDeviceRecoverableEXT.hpp"
 #include "D3D12DescriptorHeaps.hpp"
 #include "D3D12ResourceStateTracker.hpp"
 #include "D3D12PipelineStateCache.hpp"
@@ -160,6 +161,14 @@ namespace CNA::Internal::Renderers::DirectX12
         /// DX-116: mirrors DirectX11Renderer::SetSwapInterval exactly -- sync interval is
         /// renderer state applied at the next Present(), not a direct D3D12 API call ahead of time.
         void SetSwapInterval(int interval) override;
+        /** @brief Enables registration of subsequently-created resources for device recovery. */
+        void SetContextRecoveryEnabled(bool enabled) override;
+        /** @brief Reports whether the renderer currently accepts drawing commands. */
+        [[nodiscard]] bool CanBeginDrawEXT() const override { return !deviceLost_; }
+        /** @brief Enters the deterministic lost-device state used by lifecycle tests. */
+        void DebugSimulateContextLoss() override;
+        /** @brief Recreates the device and registered resources after a simulated loss. */
+        void DebugRestoreContext() override;
         /**
          * @brief Returns the most recently requested DXGI presentation interval.
          * @return The exact interval most recently passed to SetSwapInterval.
@@ -536,6 +545,15 @@ namespace CNA::Internal::Renderers::DirectX12
          *  D3D12 resource (buffers, textures -- DX-109) registers with and transitions through, so
          *  barrier correctness is enforced in one place rather than ad-hoc per call site. */
         [[nodiscard]] D3D12ResourceStateTracker& GetResourceStateTrackerEXT() { return resourceStates_; }
+        /** @brief Registers a live resource for D3D12 device recreation. */
+        void RegisterRecoverableResourceEXT(D3DCommon::ID3DDeviceRecoverableEXT* resource);
+        /** @brief Removes a live resource from the D3D12 recovery registry. */
+        void UnregisterRecoverableResourceEXT(D3DCommon::ID3DDeviceRecoverableEXT* resource) noexcept;
+        /** @brief Returns the number of resources currently tracked for recovery. */
+        [[nodiscard]] std::size_t GetRecoverableResourceCountEXT() const noexcept
+        {
+            return recoverableResources_.size();
+        }
 
         /** @brief Real per-frame command allocator for @p frameIndex (0..kFramesInFlight-1). */
         [[nodiscard]] ID3D12CommandAllocator* GetCommandAllocatorEXT(int frameIndex) const
@@ -563,26 +581,21 @@ namespace CNA::Internal::Renderers::DirectX12
          *  just signaled (for tests to assert against GetCompletedValue()). */
         std::uint64_t SignalAndWaitForFrameEXT(int frameIndex);
 
-        /** @brief DX-110: logs (does not throw or recover) when @p hr is
+        /** @brief Routes a device-removed result into the shared lost-device state when @p hr is
          *  DXGI_ERROR_DEVICE_REMOVED/DXGI_ERROR_DEVICE_RESET, including the real
-         *  GetDeviceRemovedReason() -- mirrors DirectX11Renderer::CheckDeviceRemoved's own
-         *  detection-only convention exactly (design decision 12's "never assume, always check"
-         *  discipline applied to device loss too). Called from ExecuteCommandListAndWaitEXT()/
-         *  SignalAndWaitForFrameEXT() whenever ID3D12CommandQueue::Signal() itself fails. */
-        void CheckDeviceRemovedEXT(HRESULT hr) const;
+         *  GetDeviceRemovedReason(). Called from ExecuteCommandListAndWaitEXT()/
+         *  SignalAndWaitForFrameEXT() whenever ID3D12CommandQueue::Signal() itself fails. The
+         *  deterministic restore half is separately executable through DebugRestoreContext(). */
+        void CheckDeviceRemovedEXT(HRESULT hr);
 
-        /** @brief DX-110: the real recovery path -- unlike D3D11's own DX-27 (detection+logging
-         *  only, full recovery deferred to DX-90's real hardware), D3D12 documentation treats
-         *  device-removed recovery as expected to handle from the start, so this genuinely tears
-         *  down and recreates every device-lifetime resource DX-102 through DX-105 built (device,
-         *  factory, command queue, all 3 descriptor heaps with their bump allocators reset to 0,
-         *  every per-frame command allocator + the shared command list, the fence + its counters),
-         *  clears the shared D3D12ResourceStateTracker (every previously-tracked resource's D3D12
-         *  object is gone along with the removed device), and re-attempts the swap chain if a
-         *  window was supplied. Honest scope boundary: this recreation logic is real and directly
-         *  callable/testable (see modules/renderers/directx12/examples/directx12_smoke_test.cpp), but this dev loop cannot trigger
-         *  a genuine DXGI_ERROR_DEVICE_REMOVED to prove the *trigger* path -- only DX-90/DX-114's
-         *  real hardware can. CNAEXT -- not part of any IGraphicsRenderer contract. */
+        /** @brief Tears down and recreates the complete D3D12 device domain.
+         *
+         * Rebuilds the factory, device, queue, descriptor heaps, command allocators/list, fence,
+         * presentation resources and every registered long-lived buffer, texture and render
+         * target. The shared state tracker is cleared between the old and replacement domains.
+         * This environment executes the deterministic simulated path; proving that a genuine
+         * DXGI_ERROR_DEVICE_REMOVED reaches it remains DX-90/DX-114's native-hardware gate.
+         */
         void RecreateDeviceEXT();
 
         /** @brief DX-111: binds an off-screen color target for Clear()/DrawColoredPrimitives()/
@@ -680,6 +693,10 @@ namespace CNA::Internal::Renderers::DirectX12
 
     private:
         std::shared_ptr<void> lifetimeToken_ = std::make_shared<int>(0);
+        bool contextRecoveryEnabled_ = true;
+        bool deviceLost_ = false;
+        std::function<void(RendererDeviceEvent)> deviceEventCallback_;
+        std::vector<D3DCommon::ID3DDeviceRecoverableEXT*> recoverableResources_;
 
         friend class D3D12SpriteBatchRenderer;
         friend class D3D12EffectRenderer;

@@ -74,20 +74,28 @@ namespace CNA::Internal::Renderers::DirectX11
         , surfaceFormat_(surfaceFormat)
         , dxgiFormat_(D3DCommon::SurfaceFormatToDxgi(surfaceFormat))
         , bytesPerTexel_(D3DCommon::SurfaceFormatBytesPerTexel(surfaceFormat))
+        , depthFormat_(depthFormat)
+        , requestedMultiSampleCount_(multiSampleCount)
     {
         if (dxgiFormat_ == DXGI_FORMAT_UNKNOWN || bytesPerTexel_ <= 0)
             throw std::invalid_argument("D3D11RenderTargetRenderer: unsupported SurfaceFormat " +
                                         std::to_string(surfaceFormat));
-        appliedMultiSampleCount_ = ClampMultiSampleCount(device_.Get(), dxgiFormat_, multiSampleCount);
+        appliedMultiSampleCount_ = ClampMultiSampleCount(
+            device_.Get(), dxgiFormat_, requestedMultiSampleCount_);
         isMsaa_ = appliedMultiSampleCount_ > 0;
         // The multisampled draw resource has one level; its single-sample resolve resource owns
         // the public mip chain and is the GenerateMips source/destination.
         mipMap_ = mipMap;
         levelCount_ = mipMap_ ? CalculateMipLevels(w, h) : 1;
+        CreateDeviceResources();
+        owner_->RegisterRecoverableResourceEXT(this);
+    }
 
+    void D3D11RenderTargetRenderer::CreateDeviceResources()
+    {
         D3D11_TEXTURE2D_DESC colorDesc{};
-        colorDesc.Width = static_cast<UINT>(w);
-        colorDesc.Height = static_cast<UINT>(h);
+        colorDesc.Width = static_cast<UINT>(width_);
+        colorDesc.Height = static_cast<UINT>(height_);
         colorDesc.MipLevels = isMsaa_ ? 1u : static_cast<UINT>(levelCount_);
         colorDesc.ArraySize = 1;
         colorDesc.Format = dxgiFormat_;
@@ -127,12 +135,12 @@ namespace CNA::Internal::Renderers::DirectX11
         if (FAILED(hr))
             throw std::runtime_error("D3D11RenderTargetRenderer: CreateShaderResourceView failed, hr=" + FormatHr(hr));
 
-        const DXGI_FORMAT depthDxgiFormat = D3DCommon::DepthFormatToDxgi(depthFormat);
+        const DXGI_FORMAT depthDxgiFormat = D3DCommon::DepthFormatToDxgi(depthFormat_);
         if (depthDxgiFormat != DXGI_FORMAT_UNKNOWN)
         {
             D3D11_TEXTURE2D_DESC depthDesc{};
-            depthDesc.Width = static_cast<UINT>(w);
-            depthDesc.Height = static_cast<UINT>(h);
+            depthDesc.Width = static_cast<UINT>(width_);
+            depthDesc.Height = static_cast<UINT>(height_);
             depthDesc.MipLevels = 1;
             depthDesc.ArraySize = 1;
             depthDesc.Format = depthDxgiFormat;
@@ -151,7 +159,35 @@ namespace CNA::Internal::Renderers::DirectX11
 
     D3D11RenderTargetRenderer::~D3D11RenderTargetRenderer()
     {
-        if (owner_ && !ownerLifetime_.expired()) owner_->NotifyRenderTargetDestroyedEXT(this);
+        if (owner_ && !ownerLifetime_.expired())
+        {
+            owner_->NotifyRenderTargetDestroyedEXT(this);
+            owner_->UnregisterRecoverableResourceEXT(this);
+        }
+    }
+
+    void D3D11RenderTargetRenderer::ReleaseDeviceResourcesEXT() noexcept
+    {
+        if (owner_ && !ownerLifetime_.expired())
+            owner_->NotifyRenderTargetDestroyedEXT(this);
+        dsv_.Reset();
+        depthTexture_.Reset();
+        srv_.Reset();
+        resolveTexture_.Reset();
+        rtv_.Reset();
+        colorTexture_.Reset();
+        context_.Reset();
+        device_.Reset();
+    }
+
+    void D3D11RenderTargetRenderer::RecreateDeviceResourcesEXT()
+    {
+        device_ = owner_->GetDeviceEXT();
+        context_ = owner_->GetContextEXT();
+        appliedMultiSampleCount_ = ClampMultiSampleCount(
+            device_.Get(), dxgiFormat_, requestedMultiSampleCount_);
+        isMsaa_ = appliedMultiSampleCount_ > 0;
+        CreateDeviceResources();
     }
 
     void D3D11RenderTargetRenderer::BindAsRenderTarget()

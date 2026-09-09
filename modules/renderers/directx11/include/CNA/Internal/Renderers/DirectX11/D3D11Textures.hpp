@@ -5,11 +5,13 @@
 // DX-214/DX-225: storage and transfer pitches follow the requested core XNA SurfaceFormat.
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/ID3DDeviceRecoverableEXT.hpp"
 
 #include <d3d11.h>
 #include <wrl/client.h>
 
 #include <vector>
+#include <memory>
 
 namespace CNA::Internal::Renderers::DirectX11
 {
@@ -20,10 +22,14 @@ namespace CNA::Internal::Renderers::DirectX11
     /// until the caller uploads them via UpdatePixelsLevel(), matching Texture2D's own content-
     /// pipeline usage pattern (mirrors EasyGLTextureRenderer's identical level-0-then-later-levels
     /// convention).
-    class D3D11TextureRenderer final : public ITextureRenderer
+    class DirectX11Renderer;
+
+    class D3D11TextureRenderer final : public ITextureRenderer,
+                                       public D3DCommon::ID3DDeviceRecoverableEXT
     {
     public:
-        D3D11TextureRenderer(ID3D11Device* device, ID3D11DeviceContext* context, const ImageData& data);
+        D3D11TextureRenderer(DirectX11Renderer* owner, const ImageData& data);
+        ~D3D11TextureRenderer() override;
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
@@ -41,7 +47,16 @@ namespace CNA::Internal::Renderers::DirectX11
         /// Raw SRV for Phase DIRECTX8's shader texture binding (CNAEXT).
         [[nodiscard]] ID3D11ShaderResourceView* GetShaderResourceViewEXT() const { return srv_.Get(); }
 
+        void ReleaseDeviceResourcesEXT() noexcept override;
+        void RecreateDeviceResourcesEXT() override;
+
     private:
+        void CreateDeviceResources();
+        void StoreLevel(int level, const std::uint8_t* data, int width, int height,
+                        int sourceStride);
+
+        DirectX11Renderer* owner_ = nullptr;
+        std::weak_ptr<void> ownerLifetime_;
         ComPtr<ID3D11Device> device_;
         ComPtr<ID3D11DeviceContext> context_;
         ComPtr<ID3D11Texture2D> texture_;
@@ -54,6 +69,7 @@ namespace CNA::Internal::Renderers::DirectX11
         int bytesPerTexel_ = 4;
         bool compressed_ = false;
         int bytesPerBlock_ = 0;
+        std::vector<std::vector<std::uint8_t>> cpuLevels_;
     };
 
     /// Real D3D11 cube-map texture renderer (DX-41). A single 6-slice ID3D11Texture2D array with

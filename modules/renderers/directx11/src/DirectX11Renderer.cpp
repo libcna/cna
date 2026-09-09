@@ -218,6 +218,8 @@ namespace CNA::Internal::Renderers::DirectX11
         , virtualWidth_(args.virtualWidth)
         , virtualHeight_(args.virtualHeight)
         , requestedMultiSampleCount_(args.multiSampleCount)
+        , contextRecoveryEnabled_(args.contextRecoveryEnabled)
+        , deviceEventCallback_(args.deviceEventCallback)
     {
         presentationMode_ = args.presentationMode;
         swapInterval_ = args.swapInterval;
@@ -249,6 +251,50 @@ namespace CNA::Internal::Renderers::DirectX11
     DirectX11Renderer::~DirectX11Renderer()
     {
         lifetimeToken_.reset();
+    }
+
+    void DirectX11Renderer::SetContextRecoveryEnabled(bool enabled)
+    {
+        contextRecoveryEnabled_ = enabled;
+    }
+
+    void DirectX11Renderer::RegisterRecoverableResourceEXT(
+        D3DCommon::ID3DDeviceRecoverableEXT* resource)
+    {
+        if (!contextRecoveryEnabled_ || resource == nullptr)
+            return;
+        if (std::find(recoverableResources_.begin(), recoverableResources_.end(), resource) ==
+            recoverableResources_.end())
+        {
+            recoverableResources_.push_back(resource);
+        }
+    }
+
+    void DirectX11Renderer::UnregisterRecoverableResourceEXT(
+        D3DCommon::ID3DDeviceRecoverableEXT* resource) noexcept
+    {
+        std::erase(recoverableResources_, resource);
+    }
+
+    void DirectX11Renderer::DebugSimulateContextLoss()
+    {
+        if (deviceLost_)
+            return;
+        deviceLost_ = true;
+        if (deviceEventCallback_)
+            deviceEventCallback_(RendererDeviceEvent::Lost);
+    }
+
+    void DirectX11Renderer::DebugRestoreContext()
+    {
+        if (!deviceLost_)
+            return;
+        if (deviceEventCallback_)
+            deviceEventCallback_(RendererDeviceEvent::Resetting);
+        RecreateDeviceEXT();
+        deviceLost_ = false;
+        if (deviceEventCallback_)
+            deviceEventCallback_(RendererDeviceEvent::Reset);
     }
 
     void DirectX11Renderer::CreateDeviceResources()
@@ -505,13 +551,100 @@ namespace CNA::Internal::Renderers::DirectX11
         CreateWindowSizeDependentViews();
     }
 
-    void DirectX11Renderer::CheckDeviceRemoved(HRESULT hr) const
+    void DirectX11Renderer::CheckDeviceRemoved(HRESULT hr)
     {
         if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
         {
             const HRESULT reason = device_ ? device_->GetDeviceRemovedReason() : hr;
             CNA::Logger::Error("D3D11 device removed/reset; reason=" + FormatHr(reason),
                                CNA::LogCategory::RENDER);
+            if (!deviceLost_)
+            {
+                deviceLost_ = true;
+                if (deviceEventCallback_)
+                    deviceEventCallback_(RendererDeviceEvent::Lost);
+            }
+        }
+    }
+
+    void DirectX11Renderer::RecreateDeviceEXT()
+    {
+        const auto resources = recoverableResources_;
+        if (context_)
+        {
+            context_->ClearState();
+            context_->Flush();
+        }
+        for (D3DCommon::ID3DDeviceRecoverableEXT* resource : resources)
+        {
+            if (resource != nullptr)
+                resource->ReleaseDeviceResourcesEXT();
+        }
+        ReleaseWindowSizeDependentViews();
+        swapChain_.Reset();
+
+        inputLayoutCache_ = D3D11InputLayoutCache();
+        samplerCache_ = D3D11SamplerCache();
+        blendStateCache_ = D3D11BlendStateCache();
+        depthStencilStateCache_ = D3D11DepthStencilStateCache();
+        rasterizerStateCache_ = D3D11RasterizerStateCache();
+        currentBlendState_.Reset();
+        currentDepthStencilState_.Reset();
+        perDrawConstantBuffer_.Reset();
+        fogConstantBuffer_.Reset();
+        lightingConstantBuffer_.Reset();
+        alphaTestConstantBuffer_.Reset();
+        dualTexFogConstantBuffer_.Reset();
+        envMapPerDrawConstantBuffer_.Reset();
+        envMapConstantBuffer_.Reset();
+        boneConstantBuffer_.Reset();
+        skinnedExtraConstantBuffer_.Reset();
+        pbrPerDrawConstantBuffer_.Reset();
+        pbrLightsConstantBuffer_.Reset();
+        defaultWhiteSrv_.Reset();
+        defaultWhiteTexture_.Reset();
+        defaultFlatNormalSrv_.Reset();
+        defaultFlatNormalTexture_.Reset();
+        currentCustomRT_ = nullptr;
+        currentCubeRT_ = nullptr;
+        currentMRTCount_ = 0;
+        for (auto& target : currentMRTTargets_)
+            target = nullptr;
+        currentRTVCount_ = 0;
+        for (auto& rtv : currentColorRTVs_)
+            rtv = nullptr;
+        currentDSV_ = nullptr;
+
+        context_.Reset();
+        device_.Reset();
+        factory_.Reset();
+        debugLayerEnabled_ = false;
+        allowTearingSupported_ = false;
+
+        CreateDeviceResources();
+        CreateSwapChainResources();
+        CreateWindowSizeDependentViews();
+
+        std::vector<std::string> failures;
+        for (D3DCommon::ID3DDeviceRecoverableEXT* resource : resources)
+        {
+            if (resource == nullptr)
+                continue;
+            try
+            {
+                resource->RecreateDeviceResourcesEXT();
+            }
+            catch (const std::exception& error)
+            {
+                failures.emplace_back(error.what());
+            }
+        }
+        if (!failures.empty())
+        {
+            throw std::runtime_error(
+                "D3D11 device recovery failed to recreate " +
+                std::to_string(failures.size()) + " resource(s); first failure: " +
+                failures.front());
         }
     }
 
@@ -875,7 +1008,7 @@ namespace CNA::Internal::Renderers::DirectX11
 
     std::unique_ptr<ITextureRenderer> DirectX11Renderer::CreateTexture(const ImageData& data)
     {
-        return std::make_unique<D3D11TextureRenderer>(device_.Get(), context_.Get(), data);
+        return std::make_unique<D3D11TextureRenderer>(this, data);
     }
 
     std::unique_ptr<ITexture3DRenderer> DirectX11Renderer::CreateTexture3D(
@@ -1394,17 +1527,17 @@ namespace CNA::Internal::Renderers::DirectX11
 
     std::unique_ptr<IVertexBufferRenderer> DirectX11Renderer::CreateVertexBuffer(int vertex_capacity)
     {
-        return std::make_unique<D3D11VertexBufferRenderer>(device_.Get(), context_.Get(), vertex_capacity);
+        return std::make_unique<D3D11VertexBufferRenderer>(this, vertex_capacity);
     }
 
     std::unique_ptr<IIndexBufferRenderer> DirectX11Renderer::CreateIndexBuffer16(int index_capacity)
     {
-        return std::make_unique<D3D11IndexBufferRenderer>(device_.Get(), context_.Get(), index_capacity, false);
+        return std::make_unique<D3D11IndexBufferRenderer>(this, index_capacity, false);
     }
 
     std::unique_ptr<IIndexBufferRenderer> DirectX11Renderer::CreateIndexBuffer32(int index_capacity)
     {
-        return std::make_unique<D3D11IndexBufferRenderer>(device_.Get(), context_.Get(), index_capacity, true);
+        return std::make_unique<D3D11IndexBufferRenderer>(this, index_capacity, true);
     }
 
     ID3D11Buffer* DirectX11Renderer::GetOrCreatePerDrawConstantBufferEXT()

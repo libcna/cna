@@ -21,6 +21,7 @@
 // since they're DX-111's actual prerequisite; see plans/plan_dx.md's DX-109 row for the honest scope note.
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/ID3DDeviceRecoverableEXT.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12RendererReference.hpp"
 #include "D3D12DescriptorHeaps.hpp"
 
@@ -29,6 +30,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <vector>
 
 namespace CNA::Internal::Renderers::DirectX12
 {
@@ -43,7 +45,8 @@ namespace CNA::Internal::Renderers::DirectX12
     /// (a real, deliberate transition, not left at CreateCommittedResource's own COPY_DEST initial
     /// state), so any caller can rely on "this texture is always shader-readable after
     /// construction" without checking upload history.
-    class D3D12TextureRenderer final : public ITextureRenderer
+    class D3D12TextureRenderer final : public ITextureRenderer,
+                                       public D3DCommon::ID3DDeviceRecoverableEXT
     {
     public:
         D3D12TextureRenderer(DirectX12Renderer* renderer, const ImageData& data);
@@ -80,9 +83,15 @@ namespace CNA::Internal::Renderers::DirectX12
         /// REMED-GFX-177: the stable shader-visible-heap slot index this texture owns (CNAEXT).
         [[nodiscard]] std::uint32_t GetShaderResourceViewIndexEXT() const { return srvIndex_; }
 
+        void ReleaseDeviceResourcesEXT() noexcept override;
+        void RecreateDeviceResourcesEXT() override;
+
     private:
+        void CreateDeviceResources();
         void UploadRegion(int level, const uint8_t* rgba, int levelW, int levelH, int sourceStrideBytes);
         void TransitionToShaderReadableEXT();
+        void StoreLevel(int level, const std::uint8_t* data, int width, int height,
+                        int sourceStride);
 
         D3D12RendererReference renderer_;
         ComPtr<ID3D12Resource> texture_;
@@ -97,5 +106,6 @@ namespace CNA::Internal::Renderers::DirectX12
         int bytesPerTexel_ = 4;
         bool compressed_ = false;
         int bytesPerBlock_ = 0;
+        std::vector<std::vector<std::uint8_t>> cpuLevels_;
     };
 }

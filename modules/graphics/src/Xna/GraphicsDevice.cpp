@@ -3333,7 +3333,7 @@ namespace Microsoft::Xna::Framework::Graphics
                     // CABI-15: a renderer really did lose and recreate its resources, so the
                     // default-pool ones lost their contents. This is the only place ContentLost is
                     // raised: a caller-initiated Reset on a renderer that never loses anything must
-                    // not fire it, or the event becomes noise on 44 of the 47 families.
+                    // not fire it, or the event becomes noise on unaffected renderer families.
                     NotifyContentLostResourcesEXT();
                     DeviceReset.Raise(this, System::EventArgs::Empty);
                     break;

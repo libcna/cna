@@ -43,8 +43,8 @@ namespace CNA::Internal::Renderers::DirectX11
         : owner_(owner)
         , device_(owner_->GetDeviceEXT())
         , context_(owner_->GetContextEXT())
-        , vb_(device_.Get(), context_.Get(), 256)
-        , ib_(device_.Get(), context_.Get(), 384, false)
+        , vb_(owner_, 256)
+        , ib_(owner_, 384, false)
     {
     }
 

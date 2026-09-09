@@ -63,6 +63,32 @@ namespace CNA::Internal::Renderers::DirectX12
     {
         ResolveSurfaceFormat(surfaceFormat_, dxgiFormat_, bytesPerTexel_, compressed_,
                              bytesPerBlock_);
+        cpuLevels_.resize(static_cast<std::size_t>(mipLevels_));
+        CreateDeviceResources();
+
+        if (!data.pixels.empty())
+        {
+            const int rowUnits = compressed_ ? (width_ + 3) / 4 : width_;
+            const int rowCount = compressed_ ? (height_ + 3) / 4 : height_;
+            const int unitBytes = compressed_ ? bytesPerBlock_ : bytesPerTexel_;
+            const std::size_t rowBytes = static_cast<std::size_t>(rowUnits) * unitBytes;
+            const std::size_t required = rowBytes * static_cast<std::size_t>(rowCount);
+            if (data.pixels.size() < required)
+                throw std::invalid_argument(
+                    "D3D12TextureRenderer: level-zero pixel buffer is too small for SurfaceFormat::" +
+                    std::string(D3DCommon::SurfaceFormatName(surfaceFormat_)) + ".");
+            StoreLevel(0, data.pixels.data(), width_, height_, static_cast<int>(rowBytes));
+            UploadRegion(0, cpuLevels_[0].data(), width_, height_, static_cast<int>(rowBytes));
+        }
+        else
+        {
+            TransitionToShaderReadableEXT();
+        }
+        renderer_->RegisterRecoverableResourceEXT(this);
+    }
+
+    void D3D12TextureRenderer::CreateDeviceResources()
+    {
         D3D12_HEAP_PROPERTIES heapProps{};
         heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
 
@@ -101,28 +127,29 @@ namespace CNA::Internal::Renderers::DirectX12
                 renderer_->GetDeviceEXT()->CreateShaderResourceView(texture_.Get(), &srvDesc, cpu);
             });
 
-        if (!data.pixels.empty())
-        {
-            const int rowUnits = compressed_ ? (width_ + 3) / 4 : width_;
-            const int rowCount = compressed_ ? (height_ + 3) / 4 : height_;
-            const int unitBytes = compressed_ ? bytesPerBlock_ : bytesPerTexel_;
-            const std::size_t rowBytes = static_cast<std::size_t>(rowUnits) * unitBytes;
-            const std::size_t required = rowBytes * static_cast<std::size_t>(rowCount);
-            if (data.pixels.size() < required)
-                throw std::invalid_argument(
-                    "D3D12TextureRenderer: level-zero pixel buffer is too small for SurfaceFormat::" +
-                    std::string(D3DCommon::SurfaceFormatName(surfaceFormat_)) + ".");
-            UploadRegion(0, data.pixels.data(), width_, height_, static_cast<int>(rowBytes));
-        }
-        else
-        {
-            TransitionToShaderReadableEXT();
-        }
     }
 
     D3D12TextureRenderer::~D3D12TextureRenderer()
     {
-        if (heaps_) heaps_->cbvSrvUav.Free(srvIndex_);
+        ReleaseDeviceResourcesEXT();
+        if (renderer_)
+            renderer_->UnregisterRecoverableResourceEXT(this);
+    }
+
+    void D3D12TextureRenderer::StoreLevel(
+        int level, const std::uint8_t* data, int width, int height, int sourceStride)
+    {
+        const int rowUnits = compressed_ ? (width + 3) / 4 : width;
+        const int rowCount = compressed_ ? (height + 3) / 4 : height;
+        const int rowBytes = rowUnits * (compressed_ ? bytesPerBlock_ : bytesPerTexel_);
+        auto& shadow = cpuLevels_[static_cast<std::size_t>(level)];
+        shadow.resize(static_cast<std::size_t>(rowBytes) * rowCount);
+        for (int row = 0; row < rowCount; ++row)
+        {
+            std::memcpy(shadow.data() + static_cast<std::size_t>(row) * rowBytes,
+                        data + static_cast<std::size_t>(row) * sourceStride,
+                        static_cast<std::size_t>(rowBytes));
+        }
     }
 
     void D3D12TextureRenderer::UploadRegion(
@@ -224,7 +251,8 @@ namespace CNA::Internal::Renderers::DirectX12
         const int nativeStride = compressed_ ? ((width_ + 3) / 4) * bytesPerBlock_
                                              : width_ * bytesPerTexel_;
         const int sourceStride = stride > 0 ? stride : nativeStride;
-        UploadRegion(0, rgba, width_, height_, sourceStride);
+        StoreLevel(0, rgba, width_, height_, sourceStride);
+        UploadRegion(0, cpuLevels_[0].data(), width_, height_, nativeStride);
     }
 
     void D3D12TextureRenderer::UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH)
@@ -232,7 +260,40 @@ namespace CNA::Internal::Renderers::DirectX12
         if (level < 0 || level >= mipLevels_) return;
         const int sourceStride = compressed_ ? ((levelW + 3) / 4) * bytesPerBlock_
                                              : levelW * bytesPerTexel_;
-        UploadRegion(level, rgba, levelW, levelH, sourceStride);
+        StoreLevel(level, rgba, levelW, levelH, sourceStride);
+        UploadRegion(level, cpuLevels_[static_cast<std::size_t>(level)].data(),
+                     levelW, levelH, sourceStride);
+    }
+
+    void D3D12TextureRenderer::ReleaseDeviceResourcesEXT() noexcept
+    {
+        if (renderer_ && texture_)
+            renderer_->GetResourceStateTrackerEXT().UntrackResource(texture_.Get());
+        if (heaps_ && srvIndex_ != D3D12ShaderVisibleDescriptorAllocator::kInvalidIndex)
+            heaps_->cbvSrvUav.Free(srvIndex_);
+        srvIndex_ = D3D12ShaderVisibleDescriptorAllocator::kInvalidIndex;
+        heaps_.reset();
+        texture_.Reset();
+    }
+
+    void D3D12TextureRenderer::RecreateDeviceResourcesEXT()
+    {
+        CreateDeviceResources();
+        bool uploaded = false;
+        for (int level = 0; level < mipLevels_; ++level)
+        {
+            const auto& shadow = cpuLevels_[static_cast<std::size_t>(level)];
+            if (shadow.empty())
+                continue;
+            const int levelW = std::max(1, width_ >> level);
+            const int levelH = std::max(1, height_ >> level);
+            const int rowUnits = compressed_ ? (levelW + 3) / 4 : levelW;
+            const int rowStride = rowUnits * (compressed_ ? bytesPerBlock_ : bytesPerTexel_);
+            UploadRegion(level, shadow.data(), levelW, levelH, rowStride);
+            uploaded = true;
+        }
+        if (!uploaded)
+            TransitionToShaderReadableEXT();
     }
 
     bool D3D12TextureRenderer::GetData(int level, int x, int y, int w, int h,

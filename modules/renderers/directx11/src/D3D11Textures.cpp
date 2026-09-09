@@ -1,5 +1,6 @@
 // plans/plan_dx.md Phase DIRECTX6 (DX-40/DX-41/DX-42).
 #include "CNA/Internal/Renderers/DirectX11/D3D11Textures.hpp"
+#include "CNA/Internal/Renderers/DirectX11/DirectX11Renderer.hpp"
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DFormatMapping.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
@@ -104,14 +105,47 @@ namespace CNA::Internal::Renderers::DirectX11
     // -------------------------------------------------------------------------
 
     D3D11TextureRenderer::D3D11TextureRenderer(
-        ID3D11Device* device, ID3D11DeviceContext* context, const ImageData& data)
-        : device_(device), context_(context)
+        DirectX11Renderer* owner, const ImageData& data)
+        : owner_(owner)
+        , ownerLifetime_(owner ? owner->GetLifetimeTokenEXT() : std::weak_ptr<void>{})
+        , device_(owner ? owner->GetDeviceEXT() : nullptr)
+        , context_(owner ? owner->GetContextEXT() : nullptr)
         , width_(data.width), height_(data.height)
         , mipLevels_(data.mipLevels > 0 ? data.mipLevels : 1)
         , surfaceFormat_(data.surfaceFormat)
     {
         ResolveSurfaceFormat(surfaceFormat_, true, dxgiFormat_, bytesPerTexel_, compressed_,
                              bytesPerBlock_, "D3D11TextureRenderer");
+        cpuLevels_.resize(static_cast<std::size_t>(mipLevels_));
+        CreateDeviceResources();
+
+        if (!data.pixels.empty())
+        {
+            const int rowUnits = compressed_ ? (width_ + 3) / 4 : width_;
+            const int rowCount = compressed_ ? (height_ + 3) / 4 : height_;
+            const int unitBytes = compressed_ ? bytesPerBlock_ : bytesPerTexel_;
+            const std::size_t rowBytes = static_cast<std::size_t>(rowUnits) * unitBytes;
+            const std::size_t required = rowBytes * static_cast<std::size_t>(rowCount);
+            if (data.pixels.size() < required)
+                throw std::invalid_argument(
+                    "D3D11TextureRenderer: level-zero pixel buffer is too small for SurfaceFormat::" +
+                    std::string(D3DCommon::SurfaceFormatName(surfaceFormat_)) + ".");
+            StoreLevel(0, data.pixels.data(), width_, height_, static_cast<int>(rowBytes));
+            context_->UpdateSubresource(texture_.Get(), 0, nullptr, cpuLevels_[0].data(),
+                                        static_cast<UINT>(rowBytes), 0);
+        }
+
+        owner_->RegisterRecoverableResourceEXT(this);
+    }
+
+    D3D11TextureRenderer::~D3D11TextureRenderer()
+    {
+        if (owner_ && !ownerLifetime_.expired())
+            owner_->UnregisterRecoverableResourceEXT(this);
+    }
+
+    void D3D11TextureRenderer::CreateDeviceResources()
+    {
         D3D11_TEXTURE2D_DESC desc{};
         desc.Width = static_cast<UINT>(width_);
         desc.Height = static_cast<UINT>(height_);
@@ -126,24 +160,25 @@ namespace CNA::Internal::Renderers::DirectX11
         if (FAILED(hr))
             throw std::runtime_error("D3D11TextureRenderer: CreateTexture2D failed, hr=" + FormatHr(hr));
 
-        if (!data.pixels.empty())
-        {
-            const int rowUnits = compressed_ ? (width_ + 3) / 4 : width_;
-            const int rowCount = compressed_ ? (height_ + 3) / 4 : height_;
-            const int unitBytes = compressed_ ? bytesPerBlock_ : bytesPerTexel_;
-            const std::size_t rowBytes = static_cast<std::size_t>(rowUnits) * unitBytes;
-            const std::size_t required = rowBytes * static_cast<std::size_t>(rowCount);
-            if (data.pixels.size() < required)
-                throw std::invalid_argument(
-                    "D3D11TextureRenderer: level-zero pixel buffer is too small for SurfaceFormat::" +
-                    std::string(D3DCommon::SurfaceFormatName(surfaceFormat_)) + ".");
-            context_->UpdateSubresource(texture_.Get(), 0, nullptr, data.pixels.data(),
-                                        static_cast<UINT>(rowBytes), 0);
-        }
-
         hr = device_->CreateShaderResourceView(texture_.Get(), nullptr, srv_.GetAddressOf());
         if (FAILED(hr))
             throw std::runtime_error("D3D11TextureRenderer: CreateShaderResourceView failed, hr=" + FormatHr(hr));
+    }
+
+    void D3D11TextureRenderer::StoreLevel(
+        int level, const std::uint8_t* data, int width, int height, int sourceStride)
+    {
+        const int rowUnits = compressed_ ? (width + 3) / 4 : width;
+        const int rowCount = compressed_ ? (height + 3) / 4 : height;
+        const int rowBytes = rowUnits * (compressed_ ? bytesPerBlock_ : bytesPerTexel_);
+        auto& shadow = cpuLevels_[static_cast<std::size_t>(level)];
+        shadow.resize(static_cast<std::size_t>(rowBytes) * rowCount);
+        for (int row = 0; row < rowCount; ++row)
+        {
+            std::memcpy(shadow.data() + static_cast<std::size_t>(row) * rowBytes,
+                        data + static_cast<std::size_t>(row) * sourceStride,
+                        static_cast<std::size_t>(rowBytes));
+        }
     }
 
     void D3D11TextureRenderer::UpdatePixels(const uint8_t* rgba, int stride)
@@ -155,7 +190,9 @@ namespace CNA::Internal::Renderers::DirectX11
         }
         const UINT rowPitch = stride > 0 ? static_cast<UINT>(stride)
                                          : static_cast<UINT>(width_ * bytesPerTexel_);
-        context_->UpdateSubresource(texture_.Get(), 0, nullptr, rgba, rowPitch, 0);
+        StoreLevel(0, rgba, width_, height_, static_cast<int>(rowPitch));
+        context_->UpdateSubresource(texture_.Get(), 0, nullptr, cpuLevels_[0].data(),
+                                    static_cast<UINT>(width_ * bytesPerTexel_), 0);
     }
 
     void D3D11TextureRenderer::UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH)
@@ -165,9 +202,42 @@ namespace CNA::Internal::Renderers::DirectX11
         const int rowCount = compressed_ ? (levelH + 3) / 4 : levelH;
         const int unitBytes = compressed_ ? bytesPerBlock_ : bytesPerTexel_;
         const UINT rowPitch = static_cast<UINT>(rowUnits * unitBytes);
+        StoreLevel(level, rgba, levelW, levelH, static_cast<int>(rowPitch));
         const UINT subresource = D3D11CalcSubresource(static_cast<UINT>(level), 0, static_cast<UINT>(mipLevels_));
-        context_->UpdateSubresource(texture_.Get(), subresource, nullptr, rgba,
+        context_->UpdateSubresource(texture_.Get(), subresource, nullptr,
+                                    cpuLevels_[static_cast<std::size_t>(level)].data(),
                                     rowPitch, rowPitch * static_cast<UINT>(rowCount));
+    }
+
+    void D3D11TextureRenderer::ReleaseDeviceResourcesEXT() noexcept
+    {
+        srv_.Reset();
+        texture_.Reset();
+        context_.Reset();
+        device_.Reset();
+    }
+
+    void D3D11TextureRenderer::RecreateDeviceResourcesEXT()
+    {
+        device_ = owner_->GetDeviceEXT();
+        context_ = owner_->GetContextEXT();
+        CreateDeviceResources();
+        for (int level = 0; level < mipLevels_; ++level)
+        {
+            const auto& shadow = cpuLevels_[static_cast<std::size_t>(level)];
+            if (shadow.empty())
+                continue;
+            const int levelW = std::max(1, width_ >> level);
+            const int levelH = std::max(1, height_ >> level);
+            const int rowUnits = compressed_ ? (levelW + 3) / 4 : levelW;
+            const int rowCount = compressed_ ? (levelH + 3) / 4 : levelH;
+            const UINT rowPitch = static_cast<UINT>(
+                rowUnits * (compressed_ ? bytesPerBlock_ : bytesPerTexel_));
+            const UINT subresource = D3D11CalcSubresource(
+                static_cast<UINT>(level), 0, static_cast<UINT>(mipLevels_));
+            context_->UpdateSubresource(texture_.Get(), subresource, nullptr, shadow.data(),
+                                        rowPitch, rowPitch * static_cast<UINT>(rowCount));
+        }
     }
 
     bool D3D11TextureRenderer::GetData(int level, int x, int y, int w, int h,
