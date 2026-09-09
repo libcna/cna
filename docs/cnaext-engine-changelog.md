@@ -14,6 +14,25 @@ something breaks.
 
 ---
 
+## Revision 17 — 2026-09-10
+
+### Structured shader diagnostics (`MOD-2215`)
+
+- `ShaderDiagnosticEXT` owns a severity, exact or unknown shader stage, optional source label,
+  available one-based line/column and non-empty renderer text. Its parser normalizes common GLSL
+  compiler locations without inventing positions absent from a SPIR-V or package-selection error.
+- `ShaderEffect::GetShaderDiagnosticsEXT()` adds structured inspection without changing the
+  existing non-throwing effect construction or removing `GetCompileErrorEXT()`. Explicit portable
+  code retains its source labels, including through `Clone`.
+- Compute compilation and unavailable package selection throw
+  `ShaderCompilationExceptionEXT`. `what()` provides a stable first-error/count summary while
+  `getDiagnostics()` preserves every owned record for programmatic handling.
+- The engine's pass-level shader logger now formats the structured records, including labels and
+  locations, rather than flattening the renderer log before inspection.
+
+The C header carries the same engine-layer revision marker. The C ABI remains 0.26.0; structured
+shader diagnostics are currently a C++ surface.
+
 ## Revision 16 — 2026-09-10
 
 ### Existing shader objects accept portable payloads (`MOD-2214`)

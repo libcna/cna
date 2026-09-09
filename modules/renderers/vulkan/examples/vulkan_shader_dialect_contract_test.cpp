@@ -25,6 +25,7 @@
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Graphics/ShaderPackageEXT.hpp"
+#include "CNA/ShaderDiagnosticEXT.hpp"
 #include "CNA/ShaderLanguageEXT.hpp"
 
 #include <cstdio>
@@ -202,6 +203,85 @@ protected:
             check(selection.isUsable() == expected,
                   "A8 package selection follows the live compute-image capability",
                   selection.getDiagnostic());
+        }
+
+        {
+            using namespace CNA::Graphics;
+            const std::vector<std::uint8_t> malformedSpirV = {
+                0x03, 0x02, 0x23, 0x07,
+                0x00, 0x00, 0x01, 0x00,
+                0x00, 0x00, 0x00, 0x00,
+                0x01, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00};
+            ShaderEffect broken(
+                dev,
+                ShaderCodeEXT(
+                    CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Vertex,
+                    "main", "broken.vert.spv", malformedSpirV),
+                ShaderCodeEXT(
+                    CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Fragment,
+                    "main", "broken.frag.spv", malformedSpirV));
+            const auto diagnostics = broken.GetShaderDiagnosticsEXT();
+            std::unique_ptr<Effect> clonedEffect(broken.Clone());
+            const auto* cloned = dynamic_cast<ShaderEffect*>(clonedEffect.get());
+            const auto clonedDiagnostics = cloned != nullptr
+                ? cloned->GetShaderDiagnosticsEXT()
+                : std::vector<CNA::ShaderDiagnosticEXT>{};
+            const bool structured = !broken.IsEffectValid() && !diagnostics.empty()
+                && diagnostics.front().getSeverity()
+                    == CNA::ShaderDiagnosticSeverityEXT::Error
+                && diagnostics.front().getStage() == CNA::ShaderStageEXT::Vertex
+                && diagnostics.front().getSourceLabel() == "broken.vert.spv"
+                && diagnostics.front().getLine() == 0
+                && diagnostics.front().getColumn() == 0
+                && diagnostics.front().getMessage().find("malformed vertex SPIR-V")
+                    != std::string::npos
+                && cloned != nullptr && !cloned->IsEffectValid()
+                && !clonedDiagnostics.empty()
+                && clonedDiagnostics.front().getSourceLabel() == "broken.vert.spv";
+            check(structured,
+                  "A9 malformed SPIR-V carries an owned structured source diagnostic",
+                  diagnostics.empty() ? "no structured diagnostic"
+                                      : diagnostics.front().getMessage());
+        }
+
+        {
+            using namespace CNA::Graphics;
+            bool structured = false;
+            std::string detail = "no exception";
+            try
+            {
+                ShaderEffect unavailable(
+                    dev,
+                    ShaderPackageEXT(
+                        {ShaderCodeEXT(
+                             CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Vertex,
+                             "main", "unavailable.vert.hlsl", "void main() {}"),
+                         ShaderCodeEXT(
+                             CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Fragment,
+                             "main", "unavailable.frag.hlsl", "void main() {}")},
+                        {CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment}));
+            }
+            catch (const CNA::ShaderCompilationExceptionEXT& error)
+            {
+                detail = error.what();
+                const auto& diagnostics = error.getDiagnostics();
+                structured = diagnostics.size() == 2
+                    && diagnostics[0].getSeverity()
+                        == CNA::ShaderDiagnosticSeverityEXT::Error
+                    && diagnostics[0].getStage() == CNA::ShaderStageEXT::Vertex
+                    && diagnostics[0].getSourceLabel() == "unavailable.vert.hlsl"
+                    && diagnostics[1].getStage() == CNA::ShaderStageEXT::Fragment
+                    && diagnostics[1].getSourceLabel() == "unavailable.frag.hlsl"
+                    && diagnostics[0].getMessage().find("renderer rejects Hlsl/Vertex")
+                        != std::string::npos
+                    && detail.find("2 diagnostics") != std::string::npos
+                    && detail.find("1 more") != std::string::npos;
+            }
+            check(structured,
+                  "A10 unavailable package preserves every labelled diagnostic behind what()",
+                  detail);
         }
 
         // B + C: the payload a caller acting on that answer would most plausibly send.

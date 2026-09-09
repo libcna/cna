@@ -2,13 +2,15 @@
 #pragma once
 
 #include "CNA/CNAHelper.hpp"
+#include "CNA/ShaderDiagnosticEXT.hpp"
 #include "CNA/ShaderLanguageEXT.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IEffectMatrices.hpp"
 
-#include <string>
 #include <memory>
+#include <string>
+#include <vector>
 
 namespace CNA::Internal::Renderers { class IEffectRenderer; }
 #ifdef CNA_CNAEXT
@@ -52,7 +54,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param vertexCode Vertex payload.
          * @param fragmentCode Fragment payload in the same language as @p vertexCode.
          * @throws std::invalid_argument If stages, languages or entry points are incompatible.
-         * @throws System::NotSupportedException If the live renderer refuses the exact language.
+         * @throws CNA::ShaderCompilationExceptionEXT If the live renderer refuses the exact
+         *         language.
          */
         CNAEXT ShaderEffect(
             GraphicsDevice& device, const CNA::Graphics::ShaderCodeEXT& vertexCode,
@@ -64,7 +67,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param package Package whose required stages must be exactly vertex and fragment.
          * @throws std::invalid_argument If the package stage contract or selected entry points are
          *         incompatible with the existing effect path.
-         * @throws System::NotSupportedException If no package variant is usable.
+         * @throws CNA::ShaderCompilationExceptionEXT If no package variant is usable.
          */
         CNAEXT ShaderEffect(
             GraphicsDevice& device, const CNA::Graphics::ShaderPackageEXT& package);
@@ -93,6 +96,14 @@ namespace Microsoft::Xna::Framework::Graphics
          *         keeps no log.
          */
         CNAEXT [[nodiscard]] std::string GetCompileErrorEXT() const;
+
+        /**
+         * @brief Returns owned structured compiler diagnostics for the last failed compile.
+         * @return Ordered diagnostics with stage, source label and available source location;
+         *         empty while this effect is valid.
+         */
+        CNAEXT [[nodiscard]] std::vector<CNA::ShaderDiagnosticEXT>
+            GetShaderDiagnosticsEXT() const;
 
         /**
          * @brief Returns the explicit selected language, or `Unknown` for the string constructor.
@@ -352,6 +363,8 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             std::string vertexSource;
             std::string fragmentSource;
+            std::string vertexLabel;
+            std::string fragmentLabel;
             CNA::ShaderLanguageEXT language;
         };
 
@@ -365,6 +378,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
         std::string vertSrc_;
         std::string fragSrc_;
+        std::string selectedVertexLabelEXT_;
+        std::string selectedFragmentLabelEXT_;
         CNA::ShaderLanguageEXT selectedShaderLanguageEXT_ = CNA::ShaderLanguageEXT::Unknown;
         std::unique_ptr<CNA::Internal::Renderers::IEffectRenderer> effectRenderer_;
         Matrix world_      = Matrix::getIdentityProperty();

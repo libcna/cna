@@ -7,7 +7,6 @@
 #include "CNA/RendererCapabilityProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
-#include "System/NotSupportedException.hpp"
 
 #include <algorithm>
 #include <array>
@@ -439,6 +438,8 @@ namespace Microsoft::Xna::Framework::Graphics
     ShaderEffect::ShaderEffect(GraphicsDevice& device, PreparedPortablePayload payload)
         : ShaderEffect(device, payload.vertexSource, payload.fragmentSource)
     {
+        selectedVertexLabelEXT_ = std::move(payload.vertexLabel);
+        selectedFragmentLabelEXT_ = std::move(payload.fragmentLabel);
         selectedShaderLanguageEXT_ = payload.language;
     }
 
@@ -472,7 +473,15 @@ namespace Microsoft::Xna::Framework::Graphics
         }
         const CNA::Graphics::ShaderPackageSelectionEXT selection = package.selectFor(device);
         if (!selection.isUsable())
-            throw System::NotSupportedException(selection.getDiagnostic());
+        {
+            std::vector<CNA::ShaderDiagnosticEXT> diagnostics;
+            diagnostics.reserve(package.getVariants().size());
+            for (const auto& variant : package.getVariants())
+                diagnostics.emplace_back(
+                    CNA::ShaderDiagnosticSeverityEXT::Error, variant.getStage(),
+                    variant.getSourceLabel(), 0, 0, selection.getDiagnostic());
+            throw CNA::ShaderCompilationExceptionEXT(std::move(diagnostics));
+        }
         const auto* vertex = selection.findStage(CNA::ShaderStageEXT::Vertex);
         const auto* fragment = selection.findStage(CNA::ShaderStageEXT::Fragment);
         if (vertex == nullptr || fragment == nullptr)
@@ -483,6 +492,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 "ShaderEffect: the existing renderer path requires entry point 'main'");
         return PreparedPortablePayload{
             PortablePayloadBytes(*vertex), PortablePayloadBytes(*fragment),
+            vertex->getSourceLabel(), fragment->getSourceLabel(),
             selection.getLanguage()};
     }
 

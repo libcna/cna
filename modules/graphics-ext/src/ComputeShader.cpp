@@ -24,6 +24,11 @@ namespace CNA::Graphics {
     ComputeShader::ComputeShader(GraphicsDevice& device, const std::string& source)
         : device_(device)
     {
+        compile(source);
+    }
+
+    void ComputeShader::compile(const std::string& source)
+    {
         if (!device_.SupportsCapability(CNA::GraphicsCapability::ComputeShaders))
             throw System::NotSupportedException(
                 "CNA::Graphics::ComputeShader: the '"
@@ -39,8 +44,16 @@ namespace CNA::Graphics {
         if (!renderer_->IsValid())
         {
             compileError_ = renderer_->GetCompileError();
-            throw std::runtime_error("CNA::Graphics::ComputeShader: the program did not compile: "
-                                     + compileError_);
+            const std::string label = selectedCode_.has_value()
+                ? selectedCode_->getSourceLabel() : std::string();
+            std::vector<CNA::ShaderDiagnosticEXT> diagnostics =
+                CNA::ShaderDiagnosticEXT::parseCompilerLog(
+                compileError_, CNA::ShaderStageEXT::Compute, label);
+            if (diagnostics.empty())
+                diagnostics.emplace_back(
+                    CNA::ShaderDiagnosticSeverityEXT::Error, CNA::ShaderStageEXT::Compute,
+                    label, 0, 0, "renderer did not provide compiler diagnostic text");
+            throw CNA::ShaderCompilationExceptionEXT(std::move(diagnostics));
         }
     }
 
@@ -55,9 +68,10 @@ namespace CNA::Graphics {
     }
 
     ComputeShader::ComputeShader(GraphicsDevice& device, PreparedPortablePayload payload)
-        : ComputeShader(device, payload.source)
+        : device_(device)
+        , selectedCode_(std::move(payload.code))
     {
-        selectedCode_.emplace(std::move(payload.code));
+        compile(payload.source);
     }
 
     ComputeShader::PreparedPortablePayload ComputeShader::preparePortablePayload(
@@ -78,7 +92,15 @@ namespace CNA::Graphics {
         }
         const ShaderPackageSelectionEXT selection = package.selectFor(device);
         if (!selection.isUsable())
-            throw System::NotSupportedException(selection.getDiagnostic());
+        {
+            std::vector<CNA::ShaderDiagnosticEXT> diagnostics;
+            diagnostics.reserve(package.getVariants().size());
+            for (const auto& variant : package.getVariants())
+                diagnostics.emplace_back(
+                    CNA::ShaderDiagnosticSeverityEXT::Error, variant.getStage(),
+                    variant.getSourceLabel(), 0, 0, selection.getDiagnostic());
+            throw CNA::ShaderCompilationExceptionEXT(std::move(diagnostics));
+        }
         const ShaderCodeEXT* code = selection.findStage(CNA::ShaderStageEXT::Compute);
         if (code == nullptr)
             throw std::logic_error(

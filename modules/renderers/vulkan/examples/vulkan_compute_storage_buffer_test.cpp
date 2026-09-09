@@ -21,6 +21,7 @@
 #include "CNA/Graphics/ShaderPackageEXT.hpp"
 #include "CNA/Graphics/StorageBuffer.hpp"
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/ShaderDiagnosticEXT.hpp"
 #include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -290,12 +291,33 @@ protected:
         bool invalidRejected = false;
         std::string invalidMessage;
         try {
-            ComputeShader invalid(device, "this is not SPIR-V");
-        } catch (const std::runtime_error& error) {
+            ComputeShader invalid(
+                device,
+                ShaderCodeEXT(
+                    CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Compute,
+                    "main", "broken.comp.spv",
+                    std::vector<std::uint8_t>{
+                        0x03, 0x02, 0x23, 0x07,
+                        0x00, 0x00, 0x01, 0x00,
+                        0x00, 0x00, 0x00, 0x00,
+                        0x01, 0x00, 0x00, 0x00,
+                        0x00, 0x00, 0x00, 0x00,
+                        0x00, 0x00, 0x00, 0x00}));
+        } catch (const CNA::ShaderCompilationExceptionEXT& error) {
             invalidMessage = error.what();
-            invalidRejected = invalidMessage.find("SPIR-V") != std::string::npos;
+            const auto& diagnostics = error.getDiagnostics();
+            invalidRejected = diagnostics.size() == 1
+                && diagnostics.front().getSeverity()
+                    == CNA::ShaderDiagnosticSeverityEXT::Error
+                && diagnostics.front().getStage() == CNA::ShaderStageEXT::Compute
+                && diagnostics.front().getSourceLabel() == "broken.comp.spv"
+                && diagnostics.front().getLine() == 0
+                && diagnostics.front().getColumn() == 0
+                && diagnostics.front().getMessage().find("malformed SPIR-V")
+                    != std::string::npos
+                && invalidMessage.find("broken.comp.spv") != std::string::npos;
         }
-        check(invalidRejected, "C invalid shader bytes are refused before dispatch",
+        check(invalidRejected, "C invalid shader bytes retain a structured compile diagnostic",
               invalidMessage.empty() ? "no exception" : invalidMessage);
 
         bool missingNameRejected = false;

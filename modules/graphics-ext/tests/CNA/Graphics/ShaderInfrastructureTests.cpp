@@ -17,6 +17,7 @@
 #include "CNA/Graphics/ShaderEffectFactory.hpp"
 #include "CNA/Graphics/ShaderPackageEXT.hpp"
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/ShaderDiagnosticEXT.hpp"
 #include "EngineTestSupport.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
@@ -38,6 +39,118 @@ using CNA::Graphics::ShaderPackageEXT;
 using CNA::Graphics::ShaderPackageSelectionEXT;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::ShaderEffect;
+
+// =====================================================================================
+// MOD-2215: owned structured shader diagnostics
+// =====================================================================================
+
+TEST(ShaderDiagnosticEXTTest, SeverityOrdinalsAreStableAndValuesAreOwned)
+{
+    EXPECT_EQ(static_cast<int>(CNA::ShaderDiagnosticSeverityEXT::Information), 0);
+    EXPECT_EQ(static_cast<int>(CNA::ShaderDiagnosticSeverityEXT::Warning), 1);
+    EXPECT_EQ(static_cast<int>(CNA::ShaderDiagnosticSeverityEXT::Error), 2);
+    EXPECT_EQ(static_cast<int>(CNA::ShaderDiagnosticSeverityEXT::Count), 3);
+
+    std::string label = "effect.frag.glsl";
+    std::string message = "unexpected token";
+    CNA::ShaderDiagnosticEXT diagnostic(
+        CNA::ShaderDiagnosticSeverityEXT::Warning, CNA::ShaderStageEXT::Fragment,
+        label, 7, 11, message);
+    label.clear();
+    message.clear();
+
+    EXPECT_EQ(diagnostic.getSeverity(), CNA::ShaderDiagnosticSeverityEXT::Warning);
+    EXPECT_EQ(diagnostic.getStage(), CNA::ShaderStageEXT::Fragment);
+    EXPECT_EQ(diagnostic.getSourceLabel(), "effect.frag.glsl");
+    EXPECT_EQ(diagnostic.getLine(), 7);
+    EXPECT_EQ(diagnostic.getColumn(), 11);
+    EXPECT_EQ(diagnostic.getMessage(), "unexpected token");
+}
+
+TEST(ShaderDiagnosticEXTTest, InvalidIdentitiesLocationsAndEmptyTextAreRejected)
+{
+    EXPECT_THROW(CNA::ShaderDiagnosticEXT(
+        CNA::ShaderDiagnosticSeverityEXT::Count, CNA::ShaderStageEXT::Vertex,
+        "", 0, 0, "error"), std::invalid_argument);
+    EXPECT_THROW(CNA::ShaderDiagnosticEXT(
+        static_cast<CNA::ShaderDiagnosticSeverityEXT>(999), CNA::ShaderStageEXT::Vertex,
+        "", 0, 0, "error"), std::invalid_argument);
+    EXPECT_THROW(CNA::ShaderDiagnosticEXT(
+        CNA::ShaderDiagnosticSeverityEXT::Error, CNA::ShaderStageEXT::Count,
+        "", 0, 0, "error"), std::invalid_argument);
+    EXPECT_THROW(CNA::ShaderDiagnosticEXT(
+        CNA::ShaderDiagnosticSeverityEXT::Error, static_cast<CNA::ShaderStageEXT>(999),
+        "", 0, 0, "error"), std::invalid_argument);
+    EXPECT_THROW(CNA::ShaderDiagnosticEXT(
+        CNA::ShaderDiagnosticSeverityEXT::Error, CNA::ShaderStageEXT::Vertex,
+        "", -1, 0, "error"), std::invalid_argument);
+    EXPECT_THROW(CNA::ShaderDiagnosticEXT(
+        CNA::ShaderDiagnosticSeverityEXT::Error, CNA::ShaderStageEXT::Vertex,
+        "", 1, -1, "error"), std::invalid_argument);
+    EXPECT_THROW(CNA::ShaderDiagnosticEXT(
+        CNA::ShaderDiagnosticSeverityEXT::Error, CNA::ShaderStageEXT::Vertex,
+        "", 0, 1, "error"), std::invalid_argument);
+    EXPECT_THROW(CNA::ShaderDiagnosticEXT(
+        CNA::ShaderDiagnosticSeverityEXT::Error, CNA::ShaderStageEXT::Vertex,
+        "", 0, 0, ""), std::invalid_argument);
+}
+
+TEST(ShaderDiagnosticEXTTest, CompilerLogParserRecognizesCommonLocationsStagesAndSeverities)
+{
+    const auto diagnostics = CNA::ShaderDiagnosticEXT::parseCompilerLog(
+        " VS: WARNING: shader.glsl:4:7: first warning  \r\n"
+        "FS: ERROR: 0:12(3): fragment failure\n"
+        "CS: info: kernel.comp(9,2): compiler note\n"
+        "ERROR: 0:2: source-id line only\n",
+        CNA::ShaderStageEXT::Unknown, "owned label");
+
+    ASSERT_EQ(diagnostics.size(), 4U);
+    EXPECT_EQ(diagnostics[0].getSeverity(), CNA::ShaderDiagnosticSeverityEXT::Warning);
+    EXPECT_EQ(diagnostics[0].getStage(), CNA::ShaderStageEXT::Vertex);
+    EXPECT_EQ(diagnostics[0].getLine(), 4);
+    EXPECT_EQ(diagnostics[0].getColumn(), 7);
+    EXPECT_EQ(diagnostics[0].getMessage(),
+              "VS: WARNING: shader.glsl:4:7: first warning");
+    EXPECT_EQ(diagnostics[1].getSeverity(), CNA::ShaderDiagnosticSeverityEXT::Error);
+    EXPECT_EQ(diagnostics[1].getStage(), CNA::ShaderStageEXT::Fragment);
+    EXPECT_EQ(diagnostics[1].getLine(), 12);
+    EXPECT_EQ(diagnostics[1].getColumn(), 3);
+    EXPECT_EQ(diagnostics[2].getSeverity(), CNA::ShaderDiagnosticSeverityEXT::Information);
+    EXPECT_EQ(diagnostics[2].getStage(), CNA::ShaderStageEXT::Compute);
+    EXPECT_EQ(diagnostics[2].getLine(), 9);
+    EXPECT_EQ(diagnostics[2].getColumn(), 2);
+    EXPECT_EQ(diagnostics[3].getStage(), CNA::ShaderStageEXT::Compute);
+    EXPECT_EQ(diagnostics[3].getLine(), 2);
+    EXPECT_EQ(diagnostics[3].getColumn(), 0);
+    for (const auto& diagnostic : diagnostics)
+        EXPECT_EQ(diagnostic.getSourceLabel(), "owned label");
+
+    EXPECT_TRUE(CNA::ShaderDiagnosticEXT::parseCompilerLog(
+        " \t\r\n", CNA::ShaderStageEXT::Vertex).empty());
+    EXPECT_THROW((void)CNA::ShaderDiagnosticEXT::parseCompilerLog(
+        "error", CNA::ShaderStageEXT::Count), std::invalid_argument);
+}
+
+TEST(ShaderCompilationExceptionEXTTest, SummaryIsStableAndAllDiagnosticsRemainAccessible)
+{
+    std::vector<CNA::ShaderDiagnosticEXT> diagnostics;
+    diagnostics.emplace_back(
+        CNA::ShaderDiagnosticSeverityEXT::Error, CNA::ShaderStageEXT::Fragment,
+        "effect.frag", 8, 2, "unexpected identifier");
+    diagnostics.emplace_back(
+        CNA::ShaderDiagnosticSeverityEXT::Warning, CNA::ShaderStageEXT::Fragment,
+        "effect.frag", 3, 0, "unused input");
+    CNA::ShaderCompilationExceptionEXT error(std::move(diagnostics));
+
+    EXPECT_EQ(std::string(error.what()),
+              "Shader compilation failed (2 diagnostics): Error Fragment 'effect.frag':8:2: "
+              "unexpected identifier; 1 more");
+    ASSERT_EQ(error.getDiagnostics().size(), 2U);
+    EXPECT_EQ(error.getDiagnostics()[1].getSeverity(),
+              CNA::ShaderDiagnosticSeverityEXT::Warning);
+    EXPECT_EQ(error.getDiagnostics()[1].getMessage(), "unused input");
+    EXPECT_THROW(CNA::ShaderCompilationExceptionEXT({}), std::invalid_argument);
+}
 
 constexpr const char* kVertex = R"(#version 300 es
 precision highp float;
@@ -718,6 +831,8 @@ TEST(ShaderDiagnosticsTest, AWorkingShaderReportsNothing)
     ASSERT_TRUE(effect.IsEffectValid());
     EXPECT_TRUE(effect.GetCompileErrorEXT().empty())
         << "a shader that compiled reported an error anyway";
+    EXPECT_TRUE(effect.GetShaderDiagnosticsEXT().empty())
+        << "a shader that compiled retained structured diagnostics anyway";
 
     bool logged = false;
     EXPECT_TRUE(CNA::Graphics::detail::reportShaderCompileFailure(gd, "Working", &effect, logged));

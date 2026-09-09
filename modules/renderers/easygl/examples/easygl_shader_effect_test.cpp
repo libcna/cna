@@ -83,6 +83,16 @@ void main()
 }
 )";
 
+static const char* kBrokenFragSrc = R"(#version 300 es
+precision mediump float;
+
+out vec4 FragColor;
+void main()
+{
+    FragColor = definitely_not_a_declared_value;
+}
+)";
+
 class EasyGLShaderEffectTest : public Game
 {
     std::unique_ptr<SpriteBatch> sb_;
@@ -124,6 +134,30 @@ protected:
             return;
         }
         std::printf("[PASS] EasyGLShaderEffect: GLSL language/stage contract\n");
+
+        ShaderEffect broken(device, kVertSrc, kBrokenFragSrc);
+        const auto diagnostics = broken.GetShaderDiagnosticsEXT();
+        const bool brokenDiagnosticOk = !broken.IsEffectValid() && !diagnostics.empty()
+            && diagnostics.front().getSeverity()
+                == CNA::ShaderDiagnosticSeverityEXT::Error
+            && diagnostics.front().getStage() == CNA::ShaderStageEXT::Fragment
+            && diagnostics.front().getSourceLabel().empty()
+            && diagnostics.front().getLine() == 7
+            && diagnostics.front().getColumn() >= 0
+            && !diagnostics.front().getMessage().empty();
+        if (!brokenDiagnosticOk)
+        {
+            std::printf("[FAIL] EasyGLShaderEffect: broken GLSL diagnostic was not structured "
+                        "(count=%zu, stage=%d, line=%d)\n",
+                        diagnostics.size(),
+                        diagnostics.empty() ? -1
+                            : static_cast<int>(diagnostics.front().getStage()),
+                        diagnostics.empty() ? -1 : diagnostics.front().getLine());
+            done_ = true;
+            Exit();
+            return;
+        }
+        std::printf("[PASS] EasyGLShaderEffect: broken GLSL diagnostic stage=fragment line=7\n");
 
         sb_ = std::make_unique<SpriteBatch>(device);
 

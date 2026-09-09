@@ -6,6 +6,7 @@
 #include "CNA/GraphicsImageAccess.hpp"
 #include "CNA/GraphicsMemoryBarrier.hpp"
 #include "CNA/Graphics/ShaderCodeEXT.hpp"
+#include "CNA/ShaderDiagnosticEXT.hpp"
 
 #include <memory>
 #include <optional>
@@ -55,8 +56,8 @@ namespace CNA::Graphics {
          * @param source The compute-shader source, in the renderer's own language.
          * @throws System::NotSupportedException If the renderer has no compute support; the
          *         message names the renderer.
-         * @throws std::runtime_error If the program did not compile; the message carries the
-         *         compiler log.
+         * @throws CNA::ShaderCompilationExceptionEXT If the program did not compile; `what()`
+         *         summarizes the owned structured diagnostics.
          */
         ComputeShader(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device,
                       const std::string& source);
@@ -66,8 +67,8 @@ namespace CNA::Graphics {
          * @param device The device to compile on.
          * @param code Descriptor whose stage must be `Compute`; it is copied into the program.
          * @throws std::invalid_argument If the stage or entry point cannot use the existing path.
-         * @throws System::NotSupportedException If the live renderer refuses the exact language.
-         * @throws std::runtime_error If the selected program does not compile.
+         * @throws CNA::ShaderCompilationExceptionEXT If the live renderer refuses the exact
+         *         language or the selected program does not compile.
          */
         ComputeShader(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device,
                       const ShaderCodeEXT& code);
@@ -78,8 +79,8 @@ namespace CNA::Graphics {
          * @param package Package whose sole required stage must be `Compute`.
          * @throws std::invalid_argument If the package is not compute-only or its selected entry
          *         point cannot use the existing path.
-         * @throws System::NotSupportedException If no package variant is usable.
-         * @throws std::runtime_error If the selected program does not compile.
+         * @throws CNA::ShaderCompilationExceptionEXT If no package variant is usable or the
+         *         selected program does not compile.
          */
         ComputeShader(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device,
                       const ShaderPackageEXT& package);
@@ -239,6 +240,7 @@ namespace CNA::Graphics {
         static PreparedPortablePayload preparePortablePayload(
             Microsoft::Xna::Framework::Graphics::GraphicsDevice& device,
             const ShaderPackageEXT& package);
+        void compile(const std::string& source);
 
         Microsoft::Xna::Framework::Graphics::GraphicsDevice& device_;
         std::unique_ptr<CNA::Internal::Renderers::IComputeShaderRenderer> renderer_;
