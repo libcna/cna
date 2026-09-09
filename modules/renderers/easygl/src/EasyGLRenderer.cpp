@@ -2332,13 +2332,23 @@ if (!ProfileIsEs2ApiGeneration())
     // ---------------------------------------------------------------------------------------
     // plans/plan_modern.md MOD-1511..MOD-1515: compute shaders and shader storage buffers.
 
-    EasyGLStorageBufferRenderer::EasyGLStorageBufferRenderer(const std::size_t byteSize)
+    EasyGLStorageBufferRenderer::EasyGLStorageBufferRenderer(
+        const std::size_t byteSize, const std::uint32_t usage,
+        const std::uint32_t cpuAccess)
         : byteSize_(byteSize)
+        , usage_(usage)
+        , cpuAccess_(cpuAccess)
     {
+        if (byteSize_ == 0)
+            throw std::invalid_argument("EasyGL buffer: byte size must be positive");
+        if (usage_ == 0 || (usage_ & ~UINT32_C(0x3F)) != 0)
+            throw std::invalid_argument("EasyGL buffer: usage mask is invalid");
+        if ((cpuAccess_ & ~UINT32_C(0x03)) != 0)
+            throw std::invalid_argument("EasyGL buffer: CPU-access mask is invalid");
         buffer_.create();
-        // Allocated once with no initial data; DynamicDraw because the whole point of a storage
-        // buffer is that something writes it repeatedly -- usually the GPU itself.
-        buffer_.set_data(::easygl::BufferTarget::ShaderStorage, nullptr, byteSize_,
+        // GL buffer objects are target-agnostic. Choosing DrawIndirect for a command-only buffer
+        // is what keeps allocation valid on desktop GL 4.0-4.2, where SSBO targets do not exist.
+        buffer_.set_data(TransferTarget(), nullptr, byteSize_,
                          ::easygl::BufferUsage::DynamicDraw);
     }
 
@@ -2362,9 +2372,7 @@ if (!ProfileIsEs2ApiGeneration())
         if (data == nullptr && byteSize != 0)
             throw std::invalid_argument("EasyGL storage-buffer upload source is null");
         if (byteSize == 0) return true;
-        buffer_.set_sub_data(
-            ::easygl::BufferTarget::ShaderStorage, data, byteSize, byteOffset);
-        ::metagl::glMemoryBarrier(::metagl::MemoryBarrierMask::AllBarrierBits);
+        buffer_.set_sub_data(TransferTarget(), data, byteSize, byteOffset);
         return true;
     }
 
@@ -2376,16 +2384,18 @@ if (!ProfileIsEs2ApiGeneration())
         if (out == nullptr && byteSize != 0)
             throw std::invalid_argument("EasyGL storage-buffer read destination is null");
         if (byteSize == 0) return true;
-        ::metagl::glMemoryBarrier(::metagl::MemoryBarrierMask::AllBarrierBits);
+        if ((usage_ & UINT32_C(1)) != 0)
+            ::metagl::glMemoryBarrier(::metagl::MemoryBarrierMask::AllBarrierBits);
         // glGetBufferSubData is desktop-only; mapping for read is the portable form and is what
         // the GL ES 3.1 contexts this renderer usually holds actually provide.
-        void* mapped = buffer_.map_range(::easygl::BufferTarget::ShaderStorage,
+        const ::easygl::BufferTarget target = TransferTarget();
+        void* mapped = buffer_.map_range(target,
                                          static_cast<std::ptrdiff_t>(byteOffset),
                                          static_cast<std::ptrdiff_t>(byteSize),
                                          ::metagl::MapBufferAccessMask::Read);
         if (mapped == nullptr) return false;
         std::memcpy(out, mapped, byteSize);
-        buffer_.unmap(::easygl::BufferTarget::ShaderStorage);
+        buffer_.unmap(target);
         return true;
     }
 
@@ -2404,7 +2414,8 @@ if (!ProfileIsEs2ApiGeneration())
             destinationByteOffset < sourceByteOffset + byteSize)
             throw std::invalid_argument("EasyGL storage-buffer copy ranges overlap");
         if (byteSize == 0) return true;
-        ::metagl::glMemoryBarrier(::metagl::MemoryBarrierMask::AllBarrierBits);
+        if (((usage_ | target->usage_) & UINT32_C(1)) != 0)
+            ::metagl::glMemoryBarrier(::metagl::MemoryBarrierMask::AllBarrierBits);
         buffer_.bind(::easygl::BufferTarget::CopyRead);
         target->buffer_.bind(::easygl::BufferTarget::CopyWrite);
         ::metagl::glCopyBufferSubData(
@@ -2412,8 +2423,18 @@ if (!ProfileIsEs2ApiGeneration())
             static_cast<std::ptrdiff_t>(sourceByteOffset),
             static_cast<std::ptrdiff_t>(destinationByteOffset),
             static_cast<std::ptrdiff_t>(byteSize));
-        ::metagl::glMemoryBarrier(::metagl::MemoryBarrierMask::AllBarrierBits);
+        if (((usage_ | target->usage_) & UINT32_C(1)) != 0)
+            ::metagl::glMemoryBarrier(::metagl::MemoryBarrierMask::AllBarrierBits);
         return true;
+    }
+
+    ::easygl::BufferTarget EasyGLStorageBufferRenderer::TransferTarget() const
+    {
+        if ((usage_ & UINT32_C(1)) != 0)
+            return ::easygl::BufferTarget::ShaderStorage;
+        if ((usage_ & (UINT32_C(1) << 3)) != 0)
+            return ::easygl::BufferTarget::DrawIndirect;
+        return ::easygl::BufferTarget::CopyWrite;
     }
 
     void EasyGLStorageBufferRenderer::BindBase(const int binding) const
@@ -5767,6 +5788,14 @@ if (!ProfileIsEs2ApiGeneration())
         return static_cast<int>(value);
     }
 
+    std::uint64_t EasyGLRenderer::GetMaxStorageBufferBytesEXT() const
+    {
+        if (!SupportsComputeShadersEXT()) return 0;
+        GLint64 value = 0;
+        ::metagl::glGetInteger64v(::metagl::GetParameter::MaxShaderStorageBlockSize, &value);
+        return value > 0 ? static_cast<std::uint64_t>(value) : 0;
+    }
+
     void EasyGLRenderer::BindStorageBufferForDrawEXT(const int binding,
                                                      const IStorageBufferRenderer& buffer)
     {
@@ -5794,6 +5823,21 @@ if (!ProfileIsEs2ApiGeneration())
         EnsureCallingThreadContext();
         if (!SupportsComputeShadersEXT() || byteSize == 0) return nullptr;
         return std::make_unique<EasyGLStorageBufferRenderer>(byteSize);
+    }
+
+    std::unique_ptr<IStorageBufferRenderer> EasyGLRenderer::CreateStorageBufferEXT(
+        const std::size_t byteSize, const std::uint32_t usage,
+        const std::uint32_t cpuAccess)
+    {
+        EnsureCallingThreadContext();
+        constexpr std::uint32_t Storage = UINT32_C(1) << 0;
+        constexpr std::uint32_t IndirectArguments = UINT32_C(1) << 3;
+        if (byteSize == 0 || usage == 0 || (usage & ~UINT32_C(0x3F)) != 0 ||
+            (cpuAccess & ~UINT32_C(0x03)) != 0)
+            return nullptr;
+        if ((usage & Storage) != 0 && !SupportsComputeShadersEXT()) return nullptr;
+        if ((usage & IndirectArguments) != 0 && !SupportsIndirectDrawEXT()) return nullptr;
+        return std::make_unique<EasyGLStorageBufferRenderer>(byteSize, usage, cpuAccess);
     }
 
     void EasyGLRenderer::DispatchCompute(IComputeShaderRenderer* shader, const int groupsX,

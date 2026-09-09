@@ -11,7 +11,7 @@
   `CNA_CNAEXT` CMake option (default OFF) and every file in it is `#ifdef CNA_CNAEXT`-guarded,
   which `scripts/check_cnaext_guards.sh` enforces.
 - Graphics renderer relevance: none directly — the engine layer talks to `GraphicsDevice` and the renderer contracts, never to a renderer implementation
-- Plan rows: `MOD-1520`, `MOD-2229`
+- Plan rows: `MOD-1520`, `MOD-2229`, `MOD-2231`
 
 ## Purpose
 
@@ -19,9 +19,10 @@ A tracked renderer-neutral byte buffer, immutable usage/CPU-access descriptor an
 
 ## Executive Verdict
 
-Complete for `MOD-2229`. The public surface exposes no native buffer, mapping, memory property,
-barrier or renderer identity. The original constructor retains its prior operations while the new
-descriptor makes every additional role immutable and explicit.
+Complete for `MOD-2229` and `MOD-2231`. The public surface exposes no native buffer, mapping,
+memory property, barrier or renderer identity. The original constructor retains its prior
+compute-gated operations while the descriptor makes every additional role immutable and explicit;
+an indirect-only descriptor does not acquire an artificial compute dependency.
 
 ## Checklist Results
 
@@ -37,7 +38,8 @@ descriptor makes every additional role immutable and explicit.
 
 The renderer seam carries fixed-width raw masks to avoid coupling the graphics-core contract to the
 engine-extension module. Values are pinned by shared and native tests. Existing indirect and
-compute routes additionally validate the relevant declared usage before native work.
+compute routes additionally validate the relevant declared usage before native work. Capability
+validation is per role: `Storage` requires compute and `IndirectArguments` requires indirect draw.
 
 ## Cross-File Observations
 
@@ -49,8 +51,9 @@ public enum types stay in `graphics-ext`, so ordinary builds do not acquire a re
 
 No known public-method coverage gap. `StorageBufferTests.cpp` covers descriptor fields/flags,
 invalid masks, both constructors, all getters, range operations, copy validation, renderer refusal,
-tracking/events/disposal, type name and both typed-view constructors. The Vulkan live oracle covers
-the real device-local and CPU-visible paths on RADV and llvmpipe.
+tracking/events/disposal, type name, both typed-view constructors and compute-independent indirect
+construction. The Vulkan live oracle covers the real device-local and CPU-visible paths on RADV
+and llvmpipe.
 
 ## Positive Findings
 

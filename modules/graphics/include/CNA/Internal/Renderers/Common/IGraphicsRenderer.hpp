@@ -2629,8 +2629,9 @@ namespace CNA::Internal::Renderers
          * @brief Creates a buffer with exact portable usage and direct CPU-access intent.
          *
          * This separate null default prevents an older renderer from accepting roles its native
-         * allocation did not declare. The compatible constructor continues through the factory
-         * above.
+         * allocation did not declare. Individual roles carry their own capability requirements;
+         * in particular, indirect-only buffers do not require compute support. The compatible
+         * constructor continues through the factory above.
          *
          * @param byteSize Positive allocation size.
          * @param usage Raw `CNA::Graphics::StorageBufferUsage` bits.

@@ -407,7 +407,10 @@ protected:
             vertices.SetDataRaw(data.data(), static_cast<int>(data.size()), sizeof(Vertex));
             std::array<IndirectDrawArguments, 2> commands{};
             commands[1] = {3, 1, 3, 0};
-            StorageBuffer arguments(device, sizeof(commands));
+            StorageBuffer arguments(
+                device, StorageBufferDescriptor(
+                            sizeof(commands), StorageBufferUsage::IndirectArguments,
+                            StorageBufferCpuAccess::Write));
             arguments.setBytes(commands.data(), sizeof(commands));
             RenderTarget2D target(device, kSize, kSize, false, SurfaceFormat::Color,
                                   DepthFormat::None, 0, RenderTargetUsage::DiscardContents);
@@ -421,9 +424,14 @@ protected:
             device.SetVertexBuffer(nullptr);
             device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
             const int red = CountRed(target);
-            check(red == kSize * kSize,
-                  "B CPU non-indexed command preserves both byte and vertex offsets",
-                  std::to_string(red) + "/" + std::to_string(kSize * kSize) + " red pixels");
+            const bool exactRole =
+                arguments.getDescriptor().getUsage() ==
+                    StorageBufferUsage::IndirectArguments &&
+                arguments.getDescriptor().getCpuAccess() == StorageBufferCpuAccess::Write;
+            check(red == kSize * kSize && exactRole,
+                  "B CPU non-indexed command needs indirect usage, not compute/storage",
+                  std::to_string(red) + "/" + std::to_string(kSize * kSize) +
+                      " red pixels, exactRole=" + (exactRole ? "true" : "false"));
         }
 
         {
@@ -437,7 +445,10 @@ protected:
             indexBuffer.SetData(indices.data(), static_cast<int>(indices.size()));
             std::array<IndirectDrawIndexedArguments, 2> commands{};
             commands[1] = {3, 1, 3, 2, 0};
-            StorageBuffer arguments(device, sizeof(commands));
+            StorageBuffer arguments(
+                device, StorageBufferDescriptor(
+                            sizeof(commands), StorageBufferUsage::IndirectArguments,
+                            StorageBufferCpuAccess::Write));
             arguments.setBytes(commands.data(), sizeof(commands));
             RenderTarget2D target(device, kSize, kSize, false, SurfaceFormat::Color,
                                   DepthFormat::None, 0, RenderTargetUsage::DiscardContents);
@@ -497,7 +508,11 @@ protected:
         };
 
         {
-            StorageBuffer arguments(device, sizeof(IndirectDrawIndexedArguments));
+            StorageBuffer arguments(
+                device, StorageBufferDescriptor(
+                            sizeof(IndirectDrawIndexedArguments),
+                            StorageBufferUsage::IndirectArguments,
+                            StorageBufferCpuAccess::Write));
             const IndirectDrawIndexedArguments command{6, 1, 0, 0, 1};
             arguments.setBytes(&command, sizeof(command));
             RenderTarget2D target(device, kSize, kSize, false, SurfaceFormat::Color,
@@ -639,8 +654,11 @@ protected:
                       std::to_string(culled[1].getRProperty()) + ")");
             const std::uint64_t barriers =
                 renderer->GetLogicalResourceBarrierCountEXT() - barriersBefore;
-            check(leftDeferred && rightDeferred && culledDeferred && barriers == 12,
-                  "H compute-to-graphics stays deferred and records exact SSBO/indirect hazards",
+            // Each measured iteration records four buffer hazards (two compute writes followed by
+            // vertex/indirect reads) and two requested readback image transitions. MOD-2253 made
+            // the latter use this same logical tracker, so the complete exact count is 3 * 6.
+            check(leftDeferred && rightDeferred && culledDeferred && barriers == 18,
+                  "H compute-to-graphics stays deferred with exact buffer/readback hazards",
                   "queued=" + std::string(leftDeferred ? "1" : "0") +
                       std::string(rightDeferred ? "1" : "0") +
                       std::string(culledDeferred ? "1" : "0") +

@@ -11,7 +11,7 @@
   `CNA_CNAEXT` CMake option (default OFF) and every file in it is `#ifdef CNA_CNAEXT`-guarded,
   which `scripts/check_cnaext_guards.sh` enforces.
 - Graphics renderer relevance: none directly — the engine layer talks to `GraphicsDevice` and the renderer contracts, never to a renderer implementation
-- Plan rows: `MOD-1520`, `MOD-2229`
+- Plan rows: `MOD-1520`, `MOD-2229`, `MOD-2231`
 
 ## Purpose
 
@@ -19,8 +19,9 @@ Validation, renderer allocation, exact transfers, copying and tracked disposal f
 
 ## Executive Verdict
 
-Complete for `MOD-2229`. Intrinsic descriptor errors, disposed/cross-device resources, missing
-usage/CPU access, live size limits and invalid ranges are rejected before renderer mutation.
+Complete for `MOD-2229` and `MOD-2231`. Intrinsic descriptor errors,
+disposed/cross-device resources, missing usage/CPU access, applicable live size limits and invalid
+ranges are rejected before renderer mutation.
 
 ## Checklist Results
 
@@ -39,14 +40,16 @@ Vulkan backend maps every usage bit exactly and performs GPU-only transfers with
 
 ## Cross-File Observations
 
-Construction reads the already-cached renderer limit through `GraphicsDevice` and never queries a
-native API directly. The legacy factory remains separate so existing EasyGL callers keep their
-source and behavior while unsupported descriptor combinations fail through the new null default.
+Construction reads the already-cached renderer facts through `GraphicsDevice` and never queries a
+native API directly. The storage-byte limit is applied only when the descriptor declares `Storage`;
+it is not a valid bound for an indirect-only native buffer. The legacy factory remains separate so
+existing callers keep their source and behavior.
 
 ## Missing or Weak Tests
 
-No known gap for the row. Shared validation/tracking tests compile as their own object; the expanded
-15-case native oracle passed on both physical RADV and llvmpipe with zero validation messages.
+No known gap for these rows. Shared validation/tracking tests compile as their own object; the
+Vulkan native oracle distinguishes CPU-written indirect-only buffers from compute-written mixed
+buffers and passes on both physical RADV and llvmpipe with zero validation messages.
 
 ## Positive Findings
 
@@ -55,5 +58,5 @@ and maximum-size offsets are handled without arithmetic wraparound.
 
 ## Final Assessment
 
-Complete for `MOD-2229`; automatic deferred ordering remains separately tracked in the later
-Vulkan synchronization rows.
+Complete for `MOD-2229` and `MOD-2231`; automatic deferred ordering is provided by the later Vulkan
+synchronization rows.

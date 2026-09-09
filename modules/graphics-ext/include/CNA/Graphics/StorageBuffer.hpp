@@ -147,9 +147,11 @@ namespace CNA::Graphics {
     /**
      * @brief A tracked GPU byte buffer with immutable usage and CPU-access intent.
      *
-     * The renderer chooses native memory and synchronization from the descriptor. GPU-only
-     * buffers expose no mapping or native handle: callers initialize them by copying from a
-     * CPU-writable transfer source and read them through a CPU-readable transfer destination.
+     * Storage use requires compute support, while an indirect-only buffer requires only indirect
+     * drawing. The renderer chooses native memory and synchronization from the descriptor.
+     * GPU-only buffers expose no mapping or native handle: callers initialize them by copying
+     * from a CPU-writable transfer source and read them through a CPU-readable transfer
+     * destination.
      */
     class StorageBuffer final
         : public Microsoft::Xna::Framework::Graphics::GraphicsResource
@@ -177,8 +179,9 @@ namespace CNA::Graphics {
          * @param device The device to allocate on.
          * @param descriptor Size, GPU roles and direct CPU access.
          * @throws System::ObjectDisposedException If @p device is disposed.
-         * @throws System::NotSupportedException If compute or the requested descriptor is not
-         *         implemented by the renderer, or a known device limit is exceeded.
+         * @throws System::NotSupportedException If a capability required by the declared roles or
+         *         the requested descriptor is not implemented by the renderer, or a known storage
+         *         limit is exceeded by a buffer that declares Storage usage.
          */
         StorageBuffer(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device,
                       const StorageBufferDescriptor& descriptor);

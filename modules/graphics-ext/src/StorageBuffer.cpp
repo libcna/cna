@@ -74,6 +74,32 @@ namespace CNA::Graphics {
                     std::string(device.GetGraphicsRendererName()) +
                     "' renderer has no compute support, so it has no storage buffers either");
         }
+
+        void RequireDescriptorCapabilities(
+            const GraphicsDevice& device, const StorageBufferDescriptor& descriptor)
+        {
+            if (device.getIsDisposedProperty())
+                throw System::ObjectDisposedException("GraphicsDevice");
+
+            const StorageBufferUsage usage = descriptor.getUsage();
+            if (HasUsage(usage, StorageBufferUsage::Storage) &&
+                !device.SupportsCapability(CNA::GraphicsCapability::ComputeShaders))
+            {
+                throw System::NotSupportedException(
+                    "CNA::Graphics::StorageBuffer: the '" +
+                    std::string(device.GetGraphicsRendererName()) +
+                    "' renderer has no compute support required by Storage usage");
+            }
+            if (HasUsage(usage, StorageBufferUsage::IndirectArguments) &&
+                !device.SupportsCapability(CNA::GraphicsCapability::IndirectDraw))
+            {
+                throw System::NotSupportedException(
+                    "CNA::Graphics::StorageBuffer: the '" +
+                    std::string(device.GetGraphicsRendererName()) +
+                    "' renderer has no indirect-draw support required by IndirectArguments "
+                    "usage");
+            }
+        }
     }
 
     StorageBufferDescriptor::StorageBufferDescriptor(
@@ -124,19 +150,22 @@ namespace CNA::Graphics {
     StorageBuffer::Prepared StorageBuffer::prepare(
         GraphicsDevice& device, const StorageBufferDescriptor& descriptor)
     {
-        RequireCompute(device);
-        const CNA::RendererLimitValue maximum =
-            device.GetRendererLimitEXT(CNA::RendererLimit::MaxStorageBufferBytes);
-        if (!maximum.known || maximum.value == 0)
-            throw System::NotSupportedException(
-                "CNA::Graphics::StorageBuffer: the '" +
-                std::string(device.GetGraphicsRendererName()) +
-                "' renderer exposes no implemented maximum storage-buffer size");
-        if (static_cast<std::uint64_t>(descriptor.getByteSize()) > maximum.value)
-            throw System::NotSupportedException(
-                "CNA::Graphics::StorageBuffer: byteSize " +
-                std::to_string(descriptor.getByteSize()) +
-                " exceeds the device maximum of " + std::to_string(maximum.value));
+        RequireDescriptorCapabilities(device, descriptor);
+        if (HasUsage(descriptor.getUsage(), StorageBufferUsage::Storage))
+        {
+            const CNA::RendererLimitValue maximum =
+                device.GetRendererLimitEXT(CNA::RendererLimit::MaxStorageBufferBytes);
+            if (!maximum.known || maximum.value == 0)
+                throw System::NotSupportedException(
+                    "CNA::Graphics::StorageBuffer: the '" +
+                    std::string(device.GetGraphicsRendererName()) +
+                    "' renderer exposes no implemented maximum storage-buffer size");
+            if (static_cast<std::uint64_t>(descriptor.getByteSize()) > maximum.value)
+                throw System::NotSupportedException(
+                    "CNA::Graphics::StorageBuffer: byteSize " +
+                    std::to_string(descriptor.getByteSize()) +
+                    " exceeds the device maximum of " + std::to_string(maximum.value));
+        }
 
         auto native = device.GetRenderer().CreateStorageBufferEXT(
             descriptor.getByteSize(),

@@ -549,8 +549,16 @@ namespace CNA::Internal::Renderers::EasyGL
     class EasyGLStorageBufferRenderer : public IStorageBufferRenderer
     {
     public:
-        /** @brief Allocates @p byteSize bytes of storage. */
-        explicit EasyGLStorageBufferRenderer(std::size_t byteSize);
+        /**
+         * @brief Allocates a GL buffer with exact portable roles and CPU-access intent.
+         * @param byteSize Positive allocation size in bytes.
+         * @param usage Raw `CNA::Graphics::StorageBufferUsage` bits.
+         * @param cpuAccess Raw `CNA::Graphics::StorageBufferCpuAccess` bits.
+         */
+        EasyGLStorageBufferRenderer(
+            std::size_t byteSize, std::uint32_t usage = UINT32_C(0x0F),
+            std::uint32_t cpuAccess = UINT32_C(0x03));
+        /** @brief Releases the GL buffer. */
         ~EasyGLStorageBufferRenderer() override;
 
         /**
@@ -594,20 +602,43 @@ namespace CNA::Internal::Renderers::EasyGL
         bool CopyToEXT(
             IStorageBufferRenderer& destination, std::size_t sourceByteOffset,
             std::size_t destinationByteOffset, std::size_t byteSize) override;
+        /**
+         * @brief Returns the allocation size.
+         * @return Buffer size in bytes.
+         */
         [[nodiscard]] std::size_t GetByteSize() const override { return byteSize_; }
+        /**
+         * @brief Returns the immutable portable usage mask.
+         * @return Raw `CNA::Graphics::StorageBufferUsage` bits.
+         */
+        [[nodiscard]] std::uint32_t GetUsageEXT() const override { return usage_; }
+        /**
+         * @brief Returns the immutable direct CPU-access mask.
+         * @return Raw `CNA::Graphics::StorageBufferCpuAccess` bits.
+         */
+        [[nodiscard]] std::uint32_t GetCpuAccessEXT() const override { return cpuAccess_; }
 
-        /// Binds this buffer to a shader storage binding point.
+        /**
+         * @brief Binds this buffer to a shader-storage binding point.
+         * @param binding Binding-point index.
+         */
         void BindBase(int binding) const;
 
-        /// plans/plan_modern.md MOD-2090: binds this buffer as the source of an indirect draw's
-        /// arguments. The same buffer object in a second role -- which is exactly what makes an
-        /// indirect draw worth having, since a compute shader can write the arguments through the
-        /// storage binding and the draw fetches them here without a readback in between.
+        /**
+         * @brief Binds this buffer as the source of indirect-draw arguments.
+         *
+         * A buffer with both Storage and IndirectArguments roles can be written by compute and
+         * consumed by a draw without a CPU readback. An indirect-only buffer needs no SSBO role.
+         */
         void BindAsDrawIndirect() const;
 
     private:
+        [[nodiscard]] ::easygl::BufferTarget TransferTarget() const;
+
         mutable ::easygl::Buffer buffer_;
         std::size_t byteSize_ = 0;
+        std::uint32_t usage_ = 0;
+        std::uint32_t cpuAccess_ = 0;
     };
 
     /**
@@ -1685,11 +1716,26 @@ namespace CNA::Internal::Renderers::EasyGL
         [[nodiscard]] int GetMaxComputeWorkGroupSizeEXT(int axis) const override;
         [[nodiscard]] int GetMaxComputeWorkGroupInvocationsEXT() const override;
         [[nodiscard]] int GetMaxVertexShaderStorageBlocksEXT() const override;
+        /**
+         * @brief Returns the live context's maximum shader-storage block size.
+         * @return Maximum bytes, or zero when shader storage is unavailable.
+         */
+        [[nodiscard]] std::uint64_t GetMaxStorageBufferBytesEXT() const override;
         void BindStorageBufferForDrawEXT(int binding,
                                          const IStorageBufferRenderer& buffer) override;
         std::unique_ptr<IComputeShaderRenderer> CreateComputeShader(
             const std::string& computeSrc) override;
         std::unique_ptr<IStorageBufferRenderer> CreateStorageBuffer(std::size_t byteSize) override;
+        /**
+         * @brief Creates a GL buffer for the exact declared portable roles.
+         * @param byteSize Positive allocation size in bytes.
+         * @param usage Raw `CNA::Graphics::StorageBufferUsage` bits.
+         * @param cpuAccess Raw `CNA::Graphics::StorageBufferCpuAccess` bits.
+         * @return The buffer, or null if a requested role is unsupported by the live context.
+         */
+        std::unique_ptr<IStorageBufferRenderer> CreateStorageBufferEXT(
+            std::size_t byteSize, std::uint32_t usage,
+            std::uint32_t cpuAccess) override;
         void DispatchCompute(IComputeShaderRenderer* shader, int groupsX, int groupsY,
                              int groupsZ) override;
         void MemoryBarrierEXT(int barrierBits) override;

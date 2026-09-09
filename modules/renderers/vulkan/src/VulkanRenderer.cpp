@@ -15569,8 +15569,9 @@ namespace CNA::Internal::Renderers::Vulkan
             throw std::invalid_argument("Vulkan storage buffer: usage mask is invalid");
         if ((cpuAccess_ & ~AllowedCpuAccess) != 0)
             throw std::invalid_argument("Vulkan storage buffer: CPU-access mask is invalid");
-        if (static_cast<VkDeviceSize>(byteSize_) >
-            owner_->physicalDeviceProperties_.limits.maxStorageBufferRange)
+        if ((usage_ & (UINT32_C(1) << 0)) != 0 &&
+            static_cast<VkDeviceSize>(byteSize_) >
+                owner_->physicalDeviceProperties_.limits.maxStorageBufferRange)
             throw std::invalid_argument(
                 "Vulkan storage buffer: byte size exceeds maxStorageBufferRange");
 
@@ -16669,9 +16670,13 @@ namespace CNA::Internal::Renderers::Vulkan
         const std::size_t byteSize, const std::uint32_t usage,
         const std::uint32_t cpuAccess)
     {
-        if (!SupportsComputeShadersEXT() || byteSize == 0 || usage == 0 ||
+        constexpr std::uint32_t Storage = UINT32_C(1) << 0;
+        constexpr std::uint32_t IndirectArguments = UINT32_C(1) << 3;
+        if (byteSize == 0 || usage == 0 ||
             (usage & ~UINT32_C(0x3F)) != 0 || (cpuAccess & ~UINT32_C(0x03)) != 0)
             return nullptr;
+        if ((usage & Storage) != 0 && !SupportsComputeShadersEXT()) return nullptr;
+        if ((usage & IndirectArguments) != 0 && !SupportsIndirectDrawEXT()) return nullptr;
         auto buffer = std::make_unique<VulkanStorageBufferRenderer>(
             this, byteSize, usage, cpuAccess);
         liveStorageBuffers_.push_back(buffer.get());

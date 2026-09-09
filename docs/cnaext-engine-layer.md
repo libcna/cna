@@ -977,10 +977,14 @@ without the answer travelling back through the CPU, which is a pipeline stall ra
 
 ```cpp
 if (device.SupportsCapability(CNA::GraphicsCapability::IndirectDraw)) {
-    CNA::Graphics::StorageBuffer commands(device, sizeof(CNA::IndirectDrawArguments));
-    // ... a compute shader writes the counts into `commands` ...
-    device.GetRenderer().MemoryBarrierEXT(
-        static_cast<int>(CNA::GraphicsMemoryBarrier::IndirectCommand));
+    CNA::Graphics::StorageBuffer commands(
+        device,
+        CNA::Graphics::StorageBufferDescriptor(
+            sizeof(CNA::IndirectDrawArguments),
+            CNA::Graphics::StorageBufferUsage::IndirectArguments,
+            CNA::Graphics::StorageBufferCpuAccess::Write));
+    CNA::IndirectDrawArguments arguments{3, 1, 0, 0};
+    commands.setBytes(&arguments, sizeof(arguments));
     device.SetVertexBuffer(&mesh);
     effect.Apply();
     device.DrawPrimitivesIndirectEXT(PrimitiveType::TriangleList, *commands.getRendererEXT(), 0);
@@ -1010,11 +1014,12 @@ responsibility. `GraphicsMemoryBarrier::IndirectCommand` remains a compatibility
 callers; Vulkan automatically emits the host/transfer/compute-write → indirect-command-read
 dependency before the render pass and the compute-written-command oracle calls no manual barrier.
 
-**A wrinkle worth knowing before you plan around it.** The only argument buffer CNA has is
-`CNA::Graphics::StorageBuffer`, which is an SSBO and needs GL ES 3.1 / desktop GL 4.3. The indirect
-draw itself needs only GL 4.0, so on a desktop context between 4.0 and 4.2 the capability truthfully
-reports `true` and there is still nothing in CNA able to hold the arguments. Check both capabilities
-if you intend to run there.
+**Argument buffers do not imply compute.** A `StorageBufferDescriptor` whose usage contains
+`IndirectArguments` but not `Storage` needs only the indirect-draw capability; this is the
+CPU-written route shown above and it remains valid on desktop GL 4.0–4.2. Add `Storage` only when a
+compute shader will write the same buffer. Mixed usage then deliberately requires both capabilities,
+while transfer roles and CPU access remain independent. CNA keeps one buffer resource hierarchy:
+`IndirectArguments` is an immutable role, not a second native/public buffer type.
 
 **Vulkan keeps deferred arguments alive and bounded.** It cannot know a compute-written draw range
 on the CPU, so it snapshots each complete remaining geometry/instance stream within its fixed

@@ -44,19 +44,20 @@ need content, audio, media, storage or the engine extension module.
 | `CNA::Internal::Renderers::ShaderDialectEXT` and `GraphicsDevice::GetShaderDialectEXT` | `modules/graphics` | Existing renderer payload hint (`Unknown`, GLSL families, HLSL, MSL, WGSL, SPIR-V). It has no shader stage, owning bytes or variant-selection contract. |
 | `Microsoft::Xna::Framework::Graphics::ShaderEffect` | `modules/graphics` | Existing CNAEXT vertex/fragment payload object. Its two string payloads remain renderer-specific. |
 | `CNA::Graphics::ComputeShader` | `modules/graphics-ext` | Existing CNAEXT compute object with renderer-specific string source, scalar setters, buffer/texture/image binding, dispatch and a caller-visible barrier method. |
-| `CNA::Graphics::StorageBufferDescriptor`, `StorageBuffer`, `StorageBufferT<T>` | `modules/graphics-ext` | Compute-gated tracked byte buffer and typed wrapper with immutable GPU roles, direct CPU-access intent, exact range transfer and GPU-side copy. The size-only constructor preserves its compatible legacy contract. |
+| `CNA::Graphics::StorageBufferDescriptor`, `StorageBuffer`, `StorageBufferT<T>` | `modules/graphics-ext` | Role-gated tracked byte buffer and typed wrapper with immutable GPU roles, direct CPU-access intent, exact range transfer and GPU-side copy. `Storage` requires compute; `IndirectArguments` requires only indirect drawing. The size-only constructor preserves its compute-gated compatible legacy contract. |
 | `CNA::Graphics::GpuTimer` | `modules/graphics-ext` | Existing nonblocking timer wrapper; EasyGL implemented it at this baseline and Vulkan implements the same contract since `MOD-2246`. OpenGL4 remains unsupported. |
 | `CNA::GraphicsImageAccess` | `modules/graphics` | Three image-access values used by `ComputeShader::bindImage(Texture2D&)`. |
 | `CNA::GraphicsMemoryBarrier` and its bit operators | `modules/graphics` | Portable-looking caller barrier mask. Phase 22 replaces the need for callers to drive normal correctness with renderer-owned usage transitions. |
 | `CNA::IndirectDrawArguments`, `IndirectDrawIndexedArguments` | `modules/graphics` | Canonical 16-byte/20-byte GPU argument layouts; both already contain base-instance fields. |
-| `GraphicsDevice::DrawPrimitivesIndirectEXT`, `DrawIndexedPrimitivesIndirectEXT` | `modules/graphics` | Existing indirect public routes backed by a `StorageBuffer`; EasyGL implements them, Vulkan/OpenGL4 refuse. |
+| `GraphicsDevice::DrawPrimitivesIndirectEXT`, `DrawIndexedPrimitivesIndirectEXT` | `modules/graphics` | Existing indirect public routes backed by a role-declared `StorageBuffer`; EasyGL and Vulkan implement them, while OpenGL4 still refuses. |
 | `GraphicsDevice::DrawInstancedPrimitivesBaseInstanceEXT` | `modules/graphics` | `MOD-2232` adds a capability-gated first logical instance while retaining XNA indexed geometry, bindings and effect state; Vulkan is the first implementation. |
 | `CNA::DisplayColorSpace` and device queries | `modules/graphics` | Existing sRGB/scRGB/HDR10 vocabulary; all measured renderers still expose only sRGB presentation. |
 
-There is no public `ShaderCodeEXT`, `ShaderPackageEXT`, constant buffer, independently creatable
-indirect-argument buffer, fence or native image/buffer/view type. The new texture-array,
-storage-texture and storage-buffer descriptors remain portable value types; those remaining names
-must extend the surface above rather than duplicate a hidden implementation.
+There is no constant buffer, fence or native image/buffer/view type. `ShaderCodeEXT` and
+`ShaderPackageEXT` now provide explicit portable payloads, while an independently creatable
+indirect-argument buffer is represented by the existing `StorageBuffer` with the immutable
+`IndirectArguments` role rather than by a duplicate resource type. The texture-array,
+storage-texture and storage-buffer descriptors remain portable value types.
 
 ## Phase-22-relevant renderer virtuals and their shared defaults
 

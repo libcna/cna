@@ -237,7 +237,8 @@ namespace
             const Microsoft::Xna::Framework::Matrix&,
             Microsoft::Xna::Framework::Graphics::PrimitiveType, int) override {}
 
-        [[nodiscard]] bool SupportsComputeShadersEXT() const override { return true; }
+        [[nodiscard]] bool SupportsComputeShadersEXT() const override { return supportsCompute; }
+        [[nodiscard]] bool SupportsIndirectDrawEXT() const override { return supportsIndirect; }
         [[nodiscard]] std::uint64_t GetMaxStorageBufferBytesEXT() const override
         {
             return maximumBytes;
@@ -263,6 +264,8 @@ namespace
             CNA::Internal::Renderers::IComputeShaderRenderer*, int, int, int) override {}
 
         std::uint64_t maximumBytes = 1024;
+        bool supportsCompute = true;
+        bool supportsIndirect = true;
         std::shared_ptr<StorageBufferTestState> state;
 
     private:
@@ -392,6 +395,45 @@ TEST(StorageBufferTest, DescriptorConstructionValidatesLimitAndForwardsExactInte
     CNA::Internal::StorageBufferGraphicsDeviceTestPeer::InvalidateCapabilityProfile(device);
     EXPECT_THROW(StorageBuffer(device, descriptor), System::NotSupportedException);
     EXPECT_EQ(view->state->factoryCalls, 2);
+}
+
+TEST(StorageBufferTest, IndirectOnlyConstructionIsIndependentOfComputeAndStorageLimits)
+{
+    GraphicsDevice device;
+    int destructions = 0;
+    auto renderer = MakeRenderer(destructions);
+    StorageBufferContractRenderer* const view = renderer.get();
+    renderer->supportsCompute = false;
+    renderer->supportsIndirect = true;
+    renderer->maximumBytes = 0;
+    CNA::Internal::StorageBufferGraphicsDeviceTestPeer::ReplaceRenderer(
+        device, std::move(renderer));
+
+    constexpr StorageBufferUsage usage =
+        StorageBufferUsage::TransferDestination | StorageBufferUsage::IndirectArguments;
+    const StorageBufferDescriptor descriptor(
+        36, usage, StorageBufferCpuAccess::Write);
+    StorageBuffer arguments(device, descriptor);
+    EXPECT_EQ(arguments.getDescriptor().getUsage(), usage);
+    EXPECT_EQ(view->state->factoryCalls, 1);
+    EXPECT_EQ(view->state->createdBytes, 36U);
+
+    view->supportsIndirect = false;
+    CNA::Internal::StorageBufferGraphicsDeviceTestPeer::InvalidateCapabilityProfile(device);
+    EXPECT_THROW(StorageBuffer(device, descriptor), System::NotSupportedException);
+    EXPECT_EQ(view->state->factoryCalls, 1)
+        << "missing indirect support must refuse before renderer allocation";
+
+    view->supportsIndirect = true;
+    CNA::Internal::StorageBufferGraphicsDeviceTestPeer::InvalidateCapabilityProfile(device);
+    EXPECT_THROW(
+        StorageBuffer(
+            device, StorageBufferDescriptor(
+                        36, usage | StorageBufferUsage::Storage,
+                        StorageBufferCpuAccess::Write)),
+        System::NotSupportedException);
+    EXPECT_EQ(view->state->factoryCalls, 1)
+        << "adding Storage usage must independently require compute support";
 }
 
 TEST(StorageBufferTest, LegacyDefaultAndExplicitRangesPreserveExactBytes)
