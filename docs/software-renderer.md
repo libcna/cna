@@ -422,6 +422,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
 - **`EffectMaterial.Clone()` uses the inherited base result** (`SOFTWARE-260`) — Microsoft XNA and
   FNA do not override this virtual method. CNA therefore returns an independent base `Effect`
   while preserving cloned compiled parameters, techniques and current selection.
+- **EffectParameter array getters require a positive count** (`SOFTWARE-261`) — all nine classic
+  `GetValue*Array` families reject zero and negative counts with `ArgumentOutOfRangeException`
+  before checking whether the reflected parameter can provide a numeric value.
 - **The classic SpriteBatch/SpriteFont parity corpus executes on the CPU** (`SOFTWARE-138`).
   Eighteen renderer-independent scenes shared with EasyGL cover flips, rotation/origin, both scale
   overloads, source rectangles, layer sorting, transforms, render targets, viewports, scissor,

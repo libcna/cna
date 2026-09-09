@@ -130,6 +130,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param count Number of elements to retrieve.
          * @return Vector of boolean values.
+         * @throws System::ArgumentOutOfRangeException If @p count is not positive.
          */
         [[nodiscard]] std::vector<bool> GetValueBooleanArray(int count) const;
 
@@ -145,6 +146,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param count Number of elements to retrieve.
          * @return Vector of integer values.
+         * @throws System::ArgumentOutOfRangeException If @p count is not positive.
          */
         [[nodiscard]] std::vector<int> GetValueInt32Array(int count) const;
 
@@ -160,6 +162,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param count Number of elements to retrieve.
          * @return Vector of float values.
+         * @throws System::ArgumentOutOfRangeException If @p count is not positive.
          */
         [[nodiscard]] std::vector<float> GetValueSingleArray(int count) const;
 
@@ -184,6 +187,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param count Number of matrices to retrieve.
          * @return Vector of Matrix values.
+         * @throws System::ArgumentOutOfRangeException If @p count is not positive.
          */
         [[nodiscard]] std::vector<Matrix> GetValueMatrixArray(int count) const;
 
@@ -199,6 +203,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param count Number of matrices to retrieve.
          * @return Vector of transposed Matrix values.
+         * @throws System::ArgumentOutOfRangeException If @p count is not positive.
          */
         [[nodiscard]] std::vector<Matrix> GetValueMatrixTransposeArray(int count) const;
 
@@ -214,6 +219,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param count Number of quaternions to retrieve.
          * @return Vector of Quaternion values.
+         * @throws System::ArgumentOutOfRangeException If @p count is not positive.
          */
         [[nodiscard]] std::vector<Quaternion> GetValueQuaternionArray(int count) const;
 
@@ -229,6 +235,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param count Number of elements to retrieve.
          * @return Vector of Vector2 values.
+         * @throws System::ArgumentOutOfRangeException If @p count is not positive.
          */
         [[nodiscard]] std::vector<Vector2> GetValueVector2Array(int count) const;
 
@@ -244,6 +251,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param count Number of elements to retrieve.
          * @return Vector of Vector3 values.
+         * @throws System::ArgumentOutOfRangeException If @p count is not positive.
          */
         [[nodiscard]] std::vector<Vector3> GetValueVector3Array(int count) const;
 
@@ -259,6 +267,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param count Number of elements to retrieve.
          * @return Vector of Vector4 values.
+         * @throws System::ArgumentOutOfRangeException If @p count is not positive.
          */
         [[nodiscard]] std::vector<Vector4> GetValueVector4Array(int count) const;
 

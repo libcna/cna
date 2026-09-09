@@ -5,6 +5,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidCastException.hpp"
 
 #include <algorithm>
@@ -36,6 +37,12 @@ namespace
         }
         std::memcpy(bytes.data() + offset, &value, sizeof(T));
         return true;
+    }
+
+    void RequirePositiveArrayCount(int count)
+    {
+        if (count <= 0)
+            throw System::ArgumentOutOfRangeException();
     }
 }
 
@@ -139,6 +146,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     std::vector<bool> EffectParameter::GetValueBooleanArray(int count) const
     {
+        RequirePositiveArrayCount(count);
         RequireNumericParameter("GetValueBooleanArray");
         if (compiledStorage_)
         {
@@ -169,6 +177,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     std::vector<int> EffectParameter::GetValueInt32Array(int count) const
     {
+        RequirePositiveArrayCount(count);
         RequireNumericParameter("GetValueInt32Array");
         if (compiledStorage_)
         {
@@ -198,6 +207,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     std::vector<float> EffectParameter::GetValueSingleArray(int count) const
     {
+        RequirePositiveArrayCount(count);
         RequireNumericParameter("GetValueSingleArray");
         if (compiledStorage_)
         {
@@ -296,6 +306,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     std::vector<Matrix> EffectParameter::GetValueMatrixArray(int count) const
     {
+        RequirePositiveArrayCount(count);
         RequireNumericParameter("GetValueMatrixArray");
         if (compiledStorage_)
         {
@@ -332,6 +343,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     std::vector<Matrix> EffectParameter::GetValueMatrixTransposeArray(int count) const
     {
+        RequirePositiveArrayCount(count);
         RequireNumericParameter("GetValueMatrixTransposeArray");
         if (compiledStorage_)
         {
@@ -368,6 +380,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     std::vector<Quaternion> EffectParameter::GetValueQuaternionArray(int count) const
     {
+        RequirePositiveArrayCount(count);
         RequireNumericParameter("GetValueQuaternionArray");
         if (compiledStorage_)
         {
@@ -404,6 +417,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     std::vector<Vector2> EffectParameter::GetValueVector2Array(int count) const
     {
+        RequirePositiveArrayCount(count);
         RequireNumericParameter("GetValueVector2Array");
         if (compiledStorage_)
         {
@@ -436,6 +450,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     std::vector<Vector3> EffectParameter::GetValueVector3Array(int count) const
     {
+        RequirePositiveArrayCount(count);
         RequireNumericParameter("GetValueVector3Array");
         if (compiledStorage_)
         {
@@ -470,6 +485,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     std::vector<Vector4> EffectParameter::GetValueVector4Array(int count) const
     {
+        RequirePositiveArrayCount(count);
         RequireNumericParameter("GetValueVector4Array");
         if (compiledStorage_)
         {
