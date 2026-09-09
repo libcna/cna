@@ -104,6 +104,21 @@ TEST_F(VertexBufferBindingValidationTest, NegativeVertexOffsetThrowsArgumentOutO
         System::ArgumentOutOfRangeException);
 }
 
+TEST_F(VertexBufferBindingValidationTest, LastVertexOffsetIsAccepted)
+{
+    EXPECT_NO_THROW(VertexBufferBinding(vertexBuffer(), 15, 0));
+}
+
+TEST_F(VertexBufferBindingValidationTest, VertexOffsetAtOrBeyondVertexCountThrows)
+{
+    EXPECT_THROW(
+        VertexBufferBinding(vertexBuffer(), 16, 0),
+        System::ArgumentOutOfRangeException);
+    EXPECT_THROW(
+        VertexBufferBinding(vertexBuffer(), 17, 0),
+        System::ArgumentOutOfRangeException);
+}
+
 TEST_F(VertexBufferBindingValidationTest, NegativeInstanceFrequencyThrowsArgumentOutOfRangeException)
 {
     EXPECT_THROW(
