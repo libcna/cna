@@ -59,6 +59,9 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param vertexCount       Number of vertices the buffer can hold.
          * @param bufferUsage       Usage hint.
          * @throws System::ArgumentOutOfRangeException if @p vertexCount is not positive.
+         * @throws System::ObjectDisposedException if @p vertexDeclaration is disposed.
+         * @throws System::ArgumentException if a usage index is outside the XNA device range.
+         * @throws System::NotSupportedException if the declaration exceeds the active profile.
          */
         VertexBuffer(GraphicsDevice& device,
                      const VertexDeclaration& vertexDeclaration,
@@ -556,6 +559,11 @@ namespace Microsoft::Xna::Framework::Graphics
         void Dispose(bool disposing) override;
 
     private:
+        static std::unique_ptr<CNA::Internal::Renderers::IVertexBufferRenderer>
+        CreateRenderer(GraphicsDevice& device,
+                       const VertexDeclaration& vertexDeclaration,
+                       int vertexCount);
+
         [[nodiscard]] bool ValidateSetDataRange(const void* data,
                                                 int startIndex,
                                                 int elementCount,

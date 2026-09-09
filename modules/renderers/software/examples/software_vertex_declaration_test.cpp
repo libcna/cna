@@ -277,6 +277,9 @@ public:
     VertexDeclarationFormatContractTest()
     {
         manager_ = std::make_unique<GraphicsDeviceManager>(this);
+        // HalfVector2/HalfVector4 vertex inputs are XNA HiDef formats. This exhaustive format
+        // contract intentionally exercises them, so request the profile that owns them.
+        manager_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
     }
 
     int Result() const { return failed_ == 0 ? 0 : 1; }

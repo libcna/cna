@@ -8,6 +8,8 @@
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/NotSupportedException.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -149,5 +151,50 @@ namespace Microsoft::Xna::Framework::Graphics
         if (elements_.empty())
             throw System::ArgumentNullException("elements");
         Validate(vertexStride_, elements_);
+    }
+
+    void VertexDeclaration::ValidateForProfile(GraphicsProfile graphicsProfile) const
+    {
+        if (getIsDisposedProperty())
+            throw System::ObjectDisposedException("VertexDeclaration");
+
+        // The public XNA constructors cannot create an empty declaration. CNA's marked extension
+        // default constructor exists solely for legacy extension buffers whose renderer-side
+        // declaration is supplied later, so preserve that deliberately separate path.
+        if (vertexStride_ == 0 && elements_.empty())
+            return;
+
+        if (vertexStride_ > 255)
+        {
+            throw System::NotSupportedException(
+                "The vertex stride exceeds the active graphics profile limit of 255 bytes.");
+        }
+        if (elements_.size() > 16)
+        {
+            throw System::NotSupportedException(
+                "The vertex declaration exceeds the active graphics profile limit of 16 elements.");
+        }
+
+        const int maximumFormat = graphicsProfile == GraphicsProfile::HiDef
+            ? static_cast<int>(VertexElementFormat::HalfVector4)
+            : static_cast<int>(VertexElementFormat::NormalizedShort4);
+        for (const VertexElement& element : elements_)
+        {
+            const int format = static_cast<int>(element.getVertexElementFormatProperty());
+            if (format < static_cast<int>(VertexElementFormat::Single) ||
+                format > maximumFormat)
+            {
+                throw System::NotSupportedException(
+                    "The vertex element format is not supported by the active graphics profile.");
+            }
+
+            const int usageIndex = element.getUsageIndexProperty();
+            if (usageIndex < 0 || usageIndex >= 16)
+            {
+                throw System::ArgumentException(
+                    "Vertex element usage indices must be between zero and fifteen.",
+                    "vertexElements");
+            }
+        }
     }
 }

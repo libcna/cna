@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "CNA/CNAHelper.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsResource.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 
@@ -86,6 +87,11 @@ namespace Microsoft::Xna::Framework::Graphics
         }
 
     private:
+        friend class GraphicsDevice;
+        friend class VertexBuffer;
+
+        void ValidateForProfile(GraphicsProfile graphicsProfile) const;
+
         int vertexStride_ = 0;
         std::vector<VertexElement> elements_;
     };

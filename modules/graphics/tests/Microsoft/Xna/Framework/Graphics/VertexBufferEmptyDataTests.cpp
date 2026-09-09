@@ -45,6 +45,7 @@ using namespace CNA::Testing::Renderers;
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 // plans/plan_runtimerenderer.md RTR-P9-9: this file's EasyGL block needs that renderer's own headers, so
@@ -492,10 +493,10 @@ TEST_F(VertexBufferEmptyDataTest, EmptyRangePreservesPublicValidationOrdering)
                 0, static_cast<VertexElementFormat>(12),
                 VertexElementUsage::Position, 0),
         });
-    VertexBuffer incompatibleBuffer(device, incompatible, 1, BufferUsage::None);
-    EXPECT_THROW(incompatibleBuffer.SetData(
-                     static_cast<const VertexPositionColor*>(nullptr), 0),
-                 System::ArgumentException);
+    // Profile-dependent declaration compatibility is a bind-time rule in XNA. It therefore
+    // wins before either allocation or the later empty SetData range validation can occur.
+    EXPECT_THROW((VertexBuffer(device, incompatible, 1, BufferUsage::None)),
+                 System::NotSupportedException);
 }
 
 TEST_F(VertexBufferEmptyDataTest, DisposedBuffersRejectEmptyUploadsBeforeNoOp)

@@ -1956,6 +1956,7 @@ namespace Microsoft::Xna::Framework::Graphics
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
+        vertexDeclaration.ValidateForProfile(graphicsProfile_);
         const int stride = ValidateUserVertexDeclaration(vertexDeclaration);
         const int n      = ValidateUserPrimitiveArguments(
             vertexData, vertexOffset, type, primitiveCount, stride);
@@ -1989,6 +1990,7 @@ namespace Microsoft::Xna::Framework::Graphics
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
+        vertexDeclaration.ValidateForProfile(graphicsProfile_);
         const int stride = ValidateUserVertexDeclaration(vertexDeclaration);
         if (stride != CNA::Internal::Graphics::VertexStreamStride<VertexT>)
         {
@@ -2348,6 +2350,7 @@ namespace Microsoft::Xna::Framework::Graphics
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
+        vd.ValidateForProfile(graphicsProfile_);
         const int stride = ValidateUserVertexDeclaration(vd);
         const int ic     = ValidateUserIndexedArguments(
             vertexData, vOffset, numVerts, indexData, iOffset, type, primCount, stride,
@@ -2381,6 +2384,7 @@ namespace Microsoft::Xna::Framework::Graphics
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
+        vd.ValidateForProfile(graphicsProfile_);
         const int stride = ValidateUserVertexDeclaration(vd);
         const int ic     = ValidateUserIndexedArguments(
             vertexData, vOffset, numVerts, indexData, iOffset, type, primCount, stride,
@@ -2420,6 +2424,7 @@ namespace Microsoft::Xna::Framework::Graphics
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
+        vertexDeclaration.ValidateForProfile(graphicsProfile_);
         const int stride = ValidateUserVertexDeclaration(vertexDeclaration);
         if (stride != CNA::Internal::Graphics::VertexStreamStride<VertexT>)
         {

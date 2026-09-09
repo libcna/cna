@@ -23,6 +23,9 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param vertexCount       Capacity in vertices.
          * @param bufferUsage       Usage hint for the buffer.
          * @throws System::ArgumentOutOfRangeException if @p vertexCount is not positive.
+         * @throws System::ObjectDisposedException if @p vertexDeclaration is disposed.
+         * @throws System::ArgumentException if a usage index is outside the XNA device range.
+         * @throws System::NotSupportedException if the declaration exceeds the active profile.
          */
         DynamicVertexBuffer(GraphicsDevice& device,
                             const VertexDeclaration& vertexDeclaration,

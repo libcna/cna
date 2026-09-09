@@ -20,18 +20,6 @@ namespace Microsoft::Xna::Framework::Graphics
 {
     namespace
     {
-        std::unique_ptr<CNA::Internal::Renderers::IVertexBufferRenderer>
-        CreateVertexBufferRenderer(GraphicsDevice& device, int vertexCount)
-        {
-            if (vertexCount <= 0)
-            {
-                throw System::ArgumentOutOfRangeException(
-                    "vertexCount", std::to_string(vertexCount),
-                    "The vertex count must be greater than zero.");
-            }
-            return device.GetRenderer().CreateVertexBuffer(vertexCount);
-        }
-
         std::size_t CheckedByteCount(int elementCount,
                                      std::size_t elementSize,
                                      const char* parameterName)
@@ -114,11 +102,26 @@ namespace Microsoft::Xna::Framework::Graphics
                                BufferUsage bufferUsage,
                                bool /*dynamic*/)
         : GraphicsResource(&device)
-        , renderer_(CreateVertexBufferRenderer(device, vertexCount))
+        , renderer_(CreateRenderer(device, vertexDeclaration, vertexCount))
         , vertexDeclaration_(vertexDeclaration)
         , bufferUsage_(bufferUsage)
         , vertexCount_(vertexCount)
     {
+    }
+
+    std::unique_ptr<CNA::Internal::Renderers::IVertexBufferRenderer>
+    VertexBuffer::CreateRenderer(GraphicsDevice& device,
+                                 const VertexDeclaration& vertexDeclaration,
+                                 int vertexCount)
+    {
+        if (vertexCount <= 0)
+        {
+            throw System::ArgumentOutOfRangeException(
+                "vertexCount", std::to_string(vertexCount),
+                "The vertex count must be greater than zero.");
+        }
+        vertexDeclaration.ValidateForProfile(device.getGraphicsProfileProperty());
+        return device.GetRenderer().CreateVertexBuffer(vertexCount);
     }
 
     VertexBuffer::~VertexBuffer() = default;
