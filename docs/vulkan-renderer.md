@@ -73,10 +73,11 @@ Two entries need their sentence rather than a cell:
 
 ### Compute, storage buffers and storage textures
 
-`MOD-2241`–`MOD-2242`. **Test:** `Vulkan_ComputeStorageBuffer` — raw SPIR-V compute bytecode runs on
+`MOD-2229`/`MOD-2241`–`MOD-2242`. **Test:** `Vulkan_ComputeStorageBuffer` — raw SPIR-V compute bytecode runs on
 the renderer’s existing graphics/compute queue. Internal reflection builds descriptor set 0 from
 the storage-buffer and format-qualified storage-image bindings the module actually declares,
-including sparse slot numbers; there is no public descriptor API and no fixed four-slot layout.
+including sparse slot numbers; there is no public native descriptor-set API and no fixed four-slot
+layout.
 Image reflection accepts only set-0, non-arrayed, single-sample `image2D` declarations and retains
 their SPIR-V format plus `NonReadable`/`NonWritable` access contract. Named signed-int32 and float32
 members of a SPIR-V push-constant `Block` map to `ComputeShader::setUniform`, with names, offsets,
@@ -92,6 +93,17 @@ nothing further and that the live counts return to their baseline. Invalid or na
 bytecode, a missing or
 undeclared slot, an unknown/mistyped scalar, an access mismatch and unsupported descriptor shapes
 all fail explicitly instead of becoming a silent no-op or a validation error.
+
+`StorageBufferDescriptor` declares storage, transfer-source/destination, indirect, vertex and
+index roles separately from CPU read/write intent. Vulkan translates only the requested roles to
+`VkBufferUsageFlags`. A CPU-none buffer requests device-local memory and is never mapped; direct
+`setBytes`/`getBytes` therefore refuse it. Exact range copies allow a CPU-writable transfer source
+to initialize it and a CPU-readable transfer destination to retrieve it without exposing a native
+buffer or mapping. The same oracle now passes 15/15 on RADV and llvmpipe: it checks the exact six
+native usage bits, mapped/unmapped allocation policy, a 17-byte unaligned ranged copy through a
+GPU-only buffer, a 256-float compute result copied back through staging, overflow-safe refusals and
+zero new validation messages. The size-only constructor retains its former implicit storage,
+two-way transfer, indirect and CPU read/write behavior.
 
 `MOD-2228` adds `ComputeShader::bindStorageTexture` without changing the legacy
 `bindImage(Texture2D&)` contract. Vulkan currently allocates only exact `SurfaceFormat::Color` /

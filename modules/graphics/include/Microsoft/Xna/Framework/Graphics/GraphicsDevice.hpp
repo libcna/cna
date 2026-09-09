@@ -54,6 +54,7 @@ namespace CNA::Internal
 {
     class Texture2DArrayGraphicsDeviceTestPeer;
     class StorageTexture2DGraphicsDeviceTestPeer;
+    class StorageBufferGraphicsDeviceTestPeer;
 }
 
 namespace Microsoft::Xna::Framework
@@ -450,7 +451,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param argumentBuffer     The buffer holding the arguments.
          * @param argumentByteOffset Where in it they start, in bytes. Must be a multiple of 4.
          * @throws System::NotSupportedException If the renderer does not report
-         *         `CNA::GraphicsCapability::IndirectDraw`, naming it.
+         *         `CNA::GraphicsCapability::IndirectDraw`, naming it, or if the buffer lacks the
+         *         declared indirect-argument usage.
          * @throws std::runtime_error If no vertex buffer or no effect is bound.
          * @throws System::ArgumentOutOfRangeException If @p argumentByteOffset is negative, not a
          *         multiple of 4, or leaves no room for the arguments in @p argumentBuffer.
@@ -467,7 +469,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param argumentBuffer     The buffer holding a `CNA::IndirectDrawIndexedArguments`.
          * @param argumentByteOffset Where in it they start, in bytes. Must be a multiple of 4.
          * @throws System::NotSupportedException If the renderer does not report
-         *         `CNA::GraphicsCapability::IndirectDraw`, naming it.
+         *         `CNA::GraphicsCapability::IndirectDraw`, naming it, or if the buffer lacks the
+         *         declared indirect-argument usage.
          * @throws std::runtime_error If no vertex buffer, index buffer or effect is bound.
          * @throws System::ArgumentOutOfRangeException If @p argumentByteOffset is negative, not a
          *         multiple of 4, or leaves no room for the arguments in @p argumentBuffer.
@@ -1651,5 +1654,6 @@ namespace Microsoft::Xna::Framework::Graphics
         friend class Microsoft::Xna::Framework::Content::ContentReader;
         friend class CNA::Internal::Texture2DArrayGraphicsDeviceTestPeer;
         friend class CNA::Internal::StorageTexture2DGraphicsDeviceTestPeer;
+        friend class CNA::Internal::StorageBufferGraphicsDeviceTestPeer;
     };
 }

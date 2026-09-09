@@ -44,7 +44,7 @@ need content, audio, media, storage or the engine extension module.
 | `CNA::Internal::Renderers::ShaderDialectEXT` and `GraphicsDevice::GetShaderDialectEXT` | `modules/graphics` | Existing renderer payload hint (`Unknown`, GLSL families, HLSL, MSL, WGSL, SPIR-V). It has no shader stage, owning bytes or variant-selection contract. |
 | `Microsoft::Xna::Framework::Graphics::ShaderEffect` | `modules/graphics` | Existing CNAEXT vertex/fragment payload object. Its two string payloads remain renderer-specific. |
 | `CNA::Graphics::ComputeShader` | `modules/graphics-ext` | Existing CNAEXT compute object with renderer-specific string source, scalar setters, buffer/texture/image binding, dispatch and a caller-visible barrier method. |
-| `CNA::Graphics::StorageBuffer`, `StorageBufferT<T>` | `modules/graphics-ext` | Existing compute-gated byte buffer and typed wrapper. No declared usage, CPU-access intent, range transfer or `GraphicsResource` tracking. |
+| `CNA::Graphics::StorageBufferDescriptor`, `StorageBuffer`, `StorageBufferT<T>` | `modules/graphics-ext` | Compute-gated tracked byte buffer and typed wrapper with immutable GPU roles, direct CPU-access intent, exact range transfer and GPU-side copy. The size-only constructor preserves its compatible legacy contract. |
 | `CNA::Graphics::GpuTimer` | `modules/graphics-ext` | Existing nonblocking timer wrapper; EasyGL implements it, Vulkan/OpenGL4 do not at this baseline. |
 | `CNA::GraphicsImageAccess` | `modules/graphics` | Three image-access values used by `ComputeShader::bindImage(Texture2D&)`. |
 | `CNA::GraphicsMemoryBarrier` and its bit operators | `modules/graphics` | Portable-looking caller barrier mask. Phase 22 replaces the need for callers to drive normal correctness with renderer-owned usage transitions. |
@@ -52,10 +52,10 @@ need content, audio, media, storage or the engine extension module.
 | `GraphicsDevice::DrawPrimitivesIndirectEXT`, `DrawIndexedPrimitivesIndirectEXT` | `modules/graphics` | Existing indirect public routes backed by a `StorageBuffer`; EasyGL implements them, Vulkan/OpenGL4 refuse. |
 | `CNA::DisplayColorSpace` and device queries | `modules/graphics` | Existing sRGB/scRGB/HDR10 vocabulary; all measured renderers still expose only sRGB presentation. |
 
-There is no public `ShaderCodeEXT`, `ShaderPackageEXT`, `StorageTexture2D`,
-constant buffer, independently creatable indirect-argument buffer, resource usage/access
-descriptor, fence or native image/buffer/view type. Those names must therefore extend the surface
-above rather than duplicate a hidden implementation.
+There is no public `ShaderCodeEXT`, `ShaderPackageEXT`, constant buffer, independently creatable
+indirect-argument buffer, fence or native image/buffer/view type. The new texture-array,
+storage-texture and storage-buffer descriptors remain portable value types; those remaining names
+must extend the surface above rather than duplicate a hidden implementation.
 
 ## Phase-22-relevant renderer virtuals and their shared defaults
 
@@ -71,7 +71,7 @@ reuse or must deliberately supersede. A default is not evidence of backend suppo
 | `CreateRenderTarget2DEXT`, `CreateRenderTargetCubeEXT` | Forward to the Color-era factory and discard the explicit format. |
 | `SupportsHalfFloatTextureLinearFilteringEXT` | `false`. |
 | `CreateEffectRenderer` | `nullptr`. |
-| `CreateComputeShader`, `CreateStorageBuffer` | `nullptr`. |
+| `CreateComputeShader`, `CreateStorageBuffer`, `CreateStorageBufferEXT` | `nullptr`; the descriptor factory is separately false by default. |
 | `DispatchCompute`, `MemoryBarrierEXT` | No-op. Public wrappers must gate support before reaching these defaults. |
 | `ExecutesShaderEffectSourceEXT`, `SupportsShadowSamplingEXT`, `SupportsImageBasedLightingEXT` | `false`. |
 | `SupportsComputeShadersEXT`, `SupportsIndirectDrawEXT`, `SupportsComputeImageBindingEXT`, `SupportsTexture3DSamplingEXT` | `false`. |
@@ -216,7 +216,7 @@ tree, not about native API potential.
 | MOD-2226 | Supplied | Exact layer/mip/rectangle upload and readback validate native-format bytes and compressed blocks before dispatch. `ShaderEffect` array binding retains only the internal record and refuses unsupported renderers; Vulkan samples bindings 16..18. |
 | MOD-2227 | Supplied | Immutable `StorageTexture2DDescriptor`, declared storage/sampling/transfer usage and tracked `StorageTexture2D` validate live limits plus combined format facts before a false-by-default renderer factory; exact mip/rectangle transfers expose no native handle or barrier. |
 | MOD-2228 | Supplied | `ComputeShader::bindStorageTexture` validates explicit access/device/lifetime and forwards the retained internal record through a false-by-default renderer seam. Vulkan reflects exact SPIR-V image slot/format/access metadata; the live oracle proves compute write to byte-exact readback and a sampled draw. |
-| MOD-2229 | Partial | Basic compute-gated `StorageBuffer` exists without usage/access intent, ranges, staging policy or resource tracking. |
+| MOD-2229 | Supplied | Immutable usage/CPU-access descriptors, tracked lifetime, overflow-safe ranges and GPU copies are public. Vulkan allocates exact role flags, keeps CPU-none memory unmapped and proves staging-through-copy on two devices. |
 | MOD-2230 | Absent | No typed constant-buffer wrapper or binding. |
 | MOD-2231 | Partial | Canonical argument structs and indirect draw calls exist, but argument storage cannot be created independently of compute support. |
 | MOD-2232 | Partial | Indirect layouts contain `BaseInstance`; no capability-gated direct base-instance draw extension exists. |

@@ -265,8 +265,72 @@ namespace CNA::Internal::Renderers
          */
         virtual void GetData(void* out, std::size_t byteSize) const = 0;
 
+        /**
+         * @brief Uploads bytes into an exact buffer range.
+         * @param byteOffset First destination byte.
+         * @param data Source bytes.
+         * @param byteSize Number of bytes to upload.
+         * @return True when the complete range was accepted.
+         */
+        virtual bool SetDataRangeEXT(
+            std::size_t byteOffset, const void* data, std::size_t byteSize)
+        {
+            if (byteOffset != 0) return false;
+            SetData(data, byteSize);
+            return true;
+        }
+
+        /**
+         * @brief Reads bytes from an exact buffer range.
+         * @param byteOffset First source byte.
+         * @param out Destination bytes.
+         * @param byteSize Number of bytes to read.
+         * @return True when the complete range was accepted.
+         */
+        virtual bool GetDataRangeEXT(
+            std::size_t byteOffset, void* out, std::size_t byteSize) const
+        {
+            if (byteOffset != 0) return false;
+            GetData(out, byteSize);
+            return true;
+        }
+
+        /**
+         * @brief Copies bytes to another renderer-side storage buffer.
+         * @param destination Destination buffer record.
+         * @param sourceByteOffset First source byte.
+         * @param destinationByteOffset First destination byte.
+         * @param byteSize Number of bytes to copy.
+         * @return True when the complete GPU-side copy was accepted.
+         */
+        virtual bool CopyToEXT(
+            IStorageBufferRenderer& /*destination*/, std::size_t /*sourceByteOffset*/,
+            std::size_t /*destinationByteOffset*/, std::size_t /*byteSize*/)
+        {
+            return false;
+        }
+
         /** @brief Returns the buffer's size in bytes. */
         [[nodiscard]] virtual std::size_t GetByteSize() const = 0;
+
+        /**
+         * @brief Returns the immutable portable usage mask.
+         * @return Raw `CNA::Graphics::StorageBufferUsage` bits.
+         */
+        [[nodiscard]] virtual std::uint32_t GetUsageEXT() const
+        {
+            // Compatible pre-descriptor behavior: storage, two-way transfer and indirect use.
+            return UINT32_C(0x0F);
+        }
+
+        /**
+         * @brief Returns the immutable portable direct CPU-access mask.
+         * @return Raw `CNA::Graphics::StorageBufferCpuAccess` bits.
+         */
+        [[nodiscard]] virtual std::uint32_t GetCpuAccessEXT() const
+        {
+            return UINT32_C(0x03);
+        }
     };
 
     /**
@@ -2534,6 +2598,24 @@ namespace CNA::Internal::Renderers
         /// Creates a storage buffer of @p byteSize bytes, or null where unsupported.
         virtual std::unique_ptr<IStorageBufferRenderer> CreateStorageBuffer(
             std::size_t /*byteSize*/)
+        {
+            return nullptr;
+        }
+
+        /**
+         * @brief Creates a buffer with exact portable usage and direct CPU-access intent.
+         *
+         * This separate null default prevents an older renderer from accepting roles its native
+         * allocation did not declare. The compatible constructor continues through the factory
+         * above.
+         *
+         * @param byteSize Positive allocation size.
+         * @param usage Raw `CNA::Graphics::StorageBufferUsage` bits.
+         * @param cpuAccess Raw `CNA::Graphics::StorageBufferCpuAccess` bits.
+         * @return Renderer-side buffer record, or null when unsupported.
+         */
+        virtual std::unique_ptr<IStorageBufferRenderer> CreateStorageBufferEXT(
+            std::size_t /*byteSize*/, std::uint32_t /*usage*/, std::uint32_t /*cpuAccess*/)
         {
             return nullptr;
         }

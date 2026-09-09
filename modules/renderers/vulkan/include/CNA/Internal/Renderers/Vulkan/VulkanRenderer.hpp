@@ -1331,23 +1331,21 @@ namespace CNA::Internal::Renderers::Vulkan
     // VulkanStorageBufferRenderer / VulkanComputeShaderRenderer
     // -------------------------------------------------------------------------
 
-    /**
-     * @brief Host-visible Vulkan storage buffer used by the CNAEXT compute contract.
-     *
-     * plans/plan_modern.md MOD-2241. The first Vulkan compute slice deliberately makes requested
-     * CPU readback synchronous. Its memory is host coherent, while the dispatch command records
-     * the host-to-compute and compute-to-host dependencies around the shader invocation.
-     */
+    /** @brief Vulkan storage buffer with immutable portable roles and CPU-access intent. */
     class VulkanStorageBufferRenderer final : public IStorageBufferRenderer
     {
     public:
         /**
-         * @brief Creates a storage buffer of @p byteSize bytes.
+         * @brief Creates a storage buffer of @p byteSize bytes with exact native usage.
          *
          * @param owner The Vulkan renderer that owns the device.
          * @param byteSize The positive buffer size.
+         * @param usage Raw `CNA::Graphics::StorageBufferUsage` bits.
+         * @param cpuAccess Raw `CNA::Graphics::StorageBufferCpuAccess` bits.
          */
-        VulkanStorageBufferRenderer(VulkanRenderer* owner, std::size_t byteSize);
+        VulkanStorageBufferRenderer(
+            VulkanRenderer* owner, std::size_t byteSize,
+            std::uint32_t usage, std::uint32_t cpuAccess);
 
         /** @brief Releases the native buffer and its memory. */
         ~VulkanStorageBufferRenderer() override;
@@ -1368,11 +1366,64 @@ namespace CNA::Internal::Renderers::Vulkan
          */
         void GetData(void* out, std::size_t byteSize) const override;
 
+        /**
+         * @brief Uploads bytes to an exact range.
+         * @param byteOffset First destination byte.
+         * @param data Source bytes.
+         * @param byteSize Number of bytes to upload.
+         * @return True when direct CPU write access is available.
+         */
+        bool SetDataRangeEXT(
+            std::size_t byteOffset, const void* data, std::size_t byteSize) override;
+
+        /**
+         * @brief Reads bytes from an exact range.
+         * @param byteOffset First source byte.
+         * @param out Destination bytes.
+         * @param byteSize Number of bytes to read.
+         * @return True when direct CPU read access is available.
+         */
+        bool GetDataRangeEXT(
+            std::size_t byteOffset, void* out, std::size_t byteSize) const override;
+
+        /**
+         * @brief Copies an exact range into another Vulkan storage buffer.
+         * @param destination Destination buffer record.
+         * @param sourceByteOffset First source byte.
+         * @param destinationByteOffset First destination byte.
+         * @param byteSize Number of bytes to copy.
+         * @return True when both records and declared transfer usages are compatible.
+         */
+        bool CopyToEXT(
+            IStorageBufferRenderer& destination, std::size_t sourceByteOffset,
+            std::size_t destinationByteOffset, std::size_t byteSize) override;
+
         /** @brief Returns the allocated byte count. */
         [[nodiscard]] std::size_t GetByteSize() const override { return byteSize_; }
 
+        /** @brief Returns the immutable portable usage bits. */
+        [[nodiscard]] std::uint32_t GetUsageEXT() const override { return usage_; }
+
+        /** @brief Returns the immutable portable direct CPU-access bits. */
+        [[nodiscard]] std::uint32_t GetCpuAccessEXT() const override { return cpuAccess_; }
+
         /** @brief Returns the native buffer bound into compute descriptor sets. */
         [[nodiscard]] VkBuffer GetBufferEXT() const noexcept { return buffer_; }
+
+        /** @brief Returns the exact native buffer-usage flags selected from the descriptor. */
+        [[nodiscard]] VkBufferUsageFlags GetVkBufferUsageEXT() const noexcept
+        {
+            return vkUsage_;
+        }
+
+        /** @brief Returns the requested native memory-property flags. */
+        [[nodiscard]] VkMemoryPropertyFlags GetVkMemoryPropertiesEXT() const noexcept
+        {
+            return memoryProperties_;
+        }
+
+        /** @brief Returns whether this buffer has a persistent CPU mapping. */
+        [[nodiscard]] bool IsMappedEXT() const noexcept { return mapped_ != nullptr; }
 
         /** @brief Returns whether this resource belongs to @p owner. */
         [[nodiscard]] bool IsOwnedByEXT(const VulkanRenderer* owner) const noexcept
@@ -1392,6 +1443,10 @@ namespace CNA::Internal::Renderers::Vulkan
         VkDeviceMemory memory_ = VK_NULL_HANDLE;
         void* mapped_ = nullptr;
         std::size_t byteSize_ = 0;
+        std::uint32_t usage_ = 0;
+        std::uint32_t cpuAccess_ = 0;
+        VkBufferUsageFlags vkUsage_ = 0;
+        VkMemoryPropertyFlags memoryProperties_ = 0;
     };
 
     /**
@@ -3327,6 +3382,17 @@ namespace CNA::Internal::Renderers::Vulkan
          */
         std::unique_ptr<IStorageBufferRenderer> CreateStorageBuffer(
             std::size_t byteSize) override;
+
+        /**
+         * @brief Creates a storage buffer with exact portable roles and CPU-access intent.
+         * @param byteSize Positive size in bytes, bounded by the selected device limit.
+         * @param usage Raw immutable storage-buffer usage mask.
+         * @param cpuAccess Raw immutable direct CPU-access mask.
+         * @return The created storage buffer, or null when the request is invalid or unsupported.
+         */
+        std::unique_ptr<IStorageBufferRenderer> CreateStorageBufferEXT(
+            std::size_t byteSize, std::uint32_t usage,
+            std::uint32_t cpuAccess) override;
 
         /**
          * @brief Dispatches a Vulkan compute program on the existing ordered graphics queue.

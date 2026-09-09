@@ -14495,26 +14495,52 @@ namespace CNA::Internal::Renderers::Vulkan
     }
 
     VulkanStorageBufferRenderer::VulkanStorageBufferRenderer(
-        VulkanRenderer* owner, const std::size_t byteSize)
+        VulkanRenderer* owner, const std::size_t byteSize,
+        const std::uint32_t usage, const std::uint32_t cpuAccess)
         : owner_(owner)
         , byteSize_(byteSize)
+        , usage_(usage)
+        , cpuAccess_(cpuAccess)
     {
+        constexpr std::uint32_t AllowedUsage = UINT32_C(0x3F);
+        constexpr std::uint32_t AllowedCpuAccess = UINT32_C(0x03);
         if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE)
             throw std::runtime_error("Vulkan storage buffer: renderer device is unavailable");
         if (byteSize_ == 0)
             throw std::invalid_argument("Vulkan storage buffer: byte size must be positive");
+        if (usage_ == 0 || (usage_ & ~AllowedUsage) != 0)
+            throw std::invalid_argument("Vulkan storage buffer: usage mask is invalid");
+        if ((cpuAccess_ & ~AllowedCpuAccess) != 0)
+            throw std::invalid_argument("Vulkan storage buffer: CPU-access mask is invalid");
         if (static_cast<VkDeviceSize>(byteSize_) >
             owner_->physicalDeviceProperties_.limits.maxStorageBufferRange)
             throw std::invalid_argument(
                 "Vulkan storage buffer: byte size exceeds maxStorageBufferRange");
 
-        owner_->CreateBuffer(
-            static_cast<VkDeviceSize>(byteSize_),
-            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
-                VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
-                VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            buffer_, memory_, &mapped_);
+        if ((usage_ & (UINT32_C(1) << 0)) != 0)
+            vkUsage_ |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+        if ((usage_ & (UINT32_C(1) << 1)) != 0)
+            vkUsage_ |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+        if ((usage_ & (UINT32_C(1) << 2)) != 0)
+            vkUsage_ |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+        if ((usage_ & (UINT32_C(1) << 3)) != 0)
+            vkUsage_ |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
+        if ((usage_ & (UINT32_C(1) << 4)) != 0)
+            vkUsage_ |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+        if ((usage_ & (UINT32_C(1) << 5)) != 0)
+            vkUsage_ |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+
+        memoryProperties_ = cpuAccess_ == 0
+            ? VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+            : VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+        try {
+            owner_->CreateBuffer(
+                static_cast<VkDeviceSize>(byteSize_), vkUsage_, memoryProperties_,
+                buffer_, memory_, cpuAccess_ == 0 ? nullptr : &mapped_);
+        } catch (...) {
+            ReleaseVulkanResources();
+            throw;
+        }
     }
 
     VulkanStorageBufferRenderer::~VulkanStorageBufferRenderer()
@@ -14531,26 +14557,97 @@ namespace CNA::Internal::Renderers::Vulkan
 
     void VulkanStorageBufferRenderer::SetData(const void* data, const std::size_t byteSize)
     {
-        if (byteSize > byteSize_)
-            throw std::invalid_argument("Vulkan storage buffer SetData exceeds its allocation");
-        if (data == nullptr && byteSize != 0)
-            throw std::invalid_argument("Vulkan storage buffer SetData source is null");
-        if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE || mapped_ == nullptr)
-            throw std::runtime_error("Vulkan storage buffer SetData after device disposal");
-        if (byteSize != 0) std::memcpy(mapped_, data, byteSize);
+        if (!SetDataRangeEXT(0, data, byteSize))
+            throw std::runtime_error(
+                "Vulkan storage buffer SetData requires declared CPU write access");
     }
 
     void VulkanStorageBufferRenderer::GetData(void* out, const std::size_t byteSize) const
     {
-        if (byteSize > byteSize_)
-            throw std::invalid_argument("Vulkan storage buffer GetData exceeds its allocation");
+        if (!GetDataRangeEXT(0, out, byteSize))
+            throw std::runtime_error(
+                "Vulkan storage buffer GetData requires declared CPU read access");
+    }
+
+    bool VulkanStorageBufferRenderer::SetDataRangeEXT(
+        const std::size_t byteOffset, const void* data, const std::size_t byteSize)
+    {
+        if (byteOffset > byteSize_ || byteSize > byteSize_ - byteOffset)
+            throw std::invalid_argument("Vulkan storage buffer SetData range exceeds allocation");
+        if (data == nullptr && byteSize != 0)
+            throw std::invalid_argument("Vulkan storage buffer SetData source is null");
+        if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE)
+            throw std::runtime_error("Vulkan storage buffer SetData after device disposal");
+        if ((cpuAccess_ & (UINT32_C(1) << 1)) == 0 || mapped_ == nullptr) return false;
+        if (byteSize != 0)
+            std::memcpy(static_cast<std::byte*>(mapped_) + byteOffset, data, byteSize);
+        return true;
+    }
+
+    bool VulkanStorageBufferRenderer::GetDataRangeEXT(
+        const std::size_t byteOffset, void* out, const std::size_t byteSize) const
+    {
+        if (byteOffset > byteSize_ || byteSize > byteSize_ - byteOffset)
+            throw std::invalid_argument("Vulkan storage buffer GetData range exceeds allocation");
         if (out == nullptr && byteSize != 0)
             throw std::invalid_argument("Vulkan storage buffer GetData destination is null");
-        if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE || mapped_ == nullptr)
+        if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE)
             throw std::runtime_error("Vulkan storage buffer GetData after device disposal");
-        // DispatchEXT completes its queue submission before returning and records a
-        // SHADER_WRITE -> HOST_READ dependency. HOST_COHERENT therefore needs no invalidate.
-        if (byteSize != 0) std::memcpy(out, mapped_, byteSize);
+        if ((cpuAccess_ & (UINT32_C(1) << 0)) == 0 || mapped_ == nullptr) return false;
+        // Every currently accepted producer submission completes before returning. Host-coherent
+        // memory therefore needs no invalidate at this transitional synchronous boundary.
+        if (byteSize != 0)
+            std::memcpy(out, static_cast<const std::byte*>(mapped_) + byteOffset, byteSize);
+        return true;
+    }
+
+    bool VulkanStorageBufferRenderer::CopyToEXT(
+        IStorageBufferRenderer& destination, const std::size_t sourceByteOffset,
+        const std::size_t destinationByteOffset, const std::size_t byteSize)
+    {
+        auto* target = dynamic_cast<VulkanStorageBufferRenderer*>(&destination);
+        if (target == nullptr || owner_ == nullptr || target->owner_ != owner_ ||
+            owner_->device_ == VK_NULL_HANDLE)
+            return false;
+        if ((usage_ & (UINT32_C(1) << 1)) == 0 ||
+            (target->usage_ & (UINT32_C(1) << 2)) == 0)
+            return false;
+        if (sourceByteOffset > byteSize_ || byteSize > byteSize_ - sourceByteOffset ||
+            destinationByteOffset > target->byteSize_ ||
+            byteSize > target->byteSize_ - destinationByteOffset)
+            throw std::invalid_argument("Vulkan storage buffer copy range exceeds allocation");
+        if (target == this && byteSize != 0 &&
+            sourceByteOffset < destinationByteOffset + byteSize &&
+            destinationByteOffset < sourceByteOffset + byteSize)
+            throw std::invalid_argument("Vulkan storage buffer copy ranges overlap");
+        if (byteSize == 0) return true;
+
+        VkCommandBuffer commandBuffer = owner_->BeginOneTimeCommands();
+        VkMemoryBarrier before{};
+        before.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+        before.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT |
+                               VK_ACCESS_HOST_WRITE_BIT;
+        before.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+        vkCmdPipelineBarrier(
+            commandBuffer,
+            VK_PIPELINE_STAGE_ALL_COMMANDS_BIT | VK_PIPELINE_STAGE_HOST_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &before, 0, nullptr, 0, nullptr);
+        VkBufferCopy region{};
+        region.srcOffset = static_cast<VkDeviceSize>(sourceByteOffset);
+        region.dstOffset = static_cast<VkDeviceSize>(destinationByteOffset);
+        region.size = static_cast<VkDeviceSize>(byteSize);
+        vkCmdCopyBuffer(commandBuffer, buffer_, target->buffer_, 1, &region);
+        VkMemoryBarrier after{};
+        after.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+        after.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        after.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT |
+                              VK_ACCESS_HOST_READ_BIT;
+        vkCmdPipelineBarrier(
+            commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_ALL_COMMANDS_BIT | VK_PIPELINE_STAGE_HOST_BIT,
+            0, 1, &after, 0, nullptr, 0, nullptr);
+        owner_->EndOneTimeCommands(commandBuffer);
+        return true;
     }
 
     void VulkanStorageBufferRenderer::ReleaseVulkanResources()
@@ -15379,7 +15476,23 @@ namespace CNA::Internal::Renderers::Vulkan
         const std::size_t byteSize)
     {
         if (!SupportsComputeShadersEXT()) return nullptr;
-        auto buffer = std::make_unique<VulkanStorageBufferRenderer>(this, byteSize);
+        constexpr std::uint32_t LegacyUsage = UINT32_C(0x0F);
+        constexpr std::uint32_t LegacyCpuAccess = UINT32_C(0x03);
+        auto buffer = std::make_unique<VulkanStorageBufferRenderer>(
+            this, byteSize, LegacyUsage, LegacyCpuAccess);
+        liveStorageBuffers_.push_back(buffer.get());
+        return buffer;
+    }
+
+    std::unique_ptr<IStorageBufferRenderer> VulkanRenderer::CreateStorageBufferEXT(
+        const std::size_t byteSize, const std::uint32_t usage,
+        const std::uint32_t cpuAccess)
+    {
+        if (!SupportsComputeShadersEXT() || byteSize == 0 || usage == 0 ||
+            (usage & ~UINT32_C(0x3F)) != 0 || (cpuAccess & ~UINT32_C(0x03)) != 0)
+            return nullptr;
+        auto buffer = std::make_unique<VulkanStorageBufferRenderer>(
+            this, byteSize, usage, cpuAccess);
         liveStorageBuffers_.push_back(buffer.get());
         return buffer;
     }

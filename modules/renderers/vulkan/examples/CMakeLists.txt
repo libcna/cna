@@ -1458,8 +1458,9 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
                 COMMAND cna_test_vulkan_texture2d_array_contract
                 TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-            # plans/plan_modern.md MOD-2241: SPIR-V compute + three storage buffers through the
-            # public CNAEXT wrappers. Every vector element and the validation stream are checked.
+            # plans/plan_modern.md MOD-2229/MOD-2241: SPIR-V compute plus descriptor-qualified
+            # storage buffers through the public CNAEXT wrappers. Every vector element, exact
+            # native usage/memory selection, staging copy and validation stream are checked.
             # MOD-2242 extends the baseline with reflected sparse slots, typed scalar push
             # constants, bounded native allocations, and destruction-time reclamation.
             cna_vulkan_test(cna_test_vulkan_compute_storage_buffer

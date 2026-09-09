@@ -14,6 +14,24 @@ something breaks.
 
 ---
 
+## Revision 7 — 2026-09-09
+
+### Immutable storage-buffer roles, ranges and tracking (`MOD-2229`)
+
+- `StorageBufferDescriptor` separates six immutable GPU roles from direct CPU read/write intent.
+  The original size-only constructor remains source-compatible and declares the storage, two-way
+  transfer, indirect and CPU read/write behavior available through the legacy public contract.
+- `StorageBuffer` is now a non-copyable, non-movable tracked `GraphicsResource`. Exact range
+  upload/readback and GPU-side copy reject pointer, access, usage, device, overlap and overflow
+  errors before renderer work; a CPU-none buffer cannot be silently mapped.
+- The renderer contract has a separate false-by-default descriptor factory. Vulkan maps every
+  declared role to the exact `VkBufferUsageFlags`, leaves CPU-none allocations unmapped and proves
+  the upload-staging → GPU-only compute/copy → readback-staging path byte-exactly. EasyGL preserves
+  the legacy constructor's new range/copy surface.
+
+The C header carries the same revision marker. Its existing storage-buffer routes retain the
+compatible constructor behavior; descriptor-specific C ABI additions remain separate binding work.
+
 ## Revision 6 — 2026-09-09
 
 ### Storage-texture compute and sampled binding (`MOD-2228`)

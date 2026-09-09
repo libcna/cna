@@ -1,14 +1,20 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_modern.md MOD-2241/MOD-2242: public Vulkan compute/storage conformance.
+// plans/plan_modern.md MOD-2229/MOD-2241/MOD-2242: public Vulkan compute/storage conformance.
 //
 // A  The selected queue, public capability, and all reported compute limits agree.
 // B  Non-SPIR-V input is rejected with a useful compile error rather than reaching the driver.
-// C  StorageBuffer's public CPU upload/readback round-trip preserves every element.
-// D  A three-SSBO SPIR-V vector add dispatch produces every expected result.
-// E  Reflected sparse SSBO slots and named int32/float32 push constants drive real output.
-// F  Unknown/mistyped names, undeclared/missing slots, and images fail explicitly.
-// G  Repeated dispatches reuse one descriptor set/layout and destruction reclaims both.
-// H  The complete exercise produces no new Vulkan validation warnings or errors.
+// D  Stripped scalar-name metadata fails before native allocation.
+// E  StorageBuffer's public CPU upload/readback round-trip preserves every element.
+// F  A three-SSBO SPIR-V vector add dispatch produces every expected result.
+// G  Unknown/mistyped names, undeclared/missing slots, and images fail explicitly.
+// H  Reflected sparse SSBO slots and named int32/float32 push constants drive real output.
+// I  Repeated dispatches reuse one descriptor set/layout and destruction reclaims both.
+// J  Descriptor and pipeline-layout destruction returns live counts to baseline.
+// K  Descriptor usage becomes exact VkBufferUsage and CPU-none memory is never mapped.
+// L  Range upload/copy/readback crosses a GPU-only buffer byte-exactly.
+// M  A GPU-only storage destination is written by compute and copied to CPU-readable staging.
+// N  Invalid access/range/overlap requests fail before native mutation.
+// O  The complete exercise produces no new Vulkan validation warnings or errors.
 
 #include "CNA/Graphics/ComputeShader.hpp"
 #include "CNA/Graphics/StorageBuffer.hpp"
@@ -17,6 +23,7 @@
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <array>
 #include <cmath>
@@ -25,14 +32,20 @@
 #include <cstdio>
 #include <cstring>
 #include <memory>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 using CNA::Graphics::ComputeShader;
+using CNA::Graphics::StorageBuffer;
+using CNA::Graphics::StorageBufferCpuAccess;
+using CNA::Graphics::StorageBufferDescriptor;
 using CNA::Graphics::StorageBufferT;
+using CNA::Graphics::StorageBufferUsage;
 using CNA::GraphicsCapability;
 using CNA::Internal::Renderers::Vulkan::VulkanRenderer;
+using CNA::Internal::Renderers::Vulkan::VulkanStorageBufferRenderer;
 using Microsoft::Xna::Framework::Game;
 using Microsoft::Xna::Framework::GameTime;
 using Microsoft::Xna::Framework::GraphicsDeviceManager;
@@ -282,7 +295,7 @@ protected:
             missingNameRejected = missingNameMessage.find("OpMemberName") != std::string::npos;
         }
         check(missingNameRejected,
-              "C stripped scalar-name metadata is refused before native object creation",
+              "D stripped scalar-name metadata is refused before native object creation",
               missingNameMessage.empty() ? "no exception" : missingNameMessage);
 
         std::vector<float> a(kElementCount);
@@ -302,7 +315,7 @@ protected:
         inputB.setData(b);
         output.setData(sentinel);
         check(inputA.getData() == a && inputB.getData() == b && output.getData() == sentinel,
-              "D public storage-buffer upload/readback preserves every input element",
+              "E public storage-buffer upload/readback preserves every input element",
               std::to_string(kElementCount) + " elements in each of three buffers");
 
         const std::size_t validationBefore = renderer->GetValidationMessagesEXT().size();
@@ -320,7 +333,7 @@ protected:
             }
         }
         check(mismatch == kElementCount,
-              "E SPIR-V dispatch computes A+B for every output element",
+              "F SPIR-V dispatch computes A+B for every output element",
               mismatch == kElementCount
                   ? std::to_string(kElementCount) + "/" +
                         std::to_string(kElementCount) + " exact"
@@ -352,7 +365,7 @@ protected:
         }
         check(slotRejected && unknownScalarRejected && missingBindingRejected &&
                   !vectorAdd.isImageBindingSupported(),
-              "F undeclared, unknown, missing, and image bindings fail explicitly",
+              "G undeclared, unknown, missing, and image bindings fail explicitly",
               "slot4=" + std::string(slotRejected ? "refused" : "accepted") +
                   " unknownScalar=" +
                   std::string(unknownScalarRejected ? "refused" : "accepted") +
@@ -428,13 +441,13 @@ protected:
         }
 
         check(scaledMismatch == kElementCount,
-              "G sparse SSBO and named scalar metadata drive exact bounded output",
+              "H sparse SSBO and named scalar metadata drive exact bounded output",
               scaledMismatch == kElementCount
                   ? std::to_string(kActiveCount) + " scaled, " +
                         std::to_string(kElementCount - kActiveCount) + " untouched"
                   : "first mismatch at " + std::to_string(scaledMismatch));
         check(allocatedExactlyOnce && countersStayedBounded && scalarTypesRejected,
-              "H repeated dispatches reuse one typed descriptor/layout snapshot",
+              "I repeated dispatches reuse one typed descriptor/layout snapshot",
               "iterations=33 setAllocations=" +
                   std::to_string(renderer->GetComputeDescriptorSetAllocationCountEXT() -
                                  baselineSetAllocations) +
@@ -445,16 +458,128 @@ protected:
                   std::string(scalarTypesRejected ? "refused" : "accepted"));
         check(renderer->GetLiveComputeDescriptorSetCountEXT() == baselineLiveSets &&
                   renderer->GetLiveComputePipelineLayoutCountEXT() == baselineLiveLayouts,
-              "I compute descriptor and pipeline-layout ownership is reclaimed",
+              "J compute descriptor and pipeline-layout ownership is reclaimed",
               "liveSets=" +
                   std::to_string(renderer->GetLiveComputeDescriptorSetCountEXT()) +
                   " liveLayouts=" +
                   std::to_string(renderer->GetLiveComputePipelineLayoutCountEXT()));
 
+        constexpr StorageBufferUsage fullUsage =
+            StorageBufferUsage::Storage |
+            StorageBufferUsage::TransferSource |
+            StorageBufferUsage::TransferDestination |
+            StorageBufferUsage::IndirectArguments |
+            StorageBufferUsage::Vertex |
+            StorageBufferUsage::Index;
+        constexpr VkBufferUsageFlags fullNativeUsage =
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+            VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
+            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
+            VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+        const std::size_t vectorBytes = kElementCount * sizeof(float);
+        StorageBuffer gpuOnly(
+            device, StorageBufferDescriptor(
+                        vectorBytes, fullUsage, StorageBufferCpuAccess::None));
+        auto* gpuNative = dynamic_cast<VulkanStorageBufferRenderer*>(gpuOnly.getRendererEXT());
+        check(gpuNative != nullptr &&
+                  gpuOnly.getDescriptor().getByteSize() == vectorBytes &&
+                  gpuOnly.getDescriptor().getUsage() == fullUsage &&
+                  gpuOnly.getDescriptor().getCpuAccess() == StorageBufferCpuAccess::None &&
+                  gpuNative->GetVkBufferUsageEXT() == fullNativeUsage &&
+                  gpuNative->GetVkMemoryPropertiesEXT() == VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT &&
+                  !gpuNative->IsMappedEXT(),
+              "K immutable usage maps to exact Vulkan flags and GPU-only memory",
+              gpuNative == nullptr
+                  ? "renderer record has the wrong type"
+                  : "vkUsage=" + std::to_string(gpuNative->GetVkBufferUsageEXT()) +
+                        " memory=" +
+                        std::to_string(gpuNative->GetVkMemoryPropertiesEXT()) +
+                        " mapped=" + (gpuNative->IsMappedEXT() ? "true" : "false"));
+
+        StorageBuffer upload(
+            device, StorageBufferDescriptor(
+                        64, StorageBufferUsage::TransferSource,
+                        StorageBufferCpuAccess::Write));
+        StorageBuffer readback(
+            device, StorageBufferDescriptor(
+                        vectorBytes, StorageBufferUsage::TransferDestination,
+                        StorageBufferCpuAccess::Read));
+        const std::array<std::uint8_t, 17> bytes = {
+            3, 17, 29, 41, 53, 67, 79, 83, 97, 101, 113, 127, 131, 149, 157, 173, 181};
+        upload.setBytes(7, bytes.data(), bytes.size());
+        upload.copyTo(gpuOnly, 7, 31, bytes.size());
+        gpuOnly.copyTo(readback, 31, 19, bytes.size());
+        std::array<std::uint8_t, 17> copied{};
+        readback.getBytes(19, copied.data(), copied.size());
+        auto* uploadNative = dynamic_cast<VulkanStorageBufferRenderer*>(upload.getRendererEXT());
+        auto* readbackNative =
+            dynamic_cast<VulkanStorageBufferRenderer*>(readback.getRendererEXT());
+        check(copied == bytes && uploadNative != nullptr && readbackNative != nullptr &&
+                  uploadNative->IsMappedEXT() && readbackNative->IsMappedEXT() &&
+                  uploadNative->GetVkBufferUsageEXT() == VK_BUFFER_USAGE_TRANSFER_SRC_BIT &&
+                  readbackNative->GetVkBufferUsageEXT() == VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+              "L ranged upload/copy/readback crosses GPU-only storage exactly",
+              std::to_string(copied.size()) + "/" + std::to_string(bytes.size()) +
+                  " exact; sourceUsage=" +
+                  std::to_string(uploadNative != nullptr
+                                     ? uploadNative->GetVkBufferUsageEXT() : 0) +
+                  " destinationUsage=" +
+                  std::to_string(readbackNative != nullptr
+                                     ? readbackNative->GetVkBufferUsageEXT() : 0));
+
+        ComputeShader gpuOnlyVectorAdd(device, VectorAddProgram());
+        gpuOnlyVectorAdd.bindStorageBuffer(0, inputA.getBuffer());
+        gpuOnlyVectorAdd.bindStorageBuffer(1, inputB.getBuffer());
+        gpuOnlyVectorAdd.bindStorageBuffer(2, gpuOnly);
+        gpuOnlyVectorAdd.dispatch(static_cast<int>(kElementCount / 64));
+        gpuOnly.copyTo(readback, 0, 0, vectorBytes);
+        std::vector<float> gpuOnlyActual(kElementCount);
+        readback.getBytes(gpuOnlyActual.data(), vectorBytes);
+        check(gpuOnlyActual == expected,
+              "M compute writes GPU-only storage before targeted readback copy",
+              std::to_string(kElementCount) + " elements");
+
+        bool gpuOnlyUploadRefused = false;
+        bool gpuOnlyReadbackRefused = false;
+        bool overflowRangeRefused = false;
+        bool missingCopyUsageRefused = false;
+        bool overlappingCopyRefused = false;
+        try { gpuOnly.setBytes(bytes.data(), bytes.size()); }
+        catch (const System::NotSupportedException&) { gpuOnlyUploadRefused = true; }
+        try { gpuOnly.getBytes(copied.data(), copied.size()); }
+        catch (const System::NotSupportedException&) { gpuOnlyReadbackRefused = true; }
+        try {
+            upload.setBytes(
+                std::numeric_limits<std::size_t>::max(), bytes.data(), bytes.size());
+        } catch (const std::invalid_argument&) { overflowRangeRefused = true; }
+        try { readback.copyTo(upload, 0, 0, 1); }
+        catch (const System::NotSupportedException&) { missingCopyUsageRefused = true; }
+        StorageBuffer overlap(
+            device, StorageBufferDescriptor(
+                        32, StorageBufferUsage::TransferSource |
+                                StorageBufferUsage::TransferDestination,
+                        StorageBufferCpuAccess::Read | StorageBufferCpuAccess::Write));
+        try { overlap.copyTo(overlap, 0, 4, 8); }
+        catch (const std::invalid_argument&) { overlappingCopyRefused = true; }
+        check(gpuOnlyUploadRefused && gpuOnlyReadbackRefused && overflowRangeRefused &&
+                  missingCopyUsageRefused && overlappingCopyRefused,
+              "N access intent and overflow-safe ranges refuse invalid operations",
+              "cpuWrite=" + std::string(gpuOnlyUploadRefused ? "refused" : "accepted") +
+                  " cpuRead=" +
+                  std::string(gpuOnlyReadbackRefused ? "refused" : "accepted") +
+                  " overflow=" +
+                  std::string(overflowRangeRefused ? "refused" : "accepted") +
+                  " usage=" +
+                  std::string(missingCopyUsageRefused ? "refused" : "accepted") +
+                  " overlap=" +
+                  std::string(overlappingCopyRefused ? "refused" : "accepted"));
+
         const std::size_t validationAfter = renderer->GetValidationMessagesEXT().size();
         check(VulkanRenderer::IsValidationActiveEXT() &&
                   validationAfter == validationBefore,
-              "J compute/storage operations add no Vulkan validation messages",
+              "O compute/storage operations add no Vulkan validation messages",
               "layer=" +
                   std::string(VulkanRenderer::IsValidationActiveEXT() ? "active" : "inactive") +
                   " before=" + std::to_string(validationBefore) +

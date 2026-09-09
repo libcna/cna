@@ -85,7 +85,10 @@ namespace CNA::Graphics {
          *
          * @param binding The binding index the shader declares; must not be negative.
          * @param buffer  The buffer.
-         * @throws std::invalid_argument If @p binding is negative.
+         * @throws std::invalid_argument If @p binding is negative or the buffer belongs to a
+         *         different graphics device.
+         * @throws System::ObjectDisposedException If @p buffer is disposed.
+         * @throws System::NotSupportedException If storage usage was not declared.
          */
         void bindStorageBuffer(int binding, StorageBuffer& buffer);
 

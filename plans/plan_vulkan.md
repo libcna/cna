@@ -234,6 +234,11 @@ implementation tasks.**
   exact compute-write → readback/sampled-draw evidence; optional extended formats, legal bridges
   from existing XNA textures/render targets and deferred-order integration remain owned by
   `MOD-2244`/`MOD-2247`–`MOD-2253` in the modern plan;
+- the renderer-neutral immutable storage-buffer descriptor, exact range transfers/copy and tracked
+  facade are complete (`MOD-2229`). Vulkan translates every declared role into exact
+  `VkBufferUsageFlags`, keeps CPU-none buffers device-local and unmapped, and has byte-exact
+  staging/compute/readback evidence. Indirect execution and integration into the deferred ordering,
+  lifetime and synchronization domain remain owned by `MOD-2245`/`MOD-2247`–`MOD-2253`;
 - ray tracing (`MOD-2096`) and mesh shaders (`MOD-2097`) — `MOD-2096`'s text names
   `plan_vulkan.md` as the place such a capability question *would* be asked; that reference does
   **not** transfer ownership, and this plan deliberately declines it as modern-GPU work;
@@ -1939,15 +1944,16 @@ re-measured it on 2026-09-06, as `VULKAN-207` re-measured it on 2026-09-07 at th
 campaign, and after `VULKAN-240`/`VULKAN-241` corrected the compressed-content omissions on
 2026-09-08, followed by the current modern-plan implementation. The movement is accounted for
 exactly at every step. The interface itself grew from 186 virtuals to 189 before the compressed
-overrides moved categories, then to 202 through the detailed format/limit contract.**
+overrides moved categories, then to 202 through the detailed format/limit contract, and to 207
+through the three portable resource facades completed by `MOD-2225`–`MOD-2229`.**
 
 | Group | 2026-09-05 | 2026-09-06 | 2026-09-07 | `VULKAN-241` | Current | Meaning |
 |---|---|---|---|---|---|---|
 | Both override | 102 | 106 | **114** | **117** | **127** | Vulkan implements what EasyGL implements. |
 | **EasyGL overrides, Vulkan does not** | **54** | **50** | **44** | **41** | **31** | The live survivor set — table A.1. |
-| Vulkan overrides, EasyGL does not | 3 | 7 | **8** | **8** | **23** | Renderer-specific answers and modern rollout queries. |
+| Vulkan overrides, EasyGL does not | 3 | 7 | **8** | **8** | **28** | Renderer-specific answers and modern rollout queries. |
 | Neither overrides | 27 | 23 | **23** | **23** | **21** | Both take the shared default, so there is no Vulkan-specific divergence. |
-| *total virtuals* | *186* | *186* | ***189*** | ***189*** | ***202*** | |
+| *total virtuals* | *186* | *186* | ***189*** | ***189*** | ***207*** | |
 
 **The 2026-09-05 → 2026-09-06 movement** was four virtuals: `IEffectRenderer`'s array uniform
 setters, which `VULKAN-265` made Vulkan override — to **refuse**, which counts as implementing the
@@ -1989,7 +1995,11 @@ tool reports **202 / 127 both / 31 EasyGL-only / 23 Vulkan-only / 21 neither**. 
 format/limit virtuals account for the larger interface; ten former EasyGL-only compute/float-target
 virtuals are now implemented by both renderers; and `GetMaxVertexStreams` plus
 `GetMaxTextureDimension` moved from neither to Vulkan-only. The classic verdict's ownership has not
-changed, but its appendix now states the live source count.
+changed. `MOD-2225`–`MOD-2229` subsequently added five false-by-default facade/binding virtuals:
+`CreateTexture2DArrayEXT`, `IEffectRenderer::BindTexture2DArrayEXT`,
+`CreateStorageTexture2DEXT`, `IEffectRenderer::BindStorageTexture2DEXT` and
+`CreateStorageBufferEXT`. Vulkan implements all five while EasyGL keeps the honest default, so the
+live tool output is now **207 / 127 both / 31 EasyGL-only / 28 Vulkan-only / 21 neither**.
 
 **The finding, as `VULKAN-027` wrote it against the 54.** Of the 54, exactly **one family is a real defect**: the four array uniform setters
 of `IEffectRenderer` are silently ignored on Vulkan while EasyGL implements them. The gap itself was
@@ -2046,7 +2056,7 @@ deleting the row would leave the count smaller with no account of why.
 | `IGraphicsRenderer` | `SupportsShadowSamplingEXT` | default | `return false` | CNAEXT_OUT_OF_SCOPE | Honest absence. |
 | `IGraphicsRenderer` | `SupportsImageBasedLightingEXT` | default | `return false` | CNAEXT_OUT_OF_SCOPE | Honest absence. |
 | `IGraphicsRenderer` | `SupportsComputeShadersEXT` | default | `return false` | ~~CNAEXT_OUT_OF_SCOPE~~ → **NO LONGER IN A.1** | `MOD-2240`/`MOD-2242` answer from the selected queue family, implemented resource path and device limits. |
-| `IGraphicsRenderer` | `SupportsIndirectDrawEXT` | default | `return false` | UNSUPPORTED_HONEST | Honest absence, observed by `VULKAN-470`: `DrawPrimitivesIndirectEXT` takes its argument buffer by reference and `CreateStorageBuffer` returns null, so there is nothing to hand it. |
+| `IGraphicsRenderer` | `SupportsIndirectDrawEXT` | default | `return false` | UNSUPPORTED_HONEST | Honest absence, observed by `VULKAN-470`. Storage buffers are now constructible (`MOD-2241`/`MOD-2229`), but `GraphicsDevice` checks this capability before either indirect renderer virtual, so Vulkan refuses explicitly until `MOD-2245` supplies native execution. |
 | `IGraphicsRenderer` | `SupportsComputeImageBindingEXT` | default | `return false` | CNAEXT_OUT_OF_SCOPE | Honest absence. |
 | `IGraphicsRenderer` | `GetMaxVertexShaderStorageBlocksEXT` | default | `return 0` | CNAEXT_OUT_OF_SCOPE | Consistent with no storage buffers. |
 | `IGraphicsRenderer` | `BindStorageBufferForDrawEXT` | default | no-op | CNAEXT_OUT_OF_SCOPE | Unreachable without a storage buffer. |
@@ -2056,7 +2066,7 @@ deleting the row would leave the count smaller with no account of why.
 | `IGraphicsRenderer` | `GetMaxComputeWorkGroupSizeEXT` | default | `return 0` | ~~CNAEXT_OUT_OF_SCOPE~~ → **NO LONGER IN A.1** | `MOD-2240` publishes the selected device's three-dimensional local-size limits. |
 | `IGraphicsRenderer` | `GetMaxComputeWorkGroupInvocationsEXT` | default | `return 0` | ~~CNAEXT_OUT_OF_SCOPE~~ → **NO LONGER IN A.1** | `MOD-2240` publishes the selected device's invocation ceiling. |
 | `IGraphicsRenderer` | `SetRenderTargetCubeFace` | default | `rt->BindAsRenderTargetFace(face)` | DEFAULT_CORRECT | Vulkan implements `BindAsRenderTargetFace` (`VulkanRenderer.cpp:14353`) and the replay path calls it (`:13196`), so the default composes into working per-face binding. |
-| `IGraphicsRenderer` | `DrawPrimitivesIndirectEXT` | default | no-op | UNSUPPORTED_HONEST | Unreachable: its argument buffer is taken by reference and none can be created. |
+| `IGraphicsRenderer` | `DrawPrimitivesIndirectEXT` | default | no-op | UNSUPPORTED_HONEST | Unreachable through the public path: `GraphicsDevice` rejects the false `SupportsIndirectDrawEXT` answer before this virtual. Native execution remains `MOD-2245`. |
 | `IGraphicsRenderer` | `DrawIndexedPrimitivesIndirectEXT` | default | no-op | UNSUPPORTED_HONEST | As above. |
 | `IGraphicsRenderer` | `SetContextRecoveryEnabled` | default | no-op | OWNED_ELSEWHERE | GL context loss is not `VK_ERROR_DEVICE_LOST`. Owned by `VULKAN-334`. |
 | `IGraphicsRenderer` | `CanBeginDrawEXT` | default | `return true` | OWNED_ELSEWHERE | Already owned by `VULKAN-026`. |
@@ -2191,11 +2201,16 @@ Listed for completeness; no divergence to classify.
 | `IVertexBufferRenderer` | `SetData` | PURE |
 | `IVertexBufferRenderer` | `SetVertexDeclaration` | PURE |
 
-### A.3 Vulkan overrides, EasyGL does not (23 current; 8 at `VULKAN-207`)
+### A.3 Vulkan overrides, EasyGL does not (28 current; 8 at `VULKAN-207`)
 
 | Interface | Virtual | Kind |
 |---|---|---|
+| `IEffectRenderer` | `BindTexture2DArrayEXT` | default | *(Vulkan override by `MOD-2226`)* |
+| `IEffectRenderer` | `BindStorageTexture2DEXT` | default | *(Vulkan override by `MOD-2228`)* |
 | `IGraphicsRenderer` | `GetSurfaceFormatUsageSupportEXT` | default |
+| `IGraphicsRenderer` | `CreateTexture2DArrayEXT` | default | *(Vulkan override by `MOD-2226`)* |
+| `IGraphicsRenderer` | `CreateStorageTexture2DEXT` | default | *(Vulkan override by `MOD-2228`)* |
+| `IGraphicsRenderer` | `CreateStorageBufferEXT` | default | *(Vulkan override by `MOD-2229`)* |
 | `IGraphicsRenderer` | `GetMaxStorageBufferBytesEXT` | default |
 | `IGraphicsRenderer` | `GetMaxUniformBufferBytesEXT` | default |
 | `IGraphicsRenderer` | `GetMaxComputeStorageBufferBindingsEXT` | default |

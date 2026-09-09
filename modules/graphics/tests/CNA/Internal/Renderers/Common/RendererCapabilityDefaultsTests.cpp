@@ -81,6 +81,18 @@ namespace
     {
     };
 
+    class DefaultsOnlyStorageBufferRenderer final
+        : public CNA::Internal::Renderers::IStorageBufferRenderer
+    {
+    public:
+        void SetData(const void*, std::size_t) override { ++uploads; }
+        void GetData(void*, std::size_t) const override { ++readbacks; }
+        [[nodiscard]] std::size_t GetByteSize() const override { return 16; }
+
+        int uploads = 0;
+        mutable int readbacks = 0;
+    };
+
     class DefaultsOnlyEffectRenderer final
         : public CNA::Internal::Renderers::IEffectRenderer
     {
@@ -232,6 +244,28 @@ TEST(RendererCapabilityDefaultsTest, StorageTextureFactoryDefaultsToUnsupported)
 {
     DefaultsOnlyRenderer renderer;
     EXPECT_EQ(renderer.CreateStorageTexture2DEXT(4, 3, 1, 0, UINT32_C(2)), nullptr);
+}
+
+TEST(RendererCapabilityDefaultsTest, StorageBufferDescriptorFactoryDefaultsToUnsupported)
+{
+    DefaultsOnlyRenderer renderer;
+    EXPECT_EQ(renderer.CreateStorageBufferEXT(16, UINT32_C(1), UINT32_C(3)), nullptr);
+}
+
+TEST(RendererCapabilityDefaultsTest, LegacyStorageBufferDefaultsRemainCompatibleAndCopyRefuses)
+{
+    DefaultsOnlyStorageBufferRenderer source;
+    DefaultsOnlyStorageBufferRenderer destination;
+    unsigned char bytes[4]{};
+    EXPECT_TRUE(source.SetDataRangeEXT(0, bytes, sizeof(bytes)));
+    EXPECT_TRUE(source.GetDataRangeEXT(0, bytes, sizeof(bytes)));
+    EXPECT_FALSE(source.SetDataRangeEXT(1, bytes, sizeof(bytes)));
+    EXPECT_FALSE(source.GetDataRangeEXT(1, bytes, sizeof(bytes)));
+    EXPECT_FALSE(source.CopyToEXT(destination, 0, 0, sizeof(bytes)));
+    EXPECT_EQ(source.GetUsageEXT(), UINT32_C(0x0F));
+    EXPECT_EQ(source.GetCpuAccessEXT(), UINT32_C(0x03));
+    EXPECT_EQ(source.uploads, 1);
+    EXPECT_EQ(source.readbacks, 1);
 }
 
 TEST(RendererCapabilityDefaultsTest, TextureArrayOperationsAndBindingDefaultToUnsupported)

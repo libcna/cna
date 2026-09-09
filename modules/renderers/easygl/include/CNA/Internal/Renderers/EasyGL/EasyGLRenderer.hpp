@@ -553,8 +553,47 @@ namespace CNA::Internal::Renderers::EasyGL
         explicit EasyGLStorageBufferRenderer(std::size_t byteSize);
         ~EasyGLStorageBufferRenderer() override;
 
+        /**
+         * @brief Uploads a prefix of the buffer.
+         * @param data Source bytes.
+         * @param byteSize Number of bytes to upload.
+         */
         void SetData(const void* data, std::size_t byteSize) override;
+        /**
+         * @brief Reads a prefix of the buffer.
+         * @param out Destination bytes.
+         * @param byteSize Number of bytes to read.
+         */
         void GetData(void* out, std::size_t byteSize) const override;
+        /**
+         * @brief Uploads bytes into an exact storage-buffer range.
+         * @param byteOffset First destination byte.
+         * @param data Source bytes.
+         * @param byteSize Number of bytes to upload.
+         * @return True when the complete range was uploaded.
+         */
+        bool SetDataRangeEXT(
+            std::size_t byteOffset, const void* data, std::size_t byteSize) override;
+        /**
+         * @brief Reads bytes from an exact storage-buffer range.
+         * @param byteOffset First source byte.
+         * @param out Destination bytes.
+         * @param byteSize Number of bytes to read.
+         * @return True when the complete range was read.
+         */
+        bool GetDataRangeEXT(
+            std::size_t byteOffset, void* out, std::size_t byteSize) const override;
+        /**
+         * @brief Copies bytes to another EasyGL storage buffer.
+         * @param destination Destination record.
+         * @param sourceByteOffset First source byte.
+         * @param destinationByteOffset First destination byte.
+         * @param byteSize Number of bytes to copy.
+         * @return True when the destination is compatible and the copy was issued.
+         */
+        bool CopyToEXT(
+            IStorageBufferRenderer& destination, std::size_t sourceByteOffset,
+            std::size_t destinationByteOffset, std::size_t byteSize) override;
         [[nodiscard]] std::size_t GetByteSize() const override { return byteSize_; }
 
         /// Binds this buffer to a shader storage binding point.

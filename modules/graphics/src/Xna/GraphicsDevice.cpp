@@ -1377,6 +1377,11 @@ namespace Microsoft::Xna::Framework::Graphics
             const CNA::Internal::Renderers::IStorageBufferRenderer& argumentBuffer,
             const int argumentByteOffset, const std::size_t argumentSize, const char* route)
         {
+            constexpr std::uint32_t IndirectArgumentsUsage = UINT32_C(1) << 3;
+            if ((argumentBuffer.GetUsageEXT() & IndirectArgumentsUsage) == 0)
+                throw System::NotSupportedException(
+                    std::string(route) +
+                    ": the storage buffer was not created with IndirectArguments usage.");
             System::ArgumentOutOfRangeException::ThrowIfNegative(argumentByteOffset,
                                                                  "argumentByteOffset");
             if (argumentByteOffset % 4 != 0)

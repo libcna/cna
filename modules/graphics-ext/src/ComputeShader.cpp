@@ -61,6 +61,19 @@ namespace CNA::Graphics {
         if (binding < 0)
             throw std::invalid_argument(
                 "CNA::Graphics::ComputeShader::bindStorageBuffer: the binding must not be negative");
+        if (buffer.getIsDisposedProperty())
+            throw System::ObjectDisposedException("StorageBuffer");
+        if (buffer.getGraphicsDeviceProperty() != &device_)
+            throw std::invalid_argument(
+                "CNA::Graphics::ComputeShader::bindStorageBuffer: the buffer belongs to another "
+                "GraphicsDevice");
+        if ((buffer.getDescriptor().getUsage() & StorageBufferUsage::Storage) ==
+            StorageBufferUsage::None)
+        {
+            throw System::NotSupportedException(
+                "CNA::Graphics::ComputeShader::bindStorageBuffer: Storage usage was not "
+                "declared");
+        }
         renderer_->Bind();
         renderer_->BindStorageBuffer(binding, buffer.getRendererEXT());
     }

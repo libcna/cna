@@ -2345,23 +2345,74 @@ if (!ProfileIsEs2ApiGeneration())
 
     void EasyGLStorageBufferRenderer::SetData(const void* data, const std::size_t byteSize)
     {
-        if (data == nullptr || byteSize == 0) return;
-        buffer_.set_sub_data(::easygl::BufferTarget::ShaderStorage, data,
-                             byteSize > byteSize_ ? byteSize_ : byteSize, 0);
+        (void)SetDataRangeEXT(0, data, byteSize);
     }
 
     void EasyGLStorageBufferRenderer::GetData(void* out, const std::size_t byteSize) const
     {
-        if (out == nullptr || byteSize == 0) return;
-        const std::size_t bytes = byteSize > byteSize_ ? byteSize_ : byteSize;
+        (void)GetDataRangeEXT(0, out, byteSize);
+    }
+
+    bool EasyGLStorageBufferRenderer::SetDataRangeEXT(
+        const std::size_t byteOffset, const void* data, const std::size_t byteSize)
+    {
+        if (byteOffset > byteSize_ || byteSize > byteSize_ - byteOffset)
+            throw std::invalid_argument("EasyGL storage-buffer upload range exceeds allocation");
+        if (data == nullptr && byteSize != 0)
+            throw std::invalid_argument("EasyGL storage-buffer upload source is null");
+        if (byteSize == 0) return true;
+        buffer_.set_sub_data(
+            ::easygl::BufferTarget::ShaderStorage, data, byteSize, byteOffset);
+        ::metagl::glMemoryBarrier(::metagl::MemoryBarrierMask::AllBarrierBits);
+        return true;
+    }
+
+    bool EasyGLStorageBufferRenderer::GetDataRangeEXT(
+        const std::size_t byteOffset, void* out, const std::size_t byteSize) const
+    {
+        if (byteOffset > byteSize_ || byteSize > byteSize_ - byteOffset)
+            throw std::invalid_argument("EasyGL storage-buffer read range exceeds allocation");
+        if (out == nullptr && byteSize != 0)
+            throw std::invalid_argument("EasyGL storage-buffer read destination is null");
+        if (byteSize == 0) return true;
+        ::metagl::glMemoryBarrier(::metagl::MemoryBarrierMask::AllBarrierBits);
         // glGetBufferSubData is desktop-only; mapping for read is the portable form and is what
         // the GL ES 3.1 contexts this renderer usually holds actually provide.
-        void* mapped = buffer_.map_range(::easygl::BufferTarget::ShaderStorage, 0,
-                                         static_cast<std::ptrdiff_t>(bytes),
+        void* mapped = buffer_.map_range(::easygl::BufferTarget::ShaderStorage,
+                                         static_cast<std::ptrdiff_t>(byteOffset),
+                                         static_cast<std::ptrdiff_t>(byteSize),
                                          ::metagl::MapBufferAccessMask::Read);
-        if (mapped == nullptr) return;
-        std::memcpy(out, mapped, bytes);
+        if (mapped == nullptr) return false;
+        std::memcpy(out, mapped, byteSize);
         buffer_.unmap(::easygl::BufferTarget::ShaderStorage);
+        return true;
+    }
+
+    bool EasyGLStorageBufferRenderer::CopyToEXT(
+        IStorageBufferRenderer& destination, const std::size_t sourceByteOffset,
+        const std::size_t destinationByteOffset, const std::size_t byteSize)
+    {
+        auto* target = dynamic_cast<EasyGLStorageBufferRenderer*>(&destination);
+        if (target == nullptr) return false;
+        if (sourceByteOffset > byteSize_ || byteSize > byteSize_ - sourceByteOffset ||
+            destinationByteOffset > target->byteSize_ ||
+            byteSize > target->byteSize_ - destinationByteOffset)
+            throw std::invalid_argument("EasyGL storage-buffer copy range exceeds allocation");
+        if (target == this && byteSize != 0 &&
+            sourceByteOffset < destinationByteOffset + byteSize &&
+            destinationByteOffset < sourceByteOffset + byteSize)
+            throw std::invalid_argument("EasyGL storage-buffer copy ranges overlap");
+        if (byteSize == 0) return true;
+        ::metagl::glMemoryBarrier(::metagl::MemoryBarrierMask::AllBarrierBits);
+        buffer_.bind(::easygl::BufferTarget::CopyRead);
+        target->buffer_.bind(::easygl::BufferTarget::CopyWrite);
+        ::metagl::glCopyBufferSubData(
+            ::metagl::BufferTarget::CopyRead, ::metagl::BufferTarget::CopyWrite,
+            static_cast<std::ptrdiff_t>(sourceByteOffset),
+            static_cast<std::ptrdiff_t>(destinationByteOffset),
+            static_cast<std::ptrdiff_t>(byteSize));
+        ::metagl::glMemoryBarrier(::metagl::MemoryBarrierMask::AllBarrierBits);
+        return true;
     }
 
     void EasyGLStorageBufferRenderer::BindBase(const int binding) const
