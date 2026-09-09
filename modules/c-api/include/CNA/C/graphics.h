@@ -375,8 +375,13 @@ typedef uint32_t CNA_RendererFeature;
  * @since ABI 0.24.0
  */
 #define CNA_RENDERER_FEATURE_TEXTURE_3D_SAMPLING UINT32_C(30)
+/**
+ * @brief Instanced indexed drawing can start at a caller-selected logical instance.
+ * @since ABI 0.26.0
+ */
+#define CNA_RENDERER_FEATURE_BASE_INSTANCE_DRAWING UINT32_C(31)
 /** @brief Largest currently defined detailed renderer-feature identity. */
-#define CNA_RENDERER_FEATURE_MAXIMUM CNA_RENDERER_FEATURE_TEXTURE_3D_SAMPLING
+#define CNA_RENDERER_FEATURE_MAXIMUM CNA_RENDERER_FEATURE_BASE_INSTANCE_DRAWING
 
 /** @brief Fixed-width classified answer for one detailed renderer feature. */
 typedef uint32_t CNA_RendererFeatureSupport;

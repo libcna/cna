@@ -8,7 +8,7 @@
 
 #include <cstddef>
 
-static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 25, 0));
+static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 26, 0));
 static_assert(sizeof(CNA_Result) == sizeof(uint32_t));
 static_assert(sizeof(CNA_Handle) == sizeof(uint64_t));
 static_assert(sizeof(CNA_GraphicsResourceTag) == sizeof(uint64_t));
@@ -27,7 +27,8 @@ static_assert(CNA_RENDERER_FEATURE_THREE_DIMENSIONAL_PIPELINE == UINT32_C(0));
 static_assert(CNA_RENDERER_FEATURE_SHADER_EFFECT_SOURCE_EXECUTION == UINT32_C(8));
 static_assert(CNA_RENDERER_FEATURE_COMPUTE_IMAGE_BINDING == UINT32_C(19));
 static_assert(CNA_RENDERER_FEATURE_TEXTURE_3D_SAMPLING == UINT32_C(30));
-static_assert(CNA_RENDERER_FEATURE_MAXIMUM == UINT32_C(30));
+static_assert(CNA_RENDERER_FEATURE_BASE_INSTANCE_DRAWING == UINT32_C(31));
+static_assert(CNA_RENDERER_FEATURE_MAXIMUM == UINT32_C(31));
 static_assert(sizeof(CNA_ShaderDialect) == sizeof(uint32_t));
 static_assert(CNA_SHADER_DIALECT_GLSL_VULKAN == UINT32_C(3));
 static_assert(CNA_SHADER_DIALECT_WGSL == UINT32_C(6));

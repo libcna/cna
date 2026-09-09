@@ -14,6 +14,21 @@ something breaks.
 
 ---
 
+## Revision 8 — 2026-09-09
+
+### Capability-gated base-instance drawing (`MOD-2232`)
+
+- `GraphicsDevice::DrawInstancedPrimitivesBaseInstanceEXT` reuses the complete XNA indexed,
+  vertex-stream and effect contract while adding one non-negative `firstInstance` operand.
+- `RendererFeature::BaseInstanceDrawing` and its false-by-default renderer probe prevent an older
+  backend from accepting the new route accidentally. The C ABI appends the same detailed feature
+  identity without changing any legacy graphics-capability value.
+- Vulkan retains the first instance in its deferred draw record, validates every per-instance
+  stream against the shifted range and passes the value to `vkCmdDrawIndexed`. Its native pixel
+  oracle proves that `firstInstance=1` selects instance one while leaving instance zero untouched.
+
+The C header carries the same engine-layer revision marker.
+
 ## Revision 7 — 2026-09-09
 
 ### Immutable storage-buffer roles, ranges and tracking (`MOD-2229`)

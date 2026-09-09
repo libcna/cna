@@ -996,6 +996,14 @@ draw itself needs only GL 4.0, so on a desktop context between 4.0 and 4.2 the c
 reports `true` and there is still nothing in CNA able to hold the arguments. Check both capabilities
 if you intend to run there.
 
+**A direct base instance is a separate, queryable extension.**
+`GraphicsDevice::DrawInstancedPrimitivesBaseInstanceEXT` has the same indexed geometry, vertex
+bindings and applied-effect state as XNA's `DrawInstancedPrimitives`, plus a non-negative
+`firstInstance`. Query `RendererFeature::BaseInstanceDrawing` before calling it. The value shifts
+both native instance identity and per-instance vertex-record selection; it is not emulated by
+moving one binding and losing the shader-visible instance number. A renderer that has not opted in
+refuses before submission.
+
 **Wireframe is ignored on this route.** The fill-mode fallback the ordinary routes take rebuilds a
 line list from the primitive count, and this route has no primitive count to rebuild from; an
 indirect draw renders filled rather than pretending otherwise. A compiled (FX) effect is refused

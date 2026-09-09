@@ -43,7 +43,8 @@ namespace CNA
             RendererFeature::ShaderDialectHlsl,
             RendererFeature::ShaderDialectMsl,
             RendererFeature::ShaderDialectWgsl,
-            RendererFeature::Texture3DSampling
+            RendererFeature::Texture3DSampling,
+            RendererFeature::BaseInstanceDrawing
         };
 
         constexpr std::array<RendererLimit, LimitCount> Limits = {
@@ -292,6 +293,7 @@ namespace CNA
             case RendererFeature::ShaderDialectMsl: return "ShaderDialectMsl";
             case RendererFeature::ShaderDialectWgsl: return "ShaderDialectWgsl";
             case RendererFeature::Texture3DSampling: return "Texture3DSampling";
+            case RendererFeature::BaseInstanceDrawing: return "BaseInstanceDrawing";
             case RendererFeature::Count: break;
         }
         return "UnknownRendererFeature";
@@ -364,6 +366,8 @@ namespace CNA
             case RendererFeature::Texture3DSampling:
                 return "A Texture3D bound to a custom effect is read by that shader, with the "
                        "slot's SamplerState governing it.";
+            case RendererFeature::BaseInstanceDrawing:
+                return "An instanced indexed draw can begin at a caller-selected logical instance.";
             case RendererFeature::Count: break;
         }
         return "Invalid detailed renderer feature identity.";

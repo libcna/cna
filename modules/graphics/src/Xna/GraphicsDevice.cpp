@@ -1055,8 +1055,14 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
     void GraphicsDevice::ValidateInstanceStreamRanges(
-        const CNA::Internal::Renderers::GpuDrawParams& p, int instanceCount) const
+        const CNA::Internal::Renderers::GpuDrawParams& p, const int instanceCount,
+        const int firstInstance) const
     {
+        if (firstInstance > (std::numeric_limits<int>::max)() - (instanceCount - 1))
+            throw System::ArgumentOutOfRangeException(
+                "firstInstance", std::to_string(firstInstance),
+                "The requested instance range exceeds the supported signed range.");
+        const int lastInstance = firstInstance + instanceCount - 1;
         for (int i = 0; i < p.vertexStreamCount; ++i)
         {
             const auto& stream = p.vertexStreams[static_cast<std::size_t>(i)];
@@ -1067,7 +1073,7 @@ namespace Microsoft::Xna::Framework::Graphics
             // `VertexOffset` -- D3D11's StartInstanceLocation is 0 in FNA3D's own driver and
             // OpenGL has no start-instance term at all. Every term is an element count of THIS
             // stream, so a short stream is rejected even when another one is long enough.
-            const int requiredElements = 1 + (instanceCount - 1) / stream.instanceFrequency;
+            const int requiredElements = 1 + lastInstance / stream.instanceFrequency;
             const int available = stream.vertexCount;
             if (stream.vertexOffset > available ||
                 requiredElements > available - stream.vertexOffset)
@@ -1272,6 +1278,34 @@ namespace Microsoft::Xna::Framework::Graphics
         int instanceCount
     )
     {
+        DrawInstancedPrimitivesCore(
+            primitiveType, baseVertex, minVertexIndex, numVertices, startIndex,
+            primitiveCount, instanceCount, 0);
+    }
+
+    void GraphicsDevice::DrawInstancedPrimitivesBaseInstanceEXT(
+        const PrimitiveType primitiveType, const int baseVertex, const int minVertexIndex,
+        const int numVertices, const int startIndex, const int primitiveCount,
+        const int instanceCount, const int firstInstance)
+    {
+        if (renderer_ == nullptr)
+            return;
+        if (!GetRenderer().SupportsBaseInstanceDrawingEXT())
+            throw System::NotSupportedException(
+                std::string("GraphicsDevice::DrawInstancedPrimitivesBaseInstanceEXT: the ") +
+                std::string(GetGraphicsRendererName()) +
+                " renderer does not support base-instance drawing.");
+        System::ArgumentOutOfRangeException::ThrowIfNegative(firstInstance, "firstInstance");
+        DrawInstancedPrimitivesCore(
+            primitiveType, baseVertex, minVertexIndex, numVertices, startIndex,
+            primitiveCount, instanceCount, firstInstance);
+    }
+
+    void GraphicsDevice::DrawInstancedPrimitivesCore(
+        const PrimitiveType primitiveType, const int baseVertex, const int minVertexIndex,
+        const int numVertices, const int startIndex, const int primitiveCount,
+        const int instanceCount, const int firstInstance)
+    {
         if (renderer_ == nullptr)
             return;
         renderer_->Ensure3DSupported("GraphicsDevice::DrawInstancedPrimitives");
@@ -1332,6 +1366,7 @@ namespace Microsoft::Xna::Framework::Graphics
         CNA::Internal::Renderers::GpuDrawParams p;
         currentEffect_->FillGpuDrawParams(p);
         p.instanceCount = instanceCount;
+        p.firstInstance = firstInstance;
         p.startIndex    = startIndex;
         p.baseVertex    = baseVertex;
         p.minVertexIndex = minVertexIndex;
@@ -1358,7 +1393,7 @@ namespace Microsoft::Xna::Framework::Graphics
         ValidateVertexStreamRanges(
             p, baseVertex + minVertexIndex, numVertices,
             "numVertices", std::to_string(numVertices));
-        ValidateInstanceStreamRanges(p, instanceCount);
+        ValidateInstanceStreamRanges(p, instanceCount, firstInstance);
         ValidateVertexStreamCapability(p);
         applySamplerStatesToRenderer();
         renderer_->DrawInstancedPrimitivesEx(
@@ -2553,6 +2588,9 @@ namespace Microsoft::Xna::Framework::Graphics
                            renderer.SupportsComputeImageBindingEXT()));
         setLegacy(CNA::RendererFeature::IndirectDrawing,
                   CNA::GraphicsCapability::IndirectDraw);
+        profile.SetFeature(
+            CNA::RendererFeature::BaseInstanceDrawing,
+            FeatureSupport(renderer.SupportsBaseInstanceDrawingEXT()));
         profile.SetFeature(CNA::RendererFeature::ShadowSampling,
                            FeatureSupport(renderer.SupportsShadowSamplingEXT()));
         profile.SetFeature(CNA::RendererFeature::ImageBasedLighting,

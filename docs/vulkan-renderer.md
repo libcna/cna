@@ -2,7 +2,7 @@
 
 ## Status of this document
 
-**Complete as of 2026-09-08 (`VULKAN-480`, updated by `REMED-GFX-203`, `MOD-2222`–`MOD-2223`, `MOD-2240`–`MOD-2243` and `MOD-2228`), and written after the re-audits it depends on**
+**Complete as of 2026-09-09 (`VULKAN-480`, updated by `REMED-GFX-203`, `MOD-2222`–`MOD-2223`, `MOD-2232`, `MOD-2240`–`MOD-2243` and `MOD-2228`), and written after the re-audits it depends on**
 (`VULKAN-470`–`VULKAN-474`) so that what it claims was checked rather than remembered. Every
 section names the row that put it there and the test that keeps it true; a claim with no test named
 beside it is not in here.
@@ -39,6 +39,7 @@ measures on (§*Environment* below).
 | Wire-frame rasterization | supported | fixed |
 | Occlusion queries, precise pixel counts | supported | fixed |
 | Instanced drawing | supported | fixed |
+| Base-instance drawing | supported | fixed |
 | Additive blending | supported | fixed |
 | `Texture3D` storage **and** sampling | supported | fixed |
 | Source-based `ShaderEffect` (SPIR-V) | supported | fixed |
@@ -563,6 +564,16 @@ uniformly-scaled instance and differ only under a non-uniformly-scaled one, wher
 inverse-transpose is correct. For **PBR** the instance matrix is folded into the tangent matrix and
 into `cnaDirectionHandedness` as well, so a mirroring instance flips the bitangent exactly as a
 mirroring `World` does — the same value EasyGL computes as a separate `instanceHandedness` factor.
+
+**Base instance is an explicit modern feature** (`MOD-2232`).
+`DrawInstancedPrimitivesBaseInstanceEXT` retains `firstInstance` in the same deferred record as the
+ordinary draw and supplies it to `vkCmdDrawIndexed`. Because Vulkan's 1.1 core vertex input has no
+arbitrary divisor state enabled here, the renderer already expands `InstanceFrequency` into a
+divisor-one staging stream; for a non-zero base it retains the required prefix as well, so both the
+native instance number and the selected per-instance record advance together. The public layer
+range-checks every bound instance stream over the shifted interval. `Vulkan_ShaderEffect_3D` draws
+one instance at base one and observes only instance one's translation and colour, with instance
+zero's half of the target remaining at the clear colour.
 
 **Pipeline-variant cost.** Every family's instanced pipeline is a distinct cache entry with its own
 identity, and there is exactly one per (family, vertex shape) — never one per runtime value.

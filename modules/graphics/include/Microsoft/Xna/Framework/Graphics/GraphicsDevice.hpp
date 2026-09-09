@@ -434,6 +434,32 @@ namespace Microsoft::Xna::Framework::Graphics
                                      int primitiveCount, int instanceCount);
 
         /**
+         * @brief Draws an indexed instance range beginning at @p firstInstance.
+         *
+         * This CNA extension preserves the complete XNA `DrawInstancedPrimitives` geometry,
+         * binding and effect contract. Only the first logical instance changes; renderers never
+         * expose a native command or native buffer handle through this API.
+         *
+         * @param primitiveType  The type of primitive to draw.
+         * @param baseVertex     Offset added to each decoded index.
+         * @param minVertexIndex Minimum referenced vertex index.
+         * @param numVertices    Number of vertices in the declared referenced window.
+         * @param startIndex     First index element to read.
+         * @param primitiveCount Number of primitives per instance.
+         * @param instanceCount  Number of instances to draw.
+         * @param firstInstance  First logical instance, which must be non-negative.
+         * @throws System::NotSupportedException if the renderer does not report
+         *         `CNA::RendererFeature::BaseInstanceDrawing`.
+         * @throws System::ArgumentOutOfRangeException for the same invalid ranges as
+         *         `DrawInstancedPrimitives`, or if @p firstInstance is negative or makes the
+         *         required instance range exceed a bound per-instance stream.
+         */
+        CNAEXT void DrawInstancedPrimitivesBaseInstanceEXT(
+            PrimitiveType primitiveType, int baseVertex, int minVertexIndex,
+            int numVertices, int startIndex, int primitiveCount,
+            int instanceCount, int firstInstance);
+
+        /**
          * @brief Draws with the counts and offsets read out of a GPU buffer rather than passed in.
          *
          * plans/plan_modern.md `MOD-2090`. @p argumentBuffer holds a `CNA::IndirectDrawArguments` at
@@ -1509,13 +1535,18 @@ namespace Microsoft::Xna::Framework::Graphics
 
         // REMED-GFX-202: REMED-GFX-118's instance-range gate widened from the first per-instance
         // binding to EVERY one of them. `instanceCount` instances consume
-        // `1 + (instanceCount - 1) / InstanceFrequency` records of each per-instance stream,
-        // beginning at that stream's own VertexOffset -- all in vertex ELEMENTS of that stream's own
-        // declaration, never bytes. A stream too short is rejected here, naming the offending slot,
-        // even when another per-instance stream is long enough.
+        // `1 + (firstInstance + instanceCount - 1) / InstanceFrequency` records of each
+        // per-instance stream, beginning at that stream's own VertexOffset -- all in vertex
+        // ELEMENTS of that stream's own declaration, never bytes. A stream too short is rejected
+        // here, naming the offending slot, even when another per-instance stream is long enough.
         void ValidateInstanceStreamRanges(
             const CNA::Internal::Renderers::GpuDrawParams& p,
-            int instanceCount) const;
+            int instanceCount, int firstInstance = 0) const;
+
+        void DrawInstancedPrimitivesCore(
+            PrimitiveType primitiveType, int baseVertex, int minVertexIndex,
+            int numVertices, int startIndex, int primitiveCount,
+            int instanceCount, int firstInstance);
 
         // The one object-to-GPU-stream conversion behind every built-in vertex type's explicit
         // VertexDeclaration draw: the values are packed into the stream that type's declaration

@@ -8,7 +8,7 @@
 
 #include <stddef.h>
 
-_Static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 25, 0),
+_Static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 26, 0),
                "CNA C ABI version encoding must remain stable");
 _Static_assert(sizeof(CNA_Result) == sizeof(uint32_t),
                "CNA_Result must have a fixed-width representation");
@@ -35,7 +35,8 @@ _Static_assert(sizeof(CNA_RendererFeature) == sizeof(uint32_t) &&
                    CNA_RENDERER_FEATURE_SHADER_EFFECT_SOURCE_EXECUTION == UINT32_C(8) &&
                    CNA_RENDERER_FEATURE_COMPUTE_IMAGE_BINDING == UINT32_C(19) &&
                    CNA_RENDERER_FEATURE_TEXTURE_3D_SAMPLING == UINT32_C(30) &&
-                   CNA_RENDERER_FEATURE_MAXIMUM == UINT32_C(30),
+                   CNA_RENDERER_FEATURE_BASE_INSTANCE_DRAWING == UINT32_C(31) &&
+                   CNA_RENDERER_FEATURE_MAXIMUM == UINT32_C(31),
                "CNA detailed renderer-feature identities must remain stable");
 _Static_assert(sizeof(CNA_ShaderDialect) == sizeof(uint32_t) &&
                    CNA_SHADER_DIALECT_GLSL_VULKAN == UINT32_C(3) &&

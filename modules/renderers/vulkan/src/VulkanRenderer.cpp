@@ -6,6 +6,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
 #include "CNA/Internal/Renderers/Vulkan/VulkanCompiledEffect.hpp"
 namespace {
@@ -13348,10 +13349,11 @@ namespace CNA::Internal::Renderers::Vulkan
                 if (!draw.ibData.empty()) {
                     vkCmdBindIndexBuffer(
                         cb, frame3DIB_[currentFrame_], nativeIbOff, draw.indexType);
-                    vkCmdDrawIndexed(cb, draw.drawCount, draw.instanceCount, 0, draw.baseVertex, 0);
+                    vkCmdDrawIndexed(cb, draw.drawCount, draw.instanceCount, 0, draw.baseVertex,
+                                     draw.firstInstance);
                     ibOff = nativeIbOff + static_cast<VkDeviceSize>(draw.ibData.size());
                 } else {
-                    vkCmdDraw(cb, draw.drawCount, draw.instanceCount, 0, 0);
+                    vkCmdDraw(cb, draw.drawCount, draw.instanceCount, 0, draw.firstInstance);
                 }
                 if (draw.useInstanced)
                     instVbOff += static_cast<VkDeviceSize>(draw.instVbData.size());
@@ -16711,9 +16713,10 @@ namespace CNA::Internal::Renderers::Vulkan
         VulkanPackedStreamsEXT packedInstanceStreams;
         if (packsInstanceStreams)
         {
+            const int expandedInstanceCount = params.firstInstance + std::max(1, instanceCount);
             packedInstanceStreams = PackVulkanStreamsEXT(
                 params, /*instanceRate=*/true, /*firstRecord=*/0,
-                std::max(1, instanceCount));
+                expandedInstanceCount);
         }
         if (instVb_in != nullptr) {
             instVb = static_cast<const VulkanVertexBufferRenderer*>(instVb_in);
@@ -16803,12 +16806,15 @@ namespace CNA::Internal::Renderers::Vulkan
             d.useInstanced = true;
             d.instVbStride = instanceStride;
             d.instanceCount = static_cast<uint32_t>(std::max(1, instanceCount));
+            d.firstInstance = static_cast<uint32_t>(params.firstInstance);
             d.instVbData = std::move(packedInstanceStreams.bytes);
         }
         else if (instVb != nullptr && instanceStride > 0) {
             const int count = std::max(1, instanceCount);
             const int frequency = std::max(1, instanceFrequency);
-            const int lastRecord = instanceVertexOffset + (count - 1) / frequency;
+            const int expandedInstanceCount = params.firstInstance + count;
+            const int lastRecord =
+                instanceVertexOffset + (expandedInstanceCount - 1) / frequency;
             if (instanceVertexOffset < 0 || lastRecord >= instVb->GetVertexCount())
                 throw System::NotSupportedException(
                     "CNA Vulkan: an instanced ShaderEffect draw needs per-instance record " +
@@ -16818,13 +16824,15 @@ namespace CNA::Internal::Renderers::Vulkan
             d.useInstanced   = true;
             d.instVbStride   = instanceStride;
             d.instanceCount  = static_cast<uint32_t>(count);
-            d.instVbData.resize(static_cast<std::size_t>(count) * instanceStride);
+            d.firstInstance  = static_cast<uint32_t>(params.firstInstance);
+            d.instVbData.resize(
+                static_cast<std::size_t>(expandedInstanceCount) * instanceStride);
             const auto* src = static_cast<const uint8_t*>(instVb->GetMappedPtr()) +
                               static_cast<std::size_t>(instanceVertexOffset) * instanceStride;
             if (frequency == 1) {
                 std::memcpy(d.instVbData.data(), src, d.instVbData.size());
             } else {
-                for (int i = 0; i < count; ++i)
+                for (int i = 0; i < expandedInstanceCount; ++i)
                     std::memcpy(d.instVbData.data() + static_cast<std::size_t>(i) * instanceStride,
                                 src + static_cast<std::size_t>(i / frequency) * instanceStride,
                                 instanceStride);
@@ -17563,12 +17571,33 @@ namespace CNA::Internal::Renderers::Vulkan
         PrimitiveType primitive, int primitiveCount, int instanceCount,
         const GpuDrawParams& params)
     {
+        const int instCountClamped = std::max(1, instanceCount);
+        if (params.firstInstance < 0 ||
+            params.firstInstance > (std::numeric_limits<int>::max)() - instCountClamped)
+        {
+            throw System::ArgumentOutOfRangeException(
+                "firstInstance", std::to_string(params.firstInstance),
+                "CNA Vulkan: the requested instance range exceeds the signed native range.");
+        }
+        const int expandedInstanceCount = params.firstInstance + instCountClamped;
+
         // REMED-GFX-202: the per-instance stream is the lowest-slot entry of the shared
         // GpuVertexStreamBinding array whose InstanceFrequency is greater than zero.
         const auto* instanceStream = FirstInstanceStream(params);
         if (instanceStream == nullptr) {
-            // No per-instance VB — fall back to single-instance indexed draw.
-            DrawIndexedPrimitivesEx(vb_in, ib_in, world, view, projection, primitive, primitiveCount, params);
+            // A custom shader may consume InstanceIndex without a per-instance vertex input. The
+            // ordinary capture already owns the exact geometry/effect state; retain the native
+            // instance operands on that same deferred record instead of collapsing it to one.
+            const std::size_t pendingBefore = pending3D_.size();
+            DrawIndexedPrimitivesEx(
+                vb_in, ib_in, world, view, projection, primitive, primitiveCount, params);
+            if (pending3D_.size() != pendingBefore + 1)
+                throw std::runtime_error(
+                    "CNA Vulkan: an instanced draw without per-instance vertex input did not "
+                    "produce exactly one deferred graphics record.");
+            pending3D_.back().instanceCount = static_cast<std::uint32_t>(instCountClamped);
+            pending3D_.back().firstInstance =
+                static_cast<std::uint32_t>(params.firstInstance);
             return;
         }
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
@@ -17877,12 +17906,11 @@ namespace CNA::Internal::Renderers::Vulkan
         if (packsInstanceStreams)
             packedInstanceStreams = PackVulkanStreamsEXT(
                 params, /*instanceRate=*/true, /*firstRecord=*/0,
-                std::max(1, instanceCount));
+                expandedInstanceCount);
         const std::size_t instStride = packsInstanceStreams
             ? packedInstanceStreams.stride
             : (instVb.GetStride() > 0 ? instVb.GetStride() : 64);
         const int vertexCount        = vb.GetVertexCount();
-        const int instCountClamped   = std::max(1, instanceCount);
 
         // REMED-GFX-211: on the classic single-stream path the GEOMETRY binding's own VertexOffset
         // rides vkCmdDrawIndexed's `vertexOffset` term. A packed multi-stream snapshot has already
@@ -17902,7 +17930,8 @@ namespace CNA::Internal::Renderers::Vulkan
         // diagnosis to a native layer that cannot see the public contract.
         const int instanceFrequency = std::max(1, instanceStream->instanceFrequency);
         const int lastInstanceRecord =
-            instanceStream->vertexOffset + (instCountClamped - 1) / instanceFrequency;
+            instanceStream->vertexOffset +
+            (expandedInstanceCount - 1) / instanceFrequency;
         if (!packsVertexStreams &&
             (perVertexOffset < 0 || perVertexOffset > vertexCount ||
              params.baseVertex > vertexCount - perVertexOffset))
@@ -17970,13 +17999,14 @@ namespace CNA::Internal::Renderers::Vulkan
         }
         else
         {
-            d.instVbData.resize(static_cast<std::size_t>(instCountClamped) * instStride);
+            d.instVbData.resize(
+                static_cast<std::size_t>(expandedInstanceCount) * instStride);
             const auto* instSrc = static_cast<const uint8_t*>(instVb.GetMappedPtr()) +
                                   static_cast<std::size_t>(instanceStream->vertexOffset) * instStride;
             if (instanceFrequency == 1) {
                 std::memcpy(d.instVbData.data(), instSrc, d.instVbData.size());
             } else {
-                for (int i = 0; i < instCountClamped; ++i)
+                for (int i = 0; i < expandedInstanceCount; ++i)
                     std::memcpy(d.instVbData.data() + static_cast<std::size_t>(i) * instStride,
                                 instSrc + static_cast<std::size_t>(i / instanceFrequency) * instStride,
                                 instStride);
@@ -18002,6 +18032,7 @@ namespace CNA::Internal::Renderers::Vulkan
         d.stride       = pvStride;
         d.instVbStride = instStride;
         d.instanceCount = static_cast<uint32_t>(instCountClamped);
+        d.firstInstance = static_cast<uint32_t>(params.firstInstance);
         // A multi-stream snapshot starts at the requested min vertex; rebase unchanged indices
         // onto that compact window. The classic path still folds its one binding offset into the
         // native draw term, captured by value so a later SetVertexBuffers cannot reach it.

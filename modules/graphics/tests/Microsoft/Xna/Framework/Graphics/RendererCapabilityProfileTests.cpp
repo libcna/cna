@@ -9,6 +9,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/RendererCapabilityProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
@@ -19,7 +20,8 @@ using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 static_assert(static_cast<std::uint32_t>(CNA::RendererFeature::ThreeDimensionalPipeline) == 0);
 static_assert(static_cast<std::uint32_t>(CNA::RendererFeature::ShaderDialectWgsl) == 29);
 static_assert(static_cast<std::uint32_t>(CNA::RendererFeature::Texture3DSampling) == 30);
-static_assert(static_cast<std::uint32_t>(CNA::RendererFeature::Count) == 31);
+static_assert(static_cast<std::uint32_t>(CNA::RendererFeature::BaseInstanceDrawing) == 31);
+static_assert(static_cast<std::uint32_t>(CNA::RendererFeature::Count) == 32);
 static_assert(static_cast<std::uint8_t>(CNA::RendererFeatureSupport::Unknown) == 0);
 static_assert(static_cast<std::uint8_t>(CNA::RendererFeatureSupport::Restricted) == 3);
 static_assert(static_cast<std::uint32_t>(CNA::RendererLimit::MaxTextureDimension) == 0);
@@ -156,6 +158,8 @@ TEST(RendererCapabilityProfileTest, DeviceSnapshotMapsEveryLegacyCapabilityExpli
         EXPECT_EQ(device.GetRendererFeatureSupportEXT(feature), ExpectedSupport(expected));
         EXPECT_EQ(device.SupportsRendererFeatureEXT(feature), expected);
     }
+    EXPECT_EQ(device.GetRendererFeatureSupportEXT(CNA::RendererFeature::BaseInstanceDrawing),
+              ExpectedSupport(device.GetRenderer().SupportsBaseInstanceDrawingEXT()));
 
     for (const CNA::RendererFeature feature : CNA::AllRendererFeatures())
     {

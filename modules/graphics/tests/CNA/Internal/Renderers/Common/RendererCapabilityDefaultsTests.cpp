@@ -234,6 +234,14 @@ TEST(RendererCapabilityDefaultsTest, ModernGpuLimitsDefaultToExplicitlyUnavailab
     EXPECT_EQ(renderer.GetTimestampPeriodPicosecondsEXT(), 0U);
 }
 
+TEST(RendererCapabilityDefaultsTest, ModernGpuCapabilitySeamsDefaultToUnsupported)
+{
+    DefaultsOnlyRenderer renderer;
+    EXPECT_FALSE(renderer.SupportsComputeShadersEXT());
+    EXPECT_FALSE(renderer.SupportsIndirectDrawEXT());
+    EXPECT_FALSE(renderer.SupportsBaseInstanceDrawingEXT());
+}
+
 TEST(RendererCapabilityDefaultsTest, TextureArrayFactoryDefaultsToUnsupported)
 {
     DefaultsOnlyRenderer renderer;

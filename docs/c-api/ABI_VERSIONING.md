@@ -2,7 +2,17 @@
 
 ## ABI identity
 
-The ABI is `0.25.0`. It appends **one shader-payload identity**,
+The ABI is `0.26.0`. It appends **one detailed renderer-feature identity**,
+`CNA_RENDERER_FEATURE_BASE_INSTANCE_DRAWING` (`31`). The answer is supported only when the
+renderer consumes a caller-selected first logical instance through the CNAEXT instanced-draw
+route; older renderers inherit the explicit unsupported default. Existing feature identities keep
+values `0` through `30`, and only `CNA_RENDERER_FEATURE_MAXIMUM` moves from `30` to `31`.
+
+The minor increments because the closed enumerable feature range changed. A caller built against
+`0.25.0` is unchanged; a caller iterating the new maximum sees the additional answer and can gate
+the operation without inferring support from the renderer name.
+
+`0.25.0` appended **one shader-payload identity**,
 `CNA_SHADER_DIALECT_SPIRV` (`7`), for renderers that require already-compiled SPIR-V bytecode
 rather than Vulkan GLSL source. The distinction is observable: native CNA Vulkan consumes SPIR-V
 words, while IGL's Vulkan backend compiles GLSL source, and both previously reported

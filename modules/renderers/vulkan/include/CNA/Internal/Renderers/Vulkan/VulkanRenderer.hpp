@@ -3566,6 +3566,12 @@ namespace CNA::Internal::Renderers::Vulkan
         void DrawInstancedPrimitivesEx(const IVertexBufferRenderer&, const IIndexBufferRenderer&,
                                        const Matrix&, const Matrix&, const Matrix&,
                                        PrimitiveType, int, int, const GpuDrawParams&) override;
+        /**
+         * @brief Reports Vulkan support for non-zero first-instance indexed draws.
+         *
+         * @return Always `true` for the Vulkan renderer.
+         */
+        [[nodiscard]] bool SupportsBaseInstanceDrawingEXT() const override { return true; }
 
         void ClearColorAndDepth(float, float, float, float, float) override;
         void ClearDepth(float) override;
@@ -4386,6 +4392,7 @@ namespace CNA::Internal::Renderers::Vulkan
             std::vector<uint8_t>    instVbData;                // per-instance bytes (instanceCount × stride)
             std::size_t             instVbStride      = 64;    // bytes per instance (default = mat4)
             uint32_t                instanceCount     = 1;     // number of instances
+            uint32_t                firstInstance     = 0;     // native first-instance selector
             bool                    wireframe         = false; // true = VK_POLYGON_MODE_LINE
             float                   depthBias         = 0.0f;  // XNA DepthBias (vkCmdSetDepthBias constant)
             float                   slopeScaleDepthBias = 0.0f; // XNA SlopeScaleDepthBias (slope factor)

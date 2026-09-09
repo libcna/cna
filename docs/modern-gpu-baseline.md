@@ -36,7 +36,7 @@ need content, audio, media, storage or the engine extension module.
 | Public type or entry point | Owner | Baseline meaning |
 |---|---|---|
 | `CNA::GraphicsCapability` | `modules/graphics` | Legacy 19-value summary. Ordinals 0 through 18 are already public and append-only. |
-| `CNA::RendererFeature`, `RendererFeatureSupport`, `RendererFeatureInfo` | `modules/graphics` | 31 atomic feature identities and four-state answers. `Count` is a sentinel, not a query. |
+| `CNA::RendererFeature`, `RendererFeatureSupport`, `RendererFeatureInfo` | `modules/graphics` | 32 atomic feature identities and four-state answers after `MOD-2232`. `Count` is a sentinel, not a query. |
 | `CNA::RendererLimit`, `RendererLimitValue` | `modules/graphics` | 22 numeric limit identities with an explicit known bit. Zero may be a known unsupported/unimplemented value. |
 | `CNA::RendererFormatUsage`, `RendererFormatSupport` | `modules/graphics` | Thirteen independent per-`SurfaceFormat` usage bits with separate known and supported masks. |
 | `CNA::RendererCapabilityProfile` | `modules/graphics` | Cached immutable device snapshot plus a generated English report. |
@@ -50,6 +50,7 @@ need content, audio, media, storage or the engine extension module.
 | `CNA::GraphicsMemoryBarrier` and its bit operators | `modules/graphics` | Portable-looking caller barrier mask. Phase 22 replaces the need for callers to drive normal correctness with renderer-owned usage transitions. |
 | `CNA::IndirectDrawArguments`, `IndirectDrawIndexedArguments` | `modules/graphics` | Canonical 16-byte/20-byte GPU argument layouts; both already contain base-instance fields. |
 | `GraphicsDevice::DrawPrimitivesIndirectEXT`, `DrawIndexedPrimitivesIndirectEXT` | `modules/graphics` | Existing indirect public routes backed by a `StorageBuffer`; EasyGL implements them, Vulkan/OpenGL4 refuse. |
+| `GraphicsDevice::DrawInstancedPrimitivesBaseInstanceEXT` | `modules/graphics` | `MOD-2232` adds a capability-gated first logical instance while retaining XNA indexed geometry, bindings and effect state; Vulkan is the first implementation. |
 | `CNA::DisplayColorSpace` and device queries | `modules/graphics` | Existing sRGB/scRGB/HDR10 vocabulary; all measured renderers still expose only sRGB presentation. |
 
 There is no public `ShaderCodeEXT`, `ShaderPackageEXT`, constant buffer, independently creatable
@@ -74,7 +75,7 @@ reuse or must deliberately supersede. A default is not evidence of backend suppo
 | `CreateComputeShader`, `CreateStorageBuffer`, `CreateStorageBufferEXT` | `nullptr`; the descriptor factory is separately false by default. |
 | `DispatchCompute`, `MemoryBarrierEXT` | No-op. Public wrappers must gate support before reaching these defaults. |
 | `ExecutesShaderEffectSourceEXT`, `SupportsShadowSamplingEXT`, `SupportsImageBasedLightingEXT` | `false`. |
-| `SupportsComputeShadersEXT`, `SupportsIndirectDrawEXT`, `SupportsComputeImageBindingEXT`, `SupportsTexture3DSamplingEXT` | `false`. |
+| `SupportsComputeShadersEXT`, `SupportsIndirectDrawEXT`, `SupportsBaseInstanceDrawingEXT`, `SupportsComputeImageBindingEXT`, `SupportsTexture3DSamplingEXT` | `false`. |
 | `GetDisplayColorSpaceEXT`, `SetDisplayColorSpaceEXT` | Reports sRGB; accepts only sRGB. |
 | `GetMaxVertexShaderStorageBlocksEXT` | `0`. |
 | `BindStorageBufferForDrawEXT` | No-op. |
@@ -219,7 +220,7 @@ tree, not about native API potential.
 | MOD-2229 | Supplied | Immutable usage/CPU-access descriptors, tracked lifetime, overflow-safe ranges and GPU copies are public. Vulkan allocates exact role flags, keeps CPU-none memory unmapped and proves staging-through-copy on two devices. |
 | MOD-2230 | Absent | No typed constant-buffer wrapper or binding. |
 | MOD-2231 | Partial | Canonical argument structs and indirect draw calls exist, but argument storage cannot be created independently of compute support. |
-| MOD-2232 | Partial | Indirect layouts contain `BaseInstance`; no capability-gated direct base-instance draw extension exists. |
+| MOD-2232 | Supplied | Engine revision 8 adds the direct, detailed-feature-gated base-instance draw; Vulkan retains the shifted instance range and proves instance one independently on RADV and llvmpipe. |
 | MOD-2233 | Partial | A few ad-hoc XNA texture/buffer bridges exist; no documented/tested interoperability and lifetime matrix exists. |
 | MOD-2240 | Supplied | Vulkan discovery separates supported and enabled facts and records its ordered queue. |
 | MOD-2241 | Supplied | Vulkan implements the existing compute/storage-buffer baseline. |

@@ -328,6 +328,21 @@ TEST(StorageBufferDescriptorTest, RetainsEveryFieldAndComposesEveryFlag)
               StorageBufferCpuAccess::Write);
 }
 
+TEST(BaseInstanceDrawTest, AnUnsupportedRendererRefusesBeforeInspectingDrawBindings)
+{
+    GraphicsDevice device;
+    int destructions = 0;
+    CNA::Internal::StorageBufferGraphicsDeviceTestPeer::ReplaceRenderer(
+        device, MakeRenderer(destructions));
+
+    EXPECT_FALSE(device.SupportsRendererFeatureEXT(CNA::RendererFeature::BaseInstanceDrawing));
+    EXPECT_THROW(
+        device.DrawInstancedPrimitivesBaseInstanceEXT(
+            Microsoft::Xna::Framework::Graphics::PrimitiveType::TriangleList,
+            0, 0, 3, 0, 1, 1, 1),
+        System::NotSupportedException);
+}
+
 TEST(StorageBufferDescriptorTest, RejectsEveryIntrinsicInvalidDescription)
 {
     EXPECT_THROW(StorageBufferDescriptor(

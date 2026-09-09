@@ -1559,6 +1559,9 @@ namespace CNA::Internal::Renderers
         bool pbr                 = false;
         /// Number of instances to draw (1 = non-instanced).
         int instanceCount = 1;
+        /// plans/plan_modern.md MOD-2232: first logical instance for the capability-gated
+        /// base-instance route. The XNA draw path and every older renderer see zero.
+        int firstInstance = 0;
         /// REMED-GFX-201/202: every active declared `VertexBufferBinding`, in public slot order,
         /// captured by value -- per-vertex and per-instance alike, on every draw route.
         /// `vertexStreams[0]` is always the stream `Draw*PrimitivesEx`'s own `vb` argument refers
@@ -2664,6 +2667,13 @@ namespace CNA::Internal::Renderers
         /// than that capability being answered by a renderer's own switch, for the reason
         /// SupportsComputeShadersEXT states.
         [[nodiscard]] virtual bool SupportsIndirectDrawEXT() const { return false; }
+
+        /**
+         * @brief Reports whether instanced draws consume a non-zero first-instance value.
+         *
+         * @return `true` when `GpuDrawParams::firstInstance` is supported; otherwise `false`.
+         */
+        [[nodiscard]] virtual bool SupportsBaseInstanceDrawingEXT() const { return false; }
 
         /// plans/plan_modern.md MOD-1514: whether a `Texture2D` can be bound to a compute shader as an
         /// image. Separate from `SupportsComputeShadersEXT` because the two genuinely differ: GL ES
