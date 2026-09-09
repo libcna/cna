@@ -26,6 +26,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 
 using namespace CNA::Testing::Renderers;
@@ -271,4 +272,33 @@ TEST(GraphicsProfileDrawStateFormatTest, HiDefNpotTextureAllowsNonClampAddressin
     draw.device.getSamplerStatesProperty()[0] = SamplerState::PointWrap;
 
     EXPECT_NO_THROW(draw.Draw());
+}
+
+TEST(GraphicsProfileDrawStateFormatTest, DeferredSpriteBatchUsesSamplerMutationAtEnd)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+
+    GraphicsDevice device(
+        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+        SmallBackBuffer());
+    Texture2D texture(device, 2, 1, false, SurfaceFormat::Color);
+    const std::array texels{Color::Red, Color::Green};
+    texture.SetData(texels.data(), static_cast<int>(texels.size()));
+
+    SamplerState sampler = SamplerState::PointClamp;
+    SpriteBatch batch(device);
+    device.Clear(Color::Black);
+    batch.Begin(SpriteSortMode::Deferred, &BlendState::Opaque, &sampler, nullptr, nullptr);
+    batch.Draw(texture, Rectangle(0, 0, 8, 8), Rectangle(0, 0, 4, 1), Color::White);
+
+    // Microsoft/FNA keep the state reference and do not bind it until the deferred flush.
+    ASSERT_NO_THROW(sampler.setAddressUProperty(TextureAddressMode::Wrap));
+    batch.End();
+    EXPECT_THROW(sampler.setAddressVProperty(TextureAddressMode::Mirror),
+                 System::InvalidOperationException);
+
+    Color pixel = Color::Transparent;
+    const Rectangle sample(4, 4, 1, 1);
+    device.GetBackBufferData(&sample, &pixel, 0, 1);
+    EXPECT_EQ(pixel, Color::Red);
 }

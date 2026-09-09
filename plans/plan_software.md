@@ -86,6 +86,9 @@
 > `std::out_of_range`; `SOFTWARE-231` restores the public `ArgumentOutOfRangeException` contract.
 > Recovered state-class source then disproved the campaign's FNA-derived mutable-state premise;
 > `SOFTWARE-232` restores Microsoft's bind-time immutability and shared assigned property payload.
+> That repair exposed a narrower deferred-SpriteBatch timing bug: the public sampler payload stayed
+> mutable until `End`, but both renderers had already copied its values at `Begin`. `SOFTWARE-233`
+> now refreshes every renderer-facing sampler control at the actual deferred flush boundary.
 > Deferred CNAEXT-modern and
 > non-applicable physical GPU/window behavior remain separately classified.
 > The executable task table is below; the evidence ledger is
@@ -311,6 +314,7 @@ its own tests and plan evidence in the same commit.
 | SOFTWARE-230 | Restore XNA null render-target binding exception semantics | ✅ | Completed 2026-09-09. A default `RenderTargetBinding` is representable in CNA and reached a shared `std::invalid_argument`, with an existing test pinning that native exception. Recovered Microsoft XNA checks every binding's render-target reference and throws `ArgumentException(NullNotAllowed)`. The shared loop now reports `System::ArgumentException` with the public parameter name before renderer work or state mutation. The corrected focused test passes on Software and desktop EasyGL; full suites retain 2,437/2,492 with 55 classified skips and 2,449/2,508 with 59 skips. |
 | SOFTWARE-231 | Restore XNA texture/sampler collection index exceptions | ✅ | Completed 2026-09-09. Microsoft XNA's `TextureCollection` and `SamplerStateCollection` getters/setters throw `ArgumentOutOfRangeException("index")` outside the profile-sized slot array. CNA leaked `std::out_of_range` from all four shared access paths, and eight existing assertions pinned that native type across standalone, Reach and HiDef collections. Both classes now throw the SharpRuntime exception for negative, pixel upper-bound, Reach zero-slot and HiDef four-slot failures. Eight focused boundary tests pass on Software and desktop EasyGL; both full suites retain the SOFTWARE-230 counts and classified skips. |
 | SOFTWARE-232 | Restore Microsoft XNA bind-time graphics-state immutability | ✅ | Completed 2026-09-09. The campaign had trusted FNA's mutable state records and even added K3/K4 assertions around post-bind mutation. Recovered Microsoft `BlendState`, `DepthStencilState`, `RasterizerState` and `SamplerState` instead store `isBound`; every property setter calls `ThrowIfBound`, built-in presets start bound, and `Apply` rejects disposed state before binding. CNA copied property values into device/collection caches, so the source remained mutable and a disposed state could be installed. All four families now carry a shared property payload across assignment, direct GraphicsDevice setters and sampler collection slots bind that payload, and every setter throws `InvalidOperationException` afterward through both source and cached wrappers. Public C++ copy construction remains a documented `CNAEXT` deep-copy spelling so `State custom = State::Preset` creates the mutable state instance existing call sites require. Forty-one setter rejection assertions cover every exposed property, direct disposed Blend/Depth/Rasterizer assignment and disposed sampler collection assignment. Renderer-specific OpenGL1 probes were corrected to configure mutable states before binding. Full `CnaGraphicsTests` passes 2,444 with 55 classified skips out of 2,499 on Software and 2,455 with 60 skips out of 2,515 on Mesa EasyGL; the corrected deferred-scissor K3/K4 executable passes 50/50 on both. Exact wrapper/resource identity remains SOFTWARE-198. |
+| SOFTWARE-233 | Apply deferred SpriteBatch sampler mutations at the real flush boundary | ✅ | Completed 2026-09-09. SOFTWARE-232 made SpriteBatch retain the caller's shared sampler payload, correctly leaving it mutable between a non-Immediate `Begin` and `End`, but the private renderer channel still copied `Filter`, U/V addressing, anisotropy, mip clamp and LOD bias during `Begin`. A pre-fix recording discriminator showed all six renderer controls remained stale, while an 8x8 red/green Point-sampling oracle changed the payload from Clamp to Wrap after queuing and produced green instead of XNA/FNA's red. `applyRenderState()` now refreshes the complete private sampler tuple from the retained payload immediately before a deferred flush (and remains valid for the Immediate boundary). Both discriminators and the affected 40-test SpriteBatch/profile slice pass on Software and Mesa EasyGL. Full `CnaGraphicsTests` passes 2,446 with 55 classified skips out of 2,501 on Software and 2,457 with 60 skips out of 2,517 on Mesa EasyGL. |
 
 ### Current dependency order
 Tasks through `SOFTWARE-161` plus `SOFTWARE-166/167/169/170/171/172/174/175/176/177/179..197/199..206/208..225` are complete except for the intentionally
@@ -370,7 +374,9 @@ failure instead of preserving FNA's array-copy implementation detail.
 binding array.
 `SOFTWARE-231` applies the same exception-fidelity pass to both public sampler-indexed collections.
 `SOFTWARE-232` corrects the FNA-led mutable-state premise and restores Microsoft's bind-time
-immutability for every property in all four graphics-state families.
+immutability for every property in all four graphics-state families. `SOFTWARE-233` then closes
+the deferred SpriteBatch sampler snapshot exposed by that repair, so every late legal sampler
+mutation reaches both public device state and the renderer at `End`.
 `SOFTWARE-100` remains yellow for the previously recorded
 repository-wide blockers; that status does not excuse any renderer gap found here.
 

@@ -75,6 +75,30 @@ namespace
     private:
         bool thrown_ = false;
     };
+
+    class RecordingSamplerSpriteBatchRenderer final : public RecordingSpriteBatchRenderer
+    {
+    public:
+        void SetSamplerFilter(int value) override { filter = value; }
+        void SetSamplerMaxAnisotropy(int value) override { maxAnisotropy = value; }
+        void SetSamplerMipState(int maxMip, float bias) override
+        {
+            maxMipLevel = maxMip;
+            lodBias = bias;
+        }
+        void SetSamplerAddressMode(int u, int v) override
+        {
+            addressU = u;
+            addressV = v;
+        }
+
+        int filter = -1;
+        int addressU = -1;
+        int addressV = -1;
+        int maxAnisotropy = -1;
+        int maxMipLevel = -1;
+        float lodBias = 0.0f;
+    };
 }
 
 // -----------------------------------------------------------------------
@@ -323,6 +347,36 @@ TEST(SpriteBatchTest, DeferredBeginAppliesRenderStatesOnlyWhenEndFlushes)
               SamplerState::PointClamp.getAddressUProperty());
     EXPECT_FALSE(device.getDepthStencilStateProperty().getDepthBufferEnableProperty());
     EXPECT_EQ(device.getRasterizerStateProperty().getCullModeProperty(), CullMode::CullClockwiseFace);
+}
+
+TEST(SpriteBatchTest, DeferredSamplerReadsEveryPropertyAtEndBoundary)
+{
+    using Microsoft::Xna::Framework::Graphics::BlendState;
+    using Microsoft::Xna::Framework::Graphics::SamplerState;
+    using Microsoft::Xna::Framework::Graphics::TextureAddressMode;
+    using Microsoft::Xna::Framework::Graphics::TextureFilter;
+
+    auto renderer = std::make_unique<RecordingSamplerSpriteBatchRenderer>();
+    RecordingSamplerSpriteBatchRenderer* const recording = renderer.get();
+    SpriteBatch batch(std::move(renderer));
+    SamplerState sampler = SamplerState::PointClamp;
+
+    batch.Begin(SpriteSortMode::Deferred, &BlendState::Opaque, &sampler, nullptr, nullptr);
+    sampler.setFilterProperty(TextureFilter::MinLinearMagPointMipLinear);
+    sampler.setAddressUProperty(TextureAddressMode::Wrap);
+    sampler.setAddressVProperty(TextureAddressMode::Mirror);
+    sampler.setMaxAnisotropyProperty(11);
+    sampler.setMaxMipLevelProperty(3);
+    sampler.setMipMapLevelOfDetailBiasProperty(-0.75f);
+    batch.End();
+
+    EXPECT_EQ(recording->filter,
+              static_cast<int>(TextureFilter::MinLinearMagPointMipLinear));
+    EXPECT_EQ(recording->addressU, static_cast<int>(TextureAddressMode::Wrap));
+    EXPECT_EQ(recording->addressV, static_cast<int>(TextureAddressMode::Mirror));
+    EXPECT_EQ(recording->maxAnisotropy, 11);
+    EXPECT_EQ(recording->maxMipLevel, 3);
+    EXPECT_FLOAT_EQ(recording->lodBias, -0.75f);
 }
 
 // --- Draw guard: throws when called before Begin (no-renderer batch) ---

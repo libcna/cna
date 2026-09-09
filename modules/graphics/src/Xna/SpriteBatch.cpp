@@ -129,11 +129,27 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void SpriteBatch::applyRenderState()
     {
-        if (graphicsDevice_ == nullptr) return;
-        graphicsDevice_->setBlendStateProperty(blendState_);
-        graphicsDevice_->getSamplerStatesProperty()[0] = samplerState_;
-        graphicsDevice_->setDepthStencilStateProperty(depthStencilState_);
-        graphicsDevice_->setRasterizerStateProperty(rasterizerState_);
+        if (graphicsDevice_ != nullptr)
+        {
+            graphicsDevice_->setBlendStateProperty(blendState_);
+            graphicsDevice_->getSamplerStatesProperty()[0] = samplerState_;
+            graphicsDevice_->setDepthStencilStateProperty(depthStencilState_);
+            graphicsDevice_->setRasterizerStateProperty(rasterizerState_);
+        }
+
+        // A deferred batch retains the caller's state object until this flush boundary. Its
+        // properties are still mutable between Begin and End, so refresh the renderer's private
+        // SpriteBatch sampler channel from the retained payload immediately before drawing.
+        if (renderer_ != nullptr)
+        {
+            renderer_->SetSamplerFilter(static_cast<int>(samplerState_.getFilterProperty()));
+            renderer_->SetSamplerMaxAnisotropy(samplerState_.getMaxAnisotropyProperty());
+            renderer_->SetSamplerMipState(samplerState_.getMaxMipLevelProperty(),
+                                          samplerState_.getMipMapLevelOfDetailBiasProperty());
+            renderer_->SetSamplerAddressMode(
+                static_cast<int>(samplerState_.getAddressUProperty()),
+                static_cast<int>(samplerState_.getAddressVProperty()));
+        }
     }
 
     // -----------------------------------------------------------------------
