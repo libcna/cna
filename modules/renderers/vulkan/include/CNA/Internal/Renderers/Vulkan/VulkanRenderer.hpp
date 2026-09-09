@@ -341,9 +341,41 @@ namespace CNA::Internal::Renderers::Vulkan
             int layer, int mipLevel, int x, int y, int width, int height,
             void* data, std::size_t byteCount) const override;
         /** @copydoc IVulkanArraySamplable::GetVkArrayImageView */
-        [[nodiscard]] VkImageView GetVkArrayImageView() const override { return imageView_; }
+        [[nodiscard]] VkImageView GetVkArrayImageView() const noexcept override
+        {
+            return imageView_;
+        }
         /** @brief Returns whether linear filtering was declared and device-validated. */
         [[nodiscard]] bool IsFilterableEXT() const noexcept { return (usage_ & UINT32_C(2)) != 0; }
+
+        /** @brief Returns the level-zero width recorded by the native allocation. */
+        [[nodiscard]] int GetWidthEXT() const noexcept { return width_; }
+        /** @brief Returns the level-zero height recorded by the native allocation. */
+        [[nodiscard]] int GetHeightEXT() const noexcept { return height_; }
+        /** @brief Returns the number of layers recorded by the native allocation. */
+        [[nodiscard]] int GetLayerCountEXT() const noexcept { return layerCount_; }
+        /** @brief Returns the number of mip levels recorded by the native allocation. */
+        [[nodiscard]] int GetMipLevelCountEXT() const noexcept { return mipLevelCount_; }
+        /** @brief Returns the public `SurfaceFormat` ordinal retained by the allocation. */
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept { return surfaceFormat_; }
+        /** @brief Returns the public usage mask retained by the allocation. */
+        [[nodiscard]] std::uint32_t GetDeclaredUsageEXT() const noexcept { return usage_; }
+        /** @brief Returns the exact native format passed to `vkCreateImage`. */
+        [[nodiscard]] VkFormat GetVkFormatEXT() const noexcept { return vkFormat_; }
+        /** @brief Returns the exact native usage mask passed to `vkCreateImage`. */
+        [[nodiscard]] VkImageUsageFlags GetVkImageUsageEXT() const noexcept
+        {
+            return imageUsage_;
+        }
+        /** @brief Returns the native image handle, or null after device teardown. */
+        [[nodiscard]] VkImage GetVkImageEXT() const noexcept { return image_; }
+        /** @brief Returns the view type used to create the sampled view. */
+        [[nodiscard]] VkImageViewType GetVkImageViewTypeEXT() const noexcept
+        {
+            return imageViewType_;
+        }
+        /** @brief Returns whether the renderer record is still connected to its owner. */
+        [[nodiscard]] bool HasOwnerEXT() const noexcept { return owner_ != nullptr; }
 
         /** @brief Retires all live Vulkan handles while the owner is still available. */
         void ReleaseVulkanResources();
@@ -365,6 +397,8 @@ namespace CNA::Internal::Renderers::Vulkan
         VkFormat vkFormat_ = VK_FORMAT_UNDEFINED;
         int bytesPerTexel_ = 0;
         int blockExtent_ = 1;
+        VkImageUsageFlags imageUsage_ = 0;
+        VkImageViewType imageViewType_ = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
         VkImage image_ = VK_NULL_HANDLE;
         VkDeviceMemory memory_ = VK_NULL_HANDLE;
         VkImageView imageView_ = VK_NULL_HANDLE;
@@ -2898,6 +2932,18 @@ namespace CNA::Internal::Renderers::Vulkan
         {
             return computePipelineLayoutCreationCountEXT_;
         }
+
+        /** @brief Returns the number of live renderer-owned texture-array records. */
+        CNAEXT [[nodiscard]] std::size_t GetLiveTexture2DArrayCountEXT() const noexcept
+        {
+            return liveTexture2DArrays_.size();
+        }
+
+        /** @brief Returns texture-array images handed to fence-gated retirement. */
+        CNAEXT [[nodiscard]] uint64_t GetRetiredTexture2DArrayCountEXT() const noexcept
+        {
+            return retiredTexture2DArrayCountEXT_;
+        }
         /**
          * @brief Test-only: how many deferred 3D draws are still queued for the next submit.
          *
@@ -3441,6 +3487,8 @@ namespace CNA::Internal::Renderers::Vulkan
         uint64_t computeDescriptorSetAllocationCountEXT_ = 0;
         std::size_t liveComputePipelineLayoutCountEXT_ = 0;
         uint64_t computePipelineLayoutCreationCountEXT_ = 0;
+        /// plans/plan_modern.md MOD-2243: array image records handed to deferred retirement.
+        uint64_t retiredTexture2DArrayCountEXT_ = 0;
         /// The single funnel for vkDeviceWaitIdle, so the counter above cannot miss one.
         void DeviceWaitIdleEXT();
         uint64_t frameSubmitCountEXT_      = 0;

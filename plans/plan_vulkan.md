@@ -226,9 +226,9 @@ implementation tasks.**
   outside this plan and unimplemented (`MOD-104`, `MOD-107`, `MOD-123`). Display colour spaces
   remain `MOD-2092`;
 - the renderer-neutral sampled texture-array facade (`MOD-2225`) and layer/mip transfers plus
-  sampled binding (`MOD-2226`) are complete. Vulkan's functional allocation/view/transfer/sampling
-  path is present; `MOD-2243` still owns its independent raw-device and teardown/retirement audit.
-  Bindless resources and VRS remain outside;
+  sampled binding (`MOD-2226`) are complete. Vulkan allocation/view/transfer/sampling plus its
+  independent raw-device and teardown/retirement audit are complete (`MOD-2243`, 11/11 on both
+  RADV and llvmpipe with validation). Bindless resources and VRS remain outside;
 - ray tracing (`MOD-2096`) and mesh shaders (`MOD-2097`) — `MOD-2096`'s text names
   `plan_vulkan.md` as the place such a capability question *would* be asked; that reference does
   **not** transfer ownership, and this plan deliberately declines it as modern-GPU work;

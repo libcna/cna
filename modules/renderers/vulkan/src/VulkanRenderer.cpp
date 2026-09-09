@@ -759,9 +759,9 @@ namespace CNA::Internal::Renderers::Vulkan
         bytesPerTexel_ = storage.bytesPerTexel;
         blockExtent_ = storage.blockExtent;
 
-        VkImageUsageFlags imageUsage = VK_IMAGE_USAGE_SAMPLED_BIT;
-        if ((usage_ & UINT32_C(4)) != 0) imageUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-        if ((usage_ & UINT32_C(8)) != 0) imageUsage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        imageUsage_ = VK_IMAGE_USAGE_SAMPLED_BIT;
+        if ((usage_ & UINT32_C(4)) != 0) imageUsage_ |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+        if ((usage_ & UINT32_C(8)) != 0) imageUsage_ |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
         VkImageCreateInfo imageInfo{};
         imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -773,7 +773,7 @@ namespace CNA::Internal::Renderers::Vulkan
         imageInfo.arrayLayers = static_cast<std::uint32_t>(layerCount_);
         imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
         imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-        imageInfo.usage = imageUsage;
+        imageInfo.usage = imageUsage_;
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         if (vkCreateImage(owner_->device_, &imageInfo, nullptr, &image_) != VK_SUCCESS)
@@ -819,6 +819,7 @@ namespace CNA::Internal::Renderers::Vulkan
             viewInfo.subresourceRange = barrier.subresourceRange;
             if (vkCreateImageView(owner_->device_, &viewInfo, nullptr, &imageView_) != VK_SUCCESS)
                 throw std::runtime_error("Vulkan texture array: vkCreateImageView failed");
+            imageViewType_ = viewInfo.viewType;
         }
         catch (...)
         {
@@ -958,6 +959,8 @@ namespace CNA::Internal::Renderers::Vulkan
     void VulkanTexture2DArrayRenderer::ReleaseVulkanResources()
     {
         if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE) return;
+        if (imageView_ == VK_NULL_HANDLE && image_ == VK_NULL_HANDLE && memory_ == VK_NULL_HANDLE)
+            return;
         VulkanRenderer::RetiredResources retired;
         owner_->EvictSampledViewFromCaches(imageView_, retired);
         if (imageView_ != VK_NULL_HANDLE) retired.imageViews.push_back(imageView_);
@@ -966,6 +969,7 @@ namespace CNA::Internal::Renderers::Vulkan
         imageView_ = VK_NULL_HANDLE;
         image_ = VK_NULL_HANDLE;
         memory_ = VK_NULL_HANDLE;
+        ++owner_->retiredTexture2DArrayCountEXT_;
         owner_->RetireResources(std::move(retired));
     }
 
@@ -14011,6 +14015,11 @@ namespace CNA::Internal::Renderers::Vulkan
             height <= 0 || layerCount <= 0 || mipLevelCount <= 0 ||
             (usage & UINT32_C(1)) == 0 || (usage & ~allowedUsage) != 0)
             return nullptr;
+
+        int maximumMipLevelCount = 1;
+        for (int extent = std::max(width, height); extent > 1; extent /= 2)
+            ++maximumMipLevelCount;
+        if (mipLevelCount > maximumMipLevelCount) return nullptr;
 
         VulkanSurfaceFormatStorageEXT storage{};
         if (!MapSurfaceFormatToStorageEXT(surfaceFormat, storage)) return nullptr;

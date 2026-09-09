@@ -25,8 +25,8 @@ something breaks.
   `ClearTextureArrayEXT` releases it. Renderer work is shared independently of the disposed public
   `GraphicsResource`, and an unimplemented backend refuses instead of discarding the bind.
 - Vulkan supplies the first native implementation and oracle. Revision 4 defines the portable
-  public contract; the separate `MOD-2243` audit still owns closing every Vulkan-specific native
-  allocation, view, retirement and device-fact acceptance criterion.
+  public contract; `MOD-2243` separately closed the Vulkan-specific native allocation, view,
+  retirement and device-fact acceptance criteria on RADV and llvmpipe.
 
 ## Revision 3 — 2026-09-09
 

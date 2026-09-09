@@ -216,8 +216,9 @@ descriptor set 1 bindings 16..18. Together with the twelve pre-existing set-1 sa
 0's sprite sampler, that keeps the fragment-stage layout at Vulkan's guaranteed limit of sixteen.
 Unbound array slots use a dimensional 2D-array white view rather than the incompatible ordinary 2D
 filler. The 7x5/two-layer native oracle covers distinct upload, readback and shader results with no
-validation message. `MOD-2243` remains open only for its
-independent raw-limit/factory/device-teardown and retirement audit.
+validation message. `MOD-2243` independently verifies all 27 formats against five usage masks,
+exact native image/view identity, over-limit refusal, rebind retirement and a record that outlives
+explicit `GraphicsDevice` teardown. It passes 11/11 on both RADV and llvmpipe with validation.
 
 Two current implementation gaps are stated rather than normalized into the contract:
 

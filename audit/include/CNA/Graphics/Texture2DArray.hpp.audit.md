@@ -33,8 +33,8 @@ Pending.
 
 ## Cross-File Observations
 
-Pending. `MOD-2226` supplies the layer/mip transfers and sampled binding; Vulkan's independent
-raw-device/ownership/teardown verification remains separate `MOD-2243` work.
+Pending file audit. `MOD-2226` supplies the layer/mip transfers and sampled binding; Vulkan's
+separate raw-device/ownership/teardown verification is complete under `MOD-2243`.
 
 ## Missing or Weak Tests
 

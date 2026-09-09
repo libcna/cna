@@ -1449,6 +1449,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         if(CNA_CNAEXT)
+            # plans/plan_modern.md MOD-2243: raw physical-device limits/usage combinations must
+            # agree with array factory decisions, and native image/view records must retire and
+            # survive device-first teardown without holding dead Vulkan handles.
+            cna_vulkan_test(cna_test_vulkan_texture2d_array_contract
+                            vulkan_texture2d_array_contract_test.cpp)
+            cna_register_renderer_test(NAME Vulkan_Texture2DArrayContract
+                COMMAND cna_test_vulkan_texture2d_array_contract
+                TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
             # plans/plan_modern.md MOD-2241: SPIR-V compute + three storage buffers through the
             # public CNAEXT wrappers. Every vector element and the validation stream are checked.
             # MOD-2242 extends the baseline with reflected sparse slots, typed scalar push

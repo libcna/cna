@@ -223,7 +223,7 @@ tree, not about native API potential.
 | MOD-2240 | Supplied | Vulkan discovery separates supported and enabled facts and records its ordered queue. |
 | MOD-2241 | Supplied | Vulkan implements the existing compute/storage-buffer baseline. |
 | MOD-2242 | Supplied | Vulkan reflects bounded SSBO/push-constant bindings and reuses descriptors. |
-| MOD-2243 | Partial | Vulkan allocation, full-array views, subresource transfers, sampled descriptors and retirement are implemented and pass the functional oracle; the independent raw-limit/factory/device-teardown verification is still open. |
+| MOD-2243 | Supplied | Vulkan allocation, full-array views, subresource transfers, sampled descriptors and retirement pass both the functional oracle and an independent 27-format × 5-usage raw-device/factory/lifetime matrix on RADV and llvmpipe. |
 | MOD-2244 | Partial | Vulkan has XNA images and refuses reflected image descriptors; it has no legal storage-image bridge. |
 | MOD-2245 | Partial | Public indirect routes and native feature discovery exist; Vulkan truthfully reports unsupported and submits no indirect command. |
 | MOD-2246 | Partial | Shared `GpuTimer` exists; Vulkan has no timestamp-query implementation and publishes zero period. |
@@ -243,7 +243,6 @@ tree, not about native API potential.
 | MOD-2265 | Partial | Existing performance notes/timer support do not cover all Phase 22 paths or three measured backends. |
 | MOD-2266 | Absent | Mandatory Vulkan paths, applicable OpenGL4 portability, shared gates and no-stall evidence are not complete. |
 
-The portable contract prerequisite is supplied by `MOD-2202`, and `MOD-2226` now supplies the
-texture-array transfer/binding surface plus its Vulkan functional oracle. `MOD-2243` still owns the
-independent native limit/factory/device-teardown audit; it may not weaken the descriptor's
-reject-before-native-mutation rule.
+The portable contract prerequisite is supplied by `MOD-2202`; `MOD-2226` supplies the texture-array
+transfer/binding surface and functional oracle, and `MOD-2243` independently closes Vulkan's raw
+limit/factory/device-teardown audit. EasyGL/OpenGL4 portability remains `MOD-2261` work.
