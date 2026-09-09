@@ -16,8 +16,8 @@ namespace Microsoft::Xna::Framework::Graphics
     class VertexDeclaration : public GraphicsResource
     {
     public:
-        /** @brief Constructs an empty VertexDeclaration with zero stride. */
-        VertexDeclaration() = default;
+        /** @brief Constructs CNA's empty declaration used by legacy extension buffer paths. */
+        CNAEXT VertexDeclaration() = default;
 
         /** @brief Returns the fully-qualified .NET type name of this object. */
         CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
@@ -30,6 +30,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param elements Initializer list of vertex attribute descriptors.
          * @throws System::ArgumentNullException if @p elements is empty.
+         * @throws System::ArgumentException if the resulting layout is malformed.
          */
         explicit VertexDeclaration(std::initializer_list<VertexElement> elements);
 
@@ -43,6 +44,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param elements Vector of vertex attribute descriptors (moved).
          * @throws System::ArgumentNullException if @p elements is empty.
+         * @throws System::ArgumentException if the resulting layout is malformed.
          */
         explicit VertexDeclaration(std::vector<VertexElement> elements);
 
@@ -52,6 +54,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param elements     Initializer list of vertex attribute descriptors.
          * @throws System::ArgumentNullException if @p elements is empty.
          * @throws System::ArgumentOutOfRangeException if @p vertexStride is not positive.
+         * @throws System::ArgumentException if the stride or element layout is malformed.
          */
         VertexDeclaration(int vertexStride,
                           std::initializer_list<VertexElement> elements);
@@ -62,6 +65,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param elements     Vector of vertex attribute descriptors (moved).
          * @throws System::ArgumentNullException if @p elements is empty.
          * @throws System::ArgumentOutOfRangeException if @p vertexStride is not positive.
+         * @throws System::ArgumentException if the stride or element layout is malformed.
          */
         VertexDeclaration(int vertexStride,
                           std::vector<VertexElement> elements);

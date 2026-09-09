@@ -1148,26 +1148,15 @@ namespace
 // vertex's bytes. Rejected deterministically, before anything is uploaded.
 TEST_F(BuiltInVertexValidationTest, ElementBeyondTheDeclaredStrideIsRejected)
 {
-    const VertexDeclaration tooSmall(
-        14,
-        {
-            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
-            VertexElement(12, VertexElementFormat::Color, VertexElementUsage::Color, 0),
-        });
     EXPECT_THROW(
-        device.DrawUserPrimitives(
-            PrimitiveType::TriangleList, static_cast<const void*>(vertices.data()), 0, 1,
-            tooSmall),
-        System::ArgumentException);
-    EXPECT_THROW(
-        device.DrawUserIndexedPrimitives(
-            PrimitiveType::TriangleList, static_cast<const void*>(vertices.data()), 0, 3,
-            indices16.data(), 0, 1, tooSmall),
-        System::ArgumentException);
-    EXPECT_THROW(
-        device.DrawUserIndexedPrimitives(
-            PrimitiveType::TriangleList, static_cast<const void*>(vertices.data()), 0, 3,
-            indices32.data(), 0, 1, tooSmall),
+        (VertexDeclaration(
+            12,
+            {
+                VertexElement(0, VertexElementFormat::Vector3,
+                              VertexElementUsage::Position, 0),
+                VertexElement(12, VertexElementFormat::Color,
+                              VertexElementUsage::Color, 0),
+            })),
         System::ArgumentException);
 }
 
