@@ -121,15 +121,15 @@ do.
 | 17 `ComputeShaders` | S | S | U |
 | 18 `IndirectDraw` | S | S | U |
 
-The `CustomEffects` row does not mean source parity. The detailed profile measured source execution
-only on EasyGL. Vulkan accepts `ShaderEffect` objects but its current payload route is SPIR-V, and
-OpenGL4 accepts the object while its current source-execution query remains false.
+The `CustomEffects` row does not mean source parity. Vulkan accepts `ShaderEffect` objects through
+its SPIR-V payload route. OpenGL4's existing GLSL 4.10 compiler/execution path was made truthful in
+the detailed query by `MOD-2260`; it consumes desktop GLSL vertex and fragment payloads.
 
 ## Measured detailed modern subset
 
 | Observable profile fact | EasyGL `OPENGLES3` | Vulkan | OpenGL4 |
 |---|---:|---:|---:|
-| Shader-effect source execution | S | U | U |
+| Shader-effect source execution | S | U | S |
 | Compute shaders + storage-buffer dispatch | S | S | U |
 | Compute image binding | U | U | U |
 | Indirect drawing | S | S | U |
@@ -137,11 +137,19 @@ OpenGL4 accepts the object while its current source-execution query remains fals
 | Shadow sampling | S | U | U |
 | Image-based lighting | S | U | U |
 | Texture3D sampling | S | S | U |
-| Payload dialect query | `Unknown` | `SpirV` | `Unknown` |
+| Payload dialect query | `GlslEs` | `SpirV` | `GlslDesktop` |
 
-The dialect result explains why `MOD-2210` is partial, not supplied: an old enum exists, but EasyGL
-and OpenGL4 do not identify their real text languages, SPIR-V has no corresponding detailed
-`RendererFeature`, and there is no per-stage language query.
+`MOD-2210` added an explicit append-only language/stage query. `MOD-2260` completed OpenGL4's
+reporting for its already-implemented source path while deliberately leaving compute unsupported
+until the compute implementation itself exists.
+
+OpenGL4 also retains an internal `MOD-2260` native-feature snapshot distinct from these public CNA
+promises. The required loader and context request remain OpenGL 4.1; optional function groups are
+resolved non-fatally. On Mesa 25.0.7 the probe passed both the native 4.6 context and a forced 4.1
+context, where compute, SSBO, image, base-instance and full format-query facts were admitted only
+through the separately advertised ARB extensions. Float-format queries independently reported
+RGBA16F and RGBA32F framebuffer renderability. Public modern features and their numeric limits stay
+unsupported/zero until `MOD-2261` supplies the matching operations.
 
 ### Numeric limits
 
