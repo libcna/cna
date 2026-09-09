@@ -699,6 +699,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
                     ${CNA_GRAPHICS_EXAMPLES_DIR}/graphicsdevice_ordered_clear_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_GraphicsDevice_OrderedClear COMMAND cna_test_sdlgpu_ordered_clear
         TIMEOUT 120 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    set_tests_properties(SdlGpu_GraphicsDevice_OrderedClear PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
     # REMED-GFX-143: backbuffer work and render-target work must replay in ONE ordered stream.
     # REMED-GFX-140 (Vulkan) and REMED-GFX-145 (SdlGpu) gave every render-target bind cycle its own

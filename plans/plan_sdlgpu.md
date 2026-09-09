@@ -23,7 +23,7 @@
 | Shared EasyGL parity fixtures available | 30 renderer-neutral sources in `modules/graphics/examples/parity` |
 | Shared parity fixtures registered for SDL GPU | 1/30 (`parity_fill_mode_wireframe`) |
 | Tasks created by this audit | 29 (`SDLGPU-55`–`SDLGPU-83`) |
-| Completed / open / proven unavoidable | 6 / 23 / 0; `SDLGPU-80` is a candidate limitation, not yet counted complete |
+| Completed / open / proven unavoidable | 7 / 22 / 0; `SDLGPU-80` is a candidate limitation, not yet counted complete |
 | SDL GPU build | Stable `cmake-build-sdlgpu`, Debug, `CNA_GRAPHICS_RENDERER=SDL_GPU`, tests/examples ON |
 | EasyGL oracle build | Stable `cmake-build-debug`, Debug, `CNA_GRAPHICS_RENDERER=OPENGL33`, tests/examples ON |
 | Runtime driver | SDL 3.5.0 SDL_gpu Vulkan on AMD Radeon 780M / Mesa RADV 25.0.7; Khronos validation layer 1.4.309 present |
@@ -55,8 +55,9 @@ hidden:
    instead of remaining point-exact (`SDLGPU-63`).
 6. `SdlGpu_PointSamplingContract`: 145/146; only the 3D non-integer 3×3→10×10 PointClamp mapping
    differs (`SDLGPU-62`).
-7. `SdlGpu_GraphicsDevice_OrderedClear`: 45/46; a supposedly untouched cube face receives yellow
-   after two other face cycles (`SDLGPU-66`).
+7. `SdlGpu_GraphicsDevice_OrderedClear`: the initial 45/46 result was an oracle defect, resolved by
+   `SDLGPU-66`: the supposedly untouched face had undefined new-resource contents. After seeding it
+   with a known sentinel, all 46 checks pass and prove that two later face cycles preserve it.
 
 ### Definition and boundary
 
@@ -77,7 +78,7 @@ underlying limitation with no correct reasonable emulation; `out` excluded moder
 
 | Family | EasyGL reference | SDL GPU current state | State / owner |
 |---|---|---|---|
-| Clear color/depth/stencil overloads | Direct GL clears; ordered-clear corpus | Deferred clear commands and all combinations | `~` — cube-face failure; `SDLGPU-58`, `66` |
+| Clear color/depth/stencil overloads | Direct GL clears; ordered-clear corpus | Deferred clear commands and all combinations | `~` — all ordering tests pass; exhaustive state aspects remain `SDLGPU-58` |
 | Present, interval and modes | Runtime swap interval; resize examples | SDL claim/present modes and proxy copy | `~` — reset/resize/minimize recheck; `SDLGPU-68` |
 | Backbuffer size/readback/channel order | Direct readback, RGBA contract | Real `backbufferProxy_` download, contrary to old SDLGPU-39 text | `=` — dimension/first-read/range tests pass; recheck in `SDLGPU-68` |
 | Logical resolution/transforms/letterbox | Explicit default viewport and transforms | Explicit physical/logical transforms | `~` — resize and viewport restoration pending; `SDLGPU-68` |
@@ -94,10 +95,10 @@ underlying limitation with no correct reasonable emulation; `out` excluded moder
 | Texture2D ordinary non-Color formats | Packed, DXT native-or-decode, SNORM | classifier inherited and native resource hard-coded RGBA8 | `∅` though SDL has corresponding formats; `SDLGPU-69` |
 | Texture3D Color/mips/boxes/readback | Native volume path | Native RGBA8 path | `≠` only non-integer point sampling; `SDLGPU-62` |
 | Texture3D surface format | constructor forwards format internally | public seam rejects non-Color; SDL constructor ignores argument | `∅`; `SDLGPU-71` |
-| TextureCube faces/mips/partial/readback | Native cube, DXT and formats | RGBA8-only path; current face-order regression | `≠`/`∅`; `SDLGPU-66`, `70` |
+| TextureCube faces/mips/partial/readback | Native cube, DXT and formats | RGBA8 path has isolated face upload/readback/mips | `=` for Color baseline; formats remain `∅`; `SDLGPU-70` |
 | RenderTarget2D Color/depth/MSAA/readback/mips | Full classic path | Real Color target, resolve, readback, mips | `~` — preserve/zero-MSAA/transitions sweep; `SDLGPU-74` |
 | RenderTarget2D float/half/Rgba64 | Requested storage, runtime probed | base factory drops requested format and creates RGBA8 | `∅`; ordinary constructor makes internal `*EXT` path in-scope; `SDLGPU-72` |
-| RenderTargetCube Color/faces/depth/MSAA/mips | Full classic path | Real Color cube path | `~` — face bug and depth/usage sweep; `SDLGPU-66`, `73`, `74` |
+| RenderTargetCube Color/faces/depth/MSAA/mips | Full classic path | Real Color cube path | `~` — face ordering verified; depth/usage sweep remains `SDLGPU-73`, `74` |
 | RenderTargetCube non-Color | Requested storage, runtime probed | base factory drops format | `∅`; `SDLGPU-73` |
 | MRT binding/clear | Independent fragment outputs verified | attachments bind, but stock output only targets slot 0 | `≠`; `SDLGPU-75` |
 | Vertex buffers/declarations/dynamic options | declaration semantic+offset driven | buffer stores declaration but stock routing is fixed-layout/stride gated | `≠`; `SDLGPU-59`, `78` |
@@ -172,7 +173,7 @@ were checked individually in the declarations and implementations.
 | format classifiers, compressed transfer policy, half-float filtering | explicit, runtime/profile aware | all inherited defaults | classic where reached from ordinary texture/RT constructors (`SDLGPU-69–73`) |
 | coordinate transforms and `ReadBackbuffer` | explicit | explicit | classic; readback baseline passes (`SDLGPU-68`) |
 | texture/sprite/RT2D/RTCube/Texture3D/TextureCube factories, including format-bearing `*EXT` RT factories | explicit | base factories explicit, format-bearing factories inherited and drop format | classic observable (`SDLGPU-69–74`) |
-| `SetRenderTarget2D`, `SetRenderTargetCubeFace`, `SetRenderTargets` | all explicit | 2D and plural explicit; single cube-face hook inherited and delegates to plural | classic; current cube-face ordering failure (`SDLGPU-66/75`) |
+| `SetRenderTarget2D`, `SetRenderTargetCubeFace`, `SetRenderTargets` | all explicit | 2D and plural explicit; single cube-face hook inherited and delegates to plural | classic; cube ordering verified, MRT semantics remain `SDLGPU-75` |
 | blend/depth/raster/sampler applications; BlendFactor/reference/scissor/viewport | all explicit | all explicit | classic; immutable-key and propagation verification (`SDLGPU-58/63–65`) |
 | buffer factories and colored/extended primitive/indexed draw hooks | explicit | explicit | classic (`SDLGPU-59/78`) |
 | `DrawInstancedPrimitivesEx`, `GetMaxVertexStreams`, multistream capability | explicit | draw inherited throw, max-stream/capability inherited false | classic XNA 4.0 (`SDLGPU-60`) |
@@ -360,13 +361,26 @@ underlying API limitation proven after reasonable emulation analysis.
   tasks because this baseline exposes only D32F/S8 and SDL GPU does not yet create other requested
   depth formats.
 
-### SDLGPU-66 — isolate ordered clears and draws per cube face ⬜
+### SDLGPU-66 — isolate ordered clears and draws per cube face ✅
 
-- **Problem/public behavior:** work queued for one cube face retroactively affects an untouched face.
-- **Evidence:** ordered-clear baseline is 45/46; face T4 becomes yellow after two other face cycles.
-- **Location:** cube target selection snapshots, pass segmentation and clear command encoding.
-- **Acceptance/test:** six distinct face signatures survive interleaved cube/2D/backbuffer passes,
-  repeated switches and destruction; no face aliases and no validation messages.
+- **Problem/public behavior:** the ordered-clear baseline appeared to show work queued for one cube
+  face retroactively affecting a supposedly untouched face.
+- **Evidence:** baseline T4 was 45/46 because an unwritten face read as the same yellow used by a
+  later face clear. EasyGL returned transparent black, but new render-target contents are undefined;
+  neither value proves or disproves isolation. Existing SDL tests already paint all six faces with
+  distinct values and preserve face 0 after five later writes.
+- **Location:** shared ordered-clear oracle; no renderer behavior was changed.
+- **Acceptance/test:** seed the control face with a distinct known value, then issue draw/clear
+  sequences against two other faces; all three exact readbacks, six-face tests, repeated switches,
+  pass-boundary tests and validation remain clean.
+- **Result (2026-09-09):** T4 now initializes PositiveY to cyan before the NegativeX and PositiveZ
+  subject cycles and requires byte-exact cyan afterward. SDL GPU passes all 46 ordered-clear checks;
+  EasyGL passes all 49 of its enabled checks. The existing SDL cube target suite also proves six
+  distinct faces, and the depthless-cube suite covers all faces plus producer/consumer switching.
+  Its depth discriminator was also corrected from invalid identity-projection Z=−0.5 (outside
+  XNA/DirectX's 0..W clip volume) to valid near/far depths 0.25/0.75; it passes 7/7 without undoing
+  `SDLGPU-65`'s XNA depth clipping. The SDL ordered-clear CTest now makes native validation
+  diagnostics fatal.
 
 ### SDLGPU-67 — verify viewport/scissor/depth-range capture across target changes ⬜
 

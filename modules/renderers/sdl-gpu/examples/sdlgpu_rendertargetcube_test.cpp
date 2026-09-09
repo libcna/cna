@@ -169,12 +169,12 @@ protected:
             RenderTargetCube rt(dev, kCubeSize, false, SurfaceFormat::Color,
                                 DepthFormat::Depth24Stencil8, 0, RenderTargetUsage::DiscardContents);
             const VertexPositionColor farVerts[6] = {
-                { Vector3(-1.0f, -1.0f, 0.5f), Color::Red }, { Vector3(-1.0f, 1.0f, 0.5f), Color::Red }, { Vector3(1.0f, -1.0f, 0.5f), Color::Red },
-                { Vector3(-1.0f, 1.0f, 0.5f), Color::Red }, { Vector3(1.0f, 1.0f, 0.5f), Color::Red }, { Vector3(1.0f, -1.0f, 0.5f), Color::Red },
+                { Vector3(-1.0f, -1.0f, 0.75f), Color::Red }, { Vector3(-1.0f, 1.0f, 0.75f), Color::Red }, { Vector3(1.0f, -1.0f, 0.75f), Color::Red },
+                { Vector3(-1.0f, 1.0f, 0.75f), Color::Red }, { Vector3(1.0f, 1.0f, 0.75f), Color::Red }, { Vector3(1.0f, -1.0f, 0.75f), Color::Red },
             };
             const VertexPositionColor nearVerts[6] = {
-                { Vector3(-1.0f, -1.0f, -0.5f), Color::Green }, { Vector3(-1.0f, 1.0f, -0.5f), Color::Green }, { Vector3(1.0f, -1.0f, -0.5f), Color::Green },
-                { Vector3(-1.0f, 1.0f, -0.5f), Color::Green }, { Vector3(1.0f, 1.0f, -0.5f), Color::Green }, { Vector3(1.0f, -1.0f, -0.5f), Color::Green },
+                { Vector3(-1.0f, -1.0f, 0.25f), Color::Green }, { Vector3(-1.0f, 1.0f, 0.25f), Color::Green }, { Vector3(1.0f, -1.0f, 0.25f), Color::Green },
+                { Vector3(-1.0f, 1.0f, 0.25f), Color::Green }, { Vector3(1.0f, 1.0f, 0.25f), Color::Green }, { Vector3(1.0f, -1.0f, 0.25f), Color::Green },
             };
             VertexBuffer farVb(dev, VertexPositionColor::getVertexDeclarationStatic(), 6, BufferUsage::None);
             farVb.SetData(farVerts, 0, 6);
