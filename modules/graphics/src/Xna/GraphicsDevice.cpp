@@ -499,7 +499,27 @@ namespace Microsoft::Xna::Framework::Graphics
         width = presentationParameters_.getBackBufferWidthProperty();
         height = presentationParameters_.getBackBufferHeightProperty();
         if (currentRenderTargets_.empty())
+        {
+            // CNA's presentation modes can make the active logical backbuffer wider than the
+            // requested PresentationParameters while preserving its virtual height.  Validate
+            // public Viewport/ScissorRectangle values against that live logical surface, which is
+            // also what UpdateViewportFromWindow publishes and renders into.  This distinction is
+            // especially important during GraphicsDeviceManager's synchronous window-change
+            // callback: the renderer has already observed the new drawable while Reset has not yet
+            // committed the replacement PresentationParameters.
+            if (renderer_ != nullptr)
+            {
+                int liveWidth = 0;
+                int liveHeight = 0;
+                renderer_->GetViewportSize(liveWidth, liveHeight);
+                if (liveWidth > 0 && liveHeight > 0)
+                {
+                    width = liveWidth;
+                    height = liveHeight;
+                }
+            }
             return;
+        }
 
         const Texture* const target = currentRenderTargets_[0].getRenderTargetProperty();
         if (const auto* const target2D = dynamic_cast<const RenderTarget2D*>(target))
