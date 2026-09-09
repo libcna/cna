@@ -23,11 +23,11 @@ namespace Microsoft::Xna::Framework::Graphics
         std::unique_ptr<CNA::Internal::Renderers::IVertexBufferRenderer>
         CreateVertexBufferRenderer(GraphicsDevice& device, int vertexCount)
         {
-            if (vertexCount < 0)
+            if (vertexCount <= 0)
             {
                 throw System::ArgumentOutOfRangeException(
                     "vertexCount", std::to_string(vertexCount),
-                    "The vertex count must be non-negative.");
+                    "The vertex count must be greater than zero.");
             }
             return device.GetRenderer().CreateVertexBuffer(vertexCount);
         }

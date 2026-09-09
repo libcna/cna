@@ -35,6 +35,8 @@
 > from the Microsoft implementation as `SOFTWARE-202`.
 > It also restored `DisplayMode.TitleSafeArea`/`ToString()` and XNA's seven-significant-digit
 > `Single` formatting across the audited display values as `SOFTWARE-203`.
+> The buffer-constructor pass then removed CNA's test-pinned zero-capacity extension from all four
+> classic static/dynamic vertex/index buffer constructors as `SOFTWARE-204`.
 > Deferred CNAEXT-modern and
 > non-applicable physical GPU/window behavior remain separately classified.
 > The executable task table is below; the evidence ledger is
@@ -230,6 +232,7 @@ its own tests and plan evidence in the same commit.
 | SOFTWARE-201 | Restore default `Viewport` value semantics and exact `ToString` formatting | ✅ | Completed 2026-09-09. Microsoft XNA's `Viewport` is a value type with no parameterless constructor, so `default(Viewport)` has every field zero. CNA's explicit default constructor instead set `MaxDepth=1`, contradicting both that contract and its own “all fields zero” documentation; only the two parameterized constructors initialize the ordinary 0..1 depth range. CNA also used `std::to_string`, forcing six fractional digits where XNA's formatted output uses ordinary scalar formatting. Both pre-fix discriminators failed. The default now leaves `MaxDepth` zero and stream formatting produces the recovered exact field layout without forced trailing zeroes. All 24 focused Viewport tests pass. |
 | SOFTWARE-202 | Match Microsoft XNA's exact `VertexElement.ToString()` contract | ✅ | Completed 2026-09-09. FNA constructs its text by concatenating literal double braces and inserts an extra space after `UsageIndex:`; CNA copied that implementation and its tests only searched substrings. Recovered Microsoft XNA 4.0 instead passes escaped braces to `string.Format`, whose observable result has one opening/closing brace and no extra usage-index space. The exact pre-fix assertion failed with `{{Offset:0 Format:Color Usage:TextureCoordinate UsageIndex: 1}}`; CNA now produces `{Offset:0 Format:Color Usage:TextureCoordinate UsageIndex:1}`. The complete focused VertexElement suite passes. |
 | SOFTWARE-203 | Restore the public XNA `DisplayMode` value surface and `Single` text precision | ✅ | Completed 2026-09-09. CNA's `DisplayMode` omitted the public XNA `TitleSafeArea` property and `ToString()` override entirely, while its project-only public constructors and equality operators were not marked `CNAEXT`. Recovered Microsoft XNA makes the safe area the full mode and formats width, height, enum name and aspect ratio in that order using the default seven-significant-digit `Single` representation. CNA's newly corrected Viewport string path also still emitted only six significant digits for repeating floats. The missing members are implemented, non-XNA helpers are marked, and both display types now use seven-digit scalar formatting. All 44 focused DisplayMode/Viewport checks pass. |
+| SOFTWARE-204 | Enforce positive classic vertex/index buffer capacities | ✅ | Completed 2026-09-09. Recovered Microsoft XNA 4.0 checks `vertexCount <= 0` and `indexCount <= 0` in both static and dynamic constructors. CNA checked only negative counts, while two substantial “empty data” suites explicitly declared zero-capacity buffers valid and asserted the divergence across all four kinds. The shared constructors now reject zero before renderer allocation, while zero-element transfers remain valid no-ops on positive-capacity buffers. The native C API rejects the same invalid create requests and documents positive capacity. The rewritten 29-test transfer/capacity slice passes 29/29 on Software and desktop EasyGL; the two independently compiled pure-C vertex/index buffer smoke tests pass through the shared C ABI. |
 
 ### Current dependency order
 
@@ -261,7 +264,9 @@ the prior FNA-only query lifecycle conclusion with recovered Microsoft XNA behav
 `SOFTWARE-201` corrects the recovered default and textual semantics of the public Viewport value.
 `SOFTWARE-202` restores Microsoft XNA's exact public VertexElement string result despite FNA's
 known divergent concatenation. `SOFTWARE-203` restores the missing DisplayMode public surface and
-the recovered default Single precision used by both audited display strings.
+the recovered default Single precision used by both audited display strings. `SOFTWARE-204`
+removes the shared zero-capacity buffer extension contradicted by all four recovered XNA
+constructors while preserving legal empty transfers.
 `SOFTWARE-100` remains yellow for the previously recorded
 repository-wide blockers; that status does not excuse any renderer gap found here.
 

@@ -37,7 +37,7 @@ typedef struct CNA_IndexBufferCreateInfo {
     uint32_t struct_size;
     /** @brief Version of this caller-provided structure; currently one. */
     uint32_t struct_version;
-    /** @brief Nonnegative logical capacity measured in indices. */
+    /** @brief Positive logical capacity measured in indices. */
     int32_t index_count;
     /** @brief Stored index width. */
     CNA_IndexElementSize index_element_size;

@@ -402,6 +402,16 @@ static int validate_lifecycle_and_failures(
         return 0;
     }
 
+    const CNA_IndexBufferCreateInfo zero_capacity = {
+        sizeof(CNA_IndexBufferCreateInfo), UINT32_C(1), 0,
+        CNA_INDEX_ELEMENT_SIZE_SIXTEEN_BITS, CNA_BUFFER_USAGE_NONE,
+        CNA_FALSE, {0U, 0U, 0U}};
+    CNA_IndexBufferHandle zero_output = UINT64_MAX;
+    if (cna_index_buffer_create(device, &zero_capacity, &zero_output) !=
+            CNA_RESULT_INVALID_ARGUMENT || zero_output != CNA_INVALID_HANDLE) {
+        return 0;
+    }
+
     CNA_CurveHandle wrong_kind = CNA_INVALID_HANDLE;
     CNA_IndexBufferCreateInfo invalid = {
         sizeof(CNA_IndexBufferCreateInfo), UINT32_C(1), 1,

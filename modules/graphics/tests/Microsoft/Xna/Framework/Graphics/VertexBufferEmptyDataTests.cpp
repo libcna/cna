@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-103: public regression for CNA's zero-element vertex-buffer contract.
+// REMED-GFX-103 / SOFTWARE-204: public vertex-buffer capacity and zero-element transfer contract.
 //
-// A logical zero-capacity VertexBuffer is valid.  Once the public arguments have been
-// validated, an empty upload is a true no-op: it must not reach pointer arithmetic, packing,
-// shadow copies, or a graphics renderer, and must not replace the most recent real upload.
+// XNA requires a positive logical capacity. Once the public transfer arguments have been
+// validated, an empty upload into that buffer remains a true no-op: it must not reach pointer
+// arithmetic, packing, shadow copies, or a graphics renderer, and must not replace the most
+// recent real upload.
 
 #include <algorithm>
 #include <array>
@@ -272,27 +273,25 @@ namespace
 #endif
 }
 
-TEST_F(VertexBufferEmptyDataTest, ZeroCapacityConstructionPreservesLogicalCapacity)
+TEST_F(VertexBufferEmptyDataTest, ZeroCapacityConstructionThrowsForStaticAndDynamicBuffers)
 {
     RequireVertexBuffers();
 
-    VertexBuffer staticBuffer(device, PositionColorDeclaration(), 0, BufferUsage::None);
-    DynamicVertexBuffer dynamicBuffer(
-        device, PositionColorDeclaration(), 0, BufferUsage::None);
-
-    EXPECT_EQ(0, staticBuffer.getVertexCountProperty());
-    EXPECT_EQ(0, dynamicBuffer.getVertexCountProperty());
-    EXPECT_EQ(0, staticBuffer.GetRenderer().GetVertexCount());
-    EXPECT_EQ(0, dynamicBuffer.GetRenderer().GetVertexCount());
+    EXPECT_THROW((VertexBuffer(
+                     device, PositionColorDeclaration(), 0, BufferUsage::None)),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW((DynamicVertexBuffer(
+                     device, PositionColorDeclaration(), 0, BufferUsage::None)),
+                 System::ArgumentOutOfRangeException);
 }
 
 TEST_F(VertexBufferEmptyDataTest, ZeroCountAcceptsNullForStaticAndDynamicBuffers)
 {
     RequireVertexBuffers();
 
-    VertexBuffer staticBuffer(device, PositionColorDeclaration(), 0, BufferUsage::None);
+    VertexBuffer staticBuffer(device, PositionColorDeclaration(), 1, BufferUsage::None);
     DynamicVertexBuffer dynamicBuffer(
-        device, PositionColorDeclaration(), 0, BufferUsage::None);
+        device, PositionColorDeclaration(), 1, BufferUsage::None);
 
     EXPECT_NO_THROW(
         staticBuffer.SetData(static_cast<const VertexPositionColor*>(nullptr), 0));
@@ -426,18 +425,18 @@ TEST_F(VertexBufferEmptyDataTest, NullIsLegalOnlyForEmptyUploads)
     EXPECT_NO_THROW(rawBuffer.SetDataRaw(nullptr, 0, 13));
 }
 
-TEST_F(VertexBufferEmptyDataTest, LogicalEndAndBeyondCapacityRemainDistinct)
+TEST_F(VertexBufferEmptyDataTest, EmptyRangeAndBeyondCapacityRemainDistinct)
 {
     RequireVertexBuffers();
 
     const VertexPositionColor vertex(Vector3(1.0f, 2.0f, 3.0f), Color(4, 5, 6, 7));
-    VertexBuffer staticBuffer(device, PositionColorDeclaration(), 0, BufferUsage::None);
+    VertexBuffer staticBuffer(device, PositionColorDeclaration(), 1, BufferUsage::None);
     DynamicVertexBuffer dynamicBuffer(
-        device, PositionColorDeclaration(), 0, BufferUsage::None);
-    VertexBuffer rawBuffer(device, OddStrideDeclaration(), 0, BufferUsage::None);
+        device, PositionColorDeclaration(), 1, BufferUsage::None);
+    VertexBuffer rawBuffer(device, OddStrideDeclaration(), 1, BufferUsage::None);
 
-    // These overloads have an implicit destination byte offset of zero. For a zero-capacity
-    // buffer that offset is exactly the logical end, where an empty range is valid.
+    // These overloads have an implicit destination byte offset of zero, where an empty range is
+    // valid even though construction itself requires a positive logical capacity.
     EXPECT_NO_THROW(staticBuffer.SetData(
         static_cast<const VertexPositionColor*>(nullptr), 0));
     EXPECT_NO_THROW(dynamicBuffer.SetData(
@@ -446,17 +445,17 @@ TEST_F(VertexBufferEmptyDataTest, LogicalEndAndBeyondCapacityRemainDistinct)
     EXPECT_NO_THROW(rawBuffer.SetDataRaw(nullptr, 0, 13));
 
     // A real range extends beyond that logical end even if a native renderer pads its allocation.
-    EXPECT_THROW(staticBuffer.SetData(&vertex, 1),
+    EXPECT_THROW(staticBuffer.SetData(&vertex, 2),
                  System::ArgumentOutOfRangeException);
     EXPECT_THROW(dynamicBuffer.SetData(
-                     &vertex, 0, 1, SetDataOptions::NoOverwrite),
+                     &vertex, 0, 2, SetDataOptions::NoOverwrite),
                  System::ArgumentOutOfRangeException);
-    const std::array<std::uint8_t, 13> raw{};
-    EXPECT_THROW(rawBuffer.SetDataRaw(raw.data(), 1, 13),
+    const std::array<std::uint8_t, 26> raw{};
+    EXPECT_THROW(rawBuffer.SetDataRaw(raw.data(), 2, 13),
                  System::ArgumentOutOfRangeException);
-    EXPECT_EQ(0, staticBuffer.getVertexCountProperty());
-    EXPECT_EQ(0, dynamicBuffer.getVertexCountProperty());
-    EXPECT_EQ(0, rawBuffer.getVertexCountProperty());
+    EXPECT_EQ(1, staticBuffer.getVertexCountProperty());
+    EXPECT_EQ(1, dynamicBuffer.getVertexCountProperty());
+    EXPECT_EQ(1, rawBuffer.getVertexCountProperty());
 }
 
 TEST_F(VertexBufferEmptyDataTest, EmptyRangePreservesPublicValidationOrdering)
@@ -503,9 +502,9 @@ TEST_F(VertexBufferEmptyDataTest, DisposedBuffersRejectEmptyUploadsBeforeNoOp)
 {
     RequireVertexBuffers();
 
-    VertexBuffer staticBuffer(device, PositionColorDeclaration(), 0, BufferUsage::None);
+    VertexBuffer staticBuffer(device, PositionColorDeclaration(), 1, BufferUsage::None);
     DynamicVertexBuffer dynamicBuffer(
-        device, PositionColorDeclaration(), 0, BufferUsage::None);
+        device, PositionColorDeclaration(), 1, BufferUsage::None);
     staticBuffer.Dispose();
     staticBuffer.Dispose();
     dynamicBuffer.Dispose();
@@ -694,7 +693,7 @@ TEST_F(VertexBufferEmptyDataTest, WebGpuNativeScopesCoverEmptyOddAndAlignedUploa
     wgpuDevicePushErrorScope(graphicsRenderer->Device(), WGPUErrorFilter_Validation);
 
     VertexBuffer emptyBuffer(
-        device, OddStrideDeclaration(), 0, BufferUsage::None);
+        device, OddStrideDeclaration(), 1, BufferUsage::None);
     auto* emptyRenderer =
         dynamic_cast<CNA::Internal::Renderers::WebGPU::WebGPUVertexBufferRenderer*>(
             &emptyBuffer.GetRenderer());

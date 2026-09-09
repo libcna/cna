@@ -265,7 +265,7 @@ CNA_Result cna_index_buffer_create(
         if (createInfo == nullptr ||
             createInfo->struct_size < sizeof(CNA_IndexBufferCreateInfo) ||
             createInfo->struct_version != StructureVersion ||
-            createInfo->index_count < 0 ||
+            createInfo->index_count <= 0 ||
             createInfo->index_element_size > CNA_INDEX_ELEMENT_SIZE_THIRTY_TWO_BITS ||
             createInfo->buffer_usage > CNA_BUFFER_USAGE_WRITE_ONLY ||
             !IsBool(createInfo->dynamic) ||

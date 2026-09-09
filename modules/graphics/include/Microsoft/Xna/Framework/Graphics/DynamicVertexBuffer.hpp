@@ -22,6 +22,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param vertexDeclaration Layout description for the vertex type.
          * @param vertexCount       Capacity in vertices.
          * @param bufferUsage       Usage hint for the buffer.
+         * @throws System::ArgumentOutOfRangeException if @p vertexCount is not positive.
          */
         DynamicVertexBuffer(GraphicsDevice& device,
                             const VertexDeclaration& vertexDeclaration,

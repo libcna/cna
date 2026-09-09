@@ -45,6 +45,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param device      Owning graphics device.
          * @param vertexCount Number of vertices the buffer can hold.
+         * @throws System::ArgumentOutOfRangeException if @p vertexCount is not positive.
          */
         CNAEXT VertexBuffer(GraphicsDevice& device, int vertexCount);
 
@@ -57,6 +58,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param vertexDeclaration Vertex layout description.
          * @param vertexCount       Number of vertices the buffer can hold.
          * @param bufferUsage       Usage hint.
+         * @throws System::ArgumentOutOfRangeException if @p vertexCount is not positive.
          */
         VertexBuffer(GraphicsDevice& device,
                      const VertexDeclaration& vertexDeclaration,

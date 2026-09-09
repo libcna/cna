@@ -22,10 +22,10 @@ namespace Microsoft::Xna::Framework::Graphics
             IndexElementSize indexElementSize,
             int indexCount)
         {
-            if (indexCount < 0)
+            if (indexCount <= 0)
                 throw System::ArgumentOutOfRangeException(
                     "indexCount", std::to_string(indexCount),
-                    "The index count must be non-negative.");
+                    "The index count must be greater than zero.");
             if (indexElementSize != IndexElementSize::SixteenBits &&
                 indexElementSize != IndexElementSize::ThirtyTwoBits)
             {

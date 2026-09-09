@@ -21,6 +21,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param indexElementSize Element size — SixteenBits or ThirtyTwoBits.
          * @param indexCount       Number of indices the buffer can hold.
          * @param bufferUsage      Usage hint for the buffer.
+         * @throws System::ArgumentOutOfRangeException if @p indexCount is not positive.
          */
         DynamicIndexBuffer(GraphicsDevice& device,
                            IndexElementSize indexElementSize,
