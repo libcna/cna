@@ -234,3 +234,61 @@ still gets a test that asserts it does. The fix belongs to the parity framework,
 either gate these two on the profile, or give a fixture the documented-divergence route
 `fill_mode_wireframe` already uses. Until then these two are expected red in any EasyGL ES build.
 
+
+---
+
+## 4. `Window.CurrentOrientation` follows the OS window, not the surface the game draws into
+
+**Found:** 2026-09-09, through SAMPLE-077 (DynamicMenu).
+**Open in:** `modules/runtime/src/GameWindow.cpp` (`refreshCachedPlatformState` →
+`orientationFromBounds(clientBounds_)`).
+
+`GameWindow` derives the current orientation from the **platform window's client bounds**. A game
+with a virtual resolution does not draw into those bounds: it draws into the logical surface, which
+`GraphicsDevice` letterboxes inside them. So widening a window past its own height reports
+`LandscapeLeft` while the drawing surface stays portrait, and a game that believes the report lays
+itself out for a shape it does not have.
+
+### The measurement
+
+SAMPLE-077 has a 480x800 back buffer and its own portrait and landscape layouts
+(`PhoneScreen::UpdateOrientation`). Counting non-background pixels in the lower half of the frame,
+where its menu panel belongs:
+
+| window | shape | menu panel |
+|---|---|---|
+| 700x900 | taller than wide | **12 656** samples — renders correctly, letterboxed and scaled |
+| 960x800 | wider than tall | **200** samples — the panel is off the logical area |
+
+Nothing about the two differs except which side is longer. The renderer is doing its job in both:
+the sprite flush reports `def=(240,0,480x800) custom=0 log=(480x800) atDraw=(240,0,480x800)` on
+every one of 3 300 flushes in the landscape case. The sample is doing its job too — it was told
+landscape and moved its containers to `HorizontalContainer2Left/Top`, which is off a 480-wide
+logical surface.
+
+Reproduce: `/rv/tmp/samples/SAMPLE-077-DynamicMenu_4_0/scripts/probe-resize.sh 960 800` against
+`700 900`.
+
+### What XNA does
+
+On Windows Phone an orientation change rotates the **back buffer** with the device — `XNA` swaps
+`PreferredBackBufferWidth`/`Height` for a supported orientation, so the reported orientation and the
+drawing surface always agree. CNA keeps the virtual resolution fixed and letterboxes, so reporting
+the change without swapping tells the game something its own surface contradicts.
+
+### The correction — a decision, not just a patch
+
+Two coherent answers, and they are not equivalent:
+
+1. **Derive the orientation from the logical surface** whenever a virtual resolution is in effect.
+   Narrow, fixes this, and means a desktop window resize never reports an orientation change — which
+   is arguably right, since resizing a window is not rotating a device.
+2. **Swap the virtual resolution with the orientation**, as XNA swaps the back buffer. Faithful to
+   XNA, and much larger: every letterbox rectangle, input mapping and content layout follows.
+
+There is a third question underneath both: `Window.ClientBounds` currently reports the OS window
+too, and XNA's is the back-buffer area. If `ClientBounds` became the logical surface, the
+orientation would follow it for free — but every other consumer of `ClientBounds` changes with it.
+
+Not chosen here: the sample campaign found it, the answer changes framework semantics, and it wants
+an owner decision rather than whichever patch makes SAMPLE-077 look right.
