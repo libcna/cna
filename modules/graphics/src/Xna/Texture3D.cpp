@@ -155,6 +155,7 @@ namespace Microsoft::Xna::Framework::Graphics
             throw System::ObjectDisposedException("Texture3D");
         if (!data)
             throw std::invalid_argument("Texture3D::SetData: data must not be null");
+        ThrowIfDataTransferResourceInUseEXT(true);
         if (elementCount <= 0)
             throw std::out_of_range("Texture3D::SetData: elementCount must be > 0");
         if (startIndex < 0)
@@ -234,6 +235,7 @@ namespace Microsoft::Xna::Framework::Graphics
             throw System::ObjectDisposedException("Texture3D");
         if (!data)
             throw std::invalid_argument("Texture3D::GetData: data must not be null");
+        ThrowIfDataTransferResourceInUseEXT(false);
         if (elementCount <= 0)
             throw std::out_of_range("Texture3D::GetData: elementCount must be > 0");
         if (startIndex < 0)

@@ -437,6 +437,7 @@ namespace Microsoft::Xna::Framework::Graphics
         if (!data || elementCount <= 0)
             throw std::invalid_argument(
                 "Texture2D::SetData: data must not be null and elementCount must be > 0");
+        ThrowIfDataTransferResourceInUseEXT(true);
         if (!graphicsDevice_) return;
         const int total = width * height;
         validateTransferWindow("Texture2D::SetData", 0, elementCount, total);
@@ -489,6 +490,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 "Texture2D::SetData: Color data requires a Color-compatible 32-bit format");
         if (!data || elementCount <= 0)
             throw std::invalid_argument("Texture2D::SetData: data must not be null");
+        ThrowIfDataTransferResourceInUseEXT(true);
         if (startIndex < 0)
             throw std::out_of_range("Texture2D::SetData: startIndex must be >= 0");
         validateMipLevel("Texture2D::SetData", level, levelCount_);
@@ -623,6 +625,7 @@ namespace Microsoft::Xna::Framework::Graphics
             throw System::ObjectDisposedException("Texture2D");
         if (!data || elementCount <= 0)
             throw std::invalid_argument("Texture2D::SetData: data must not be null");
+        ThrowIfDataTransferResourceInUseEXT(true);
         if (startIndex < 0)
             throw std::out_of_range("Texture2D::SetData: startIndex must be >= 0");
         validateMipLevel("Texture2D::SetData", level, levelCount_);
@@ -745,6 +748,7 @@ namespace Microsoft::Xna::Framework::Graphics
             throw System::ObjectDisposedException("Texture2D");
         if (!data || elementCount <= 0)
             throw std::invalid_argument("Texture2D::SetData: data must not be null");
+        ThrowIfDataTransferResourceInUseEXT(true);
         if (startIndex < 0)
             throw std::out_of_range("Texture2D::SetData: startIndex must be >= 0");
         validateMipLevel("Texture2D::SetData", level, levelCount_);
@@ -1430,6 +1434,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 "Texture2D::GetData: Color data requires a Color-compatible 32-bit format");
         if (!data || elementCount <= 0)
             throw std::invalid_argument("data must not be null and elementCount must be > 0");
+        ThrowIfDataTransferResourceInUseEXT(false);
         if (startIndex < 0)
             throw std::out_of_range("Texture2D::GetData: startIndex must be >= 0");
         Texture::ValidateGetDataFormat(format_, 4);
@@ -1521,6 +1526,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 "Texture2D::GetData: Color data requires a Color-compatible 32-bit format");
         if (!data || elementCount <= 0)
             throw std::invalid_argument("Texture2D::GetData: data must not be null");
+        ThrowIfDataTransferResourceInUseEXT(false);
         if (startIndex < 0)
             throw std::out_of_range("Texture2D::GetData: startIndex must be >= 0");
         validateMipLevel("Texture2D::GetData", level, levelCount_);
@@ -1626,6 +1632,7 @@ namespace Microsoft::Xna::Framework::Graphics
             throw System::ObjectDisposedException("Texture2D");
         if (!data || elementCount <= 0)
             throw std::invalid_argument("Texture2D::GetData: data must not be null");
+        ThrowIfDataTransferResourceInUseEXT(false);
         if (startIndex < 0)
             throw std::out_of_range("Texture2D::GetData: startIndex must be >= 0");
         validateMipLevel("Texture2D::GetData", level, levelCount_);
@@ -1701,6 +1708,7 @@ namespace Microsoft::Xna::Framework::Graphics
             throw System::ObjectDisposedException("Texture2D");
         if (!data || elementCount <= 0)
             throw std::invalid_argument("Texture2D::GetData: data must not be null");
+        ThrowIfDataTransferResourceInUseEXT(false);
         if (startIndex < 0)
             throw std::out_of_range("Texture2D::GetData: startIndex must be >= 0");
         validateMipLevel("Texture2D::GetData", level, levelCount_);

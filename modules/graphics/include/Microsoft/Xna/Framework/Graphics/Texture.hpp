@@ -123,6 +123,19 @@ namespace Microsoft::Xna::Framework::Graphics
         explicit Texture(GraphicsDevice* device = nullptr);
 
         /**
+         * @brief Enforces XNA's resource-in-use rules for texture CPU transfers.
+         *
+         * An active 2D/cube render target cannot be read or written until it is unbound. A texture
+         * bound to a pixel- or vertex-stage sampler cannot be written, although readback remains
+         * legal. The check is renderer-neutral because both bindings are GraphicsDevice state.
+         *
+         * @param isSetting True for SetData; false for GetData.
+         * @throws System::InvalidOperationException when the requested transfer conflicts with a
+         *         current render-target or sampler binding.
+         */
+        CNAEXT void ThrowIfDataTransferResourceInUseEXT(bool isSetting) const;
+
+        /**
          * @brief Removes this texture from all sampler slots before disposal.
          *
          * Matches FNA's Texture.Dispose behaviour: the texture is unbound from

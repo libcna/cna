@@ -284,6 +284,7 @@ namespace Microsoft::Xna::Framework::Graphics
         CubeMapFace face, int level, const Microsoft::Xna::Framework::Rectangle* rect,
         const std::uint8_t* data, int elementBytes)
     {
+        ThrowIfDataTransferResourceInUseEXT(true);
         if (!renderer_)
             throw System::NotSupportedException(
                 "TextureCube::SetData: this renderer creates no cube-map resource");
@@ -306,6 +307,7 @@ namespace Microsoft::Xna::Framework::Graphics
         CubeMapFace face, int level, const Microsoft::Xna::Framework::Rectangle* rect,
         std::uint8_t* data, int elementBytes) const
     {
+        ThrowIfDataTransferResourceInUseEXT(false);
         if (!renderer_)
             throw System::NotSupportedException(
                 "TextureCube::GetData: this renderer creates no cube-map resource");
@@ -333,6 +335,7 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::out_of_range("TextureCube::SetData: face is not a valid CubeMapFace value");
         if (!data)
             throw std::invalid_argument("TextureCube::SetData: data must not be null");
+        ThrowIfDataTransferResourceInUseEXT(true);
         if (elementCount <= 0)
             throw std::out_of_range("TextureCube::SetData: elementCount must be > 0");
         if (startIndex < 0)
@@ -412,6 +415,7 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::out_of_range("TextureCube::SetData: face is not a valid CubeMapFace value");
         if (!data || elementCount <= 0)
             throw std::invalid_argument("TextureCube::SetData: data must not be null");
+        ThrowIfDataTransferResourceInUseEXT(true);
         if (startIndex < 0)
             throw std::out_of_range("TextureCube::SetData: startIndex must be >= 0");
         if (level < 0 || level >= levelCount_)
@@ -487,6 +491,7 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::out_of_range("TextureCube::GetData: face is not a valid CubeMapFace value");
         if (!data)
             throw std::invalid_argument("TextureCube::GetData: data must not be null");
+        ThrowIfDataTransferResourceInUseEXT(false);
         if (elementCount <= 0)
             throw std::out_of_range("TextureCube::GetData: elementCount must be > 0");
         if (startIndex < 0)
