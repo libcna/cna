@@ -681,6 +681,7 @@ namespace CNA::Internal::Renderers::DirectX12
         std::shared_ptr<void> lifetimeToken_ = std::make_shared<int>(0);
 
         friend class D3D12SpriteBatchRenderer;
+        friend class D3D12EffectRenderer;
 
         [[noreturn]] static void NotYetImplemented(const char* what);
 

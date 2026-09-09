@@ -1781,6 +1781,45 @@ namespace CNA::Internal::Renderers::DirectX11
         const std::size_t stride = CombinedVertexStrideOr(params, fallbackStride);
         const auto& vertexElements = multiStream
             ? combinedElements : d3dVb.GetDeclarationEXT().GetElements();
+
+        if (params.customEffectRequested)
+        {
+            auto* customEffect = dynamic_cast<D3D11EffectRenderer*>(params.customEffectRenderer);
+            if (customEffect == nullptr || !customEffect->IsValid())
+                throw System::NotSupportedException(
+                    "DirectX11 custom 3D drawing requires a valid D3D11 ShaderEffect.");
+
+            float worldValues[16];
+            float viewValues[16];
+            float projectionValues[16];
+            world.ToColumnMajor(worldValues);
+            view.ToColumnMajor(viewValues);
+            projection.ToColumnMajor(projectionValues);
+            customEffect->SetUniformMat4("World", worldValues);
+            customEffect->SetUniformMat4("View", viewValues);
+            customEffect->SetUniformMat4("Projection", projectionValues);
+            if (!customEffect->BindForDrawEXT(vertexElements, inputElements))
+                throw System::NotSupportedException(
+                    "DirectX11 could not match the ShaderEffect vertex signature to the bound "
+                    "VertexDeclaration.");
+
+            BindVertexStreams(context_.Get(), d3dVb, params);
+            if (ib != nullptr)
+            {
+                const auto& d3dIb = static_cast<const D3D11IndexBufferRenderer&>(*ib);
+                context_->IASetIndexBuffer(d3dIb.GetBufferEXT(), d3dIb.GetFormatEXT(), 0);
+            }
+            context_->IASetPrimitiveTopology(ToD3D11Topology(primitive));
+            const UINT elementCount = static_cast<UINT>(
+                VertexCountForPrimitives(primitive, primitiveCount));
+            if (ib != nullptr)
+                context_->DrawIndexed(elementCount, static_cast<UINT>(params.startIndex),
+                                      static_cast<INT>(params.baseVertex));
+            else
+                context_->Draw(elementCount, static_cast<UINT>(params.vertexStart));
+            return;
+        }
+
         using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
         using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
         const bool hasDeclaration = !vertexElements.empty();

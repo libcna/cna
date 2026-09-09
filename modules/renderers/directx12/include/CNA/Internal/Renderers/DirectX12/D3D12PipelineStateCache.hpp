@@ -34,6 +34,7 @@
 #include <wrl/client.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <map>
 #include <tuple>
 #include <utility>
@@ -53,6 +54,13 @@ namespace CNA::Internal::Renderers::DirectX12
     struct D3D12PipelineStateDesc
     {
         D3DShaderVariant variant = D3DShaderVariant::Colored3d;
+        /// DX-223: nonzero identifies one runtime-compiled ShaderEffect program. The bytecode
+        /// pointers are deliberately not part of the key; this stable monotonic identity is.
+        std::uint64_t customProgramId = 0;
+        const void* customVertexShaderBytecode = nullptr;
+        std::size_t customVertexShaderBytecodeSize = 0;
+        const void* customPixelShaderBytecode = nullptr;
+        std::size_t customPixelShaderBytecodeSize = 0;
         std::size_t strideInBytes = 16;
         std::vector<Microsoft::Xna::Framework::Graphics::VertexElement> vertexElements;
         /// DX-222: explicit native slots/classifications for a multi-stream or instanced draw.
@@ -140,7 +148,7 @@ namespace CNA::Internal::Renderers::DirectX12
         /// deliberately.
         [[nodiscard]] auto AsCacheKeyEXT() const
         {
-            return std::make_tuple(static_cast<int>(variant), strideInBytes,
+            return std::make_tuple(static_cast<int>(variant), customProgramId, strideInBytes,
                                    D3DCommon::VertexDeclarationCacheKey(vertexElements),
                                    D3DCommon::VertexInputLayoutCacheKey(vertexInputElements),
                                    colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend,

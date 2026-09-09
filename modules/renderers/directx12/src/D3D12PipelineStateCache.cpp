@@ -39,8 +39,18 @@ namespace CNA::Internal::Renderers::DirectX12
 
         const uint8_t* vsBytes = nullptr; std::size_t vsSize = 0;
         const uint8_t* psBytes = nullptr; std::size_t psSize = 0;
-        GetVertexShaderBytecode(desc.variant, vsBytes, vsSize);
-        GetPixelShaderBytecode(desc.variant, psBytes, psSize);
+        if (desc.customProgramId != 0)
+        {
+            vsBytes = static_cast<const uint8_t*>(desc.customVertexShaderBytecode);
+            vsSize = desc.customVertexShaderBytecodeSize;
+            psBytes = static_cast<const uint8_t*>(desc.customPixelShaderBytecode);
+            psSize = desc.customPixelShaderBytecodeSize;
+        }
+        else
+        {
+            GetVertexShaderBytecode(desc.variant, vsBytes, vsSize);
+            GetPixelShaderBytecode(desc.variant, psBytes, psSize);
+        }
 
         UINT inputElementCount = 0;
         std::vector<D3D12_INPUT_ELEMENT_DESC> translatedElements;

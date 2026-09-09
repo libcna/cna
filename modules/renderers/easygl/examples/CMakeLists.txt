@@ -622,6 +622,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_ShaderEffect_CustomVertexLayout COMMAND cna_test_easygl_shadereffect_custom_vertex_layout
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plans/plan_dx.md DX-223: the same public reflection/resource/layout oracle used by both
+        # modern DirectX renderers. EasyGL is the independent implementation control.
+        cna_easygl_test(cna_test_easygl_shader_effect_reflection
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/shader_effect_reflection_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_ShaderEffect_ReflectionContract
+            COMMAND cna_test_easygl_shader_effect_reflection
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 947: NormalMapping.fx (tangent-space normal mapping + Phong specular) -- with
         # this, NormalMapping sample's shader blocker is fully cleared. Uses Task 1080's custom
         # vertex layout (Position+TexCoord+Normal+Binormal+Tangent, stride 56).

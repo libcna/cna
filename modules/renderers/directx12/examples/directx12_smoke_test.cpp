@@ -427,15 +427,12 @@ namespace
 
 // plans/plan_dx.md DX-121 adds:
 // Check BB -- D3D12EffectRenderer: runtime D3DCompile() of arbitrary HLSL source (not one of
-//   DX-13-hlsl's offline-compiled stock variants) builds a real PSO+constant-buffer end to end,
+//   DX-13-hlsl's offline-compiled stock variants) builds a real reflected PSO+constant-buffer end to end,
 //   driven manually (SpriteBatch/GraphicsDevice can't be constructed safely in this off-screen-only
 //   suite -- GraphicsDevice's own constructor unconditionally creates a real window for any
 //   non-Headless/Software renderer, which is exactly the crash-prone path DX-100/DX-102 already
-//   found for D3D12 outside a Proton-managed launch; D3D12SpriteBatchRenderer's own real
-//   SetCustomEffect()/FlushBatch() wiring, added this same task, is exercised by code review and
-//   architectural reuse of this exact PSO/constant-buffer pair, not an independent CTest proof --
-//   an honest, documented scope boundary), proving the color is genuinely driven by
-//   SetUniformVec4()'s fixed-slot constant buffer, matching D3D11's own DX-58 rigor. A deliberately
+//   found for D3D12 outside a Proton-managed launch), proving the color is genuinely driven by a
+//   named reflected SetUniformVec4() constant-buffer field. A deliberately
 //   broken HLSL source fails CompileProgram() cleanly with a real, non-empty compiler error.
 
 int main()
@@ -4549,8 +4546,8 @@ int main()
             "struct PSIn { float4 pos:SV_Position; float4 col:TEXCOORD0; };\n"
             "float4 main(PSIn input):SV_Target { return input.col; }");
         Check(effect && effect->IsValid(),
-              "BB1: DirectX12Renderer::CreateEffectRenderer() -- real runtime D3DCompile() of "
-              "arbitrary HLSL source builds a real PSO+constant-buffer end to end (plans/plan_dx.md DX-121)");
+              "BB1: DirectX12Renderer::CreateEffectRenderer() -- real runtime D3DCompile() and "
+              "reflection of arbitrary HLSL succeeds (plans/plan_dx.md DX-121/DX-223)");
         // plans/plan_dx.md DX-212: asserted beside the D3DCompile() proof it is a claim about, not in
         // isolation -- the pixel checks below are what make the answer true.
         Check(renderer.ExecutesShaderEffectSourceEXT(),
@@ -4578,23 +4575,37 @@ int main()
             D3D12VertexBufferRenderer vbFx(&renderer, 3);
             vbFx.SetData(kTriFx, 3, sizeof(SpriteVtx));
 
-            // The (1,1,1) root signature this PSO was built against always declares an SRV+sampler
-            // table -- bind a real, throwaway 1x1 texture/sampler even though this particular
-            // pixel shader never samples it, matching every other real D3D12 draw's own full
-            // root-parameter binding discipline (avoids relying on undefined/unbound-table
-            // behavior).
-            ImageData dummyImg;
-            dummyImg.width = 1; dummyImg.height = 1; dummyImg.mipLevels = 1;
-            dummyImg.pixels = {255, 255, 255, 255};
-            D3D12TextureRenderer dummyTex(&renderer, dummyImg);
-            renderer.ApplySamplerState(0, /*filter=*/1 /*Point*/, /*addressU=*/0, /*addressV=*/0, /*maxAnisotropy=*/1);
-
-            auto rootSig = renderer.GetRootSignatureCacheEXT().GetOrCreate(renderer.GetDeviceEXT(), 1, 1, 1);
+            // DX-223 creates custom PSOs lazily because the vertex declaration, target format,
+            // sample count, topology and render state exist only at draw time. Model this manual
+            // low-level draw with the same explicit Sprite2D input contract as SpriteBatch.
+            using Microsoft::Xna::Framework::Graphics::VertexElement;
+            using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+            using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+            D3D12PipelineStateDesc effectState;
+            effectState.strideInBytes = sizeof(SpriteVtx);
+            effectState.vertexInputElements = {
+                {VertexElement(0, VertexElementFormat::Vector2,
+                               VertexElementUsage::Position, 0), 0, 0, false},
+                {VertexElement(8, VertexElementFormat::Vector2,
+                               VertexElementUsage::TextureCoordinate, 0), 0, 0, false},
+                {VertexElement(16, VertexElementFormat::Vector4,
+                               VertexElementUsage::Color, 0), 0, 0, false},
+            };
+            effectState.depthEnable = false;
+            effectState.depthWriteEnable = false;
+            effectState.cullMode = 0;
+            effectState.topologyType =
+                static_cast<int>(D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE);
+            ID3D12PipelineState* effectPso = d3dEffect->GetOrCreatePipelineStateEXT(
+                std::move(effectState), DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_UNKNOWN);
+            ID3D12RootSignature* rootSig = d3dEffect->GetRootSignatureEXT();
+            Check(effectPso != nullptr && rootSig != nullptr,
+                  "BB2a: reflected custom PSO and root signature resolve for the actual draw layout");
 
             ID3D12CommandAllocator* allocator = renderer.GetCommandAllocatorEXT(0);
             ID3D12GraphicsCommandList* cmdList = renderer.GetCommandListEXT();
             allocator->Reset();
-            cmdList->Reset(allocator, d3dEffect->GetPipelineStateEXT());
+            cmdList->Reset(allocator, effectPso);
 
             renderer.GetResourceStateTrackerEXT().TransitionTo(cmdList, rt.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
             const float clearColor[4] = {0.0f, 0.0f, 1.0f, 1.0f};
@@ -4606,18 +4617,13 @@ int main()
             cmdList->RSSetViewports(1, &viewport);
             cmdList->RSSetScissorRects(1, &scissor);
 
-            cmdList->SetGraphicsRootSignature(rootSig.Get());
-            cmdList->SetPipelineState(d3dEffect->GetPipelineStateEXT());
+            cmdList->SetGraphicsRootSignature(rootSig);
+            cmdList->SetPipelineState(effectPso);
             cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
             D3D12_VERTEX_BUFFER_VIEW vbView = vbFx.GetViewEXT();
             cmdList->IASetVertexBuffers(0, 1, &vbView);
             cmdList->SetGraphicsRootConstantBufferView(0, d3dEffect->GetConstantBufferEXT()->GetGPUVirtualAddress());
-
-            ID3D12DescriptorHeap* heaps[] = {renderer.GetCbvSrvUavHeapEXT(), renderer.GetSamplerHeapEXT()};
-            cmdList->SetDescriptorHeaps(2, heaps);
-            cmdList->SetGraphicsRootDescriptorTable(1, dummyTex.GetShaderResourceViewGpuHandleEXT());
-            cmdList->SetGraphicsRootDescriptorTable(2, renderer.GetSamplerGpuHandleEXT(0));
 
             cmdList->DrawInstanced(3, 1, 0, 0);
 
@@ -4635,8 +4641,8 @@ int main()
         }
         Check(effIsExact,
               "BB3: D3D12EffectRenderer::Bind() -- a real custom-compiled shader pair, driven by "
-              "SetUniformVec4()'s fixed-slot constant buffer, draws the exact expected color "
-              "(plans/plan_dx.md DX-121)");
+              "a named reflected SetUniformVec4() field, draws the exact expected color "
+              "(plans/plan_dx.md DX-121/DX-223)");
 
         auto badEffect = renderer.CreateEffectRenderer("this is not valid HLSL {{{", "also not valid ]]]");
         Check(badEffect && !badEffect->IsValid() && !badEffect->GetCompileError().empty(),

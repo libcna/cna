@@ -287,38 +287,64 @@ namespace CNA::Internal::Renderers::DirectX12
         const int vpW = static_cast<int>(std::lround(logicalViewportWidth));
         const int vpH = static_cast<int>(std::lround(logicalViewportHeight));
 
-        auto rootSig = owner_->GetRootSignatureCacheEXT().GetOrCreate(device_.Get(), /*numCbvs=*/1, /*numSrvs=*/1, /*numSamplers=*/1);
-        if (!rootSig)
-            throw std::runtime_error("D3D12SpriteBatchRenderer: failed to create sprite2d root signature");
-
-        // DX-121: a valid custom Effect (SpriteBatch::Begin(effect)) draws through its own
-        // real, compiled PSO+constant-buffer instead of the stock sprite2d pipeline -- both share
-        // the exact same (1,1,1) root signature above (D3D12RootSignatureCache caches by shape),
-        // so every root-signature-relative binding below (CBV@0/SRV table@1/sampler table@2) stays
-        // correct regardless of which path supplied pso/cb.
         D3D12EffectRenderer* customRenderer = nullptr;
         if (customEffect_)
             customRenderer = dynamic_cast<D3D12EffectRenderer*>(customEffect_->GetEffectRendererPtr());
 
+        ComPtr<ID3D12RootSignature> stockRootSignature;
+        ID3D12RootSignature* rootSignature = nullptr;
         ID3D12PipelineState* pso = nullptr;
         ID3D12Resource* cb = nullptr;
+        int constantBufferCount = 1;
+        int shaderResourceCount = 1;
+        int samplerCount = 1;
 
         if (customRenderer && customRenderer->IsValid())
         {
-            // DX-121: vpSize is set here, once per flush, mirroring D3D11EffectRenderer's own
-            // "set automatically by the sprite-batch runtime" convention -- the game/effect
-            // author never calls SetViewportSizeEXT() itself.
             customRenderer->SetViewportSizeEXT(static_cast<float>(vpW), static_cast<float>(vpH));
             customEffect_->Apply();
-            customRenderer->Bind();
-            pso = customRenderer->GetPipelineStateEXT();
-            cb = customRenderer->GetConstantBufferEXT();
-            if (!pso || !cb)
-                throw std::runtime_error("D3D12SpriteBatchRenderer: custom Effect's D3D12EffectRenderer is not valid");
+
+            using Microsoft::Xna::Framework::Graphics::VertexElement;
+            using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+            using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+            D3D12PipelineStateDesc state;
+            owner_->FillPsoStateFromCurrentEXT(state);
+            state.strideInBytes = sizeof(Sprite2DVertex);
+            state.vertexInputElements = {
+                {VertexElement(0, VertexElementFormat::Vector2,
+                               VertexElementUsage::Position, 0), 0, 0, false},
+                {VertexElement(8, VertexElementFormat::Vector2,
+                               VertexElementUsage::TextureCoordinate, 0), 0, 0, false},
+                {VertexElement(16, VertexElementFormat::Vector4,
+                               VertexElementUsage::Color, 0), 0, 0, false},
+            };
+            state.topologyType = static_cast<int>(D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE);
+            // Preserve the established SpriteBatch rasterizer contract while the custom shader
+            // uses the same blend/depth/stencil state as the stock sprite PSO.
+            state.cullMode = 0;
+            state.fillMode = 0;
+            state.depthBias = 0;
+            state.slopeScaleDepthBias = 0.0f;
+            pso = customRenderer->GetOrCreatePipelineStateEXT(
+                std::move(state), owner_->GetBoundColorFormatEXT(),
+                owner_->GetBoundDsvFormatEXT());
+            rootSignature = customRenderer->GetRootSignatureEXT();
+            constantBufferCount = customRenderer->GetConstantBufferCountEXT();
+            shaderResourceCount = customRenderer->GetShaderResourceCountEXT();
+            samplerCount = customRenderer->GetSamplerCountEXT();
+            if (!pso || !rootSignature)
+                throw std::runtime_error(
+                    "D3D12SpriteBatchRenderer: custom ShaderEffect PSO creation failed");
         }
         else
         {
-            pso = GetOrCreateSprite2DPso(rootSig.Get());
+            stockRootSignature = owner_->GetRootSignatureCacheEXT().GetOrCreate(
+                device_.Get(), 1, 1, 1);
+            rootSignature = stockRootSignature.Get();
+            if (!rootSignature)
+                throw std::runtime_error(
+                    "D3D12SpriteBatchRenderer: failed to create sprite2d root signature");
+            pso = GetOrCreateSprite2DPso(rootSignature);
             D3DSprite2DConstants c{};
             c.ViewportSize[0] = static_cast<float>(vpW);
             c.ViewportSize[1] = static_cast<float>(vpH);
@@ -357,7 +383,7 @@ namespace CNA::Internal::Renderers::DirectX12
         cmdList->RSSetViewports(1, &effectiveViewport);
         cmdList->RSSetScissorRects(1, &scissor);
 
-        cmdList->SetGraphicsRootSignature(rootSig.Get());
+        cmdList->SetGraphicsRootSignature(rootSignature);
         cmdList->SetPipelineState(pso);
         // plans/plan_dx.md DX-204: SpriteBatch::Begin(..., BlendState) can select Blend::BlendFactor just as
         // a 3D draw can, so the sprite path records the same device constant.
@@ -373,7 +399,19 @@ namespace CNA::Internal::Renderers::DirectX12
         D3D12_INDEX_BUFFER_VIEW ibView = ib_.GetViewEXT();
         cmdList->IASetIndexBuffer(&ibView);
 
-        cmdList->SetGraphicsRootConstantBufferView(0, cb->GetGPUVirtualAddress());
+        if (customRenderer)
+        {
+            for (int slot = 0; slot < constantBufferCount; ++slot)
+            {
+                if (ID3D12Resource* buffer = customRenderer->GetConstantBufferEXT(slot))
+                    cmdList->SetGraphicsRootConstantBufferView(
+                        static_cast<UINT>(slot), buffer->GetGPUVirtualAddress());
+            }
+        }
+        else
+        {
+            cmdList->SetGraphicsRootConstantBufferView(0, cb->GetGPUVirtualAddress());
+        }
 
         // DX-133: pendingFilter_/pendingAddressU_/pendingAddressV_ (set via SetSamplerFilter()/
         // SetSamplerAddressMode(), i.e. the SamplerState passed to SpriteBatch::Begin()) now
@@ -386,25 +424,42 @@ namespace CNA::Internal::Renderers::DirectX12
         owner_->ApplySamplerState(0, pendingFilter_, pendingAddressU_, pendingAddressV_, 1);
         owner_->ApplySamplerMipState(0, pendingMaxMipLevel_, pendingLodBias_);
         owner_->ApplySamplerAddressW(0, pendingAddressW_);
-        // GetSamplerGpuHandleEXT may grow and replace the shader-visible sampler heap. Resolve the
-        // descriptor before capturing the heap object that this command list will actually bind.
-        const D3D12_GPU_DESCRIPTOR_HANDLE samplerHandle = owner_->GetSamplerGpuHandleEXT(0);
+        std::array<D3D12_GPU_DESCRIPTOR_HANDLE,
+                   D3DCommon::D3DProgramReflection::kMaxSamplers> samplerHandles{};
+        for (int slot = 0; slot < samplerCount; ++slot)
+            (void) owner_->GetSamplerGpuHandleEXT(slot);
+        // Allocating a later descriptor may grow and replace the shader-visible heap. Resolve
+        // every handle only after all requested descriptors exist in the final heap.
+        for (int slot = 0; slot < samplerCount; ++slot)
+            samplerHandles[static_cast<std::size_t>(slot)] = owner_->GetSamplerGpuHandleEXT(slot);
 
-        // DX-119: SpriteBatch always samples XNA texture slot 0 (GraphicsDevice.Textures[0]/
-        // SamplerStates[0]) -- real, runtime-settable SamplerState, not a hardcoded default,
-        // bound at root parameter index 2 (root sig shape (1,1,1): CBV@0, SRV table@1, sampler
-        // table@2, D3D12RootSignatureCache's own real parameter ordering).
-        ID3D12DescriptorHeap* heaps[] = {owner_->GetCbvSrvUavHeapEXT(), owner_->GetSamplerHeapEXT()};
-        cmdList->SetDescriptorHeaps(2, heaps);
-        D3D12_GPU_DESCRIPTOR_HANDLE textureHandle = GetSrvGpuHandle(currentTexture_);
-        if (customRenderer)
+        ID3D12DescriptorHeap* heaps[2]{};
+        UINT heapCount = 0;
+        if (shaderResourceCount > 0)
+            heaps[heapCount++] = owner_->GetCbvSrvUavHeapEXT();
+        if (samplerCount > 0)
+            heaps[heapCount++] = owner_->GetSamplerHeapEXT();
+        if (heapCount > 0)
+            cmdList->SetDescriptorHeaps(heapCount, heaps);
+
+        for (int slot = 0; slot < shaderResourceCount; ++slot)
         {
-            const D3D12_GPU_DESCRIPTOR_HANDLE customTexture =
-                customRenderer->GetTexture3DGpuHandleEXT(0);
-            if (customTexture.ptr != 0) textureHandle = customTexture;
+            D3D12_GPU_DESCRIPTOR_HANDLE textureHandle{};
+            if (customRenderer && customRenderer->HasTextureBindingEXT(slot))
+                textureHandle = customRenderer->GetTextureGpuHandleEXT(slot);
+            else if (slot == 0)
+                textureHandle = GetSrvGpuHandle(currentTexture_);
+            if (textureHandle.ptr != 0)
+                cmdList->SetGraphicsRootDescriptorTable(
+                    static_cast<UINT>(constantBufferCount + slot), textureHandle);
         }
-        cmdList->SetGraphicsRootDescriptorTable(1, textureHandle);
-        cmdList->SetGraphicsRootDescriptorTable(2, samplerHandle);
+        for (int slot = 0; slot < samplerCount; ++slot)
+        {
+            const auto handle = samplerHandles[static_cast<std::size_t>(slot)];
+            if (handle.ptr != 0)
+                cmdList->SetGraphicsRootDescriptorTable(
+                    static_cast<UINT>(constantBufferCount + shaderResourceCount + slot), handle);
+        }
 
         cmdList->DrawIndexedInstanced(static_cast<UINT>(pendingIndices_.size()), 1, 0, 0, 0);
 

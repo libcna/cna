@@ -2571,6 +2571,134 @@ namespace CNA::Internal::Renderers::DirectX12
         const std::size_t stride = CombinedVertexStrideOr(params, fallbackStride);
         const auto& vertexElements = multiStream
             ? combinedElements : d3dVb.GetDeclarationEXT().GetElements();
+
+        if (params.customEffectRequested)
+        {
+            auto* customEffect = dynamic_cast<D3D12EffectRenderer*>(params.customEffectRenderer);
+            if (customEffect == nullptr || !customEffect->IsValid())
+                throw System::NotSupportedException(
+                    "DirectX12 custom 3D drawing requires a valid D3D12 ShaderEffect.");
+
+            float worldValues[16];
+            float viewValues[16];
+            float projectionValues[16];
+            world.ToColumnMajor(worldValues);
+            view.ToColumnMajor(viewValues);
+            projection.ToColumnMajor(projectionValues);
+            customEffect->SetUniformMat4("World", worldValues);
+            customEffect->SetUniformMat4("View", viewValues);
+            customEffect->SetUniformMat4("Projection", projectionValues);
+            customEffect->Bind();
+
+            D3D12PipelineStateDesc customState;
+            customState.strideInBytes = stride;
+            customState.vertexElements = vertexElements;
+            customState.vertexInputElements = inputElements;
+            customState.topologyType = static_cast<int>(ToD3D12TopologyType(primitive));
+            FillPsoStateFromCurrentEXT(customState);
+            ID3D12PipelineState* customPso = customEffect->GetOrCreatePipelineStateEXT(
+                std::move(customState), boundColorFormat_, boundDsvFormat_);
+            ID3D12RootSignature* customRootSignature = customEffect->GetRootSignatureEXT();
+            if (customPso == nullptr || customRootSignature == nullptr)
+                throw System::NotSupportedException(
+                    "DirectX12 could not match the ShaderEffect vertex signature and current "
+                    "pipeline state to the bound VertexDeclaration.");
+
+            const int constantBufferCount = customEffect->GetConstantBufferCountEXT();
+            const int shaderResourceCount = customEffect->GetShaderResourceCountEXT();
+            const int samplerCount = customEffect->GetSamplerCountEXT();
+            std::array<D3D12_GPU_DESCRIPTOR_HANDLE,
+                       D3DCommon::D3DProgramReflection::kMaxShaderResources> textureHandles{};
+            for (int slot = 0; slot < shaderResourceCount; ++slot)
+                textureHandles[static_cast<std::size_t>(slot)] =
+                    customEffect->GetTextureGpuHandleEXT(slot);
+            std::array<D3D12_GPU_DESCRIPTOR_HANDLE,
+                       D3DCommon::D3DProgramReflection::kMaxSamplers> samplerHandles{};
+            for (int slot = 0; slot < samplerCount; ++slot)
+                (void)GetSamplerGpuHandleEXT(slot);
+            for (int slot = 0; slot < samplerCount; ++slot)
+                samplerHandles[static_cast<std::size_t>(slot)] =
+                    GetSamplerGpuHandleEXT(slot);
+
+            ID3D12CommandAllocator* allocator = GetCommandAllocatorEXT(0);
+            ID3D12GraphicsCommandList* cmdList = GetCommandListEXT();
+            allocator->Reset();
+            cmdList->Reset(allocator, customPso);
+            if (activeOcclusionQueryHeap_)
+                cmdList->BeginQuery(activeOcclusionQueryHeap_, D3D12_QUERY_TYPE_OCCLUSION, 0);
+
+            resourceStates_.TransitionTo(
+                cmdList, boundColorResource_, D3D12_RESOURCE_STATE_RENDER_TARGET);
+            cmdList->OMSetRenderTargets(
+                1, &boundColorRtv_, FALSE, boundDsv_.ptr != 0 ? &boundDsv_ : nullptr);
+            const D3D12_VIEWPORT viewport = GetEffectiveViewportEXT();
+            const D3D12_RECT scissor = GetEffectiveScissorEXT();
+            cmdList->RSSetViewports(1, &viewport);
+            cmdList->RSSetScissorRects(1, &scissor);
+            cmdList->SetGraphicsRootSignature(customRootSignature);
+            cmdList->SetPipelineState(customPso);
+            cmdList->OMSetStencilRef(static_cast<UINT>(currentReferenceStencil_));
+            cmdList->OMSetBlendFactor(currentBlendFactor_);
+            cmdList->IASetPrimitiveTopology(nativeTopology);
+
+            BindVertexStreams(cmdList, d3dVb, params);
+            if (ib != nullptr)
+            {
+                const auto& d3dIb = static_cast<const D3D12IndexBufferRenderer&>(*ib);
+                const D3D12_INDEX_BUFFER_VIEW ibView = d3dIb.GetViewEXT();
+                cmdList->IASetIndexBuffer(&ibView);
+            }
+            for (int slot = 0; slot < constantBufferCount; ++slot)
+            {
+                if (ID3D12Resource* buffer = customEffect->GetConstantBufferEXT(slot))
+                    cmdList->SetGraphicsRootConstantBufferView(
+                        static_cast<UINT>(slot), buffer->GetGPUVirtualAddress());
+            }
+
+            ID3D12DescriptorHeap* heaps[2]{};
+            UINT heapCount = 0;
+            if (shaderResourceCount > 0)
+                heaps[heapCount++] = GetCbvSrvUavHeapEXT();
+            if (samplerCount > 0)
+                heaps[heapCount++] = GetSamplerHeapEXT();
+            if (heapCount > 0)
+                cmdList->SetDescriptorHeaps(heapCount, heaps);
+            for (int slot = 0; slot < shaderResourceCount; ++slot)
+            {
+                const auto handle = textureHandles[static_cast<std::size_t>(slot)];
+                if (handle.ptr != 0)
+                    cmdList->SetGraphicsRootDescriptorTable(
+                        static_cast<UINT>(constantBufferCount + slot), handle);
+            }
+            for (int slot = 0; slot < samplerCount; ++slot)
+            {
+                const auto handle = samplerHandles[static_cast<std::size_t>(slot)];
+                if (handle.ptr != 0)
+                    cmdList->SetGraphicsRootDescriptorTable(
+                        static_cast<UINT>(constantBufferCount + shaderResourceCount + slot),
+                        handle);
+            }
+
+            const UINT elementCount = static_cast<UINT>(
+                VertexCountForPrimitives(primitive, primitiveCount));
+            if (ib != nullptr)
+                cmdList->DrawIndexedInstanced(
+                    elementCount, 1, static_cast<UINT>(params.startIndex),
+                    static_cast<INT>(params.baseVertex), 0);
+            else
+                cmdList->DrawInstanced(
+                    elementCount, 1, static_cast<UINT>(params.vertexStart), 0);
+
+            if (activeOcclusionQueryHeap_)
+                cmdList->EndQuery(activeOcclusionQueryHeap_, D3D12_QUERY_TYPE_OCCLUSION, 0);
+            const HRESULT hr = cmdList->Close();
+            if (FAILED(hr))
+                throw std::runtime_error(
+                    "DirectX12 ShaderEffect draw command list Close failed, hr=" + FormatHr(hr));
+            ExecuteCommandListAndWaitEXT(cmdList);
+            return;
+        }
+
         using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
         using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
         const bool hasDeclaration = !vertexElements.empty();
