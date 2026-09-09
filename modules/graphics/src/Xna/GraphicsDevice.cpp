@@ -43,6 +43,7 @@
 #include <vector>
 
 #include "System/ArgumentException.hpp"
+#include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
@@ -867,7 +868,8 @@ namespace Microsoft::Xna::Framework::Graphics
             default:
                 throw System::InvalidOperationException("Unrecognized primitive type!");
             }
-            if (count > std::numeric_limits<int>::max())
+            if (count < std::numeric_limits<int>::min() ||
+                count > std::numeric_limits<int>::max())
             {
                 throw System::ArgumentOutOfRangeException(
                     "primitiveCount", std::to_string(primitiveCount),
@@ -1534,6 +1536,29 @@ namespace Microsoft::Xna::Framework::Graphics
             world, view, proj, primitiveType, argumentBuffer, argumentByteOffset, p);
     }
 
+    namespace
+    {
+        void ValidateUserSourceRange(std::int64_t first,
+                                     std::int64_t count,
+                                     std::int64_t elementSize,
+                                     const char* firstName,
+                                     const char* countName);
+        int ValidateUserPrimitiveArguments(const void* vertexData,
+                                           int vertexOffset,
+                                           PrimitiveType primitiveType,
+                                           int primitiveCount,
+                                           std::int64_t vertexSize);
+        int ValidateUserIndexedArguments(const void* vertexData,
+                                         int vertexOffset,
+                                         int numVertices,
+                                         const void* indexData,
+                                         int indexOffset,
+                                         PrimitiveType primitiveType,
+                                         int primitiveCount,
+                                         std::int64_t vertexSize,
+                                         std::int64_t indexSize);
+    }
+
     void GraphicsDevice::DrawUserPrimitives(
         PrimitiveType primitiveType,
         const void* vertexData,
@@ -1549,20 +1574,9 @@ namespace Microsoft::Xna::Framework::Graphics
         if (currentEffect_ == nullptr)
             throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
 
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
-
-        // Compute vertex count from primitive type (mirrors FNA PrimitiveVerts).
-        int totalVerts;
-        switch (primitiveType)
-        {
-            case PrimitiveType::TriangleList:  totalVerts = primitiveCount * 3; break;
-            case PrimitiveType::TriangleStrip: totalVerts = primitiveCount + 2; break;
-            case PrimitiveType::LineList:      totalVerts = primitiveCount * 2; break;
-            case PrimitiveType::LineStrip:     totalVerts = primitiveCount + 1; break;
-            case PrimitiveType::PointListEXT:  totalVerts = primitiveCount;     break;
-            default:
-                throw System::InvalidOperationException("Unrecognized primitive type!");
-        }
+        const int totalVerts = ValidateUserPrimitiveArguments(
+            vertexData, vertexOffset, primitiveType, primitiveCount,
+            static_cast<std::int64_t>(sizeof(VertexPositionColor)));
 
         // vertexData points to an array of VertexPositionColor starting at vertexOffset.
         const auto* vertices = static_cast<const VertexPositionColor*>(vertexData) + vertexOffset;
@@ -1615,20 +1629,10 @@ namespace Microsoft::Xna::Framework::Graphics
         if (currentEffect_ == nullptr)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
 
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
-
-        // Compute total index count from primitive type (mirrors FNA PrimitiveVerts).
-        int indexCount = 0;
-        switch (primitiveType)
-        {
-            case PrimitiveType::TriangleList:  indexCount = primitiveCount * 3; break;
-            case PrimitiveType::TriangleStrip: indexCount = primitiveCount + 2; break;
-            case PrimitiveType::LineList:      indexCount = primitiveCount * 2; break;
-            case PrimitiveType::LineStrip:     indexCount = primitiveCount + 1; break;
-            case PrimitiveType::PointListEXT:  indexCount = primitiveCount;     break;
-            default:
-                throw System::InvalidOperationException("Unrecognized primitive type!");
-        }
+        const int indexCount = ValidateUserIndexedArguments(
+            vertexData, vertexOffset, numVertices, indexData, indexOffset, primitiveType,
+            primitiveCount, static_cast<std::int64_t>(sizeof(VertexPositionColor)),
+            static_cast<std::int64_t>(sizeof(std::uint16_t)));
 
         // Pack vertices from caller array (assumed VertexPositionColor layout).
         const auto* vertices = static_cast<const VertexPositionColor*>(vertexData) + vertexOffset;
@@ -1669,25 +1673,11 @@ namespace Microsoft::Xna::Framework::Graphics
     // Public CNAEXT static — mirrors FNA's private PrimitiveVerts().
     int GraphicsDevice::PrimitiveVerts(PrimitiveType type, int primitiveCount)
     {
-        switch (type)
-        {
-            case PrimitiveType::TriangleList:  return primitiveCount * 3;
-            case PrimitiveType::TriangleStrip: return primitiveCount + 2;
-            case PrimitiveType::LineList:      return primitiveCount * 2;
-            case PrimitiveType::LineStrip:     return primitiveCount + 1;
-            case PrimitiveType::PointListEXT:  return primitiveCount;
-            default:
-                throw System::InvalidOperationException("Unrecognized primitive type!");
-        }
+        return CheckedPrimitiveElementCount(type, primitiveCount);
     }
 
     namespace
     {
-        int VertexCountForUserPrimitives(PrimitiveType type, int primitiveCount)
-        {
-            return GraphicsDevice::PrimitiveVerts(type, primitiveCount);
-        }
-
         // The GPU vertex streams of the built-in types, shared with their VertexDeclarations and
         // with VertexBuffer so a stride can never be described in two places at once.
         using GpuVPC  = CNA::Internal::Graphics::PositionColorStream;         // 16
@@ -1773,6 +1763,45 @@ namespace Microsoft::Xna::Framework::Graphics
                     "The requested source byte range is too large.");
             }
         }
+
+        int ValidateUserPrimitiveArguments(const void* vertexData,
+                                           int vertexOffset,
+                                           PrimitiveType primitiveType,
+                                           int primitiveCount,
+                                           std::int64_t vertexSize)
+        {
+            System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(
+                primitiveCount, "primitiveCount");
+            System::ArgumentNullException::ThrowIfNull(vertexData, "vertexData");
+            const int vertexCount = CheckedPrimitiveElementCount(primitiveType, primitiveCount);
+            ValidateUserSourceRange(vertexOffset, vertexCount, vertexSize,
+                                    "vertexOffset", "primitiveCount");
+            return vertexCount;
+        }
+
+        int ValidateUserIndexedArguments(const void* vertexData,
+                                         int vertexOffset,
+                                         int numVertices,
+                                         const void* indexData,
+                                         int indexOffset,
+                                         PrimitiveType primitiveType,
+                                         int primitiveCount,
+                                         std::int64_t vertexSize,
+                                         std::int64_t indexSize)
+        {
+            System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(
+                primitiveCount, "primitiveCount");
+            System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(
+                numVertices, "numVertices");
+            System::ArgumentNullException::ThrowIfNull(vertexData, "vertexData");
+            System::ArgumentNullException::ThrowIfNull(indexData, "indexData");
+            const int indexCount = CheckedPrimitiveElementCount(primitiveType, primitiveCount);
+            ValidateUserSourceRange(vertexOffset, numVertices, vertexSize,
+                                    "vertexOffset", "numVertices");
+            ValidateUserSourceRange(indexOffset, indexCount, indexSize,
+                                    "indexOffset", "primitiveCount");
+            return indexCount;
+        }
     }
 
     // Grows the scratch buffer only when the requested size exceeds current capacity, so
@@ -1802,8 +1831,8 @@ namespace Microsoft::Xna::Framework::Graphics
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(count, "primitiveCount");
-        const int n = VertexCountForUserPrimitives(type, count);
+        const int n = ValidateUserPrimitiveArguments(
+            data, offset, type, count, static_cast<std::int64_t>(sizeof(VertexPositionColor)));
         auto* packed = static_cast<GpuVPC*>(AcquireUserVertexScratch(static_cast<std::size_t>(n) * sizeof(GpuVPC)));
         for (int i = 0; i < n; ++i)
         {
@@ -1831,8 +1860,8 @@ namespace Microsoft::Xna::Framework::Graphics
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(count, "primitiveCount");
-        const int n = VertexCountForUserPrimitives(type, count);
+        const int n = ValidateUserPrimitiveArguments(
+            data, offset, type, count, static_cast<std::int64_t>(sizeof(VertexPositionTexture)));
         auto* packed = static_cast<GpuVPT*>(AcquireUserVertexScratch(static_cast<std::size_t>(n) * sizeof(GpuVPT)));
         for (int i = 0; i < n; ++i)
         {
@@ -1860,8 +1889,9 @@ namespace Microsoft::Xna::Framework::Graphics
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(count, "primitiveCount");
-        const int n = VertexCountForUserPrimitives(type, count);
+        const int n = ValidateUserPrimitiveArguments(
+            data, offset, type, count,
+            static_cast<std::int64_t>(sizeof(VertexPositionColorTexture)));
         auto* packed = static_cast<GpuVPCT*>(AcquireUserVertexScratch(static_cast<std::size_t>(n) * sizeof(GpuVPCT)));
         for (int i = 0; i < n; ++i)
         {
@@ -1889,8 +1919,9 @@ namespace Microsoft::Xna::Framework::Graphics
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(count, "primitiveCount");
-        const int n = VertexCountForUserPrimitives(type, count);
+        const int n = ValidateUserPrimitiveArguments(
+            data, offset, type, count,
+            static_cast<std::int64_t>(sizeof(VertexPositionNormalTexture)));
         auto* packed = static_cast<GpuVPNT*>(AcquireUserVertexScratch(static_cast<std::size_t>(n) * sizeof(GpuVPNT)));
         for (int i = 0; i < n; ++i)
         {
@@ -1925,10 +1956,9 @@ namespace Microsoft::Xna::Framework::Graphics
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
         const int stride = ValidateUserVertexDeclaration(vertexDeclaration);
-        const int n      = VertexCountForUserPrimitives(type, primitiveCount);
-        ValidateUserSourceRange(vertexOffset, n, stride, "vertexOffset", "primitiveCount");
+        const int n      = ValidateUserPrimitiveArguments(
+            vertexData, vertexOffset, type, primitiveCount, stride);
         // Apply vertexOffset in bytes then upload n vertices worth of raw data.
         const auto* src = static_cast<const std::uint8_t*>(vertexData)
                           + static_cast<std::ptrdiff_t>(vertexOffset) * stride;
@@ -1959,7 +1989,6 @@ namespace Microsoft::Xna::Framework::Graphics
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
         const int stride = ValidateUserVertexDeclaration(vertexDeclaration);
         if (stride != CNA::Internal::Graphics::VertexStreamStride<VertexT>)
         {
@@ -1968,9 +1997,9 @@ namespace Microsoft::Xna::Framework::Graphics
                 "supplied vertex type.",
                 "vertexDeclaration");
         }
-        const int n = VertexCountForUserPrimitives(type, primitiveCount);
-        ValidateUserSourceRange(vertexOffset, n, static_cast<std::int64_t>(sizeof(VertexT)),
-                                "vertexOffset", "primitiveCount");
+        const int n = ValidateUserPrimitiveArguments(
+            vertexData, vertexOffset, type, primitiveCount,
+            static_cast<std::int64_t>(sizeof(VertexT)));
         auto* packed = static_cast<Stream*>(
             AcquireUserVertexScratch(static_cast<std::size_t>(n) * sizeof(Stream)));
         for (int i = 0; i < n; ++i)
@@ -2019,23 +2048,6 @@ namespace Microsoft::Xna::Framework::Graphics
     // DrawUserIndexedPrimitives — typed overloads
     // -----------------------------------------------------------------------
 
-    namespace
-    {
-        int IndexCountForPrimitives(PrimitiveType type, int primitiveCount)
-        {
-            switch (type)
-            {
-                case PrimitiveType::TriangleList:  return primitiveCount * 3;
-                case PrimitiveType::TriangleStrip: return primitiveCount + 2;
-                case PrimitiveType::LineList:      return primitiveCount * 2;
-                case PrimitiveType::LineStrip:     return primitiveCount + 1;
-                case PrimitiveType::PointListEXT:  return primitiveCount;
-                default:
-                    throw System::InvalidOperationException("Unrecognized primitive type!");
-            }
-        }
-    }
-
     void GraphicsDevice::DrawUserIndexedPrimitives(PrimitiveType type,
                                                    const VertexPositionColor* vertices, int vOffset, int numVerts,
                                                    const std::uint16_t* indices, int iOffset, int primCount)
@@ -2048,8 +2060,10 @@ namespace Microsoft::Xna::Framework::Graphics
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
-        const int ic = IndexCountForPrimitives(type, primCount);
+        const int ic = ValidateUserIndexedArguments(
+            vertices, vOffset, numVerts, indices, iOffset, type, primCount,
+            static_cast<std::int64_t>(sizeof(VertexPositionColor)),
+            static_cast<std::int64_t>(sizeof(std::uint16_t)));
         auto* packed = static_cast<GpuVPC*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPC)));
         for (int i = 0; i < numVerts; ++i)
         {
@@ -2081,8 +2095,10 @@ namespace Microsoft::Xna::Framework::Graphics
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
-        const int ic = IndexCountForPrimitives(type, primCount);
+        const int ic = ValidateUserIndexedArguments(
+            vertices, vOffset, numVerts, indices, iOffset, type, primCount,
+            static_cast<std::int64_t>(sizeof(VertexPositionTexture)),
+            static_cast<std::int64_t>(sizeof(std::uint16_t)));
         auto* packed = static_cast<GpuVPT*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPT)));
         for (int i = 0; i < numVerts; ++i)
         {
@@ -2114,8 +2130,10 @@ namespace Microsoft::Xna::Framework::Graphics
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
-        const int ic = IndexCountForPrimitives(type, primCount);
+        const int ic = ValidateUserIndexedArguments(
+            vertices, vOffset, numVerts, indices, iOffset, type, primCount,
+            static_cast<std::int64_t>(sizeof(VertexPositionColorTexture)),
+            static_cast<std::int64_t>(sizeof(std::uint16_t)));
         auto* packed = static_cast<GpuVPCT*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPCT)));
         for (int i = 0; i < numVerts; ++i)
         {
@@ -2147,8 +2165,10 @@ namespace Microsoft::Xna::Framework::Graphics
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
-        const int ic = IndexCountForPrimitives(type, primCount);
+        const int ic = ValidateUserIndexedArguments(
+            vertices, vOffset, numVerts, indices, iOffset, type, primCount,
+            static_cast<std::int64_t>(sizeof(VertexPositionNormalTexture)),
+            static_cast<std::int64_t>(sizeof(std::uint16_t)));
         auto* packed = static_cast<GpuVPNT*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPNT)));
         for (int i = 0; i < numVerts; ++i)
         {
@@ -2182,8 +2202,10 @@ namespace Microsoft::Xna::Framework::Graphics
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
-        const int ic = IndexCountForPrimitives(type, primCount);
+        const int ic = ValidateUserIndexedArguments(
+            vertices, vOffset, numVerts, indices, iOffset, type, primCount,
+            static_cast<std::int64_t>(sizeof(VertexPositionColor)),
+            static_cast<std::int64_t>(sizeof(std::uint32_t)));
         auto* packed = static_cast<GpuVPC*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPC)));
         for (int i = 0; i < numVerts; ++i)
         {
@@ -2215,8 +2237,10 @@ namespace Microsoft::Xna::Framework::Graphics
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
-        const int ic = IndexCountForPrimitives(type, primCount);
+        const int ic = ValidateUserIndexedArguments(
+            vertices, vOffset, numVerts, indices, iOffset, type, primCount,
+            static_cast<std::int64_t>(sizeof(VertexPositionTexture)),
+            static_cast<std::int64_t>(sizeof(std::uint32_t)));
         auto* packed = static_cast<GpuVPT*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPT)));
         for (int i = 0; i < numVerts; ++i)
         {
@@ -2248,8 +2272,10 @@ namespace Microsoft::Xna::Framework::Graphics
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
-        const int ic = IndexCountForPrimitives(type, primCount);
+        const int ic = ValidateUserIndexedArguments(
+            vertices, vOffset, numVerts, indices, iOffset, type, primCount,
+            static_cast<std::int64_t>(sizeof(VertexPositionColorTexture)),
+            static_cast<std::int64_t>(sizeof(std::uint32_t)));
         auto* packed = static_cast<GpuVPCT*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPCT)));
         for (int i = 0; i < numVerts; ++i)
         {
@@ -2281,8 +2307,10 @@ namespace Microsoft::Xna::Framework::Graphics
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
-        const int ic = IndexCountForPrimitives(type, primCount);
+        const int ic = ValidateUserIndexedArguments(
+            vertices, vOffset, numVerts, indices, iOffset, type, primCount,
+            static_cast<std::int64_t>(sizeof(VertexPositionNormalTexture)),
+            static_cast<std::int64_t>(sizeof(std::uint32_t)));
         auto* packed = static_cast<GpuVPNT*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPNT)));
         for (int i = 0; i < numVerts; ++i)
         {
@@ -2320,12 +2348,10 @@ namespace Microsoft::Xna::Framework::Graphics
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
         const int stride = ValidateUserVertexDeclaration(vd);
-        const int ic     = IndexCountForPrimitives(type, primCount);
-        ValidateUserSourceRange(vOffset, numVerts, stride, "vertexOffset", "numVertices");
-        ValidateUserSourceRange(iOffset, ic, static_cast<std::int64_t>(sizeof(std::uint16_t)),
-                                "indexOffset", "primitiveCount");
+        const int ic     = ValidateUserIndexedArguments(
+            vertexData, vOffset, numVerts, indexData, iOffset, type, primCount, stride,
+            static_cast<std::int64_t>(sizeof(std::uint16_t)));
         const auto* src  = static_cast<const std::uint8_t*>(vertexData)
                            + static_cast<std::ptrdiff_t>(vOffset) * stride;
         auto vb = renderer_->CreateVertexBuffer(numVerts);
@@ -2355,12 +2381,10 @@ namespace Microsoft::Xna::Framework::Graphics
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
         const int stride = ValidateUserVertexDeclaration(vd);
-        const int ic     = IndexCountForPrimitives(type, primCount);
-        ValidateUserSourceRange(vOffset, numVerts, stride, "vertexOffset", "numVertices");
-        ValidateUserSourceRange(iOffset, ic, static_cast<std::int64_t>(sizeof(std::uint32_t)),
-                                "indexOffset", "primitiveCount");
+        const int ic     = ValidateUserIndexedArguments(
+            vertexData, vOffset, numVerts, indexData, iOffset, type, primCount, stride,
+            static_cast<std::int64_t>(sizeof(std::uint32_t)));
         const auto* src  = static_cast<const std::uint8_t*>(vertexData)
                            + static_cast<std::ptrdiff_t>(vOffset) * stride;
         auto vb = renderer_->CreateVertexBuffer(numVerts);
@@ -2396,7 +2420,6 @@ namespace Microsoft::Xna::Framework::Graphics
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
         const int stride = ValidateUserVertexDeclaration(vertexDeclaration);
         if (stride != CNA::Internal::Graphics::VertexStreamStride<VertexT>)
         {
@@ -2405,9 +2428,10 @@ namespace Microsoft::Xna::Framework::Graphics
                 "supplied vertex type.",
                 "vertexDeclaration");
         }
-        ValidateUserSourceRange(vertexOffset, numVertices,
-                                static_cast<std::int64_t>(sizeof(VertexT)),
-                                "vertexOffset", "numVertices");
+        ValidateUserIndexedArguments(
+            vertexData, vertexOffset, numVertices, indexData, indexOffset, type, primitiveCount,
+            static_cast<std::int64_t>(sizeof(VertexT)),
+            static_cast<std::int64_t>(sizeof(IndexT)));
         auto* packed = static_cast<Stream*>(
             AcquireUserVertexScratch(static_cast<std::size_t>(numVertices) * sizeof(Stream)));
         for (int i = 0; i < numVertices; ++i)

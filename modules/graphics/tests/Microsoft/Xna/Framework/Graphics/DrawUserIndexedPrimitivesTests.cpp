@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // Task 252: DrawUserIndexedPrimitives audit — FNA API conformance tests.
+// SOFTWARE-197: pointer/offset/count/overflow validation parity.
 //
 // Tests cover:
 //   • Index count formula (identical to PrimitiveVerts — verified via the public static).
@@ -32,6 +33,7 @@
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/ArgumentNullException.hpp"
 
 using Microsoft::Xna::Framework::Graphics::BasicEffect;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
@@ -447,4 +449,27 @@ TEST_F(DrawUserIndexedPrimitivesArgumentGuardTest, Raw_NegativeCount_Throws)
         static_cast<const void*>(vpc.data()), 0, 3,
         static_cast<const void*>(idx16.data()), 0, -1),
         System::ArgumentOutOfRangeException);
+}
+
+TEST_F(DrawUserIndexedPrimitivesArgumentGuardTest, TypedOffsetsAndVertexCountAreValidated)
+{
+    EXPECT_THROW(gd.DrawUserIndexedPrimitives(
+        PrimitiveType::TriangleList, vpc.data() + 3, -3, 3, idx16.data(), 0, 1),
+        System::ArgumentOutOfRangeException);
+    EXPECT_THROW(gd.DrawUserIndexedPrimitives(
+        PrimitiveType::TriangleList, vpc.data(), 0, 3, idx16.data() + 3, -3, 1),
+        System::ArgumentOutOfRangeException);
+    EXPECT_THROW(gd.DrawUserIndexedPrimitives(
+        PrimitiveType::TriangleList, vpc.data(), 0, 0, idx16.data(), 0, 1),
+        System::ArgumentOutOfRangeException);
+}
+
+TEST_F(DrawUserIndexedPrimitivesArgumentGuardTest, NullVertexAndIndexDataThrowArgumentNullException)
+{
+    EXPECT_THROW(gd.DrawUserIndexedPrimitives(
+        PrimitiveType::TriangleList, static_cast<const VertexPositionColor*>(nullptr), 0, 3,
+        idx16.data(), 0, 1), System::ArgumentNullException);
+    EXPECT_THROW(gd.DrawUserIndexedPrimitives(
+        PrimitiveType::TriangleList, vpc.data(), 0, 3,
+        static_cast<const std::uint16_t*>(nullptr), 0, 1), System::ArgumentNullException);
 }

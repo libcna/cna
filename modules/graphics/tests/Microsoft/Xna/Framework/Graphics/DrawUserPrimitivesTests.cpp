@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // Task 251: DrawUserPrimitives audit — FNA API conformance tests.
 // Task 259: DrawUserPrimitives argument-guard tests (primitiveCount <= 0).
+// SOFTWARE-197: pointer/offset/count/overflow validation parity.
 //
 // Tests cover:
 //   • GraphicsDevice::PrimitiveVerts() vertex-count formula for all five topologies.
@@ -12,6 +13,7 @@
 // Draw-call pixel-readback tests live in tasks 255–256 (integration tests).
 
 #include <gtest/gtest.h>
+#include <limits>
 #include <stdexcept>
 #include <vector>
 
@@ -31,6 +33,7 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/ArgumentNullException.hpp"
 #include "System/InvalidOperationException.hpp"
 
 using Microsoft::Xna::Framework::Graphics::BasicEffect;
@@ -111,6 +114,14 @@ TEST(PrimitiveVertsTest, TriangleList_ZeroPrimitives)
 {
     // FNA allows zero; vertex count is zero (no draw would occur).
     EXPECT_EQ(GraphicsDevice::PrimitiveVerts(PrimitiveType::TriangleList, 0), 0);
+}
+
+TEST(PrimitiveVertsTest, TriangleList_OverflowThrowsInsteadOfInvokingSignedOverflow)
+{
+    EXPECT_THROW(
+        GraphicsDevice::PrimitiveVerts(PrimitiveType::TriangleList,
+                                       std::numeric_limits<int>::max()),
+        System::ArgumentOutOfRangeException);
 }
 
 // =============================================================================
@@ -263,4 +274,24 @@ TEST_F(DrawUserPrimitivesArgumentGuardTest, VD_NegativeCount_Throws)
     EXPECT_THROW(
         gd.DrawUserPrimitives(PrimitiveType::TriangleList, vpc.data(), 0, -1, vd),
         System::ArgumentOutOfRangeException);
+}
+
+TEST_F(DrawUserPrimitivesArgumentGuardTest, EveryTypedOverloadRejectsNegativeVertexOffset)
+{
+    EXPECT_THROW(gd.DrawUserPrimitives(PrimitiveType::TriangleList, vpc.data() + 3, -3, 1),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW(gd.DrawUserPrimitives(PrimitiveType::TriangleList, vpt.data() + 3, -3, 1),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW(gd.DrawUserPrimitives(PrimitiveType::TriangleList, vpct.data() + 3, -3, 1),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW(gd.DrawUserPrimitives(PrimitiveType::TriangleList, vpnt.data() + 3, -3, 1),
+                 System::ArgumentOutOfRangeException);
+}
+
+TEST_F(DrawUserPrimitivesArgumentGuardTest, NullVertexDataThrowsArgumentNullException)
+{
+    EXPECT_THROW(
+        gd.DrawUserPrimitives(PrimitiveType::TriangleList,
+                              static_cast<const VertexPositionColor*>(nullptr), 0, 1),
+        System::ArgumentNullException);
 }
