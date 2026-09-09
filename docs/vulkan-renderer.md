@@ -47,7 +47,8 @@ measures on (§*Environment* below).
 | Multi-stream vertex input | supported | fixed |
 | Compiled XNA `.fx` effects | **unsupported** here | fixed |
 | SPIR-V compute shaders, storage buffers and dedicated `rgba8` storage images | supported | device |
-| Legacy XNA `Texture2D` compute-image binding and indirect draw | **unsupported** | fixed |
+| Indirect drawing, including non-zero base instance | supported | device |
+| Legacy XNA `Texture2D` compute-image binding | **unsupported** | fixed |
 | Float32 / Float16 `RenderTarget2D`, half-float linear filtering | supported | device |
 | GPU timers, shadow sampling, image-based lighting | **unsupported** | fixed |
 
@@ -125,6 +126,39 @@ readback boundary; `MOD-2247`–`MOD-2253` own integration into deferred public-
 resource-tracked barriers, fence-safe retirement and removal of this routine wait. Optional
 extended storage-image formats and legal bridges from existing XNA textures/render targets remain
 `MOD-2244`; the dedicated `StorageTexture2D` path is claimed here.
+
+### Indirect drawing
+
+`MOD-2245`. **Test:** `Vulkan_IndirectDraw` — both canonical command layouts are consumed directly
+by `vkCmdDrawIndirect` / `vkCmdDrawIndexedIndirect`; the renderer never reads the count or offsets
+back to the CPU. Support is device-derived: CNA enables `drawIndirectFirstInstance` when the
+selected device offers it and reports indirect drawing only then. This matters because both CNA
+layouts expose `BaseInstance`; claiming a device that accepted only zero would make one documented
+field silently conditional.
+
+Vulkan's ordinary draws snapshot only the requested geometry window. An indirect command can be
+written by compute after the draw is issued, so its future range cannot be known on the CPU. The
+deferred path instead snapshots the complete remaining per-vertex and index ranges, plus every
+logical per-instance record, before enqueue. Each copy is checked against the existing 4 MiB / 1
+MiB / 1 MiB per-frame arenas before allocation. The native command then preserves the argument
+byte offset, binding offset, `FirstVertex`, `FirstIndex`, `BaseVertex`, `BaseInstance`, instance
+frequency and combined multi-stream layout independently.
+
+The queued draw owns a share of the argument renderer record. Disposing its public
+`StorageBuffer` after enqueue therefore remains logically immediate but cannot invalidate the
+unrecorded `VkBuffer`; once the command has been recorded, the allocation enters the existing
+frame-generation retirement queue and is destroyed only after the consuming fence. A single
+automatic host/transfer/compute-write → indirect-command-read barrier is recorded before relevant
+render passes. The current compute producer is still synchronously submitted, so integration of
+all modern commands into one deferred order remains `MOD-2247`–`MOD-2250`, but callers need no
+manual barrier for correctness.
+
+The six-leg oracle uses non-zero command offsets for both routes, separates every geometry offset,
+selects instance one, disposes an accepted argument before render-target flush, and has SPIR-V
+compute write a command that is drawn without readback. It passes **6/6 on RADV and llvmpipe** with
+zero new validation messages. Wireframe renders filled because the CPU cannot rebuild a line list
+without the hidden count; compiled FX is refused because its current pipeline route likewise needs
+that count.
 
 ### Multi-stream vertex input
 
@@ -212,8 +246,9 @@ one that matters for a reader is MSAA, where llvmpipe offers up to 4× and RADV 
 `vkGetPhysicalDeviceProperties2` and `vkGetPhysicalDeviceFeatures2`. CNA keeps the supported and
 enabled feature records separate. A native bit is enabled only when a complete renderer path uses
 it: today those are `fillModeNonSolid`, `samplerAnisotropy`, `independentBlend`,
-`occlusionQueryPrecise` and `textureCompressionBC`, each conditional on device support. The
-optional `VK_EXT_4444_formats` feature is queried and enabled through the features2 `pNext` chain
+`occlusionQueryPrecise`, `textureCompressionBC` and `drawIndirectFirstInstance`, each conditional
+on device support. The optional `VK_EXT_4444_formats` feature is queried and enabled through the
+features2 `pNext` chain
 only when the extension is advertised and its `formatA4R4G4B4` feature is true. A device missing
 any optional feature still starts and the corresponding public capability under-claims or refuses.
 
@@ -638,13 +673,13 @@ short form a reader needs before opening it.
 | `SpriteSortMode::Immediate` honoured at the renderer boundary | EasyGL does not override `SetImmediateMode` at all. |
 | Precise occlusion counts on real hardware | `VK_QUERY_CONTROL_PRECISE_BIT` with the feature enabled, answered honestly through `PixelCountIsPreciseEXT` (`VULKAN-370`). |
 
-**Differences that are gaps, and are owned:** indirect draw, GPU timers, shadow sampling and image-
-based lighting are all `false` here and implemented on EasyGL. They are outside
+**Differences that are gaps, and are owned:** GPU timers, shadow sampling and image-based lighting
+are all `false` here and implemented on EasyGL. They are outside
 this campaign's scope — the ordinary XNA graphics surface — and `plans/plan_modern.md` owns the
 engine layer that uses them. The capability profile reports them `false` rather than accepting the
-call and doing nothing, which is the property that matters: `GraphicsDevice`'s four EXT queries
+call and doing nothing, which is the property that matters: `GraphicsDevice`'s three relevant EXT queries
 (`ExecutesShaderEffectSourceEXT`, `SupportsShadowSamplingEXT`, `SupportsImageBasedLightingEXT`)
-answer the same way. Compute/storage support is now the measured exception described above.
+Indirect execution is the additional device-gated path described above.
 
 ---
 

@@ -3567,6 +3567,48 @@ namespace CNA::Internal::Renderers::Vulkan
                                        const Matrix&, const Matrix&, const Matrix&,
                                        PrimitiveType, int, int, const GpuDrawParams&) override;
         /**
+         * @brief Reports whether this device executes the canonical indirect draw commands.
+         *
+         * @return `true` when non-zero indirect first-instance values are enabled.
+        */
+        [[nodiscard]] bool SupportsIndirectDrawEXT() const override;
+        /**
+         * @brief Queues one non-indexed draw whose operands come from a native argument buffer.
+         *
+         * @param vertexBuffer Bound per-vertex geometry.
+         * @param world World transform captured for the draw.
+         * @param view View transform captured for the draw.
+         * @param projection Projection transform captured for the draw.
+         * @param primitive Primitive topology.
+         * @param argumentBuffer Buffer containing one canonical indirect command.
+         * @param argumentByteOffset Byte offset of the command.
+         * @param params Captured effect, declaration, stream, and render-state parameters.
+        */
+        void DrawPrimitivesIndirectEXT(
+            const IVertexBufferRenderer& vertexBuffer,
+            const Matrix& world, const Matrix& view, const Matrix& projection,
+            PrimitiveType primitive, const IStorageBufferRenderer& argumentBuffer,
+            int argumentByteOffset, const GpuDrawParams& params) override;
+        /**
+         * @brief Queues one indexed draw whose operands come from a native argument buffer.
+         *
+         * @param vertexBuffer Bound per-vertex geometry.
+         * @param indexBuffer Bound index geometry.
+         * @param world World transform captured for the draw.
+         * @param view View transform captured for the draw.
+         * @param projection Projection transform captured for the draw.
+         * @param primitive Primitive topology.
+         * @param argumentBuffer Buffer containing one canonical indexed indirect command.
+         * @param argumentByteOffset Byte offset of the command.
+         * @param params Captured effect, declaration, stream, and render-state parameters.
+        */
+        void DrawIndexedPrimitivesIndirectEXT(
+            const IVertexBufferRenderer& vertexBuffer,
+            const IIndexBufferRenderer& indexBuffer,
+            const Matrix& world, const Matrix& view, const Matrix& projection,
+            PrimitiveType primitive, const IStorageBufferRenderer& argumentBuffer,
+            int argumentByteOffset, const GpuDrawParams& params) override;
+        /**
          * @brief Reports Vulkan support for non-zero first-instance indexed draws.
          *
          * @return Always `true` for the Vulkan renderer.
@@ -4393,6 +4435,13 @@ namespace CNA::Internal::Renderers::Vulkan
             std::size_t             instVbStride      = 64;    // bytes per instance (default = mat4)
             uint32_t                instanceCount     = 1;     // number of instances
             uint32_t                firstInstance     = 0;     // native first-instance selector
+            // MOD-2245: a live renderer record owns the native argument buffer until this
+            // deferred draw has been recorded; ReleaseVulkanResources retires its handles on the
+            // current frame fence if the public wrapper was disposed in the meantime.
+            std::shared_ptr<const IStorageBufferRenderer> indirectBufferLifetime;
+            VkBuffer                indirectBuffer    = VK_NULL_HANDLE;
+            VkDeviceSize            indirectByteOffset = 0;
+            bool                    indirectIndexed   = false;
             bool                    wireframe         = false; // true = VK_POLYGON_MODE_LINE
             float                   depthBias         = 0.0f;  // XNA DepthBias (vkCmdSetDepthBias constant)
             float                   slopeScaleDepthBias = 0.0f; // XNA SlopeScaleDepthBias (slope factor)
@@ -4481,6 +4530,19 @@ namespace CNA::Internal::Renderers::Vulkan
                                         int instanceVertexOffset = 0,
                                         int instanceFrequency = 1,
                                         int instanceCount = 1);
+        void DrawInstancedPrimitivesCoreEXT(
+            const IVertexBufferRenderer& vb,
+            const IIndexBufferRenderer* ib,
+            const Matrix& world, const Matrix& view, const Matrix& projection,
+            PrimitiveType primitive, int primitiveCount, int instanceCount,
+            const GpuDrawParams& params);
+        void QueueIndirectDrawEXT(
+            const IVertexBufferRenderer& vb,
+            const IIndexBufferRenderer* ib,
+            const Matrix& world, const Matrix& view, const Matrix& projection,
+            PrimitiveType primitive,
+            const IStorageBufferRenderer& argumentBuffer,
+            int argumentByteOffset, const GpuDrawParams& params);
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
         [[nodiscard]] VkPipeline GetOrCreateCompiledEffectPipelineEXT(
             const Pending3DDraw& draw, uint32_t colorAttachmentCount, bool msaa,

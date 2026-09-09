@@ -208,9 +208,9 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 | Image-based lighting | ✅ CPU precompute (works on every renderer) + split-sum shading | 🟨 precompute works; `SupportsImageBasedLightingEXT()` false | ⬜ | ⬜ — the precompute runs anywhere; the shading needs the renderer's own shader path |
 | Materials (`PbrMaterial` ↔ `PbrEffect`) | ✅ | ✅ | ✅ | ✅ — no renderer code at all: it moves values between two existing objects |
 | Instancing / LOD / culling | ✅ | ✅ measured — `cnaext_instancing_lod_test` passes 5/5 on a real Vulkan device | ⬜ | ⬜ — `LodGroupEXT` and `FrustumCullerEXT` are renderer-free and run everywhere; `InstancedRendererEXT` needs `GraphicsCapability::Instancing` and otherwise refuses (or falls back, on request) |
-| Compute / storage buffers | ✅ GL ES ≥ 3.1 / GL ≥ 4.3, runtime-probed; image bindings desktop-GL only | ⬜ not implemented; reports false and both wrappers refuse | ⬜ | ⬜ — both wrappers throw `System::NotSupportedException` naming the renderer |
-| Indirect draws | ✅ GL ES ≥ 3.1 / GL ≥ 4.0, runtime-probed; both routes, including per-instance streams | ⬜ | ⬜ | ⬜ — `SupportsIndirectDrawEXT()` is false by default and `GraphicsDevice` refuses the draw naming the renderer |
-| GPU culling into an indirect draw | ✅ needs compute, indirect draw, executed effect source and a vertex-stage SSBO — all four probed | ⬜ | ⬜ | ⬜ — `GpuInstanceCuller` refuses and names the missing requirement; there is no fallback, because a CPU path would not remove the stall |
+| Compute / storage buffers | ✅ GL ES ≥ 3.1 / GL ≥ 4.3, runtime-probed; image bindings desktop-GL only | ✅ SPIR-V, reflected SSBO/push constants and dedicated `rgba8` storage images; dispatch still waits synchronously | ⬜ | ⬜ — both wrappers throw `System::NotSupportedException` naming the renderer |
+| Indirect draws | ✅ GL ES ≥ 3.1 / GL ≥ 4.0, runtime-probed; both routes, including per-instance streams | ✅ device-gated `drawIndirectFirstInstance`; both routes, deferred lifetime and compute-written commands | ⬜ | ⬜ — `SupportsIndirectDrawEXT()` is false by default and `GraphicsDevice` refuses the draw naming the renderer |
+| GPU culling into an indirect draw | ✅ needs compute, indirect draw, executed effect source and a vertex-stage SSBO — all four probed | ⬜ compute + indirect exist, but executed source and vertex-stage SSBO binding do not | ⬜ | ⬜ — `GpuInstanceCuller` refuses and names the missing requirement; there is no fallback, because a CPU path would not remove the stall |
 | Particles | ✅ GPU simulation + instanced billboards | 🟨 CPU simulation and the stock-effect draw work anywhere | 🟨 same | 🟨 — `ParticleSystem` falls back to its CPU path and the same particles appear, more slowly |
 | Transparency (sorted) | ✅ ordering is renderer-free; the phase needs only a scene target | ✅ | ✅ | ✅ — `TransparentDrawList` is plain arithmetic and runs everywhere |
 | Transparency (order-independent) | ✅ needs MRT, a half-float target and executed effect source | ⬜ | ⬜ | ⬜ — the pipeline falls back to the sorted phase and names the missing requirement |
@@ -974,7 +974,8 @@ if (device.SupportsCapability(CNA::GraphicsCapability::IndirectDraw)) {
 order GL, D3D12 and Vulkan all agree on. A compute shader declaring the same words in the same order
 lands on the same memory. `BaseInstance` **must be 0 on GL ES**, which has no base-instance
 parameter; that cannot be diagnosed anywhere, because by the time the draw runs the value is in GPU
-memory.
+memory. Vulkan instead advertises the route only when `drawIndirectFirstInstance` is enabled, so
+the complete layout — including non-zero values — is a real device promise.
 
 **The range checks every other draw performs are impossible here.** `GraphicsDevice` rejects a
 primitive range that leaves the bound buffers before every other draw route; for this one the range
@@ -985,16 +986,25 @@ an applied effect, and an argument offset that is 4-byte aligned and leaves room
 **One buffer can hold a frame's worth of commands.** The byte offset selects which one this draw
 runs, which is the shape a GPU-driven pass wants.
 
-**Order the command fetch explicitly.** `GraphicsMemoryBarrier::IndirectCommand` is a separate bit
-from `ShaderStorage` because writing a count through a storage binding and fetching it as a command
-are two different accesses; ordering only the first can let the fetch read the previous frame's
-numbers.
+**The renderer orders the command fetch.** Writing a count through a storage binding and fetching
+it as a command are distinct accesses, but the accepted ordering contract makes that a backend
+responsibility. `GraphicsMemoryBarrier::IndirectCommand` remains a compatibility hint for older
+callers; Vulkan automatically emits the host/transfer/compute-write → indirect-command-read
+dependency before the render pass and the compute-written-command oracle calls no manual barrier.
 
 **A wrinkle worth knowing before you plan around it.** The only argument buffer CNA has is
 `CNA::Graphics::StorageBuffer`, which is an SSBO and needs GL ES 3.1 / desktop GL 4.3. The indirect
 draw itself needs only GL 4.0, so on a desktop context between 4.0 and 4.2 the capability truthfully
 reports `true` and there is still nothing in CNA able to hold the arguments. Check both capabilities
 if you intend to run there.
+
+**Vulkan keeps deferred arguments alive and bounded.** It cannot know a compute-written draw range
+on the CPU, so it snapshots each complete remaining geometry/instance stream within its fixed
+per-frame arenas and retains the argument buffer's internal record until command recording. Public
+`Dispose()` after enqueue neither cancels the draw nor leaves a dangling `VkBuffer`; physical
+release is fence-retired. `Vulkan_IndirectDraw` proves both command layouts, every independent
+offset, `BaseInstance=1`, disposal-before-flush and compute-to-indirect without readback on RADV and
+llvmpipe.
 
 **A direct base instance is a separate, queryable extension.**
 `GraphicsDevice::DrawInstancedPrimitivesBaseInstanceEXT` has the same indexed geometry, vertex

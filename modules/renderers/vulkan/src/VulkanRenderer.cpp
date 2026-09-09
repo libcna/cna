@@ -378,6 +378,7 @@ namespace CNA::Internal::Renderers::Vulkan
 
     static int VertexCountForPrimitives(PrimitiveType pt, int n)
     {
+        if (n <= 0) return 0;
         switch (pt) {
         case PrimitiveType::TriangleList:  return n * 3;
         case PrimitiveType::TriangleStrip: return n + 2;
@@ -3983,6 +3984,12 @@ namespace CNA::Internal::Renderers::Vulkan
             feat.occlusionQueryPrecise = VK_TRUE;
             occlusionQueryPreciseSupported_ = true;
         }
+        // MOD-2245: the public argument layouts always contain BaseInstance. Vulkan permits a
+        // non-zero value only when this core feature is enabled, so the renderer advertises the
+        // complete indirect contract only on devices that offer it rather than quietly accepting
+        // a zero-only subset.
+        if (supported.drawIndirectFirstInstance)
+            feat.drawIndirectFirstInstance = VK_TRUE;
         // plan_vulkan.md VULKAN-172: BCn formats may not be used at all unless this feature is
         // ENABLED, not merely reported -- an image created in VK_FORMAT_BC1_RGBA_UNORM_BLOCK on a
         // device where it was left false is invalid however encouraging VkFormatProperties looks.
@@ -7622,9 +7629,14 @@ namespace CNA::Internal::Renderers::Vulkan
     [[nodiscard]] static VulkanIndexedStreamWindowEXT VulkanIndexedStreamWindow(
         const void* indexData, std::size_t indexCount, VkIndexType indexType, int baseVertex)
     {
-        if (indexData == nullptr || indexCount == 0)
+        if (indexData == nullptr)
             throw System::NotSupportedException(
                 "CNA Vulkan: an indexed multi-stream draw contains no index data.");
+        // A zero-count draw is a legal no-op and is also used as the state-only seed for an
+        // indirect record whose actual count remains on the GPU. There is no selected index
+        // window to compact in that case.
+        if (indexCount == 0)
+            return VulkanIndexedStreamWindowEXT{};
 
         std::uint32_t minimum = std::numeric_limits<std::uint32_t>::max();
         std::uint32_t maximum = 0;
@@ -12549,6 +12561,35 @@ namespace CNA::Internal::Renderers::Vulkan
             }
         }
 
+        // MOD-2245: an indirect-command fetch is outside every render pass, so its producer
+        // dependency must be established here as well. This one barrier covers host uploads,
+        // transfer copies and the synchronous compute submission that may have produced any
+        // pending argument buffer. The selected graphics queue is ordered with those submissions;
+        // the barrier supplies the missing availability/visibility scope for command reads.
+        const bool recordsIndirect = std::any_of(
+            pending3D_.begin(), pending3D_.end(), [&](const Pending3DDraw& draw) {
+                return draw.indirectBuffer != VK_NULL_HANDLE &&
+                       (!rtOnly || recordedByFlush(draw.rt.get(), draw.segment));
+            });
+        if (recordsIndirect)
+        {
+            VkMemoryBarrier commandBarrier{};
+            commandBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+            commandBarrier.srcAccessMask =
+                VK_ACCESS_HOST_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+            VkPipelineStageFlags sourceStages =
+                VK_PIPELINE_STAGE_HOST_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT;
+            if ((graphicsQueueFlags_ & VK_QUEUE_COMPUTE_BIT) != 0)
+            {
+                commandBarrier.srcAccessMask |= VK_ACCESS_SHADER_WRITE_BIT;
+                sourceStages |= VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+            }
+            commandBarrier.dstAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
+            vkCmdPipelineBarrier(
+                cb, sourceStages, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT,
+                0, 1, &commandBarrier, 0, nullptr, 0, nullptr);
+        }
+
         // REMED-GFX-013: build the dynamic VkRect2D scissor for one draw/batch from its captured
         // XNA scissor state (see Pending3DDraw / BatchSnapshot) and the physical extent of the
         // framebuffer it targets. Disabled or degenerate (zero-sized) → whole framebuffer, matching
@@ -12901,8 +12942,10 @@ namespace CNA::Internal::Renderers::Vulkan
                     continue;
                 }
                 if (draw.vbData.empty()) continue;
+                const bool indexedDraw = draw.indirectBuffer != VK_NULL_HANDLE
+                    ? draw.indirectIndexed : !draw.ibData.empty();
                 VkDeviceSize nativeIbOff = ibOff;
-                if (!draw.ibData.empty()) {
+                if (indexedDraw) {
                     const VkDeviceSize indexAlignment =
                         draw.indexType == VK_INDEX_TYPE_UINT32
                             ? sizeof(uint32_t)
@@ -13346,15 +13389,32 @@ namespace CNA::Internal::Renderers::Vulkan
                 if (draw.useInstanced && !draw.instVbData.empty()) {
                     vkCmdBindVertexBuffers(cb, 1, 1, &frame3DInstVB_[currentFrame_], &instVbOff);
                 }
-                if (!draw.ibData.empty()) {
+                if (indexedDraw) {
                     vkCmdBindIndexBuffer(
                         cb, frame3DIB_[currentFrame_], nativeIbOff, draw.indexType);
+                }
+                if (draw.indirectBuffer != VK_NULL_HANDLE)
+                {
+                    if (indexedDraw)
+                        vkCmdDrawIndexedIndirect(
+                            cb, draw.indirectBuffer, draw.indirectByteOffset,
+                            1, sizeof(VkDrawIndexedIndirectCommand));
+                    else
+                        vkCmdDrawIndirect(
+                            cb, draw.indirectBuffer, draw.indirectByteOffset,
+                            1, sizeof(VkDrawIndirectCommand));
+                }
+                else if (indexedDraw)
+                {
                     vkCmdDrawIndexed(cb, draw.drawCount, draw.instanceCount, 0, draw.baseVertex,
                                      draw.firstInstance);
-                    ibOff = nativeIbOff + static_cast<VkDeviceSize>(draw.ibData.size());
-                } else {
+                }
+                else
+                {
                     vkCmdDraw(cb, draw.drawCount, draw.instanceCount, 0, draw.firstInstance);
                 }
+                if (indexedDraw)
+                    ibOff = nativeIbOff + static_cast<VkDeviceSize>(draw.ibData.size());
                 if (draw.useInstanced)
                     instVbOff += static_cast<VkDeviceSize>(draw.instVbData.size());
                 vbOff += static_cast<VkDeviceSize>(draw.vbData.size());
@@ -14659,14 +14719,20 @@ namespace CNA::Internal::Renderers::Vulkan
             vkUnmapMemory(owner_->device_, memory_);
             mapped_ = nullptr;
         }
+        // MOD-2245: an indirect draw can be recorded after the public StorageBuffer was disposed.
+        // Its pending record retains this renderer object until command recording, and releasing
+        // the last share then hands the handles to the current frame's existing fence retirement
+        // rather than destroying a VkBuffer already named by that command buffer.
+        VulkanRenderer::RetiredResources retired;
         if (buffer_ != VK_NULL_HANDLE) {
-            vkDestroyBuffer(owner_->device_, buffer_, nullptr);
+            retired.buffers.push_back(buffer_);
             buffer_ = VK_NULL_HANDLE;
         }
         if (memory_ != VK_NULL_HANDLE) {
-            vkFreeMemory(owner_->device_, memory_, nullptr);
+            retired.memories.push_back(memory_);
             memory_ = VK_NULL_HANDLE;
         }
+        owner_->RetireResources(std::move(retired));
     }
 
     VulkanComputeShaderRenderer::VulkanComputeShaderRenderer(
@@ -17571,6 +17637,17 @@ namespace CNA::Internal::Renderers::Vulkan
         PrimitiveType primitive, int primitiveCount, int instanceCount,
         const GpuDrawParams& params)
     {
+        DrawInstancedPrimitivesCoreEXT(
+            vb_in, &ib_in, world, view, projection, primitive,
+            primitiveCount, instanceCount, params);
+    }
+
+    void VulkanRenderer::DrawInstancedPrimitivesCoreEXT(
+        const IVertexBufferRenderer& vb_in, const IIndexBufferRenderer* ib_in,
+        const Matrix& world, const Matrix& view, const Matrix& projection,
+        PrimitiveType primitive, int primitiveCount, int instanceCount,
+        const GpuDrawParams& params)
+    {
         const int instCountClamped = std::max(1, instanceCount);
         if (params.firstInstance < 0 ||
             params.firstInstance > (std::numeric_limits<int>::max)() - instCountClamped)
@@ -17589,8 +17666,13 @@ namespace CNA::Internal::Renderers::Vulkan
             // ordinary capture already owns the exact geometry/effect state; retain the native
             // instance operands on that same deferred record instead of collapsing it to one.
             const std::size_t pendingBefore = pending3D_.size();
-            DrawIndexedPrimitivesEx(
-                vb_in, ib_in, world, view, projection, primitive, primitiveCount, params);
+            if (ib_in != nullptr)
+                DrawIndexedPrimitivesEx(
+                    vb_in, *ib_in, world, view, projection,
+                    primitive, primitiveCount, params);
+            else
+                DrawPrimitivesEx(
+                    vb_in, world, view, projection, primitive, primitiveCount, params);
             if (pending3D_.size() != pendingBefore + 1)
                 throw std::runtime_error(
                     "CNA Vulkan: an instanced draw without per-instance vertex input did not "
@@ -17612,23 +17694,25 @@ namespace CNA::Internal::Renderers::Vulkan
                 "stock shader instead.");
         }
 #endif
-        const auto& ib = static_cast<const VulkanIndexBufferRenderer&>(ib_in);
-        const uint32_t indexCount =
+        const auto* ib = ib_in != nullptr
+            ? static_cast<const VulkanIndexBufferRenderer*>(ib_in) : nullptr;
+        const uint32_t drawCount =
             static_cast<uint32_t>(VertexCountForPrimitives(primitive, primitiveCount));
-        const int indexSize = ib.IsThirtyTwoBit() ? 4 : 2;
-        const auto* selectedIndices =
-            static_cast<const std::uint8_t*>(ib.GetMappedPtr()) + params.startIndex * indexSize;
+        const int indexSize = ib != nullptr && ib->IsThirtyTwoBit() ? 4 : 2;
+        const auto* selectedIndices = ib != nullptr
+            ? static_cast<const std::uint8_t*>(ib->GetMappedPtr()) +
+                  params.startIndex * indexSize
+            : nullptr;
         // A custom program owns its input locations. QueueCustomEffect3DDrawEXT builds the
         // combined declarations and immutable stream snapshots before any stock-family inference.
         if (params.customEffectRequested) {
-            const int indexSize = ib.IsThirtyTwoBit() ? 4 : 2;
-            const std::size_t indexCount =
-                static_cast<std::size_t>(VertexCountForPrimitives(primitive, primitiveCount));
             QueueCustomEffect3DDrawEXT(
                 vb_in, world, view, projection, primitive, primitiveCount, params,
-                static_cast<const uint8_t*>(ib.GetMappedPtr()) + params.startIndex * indexSize,
-                indexCount * static_cast<std::size_t>(indexSize),
-                ib.IsThirtyTwoBit() ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16,
+                selectedIndices,
+                ib != nullptr
+                    ? static_cast<std::size_t>(drawCount) * indexSize : 0,
+                ib != nullptr && ib->IsThirtyTwoBit()
+                    ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16,
                 instanceStream->buffer, instanceStream->vertexOffset,
                 instanceStream->instanceFrequency, instanceCount);
             return;
@@ -17645,13 +17729,22 @@ namespace CNA::Internal::Renderers::Vulkan
         VulkanIndexedStreamWindowEXT indexedWindow;
         if (packsVertexStreams)
         {
-            indexedWindow = VulkanIndexedStreamWindow(
-                selectedIndices, indexCount,
-                ib.IsThirtyTwoBit() ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16,
-                params.baseVertex);
-            packedVertexStreams = PackVulkanStreamsEXT(
-                params, /*instanceRate=*/false,
-                indexedWindow.firstRecord, indexedWindow.recordCount);
+            if (ib != nullptr)
+            {
+                indexedWindow = VulkanIndexedStreamWindow(
+                    selectedIndices, drawCount,
+                    ib->IsThirtyTwoBit() ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16,
+                    params.baseVertex);
+                packedVertexStreams = PackVulkanStreamsEXT(
+                    params, /*instanceRate=*/false,
+                    indexedWindow.firstRecord, indexedWindow.recordCount);
+            }
+            else
+            {
+                packedVertexStreams = PackVulkanStreamsEXT(
+                    params, /*instanceRate=*/false, params.vertexStart,
+                    static_cast<int>(drawCount));
+            }
         }
         // The record stride the hoisted family predicates below need. Defined here rather than
         // with its siblings further down, because those come after the guard and these do not.
@@ -17920,6 +18013,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // already applied to the index copy below.
         const GpuVertexStreamBinding* perVertexStream = FirstPerVertexStream(params);
         const int perVertexOffset = perVertexStream != nullptr ? perVertexStream->vertexOffset : 0;
+        const int geometryStart = ib != nullptr ? params.baseVertex : params.vertexStart;
 
         // REMED-GFX-211/213: the shared layer validates both of these before dispatch
         // (ValidateVertexStreamRanges / ValidateInstanceStreamRanges), so neither can fire for a
@@ -17934,7 +18028,7 @@ namespace CNA::Internal::Renderers::Vulkan
             (expandedInstanceCount - 1) / instanceFrequency;
         if (!packsVertexStreams &&
             (perVertexOffset < 0 || perVertexOffset > vertexCount ||
-             params.baseVertex > vertexCount - perVertexOffset))
+             geometryStart > vertexCount - perVertexOffset))
         {
             throw std::runtime_error(
                 "The Vulkan renderer: the per-vertex VertexBufferBinding.VertexOffset bound to slot " +
@@ -17974,10 +18068,15 @@ namespace CNA::Internal::Renderers::Vulkan
                         static_cast<std::size_t>(vertexCount) * pvStride);
         }
 
-        // Copy index data (with startIndex offset)
-        d.ibData.resize(static_cast<std::size_t>(indexCount) * indexSize);
-        std::memcpy(d.ibData.data(), selectedIndices,
-                    static_cast<std::size_t>(indexCount) * indexSize);
+        // Copy index data (with startIndex offset) only for the indexed public route. The private
+        // non-indexed form is used by Vulkan indirect drawing so it can share the exact instanced
+        // effect/pipeline capture without inventing an index buffer.
+        if (ib != nullptr)
+        {
+            d.ibData.resize(static_cast<std::size_t>(drawCount) * indexSize);
+            std::memcpy(d.ibData.data(), selectedIndices,
+                        static_cast<std::size_t>(drawCount) * indexSize);
+        }
 
         // Copy per-instance data: one destination record per instance, exactly as before -- only
         // WHICH source record each one takes changed.
@@ -18014,7 +18113,7 @@ namespace CNA::Internal::Renderers::Vulkan
         }
 
         d.topology     = ToVkTopology(primitive);
-        d.drawCount    = indexCount;
+        d.drawCount    = drawCount;
         d.depthTest    = depthTestEnabled_;
         d.depthWrite   = depthWriteEnabled_;
         d.dsParams = dsParams_;
@@ -18027,7 +18126,8 @@ namespace CNA::Internal::Renderers::Vulkan
         d.wireframe  = fillModeWireframe_;
         d.depthBias  = depthBias_;
         d.slopeScaleDepthBias = slopeScaleDepthBias_;
-        d.indexType    = ib.IsThirtyTwoBit() ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16;
+        d.indexType    = ib != nullptr && ib->IsThirtyTwoBit()
+            ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16;
         d.rt           = currentRT_;
         d.stride       = pvStride;
         d.instVbStride = instStride;
@@ -18036,9 +18136,11 @@ namespace CNA::Internal::Renderers::Vulkan
         // A multi-stream snapshot starts at the requested min vertex; rebase unchanged indices
         // onto that compact window. The classic path still folds its one binding offset into the
         // native draw term, captured by value so a later SetVertexBuffers cannot reach it.
-        d.baseVertex   = packsVertexStreams
-            ? indexedWindow.nativeBaseVertex
-            : static_cast<int32_t>(params.baseVertex + perVertexOffset);
+        d.baseVertex   = ib == nullptr
+            ? 0
+            : packsVertexStreams
+                ? indexedWindow.nativeBaseVertex
+                : static_cast<int32_t>(params.baseVertex + perVertexOffset);
         d.useInstanced = true;
         // VULKAN-149: taken at DRAW time, like every other route's, because the record is replayed
         // at Present() by which time the buffer's declaration may have been replaced.
@@ -18166,6 +18268,242 @@ namespace CNA::Internal::Renderers::Vulkan
         }
 #endif
         PushPending3DDraw(std::move(d));
+    }
+
+    bool VulkanRenderer::SupportsIndirectDrawEXT() const
+    {
+        return device_ != VK_NULL_HANDLE &&
+               enabledDeviceFeatures_.drawIndirectFirstInstance == VK_TRUE;
+    }
+
+    void VulkanRenderer::DrawPrimitivesIndirectEXT(
+        const IVertexBufferRenderer& vb,
+        const Matrix& world, const Matrix& view, const Matrix& projection,
+        const PrimitiveType primitive,
+        const IStorageBufferRenderer& argumentBuffer,
+        const int argumentByteOffset, const GpuDrawParams& params)
+    {
+        QueueIndirectDrawEXT(
+            vb, nullptr, world, view, projection, primitive,
+            argumentBuffer, argumentByteOffset, params);
+    }
+
+    void VulkanRenderer::DrawIndexedPrimitivesIndirectEXT(
+        const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,
+        const Matrix& world, const Matrix& view, const Matrix& projection,
+        const PrimitiveType primitive,
+        const IStorageBufferRenderer& argumentBuffer,
+        const int argumentByteOffset, const GpuDrawParams& params)
+    {
+        QueueIndirectDrawEXT(
+            vb, &ib, world, view, projection, primitive,
+            argumentBuffer, argumentByteOffset, params);
+    }
+
+    void VulkanRenderer::QueueIndirectDrawEXT(
+        const IVertexBufferRenderer& vb_in, const IIndexBufferRenderer* ib_in,
+        const Matrix& world, const Matrix& view, const Matrix& projection,
+        const PrimitiveType primitive,
+        const IStorageBufferRenderer& argumentBuffer,
+        const int argumentByteOffset, const GpuDrawParams& params)
+    {
+        if (!SupportsIndirectDrawEXT())
+            throw System::NotSupportedException(
+                "CNA Vulkan: the selected device cannot execute non-zero indirect "
+                "first-instance commands.");
+        if (params.compiledEffectRuntime != nullptr)
+            throw System::NotSupportedException(
+                "CNA Vulkan: an indirect draw does not accept a compiled (FX) effect; its "
+                "draw routes require the primitive count that this command keeps on the GPU.");
+
+        const auto* nativeArguments =
+            dynamic_cast<const VulkanStorageBufferRenderer*>(&argumentBuffer);
+        if (nativeArguments == nullptr || !nativeArguments->IsOwnedByEXT(this) ||
+            nativeArguments->GetBufferEXT() == VK_NULL_HANDLE)
+            throw std::invalid_argument(
+                "CNA Vulkan: indirect arguments must belong to this Vulkan device.");
+
+        // StorageBuffer owns its renderer record through shared_ptr. Retaining that same record is
+        // what makes public Dispose() logically immediate without invalidating a deferred native
+        // command. A directly-created unique renderer object has no such portable lifetime and is
+        // refused instead of leaving a borrowed VkBuffer in pending3D_.
+        std::shared_ptr<const IStorageBufferRenderer> argumentLifetime =
+            argumentBuffer.weak_from_this().lock();
+        if (argumentLifetime == nullptr)
+            throw System::NotSupportedException(
+                "CNA Vulkan: a deferred indirect draw requires a tracked StorageBuffer so its "
+                "native argument allocation can be retained through command recording.");
+
+        // Build the effect, declaration, pipeline-family and render-state snapshot through the
+        // ordinary path, but with a legal zero primitive count. The actual counts are deliberately
+        // never copied to the CPU; the complete geometry windows below are the only safe snapshot
+        // for arguments that may have been produced by compute.
+        GpuDrawParams seed = params;
+        seed.firstInstance = 0;
+        const std::size_t pendingBefore = pending3D_.size();
+        if (FirstInstanceStream(seed) != nullptr)
+            DrawInstancedPrimitivesCoreEXT(
+                vb_in, ib_in, world, view, projection, primitive, 0, 1, seed);
+        else if (ib_in != nullptr)
+            DrawIndexedPrimitivesEx(
+                vb_in, *ib_in, world, view, projection, primitive, 0, seed);
+        else
+            DrawPrimitivesEx(
+                vb_in, world, view, projection, primitive, 0, seed);
+        if (pending3D_.size() != pendingBefore + 1)
+            throw std::runtime_error(
+                "CNA Vulkan: indirect state capture did not produce exactly one deferred draw.");
+
+        Pending3DDraw draw = std::move(pending3D_.back());
+        pending3D_.pop_back();
+        const int foldedOffset = ib_in != nullptr ? params.baseVertex : params.vertexStart;
+        if (foldedOffset < 0)
+            throw std::invalid_argument(
+                "CNA Vulkan: the folded vertex-buffer offset cannot be negative.");
+
+        if (HasMultipleVertexStreams(params))
+        {
+            int recordCount = std::numeric_limits<int>::max();
+            std::size_t combinedStride = 0;
+            bool sawPerVertexStream = false;
+            for (int i = 0; i < params.vertexStreamCount; ++i)
+            {
+                const auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
+                if (stream.instanceFrequency != 0) continue;
+                sawPerVertexStream = true;
+                if (stream.buffer == nullptr || stream.vertexOffset < 0 ||
+                    foldedOffset > stream.vertexCount - stream.vertexOffset)
+                    throw std::invalid_argument(
+                        "CNA Vulkan: an indirect per-vertex stream offset leaves its buffer.");
+                if (stream.strideInBytes <= 0 ||
+                    combinedStride > kFrame3DVBSize -
+                        static_cast<std::size_t>(stream.strideInBytes))
+                    throw System::NotSupportedException(
+                        "CNA Vulkan: the indirect per-vertex stream stride exceeds the "
+                        "bounded staging arena.");
+                combinedStride += static_cast<std::size_t>(stream.strideInBytes);
+                recordCount = std::min(
+                    recordCount,
+                    stream.vertexCount - stream.vertexOffset - foldedOffset);
+            }
+            if (!sawPerVertexStream) recordCount = 0;
+            if (combinedStride != 0 &&
+                static_cast<std::size_t>(recordCount) > kFrame3DVBSize / combinedStride)
+                throw System::NotSupportedException(
+                    "CNA Vulkan: the complete indirect vertex snapshot exceeds the renderer's "
+                    "bounded per-frame staging arena.");
+            VulkanPackedStreamsEXT packed = PackVulkanStreamsEXT(
+                params, /*instanceRate=*/false, foldedOffset, recordCount);
+            draw.vbData = std::move(packed.bytes);
+            draw.stride = packed.stride;
+        }
+        else
+        {
+            const GpuVertexStreamBinding* stream = FirstPerVertexStream(params);
+            const auto& vb = stream != nullptr && stream->buffer != nullptr
+                ? static_cast<const VulkanVertexBufferRenderer&>(*stream->buffer)
+                : static_cast<const VulkanVertexBufferRenderer&>(vb_in);
+            const int relativeOffset = stream != nullptr ? stream->vertexOffset : 0;
+            if (relativeOffset < 0 ||
+                foldedOffset > vb.GetVertexCount() - relativeOffset)
+                throw std::invalid_argument(
+                    "CNA Vulkan: the indirect vertex-buffer binding offset leaves its buffer.");
+            const int firstRecord = foldedOffset + relativeOffset;
+            const int recordCount = vb.GetVertexCount() - firstRecord;
+            if (draw.stride != 0 &&
+                static_cast<std::size_t>(recordCount) > kFrame3DVBSize / draw.stride)
+                throw System::NotSupportedException(
+                    "CNA Vulkan: the complete indirect vertex snapshot exceeds the renderer's "
+                    "bounded per-frame staging arena.");
+            draw.vbData.resize(static_cast<std::size_t>(recordCount) * draw.stride);
+            if (!draw.vbData.empty())
+                std::memcpy(
+                    draw.vbData.data(),
+                    static_cast<const std::uint8_t*>(vb.GetMappedPtr()) +
+                        static_cast<std::size_t>(firstRecord) * draw.stride,
+                    draw.vbData.size());
+        }
+
+        draw.ibData.clear();
+        if (ib_in != nullptr)
+        {
+            const auto& ib = static_cast<const VulkanIndexBufferRenderer&>(*ib_in);
+            const std::size_t indexSize = ib.IsThirtyTwoBit()
+                ? sizeof(std::uint32_t) : sizeof(std::uint16_t);
+            if (static_cast<std::size_t>(ib.GetIndexCount()) >
+                kFrame3DIBSize / indexSize)
+                throw System::NotSupportedException(
+                    "CNA Vulkan: the complete indirect index snapshot exceeds the renderer's "
+                    "bounded per-frame staging arena.");
+            draw.ibData.resize(
+                static_cast<std::size_t>(ib.GetIndexCount()) * indexSize);
+            if (!draw.ibData.empty())
+                std::memcpy(draw.ibData.data(), ib.GetMappedPtr(), draw.ibData.size());
+            draw.indexType = ib.IsThirtyTwoBit()
+                ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16;
+        }
+
+        if (FirstInstanceStream(params) != nullptr)
+        {
+            int logicalRecordCount = std::numeric_limits<int>::max();
+            std::size_t combinedStride = 0;
+            bool sawInstanceStream = false;
+            for (int i = 0; i < params.vertexStreamCount; ++i)
+            {
+                const auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
+                if (stream.instanceFrequency <= 0) continue;
+                sawInstanceStream = true;
+                if (stream.buffer == nullptr || stream.vertexOffset < 0 ||
+                    stream.vertexOffset > stream.vertexCount)
+                    throw std::invalid_argument(
+                        "CNA Vulkan: an indirect instance-stream offset leaves its buffer.");
+                if (stream.strideInBytes <= 0 ||
+                    combinedStride > kFrame3DInstVBSize -
+                        static_cast<std::size_t>(stream.strideInBytes))
+                    throw System::NotSupportedException(
+                        "CNA Vulkan: the indirect instance-stream stride exceeds the bounded "
+                        "staging arena.");
+                combinedStride += static_cast<std::size_t>(stream.strideInBytes);
+                const std::uint64_t available =
+                    static_cast<std::uint64_t>(stream.vertexCount - stream.vertexOffset) *
+                    static_cast<std::uint64_t>(stream.instanceFrequency);
+                logicalRecordCount = std::min(
+                    logicalRecordCount,
+                    available > static_cast<std::uint64_t>(std::numeric_limits<int>::max())
+                        ? std::numeric_limits<int>::max()
+                        : static_cast<int>(available));
+            }
+            if (!sawInstanceStream) logicalRecordCount = 0;
+            if (combinedStride != 0 &&
+                static_cast<std::size_t>(logicalRecordCount) >
+                    kFrame3DInstVBSize / combinedStride)
+                throw System::NotSupportedException(
+                    "CNA Vulkan: the complete indirect instance snapshot exceeds the renderer's "
+                    "bounded per-frame staging arena.");
+            VulkanPackedStreamsEXT packedInstances = PackVulkanStreamsEXT(
+                params, /*instanceRate=*/true, /*firstRecord=*/0, logicalRecordCount);
+            draw.instVbData = std::move(packedInstances.bytes);
+            draw.instVbStride = packedInstances.stride;
+            draw.useInstanced = true;
+        }
+
+        if (draw.vbData.size() > kFrame3DVBSize ||
+            draw.ibData.size() > kFrame3DIBSize ||
+            draw.instVbData.size() > kFrame3DInstVBSize)
+            throw System::NotSupportedException(
+                "CNA Vulkan: the complete indirect geometry snapshot exceeds the renderer's "
+                "bounded per-frame staging arena.");
+
+        draw.drawCount = 0;
+        draw.instanceCount = 1;
+        draw.firstInstance = 0;
+        draw.baseVertex = 0;
+        draw.wireframe = false;
+        draw.indirectBuffer = nativeArguments->GetBufferEXT();
+        draw.indirectByteOffset = static_cast<VkDeviceSize>(argumentByteOffset);
+        draw.indirectIndexed = ib_in != nullptr;
+        draw.indirectBufferLifetime = std::move(argumentLifetime);
+        pending3D_.push_back(std::move(draw));
     }
 
     // ---- Graphics state ----

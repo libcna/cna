@@ -17,6 +17,9 @@ The implementation baseline is recorded in `docs/modern-gpu-baseline.md`. In par
 `StorageBuffer`/`ComputeShader` objects are not `GraphicsResource`-tracked, the first Vulkan compute
 slice submits synchronously, and an old lifetime document told Vulkan callers to use
 `vkDeviceWaitIdle`. Those are measured transitional gaps, not contracts to preserve.
+Subsequent `MOD-2229`/`MOD-2245` work made storage buffers tracked and proved deferred argument
+retention through fence retirement; synchronous dispatch and full mixed-command ordering remain
+the transitional parts owned by `MOD-2247`–`MOD-2253`.
 
 ## Decision
 

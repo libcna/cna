@@ -39,7 +39,7 @@ namespace
         CNA_VK_FEATURE(dualSrcBlend, false),
         CNA_VK_FEATURE(logicOp, false),
         CNA_VK_FEATURE(multiDrawIndirect, false),
-        CNA_VK_FEATURE(drawIndirectFirstInstance, false),
+        CNA_VK_FEATURE(drawIndirectFirstInstance, true),
         CNA_VK_FEATURE(depthClamp, false),
         CNA_VK_FEATURE(depthBiasClamp, false),
         CNA_VK_FEATURE(fillModeNonSolid, true),

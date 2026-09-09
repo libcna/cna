@@ -14,6 +14,28 @@ something breaks.
 
 ---
 
+## Revision 9 — 2026-09-09
+
+### Device-gated Vulkan indirect drawing (`MOD-2245`)
+
+- Vulkan now consumes both canonical indirect command layouts with `vkCmdDrawIndirect` and
+  `vkCmdDrawIndexedIndirect`. `GraphicsCapability::IndirectDraw` and
+  `RendererFeature::IndirectDrawing` report support only when the selected device exposes and CNA
+  enables `drawIndirectFirstInstance`, so the promised layout includes working non-zero
+  `BaseInstance` rather than a silent zero-only subset.
+- Deferred draws retain the internal argument-buffer record through command recording and retire
+  its native allocation on the consuming frame fence. Complete bounded geometry snapshots preserve
+  vertex-binding, first-vertex, first-index, base-vertex and per-instance offsets without reading a
+  GPU-produced command back to the CPU.
+- Vulkan inserts the host/transfer/compute-write to indirect-command-read dependency automatically.
+  The live oracle covers CPU- and compute-generated commands, disposal before render-target flush,
+  and non-zero argument offsets and base instance on both RADV and llvmpipe with no validation
+  messages.
+
+The C header carries the same engine-layer revision marker. The C ABI remains 0.26.0 because no C
+declaration, layout, identity or exported route changed; only the result of the existing device
+capability query can now report Vulkan support.
+
 ## Revision 8 — 2026-09-09
 
 ### Capability-gated base-instance drawing (`MOD-2232`)

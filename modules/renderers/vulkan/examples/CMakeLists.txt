@@ -1468,6 +1468,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             cna_register_renderer_test(NAME Vulkan_ComputeStorageBuffer
                 COMMAND cna_test_vulkan_compute_storage_buffer
                 TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+            # plans/plan_modern.md MOD-2245: both canonical indirect layouts, non-zero command
+            # offsets, all vertex/index/base-instance offsets, compute-written commands, deferred
+            # argument lifetime and the validation stream are one end-to-end contract.
+            cna_vulkan_test(cna_test_vulkan_indirect_draw
+                            vulkan_indirect_draw_test.cpp)
+            cna_register_renderer_test(NAME Vulkan_IndirectDraw
+                COMMAND cna_test_vulkan_indirect_draw
+                TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
         endif()
 
         # plans/plan_vulkan.md VULKAN-098 (F-19): this renderer's clip-space depth range is XNA's

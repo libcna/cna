@@ -249,18 +249,18 @@ class VulkanCapabilityContractTest : public Game
                   std::string("capability=") + (supported ? "true" : "false") + ", " + how);
         }
 
-        // VULKAN-470 / MOD-2241. IndirectDraw remains false, but it can no longer borrow the old
-        // "there is no storage buffer" proof: compute now owns a real storage-buffer route while
-        // the two indirect-draw entry points remain unimplemented. Observe both answers and the
-        // resource that separates them. CompiledEffects is different again: it is false because
-        // `CNA_VULKAN_COMPILED_EFFECTS` is OFF in this build, and only an enabled build can observe
-        // the other answer.
+        // VULKAN-470 / MOD-2241 / MOD-2245. The indirect answer is gated on Vulkan's
+        // drawIndirectFirstInstance feature because CNA's canonical command layout promises that
+        // fifth/fourth word rather than a zero-only subset. This selected device offers it, and
+        // the same renderer also exposes the storage-buffer allocation that carries the command.
         {
             const bool indirect = r.SupportsCapability(GraphicsCapability::IndirectDraw);
             const bool compute  = r.SupportsCapability(GraphicsCapability::ComputeShaders);
             const auto buffer   = const_cast<VulkanRenderer&>(r).CreateStorageBuffer(64);
-            check(!indirect && compute && buffer != nullptr,
-                  "C ComputeShaders=true has storage while IndirectDraw stays independently false",
+            const bool nativeIndirect =
+                r.GetEnabledDeviceFeaturesEXT().drawIndirectFirstInstance == VK_TRUE;
+            check(indirect == nativeIndirect && compute && buffer != nullptr,
+                  "C IndirectDraw follows enabled first-instance support and has storage",
                   std::string("indirect=") + (indirect ? "true" : "false")
                       + " compute=" + (compute ? "true" : "false")
                       + " storageBuffer=" + (buffer == nullptr ? "null" : "created"));

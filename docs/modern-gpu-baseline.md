@@ -119,7 +119,7 @@ do.
 | 15 `HalfFloatRenderTargets` | S | S | U |
 | 16 `HalfFloatTextureLinearFiltering` | S | S | U |
 | 17 `ComputeShaders` | S | S | U |
-| 18 `IndirectDraw` | S | U | U |
+| 18 `IndirectDraw` | S | S | U |
 
 The `CustomEffects` row does not mean source parity. The detailed profile measured source execution
 only on EasyGL. Vulkan accepts `ShaderEffect` objects but its current payload route is SPIR-V, and
@@ -132,7 +132,7 @@ OpenGL4 accepts the object while its current source-execution query remains fals
 | Shader-effect source execution | S | U | U |
 | Compute shaders + storage-buffer dispatch | S | S | U |
 | Compute image binding | U | U | U |
-| Indirect drawing | S | U | U |
+| Indirect drawing | S | S | U |
 | GPU timers | S | U | U |
 | Shadow sampling | S | U | U |
 | Image-based lighting | S | U | U |
@@ -159,9 +159,9 @@ path is unavailable or not yet classified; a large native device value is not pu
 | `MaxStorageBufferBytes` | 0 | 134217728 | 0 |
 | `MaxUniformBufferBytes` | 0 | 4608 | 0 |
 | `MaxComputeStorageBufferBindings` | 0 | 1000000 | 0 |
-| `MaxTextureArrayLayers` | 0 | 0 | 0 |
-| `MaxSampledTexturesPerShaderStage` | 0 | 12 | 0 |
-| `MaxStorageImagesPerShaderStage` | 0 | 0 | 0 |
+| `MaxTextureArrayLayers` | 0 | 2048 | 0 |
+| `MaxSampledTexturesPerShaderStage` | 0 | 15 | 0 |
+| `MaxStorageImagesPerShaderStage` | 0 | 1000000 | 0 |
 | `MaxVertexInputBindings` | 0 | 16 | 0 |
 | `MaxVertexInputAttributes` | 0 | 32 | 0 |
 | `MaxColorAttachments` | 0 | 4 | 0 |
@@ -169,8 +169,9 @@ path is unavailable or not yet classified; a large native device value is not pu
 | `MinUniformBufferOffsetAlignment` | 0 | 16 | 0 |
 | `TimestampPeriodPicoseconds` | 0 | 0 | 0 |
 
-Vulkan deliberately withholds array layers, storage images and timestamp period until the matching
-CNA paths land. EasyGL has several working older paths whose newly appended detailed limit fields
+The Vulkan values are the llvmpipe reference snapshot; array layers and storage-image descriptors
+became publishable with their matching CNA paths, while timestamp period remains deliberately zero
+until `MOD-2246`. EasyGL has several working older paths whose newly appended detailed limit fields
 are still zero; those are classification gaps, not permission to assume unlimited values.
 
 ### Format support
@@ -227,16 +228,16 @@ tree, not about native API potential.
 | MOD-2242 | Supplied | Vulkan reflects bounded SSBO/push-constant bindings and reuses descriptors. |
 | MOD-2243 | Supplied | Vulkan allocation, full-array views, subresource transfers, sampled descriptors and retirement pass both the functional oracle and an independent 27-format × 5-usage raw-device/factory/lifetime matrix on RADV and llvmpipe. |
 | MOD-2244 | Partial | Vulkan now has the dedicated format-qualified `rgba8` storage-image path used by `MOD-2228`; optional extended formats and legal bridges from supported existing XNA textures/render targets remain open. |
-| MOD-2245 | Partial | Public indirect routes and native feature discovery exist; Vulkan truthfully reports unsupported and submits no indirect command. |
+| MOD-2245 | Supplied | Vulkan gates on enabled `drawIndirectFirstInstance`, executes both canonical commands without CPU readback, preserves every geometry/instance offset, retains deferred argument lifetime and inserts the automatic indirect-read dependency. The six-leg oracle passes on RADV and llvmpipe. |
 | MOD-2246 | Partial | Shared `GpuTimer` exists; Vulkan has no timestamp-query implementation and publishes zero period. |
 | MOD-2247 | Partial | XNA Vulkan work has ordered submission, but the current compute slice uses a separate synchronous submission boundary. |
 | MOD-2248 | Absent | No internal logical resource-usage tracker. |
 | MOD-2249 | Partial | The current buffer compute path emits host/compute barriers, but routine dispatch completion still waits synchronously. |
-| MOD-2250 | Absent | No compute-write to graphics/indirect Vulkan dependency path. |
+| MOD-2250 | Partial | Compute-write to indirect-command fetch is automatic and tested without readback; storage-buffer vertex/fragment consumption and full GPU-driven stale-frame oracles remain. |
 | MOD-2251 | Absent | No two-way render-target/storage-image transition path. |
-| MOD-2252 | Partial | XNA `GraphicsResource` tracking exists; modern buffers/shaders are not tracked and there is no fence-retirement queue. |
+| MOD-2252 | Partial | Arrays, storage images and buffers use tracked records and fence retirement; the indirect test disposes its argument before deferred flush. Shader/query and resize/teardown matrix coverage remains. |
 | MOD-2253 | Partial | Compute descriptor reuse is bounded; broader modern allocators and removal of routine global waits remain open. |
-| MOD-2254 | Partial | Several Vulkan validation gates exist, but the mandatory array/image/indirect/timer/order/disposal matrix is incomplete. |
+| MOD-2254 | Partial | Float, array, storage-buffer/image, base-instance, indirect and early-disposal gates run validation-clean on two devices; timer, mixed-order, recovery, stress and sanitizer legs remain. |
 | MOD-2260 | Partial | OpenGL4 has a 4.1-floor renderer and measured 4.5 context, but does not independently discover modern subsets. |
 | MOD-2261 | Partial | OpenGL4's XNA baseline is substantial; the Phase 22 float/array/compute/image/indirect/timer contracts are unimplemented. |
 | MOD-2262 | Partial | The capability probe is shared; the functional modern-GPU contract suite does not yet exist. |

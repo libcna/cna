@@ -244,6 +244,7 @@ namespace CNA::Internal::Renderers
      * wrapper is where a typed view over it belongs.
      */
     class IStorageBufferRenderer
+        : public std::enable_shared_from_this<IStorageBufferRenderer>
     {
     public:
         /** @brief Virtual destructor. */
