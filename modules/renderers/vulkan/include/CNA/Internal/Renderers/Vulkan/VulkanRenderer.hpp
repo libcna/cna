@@ -1611,6 +1611,8 @@ namespace CNA::Internal::Renderers::Vulkan
      */
     class VulkanComputeShaderRenderer final : public IComputeShaderRenderer
     {
+        friend class VulkanRenderer;
+
     public:
         /** @brief Storage slots required by the permanent baseline vector-add oracle. */
         static constexpr int BaselineStorageBindingCount = 3;
@@ -1751,7 +1753,6 @@ namespace CNA::Internal::Renderers::Vulkan
             std::vector<VkBuffer> buffers;
             std::vector<VkImageView> images;
             std::vector<VkSampler> samplers;
-            std::vector<std::shared_ptr<void>> retainedResources;
             VkDescriptorSet set = VK_NULL_HANDLE;
             bool initialized = false;
         };
@@ -1762,11 +1763,13 @@ namespace CNA::Internal::Renderers::Vulkan
         [[nodiscard]] VkDescriptorSet GetOrCreateDescriptorSetEXT(
             const std::vector<VkBuffer>& buffers, const std::vector<VkImageView>& images,
             const std::vector<VkSampler>& samplers,
-            const std::vector<std::shared_ptr<void>>& retainedResources,
             const std::vector<VkDescriptorBufferInfo>& constantBufferInfos,
             const std::vector<VkDescriptorBufferInfo>& bufferInfos,
             const std::vector<VkDescriptorImageInfo>& storageImageInfos,
             const std::vector<VkDescriptorImageInfo>& sampledImageInfos);
+        void EvictDescriptorSetsReferencingEXT(
+            VkBuffer buffer, VkImageView imageView,
+            std::vector<std::pair<VkDescriptorPool, VkDescriptorSet>>& retiredSets);
 
         VulkanRenderer* owner_ = nullptr;
         VkShaderModule shaderModule_ = VK_NULL_HANDLE;
@@ -5390,9 +5393,9 @@ namespace CNA::Internal::Renderers::Vulkan
             std::vector<VkDescriptorPool> descriptorPools;
             std::vector<VkQueryPool>       queryPools;
             std::vector<VkDescriptorSet>   descriptorSets; // all allocated from descriptorPool_
-            // REMED-GFX-076: effect descriptor sets evicted from the seven per-frame effect caches
-            // when a sampled view they reference dies. Unlike `descriptorSets` (all from
-            // descriptorPool_), each is freed from its OWN pool, so the pool is carried with the set.
+            // Descriptor sets evicted from effect or compute caches when a resource they reference
+            // dies. Unlike `descriptorSets` (all from descriptorPool_), each is freed from its OWN
+            // pool, so the pool is carried with the set.
             std::vector<std::pair<VkDescriptorPool, VkDescriptorSet>> poolDescriptorSets;
             /// plan_vulkan.md `VULKAN-160`: samplers evicted from `samplerCache_` when it passes its
             /// bound. A `VkSampler` outlives its cache entry by as long as any recorded frame can
@@ -5425,6 +5428,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // later resource that happens to reuse the freed VkImageView handle value can never collide
         // with a stale cached descriptor set.
         void EvictSampledViewFromCaches(VkImageView view, RetiredResources& into);
+        void EvictComputeBufferFromCachesEXT(VkBuffer buffer, RetiredResources& into);
         // REMED-GFX-076: erase (and fence-retire to `pool`) every entry in one effect descriptor-set
         // cache that references `view`, so a later resource reusing the freed VkImageView handle
         // value gets a fresh descriptor set rather than aliasing this (now-destroyed) one. Called

@@ -96,10 +96,15 @@ output slot 7 plus `uCount`/`uScale` to change only 173 elements.
 
 Each program owns one pipeline layout and a bounded cache of immutable descriptor snapshots (at
 most 64 distinct binding combinations). Repeated bindings reuse a snapshot, while a binding change
-cannot rewrite a set already named by deferred work. Resource/scalar state is captured at dispatch
-issue time and native objects are fence-retired at program destruction. Test-only live/cumulative
-counters prove that 33 repeated dispatches allocate nothing further and that the live counts return
-to their baseline. Invalid or name-stripped bytecode, a missing or undeclared slot, an
+cannot rewrite a set already named by deferred work. The pending dispatch, rather than the cache,
+owns the referenced renderer records until command recording. Destruction of a referenced buffer or
+image view removes every matching compute snapshot immediately and fence-retires its descriptor set
+beside the native resource. This keeps submitted work valid without extending the public resource's
+lifetime to that of the compute program, and prevents recycled Vulkan handle values from matching a
+stale cached set. Resource/scalar state is captured at dispatch issue time and remaining native
+objects are fence-retired at program destruction. Test-only live/cumulative counters prove that 33
+repeated dispatches allocate nothing further and that the live counts return to their baseline.
+Invalid or name-stripped bytecode, a missing or undeclared slot, an
 unknown/mistyped scalar, an access mismatch and unsupported descriptor shapes
 all fail explicitly instead of becoming a silent no-op or a validation error.
 
@@ -109,9 +114,10 @@ renderers still receive the named sampler uniform, while SPIR-V uses the descrip
 directly. Only an unqualified float32 `sampler2D` is admitted, matching the numeric class exposed
 by CNA's XNA colour textures; integer samplers fail during reflection rather than aliasing an
 incompatible view. Both ordinary `Texture2D` and `RenderTarget2D` retain their exact internal
-image/view and format. The immutable dispatch record retains the sampled resource, transitions it to
-`SHADER_READ_ONLY_OPTIMAL` at consumption, and pulls every pending render-target producer into a
-synchronous result readback's dependency closure. All five tests pass on RADV and llvmpipe; the
+image/view and format. The immutable dispatch record retains the sampled resource through command
+recording, then its native image/view and descriptor set share frame-fence retirement. It transitions
+the image to `SHADER_READ_ONLY_OPTIMAL` at consumption and pulls every pending render-target
+producer into a synchronous result readback's dependency closure. All five tests pass on RADV and llvmpipe; the
 four backend-neutral cases also pass on EasyGL. The Vulkan runs enable Khronos validation and
 report no message.
 

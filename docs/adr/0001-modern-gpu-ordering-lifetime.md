@@ -83,6 +83,12 @@ At call acceptance a deferred backend must:
 2. retain the native records for every referenced buffer, image/view, sampler, pipeline,
    descriptor and query until both CPU command recording and submitted GPU execution are finished.
 
+That guarantee need not be one unbounded shared-ownership edge. A deferred command may retain a
+resource record through command recording and then transfer its native handles plus every descriptor
+that names them to the same completion-token retirement. Persistent descriptor caches must evict
+such entries before a raw native handle can be recycled; they must not keep an otherwise-unused
+resource alive merely until shader or program destruction.
+
 An immediate backend may consume the same data before returning and therefore need no retained CPU
 record. It still may not retain an unowned public pointer for later work.
 

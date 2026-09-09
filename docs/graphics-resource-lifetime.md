@@ -194,6 +194,10 @@ Some resources (e.g. `BlendState`, `SamplerState`) may be constructed without a
   that storage buffers, compute programs, storage images, texture arrays and GPU timers use the same
   mechanism across submit, resize and device-first teardown. Applications must not call
   `vkDeviceWaitIdle` (nor can they access the native device).
+- Compute descriptor snapshots do not own shared resource records indefinitely. Pending commands
+  retain their exact records through command recording; destruction then evicts every descriptor
+  snapshot that names the dying buffer or image view and retires both behind the same frame fence.
+  This preserves submitted work and prevents recycled native handles from selecting stale bindings.
 
 ### Bgfx
 

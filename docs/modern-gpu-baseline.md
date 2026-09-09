@@ -210,7 +210,12 @@ alias, descriptor or buffer handle, and never treats matching byte sizes as perm
 reinterpret one resource class as another. A legal bind validates the live resource, owning
 `GraphicsDevice`, immutable usage and (where relevant) exact format before renderer work. An
 accepted deferred operation retains the renderer-owned record rather than the public wrapper, so
-later rebinding or disposal cannot invalidate work already issued.
+later rebinding or disposal cannot invalidate work already issued. Vulkan's immutable compute
+descriptor cache records only native binding identities. A pending dispatch owns the referenced
+records through command recording; when a buffer or image/view then dies, CNA evicts and
+fence-retires every matching descriptor snapshot with that native resource. The cache therefore
+cannot keep an otherwise-unused resource alive until program destruction, nor can a recycled raw
+handle select a stale descriptor set.
 
 | Public resource | Graphics sampling/drawing | Compute use | Copy/alias contract |
 |---|---|---|---|
@@ -295,7 +300,7 @@ tree, not about native API potential.
 | MOD-2230 | Supplied | `ConstantBufferT<T>` reuses the tracked shared-buffer core, validates live range/alignment and zeroes padding. Compute/package slots bind real GL uniform buffers and reflected Vulkan uniform descriptors; one generated package proves output, replacement and deferred lifetime on EasyGL, RADV and llvmpipe. |
 | MOD-2231 | Supplied | `StorageBufferUsage::IndirectArguments` is independently creatable on an indirect-capable device without compute or a storage-buffer byte limit; mixed compute-written arguments explicitly require both roles. |
 | MOD-2232 | Supplied | Engine revision 8 adds the direct, detailed-feature-gated base-instance draw; Vulkan retains the shifted instance range and proves instance one independently on RADV and llvmpipe. |
-| MOD-2233 | Supplied | The typed matrix above defines every legal XNA/new-resource bridge and explicit non-alias. One generated compute package proves Texture2D and deferred RenderTarget2D sampling, retained lifetime, automatic ordering and deterministic validation on EasyGL plus Vulkan/RADV/llvmpipe. |
+| MOD-2233 | Supplied | The typed matrix above defines every legal XNA/new-resource bridge and explicit non-alias. One generated compute package proves Texture2D and deferred RenderTarget2D sampling, retained lifetime, automatic ordering and deterministic validation on EasyGL plus Vulkan/RADV/llvmpipe. Vulkan compute snapshots retain native identities, not shared resource ownership; dying buffers/views evict and fence-retire matching sets so resource lifetime ends after accepted work without stale-handle reuse. |
 | MOD-2240 | Supplied | Vulkan discovery separates supported and enabled facts and records its ordered queue. |
 | MOD-2241 | Supplied | Vulkan implements the existing compute/storage-buffer baseline. |
 | MOD-2242 | Supplied | Vulkan reflects bounded SSBO/push-constant bindings and reuses descriptors. |
@@ -308,7 +313,7 @@ tree, not about native API potential.
 | MOD-2249 | Supplied | Storage-image uploads are immutable ordered records; one requested readback records upload/compute/upload plus copy in one synchronous submission. |
 | MOD-2250 | Supplied | Reflected readonly set-2 storage buffers feed vertex and fragment stages from immutable retained draw snapshots. A compute-authored transform, fragment value and indirect count prove fresh left/right/zero frames with exact dependencies on RADV and llvmpipe. |
 | MOD-2251 | Supplied | Canonical RGBA8 `Color` render targets share one tracked image across attachment, compute and sampling uses. The two-driver oracle image-loads a rendered texel, rewrites it in compute, samples it through ordinary SpriteBatch, observes exactly two barriers and emits no validation message. Dedicated storage-image sampling also transitions in the consuming command buffer without an eager wait. |
-| MOD-2252 | Supplied | A 10-leg two-driver native matrix covers buffers, compute programs, dedicated/RT storage images, arrays and timestamp pools across presented work, pre-present destruction, real swapchain recreation and explicit device-first teardown. All handles are released and owners disconnected before retained records outlive the device. |
+| MOD-2252 | Supplied | A 10-leg two-driver native matrix covers buffers, compute programs, dedicated/RT storage images, arrays and timestamp pools across presented work, pre-present destruction, real swapchain recreation and explicit device-first teardown. Its post-recording expiry checks also prevent compute descriptor caches from silently extending buffer/image/target lifetime. All handles are released and owners disconnected before retained records outlive the device. |
 | MOD-2253 | Supplied | One-time work waits its own submission fence rather than the queue; off-screen readback records the exact producer closure, transitions, copy and restore in one submit/fence. A 2,048-frame matrix with 32 real resize requests keeps descriptor/pipeline counts constant, staging at four live and retirement at 15 buckets/29 handles, then drains every transient resource on RADV and llvmpipe. |
 | MOD-2254 | Supplied | The two-driver validation matrix now includes acquire-out-of-date retention plus present-suboptimal/out-of-date recovery with exact modern output and stable handles. Recovery, complete modern lifetime and the 2,048-frame allocation stress also pass under ASan+UBSan on RADV and llvmpipe. |
 | MOD-2260 | Partial | OpenGL4 has a 4.1-floor renderer and measured 4.5 context, but does not independently discover modern subsets. |

@@ -651,6 +651,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // never hit a stale set. Frees happen once the consuming frame's fence has completed.
         VulkanRenderer::RetiredResources r;
         owner_->EvictSampledViewFromCaches(imageView_, r);
+        owner_->EvictSampledViewFromCaches(storageImageView_, r);
         // VULKAN-181: freed from the pool it actually came from, which is no longer always the
         // base pool -- poolDescriptorSets is REMED-GFX-076's existing (pool, set) queue.
         if (descriptorSet_ != VK_NULL_HANDLE) {
@@ -1362,6 +1363,7 @@ namespace CNA::Internal::Renderers::Vulkan
             return;
         VulkanRenderer::RetiredResources retired;
         owner_->EvictSampledViewFromCaches(sampledView_, retired);
+        owner_->EvictSampledViewFromCaches(storageView_, retired);
         if (sampledView_ != VK_NULL_HANDLE) retired.imageViews.push_back(sampledView_);
         if (storageView_ != VK_NULL_HANDLE) retired.imageViews.push_back(storageView_);
         if (image_ != VK_NULL_HANDLE) retired.images.push_back(image_);
@@ -15723,6 +15725,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // the last share then hands the handles to the current frame's existing fence retirement
         // rather than destroying a VkBuffer already named by that command buffer.
         VulkanRenderer::RetiredResources retired;
+        owner_->EvictComputeBufferFromCachesEXT(buffer_, retired);
         if (buffer_ != VK_NULL_HANDLE) {
             retired.buffers.push_back(buffer_);
             buffer_ = VK_NULL_HANDLE;
@@ -16345,6 +16348,7 @@ namespace CNA::Internal::Renderers::Vulkan
                                      sampledImageCount * DescriptorCacheCapacity});
             VkDescriptorPoolCreateInfo poolInfo{};
             poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+            poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
             poolInfo.maxSets = DescriptorCacheCapacity;
             poolInfo.poolSizeCount = static_cast<std::uint32_t>(poolSizes.size());
             poolInfo.pPoolSizes = poolSizes.data();
@@ -16663,10 +16667,36 @@ namespace CNA::Internal::Renderers::Vulkan
         return false;
     }
 
+    void VulkanComputeShaderRenderer::EvictDescriptorSetsReferencingEXT(
+        const VkBuffer buffer, const VkImageView imageView,
+        std::vector<std::pair<VkDescriptorPool, VkDescriptorSet>>& retiredSets)
+    {
+        if (descriptorPool_ == VK_NULL_HANDLE ||
+            (buffer == VK_NULL_HANDLE && imageView == VK_NULL_HANDLE))
+            return;
+        for (auto it = descriptorCache_.begin(); it != descriptorCache_.end();)
+        {
+            const bool referencesBuffer = buffer != VK_NULL_HANDLE &&
+                std::find(it->buffers.begin(), it->buffers.end(), buffer) !=
+                    it->buffers.end();
+            const bool referencesImage = imageView != VK_NULL_HANDLE &&
+                std::find(it->images.begin(), it->images.end(), imageView) !=
+                    it->images.end();
+            if (!it->initialized || (!referencesBuffer && !referencesImage)) {
+                ++it;
+                continue;
+            }
+            if (it->set != VK_NULL_HANDLE)
+                retiredSets.emplace_back(descriptorPool_, it->set);
+            it = descriptorCache_.erase(it);
+            if (owner_ != nullptr && owner_->liveComputeDescriptorSetCountEXT_ != 0)
+                --owner_->liveComputeDescriptorSetCountEXT_;
+        }
+    }
+
     VkDescriptorSet VulkanComputeShaderRenderer::GetOrCreateDescriptorSetEXT(
         const std::vector<VkBuffer>& buffers, const std::vector<VkImageView>& images,
         const std::vector<VkSampler>& samplers,
-        const std::vector<std::shared_ptr<void>>& retainedResources,
         const std::vector<VkDescriptorBufferInfo>& constantBufferInfos,
         const std::vector<VkDescriptorBufferInfo>& bufferInfos,
         const std::vector<VkDescriptorImageInfo>& storageImageInfos,
@@ -16753,7 +16783,6 @@ namespace CNA::Internal::Renderers::Vulkan
         selected->buffers = buffers;
         selected->images = images;
         selected->samplers = samplers;
-        selected->retainedResources = retainedResources;
         selected->initialized = true;
         return selected->set;
     }
@@ -16814,13 +16843,9 @@ namespace CNA::Internal::Renderers::Vulkan
         std::vector<VkBuffer> bufferHandles;
         std::vector<std::shared_ptr<VulkanStorageBufferRenderer>> retainedConstantBuffers;
         std::vector<std::shared_ptr<VulkanStorageBufferRenderer>> retainedBuffers;
-        std::vector<std::shared_ptr<void>> retainedDescriptorResources;
         bufferHandles.reserve(constantBindingSlots_.size() + storageBindingSlots_.size());
         retainedConstantBuffers.reserve(constantBindingSlots_.size());
         retainedBuffers.reserve(storageBindingSlots_.size());
-        retainedDescriptorResources.reserve(
-            constantBindingSlots_.size() + storageBindingSlots_.size() +
-            storageImageBindingSlots_.size() + sampledImageBindingSlots_.size());
         std::vector<VkDescriptorImageInfo> imageInfos(storageImageBindingSlots_.size());
         std::vector<VkImageView> imageViews;
         imageViews.reserve(
@@ -16835,7 +16860,6 @@ namespace CNA::Internal::Renderers::Vulkan
             auto retained = std::dynamic_pointer_cast<VulkanStorageBufferRenderer>(
                 buffer->IStorageBufferRenderer::shared_from_this());
             retainedConstantBuffers.push_back(retained);
-            retainedDescriptorResources.push_back(std::move(retained));
             bufferHandles.push_back(buffer->GetBufferEXT());
             auto& info = constantInfos[i];
             info.buffer = buffer->GetBufferEXT();
@@ -16848,7 +16872,6 @@ namespace CNA::Internal::Renderers::Vulkan
             auto retained = std::dynamic_pointer_cast<VulkanStorageBufferRenderer>(
                 buffer->IStorageBufferRenderer::shared_from_this());
             retainedBuffers.push_back(retained);
-            retainedDescriptorResources.push_back(std::move(retained));
             bufferHandles.push_back(buffer->GetBufferEXT());
             auto& info = infos[i];
             info.buffer = buffer->GetBufferEXT();
@@ -16865,12 +16888,6 @@ namespace CNA::Internal::Renderers::Vulkan
                     : textureImages.at(binding)->GetStorageImageViewEXT());
             info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
             imageViews.push_back(info.imageView);
-            if (storageImages.at(binding) != nullptr)
-                retainedDescriptorResources.push_back(storageImages.at(binding));
-            else if (renderTargetImages.at(binding) != nullptr)
-                retainedDescriptorResources.push_back(renderTargetImages.at(binding));
-            else
-                retainedDescriptorResources.push_back(textureImages.at(binding));
         }
         for (std::size_t i = 0; i < sampledImageBindingSlots_.size(); ++i) {
             const uint32_t binding = sampledImageBindingSlots_[i];
@@ -16885,14 +16902,9 @@ namespace CNA::Internal::Renderers::Vulkan
             info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             imageViews.push_back(info.imageView);
             sampledSamplers.push_back(info.sampler);
-            if (sampledRenderTargets.at(binding) != nullptr)
-                retainedDescriptorResources.push_back(sampledRenderTargets.at(binding));
-            else
-                retainedDescriptorResources.push_back(sampledTextures.at(binding));
         }
         const VkDescriptorSet descriptorSet = GetOrCreateDescriptorSetEXT(
-            bufferHandles, imageViews, sampledSamplers, retainedDescriptorResources,
-            constantInfos, infos, imageInfos,
+            bufferHandles, imageViews, sampledSamplers, constantInfos, infos, imageInfos,
             sampledImageInfos);
 
         VulkanRenderer::PendingModernCommand command;
@@ -18044,10 +18056,10 @@ namespace CNA::Internal::Renderers::Vulkan
         return count;
     }
 
-    // REMED-GFX-075: evict every persistent per-(view,sampler) descriptor-set cache entry keyed on a
-    // dying sampled view, moving the cached VkDescriptorSet into `into` for frame-fence-gated free.
-    // Prevents a later resource that reuses the freed VkImageView handle value from being handed a
-    // stale descriptor set that still samples the destroyed image.
+    // Evict every persistent graphics or compute descriptor-set cache entry keyed on a dying view,
+    // moving the cached VkDescriptorSet into `into` for frame-fence-gated free. Prevents a later
+    // resource that reuses the freed VkImageView handle value from being handed a stale descriptor
+    // set that still references the destroyed image.
     void VulkanRenderer::EvictSampledViewFromCaches(VkImageView view, RetiredResources& into)
     {
         if (view == VK_NULL_HANDLE) return;
@@ -18075,10 +18087,24 @@ namespace CNA::Internal::Renderers::Vulkan
         EvictViewFromEffectCache(skinnedDescSets_,     descriptorPoolSkinned_,     view, into);
         EvictViewFromEffectCache(pbrDescSets_,         descriptorPoolPbr_,         view, into);
         EvictViewFromEffectCache(pbrSkinnedDescSets_,  descriptorPoolPbrSkinned_,  view, into);
+        for (auto* shader : liveComputeShaders_)
+            if (shader != nullptr)
+                shader->EvictDescriptorSetsReferencingEXT(
+                    VK_NULL_HANDLE, view, into.poolDescriptorSets);
         VkLifetimeTraceEXT("cache.evict      view=0x%llx evictedSets=%zu gen=%llu",
                            VkH(view),
                            into.descriptorSets.size() + into.poolDescriptorSets.size() - before,
                            static_cast<unsigned long long>(frameGeneration_));
+    }
+
+    void VulkanRenderer::EvictComputeBufferFromCachesEXT(
+        const VkBuffer buffer, RetiredResources& into)
+    {
+        if (buffer == VK_NULL_HANDLE) return;
+        for (auto* shader : liveComputeShaders_)
+            if (shader != nullptr)
+                shader->EvictDescriptorSetsReferencingEXT(
+                    buffer, VK_NULL_HANDLE, into.poolDescriptorSets);
     }
 
     // REMED-GFX-076: drop every entry in one effect descriptor-set cache (all frame slots) that
@@ -18242,8 +18268,8 @@ namespace CNA::Internal::Renderers::Vulkan
             for (VkDescriptorSet s : r.descriptorSets)
                 if (s != VK_NULL_HANDLE && descriptorPool_ != VK_NULL_HANDLE)
                     vkFreeDescriptorSets(device_, descriptorPool_, 1, &s);
-            // REMED-GFX-076: effect-cache sets evicted on a sampled view's death, each freed from its
-            // own pool (created with VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT).
+            // Effect/compute-cache sets evicted on a referenced resource's death, each freed from
+            // its own pool (created with VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT).
             for (auto& ps : r.poolDescriptorSets)
                 if (ps.second != VK_NULL_HANDLE && ps.first != VK_NULL_HANDLE)
                     vkFreeDescriptorSets(device_, ps.first, 1, &ps.second);
