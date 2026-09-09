@@ -39,6 +39,8 @@
 //   M  A sparse undeclared image slot and access that differs from SPIR-V qualifiers are refused.
 //   N  Clearing the sampled storage binding restores the ordinary 2D white filler.
 //   O  Repeated sampling of the same image layout emits no redundant Vulkan image barrier.
+//   P  Storage-image upload/compute/upload enqueue without a routine queue/device-wide wait.
+//   Q  One requested readback submits that exact order once and observes the final upload.
 //
 // Exit code 0 = all PASS, 1 = any FAIL.
 
@@ -375,7 +377,8 @@ protected:
             const auto usage = StorageTexture2DUsage::StorageRead |
                                StorageTexture2DUsage::StorageWrite |
                                StorageTexture2DUsage::Sampled |
-                               StorageTexture2DUsage::TransferSource;
+                               StorageTexture2DUsage::TransferSource |
+                               StorageTexture2DUsage::TransferDestination;
             StorageTexture2D storage(
                 dev, StorageTexture2DDescriptor(1, 1, 1, SurfaceFormat::Color, usage));
             const std::string compute(
@@ -427,6 +430,40 @@ protected:
                       std::to_string(barriersAfterSecondSample) + " elisions=" +
                       std::to_string(elisionsBeforeSecondSample) + "->" +
                       std::to_string(elisionsAfterSecondSample));
+
+            const std::array<std::uint8_t, 4> blueBytes{0, 0, 255, 255};
+            const std::array<std::uint8_t, 4> greenBytes{0, 255, 0, 255};
+            const std::uint64_t oneTimeBeforeOrderedWork =
+                Renderer().GetOneTimeCommandCountEXT();
+            const std::uint64_t deviceWaitBeforeOrderedWork =
+                Renderer().GetDeviceWaitIdleCountEXT();
+            const std::uint64_t barriersBeforeOrderedWork =
+                Renderer().GetLogicalResourceBarrierCountEXT();
+            storage.setData(0, nullptr, blueBytes.data(), blueBytes.size());
+            writer.dispatch(1);
+            storage.setData(0, nullptr, greenBytes.data(), greenBytes.size());
+            const bool queuedWithoutWait =
+                Renderer().GetOneTimeCommandCountEXT() == oneTimeBeforeOrderedWork &&
+                Renderer().GetDeviceWaitIdleCountEXT() == deviceWaitBeforeOrderedWork;
+            check(queuedWithoutWait,
+                  "P upload -> compute -> upload enters one ordered stream without a routine "
+                  "queue/device wait");
+
+            std::array<std::uint8_t, 4> orderedBytes{};
+            storage.getData(0, nullptr, orderedBytes.data(), orderedBytes.size());
+            const Color ordered(
+                orderedBytes[0], orderedBytes[1], orderedBytes[2], orderedBytes[3]);
+            const std::uint64_t orderedBarriers =
+                Renderer().GetLogicalResourceBarrierCountEXT() - barriersBeforeOrderedWork;
+            check(Is(ordered, kGreen) &&
+                      Renderer().GetOneTimeCommandCountEXT() == oneTimeBeforeOrderedWork + 1 &&
+                      Renderer().GetDeviceWaitIdleCountEXT() == deviceWaitBeforeOrderedWork &&
+                      orderedBarriers == 4,
+                  "Q one requested readback preserves upload -> compute -> upload order: " +
+                      Text(ordered) + " submits=" +
+                      std::to_string(Renderer().GetOneTimeCommandCountEXT() -
+                                     oneTimeBeforeOrderedWork) +
+                      " barriers=" + std::to_string(orderedBarriers));
             effect.ClearStorageTextureEXT(0);
             const Color cleared = DrawThrough(dev, effect, *white);
             check(Is(cleared, kWhite),

@@ -130,9 +130,13 @@ and indirect intent; storage images retain the same state independently for ever
 hazards and layout changes emit buffer/image barriers at the consuming command, while compatible
 read-after-read uses merge their stage/access scopes and emit nothing. The intent vocabulary also
 names render-target, sampled, vertex and index uses so later bridges do not expose native Vulkan
-state. `MOD-2249`–`MOD-2253` own the remaining renderer paths and transition/readback stalls. Optional
-extended storage-image formats and legal bridges from existing XNA textures/render targets remain
-`MOD-2244`; the dedicated `StorageTexture2D` path is claimed here.
+state. `MOD-2249` adds storage-image uploads as immutable staging-backed records in that order:
+upload → compute → upload performs no immediate submit or wait, and a requested image readback
+records that complete dependency chain plus its copy in one synchronous submission. The staging
+allocation retires behind the consuming frame fence. `MOD-2250`–`MOD-2253` own the remaining
+renderer paths and transition/readback stalls. Optional extended storage-image formats and legal
+bridges from existing XNA textures/render targets remain `MOD-2244`; the dedicated
+`StorageTexture2D` path is claimed here.
 
 ### Indirect drawing
 

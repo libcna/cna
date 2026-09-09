@@ -1100,7 +1100,6 @@ namespace CNA::Internal::Renderers::Vulkan
         if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE || image_ == VK_NULL_HANDLE ||
             data == nullptr || (usage_ & UINT32_C(32)) == 0)
             return false;
-        owner_->FlushPendingModernCommandsForHostEXT();
         VkBuffer stagingBuffer = VK_NULL_HANDLE;
         VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
         void* mapped = nullptr;
@@ -1111,19 +1110,27 @@ namespace CNA::Internal::Renderers::Vulkan
         std::memcpy(mapped, data, byteCount);
         vkUnmapMemory(owner_->device_, stagingMemory);
 
-        VkCommandBuffer commandBuffer = owner_->BeginOneTimeCommands();
-        RecordUsage(commandBuffer, mipLevel, VulkanResourceIntent::TransferWrite);
-        VkBufferImageCopy copy{};
-        copy.imageSubresource = {
+        VulkanRenderer::PendingModernCommand command;
+        command.kind = VulkanRenderer::PendingModernCommand::Kind::ImageUpload;
+        command.uploadImage = std::dynamic_pointer_cast<VulkanStorageTexture2DRenderer>(
+            IStorageTexture2DRenderer::shared_from_this());
+        if (command.uploadImage == nullptr)
+            throw std::logic_error("Vulkan storage texture upload lost its tracked image record");
+        command.uploadStagingBuffer = stagingBuffer;
+        command.uploadRegion.imageSubresource = {
             VK_IMAGE_ASPECT_COLOR_BIT, static_cast<std::uint32_t>(mipLevel), 0, 1};
-        copy.imageOffset = {x, y, 0};
-        copy.imageExtent = {static_cast<std::uint32_t>(width),
-                            static_cast<std::uint32_t>(height), 1};
-        vkCmdCopyBufferToImage(commandBuffer, stagingBuffer, image_,
-                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
-        owner_->EndOneTimeCommands(commandBuffer);
-        vkDestroyBuffer(owner_->device_, stagingBuffer, nullptr);
-        vkFreeMemory(owner_->device_, stagingMemory, nullptr);
+        command.uploadRegion.imageOffset = {x, y, 0};
+        command.uploadRegion.imageExtent = {
+            static_cast<std::uint32_t>(width), static_cast<std::uint32_t>(height), 1};
+
+        // The immutable staging bytes join compute/copies in public-call order. Retire their
+        // native allocation behind the consuming frame fence now; the pending record retains the
+        // destination image and the handles remain alive through command recording and execution.
+        VulkanRenderer::RetiredResources retired;
+        retired.buffers.push_back(stagingBuffer);
+        retired.memories.push_back(stagingMemory);
+        owner_->RetireResources(std::move(retired));
+        owner_->QueueStorageImageUploadEXT(std::move(command));
         return true;
     }
 
@@ -1134,7 +1141,6 @@ namespace CNA::Internal::Renderers::Vulkan
         if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE || image_ == VK_NULL_HANDLE ||
             data == nullptr || (usage_ & UINT32_C(16)) == 0)
             return false;
-        owner_->FlushPendingModernCommandsForHostEXT();
         VkBuffer stagingBuffer = VK_NULL_HANDLE;
         VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
         owner_->CreateBuffer(
@@ -1142,6 +1148,11 @@ namespace CNA::Internal::Renderers::Vulkan
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             stagingBuffer, stagingMemory);
         VkCommandBuffer commandBuffer = owner_->BeginOneTimeCommands();
+        // Requested readback is the single synchronous boundary: replay every older immutable
+        // upload/compute/copy and this image copy in one ordered submission, rather than waiting
+        // once for the producer stream and again for the readback transfer.
+        for (const auto& command : owner_->pendingModernCommands_)
+            owner_->RecordModernCommandEXT(commandBuffer, command);
         RecordUsage(commandBuffer, mipLevel, VulkanResourceIntent::TransferRead);
         VkBufferImageCopy copy{};
         copy.imageSubresource = {
@@ -1152,6 +1163,7 @@ namespace CNA::Internal::Renderers::Vulkan
         vkCmdCopyImageToBuffer(commandBuffer, image_, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                                stagingBuffer, 1, &copy);
         owner_->EndOneTimeCommands(commandBuffer);
+        owner_->pendingModernCommands_.clear();
         void* mapped = nullptr;
         const VkResult result = vkMapMemory(
             owner_->device_, stagingMemory, 0, static_cast<VkDeviceSize>(byteCount), 0, &mapped);
@@ -16113,6 +16125,15 @@ namespace CNA::Internal::Renderers::Vulkan
         SplitRenderPassForModernCommandEXT();
     }
 
+    void VulkanRenderer::QueueStorageImageUploadEXT(PendingModernCommand&& command)
+    {
+        command.segment = currentSegment_;
+        command.rt = currentRT_;
+        command.order = NextCommandOrderEXT();
+        pendingModernCommands_.push_back(std::move(command));
+        SplitRenderPassForModernCommandEXT();
+    }
+
     VulkanRenderer::NativeResourceUsageEXT VulkanRenderer::DescribeResourceIntentEXT(
         const VulkanResourceIntent intent, const bool image)
     {
@@ -16333,6 +16354,21 @@ namespace CNA::Internal::Renderers::Vulkan
             vkCmdCopyBuffer(
                 cb, command.copySource->GetBufferEXT(),
                 command.copyDestination->GetBufferEXT(), 1, &region);
+            return;
+        }
+
+        if (command.kind == PendingModernCommand::Kind::ImageUpload)
+        {
+            if (command.uploadImage == nullptr ||
+                command.uploadStagingBuffer == VK_NULL_HANDLE)
+                throw std::logic_error("Vulkan storage texture upload record is incomplete");
+            const int mipLevel = static_cast<int>(
+                command.uploadRegion.imageSubresource.mipLevel);
+            command.uploadImage->RecordUsage(
+                cb, mipLevel, VulkanResourceIntent::TransferWrite);
+            vkCmdCopyBufferToImage(
+                cb, command.uploadStagingBuffer, command.uploadImage->image_,
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &command.uploadRegion);
             return;
         }
 

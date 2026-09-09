@@ -23,7 +23,9 @@ graphics order and retires submitted query pools on that fence. `MOD-2247` then 
 buffer copies in that order as immutable records, splitting render passes at their exact command
 positions. `MOD-2248` added the internal logical-use state machine and per-mip image state, replacing
 the coarse modern-command barriers with exact buffer/image dependencies and eliding compatible
-read-after-read uses. Remaining bridges and narrow readback stalls are owned by `MOD-2249`–`MOD-2253`.
+read-after-read uses. `MOD-2249` placed immutable storage-image uploads in that same order and
+folded their dependency closure into the single requested image-readback submission. Remaining
+bridges and narrow readback stalls are owned by `MOD-2250`–`MOD-2253`.
 
 ## Decision
 

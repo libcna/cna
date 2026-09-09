@@ -440,6 +440,8 @@ namespace CNA::Internal::Renderers::Vulkan
     /** @brief Vulkan image record behind `CNA::Graphics::StorageTexture2D`. */
     class VulkanStorageTexture2DRenderer final : public IStorageTexture2DRenderer
     {
+        friend class VulkanRenderer;
+
     public:
         /**
          * @brief Allocates one storage-capable 2D image and mip-zero storage view.
@@ -3222,9 +3224,9 @@ namespace CNA::Internal::Renderers::Vulkan
         /**
          * @brief Test-only: how many one-time command submissions this renderer has performed.
          *
-         * plans/plan_vulkan.md `VULKAN-396`. Every texture upload, layout transition and readback
-         * goes through `EndOneTimeCommands`, which submits and then waits the queue, so this is
-         * also the number of `vkQueueWaitIdle` calls those paths cost.
+         * plans/plan_vulkan.md `VULKAN-396`. Legacy texture transfers and synchronous readbacks
+         * go through `EndOneTimeCommands`, which submits and then waits the queue. Deferred
+         * storage-image uploads from `MOD-2249` deliberately do not increment this counter.
          *
          * @return Number of completed one-time command submissions since construction.
          */
@@ -4912,9 +4914,9 @@ namespace CNA::Internal::Renderers::Vulkan
             std::uint64_t order = 0;
         };
         std::vector<PendingTimestamp> pendingTimestamps_;
-        /** @brief One compute dispatch or buffer copy in the frame's public-call order. */
+        /** @brief One compute dispatch, buffer copy, or image upload in public-call order. */
         struct PendingModernCommand {
-            enum class Kind { Compute, BufferCopy } kind = Kind::Compute;
+            enum class Kind { Compute, BufferCopy, ImageUpload } kind = Kind::Compute;
             std::uint64_t segment = 0;
             std::shared_ptr<VulkanRTSource> rt;
             std::uint64_t order = 0;
@@ -4936,10 +4938,15 @@ namespace CNA::Internal::Renderers::Vulkan
             VkDeviceSize sourceOffset = 0;
             VkDeviceSize destinationOffset = 0;
             VkDeviceSize byteSize = 0;
+
+            std::shared_ptr<VulkanStorageTexture2DRenderer> uploadImage;
+            VkBuffer uploadStagingBuffer = VK_NULL_HANDLE;
+            VkBufferImageCopy uploadRegion{};
         };
         std::vector<PendingModernCommand> pendingModernCommands_;
         void QueueComputeDispatchEXT(PendingModernCommand&& command);
         void QueueStorageBufferCopyEXT(PendingModernCommand&& command);
+        void QueueStorageImageUploadEXT(PendingModernCommand&& command);
         void RecordModernCommandEXT(VkCommandBuffer cb, const PendingModernCommand& command);
         void FlushPendingModernCommandsForHostEXT(
             const VulkanStorageBufferRenderer* targetBuffer = nullptr,
