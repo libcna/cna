@@ -5,6 +5,7 @@
 #include <vector>
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelBone.hpp"
+#include "System/Collections/Generic/KeyNotFoundException.hpp"
 
 using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Graphics::ModelBone;
@@ -118,7 +119,8 @@ TEST(ModelBoneTest, ChildrenByNameThrowsWhenNotFound)
     ModelBone root(0, "Root");
     ModelBone left(1, "Left");
     root.AddChild(&left);
-    EXPECT_THROW({ [[maybe_unused]] auto* b = root.getChildrenProperty()["Nope"]; }, std::out_of_range);
+    EXPECT_THROW({ [[maybe_unused]] auto* b = root.getChildrenProperty()["Nope"]; },
+                 System::Collections::Generic::KeyNotFoundException);
 }
 
 TEST(ModelBoneTest, ChildrenTryGetValueFindsExistingChild)

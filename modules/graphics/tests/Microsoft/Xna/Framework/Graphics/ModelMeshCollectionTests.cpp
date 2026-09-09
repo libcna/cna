@@ -12,7 +12,9 @@
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshCollection.hpp"
+#include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/Collections/Generic/KeyNotFoundException.hpp"
 
 using namespace Microsoft::Xna::Framework::Graphics;
 
@@ -31,7 +33,17 @@ TEST(ModelMeshCollectionTest, IndexOutOfRangeThrows)
 TEST(ModelMeshCollectionTest, NameLookupNotFoundThrows)
 {
     ModelMeshCollection col;
-    EXPECT_THROW({ [[maybe_unused]] auto* m = col[std::string("Body")]; }, std::out_of_range);
+    EXPECT_THROW({ [[maybe_unused]] auto* m = col[std::string("Body")]; },
+                 System::Collections::Generic::KeyNotFoundException);
+}
+
+TEST(ModelMeshCollectionTest, EmptyNameThrowsArgumentNull)
+{
+    ModelMeshCollection col;
+    ModelMesh* value = reinterpret_cast<ModelMesh*>(1);
+    EXPECT_THROW((void) col[std::string()], System::ArgumentNullException);
+    EXPECT_THROW(col.TryGetValue("", value), System::ArgumentNullException);
+    EXPECT_EQ(value, reinterpret_cast<ModelMesh*>(1));
 }
 
 namespace
@@ -70,7 +82,8 @@ TEST(ModelMeshCollectionTest, IndexByNamePopulatedNotFoundThrows)
 {
     PopulatedMeshes fixture;
     const ModelMeshCollection& col = fixture.model.getMeshesProperty();
-    EXPECT_THROW({ [[maybe_unused]] auto* m = col["Tail"]; }, std::out_of_range);
+    EXPECT_THROW({ [[maybe_unused]] auto* m = col["Tail"]; },
+                 System::Collections::Generic::KeyNotFoundException);
 }
 
 TEST(ModelMeshCollectionTest, TryGetValueFindsExisting)

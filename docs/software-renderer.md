@@ -399,6 +399,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   missing state raises `InvalidOperationException`, and user-array null/range checks precede the
   shader check. The public 32-bit user-index overload remains the deliberate exception: under
   Reach its profile refusal occurs first, exactly where Microsoft places that gate.
+- **Model name lookups expose XNA collection failures** (`SOFTWARE-254`) — missing bones/meshes
+  throw `KeyNotFoundException`; empty lookup names throw `ArgumentNullException` before changing
+  the caller's out pointer, identically above Software and EasyGL.
 - **The classic SpriteBatch/SpriteFont parity corpus executes on the CPU** (`SOFTWARE-138`).
   Eighteen renderer-independent scenes shared with EasyGL cover flips, rotation/origin, both scale
   overloads, source rectangles, layer sorting, transforms, render targets, viewports, scissor,
