@@ -24,11 +24,8 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Per-vertex color. */
         Microsoft::Xna::Framework::Color Color;
 
-        /** @brief Constructs a default VertexPositionColor with position (0,0,0) and white color. */
-        VertexPositionColor()
-            : Position(0, 0, 0), Color(255, 255, 255, 255)
-        {
-        }
+        /** @brief Constructs a default VertexPositionColor with zero-initialized fields. */
+        VertexPositionColor() = default;
 
         /**
          * @brief Constructs a VertexPositionColor with the given position and color.

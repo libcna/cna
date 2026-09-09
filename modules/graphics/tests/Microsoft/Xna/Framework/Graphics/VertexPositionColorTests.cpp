@@ -23,10 +23,10 @@ TEST(VertexPositionColorTest, DefaultPositionZero)
     EXPECT_FLOAT_EQ(v.Position.Z, 0.0f);
 }
 
-TEST(VertexPositionColorTest, DefaultColorWhite)
+TEST(VertexPositionColorTest, DefaultColorTransparentBlack)
 {
     VertexPositionColor v;
-    EXPECT_EQ(v.Color, Color(255, 255, 255, 255));
+    EXPECT_EQ(v.Color, Color::Transparent);
 }
 
 // --- Parameterized constructor ---
