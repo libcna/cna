@@ -7,6 +7,9 @@
 #include "CNA/Internal/Renderers/DirectX11/D3D11OcclusionQuery.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11EffectRenderer.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11SpriteBatch.hpp"
+#if defined(CNA_DIRECTX11_COMPILED_EFFECTS)
+#include "CNA/Internal/Renderers/DirectX11/D3D11CompiledEffect.hpp"
+#endif
 #include "CNA/Internal/Renderers/D3DCommon/D3DShaderCache.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DConstantBuffers.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DFormatMapping.hpp"
@@ -251,6 +254,13 @@ namespace CNA::Internal::Renderers::DirectX11
     DirectX11Renderer::~DirectX11Renderer()
     {
         lifetimeToken_.reset();
+#if defined(CNA_DIRECTX11_COMPILED_EFFECTS)
+        if (mojoShaderContext_ != nullptr)
+        {
+            MOJOSHADER_d3d11DestroyContext(mojoShaderContext_);
+            mojoShaderContext_ = nullptr;
+        }
+#endif
     }
 
     void DirectX11Renderer::SetContextRecoveryEnabled(bool enabled)
@@ -580,6 +590,13 @@ namespace CNA::Internal::Renderers::DirectX11
             if (resource != nullptr)
                 resource->ReleaseDeviceResourcesEXT();
         }
+#if defined(CNA_DIRECTX11_COMPILED_EFFECTS)
+        if (mojoShaderContext_ != nullptr)
+        {
+            MOJOSHADER_d3d11DestroyContext(mojoShaderContext_);
+            mojoShaderContext_ = nullptr;
+        }
+#endif
         ReleaseWindowSizeDependentViews();
         swapChain_.Reset();
 
@@ -1955,6 +1972,29 @@ namespace CNA::Internal::Renderers::DirectX11
         const auto& vertexElements = multiStream
             ? combinedElements : d3dVb.GetDeclarationEXT().GetElements();
 
+#if defined(CNA_DIRECTX11_COMPILED_EFFECTS)
+        if (params.compiledEffectRuntime != nullptr)
+        {
+            BindCompiledEffectForDrawEXT(
+                d3dVb, params, *params.compiledEffectRuntime);
+            BindVertexStreams(context_.Get(), d3dVb, params);
+            if (ib != nullptr)
+            {
+                const auto& d3dIb = static_cast<const D3D11IndexBufferRenderer&>(*ib);
+                context_->IASetIndexBuffer(d3dIb.GetBufferEXT(), d3dIb.GetFormatEXT(), 0);
+            }
+            context_->IASetPrimitiveTopology(ToD3D11Topology(primitive));
+            const UINT elementCount = static_cast<UINT>(
+                VertexCountForPrimitives(primitive, primitiveCount));
+            if (ib != nullptr)
+                context_->DrawIndexed(elementCount, static_cast<UINT>(params.startIndex),
+                                      static_cast<INT>(params.baseVertex));
+            else
+                context_->Draw(elementCount, static_cast<UINT>(params.vertexStart));
+            return;
+        }
+#endif
+
         if (params.customEffectRequested)
         {
             auto* customEffect = dynamic_cast<D3D11EffectRenderer*>(params.customEffectRenderer);
@@ -2725,6 +2765,22 @@ namespace CNA::Internal::Renderers::DirectX11
         }
         const auto& d3dVb = static_cast<const D3D11VertexBufferRenderer&>(vb);
         const auto& d3dIb = static_cast<const D3D11IndexBufferRenderer&>(ib);
+#if defined(CNA_DIRECTX11_COMPILED_EFFECTS)
+        if (params.compiledEffectRuntime != nullptr)
+        {
+            BindCompiledEffectForDrawEXT(
+                d3dVb, params, *params.compiledEffectRuntime);
+            BindVertexStreams(context_.Get(), d3dVb, params);
+            context_->IASetIndexBuffer(d3dIb.GetBufferEXT(), d3dIb.GetFormatEXT(), 0);
+            context_->IASetPrimitiveTopology(ToD3D11Topology(primitive));
+            context_->DrawIndexedInstanced(
+                static_cast<UINT>(VertexCountForPrimitives(primitive, primitiveCount)),
+                static_cast<UINT>(std::max(1, instanceCount)),
+                static_cast<UINT>(params.startIndex),
+                static_cast<INT>(params.baseVertex), 0);
+            return;
+        }
+#endif
         std::vector<Microsoft::Xna::Framework::Graphics::VertexElement> combinedElements;
         std::vector<D3DCommon::D3DVertexInputElement> inputElements;
         BuildVertexInputLayout(params, true, combinedElements, inputElements);

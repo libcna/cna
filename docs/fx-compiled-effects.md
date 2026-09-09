@@ -187,22 +187,24 @@ rejected by name.
 Publishing a pass's sampler state on `GraphicsDevice.SamplerStates` is only half the job; the other
 half is that the state actually filters the sampled texture. What each backend can express:
 
-| State | FNA3D | SDL_GPU | EasyGL / OpenGL ES 3 | EasyGL / OpenGL 3.3 |
-|---|---|---|---|---|
-| `Filter` | yes | yes | yes | yes |
-| `AddressU` / `AddressV` | yes | yes | yes | yes |
-| `AddressW` | yes | recorded, unobservable | yes (`GL_TEXTURE_WRAP_R`) | yes (`GL_TEXTURE_WRAP_R`) |
-| `MaxAnisotropy` | yes | yes | yes | yes |
-| `MaxMipLevel` | yes (`GL_TEXTURE_BASE_LEVEL`) | yes (`min_lod`) | yes (`GL_TEXTURE_MIN_LOD`) | yes (`GL_TEXTURE_MIN_LOD`) |
-| `MipMapLevelOfDetailBias` | desktop GL only | yes (`mip_lod_bias`) | **no** | yes (`GL_TEXTURE_LOD_BIAS`) |
+| State | FNA3D | SDL_GPU | EasyGL / OpenGL ES 3 | EasyGL / OpenGL 3.3 | Vulkan | DirectX 11 |
+|---|---|---|---|---|---|---|
+| `Filter` | yes | yes | yes | yes | yes | yes |
+| `AddressU` / `AddressV` | yes | yes | yes | yes | yes | yes |
+| `AddressW` | yes | recorded, unobservable | yes (`GL_TEXTURE_WRAP_R`) | yes (`GL_TEXTURE_WRAP_R`) | yes | yes |
+| `MaxAnisotropy` | yes | yes | yes | yes | yes | yes |
+| `MaxMipLevel` | yes (`GL_TEXTURE_BASE_LEVEL`) | yes (`min_lod`) | yes (`GL_TEXTURE_MIN_LOD`) | yes (`GL_TEXTURE_MIN_LOD`) | yes (`minLod`) | yes (`MinLOD`) |
+| `MipMapLevelOfDetailBias` | desktop GL only | yes (`mip_lod_bias`) | **no** | yes (`GL_TEXTURE_LOD_BIAS`) | yes (`mipLodBias`) | yes (`MipLODBias`) |
 
-Every "yes" in that table is now checked by drawing, not by reading CNA's state objects back:
+The sampling entries in that table are checked by drawing, not only by reading CNA's state objects back:
 `RunCompiledEffectSamplerPixelContract` binds a real texture, applies the pass, draws, reads the
 pixel and compares it against the texel the requested sampler state selects. Addressing is probed
 from coordinates outside `[0,1]` with two probes per axis, so `Wrap`, `Clamp` and `Mirror` have
 three distinct signatures; the filter check samples a quarter of the way between two texel centres,
 away from any boundary; `MaxMipLevel` and the LOD bias are checked against a mipmapped texture whose
-levels are different colours (`plans/plan_fx.md` FX-093).
+levels are different colours (`plans/plan_fx.md` FX-093). The cube/volume contract proves the
+dimensioned paths, and DirectX 11's separate renderer-neutral sampler contract differentially
+proves the shared D3D sampler cache's `AddressW` mapping.
 
 `MipMapLevelOfDetailBias` has no OpenGL ES equivalent at all -- `GL_TEXTURE_LOD_BIAS` is a desktop
 GL parameter -- which is why FNA3D's own OpenGL driver skips it under ES too. CNA does not
@@ -212,9 +214,10 @@ backend can represent rather than guessing, so an ES build proves everything els
 that one section.
 
 `AddressW` is carried through the renderer-neutral contract by
-`IGraphicsRenderer::ApplySamplerAddressW` (`plans/plan_fx.md` FX-026). FNA3D and EasyGL apply it; SDL_GPU
-records it and carries it in its sampler-cache identity, but its compiled route resolves 2D textures
-only, so the axis is not observable there yet (FX-092, FX-110). It only matters for volume textures.
+`IGraphicsRenderer::ApplySamplerAddressW` (`plans/plan_fx.md` FX-026). FNA3D, EasyGL, Vulkan, and
+DirectX 11 apply it; SDL_GPU records it and carries it in its sampler-cache identity, but its
+compiled route resolves 2D textures only, so the axis is not observable there yet (FX-092,
+FX-110). It only matters for volume textures.
 
 A slot no pass has assigned keeps whatever the game selected. The compiled-effect draw routes read
 `GraphicsDevice.SamplerStates[slot]` for those, so `SpriteBatch.Begin`'s own sampler state, for
@@ -254,6 +257,8 @@ shared.
 | `FNA3D` | **true** | always on | Owns the MojoShader Effect Framework runtime; passes the full shared contract including the draw matrix |
 | `SDL_GPU` | **true** | `CNA_SDL_GPU_COMPILED_EFFECTS` (off by default) | MojoShader's SDL_GPU adapter; passes the shared contract, multi-stream and instanced draws excepted -- it advertises neither capability, so `GraphicsDevice` refuses them before submission |
 | EasyGL family (`OPENGLES2`, `OPENGLES3`, `OPENGL33`, `WEBGL1`, `WEBGL2`) | **true** | `CNA_EASYGL_COMPILED_EFFECTS` (off by default) | MojoShader's OpenGL adapter; passes the full shared contract, including multi-stream and instanced draws |
+| `VULKAN` | **true** | `CNA_VULKAN_COMPILED_EFFECTS` (off by default) | CNA's MojoShader SPIR-V binding; passes every applicable shared section, with multi-stream input refused renderer-wide |
+| `DIRECTX11` | **true** | `CNA_DIRECTX11_COMPILED_EFFECTS` (off by default) | MojoShader's D3D11 adapter; all 18 shared/public-path tests pass, including multi-stream, instancing, SpriteBatch, and 2D/cube/volume sampling |
 | every other renderer identity | false | — | No compiled-effect runtime yet, or no programmable shader target at all |
 
 EasyGL selects the MojoShader source dialect from the renderer instance that owns the GL context:
@@ -262,7 +267,7 @@ identities use `glsles3`. It deliberately does not accept `MOJOSHADER_glBestProf
 `glspirv` on a newer desktop driver: that adapter assumes a complete vertex/pixel pair, while an
 XNA Effect pass may validly assign only one stage and inherit the other at draw time.
 
-The two opt-in options exist because MojoShader is a fetched dependency those renderers do not
+The four opt-in options exist because MojoShader is a fetched dependency those renderers do not
 otherwise need. With the option off the renderer reports `CompiledEffects == false` and refuses a
 compiled `Effect` exactly like any unsupported backend -- the capability never claims more than the
 build actually contains.
@@ -280,7 +285,8 @@ the public vertex-texture surface, for example, reaches no CNA renderer, so a co
 not expected to invent that renderer capability. A **compiled-Effect-specific** limitation is one
 the renderer supports elsewhere but this draw route cannot preserve. `plans/plan_fx.md` section
 10.5 is the authoritative per-renderer table. In particular, cube sampling is no longer a
-limitation: FNA3D, SDL_GPU, EasyGL and Vulkan all pass the compiled cube-sampler contract.
+limitation: FNA3D, SDL_GPU, EasyGL, Vulkan, and DirectX 11 all pass the compiled cube-sampler
+contract.
 
 Vulkan joined the supported set on 2026-08-18 (`CNA_VULKAN_COMPILED_EFFECTS=ON`). It is the one
 backend with no MojoShader-provided adapter -- there is no `mojoshader_vulkan.c` -- so the
@@ -291,13 +297,13 @@ draws buffered, user, indexed and instanced geometry, and samples 2D, cube and v
 one thing it refuses that is specific to compiled Effects is vertex-stage sampling; multi-stream
 vertex input is refused renderer-wide, for stock draws equally.
 
-DirectX 11, DirectX 9 and Metal are the planned next waves; each becomes true only after it passes
-the same shared suite **on hardware that can execute it**. None of the three has been written, and
-that is deliberate rather than pending: writing a backend that cannot be run would put a capability
-behind unexecuted code, which is the one thing this page's own rule forbids. `plans/plan_fx.md` carries a
-concrete requirements note for each. Fixed-function, 2D-only and CPU renderers stay intentionally
-unsupported. `plans/plan_fx.md` Phase G tracks the rollout, and its own section 10.3 -- not the one below,
-which belongs to this page -- classifies every renderer identity.
+DirectX 11 joined the supported set on 2026-09-09 through MojoShader's native D3D11 adapter. Its
+opt-in route passes the shared public-path suite through Wine+DXVK on a private headless display,
+including multi-stream, instancing, SpriteBatch, and 2D/cube/volume sampling. DirectX 12, DirectX 9,
+and Metal are the remaining planned waves; each becomes true only after the same executed quality
+gate. Fixed-function, 2D-only and CPU renderers stay intentionally unsupported. `plans/plan_fx.md`
+Phase G tracks the rollout, and its own section 10.3 -- not the one below, which belongs to this
+page -- classifies every renderer identity.
 
 ### What "passes the shared contract" means
 

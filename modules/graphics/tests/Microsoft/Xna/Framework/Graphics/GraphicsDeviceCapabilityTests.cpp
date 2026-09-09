@@ -217,14 +217,15 @@ struct CapabilityExpectation
 
 // FNA3D has no separate compiled-effects opt-in: MojoShader is already its own graphics
 // dependency, so support is unconditional whenever this renderer is selected at all. SDL_GPU,
-// EasyGL and Vulkan all pull MojoShader in only as an extra, off-by-default dependency none of
-// them otherwise needs (CNA_SDL_GPU_COMPILED_EFFECTS / CNA_EASYGL_COMPILED_EFFECTS /
-// CNA_VULKAN_COMPILED_EFFECTS) -- selecting the renderer alone is not enough to expect the
-// capability true for any of those three.
+// EasyGL, Vulkan and DirectX 11 all pull MojoShader in only as an extra, off-by-default dependency
+// none of them otherwise needs (CNA_SDL_GPU_COMPILED_EFFECTS / CNA_EASYGL_COMPILED_EFFECTS /
+// CNA_VULKAN_COMPILED_EFFECTS / CNA_DIRECTX11_COMPILED_EFFECTS) -- selecting the renderer alone is
+// not enough to expect the capability true for any of those four.
 #if defined(CNA_RENDERER_FNA3D) || \
     (defined(CNA_RENDERER_SDL_GPU) && defined(CNA_SDL_GPU_COMPILED_EFFECTS)) || \
     (defined(CNA_RENDERER_EASYGL) && defined(CNA_EASYGL_COMPILED_EFFECTS)) || \
-    (defined(CNA_RENDERER_VULKAN) && defined(CNA_VULKAN_COMPILED_EFFECTS))
+    (defined(CNA_RENDERER_VULKAN) && defined(CNA_VULKAN_COMPILED_EFFECTS)) || \
+    (defined(CNA_RENDERER_DIRECTX11) && defined(CNA_DIRECTX11_COMPILED_EFFECTS))
 constexpr bool kExpectCompiledEffects = true;
 #else
 constexpr bool kExpectCompiledEffects = false;

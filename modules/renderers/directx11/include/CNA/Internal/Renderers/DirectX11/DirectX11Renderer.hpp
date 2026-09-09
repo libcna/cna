@@ -19,12 +19,25 @@
 #include <memory>
 #include <vector>
 
+#if defined(CNA_DIRECTX11_COMPILED_EFFECTS)
+typedef struct MOJOSHADER_d3d11Context MOJOSHADER_d3d11Context;
+
+namespace Microsoft::Xna::Framework::Graphics
+{
+    class TextureCollection;
+}
+#endif
+
 namespace CNA::Internal::Renderers::DirectX11
 {
     using Microsoft::WRL::ComPtr;
 
     class D3D11RenderTargetRenderer;
     class D3D11RenderTargetCubeRenderer;
+    class D3D11VertexBufferRenderer;
+#if defined(CNA_DIRECTX11_COMPILED_EFFECTS)
+    class D3D11CompiledEffect;
+#endif
 
     /**
      * D3D11 graphics renderer (plans/plan_dx.md). Implements IGraphicsRenderer on top of Direct3D 11 via
@@ -376,6 +389,34 @@ namespace CNA::Internal::Renderers::DirectX11
         // ---- IGraphicsRenderer: real (Phase DX9, DX-70/DX-71/DX-72) ----
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;
 
+#if defined(CNA_DIRECTX11_COMPILED_EFFECTS)
+        /** @brief Creates a MojoShader-backed compiled XNA effect for this D3D11 device. */
+        std::unique_ptr<ICompiledEffectRuntime> CreateCompiledEffect(
+            const std::uint8_t* effectCode, std::size_t effectCodeBytes) override;
+
+        /** @brief Reports compiled effects only in the fully conformance-gated opt-in build. */
+        [[nodiscard]] bool SupportsCompiledEffects() const override { return true; }
+
+        /** @brief Returns the one MojoShader D3D11 context associated with this native device. */
+        CNAEXT MOJOSHADER_d3d11Context* GetMojoShaderContextEXT();
+
+        /**
+         * @brief Binds an applied compiled effect for an immediate D3D11 draw.
+         * @param fallback Primary vertex buffer used when @p params has no explicit stream list.
+         * @param params Complete public draw parameters and vertex stream bindings.
+         * @param runtime Applied compiled-effect runtime.
+         * @param spriteBatchSlotZeroTexture Optional SpriteBatch source that must win pixel slot 0.
+         * @param spriteBatchTextures Optional public texture collection used for unassigned slots.
+         */
+        CNAEXT void BindCompiledEffectForDrawEXT(
+            const D3D11VertexBufferRenderer& fallback,
+            const GpuDrawParams& params,
+            ICompiledEffectRuntime& runtime,
+            const ITextureRenderer* spriteBatchSlotZeroTexture = nullptr,
+            const Microsoft::Xna::Framework::Graphics::TextureCollection*
+                spriteBatchTextures = nullptr);
+#endif
+
     private:
         std::shared_ptr<void> lifetimeToken_ = std::make_shared<int>(0);
 
@@ -421,6 +462,9 @@ namespace CNA::Internal::Renderers::DirectX11
         bool deviceLost_ = false;
         std::function<void(RendererDeviceEvent)> deviceEventCallback_;
         std::vector<D3DCommon::ID3DDeviceRecoverableEXT*> recoverableResources_;
+#if defined(CNA_DIRECTX11_COMPILED_EFFECTS)
+        MOJOSHADER_d3d11Context* mojoShaderContext_ = nullptr;
+#endif
 
         // Swap-chain lifetime.
         ComPtr<IDXGISwapChain1> swapChain_;

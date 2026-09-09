@@ -6,10 +6,22 @@
 #include "CNA/Internal/Renderers/DirectX11/D3D11EffectRenderer.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DShaderCache.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DConstantBuffers.hpp"
+#if defined(CNA_DIRECTX11_COMPILED_EFFECTS)
+#include "CNA/Internal/Renderers/DirectX11/D3D11CompiledEffect.hpp"
+#include "Fna3dStockEffectBlobs.hpp"
+#endif
 
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "System/InvalidOperationException.hpp"
 
+#include <algorithm>
+#include <cstddef>
 #include <cmath>
 #include <cstring>
 #include <stdexcept>
@@ -46,7 +58,44 @@ namespace CNA::Internal::Renderers::DirectX11
         , vb_(owner_, 256)
         , ib_(owner_, 384, false)
     {
+        using Microsoft::Xna::Framework::Graphics::VertexDeclaration;
+        using Microsoft::Xna::Framework::Graphics::VertexElement;
+        using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+        using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+        static const VertexDeclaration kSpriteDeclaration(
+            static_cast<int>(sizeof(Sprite2DVertex)),
+            {
+                VertexElement(static_cast<int>(offsetof(Sprite2DVertex, x)),
+                              VertexElementFormat::Vector2, VertexElementUsage::Position, 0),
+                VertexElement(static_cast<int>(offsetof(Sprite2DVertex, u)),
+                              VertexElementFormat::Vector2,
+                              VertexElementUsage::TextureCoordinate, 0),
+                VertexElement(static_cast<int>(offsetof(Sprite2DVertex, r)),
+                              VertexElementFormat::Vector4, VertexElementUsage::Color, 0),
+            });
+        vb_.SetVertexDeclaration(kSpriteDeclaration);
+#if defined(CNA_DIRECTX11_COMPILED_EFFECTS)
+        const auto& bytes =
+            CNA::Internal::Renderers::Fna3d::StockEffectBlobs::kSpriteEffectFxb;
+        spriteCompiledEffect_ = std::make_unique<D3D11CompiledEffect>(
+            *owner_, bytes, sizeof(bytes));
+        const auto& parameters = spriteCompiledEffect_->GetDescription().parameters;
+        const auto matrix = std::find_if(
+            parameters.begin(), parameters.end(),
+            [](const CompiledEffectParameterDescription& parameter)
+            {
+                return parameter.name == "MatrixTransform";
+            });
+        if (matrix == parameters.end())
+        {
+            throw std::runtime_error(
+                "DirectX11 SpriteBatch: embedded XNA SpriteEffect has no MatrixTransform parameter.");
+        }
+        spriteMatrixParameterIndex_ = matrix->runtimeIndex;
+#endif
     }
+
+    D3D11SpriteBatchRenderer::~D3D11SpriteBatchRenderer() = default;
 
     void D3D11SpriteBatchRenderer::Begin()
     {
@@ -147,6 +196,14 @@ namespace CNA::Internal::Renderers::DirectX11
     {
         if (pendingVertices_.empty()) return;
 
+#if defined(CNA_DIRECTX11_COMPILED_EFFECTS)
+        if (customEffect_ != nullptr && customEffect_->GetCompiledRuntimePtr() != nullptr)
+        {
+            FlushBatchWithCompiledEffect();
+            return;
+        }
+#endif
+
         float vpW = 0.0f, vpH = 0.0f;
         GetCurrentViewportSize(vpW, vpH);
 
@@ -213,6 +270,93 @@ namespace CNA::Internal::Renderers::DirectX11
         pendingIndices_.clear();
         currentTexture_ = nullptr;
     }
+
+#if defined(CNA_DIRECTX11_COMPILED_EFFECTS)
+    void D3D11SpriteBatchRenderer::ApplyCompiledSpriteVertexShader(
+        float viewportWidth, float viewportHeight)
+    {
+        if (spriteCompiledEffect_ == nullptr || customEffect_ == nullptr ||
+            viewportWidth <= 0.0f || viewportHeight <= 0.0f)
+        {
+            throw std::runtime_error(
+                "DirectX11 SpriteBatch: the compiled stock vertex effect is unavailable.");
+        }
+
+        // D3D11's SpriteBatch already applies Begin(transformMatrix) on the CPU. The inherited
+        // stock vertex stage therefore needs only the pixel-space projection, not that transform
+        // a second time.
+        const Matrix projection = Matrix::CreateOrthographicOffCenter(
+            0.0f, viewportWidth, viewportHeight, 0.0f, 0.0f, -1.0f);
+        float values[16];
+        projection.ToColumnMajor(values);
+        spriteCompiledEffect_->SetParameterValue(
+            spriteMatrixParameterIndex_, values, sizeof(values));
+        spriteCompiledEffect_->SetTechnique(0);
+
+        auto& graphicsDevice = customEffect_->getGraphicsDeviceInternal();
+        CompiledEffectDeviceState state;
+        state.blend = &graphicsDevice.getBlendStateProperty();
+        state.depthStencil = &graphicsDevice.getDepthStencilStateProperty();
+        state.rasterizer = &graphicsDevice.getRasterizerStateProperty();
+        state.samplerStates = &graphicsDevice.getSamplerStatesProperty();
+        state.vertexSamplerStates = &graphicsDevice.getVertexSamplerStatesProperty();
+        CompiledEffectPassStateChanges ignored;
+        spriteCompiledEffect_->ApplyPass(0, state, ignored);
+    }
+
+    void D3D11SpriteBatchRenderer::FlushBatchWithCompiledEffect()
+    {
+        ICompiledEffectRuntime* runtime = customEffect_->GetCompiledRuntimePtr();
+        if (runtime == nullptr || currentTexture_ == nullptr)
+            throw std::runtime_error(
+                "DirectX11 SpriteBatch: compiled-effect batch state is incomplete.");
+
+        vb_.SetData(pendingVertices_.data(), static_cast<int>(pendingVertices_.size()),
+                    sizeof(Sprite2DVertex));
+        ib_.SetData16(pendingIndices_.data(), static_cast<int>(pendingIndices_.size()));
+
+        ID3D11Buffer* vertexBuffer = vb_.GetBufferEXT();
+        const UINT stride = static_cast<UINT>(sizeof(Sprite2DVertex));
+        const UINT offset = 0;
+        context_->IASetVertexBuffers(0, 1, &vertexBuffer, &stride, &offset);
+        context_->IASetIndexBuffer(ib_.GetBufferEXT(), ib_.GetFormatEXT(), 0);
+        context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+        float viewportWidth = 0.0f;
+        float viewportHeight = 0.0f;
+        GetCurrentViewportSize(viewportWidth, viewportHeight);
+        owner_->ApplySamplerState(
+            0, pendingFilter_, pendingAddressU_, pendingAddressV_, 1);
+        owner_->ApplySamplerMipState(0, pendingMaxMipLevel_, pendingLodBias_);
+        owner_->ApplySamplerAddressW(0, pendingAddressW_);
+
+        auto* technique = customEffect_->getCurrentTechniqueProperty();
+        const int passCount = technique != nullptr
+            ? technique->getPassesProperty().getCountProperty() : 0;
+        if (passCount == 0)
+        {
+            throw System::InvalidOperationException(
+                "DirectX11 SpriteBatch: a compiled Effect needs a current technique with at "
+                "least one pass.");
+        }
+
+        ApplyCompiledSpriteVertexShader(viewportWidth, viewportHeight);
+        const auto& deviceTextures =
+            customEffect_->getGraphicsDeviceInternal().getTexturesProperty();
+        GpuDrawParams params;
+        for (int pass = 0; pass < passCount; ++pass)
+        {
+            technique->getPassesProperty()[pass].Apply();
+            owner_->BindCompiledEffectForDrawEXT(
+                vb_, params, *runtime, currentTexture_, &deviceTextures);
+            context_->DrawIndexed(static_cast<UINT>(pendingIndices_.size()), 0, 0);
+        }
+
+        pendingVertices_.clear();
+        pendingIndices_.clear();
+        currentTexture_ = nullptr;
+    }
+#endif
 
     void D3D11SpriteBatchRenderer::Draw(const ITextureRenderer& texture, float x, float y)
     {

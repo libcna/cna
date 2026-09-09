@@ -16,6 +16,10 @@ cmake -S . -B cmake-build-d3d11 -G Ninja \
 cmake --build cmake-build-d3d11 -j
 ```
 
+Add `-DCNA_DIRECTX11_COMPILED_EFFECTS=ON` to execute compiled XNA Effect Framework bytecode through
+MojoShader's D3D11 adapter. The option is off by default so the ordinary renderer keeps its
+dependency-free build.
+
 Three corrections to that command, all found by running it (`plans/plan_dx.md` `DX-249`):
 
 * the renderer identity is **`DIRECTX11`**, not `D3D11` — `D3D11` is not one of the 49 accepted
@@ -29,9 +33,10 @@ Three corrections to that command, all found by running it (`plans/plan_dx.md` `
 
 `D3D11` is hard-gated to `CMAKE_SYSTEM_NAME=Windows` at configure time — attempting it on a native
 Linux/macOS configure fails fast with `FATAL_ERROR`, pointing at the MinGW-w64 toolchain file above.
-No extra CMake dependency is fetched: `d3d11`/`dxgi`/`d3dcompiler` are all provided by the Windows
-SDK (MSVC) or MinGW-w64's own headers/import libraries (this dev machine's actual path — see
-`plans/plan_dx.md` `DX-1`).
+The default build fetches no extra dependency: `d3d11`/`dxgi`/`d3dcompiler` are all provided by the
+Windows SDK (MSVC) or MinGW-w64's own headers/import libraries (this dev machine's actual path — see
+`plans/plan_dx.md` `DX-1`). The compiled-effect opt-in additionally builds the MojoShader revision
+pinned by FNA3D.
 
 ## What this renderer is for (and isn't)
 
@@ -47,11 +52,16 @@ using modern C++23 internals" mandate more directly than routing through a third
 `IGraphicsRenderer` contract. Buffers, all core-XNA texture formats, render targets including
 MSAA/MRT, state objects, SpriteBatch/SpriteFont, all stock effects, models/content, runtime HLSL
 `ShaderEffect`, queries, presentation and deterministic device recovery are exercised through
-public `GraphicsDevice` fixtures with GPU readback. Renderer-internal cache/device invariants remain
-in the deliberately small smoke binary rather than standing in for public behavior.
+public `GraphicsDevice` fixtures with GPU readback. With the compiled-effect option enabled, the
+same public path also executes XNA/FNA `.fxb` reflection, passes, primitive/instanced/multi-stream
+draws, SpriteBatch, sampler state, and 2D/cube/volume sampling. Renderer-internal cache/device
+invariants remain in the deliberately small smoke binary rather than standing in for public
+behavior.
 
-**Measured state, 2026-09-09 (`plans/plan_dx.md` Phase DX17).** `ctest -L DIRECTX11` passes
-**266/266**, with no CTest skips, and `DirectX11_Smoke` passes **21/21** retained internal checks.
+**Measured state, 2026-09-09 (`plans/plan_dx.md` Phase DX17 and `plans/plan_fx.md` `FX-063`).** With
+`CNA_DIRECTX11_COMPILED_EFFECTS=ON`, `ctest -L DIRECTX11` passes **267/267**, with no CTest skips,
+the 18-test compiled-effect suite passes without a GoogleTest skip, and `DirectX11_Smoke` passes
+**21/21** retained internal checks.
 The shared registration inventory contains **265 declarations: 262 renderer-neutral fixtures, two
 reasoned D3D11-native exceptions and one D3D12-native exception**. The D3D11 label adds its smoke and
 DXVK gate to the applicable inventory. This result used the fixed `sharp-runtimenext` checkout,
@@ -146,11 +156,12 @@ vertex-stride inference, cbuffer `static_assert` layout checks already caught at
 - **The D3D11 debug-layer-missing fallback path (`DX-21`) is unexercised.** This dev machine's
   Wine+DXVK setup always satisfies `D3D11_CREATE_DEVICE_DEBUG`, so the
   `DXGI_ERROR_SDK_COMPONENT_MISSING` → retry-without-debug-layer branch has never actually run.
-- **Compiled XNA `Effect` bytecode is unsupported.** `SupportsCompiledEffects()` is false and
-  `CreateCompiledEffect()` returns null. The D3D11 implementation is owned by
-  `plans/plan_fx.md` `FX-063`; D3D12's counterpart is `FX-134`. `plans/plan_dx.md` `DX-248`
-  records this ownership boundary. Runtime-source `ShaderEffect` and every stock effect are
-  separate, working paths.
+- **Compiled XNA `Effect` bytecode is an opt-in.** With
+  `CNA_DIRECTX11_COMPILED_EFFECTS=ON`, `SupportsCompiledEffects()` is true and the complete
+  `FX-063` public-path suite passes. With it off, the renderer keeps the explicit unsupported
+  capability/refusal and does not build MojoShader. D3D12's separate implementation owner is
+  `plans/plan_fx.md` `FX-134`. Runtime-source `ShaderEffect` and every stock effect remain separate
+  working paths.
 - **`SetDataOptions` is implemented and differentially proven.** D3D11 maps `Discard` and
   `NoOverwrite` to the matching D3D11 map modes. The renderer-neutral 62-frame dynamic-buffer
   oracle passes all 187 checks on D3D11 and EasyGL and distinguishes all three options without

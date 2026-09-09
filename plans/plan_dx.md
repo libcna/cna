@@ -973,6 +973,14 @@
 > the verified MinGW/Wine+vkd3d-proton loop. Both renderer guides point to those owners. This plan
 > deliberately gains no compiled-effect implementation task and no modern `CNAEXT` graphics API.
 >
+> **Post-DX17 FX follow-up, 2026-09-09.** The separately owned `plans/plan_fx.md` `FX-063` is now
+> closed: D3D11 reports compiled effects true only with `CNA_DIRECTX11_COMPILED_EFFECTS=ON`, and its
+> 18 public-path tests pass without skips through MojoShader's D3D11 adapter. The complete opt-in
+> D3D11 label is **267/267**, including smoke **21/21**, on Wine+DXVK 2.6.0 and private invisible
+> headless Xwayland `:4`; no physical display. The option-off build still reports false and carries
+> no MojoShader runtime. D3D12 remains false and owned by `FX-134`. The `DX-242` parity inventory is
+> unchanged: this is a renderer-specific FX capability gate, not a new shared D3D fixture.
+>
 > **The 87-group percentages above have NOT been recomputed**, and should not be read as current.
 > Recomputing them means redoing `DX-200`'s audit against the tree as it now stands, which is its
 > own task; quoting a new number without that work would be exactly the kind of unbacked figure
@@ -2516,8 +2524,8 @@ not the modern engine layer:
 
 | Concern | Owner | State |
 |---|---|---|
-| Compiled XNA `Effect` (`.fx`/`.xnb`) on D3D11 | `plans/plan_fx.md` `FX-063` | Not implemented; needs a real Windows D3D11 device |
-| Compiled XNA `Effect` on D3D12 | `plans/plan_fx.md` §10.3 (assessed by `FX-067`) | Feasibility recorded, no task assigned |
+| Compiled XNA `Effect` (`.fx`/`.xnb`) on D3D11 | `plans/plan_fx.md` `FX-063` | DONE 2026-09-09 behind `CNA_DIRECTX11_COMPILED_EFFECTS`; 18/18 public-path tests and full D3D11 label 267/267 |
+| Compiled XNA `Effect` on D3D12 | `plans/plan_fx.md` `FX-134` | Open; executable MinGW/Wine+vkd3d-proton existence gate is next |
 | Multi-stream vertex input on D3D11/D3D12 | `REMED-GFX-207` → `plans/plan_postaudit.md` §5 | DONE 2026-09-09 by `DX-222` |
 | Declaration-driven input layouts (all seven stride-table renderers) | `plans/plan_postaudit.md` §4.4 option A | Deferred; `REMED-GFX-DECL-GUARD` is the interim boundary |
 | D3D12 windowed-test blocker | `REMED-BUILD-012` (remediation index) | HIGH, P1, NOT STARTED |
@@ -2625,7 +2633,7 @@ is a partial implementation are distinguished in the "gap" column.
 | P-K5 | Context/device loss and restore through the public API | ✅ | ✅ | Both expose the two-phase public lifecycle; 16 cycles preserve the same texture, buffers and target, while the original loaded-model fixture survives independently on each renderer | `DX-244` |
 | P-L1 | `SupportsCapability` truthfulness | ✅ | ✅ | `DX-211`: all 19 current values are exhaustively classified from implemented core behavior or their runtime-derived query; unimplemented modern paths and unknown future values report false | — |
 | P-L2 | `GraphicsAdapter` query hooks (profile, render-target format, back-buffer format, MSAA clamp) | ✅ | ✅ | `DX-245` queries real native format/MSAA support before device creation, reports the fixed Color/D24S8 back buffer, and behaviorally agrees with device reset and real render-target allocation; profile support deliberately retains the honest framework fallback | — |
-| P-L3 | Compiled XNA `Effect` (`.fx` bytecode) | ⬜ | ⬜ | `SupportsCompiledEffects()` false on both; implementation is owned by `plans/plan_fx.md` `FX-063` (D3D11) and `FX-134` (D3D12) | `plans/plan_fx.md` `FX-063`, `FX-134` |
+| P-L3 | Compiled XNA `Effect` (`.fx` bytecode) | ✅ | ⬜ | D3D11 passes `plans/plan_fx.md` `FX-063` behind its off-by-default opt-in; D3D12 remains false and is owned by `FX-134` | `plans/plan_fx.md` `FX-134` |
 | P-L4 | Surface-format validation and `GraphicsProfile` ceilings | 🟨 | 🟨 | Both `Defer` to the framework rule, which is defensible, but `easygl_surface_format_throws_test` runs on neither | `DX-230`, `DX-236` |
 | P-L5 | `ExecutesShaderEffectSourceEXT` truthfulness | ⬜ | ⬜ | Both compile and execute the caller's HLSL through `D3DCompile()` and both report `false` | `DX-212` |
 | P-M1 | D3D12 command allocator / command list lifetime and submission strategy | — | ✅ | `DX-237` gives each of two frame slots its own allocator/list, fence value, retained-resource set and mapped arenas; an independent immediate allocator/list owns explicit CPU-readback boundaries | — |

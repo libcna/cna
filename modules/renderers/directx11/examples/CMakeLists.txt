@@ -42,6 +42,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11")
     cna_register_renderer_test(NAME DirectX11_Smoke COMMAND ${_directx11_smoke_cmd}
         TIMEOUT 60 LABELS "DIRECTX11")
 
+    if(CNA_DIRECTX11_COMPILED_EFFECTS)
+        cna_directx11_ctest_command(_directx11_compiled_effects_cmd CnaRendererTests)
+        cna_register_renderer_test(NAME DirectX11_CompiledEffects
+            COMMAND ${_directx11_compiled_effects_cmd}
+                    --gtest_filter=DirectX11CompiledEffect*
+            TIMEOUT 300 LABELS "DIRECTX11;CompiledEffects")
+    endif()
+
     include(${CMAKE_SOURCE_DIR}/cmake/DirectXParityTests.cmake)
     cna_register_d3d_parity_tests()
 endif()

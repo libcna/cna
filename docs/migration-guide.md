@@ -84,13 +84,13 @@ Before the smaller caveats below — these two are the ones most likely to block
 - **`.xnb` is supported for the registered built-in readers**, including the general
   `EffectReader`. Reflective custom readers and some media/surface formats remain explicit gaps;
   consult `docs/xnb-content-pipeline-support.md` before assuming every asset type is portable.
-- **`Effect(GraphicsDevice&, byte[])` is implemented on FNA3D.** The input must be compiled
+- **`Effect(GraphicsDevice&, byte[])` is implemented on five renderer families.** The input must be compiled
   Direct3D 9 Effect Framework bytecode (`.fxb` or an XNB Effect payload), not HLSL `.fx` source and
   not MonoGame MGFX. Public parameters, techniques/passes, cloning, pass state, general 3D draws,
-  and `SpriteBatch` use the native FNA3D/MojoShader runtime. Other renderers currently report
-  `CompiledEffects == false`, so use FNA3D, SDL_GPU or the EasyGL/OpenGL family (the latter two
-  need `CNA_SDL_GPU_COMPILED_EFFECTS`/`CNA_EASYGL_COMPILED_EFFECTS` at configure time), or keep a
-  renderer-specific CNAEXT `ShaderEffect` path.
+  and `SpriteBatch` use the native MojoShader-backed runtime. Use FNA3D (always enabled), or enable
+  `CNA_SDL_GPU_COMPILED_EFFECTS`, `CNA_EASYGL_COMPILED_EFFECTS`,
+  `CNA_VULKAN_COMPILED_EFFECTS`, or `CNA_DIRECTX11_COMPILED_EFFECTS` for the matching renderer.
+  Otherwise keep a renderer-specific CNAEXT `ShaderEffect` path.
 
 ## What has caveats — read this before porting anything using these
 

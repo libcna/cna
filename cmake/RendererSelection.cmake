@@ -800,6 +800,15 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11")
     set(RENDERER_TARGET "cna_renderer_directx11")
     list(APPEND _cna_identity_defines CNA_RENDERER_DIRECTX11)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_DIRECTX11")
+    # plans/plan_fx.md FX-063: MojoShader ships a native D3D11 adapter, but remains an optional
+    # dependency for builds that do not execute compiled XNA Effect Framework bytecode.
+    option(CNA_DIRECTX11_COMPILED_EFFECTS
+           "Build DirectX 11 support for compiled XNA Effect bytecode (plans/plan_fx.md FX-063)" OFF)
+    if(CNA_DIRECTX11_COMPILED_EFFECTS)
+        include(cmake/ThirdPartyFNA3D.cmake)
+        cna_configure_mojoshader()
+        add_compile_definitions(CNA_DIRECTX11_COMPILED_EFFECTS)
+    endif()
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12")
     message(STATUS "CNA: Using DIRECTX12 graphics renderer")
     set(RENDERER_DIR "modules/renderers/directx12")

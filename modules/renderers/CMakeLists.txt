@@ -130,7 +130,7 @@ endif()
 
 # plans/plan_fx.md FX-061: the MojoShader-to-CNA translation shared by every backend that executes
 # compiled XNA effects. Entered only where cna_mojoshader was configured, which today means the
-# FNA3D renderer or an SDL_GPU build with -DCNA_SDL_GPU_COMPILED_EFFECTS=ON.
+# FNA3D renderer or an opt-in SDL_GPU, EasyGL, Vulkan, or DirectX 11 compiled-effect build.
 if(TARGET cna_mojoshader)
     add_subdirectory(common/mojoshader)
 endif()
