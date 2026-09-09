@@ -35,6 +35,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ArgumentException.hpp"
+#include "System/InvalidOperationException.hpp"
 
 using Microsoft::Xna::Framework::Graphics::GraphicsAdapter;
 using Microsoft::Xna::Framework::Color;
@@ -154,6 +155,41 @@ TEST(GraphicsProfileResourceCeilingTest, MrtPermitsDifferentFormatsWithTheSamePi
         device.SetRenderTargets({RenderTargetBinding(&color), RenderTargetBinding(&single)}));
     ASSERT_EQ(device.GetRenderTargets().size(), 2u);
     device.SetRenderTargets({});
+}
+
+TEST(GraphicsProfileResourceCeilingTest, RenderTarget2DMustBelongToTheReceivingDevice)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+    PresentationParameters parameters;
+    GraphicsDevice receiving(
+        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef, parameters);
+    GraphicsDevice owner(
+        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef, parameters);
+    RenderTarget2D local(receiving, 4, 4);
+    RenderTarget2D foreign(owner, 4, 4);
+    receiving.SetRenderTarget(&local);
+
+    EXPECT_THROW(receiving.SetRenderTarget(&foreign), System::InvalidOperationException);
+    ASSERT_EQ(receiving.GetRenderTargets().size(), 1u);
+    EXPECT_EQ(receiving.GetRenderTargets()[0].getRenderTargetProperty(), &local);
+    receiving.SetRenderTarget(nullptr);
+}
+
+TEST(GraphicsProfileResourceCeilingTest, RenderTargetCubeMustBelongToTheReceivingDevice)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+    PresentationParameters parameters;
+    GraphicsDevice receiving(
+        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef, parameters);
+    GraphicsDevice owner(
+        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef, parameters);
+    RenderTargetCube foreign(owner, 4, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                             RenderTargetUsage::DiscardContents);
+
+    EXPECT_THROW(
+        receiving.SetRenderTarget(&foreign, CubeMapFace::PositiveX),
+        System::InvalidOperationException);
+    EXPECT_TRUE(receiving.GetRenderTargets().empty());
 }
 
 TEST(GraphicsProfileResourceCeilingTest, Texture2DEnforcesTheSharedMaximumAspectRatio)

@@ -4422,6 +4422,12 @@ namespace Microsoft::Xna::Framework::Graphics
                     + " has a null render target.");
             if (texture->getIsDisposedProperty())
                 throw System::ObjectDisposedException(texture->getNameProperty());
+            // SOFTWARE-221: XNA resources are owned by one GraphicsDevice. Accepting a target
+            // created by another device can hand this renderer a backend object from another
+            // context and must be rejected before either public or renderer binding state changes.
+            if (texture->getGraphicsDeviceProperty() != this)
+                throw System::InvalidOperationException(
+                    "SetRenderTargets: the render target belongs to a different GraphicsDevice.");
 
             if (auto* rt2D = dynamic_cast<RenderTarget2D*>(texture))
             {
