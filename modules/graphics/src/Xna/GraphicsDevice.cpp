@@ -4368,6 +4368,23 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::SetRenderTargets(const std::vector<RenderTargetBinding>& renderTargets)
     {
         ThrowIfDisposed();
+
+        // SOFTWARE-222: Microsoft XNA returns immediately when the complete binding set is
+        // unchanged, comparing each target resource and selected cube face. This also makes an
+        // empty-to-empty call a no-op. Do this before validation or renderer work so repeated
+        // bindings do not resolve/discard content or reset application viewport/scissor state.
+        bool bindingsUnchanged = renderTargets.size() == currentRenderTargets_.size();
+        for (std::size_t i = 0; bindingsUnchanged && i < renderTargets.size(); ++i)
+        {
+            bindingsUnchanged =
+                renderTargets[i].getRenderTargetProperty()
+                    == currentRenderTargets_[i].getRenderTargetProperty()
+                && renderTargets[i].getCubeMapFaceProperty()
+                    == currentRenderTargets_[i].getCubeMapFaceProperty();
+        }
+        if (bindingsUnchanged)
+            return;
+
         if (renderTargets.size() > MAX_RENDERTARGET_BINDINGS)
             throw std::invalid_argument("SetRenderTargets: at most " +
                 std::to_string(MAX_RENDERTARGET_BINDINGS) + " render targets may be bound at once.");

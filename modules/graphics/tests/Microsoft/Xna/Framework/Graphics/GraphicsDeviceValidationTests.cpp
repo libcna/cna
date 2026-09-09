@@ -14,36 +14,44 @@ using namespace CNA::Testing::Renderers;
 
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
+#include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBufferBinding.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 using Microsoft::Xna::Framework::Color;
+using Microsoft::Xna::Framework::Rectangle;
+using Microsoft::Xna::Framework::Graphics::CubeMapFace;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::IndexBuffer;
 using Microsoft::Xna::Framework::Graphics::IndexElementSize;
 using Microsoft::Xna::Framework::Graphics::PrimitiveType;
 using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 using Microsoft::Xna::Framework::Graphics::RenderTargetBinding;
+using Microsoft::Xna::Framework::Graphics::RenderTargetCube;
 using Microsoft::Xna::Framework::Graphics::TextureCollection;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 using Microsoft::Xna::Framework::Graphics::VertexBuffer;
 using Microsoft::Xna::Framework::Graphics::VertexBufferBinding;
 using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
+using Microsoft::Xna::Framework::Graphics::Viewport;
 
 TEST(GraphicsDeviceLifecycleTest, RendererFacingOperationsRejectUseAfterDeviceDisposal)
 {
@@ -465,6 +473,65 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_Empty_DoesNotThrow)
 {
     GraphicsDevice gd;
     EXPECT_NO_THROW(gd.SetRenderTargets({}));
+}
+
+TEST(GraphicsDeviceValidationTest, IdenticalRenderTargetBindingsAreNoOps)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+    GraphicsDevice gd;
+    RenderTarget2D target(gd, 8, 8);
+    gd.SetRenderTarget(&target);
+
+    const Viewport targetViewport(1, 2, 3, 4);
+    const Rectangle targetScissor(2, 1, 4, 5);
+    gd.setViewportProperty(targetViewport);
+    gd.setScissorRectangleProperty(targetScissor);
+    gd.SetRenderTarget(&target);
+    EXPECT_EQ(gd.getViewportProperty().getXProperty(), 1);
+    EXPECT_EQ(gd.getViewportProperty().getYProperty(), 2);
+    EXPECT_EQ(gd.getViewportProperty().getWidthProperty(), 3);
+    EXPECT_EQ(gd.getViewportProperty().getHeightProperty(), 4);
+    EXPECT_EQ(gd.getScissorRectangleProperty(), targetScissor);
+
+    gd.SetRenderTarget(nullptr);
+    const Viewport backBufferViewport(2, 3, 4, 5);
+    const Rectangle backBufferScissor(3, 2, 5, 4);
+    gd.setViewportProperty(backBufferViewport);
+    gd.setScissorRectangleProperty(backBufferScissor);
+    gd.SetRenderTargets({});
+    EXPECT_EQ(gd.getViewportProperty().getXProperty(), 2);
+    EXPECT_EQ(gd.getViewportProperty().getYProperty(), 3);
+    EXPECT_EQ(gd.getViewportProperty().getWidthProperty(), 4);
+    EXPECT_EQ(gd.getViewportProperty().getHeightProperty(), 5);
+    EXPECT_EQ(gd.getScissorRectangleProperty(), backBufferScissor);
+}
+
+TEST(GraphicsDeviceValidationTest, CubeFaceParticipatesInRenderTargetBindingIdentity)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+    GraphicsDevice gd;
+    RenderTargetCube target(
+        gd, 8, false, Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color,
+        Microsoft::Xna::Framework::Graphics::DepthFormat::None, 0,
+        Microsoft::Xna::Framework::Graphics::RenderTargetUsage::PreserveContents);
+    gd.SetRenderTarget(&target, CubeMapFace::PositiveX);
+
+    const Viewport custom(1, 2, 3, 4);
+    gd.setViewportProperty(custom);
+    gd.SetRenderTarget(&target, CubeMapFace::PositiveX);
+    EXPECT_EQ(gd.getViewportProperty().getXProperty(), 1);
+    EXPECT_EQ(gd.getViewportProperty().getYProperty(), 2);
+    EXPECT_EQ(gd.getViewportProperty().getWidthProperty(), 3);
+    EXPECT_EQ(gd.getViewportProperty().getHeightProperty(), 4);
+
+    gd.SetRenderTarget(&target, CubeMapFace::NegativeX);
+    EXPECT_EQ(gd.getViewportProperty().getXProperty(), 0);
+    EXPECT_EQ(gd.getViewportProperty().getYProperty(), 0);
+    EXPECT_EQ(gd.getViewportProperty().getWidthProperty(), 8);
+    EXPECT_EQ(gd.getViewportProperty().getHeightProperty(), 8);
+    ASSERT_EQ(gd.GetRenderTargets().size(), 1u);
+    EXPECT_EQ(gd.GetRenderTargets()[0].getCubeMapFaceProperty(), CubeMapFace::NegativeX);
+    gd.SetRenderTargets({});
 }
 
 TEST(GraphicsDeviceValidationTest, SetRenderTargets_DefaultNullBindingThrows)
