@@ -115,6 +115,7 @@ namespace CNA::TestSupport
     using Microsoft::Xna::Framework::Graphics::EffectParameterType;
     using Microsoft::Xna::Framework::Graphics::FillMode;
     using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+    using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
     using Microsoft::Xna::Framework::Graphics::RasterizerState;
     using Microsoft::Xna::Framework::Graphics::SamplerState;
     using Microsoft::Xna::Framework::Graphics::CubeMapFace;
@@ -3035,6 +3036,8 @@ namespace CNA::TestSupport
      */
     inline void RunCompiledEffectContract(GraphicsDevice& device)
     {
+        ASSERT_EQ(device.getGraphicsProfileProperty(), GraphicsProfile::HiDef)
+            << "the render-state section deliberately exercises separate alpha blending";
         RunCompiledEffectFormatContract(device);
         RunCompiledEffectReflectionContract(device);
         RunCompiledEffectParameterApiContract(device);

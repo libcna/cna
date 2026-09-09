@@ -436,6 +436,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   layer rejects incompatible texture getters and non-texture setters with `InvalidCastException`,
   while generic `Texture` parameters accept every classic dimension. This is executable on
   compiled-capable EasyGL; Software continues to report that larger subsystem unsupported.
+- **Compiled-Effect conformance declares its HiDef prerequisite** (`SOFTWARE-265`) — its deliberate
+  separate-alpha state is not legal under Reach. All backend wrappers now select HiDef and the
+  shared helper guards that assumption, keeping the EasyGL reference evidence executable.
 - **The classic SpriteBatch/SpriteFont parity corpus executes on the CPU** (`SOFTWARE-138`).
   Eighteen renderer-independent scenes shared with EasyGL cover flips, rotation/origin, both scale
   overloads, source rectangles, layer sorting, transforms, render targets, viewports, scissor,

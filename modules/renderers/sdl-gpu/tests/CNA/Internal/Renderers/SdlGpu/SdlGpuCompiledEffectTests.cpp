@@ -727,7 +727,8 @@ TEST(SdlGpuCompiledEffectTest, SharedBackendConformanceContract)
     // techniques/passes, render state, state policy, samplers, texture binding, clone and
     // lifetime -- now through the public Effect/GraphicsDevice API, since SupportsCompiledEffects()
     // is true.
-    GraphicsDevice device;
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectContract(device);

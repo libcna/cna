@@ -727,7 +727,8 @@ TEST(Fna3dCompiledEffectDrawTest, SharedEffectSwitchingContract)
 
 TEST(Fna3dCompiledEffectTest, SharedBackendConformanceContract)
 {
-    GraphicsDevice device;
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectContract(device);
