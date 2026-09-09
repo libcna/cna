@@ -929,6 +929,15 @@ TEST(XnaFbxImporter, EveryFileAnswersTheGraphXnaAnswers)
           "fbx_uv_transparent_pair.fbx", "fbx_uv_transparent_no_texture.fbx",
           "fbx_uv_transparent_unnamed.fbx", "fbx_uv_transparent_alone.fbx",
           "fbx_uv_three_types.fbx", "fbx_uv_same_type_twice.fbx",
+          // FBX's pivot set is not something an XNA `Matrix` carries, so the conversion replaces a
+          // node's `Rpost^-1 . R . Rpre` with a single Euler triple decomposed from the *float*
+          // matrix -- which at a quarter turn cannot tell 90 from 90.0000839, because `sin` of
+          // both is `1.0f`. The node keeps its composed rotation and its children carry the
+          // difference. Five pairs: three with a visible residue, including the `PreRotation` on X
+          // against a rotation on Z that RobotGame's mechs have, and two negative controls whose
+          // composition stays a single-axis turn and whose children are their own
+          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-176`).
+          "fbx_pivot_residue.fbx",
           "fbx_two_materials.fbx"})
     {
         ImporterContext context;
@@ -981,6 +990,45 @@ TEST(XnaFbxImporter, AQuarterTurnIsComposedTheWayXnasIsAndNotInFloat)
     EXPECT_EQ(transform.M33, 1.555301383669155e-16f);
     // And not what a float `cos` answers, which is where this used to be.
     EXPECT_NE(transform.M22, 2.54f * std::cos(1.5707964f));
+}
+
+// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-176: the pivot residue stops at the node that
+// inherits it. `fbx_pivot_residue_chain.fbx` is two degenerate nodes and a child: the first
+// node's decomposition loses the 0.0000839 of its quarter turn, its child carries the difference,
+// and the *grandchild* does not -- even though its own parent's decomposition is just as lossy.
+// The genuine importer answers the child's cosine as twice the angle's own and the grandchild's
+// as the angle's own, which is a factor of two apart and far outside any tolerance.
+//
+// This file is not in the graph regression above because CNA does not reproduce its grandchild
+// bit for bit: four entries a quarter turn nearly zeroes come back as exact zeros here and as
+// ~1e-17 there, which is the composition's own residue rather than this rule's, and is recorded
+// in the row as what is left.
+TEST(XnaFbxImporter, ThePivotResidueStopsAtTheNodeThatInheritsIt)
+{
+    ImporterContext context;
+    Xna::FbxImporter importer;
+    const std::shared_ptr<Graphics::NodeContent> root =
+        importer.Import(Fixture("fbx_pivot_residue_chain.fbx").string(), context);
+    ASSERT_NE(root, nullptr);
+    ASSERT_EQ(root->getChildrenProperty().getCountProperty(), 1);
+    const std::shared_ptr<Graphics::NodeContent> child = root->getChildrenProperty()[0];
+    ASSERT_NE(child, nullptr);
+    ASSERT_EQ(child->getChildrenProperty().getCountProperty(), 1);
+    const std::shared_ptr<Graphics::NodeContent> grandchild = child->getChildrenProperty()[0];
+    ASSERT_NE(grandchild, nullptr);
+
+    // The two upper nodes declare `Lcl Rotation (0, 0, 90.0000839233398)` with
+    // `PreRotation (-90, 0, 0)`; the leaf declares `(0, 0, -90.0000839233398)`.
+    //
+    // The child carries the residue, and where it shows is the entry a quarter turn nearly
+    // zeroes: 2.1455817e-12 against the 6.123234e-17 the composition alone leaves, which is the
+    // value the genuine importer answers for this file.
+    EXPECT_EQ(child->getTransformProperty().M12, 2.1455817e-12f);
+    EXPECT_NE(child->getTransformProperty().M12, 6.123234e-17f);
+    // The grandchild does not, although its own parent's decomposition is just as lossy: it keeps
+    // the cosine of its own angle. A residue that chained would answer twice that.
+    EXPECT_EQ(grandchild->getTransformProperty().M11, -1.4647386e-06f);
+    EXPECT_NE(grandchild->getTransformProperty().M11, -2.9294772e-06f);
 }
 
 TEST(XnaFbxImporter, RefusalsMatchXna)

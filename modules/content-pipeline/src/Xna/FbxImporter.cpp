@@ -442,7 +442,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         }
 
         /**
-         * @brief One node's local transform: scaling, then `PreRotation`, then `Lcl Rotation`.
+         * @brief A 4x4 in double, row-vector convention, the way the genuine importer composes.
          *
          * `PreRotation` is part of FBX's own transform formula and every model an exporter writes
          * from a Z-up tool carries one: the public XNA sample corpus's `Cone.fbx`, `Handgun.FBX`
@@ -450,11 +450,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          * importer answers a basis of `[1 0 0][0 0 -1][0 1 0]` for exactly that. Leaving it out
          * gave every such model a near-identity transform and stood it on the wrong axis
          * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-113`).
-         *
-         * @param object The FBX object.
-         * @return The local transform.
          */
-        /** @brief A 4x4 in double, row-vector convention, the way the genuine importer composes. */
         using Rows = std::array<std::array<double, 4>, 4>;
 
         /** @brief The identity. */
@@ -605,15 +601,155 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         }
 
         /**
-         * @brief One node's local transform: the geometry's offset, then scaling, `PreRotation`,
-         *        `Lcl Rotation` and the translation, with the parent's geometric offset undone.
+         * @brief The rotation half of FBX's own formula: `Rpost^-1 . R . Rpre`, row-vector order.
+         *
+         * `PreRotation` and `PostRotation` count only where `RotationActive` is set, which is FBX's
+         * own rule and measurable (`XNASWEEP-146`).
+         *
+         * @param object The FBX object.
+         * @return The composed rotation, in double.
+         */
+        [[nodiscard]] Rows RotationRows(const Object& object)
+        {
+            const Triple post{-object.postRotation[0], -object.postRotation[1],
+                              -object.postRotation[2]};
+            return Multiply(
+                Multiply(object.rotationActive ? EulerRows(post) : IdentityRows(),
+                         EulerRows(object.rotation)),
+                object.rotationActive ? EulerRows(object.preRotation) : IdentityRows());
+        }
+
+        /** @brief The 3x3 basis narrowed to `float` and back, which is where the loss happens. */
+        [[nodiscard]] Rows NarrowBasis(const Rows& rows)
+        {
+            Rows narrowed = rows;
+            for (std::size_t row = 0; row < 3u; ++row)
+            {
+                for (std::size_t column = 0; column < 3u; ++column)
+                {
+                    narrowed[row][column] =
+                        static_cast<double>(static_cast<float>(rows[row][column]));
+                }
+            }
+            return narrowed;
+        }
+
+        /**
+         * @brief The rotation's Euler triple in degrees, XYZ order, row-vector convention.
+         *
+         * The matrix `Rx(x) . Ry(y) . Rz(z)` has `-sin(y)` at (1,3), so `y` comes out of an arcsine
+         * and the other two out of the row and column that arcsine leaves. When `cos(y)` is zero
+         * the two are not separable -- the matrix depends only on `x - z` for `y = +90` and on
+         * `x + z` for `y = -90` -- and the convention this reproduces puts all of it in `x`.
+         *
+         * @param rows The rotation.
+         * @return The triple, in degrees.
+         */
+        [[nodiscard]] Triple DecomposeEulerXYZ(const Rows& rows)
+        {
+            const double toDegrees = 57.29577951308232;
+            const double sineY = std::clamp(-rows[0][2], -1.0, 1.0);
+            const double y = std::asin(sineY);
+            const double cosineY = std::cos(y);
+            double x = 0.0;
+            double z = 0.0;
+            if (std::abs(cosineY) > 1e-12)
+            {
+                z = std::atan2(rows[0][1], rows[0][0]);
+                x = std::atan2(rows[1][2], rows[2][2]);
+            }
+            else if (sineY > 0.0)
+            {
+                x = std::atan2(rows[1][0], rows[1][1]);
+            }
+            else
+            {
+                x = std::atan2(-rows[1][0], rows[1][1]);
+            }
+            return Triple{x * toDegrees, y * toDegrees, z * toDegrees};
+        }
+
+        /** @brief What a rotation leaves behind when it is decomposed, and whether it does. */
+        struct PivotResidue
+        {
+            /** @brief `E . P^-1`: the decomposed rotation against the composed one. */
+            Rows compensation = IdentityRows();
+            /** @brief Whether the decomposition does not round-trip in `float`. */
+            bool lossy = false;
+        };
+
+        /**
+         * @brief What a rotation leaves behind when the pivots are converted away.
+         *
+         * FBX's pivot set is not something an XNA `Matrix` can carry, so the conversion replaces a
+         * node's `Rpost^-1 . R . Rpre` with a single Euler triple -- and the triple is decomposed
+         * from the *float* matrix, which at a quarter turn cannot tell 90 from 90.0000839: `sin`
+         * of both is `1.0f`. A node's own answered transform is the composition, exactly; what
+         * carries the difference is its children, each expressed against the *decomposition of the
+         * node's global rotation* rather than against the rotation itself -- so the child's own
+         * rotation is multiplied on the right by `E . G^-1`, and its translation is not turned by
+         * it. Because the child's global then carries that residue, the child's own decomposition
+         * is exact and nothing below it moves again: the residue appears once on each path, at the
+         * first node whose rotation does not decompose (plans/plan_xna_sample_xnb_sweep.md
+         * `XNASWEEP-176`).
+         *
+         * @param composed The rotation to decompose: a node's global rotation, in double.
+         * @return The residue and whether there is one.
+         */
+        [[nodiscard]] PivotResidue RotationResidue(const Rows& composed)
+        {
+            PivotResidue residue;
+            const Rows recomposed = EulerRows(DecomposeEulerXYZ(NarrowBasis(composed)));
+            const Rows narrowedComposed = NarrowBasis(composed);
+            const Rows narrowedRecomposed = NarrowBasis(recomposed);
+            for (std::size_t row = 0; row < 3u && !residue.lossy; ++row)
+            {
+                for (std::size_t column = 0; column < 3u; ++column)
+                {
+                    if (narrowedComposed[row][column] != narrowedRecomposed[row][column])
+                    {
+                        residue.lossy = true;
+                        break;
+                    }
+                }
+            }
+            if (!residue.lossy) { return residue; }
+            // Both sides narrowed, and the inverse taken as the transpose a rotation's inverse is.
+            // The narrowing is not decoration: the difference this carries is a *float* difference
+            // -- it is what `sin` rounding to `1.0f` produced -- and multiplying a float-derived
+            // `E` by a double `P` leaves 1-ulp residues in the entries a quarter turn nearly
+            // zeroes. Narrowing both takes eighteen more of the thirty-eight measured compensated
+            // nodes to bit-identical, the corpus's own shape among them
+            // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-176`).
+            Rows inverse = IdentityRows();
+            for (std::size_t row = 0; row < 3u; ++row)
+            {
+                for (std::size_t column = 0; column < 3u; ++column)
+                {
+                    inverse[row][column] = narrowedComposed[column][row];
+                }
+            }
+            residue.compensation = Multiply(narrowedRecomposed, inverse);
+            return residue;
+        }
+
+        /**
+         * @brief One node's local transform: the geometry's offset, then scaling, its rotation and
+         *        the translation, with the parent's geometric offset undone.
          *
          * `PreRotation` counts only where `RotationActive` is set, which is FBX's own rule and
          * measurable: `fbx_prerotation_units.fbx` sets it and the quarter turn is in XNA's answer,
          * `fbx_geometric_offset.fbx` does not and the same `PreRotation -90` is not
          * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-146`).
+         *
+         * @param object The FBX object.
+         * @param parentGeometricInverse The parent's geometric offset, to undo.
+         * @param rotations The node's own rotation with the parent's pivot residue already in it.
+         * @return The local transform.
          */
-        [[nodiscard]] Matrix LocalTransform(const Object& object, const Rows& parentGeometricInverse)
+        [[nodiscard]] Matrix LocalTransform(const Object& object,
+                                            const Rows& parentGeometricInverse,
+                                            const Rows& rotations)
         {
             // FBX's own transform formula, all ten terms of it. Written the way a row vector meets
             // them, which is the reverse of the order the SDK's documentation lists:
@@ -633,10 +769,11 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 {-object.rotationPivot[0], -object.rotationPivot[1], -object.rotationPivot[2]},
                 {-object.postRotation[0], -object.postRotation[1], -object.postRotation[2]},
                 {0.0, 0.0, 0.0}};
-            const Rows rotations = Multiply(
-                Multiply(object.rotationActive ? EulerRows(negate[2]) : IdentityRows(),
-                         EulerRows(object.rotation)),
-                object.rotationActive ? EulerRows(object.preRotation) : IdentityRows());
+            // `rotations` is `Rpost^-1 . R . Rpre` already multiplied by the parent's residue,
+            // which rides with this node's rotation and stops there: the translation is not turned
+            // by it, which is what a child carrying only a translation measures (`XNASWEEP-176`).
+            // No fixture separates this position from one after the rotation pivot, because a node
+            // that needs the residue has none.
             const Rows local = Multiply(
                 Multiply(Multiply(Multiply(TranslationRows(negate[0]),
                                            Multiply(ScaleRows(object.scaling),
@@ -1141,6 +1278,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         };
 
         const auto build = [&](const std::int64_t identity, const Rows& parentGeometricInverse,
+                               const Rows& parentGlobalRotation,
                                auto&& self) -> std::shared_ptr<NodeContent>
         {
             const Object& object = objects.at(identity);
@@ -1815,8 +1953,13 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 node = std::make_shared<NodeContent>();
             }
             node->setNameProperty(object.name);
-            node->setTransformProperty(LocalTransform(object, parentGeometricInverse));
+            // A node is expressed against the *decomposition* of its parent's global rotation; see
+            // `RotationResidue`. The scene root has none, so the top-level nodes are their own.
+            const Rows rotated =
+                Multiply(RotationRows(object), RotationResidue(parentGlobalRotation).compensation);
+            node->setTransformProperty(LocalTransform(object, parentGeometricInverse, rotated));
             const Rows geometricInverse = InverseGeometricRows(object);
+            const Rows globalRotation = Multiply(rotated, parentGlobalRotation);
             for (const std::int64_t child : object.children)
             {
                 if (objects.count(child) == 0 || objects.at(child).isGeometryData ||
@@ -1824,7 +1967,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 {
                     continue;
                 }
-                node->getChildrenProperty().Add(self(child, geometricInverse, self));
+                node->getChildrenProperty().Add(self(child, geometricInverse, globalRotation, self));
             }
             return node;
         };
@@ -1901,13 +2044,15 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         if (roots.size() == 1u && topLevel == 1u)
         {
             // One top-level model answers as the root itself, as the .x route's single frame does.
-            return PromoteSkeletonRoot(build(roots.front(), IdentityRows(), build), context);
+            return PromoteSkeletonRoot(
+                build(roots.front(), IdentityRows(), IdentityRows(), build), context);
         }
         auto root = std::make_shared<NodeContent>();
         root->setNameProperty("RootNode");
         for (const std::int64_t identity : roots)
         {
-            root->getChildrenProperty().Add(build(identity, IdentityRows(), build));
+            root->getChildrenProperty().Add(
+                build(identity, IdentityRows(), IdentityRows(), build));
         }
         return PromoteSkeletonRoot(root, context);
     }

@@ -190,6 +190,18 @@
    "thirdParty": false
   },
   {
+   "file": "fbx_pivot_residue.fbx",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_pivot_residue_fixture.py",
+   "thirdParty": false
+  },
+  {
+   "file": "fbx_pivot_residue_chain.fbx",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_pivot_residue_fixture.py",
+   "thirdParty": false
+  },
+  {
    "file": "fbx_pivots.fbx",
    "origin": "authored",
    "thirdParty": false
