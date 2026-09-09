@@ -31,7 +31,8 @@ consuming segment. `MOD-2251` extends that same tracked order across render-targ
 and sampled-image uses and removes the eager storage-sampling wait. `MOD-2253` folds off-screen
 producer passes, readback transitions and the requested copy into one submit/fence, replaces
 one-time queue-idle calls with submission fences and proves bounded modern-resource churn over
-2,048 frames. Remaining legal image bridges are owned by `MOD-2244`.
+2,048 frames. `MOD-2244` completes legal ordinary-texture/render-target image bridges, exact
+extended-format gating and compute-image producer closure within this same ordering model.
 
 ## Decision
 

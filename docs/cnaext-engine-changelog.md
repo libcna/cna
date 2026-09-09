@@ -14,6 +14,27 @@ something breaks.
 
 ---
 
+## Revision 11 — 2026-09-10
+
+### Complete Vulkan storage-image bridges (`MOD-2244`)
+
+- Vulkan now derives storage-image support from one exact CNA → Vulkan → SPIR-V format table.
+  Fifteen uncompressed formats are eligible; extended SPIR-V formats additionally require CNA to
+  enable `shaderStorageImageExtendedFormats`, and every allocation still intersects its complete
+  usage with device image-format properties. Unsupported channel semantics, compression, sRGB and
+  packed formats are refused rather than substituted.
+- An ordinary Vulkan `Texture2D` conditionally receives a mip-zero storage view when the immutable
+  sampled/transfer allocation legally supports storage. `ComputeShader::bindImage` validates the
+  reflected format/access contract and keeps later uploads, compute and ordinary sampling in one
+  deferred order. Eligible `RenderTarget2D` formats reuse their attachment image the same way.
+- Render-target readback dependency closure now traverses compute-image inputs as well as sampled
+  graphics inputs. The permanent oracle proves `A` render → compute copy to `B` → direct `B`
+  readback without an intervening `A.GetData()` or `Present()` on RADV and llvpipe.
+
+The C header carries the same engine-layer revision marker. The C ABI remains 0.26.0: no C
+declaration or layout changed, but existing capability/format queries can now report the completed
+device-qualified Vulkan paths.
+
 ## Revision 10 — 2026-09-10
 
 ### Vulkan GPU timing and structured debug integration (`MOD-2246`)
@@ -101,8 +122,8 @@ compatible constructor behavior; descriptor-specific C ABI additions remain sepa
   so disposal of the public wrapper cannot invalidate an accepted deferred operation.
 - Renderer interfaces refuse both bindings by default. Vulkan implements format-qualified
   `rgba8` storage images, descriptor reflection, upload/readback and compute-to-sampling visibility;
-  optional extended storage formats and legacy XNA texture/render-target bridges remain bounded by
-  `MOD-2244`.
+  optional extended storage formats and legacy XNA texture/render-target bridges were subsequently
+  completed by `MOD-2244` in revision 11.
 
 The C header's mirrored revision marker is also synchronized from its stale value 2 to 6; the
 existing compile-time assertion and pure-C runtime check keep the two public version reports equal.
@@ -122,8 +143,8 @@ existing compile-time assertion and pure-C runtime check keep the two public ver
   renderer-neutral record; native images, layouts and barriers remain hidden.
 
 Revision 5 published the portable allocation/transfer/lifetime contract. Revision 6 adds compute
-and sampled binding; broader Vulkan format support and legal XNA-resource bridges remain
-`MOD-2244`.
+and sampled binding; revision 11 completes broader Vulkan format support and legal XNA-resource
+bridges through `MOD-2244`.
 
 ## Revision 4 — 2026-09-09
 

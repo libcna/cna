@@ -6,7 +6,8 @@
 //    timer range are accepted into one ordinary presented frame and produce exact results.
 // C  A real swapchain resize preserves every resource identity and all paths remain usable.
 // D  Destroying buffers, images, render targets and their programs after enqueue but before
-//    Present leaves the internal records alive only until command recording consumes them.
+//    Present leaves the internal records alive only until command recording consumes them,
+//    including an ordinary Texture2D used through MOD-2244's legal storage-image bridge.
 // E  Destroying an unsubmitted timer removes its queued events without a global wait.
 // F  Explicit GraphicsDevice teardown releases and disconnects every externally retained record;
 //    those records can then be destroyed after the VkDevice without dereferencing their owner.
@@ -22,6 +23,7 @@
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
 #include <array>
 #include <cstdint>
@@ -39,6 +41,7 @@ using CNA::Internal::Renderers::Vulkan::VulkanRenderer;
 using CNA::Internal::Renderers::Vulkan::VulkanStorageBufferRenderer;
 using CNA::Internal::Renderers::Vulkan::VulkanStorageTexture2DRenderer;
 using CNA::Internal::Renderers::Vulkan::VulkanTexture2DArrayRenderer;
+using CNA::Internal::Renderers::Vulkan::VulkanTextureRenderer;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Game;
 using Microsoft::Xna::Framework::GameTime;
@@ -48,6 +51,7 @@ using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 using Microsoft::Xna::Framework::Graphics::RenderTargetUsage;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+using Microsoft::Xna::Framework::Graphics::Texture2D;
 
 namespace
 {
@@ -405,14 +409,37 @@ class VulkanModernResourceLifetimeTest final : public Game
         const bool targetConsumed =
             renderer_->GetLiveRenderTargetCountEXT() == targetsBefore;
 
+        auto ordinaryPublic = std::make_unique<Texture2D>(
+            device, 1, 1, false, SurfaceFormat::Color);
+        const std::array<std::uint8_t, 4> ordinaryBytes{1, 2, 3, 255};
+        ordinaryPublic->SetDataRGBA(ordinaryBytes.data(), 4);
+        auto ordinary = std::dynamic_pointer_cast<VulkanTextureRenderer>(
+            ordinaryPublic->GetRenderer().shared_from_this());
+        if (ordinary == nullptr || !ordinary->IsStorageImageCapableEXT())
+            throw std::runtime_error("the ordinary texture storage-image bridge was unavailable");
+        std::weak_ptr<VulkanTextureRenderer> ordinaryWeak = ordinary;
+        imageNative_->Bind();
+        imageNative_->BindImageTexture(
+            0, ordinary.get(), static_cast<int>(CNA::GraphicsImageAccess::WriteOnly));
+        imageNative_->DispatchEXT(1, 1, 1);
+        imageNative_->BindImageTexture(
+            0, bridge_.get(), static_cast<int>(CNA::GraphicsImageAccess::WriteOnly));
+        ordinaryPublic.reset();
+        ordinary.reset();
+        const bool ordinaryRetained = !ordinaryWeak.expired();
+        device.Present();
+        const bool ordinaryConsumed = ordinaryWeak.expired();
+
         Check(buffersRetained && buffersConsumed && imageRetained && imageConsumed &&
-                  targetRetained && targetConsumed,
+                  targetRetained && targetConsumed && ordinaryRetained && ordinaryConsumed,
               "D pre-present destruction retains records exactly through command recording",
               "buffers=" + std::to_string(buffersRetained) + "/" +
                   std::to_string(buffersConsumed) + " images=" +
                   std::to_string(imageRetained) + "/" + std::to_string(imageConsumed) +
                   " targets=" + std::to_string(targetRetained) + "/" +
-                  std::to_string(targetConsumed));
+                  std::to_string(targetConsumed) + " texture=" +
+                  std::to_string(ordinaryRetained) + "/" +
+                  std::to_string(ordinaryConsumed));
 
         const std::size_t timersBefore = renderer_->GetLiveGpuTimerCountEXT();
         auto abandonedTimer = renderer_->CreateGpuTimerEXT();

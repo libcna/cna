@@ -183,11 +183,12 @@ are still zero; those are classification gaps, not permission to assume unlimite
 - EasyGL and OpenGL4 still populate only the older texture-storage, render-target and color-transfer
   facts. EasyGL reports nine texture-storage formats and eight render-target formats. OpenGL4
   reports only `Color` for texture storage and render targets.
-- Vulkan reports storage-image read/write support only for its implemented, format-qualified
-  `Color`/SPIR-V `Rgba8` path; storage atomics and every extended storage-image format remain
-  unsupported. Vulkan also publishes its implemented sampled texture-array layer limit. EasyGL
-  and OpenGL4 still report no storage-image or texture-array path; their portability work and the
-  remaining Vulkan formats/bridges belong to `MOD-2244` and `MOD-2261`.
+- Vulkan reports storage-image read/write support for fifteen exact format-qualified paths. The
+  five baseline SPIR-V formats need no optional feature; the other ten require the enabled
+  `shaderStorageImageExtendedFormats` guarantee as well as the per-format/complete-usage query.
+  Storage atomics remain unsupported. Vulkan also publishes its implemented sampled texture-array
+  layer limit. EasyGL and OpenGL4 still report no storage-image or texture-array path; their
+  portability work belongs to `MOD-2261`.
 
 ## Per-task reconciliation
 
@@ -228,7 +229,7 @@ tree, not about native API potential.
 | MOD-2241 | Supplied | Vulkan implements the existing compute/storage-buffer baseline. |
 | MOD-2242 | Supplied | Vulkan reflects bounded SSBO/push-constant bindings and reuses descriptors. |
 | MOD-2243 | Supplied | Vulkan allocation, full-array views, subresource transfers, sampled descriptors and retirement pass both the functional oracle and an independent 27-format × 5-usage raw-device/factory/lifetime matrix on RADV and llvmpipe. |
-| MOD-2244 | Partial | Vulkan has the dedicated format-qualified `rgba8` storage image and the zero-copy storage-capable `Color` `RenderTarget2D` bridge. Optional extended formats and an ordinary-`Texture2D` bridge where allocation permits it remain open; `MOD-2252` supplies the lifetime matrix. |
+| MOD-2244 | Supplied | Vulkan has fifteen exactly mapped/query-qualified dedicated storage-image formats, conditionally storage-capable ordinary `Texture2D` allocations, and zero-copy bridges for exact eligible `RenderTarget2D` formats. Reflected format/access validation, deferred uploads, sampled transitions, cross-target compute/readback closure and the `MOD-2252` lifetime matrix cover the complete path. |
 | MOD-2245 | Supplied | Vulkan gates on enabled `drawIndirectFirstInstance`, executes both canonical commands without CPU readback, preserves every geometry/instance offset, retains deferred argument lifetime and inserts the automatic indirect-read dependency. The six-leg oracle passes on RADV and llvmpipe. |
 | MOD-2246 | Supplied | Vulkan recycles two-slot timestamp pools, converts with the selected device period, polls without blocking and integrates optional debug-utils labels/messages with one logger copy. The eight-leg native oracle passes on RADV and llvmpipe. |
 | MOD-2247 | Supplied | Immutable compute, buffer-copy and image-upload records share the existing XNA ordering/segment domain; routine dispatch/copy add no separate submission or wait. |

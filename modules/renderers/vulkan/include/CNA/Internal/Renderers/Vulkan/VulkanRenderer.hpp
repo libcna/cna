@@ -283,6 +283,9 @@ namespace CNA::Internal::Renderers::Vulkan
 
     class VulkanTextureRenderer : public ITextureRenderer, public IVulkanSamplable
     {
+        friend class VulkanRenderer;
+        friend class VulkanComputeShaderRenderer;
+
     public:
         explicit VulkanTextureRenderer(const ImageData& data, VulkanRenderer* owner);
         ~VulkanTextureRenderer() override;
@@ -324,6 +327,39 @@ namespace CNA::Internal::Renderers::Vulkan
          */
         [[nodiscard]] VkFormat GetVkFormatEXT() const noexcept { return vkFormat_; }
 
+        /** @brief Returns the exact usage mask passed to the native image allocation. */
+        [[nodiscard]] VkImageUsageFlags GetVkImageUsageEXT() const noexcept
+        {
+            return imageUsage_;
+        }
+
+        /** @brief Returns the native image handle, or null after renderer teardown. */
+        [[nodiscard]] VkImage GetVkImageEXT() const noexcept { return image_; }
+
+        /** @brief Returns whether mip zero has a legal storage-image allocation and view. */
+        [[nodiscard]] bool IsStorageImageCapableEXT() const noexcept
+        {
+            return storageImageView_ != VK_NULL_HANDLE;
+        }
+
+        /** @brief Returns the mip-zero view used by compute storage-image descriptors. */
+        [[nodiscard]] VkImageView GetStorageImageViewEXT() const noexcept
+        {
+            return storageImageView_;
+        }
+
+        /** @brief Returns whether this texture was allocated by the supplied renderer. */
+        [[nodiscard]] bool IsOwnedByEXT(const VulkanRenderer* owner) const noexcept
+        {
+            return owner_ == owner;
+        }
+
+        /** @brief Records the exact prior-use to compute dependency for mip zero. */
+        void PrepareForComputeEXT(VkCommandBuffer commandBuffer, int accessMode);
+
+        /** @brief Records a sampled-read transition for every mip without submitting. */
+        void PrepareForSamplingEXT(VkCommandBuffer commandBuffer);
+
     private:
         // Task 925: transitions exactly ONE mip level's layout -- the shared
         // VulkanRenderer::TransitionImageLayout always barriers level 0 regardless of
@@ -345,6 +381,10 @@ namespace CNA::Internal::Renderers::Vulkan
         VkImage             image_         = VK_NULL_HANDLE;
         VkDeviceMemory      memory_        = VK_NULL_HANDLE;
         VkImageView         imageView_     = VK_NULL_HANDLE;
+        VkImageView         storageImageView_ = VK_NULL_HANDLE;
+        VkImageUsageFlags   imageUsage_    = 0;
+        mutable std::vector<VulkanResourceUsageState> mipUsageStates_;
+        bool participatesInModernOrder_ = false;
         VkDescriptorSet     descriptorSet_ = VK_NULL_HANDLE;
         /// plan_vulkan.md VULKAN-181: see VulkanRenderTargetRenderer's twin -- the set no longer
         /// always comes from `owner_->descriptorPool_`, so it must be freed from its own pool.
@@ -1720,6 +1760,8 @@ namespace CNA::Internal::Renderers::Vulkan
             storageImages_;
         std::unordered_map<uint32_t, std::shared_ptr<VulkanRenderTargetRenderer>>
             renderTargetImages_;
+        std::unordered_map<uint32_t, std::shared_ptr<VulkanTextureRenderer>>
+            textureImages_;
         std::unordered_map<std::string, ScalarSlot> scalarSlots_;
         std::vector<uint8_t> pushConstantBytes_;
         std::string compileError_;
@@ -2573,6 +2615,44 @@ namespace CNA::Internal::Renderers::Vulkan
          */
         CNAEXT [[nodiscard]] static bool MapSurfaceFormatToVkFormatEXT(
             int surfaceFormatOrdinal, VkFormat& out) noexcept;
+
+        /**
+         * @brief Maps one exact Vulkan storage-image format to its SPIR-V Image Format value.
+         *
+         * The mapping follows Vulkan's SPIR-V image-format compatibility table. A successful
+         * mapping alone does not advertise support; callers must still require the native storage
+         * feature and the complete image-usage combination from the selected physical device.
+         *
+         * @param format Vulkan image-view format.
+         * @param imageFormat Receives the SPIR-V Image Format enumerant.
+         * @return True when SPIR-V can name the native representation exactly.
+         */
+        CNAEXT [[nodiscard]] static bool MapVkFormatToSpirvStorageImageFormatEXT(
+            VkFormat format, std::uint32_t& imageFormat) noexcept;
+
+        /**
+         * @brief Reports whether a SPIR-V storage image format needs the extended-format feature.
+         *
+         * @param imageFormat SPIR-V Image Format enumerant.
+         * @return True unless the format is one of Vulkan's five baseline storage formats.
+         */
+        CNAEXT [[nodiscard]] static bool StorageImageFormatRequiresExtendedFeatureEXT(
+            std::uint32_t imageFormat) noexcept;
+
+        /**
+         * @brief Maps a public format to an exact uncompressed storage-image representation.
+         *
+         * Unlike @ref MapSurfaceFormatToStorageEXT, this is the dedicated storage-image table and
+         * is not limited by the ordinary XNA `Texture2D` allocation path.
+         *
+         * @param surfaceFormatOrdinal The public `SurfaceFormat` ordinal.
+         * @param out Receives the exact Vulkan storage and byte width.
+         * @param imageFormat Receives the matching SPIR-V Image Format enumerant.
+         * @return True when the public format has an exact format-qualified storage-image form.
+         */
+        CNAEXT [[nodiscard]] static bool MapStorageImageFormatToStorageEXT(
+            int surfaceFormatOrdinal, VulkanSurfaceFormatStorageEXT& out,
+            std::uint32_t& imageFormat) noexcept;
 
         /**
          * @brief Maps a faithfully implemented RenderTarget2D format to native storage.
@@ -5150,6 +5230,7 @@ namespace CNA::Internal::Renderers::Vulkan
             struct StorageImageUse {
                 std::shared_ptr<VulkanStorageTexture2DRenderer> image;
                 std::shared_ptr<VulkanRenderTargetRenderer> renderTarget;
+                std::shared_ptr<VulkanTextureRenderer> texture;
                 int accessMode = 2;
             };
             std::vector<StorageImageUse> storageImages;
@@ -5161,6 +5242,7 @@ namespace CNA::Internal::Renderers::Vulkan
             VkDeviceSize byteSize = 0;
 
             std::shared_ptr<VulkanStorageTexture2DRenderer> uploadImage;
+            std::shared_ptr<VulkanTextureRenderer> uploadTexture;
             VkBuffer uploadStagingBuffer = VK_NULL_HANDLE;
             VkBufferImageCopy uploadRegion{};
         };
@@ -5826,7 +5908,8 @@ namespace CNA::Internal::Renderers::Vulkan
         //
         // `flushSegments` is the exact set of bind cycles this record must replay, computed by
         // FlushDeferredRenderTarget as the transitive closure of "the target being read, plus every
-        // render target its cycles sample, plus theirs". Replay is in ascending segment id, i.e.
+        // render target its cycles sample or an included compute command binds, plus theirs".
+        // Replay is in ascending segment id, i.e.
         // exactly the public order Present would have used. Nothing is over-synchronized: no wait,
         // no submit per target switch, no readback and no extra barrier are introduced, because each
         // render target's render pass already ends in SHADER_READ_ONLY_OPTIMAL with a
@@ -5853,6 +5936,7 @@ namespace CNA::Internal::Renderers::Vulkan
             std::uint64_t segment = 0;
             std::shared_ptr<VulkanStorageTexture2DRenderer> storage;
             std::shared_ptr<VulkanRenderTargetRenderer> renderTarget;
+            std::shared_ptr<VulkanTextureRenderer> texture;
         };
         std::vector<PendingSampledImageUseEXT> pendingSampledImages_;
         // REMED-GFX-194 test diagnostics: exact pending proxy cycles and public attachment slots

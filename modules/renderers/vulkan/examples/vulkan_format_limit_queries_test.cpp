@@ -11,6 +11,9 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#ifdef CNA_CNAEXT
+#include "CNA/Graphics/StorageTexture2D.hpp"
+#endif
 
 #include <algorithm>
 #include <array>
@@ -27,6 +30,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 using CNA::Internal::Renderers::RendererFormatVerdict;
 using CNA::Internal::Renderers::Vulkan::VulkanRenderer;
 using CNA::Internal::Renderers::Vulkan::VulkanRenderTargetRenderer;
+using CNA::Internal::Renderers::Vulkan::VulkanStorageTexture2DRenderer;
 
 namespace
 {
@@ -34,37 +38,38 @@ namespace
     {
         SurfaceFormat surface;
         VkFormat vulkan;
+        std::uint32_t spirvStorageImageFormat;
         const char* name;
     };
 
     constexpr std::array<FormatCase, 27> kFormats{{
-        {SurfaceFormat::Color, VK_FORMAT_R8G8B8A8_UNORM, "Color"},
-        {SurfaceFormat::Bgr565, VK_FORMAT_R5G6B5_UNORM_PACK16, "Bgr565"},
-        {SurfaceFormat::Bgra5551, VK_FORMAT_A1R5G5B5_UNORM_PACK16, "Bgra5551"},
-        {SurfaceFormat::Bgra4444, VK_FORMAT_A4R4G4B4_UNORM_PACK16, "Bgra4444"},
-        {SurfaceFormat::Dxt1, VK_FORMAT_BC1_RGBA_UNORM_BLOCK, "Dxt1"},
-        {SurfaceFormat::Dxt3, VK_FORMAT_BC2_UNORM_BLOCK, "Dxt3"},
-        {SurfaceFormat::Dxt5, VK_FORMAT_BC3_UNORM_BLOCK, "Dxt5"},
-        {SurfaceFormat::NormalizedByte2, VK_FORMAT_R8G8_SNORM, "NormalizedByte2"},
-        {SurfaceFormat::NormalizedByte4, VK_FORMAT_R8G8B8A8_SNORM, "NormalizedByte4"},
-        {SurfaceFormat::Rgba1010102, VK_FORMAT_A2B10G10R10_UNORM_PACK32, "Rgba1010102"},
-        {SurfaceFormat::Rg32, VK_FORMAT_R16G16_UNORM, "Rg32"},
-        {SurfaceFormat::Rgba64, VK_FORMAT_R16G16B16A16_UNORM, "Rgba64"},
-        {SurfaceFormat::Alpha8, VK_FORMAT_R8_UNORM, "Alpha8"},
-        {SurfaceFormat::Single, VK_FORMAT_R32_SFLOAT, "Single"},
-        {SurfaceFormat::Vector2, VK_FORMAT_R32G32_SFLOAT, "Vector2"},
-        {SurfaceFormat::Vector4, VK_FORMAT_R32G32B32A32_SFLOAT, "Vector4"},
-        {SurfaceFormat::HalfSingle, VK_FORMAT_R16_SFLOAT, "HalfSingle"},
-        {SurfaceFormat::HalfVector2, VK_FORMAT_R16G16_SFLOAT, "HalfVector2"},
-        {SurfaceFormat::HalfVector4, VK_FORMAT_R16G16B16A16_SFLOAT, "HalfVector4"},
-        {SurfaceFormat::HdrBlendable, VK_FORMAT_R16G16B16A16_SFLOAT, "HdrBlendable"},
-        {SurfaceFormat::ColorBgraEXT, VK_FORMAT_B8G8R8A8_UNORM, "ColorBgraEXT"},
-        {SurfaceFormat::ColorSrgbEXT, VK_FORMAT_R8G8B8A8_SRGB, "ColorSrgbEXT"},
-        {SurfaceFormat::Dxt5SrgbEXT, VK_FORMAT_BC3_SRGB_BLOCK, "Dxt5SrgbEXT"},
-        {SurfaceFormat::Bc7EXT, VK_FORMAT_BC7_UNORM_BLOCK, "Bc7EXT"},
-        {SurfaceFormat::Bc7SrgbEXT, VK_FORMAT_BC7_SRGB_BLOCK, "Bc7SrgbEXT"},
-        {SurfaceFormat::ByteEXT, VK_FORMAT_R8_UNORM, "ByteEXT"},
-        {SurfaceFormat::UShortEXT, VK_FORMAT_R16_UNORM, "UShortEXT"},
+        {SurfaceFormat::Color, VK_FORMAT_R8G8B8A8_UNORM, 4, "Color"},
+        {SurfaceFormat::Bgr565, VK_FORMAT_R5G6B5_UNORM_PACK16, 0, "Bgr565"},
+        {SurfaceFormat::Bgra5551, VK_FORMAT_A1R5G5B5_UNORM_PACK16, 0, "Bgra5551"},
+        {SurfaceFormat::Bgra4444, VK_FORMAT_A4R4G4B4_UNORM_PACK16, 0, "Bgra4444"},
+        {SurfaceFormat::Dxt1, VK_FORMAT_BC1_RGBA_UNORM_BLOCK, 0, "Dxt1"},
+        {SurfaceFormat::Dxt3, VK_FORMAT_BC2_UNORM_BLOCK, 0, "Dxt3"},
+        {SurfaceFormat::Dxt5, VK_FORMAT_BC3_UNORM_BLOCK, 0, "Dxt5"},
+        {SurfaceFormat::NormalizedByte2, VK_FORMAT_R8G8_SNORM, 18, "NormalizedByte2"},
+        {SurfaceFormat::NormalizedByte4, VK_FORMAT_R8G8B8A8_SNORM, 5, "NormalizedByte4"},
+        {SurfaceFormat::Rgba1010102, VK_FORMAT_A2B10G10R10_UNORM_PACK32, 11, "Rgba1010102"},
+        {SurfaceFormat::Rg32, VK_FORMAT_R16G16_UNORM, 12, "Rg32"},
+        {SurfaceFormat::Rgba64, VK_FORMAT_R16G16B16A16_UNORM, 10, "Rgba64"},
+        {SurfaceFormat::Alpha8, VK_FORMAT_R8_UNORM, 15, "Alpha8"},
+        {SurfaceFormat::Single, VK_FORMAT_R32_SFLOAT, 3, "Single"},
+        {SurfaceFormat::Vector2, VK_FORMAT_R32G32_SFLOAT, 6, "Vector2"},
+        {SurfaceFormat::Vector4, VK_FORMAT_R32G32B32A32_SFLOAT, 1, "Vector4"},
+        {SurfaceFormat::HalfSingle, VK_FORMAT_R16_SFLOAT, 9, "HalfSingle"},
+        {SurfaceFormat::HalfVector2, VK_FORMAT_R16G16_SFLOAT, 7, "HalfVector2"},
+        {SurfaceFormat::HalfVector4, VK_FORMAT_R16G16B16A16_SFLOAT, 2, "HalfVector4"},
+        {SurfaceFormat::HdrBlendable, VK_FORMAT_R16G16B16A16_SFLOAT, 2, "HdrBlendable"},
+        {SurfaceFormat::ColorBgraEXT, VK_FORMAT_B8G8R8A8_UNORM, 0, "ColorBgraEXT"},
+        {SurfaceFormat::ColorSrgbEXT, VK_FORMAT_R8G8B8A8_SRGB, 0, "ColorSrgbEXT"},
+        {SurfaceFormat::Dxt5SrgbEXT, VK_FORMAT_BC3_SRGB_BLOCK, 0, "Dxt5SrgbEXT"},
+        {SurfaceFormat::Bc7EXT, VK_FORMAT_BC7_UNORM_BLOCK, 0, "Bc7EXT"},
+        {SurfaceFormat::Bc7SrgbEXT, VK_FORMAT_BC7_SRGB_BLOCK, 0, "Bc7SrgbEXT"},
+        {SurfaceFormat::ByteEXT, VK_FORMAT_R8_UNORM, 15, "ByteEXT"},
+        {SurfaceFormat::UShortEXT, VK_FORMAT_R16_UNORM, 14, "UShortEXT"},
     }};
 
     constexpr std::uint32_t Bit(const CNA::RendererFormatUsage usage)
@@ -112,12 +117,6 @@ namespace
         return 0;
     }
 
-    constexpr bool HasStorageImageSpirvFormat(const SurfaceFormat format)
-    {
-        // Rgba8 needs no optional storage-image-format feature. Extended formats stay outside
-        // this implemented path until their feature is enabled and verified by MOD-2244.
-        return format == SurfaceFormat::Color;
-    }
 }
 
 class VulkanFormatLimitQueriesTest final : public Game
@@ -155,8 +154,12 @@ protected:
         for (const auto& format : kFormats)
         {
             VkFormat mapped = VK_FORMAT_UNDEFINED;
+            std::uint32_t spirvMapped = 0;
             if (!VulkanRenderer::MapSurfaceFormatToVkFormatEXT(
-                    static_cast<int>(format.surface), mapped) || mapped != format.vulkan)
+                    static_cast<int>(format.surface), mapped) || mapped != format.vulkan ||
+                VulkanRenderer::MapVkFormatToSpirvStorageImageFormatEXT(
+                    mapped, spirvMapped) != (format.spirvStorageImageFormat != 0) ||
+                spirvMapped != format.spirvStorageImageFormat)
             {
                 mappingsExact = false;
                 if (firstMappingError.empty())
@@ -205,13 +208,43 @@ protected:
             const bool expectedStorage = allocationMapped && nativeTexture &&
                 (properties.optimalTilingFeatures & requiredTextureFeatures) ==
                     requiredTextureFeatures;
+            VulkanRenderer::VulkanSurfaceFormatStorageEXT storageImageStorage{};
+            std::uint32_t storageImageSpirvFormat = 0;
+            const bool storageImageMapped =
+                VulkanRenderer::MapStorageImageFormatToStorageEXT(
+                    ordinal, storageImageStorage, storageImageSpirvFormat) &&
+                storageImageStorage.format == format.vulkan;
             VkImageFormatProperties storageImageProperties{};
-            const bool expectedStorageImage = expectedStorage && storage.blockExtent == 1 &&
-                HasStorageImageSpirvFormat(format.surface) &&
+            const bool expectedStorageImage = storageImageMapped &&
+                (!VulkanRenderer::StorageImageFormatRequiresExtendedFeatureEXT(
+                     storageImageSpirvFormat) ||
+                 renderer->GetEnabledDeviceFeaturesEXT()
+                         .shaderStorageImageExtendedFormats == VK_TRUE) &&
                 (properties.optimalTilingFeatures & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) != 0 &&
                 vkGetPhysicalDeviceImageFormatProperties(
                     physical, format.vulkan, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
                     VK_IMAGE_USAGE_STORAGE_BIT, 0, &storageImageProperties) == VK_SUCCESS;
+            VkImageFormatProperties storageSampledProperties{};
+            const bool expectedStorageSampled = expectedStorageImage &&
+                (properties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) != 0 &&
+                vkGetPhysicalDeviceImageFormatProperties(
+                    physical, format.vulkan, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
+                    VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 0,
+                    &storageSampledProperties) == VK_SUCCESS;
+            VkImageFormatProperties storageTransferSourceProperties{};
+            const bool expectedStorageTransferSource = expectedStorageImage &&
+                (properties.optimalTilingFeatures & VK_FORMAT_FEATURE_TRANSFER_SRC_BIT) != 0 &&
+                vkGetPhysicalDeviceImageFormatProperties(
+                    physical, format.vulkan, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
+                    VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, 0,
+                    &storageTransferSourceProperties) == VK_SUCCESS;
+            VkImageFormatProperties storageTransferDestinationProperties{};
+            const bool expectedStorageTransferDestination = expectedStorageImage &&
+                (properties.optimalTilingFeatures & VK_FORMAT_FEATURE_TRANSFER_DST_BIT) != 0 &&
+                vkGetPhysicalDeviceImageFormatProperties(
+                    physical, format.vulkan, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
+                    VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, 0,
+                    &storageTransferDestinationProperties) == VK_SUCCESS;
             const bool expectedRenderTarget =
                 renderer->ClassifyRenderTargetFormatEXT(ordinal) ==
                     RendererFormatVerdict::Supported;
@@ -234,6 +267,7 @@ protected:
                     physical, format.vulkan, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
                     transferSourceUsage, 0, &transferSourceProperties) == VK_SUCCESS;
             const bool expectedTransferSource = nativeTextureTransferSource ||
+                expectedStorageTransferSource ||
                 (expectedRenderTarget &&
                  (renderTargetProperties.optimalTilingFeatures &
                   VK_FORMAT_FEATURE_TRANSFER_SRC_BIT) != 0);
@@ -255,12 +289,12 @@ protected:
                    VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT)) ==
                      (VK_FORMAT_FEATURE_BLIT_SRC_BIT | VK_FORMAT_FEATURE_BLIT_DST_BIT |
                       VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT));
-            const bool expectedSampled = expectedStorage ||
+            const bool expectedSampled = expectedStorage || expectedStorageSampled ||
                 (expectedRenderTarget &&
                  (renderTargetProperties.optimalTilingFeatures &
                   VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) != 0);
             const bool expectedFilter =
-                (expectedStorage &&
+                ((expectedStorage || expectedStorageSampled) &&
                  (properties.optimalTilingFeatures &
                   VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) != 0) ||
                 (expectedRenderTarget &&
@@ -283,7 +317,8 @@ protected:
 
             const bool oneExact = support.knownUsages == kAllUsageBits &&
                 (support.supportedUsages & ~support.knownUsages) == 0 &&
-                support.Supports(CNA::RendererFormatUsage::TextureStorage) == expectedStorage &&
+                support.Supports(CNA::RendererFormatUsage::TextureStorage) ==
+                    (expectedStorage || expectedStorageImage) &&
                 support.Supports(CNA::RendererFormatUsage::Sampled) == expectedSampled &&
                 support.Supports(CNA::RendererFormatUsage::Filterable) == expectedFilter &&
                 support.Supports(CNA::RendererFormatUsage::RenderTarget) == expectedRenderTarget &&
@@ -296,7 +331,7 @@ protected:
                 support.Supports(CNA::RendererFormatUsage::TransferSource) ==
                     expectedTransferSource &&
                 support.Supports(CNA::RendererFormatUsage::TransferDestination) ==
-                    expectedStorage &&
+                    (expectedStorage || expectedStorageTransferDestination) &&
                 support.Supports(CNA::RendererFormatUsage::Mipmapped) == expectedMips &&
                 support.Supports(CNA::RendererFormatUsage::Multisample) ==
                     nativeMultisample &&
@@ -323,6 +358,72 @@ protected:
               "D storage-image support is advertised only for an exact CNA/SPIR-V path");
         Check(bcNeedsEnabledFeature,
               "E compressed storage is never advertised without the enabled BC feature");
+        Check(renderer->GetEnabledDeviceFeaturesEXT().shaderStorageImageExtendedFormats ==
+                  renderer->GetSupportedDeviceFeaturesEXT().shaderStorageImageExtendedFormats,
+              "E1 storage-image extended-format guarantee is enabled exactly when supported");
+
+#ifdef CNA_CNAEXT
+        bool storageConstructorsAgree = true;
+        int storageCreated = 0;
+        int storageRefused = 0;
+        std::string firstStorageConstructionError;
+        using CNA::Graphics::StorageTexture2D;
+        using CNA::Graphics::StorageTexture2DDescriptor;
+        using CNA::Graphics::StorageTexture2DUsage;
+        constexpr auto storageUsage =
+            StorageTexture2DUsage::StorageRead | StorageTexture2DUsage::StorageWrite;
+        for (const auto& format : kFormats)
+        {
+            const auto support = device.GetRendererSurfaceFormatSupportEXT(format.surface);
+            const bool advertised =
+                support.Supports(CNA::RendererFormatUsage::StorageRead) &&
+                support.Supports(CNA::RendererFormatUsage::StorageWrite);
+            bool publicCreated = false;
+            try
+            {
+                auto texture = std::make_unique<StorageTexture2D>(
+                    device, StorageTexture2DDescriptor(
+                        3, 2, 1, format.surface, storageUsage));
+                publicCreated = true;
+            }
+            catch (const std::exception& error)
+            {
+                if (advertised && firstStorageConstructionError.empty())
+                    firstStorageConstructionError =
+                        std::string(format.name) + " public: " + error.what();
+            }
+            std::unique_ptr<CNA::Internal::Renderers::IStorageTexture2DRenderer> native;
+            try
+            {
+                native = renderer->CreateStorageTexture2DEXT(
+                    3, 2, 1, static_cast<int>(format.surface), UINT32_C(3));
+            }
+            catch (const std::exception& error)
+            {
+                if (advertised && firstStorageConstructionError.empty())
+                    firstStorageConstructionError =
+                        std::string(format.name) + " native: " + error.what();
+            }
+            const auto* concrete =
+                dynamic_cast<const VulkanStorageTexture2DRenderer*>(native.get());
+            const bool nativeExact = concrete != nullptr &&
+                concrete->GetVkFormatEXT() == format.vulkan &&
+                concrete->GetVkImageEXT() != VK_NULL_HANDLE;
+            const bool oneAgrees = advertised
+                ? publicCreated && nativeExact
+                : !publicCreated && native == nullptr;
+            if (!oneAgrees && firstStorageConstructionError.empty())
+                firstStorageConstructionError = format.name;
+            storageConstructorsAgree = storageConstructorsAgree && oneAgrees;
+            if (publicCreated) ++storageCreated; else ++storageRefused;
+        }
+        Check(storageConstructorsAgree && storageCreated > 1 && storageRefused > 0,
+              "E2 every advertised storage-image format constructs with exact native identity",
+              firstStorageConstructionError.empty()
+                  ? std::to_string(storageCreated) + " created, " +
+                        std::to_string(storageRefused) + " refused"
+                  : firstStorageConstructionError);
+#endif
 
         // MOD-2224: query truth is only useful if the matching public constructor behaves the
         // same way. Exercise every format at a deliberately odd size so the test also catches

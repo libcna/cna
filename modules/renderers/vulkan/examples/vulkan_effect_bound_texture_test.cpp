@@ -41,10 +41,21 @@
 //   O  Repeated sampling of the same image layout emits no redundant Vulkan image barrier.
 //   P  Storage-image upload/compute/upload enqueue without a routine queue/device-wide wait.
 //   Q  One requested readback submits that exact order once and observes the final upload.
-//   R  MOD-2251: a Color RenderTarget2D is a legal compute image, while an ordinary Texture2D is
-//      refused because its native allocation has no storage usage.
+//   R  MOD-2244: a Color Texture2D whose combined allocation supports storage is written by
+//      compute and then sampled normally, without an eager submit or a second image.
 //   S  A render-target clear feeds a compute imageLoad, the compute imageStore feeds an ordinary
-//      SpriteBatch sample, and the two exact tracked barriers occur without an eager submit/wait.
+//      SpriteBatch sample; two compute/sample and two readback transitions are tracked without an
+//      eager submit/wait.
+//   T  MOD-2244: both core Rgba8Snorm and capability-declaring Rg8Snorm storage shaders execute
+//      against exact native images and return their signed-normalized bytes.
+//   U  Texture2D::SetData after image use stays in the same deferred order and overwrites the
+//      preceding compute write before a later ordinary sample.
+//   V  An ordinary texture without an exact storage representation refuses by capability, while
+//      a storage-capable texture with the wrong SPIR-V format refuses the format mismatch.
+//   W  An extended-format Rgba64 RenderTarget2D is written in-place by compute and direct
+//      readback observes the exact normalized 16-bit channels.
+//   X  Reading a compute destination also flushes an earlier, different render target that the
+//      dispatch reads; no accidental source GetData or Present is needed to order the dependency.
 //
 // Exit code 0 = all PASS, 1 = any FAIL.
 
@@ -77,6 +88,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdlib>
 #include <cstdint>
 #include <cstdio>
 #include <exception>
@@ -87,6 +99,7 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
+using CNA::Internal::Renderers::Vulkan::VulkanRenderTargetRenderer;
 using CNA::Internal::Renderers::Vulkan::VulkanRenderer;
 
 // ---------------------------------------------------------------------------
@@ -321,6 +334,74 @@ std::string ReadWriteStorageImageSpirV()
         {0x00040063, 0x00000013, 0x00000011, 0x00000015});
     return {reinterpret_cast<const char*>(words.data()), words.size() * sizeof(words[0])};
 }
+
+std::string StorageImageWriteSpirV(
+    const std::uint32_t imageFormat, const bool needsExtendedCapability)
+{
+    std::vector<std::uint32_t> words(
+        std::begin(kStorageImageWriteSpv), std::end(kStorageImageWriteSpv));
+    bool patchedFormat = false;
+    for (std::size_t i = 0; i + 8 < words.size(); ++i)
+    {
+        if (words[i] == 0x00090019 && words[i + 8] == 4)
+        {
+            words[i + 8] = imageFormat;
+            patchedFormat = true;
+            break;
+        }
+    }
+    if (!patchedFormat)
+        throw std::runtime_error("the embedded storage-image format contract drifted");
+    if (needsExtendedCapability)
+    {
+        const std::array<std::uint32_t, 2> capability{
+            0x00020011, 49}; // OpCapability StorageImageExtendedFormats
+        words.insert(words.begin() + 7, capability.begin(), capability.end());
+    }
+    return {reinterpret_cast<const char*>(words.data()), words.size() * sizeof(words[0])};
+}
+
+std::string CrossTargetStorageCopySpirV()
+{
+    // layout(binding=0,rgba8) readonly image2D sourceImage;
+    // layout(binding=1,rgba8) writeonly image2D destinationImage;
+    // imageStore(destinationImage, ivec2(0), imageLoad(sourceImage, ivec2(0)));
+    static constexpr std::uint32_t words[] = {
+        0x07230203, 0x00010000, 0x00000000, 0x00000013, 0x00000000,
+        0x00020011, 0x00000001,
+        0x0003000e, 0x00000000, 0x00000001,
+        0x0005000f, 0x00000005, 0x0000000b, 0x6e69616d, 0x00000000,
+        0x00060010, 0x0000000b, 0x00000011, 0x00000001, 0x00000001, 0x00000001,
+        0x00030047, 0x00000009, 0x00000018,
+        0x00040047, 0x00000009, 0x00000021, 0x00000000,
+        0x00040047, 0x00000009, 0x00000022, 0x00000000,
+        0x00030047, 0x0000000a, 0x00000019,
+        0x00040047, 0x0000000a, 0x00000021, 0x00000001,
+        0x00040047, 0x0000000a, 0x00000022, 0x00000000,
+        0x00020013, 0x00000001,
+        0x00030021, 0x00000002, 0x00000001,
+        0x00030016, 0x00000003, 0x00000020,
+        0x00040017, 0x00000004, 0x00000003, 0x00000004,
+        0x00040015, 0x00000005, 0x00000020, 0x00000001,
+        0x00040017, 0x00000006, 0x00000005, 0x00000002,
+        0x00090019, 0x00000007, 0x00000003, 0x00000001, 0x00000000,
+                    0x00000000, 0x00000000, 0x00000002, 0x00000004,
+        0x00040020, 0x00000008, 0x00000000, 0x00000007,
+        0x0004003b, 0x00000008, 0x00000009, 0x00000000,
+        0x0004003b, 0x00000008, 0x0000000a, 0x00000000,
+        0x0004002b, 0x00000005, 0x0000000d, 0x00000000,
+        0x0005002c, 0x00000006, 0x0000000e, 0x0000000d, 0x0000000d,
+        0x00050036, 0x00000001, 0x0000000b, 0x00000000, 0x00000002,
+        0x000200f8, 0x0000000f,
+        0x0004003d, 0x00000007, 0x00000010, 0x00000009,
+        0x00050062, 0x00000004, 0x00000011, 0x00000010, 0x0000000e,
+        0x0004003d, 0x00000007, 0x00000012, 0x0000000a,
+        0x00040063, 0x00000012, 0x0000000e, 0x00000011,
+        0x000100fd,
+        0x00010038,
+    };
+    return {reinterpret_cast<const char*>(words), sizeof(words)};
+}
 #endif
 }  // namespace
 
@@ -438,13 +519,74 @@ protected:
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
             ComputeShader imageProgram(dev, ReadWriteStorageImageSpirV());
-            bool ordinaryRefused = false;
-            try {
+            auto ordinaryBridge = std::make_unique<Texture2D>(
+                dev, 1, 1, false, SurfaceFormat::Color);
+            const std::array<std::uint8_t, 4> ordinaryInitial{32, 64, 192, 255};
+            ordinaryBridge->SetDataRGBA(ordinaryInitial.data(), 4);
+            auto* ordinaryNative = dynamic_cast<
+                CNA::Internal::Renderers::Vulkan::VulkanTextureRenderer*>(
+                    &ordinaryBridge->GetRenderer());
+            imageProgram.bindImage(
+                0, *ordinaryBridge, CNA::GraphicsImageAccess::ReadWrite);
+            const std::uint64_t ordinaryOneTimeBefore =
+                Renderer().GetOneTimeCommandCountEXT();
+            const std::uint64_t ordinaryDeviceWaitBefore =
+                Renderer().GetDeviceWaitIdleCountEXT();
+            const std::uint64_t ordinaryBarriersBefore =
+                Renderer().GetLogicalResourceBarrierCountEXT();
+            imageProgram.dispatch(1);
+            const Color ordinaryResult = DrawOrdinary(dev, *ordinaryBridge);
+            const std::uint64_t ordinaryBarrierDelta =
+                Renderer().GetLogicalResourceBarrierCountEXT() - ordinaryBarriersBefore;
+            check(ordinaryNative != nullptr &&
+                      ordinaryNative->IsStorageImageCapableEXT() &&
+                      (ordinaryNative->GetVkImageUsageEXT() & VK_IMAGE_USAGE_STORAGE_BIT) != 0 &&
+                      Is(ordinaryResult, Color(192, 32, 64, 255)) &&
+                      ordinaryBarrierDelta == 4 &&
+                      Renderer().GetOneTimeCommandCountEXT() == ordinaryOneTimeBefore + 1 &&
+                      Renderer().GetDeviceWaitIdleCountEXT() == ordinaryDeviceWaitBefore,
+                  "R ordinary Color Texture2D compute bridge writes then samples in order: " +
+                      Text(ordinaryResult) + " barriers=" +
+                      std::to_string(ordinaryBarrierDelta));
+
+            const std::array<std::uint8_t, 4> overwrite{7, 89, 203, 255};
+            const std::uint64_t orderedOneTimeBefore =
+                Renderer().GetOneTimeCommandCountEXT();
+            imageProgram.dispatch(1);
+            ordinaryBridge->SetDataRGBA(overwrite.data(), 4);
+            const bool orderedQueuedWithoutWait =
+                Renderer().GetOneTimeCommandCountEXT() == orderedOneTimeBefore;
+            const Color overwriteResult = DrawOrdinary(dev, *ordinaryBridge);
+            check(orderedQueuedWithoutWait &&
+                      Is(overwriteResult, Color(7, 89, 203, 255)),
+                  "U ordinary Texture2D compute -> SetData -> sample order is exact: " +
+                      Text(overwriteResult));
+
+            bool packedRefused = false;
+            bool formatMismatchRefused = false;
+            Texture2D packed(dev, 1, 1, false, SurfaceFormat::Bgr565);
+            Texture2D snorm(dev, 1, 1, false, SurfaceFormat::NormalizedByte4);
+            try
+            {
                 imageProgram.bindImage(
-                    0, *white, CNA::GraphicsImageAccess::ReadWrite);
-            } catch (const System::NotSupportedException&) {
-                ordinaryRefused = true;
+                    0, packed, CNA::GraphicsImageAccess::ReadWrite);
             }
+            catch (const System::NotSupportedException&)
+            {
+                packedRefused = true;
+            }
+            try
+            {
+                imageProgram.bindImage(
+                    0, snorm, CNA::GraphicsImageAccess::ReadWrite);
+            }
+            catch (const std::invalid_argument&)
+            {
+                formatMismatchRefused = true;
+            }
+            check(packedRefused && formatMismatchRefused,
+                  "V unsupported and SPIR-V-format-mismatched Texture2D bridges refuse exactly");
+
             imageProgram.bindImage(
                 0, bridge, CNA::GraphicsImageAccess::ReadWrite);
             const std::uint64_t oneTimeBefore = Renderer().GetOneTimeCommandCountEXT();
@@ -458,11 +600,8 @@ protected:
             const Color bridged = DrawOrdinary(dev, bridge);
             const std::uint64_t barrierDelta =
                 Renderer().GetLogicalResourceBarrierCountEXT() - barriersBefore;
-            check(imageProgram.isImageBindingSupported() && ordinaryRefused,
-                  "R Color RenderTarget2D has the compute-image bridge and ordinary Texture2D "
-                  "is refused");
-            check(Is(bridged, Color(192, 32, 64, 255)) && barrierDelta == 2 &&
-                      queuedWithoutWait,
+            check(Is(bridged, Color(192, 32, 64, 255)) && barrierDelta == 4 &&
+                      queuedWithoutWait && imageProgram.isImageBindingSupported(),
                   "S render-target write -> compute read/write -> sampled render is ordered: " +
                       Text(bridged) + " barriers=" + std::to_string(barrierDelta));
         }
@@ -520,9 +659,10 @@ protected:
             check(sparseSlotRefused && mismatchedAccessRefused,
                   "M reflected storage-image slot and access qualifier are enforced");
             check(Is(drawnAgain, expected) &&
-                      barriersAfterSecondSample == barriersAfterFirstSample &&
+                      barriersAfterSecondSample == barriersAfterFirstSample + 2 &&
                       elisionsAfterSecondSample > elisionsBeforeSecondSample,
-                  "O repeated sampled-image use elides a redundant Vulkan barrier: " +
+                  "O repeated sampled-image use elides its redundant Vulkan barrier while "
+                  "the fresh readback target records only its two required barriers: " +
                       Text(drawnAgain) + " barriers=" +
                       std::to_string(barriersAfterFirstSample) + "->" +
                       std::to_string(barriersAfterSecondSample) + " elisions=" +
@@ -567,6 +707,94 @@ protected:
             check(Is(cleared, kWhite),
                   "N clearing a sampled storage texture restores the dimensional white filler: " +
                       Text(cleared));
+        }
+
+        {
+            using CNA::Graphics::ComputeShader;
+            using CNA::Graphics::StorageTexture2D;
+            using CNA::Graphics::StorageTexture2DDescriptor;
+            using CNA::Graphics::StorageTexture2DUsage;
+            constexpr auto usage = StorageTexture2DUsage::StorageWrite |
+                                   StorageTexture2DUsage::TransferSource;
+            const auto writeAndRead = [&](const SurfaceFormat format,
+                                          const std::uint32_t spirvFormat,
+                                          const bool extended,
+                                          const std::vector<int>& expected)
+            {
+                const auto support = dev.GetRendererSurfaceFormatSupportEXT(format);
+                if (!support.Supports(CNA::RendererFormatUsage::StorageWrite) ||
+                    !support.Supports(CNA::RendererFormatUsage::TransferSource))
+                    return false;
+                StorageTexture2D texture(
+                    dev, StorageTexture2DDescriptor(1, 1, 1, format, usage));
+                ComputeShader writer(dev, StorageImageWriteSpirV(spirvFormat, extended));
+                writer.bindStorageTexture(
+                    0, texture, CNA::GraphicsImageAccess::WriteOnly);
+                writer.dispatch(1);
+                std::vector<std::uint8_t> bytes(expected.size());
+                texture.getData(0, nullptr, bytes.data(), bytes.size());
+                for (std::size_t i = 0; i < bytes.size(); ++i)
+                {
+                    const int actual = static_cast<int>(static_cast<std::int8_t>(bytes[i]));
+                    if (std::abs(actual - expected[i]) > 1) return false;
+                }
+                return true;
+            };
+            const bool coreSnorm = writeAndRead(
+                SurfaceFormat::NormalizedByte4, 5, false, {32, 64, 95, 127});
+            const bool extendedSnorm = writeAndRead(
+                SurfaceFormat::NormalizedByte2, 18, true, {32, 64});
+            check(coreSnorm && extendedSnorm,
+                  "T core and StorageImageExtendedFormats SNORM images execute and read back");
+        }
+
+        {
+            using CNA::Graphics::ComputeShader;
+            RenderTarget2D wide(
+                dev, 1, 1, false, SurfaceFormat::Rgba64, DepthFormat::None, 0,
+                RenderTargetUsage::DiscardContents);
+            dev.SetRenderTarget(&wide);
+            dev.Clear(Color::Black);
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            ComputeShader writer(dev, StorageImageWriteSpirV(10, true));
+            writer.bindImage(0, wide, CNA::GraphicsImageAccess::WriteOnly);
+            writer.dispatch(1);
+            std::array<std::uint16_t, 4> channels{};
+            auto* wideNative = dynamic_cast<VulkanRenderTargetRenderer*>(&wide.GetRenderer());
+            const bool readBack = wideNative != nullptr &&
+                                  wideNative->GetData(
+                                      0, 0, 0, 1, 1, channels.data(), sizeof(channels));
+            const auto near = [](const std::uint16_t actual, const std::uint16_t expected)
+            {
+                return actual >= expected - 1 && actual <= expected + 1;
+            };
+            check(readBack && near(channels[0], 16384) && near(channels[1], 32768) &&
+                      near(channels[2], 49151) && channels[3] == 65535,
+                  "W extended Rgba64 RenderTarget2D compute bridge reads exact UNORM16 bytes");
+        }
+
+        {
+            using CNA::Graphics::ComputeShader;
+            RenderTarget2D source(
+                dev, 1, 1, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                RenderTargetUsage::DiscardContents);
+            RenderTarget2D destination(
+                dev, 1, 1, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                RenderTargetUsage::DiscardContents);
+            const Color expected(23, 101, 211, 255);
+            dev.SetRenderTarget(&source);
+            dev.Clear(expected);
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+            ComputeShader copy(dev, CrossTargetStorageCopySpirV());
+            copy.bindImage(0, source, CNA::GraphicsImageAccess::ReadOnly);
+            copy.bindImage(1, destination, CNA::GraphicsImageAccess::WriteOnly);
+            copy.dispatch(1);
+            std::array<Color, 1> copied{};
+            destination.GetData(copied.data(), 0, 1);
+            check(Is(copied[0], expected),
+                  "X destination readback closes cross-target graphics -> compute dependency: " +
+                      Text(copied[0]));
         }
 #endif
 

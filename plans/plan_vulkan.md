@@ -230,10 +230,10 @@ implementation tasks.**
   independent raw-device and teardown/retirement audit are complete (`MOD-2243`, 11/11 on both
   RADV and llvmpipe with validation). Bindless resources and VRS remain outside;
 - the renderer-neutral storage-texture facade and its compute/sampled binding are complete
-  (`MOD-2227`/`MOD-2228`). Vulkan has a device-queried, format-qualified `Color`/`Rgba8` path with
-  exact compute-write → readback/sampled-draw evidence; optional extended formats, legal bridges
-  from existing XNA textures/render targets and deferred-order integration remain owned by
-  `MOD-2244`/`MOD-2247`–`MOD-2253` in the modern plan;
+  (`MOD-2227`/`MOD-2228`). Vulkan's fifteen exact device/feature-qualified storage formats,
+  conditional ordinary-`Texture2D` bridge, eligible zero-copy `RenderTarget2D` bridges and
+  cross-target compute/readback closure are complete in `MOD-2244`; the common deferred-order,
+  dependency and lifetime foundation is complete in `MOD-2247`–`MOD-2253` in the modern plan;
 - the renderer-neutral immutable storage-buffer descriptor, exact range transfers/copy and tracked
   facade are complete (`MOD-2229`). Vulkan translates every declared role into exact
   `VkBufferUsageFlags`, keeps CPU-none buffers device-local and unmapped, and has byte-exact

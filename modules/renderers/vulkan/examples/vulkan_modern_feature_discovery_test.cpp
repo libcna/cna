@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // plans/plan_modern.md MOD-2240: the selected device is discovered through Vulkan's extensible
 // feature/property queries, and native support is kept distinct from what CNA enables and claims.
+// MOD-2244 consumes and enables the extended storage-image format guarantee.
 
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
@@ -58,7 +59,7 @@ namespace
         CNA_VK_FEATURE(fragmentStoresAndAtomics, false),
         CNA_VK_FEATURE(shaderTessellationAndGeometryPointSize, false),
         CNA_VK_FEATURE(shaderImageGatherExtended, false),
-        CNA_VK_FEATURE(shaderStorageImageExtendedFormats, false),
+        CNA_VK_FEATURE(shaderStorageImageExtendedFormats, true),
         CNA_VK_FEATURE(shaderStorageImageMultisample, false),
         CNA_VK_FEATURE(shaderStorageImageReadWithoutFormat, false),
         CNA_VK_FEATURE(shaderStorageImageWriteWithoutFormat, false),

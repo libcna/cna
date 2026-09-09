@@ -480,7 +480,32 @@ namespace CNA::Internal::Renderers::Vulkan
         imgInfo.arrayLayers   = 1;
         imgInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
         imgInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
-        imgInfo.usage         = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        imageUsage_ = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        std::uint32_t spirvImageFormat = 0;
+        VulkanRenderer::VulkanSurfaceFormatStorageEXT storageImageFormat{};
+        if (VulkanRenderer::MapStorageImageFormatToStorageEXT(
+                surfaceFormat_, storageImageFormat, spirvImageFormat) &&
+            storageImageFormat.format == vkFormat_ &&
+            (!VulkanRenderer::StorageImageFormatRequiresExtendedFeatureEXT(
+                 spirvImageFormat) ||
+             owner_->enabledDeviceFeatures_.shaderStorageImageExtendedFormats == VK_TRUE))
+        {
+            VkFormatProperties formatProperties{};
+            vkGetPhysicalDeviceFormatProperties(
+                owner_->physicalDevice_, vkFormat_, &formatProperties);
+            VkImageFormatProperties imageProperties{};
+            const VkImageUsageFlags candidateUsage = imageUsage_ | VK_IMAGE_USAGE_STORAGE_BIT;
+            if ((formatProperties.optimalTilingFeatures &
+                 VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) != 0 &&
+                vkGetPhysicalDeviceImageFormatProperties(
+                    owner_->physicalDevice_, vkFormat_, VK_IMAGE_TYPE_2D,
+                    VK_IMAGE_TILING_OPTIMAL, candidateUsage, 0,
+                    &imageProperties) == VK_SUCCESS)
+            {
+                imageUsage_ = candidateUsage;
+            }
+        }
+        imgInfo.usage         = imageUsage_;
         imgInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
         imgInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         if (vkCreateImage(dev, &imgInfo, nullptr, &image_) != VK_SUCCESS)
@@ -551,6 +576,12 @@ namespace CNA::Internal::Renderers::Vulkan
             owner_->EndOneTimeCommands(initCb);
         }
 
+        mipUsageStates_.assign(
+            static_cast<std::size_t>(levelCount_),
+            VulkanResourceUsageState{
+                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, true, false});
+
         // --- VkImageView ---
         VkImageViewCreateInfo viewInfo{};
         viewInfo.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -564,6 +595,20 @@ namespace CNA::Internal::Renderers::Vulkan
         viewInfo.subresourceRange.layerCount     = 1;
         if (vkCreateImageView(dev, &viewInfo, nullptr, &imageView_) != VK_SUCCESS)
             throw std::runtime_error("vkCreateImageView (texture) failed");
+        if ((imageUsage_ & VK_IMAGE_USAGE_STORAGE_BIT) != 0)
+        {
+            viewInfo.subresourceRange.levelCount = 1;
+            if (vkCreateImageView(dev, &viewInfo, nullptr, &storageImageView_) != VK_SUCCESS)
+            {
+                vkDestroyImageView(dev, imageView_, nullptr);
+                vkDestroyImage(dev, image_, nullptr);
+                vkFreeMemory(dev, memory_, nullptr);
+                imageView_ = VK_NULL_HANDLE;
+                image_ = VK_NULL_HANDLE;
+                memory_ = VK_NULL_HANDLE;
+                throw std::runtime_error("vkCreateImageView (texture storage bridge) failed");
+            }
+        }
 
         // --- Descriptor set ---
         // plan_vulkan.md VULKAN-181: through AllocateTexSamplerDescSetEXT, which chains a further
@@ -612,9 +657,38 @@ namespace CNA::Internal::Renderers::Vulkan
             descriptorSet_ = VK_NULL_HANDLE; descriptorPool_ = VK_NULL_HANDLE;
         }
         if (imageView_     != VK_NULL_HANDLE) { r.imageViews.push_back(imageView_);         imageView_     = VK_NULL_HANDLE; }
+        if (storageImageView_ != VK_NULL_HANDLE) {
+            r.imageViews.push_back(storageImageView_);
+            storageImageView_ = VK_NULL_HANDLE;
+        }
         if (image_         != VK_NULL_HANDLE) { r.images.push_back(image_);                  image_         = VK_NULL_HANDLE; }
         if (memory_        != VK_NULL_HANDLE) { r.memories.push_back(memory_);               memory_        = VK_NULL_HANDLE; }
         owner_->RetireResources(std::move(r));
+    }
+
+    void VulkanTextureRenderer::PrepareForComputeEXT(
+        const VkCommandBuffer commandBuffer, const int accessMode)
+    {
+        if (!IsStorageImageCapableEXT())
+            throw std::logic_error("Vulkan texture has no storage-image bridge");
+        const VulkanResourceIntent intent = accessMode == 0
+            ? VulkanResourceIntent::ShaderRead
+            : (accessMode == 1 ? VulkanResourceIntent::ShaderWrite
+                               : VulkanResourceIntent::ShaderReadWrite);
+        owner_->RecordImageUsageEXT(
+            commandBuffer, image_, mipUsageStates_,
+            static_cast<std::uint32_t>(levelCount_), VK_IMAGE_ASPECT_COLOR_BIT,
+            0, 1, 0, 1, intent);
+    }
+
+    void VulkanTextureRenderer::PrepareForSamplingEXT(
+        const VkCommandBuffer commandBuffer)
+    {
+        owner_->RecordImageUsageEXT(
+            commandBuffer, image_, mipUsageStates_,
+            static_cast<std::uint32_t>(levelCount_), VK_IMAGE_ASPECT_COLOR_BIT,
+            0, static_cast<std::uint32_t>(levelCount_), 0, 1,
+            VulkanResourceIntent::SampledRead);
     }
 
     void VulkanTextureRenderer::UpdatePixels(const uint8_t* rgba, int stride)
@@ -654,24 +728,45 @@ namespace CNA::Internal::Renderers::Vulkan
         }
         vkUnmapMemory(dev, stagingMem);
 
-        // plan_vulkan.md VULKAN-401: barrier, copy, barrier in ONE command buffer. These three
-        // used to be three separate one-time submissions, so an upload cost three full
-        // vkQueueWaitIdle calls where the Vulkan idiom pays one -- measured by VULKAN-396 at
-        // 40.5% of an upload workload's wall clock. Ordering within the buffer is what the
-        // barriers are for, so batching them changes nothing but the number of waits.
+        if (!participatesInModernOrder_)
         {
             VkCommandBuffer cb = owner_->BeginOneTimeCommands();
-            owner_->RecordImageLayoutTransition(cb, image_,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-            owner_->RecordBufferToImageCopy(cb, stagingBuf, image_,
-                static_cast<uint32_t>(width_), static_cast<uint32_t>(height_));
-            owner_->RecordImageLayoutTransition(cb, image_,
-                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            owner_->RecordImageLayoutTransition(
+                cb, image_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+            owner_->RecordBufferToImageCopy(
+                cb, stagingBuf, image_, static_cast<std::uint32_t>(width_),
+                static_cast<std::uint32_t>(height_));
+            owner_->RecordImageLayoutTransition(
+                cb, image_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
             owner_->EndOneTimeCommands(cb);
+            vkDestroyBuffer(dev, stagingBuf, nullptr);
+            vkFreeMemory(dev, stagingMem, nullptr);
+            return;
         }
 
-        vkDestroyBuffer(dev, stagingBuf, nullptr);
-        vkFreeMemory(dev, stagingMem, nullptr);
+        VulkanRenderer::PendingModernCommand command;
+        command.kind = VulkanRenderer::PendingModernCommand::Kind::ImageUpload;
+        command.uploadTexture = std::dynamic_pointer_cast<VulkanTextureRenderer>(
+            ITextureRenderer::shared_from_this());
+        if (command.uploadTexture == nullptr)
+            throw std::logic_error("Vulkan texture upload lost its tracked image record");
+        command.uploadStagingBuffer = stagingBuf;
+        command.uploadRegion.imageSubresource = {
+            VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        command.uploadRegion.imageOffset = {0, 0, 0};
+        command.uploadRegion.imageExtent = {
+            static_cast<std::uint32_t>(width_), static_cast<std::uint32_t>(height_), 1};
+
+        VulkanRenderer::RetiredResources retired;
+        retired.buffers.push_back(stagingBuf);
+        retired.memories.push_back(stagingMem);
+        retired.modernStagingAllocations = 1;
+        ++owner_->liveModernStagingAllocationCountEXT_;
+        ++owner_->modernStagingAllocationCountEXT_;
+        owner_->RetireResources(std::move(retired));
+        owner_->QueueStorageImageUploadEXT(std::move(command));
     }
 
     // Task 925: transitions exactly ONE mip level's layout -- the shared TransitionImageLayout
@@ -726,24 +821,52 @@ namespace CNA::Internal::Renderers::Vulkan
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             stagingBuf, stagingMem, &mapped);
         std::memcpy(mapped, rgba, static_cast<std::size_t>(size));
+        vkUnmapMemory(dev, stagingMem);
 
-        TransitionLevelLayout(level,
-            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+        if (!participatesInModernOrder_)
+        {
+            TransitionLevelLayout(
+                level, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+            VkCommandBuffer cb = owner_->BeginOneTimeCommands();
+            VkBufferImageCopy region{};
+            region.imageSubresource = {
+                VK_IMAGE_ASPECT_COLOR_BIT, static_cast<std::uint32_t>(level), 0, 1};
+            region.imageOffset = {0, 0, 0};
+            region.imageExtent = {
+                static_cast<std::uint32_t>(levelW), static_cast<std::uint32_t>(levelH), 1};
+            vkCmdCopyBufferToImage(
+                cb, stagingBuf, image_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+            owner_->EndOneTimeCommands(cb);
+            TransitionLevelLayout(
+                level, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            vkDestroyBuffer(dev, stagingBuf, nullptr);
+            vkFreeMemory(dev, stagingMem, nullptr);
+            return;
+        }
 
-        VkCommandBuffer cb = owner_->BeginOneTimeCommands();
-        VkBufferImageCopy region{};
-        region.imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, static_cast<uint32_t>(level), 0, 1 };
-        region.imageOffset      = { 0, 0, 0 };
-        region.imageExtent      = { static_cast<uint32_t>(levelW), static_cast<uint32_t>(levelH), 1 };
-        vkCmdCopyBufferToImage(cb, stagingBuf, image_,
-                                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
-        owner_->EndOneTimeCommands(cb);
+        VulkanRenderer::PendingModernCommand command;
+        command.kind = VulkanRenderer::PendingModernCommand::Kind::ImageUpload;
+        command.uploadTexture = std::dynamic_pointer_cast<VulkanTextureRenderer>(
+            ITextureRenderer::shared_from_this());
+        if (command.uploadTexture == nullptr)
+            throw std::logic_error("Vulkan texture mip upload lost its tracked image record");
+        command.uploadStagingBuffer = stagingBuf;
+        command.uploadRegion.imageSubresource = {
+            VK_IMAGE_ASPECT_COLOR_BIT, static_cast<std::uint32_t>(level), 0, 1};
+        command.uploadRegion.imageOffset = {0, 0, 0};
+        command.uploadRegion.imageExtent = {
+            static_cast<std::uint32_t>(levelW), static_cast<std::uint32_t>(levelH), 1};
 
-        TransitionLevelLayout(level,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
-        vkDestroyBuffer(dev, stagingBuf, nullptr);
-        vkFreeMemory(dev, stagingMem, nullptr);
+        VulkanRenderer::RetiredResources retired;
+        retired.buffers.push_back(stagingBuf);
+        retired.memories.push_back(stagingMem);
+        retired.modernStagingAllocations = 1;
+        ++owner_->liveModernStagingAllocationCountEXT_;
+        ++owner_->modernStagingAllocationCountEXT_;
+        owner_->RetireResources(std::move(retired));
+        owner_->QueueStorageImageUploadEXT(std::move(command));
     }
 
     VulkanTextureRenderer::~VulkanTextureRenderer()
@@ -1026,11 +1149,20 @@ namespace CNA::Internal::Renderers::Vulkan
             throw std::runtime_error("Vulkan storage texture: renderer device is unavailable");
 
         VulkanRenderer::VulkanSurfaceFormatStorageEXT storage{};
-        if (!owner_->MapSurfaceFormatToStorageEXT(surfaceFormat_, storage) ||
-            storage.blockExtent != 1)
+        std::uint32_t spirvImageFormat = 0;
+        if (!VulkanRenderer::MapStorageImageFormatToStorageEXT(
+                surfaceFormat_, storage, spirvImageFormat))
         {
             throw System::NotSupportedException(
-                "Vulkan storage texture: SurfaceFormat has no uncompressed native storage");
+                "Vulkan storage texture: SurfaceFormat has no exact SPIR-V storage image format");
+        }
+        if (VulkanRenderer::StorageImageFormatRequiresExtendedFeatureEXT(
+                spirvImageFormat) &&
+            owner_->enabledDeviceFeatures_.shaderStorageImageExtendedFormats != VK_TRUE)
+        {
+            throw System::NotSupportedException(
+                "Vulkan storage texture: the selected device did not enable "
+                "shaderStorageImageExtendedFormats for this SPIR-V image format");
         }
         vkFormat_ = storage.format;
         bytesPerTexel_ = storage.bytesPerTexel;
@@ -1357,8 +1489,13 @@ namespace CNA::Internal::Renderers::Vulkan
         const VkImageUsageFlags baseColorUsage =
             VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
             VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        std::uint32_t spirvImageFormat = 0;
         const bool storageImageCapable =
-            colorVkFormat_ == VK_FORMAT_R8G8B8A8_UNORM &&
+            VulkanRenderer::MapVkFormatToSpirvStorageImageFormatEXT(
+                colorVkFormat_, spirvImageFormat) &&
+            (!VulkanRenderer::StorageImageFormatRequiresExtendedFeatureEXT(
+                 spirvImageFormat) ||
+             owner_->enabledDeviceFeatures_.shaderStorageImageExtendedFormats == VK_TRUE) &&
             (colorFormatProperties.optimalTilingFeatures &
              VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) != 0 &&
             vkGetPhysicalDeviceImageFormatProperties(
@@ -1911,9 +2048,11 @@ namespace CNA::Internal::Renderers::Vulkan
             {
                 // Every level is sampled outside a render pass. MOD-2253 records transition,
                 // copy and restore behind the producer closure in the same submission.
-                owner_->RecordImageLayoutTransition(
-                    cb, colorImage_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, static_cast<uint32_t>(level));
+                owner_->RecordImageUsageEXT(
+                    cb, colorImage_, pass_->colorUsageStates,
+                    static_cast<std::uint32_t>(pass_->colorUsageStates.size()),
+                    VK_IMAGE_ASPECT_COLOR_BIT, static_cast<std::uint32_t>(level), 1,
+                    0, 1, VulkanResourceIntent::TransferRead);
                 VkTargetReadbackTraceEXT(
                     "rt2d.read.native call=%llu image=0x%llx mipLevel=%u baseLayer=%u "
                     "layerCount=%u srcLayout=TRANSFER_SRC_OPTIMAL offset=(%d,%d,0) "
@@ -1935,9 +2074,11 @@ namespace CNA::Internal::Renderers::Vulkan
                 vkCmdCopyImageToBuffer(
                     cb, colorImage_, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                     stagingBuf, 1, &region);
-                owner_->RecordImageLayoutTransition(
-                    cb, colorImage_, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, static_cast<uint32_t>(level));
+                owner_->RecordImageUsageEXT(
+                    cb, colorImage_, pass_->colorUsageStates,
+                    static_cast<std::uint32_t>(pass_->colorUsageStates.size()),
+                    VK_IMAGE_ASPECT_COLOR_BIT, static_cast<std::uint32_t>(level), 1,
+                    0, 1, VulkanResourceIntent::SampledRead);
             });
 
         const bool isBGRA = surfaceFormat_ == static_cast<int>(
@@ -3183,24 +3324,82 @@ namespace CNA::Internal::Renderers::Vulkan
         return MapSurfaceFormatToStorageEXT(surfaceFormat, storage) && storage.blockExtent > 1;
     }
 
-    namespace
+    bool VulkanRenderer::MapVkFormatToSpirvStorageImageFormatEXT(
+        const VkFormat format, std::uint32_t& imageFormat) noexcept
     {
-        [[nodiscard]] bool MapVkFormatToSpirvStorageImageFormatEXT(
-            const VkFormat format, std::uint32_t& imageFormat) noexcept
+        switch (format)
         {
-            // SPIR-V core Image Format enumerants. This is deliberately narrower than VkFormat:
-            // storage support is published only when shader metadata can name and verify the
-            // exact native representation.
-            switch (format)
-            {
-                // Rgba8 is in Vulkan's storage-image format set that does not require the
-                // shaderStorageImageExtendedFormats feature. Keep the implemented set here
-                // narrower than raw format support until MOD-2244 enables and verifies that
-                // optional feature for the remaining exact SPIR-V formats.
-                case VK_FORMAT_R8G8B8A8_UNORM: imageFormat = 4; return true;   // Rgba8
-                default: imageFormat = 0; return false;
-            }
+            case VK_FORMAT_R32G32B32A32_SFLOAT: imageFormat = 1; return true;  // Rgba32f
+            case VK_FORMAT_R16G16B16A16_SFLOAT: imageFormat = 2; return true;  // Rgba16f
+            case VK_FORMAT_R32_SFLOAT:          imageFormat = 3; return true;  // R32f
+            case VK_FORMAT_R8G8B8A8_UNORM:      imageFormat = 4; return true;  // Rgba8
+            case VK_FORMAT_R8G8B8A8_SNORM:      imageFormat = 5; return true;  // Rgba8Snorm
+            case VK_FORMAT_R32G32_SFLOAT:       imageFormat = 6; return true;  // Rg32f
+            case VK_FORMAT_R16G16_SFLOAT:       imageFormat = 7; return true;  // Rg16f
+            case VK_FORMAT_R16_SFLOAT:          imageFormat = 9; return true;  // R16f
+            case VK_FORMAT_R16G16B16A16_UNORM:  imageFormat = 10; return true; // Rgba16
+            case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
+                imageFormat = 11; return true;                                  // Rgb10A2
+            case VK_FORMAT_R16G16_UNORM:        imageFormat = 12; return true; // Rg16
+            case VK_FORMAT_R8G8_UNORM:          imageFormat = 13; return true; // Rg8
+            case VK_FORMAT_R16_UNORM:           imageFormat = 14; return true; // R16
+            case VK_FORMAT_R8_UNORM:            imageFormat = 15; return true; // R8
+            case VK_FORMAT_R8G8_SNORM:          imageFormat = 18; return true; // Rg8Snorm
+            default: imageFormat = 0; return false;
         }
+    }
+
+    bool VulkanRenderer::MapStorageImageFormatToStorageEXT(
+        const int surfaceFormatOrdinal, VulkanSurfaceFormatStorageEXT& out,
+        std::uint32_t& imageFormat) noexcept
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        switch (static_cast<SurfaceFormat>(surfaceFormatOrdinal))
+        {
+            case SurfaceFormat::Color:
+                out = {VK_FORMAT_R8G8B8A8_UNORM, 4}; break;
+            case SurfaceFormat::NormalizedByte2:
+                out = {VK_FORMAT_R8G8_SNORM, 2}; break;
+            case SurfaceFormat::NormalizedByte4:
+                out = {VK_FORMAT_R8G8B8A8_SNORM, 4}; break;
+            case SurfaceFormat::Rgba1010102:
+                out = {VK_FORMAT_A2B10G10R10_UNORM_PACK32, 4}; break;
+            case SurfaceFormat::Rg32:
+                out = {VK_FORMAT_R16G16_UNORM, 4}; break;
+            case SurfaceFormat::Rgba64:
+                out = {VK_FORMAT_R16G16B16A16_UNORM, 8}; break;
+            case SurfaceFormat::Single:
+                out = {VK_FORMAT_R32_SFLOAT, 4}; break;
+            case SurfaceFormat::Vector2:
+                out = {VK_FORMAT_R32G32_SFLOAT, 8}; break;
+            case SurfaceFormat::Vector4:
+                out = {VK_FORMAT_R32G32B32A32_SFLOAT, 16}; break;
+            case SurfaceFormat::HalfSingle:
+                out = {VK_FORMAT_R16_SFLOAT, 2}; break;
+            case SurfaceFormat::HalfVector2:
+                out = {VK_FORMAT_R16G16_SFLOAT, 4}; break;
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::HdrBlendable:
+                out = {VK_FORMAT_R16G16B16A16_SFLOAT, 8}; break;
+            case SurfaceFormat::ByteEXT:
+                out = {VK_FORMAT_R8_UNORM, 1}; break;
+            case SurfaceFormat::UShortEXT:
+                out = {VK_FORMAT_R16_UNORM, 2}; break;
+            default:
+                out = {};
+                imageFormat = 0;
+                return false;
+        }
+        return MapVkFormatToSpirvStorageImageFormatEXT(out.format, imageFormat);
+    }
+
+    bool VulkanRenderer::StorageImageFormatRequiresExtendedFeatureEXT(
+        const std::uint32_t imageFormat) noexcept
+    {
+        // Vulkan's baseline set is exactly Rgba32f, Rgba16f, R32f, Rgba8 and Rgba8Snorm.
+        // Every other format-qualified OpTypeImage requires the
+        // StorageImageExtendedFormats capability and therefore the matching enabled feature.
+        return imageFormat < 1 || imageFormat > 5;
     }
 
     CNA::RendererFormatSupport VulkanRenderer::GetSurfaceFormatUsageSupportEXT(
@@ -3247,16 +3446,46 @@ namespace CNA::Internal::Renderers::Vulkan
             ClassifySurfaceFormatEXT(surfaceFormat) == RendererFormatVerdict::Supported;
         const bool sampled = hasImplementedStorage &&
             (optimal & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) != 0;
+        VulkanSurfaceFormatStorageEXT storageImageStorage{};
         VkImageFormatProperties storageImageProperties{};
         constexpr VkImageUsageFlags storageImageUsage = VK_IMAGE_USAGE_STORAGE_BIT;
         std::uint32_t spirvStorageImageFormat = 0;
-        const bool storageImage = hasImplementedStorage && storage.blockExtent == 1 &&
-            MapVkFormatToSpirvStorageImageFormatEXT(
-                storage.format, spirvStorageImageFormat) &&
+        const bool storageImage =
+            MapStorageImageFormatToStorageEXT(
+                surfaceFormat, storageImageStorage, spirvStorageImageFormat) &&
+            storageImageStorage.format == semanticFormat &&
+            (!StorageImageFormatRequiresExtendedFeatureEXT(spirvStorageImageFormat) ||
+             enabledDeviceFeatures_.shaderStorageImageExtendedFormats == VK_TRUE) &&
             (optimal & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) != 0 &&
             vkGetPhysicalDeviceImageFormatProperties(
                 physicalDevice_, semanticFormat, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
                 storageImageUsage, 0, &storageImageProperties) == VK_SUCCESS;
+        VkImageFormatProperties storageSampledImageProperties{};
+        constexpr VkImageUsageFlags storageSampledUsage =
+            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        const bool storageSampled = storageImage &&
+            (optimal & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) != 0 &&
+            vkGetPhysicalDeviceImageFormatProperties(
+                physicalDevice_, semanticFormat, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
+                storageSampledUsage, 0, &storageSampledImageProperties) == VK_SUCCESS;
+        VkImageFormatProperties storageTransferSourceProperties{};
+        constexpr VkImageUsageFlags storageTransferSourceUsage =
+            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+        const bool storageTransferSource = storageImage &&
+            (optimal & VK_FORMAT_FEATURE_TRANSFER_SRC_BIT) != 0 &&
+            vkGetPhysicalDeviceImageFormatProperties(
+                physicalDevice_, semanticFormat, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
+                storageTransferSourceUsage, 0,
+                &storageTransferSourceProperties) == VK_SUCCESS;
+        VkImageFormatProperties storageTransferDestinationProperties{};
+        constexpr VkImageUsageFlags storageTransferDestinationUsage =
+            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        const bool storageTransferDestination = storageImage &&
+            (optimal & VK_FORMAT_FEATURE_TRANSFER_DST_BIT) != 0 &&
+            vkGetPhysicalDeviceImageFormatProperties(
+                physicalDevice_, semanticFormat, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
+                storageTransferDestinationUsage, 0,
+                &storageTransferDestinationProperties) == VK_SUCCESS;
         const bool transferDestination = hasImplementedStorage &&
             (optimal & VK_FORMAT_FEATURE_TRANSFER_DST_BIT) != 0;
         VkImageFormatProperties transferSourceImageProperties{};
@@ -3268,10 +3497,12 @@ namespace CNA::Internal::Renderers::Vulkan
                 physicalDevice_, semanticFormat, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
                 transferSourceTextureUsage, 0, &transferSourceImageProperties) == VK_SUCCESS;
         setSupported(RendererFormatUsage::TextureStorage, hasImplementedStorage || storageImage);
-        setSupported(RendererFormatUsage::Sampled, sampled);
+        setSupported(RendererFormatUsage::Sampled, sampled || storageSampled);
         setSupported(RendererFormatUsage::Filterable,
-                     sampled && (optimal & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) != 0);
-        setSupported(RendererFormatUsage::TransferDestination, transferDestination);
+                     (sampled || storageSampled) &&
+                         (optimal & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) != 0);
+        setSupported(RendererFormatUsage::TransferDestination,
+                     transferDestination || storageTransferDestination);
         setSupported(RendererFormatUsage::StorageRead, storageImage);
         setSupported(RendererFormatUsage::StorageWrite, storageImage);
 
@@ -3297,10 +3528,10 @@ namespace CNA::Internal::Renderers::Vulkan
             vkGetPhysicalDeviceFormatProperties(
                 physicalDevice_, renderTargetStorage.format, &renderTargetProperties);
         setSupported(RendererFormatUsage::Sampled,
-                     sampled || (renderTarget &&
+                     sampled || storageSampled || (renderTarget &&
                          (renderTargetProperties.optimalTilingFeatures &
                           VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) != 0));
-        const bool textureFilterable = sampled &&
+        const bool textureFilterable = (sampled || storageSampled) &&
             (optimal & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) != 0;
         const bool renderTargetFilterable = renderTarget &&
             (renderTargetProperties.optimalTilingFeatures &
@@ -3313,7 +3544,7 @@ namespace CNA::Internal::Renderers::Vulkan
                          (renderTargetProperties.optimalTilingFeatures &
                           VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT) != 0);
         setSupported(RendererFormatUsage::TransferSource,
-                     transferSource ||
+                     transferSource || storageTransferSource ||
                          (renderTarget &&
                           (renderTargetProperties.optimalTilingFeatures &
                            VK_FORMAT_FEATURE_TRANSFER_SRC_BIT) != 0));
@@ -4078,6 +4309,14 @@ namespace CNA::Internal::Renderers::Vulkan
             feat.textureCompressionBC = VK_TRUE;
             textureCompressionBCSupported_ = true;
         }
+        // MOD-2244 consumes every exact format-qualified storage-image representation the
+        // selected device exposes. Vulkan defines this feature as a whole-device guarantee for
+        // the extended format set (per-format support remains queryable even when it is false),
+        // and explicitly says enabling it has no practical effect. Preserve it in the enabled
+        // snapshot when offered so diagnostics state that the guarantee was accepted; legality is
+        // still decided per VkFormat and complete VkImage usage below.
+        if (supported.shaderStorageImageExtendedFormats)
+            feat.shaderStorageImageExtendedFormats = VK_TRUE;
         // The enabled snapshot is deliberately narrower than the supported one. MOD-2241 and
         // later rows extend it only together with the public path and native validation test that
         // consume each newly enabled feature.
@@ -14096,8 +14335,28 @@ namespace CNA::Internal::Renderers::Vulkan
 
         std::uint64_t flushMaxOrder = 0;
         if (rtOnly)
+        {
             for (const auto& seg : segments)
                 flushMaxOrder = std::max(flushMaxOrder, seg.lastOrder);
+            const void* readbackGroup = onlyRT != nullptr
+                ? onlyRT->DepthStencilOwnerEXT() : nullptr;
+            for (const auto& command : pendingModernCommands_)
+            {
+                bool writesReadbackTarget = false;
+                for (const auto& image : command.storageImages)
+                {
+                    if (image.renderTarget != nullptr &&
+                        image.renderTarget->PassEXT() != nullptr &&
+                        image.renderTarget->PassEXT()->DepthStencilOwnerEXT() == readbackGroup)
+                    {
+                        writesReadbackTarget = true;
+                        break;
+                    }
+                }
+                if (writesReadbackTarget)
+                    flushMaxOrder = std::max(flushMaxOrder, command.order);
+            }
+        }
 
         // REMED-GFX-143: the swapchain image must be cleared/stored and left in PRESENT_SRC_KHR
         // every rendered frame even when the game drew nothing to it, which the single trailing pass
@@ -14165,6 +14424,8 @@ namespace CNA::Internal::Renderers::Vulkan
                     use.storage->PrepareForSamplingEXT(cb);
                 else if (use.renderTarget != nullptr)
                     use.renderTarget->PrepareForSamplingEXT(cb);
+                else if (use.texture != nullptr)
+                    use.texture->PrepareForSamplingEXT(cb);
             }
             // MOD-2250: a graphics storage descriptor is a shader read, not a vertex-input read.
             // Transition every retained draw snapshot here, outside the render pass and after any
@@ -15215,11 +15476,12 @@ namespace CNA::Internal::Renderers::Vulkan
             return nullptr;
 
         VulkanSurfaceFormatStorageEXT storage{};
-        if (!MapSurfaceFormatToStorageEXT(surfaceFormat, storage) || storage.blockExtent != 1)
-            return nullptr;
         std::uint32_t spirvStorageImageFormat = 0;
-        if (!MapVkFormatToSpirvStorageImageFormatEXT(
-                storage.format, spirvStorageImageFormat))
+        if (!MapStorageImageFormatToStorageEXT(
+                surfaceFormat, storage, spirvStorageImageFormat))
+            return nullptr;
+        if (StorageImageFormatRequiresExtendedFeatureEXT(spirvStorageImageFormat) &&
+            enabledDeviceFeatures_.shaderStorageImageExtendedFormats != VK_TRUE)
             return nullptr;
         VkFormatProperties formatProperties{};
         vkGetPhysicalDeviceFormatProperties(physicalDevice_, storage.format, &formatProperties);
@@ -15513,6 +15775,7 @@ namespace CNA::Internal::Renderers::Vulkan
         storageBindingSlots_.clear();
         storageImages_.clear();
         renderTargetImages_.clear();
+        textureImages_.clear();
         storageImageSlots_.clear();
         storageImageBindingSlots_.clear();
         scalarSlots_.clear();
@@ -15529,6 +15792,7 @@ namespace CNA::Internal::Renderers::Vulkan
         storageImageSlots_.clear();
         storageImages_.clear();
         renderTargetImages_.clear();
+        textureImages_.clear();
         scalarSlots_.clear();
         pushConstantBytes_.clear();
         if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE) {
@@ -15864,6 +16128,7 @@ namespace CNA::Internal::Renderers::Vulkan
                     bindingIt->second, StorageImageSlot{image.format, accessMode});
                 storageImages_.emplace(bindingIt->second, nullptr);
                 renderTargetImages_.emplace(bindingIt->second, nullptr);
+                textureImages_.emplace(bindingIt->second, nullptr);
                 continue;
             }
             {
@@ -16105,30 +16370,47 @@ namespace CNA::Internal::Renderers::Vulkan
         if (texture == nullptr) {
             renderTargetImages_[static_cast<std::uint32_t>(unit)].reset();
             storageImages_[static_cast<std::uint32_t>(unit)].reset();
+            textureImages_[static_cast<std::uint32_t>(unit)].reset();
             return;
         }
-        auto* raw = dynamic_cast<VulkanRenderTargetRenderer*>(texture);
-        if (raw == nullptr)
-            throw System::NotSupportedException(
-                "CNA Vulkan: only a RenderTarget2D with storage-capable Color backing can be "
-                "bound through ComputeShader::bindImage; ordinary Texture2D allocations are "
-                "sampled/transfer resources and are not silently aliased as storage images");
-        auto native = std::dynamic_pointer_cast<VulkanRenderTargetRenderer>(
+        if (auto* raw = dynamic_cast<VulkanRenderTargetRenderer*>(texture))
+        {
+            auto native = std::dynamic_pointer_cast<VulkanRenderTargetRenderer>(
+                texture->shared_from_this());
+            if (native == nullptr || !native->IsOwnedByEXT(owner_) ||
+                !native->IsStorageImageCapableEXT())
+                throw System::NotSupportedException(
+                    "CNA Vulkan: this RenderTarget2D format/allocation has no legal "
+                    "storage-image bridge");
+            std::uint32_t nativeImageFormat = 0;
+            if (!VulkanRenderer::MapVkFormatToSpirvStorageImageFormatEXT(
+                    native->GetVkFormatEXT(), nativeImageFormat) ||
+                nativeImageFormat != slot.spirvImageFormat)
+                throw std::invalid_argument(
+                    "Vulkan compute shader: render-target format does not match the SPIR-V "
+                    "image format at binding " + std::to_string(unit));
+            renderTargetImages_[static_cast<std::uint32_t>(unit)] = std::move(native);
+            storageImages_[static_cast<std::uint32_t>(unit)].reset();
+            textureImages_[static_cast<std::uint32_t>(unit)].reset();
+            return;
+        }
+        auto native = std::dynamic_pointer_cast<VulkanTextureRenderer>(
             texture->shared_from_this());
         if (native == nullptr || !native->IsOwnedByEXT(owner_) ||
             !native->IsStorageImageCapableEXT())
             throw System::NotSupportedException(
-                "CNA Vulkan: this RenderTarget2D format/allocation has no legal storage-image "
-                "bridge");
+                "CNA Vulkan: this Texture2D format/allocation has no legal storage-image bridge");
         std::uint32_t nativeImageFormat = 0;
-        if (!MapVkFormatToSpirvStorageImageFormatEXT(
+        if (!VulkanRenderer::MapVkFormatToSpirvStorageImageFormatEXT(
                 native->GetVkFormatEXT(), nativeImageFormat) ||
             nativeImageFormat != slot.spirvImageFormat)
             throw std::invalid_argument(
-                "Vulkan compute shader: render-target format does not match the SPIR-V image "
+                "Vulkan compute shader: texture format does not match the SPIR-V image "
                 "format at binding " + std::to_string(unit));
-        renderTargetImages_[static_cast<std::uint32_t>(unit)] = std::move(native);
+        native->participatesInModernOrder_ = true;
+        textureImages_[static_cast<std::uint32_t>(unit)] = std::move(native);
         storageImages_[static_cast<std::uint32_t>(unit)].reset();
+        renderTargetImages_[static_cast<std::uint32_t>(unit)].reset();
     }
 
     bool VulkanComputeShaderRenderer::BindStorageTexture2DEXT(
@@ -16151,12 +16433,13 @@ namespace CNA::Internal::Renderers::Vulkan
         if (texture == nullptr) {
             storageImages_[static_cast<std::uint32_t>(unit)].reset();
             renderTargetImages_[static_cast<std::uint32_t>(unit)].reset();
+            textureImages_[static_cast<std::uint32_t>(unit)].reset();
             return true;
         }
         auto native = std::dynamic_pointer_cast<VulkanStorageTexture2DRenderer>(texture);
         if (native == nullptr || !native->IsOwnedByEXT(owner_)) return false;
         std::uint32_t nativeImageFormat = 0;
-        if (!MapVkFormatToSpirvStorageImageFormatEXT(
+        if (!VulkanRenderer::MapVkFormatToSpirvStorageImageFormatEXT(
                 native->GetVkFormatEXT(), nativeImageFormat) ||
             nativeImageFormat != slot.spirvImageFormat)
         {
@@ -16172,6 +16455,7 @@ namespace CNA::Internal::Renderers::Vulkan
                 "access");
         storageImages_[static_cast<std::uint32_t>(unit)] = std::move(native);
         renderTargetImages_[static_cast<std::uint32_t>(unit)].reset();
+        textureImages_[static_cast<std::uint32_t>(unit)].reset();
         return true;
     }
 
@@ -16273,6 +16557,7 @@ namespace CNA::Internal::Renderers::Vulkan
         const auto storageBuffers = storageBuffers_;
         const auto storageImages = storageImages_;
         const auto renderTargetImages = renderTargetImages_;
+        const auto textureImages = textureImages_;
         const auto pushConstantBytes = pushConstantBytes_;
         for (const uint32_t binding : storageBindingSlots_) {
             if (storageBuffers.at(binding) == nullptr)
@@ -16282,7 +16567,8 @@ namespace CNA::Internal::Renderers::Vulkan
         }
         for (const uint32_t binding : storageImageBindingSlots_) {
             if (storageImages.at(binding) == nullptr &&
-                renderTargetImages.at(binding) == nullptr)
+                renderTargetImages.at(binding) == nullptr &&
+                textureImages.at(binding) == nullptr)
                 throw std::runtime_error(
                     "Vulkan compute shader: required set 0 storage-image binding " +
                     std::to_string(binding) + " is not bound");
@@ -16312,7 +16598,9 @@ namespace CNA::Internal::Renderers::Vulkan
             auto& info = imageInfos[i];
             info.imageView = storageImages.at(binding) != nullptr
                 ? storageImages.at(binding)->GetStorageImageViewEXT()
-                : renderTargetImages.at(binding)->GetStorageImageViewEXT();
+                : (renderTargetImages.at(binding) != nullptr
+                    ? renderTargetImages.at(binding)->GetStorageImageViewEXT()
+                    : textureImages.at(binding)->GetStorageImageViewEXT());
             info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
             imageViews.push_back(info.imageView);
         }
@@ -16332,6 +16620,7 @@ namespace CNA::Internal::Renderers::Vulkan
         for (const uint32_t binding : storageImageBindingSlots_) {
             command.storageImages.push_back({
                 storageImages.at(binding), renderTargetImages.at(binding),
+                textureImages.at(binding),
                 storageImageSlots_.at(binding).accessMode});
         }
         owner_->QueueComputeDispatchEXT(std::move(command));
@@ -16996,15 +17285,30 @@ namespace CNA::Internal::Renderers::Vulkan
 
         if (command.kind == PendingModernCommand::Kind::ImageUpload)
         {
-            if (command.uploadImage == nullptr ||
+            if ((command.uploadImage == nullptr) == (command.uploadTexture == nullptr) ||
                 command.uploadStagingBuffer == VK_NULL_HANDLE)
-                throw std::logic_error("Vulkan storage texture upload record is incomplete");
-            const int mipLevel = static_cast<int>(
-                command.uploadRegion.imageSubresource.mipLevel);
-            command.uploadImage->RecordUsage(
-                cb, mipLevel, VulkanResourceIntent::TransferWrite);
+                throw std::logic_error("Vulkan texture upload record is incomplete");
+            VkImage targetImage = VK_NULL_HANDLE;
+            if (command.uploadImage != nullptr)
+            {
+                const int mipLevel = static_cast<int>(
+                    command.uploadRegion.imageSubresource.mipLevel);
+                command.uploadImage->RecordUsage(
+                    cb, mipLevel, VulkanResourceIntent::TransferWrite);
+                targetImage = command.uploadImage->image_;
+            }
+            else
+            {
+                RecordImageUsageEXT(
+                    cb, command.uploadTexture->image_, command.uploadTexture->mipUsageStates_,
+                    static_cast<std::uint32_t>(command.uploadTexture->levelCount_),
+                    VK_IMAGE_ASPECT_COLOR_BIT,
+                    command.uploadRegion.imageSubresource.mipLevel, 1, 0, 1,
+                    VulkanResourceIntent::TransferWrite);
+                targetImage = command.uploadTexture->image_;
+            }
             vkCmdCopyBufferToImage(
-                cb, command.uploadStagingBuffer, command.uploadImage->image_,
+                cb, command.uploadStagingBuffer, targetImage,
                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &command.uploadRegion);
             return;
         }
@@ -17027,6 +17331,8 @@ namespace CNA::Internal::Renderers::Vulkan
                 image.image->PrepareForComputeEXT(cb, image.accessMode);
             else if (image.renderTarget != nullptr)
                 image.renderTarget->PrepareForComputeEXT(cb, image.accessMode);
+            else if (image.texture != nullptr)
+                image.texture->PrepareForComputeEXT(cb, image.accessMode);
             else
                 throw std::logic_error(
                     "Vulkan compute dispatch lost its retained storage-image record");
@@ -17716,21 +18022,36 @@ namespace CNA::Internal::Renderers::Vulkan
         // cast has to go through the most-derived object rather than between siblings.
         if (const auto* rt = dynamic_cast<const VulkanRenderTargetRenderer*>(tex))
             NoteSampledTextureEXT(segment, rt);
+        else if (const auto* texture = dynamic_cast<const VulkanTextureRenderer*>(tex))
+            NoteSampledTextureEXT(segment, texture);
     }
 
     void VulkanRenderer::NoteSampledTextureEXT(
         const uint64_t segment, const ITextureRenderer* texture)
     {
-        const auto* raw = dynamic_cast<const VulkanRenderTargetRenderer*>(texture);
-        if (raw == nullptr || raw->PassEXT() == nullptr) return;
-        NoteSampledRenderTargetGroupEXT(
-            segment, raw->PassEXT()->DepthStencilOwnerEXT());
-        auto retained = std::dynamic_pointer_cast<VulkanRenderTargetRenderer>(
+        if (const auto* raw = dynamic_cast<const VulkanRenderTargetRenderer*>(texture))
+        {
+            if (raw->PassEXT() == nullptr) return;
+            NoteSampledRenderTargetGroupEXT(
+                segment, raw->PassEXT()->DepthStencilOwnerEXT());
+            auto retained = std::dynamic_pointer_cast<VulkanRenderTargetRenderer>(
+                const_cast<ITextureRenderer*>(texture)->shared_from_this());
+            if (retained == nullptr) return;
+            for (const auto& use : pendingSampledImages_)
+                if (use.segment == segment && use.renderTarget == retained) return;
+            pendingSampledImages_.push_back(
+                {segment, nullptr, std::move(retained), nullptr});
+            return;
+        }
+        const auto* raw = dynamic_cast<const VulkanTextureRenderer*>(texture);
+        if (raw == nullptr || !raw->IsStorageImageCapableEXT()) return;
+        auto retained = std::dynamic_pointer_cast<VulkanTextureRenderer>(
             const_cast<ITextureRenderer*>(texture)->shared_from_this());
         if (retained == nullptr) return;
         for (const auto& use : pendingSampledImages_)
-            if (use.segment == segment && use.renderTarget == retained) return;
-        pendingSampledImages_.push_back({segment, nullptr, std::move(retained)});
+            if (use.segment == segment && use.texture == retained) return;
+        pendingSampledImages_.push_back(
+            {segment, nullptr, nullptr, std::move(retained)});
     }
 
     void VulkanRenderer::NoteSampledStorageTextureEXT(
@@ -17740,7 +18061,7 @@ namespace CNA::Internal::Renderers::Vulkan
         if (texture == nullptr) return;
         for (const auto& use : pendingSampledImages_)
             if (use.segment == segment && use.storage == texture) return;
-        pendingSampledImages_.push_back({segment, std::move(texture), nullptr});
+        pendingSampledImages_.push_back({segment, std::move(texture), nullptr, nullptr});
     }
 
     // REMED-GFX-151: every render target this draw samples, in one place, so a new stock-effect
@@ -17774,8 +18095,10 @@ namespace CNA::Internal::Renderers::Vulkan
     //
     // The set is now a transitive closure: seed with every pending segment of `rt`'s own group, then
     // repeatedly pull in, for each segment already in the set, the pending segments of every group
-    // that segment samples which PRECEDE it. It terminates because each pulled-in segment has a
-    // strictly smaller id than the one that needed it.
+    // that segment samples which PRECEDE it. MOD-2244 applies the same rule to every render-target
+    // image bound by a modern command included before the readback, including the issuing target's
+    // preceding segment. Thus B.GetData() cannot record an A -> B compute copy while leaving A's
+    // render pass pending for Present().
     //
     // Deliberately a closure and not "every off-screen segment up to `rt`'s last one": the wider
     // rule also fixes the finding, but it advances UNRELATED targets early, and a backbuffer draw
@@ -17844,17 +18167,86 @@ namespace CNA::Internal::Renderers::Vulkan
         auto alreadyNeeded = [&flushSegments](uint64_t id) {
             return std::find(flushSegments.begin(), flushSegments.end(), id) != flushSegments.end();
         };
+        auto segmentLastOrder = [&](const std::uint64_t id) {
+            std::uint64_t last = 0;
+            for (const auto& clear : pendingClears_)
+                if (clear.segment == id) last = std::max(last, clear.order);
+            for (const auto& batch : activeBatches_)
+                if (batch.segment == id) last = std::max(last, batch.order);
+            for (const auto& draw : pending3D_)
+                if (draw.segment == id) last = std::max(last, draw.order);
+            for (const auto& event : pendingTimestamps_)
+                if (event.segment == id) last = std::max(last, event.order);
+            return last;
+        };
+        std::uint64_t flushMaxOrder = 0;
+        auto addFlushSegment = [&](const std::uint64_t id) {
+            if (alreadyNeeded(id)) return false;
+            flushSegments.push_back(id);
+            flushMaxOrder = std::max(flushMaxOrder, segmentLastOrder(id));
+            return true;
+        };
         for (const auto& s : pendingSegments)
             for (const void* g : groups)
-                if (s.group == g && !alreadyNeeded(s.id)) { flushSegments.push_back(s.id); break; }
-        // Transitive closure over the producers each needed cycle samples.
-        for (std::size_t i = 0; i < flushSegments.size(); ++i) {
-            const uint64_t consumer = flushSegments[i];
-            for (const auto& sampled : segmentSampledGroups_) {
-                if (sampled.first != consumer) continue;
-                for (const auto& s : pendingSegments)
-                    if (s.group == sampled.second && s.id < consumer && !alreadyNeeded(s.id))
-                        flushSegments.push_back(s.id);
+                if (s.group == g && addFlushSegment(s.id)) break;
+
+        const void* readbackGroup = rt->DepthStencilOwnerEXT();
+        const auto commandUsesGroup = [](const PendingModernCommand& command,
+                                         const void* group) {
+            for (const auto& image : command.storageImages)
+                if (image.renderTarget != nullptr &&
+                    image.renderTarget->PassEXT() != nullptr &&
+                    image.renderTarget->PassEXT()->DepthStencilOwnerEXT() == group)
+                    return true;
+            return false;
+        };
+        // A compute operation may be the target's final producer even when no later graphics
+        // segment exists to give it an order bound. Include the latest operation touching the
+        // target; every earlier modern operation is then recorded in public order.
+        for (const auto& command : pendingModernCommands_)
+            if (commandUsesGroup(command, readbackGroup))
+                flushMaxOrder = std::max(flushMaxOrder, command.order);
+
+        auto addGroupBefore = [&](const void* group, const std::uint64_t segment) {
+            bool added = false;
+            if (group == nullptr) return added;
+            for (const auto& pending : pendingSegments)
+                if (pending.group == group && pending.id <= segment)
+                    added = addFlushSegment(pending.id) || added;
+            return added;
+        };
+
+        // Close both dependency kinds to a fixed point. Graphics segments can sample prior
+        // render targets, while every modern command that will be recorded can read/write a
+        // target produced by an earlier segment. The issuing target is included as well so a
+        // command never overtakes graphics that preceded it in the same bind cycle.
+        bool expanded = true;
+        while (expanded)
+        {
+            expanded = false;
+            const std::size_t neededCount = flushSegments.size();
+            for (std::size_t i = 0; i < neededCount; ++i)
+            {
+                const std::uint64_t consumer = flushSegments[i];
+                for (const auto& sampled : segmentSampledGroups_)
+                {
+                    if (sampled.first != consumer) continue;
+                    for (const auto& pending : pendingSegments)
+                        if (pending.group == sampled.second && pending.id < consumer)
+                            expanded = addFlushSegment(pending.id) || expanded;
+                }
+            }
+            for (const auto& command : pendingModernCommands_)
+            {
+                if (command.order > flushMaxOrder) continue;
+                if (command.rt != nullptr)
+                    expanded = addGroupBefore(
+                        command.rt->DepthStencilOwnerEXT(), command.segment) || expanded;
+                for (const auto& image : command.storageImages)
+                    if (image.renderTarget != nullptr && image.renderTarget->PassEXT() != nullptr)
+                        expanded = addGroupBefore(
+                            image.renderTarget->PassEXT()->DepthStencilOwnerEXT(),
+                            command.segment) || expanded;
             }
         }
         std::sort(flushSegments.begin(), flushSegments.end());

@@ -2,7 +2,7 @@
 
 ## Status of this document
 
-**Complete as of 2026-09-09 (`VULKAN-480`, updated by `REMED-GFX-203`, `MOD-2222`–`MOD-2223`, `MOD-2232`, `MOD-2240`–`MOD-2243` and `MOD-2228`), and written after the re-audits it depends on**
+**Complete as of 2026-09-10 (`VULKAN-480`, updated by `REMED-GFX-203`, `MOD-2222`–`MOD-2223`, `MOD-2232`, `MOD-2240`–`MOD-2244` and `MOD-2228`), and written after the re-audits it depends on**
 (`VULKAN-470`–`VULKAN-474`) so that what it claims was checked rather than remembered. Every
 section names the row that put it there and the test that keeps it true; a claim with no test named
 beside it is not in here.
@@ -46,9 +46,9 @@ measures on (§*Environment* below).
 | `ShaderEffect` **source execution** | unsupported | fixed |
 | Multi-stream vertex input | supported | fixed |
 | Compiled XNA `.fx` effects | **unsupported** here | fixed |
-| SPIR-V compute shaders, storage buffers and dedicated `rgba8` storage images | supported | device |
+| SPIR-V compute shaders, storage buffers and exact format-qualified storage images | supported | device |
 | Indirect drawing, including non-zero base instance | supported | device |
-| XNA `RenderTarget2D` compute-image binding | supported for exact storage-capable `Color`; ordinary `Texture2D` is refused | device |
+| XNA `Texture2D` / `RenderTarget2D` compute-image binding | supported when that exact allocation is storage-capable | device |
 | Float32 / Float16 `RenderTarget2D`, half-float linear filtering | supported | device |
 | GPU timers | supported when the selected graphics queue exposes timestamps | device |
 | Shadow sampling, image-based lighting | **unsupported** | fixed |
@@ -109,20 +109,30 @@ GPU-only buffer, a 256-float compute result copied back through staging, overflo
 zero new validation messages. The size-only constructor retains its former implicit storage,
 two-way transfer, indirect and CPU read/write behavior.
 
-`MOD-2228` adds `ComputeShader::bindStorageTexture`; `MOD-2251` implements the legal
-`bindImage(Texture2D&)` bridge for a `RenderTarget2D`. Vulkan currently allocates only exact `SurfaceFormat::Color` /
-`VK_FORMAT_R8G8B8A8_UNORM` storage images, whose `Rgba8` SPIR-V format does not require the optional
-`shaderStorageImageExtendedFormats` feature. The immutable resource declaration controls storage
-read/write, sampling/filtering and transfer flags; the factory intersects the complete requested
-usage with format features and `vkGetPhysicalDeviceImageFormatProperties`. A mip-zero storage view
-and optional full-chain sampled view remain internal. The `Vulkan_ShaderEffect_BoundTexture`
-oracle writes `(0.25, 0.5, 0.75, 1)` in compute, reads back the exact quantised bytes and samples the
-same texel through a later fragment draw, while also testing slot/access refusal and binding clear.
-An off-screen `Color` render target uses canonical `VK_FORMAT_R8G8B8A8_UNORM`, independently of
-the swapchain's platform-selected channel order, and requests storage usage only when the complete
-attachment/sampled/transfer/storage combination is supported. The bridge reuses mip zero's image
-and view; it does not copy or expose a layout. Ordinary Vulkan `Texture2D` allocations have no
-storage usage and fail explicitly.
+`MOD-2228` adds `ComputeShader::bindStorageTexture`; `MOD-2251` first implemented the legal
+`bindImage(Texture2D&)` bridge for a `Color` `RenderTarget2D`; `MOD-2244` completes the device-
+qualified image paths. One table maps exactly fifteen CNA formats to their Vulkan storage and
+SPIR-V Image Format: `Color`, `NormalizedByte2`, `NormalizedByte4`, `Rgba1010102`, `Rg32`,
+`Rgba64`, `Single`, `Vector2`, `Vector4`, `HalfSingle`, `HalfVector2`, `HalfVector4`,
+`HdrBlendable`, `ByteEXT` and `UShortEXT`. `Alpha8` deliberately does not alias `R8`: an R-only
+storage view cannot preserve Alpha8's alpha-channel semantics. Compressed, sRGB, BGRA and packed
+16-bit formats likewise have no invented representation.
+
+The five baseline SPIR-V formats work without an optional feature. Every other entry additionally
+requires the selected device to support and CNA to enable `shaderStorageImageExtendedFormats`;
+all entries still require `VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT` and a successful
+`vkGetPhysicalDeviceImageFormatProperties` query for the complete requested usage. The immutable
+dedicated-resource declaration controls storage read/write, sampling/filtering and transfer flags.
+A mip-zero storage view and optional full-chain sampled view remain internal.
+
+An ordinary Vulkan `Texture2D` now requests `VK_IMAGE_USAGE_STORAGE_BIT` only when its exact
+sampled/transfer allocation also admits storage. Binding validates device ownership, reflected
+SPIR-V format and access qualifier; after first image use its uploads join the same deferred order
+as compute and sampling. Ineligible allocations refuse explicitly. Every exact storage-capable
+`RenderTarget2D` uses the same zero-copy rule; its attachment image/view is reused without exposing
+a layout or native handle. The permanent `Vulkan_ShaderEffect_BoundTexture` oracle covers ordinary
+texture compute → upload → standard sampling, core and extended SNORM dedicated images, an extended
+`Rgba64` render target, and a cross-target render → compute-copy → destination-readback dependency.
 
 `MOD-2247` makes dispatch and storage-buffer copies immutable entries in the same monotonic order as
 clear, SpriteBatch, XNA 3D, indirect draws, timestamps and presentation. A compute/copy boundary
@@ -150,9 +160,9 @@ colour state with compute, transitions both render-target and dedicated storage 
 consuming segment without an eager submit, and proves render → compute → sampled render through a
 channel-shuffling image-load/store oracle. `MOD-2253` folds target readback's producer closure,
 transitions and copy into one submission/fence and removes queue/device idle waits. Optional
-extended storage-image formats and an ordinary-`Texture2D` bridge, where its allocation contract
-can legally provide one, remain `MOD-2244`; the dedicated `StorageTexture2D` and `RenderTarget2D`
-paths are claimed here.
+format gates and ordinary/XNA image bridges are completed by `MOD-2244`: the readback closure now
+also follows render-target inputs of every included compute command, so reading destination B
+cannot run an `A → B` dispatch before A's pending producer pass.
 
 ### Indirect drawing
 
@@ -229,8 +239,9 @@ DDS and XNB loaders preserve the native blocks and complete mip chains on those 
 For a format it allocates, the verdict comes from the device's `VkFormatProperties` **and** an
 exact `vkGetPhysicalDeviceImageFormatProperties` query for the usage combination CNA creates. The
 detailed profile then intersects sampling, linear filtering, transfer, mip and attachment facts
-with those implemented paths. Storage read/write is published only for the exact `Color`/`Rgba8`
-path implemented by `MOD-2228`; storage atomics and optional extended formats remain unsupported.
+with those implemented paths. Storage read/write is published for the fifteen exact
+format-qualified paths implemented by `MOD-2244`, intersected with the enabled extended-format
+feature and complete native image-usage facts; storage atomics remain unsupported.
 Timestamp period is published in integer picoseconds only when the selected graphics queue exposes
 timestamp bits and the period is positive; llvmpipe reports 1000 ps and RADV 10019 ps in the
 permanent `MOD-2246` runs. Texture-array layers publish the sampled 2D-array image limit
@@ -314,7 +325,8 @@ The existing XNA Vulkan paths snapshot mutable draw state, retain deferred rende
 destinations independently of their public wrappers, evict descriptor entries that mention dying
 views and retire images, buffers, views, pipelines, layouts, descriptors and queries only after the
 consuming frame fence. `MOD-2252` applies and verifies the same path for storage buffers, compute
-programs, dedicated and render-target storage images, texture arrays and timestamp pools. Commands
+programs, dedicated, ordinary-texture and render-target storage images, texture arrays and
+timestamp pools. Commands
 retain internal records through command recording; resize preserves their handles; terminal device
 teardown releases handles and disconnects externally retained records before destroying `VkDevice`.
 Applications neither receive the native device nor wait it idle before disposal.
