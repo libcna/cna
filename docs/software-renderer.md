@@ -385,6 +385,11 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   rather than being truncated by the renderer interface's compatibility fallback. A shared
   Software/EasyGL fixture compares each direct draw with the equivalent `Begin` transform using
   byte-exact full-target images.
+- **Large `SpriteBatch` queues remain exact** (`SOFTWARE-251`) — Microsoft XNA/FNA expose queues
+  larger than one native submission but chunk the actual 16-bit indexed draws at 2,048 sprites.
+  Software already rendered the 16,385th same-texture sprite correctly; the new shared exact-pixel
+  discriminator also forced EasyGL to adopt the same native boundary instead of wrapping its
+  65,536th vertex back to zero.
 - **The classic SpriteBatch/SpriteFont parity corpus executes on the CPU** (`SOFTWARE-138`).
   Eighteen renderer-independent scenes shared with EasyGL cover flips, rotation/origin, both scale
   overloads, source rectangles, layer sorting, transforms, render targets, viewports, scissor,

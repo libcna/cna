@@ -889,6 +889,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_SpriteBatchSubpixelContract
         COMMAND cna_test_software_spritebatch_subpixel TIMEOUT 30 LABELS "Software")
 
+    # SOFTWARE-251: Microsoft XNA/FNA split SpriteBatch work into 2,048-sprite native batches.
+    # The same public discriminator runs on EasyGL, whose unbounded UInt16 index accumulation used
+    # to wrap the 16,385th same-texture sprite back onto vertex zero.
+    cna_software_test(cna_test_software_spritebatch_large_batch
+                      ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_large_batch_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteBatchLargeBatchContract
+        COMMAND cna_test_software_spritebatch_large_batch TIMEOUT 120 LABELS "Software")
+
     # SOFTWARE-138: compile the renderer-independent EasyGL SpriteBatch/SpriteFont public corpus
     # unchanged for Software. Historical filenames remain beside their original EasyGL registrations;
     # none of these sources reaches renderer internals.

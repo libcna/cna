@@ -2194,6 +2194,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_easygl_spritebatch_subpixel
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # SOFTWARE-251: the public XNA SpriteBatch surface accepts more sprites than one native
+        # UInt16-index submission. Microsoft XNA/FNA chunk at 2,048; this observes the 16,385th
+        # same-texture sprite, whose vertex base wrapped to zero in EasyGL before the repair.
+        cna_easygl_test(cna_test_easygl_spritebatch_large_batch
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_large_batch_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_SpriteBatchLargeBatchContract
+            COMMAND cna_test_easygl_spritebatch_large_batch
+            TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # REMED-GFX-151 cross-renderer control: the canonical XNA render-to-texture sequence -- render
         # into a target, unbind it, sample it -- must complete in ONE public frame with no intervening
         # GetData, Present, extra frame, manual flush or wait. The defect was Vulkan-local (its deferred

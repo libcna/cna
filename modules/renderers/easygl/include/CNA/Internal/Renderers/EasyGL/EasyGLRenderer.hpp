@@ -794,6 +794,12 @@ namespace CNA::Internal::Renderers::EasyGL
         struct Vertex { float x, y, u, v, r, g, b, a; };
 
     private:
+        // Microsoft XNA and FNA both keep the native UInt16-indexed SpriteBatch buffers at 2,048
+        // sprites. The public queue may be larger, but each renderer submission must not be.
+        static constexpr std::size_t kMaxSpritesPerBatch = 2048;
+        static constexpr std::size_t kMaxVerticesPerBatch = kMaxSpritesPerBatch * 4;
+        static constexpr std::size_t kMaxIndicesPerBatch = kMaxSpritesPerBatch * 6;
+
         ::easygl::Device& device_;
         ::easygl::Program program_;
         ::easygl::VertexArray vao_;

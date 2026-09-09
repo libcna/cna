@@ -5385,12 +5385,14 @@ if (ProfileUsesGlslEs100())
         // flush of every compiled-effect sprite batch.
         if (compiledSpriteVertexBuffer_ == nullptr)
         {
-            compiledSpriteVertexBuffer_ = graphicsRenderer_->CreateVertexBuffer(vertexCount);
+            compiledSpriteVertexBuffer_ = graphicsRenderer_->CreateVertexBuffer(
+                static_cast<int>(kMaxVerticesPerBatch));
             compiledSpriteVertexBuffer_->SetVertexDeclaration(kSpriteDeclaration);
         }
         if (compiledSpriteIndexBuffer_ == nullptr)
         {
-            compiledSpriteIndexBuffer_ = graphicsRenderer_->CreateIndexBuffer16(indexCount);
+            compiledSpriteIndexBuffer_ = graphicsRenderer_->CreateIndexBuffer16(
+                static_cast<int>(kMaxIndicesPerBatch));
         }
         compiledSpriteVertexBuffer_->SetData(pending_vertices_.data(), vertexCount,
                                              sizeof(Vertex));
@@ -5519,6 +5521,19 @@ if (ProfileUsesGlslEs100())
             current_texture_ = &texture;
             // REMED-GFX-147: resolved once per bound source rather than once per sprite -- a
             // batch is by construction one texture, so this is a binding-time decision.
+            ResolveCurrentTextureRowOrder();
+        }
+
+        // XNA's queue is unbounded from the caller's point of view, but its native dynamic
+        // buffers are deliberately limited to 2,048 sprites per submission. EasyGL previously
+        // accumulated every same-texture sprite until End() and narrowed pending_vertices_.size()
+        // to UInt16 below. The 16,385th quad therefore wrapped its base from 65,536 to zero and
+        // silently redrew the first quad. Chunk at XNA's real boundary, then restore the source
+        // FlushBatch cleared so this call can append the first quad of the next submission.
+        if (pending_vertices_.size() >= kMaxVerticesPerBatch)
+        {
+            FlushBatch();
+            current_texture_ = &texture;
             ResolveCurrentTextureRowOrder();
         }
 
