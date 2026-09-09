@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <tuple>
@@ -32,6 +33,35 @@ namespace CNA::Internal::Renderers::Vulkan
     class VulkanTexture2DArrayRenderer;      // forward
     class VulkanStorageTexture2DRenderer;    // forward
     class VulkanGpuTimerRenderer;            // forward
+
+    /** @brief Renderer-internal logical use of one Vulkan buffer or image subresource. */
+    enum class VulkanResourceIntent : std::uint8_t
+    {
+        None,
+        CpuRead,
+        CpuWrite,
+        TransferRead,
+        TransferWrite,
+        TransferReadWrite,
+        ShaderRead,
+        ShaderWrite,
+        ShaderReadWrite,
+        RenderTargetWrite,
+        SampledRead,
+        IndirectRead,
+        VertexRead,
+        IndexRead
+    };
+
+    /** @brief Accumulated native state for one logical buffer or image subresource. */
+    struct VulkanResourceUsageState
+    {
+        VkPipelineStageFlags stages = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        VkAccessFlags access = 0;
+        VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
+        bool initialized = false;
+        bool writes = false;
+    };
 
     // -------------------------------------------------------------------------
     // Vertex types (internal to the Vulkan renderer)
@@ -464,8 +494,8 @@ namespace CNA::Internal::Renderers::Vulkan
         void DisconnectOwner() noexcept { owner_ = nullptr; }
 
     private:
-        void RecordTransition(
-            VkCommandBuffer commandBuffer, int mipLevel, VkImageLayout newLayout) const;
+        void RecordUsage(
+            VkCommandBuffer commandBuffer, int mipLevel, VulkanResourceIntent intent) const;
 
         VulkanRenderer* owner_ = nullptr;
         int width_ = 0;
@@ -480,7 +510,7 @@ namespace CNA::Internal::Renderers::Vulkan
         VkDeviceMemory memory_ = VK_NULL_HANDLE;
         VkImageView storageView_ = VK_NULL_HANDLE;
         VkImageView sampledView_ = VK_NULL_HANDLE;
-        mutable std::vector<VkImageLayout> mipLayouts_;
+        mutable std::vector<VulkanResourceUsageState> mipUsageStates_;
     };
 
     // -------------------------------------------------------------------------
@@ -1336,6 +1366,8 @@ namespace CNA::Internal::Renderers::Vulkan
     /** @brief Vulkan storage buffer with immutable portable roles and CPU-access intent. */
     class VulkanStorageBufferRenderer final : public IStorageBufferRenderer
     {
+        friend class VulkanRenderer;
+
     public:
         /**
          * @brief Creates a storage buffer of @p byteSize bytes with exact native usage.
@@ -1433,7 +1465,7 @@ namespace CNA::Internal::Renderers::Vulkan
             return owner_ == owner;
         }
 
-        /** @brief Destroys Vulkan handles immediately while the owning device exists. */
+        /** @brief Hands live Vulkan handles to fence-safe deferred retirement. */
         void ReleaseVulkanResources();
 
         /** @brief Forgets the renderer after device teardown. */
@@ -1449,6 +1481,7 @@ namespace CNA::Internal::Renderers::Vulkan
         std::uint32_t cpuAccess_ = 0;
         VkBufferUsageFlags vkUsage_ = 0;
         VkMemoryPropertyFlags memoryProperties_ = 0;
+        mutable VulkanResourceUsageState usageState_;
     };
 
     /**
@@ -3199,6 +3232,24 @@ namespace CNA::Internal::Renderers::Vulkan
         {
             return oneTimeCommandCountEXT_;
         }
+
+        /**
+         * @brief Returns how many resource barriers the logical Vulkan usage tracker emitted.
+         * @return Cumulative emitted buffer/image barrier count.
+         */
+        CNAEXT [[nodiscard]] std::uint64_t GetLogicalResourceBarrierCountEXT() const noexcept
+        {
+            return logicalResourceBarrierCountEXT_;
+        }
+
+        /**
+         * @brief Returns how many compatible resource uses required no Vulkan barrier.
+         * @return Cumulative elided buffer/image transition count.
+         */
+        CNAEXT [[nodiscard]] std::uint64_t GetLogicalResourceBarrierElisionCountEXT() const noexcept
+        {
+            return logicalResourceBarrierElisionCountEXT_;
+        }
         /**
          * @brief Test-only: total nanoseconds spent inside those `vkQueueWaitIdle` calls.
          *
@@ -3868,6 +3919,9 @@ namespace CNA::Internal::Renderers::Vulkan
         /// waits cost. Both device-dependent in magnitude, both structural in ratio.
         uint64_t oneTimeCommandCountEXT_ = 0;
         uint64_t oneTimeCommandWaitNanosEXT_ = 0;
+        /// MOD-2248: exact logical-resource barriers emitted and compatible uses elided.
+        std::uint64_t logicalResourceBarrierCountEXT_ = 0;
+        std::uint64_t logicalResourceBarrierElisionCountEXT_ = 0;
         /// plans/plan_modern.md MOD-2242: live and cumulative native compute allocation counters.
         std::size_t liveComputeDescriptorSetCountEXT_ = 0;
         uint64_t computeDescriptorSetAllocationCountEXT_ = 0;
@@ -4887,8 +4941,31 @@ namespace CNA::Internal::Renderers::Vulkan
         void QueueComputeDispatchEXT(PendingModernCommand&& command);
         void QueueStorageBufferCopyEXT(PendingModernCommand&& command);
         void RecordModernCommandEXT(VkCommandBuffer cb, const PendingModernCommand& command);
-        void FlushPendingModernCommandsForHostEXT();
+        void FlushPendingModernCommandsForHostEXT(
+            const VulkanStorageBufferRenderer* targetBuffer = nullptr,
+            VulkanResourceIntent hostIntent = VulkanResourceIntent::CpuRead);
         void SplitRenderPassForModernCommandEXT();
+        struct NativeResourceUsageEXT
+        {
+            VkPipelineStageFlags stages = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            VkAccessFlags access = 0;
+            VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
+            bool writes = false;
+        };
+        [[nodiscard]] static NativeResourceUsageEXT DescribeResourceIntentEXT(
+            VulkanResourceIntent intent, bool image);
+        void NoteHostBufferUsageEXT(
+            VulkanResourceUsageState& state, VulkanResourceIntent intent) const;
+        bool RecordBufferUsageEXT(
+            VkCommandBuffer cb, VkBuffer buffer, VulkanResourceUsageState& state,
+            VulkanResourceIntent intent);
+        std::size_t RecordImageUsageEXT(
+            VkCommandBuffer cb, VkImage image,
+            std::vector<VulkanResourceUsageState>& states,
+            std::uint32_t totalMipLevels, VkImageAspectFlags aspects,
+            std::uint32_t baseMipLevel, std::uint32_t levelCount,
+            std::uint32_t baseArrayLayer, std::uint32_t layerCount,
+            VulkanResourceIntent intent);
         /**
          * @brief Queues one timestamp at the current public command position.
          * @param timer Timer record that owns the query pool.

@@ -273,8 +273,8 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 119: ShaderEffect with SPIR-V — SpriteBatch tint via custom push constants
-        # plan_vulkan.md VULKAN-253: a custom effect samples a texture it was explicitly bound,
-        # through descriptor set 1 -- the sprite's own stays at set 0.
+        # plan_vulkan.md VULKAN-253 / plan_modern.md MOD-2248: a custom effect samples a texture the
+        # caller explicitly bound through set 1, including tracked storage-image layout reuse.
         cna_vulkan_test(cna_test_vulkan_effect_bound_texture
                         vulkan_effect_bound_texture_test.cpp)
         cna_register_renderer_test(NAME Vulkan_ShaderEffect_BoundTexture
@@ -1458,11 +1458,9 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
                 COMMAND cna_test_vulkan_texture2d_array_contract
                 TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-            # plans/plan_modern.md MOD-2229/MOD-2241: SPIR-V compute plus descriptor-qualified
-            # storage buffers through the public CNAEXT wrappers. Every vector element, exact
-            # native usage/memory selection, staging copy and validation stream are checked.
-            # MOD-2242 extends the baseline with reflected sparse slots, typed scalar push
-            # constants, bounded native allocations, and destruction-time reclamation.
+            # plans/plan_modern.md MOD-2229/MOD-2241/MOD-2242/MOD-2248: SPIR-V compute plus
+            # descriptor-qualified storage buffers, exact native usage/memory, staging copies,
+            # bounded native allocation/lifetime and logical barrier emission/elision.
             cna_vulkan_test(cna_test_vulkan_compute_storage_buffer
                             vulkan_compute_storage_buffer_test.cpp)
             cna_register_renderer_test(NAME Vulkan_ComputeStorageBuffer

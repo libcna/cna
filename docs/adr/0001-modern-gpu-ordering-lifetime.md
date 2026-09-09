@@ -21,7 +21,9 @@ Subsequent `MOD-2229`/`MOD-2245` work made storage buffers tracked and proved de
 retention through fence retirement. `MOD-2246` put timestamp/debug records in the same monotonic
 graphics order and retires submitted query pools on that fence. `MOD-2247` then placed compute and
 buffer copies in that order as immutable records, splitting render passes at their exact command
-positions; narrow readback waits and resource-state refinement remain owned by `MOD-2248`–`MOD-2253`.
+positions. `MOD-2248` added the internal logical-use state machine and per-mip image state, replacing
+the coarse modern-command barriers with exact buffer/image dependencies and eliding compatible
+read-after-read uses. Remaining bridges and narrow readback stalls are owned by `MOD-2249`–`MOD-2253`.
 
 ## Decision
 

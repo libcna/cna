@@ -38,6 +38,7 @@
 //      both observe the exact quantised texel.
 //   M  A sparse undeclared image slot and access that differs from SPIR-V qualifiers are refused.
 //   N  Clearing the sampled storage binding restores the ordinary 2D white filler.
+//   O  Repeated sampling of the same image layout emits no redundant Vulkan image barrier.
 //
 // Exit code 0 = all PASS, 1 = any FAIL.
 
@@ -403,11 +404,29 @@ protected:
             const Color expected(64, 128, 191, 255);
             effect.SetStorageTextureEXT(0, storage);
             const Color drawn = DrawThrough(dev, effect, *white);
+            const std::uint64_t barriersAfterFirstSample =
+                Renderer().GetLogicalResourceBarrierCountEXT();
+            const std::uint64_t elisionsBeforeSecondSample =
+                Renderer().GetLogicalResourceBarrierElisionCountEXT();
+            const Color drawnAgain = DrawThrough(dev, effect, *white);
+            const std::uint64_t barriersAfterSecondSample =
+                Renderer().GetLogicalResourceBarrierCountEXT();
+            const std::uint64_t elisionsAfterSecondSample =
+                Renderer().GetLogicalResourceBarrierElisionCountEXT();
             check(Is(readback, expected) && Is(drawn, expected),
                   "L compute-write is visible to storage readback and sampled draw: read=" +
                       Text(readback) + " draw=" + Text(drawn) + " want=" + Text(expected));
             check(sparseSlotRefused && mismatchedAccessRefused,
                   "M reflected storage-image slot and access qualifier are enforced");
+            check(Is(drawnAgain, expected) &&
+                      barriersAfterSecondSample == barriersAfterFirstSample &&
+                      elisionsAfterSecondSample > elisionsBeforeSecondSample,
+                  "O repeated sampled-image use elides a redundant Vulkan barrier: " +
+                      Text(drawnAgain) + " barriers=" +
+                      std::to_string(barriersAfterFirstSample) + "->" +
+                      std::to_string(barriersAfterSecondSample) + " elisions=" +
+                      std::to_string(elisionsBeforeSecondSample) + "->" +
+                      std::to_string(elisionsAfterSecondSample));
             effect.ClearStorageTextureEXT(0);
             const Color cleared = DrawThrough(dev, effect, *white);
             check(Is(cleared, kWhite),

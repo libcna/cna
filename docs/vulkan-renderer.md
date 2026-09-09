@@ -124,9 +124,13 @@ clear, SpriteBatch, XNA 3D, indirect draws, timestamps and presentation. A compu
 closes the current render-pass segment, records outside both passes and leaves the same target bound
 for following graphics. Routine dispatch/copy therefore add no one-time submit or queue/device wait;
 requested CPU buffer/image readback remains their synchronous fallback. Storage-image sampling also
-retains its older synchronous transition. Conservative automatic dependencies currently cover
-host/transfer/compute and following graphics/indirect access; `MOD-2248`–`MOD-2253` own finer
-resource tracking and those remaining transition/readback stalls. Optional
+retains its older synchronous submission boundary. `MOD-2248` replaces the coarse command-wide
+barriers with an internal logical-use tracker. Buffers retain accumulated CPU, transfer, compute
+and indirect intent; storage images retain the same state independently for every mip. Write
+hazards and layout changes emit buffer/image barriers at the consuming command, while compatible
+read-after-read uses merge their stage/access scopes and emit nothing. The intent vocabulary also
+names render-target, sampled, vertex and index uses so later bridges do not expose native Vulkan
+state. `MOD-2249`–`MOD-2253` own the remaining renderer paths and transition/readback stalls. Optional
 extended storage-image formats and legal bridges from existing XNA textures/render targets remain
 `MOD-2244`; the dedicated `StorageTexture2D` path is claimed here.
 

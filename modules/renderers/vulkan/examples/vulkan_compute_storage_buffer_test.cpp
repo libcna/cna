@@ -14,7 +14,8 @@
 // L  Range upload/copy/readback crosses a GPU-only buffer byte-exactly.
 // M  A GPU-only storage destination is written by compute and copied to CPU-readable staging.
 // N  Invalid access/range/overlap requests fail before native mutation.
-// O  The complete exercise produces no new Vulkan validation warnings or errors.
+// O  Two copies from one source prove read/read barrier elision without losing either result.
+// P  The complete exercise produces no new Vulkan validation warnings or errors.
 
 #include "CNA/Graphics/ComputeShader.hpp"
 #include "CNA/Graphics/StorageBuffer.hpp"
@@ -576,10 +577,46 @@ protected:
                   " overlap=" +
                   std::string(overlappingCopyRefused ? "refused" : "accepted"));
 
+        StorageBuffer fanoutSource(
+            device, StorageBufferDescriptor(
+                        bytes.size(), StorageBufferUsage::TransferSource,
+                        StorageBufferCpuAccess::Write));
+        StorageBuffer fanoutA(
+            device, StorageBufferDescriptor(
+                        bytes.size(), StorageBufferUsage::TransferDestination,
+                        StorageBufferCpuAccess::Read));
+        StorageBuffer fanoutB(
+            device, StorageBufferDescriptor(
+                        bytes.size(), StorageBufferUsage::TransferDestination,
+                        StorageBufferCpuAccess::Read));
+        fanoutSource.setBytes(bytes.data(), bytes.size());
+        const std::uint64_t barriersBeforeFanout =
+            renderer->GetLogicalResourceBarrierCountEXT();
+        const std::uint64_t elisionsBeforeFanout =
+            renderer->GetLogicalResourceBarrierElisionCountEXT();
+        fanoutSource.copyTo(fanoutA, 0, 0, bytes.size());
+        fanoutSource.copyTo(fanoutB, 0, 0, bytes.size());
+        std::array<std::uint8_t, 17> fanoutBytesA{};
+        std::array<std::uint8_t, 17> fanoutBytesB{};
+        fanoutB.getBytes(fanoutBytesB.data(), fanoutBytesB.size());
+        fanoutA.getBytes(fanoutBytesA.data(), fanoutBytesA.size());
+        const std::uint64_t fanoutBarriers =
+            renderer->GetLogicalResourceBarrierCountEXT() - barriersBeforeFanout;
+        const std::uint64_t fanoutElisions =
+            renderer->GetLogicalResourceBarrierElisionCountEXT() - elisionsBeforeFanout;
+        check(fanoutBytesA == bytes && fanoutBytesB == bytes &&
+                  fanoutBarriers == 3 && fanoutElisions == 1,
+              "O compatible repeated transfer reads elide their Vulkan barrier",
+              "barriers=" + std::to_string(fanoutBarriers) +
+                  " elisions=" + std::to_string(fanoutElisions) +
+                  " outputs=" +
+                  std::string(fanoutBytesA == bytes && fanoutBytesB == bytes
+                                  ? "exact" : "mismatch"));
+
         const std::size_t validationAfter = renderer->GetValidationMessagesEXT().size();
         check(VulkanRenderer::IsValidationActiveEXT() &&
                   validationAfter == validationBefore,
-              "O compute/storage operations add no Vulkan validation messages",
+              "P compute/storage operations add no Vulkan validation messages",
               "layer=" +
                   std::string(VulkanRenderer::IsValidationActiveEXT() ? "active" : "inactive") +
                   " before=" + std::to_string(validationBefore) +

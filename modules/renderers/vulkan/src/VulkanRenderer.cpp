@@ -999,7 +999,7 @@ namespace CNA::Internal::Renderers::Vulkan
         , mipLevelCount_(mipLevelCount)
         , surfaceFormat_(surfaceFormat)
         , usage_(usage)
-        , mipLayouts_(static_cast<std::size_t>(mipLevelCount), VK_IMAGE_LAYOUT_UNDEFINED)
+        , mipUsageStates_(static_cast<std::size_t>(mipLevelCount))
     {
         if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE)
             throw std::runtime_error("Vulkan storage texture: renderer device is unavailable");
@@ -1048,24 +1048,6 @@ namespace CNA::Internal::Renderers::Vulkan
             if (vkBindImageMemory(owner_->device_, image_, memory_, 0) != VK_SUCCESS)
                 throw std::runtime_error("Vulkan storage texture: vkBindImageMemory failed");
 
-            VkCommandBuffer commandBuffer = owner_->BeginOneTimeCommands();
-            VkImageMemoryBarrier barrier{};
-            barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-            barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-            barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            barrier.image = image_;
-            barrier.subresourceRange = {
-                VK_IMAGE_ASPECT_COLOR_BIT, 0, static_cast<std::uint32_t>(mipLevelCount_), 0, 1};
-            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-            vkCmdPipelineBarrier(
-                commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
-                0, nullptr, 0, nullptr, 1, &barrier);
-            owner_->EndOneTimeCommands(commandBuffer);
-            std::fill(mipLayouts_.begin(), mipLayouts_.end(), VK_IMAGE_LAYOUT_GENERAL);
-
             VkImageViewCreateInfo viewInfo{};
             viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
             viewInfo.image = image_;
@@ -1101,52 +1083,14 @@ namespace CNA::Internal::Renderers::Vulkan
         }
     }
 
-    void VulkanStorageTexture2DRenderer::RecordTransition(
+    void VulkanStorageTexture2DRenderer::RecordUsage(
         const VkCommandBuffer commandBuffer, const int mipLevel,
-        const VkImageLayout newLayout) const
+        const VulkanResourceIntent intent) const
     {
-        const VkImageLayout oldLayout = mipLayouts_.at(static_cast<std::size_t>(mipLevel));
-        VkImageMemoryBarrier barrier{};
-        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        barrier.oldLayout = oldLayout;
-        barrier.newLayout = newLayout;
-        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.image = image_;
-        barrier.subresourceRange = {
-            VK_IMAGE_ASPECT_COLOR_BIT, static_cast<std::uint32_t>(mipLevel), 1, 0, 1};
-
-        VkPipelineStageFlags sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-        if (oldLayout == VK_IMAGE_LAYOUT_GENERAL) {
-            barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-            sourceStage = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
-        } else if (oldLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
-            barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
-            sourceStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-        } else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
-            barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-            sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-        } else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
-            barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-            sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-        }
-
-        VkPipelineStageFlags destinationStage = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
-        if (newLayout == VK_IMAGE_LAYOUT_GENERAL) {
-            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-        } else if (newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
-            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-            destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-        } else if (newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
-            barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-            destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-        } else if (newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
-            barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-            destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-        }
-        vkCmdPipelineBarrier(commandBuffer, sourceStage, destinationStage, 0,
-                             0, nullptr, 0, nullptr, 1, &barrier);
-        mipLayouts_[static_cast<std::size_t>(mipLevel)] = newLayout;
+        owner_->RecordImageUsageEXT(
+            commandBuffer, image_, mipUsageStates_,
+            static_cast<std::uint32_t>(mipLevelCount_), VK_IMAGE_ASPECT_COLOR_BIT,
+            static_cast<std::uint32_t>(mipLevel), 1, 0, 1, intent);
     }
 
     bool VulkanStorageTexture2DRenderer::SetData(
@@ -1168,7 +1112,7 @@ namespace CNA::Internal::Renderers::Vulkan
         vkUnmapMemory(owner_->device_, stagingMemory);
 
         VkCommandBuffer commandBuffer = owner_->BeginOneTimeCommands();
-        RecordTransition(commandBuffer, mipLevel, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+        RecordUsage(commandBuffer, mipLevel, VulkanResourceIntent::TransferWrite);
         VkBufferImageCopy copy{};
         copy.imageSubresource = {
             VK_IMAGE_ASPECT_COLOR_BIT, static_cast<std::uint32_t>(mipLevel), 0, 1};
@@ -1177,7 +1121,6 @@ namespace CNA::Internal::Renderers::Vulkan
                             static_cast<std::uint32_t>(height), 1};
         vkCmdCopyBufferToImage(commandBuffer, stagingBuffer, image_,
                                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
-        RecordTransition(commandBuffer, mipLevel, VK_IMAGE_LAYOUT_GENERAL);
         owner_->EndOneTimeCommands(commandBuffer);
         vkDestroyBuffer(owner_->device_, stagingBuffer, nullptr);
         vkFreeMemory(owner_->device_, stagingMemory, nullptr);
@@ -1199,7 +1142,7 @@ namespace CNA::Internal::Renderers::Vulkan
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             stagingBuffer, stagingMemory);
         VkCommandBuffer commandBuffer = owner_->BeginOneTimeCommands();
-        RecordTransition(commandBuffer, mipLevel, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+        RecordUsage(commandBuffer, mipLevel, VulkanResourceIntent::TransferRead);
         VkBufferImageCopy copy{};
         copy.imageSubresource = {
             VK_IMAGE_ASPECT_COLOR_BIT, static_cast<std::uint32_t>(mipLevel), 0, 1};
@@ -1208,7 +1151,6 @@ namespace CNA::Internal::Renderers::Vulkan
                             static_cast<std::uint32_t>(height), 1};
         vkCmdCopyImageToBuffer(commandBuffer, image_, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                                stagingBuffer, 1, &copy);
-        RecordTransition(commandBuffer, mipLevel, VK_IMAGE_LAYOUT_GENERAL);
         owner_->EndOneTimeCommands(commandBuffer);
         void* mapped = nullptr;
         const VkResult result = vkMapMemory(
@@ -1223,9 +1165,13 @@ namespace CNA::Internal::Renderers::Vulkan
     }
 
     void VulkanStorageTexture2DRenderer::PrepareForComputeEXT(
-        const VkCommandBuffer commandBuffer, int /*accessMode*/)
+        const VkCommandBuffer commandBuffer, const int accessMode)
     {
-        RecordTransition(commandBuffer, 0, VK_IMAGE_LAYOUT_GENERAL);
+        const VulkanResourceIntent intent = accessMode == 0
+            ? VulkanResourceIntent::ShaderRead
+            : (accessMode == 1 ? VulkanResourceIntent::ShaderWrite
+                               : VulkanResourceIntent::ShaderReadWrite);
+        RecordUsage(commandBuffer, 0, intent);
     }
 
     bool VulkanStorageTexture2DRenderer::PrepareForSamplingEXT()
@@ -1234,8 +1180,11 @@ namespace CNA::Internal::Renderers::Vulkan
             (usage_ & UINT32_C(4)) == 0)
             return false;
         VkCommandBuffer commandBuffer = owner_->BeginOneTimeCommands();
-        for (int mip = 0; mip < mipLevelCount_; ++mip)
-            RecordTransition(commandBuffer, mip, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        owner_->RecordImageUsageEXT(
+            commandBuffer, image_, mipUsageStates_,
+            static_cast<std::uint32_t>(mipLevelCount_), VK_IMAGE_ASPECT_COLOR_BIT,
+            0, static_cast<std::uint32_t>(mipLevelCount_), 0, 1,
+            VulkanResourceIntent::SampledRead);
         owner_->EndOneTimeCommands(commandBuffer);
         return true;
     }
@@ -12645,35 +12594,6 @@ namespace CNA::Internal::Renderers::Vulkan
             }
         }
 
-        // MOD-2245: an indirect-command fetch is outside every render pass, so its producer
-        // dependency must be established here as well. This one barrier covers host uploads,
-        // transfer copies and compute work that may have produced any pending argument buffer.
-        // MOD-2247's per-command barriers now supply this dependency at the exact ordered boundary;
-        // this conservative frame-prefix barrier remains valid for CPU-produced arguments.
-        const bool recordsIndirect = std::any_of(
-            pending3D_.begin(), pending3D_.end(), [&](const Pending3DDraw& draw) {
-                return draw.indirectBuffer != VK_NULL_HANDLE &&
-                       (!rtOnly || recordedByFlush(draw.rt.get(), draw.segment));
-            });
-        if (recordsIndirect)
-        {
-            VkMemoryBarrier commandBarrier{};
-            commandBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-            commandBarrier.srcAccessMask =
-                VK_ACCESS_HOST_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
-            VkPipelineStageFlags sourceStages =
-                VK_PIPELINE_STAGE_HOST_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT;
-            if ((graphicsQueueFlags_ & VK_QUEUE_COMPUTE_BIT) != 0)
-            {
-                commandBarrier.srcAccessMask |= VK_ACCESS_SHADER_WRITE_BIT;
-                sourceStages |= VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
-            }
-            commandBarrier.dstAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
-            vkCmdPipelineBarrier(
-                cb, sourceStages, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT,
-                0, 1, &commandBarrier, 0, nullptr, 0, nullptr);
-        }
-
         // REMED-GFX-013: build the dynamic VkRect2D scissor for one draw/batch from its captured
         // XNA scissor state (see Pending3DDraw / BatchSnapshot) and the physical extent of the
         // framebuffer it targets. Disabled or degenerate (zero-sized) → whole framebuffer, matching
@@ -13765,6 +13685,22 @@ namespace CNA::Internal::Renderers::Vulkan
             // MOD-2247: a modern command closes its issuing graphics segment and precedes every
             // later segment. Record it outside both render passes, at that exact boundary.
             recordModernBeforeSegment(seg.id);
+            // MOD-2248: indirect fetch dependencies are buffer-specific and must be recorded
+            // outside the render pass. A modern producer necessarily split the prior segment, so
+            // this point is both the exact ordered boundary and legal Vulkan command placement.
+            for (const auto& draw : pending3D_)
+            {
+                if (draw.segment != seg.id || draw.indirectBuffer == VK_NULL_HANDLE) continue;
+                const auto argumentLifetime =
+                    std::dynamic_pointer_cast<const VulkanStorageBufferRenderer>(
+                        draw.indirectBufferLifetime);
+                if (argumentLifetime == nullptr)
+                    throw std::logic_error(
+                        "Vulkan indirect draw lost its tracked argument-buffer record");
+                RecordBufferUsageEXT(
+                    cb, draw.indirectBuffer, argumentLifetime->usageState_,
+                    VulkanResourceIntent::IndirectRead);
+            }
             // plan_vulkan.md VULKAN-216: every pipeline built while recording this segment has to
             // rasterize with the sample count THIS segment's attachments carry. Set once per
             // segment rather than threaded through fourteen factory signatures, because it is a
@@ -14876,9 +14812,12 @@ namespace CNA::Internal::Renderers::Vulkan
         if ((cpuAccess_ & (UINT32_C(1) << 1)) == 0 || mapped_ == nullptr) return false;
         // A host write is itself an ordered public operation. Complete older deferred modern
         // uses before changing their mapped input bytes; ordinary dispatch/copy paths do not wait.
-        owner_->FlushPendingModernCommandsForHostEXT();
-        if (byteSize != 0)
+        owner_->FlushPendingModernCommandsForHostEXT(
+            this, VulkanResourceIntent::CpuWrite);
+        if (byteSize != 0) {
             std::memcpy(static_cast<std::byte*>(mapped_) + byteOffset, data, byteSize);
+            owner_->NoteHostBufferUsageEXT(usageState_, VulkanResourceIntent::CpuWrite);
+        }
         return true;
     }
 
@@ -14894,9 +14833,12 @@ namespace CNA::Internal::Renderers::Vulkan
         if ((cpuAccess_ & (UINT32_C(1) << 0)) == 0 || mapped_ == nullptr) return false;
         // Requested host readback is the synchronization boundary; routine dispatch and copy
         // remain deferred in the frame stream.
-        owner_->FlushPendingModernCommandsForHostEXT();
-        if (byteSize != 0)
+        owner_->FlushPendingModernCommandsForHostEXT(
+            this, VulkanResourceIntent::CpuRead);
+        if (byteSize != 0) {
+            owner_->NoteHostBufferUsageEXT(usageState_, VulkanResourceIntent::CpuRead);
             std::memcpy(out, static_cast<const std::byte*>(mapped_) + byteOffset, byteSize);
+        }
         return true;
     }
 
@@ -15850,7 +15792,7 @@ namespace CNA::Internal::Renderers::Vulkan
     {
         // Dispatch and copy records already carry their producer/consumer dependencies in the
         // renderer's one ordered stream. The compatibility call is therefore fulfilled without a
-        // second command queue, submit, or wait; MOD-2248/2249 refine the conservative masks.
+        // second command queue, submit, or wait; MOD-2248's resource tracker selects the masks.
     }
 
     bool VulkanRenderer::SupportsComputeShadersEXT() const
@@ -16171,19 +16113,219 @@ namespace CNA::Internal::Renderers::Vulkan
         SplitRenderPassForModernCommandEXT();
     }
 
+    VulkanRenderer::NativeResourceUsageEXT VulkanRenderer::DescribeResourceIntentEXT(
+        const VulkanResourceIntent intent, const bool image)
+    {
+        NativeResourceUsageEXT usage;
+        switch (intent)
+        {
+        case VulkanResourceIntent::None:
+            break;
+        case VulkanResourceIntent::CpuRead:
+            usage.stages = VK_PIPELINE_STAGE_HOST_BIT;
+            usage.access = VK_ACCESS_HOST_READ_BIT;
+            usage.layout = image ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED;
+            break;
+        case VulkanResourceIntent::CpuWrite:
+            usage.stages = VK_PIPELINE_STAGE_HOST_BIT;
+            usage.access = VK_ACCESS_HOST_WRITE_BIT;
+            usage.layout = image ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED;
+            usage.writes = true;
+            break;
+        case VulkanResourceIntent::TransferRead:
+            usage.stages = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            usage.access = VK_ACCESS_TRANSFER_READ_BIT;
+            usage.layout = image ? VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+                                 : VK_IMAGE_LAYOUT_UNDEFINED;
+            break;
+        case VulkanResourceIntent::TransferWrite:
+            usage.stages = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            usage.access = VK_ACCESS_TRANSFER_WRITE_BIT;
+            usage.layout = image ? VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+                                 : VK_IMAGE_LAYOUT_UNDEFINED;
+            usage.writes = true;
+            break;
+        case VulkanResourceIntent::TransferReadWrite:
+            usage.stages = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            usage.access = VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+            usage.layout = image ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED;
+            usage.writes = true;
+            break;
+        case VulkanResourceIntent::ShaderRead:
+            usage.stages = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+            usage.access = VK_ACCESS_SHADER_READ_BIT;
+            usage.layout = image ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED;
+            break;
+        case VulkanResourceIntent::ShaderWrite:
+            usage.stages = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+            usage.access = VK_ACCESS_SHADER_WRITE_BIT;
+            usage.layout = image ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED;
+            usage.writes = true;
+            break;
+        case VulkanResourceIntent::ShaderReadWrite:
+            usage.stages = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+            usage.access = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+            usage.layout = image ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED;
+            usage.writes = true;
+            break;
+        case VulkanResourceIntent::RenderTargetWrite:
+            usage.stages = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+            usage.access = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+                           VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+            usage.layout = image ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+                                 : VK_IMAGE_LAYOUT_UNDEFINED;
+            usage.writes = true;
+            break;
+        case VulkanResourceIntent::SampledRead:
+            usage.stages = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
+                           VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+                           VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+            usage.access = VK_ACCESS_SHADER_READ_BIT;
+            usage.layout = image ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+                                 : VK_IMAGE_LAYOUT_UNDEFINED;
+            break;
+        case VulkanResourceIntent::IndirectRead:
+            usage.stages = VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
+            usage.access = VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
+            break;
+        case VulkanResourceIntent::VertexRead:
+            usage.stages = VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
+            usage.access = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+            break;
+        case VulkanResourceIntent::IndexRead:
+            usage.stages = VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
+            usage.access = VK_ACCESS_INDEX_READ_BIT;
+            break;
+        }
+        return usage;
+    }
+
+    void VulkanRenderer::NoteHostBufferUsageEXT(
+        VulkanResourceUsageState& state, const VulkanResourceIntent intent) const
+    {
+        if (intent != VulkanResourceIntent::CpuRead &&
+            intent != VulkanResourceIntent::CpuWrite)
+            throw std::logic_error("Vulkan logical tracker: host note requires a CPU intent");
+        const NativeResourceUsageEXT usage = DescribeResourceIntentEXT(intent, false);
+        state = {usage.stages, usage.access, usage.layout, true, usage.writes};
+    }
+
+    bool VulkanRenderer::RecordBufferUsageEXT(
+        const VkCommandBuffer cb, const VkBuffer buffer,
+        VulkanResourceUsageState& state, const VulkanResourceIntent intent)
+    {
+        const NativeResourceUsageEXT next = DescribeResourceIntentEXT(intent, false);
+        if (!state.initialized)
+        {
+            state = {next.stages, next.access, next.layout, true, next.writes};
+            return false;
+        }
+
+        if (!state.writes && !next.writes)
+        {
+            state.stages |= next.stages;
+            state.access |= next.access;
+            ++logicalResourceBarrierElisionCountEXT_;
+            return false;
+        }
+
+        VkBufferMemoryBarrier barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+        barrier.srcAccessMask = state.access;
+        barrier.dstAccessMask = next.access;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.buffer = buffer;
+        barrier.offset = 0;
+        barrier.size = VK_WHOLE_SIZE;
+        vkCmdPipelineBarrier(
+            cb, state.stages, next.stages, 0,
+            0, nullptr, 1, &barrier, 0, nullptr);
+        ++logicalResourceBarrierCountEXT_;
+        state = {next.stages, next.access, next.layout, true, next.writes};
+        return true;
+    }
+
+    std::size_t VulkanRenderer::RecordImageUsageEXT(
+        const VkCommandBuffer cb, const VkImage image,
+        std::vector<VulkanResourceUsageState>& states,
+        const std::uint32_t totalMipLevels, const VkImageAspectFlags aspects,
+        const std::uint32_t baseMipLevel, const std::uint32_t levelCount,
+        const std::uint32_t baseArrayLayer, const std::uint32_t layerCount,
+        const VulkanResourceIntent intent)
+    {
+        if (totalMipLevels == 0 || states.size() % totalMipLevels != 0 ||
+            levelCount == 0 || layerCount == 0 ||
+            baseMipLevel > totalMipLevels || levelCount > totalMipLevels - baseMipLevel ||
+            baseArrayLayer > states.size() / totalMipLevels ||
+            layerCount > states.size() / totalMipLevels - baseArrayLayer)
+            throw std::logic_error("Vulkan logical tracker: image subresource range is invalid");
+
+        const NativeResourceUsageEXT next = DescribeResourceIntentEXT(intent, true);
+        std::vector<VkImageMemoryBarrier> barriers;
+        barriers.reserve(static_cast<std::size_t>(levelCount) * layerCount);
+        VkPipelineStageFlags sourceStages = 0;
+        for (std::uint32_t layer = baseArrayLayer;
+             layer < baseArrayLayer + layerCount; ++layer)
+        {
+            for (std::uint32_t mip = baseMipLevel; mip < baseMipLevel + levelCount; ++mip)
+            {
+                VulkanResourceUsageState& state = states[
+                    static_cast<std::size_t>(layer) * totalMipLevels + mip];
+                const bool layoutChanges = !state.initialized || state.layout != next.layout;
+                const bool hasHazard = state.initialized && (state.writes || next.writes);
+                if (!layoutChanges && !hasHazard)
+                {
+                    state.stages |= next.stages;
+                    state.access |= next.access;
+                    ++logicalResourceBarrierElisionCountEXT_;
+                    continue;
+                }
+
+                VkImageMemoryBarrier barrier{};
+                barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                barrier.srcAccessMask = state.initialized ? state.access : 0;
+                barrier.dstAccessMask = next.access;
+                barrier.oldLayout = state.initialized ? state.layout : VK_IMAGE_LAYOUT_UNDEFINED;
+                barrier.newLayout = next.layout;
+                barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                barrier.image = image;
+                barrier.subresourceRange = {aspects, mip, 1, layer, 1};
+                barriers.push_back(barrier);
+                sourceStages |= state.initialized
+                    ? state.stages : VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+                state = {next.stages, next.access, next.layout, true, next.writes};
+            }
+        }
+        if (barriers.empty()) return 0;
+        vkCmdPipelineBarrier(
+            cb, sourceStages, next.stages, 0,
+            0, nullptr, 0, nullptr,
+            static_cast<std::uint32_t>(barriers.size()), barriers.data());
+        logicalResourceBarrierCountEXT_ += barriers.size();
+        return barriers.size();
+    }
+
     void VulkanRenderer::RecordModernCommandEXT(
         const VkCommandBuffer cb, const PendingModernCommand& command)
     {
         if (command.kind == PendingModernCommand::Kind::BufferCopy)
         {
-            VkMemoryBarrier before{};
-            before.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-            before.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT |
-                                   VK_ACCESS_HOST_WRITE_BIT;
-            before.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
-            vkCmdPipelineBarrier(
-                cb, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT | VK_PIPELINE_STAGE_HOST_BIT,
-                VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &before, 0, nullptr, 0, nullptr);
+            if (command.copySource == command.copyDestination)
+                RecordBufferUsageEXT(
+                    cb, command.copySource->GetBufferEXT(), command.copySource->usageState_,
+                    VulkanResourceIntent::TransferReadWrite);
+            else
+            {
+                RecordBufferUsageEXT(
+                    cb, command.copySource->GetBufferEXT(), command.copySource->usageState_,
+                    VulkanResourceIntent::TransferRead);
+                RecordBufferUsageEXT(
+                    cb, command.copyDestination->GetBufferEXT(),
+                    command.copyDestination->usageState_,
+                    VulkanResourceIntent::TransferWrite);
+            }
             VkBufferCopy region{};
             region.srcOffset = command.sourceOffset;
             region.dstOffset = command.destinationOffset;
@@ -16191,29 +16333,23 @@ namespace CNA::Internal::Renderers::Vulkan
             vkCmdCopyBuffer(
                 cb, command.copySource->GetBufferEXT(),
                 command.copyDestination->GetBufferEXT(), 1, &region);
-            VkMemoryBarrier after{};
-            after.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-            after.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-            after.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT |
-                                  VK_ACCESS_HOST_READ_BIT;
-            vkCmdPipelineBarrier(
-                cb, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                VK_PIPELINE_STAGE_ALL_COMMANDS_BIT | VK_PIPELINE_STAGE_HOST_BIT,
-                0, 1, &after, 0, nullptr, 0, nullptr);
             return;
         }
 
+        std::vector<VulkanStorageBufferRenderer*> trackedBuffers;
+        trackedBuffers.reserve(command.storageBuffers.size());
+        for (const auto& buffer : command.storageBuffers)
+        {
+            if (std::find(trackedBuffers.begin(), trackedBuffers.end(), buffer.get()) !=
+                trackedBuffers.end())
+                continue;
+            RecordBufferUsageEXT(
+                cb, buffer->GetBufferEXT(), buffer->usageState_,
+                VulkanResourceIntent::ShaderReadWrite);
+            trackedBuffers.push_back(buffer.get());
+        }
         for (const auto& image : command.storageImages)
             image.image->PrepareForComputeEXT(cb, image.accessMode);
-        VkMemoryBarrier before{};
-        before.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-        before.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT |
-                               VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
-        before.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-        vkCmdPipelineBarrier(
-            cb, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT | VK_PIPELINE_STAGE_HOST_BIT,
-            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-            0, 1, &before, 0, nullptr, 0, nullptr);
         vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, command.pipeline);
         if (command.descriptorSet != VK_NULL_HANDLE)
             vkCmdBindDescriptorSets(
@@ -16225,23 +16361,30 @@ namespace CNA::Internal::Renderers::Vulkan
                 static_cast<std::uint32_t>(command.pushConstantBytes.size()),
                 command.pushConstantBytes.data());
         vkCmdDispatch(cb, command.groupsX, command.groupsY, command.groupsZ);
-        VkMemoryBarrier after{};
-        after.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-        after.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-        after.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT |
-                              VK_ACCESS_HOST_READ_BIT;
-        vkCmdPipelineBarrier(
-            cb, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-            VK_PIPELINE_STAGE_ALL_COMMANDS_BIT | VK_PIPELINE_STAGE_HOST_BIT,
-            0, 1, &after, 0, nullptr, 0, nullptr);
     }
 
-    void VulkanRenderer::FlushPendingModernCommandsForHostEXT()
+    void VulkanRenderer::FlushPendingModernCommandsForHostEXT(
+        const VulkanStorageBufferRenderer* targetBuffer,
+        const VulkanResourceIntent hostIntent)
     {
-        if (pendingModernCommands_.empty()) return;
+        bool targetNeedsBarrier = false;
+        if (targetBuffer != nullptr && targetBuffer->usageState_.initialized)
+        {
+            const NativeResourceUsageEXT next =
+                DescribeResourceIntentEXT(hostIntent, false);
+            const bool hasDeviceUse =
+                (targetBuffer->usageState_.stages & ~VK_PIPELINE_STAGE_HOST_BIT) != 0;
+            targetNeedsBarrier = hasDeviceUse &&
+                (targetBuffer->usageState_.writes || next.writes);
+        }
+        if (pendingModernCommands_.empty() && !targetNeedsBarrier) return;
         VkCommandBuffer cb = BeginOneTimeCommands();
         for (const auto& command : pendingModernCommands_)
             RecordModernCommandEXT(cb, command);
+        if (targetBuffer != nullptr &&
+            (targetBuffer->usageState_.stages & ~VK_PIPELINE_STAGE_HOST_BIT) != 0)
+            RecordBufferUsageEXT(
+                cb, targetBuffer->GetBufferEXT(), targetBuffer->usageState_, hostIntent);
         EndOneTimeCommands(cb);
         pendingModernCommands_.clear();
     }
