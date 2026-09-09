@@ -118,7 +118,7 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT void Add(EffectParameter param);
 
         /**
-         * @brief Gets the first parameter whose semantic matches the given string.
+         * @brief Gets the first parameter whose semantic matches the given string ignoring case.
          *
          * @param semantic The HLSL semantic string to search for.
          * @return Pointer to the matching parameter, or nullptr if not found.
@@ -126,7 +126,7 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] EffectParameter* GetParameterBySemantic(const std::string& semantic);
 
         /**
-         * @brief Gets the first parameter whose semantic matches the given string (const overload).
+         * @brief Gets the first parameter whose semantic matches the given string ignoring case (const overload).
          *
          * @param semantic The HLSL semantic string to search for.
          * @return Const pointer to the matching parameter, or nullptr if not found.

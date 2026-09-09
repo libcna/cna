@@ -193,6 +193,8 @@ namespace CNA::TestSupport
         EXPECT_EQ(parameters[4]->getNameProperty(), "Weights");
 
         ASSERT_NE(parameters["Gain"], nullptr);
+        EXPECT_EQ(parameters.GetParameterBySemantic("scalar"), parameters["Gain"])
+            << "Microsoft XNA resolves Effect semantics with OrdinalIgnoreCase";
         EXPECT_EQ(parameters["Gain"]->getSemanticProperty(), "SCALAR");
         EXPECT_EQ(parameters["Gain"]->getParameterClassProperty(), EffectParameterClass::Scalar);
         EXPECT_EQ(parameters["Gain"]->getParameterTypeProperty(), EffectParameterType::Single);

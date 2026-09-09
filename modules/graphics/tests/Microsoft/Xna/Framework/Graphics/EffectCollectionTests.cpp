@@ -238,8 +238,8 @@ TEST(EffectParameterCollectionTest, IterationOrderMatchesInsertionOrder)
 
 // Task 357: FNA's this[string name] does a plain `name.Equals(elem.Name)` scan — ordinal,
 // case-sensitive, first match wins on duplicates (foreach loop, no dedup/ambiguity check).
-// GetParameterBySemantic uses the identical pattern over Semantic instead of Name. Neither
-// was previously verified for case-sensitivity or duplicate-name/-semantic tie-breaking.
+// Recovered Microsoft agrees for the name indexer, but its semantic lookup deliberately uses
+// StringComparison.OrdinalIgnoreCase. SOFTWARE-256 pins that higher-authority distinction.
 
 TEST(EffectParameterCollectionTest, IndexByNameIsCaseSensitive)
 {
@@ -259,20 +259,22 @@ TEST(EffectParameterCollectionTest, IndexByNameFirstMatchWinsOnDuplicateNames)
     EXPECT_EQ(p->getParameterClassProperty(), EffectParameterClass::Scalar);
 }
 
-TEST(EffectParameterCollectionTest, GetParameterBySemanticIsCaseSensitive)
+TEST(EffectParameterCollectionTest, GetParameterBySemanticIsOrdinalIgnoreCase)
 {
     EffectParameterCollection col;
     col.Add(MakeParam("Proj", "PROJECTION"));
-    EXPECT_EQ(col.GetParameterBySemantic("projection"), nullptr);
-    EXPECT_NE(col.GetParameterBySemantic("PROJECTION"), nullptr);
+    const EffectParameterCollection& cref = col;
+    EXPECT_EQ(col.GetParameterBySemantic("projection"), col[0]);
+    EXPECT_EQ(col.GetParameterBySemantic("PrOjEcTiOn"), col[0]);
+    EXPECT_EQ(cref.GetParameterBySemantic("projection"), cref[0]);
 }
 
 TEST(EffectParameterCollectionTest, GetParameterBySemanticFirstMatchWinsOnDuplicates)
 {
     EffectParameterCollection col;
     col.Add(MakeParam("first", "TEXCOORD"));
-    col.Add(MakeParam("second", "TEXCOORD"));
-    EffectParameter* p = col.GetParameterBySemantic("TEXCOORD");
+    col.Add(MakeParam("second", "TexCoord"));
+    EffectParameter* p = col.GetParameterBySemantic("texcoord");
     ASSERT_NE(p, nullptr);
     EXPECT_EQ(p->getNameProperty(), "first");
 }

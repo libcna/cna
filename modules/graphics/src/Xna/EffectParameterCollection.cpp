@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/EffectParameterCollection.hpp"
+#include "System/String.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -36,13 +37,17 @@ namespace Microsoft::Xna::Framework::Graphics
     EffectParameter* EffectParameterCollection::GetParameterBySemantic(const std::string& semantic)
     {
         for (auto& e : elements_)
-            if (e->getSemanticProperty() == semantic) return e.get();
+            if (System::String::Compare(e->getSemanticProperty(), semantic,
+                                        System::StringComparison::OrdinalIgnoreCase) == 0)
+                return e.get();
         return nullptr;
     }
     const EffectParameter* EffectParameterCollection::GetParameterBySemantic(const std::string& semantic) const
     {
         for (const auto& e : elements_)
-            if (e->getSemanticProperty() == semantic) return e.get();
+            if (System::String::Compare(e->getSemanticProperty(), semantic,
+                                        System::StringComparison::OrdinalIgnoreCase) == 0)
+                return e.get();
         return nullptr;
     }
 

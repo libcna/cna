@@ -406,6 +406,10 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   parameter, pass and technique collections return a stable object pointer for a valid index and
   null for either invalid direction. This intentionally follows recovered Microsoft XNA over
   FNA's list-index exception, and is exercised on stock graphs plus a parsed EasyGL Effect graph.
+- **Effect semantic lookup is ordinal and case-insensitive** (`SOFTWARE-256`) — both mutable and
+  const `GetParameterBySemantic` overloads follow recovered Microsoft XNA's
+  `StringComparison::OrdinalIgnoreCase` rule and retain first-declaration wins for duplicates;
+  the separate name indexer remains case-sensitive.
 - **The classic SpriteBatch/SpriteFont parity corpus executes on the CPU** (`SOFTWARE-138`).
   Eighteen renderer-independent scenes shared with EasyGL cover flips, rotation/origin, both scale
   overloads, source rectangles, layer sorting, transforms, render targets, viewports, scissor,
