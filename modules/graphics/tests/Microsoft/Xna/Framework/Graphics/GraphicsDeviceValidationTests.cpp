@@ -7,13 +7,18 @@
 // Lets CNA_RENDERER_IS name identities bare (Stub, OpenVg, ...), matching how the compile-time
 // guards these replaced read.
 using namespace CNA::Testing::Renderers;
+#include <array>
 #include <memory>
 #include <stdexcept>
 #include <vector>
 
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
@@ -21,6 +26,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBufferBinding.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
@@ -28,6 +34,8 @@ using namespace CNA::Testing::Renderers;
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::IndexBuffer;
+using Microsoft::Xna::Framework::Graphics::IndexElementSize;
 using Microsoft::Xna::Framework::Graphics::PrimitiveType;
 using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 using Microsoft::Xna::Framework::Graphics::RenderTargetBinding;
@@ -35,6 +43,7 @@ using Microsoft::Xna::Framework::Graphics::TextureCollection;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 using Microsoft::Xna::Framework::Graphics::VertexBuffer;
 using Microsoft::Xna::Framework::Graphics::VertexBufferBinding;
+using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
 
 TEST(GraphicsDeviceLifecycleTest, RendererFacingOperationsRejectUseAfterDeviceDisposal)
 {
@@ -68,6 +77,56 @@ TEST(GraphicsDeviceLifecycleTest, RendererFacingOperationsRejectUseAfterDeviceDi
     EXPECT_THROW(gd.GetBackBufferData(&pixelRegion, &pixel, 0, 1),
                  System::ObjectDisposedException);
     EXPECT_EQ(pixel, Color::Magenta);
+}
+
+TEST(GraphicsDeviceLifecycleTest, DrawRejectsVertexBufferDisposedAfterBinding)
+{
+    GraphicsDevice gd;
+    VertexBuffer vertices(
+        gd, VertexPositionColor::getVertexDeclarationStatic(), 3,
+        Microsoft::Xna::Framework::Graphics::BufferUsage::None);
+    const std::array<VertexPositionColor, 3> triangle{
+        VertexPositionColor({-0.5f, -0.5f, 0.0f}, Color::Red),
+        VertexPositionColor({0.0f, 0.5f, 0.0f}, Color::Green),
+        VertexPositionColor({0.5f, -0.5f, 0.0f}, Color::Blue)};
+    vertices.SetData(triangle.data(), static_cast<int>(triangle.size()));
+    gd.SetVertexBuffer(&vertices);
+
+    Microsoft::Xna::Framework::Graphics::BasicEffect effect(gd);
+    effect.setVertexColorEnabledProperty(true);
+    effect.Apply();
+    vertices.Dispose();
+
+    EXPECT_THROW(gd.DrawPrimitives(PrimitiveType::TriangleList, 0, 1),
+                 System::ObjectDisposedException);
+}
+
+TEST(GraphicsDeviceLifecycleTest, IndexedDrawRejectsIndexBufferDisposedAfterBinding)
+{
+    GraphicsDevice gd;
+    VertexBuffer vertices(
+        gd, VertexPositionColor::getVertexDeclarationStatic(), 3,
+        Microsoft::Xna::Framework::Graphics::BufferUsage::None);
+    const std::array<VertexPositionColor, 3> triangle{
+        VertexPositionColor({-0.5f, -0.5f, 0.0f}, Color::Red),
+        VertexPositionColor({0.0f, 0.5f, 0.0f}, Color::Green),
+        VertexPositionColor({0.5f, -0.5f, 0.0f}, Color::Blue)};
+    vertices.SetData(triangle.data(), static_cast<int>(triangle.size()));
+    IndexBuffer indices(gd, IndexElementSize::SixteenBits, 3,
+                        Microsoft::Xna::Framework::Graphics::BufferUsage::None);
+    const std::array<std::uint16_t, 3> values{0, 1, 2};
+    indices.SetData(values.data(), static_cast<int>(values.size()));
+    gd.SetVertexBuffer(&vertices);
+    gd.SetIndexBuffer(&indices);
+
+    Microsoft::Xna::Framework::Graphics::BasicEffect effect(gd);
+    effect.setVertexColorEnabledProperty(true);
+    effect.Apply();
+    indices.Dispose();
+
+    EXPECT_THROW(gd.DrawIndexedPrimitives(
+                     PrimitiveType::TriangleList, 0, 0, 3, 0, 1),
+                 System::ObjectDisposedException);
 }
 
 // =============================================================================

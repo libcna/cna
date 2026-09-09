@@ -1467,6 +1467,11 @@ namespace Microsoft::Xna::Framework::Graphics
         // giving each stream `binding.VertexOffset + vertexStart` of its own elements.
         [[nodiscard]] int FoldedVertexStreamOffset() const;
 
+        // A binding remains cached when its resource is disposed. Validate before any renderer
+        // handle is dereferenced so that use-after-dispose is a public exception, not null UB.
+        void ThrowIfBoundVertexBufferDisposed() const;
+        void ThrowIfBoundIndexBufferDisposed() const;
+
         // REMED-GFX-201: copies every active declared VertexBufferBinding into `p.vertexStreams`,
         // in public slot order, and computes `p.combinedVertexStride`. `foldedOffset` is subtracted
         // from each per-vertex stream's VertexOffset (see FoldedVertexStreamOffset above). Captured

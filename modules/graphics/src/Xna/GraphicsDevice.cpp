@@ -908,6 +908,24 @@ namespace Microsoft::Xna::Framework::Graphics
         return folded == std::numeric_limits<int>::max() ? 0 : folded;
     }
 
+    void GraphicsDevice::ThrowIfBoundVertexBufferDisposed() const
+    {
+        if (currentVertexBuffer_ != nullptr && currentVertexBuffer_->getIsDisposedProperty())
+            throw System::ObjectDisposedException(currentVertexBuffer_->getNameProperty());
+        for (const VertexBufferBinding& binding : currentVertexBuffers_)
+        {
+            const VertexBuffer* const buffer = binding.getVertexBufferProperty();
+            if (buffer != nullptr && buffer->getIsDisposedProperty())
+                throw System::ObjectDisposedException(buffer->getNameProperty());
+        }
+    }
+
+    void GraphicsDevice::ThrowIfBoundIndexBufferDisposed() const
+    {
+        if (currentIndexBuffer_ != nullptr && currentIndexBuffer_->getIsDisposedProperty())
+            throw System::ObjectDisposedException(currentIndexBuffer_->getNameProperty());
+    }
+
     void GraphicsDevice::FillVertexStreamBindings(
         CNA::Internal::Renderers::GpuDrawParams& p, int foldedOffset,
         bool allowLegacyEmptyDeclarationFallback) const
@@ -1141,6 +1159,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         if (currentVertexBuffer_ == nullptr)
             throw std::runtime_error("GraphicsDevice::DrawPrimitives: no vertex buffer is bound.");
+        ThrowIfBoundVertexBufferDisposed();
 
         if (currentEffect_ == nullptr)
             throw std::runtime_error("GraphicsDevice::DrawPrimitives: no effect has been applied.");
@@ -1214,9 +1233,11 @@ namespace Microsoft::Xna::Framework::Graphics
 
         if (currentVertexBuffer_ == nullptr)
             throw std::runtime_error("GraphicsDevice::DrawIndexedPrimitives: no vertex buffer is bound.");
+        ThrowIfBoundVertexBufferDisposed();
 
         if (currentIndexBuffer_ == nullptr)
             throw std::runtime_error("GraphicsDevice::DrawIndexedPrimitives: no index buffer is bound.");
+        ThrowIfBoundIndexBufferDisposed();
 
         if (currentEffect_ == nullptr)
             throw std::runtime_error("GraphicsDevice::DrawIndexedPrimitives: no effect has been applied.");
@@ -1305,10 +1326,12 @@ namespace Microsoft::Xna::Framework::Graphics
         if (currentVertexBuffer_ == nullptr)
             throw std::runtime_error(
                 "GraphicsDevice::DrawInstancedPrimitives: no vertex buffer is bound.");
+        ThrowIfBoundVertexBufferDisposed();
 
         if (currentIndexBuffer_ == nullptr)
             throw std::runtime_error(
                 "GraphicsDevice::DrawInstancedPrimitives: no index buffer is bound.");
+        ThrowIfBoundIndexBufferDisposed();
 
         if (currentEffect_ == nullptr)
             throw std::runtime_error(
@@ -1437,6 +1460,7 @@ namespace Microsoft::Xna::Framework::Graphics
         if (currentVertexBuffer_ == nullptr)
             throw std::runtime_error(
                 "GraphicsDevice::DrawPrimitivesIndirectEXT: no vertex buffer is bound.");
+        ThrowIfBoundVertexBufferDisposed();
         if (currentEffect_ == nullptr)
             throw std::runtime_error(
                 "GraphicsDevice::DrawPrimitivesIndirectEXT: no effect has been applied.");
@@ -1481,9 +1505,11 @@ namespace Microsoft::Xna::Framework::Graphics
         if (currentVertexBuffer_ == nullptr)
             throw std::runtime_error(
                 "GraphicsDevice::DrawIndexedPrimitivesIndirectEXT: no vertex buffer is bound.");
+        ThrowIfBoundVertexBufferDisposed();
         if (currentIndexBuffer_ == nullptr)
             throw std::runtime_error(
                 "GraphicsDevice::DrawIndexedPrimitivesIndirectEXT: no index buffer is bound.");
+        ThrowIfBoundIndexBufferDisposed();
         if (currentEffect_ == nullptr)
             throw std::runtime_error(
                 "GraphicsDevice::DrawIndexedPrimitivesIndirectEXT: no effect has been applied.");
