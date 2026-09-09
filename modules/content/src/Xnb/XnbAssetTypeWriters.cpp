@@ -759,10 +759,11 @@ namespace CNA::Internal::Xnb
         template<typename T>
         void AddWriter(XnbTypeWriterRegistry& registry, XnbReaderIdentity identity,
                        const bool serializedByReference,
-                       void (*payload)(XnbWriter&, const T&))
+                       void (*payload)(XnbWriter&, const T&),
+                       std::vector<XnbReaderIdentity> dependents = {})
         {
             registry.Register(std::make_shared<const XnbFunctionTypeWriter<T>>(
-                std::move(identity), serializedByReference, payload));
+                std::move(identity), serializedByReference, payload, std::move(dependents)));
         }
     }
 
@@ -1260,6 +1261,12 @@ namespace CNA::Internal::Xnb
         // XNAP-2B: an external reference stored where the static type is `object`. The reader
         // side is ExternalReferenceReader, whose target type is System.Object, so this entry has
         // to be interned under that name for the dictionary below to resolve it.
+        // The reference names a `Texture`, and XNA's table says so: an `ExternalReferenceWriter<T>`
+        // asks the compiler for `T`'s writer while it is initialised, and the asking is what puts
+        // `TextureReader` in the table beside `ExternalReferenceReader` -- with nothing ever read
+        // through it. SAMPLE-028's `Car.xnb` is the corpus file that shows it: XNA's table has ten
+        // entries where CNA's had nine, and every byte after the table was shifted by the one that
+        // was missing (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-188`).
         AddWriter<XnbExternalAssetReference>(registry,
             CoreIdentity("Microsoft.Xna.Framework.Content.ExternalReferenceReader",
                          "System.Object", XnbAssembly::Mscorlib, XnbNameEvidence::DerivedRule),
@@ -1267,7 +1274,10 @@ namespace CNA::Internal::Xnb
             [](XnbWriter& output, const XnbExternalAssetReference& value)
             {
                 output.WriteExternalReferenceLogicalName(value.reference);
-            });
+            },
+            {GraphicsIdentity("Microsoft.Xna.Framework.Content.TextureReader",
+                              "Microsoft.Xna.Framework.Graphics.Texture",
+                              XnbNameEvidence::Xna40Fixture)});
 
         // XNAP-29: Dictionary<String, Object>. Its values are polymorphic -- each carries its own
         // dispatch index -- which is exactly what the homogeneous dictionary writer cannot do.

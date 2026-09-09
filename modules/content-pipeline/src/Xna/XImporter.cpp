@@ -145,21 +145,38 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         }
 
         /**
+         * @brief The basis matrix the `.x` importer changes a transform with.
+         *
+         * `diag(1, 1, -1, 1)` in value, and its zeros carry a sign: `M24` and `M42` are negative
+         * zeros and the other ten are positive. That is not decoration either -- a zero times a
+         * negative number is a negative zero, so which of a dot product's four terms is negative
+         * decides the sign of a zero entry in the answer (`XNASWEEP-189`).
+         */
+        [[nodiscard]] Matrix BasisChange()
+        {
+            static constexpr float kNegativeZero = -0.0f;
+            Matrix basis = Matrix::getIdentityProperty();
+            basis.M33 = -1.0f;
+            basis.M24 = kNegativeZero;
+            basis.M42 = kNegativeZero;
+            return basis;
+        }
+
+        /**
          * @brief The left-handed matrix as the right-handed pipeline holds it.
          *
-         * The basis change `S M S` with `S = diag(1, 1, -1, 1)`: the third row and the third
-         * column are negated, which leaves `M33` alone because it is negated twice (measured,
-         * `x/transform_z.x`).
+         * The basis change `B M B`, as two matrix multiplications in that order, and *not* the
+         * five negations it is equal to in value: the third row and the third column are negated
+         * and `M33` is left alone because it is negated twice, but negating an entry on its own
+         * turns a zero into a negative zero where a dot product's sum of four terms does not.
+         * Measured over 96 random sign patterns, where the negations reproduce 3 of 96 matrices
+         * and this reproduces all 96 to the bit (plans/plan_xna_sample_xnb_sweep.md
+         * `XNASWEEP-189`).
          */
         [[nodiscard]] Matrix Convert(const Matrix& m)
         {
-            Matrix out = m;
-            out.M13 = -m.M13;
-            out.M23 = -m.M23;
-            out.M31 = -m.M31;
-            out.M32 = -m.M32;
-            out.M43 = -m.M43;
-            return out;
+            const Matrix basis = BasisChange();
+            return Matrix::Multiply(Matrix::Multiply(basis, m), basis);
         }
 
         [[nodiscard]] const Canon::DirectXFileObject* Find(const Canon::DirectXFileObject& parent,

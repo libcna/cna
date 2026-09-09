@@ -349,6 +349,25 @@ namespace CNA::Internal::Xnb
         typeTable_.push_back({name, identity.readerVersion});
         const auto index = static_cast<std::int32_t>(typeTable_.size());
         typeTableIndices_.emplace(name, index);
+        // The readers this one names go in immediately after it, which is where XNA's own end up:
+        // its writer asks the compiler for them while it is being initialised, and the asking is
+        // what interns them (see `XnbTypeWriterBase::DependentReaders`).
+        for (const XnbReaderIdentity& dependent : writer.DependentReaders())
+        {
+            const std::string dependentName =
+                FormatXnbReaderName(dependent, options_.readerNameStyle, options_.platform);
+            if (typeTableIndices_.count(dependentName) != 0u) { continue; }
+            if (static_cast<std::int32_t>(typeTable_.size()) >= options_.limits.maxTypeWriterCount)
+            {
+                throw XnbWriteException(
+                    "'" + assetName_ + "': the type-reader table would exceed the configured "
+                    "maximum of " + std::to_string(options_.limits.maxTypeWriterCount) +
+                    " entries.");
+            }
+            typeTable_.push_back({dependentName, dependent.readerVersion});
+            typeTableIndices_.emplace(dependentName,
+                                      static_cast<std::int32_t>(typeTable_.size()));
+        }
         return index;
     }
 

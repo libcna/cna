@@ -67,15 +67,23 @@ namespace CNA::Internal::Xnb
          * @param payload Non-null stateless payload emitter.
          */
         XnbFunctionTypeWriter(XnbReaderIdentity identity, const bool serializedByReference,
-                              const PayloadWriter payload)
+                              const PayloadWriter payload,
+                              std::vector<XnbReaderIdentity> dependents = {})
             : identity_(std::move(identity))
             , serializedByReference_(serializedByReference)
             , payload_(payload)
+            , dependents_(std::move(dependents))
         {
         }
 
         /** @brief Returns the configured reader identity. */
         [[nodiscard]] XnbReaderIdentity ReaderIdentity() const override { return identity_; }
+
+        /** @brief Returns the readers this one names; see `XnbTypeWriterBase::DependentReaders`. */
+        [[nodiscard]] std::vector<XnbReaderIdentity> DependentReaders() const override
+        {
+            return dependents_;
+        }
 
         /** @brief Returns whether nested elements of `T` carry a dispatch index. */
         [[nodiscard]] bool IsSerializedByReference() const noexcept override
@@ -96,6 +104,7 @@ namespace CNA::Internal::Xnb
         XnbReaderIdentity identity_;
         bool serializedByReference_ = false;
         PayloadWriter payload_ = nullptr;
+        std::vector<XnbReaderIdentity> dependents_;
     };
 
     /**

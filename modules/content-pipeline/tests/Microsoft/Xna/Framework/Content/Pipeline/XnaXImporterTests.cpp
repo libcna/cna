@@ -558,6 +558,9 @@ TEST(XnaXImporter, EveryFileAnswersTheGraphXnaAnswers)
           // negative zero to `0`, so this file's *values* are checked here and its *bits* by
           // `ASignedZeroInANormalIsTheMatrixsOwn` below (`XNASWEEP-181`).
           "x_normal_signed_zero.x",
+          // Nine frames whose transforms hold a zero of each sign, checked entry by entry in
+          // `TheBasisChangeIsAMultiplicationRatherThanFiveNegations` below (`XNASWEEP-189`).
+          "x_basis_signed_zero.x",
           "oblique_normals.x", "quad_textured.x", "transform_z.x", "two_materials.x",
           "with_templates.x", "zero_power.x"})
     {
@@ -629,6 +632,95 @@ TEST(XnaXImporter, ASignedZeroInANormalIsTheMatrixsOwn)
         EXPECT_EQ(bits(normal.X), expected[at][0]) << "normal " << at << " X";
         EXPECT_EQ(bits(normal.Y), expected[at][1]) << "normal " << at << " Y";
         EXPECT_EQ(bits(normal.Z), expected[at][2]) << "normal " << at << " Z";
+    }
+}
+
+// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-189: the sign of a zero in a converted transform,
+// which the committed oracle cannot carry either. The basis change is `B M B` with
+// `B = diag(1, 1, -1, 1)`, as two matrix multiplications; negating the third row and the third
+// column instead is equal in value and answers a negative zero wherever the entry it negated was
+// a positive one. `B`'s own zeros are signed too -- `M24` and `M42` negative, the other ten
+// positive -- and each of the nine frames below is one a search over all 4,096 assignments needs:
+// flip any single sign and at least one of them stops matching. `Car` is SAMPLE-028's own shape,
+// and `Dense` is the negative control, with no zero in its upper 3x3 at all.
+TEST(XnaXImporter, TheBasisChangeIsAMultiplicationRatherThanFiveNegations)
+{
+    static constexpr std::array<std::array<std::uint32_t, 16>, 9> expected = {{
+        // Car
+        {{0x3EBBC2FCu, 0x00000000u, 0x00000000u, 0x00000000u,
+         0x00000000u, 0x3EBBC2FCu, 0x00000000u, 0x00000000u,
+         0x00000000u, 0x00000000u, 0x3EBBC2FCu, 0x00000000u,
+         0xB58637BDu, 0x3FC471B4u, 0xBF3DE508u, 0x3F800000u}},
+        // Dense
+        {{0x3F800000u, 0x40000000u, 0xC0400000u, 0x00000000u,
+         0x40800000u, 0x40A00000u, 0xC0C00000u, 0x00000000u,
+         0xC0E00000u, 0xC1000000u, 0x41100000u, 0x00000000u,
+         0x41200000u, 0x41300000u, 0xC1400000u, 0x3F800000u}},
+        // RowNegative
+        {{0xBFC00000u, 0x00000000u, 0x3FC00000u, 0xBFC00000u,
+         0x40200000u, 0xBFC00000u, 0x00000000u, 0xBFC00000u,
+         0xC0200000u, 0x3FC00000u, 0xBFC00000u, 0x3FC00000u,
+         0x00000000u, 0x00000000u, 0x3FC00000u, 0x00000000u}},
+        // ColumnNegative
+        {{0xBFC00000u, 0x00000000u, 0x3FC00000u, 0x40200000u,
+         0x80000000u, 0xBFC00000u, 0x3FC00000u, 0xBFC00000u,
+         0x3FC00000u, 0x3FC00000u, 0x40200000u, 0x00000000u,
+         0x40200000u, 0x40200000u, 0xC0200000u, 0xBFC00000u}},
+        // MixedA
+        {{0x40200000u, 0x40200000u, 0xC0200000u, 0x00000000u,
+         0x00000000u, 0xBFC00000u, 0xC0200000u, 0x40200000u,
+         0xC0200000u, 0xC0200000u, 0x00000000u, 0x00000000u,
+         0x40200000u, 0xBFC00000u, 0xC0200000u, 0x40200000u}},
+        // MixedB
+        {{0x00000000u, 0x00000000u, 0x3FC00000u, 0x40200000u,
+         0x00000000u, 0x40200000u, 0x00000000u, 0xBFC00000u,
+         0xC0200000u, 0x3FC00000u, 0x00000000u, 0x00000000u,
+         0x00000000u, 0xBFC00000u, 0x00000000u, 0x00000000u}},
+        // MixedC
+        {{0xBFC00000u, 0x40200000u, 0xC0200000u, 0xBFC00000u,
+         0x40200000u, 0x40200000u, 0xC0200000u, 0x40200000u,
+         0xC0200000u, 0xC0200000u, 0x00000000u, 0x00000000u,
+         0x00000000u, 0x40200000u, 0x00000000u, 0xBFC00000u}},
+        // MixedD
+        {{0x00000000u, 0xBFC00000u, 0x00000000u, 0x00000000u,
+         0x40200000u, 0xBFC00000u, 0x3FC00000u, 0x00000000u,
+         0x00000000u, 0x00000000u, 0x40200000u, 0x00000000u,
+         0xBFC00000u, 0x00000000u, 0xC0200000u, 0x00000000u}},
+        // MixedE
+        {{0xBFC00000u, 0xBFC00000u, 0x3FC00000u, 0xBFC00000u,
+         0x40200000u, 0x00000000u, 0x00000000u, 0x40200000u,
+         0x00000000u, 0x00000000u, 0x00000000u, 0x3FC00000u,
+         0xBFC00000u, 0x40200000u, 0x00000000u, 0x00000000u}},
+    }};
+
+    ImporterContext context;
+    XImporter importer;
+    const std::shared_ptr<Graphics::NodeContent> root =
+        importer.Import(Fixture("x_basis_signed_zero.x").string(), context);
+    ASSERT_NE(root, nullptr);
+    ASSERT_EQ(root->getChildrenProperty().getCountProperty(),
+              static_cast<SharpRuntime::intcs>(expected.size()));
+    const auto bits = [](const float value)
+    {
+        std::uint32_t raw = 0;
+        std::memcpy(&raw, &value, sizeof(raw));
+        return raw;
+    };
+    for (std::size_t at = 0; at < expected.size(); ++at)
+    {
+        const std::shared_ptr<Graphics::NodeContent> frame =
+            root->getChildrenProperty()[static_cast<SharpRuntime::intcs>(at)];
+        ASSERT_NE(frame, nullptr) << "frame " << at;
+        const Matrix& m = frame->getTransformProperty();
+        const std::array<float, 16> answered = {m.M11, m.M12, m.M13, m.M14,
+                                                m.M21, m.M22, m.M23, m.M24,
+                                                m.M31, m.M32, m.M33, m.M34,
+                                                m.M41, m.M42, m.M43, m.M44};
+        for (std::size_t entry = 0; entry < answered.size(); ++entry)
+        {
+            EXPECT_EQ(bits(answered[entry]), expected[at][entry])
+                << "frame " << frame->getNameProperty() << " entry " << entry;
+        }
     }
 }
 
