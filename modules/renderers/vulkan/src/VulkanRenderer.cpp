@@ -228,6 +228,27 @@ namespace CNA::Internal::Renderers::Vulkan
     // successful acquire that is then reported out of date would leave the image-available
     // semaphore signalled with no waiter.
     static std::uint32_t sSwapchainOutOfDateToInject = 0;
+    // plan_modern.md MOD-2254: presentation-result recovery needs a deterministic route too. The
+    // real present still runs; only a successful return is replaced, so the wait semaphore is
+    // consumed and the acquired image is released before the production recovery branch runs.
+    static std::uint32_t sSwapchainPresentOutOfDateToInject = 0;
+    static std::uint32_t sSwapchainPresentSuboptimalToInject = 0;
+
+    static VkResult InjectSwapchainPresentResultForTest(VkResult result)
+    {
+        if (result != VK_SUCCESS) return result;
+        if (sSwapchainPresentOutOfDateToInject > 0)
+        {
+            --sSwapchainPresentOutOfDateToInject;
+            return VK_ERROR_OUT_OF_DATE_KHR;
+        }
+        if (sSwapchainPresentSuboptimalToInject > 0)
+        {
+            --sSwapchainPresentSuboptimalToInject;
+            return VK_SUBOPTIMAL_KHR;
+        }
+        return result;
+    }
 
     // VULKAN-390: one allocation attempt, with the test-only failure injection folded in so every
     // call site sees the same behaviour a real VK_ERROR_OUT_OF_POOL_MEMORY would produce.
@@ -5181,6 +5202,16 @@ namespace CNA::Internal::Renderers::Vulkan
     void VulkanRenderer::SetSwapchainOutOfDateForTestEXT(std::uint32_t count) noexcept
     {
         sSwapchainOutOfDateToInject = count;
+    }
+
+    void VulkanRenderer::SetSwapchainPresentOutOfDateForTestEXT(std::uint32_t count) noexcept
+    {
+        sSwapchainPresentOutOfDateToInject = count;
+    }
+
+    void VulkanRenderer::SetSwapchainPresentSuboptimalForTestEXT(std::uint32_t count) noexcept
+    {
+        sSwapchainPresentSuboptimalToInject = count;
     }
 
     void VulkanRenderer::SetDepthFormatPreferredUnsupportedForTestEXT(bool unsupported) noexcept
@@ -14718,8 +14749,9 @@ namespace CNA::Internal::Renderers::Vulkan
         pi.waitSemaphoreCount = 1; pi.pWaitSemaphores = signalSems;
         pi.swapchainCount     = 1; pi.pSwapchains     = sc;
         pi.pImageIndices      = &imageIndex;
-        result = vkQueuePresentKHR(presentQueue_, &pi);
+        result = InjectSwapchainPresentResultForTest(vkQueuePresentKHR(presentQueue_, &pi));
         ++presentCountEXT_;
+        CheckDeviceLostEXT("vkQueuePresentKHR", result);   // VULKAN-334 / MOD-2254
         if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
             RecreateSwapchain();
         else if (result != VK_SUCCESS)
@@ -14745,7 +14777,8 @@ namespace CNA::Internal::Renderers::Vulkan
         pi.waitSemaphoreCount = 1; pi.pWaitSemaphores = signalSems;
         pi.swapchainCount     = 1; pi.pSwapchains     = sc;
         pi.pImageIndices      = &imageIndex;
-        VkResult result = vkQueuePresentKHR(presentQueue_, &pi);
+        VkResult result = InjectSwapchainPresentResultForTest(
+            vkQueuePresentKHR(presentQueue_, &pi));
         ++presentCountEXT_;
         CheckDeviceLostEXT("vkQueuePresentKHR", result);   // VULKAN-334
         if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)

@@ -3172,6 +3172,31 @@ namespace CNA::Internal::Renderers::Vulkan
         CNAEXT static void SetSwapchainOutOfDateForTestEXT(std::uint32_t count) noexcept;
 
         /**
+         * @brief Test-only: report `VK_ERROR_OUT_OF_DATE_KHR` after successful presents.
+         *
+         * The native present is still executed so its wait semaphore and acquired image are
+         * consumed normally. Only the result subsequently handled by the renderer is replaced,
+         * which exercises the production recovery branch without leaving test-only Vulkan state
+         * signalled or acquired.
+         *
+         * @param count How many successful presents to report out of date; 0 disables injection.
+         */
+        CNAEXT static void SetSwapchainPresentOutOfDateForTestEXT(
+            std::uint32_t count) noexcept;
+
+        /**
+         * @brief Test-only: report `VK_SUBOPTIMAL_KHR` after successful presents.
+         *
+         * The native present is still executed before its successful result is replaced. This
+         * keeps synchronization valid while deterministically exercising the same recreation
+         * branch a real suboptimal presentation result takes.
+         *
+         * @param count How many successful presents to report suboptimal; 0 disables injection.
+         */
+        CNAEXT static void SetSwapchainPresentSuboptimalForTestEXT(
+            std::uint32_t count) noexcept;
+
+        /**
          * @brief Test-only: make `PickDepthFormat` take each request's fallback.
          *
          * plans/plan_vulkan.md `VULKAN-215`. Every device measured here honours `Depth16` and

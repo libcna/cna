@@ -134,6 +134,12 @@ extra one-time submissions and exactly one requested-closure fence. Its
 2,048 staging/buffer/timer churn cycles on RADV and llvmpipe; live staging and retirement state stay
 bounded and drain to zero with no validation message (`MOD-2253`).
 
+`Vulkan_ModernRecovery` pins the recoverable presentation boundary too: an out-of-date acquire
+retains its unsubmitted ordered prefix for the next frame, while suboptimal/out-of-date present
+results recreate only after that frame's work was submitted. Native modern-resource identities
+survive all three paths. Recovery, the complete lifetime matrix and the 2,048-frame allocation
+stress pass under ASan+UBSan on RADV and llvmpipe (`MOD-2254`).
+
 ### 6. Reject from cached capability facts before native mutation
 
 Portable validation happens before native allocation, descriptor update, command recording or

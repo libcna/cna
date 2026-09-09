@@ -346,6 +346,17 @@ extra one-time submissions and exactly one dependency-closure fence. The 2,048-f
 descriptor and compute-pipeline counts remain constant, live staging peaks at 4, pending retirement
 at 15 buckets/29 handles, then every transient count drains to zero on RADV and llvmpipe.
 
+`MOD-2254` closes the recoverable swapchain-error gate. `Vulkan_ModernRecovery` injects an acquire
+`VK_ERROR_OUT_OF_DATE_KHR` before image hand-off and proves its two queued modern commands are not
+submitted or discarded; the next frame executes them to the exact result. It also runs the real
+native present before replacing a successful handled result with `VK_SUBOPTIMAL_KHR` or
+`VK_ERROR_OUT_OF_DATE_KHR`, so test injection cannot strand a semaphore or acquired image. Each
+result takes the production recreation branch, preserves image/view/pipeline/descriptor-pool
+identities and remains validation-clean on RADV and llvmpipe. Recovery, the complete 10-leg modern
+lifetime matrix and the 2,048-frame allocator stress also pass under the project ASan+UBSan
+configuration on both devices; leak detection was disabled, so that run is memory/UB safety
+evidence rather than external-stack leak evidence.
+
 Normal `Dispose()` must never add a queue/device idle. Device teardown, loss/recovery and a
 requested synchronous readback are the only relevant completion boundaries, with readback waiting
 on its narrow submission fence rather than the whole device.
@@ -745,7 +756,8 @@ whichever generic failure the next call raised.
 `vkAcquireNextImageKHR`, and the two fence waits — is checked. On a loss the renderer reports
 `RendererDeviceEvent::Lost` to the shared layer **once**, so the game's own `DeviceLost` handler
 runs and `GraphicsDeviceStatus` becomes `Lost`, and the call then fails with a message naming the
-entry point.
+entry point. `MOD-2254` made the ordinary `SubmitFrame` present path use the same check already
+used by deferred present, closing the final unchecked route behind this statement.
 
 **What does not happen, and why.** There is no reset. A lost `VkDevice` is unrecoverable by
 specification: the device and every object created from it must be destroyed and rebuilt. Doing

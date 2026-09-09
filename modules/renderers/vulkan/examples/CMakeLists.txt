@@ -1503,6 +1503,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             cna_register_renderer_test(NAME Vulkan_ModernAllocatorStress
                 COMMAND cna_test_vulkan_modern_allocator_stress
                 TIMEOUT 180 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+            # plans/plan_modern.md MOD-2254: acquire OUT_OF_DATE and present
+            # SUBOPTIMAL/OUT_OF_DATE preserve deferred modern work, native resource identities
+            # and validation cleanliness through their exact production recovery branches.
+            cna_vulkan_test(cna_test_vulkan_modern_recovery
+                            vulkan_modern_recovery_test.cpp)
+            cna_register_renderer_test(NAME Vulkan_ModernRecovery
+                COMMAND cna_test_vulkan_modern_recovery
+                TIMEOUT 90 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
         endif()
 
         # plans/plan_vulkan.md VULKAN-098 (F-19): this renderer's clip-space depth range is XNA's
