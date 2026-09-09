@@ -12,8 +12,8 @@
 // never allocated, which is undefined/a GL error, not a working upload. Fixed by allocating every
 // level's storage up front (mirroring TextureCubeRenderer's own established per-level loop),
 // confirmed against FNA3D_Driver_OpenGL.c's real OPENGL_CreateTexture3D: depth halves per level
-// (SDL_max(depth >> i, 1)) exactly like width/height, even though Texture3D.cpp's own
-// CalculateMipLevels(width, height) deliberately excludes depth from the LEVEL COUNT formula.
+// (SDL_max(depth >> i, 1)) exactly like width/height, and Microsoft XNA's complete D3D9 volume
+// chain makes the largest of all three dimensions determine the level count.
 //
 // A 4x4x4 Texture3D with mipMap=true has 3 mip levels: 4x4x4 (mip 0), 2x2x2 (mip 1), 1x1x1 (mip 2).
 //

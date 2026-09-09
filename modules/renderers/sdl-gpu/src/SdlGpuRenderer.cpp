@@ -6756,7 +6756,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     SdlGpuTexture3DRenderer::SdlGpuTexture3DRenderer(SdlGpuRenderer& owner, int width, int height,
                                                     int depth, bool mipMap)
         : owner_(&owner), width_(width), height_(height), depth_(depth)
-        , levelCount_(mipMap ? CalculateMipLevels(width, height) : 1)
+        , levelCount_(mipMap ? CalculateMipLevels(std::max(width, depth), height) : 1)
     {
         SDL_GPUTextureCreateInfo createInfo{};
         createInfo.type = SDL_GPU_TEXTURETYPE_3D;
@@ -6769,9 +6769,10 @@ namespace CNA::Internal::Renderers::SdlGpu
         createInfo.width = static_cast<Uint32>(width);
         createInfo.height = static_cast<Uint32>(height);
         createInfo.layer_count_or_depth = static_cast<Uint32>(depth);
-        // Mirrors FNA's Texture3D constructor: LevelCount = mipMap ? CalculateMipLevels(width, height)
-        // : 1 -- depth does not participate in the mip-level count.
-        createInfo.num_levels = mipMap ? static_cast<Uint32>(CalculateMipLevels(width, height)) : 1;
+        // XNA asks D3D9 for the complete volume chain; pass SDL the same depth-aware count so the
+        // public LevelCount and native allocation cannot disagree.
+        createInfo.num_levels = mipMap
+            ? static_cast<Uint32>(CalculateMipLevels(std::max(width, depth), height)) : 1;
         createInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
 
         texture_ = SDL_CreateGPUTexture(owner_->Device(), &createInfo);

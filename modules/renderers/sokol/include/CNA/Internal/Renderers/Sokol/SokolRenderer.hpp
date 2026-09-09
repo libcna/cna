@@ -559,10 +559,8 @@ namespace CNA::Internal::Renderers::Sokol
          * @param width  Level-0 width in texels.
          * @param height Level-0 height in texels.
          * @param depth  Level-0 depth in texels.
-         * @param mipMap Allocate the full mip chain down to 1x1x1 as well as level 0. Matches
-         *               Texture3D.cpp's own `CalculateMipLevels(width, height)` -- depth does not
-         *               participate in the level COUNT, even though it still halves per level like
-         *               width/height do (real volume-texture mip convention).
+         * @param mipMap Allocate the complete three-dimensional mip chain down to 1x1x1 as well
+         *               as level 0, matching Texture3D.cpp.
          */
         SokolTexture3DRenderer(int width, int height, int depth, bool mipMap);
 

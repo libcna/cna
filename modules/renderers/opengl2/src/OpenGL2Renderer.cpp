@@ -1485,15 +1485,14 @@ namespace CNA::Internal::Renderers::OpenGL2
 
             Texture3DRenderer(int width, int height, int depth, bool mipMap)
                 : w(width), h(height), d(depth)
-                , levelCount(mipMap ? CalculateRenderTargetMipLevels(width, height) : 1)
+                , levelCount(mipMap ? CalculateRenderTargetMipLevels(std::max(width, depth), height) : 1)
             {
                 glGenTextures(1, &id);
                 glBindTexture(GL_TEXTURE_3D, id);
                 // Task (plans/plan_opengl2.md follow-up, session 8): real FNA3D_Driver_OpenGL.c
                 // OPENGL_CreateTexture3D confirms depth halves per level (max(depth >> i, 1))
-                // exactly like width/height, even though Texture3D.cpp's own CalculateMipLevels
-                // (matching Texture3D.cs's LevelCount formula) deliberately excludes depth from the
-                // LEVEL COUNT itself -- those are two separate facts, both honored here.
+                // exactly like width/height. XNA's D3D9 volume allocation requests the complete
+                // chain, so the largest of all three dimensions also controls its length.
                 for (int level = 0; level < levelCount; ++level)
                 {
                     glTexImage3D(GL_TEXTURE_3D, level, GL_RGBA,

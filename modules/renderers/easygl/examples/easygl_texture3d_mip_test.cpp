@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 // Task 862/864: Texture3D mip-level SetData/GetData round-trip.
 //
-// A 4x4x4 Texture3D with mipMap=true has 3 mip levels (Texture3D.cpp's CalculateMipLevels(w,h)
-// only considers width/height, matching FNA's Texture3D constructor exactly, but each level's
-// GPU storage still halves in all 3 dimensions, standard volume-mip behavior): 4x4x4 (mip 0),
+// A 4x4x4 Texture3D with mipMap=true has 3 mip levels. Microsoft XNA's complete volume chain
+// considers all dimensions and each level halves all three: 4x4x4 (mip 0),
 // 2x2x2 (mip 1), 1x1x1 (mip 2) — mirrors Task 171's Texture2D mip test and Task 276's
 // TextureCube mip test (easygl_texturecube_mip_test.cpp), applied to the 3rd texture type.
 //

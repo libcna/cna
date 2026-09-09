@@ -480,11 +480,9 @@ namespace CNA::Internal::Renderers::WebGPU
     /// via `wgpuQueueWriteTexture`/a staged `wgpuCommandEncoderCopyTextureToBuffer` readback
     /// exactly like `WebGPUTextureRenderer`'s own 2D equivalents, just with a third (depth) extent
     /// dimension. Mirrors `VulkanTexture3DRenderer`'s minimal scope: upload/readback only, no
-    /// render-target-ness (XNA's `Texture3D` itself is never renderable). Mip-level COUNT uses the
-    /// same width/height-only `CalculateMipLevels()` formula as `Texture3D.cpp` (depth does not
-    /// participate in the count, matching FNA's `Texture3D` constructor) -- wgpu-native still
-    /// halves the actual per-level depth extent automatically (standard 3D-texture mip rules),
-    /// this only affects how many levels are allocated.
+    /// render-target-ness (XNA's `Texture3D` itself is never renderable). Mip levels follow
+    /// `Texture3D.cpp`'s complete three-dimensional chain; wgpu-native halves every per-level
+    /// extent automatically.
     class WebGPUTexture3DRenderer final : public ITexture3DRenderer
     {
     public:

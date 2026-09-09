@@ -178,11 +178,11 @@ TEST_F(Texture3DTest, GetTypeNameReturnsFullyQualifiedName)
 }
 
 // -----------------------------------------------------------------------
-// LevelCount — mipmapped vs non-mipmapped construction (Task 271)
+// LevelCount — mipmapped vs non-mipmapped construction (SOFTWARE-273)
 //
-// Mirrors FNA's Texture3D constructor: LevelCount = mipMap ? CalculateMipLevels(width, height) : 1
-// (depth does not participate in the mip-level count, matching FNA/Texture2D's formula).
-// Previously hardcoded to 1 regardless of mipMap — a real bug fixed by this task.
+// Microsoft XNA asks D3D9 for the complete volume mip chain (`Levels == 0`), so the largest of
+// width, height and depth determines LevelCount. FNA's two-dimensional helper omits depth here;
+// SOFTWARE-273 follows the higher-authority XNA behavior.
 // -----------------------------------------------------------------------
 
 TEST_F(Texture3DTest, MipMapFalseIsAlwaysOne)
@@ -196,12 +196,26 @@ TEST_F(Texture3DTest, MipMapTrueSquarePowerOfTwo)
     EXPECT_EQ(Texture3D(gd, 1, 1, 1, true, SurfaceFormat::Color).getLevelCountProperty(), 1);
     EXPECT_EQ(Texture3D(gd, 4, 4, 1, true, SurfaceFormat::Color).getLevelCountProperty(), 3);
     EXPECT_EQ(Texture3D(gd, 16, 16, 4, true, SurfaceFormat::Color).getLevelCountProperty(), 5);
+    EXPECT_EQ(Texture3D(gd, 1, 1, 8, true, SurfaceFormat::Color).getLevelCountProperty(), 4);
 }
 
 TEST_F(Texture3DTest, MipMapTrueNonPowerOfTwo)
 {
     EXPECT_EQ(Texture3D(gd, 3, 5, 1, true, SurfaceFormat::Color).getLevelCountProperty(), 3);
     EXPECT_EQ(Texture3D(gd, 7, 11, 2, true, SurfaceFormat::Color).getLevelCountProperty(), 4);
+    EXPECT_EQ(Texture3D(gd, 1, 2, 7, true, SurfaceFormat::Color).getLevelCountProperty(), 3);
+}
+
+TEST_F(Texture3DTest, DepthDominantMipChainStoresItsLastLevel)
+{
+    Texture3D texture(gd, 1, 1, 8, true, SurfaceFormat::Color);
+    const Color expected(17, 34, 51, 68);
+    texture.SetData(3, 0, 0, 1, 1, 0, 1, &expected, 0, 1);
+
+    if (!VolumeReadbackSupported()) return;
+    Color actual;
+    texture.GetData(3, 0, 0, 1, 1, 0, 1, &actual, 0, 1);
+    EXPECT_EQ(actual, expected);
 }
 
 // -----------------------------------------------------------------------

@@ -107,10 +107,7 @@ namespace CNA::Internal::Renderers::Metal
     }
 
     /**
-     * @brief Computes the mip count exposed by CNA Texture2D, TextureCube, and Texture3D.
-     *
-     * Texture3D follows XNA/FNA and derives its chain from width and height only; depth shrinks
-     * within those allocated levels but never creates extra levels by itself.
+     * @brief Computes a two-dimensional mip-chain count.
      *
      * @param width Level-zero width.
      * @param height Level-zero height.
@@ -133,6 +130,27 @@ namespace CNA::Internal::Renderers::Metal
             ++levels;
         }
         return levels;
+    }
+
+    /**
+     * @brief Computes the complete mip-chain count for a volume texture.
+     *
+     * @param width Level-zero width.
+     * @param height Level-zero height.
+     * @param depth Level-zero depth.
+     * @param mipMap Whether a complete mip chain was requested.
+     * @return One for a non-mipmapped texture, otherwise the largest-dimension-derived level
+     *         count; zero when any dimension is not positive.
+     */
+    [[nodiscard]] constexpr int MetalVolumeMipLevelCount(
+        int width,
+        int height,
+        int depth,
+        bool mipMap) noexcept
+    {
+        if (depth <= 0)
+            return 0;
+        return MetalMipLevelCount(width > depth ? width : depth, height, mipMap);
     }
 
     /** @brief Tracks which render-target mip levels have deterministic readable contents. */

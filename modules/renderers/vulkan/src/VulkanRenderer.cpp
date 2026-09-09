@@ -11954,12 +11954,17 @@ namespace CNA::Internal::Renderers::Vulkan
 
     // --- VulkanTexture3DRenderer ---
 
-    // Task 864: mirrors Texture3D.cpp's CalculateMipLevels(w,h) -- depth does not participate in
-    // the level count, matching FNA's Texture3D constructor exactly.
-    static int CalculateVulkanTexture3DMipLevels(int w, int h)
+    // XNA's D3D9 volume allocation requests the complete chain, so depth participates too.
+    static int CalculateVulkanTexture3DMipLevels(int w, int h, int d)
     {
         int levels = 1;
-        while (w > 1 || h > 1) { w = std::max(1, w / 2); h = std::max(1, h / 2); ++levels; }
+        while (w > 1 || h > 1 || d > 1)
+        {
+            w = std::max(1, w / 2);
+            h = std::max(1, h / 2);
+            d = std::max(1, d / 2);
+            ++levels;
+        }
         return levels;
     }
 
@@ -11968,7 +11973,7 @@ namespace CNA::Internal::Renderers::Vulkan
     {
         if (!owner_ || owner_->device_ == VK_NULL_HANDLE) return;
         VkDevice dev = owner_->device_;
-        levelCount_ = mipMap ? CalculateVulkanTexture3DMipLevels(w, h) : 1;
+        levelCount_ = mipMap ? CalculateVulkanTexture3DMipLevels(w, h, depth) : 1;
 
         VkImageCreateInfo imgInfo{};
         imgInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;

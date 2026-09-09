@@ -999,13 +999,17 @@ namespace CNA::Internal::Renderers::Sokol
 
     namespace
     {
-        // Mirrors Texture3D.cpp's own CalculateMipLevels(width, height) exactly -- depth does not
-        // participate in the level COUNT (matching FNA's Texture3D.cs constructor), even though
-        // LevelDepth() below still halves depth per level like width/height do.
-        int CalculateVolumeMipLevels(int w, int h)
+        // XNA's D3D9 volume allocation requests the complete chain, so depth participates too.
+        int CalculateVolumeMipLevels(int w, int h, int d)
         {
             int levels = 1;
-            while (w > 1 || h > 1) { w = std::max(1, w / 2); h = std::max(1, h / 2); ++levels; }
+            while (w > 1 || h > 1 || d > 1)
+            {
+                w = std::max(1, w / 2);
+                h = std::max(1, h / 2);
+                d = std::max(1, d / 2);
+                ++levels;
+            }
             return levels;
         }
     }
@@ -1018,7 +1022,7 @@ namespace CNA::Internal::Renderers::Sokol
         : width_(width)
         , height_(height)
         , depth_(depth)
-        , levelCount_(mipMap ? CalculateVolumeMipLevels(width, height) : 1)
+        , levelCount_(mipMap ? CalculateVolumeMipLevels(width, height, depth) : 1)
     {
         levels_.resize(static_cast<std::size_t>(levelCount_));
         for (int level = 0; level < levelCount_; ++level)
@@ -1100,8 +1104,7 @@ namespace CNA::Internal::Renderers::Sokol
 
     namespace
     {
-        /// Mirrors Texture3D.cpp's own CalculateMipLevels(width, height) (rectangular, not just
-        /// square) -- the same formula CalculateVolumeMipLevels above already reuses.
+        /// Computes the complete two-dimensional render-target mip chain.
         int CalculateRenderTargetMipLevels(int w, int h)
         {
             int levels = 1;

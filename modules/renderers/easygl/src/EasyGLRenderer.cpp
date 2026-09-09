@@ -1725,19 +1725,24 @@ if (ProfileIsEs2ApiGeneration())
         }
     }
 
-    // Mirrors Texture3D.cpp's CalculateMipLevels(w,h) — depth does not participate in the level
-    // count, matching FNA's Texture3D constructor, but each level's own GPU storage still halves
-    // in all 3 dimensions (standard volume-mip behavior).
-    static int CalculateTexture3DMipLevels(int w, int h)
+    // XNA requests D3D9's complete volume chain, so the largest of all three dimensions controls
+    // the level count. FNA's width/height-only calculation truncates depth-dominant volumes.
+    static int CalculateTexture3DMipLevels(int w, int h, int d)
     {
         int levels = 1;
-        while (w > 1 || h > 1) { w = std::max(1, w / 2); h = std::max(1, h / 2); ++levels; }
+        while (w > 1 || h > 1 || d > 1)
+        {
+            w = std::max(1, w / 2);
+            h = std::max(1, h / 2);
+            d = std::max(1, d / 2);
+            ++levels;
+        }
         return levels;
     }
 
     EasyGLTexture3DRenderer::EasyGLTexture3DRenderer(int w, int h, int depth, bool mipMap, int /*surfaceFormat*/)
         : width_(w), height_(h), depth_(depth)
-        , levelCount_(mipMap ? CalculateTexture3DMipLevels(w, h) : 1)
+        , levelCount_(mipMap ? CalculateTexture3DMipLevels(w, h, depth) : 1)
     {
         tex_.create();
         tex_.bind(::easygl::TextureTarget::Texture3D);

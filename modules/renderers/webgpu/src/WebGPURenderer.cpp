@@ -1995,9 +1995,8 @@ namespace CNA::Internal::Renderers::WebGPU
 
     // WEBGPU-57/112: a plain WGPUTextureDimension_3D volume texture -- upload/readback only (no
     // render-target-ness, matching Texture3D's own XNA semantics: it is never a draw target). Mip
-    // level COUNT mirrors Texture3D.cpp's own CalculateMipLevels(width, height) (depth does not
-    // participate in the count); wgpu-native still halves the actual per-level depth extent
-    // automatically like every other dimension (standard 3D mip rules), independent of this count.
+    // level count follows XNA's complete D3D9 volume chain, including depth. wgpu-native halves
+    // every per-level extent automatically.
     WebGPUTexture3DRenderer::WebGPUTexture3DRenderer(WebGPURenderer& owner, int width, int height,
                                                     int depth, bool mipMap)
         : owner_(&owner), width_(width), height_(height), depth_(depth)
@@ -2008,8 +2007,14 @@ namespace CNA::Internal::Renderers::WebGPU
         mipLevels_ = 1;
         if (mipMap)
         {
-            int w = width_, h = height_;
-            while (w > 1 || h > 1) { w = std::max(1, w / 2); h = std::max(1, h / 2); ++mipLevels_; }
+            int w = width_, h = height_, d = depth_;
+            while (w > 1 || h > 1 || d > 1)
+            {
+                w = std::max(1, w / 2);
+                h = std::max(1, h / 2);
+                d = std::max(1, d / 2);
+                ++mipLevels_;
+            }
         }
 
         WGPUTextureDescriptor descriptor{};

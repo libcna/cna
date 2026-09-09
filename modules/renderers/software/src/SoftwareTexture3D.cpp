@@ -12,13 +12,14 @@ namespace CNA::Internal::Renderers::Software
 {
     namespace
     {
-        int CalculateVolumeMipLevels(int width, int height)
+        int CalculateVolumeMipLevels(int width, int height, int depth)
         {
             int levels = 1;
-            while (width > 1 || height > 1)
+            while (width > 1 || height > 1 || depth > 1)
             {
                 width = std::max(1, width / 2);
                 height = std::max(1, height / 2);
+                depth = std::max(1, depth / 2);
                 ++levels;
             }
             return levels;
@@ -41,7 +42,7 @@ namespace CNA::Internal::Renderers::Software
     SoftwareTexture3DRenderer::SoftwareTexture3DRenderer(
         int width, int height, int depth, bool mipMap)
         : width_(width), height_(height), depth_(depth)
-        , levelCount_(mipMap ? CalculateVolumeMipLevels(width, height) : 1)
+        , levelCount_(mipMap ? CalculateVolumeMipLevels(width, height, depth) : 1)
     {
         if (width <= 0 || height <= 0 || depth <= 0)
             throw std::invalid_argument("SoftwareTexture3DRenderer: dimensions must be positive");

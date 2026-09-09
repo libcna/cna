@@ -1437,7 +1437,7 @@ void main()
 
     OpenGL4Texture3DRenderer::OpenGL4Texture3DRenderer(int w, int h, int depth, bool mipMap)
         : width_(w), height_(h), depth_(depth),
-          levelCount_(mipMap ? CalculateRenderTargetMipLevelsGL4(w, h) : 1)
+          levelCount_(mipMap ? CalculateRenderTargetMipLevelsGL4(std::max(w, depth), h) : 1)
     {
         glGenTextures(1, &texture_);
         glBindTexture(GL_TEXTURE_3D, texture_);

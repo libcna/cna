@@ -22,12 +22,19 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    // Mirrors FNA's Texture.CalculateMipLevels(width, height) — depth does not participate,
-    // matching Texture3D.cs's constructor: LevelCount = mipMap ? CalculateMipLevels(width, height) : 1.
-    static int CalculateMipLevels(int w, int h)
+    // XNA passes zero levels to D3D9 for a mipmapped volume, requesting the complete chain. All
+    // three dimensions therefore participate; FNA's width/height-only helper is a lower-authority
+    // divergence that truncates depth-dominant textures.
+    static int CalculateMipLevels(int w, int h, int d)
     {
         int levels = 1;
-        while (w > 1 || h > 1) { w = std::max(1, w / 2); h = std::max(1, h / 2); ++levels; }
+        while (w > 1 || h > 1 || d > 1)
+        {
+            w = std::max(1, w / 2);
+            h = std::max(1, h / 2);
+            d = std::max(1, d / 2);
+            ++levels;
+        }
         return levels;
     }
 
@@ -103,7 +110,7 @@ namespace Microsoft::Xna::Framework::Graphics
         ValidateVolumeSizeForProfileEXT(device, width, height, depth);
         Texture::ValidateFormat(format);
         format_     = format;
-        levelCount_ = mipMap ? CalculateMipLevels(width, height) : 1;
+        levelCount_ = mipMap ? CalculateMipLevels(width, height, depth) : 1;
         renderer_ = device.GetRenderer().CreateTexture3D(width, height, depth, mipMap, static_cast<int>(format));
     }
 

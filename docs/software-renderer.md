@@ -464,6 +464,11 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
 - **Compiled numeric-array setters convert to reflected storage** (`SOFTWARE-272`) — bool, int and
   float array sources are converted cell-by-cell to the parameter's reflected Bool, Int32 or Single
   representation instead of copying incompatible source-type bit patterns into compiled registers.
+- **Texture3D mip chains include depth** (`SOFTWARE-273`) — recovered Microsoft XNA requests the
+  complete D3D9 volume chain, so depth-dominant textures such as `1x1x8` expose and physically
+  allocate all four levels. Software, EasyGL and the other real volume backends now agree with the
+  shared `LevelCount`; a final-level upload/readback proves the allocation rather than only the
+  property value.
 - **The classic SpriteBatch/SpriteFont parity corpus executes on the CPU** (`SOFTWARE-138`).
   Eighteen renderer-independent scenes shared with EasyGL cover flips, rotation/origin, both scale
   overloads, source rectangles, layer sorting, transforms, render targets, viewports, scissor,
