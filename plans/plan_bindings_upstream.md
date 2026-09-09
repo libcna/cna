@@ -21,50 +21,46 @@ re-measured.
 ## What this plan is not
 
 It is not a list of places where CNA differs from Microsoft XNA. Several of the strongest
-binding findings are exactly that, and they are **decisions for the project owner rather
-than defects**, because `CLAUDE.md` makes FNA the authoritative behavioural reference and
-CNA matches FNA faithfully in each case:
+binding findings were exactly that, and they were recorded here as **decisions for the
+project owner rather than defects**, because `CLAUDE.md` then made FNA the authoritative
+behavioural reference and CNA matched FNA faithfully in each case.
 
-- **`GraphicsAdapter::getIsWideScreenProperty()`** compares the aspect ratio against
-  `4.0f / 3.0f`. `cna-ruby` read the pinned XNA IL and found `1.6f`. CNA's implementation
-  is a byte-for-byte match of `FNA/src/Graphics/GraphicsAdapter.cs:71-83`, comment
-  included. Every mode between 1.334 and 1.6 is reported widescreen by CNA and not by XNA,
-  and 16:10 by CNA and not by XNA's strict `>`.
-- **`Microphone::setBufferDurationProperty()`** reads `getMillisecondsProperty()`, the
-  sub-second component, so the documented `> 1000` branch is unreachable and
-  `set(get())` fails at 1000 ms. That is `FNA/src/Audio/Microphone.cs:57-60` exactly,
-  `value.Milliseconds` and all. XNA's IL reads `get_TotalMilliseconds`. CNA's own comment
-  already records the unreachable branch.
-- **`SoundEffectInstance::Apply3D`** refusing more than one listener, which
-  `_bindings/fixcna-analysis.md` §2 already identified as a scope decision rather than a
-  bug for the same reason.
+**All four are now closed, in CNA's favour of XNA.** The owner made XNA the tie-break on
+2026-09-04 and restated it on 2026-09-09 — *CNA should follow XNA faithfully, and FNA only
+after it*. This section is kept because the reasoning is worth having, not because anything
+here is open.
 
-A fourth of the same kind was found on 2026-09-09 by the sample campaign rather than by a
-binding: `Microphone::All` carried a synthetic `"Default Device"` entry that FNA prepends
-(`SDL3_FNAPlatform.cs:1699,1707`) and XNA does not have. It was the only one of the four
+| divergence | what it was | closed by |
+|---|---|---|
+| `GraphicsAdapter::getIsWideScreenProperty()` | compared the aspect ratio against FNA's `4.0f/3.0f` (`FNA/src/Graphics/GraphicsAdapter.cs:71-83`, comment included); `cna-ruby` read the pinned XNA IL and found `1.6f`. Every mode between them — 3:2, 14:9 — was widescreen to FNA and is not to XNA, and 16:10 sits exactly on XNA's strictly-greater limit | `fb62662c9`, 2026-09-04 (`BINDFIX-033`) |
+| `Microphone::setBufferDurationProperty()` | read `getMillisecondsProperty()`, the sub-second component, exactly as `FNA/src/Audio/Microphone.cs:57-60` does. That made the documented `> 1000` branch unreachable and refused 1000 ms — the value the property itself *reports* on an unconfigured microphone, so `mic.BufferDuration = mic.BufferDuration` threw, while 1100, 1500 and 2500 ms were accepted. XNA's IL reads `get_TotalMilliseconds` | `fb62662c9`, 2026-09-04 (`BINDFIX-032`) |
+| `SoundEffectInstance::Apply3D` | refused any listener count but one, as FNA does. XNA copies every listener into a native array and hands XACT the whole thing; there is no count restriction in `UnsafeApply3D` | `0345f2471`, 2026-08-26 (`CABI-6`) |
+| `Microphone::All` / `Default` | carried a synthetic `"Default Device"` entry that FNA prepends (`SDL3_FNAPlatform.cs:1699,1707`) and XNA does not have, so `Default` was not a real device and `All` was one longer than the machine's device list | `30bd6cf60`, 2026-09-09 |
+
+The fourth was found by the sample campaign rather than by a binding, and is the only one
 backed by a side-by-side capture of both runtimes on this machine rather than by reading
-IL — SAMPLE-098's whole HUD is `Microphone.Name`, and the unchanged XNA executable drew
+IL: SAMPLE-098's whole HUD is `Microphone.Name`, and the unchanged XNA executable drew
 `PulseAudio Input is Stopped` where CNA drew `Default Device is Stopped`.
 
-**That one is fixed.** On 2026-09-09 the project owner restated the rule — *CNA should
-follow XNA faithfully, and FNA only after it* — and directed that this be implemented
-rather than recorded. The synthetic entry is gone, `Microphone::All` is the machine's
-device list, and `Microphone::Default` is a real device reporting the driver's own name.
+**A note for whoever reads this next.** On 2026-09-09 the first three were reported to the
+owner as still open, on the strength of the prose that used to stand here, without being
+re-measured against the tree. All three had been fixed weeks or days earlier. That is the
+mistake this document's own header warns about — *"every row must be re-measured before it
+is worked on"* — so the rows above now name the commit that closed each one, and the
+behaviours are pinned by tests rather than only by comments:
 
-**The three above are the same class and are still open.** They were left as owner
-decisions because `CLAUDE.md` made FNA the behavioural reference; the tie-break has since
-been XNA (2026-09-04), and the owner has now restated it and acted on it once. Each still
-needs its own measurement and carries its own cost, so none was changed as a side effect
-of the microphone fix:
-
-| divergence | what XNA does | what closing it would cost |
-|---|---|---|
-| `GraphicsAdapter::getIsWideScreenProperty()` compares against `4.0f/3.0f` | compares against `1.6f` (read from IL by `cna-ruby`) | every mode between 1.334 and 1.6, and 16:10, changes classification |
-| `Microphone::setBufferDurationProperty()` reads `getMillisecondsProperty()` | reads `get_TotalMilliseconds`, so the `> 1000` branch is reachable and `set(get())` works at 1000 ms | a currently-unreachable branch starts throwing, which is the point |
-| `SoundEffectInstance::Apply3D` refuses more than one listener | *not yet measured against XNA IL* — recorded as a scope decision | unknown until measured |
-
-The first two are small and well-evidenced. The third should be measured before it is
-touched.
+- `GraphicsAdapterTest.IsWideScreenUsesXnasLimitOfOnePointSixExclusive` — the property
+  reads whatever display the host has, so it could never pin the constant; the rule is now
+  reachable through `GraphicsAdapter::IsWideScreenAspectRatioEXT` and asserted on both
+  sides of 1.6, including 16:10 sitting exactly on it.
+- `MicrophoneTest.BufferDurationUsesTotalMillisecondsAsXnaDoes` — `set(get())` at 1000 ms,
+  and the three values FNA's reading wrongly accepted.
+- `SoundEffectInstanceTest.Apply3DArrayOverload` and
+  `Apply3DMultiListenerNearestListenerDominates` already pinned the third, and the second
+  of those is written so that a "listeners[0] decides" implementation fails it.
+- `MicrophoneTest.AllContainsOnlyRealDevicesWithNoInventedDefaultEntry` and
+  `Sdl3AudioRecordingDeviceTests.ProviderEnumeratesOnlyRealDevicesSortedById` for the
+  fourth.
 - **Display modes carrying a hardcoded `SurfaceFormat::Color`**, which `cna-ruby` and
   `cna-swift` both recorded. `SurfaceFormat.Color // FIXME: Assumption!` is what FNA writes,
   four times over, in `SDL3_FNAPlatform.cs` and `SDL2_FNAPlatform.cs`.

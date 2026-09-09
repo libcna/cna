@@ -300,6 +300,40 @@ TEST_F(GraphicsAdapterTest, IsWideScreenDoesNotThrow)
     EXPECT_NO_THROW({ (void)def.getIsWideScreenProperty(); });
 }
 
+// The property reads whatever display the host has, so it cannot pin the threshold; this does.
+// BINDFIX-033 moved the limit from FNA's 4.0f/3.0f to the 1.6f XNA's IL uses, and the two disagree
+// over the whole range between them -- 3:2 (1.5) and 8:5-under is widescreen to FNA and not to
+// XNA. A
+// regression to FNA's constant would still pass IsWideScreenDoesNotThrow on every machine.
+TEST_F(GraphicsAdapterTest, IsWideScreenUsesXnasLimitOfOnePointSixExclusive)
+{
+    // Not widescreen: 1:1, 5:4, 4:3, 3:2 (1.5) and 14:9 (1.556). The last two are the disagreement
+    // itself -- both are above FNA's 4:3 limit and below XNA's 1.6.
+    EXPECT_FALSE(GraphicsAdapter::IsWideScreenAspectRatioEXT(1.0f));
+    EXPECT_FALSE(GraphicsAdapter::IsWideScreenAspectRatioEXT(1.25f));
+    EXPECT_FALSE(GraphicsAdapter::IsWideScreenAspectRatioEXT(4.0f / 3.0f));
+    EXPECT_FALSE(GraphicsAdapter::IsWideScreenAspectRatioEXT(1.5f));
+    EXPECT_FALSE(GraphicsAdapter::IsWideScreenAspectRatioEXT(14.0f / 9.0f));
+
+    // 16:10 is exactly the limit, and XNA's comparison is strictly greater, so it is NOT
+    // widescreen -- the one case where the answer is surprising and the one a rewrite would break.
+    EXPECT_FALSE(GraphicsAdapter::IsWideScreenAspectRatioEXT(1.6f));
+    EXPECT_FALSE(GraphicsAdapter::IsWideScreenAspectRatioEXT(1920.0f / 1200.0f));
+
+    // Widescreen: just past the limit, 5:3, 16:9, 2:1, 21:9.
+    EXPECT_TRUE(GraphicsAdapter::IsWideScreenAspectRatioEXT(1.6001f));
+    EXPECT_TRUE(GraphicsAdapter::IsWideScreenAspectRatioEXT(5.0f / 3.0f));
+    EXPECT_TRUE(GraphicsAdapter::IsWideScreenAspectRatioEXT(16.0f / 9.0f));
+    EXPECT_TRUE(GraphicsAdapter::IsWideScreenAspectRatioEXT(2.0f));
+    EXPECT_TRUE(GraphicsAdapter::IsWideScreenAspectRatioEXT(21.0f / 9.0f));
+
+    // And the property really is that rule, on whatever display this host has.
+    GraphicsAdapter& def = GraphicsAdapter::getDefaultAdapterProperty();
+    EXPECT_EQ(def.getIsWideScreenProperty(),
+              GraphicsAdapter::IsWideScreenAspectRatioEXT(
+                  def.getCurrentDisplayModeProperty().getAspectRatioProperty()));
+}
+
 TEST_F(GraphicsAdapterTest, MonitorHandleDoesNotThrow)
 {
     GraphicsAdapter& def = GraphicsAdapter::getDefaultAdapterProperty();

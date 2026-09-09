@@ -176,11 +176,36 @@ TEST(MicrophoneTest, BufferDurationTooSmallThrows)
 
 TEST(MicrophoneTest, BufferDurationNotMultipleOfTenThrows)
 {
-    // getMillisecondsProperty() is the sub-second component ([-999, 999]), so the setter's
-    // ">1000" branch is unreachable — not tested here since no TimeSpan value can trigger it.
     Microphone mic = MakeMic();
     EXPECT_THROW(mic.setBufferDurationProperty(System::TimeSpan::FromMilliseconds(105)),
                  System::ArgumentOutOfRangeException);
+}
+
+// BINDFIX-032. The setter reads TotalMilliseconds, as XNA's IL does, not the sub-second
+// `Milliseconds` component FNA reads. These four cases are exactly what that changes, and the
+// comment that used to sit above the test before this one asserted the opposite.
+TEST(MicrophoneTest, BufferDurationUsesTotalMillisecondsAsXnaDoes)
+{
+    Microphone mic = MakeMic();
+
+    // The whole point: 1000 ms is the value the property REPORTS on an unconfigured microphone,
+    // so `mic.BufferDuration = mic.BufferDuration` has to work. Reading the sub-second component
+    // makes 1000 ms read as 0 and throw.
+    EXPECT_NO_THROW(mic.setBufferDurationProperty(mic.getBufferDurationProperty()));
+    EXPECT_NO_THROW(mic.setBufferDurationProperty(System::TimeSpan::FromMilliseconds(1000)));
+    EXPECT_DOUBLE_EQ(mic.getBufferDurationProperty().getTotalMillisecondsProperty(), 1000.0);
+
+    // And the upper branch is reachable now. Under the sub-second reading these three were
+    // accepted, because their `Milliseconds` components are 100, 500 and 500.
+    EXPECT_THROW(mic.setBufferDurationProperty(System::TimeSpan::FromMilliseconds(1100)),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW(mic.setBufferDurationProperty(System::TimeSpan::FromMilliseconds(1500)),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW(mic.setBufferDurationProperty(System::TimeSpan::FromMilliseconds(2500)),
+                 System::ArgumentOutOfRangeException);
+
+    // The refusals left the property untouched.
+    EXPECT_DOUBLE_EQ(mic.getBufferDurationProperty().getTotalMillisecondsProperty(), 1000.0);
 }
 
 // ===================== GetSampleDuration / GetSampleSizeInBytes =====================
