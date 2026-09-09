@@ -6,7 +6,12 @@ on a number that follows from it. This directory is the black-box laboratory for
 it generates small meshes whose whole answer can be reasoned about, runs the **genuine** method
 over them under Wine, and scores candidate reconstructions against what came back.
 
-Nothing here reads Microsoft's implementation. The only input is what the method *does*.
+Rounds one to five read nothing of Microsoft's implementation: the only input was what the method
+*does*. Round six is different and deliberately so -- the project owner authorised the use of
+Microsoft's **open-source, MIT-licensed DirectXMesh** on 2026-09-09, which publishes the same
+algorithm the legacy D3DX entry point used. Nothing here decompiles or disassembles anything;
+`d3dx9_43.dll` and the XNA assemblies are still black boxes, loaded by their documented names and
+observed only through what they return.
 
 ## Running it
 
@@ -34,7 +39,14 @@ deterministic, so a re-run reproduces the probes byte for byte.
 | `probes.py`, `oracle.py`, `dump.py` | the same for the 35 `OptimizeForCache` cases in the graphics oracle |
 | `mine.py`, `decisions.py`, `replay.py`, `search.py` | the walk replayed over the truth, one row per decision |
 | `families.py` | published algorithm families, implemented from their descriptions, scored |
-| `model.py` | the current reconstruction, and its score |
+| `model.py`, `hoppe.py` | the black-box reconstructions of rounds four and five, and their scores |
+| `D3dxOptimizeOracle.c`, `run-d3dx-oracle.sh` | the genuine D3DX9 redistributable, under Wine |
+| `DxMeshOptimizeOracle.cpp`, `run-dxmesh-oracle.sh` | the genuine DirectXMesh library, cross-compiled and run under Wine |
+| `dxmesh.py` | a line-for-line port of DirectXMesh's `OptimizeFaces`, and the candidate adjacencies |
+| `dxcompare.py` | scores the port and the binary against genuine XNA, and the port against the binary |
+| `nonmanifold.py` | the 594 probes that decide the adjacency, where three or more faces meet on one edge |
+| `heldout.py` | 240 fresh probes generated after the rule was settled |
+| `validate_model.py`, `validate_corpus.py` | the same question asked of real corpus models |
 
 ## What the measurements settle
 
@@ -170,6 +182,99 @@ to 12; counting **cache misses** from the same point is tighter -- 5 or 6 in 322
 -- and is not constant either.  371 cut strips are recorded; the rule that reproduces all of them
 is the one thing this method still owes.
 
+## Round six: the method is Microsoft's own open-source `OptimizeFaces`, and it is exact
+
+Round five settled everything except *when a strip is cut*, and stopped at 461 of 616 on that
+alone.  It did not need to be inferred either.
+
+**Microsoft's DirectXMesh is the same algorithm, published under the MIT licence.**  Its
+`DirectX::OptimizeFaces` implements Hoppe's greedy strip-growing reorder, and Microsoft documents
+it as what the legacy D3DX9 entry point did, with `D3DXMESHOPT_DEVICEINDEPENDENT`-equivalent
+defaults -- the same cache of 12 and restart threshold of 7 round five had already measured.  The
+project owner authorised its use on 2026-09-09.  `DxMeshOptimizeOracle.cpp` links the genuine
+upstream library (`~/deps/DirectXMesh`, revision `bd17eb215d463d98f2b3a13082ce13979219314f`, tag
+`oct2025`), cross-compiled with MinGW and run under Wine over the same probe file the other two
+oracles read; `dxmesh.py` is a line-for-line port of the same code, and `dxcompare.py --verify`
+checks the port against the binary on every probe so the experiments below are measured on
+Microsoft's algorithm rather than on a paraphrase of it.
+
+**What the cut rule turned out to be** answers the two facts round five recorded, and says why
+neither was a threshold.  The decision is not asked before every face: it is asked at the face
+where the strip can no longer go straight, which is exactly the 2,467 decisions the corpus
+isolated.  At that point the walk counts `nf`, the faces a counter-clockwise ring from here would
+still reach, and restarts when `locnext + nf > vertexCache - restart` -- five.  `locnext` is the
+number of **cache misses since a restart location was queued**, and it is reset to zero at the
+moment of queueing, which is round five's "the counter starts when a restart location is first
+queued".  It takes values 5 or 6 in most cut strips because `nf` is usually 0 or 1, which is why a
+threshold on misses alone almost worked and could not be made to work.  The queue itself is one
+pending corner, not a FIFO of many.
+
+## Round six's one open question, and the answer the corpus gave
+
+`D3DXOptimizeFaces` computed its adjacency internally; `DirectX::OptimizeFaces` is handed one.  So
+the only thing left to measure was which adjacency reproduces the legacy entry point.
+
+Scored on all 616 probes, with the genuine library:
+
+| adjacency handed to `DirectX::OptimizeFaces` | designed 376 | held-out 240 |
+|---|---:|---:|
+| the first other face in input order on each edge (round four's reading) | 331 | 212 |
+| DirectXMesh's own `GenerateAdjacencyAndPointReps`, over the positions | 373 | 231 |
+| **the pairing below** | **376** | **240** |
+
+and the split is total: **every one of the 449 probes whose every edge carries at most two faces
+comes back exactly right under all three readings**, and all 167 disagreements are probes with an
+edge three or more faces meet on.  `nonmanifold.py` generates 594 probes for that one question --
+three and four faces on a single edge, every winding, every input order; the same with a manifold
+strip hanging off, so a crossing is observable; two such edges in one mesh; and a row of quads with
+a third face on one interior edge.  Genuine XNA, genuine D3DX and DirectXMesh were all run over
+them.
+
+**The rule.**  An undirected edge holds the faces that carry it, in input order.  Walking those in
+input order, a face that is not yet paired takes the **last** still-unpaired face on that edge
+whose own winding on it is the reverse; the two are paired and both leave the pool, and a face left
+over gets no neighbour there.  On an edge two faces meet on this is simply "link them when they are
+wound the other way", which is why no manifold probe can see it.
+
+It was not guessed.  For the three-faces-on-one-edge family every possible adjacency was
+enumerated and simulated, and the answers admit exactly one physical adjacency: the first face on
+the edge pairs with the last one wound the other way, and the middle one is left isolated -- which
+`first other` gets wrong whenever the first face's own first neighbour is wound the same way, and
+`first opposite` gets wrong whenever a later face would also have served.  The four-face family
+then separates "last unpaired opposite" from "last opposite" outright.
+
+## Where it stands
+
+| | designed 376 | held-out 240 | non-manifold 594 | total |
+|---|---:|---:|---:|---:|
+| genuine XNA vs genuine D3DX9 | 376 | 240 | 594 | **1,210 / 1,210** |
+| genuine XNA vs genuine DirectXMesh + this adjacency | 376 | 240 | 594 | **1,210 / 1,210** |
+| genuine XNA vs **CNA production** | 376 | 240 | 594 | **1,210 / 1,210** |
+
+The last row is `CnaContentPipelineTests`'s `XnaOptimizeForCacheProbes` suite, which rebuilds each
+probe the way the .NET oracle's driver builds it, runs `MeshHelper::OptimizeForCache` over it and
+compares the vertex order and the whole index buffer.  Production is
+`modules/content-pipeline/src/Internal/DirectXMeshOptimizeFaces.cpp` (the algorithm, adapted from
+DirectXMesh, MIT, attributed in `THIRD_PARTY_NOTICES.md` and
+`tools/provenance/derived-sources.json`) and `LegacyMeshAdjacency.cpp` (the pairing above, which is
+CNA's own measurement and is MS-PL).
+
+## Running the third oracle
+
+```bash
+python3 tools/xna-pipeline-oracle/optimize/nonmanifold.py \
+        build/xna-sample-sweep/optimize/nm-probes.txt \
+        build/xna-sample-sweep/optimize/nm-probes.json
+bash tools/xna-pipeline-oracle/optimize/run-dxmesh-oracle.sh legacy \
+        build/xna-sample-sweep/optimize/nm-probes.txt \
+        build/xna-sample-sweep/optimize/nm-dxmesh.txt
+python3 tools/xna-pipeline-oracle/optimize/dxcompare.py                 # every adjacency, scored
+python3 tools/xna-pipeline-oracle/optimize/dxcompare.py --verify \
+        build/xna-sample-sweep/optimize/nm-dxmesh.txt pair_last          # port == binary
+```
+
+The runner refuses to build against a DirectXMesh checkout that is not at the pinned revision.
+
 ## Where the cut rule stands, and the two facts that narrow it
 
 Everything above except *when a strip is cut* is exact.  These are the measurements a next attempt
@@ -203,7 +308,8 @@ Both are seven faces counted from the pushing face.  Over the whole corpus that 
 6 to 12, and counting cache misses from the same point takes 5 or 6 in 322 of 371 cut strips, so
 neither is the counter by itself.
 
-**Ruled out by implementation and measurement**, so that none of it is tried again:
+**Ruled out by implementation and measurement** before round six answered it -- kept because it is
+what a reconstruction of this rule costs, and because each row is still true of the rule it names:
 
 | candidate | result |
 |---|---|
@@ -216,6 +322,6 @@ neither is the counter by itself.
 | favouring a restart seed whose vertices are still cached, as the paper says | worse in every configuration tried |
 | a threshold on faces since the push, misses since the push, cache occupancy, queue length, the queued face's cached vertices, or how close they are to eviction | none separates; several are non-monotonic, which no threshold can be |
 
-The current reconstruction cuts `restart` faces after the first push and reaches **461 of 616**.
-Production is unchanged, and should stay unchanged: a reorder fitted to part of a corpus is a guess
-dressed as a fix, and the 160 references this method owns are still owed an exact one.
+That reconstruction cut `restart` faces after the first push and reached **461 of 616**.  It is
+`hoppe.py`, and it is kept as the record of what black-box reconstruction reached; `dxmesh.py` is
+what production is measured against now.
