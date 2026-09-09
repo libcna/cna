@@ -293,6 +293,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Copies all back-buffer pixels into the provided Color array.
          * @param data         Output array to receive pixel data.
          * @param elementCount Number of Color elements to read.
+         * @throws System::NotSupportedException under the Reach graphics profile.
          */
         void GetBackBufferData(Color* data, int elementCount);
         /**
@@ -300,6 +301,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param data         Output array to receive pixel data.
          * @param startIndex   First element index in @p data to write to.
          * @param elementCount Number of Color elements to read.
+         * @throws System::NotSupportedException under the Reach graphics profile.
          */
         void GetBackBufferData(Color* data, int startIndex, int elementCount);
         /**
@@ -308,6 +310,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param data         Output array to receive pixel data.
          * @param startIndex   First element index in @p data to write to.
          * @param elementCount Number of Color elements to read.
+         * @throws System::NotSupportedException under the Reach graphics profile.
          */
         void GetBackBufferData(const Rectangle* rect, Color* data, int startIndex, int elementCount);
 

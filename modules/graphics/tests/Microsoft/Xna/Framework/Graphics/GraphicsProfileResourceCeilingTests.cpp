@@ -4,6 +4,8 @@
 #include <gtest/gtest.h>
 
 #include "CNA/RendererTestGate.hpp"
+#include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
 
 using namespace CNA::Testing::Renderers;
 
@@ -30,6 +32,8 @@ using namespace CNA::Testing::Renderers;
 #include "System/NotSupportedException.hpp"
 
 using Microsoft::Xna::Framework::Graphics::GraphicsAdapter;
+using Microsoft::Xna::Framework::Color;
+using Microsoft::Xna::Framework::Rectangle;
 using Microsoft::Xna::Framework::Graphics::BufferUsage;
 using Microsoft::Xna::Framework::Graphics::DynamicIndexBuffer;
 using Microsoft::Xna::Framework::Graphics::DynamicVertexBuffer;
@@ -108,6 +112,30 @@ TEST(GraphicsProfileResourceCeilingTest, Texture2DEnforcesTheSharedMaximumAspect
                  System::NotSupportedException);
     EXPECT_THROW((void)Texture2D(device, 1, 4096, false, SurfaceFormat::Color),
                  System::NotSupportedException);
+}
+
+TEST(GraphicsProfileResourceCeilingTest, BackBufferReadbackIsHiDefOnly)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+    PresentationParameters parameters;
+    parameters.setBackBufferWidthProperty(2);
+    parameters.setBackBufferHeightProperty(2);
+    {
+        GraphicsDevice reach(
+            GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach, parameters);
+        Color pixel;
+        EXPECT_THROW(reach.GetBackBufferData(&pixel, 1), System::NotSupportedException);
+        EXPECT_THROW(reach.GetBackBufferData(static_cast<Color*>(nullptr), 0),
+                     System::NotSupportedException);
+    }
+
+    GraphicsDevice hiDef(
+        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef, parameters);
+    Color pixel;
+    hiDef.Clear(Color::CornflowerBlue);
+    const Rectangle onePixel(0, 0, 1, 1);
+    EXPECT_NO_THROW(hiDef.GetBackBufferData(&onePixel, &pixel, 0, 1));
+    EXPECT_EQ(Color::CornflowerBlue, pixel);
 }
 
 TEST(GraphicsProfileResourceCeilingTest, VertexBuffersRespectTheSharedSixtyFourMiBMinusOneLimit)

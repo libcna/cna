@@ -4047,6 +4047,11 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::GetBackBufferData(const Rectangle* rect, Color* data, int startIndex, int elementCount)
     {
         ThrowIfDisposed();
+        if (graphicsProfile_ == GraphicsProfile::Reach)
+        {
+            throw System::NotSupportedException(
+                "GetBackBufferData is not supported by the Reach graphics profile.");
+        }
         if (data == nullptr)
             throw std::invalid_argument("data");
         if (startIndex < 0)

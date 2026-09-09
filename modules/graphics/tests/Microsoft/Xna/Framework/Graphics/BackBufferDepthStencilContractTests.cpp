@@ -83,7 +83,7 @@ namespace
     Color RenderDepthWinner(DepthFormat format)
     {
         GraphicsDevice device(
-            GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach,
+            GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
             BackbufferParameters(format));
         PrepareDraw(device, DepthStencilState::Default);
         device.Clear(ClearOptions::Target | ClearOptions::DepthBuffer, Color::Black, 1.0f, 0);
@@ -95,7 +95,7 @@ namespace
     Color RenderStencilProbe(DepthFormat format, int samples)
     {
         GraphicsDevice device(
-            GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach,
+            GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
             BackbufferParameters(format, samples));
 
         DepthStencilState requireOne;

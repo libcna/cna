@@ -51,7 +51,7 @@ TEST(BackBufferFormatContractTest, ConstructionReportsAndReadsTheActuallyApplied
 
     PresentationParameters parameters = RequestedPackedBackbuffer(SurfaceFormat::Bgr565);
     GraphicsDevice device(
-        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach, parameters);
+        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef, parameters);
 
     EXPECT_EQ(device.getPresentationParametersProperty().getBackBufferFormatProperty(),
               SurfaceFormat::Color);
@@ -63,6 +63,7 @@ TEST(BackBufferFormatContractTest, ResetAlsoReportsAndReadsTheActuallyAppliedFor
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
 
     GraphicsDevice device;
+    device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     PresentationParameters parameters = RequestedPackedBackbuffer(SurfaceFormat::Bgra4444);
     device.Reset(parameters);
 
@@ -77,7 +78,7 @@ TEST(BackBufferFormatContractTest, ReadbackRejectsMalformedDestinationAndRectang
 
     PresentationParameters parameters = RequestedPackedBackbuffer(SurfaceFormat::Color);
     GraphicsDevice device(
-        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach, parameters);
+        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef, parameters);
     std::array<Color, 2> pixels{Color::Red, Color::Blue};
     const Rectangle onePixel(0, 0, 1, 1);
     const Rectangle overflowingX(std::numeric_limits<int>::max(), 0, 1, 1);
