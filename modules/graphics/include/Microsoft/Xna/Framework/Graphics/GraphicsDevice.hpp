@@ -1461,6 +1461,7 @@ namespace Microsoft::Xna::Framework::Graphics
         std::vector<std::uint8_t> userVertexScratch_;
         std::vector<std::uint8_t> userIndexScratch_;
         void ThrowIfDisposed() const;
+        void GetActiveRenderDimensions(int& width, int& height) const;
         [[nodiscard]] void* AcquireUserVertexScratch(std::size_t bytes);
         [[nodiscard]] void* AcquireUserIndexScratch(std::size_t bytes);
 

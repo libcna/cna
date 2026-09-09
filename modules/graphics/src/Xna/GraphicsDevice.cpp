@@ -429,23 +429,41 @@ namespace Microsoft::Xna::Framework::Graphics
 
     const Viewport& GraphicsDevice::getViewportProperty() const
     {
+        ThrowIfDisposed();
         return viewport_;
     }
 
     void GraphicsDevice::setViewportProperty(const Viewport& value)
     {
         ThrowIfDisposed();
+        int surfaceWidth;
+        int surfaceHeight;
+        GetActiveRenderDimensions(surfaceWidth, surfaceHeight);
+        int x = value.getXProperty();
+        int y = value.getYProperty();
+        int width = value.getWidthProperty();
+        int height = value.getHeightProperty();
+        const float minDepth = value.getMinDepthProperty();
+        const float maxDepth = value.getMaxDepthProperty();
+        if (x < 0 || y < 0 || width <= 0 || height <= 0
+            || static_cast<std::int64_t>(x) + width > surfaceWidth
+            || static_cast<std::int64_t>(y) + height > surfaceHeight
+            || minDepth < 0.0f || minDepth > 1.0f
+            || maxDepth < 0.0f || maxDepth > 1.0f
+            || maxDepth < minDepth)
+        {
+            throw System::ArgumentException(
+                "The viewport must fit inside the active render surface and use an ordered "
+                "depth range between zero and one.",
+                "value");
+        }
         if (renderer_)
         {
             // The public Viewport is logical; the renderer seam is not. See
             // MapLogicalRectToPresentation for why, and for the cases where it is the identity.
-            int x = value.getXProperty();
-            int y = value.getYProperty();
-            int width = value.getWidthProperty();
-            int height = value.getHeightProperty();
             MapLogicalRectToPresentation(x, y, width, height);
             renderer_->SetViewport(x, y, width, height,
-                                   value.getMinDepthProperty(), value.getMaxDepthProperty());
+                                   minDepth, maxDepth);
         }
         // Commit the public cache only after the native/renderer operation succeeds.  In particular,
         // D3D9's checked SetViewport path may reject a bad/lost device; retaining the old viewport
@@ -474,6 +492,26 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (isDisposed_)
             throw System::ObjectDisposedException("GraphicsDevice");
+    }
+
+    void GraphicsDevice::GetActiveRenderDimensions(int& width, int& height) const
+    {
+        width = presentationParameters_.getBackBufferWidthProperty();
+        height = presentationParameters_.getBackBufferHeightProperty();
+        if (currentRenderTargets_.empty())
+            return;
+
+        const Texture* const target = currentRenderTargets_[0].getRenderTargetProperty();
+        if (const auto* const target2D = dynamic_cast<const RenderTarget2D*>(target))
+        {
+            width = target2D->getWidthProperty();
+            height = target2D->getHeightProperty();
+        }
+        else if (const auto* const targetCube = dynamic_cast<const RenderTargetCube*>(target))
+        {
+            width = targetCube->getWidthProperty();
+            height = targetCube->getHeightProperty();
+        }
     }
 
     void GraphicsDevice::Clear(const Color& color)
@@ -4104,10 +4142,24 @@ namespace Microsoft::Xna::Framework::Graphics
         rasterizerState_ = value;
     }
 
-    Rectangle GraphicsDevice::getScissorRectangleProperty() const { return scissorRectangle_; }
+    Rectangle GraphicsDevice::getScissorRectangleProperty() const
+    {
+        ThrowIfDisposed();
+        return scissorRectangle_;
+    }
     void GraphicsDevice::setScissorRectangleProperty(const Rectangle& value)
     {
         ThrowIfDisposed();
+        int surfaceWidth;
+        int surfaceHeight;
+        GetActiveRenderDimensions(surfaceWidth, surfaceHeight);
+        if (value.X < 0 || value.Y < 0 || value.Width < 0 || value.Height < 0
+            || static_cast<std::int64_t>(value.X) + value.Width > surfaceWidth
+            || static_cast<std::int64_t>(value.Y) + value.Height > surfaceHeight)
+        {
+            throw System::ArgumentException(
+                "The scissor rectangle must fit inside the active render surface.", "value");
+        }
         if (renderer_)
         {
             // Same logical-versus-drawable split as the Viewport setter above: EasyGL, Magnum and

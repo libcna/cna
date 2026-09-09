@@ -65,6 +65,9 @@
 > every profile, accepted non-float vertex textures, and allowed texture collection use after
 > device disposal; `SOFTWARE-225` restores the XNA collection boundary without concealing the
 > still-missing vertex-shader execution tracked by `SOFTWARE-168`.
+> The next public-state probe proved that both renderers accepted invalid viewport/scissor values
+> and exposed those caches after device disposal; `SOFTWARE-226` restores Microsoft's active-surface
+> bounds, depth-range, failure-atomicity and getter-lifetime rules.
 > Deferred CNAEXT-modern and
 > non-applicable physical GPU/window behavior remain separately classified.
 > The executable task table is below; the evidence ledger is
@@ -283,6 +286,7 @@ its own tests and plan evidence in the same commit.
 | SOFTWARE-223 | Reject vertex/index buffers and textures owned by another GraphicsDevice | ✅ | Completed 2026-09-09. Recovered Microsoft XNA rejects a vertex buffer, index buffer or pixel/vertex texture whose `GraphicsDevice` differs from the receiving device. CNA validated disposal but omitted ownership in all four shared binding paths. Both pre-fix discriminators failed: foreign singular and secondary vertex buffers, an index buffer, and textures in both public collections were accepted and replaced valid local state. Shared validation now throws `InvalidOperationException` before mutation while retaining null-device compatibility for CNA's renderer test fixtures. The two-device tests pass on Software and desktop EasyGL. Full `CnaGraphicsTests` passes 2,430 with 55 classified skips out of 2,485 on Software and 2,442 with 59 skips out of 2,501 on desktop EasyGL. |
 | SOFTWARE-224 | Restore Microsoft XNA `SetVertexBuffers` validation and failure-state semantics | ✅ | Completed 2026-09-09. CNA's FNA-led contract explicitly accepted null entries as unused slots, used `ArgumentOutOfRangeException` above 16 streams, prevalidated the entire array transactionally, and rejected `SetVertexBuffer(nullptr, negativeOffset)` before unbinding. Recovered Microsoft XNA instead throws `ArgumentException` at the first null slot, `NotSupportedException` above the profile's 16-stream ceiling, applies entries in order and retains only the processed prefix on failure, and ignores the offset when the singular buffer is null. Three pre-fix unit discriminators failed across all four distinctions. Shared state application now matches the recovered flow; the old null-acceptance unit and multi-stream assertions were corrected, and the EasyGL validation executable now passes 5/5 (including its stale Reach readback setup). Full `CnaGraphicsTests` remains 2,430/2,485 with 55 classified skips on Software and 2,442/2,501 with 59 skips on desktop EasyGL. |
 | SOFTWARE-225 | Restore XNA texture/sampler collection profile, format and lifecycle boundaries | ✅ | Completed 2026-09-09. XNA exposes 16 pixel samplers but constructs zero vertex texture/sampler slots under Reach and four under HiDef; vertex texture fetch additionally permits only seven float/half formats. CNA created 16 slots for both stages in every profile, accepted Color vertex textures, checked index bounds before the supplied texture's disposal, and let an owned texture collection remain readable/writable after its GraphicsDevice was disposed. All three pre-fix discriminators failed (nine assertions). Owned collections are now profile/stage aware, validate device/value/format before range as XNA does, and retain standalone 16-slot CNA test fixtures. Nineteen focused collection/resource checks pass on Software and desktop EasyGL. Five older tests that exercised impossible Reach/Color vertex states now request HiDef plus an allowed float format or assert the truthful Color rejection. Full `CnaGraphicsTests` passes 2,433 with 55 classified skips out of 2,488 on Software and 2,445 with 59 skips out of 2,504 on desktop EasyGL. This closes collection bookkeeping only; `SOFTWARE-168` remains the explicit execution gap. |
+| SOFTWARE-226 | Restore Microsoft XNA viewport/scissor validation and lifetime semantics | ✅ | Completed 2026-09-09. Recovered Microsoft XNA validates every assigned viewport against the active backbuffer or first render target, requires positive dimensions, an ordered 0..1 depth range, and validates scissor coordinates/extents against that same surface while allowing a zero-area boundary rectangle. CNA forwarded every value to the renderer and cached it, so renderer-dependent native behavior replaced a shared public contract; both getters also returned stale values after device disposal. Shared overflow-safe validation now runs before renderer mutation and commits only accepted state, target dimensions take precedence over the larger backbuffer, and both getters enforce device lifetime. Three new public validation tests plus the expanded lifecycle test pass on Software and desktop EasyGL. Full `CnaGraphicsTests` passes 2,436 with 55 classified skips out of 2,491 on Software and 2,448 with 59 skips out of 2,507 on desktop EasyGL. |
 
 ### Current dependency order
 Tasks through `SOFTWARE-161` plus `SOFTWARE-166/167/169/170/171/172/174/175/176/177/179..197/199..206/208..225` are complete except for the intentionally
@@ -327,10 +331,11 @@ renderer-side batch state after a deferred submission exception so the public ob
 reusable as FNA's cleared guard promises. `SOFTWARE-219` closes the remaining recovered
 `VerifyCanDraw` texture-state branch by enforcing Reach clamp-only sampling for conditional NPOT
 Texture2D resources without restricting HiDef.
-`SOFTWARE-220..225` close the subsequent recovered render-target compatibility/identity/no-op
+`SOFTWARE-220..226` close the subsequent recovered render-target compatibility/identity/no-op
 rules, common cross-device vertex/index/texture binding omissions, and Microsoft-specific plural
 vertex-binding validation/state behavior that FNA does not reproduce, followed by the public
-texture/sampler collection profile, format, and device-lifecycle boundary.
+texture/sampler collection profile, format, and device-lifecycle boundary and the active-surface
+viewport/scissor validation contract.
 `SOFTWARE-100` remains yellow for the previously recorded
 repository-wide blockers; that status does not excuse any renderer gap found here.
 

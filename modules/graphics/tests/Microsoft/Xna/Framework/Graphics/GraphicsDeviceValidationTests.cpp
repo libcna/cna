@@ -33,6 +33,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/VertexBufferBinding.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
+#include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
@@ -79,6 +80,9 @@ TEST(GraphicsDeviceLifecycleTest, RendererFacingOperationsRejectUseAfterDeviceDi
                  System::ObjectDisposedException);
     EXPECT_THROW(gd.setScissorRectangleProperty(Microsoft::Xna::Framework::Rectangle(0, 0, 1, 1)),
                  System::ObjectDisposedException);
+    EXPECT_THROW(static_cast<void>(gd.getViewportProperty()), System::ObjectDisposedException);
+    EXPECT_THROW(static_cast<void>(gd.getScissorRectangleProperty()),
+                 System::ObjectDisposedException);
     EXPECT_THROW(gd.SetVertexBuffer(nullptr), System::ObjectDisposedException);
     EXPECT_THROW(gd.SetVertexBuffers({}), System::ObjectDisposedException);
     EXPECT_THROW(gd.SetIndexBuffer(nullptr), System::ObjectDisposedException);
@@ -90,6 +94,84 @@ TEST(GraphicsDeviceLifecycleTest, RendererFacingOperationsRejectUseAfterDeviceDi
     EXPECT_THROW(gd.GetBackBufferData(&pixelRegion, &pixel, 0, 1),
                  System::ObjectDisposedException);
     EXPECT_EQ(pixel, Color::Magenta);
+}
+
+TEST(GraphicsDeviceValidationTest, ViewportRejectsInvalidValuesWithoutChangingState)
+{
+    GraphicsDevice gd;
+    const Viewport valid = gd.getViewportProperty();
+    ASSERT_GT(valid.getWidthProperty(), 0);
+    ASSERT_GT(valid.getHeightProperty(), 0);
+
+    std::array<Viewport, 11> invalid{
+        Viewport(-1, 0, 1, 1),
+        Viewport(0, -1, 1, 1),
+        Viewport(0, 0, 0, 1),
+        Viewport(0, 0, 1, 0),
+        Viewport(valid.getWidthProperty(), 0, 1, 1),
+        Viewport(0, valid.getHeightProperty(), 1, 1),
+        Viewport(0, 0, 1, 1),
+        Viewport(0, 0, 1, 1),
+        Viewport(0, 0, 1, 1),
+        Viewport(0, 0, 1, 1),
+        Viewport(0, 0, 1, 1)};
+    invalid[6].setMinDepthProperty(-0.01f);
+    invalid[7].setMinDepthProperty(1.01f);
+    invalid[8].setMaxDepthProperty(1.01f);
+    invalid[9].setMaxDepthProperty(-0.01f);
+    invalid[10].setMinDepthProperty(0.75f);
+    invalid[10].setMaxDepthProperty(0.25f);
+
+    for (const Viewport& candidate : invalid)
+    {
+        EXPECT_THROW(gd.setViewportProperty(candidate), System::ArgumentException);
+        EXPECT_EQ(gd.getViewportProperty().ToString(), valid.ToString());
+    }
+}
+
+TEST(GraphicsDeviceValidationTest, ScissorRejectsInvalidValuesWithoutChangingState)
+{
+    GraphicsDevice gd;
+    const Viewport viewport = gd.getViewportProperty();
+    const Rectangle valid(1, 1, viewport.getWidthProperty() - 1,
+                          viewport.getHeightProperty() - 1);
+    gd.setScissorRectangleProperty(valid);
+
+    const std::array<Rectangle, 6> invalid{
+        Rectangle(-1, 0, 1, 1),
+        Rectangle(0, -1, 1, 1),
+        Rectangle(0, 0, -1, 1),
+        Rectangle(0, 0, 1, -1),
+        Rectangle(viewport.getWidthProperty(), 0, 1, 1),
+        Rectangle(0, viewport.getHeightProperty(), 1, 1)};
+    for (const Rectangle& candidate : invalid)
+    {
+        EXPECT_THROW(gd.setScissorRectangleProperty(candidate), System::ArgumentException);
+        EXPECT_EQ(gd.getScissorRectangleProperty(), valid);
+    }
+
+    EXPECT_NO_THROW(gd.setScissorRectangleProperty(
+        Rectangle(viewport.getWidthProperty(), viewport.getHeightProperty(), 0, 0)));
+}
+
+TEST(GraphicsDeviceValidationTest, ViewportAndScissorUseActiveRenderTargetBounds)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+    GraphicsDevice gd;
+    RenderTarget2D target(gd, 8, 6);
+    gd.SetRenderTarget(&target);
+
+    const Viewport validViewport(0, 0, 8, 6);
+    const Rectangle validScissor(0, 0, 8, 6);
+    gd.setViewportProperty(validViewport);
+    gd.setScissorRectangleProperty(validScissor);
+
+    EXPECT_THROW(gd.setViewportProperty(Viewport(0, 0, 9, 6)),
+                 System::ArgumentException);
+    EXPECT_THROW(gd.setScissorRectangleProperty(Rectangle(0, 0, 8, 7)),
+                 System::ArgumentException);
+    EXPECT_EQ(gd.getViewportProperty().ToString(), validViewport.ToString());
+    EXPECT_EQ(gd.getScissorRectangleProperty(), validScissor);
 }
 
 TEST(GraphicsDeviceLifecycleTest, DrawRejectsVertexBufferDisposedAfterBinding)
