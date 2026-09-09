@@ -67,6 +67,15 @@ namespace Microsoft::Xna::Framework::Graphics
                 (profile == 1 ? std::string("HiDef") : std::string("Reach")) +
                 "'s own maximum of " + std::to_string(maxSize) + "x" + std::to_string(maxSize));
         }
+
+        constexpr std::int64_t maximumAspectRatio = 2048;
+        const std::int64_t larger = std::max(w, h);
+        const std::int64_t smaller = std::min(w, h);
+        if (larger > smaller * maximumAspectRatio)
+        {
+            throw System::NotSupportedException(
+                "Texture2D's aspect ratio exceeds the active graphics profile limit of 2048:1.");
+        }
     }
 
 

@@ -71,8 +71,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param graphicsDevice The device to create the texture on.
          * @param width          Width in pixels.
          * @param height         Height in pixels.
-         * @throws System::NotSupportedException if @p width or @p height exceeds the active
-         *         renderer's maximum texture dimension (see GraphicsDevice::GetMaxTextureDimension()).
+         * @throws System::NotSupportedException if either dimension or their aspect ratio exceeds
+         *         the active graphics profile or renderer limit.
          */
         Texture2D(GraphicsDevice& graphicsDevice, int width, int height);
 
@@ -83,8 +83,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param height         Height in pixels.
          * @param mipMap         True to generate a full mipmap chain.
          * @param format         The desired surface format.
-         * @throws System::NotSupportedException if @p width or @p height exceeds the active
-         *         renderer's maximum texture dimension (see GraphicsDevice::GetMaxTextureDimension()).
+         * @throws System::NotSupportedException if either dimension or their aspect ratio exceeds
+         *         the active graphics profile or renderer limit.
          */
         Texture2D(GraphicsDevice& graphicsDevice, int width, int height,
                   bool mipMap, SurfaceFormat format);

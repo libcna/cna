@@ -95,6 +95,21 @@ TEST(GraphicsProfileResourceCeilingTest, HiDefPermitsVolumeAndMrtButEnforcesItsO
     device.SetRenderTargets({});
 }
 
+TEST(GraphicsProfileResourceCeilingTest, Texture2DEnforcesTheSharedMaximumAspectRatio)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+    PresentationParameters parameters;
+    GraphicsDevice device(
+        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef, parameters);
+
+    EXPECT_NO_THROW((void)Texture2D(device, 4096, 2, false, SurfaceFormat::Color));
+    EXPECT_NO_THROW((void)Texture2D(device, 2, 4096, false, SurfaceFormat::Color));
+    EXPECT_THROW((void)Texture2D(device, 4096, 1, false, SurfaceFormat::Color),
+                 System::NotSupportedException);
+    EXPECT_THROW((void)Texture2D(device, 1, 4096, false, SurfaceFormat::Color),
+                 System::NotSupportedException);
+}
+
 TEST(GraphicsProfileResourceCeilingTest, VertexBuffersRespectTheSharedSixtyFourMiBMinusOneLimit)
 {
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
