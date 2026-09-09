@@ -813,6 +813,7 @@ namespace CNA::Internal::Renderers::EasyGL
         // flushed in one draw call. A flush also occurs when the texture changes.
         std::vector<Vertex>   pending_vertices_;
         std::vector<uint16_t> pending_indices_;
+        bool immediateMode_ = false;
         /**
          * Writes the Direct3D 9 channel expansion for a surface format into the bound program.
          *
@@ -872,6 +873,12 @@ namespace CNA::Internal::Renderers::EasyGL
         void SetSamplerMaxAnisotropy(int maxAnisotropy) override;
         void SetSamplerMipState(int maxMipLevel, float lodBias) override;
         void SetSamplerAddressMode(int addressU, int addressV) override;
+        /**
+         * @brief Selects whether each Draw call must submit before returning.
+         *
+         * @param immediate True for SpriteSortMode::Immediate; false for renderer batching.
+         */
+        void SetImmediateMode(bool immediate) override { immediateMode_ = immediate; }
         void Draw(const ITextureRenderer& texture, float x, float y) override;
         void Draw(const ITextureRenderer& texture,
                   const Rectangle& destinationRectangle,

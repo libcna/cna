@@ -897,6 +897,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_SpriteBatchLargeBatchContract
         COMMAND cna_test_software_spritebatch_large_batch TIMEOUT 120 LABELS "Software")
 
+    # SOFTWARE-252: the renderer-side Draw called by SpriteSortMode::Immediate must submit before
+    # a subsequent target switch; EasyGL formerly queued it privately until End().
+    cna_software_test(cna_test_software_spritebatch_immediate_submission
+                      ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_immediate_submission_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteBatchImmediateSubmissionContract
+        COMMAND cna_test_software_spritebatch_immediate_submission TIMEOUT 60 LABELS "Software")
+
     # SOFTWARE-138: compile the renderer-independent EasyGL SpriteBatch/SpriteFont public corpus
     # unchanged for Software. Historical filenames remain beside their original EasyGL registrations;
     # none of these sources reaches renderer internals.

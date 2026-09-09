@@ -390,6 +390,10 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   Software already rendered the 16,385th same-texture sprite correctly; the new shared exact-pixel
   discriminator also forced EasyGL to adopt the same native boundary instead of wrapping its
   65,536th vertex back to zero.
+- **`SpriteSortMode::Immediate` is observably immediate** (`SOFTWARE-252`) — a shared test draws
+  into one target and switches targets before `End`. Software leaves the sprite in the target that
+  was active at `Draw`, matching XNA/FNA; the audit used that CPU behavior to catch and repair an
+  EasyGL renderer-private queue that had delayed the sprite until `End`.
 - **The classic SpriteBatch/SpriteFont parity corpus executes on the CPU** (`SOFTWARE-138`).
   Eighteen renderer-independent scenes shared with EasyGL cover flips, rotation/origin, both scale
   overloads, source rectangles, layer sorting, transforms, render targets, viewports, scissor,

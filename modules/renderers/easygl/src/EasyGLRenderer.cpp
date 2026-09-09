@@ -5622,6 +5622,13 @@ if (ProfileUsesGlslEs100())
         pending_indices_.push_back(base + 2);
         pending_indices_.push_back(base + 3);
         pending_indices_.push_back(base + 0);
+
+        // The shared SpriteBatch front end already calls this renderer once per public Draw in
+        // Immediate mode. Do not turn that immediate call back into a private deferred batch:
+        // target, viewport and device state are allowed to change before End(), and XNA binds them
+        // at Draw time. In the other sort modes, retain the texture/coalescing batch above.
+        if (immediateMode_)
+            FlushBatch();
     }
 
     // --- EasyGLRenderer ---

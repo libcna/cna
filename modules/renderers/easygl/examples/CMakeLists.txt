@@ -2203,6 +2203,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_easygl_spritebatch_large_batch
             TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # SOFTWARE-252: Immediate Draw must submit before a subsequent render-target switch rather
+        # than remaining in EasyGL's private same-texture queue until End().
+        cna_easygl_test(cna_test_easygl_spritebatch_immediate_submission
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_immediate_submission_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_SpriteBatchImmediateSubmissionContract
+            COMMAND cna_test_easygl_spritebatch_immediate_submission
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # REMED-GFX-151 cross-renderer control: the canonical XNA render-to-texture sequence -- render
         # into a target, unbind it, sample it -- must complete in ONE public frame with no intervening
         # GetData, Present, extra frame, manual flush or wait. The defect was Vulkan-local (its deferred
