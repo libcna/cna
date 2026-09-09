@@ -161,8 +161,9 @@ instead of the shared renderer-neutral fixture.
   events; `DX-114` must still prove that a native `DXGI_ERROR_DEVICE_REMOVED` reaches that path.
 - **Compiled XNA `Effect` bytecode is unsupported.** `SupportsCompiledEffects()` is false and
   `CreateCompiledEffect()` returns null. Runtime-source `ShaderEffect` and all stock effects are
-  working paths. `plans/plan_dx.md` `DX-248` records the unassigned D3D12 ownership decision;
-  the implementation itself belongs in `plans/plan_fx.md`, not DX17.
+  working paths. The D3D12 implementation is owned by `plans/plan_fx.md` `FX-134`; D3D11's
+  counterpart is `FX-063`. `plans/plan_dx.md` `DX-248` records this cross-plan boundary, not an
+  implementation task in DX17.
 - **Native Windows execution remains a separate gate.** The Wine+vkd3d-proton results prove CNA's
   renderer behavior but do not substitute for the MSVC, WARP and vendor-driver evidence required by
   `DX-114` and `DX-246`.

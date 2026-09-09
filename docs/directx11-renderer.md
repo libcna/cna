@@ -148,11 +148,13 @@ vertex-stride inference, cbuffer `static_assert` layout checks already caught at
   `DXGI_ERROR_SDK_COMPONENT_MISSING` → retry-without-debug-layer branch has never actually run.
 - **Compiled XNA `Effect` bytecode is unsupported.** `SupportsCompiledEffects()` is false and
   `CreateCompiledEffect()` returns null. The D3D11 implementation is owned by
-  `plans/plan_fx.md` `FX-063`; `plans/plan_dx.md` `DX-248` records the corresponding unassigned
-  D3D12 boundary. Runtime-source `ShaderEffect` and every stock effect are separate, working paths.
-- **`SetDataOptions` has implementation but incomplete differential proof.** D3D11 maps `Discard`
-  and `NoOverwrite` to the matching D3D11 map modes; the shared buffer corpus proves correctness and
-  stress behavior, while the distinction itself remains the P-C2 verification residue in the plan.
+  `plans/plan_fx.md` `FX-063`; D3D12's counterpart is `FX-134`. `plans/plan_dx.md` `DX-248`
+  records this ownership boundary. Runtime-source `ShaderEffect` and every stock effect are
+  separate, working paths.
+- **`SetDataOptions` is implemented and differentially proven.** D3D11 maps `Discard` and
+  `NoOverwrite` to the matching D3D11 map modes. The renderer-neutral 62-frame dynamic-buffer
+  oracle passes all 187 checks on D3D11 and EasyGL and distinguishes all three options without
+  state leakage; `plans/plan_dx.md` `DX-238` records the cross-renderer evidence.
 
 See `plans/plan_dx.md` for the authoritative task-by-task status and design rationale, and
 `docs/graphics-renderer-feature-matrix.md` for a row-by-row comparison against the other established
