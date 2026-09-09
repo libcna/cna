@@ -327,10 +327,12 @@ namespace CNA::Internal::Renderers::DirectX12
             useStockConstants = true;
         }
 
-        // DX-238 will make these uploads frame-owned. Until then they deliberately finish before
-        // this batch opens its frame command list, preserving SetData's synchronous contract.
-        vb_.SetData(pendingVertices_.data(), static_cast<int>(pendingVertices_.size()), sizeof(Sprite2DVertex));
-        ib_.SetData16(pendingIndices_.data(), static_cast<int>(pendingIndices_.size()));
+        // SpriteBatch replaces both transient streams on every flush. Discard gives each update a
+        // fresh range in DX-238's frame-owned upload ring without a submit or fence wait.
+        vb_.SetDataWithOptions(pendingVertices_.data(), static_cast<int>(pendingVertices_.size()),
+                               sizeof(Sprite2DVertex), SetDataOptions::Discard);
+        ib_.SetData16WithOptions(pendingIndices_.data(), static_cast<int>(pendingIndices_.size()),
+                                 SetDataOptions::Discard);
 
         ID3D12GraphicsCommandList* cmdList = owner_->GetFrameCommandListEXT();
         owner_->RetainFrameObjectEXT(vb_.GetResourceEXT());

@@ -2,9 +2,9 @@
 
 // plans/plan_dx.md Phase DX13 (DX-122): real D3D12 3D texture renderer -- mirrors D3D11Texture3DRenderer's
 // (D3D11's own DX-42) XNA-level behavior contract. Storage and transfer pitches follow the
-// requested core XNA SurfaceFormat, including BC1/2/3 block pitches. Same explicit upload-heap-staging discipline
-// D3D12TextureRenderer (DX-109) already
-// established, generalized to a real sub-volume (x,y,z,w,h,depth) upload/readback instead of
+// requested core XNA SurfaceFormat, including BC1/2/3 block pitches. Uploads use the same DX-238
+// persistently mapped frame ring as D3D12TextureRenderer, generalized to a real sub-volume
+// (x,y,z,w,h,depth) upload/readback instead of
 // D3D12TextureRenderer's simpler always-full-level 2D case -- D3D12_TEXTURE_DIMENSION_TEXTURE3D has
 // no array dimension, so (unlike D3D12TextureRenderer's own array-size-1 simplification note) the
 // subresource-index formula is unconditionally just the mip level itself, no special-casing needed.
@@ -36,8 +36,8 @@ namespace CNA::Internal::Renderers::DirectX12
         /// REMED-GFX-177: returns this volume's SRV slot to the shader-visible allocator.
         ~D3D12Texture3DRenderer() override;
 
-        /// REMED-GFX-135: same explicit completion contract as D3D12TextureCubeRenderer::SetData,
-        /// applied to the placed footprint's row pitch and slice pitch.
+        /// REMED-GFX-135/DX-238: records the complete placed-footprint upload in the current frame,
+        /// using its row pitch and slice pitch.
         [[nodiscard]] bool SetData(int level, int x, int y, int z, int w, int h, int depth,
                                    const void* data, int dataLength) override;
         /// REMED-GFX-130: same explicit completion contract as D3D12TextureCubeRenderer::GetData,

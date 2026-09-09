@@ -163,38 +163,14 @@ namespace CNA::Internal::Renderers::DirectX12
         const UINT64 uploadBufferSize = static_cast<UINT64>(rowPitch) *
                                         static_cast<UINT64>(rowCount);
 
-        D3D12_HEAP_PROPERTIES uploadHeapProps{};
-        uploadHeapProps.Type = D3D12_HEAP_TYPE_UPLOAD;
-
-        D3D12_RESOURCE_DESC bufDesc{};
-        bufDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-        bufDesc.Width = uploadBufferSize;
-        bufDesc.Height = 1;
-        bufDesc.DepthOrArraySize = 1;
-        bufDesc.MipLevels = 1;
-        bufDesc.Format = DXGI_FORMAT_UNKNOWN;
-        bufDesc.SampleDesc.Count = 1;
-        bufDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-
-        ComPtr<ID3D12Resource> staging;
-        HRESULT hr = renderer_->GetDeviceEXT()->CreateCommittedResource(
-            &uploadHeapProps, D3D12_HEAP_FLAG_NONE, &bufDesc,
-            D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(staging.GetAddressOf()));
-        if (FAILED(hr))
-            throw std::runtime_error("D3D12TextureRenderer: staging CreateCommittedResource failed, hr=" + FormatHr(hr));
-
-        uint8_t* mapped = nullptr;
-        const D3D12_RANGE readRange{0, 0};
-        hr = staging->Map(0, &readRange, reinterpret_cast<void**>(&mapped));
-        if (FAILED(hr))
-            throw std::runtime_error("D3D12TextureRenderer: staging Map failed, hr=" + FormatHr(hr));
+        auto upload = renderer_->AllocateFrameUploadEXT(
+            static_cast<std::size_t>(uploadBufferSize), D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT);
         for (int row = 0; row < rowCount; ++row)
         {
-            std::memcpy(mapped + static_cast<std::size_t>(row) * rowPitch,
+            std::memcpy(upload.mapped + static_cast<std::size_t>(row) * rowPitch,
                         rgba + static_cast<std::size_t>(row) * sourceStrideBytes,
                         rowBytes);
         }
-        staging->Unmap(0, nullptr);
 
         // Array size 1, single plane -> the general D3D12CalcSubresource() formula
         // (MipSlice + ArraySlice*MipLevels + PlaneSlice*MipLevels*ArraySize) collapses to the mip
@@ -206,38 +182,31 @@ namespace CNA::Internal::Renderers::DirectX12
         dst.SubresourceIndex = static_cast<UINT>(level);
 
         D3D12_TEXTURE_COPY_LOCATION src{};
-        src.pResource = staging.Get();
+        src.pResource = upload.resource;
         src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-        src.PlacedFootprint.Offset = 0;
+        src.PlacedFootprint.Offset = upload.offset;
         src.PlacedFootprint.Footprint.Format = dxgiFormat_;
         src.PlacedFootprint.Footprint.Width = static_cast<UINT>(levelW);
         src.PlacedFootprint.Footprint.Height = static_cast<UINT>(levelH);
         src.PlacedFootprint.Footprint.Depth = 1;
         src.PlacedFootprint.Footprint.RowPitch = rowPitch;
 
-        ID3D12GraphicsCommandList* cmdList = renderer_->BeginImmediateCommandsEXT();
+        ID3D12GraphicsCommandList* cmdList = renderer_->GetFrameCommandListEXT();
+        renderer_->RetainFrameObjectEXT(texture_.Get());
 
         auto& tracker = renderer_->GetResourceStateTrackerEXT();
         tracker.TransitionTo(cmdList, texture_.Get(), D3D12_RESOURCE_STATE_COPY_DEST);
         cmdList->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
         tracker.TransitionTo(cmdList, texture_.Get(), kTextureShaderReadableState);
 
-        hr = cmdList->Close();
-        if (FAILED(hr))
-            throw std::runtime_error("D3D12TextureRenderer: command list Close failed, hr=" + FormatHr(hr));
-        renderer_->ExecuteCommandListAndWaitEXT(cmdList); // synchronous -- staging is safe to release after this
     }
 
     void D3D12TextureRenderer::TransitionToShaderReadableEXT()
     {
-        ID3D12GraphicsCommandList* cmdList = renderer_->BeginImmediateCommandsEXT();
+        ID3D12GraphicsCommandList* cmdList = renderer_->GetFrameCommandListEXT();
+        renderer_->RetainFrameObjectEXT(texture_.Get());
 
         renderer_->GetResourceStateTrackerEXT().TransitionTo(cmdList, texture_.Get(), kTextureShaderReadableState);
-
-        const HRESULT hr = cmdList->Close();
-        if (FAILED(hr))
-            throw std::runtime_error("D3D12TextureRenderer: command list Close failed, hr=" + FormatHr(hr));
-        renderer_->ExecuteCommandListAndWaitEXT(cmdList);
     }
 
     void D3D12TextureRenderer::UpdatePixels(const uint8_t* rgba, int stride)

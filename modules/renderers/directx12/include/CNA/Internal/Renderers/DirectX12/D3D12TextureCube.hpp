@@ -1,10 +1,9 @@
 #pragma once
 
 // plans/plan_dx.md Phase DX12 (DX-111/DX-214/DX-225): real D3D12 cube-map texture renderer. Storage
-// and transfer pitches follow the requested core XNA SurfaceFormat. Same explicit
-// upload-heap-staging discipline as
-// D3D12Textures.hpp/.cpp's D3D12TextureRenderer::UploadRegion(), just parameterized per face: a
-// fresh UPLOAD-heap staging BUFFER per SetData() call, CopyTextureRegion into the face's own
+// and transfer pitches follow the requested core XNA SurfaceFormat. Uploads use the same DX-238
+// persistently mapped frame ring as D3D12TextureRenderer::UploadRegion(), parameterized per face:
+// a ring range feeds CopyTextureRegion into the face's own
 // subresource, and D3D12ResourceStateTracker (DX-106) driving the
 // COPY_DEST -> {PIXEL_SHADER_RESOURCE | NON_PIXEL_SHADER_RESOURCE} transition.
 //
@@ -40,7 +39,7 @@ namespace CNA::Internal::Renderers::DirectX12
     /// Real D3D12 cube-map texture renderer (DX-111/env_map3d). Constructed with no initial pixel
     /// data (matches D3D11TextureCubeRenderer's own constructor shape) -- ends construction in a
     /// real, deliberate shader-readable resting state (empty/undefined content), then each SetData()
-    /// call uploads one face's sub-rectangle for real via an upload-heap staging buffer.
+    /// call uploads one face's sub-rectangle through the current frame's upload ring.
     class D3D12TextureCubeRenderer final : public ITextureCubeRenderer
     {
     public:
@@ -48,10 +47,9 @@ namespace CNA::Internal::Renderers::DirectX12
         /// REMED-GFX-177: returns this cube's SRV slot to the shader-visible allocator.
         ~D3D12TextureCubeRenderer() override;
 
-        /// REMED-GFX-135: true only once the staged copy has been submitted and waited on for the
-        /// whole requested face rectangle; false for an out-of-range face/level/rectangle, a null
-        /// source or a source buffer too small for the region. A failed D3D12 resource
-        /// creation/Map/Close still throws -- that is a broken device, not an unsupported request.
+        /// REMED-GFX-135/DX-238: true once the complete face copy has been recorded in the current
+        /// frame; false for an out-of-range face/level/rectangle, a null source or a source buffer
+        /// too small for the region. A failed D3D12 upload allocation still throws.
         [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
                                    const void* data, int dataLength) override;
         /**

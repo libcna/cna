@@ -2,8 +2,9 @@
 
 // plans/plan_dx.md Phase DX17: production D3D12 renderer. DX-237 records clears, draws, resolves,
 // SpriteBatch flushes and per-draw constants into one command list per frame slot, retaining every
-// referenced COM object until that slot's fence completes. Synchronous upload/readback work uses a
-// separate immediate command list pending DX-238's staging-ring work.
+// referenced COM object until that slot's fence completes. DX-238 routes uploads through
+// persistently mapped per-frame rings; CPU readbacks remain explicit immediate synchronization
+// boundaries.
 //
 // Windows-only (see CMakeLists.txt's FATAL_ERROR guard for non-Windows CNA_GRAPHICS_RENDERER=D3D12).
 
@@ -37,8 +38,8 @@ namespace CNA::Internal::Renderers::DirectX12
      *
      * Windowed devices use the swap-chain back-buffer index; headless devices rotate the same two
      * slots at Present(). Each slot owns its allocator, command list, constant arena and retained
-     * resource set. Uploads and CPU readbacks remain explicit synchronization boundaries until
-     * DX-238 replaces their one-shot staging resources with frame-owned upload ranges.
+     * resource set and persistently mapped upload ring. CPU readbacks remain explicit
+     * synchronization boundaries.
      */
     class DirectX12Renderer final : public IGraphicsRenderer
     {
@@ -544,6 +545,15 @@ namespace CNA::Internal::Renderers::DirectX12
         /** @brief The synchronous immediate direct command list used by native tests. */
         [[nodiscard]] ID3D12GraphicsCommandList* GetCommandListEXT() const { return commandList_.Get(); }
 
+        /** @brief One non-overlapping range in the current frame slot's mapped upload ring. */
+        struct FrameUploadAllocationEXT
+        {
+            ID3D12Resource* resource = nullptr;
+            std::uint8_t* mapped = nullptr;
+            UINT64 offset = 0;
+            std::size_t size = 0;
+        };
+
         /** @brief Returns the open command list for the current frame, beginning one if necessary. */
         ID3D12GraphicsCommandList* GetFrameCommandListEXT();
         /** @brief Flushes an open frame segment, then resets and returns the synchronous immediate list. */
@@ -552,10 +562,20 @@ namespace CNA::Internal::Renderers::DirectX12
         /** @brief Allocates and copies one 256-byte-aligned constant range owned by the current frame. */
         D3D12_GPU_VIRTUAL_ADDRESS AllocateFrameConstantDataEXT(
             const void* data, std::size_t byteCount);
+        /** @brief Allocates a non-overlapping persistently mapped upload range for this frame.
+         *
+         * @param byteCount Number of writable bytes requested.
+         * @param alignment Required power-of-two offset alignment.
+         * @return The upload resource, mapped CPU pointer and aligned resource offset.
+         */
+        FrameUploadAllocationEXT AllocateFrameUploadEXT(
+            std::size_t byteCount, std::size_t alignment);
         /** @brief Retains a COM object until the current frame slot's fence has completed. */
         void RetainFrameObjectEXT(IUnknown* object);
         /** @brief Submits the currently open frame list without waiting for its new fence. */
         std::uint64_t SubmitFrameCommandsEXT();
+        /** @brief Submits all pending work and waits for the shared GPU fence to complete. */
+        void WaitForGpuIdleEXT() { WaitForGpuIdle(); }
         /** @brief Number of actual waits required before a busy frame slot could be reused. */
         [[nodiscard]] std::uint64_t GetFrameFenceWaitCountEXT() const noexcept
         {
@@ -573,6 +593,16 @@ namespace CNA::Internal::Renderers::DirectX12
         {
             return immediateSubmissionCountEXT_;
         }
+        /** @brief Total lazily allocated upload-ring resources created over this renderer lifetime. */
+        [[nodiscard]] std::uint64_t GetUploadResourceCreationCountEXT() const noexcept
+        {
+            return uploadResourceCreationCountEXT_;
+        }
+        /** @brief Number of upload-ring ranges allocated since the diagnostic counters were reset. */
+        [[nodiscard]] std::uint64_t GetUploadAllocationCountEXT() const noexcept
+        {
+            return uploadAllocationCountEXT_;
+        }
         /** @brief Resets the synchronization counters used by focused performance contracts. */
         void ResetSynchronizationCountersEXT() noexcept
         {
@@ -580,6 +610,7 @@ namespace CNA::Internal::Renderers::DirectX12
             gpuWaitCountEXT_ = 0;
             frameSubmissionCountEXT_ = 0;
             immediateSubmissionCountEXT_ = 0;
+            uploadAllocationCountEXT_ = 0;
         }
 
         /** @brief Real shared fence object (DX-105). */
@@ -890,13 +921,25 @@ namespace CNA::Internal::Renderers::DirectX12
             std::size_t cursor = 0;
         };
 
-        // DX-237: one allocator/list and one lifetime domain per frame slot. commandList_ and
-        // immediateCommandAllocator_ are a separate synchronous upload/readback path until DX-238.
+        struct FrameUploadChunk
+        {
+            ComPtr<ID3D12Resource> resource;
+            std::uint8_t* mapped = nullptr;
+            std::size_t capacity = 0;
+            std::size_t cursor = 0;
+        };
+
+        FrameUploadChunk& CreateFrameUploadChunkEXT(int frameIndex, std::size_t minimumCapacity);
+        void ReleaseFrameUploadChunksEXT() noexcept;
+
+        // DX-237/DX-238: one allocator/list, lifetime domain and upload ring per frame slot.
+        // commandList_ and immediateCommandAllocator_ are reserved for synchronous readback work.
         ComPtr<ID3D12CommandAllocator> commandAllocators_[kFramesInFlight];
         ComPtr<ID3D12GraphicsCommandList> frameCommandLists_[kFramesInFlight];
         ComPtr<ID3D12CommandAllocator> immediateCommandAllocator_;
         ComPtr<ID3D12GraphicsCommandList> commandList_;
         std::vector<FrameConstantChunk> frameConstantChunks_[kFramesInFlight];
+        std::vector<FrameUploadChunk> frameUploadChunks_[kFramesInFlight];
         std::vector<ComPtr<IUnknown>> frameRetainedObjects_[kFramesInFlight];
         int activeFrameIndex_ = -1;
         int headlessFrameIndex_ = 0;
@@ -912,6 +955,8 @@ namespace CNA::Internal::Renderers::DirectX12
         std::uint64_t gpuWaitCountEXT_ = 0;
         std::uint64_t frameSubmissionCountEXT_ = 0;
         std::uint64_t immediateSubmissionCountEXT_ = 0;
+        std::uint64_t uploadResourceCreationCountEXT_ = 0;
+        std::uint64_t uploadAllocationCountEXT_ = 0;
 
         // Swap-chain lifetime (DX-102) -- see class-level doc comment for why this is allowed to
         // fail gracefully instead of throwing.

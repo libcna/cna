@@ -1,12 +1,11 @@
 #pragma once
 
 // plans/plan_dx.md Phase DX12 (DX-109/DX-214/DX-225): real D3D12 2D texture renderer. Storage and
-// transfer pitches follow the requested core XNA SurfaceFormat. Same explicit
-// upload-heap-staging discipline as D3D12Buffers.hpp/.cpp:
-// CreateCommittedResource on a DEFAULT heap for the GPU-resident texture, a fresh UPLOAD-heap
-// staging BUFFER per upload (D3D12 requires texture-copy sources to be laid out as a row-pitch-
-// aligned buffer -- D3D12_TEXTURE_DATA_PITCH_ALIGNMENT, 256 bytes -- not a TEXTURE2D resource),
-// CopyTextureRegion, and D3D12ResourceStateTracker (DX-106) driving the
+// transfer pitches follow the requested core XNA SurfaceFormat. Uploads allocate persistently
+// mapped ranges from the current DX-238 frame ring (D3D12 requires texture-copy sources to be laid
+// out as a row-pitch-aligned buffer -- D3D12_TEXTURE_DATA_PITCH_ALIGNMENT, 256 bytes -- not a
+// TEXTURE2D resource), record CopyTextureRegion in that frame, and use D3D12ResourceStateTracker
+// (DX-106) to drive the
 // COPY_DEST -> {PIXEL_SHADER_RESOURCE | NON_PIXEL_SHADER_RESOURCE} transition.
 //
 // d3dx12.h (Microsoft's optional helper header, which normally provides D3D12CalcSubresource()) is

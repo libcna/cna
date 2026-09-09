@@ -86,7 +86,7 @@ namespace CNA::Internal::Renderers::DirectX12
         }
 
         void UploadSubresource(
-            DirectX12Renderer* owner, ID3D12Device* device, ID3D12Resource* resource,
+            DirectX12Renderer* owner, ID3D12Resource* resource,
             UINT subresource, const uint8_t* pixels, int w, int h,
             DXGI_FORMAT dxgiFormat, int bytesPerTexel)
         {
@@ -95,33 +95,13 @@ namespace CNA::Internal::Renderers::DirectX12
                                  & ~(D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1);
             const UINT64 uploadBufferSize = static_cast<UINT64>(rowPitch) * static_cast<UINT64>(h);
 
-            D3D12_HEAP_PROPERTIES uploadHeapProps{};
-            uploadHeapProps.Type = D3D12_HEAP_TYPE_UPLOAD;
-            D3D12_RESOURCE_DESC bufDesc{};
-            bufDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-            bufDesc.Width = uploadBufferSize;
-            bufDesc.Height = 1;
-            bufDesc.DepthOrArraySize = 1;
-            bufDesc.MipLevels = 1;
-            bufDesc.Format = DXGI_FORMAT_UNKNOWN;
-            bufDesc.SampleDesc.Count = 1;
-            bufDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-
-            ComPtr<ID3D12Resource> staging;
-            HRESULT hr = device->CreateCommittedResource(
-                &uploadHeapProps, D3D12_HEAP_FLAG_NONE, &bufDesc,
-                D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(staging.GetAddressOf()));
-            if (FAILED(hr)) return;
-
-            uint8_t* mapped = nullptr;
-            const D3D12_RANGE readRange{0, 0};
-            hr = staging->Map(0, &readRange, reinterpret_cast<void**>(&mapped));
-            if (FAILED(hr)) return;
+            auto upload = owner->AllocateFrameUploadEXT(
+                static_cast<std::size_t>(uploadBufferSize),
+                D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT);
             for (int row = 0; row < h; ++row)
-                std::memcpy(mapped + static_cast<std::size_t>(row) * rowPitch,
+                std::memcpy(upload.mapped + static_cast<std::size_t>(row) * rowPitch,
                             pixels + static_cast<std::size_t>(row) * tightRowPitch,
                             tightRowPitch);
-            staging->Unmap(0, nullptr);
 
             D3D12_TEXTURE_COPY_LOCATION dst{};
             dst.pResource = resource;
@@ -129,16 +109,17 @@ namespace CNA::Internal::Renderers::DirectX12
             dst.SubresourceIndex = subresource;
 
             D3D12_TEXTURE_COPY_LOCATION src{};
-            src.pResource = staging.Get();
+            src.pResource = upload.resource;
             src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-            src.PlacedFootprint.Offset = 0;
+            src.PlacedFootprint.Offset = upload.offset;
             src.PlacedFootprint.Footprint.Format = dxgiFormat;
             src.PlacedFootprint.Footprint.Width = static_cast<UINT>(w);
             src.PlacedFootprint.Footprint.Height = static_cast<UINT>(h);
             src.PlacedFootprint.Footprint.Depth = 1;
             src.PlacedFootprint.Footprint.RowPitch = rowPitch;
 
-            ID3D12GraphicsCommandList* cmdList = owner->BeginImmediateCommandsEXT();
+            ID3D12GraphicsCommandList* cmdList = owner->GetFrameCommandListEXT();
+            owner->RetainFrameObjectEXT(resource);
 
             auto& tracker = owner->GetResourceStateTrackerEXT();
             const D3D12_RESOURCE_STATES prior = tracker.GetTrackedStateEXT(resource);
@@ -146,9 +127,6 @@ namespace CNA::Internal::Renderers::DirectX12
             cmdList->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
             tracker.TransitionTo(cmdList, resource, prior);
 
-            hr = cmdList->Close();
-            if (FAILED(hr)) return;
-            owner->ExecuteCommandListAndWaitEXT(cmdList);
         }
 
         template <typename T>
@@ -531,6 +509,14 @@ namespace CNA::Internal::Renderers::DirectX12
         (void) owner_.Get();
         ResolveMsaaEXT();
         GenerateMipsEXT();
+        ID3D12Resource* const sampleable = GetSampleableColorResourceEXT();
+        ID3D12GraphicsCommandList* const commandList = owner_->GetFrameCommandListEXT();
+        owner_->RetainFrameObjectEXT(sampleable);
+        owner_->GetResourceStateTrackerEXT().TransitionTo(
+            commandList, sampleable,
+            static_cast<D3D12_RESOURCE_STATES>(
+                D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE |
+                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
         owner_->RestoreBackBufferRenderTargetEXT();
     }
 
@@ -654,7 +640,7 @@ namespace CNA::Internal::Renderers::DirectX12
                 srcPixels, srcW, srcH, dstW, dstH,
                 static_cast<SurfaceFormat>(surfaceFormat_), bytesPerTexel_);
             UploadSubresource(
-                owner_.Get(), device_.Get(), mipResource, static_cast<UINT>(level),
+                owner_.Get(), mipResource, static_cast<UINT>(level),
                 dstPixels.data(), dstW, dstH, dxgiFormat_, bytesPerTexel_);
 
             srcW = dstW; srcH = dstH;
@@ -960,6 +946,14 @@ namespace CNA::Internal::Renderers::DirectX12
         // activeFace_. The latter runs against the single-sample resolve resource when needed.
         ResolveMsaaEXT();
         GenerateMipsEXT();
+        ID3D12Resource* const sampleable = GetSampleableColorResourceEXT();
+        ID3D12GraphicsCommandList* const commandList = owner_->GetFrameCommandListEXT();
+        owner_->RetainFrameObjectEXT(sampleable);
+        owner_->GetResourceStateTrackerEXT().TransitionTo(
+            commandList, sampleable,
+            static_cast<D3D12_RESOURCE_STATES>(
+                D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE |
+                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
         activeFace_ = -1;
         owner_->RestoreBackBufferRenderTargetEXT();
     }
@@ -994,7 +988,7 @@ namespace CNA::Internal::Renderers::DirectX12
                 srcPixels, srcW, srcH, dstW, dstH,
                 static_cast<SurfaceFormat>(surfaceFormat_), bytesPerTexel_);
             UploadSubresource(
-                owner_.Get(), device_.Get(), mipResource, dstSubresource,
+                owner_.Get(), mipResource, dstSubresource,
                 dstPixels.data(), dstW, dstH, dxgiFormat_, bytesPerTexel_);
 
             srcW = dstW; srcH = dstH;

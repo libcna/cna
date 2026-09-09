@@ -1,27 +1,10 @@
 #pragma once
 
-// plans/plan_dx.md Phase DX12 (DX-109): real D3D12 vertex/index buffer renderers via explicit
-// upload-heap staging + CopyBufferRegion -- D3D12 has no implicit driver-managed Map/Unmap-onto-a-
-// GPU-resident-resource path the way D3D11 does (D3D11Buffers.hpp/.cpp's own D3D11_USAGE_DYNAMIC +
-// Map/Unmap convention). Each SetData()/SetDataWithOptions() call: (1) ensures a DEFAULT-heap
-// GPU-resident ID3D12Resource is at least byteCount bytes (grows, never shrinks, mirroring
-// D3D11VertexBufferRenderer's own capacity policy); (2) creates a fresh UPLOAD-heap staging resource
-// sized exactly to byteCount, Map()s it (upload heaps are always CPU-writable, unlike DEFAULT-heap
-// resources) and memcpy's the caller's data in; (3) records CopyBufferRegion on the renderer's
-// shared command list, with D3D12ResourceStateTracker (DX-106) driving the
-// GENERIC_READ/COMMON -> COPY_DEST -> GENERIC_READ transition around it; (4) executes + waits
-// synchronously via the renderer's own ExecuteCommandListAndWaitEXT() (DX-102/DX-105).
-//
-// No persistent per-frame staging ring yet -- nothing above this layer (Clear()/Present()/draws) is
-// real yet either (that's DX-111 onward), so there is no per-frame throughput requirement to design
-// against today; a synchronous immediate-submit upload is the correct, honest scope for this task.
-//
-// SetDataOptions (Discard/NoOverwrite/None) has no real distinguishing effect at this synchronous-
-// upload stage: every SetData() call already fully serializes with the GPU via
-// ExecuteCommandListAndWaitEXT() before returning, so there is no in-flight GPU access for
-// Discard/NoOverwrite to avoid racing with. The parameter is accepted (interface compatibility) but
-// intentionally not distinguished -- a documented, honest simplification, not silently dropped
-// semantics; revisit once real per-frame command-list pipelining exists.
+// plans/plan_dx.md DX-238: D3D12 vertex/index buffers retain GPU-resident DEFAULT resources while
+// uploads come from the owning frame slot's persistently mapped ring. Every update receives a fresh
+// non-overlapping source range and records CopyBufferRegion into the active frame list, so Discard
+// never waits for an old mapping and NoOverwrite appends without touching in-flight upload bytes.
+// The slot's fence gates ring reset; no SetData call creates a one-shot staging resource or submits.
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
@@ -78,7 +61,7 @@ namespace CNA::Internal::Renderers::DirectX12
 
     private:
         void EnsureCapacity(std::size_t requiredBytes);
-        void UploadAndCopy(const void* data, std::size_t byteCount);
+        void UploadAndCopy(const void* data, std::size_t byteCount, SetDataOptions options);
 
         D3D12RendererReference renderer_;
         ComPtr<ID3D12Resource> buffer_;
@@ -119,7 +102,8 @@ namespace CNA::Internal::Renderers::DirectX12
 
     private:
         void EnsureCapacity(std::size_t requiredBytes);
-        void UploadAndCopy(const void* data, std::size_t byteCount, bool dataIsThirtyTwoBit);
+        void UploadAndCopy(const void* data, std::size_t byteCount, bool dataIsThirtyTwoBit,
+                           SetDataOptions options);
 
         D3D12RendererReference renderer_;
         ComPtr<ID3D12Resource> buffer_;

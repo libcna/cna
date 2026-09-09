@@ -159,14 +159,10 @@ namespace CNA::Internal::Renderers::DirectX12
 
     void D3D12TextureCubeRenderer::TransitionToShaderReadableEXT()
     {
-        ID3D12GraphicsCommandList* cmdList = renderer_->BeginImmediateCommandsEXT();
+        ID3D12GraphicsCommandList* cmdList = renderer_->GetFrameCommandListEXT();
+        renderer_->RetainFrameObjectEXT(texture_.Get());
 
         renderer_->GetResourceStateTrackerEXT().TransitionTo(cmdList, texture_.Get(), kTextureShaderReadableState);
-
-        const HRESULT hr = cmdList->Close();
-        if (FAILED(hr))
-            throw std::runtime_error("D3D12TextureCubeRenderer: command list Close failed, hr=" + FormatHr(hr));
-        renderer_->ExecuteCommandListAndWaitEXT(cmdList);
     }
 
     bool D3D12TextureCubeRenderer::SetData(int face, int level, int x, int y, int w, int h,
@@ -187,38 +183,14 @@ namespace CNA::Internal::Renderers::DirectX12
         const UINT rowPitch = AlignUp(static_cast<UINT>(rowBytes), D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
         const UINT64 uploadBufferSize = static_cast<UINT64>(rowPitch) * static_cast<UINT64>(h);
 
-        D3D12_HEAP_PROPERTIES uploadHeapProps{};
-        uploadHeapProps.Type = D3D12_HEAP_TYPE_UPLOAD;
-
-        D3D12_RESOURCE_DESC bufDesc{};
-        bufDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-        bufDesc.Width = uploadBufferSize;
-        bufDesc.Height = 1;
-        bufDesc.DepthOrArraySize = 1;
-        bufDesc.MipLevels = 1;
-        bufDesc.Format = DXGI_FORMAT_UNKNOWN;
-        bufDesc.SampleDesc.Count = 1;
-        bufDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-
-        ComPtr<ID3D12Resource> staging;
-        HRESULT hr = renderer_->GetDeviceEXT()->CreateCommittedResource(
-            &uploadHeapProps, D3D12_HEAP_FLAG_NONE, &bufDesc,
-            D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(staging.GetAddressOf()));
-        if (FAILED(hr))
-            throw std::runtime_error("D3D12TextureCubeRenderer: staging CreateCommittedResource failed, hr=" + FormatHr(hr));
-
-        uint8_t* mapped = nullptr;
-        const D3D12_RANGE readRange{0, 0};
-        hr = staging->Map(0, &readRange, reinterpret_cast<void**>(&mapped));
-        if (FAILED(hr))
-            throw std::runtime_error("D3D12TextureCubeRenderer: staging Map failed, hr=" + FormatHr(hr));
+        auto upload = renderer_->AllocateFrameUploadEXT(
+            static_cast<std::size_t>(uploadBufferSize), D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT);
         const uint8_t* src = static_cast<const uint8_t*>(data);
         for (int row = 0; row < h; ++row)
         {
-            std::memcpy(mapped + static_cast<std::size_t>(row) * rowPitch,
+            std::memcpy(upload.mapped + static_cast<std::size_t>(row) * rowPitch,
                         src + static_cast<std::size_t>(row) * rowBytes, rowBytes);
         }
-        staging->Unmap(0, nullptr);
 
         // Single-plane, ArraySize=6 -> D3D12CalcSubresource()'s formula collapses to
         // level + face*mipLevels_ (see this file's own header comment for why it's computed
@@ -231,26 +203,23 @@ namespace CNA::Internal::Renderers::DirectX12
         dst.SubresourceIndex = subresource;
 
         D3D12_TEXTURE_COPY_LOCATION srcLoc{};
-        srcLoc.pResource = staging.Get();
+        srcLoc.pResource = upload.resource;
         srcLoc.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-        srcLoc.PlacedFootprint.Offset = 0;
+        srcLoc.PlacedFootprint.Offset = upload.offset;
         srcLoc.PlacedFootprint.Footprint.Format = dxgiFormat_;
         srcLoc.PlacedFootprint.Footprint.Width = static_cast<UINT>(w);
         srcLoc.PlacedFootprint.Footprint.Height = static_cast<UINT>(h);
         srcLoc.PlacedFootprint.Footprint.Depth = 1;
         srcLoc.PlacedFootprint.Footprint.RowPitch = rowPitch;
 
-        ID3D12GraphicsCommandList* cmdList = renderer_->BeginImmediateCommandsEXT();
+        ID3D12GraphicsCommandList* cmdList = renderer_->GetFrameCommandListEXT();
+        renderer_->RetainFrameObjectEXT(texture_.Get());
 
         auto& tracker = renderer_->GetResourceStateTrackerEXT();
         tracker.TransitionTo(cmdList, texture_.Get(), D3D12_RESOURCE_STATE_COPY_DEST);
         cmdList->CopyTextureRegion(&dst, static_cast<UINT>(x), static_cast<UINT>(y), 0, &srcLoc, nullptr);
         tracker.TransitionTo(cmdList, texture_.Get(), kTextureShaderReadableState);
 
-        hr = cmdList->Close();
-        if (FAILED(hr))
-            throw std::runtime_error("D3D12TextureCubeRenderer: command list Close failed, hr=" + FormatHr(hr));
-        renderer_->ExecuteCommandListAndWaitEXT(cmdList); // synchronous -- staging is safe to release after this
         return true;
     }
 
@@ -292,37 +261,12 @@ namespace CNA::Internal::Renderers::DirectX12
         const UINT rowPitch = AlignUp(static_cast<UINT>(levelRowBytes),
                                       D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
         const UINT64 uploadBufferSize = static_cast<UINT64>(rowPitch) * levelBlockRows;
-        D3D12_HEAP_PROPERTIES uploadHeapProps{};
-        uploadHeapProps.Type = D3D12_HEAP_TYPE_UPLOAD;
-        D3D12_RESOURCE_DESC bufferDesc{};
-        bufferDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-        bufferDesc.Width = uploadBufferSize;
-        bufferDesc.Height = 1;
-        bufferDesc.DepthOrArraySize = 1;
-        bufferDesc.MipLevels = 1;
-        bufferDesc.Format = DXGI_FORMAT_UNKNOWN;
-        bufferDesc.SampleDesc.Count = 1;
-        bufferDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-
-        ComPtr<ID3D12Resource> staging;
-        HRESULT hr = renderer_->GetDeviceEXT()->CreateCommittedResource(
-            &uploadHeapProps, D3D12_HEAP_FLAG_NONE, &bufferDesc,
-            D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(staging.GetAddressOf()));
-        if (FAILED(hr))
-            throw std::runtime_error(
-                "D3D12TextureCubeRenderer: compressed staging creation failed, hr=" + FormatHr(hr));
-
-        std::uint8_t* mapped = nullptr;
-        const D3D12_RANGE readRange{0, 0};
-        hr = staging->Map(0, &readRange, reinterpret_cast<void**>(&mapped));
-        if (FAILED(hr))
-            throw std::runtime_error(
-                "D3D12TextureCubeRenderer: compressed staging Map failed, hr=" + FormatHr(hr));
+        auto upload = renderer_->AllocateFrameUploadEXT(
+            static_cast<std::size_t>(uploadBufferSize), D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT);
         for (int row = 0; row < levelBlockRows; ++row)
-            std::memcpy(mapped + static_cast<std::size_t>(row) * rowPitch,
+            std::memcpy(upload.mapped + static_cast<std::size_t>(row) * rowPitch,
                         levelBlocks.data() + static_cast<std::size_t>(row) * levelRowBytes,
                         levelRowBytes);
-        staging->Unmap(0, nullptr);
 
         const UINT subresource = static_cast<UINT>(level) +
                                  static_cast<UINT>(face) * static_cast<UINT>(mipLevels_);
@@ -331,24 +275,21 @@ namespace CNA::Internal::Renderers::DirectX12
         destination.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
         destination.SubresourceIndex = subresource;
         D3D12_TEXTURE_COPY_LOCATION source{};
-        source.pResource = staging.Get();
+        source.pResource = upload.resource;
         source.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+        source.PlacedFootprint.Offset = upload.offset;
         source.PlacedFootprint.Footprint.Format = dxgiFormat_;
         source.PlacedFootprint.Footprint.Width = static_cast<UINT>(levelSize);
         source.PlacedFootprint.Footprint.Height = static_cast<UINT>(levelSize);
         source.PlacedFootprint.Footprint.Depth = 1;
         source.PlacedFootprint.Footprint.RowPitch = rowPitch;
 
-        ID3D12GraphicsCommandList* commandList = renderer_->BeginImmediateCommandsEXT();
+        ID3D12GraphicsCommandList* commandList = renderer_->GetFrameCommandListEXT();
+        renderer_->RetainFrameObjectEXT(texture_.Get());
         auto& tracker = renderer_->GetResourceStateTrackerEXT();
         tracker.TransitionTo(commandList, texture_.Get(), D3D12_RESOURCE_STATE_COPY_DEST);
         commandList->CopyTextureRegion(&destination, 0, 0, 0, &source, nullptr);
         tracker.TransitionTo(commandList, texture_.Get(), kTextureShaderReadableState);
-        hr = commandList->Close();
-        if (FAILED(hr))
-            throw std::runtime_error(
-                "D3D12TextureCubeRenderer: compressed command list Close failed, hr=" + FormatHr(hr));
-        renderer_->ExecuteCommandListAndWaitEXT(commandList);
         return true;
     }
 

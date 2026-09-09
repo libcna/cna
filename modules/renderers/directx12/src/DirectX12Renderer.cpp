@@ -1,5 +1,5 @@
-// plans/plan_dx.md Phase DX17: frame-scoped D3D12 command recording with explicit immediate-list
-// boundaries for uploads and CPU readbacks.
+// plans/plan_dx.md Phase DX17: frame-scoped D3D12 command recording with persistently mapped
+// per-frame upload rings and explicit immediate-list boundaries for CPU readbacks.
 #include "CNA/Logger.hpp"
 #include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12Buffers.hpp"
@@ -23,6 +23,7 @@
 #include <cstdio>
 #include <cstring>
 #include <iterator>
+#include <limits>
 #include <stdexcept>
 #include <string>
 
@@ -52,6 +53,8 @@ namespace CNA::Internal::Renderers::DirectX12
 
     namespace
     {
+        constexpr std::size_t kDefaultFrameUploadChunkSize = 1u * 1024u * 1024u;
+
         std::string FormatHr(HRESULT hr)
         {
             char buf[32];
@@ -340,6 +343,7 @@ namespace CNA::Internal::Renderers::DirectX12
         for (auto& chunks : frameConstantChunks_)
             for (auto& chunk : chunks)
                 if (chunk.resource && chunk.mapped) chunk.resource->Unmap(0, nullptr);
+        ReleaseFrameUploadChunksEXT();
         if (fenceEvent_)
         {
             CloseHandle(fenceEvent_);
@@ -528,6 +532,7 @@ namespace CNA::Internal::Renderers::DirectX12
             hr = frameCommandLists_[i]->Close();
             if (FAILED(hr))
                 throw std::runtime_error("ID3D12GraphicsCommandList::Close (frame initial) failed, hr=" + FormatHr(hr));
+
         }
 
         HRESULT hr = device_->CreateCommandAllocator(
@@ -1069,6 +1074,7 @@ namespace CNA::Internal::Renderers::DirectX12
 
         frameRetainedObjects_[frameIndex].clear();
         for (auto& chunk : frameConstantChunks_[frameIndex]) chunk.cursor = 0;
+        for (auto& chunk : frameUploadChunks_[frameIndex]) chunk.cursor = 0;
 
         HRESULT hr = commandAllocators_[frameIndex]->Reset();
         if (FAILED(hr))
@@ -1143,6 +1149,85 @@ namespace CNA::Internal::Renderers::DirectX12
         std::memcpy(chunkIt->mapped + offset, data, byteCount);
         chunkIt->cursor += alignedSize;
         return chunkIt->resource->GetGPUVirtualAddress() + offset;
+    }
+
+    DirectX12Renderer::FrameUploadChunk& DirectX12Renderer::CreateFrameUploadChunkEXT(
+        int frameIndex, std::size_t minimumCapacity)
+    {
+        FrameUploadChunk chunk;
+        chunk.capacity = std::max(kDefaultFrameUploadChunkSize, minimumCapacity);
+
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_UPLOAD;
+        D3D12_RESOURCE_DESC desc{};
+        desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+        desc.Width = static_cast<UINT64>(chunk.capacity);
+        desc.Height = 1;
+        desc.DepthOrArraySize = 1;
+        desc.MipLevels = 1;
+        desc.Format = DXGI_FORMAT_UNKNOWN;
+        desc.SampleDesc.Count = 1;
+        desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+        HRESULT hr = device_->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_GENERIC_READ,
+            nullptr, IID_PPV_ARGS(chunk.resource.ReleaseAndGetAddressOf()));
+        if (FAILED(hr))
+            throw std::runtime_error("D3D12 frame upload ring creation failed, hr=" + FormatHr(hr));
+
+        const D3D12_RANGE noRead{0, 0};
+        hr = chunk.resource->Map(0, &noRead, reinterpret_cast<void**>(&chunk.mapped));
+        if (FAILED(hr))
+            throw std::runtime_error("D3D12 frame upload ring Map failed, hr=" + FormatHr(hr));
+
+        frameUploadChunks_[frameIndex].push_back(std::move(chunk));
+        ++uploadResourceCreationCountEXT_;
+        return frameUploadChunks_[frameIndex].back();
+    }
+
+    void DirectX12Renderer::ReleaseFrameUploadChunksEXT() noexcept
+    {
+        for (auto& chunks : frameUploadChunks_)
+        {
+            for (auto& chunk : chunks)
+            {
+                if (chunk.resource && chunk.mapped)
+                    chunk.resource->Unmap(0, nullptr);
+            }
+            chunks.clear();
+        }
+    }
+
+    DirectX12Renderer::FrameUploadAllocationEXT DirectX12Renderer::AllocateFrameUploadEXT(
+        std::size_t byteCount, std::size_t alignment)
+    {
+        if (byteCount == 0)
+            throw std::runtime_error("AllocateFrameUploadEXT requires a non-empty range");
+        if (alignment == 0 || (alignment & (alignment - 1)) != 0)
+            throw std::runtime_error("AllocateFrameUploadEXT requires power-of-two alignment");
+        if (byteCount > std::numeric_limits<std::size_t>::max() - (alignment - 1))
+            throw std::runtime_error("AllocateFrameUploadEXT size exceeds addressable memory");
+
+        (void)GetFrameCommandListEXT();
+        auto& chunks = frameUploadChunks_[activeFrameIndex_];
+        for (auto& chunk : chunks)
+        {
+            const std::size_t alignedOffset = (chunk.cursor + alignment - 1) & ~(alignment - 1);
+            if (alignedOffset <= chunk.capacity && byteCount <= chunk.capacity - alignedOffset)
+            {
+                chunk.cursor = alignedOffset + byteCount;
+                ++uploadAllocationCountEXT_;
+                return {chunk.resource.Get(), chunk.mapped + alignedOffset,
+                        static_cast<UINT64>(alignedOffset), byteCount};
+            }
+        }
+
+        FrameUploadChunk& chunk = CreateFrameUploadChunkEXT(
+            activeFrameIndex_, byteCount + alignment - 1);
+        const std::size_t alignedOffset = (chunk.cursor + alignment - 1) & ~(alignment - 1);
+        chunk.cursor = alignedOffset + byteCount;
+        ++uploadAllocationCountEXT_;
+        return {chunk.resource.Get(), chunk.mapped + alignedOffset,
+                static_cast<UINT64>(alignedOffset), byteCount};
     }
 
     void DirectX12Renderer::RetainFrameObjectEXT(IUnknown* object)
@@ -1271,6 +1356,7 @@ namespace CNA::Internal::Renderers::DirectX12
                 if (chunk.resource && chunk.mapped) chunk.resource->Unmap(0, nullptr);
             chunks.clear();
         }
+        ReleaseFrameUploadChunksEXT();
         if (fenceEvent_) { CloseHandle(fenceEvent_); fenceEvent_ = nullptr; }
         fence_.Reset();
         // REMED-GFX-177: drop this device's allocator set. Any resource created against the old

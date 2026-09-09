@@ -221,6 +221,9 @@ class GraphicsRendererBenchmark : public Game
     const int meshDrawCount_ = MeshDrawCount();
     int frame_ = 0;
     double lastFrameStart_ = -1.0;
+#if defined(CNA_RENDERER_DIRECTX12)
+    std::uint64_t uploadResourceBaseline_ = 0;
+#endif
 
     double stableSubmissionTotalMs_ = 0.0;
     double stableEndToEndTotalMs_ = 0.0;
@@ -332,7 +335,11 @@ protected:
 
 #if defined(CNA_RENDERER_DIRECTX12)
         if (frame_ == kWarmupFrames + 1)
-            GetD3D12Renderer().ResetSynchronizationCountersEXT();
+        {
+            auto& renderer = GetD3D12Renderer();
+            renderer.ResetSynchronizationCountersEXT();
+            uploadResourceBaseline_ = renderer.GetUploadResourceCreationCountEXT();
+        }
 #endif
 
         const double subT0 = (inStablePhase || inChurnPhase) ? JsNow() : 0.0;
@@ -399,16 +406,24 @@ protected:
             auto& renderer = GetD3D12Renderer();
             const std::uint64_t measuredFrames = static_cast<std::uint64_t>(2 * phaseFrames_);
             const std::uint64_t frameWaits = renderer.GetFrameFenceWaitCountEXT();
+            const std::uint64_t uploadResources =
+                renderer.GetUploadResourceCreationCountEXT() - uploadResourceBaseline_;
             std::printf("    D3D12 sync  : frame_waits=%llu gpu_waits=%llu frame_submissions=%llu "
-                        "immediate_submissions=%llu measured_frames=%llu\n",
+                        "immediate_submissions=%llu upload_resources=%llu upload_allocations=%llu "
+                        "measured_frames=%llu\n",
                         static_cast<unsigned long long>(frameWaits),
                         static_cast<unsigned long long>(renderer.GetGpuWaitCountEXT()),
                         static_cast<unsigned long long>(renderer.GetFrameSubmissionCountEXT()),
                         static_cast<unsigned long long>(renderer.GetImmediateSubmissionCountEXT()),
+                        static_cast<unsigned long long>(uploadResources),
+                        static_cast<unsigned long long>(renderer.GetUploadAllocationCountEXT()),
                         static_cast<unsigned long long>(measuredFrames));
             if (meshDrawCount_ >= 50 && frameWaits > measuredFrames)
                 throw std::runtime_error(
                     "DX-237 failed: more than one frame-fence wait per measured frame");
+            if (meshDrawCount_ >= 50 && uploadResources != 0)
+                throw std::runtime_error(
+                    "DX-238 failed: upload ring created a resource after warm-up");
 #endif
             std::fflush(stdout);
 
