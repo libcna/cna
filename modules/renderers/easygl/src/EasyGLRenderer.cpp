@@ -1580,7 +1580,9 @@ if (ProfileIsEs2ApiGeneration())
             {
                 GLfloat maxAnisoCap = 1.0f;
                 metagl::glGetFloatv(::metagl::GetParameter::MaxTextureMaxAnisotropy, &maxAnisoCap);
-                const float requested = static_cast<float>(desc.maxAnisotropy);
+                // XNA converts the signed property to UInt32 before applying the device cap.
+                const float requested = static_cast<float>(
+                    static_cast<std::uint32_t>(desc.maxAnisotropy));
                 anisoValue = (maxAnisoCap > 0.0f && requested > maxAnisoCap) ? maxAnisoCap : requested;
                 if (anisoValue < 1.0f) anisoValue = 1.0f;
             }
@@ -7905,7 +7907,9 @@ else
             {
                 GLfloat maxAnisoCap = 1.0f;
                 metagl::glGetFloatv(::metagl::GetParameter::MaxTextureMaxAnisotropy, &maxAnisoCap);
-                const float requested = static_cast<float>(maxAnisotropy);
+                // XNA converts the signed property to UInt32 before applying the device cap.
+                const float requested = static_cast<float>(
+                    static_cast<std::uint32_t>(maxAnisotropy));
                 clamped = (maxAnisoCap > 0.0f && requested > maxAnisoCap) ? maxAnisoCap : requested;
                 if (clamped < 1.0f) clamped = 1.0f;
             }

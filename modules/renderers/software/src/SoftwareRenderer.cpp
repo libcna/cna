@@ -1252,8 +1252,13 @@ namespace CNA::Internal::Renderers::Software
                            const TextureFootprint* footprint = nullptr)
         {
             constexpr int kMaxCpuAnisotropy = 16;
-            const int maxAnisotropy = std::clamp(sampler.maxAnisotropy, 1,
-                                                 kMaxCpuAnisotropy);
+            // Microsoft XNA converts MaxAnisotropy to UInt32 before applying the device cap.
+            // Consequently a negative public Int32 value wraps high and selects the cap, while
+            // zero remains the effectively-isotropic zero accepted by the D3D state path.
+            const auto requestedAnisotropy =
+                static_cast<std::uint32_t>(sampler.maxAnisotropy);
+            const int maxAnisotropy = static_cast<int>(std::min(
+                requestedAnisotropy, static_cast<std::uint32_t>(kMaxCpuAnisotropy)));
             if (sampler.filter != 2 || maxAnisotropy <= 1 || footprint == nullptr ||
                 !(footprint->majorRate > 1.0f))
             {

@@ -287,8 +287,10 @@ class AnisotropicFilterContractTest : public Game
               "vertical 16:1 is filtered along V and preserves mip 0");
         Check(Render3D(horizontal_, Anisotropic(9999)) == h16,
               "an over-cap request clamps to the deterministic 16x ceiling");
+        Check(Render3D(horizontal_, Anisotropic(-1)) == h16,
+              "XNA's unsigned clamp maps a negative request to the anisotropy ceiling");
         Check(Render3D(horizontal_, Anisotropic(0)) == h1,
-              "a non-positive request clamps safely to 1x");
+              "a zero request clamps safely to 1x");
 
         const auto s1 = RenderSprite(horizontal_, Anisotropic(1));
         const auto s4 = RenderSprite(horizontal_, Anisotropic(4));
@@ -296,6 +298,8 @@ class AnisotropicFilterContractTest : public Game
         Check(AllNear(s1, levelColors_[4]) && AllNear(s4, levelColors_[2]) &&
                   AllNear(s16, levelColors_[0]),
               "SpriteBatch forwards MaxAnisotropy instead of hard-coding 1");
+        Check(RenderSprite(horizontal_, Anisotropic(-1)) == s16,
+              "SpriteBatch preserves XNA's negative-to-maximum anisotropy rule");
         Check(RenderSprite(horizontal_, Anisotropic(16)) == s16,
               "SpriteBatch anisotropy transitions restore byte-identical output");
 
