@@ -355,6 +355,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the value by packing the Matrix into column-major effect storage.
          *
          * @param value The Matrix to store.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a
+         *         non-array matrix.
          */
         void SetValue(const Matrix& value);
 
@@ -362,6 +364,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets values by packing each Matrix into column-major effect storage.
          *
          * @param value The array of matrices to store.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a matrix
+         *         array or the supplied array has more elements than the parameter.
          */
         void SetValue(const std::vector<Matrix>& value);
 
@@ -369,6 +373,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the transposed value using row-major effect storage.
          *
          * @param value The Matrix to transpose and store.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a
+         *         non-array matrix.
          */
         void SetValueTranspose(const Matrix& value);
 
@@ -376,6 +382,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets transposed values using row-major effect storage for each matrix.
          *
          * @param value The array of matrices to transpose and store.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a matrix
+         *         array or the supplied array has more elements than the parameter.
          */
         void SetValueTranspose(const std::vector<Matrix>& value);
 
@@ -383,6 +391,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the value of this parameter from a Quaternion.
          *
          * @param value The Quaternion to store.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a
+         *         non-array one-row four-column vector.
          */
         void SetValue(const Quaternion& value);
 
@@ -390,6 +400,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the value of this parameter from a Quaternion array.
          *
          * @param value The array of Quaternion values to store.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a vector
+         *         array.
          */
         void SetValue(const std::vector<Quaternion>& value);
 
@@ -397,6 +409,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the value of this parameter from a Vector2.
          *
          * @param value The Vector2 to store.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a
+         *         non-array one-row two-column vector.
          */
         void SetValue(const Vector2& value);
 
@@ -404,6 +418,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the value of this parameter from a Vector2 array.
          *
          * @param value The array of Vector2 values to store.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a vector
+         *         array.
          */
         void SetValue(const std::vector<Vector2>& value);
 
@@ -411,6 +427,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the value of this parameter from a Vector3.
          *
          * @param value The Vector3 to store.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a
+         *         non-array one-row three-column vector.
          */
         void SetValue(const Vector3& value);
 
@@ -418,6 +436,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the value of this parameter from a Vector3 array.
          *
          * @param value The array of Vector3 values to store.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a vector
+         *         array.
          */
         void SetValue(const std::vector<Vector3>& value);
 
@@ -425,6 +445,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the value of this parameter from a Vector4.
          *
          * @param value The Vector4 to store.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a
+         *         non-array one-row four-column vector.
          */
         void SetValue(const Vector4& value);
 
@@ -432,6 +454,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the value of this parameter from a Vector4 array.
          *
          * @param value The array of Vector4 values to store.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a vector
+         *         array.
          */
         void SetValue(const std::vector<Vector4>& value);
 
@@ -497,6 +521,11 @@ namespace Microsoft::Xna::Framework::Graphics
 
         void RequireStringParameter(const char* operation) const;
         void RequireNumericParameter(const char* operation) const;
+        void RequireScalarValueShape(EffectParameterClass parameterClass,
+                                     int columnCount = 0) const;
+        void RequireArrayValueShape(EffectParameterClass parameterClass,
+                                    std::size_t valueCount,
+                                    bool enforceElementCount) const;
         void RequireTextureGetterParameter(EffectParameterType requestedType) const;
         void RequireTextureSetterParameter() const;
         void RequireTextureValueUsable(Texture* value) const;

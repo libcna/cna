@@ -117,11 +117,11 @@ namespace CNA::TestSupport
             AppendUInt32(bytes, columns);
             AppendUInt32(bytes, rows);
         };
-        // The Effect Framework struct encoding stores the concrete element multiplicity for each
-        // member, including one for non-array members (unlike top-level numeric declarations,
-        // where zero means non-array).
-        appendMember(EffectFormat::ClassScalar, intensityName, 1, 1, 1);
-        appendMember(EffectFormat::ClassVector, directionName, 1, 3, 1);
+        // Effect Framework uses zero for a non-array structure member, just as it does for a
+        // top-level value. This is observable through EffectParameter.Elements and matches the
+        // committed fxc-produced conformance effect's recorded FNA reflection.
+        appendMember(EffectFormat::ClassScalar, intensityName, 0, 1, 1);
+        appendMember(EffectFormat::ClassVector, directionName, 0, 3, 1);
         appendMember(EffectFormat::ClassScalar, thresholdsName, 2, 1, 1);
 
         // Struct defaults live immediately after the member metadata. MojoShader expands every

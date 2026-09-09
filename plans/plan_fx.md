@@ -1343,6 +1343,7 @@ pass. That is the line `CompiledEffects == true` is a promise about.
 | `EffectParameter`'s numeric accessors on an object parameter | Was **Case 1**, shared layer; **closed** -- `RequireNumericParameter` refuses them with `InvalidCastException`, as XNA does | works | works | works | `FX-105` |
 | `EffectParameter` texture access through an incompatible reflected type | Was **Case 1**, shared layer; **closed** -- dimension getters accept generic `Texture` or their exact dimension and the base setter accepts only texture types, otherwise `InvalidCastException` | works | works | works | `SOFTWARE-264` |
 | `EffectParameter.SetValue(Texture)` with a disposed texture or active render target | Was **Case 1**, shared layer; **closed** -- compiled parameters reject the resource before reflected-type validation with XNA's `ObjectDisposedException`/`InvalidOperationException` precedence | works | works | works | `SOFTWARE-266` |
+| Typed Matrix/Vector/Quaternion setters on a mismatched reflected shape | Was **Case 1**, shared layer; **closed** -- compiled parameters validate class, dimensions and scalar/array shape before mutation with XNA's `InvalidCastException` | works | works | works | `SOFTWARE-267` |
 
 ## 11. Recommended critical path
 

@@ -295,6 +295,26 @@ namespace Microsoft::Xna::Framework::Graphics
             "), whose value storage is an effect object-table index rather than a number.");
     }
 
+    void EffectParameter::RequireScalarValueShape(EffectParameterClass parameterClass,
+                                                  int columnCount) const
+    {
+        if (elements_->getCountProperty() != 0 || paramClass_ != parameterClass)
+            throw System::InvalidCastException();
+        if (parameterClass == EffectParameterClass::Vector &&
+            (rowCount_ != 1 || columnCount_ != columnCount))
+            throw System::InvalidCastException();
+    }
+
+    void EffectParameter::RequireArrayValueShape(EffectParameterClass parameterClass,
+                                                 std::size_t valueCount,
+                                                 bool enforceElementCount) const
+    {
+        const int elementCount = elements_->getCountProperty();
+        if (paramClass_ != parameterClass || elementCount == 0 ||
+            (enforceElementCount && valueCount > static_cast<std::size_t>(elementCount)))
+            throw System::InvalidCastException();
+    }
+
     void EffectParameter::RequireTextureGetterParameter(EffectParameterType requestedType) const
     {
         if (paramType_ == EffectParameterType::Texture || paramType_ == requestedType) return;
@@ -724,6 +744,7 @@ namespace Microsoft::Xna::Framework::Graphics
         RequireNumericParameter("SetValue(Matrix)");
         if (compiledStorage_)
         {
+            RequireScalarValueShape(EffectParameterClass::Matrix);
             WriteCompiledMatrix(compiledStorage_->bytes, compiledByteOffset_, compiledByteSize_,
                                 rowCount_, columnCount_, m, false);
             compiledStorage_->dirty = true;
@@ -741,6 +762,7 @@ namespace Microsoft::Xna::Framework::Graphics
         RequireNumericParameter("SetValue(Matrix[])");
         if (compiledStorage_)
         {
+            RequireArrayValueShape(EffectParameterClass::Matrix, v.size(), true);
             const std::size_t stride = static_cast<std::size_t>(std::max(rowCount_, 1)) * 16;
             for (std::size_t i = 0; i < v.size(); ++i)
             {
@@ -767,6 +789,7 @@ namespace Microsoft::Xna::Framework::Graphics
         RequireNumericParameter("SetValueTranspose(Matrix)");
         if (compiledStorage_)
         {
+            RequireScalarValueShape(EffectParameterClass::Matrix);
             WriteCompiledMatrix(compiledStorage_->bytes, compiledByteOffset_, compiledByteSize_,
                                 rowCount_, columnCount_, m, true);
             compiledStorage_->dirty = true;
@@ -779,6 +802,7 @@ namespace Microsoft::Xna::Framework::Graphics
         RequireNumericParameter("SetValueTranspose(Matrix[])");
         if (compiledStorage_)
         {
+            RequireArrayValueShape(EffectParameterClass::Matrix, v.size(), true);
             const std::size_t stride = static_cast<std::size_t>(std::max(rowCount_, 1)) * 16;
             for (std::size_t i = 0; i < v.size(); ++i)
             {
@@ -800,6 +824,7 @@ namespace Microsoft::Xna::Framework::Graphics
         RequireNumericParameter("SetValue(Quaternion)");
         if (compiledStorage_)
         {
+            RequireScalarValueShape(EffectParameterClass::Vector, 4);
             const float values[4] = {q.X, q.Y, q.Z, q.W};
             if (compiledByteSize_ >= sizeof(values))
             {
@@ -816,6 +841,7 @@ namespace Microsoft::Xna::Framework::Graphics
         RequireNumericParameter("SetValue(Quaternion[])");
         if (compiledStorage_)
         {
+            RequireArrayValueShape(EffectParameterClass::Vector, v.size(), false);
             for (std::size_t i = 0; i < v.size(); ++i)
             {
                 const std::size_t offset = i * 16;
@@ -835,6 +861,7 @@ namespace Microsoft::Xna::Framework::Graphics
         RequireNumericParameter("SetValue(Vector2)");
         if (compiledStorage_)
         {
+            RequireScalarValueShape(EffectParameterClass::Vector, 2);
             const float values[2] = {v.X, v.Y};
             if (compiledByteSize_ >= sizeof(values))
             {
@@ -851,6 +878,7 @@ namespace Microsoft::Xna::Framework::Graphics
         RequireNumericParameter("SetValue(Vector2[])");
         if (compiledStorage_)
         {
+            RequireArrayValueShape(EffectParameterClass::Vector, v.size(), false);
             for (std::size_t i = 0; i < v.size(); ++i)
             {
                 const std::size_t offset = i * 16;
@@ -870,6 +898,7 @@ namespace Microsoft::Xna::Framework::Graphics
         RequireNumericParameter("SetValue(Vector3)");
         if (compiledStorage_)
         {
+            RequireScalarValueShape(EffectParameterClass::Vector, 3);
             const float values[3] = {v.X, v.Y, v.Z};
             if (compiledByteSize_ >= sizeof(values))
             {
@@ -886,6 +915,7 @@ namespace Microsoft::Xna::Framework::Graphics
         RequireNumericParameter("SetValue(Vector3[])");
         if (compiledStorage_)
         {
+            RequireArrayValueShape(EffectParameterClass::Vector, v.size(), false);
             for (std::size_t i = 0; i < v.size(); ++i)
             {
                 const std::size_t offset = i * 16;
@@ -905,6 +935,7 @@ namespace Microsoft::Xna::Framework::Graphics
         RequireNumericParameter("SetValue(Vector4)");
         if (compiledStorage_)
         {
+            RequireScalarValueShape(EffectParameterClass::Vector, 4);
             const float values[4] = {v.X, v.Y, v.Z, v.W};
             if (compiledByteSize_ >= sizeof(values))
             {
@@ -921,6 +952,7 @@ namespace Microsoft::Xna::Framework::Graphics
         RequireNumericParameter("SetValue(Vector4[])");
         if (compiledStorage_)
         {
+            RequireArrayValueShape(EffectParameterClass::Vector, v.size(), false);
             for (std::size_t i = 0; i < v.size(); ++i)
             {
                 const std::size_t offset = i * 16;

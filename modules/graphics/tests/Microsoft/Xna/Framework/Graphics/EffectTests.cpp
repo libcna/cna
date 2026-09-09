@@ -31,7 +31,11 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Quaternion.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentException.hpp"
@@ -53,7 +57,11 @@ using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
 using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
 using Microsoft::Xna::Framework::Color;
+using Microsoft::Xna::Framework::Matrix;
+using Microsoft::Xna::Framework::Quaternion;
+using Microsoft::Xna::Framework::Vector2;
 using Microsoft::Xna::Framework::Vector3;
+using Microsoft::Xna::Framework::Vector4;
 
 namespace
 {
@@ -339,6 +347,73 @@ TEST(EffectTest, CompiledTextureSetterRejectsDisposedAndActiveRenderTargetsBefor
 
     EXPECT_NO_THROW(texture2D->SetValue(&active));
     EXPECT_EQ(texture2D->GetValueTexture2D(), &active);
+}
+
+TEST(EffectTest, CompiledTypedValueSettersValidateReflectedShape)
+{
+    GraphicsDevice gd;
+    const auto bytes = LoadConformanceCompiledEffectFixture();
+    ASSERT_FALSE(bytes.empty());
+
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+    {
+        GTEST_SKIP() << "renderer does not execute compiled effects";
+    }
+
+    Effect effect(gd, bytes);
+    auto& parameters = effect.getParametersProperty();
+    auto* gain = parameters["Gain"];
+    auto* tint = parameters["Tint"];
+    auto* transform = parameters["Transform"];
+    auto* weights = parameters["Weights"];
+    auto* lighting = parameters["Lighting"];
+    ASSERT_NE(gain, nullptr);
+    ASSERT_NE(tint, nullptr);
+    ASSERT_NE(transform, nullptr);
+    ASSERT_NE(weights, nullptr);
+    ASSERT_NE(lighting, nullptr);
+    auto* direction = lighting->getStructureMembersProperty()["Direction"];
+    ASSERT_NE(direction, nullptr);
+
+    EXPECT_THROW(gain->SetValue(Vector2::One), System::InvalidCastException);
+    EXPECT_THROW(gain->SetValue(Vector4::One), System::InvalidCastException);
+    EXPECT_THROW(tint->SetValue(Vector3::One), System::InvalidCastException);
+    EXPECT_THROW(transform->SetValue(Vector4::One), System::InvalidCastException);
+    EXPECT_THROW(tint->SetValue(Matrix::getIdentityProperty()), System::InvalidCastException);
+    EXPECT_THROW(gain->SetValueTranspose(Matrix::getIdentityProperty()),
+                 System::InvalidCastException);
+    EXPECT_THROW(weights->SetValue(Vector4::One), System::InvalidCastException)
+        << "a scalar overload cannot address an array parent";
+
+    EXPECT_THROW(tint->SetValue(std::vector<Vector4>{Vector4::One}),
+                 System::InvalidCastException);
+    EXPECT_THROW(transform->SetValue(
+                     std::vector<Matrix>{Matrix::getIdentityProperty()}),
+                 System::InvalidCastException);
+    EXPECT_THROW(weights->SetValue(std::vector<Vector4>{Vector4::One}),
+                 System::InvalidCastException);
+
+    EXPECT_NO_THROW(tint->SetValue(Quaternion(0.0f, 0.0f, 0.0f, 1.0f)));
+    EXPECT_NO_THROW(tint->SetValue(Vector4::One));
+    EXPECT_NO_THROW(direction->SetValue(Vector3::One));
+    EXPECT_NO_THROW(transform->SetValue(Matrix::getIdentityProperty()));
+    EXPECT_NO_THROW(weights->SetValue(std::vector<float>{0.25f, 0.75f}));
+
+    const std::filesystem::path skinnedPath =
+        CNA::TestSupport::CompiledEffectDirectory() / "SkinnedEffect.fxb";
+    std::ifstream skinnedInput(skinnedPath, std::ios::binary);
+    const std::vector<SharpRuntime::bytecs> skinnedBytes{
+        std::istreambuf_iterator<char>(skinnedInput), std::istreambuf_iterator<char>()};
+    ASSERT_FALSE(skinnedBytes.empty());
+    Effect skinned(gd, skinnedBytes);
+    auto* bones = skinned.getParametersProperty()["Bones"];
+    ASSERT_NE(bones, nullptr);
+    ASSERT_EQ(bones->getElementsProperty().getCountProperty(), 72);
+    EXPECT_NO_THROW(bones->SetValue(
+        std::vector<Matrix>(72, Matrix::getIdentityProperty())));
+    EXPECT_THROW(bones->SetValue(
+                     std::vector<Matrix>(73, Matrix::getIdentityProperty())),
+                 System::InvalidCastException);
 }
 
 TEST(EffectTest, AuthenticXna4EffectAcceptsRepeatedAndAuxiliaryObjectRecords)

@@ -226,6 +226,9 @@ namespace CNA::TestSupport
         EXPECT_EQ(members[0]->getNameProperty(), "Intensity");
         EXPECT_EQ(members[1]->getNameProperty(), "Direction");
         EXPECT_EQ(members[2]->getNameProperty(), "Thresholds");
+        EXPECT_EQ(members[0]->getElementsProperty().getCountProperty(), 0);
+        EXPECT_EQ(members[1]->getElementsProperty().getCountProperty(), 0);
+        EXPECT_EQ(members[2]->getElementsProperty().getCountProperty(), 2);
 
         const auto& annotations = parameters["Gain"]->getAnnotationsProperty();
         ASSERT_EQ(annotations.getCountProperty(), 1);

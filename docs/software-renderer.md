@@ -443,6 +443,10 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   disposed texture or currently bound render target is rejected before reflected parameter-type
   validation, matching Microsoft's observable exception order. The shared fix is exercised on
   compiled-capable EasyGL; Software retains its honest compiled-effect capability skip.
+- **Compiled typed EffectParameter setters enforce reflected shape** (`SOFTWARE-267`) — Matrix,
+  Vector2/3/4 and Quaternion scalar/array overloads reject incompatible class, dimensions and
+  scalar-versus-array use exactly where recovered Microsoft IL does. The corrected synthetic
+  fixture also matches fxc/FNA reflection for ordinary versus array structure members.
 - **The classic SpriteBatch/SpriteFont parity corpus executes on the CPU** (`SOFTWARE-138`).
   Eighteen renderer-independent scenes shared with EasyGL cover flips, rotation/origin, both scale
   overloads, source rectangles, layer sorting, transforms, render targets, viewports, scissor,
