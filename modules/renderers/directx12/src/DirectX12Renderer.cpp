@@ -8,6 +8,9 @@
 #include "CNA/Internal/Renderers/DirectX12/D3D12SpriteBatch.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12OcclusionQuery.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12EffectRenderer.hpp"
+#if defined(CNA_DIRECTX12_COMPILED_EFFECTS)
+#include "CNA/Internal/Renderers/DirectX12/D3D12CompiledEffect.hpp"
+#endif
 #include "CNA/Internal/Renderers/DirectX12/D3D12Texture3D.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DConstantBuffers.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DFormatMapping.hpp"
@@ -2898,6 +2901,16 @@ namespace CNA::Internal::Renderers::DirectX12
         const auto& vertexElements = multiStream
             ? combinedElements : d3dVb.GetDeclarationEXT().GetElements();
 
+#if defined(CNA_DIRECTX12_COMPILED_EFFECTS)
+        if (params.compiledEffectRuntime != nullptr)
+        {
+            RecordCompiledEffectDrawEXT(
+                d3dVb, ib, primitive, primitiveCount, 1, params,
+                *params.compiledEffectRuntime);
+            return;
+        }
+#endif
+
         if (params.customEffectRequested)
         {
             auto* customEffect = dynamic_cast<D3D12EffectRenderer*>(params.customEffectRenderer);
@@ -3856,6 +3869,15 @@ namespace CNA::Internal::Renderers::DirectX12
 
         const auto& d3dVb = static_cast<const D3D12VertexBufferRenderer&>(vb);
         const auto& d3dIb = static_cast<const D3D12IndexBufferRenderer&>(ib);
+#if defined(CNA_DIRECTX12_COMPILED_EFFECTS)
+        if (params.compiledEffectRuntime != nullptr)
+        {
+            RecordCompiledEffectDrawEXT(
+                d3dVb, &d3dIb, primitive, primitiveCount, instanceCount, params,
+                *params.compiledEffectRuntime);
+            return;
+        }
+#endif
         std::vector<Microsoft::Xna::Framework::Graphics::VertexElement> combinedElements;
         std::vector<D3DVertexInputElement> inputElements;
         BuildVertexInputLayout(params, true, combinedElements, inputElements);

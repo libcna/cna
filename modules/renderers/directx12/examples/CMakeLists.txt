@@ -38,6 +38,25 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12")
     cna_register_renderer_test(NAME DirectX12_Smoke COMMAND ${_directx12_smoke_cmd}
         TIMEOUT 60 LABELS "DIRECTX12")
 
+    if(CNA_DIRECTX12_COMPILED_EFFECTS)
+        cna_directx12_ctest_command(_directx12_compiled_effects_cmd CnaRendererTests)
+        cna_register_renderer_test(NAME DirectX12_CompiledEffects
+            COMMAND ${_directx12_compiled_effects_cmd}
+                    --gtest_filter=DirectX12CompiledEffect*
+            TIMEOUT 300 LABELS "DIRECTX12;CompiledEffects"
+            ENVIRONMENT "CNA_FORCE_HEADLESS_DEVICE_EXT=DIRECTX12")
+
+        cna_directx12_test(cna_probe_directx12_compiled_effect
+            directx12_compiled_effect_probe.cpp)
+        target_link_libraries(cna_probe_directx12_compiled_effect PRIVATE cna_mojoshader)
+        cna_directx12_ctest_command(_directx12_compiled_effect_probe_cmd
+            cna_probe_directx12_compiled_effect)
+        cna_register_renderer_test(NAME DirectX12_CompiledEffectProbe
+            COMMAND ${_directx12_compiled_effect_probe_cmd}
+                    "${CMAKE_SOURCE_DIR}/modules/renderers/fna3d/effects/CnaConformanceEffect.fxb"
+            TIMEOUT 60 LABELS "DIRECTX12;FX")
+    endif()
+
     # This window-attached diagnostic remains buildable but intentionally is not
     # a CTest in the routine Wine lane (DX-100/DX-114).
     cna_directx12_test(cna_diag_d3d12_swapchain directx12_swapchain_diag.cpp)

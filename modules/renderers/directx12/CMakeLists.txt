@@ -11,6 +11,32 @@ target_link_libraries(${RENDERER_TARGET} PRIVATE d3d12 dxgi d3dcompiler)
 # usage requirement.
 target_link_libraries(${RENDERER_TARGET} PUBLIC cna_renderer_d3dcommon)
 
+if(CNA_DIRECTX12_COMPILED_EFFECTS)
+    find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    set(CNA_DIRECTX12_STOCK_EFFECT
+        "${CMAKE_CURRENT_SOURCE_DIR}/../fna3d/effects/SpriteEffect.fxb")
+    set(CNA_DIRECTX12_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+    set(CNA_DIRECTX12_STOCK_EFFECT_HEADER
+        "${CNA_DIRECTX12_GENERATED_DIR}/Fna3dStockEffectBlobs.hpp")
+    add_custom_command(
+        OUTPUT "${CNA_DIRECTX12_STOCK_EFFECT_HEADER}"
+        COMMAND ${Python3_EXECUTABLE}
+                "${CMAKE_CURRENT_SOURCE_DIR}/../fna3d/effects/embed_effects.py"
+                "${CNA_DIRECTX12_STOCK_EFFECT_HEADER}"
+                "SpriteEffect=${CNA_DIRECTX12_STOCK_EFFECT}"
+        DEPENDS
+                "${CMAKE_CURRENT_SOURCE_DIR}/../fna3d/effects/embed_effects.py"
+                "${CNA_DIRECTX12_STOCK_EFFECT}"
+        COMMENT "CNA: embedding the XNA SpriteEffect for D3D12 compiled-effect inheritance"
+        VERBATIM)
+    add_custom_target(cna_renderer_directx12_sprite_effect
+        DEPENDS "${CNA_DIRECTX12_STOCK_EFFECT_HEADER}")
+    add_dependencies(${RENDERER_TARGET} cna_renderer_directx12_sprite_effect)
+    target_sources(${RENDERER_TARGET} PRIVATE "${CNA_DIRECTX12_STOCK_EFFECT_HEADER}")
+    target_include_directories(${RENDERER_TARGET} PRIVATE "${CNA_DIRECTX12_GENERATED_DIR}")
+    target_link_libraries(${RENDERER_TARGET} PUBLIC cna_renderer_mojoshader_effect)
+endif()
+
 # Module-owned examples (module-examples campaign): the family's example/test
 # registration is module-local; its historical selection/platform conditions
 # live inside examples/CMakeLists.txt unchanged.

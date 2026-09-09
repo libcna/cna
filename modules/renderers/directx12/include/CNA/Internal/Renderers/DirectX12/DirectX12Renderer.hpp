@@ -29,8 +29,15 @@
 #include <vector>
 #include <memory>
 
+namespace Microsoft::Xna::Framework::Graphics
+{
+    class TextureCollection;
+}
+
 namespace CNA::Internal::Renderers::DirectX12
 {
+    struct D3D12MojoShaderContextEXT;
+    class D3D12CompiledEffect;
     using Microsoft::WRL::ComPtr;
 
     /**
@@ -226,6 +233,27 @@ namespace CNA::Internal::Renderers::DirectX12
         /// (the caller checks IsValid()/GetCompileError()).
         std::unique_ptr<IEffectRenderer> CreateEffectRenderer(const std::string& vertSrc,
                                                              const std::string& fragSrc) override;
+#if defined(CNA_DIRECTX12_COMPILED_EFFECTS)
+        /** @brief Creates a compiled XNA effect through CNA's MojoShader HLSL backend. */
+        std::unique_ptr<ICompiledEffectRuntime> CreateCompiledEffect(
+            const std::uint8_t* effectCode, std::size_t effectCodeBytes) override;
+        /** @brief Reports compiled effects only in the fully conformance-gated opt-in build. */
+        [[nodiscard]] bool SupportsCompiledEffects() const override { return true; }
+        /** @brief Returns the renderer-wide compiled-effect shader/register context. */
+        CNAEXT D3D12MojoShaderContextEXT* GetMojoShaderContextEXT();
+        /** @brief Records one draw using the currently applied compiled-effect pass. */
+        CNAEXT void RecordCompiledEffectDrawEXT(
+            const IVertexBufferRenderer& fallback,
+            const IIndexBufferRenderer* indexBuffer,
+            PrimitiveType primitive,
+            int primitiveCount,
+            int instanceCount,
+            const GpuDrawParams& params,
+            ICompiledEffectRuntime& runtime,
+            const ITextureRenderer* spriteBatchSlotZeroTexture = nullptr,
+            const Microsoft::Xna::Framework::Graphics::TextureCollection*
+                spriteBatchTextures = nullptr);
+#endif
 
         /// DX-117: real D3D12RenderTargetRenderer, no longer the inherited default (-> nullptr).
         std::unique_ptr<IRenderTargetRenderer> CreateRenderTarget2D(int w, int h, int depthFormat,
@@ -749,6 +777,7 @@ namespace CNA::Internal::Renderers::DirectX12
 
         friend class D3D12SpriteBatchRenderer;
         friend class D3D12EffectRenderer;
+        friend class D3D12CompiledEffect;
 
         [[noreturn]] static void NotYetImplemented(const char* what);
 
@@ -902,6 +931,9 @@ namespace CNA::Internal::Renderers::DirectX12
         // never had ApplySamplerState() called on it behaves identically to before this task.
         static constexpr int kMaxSamplerSlots = 16;
         D3D12SamplerCache samplerCache_;
+#if defined(CNA_DIRECTX12_COMPILED_EFFECTS)
+        std::shared_ptr<D3D12MojoShaderContextEXT> mojoShaderContext_;
+#endif
         int currentSamplerFilter_[kMaxSamplerSlots];
         int currentSamplerAddressU_[kMaxSamplerSlots];
         int currentSamplerAddressV_[kMaxSamplerSlots];

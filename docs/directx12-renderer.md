@@ -16,6 +16,9 @@ cmake -S . -B cmake-build-d3d12 -G Ninja \
 cmake --build cmake-build-d3d12
 ```
 
+Add `-DCNA_DIRECTX12_COMPILED_EFFECTS=ON` to enable the opt-in compiled XNA Effect route described
+below. It is OFF by default so an ordinary D3D12 build does not fetch FNA3D/MojoShader.
+
 The renderer identity is **`DIRECTX12`**, not `D3D12`, and the toolchain file must be an absolute
 path — both corrected by `plans/plan_dx.md` `DX-249`, which found the documented command does not
 work. `--target CnaTests` was also wrong: that target does not build on any Windows toolchain (see
@@ -50,8 +53,9 @@ MSAA and MRT, state objects, SpriteBatch/SpriteFont, all stock effects, models/c
 GPU readback rather than only successful API return values. D3D12-specific descriptor and command
 invariants remain in the deliberately small smoke executable.
 
-**Measured state, 2026-09-09 (`plans/plan_dx.md` Phase DX17).** `ctest -L DIRECTX12` passes
-**264/264**, with no CTest skips, and `D3D12_Smoke` passes **25/25** retained internal checks. The
+**Measured state, 2026-09-10 (`plans/plan_dx.md` Phase DX17 and `plans/plan_fx.md` `FX-134`).**
+`ctest -L DIRECTX12` passes **266/266**, with no CTest skips, and `D3D12_Smoke` passes **25/25**
+retained internal checks. The
 shared registration inventory contains **265 declarations: 262 renderer-neutral fixtures, two
 reasoned D3D11-native exceptions and one D3D12-native exception**. This result used the fixed
 `sharp-runtimenext` checkout, Wine+vkd3d-proton and private virtual Xwayland `:4`; no physical
@@ -159,10 +163,11 @@ instead of the shared renderer-neutral fixture.
 - **A genuine device-removal trigger is not available in this environment.** `DX-244` proves the
   complete public two-phase loss/restore path for 16 cycles, including resources, loaded content and
   events; `DX-114` must still prove that a native `DXGI_ERROR_DEVICE_REMOVED` reaches that path.
-- **Compiled XNA `Effect` bytecode is unsupported.** `SupportsCompiledEffects()` is false and
-  `CreateCompiledEffect()` returns null. Runtime-source `ShaderEffect` and all stock effects are
-  working paths. The D3D12 implementation is owned by `plans/plan_fx.md` `FX-134`; D3D11's
-  counterpart is `FX-063`. `plans/plan_dx.md` `DX-248` records this cross-plan boundary, not an
+- **Compiled XNA `Effect` bytecode is opt-in.** With
+  `CNA_DIRECTX12_COMPILED_EFFECTS=ON`, `FX-134` supplies CNA's MojoShader HLSL/D3DCompile backend
+  and `SupportsCompiledEffects()` is true after 19/19 shared/public-path tests. With the default
+  OFF setting, D3D12 pulls no FNA3D/MojoShader dependency, reports false and refuses construction
+  by capability name. `plans/plan_dx.md` `DX-248` records this cross-plan boundary rather than an
   implementation task in DX17.
 - **Native Windows execution remains a separate gate.** The Wine+vkd3d-proton results prove CNA's
   renderer behavior but do not substitute for the MSVC, WARP and vendor-driver evidence required by

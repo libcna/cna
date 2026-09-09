@@ -46,6 +46,9 @@ namespace CNA::Internal::Renderers::DirectX12
     using Microsoft::WRL::ComPtr;
     using CNA::Internal::Renderers::D3DCommon::D3DShaderVariant;
 
+    /** @brief Returns a process-unique identity for runtime-compiled D3D12 shader bytecode. */
+    [[nodiscard]] std::uint64_t NextD3D12CustomProgramIdEXT();
+
     /// The subset of D3D11_RASTERIZER_DESC/D3D11_BLEND_DESC/D3D11_DEPTH_STENCIL_DESC fields this
     /// first PSO cache covers -- raw XNA-level ordinals, exactly matching the parameter shapes
     /// D3D11BlendStateCache::GetOrCreate/D3D11DepthStencilStateCache::GetOrCreate (minus stencil)/

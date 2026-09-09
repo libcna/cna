@@ -40,6 +40,7 @@
 
 #include <cstdint>
 #include <map>
+#include <memory>
 #include <tuple>
 #include <vector>
 
@@ -48,6 +49,9 @@ namespace CNA::Internal::Renderers::DirectX12
     using Microsoft::WRL::ComPtr;
 
     class DirectX12Renderer;
+#if defined(CNA_DIRECTX12_COMPILED_EFFECTS)
+    class D3D12CompiledEffect;
+#endif
 
     /// Real D3D12 SpriteBatch renderer (plans/plan_dx.md Phase DX12, DX-111/DX-112 follow-up).
     class D3D12SpriteBatchRenderer final : public ISpriteBatchRenderer
@@ -58,6 +62,7 @@ namespace CNA::Internal::Renderers::DirectX12
         struct Sprite2DVertex { float x, y, u, v, r, g, b, a; };
 
         explicit D3D12SpriteBatchRenderer(DirectX12Renderer* owner);
+        ~D3D12SpriteBatchRenderer() override;
 
         void Begin() override;
         void End() override;
@@ -85,6 +90,10 @@ namespace CNA::Internal::Renderers::DirectX12
     private:
         void FlushBatch();
         ID3D12PipelineState* GetOrCreateSprite2DPso(ID3D12RootSignature* rootSig);
+#if defined(CNA_DIRECTX12_COMPILED_EFFECTS)
+        void ApplyCompiledSpriteVertexShader(float viewportWidth, float viewportHeight);
+        void FlushBatchWithCompiledEffect();
+#endif
 
         D3D12RendererReference owner_;
         ComPtr<ID3D12Device> device_;
@@ -105,6 +114,10 @@ namespace CNA::Internal::Renderers::DirectX12
         bool begun_ = false;
         Matrix transform_ = Matrix::getIdentityProperty();
         Microsoft::Xna::Framework::Graphics::Effect* customEffect_ = nullptr;
+#if defined(CNA_DIRECTX12_COMPILED_EFFECTS)
+        std::unique_ptr<D3D12CompiledEffect> spriteCompiledEffect_;
+        std::uint32_t spriteMatrixParameterIndex_ = 0;
+#endif
 
         // Defaults mirror D3D11SpriteBatchRenderer's own and describe the complete slot-zero
         // sampler that FlushBatch applies before each draw.

@@ -7,7 +7,6 @@
 #include "CNA/Internal/Renderers/DirectX12/D3D12Texture3D.hpp"
 
 #include <algorithm>
-#include <atomic>
 #include <cstdio>
 #include <cstring>
 
@@ -15,8 +14,6 @@ namespace CNA::Internal::Renderers::DirectX12
 {
     namespace
     {
-        std::atomic<std::uint64_t> nextProgramId{1};
-
         std::string FormatHr(HRESULT hr)
         {
             char buf[32];
@@ -86,7 +83,7 @@ namespace CNA::Internal::Renderers::DirectX12
             return false;
         }
 
-        programId_ = nextProgramId.fetch_add(1, std::memory_order_relaxed);
+        programId_ = NextD3D12CustomProgramIdEXT();
         valid_ = true;
         return true;
     }

@@ -4,12 +4,22 @@
 #include "CNA/Internal/Renderers/DirectX12/D3D12Textures.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12RenderTargets.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12EffectRenderer.hpp"
+#if defined(CNA_DIRECTX12_COMPILED_EFFECTS)
+#include "CNA/Internal/Renderers/DirectX12/D3D12CompiledEffect.hpp"
+#include "Fna3dStockEffectBlobs.hpp"
+#endif
 #include "CNA/Internal/Renderers/D3DCommon/D3DShaderCache.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DConstantBuffers.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DStateMapping.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "System/InvalidOperationException.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -61,7 +71,42 @@ namespace CNA::Internal::Renderers::DirectX12
         , vb_(owner_.Get(), 256)
         , ib_(owner_.Get(), 384, /*thirtyTwoBit=*/false)
     {
+        using Microsoft::Xna::Framework::Graphics::VertexDeclaration;
+        using Microsoft::Xna::Framework::Graphics::VertexElement;
+        using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+        using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+        static const VertexDeclaration kSpriteDeclaration(
+            static_cast<int>(sizeof(Sprite2DVertex)),
+            {
+                VertexElement(static_cast<int>(offsetof(Sprite2DVertex, x)),
+                              VertexElementFormat::Vector2, VertexElementUsage::Position, 0),
+                VertexElement(static_cast<int>(offsetof(Sprite2DVertex, u)),
+                              VertexElementFormat::Vector2,
+                              VertexElementUsage::TextureCoordinate, 0),
+                VertexElement(static_cast<int>(offsetof(Sprite2DVertex, r)),
+                              VertexElementFormat::Vector4, VertexElementUsage::Color, 0),
+            });
+        vb_.SetVertexDeclaration(kSpriteDeclaration);
+#if defined(CNA_DIRECTX12_COMPILED_EFFECTS)
+        const auto& bytes =
+            CNA::Internal::Renderers::Fna3d::StockEffectBlobs::kSpriteEffectFxb;
+        spriteCompiledEffect_ = std::make_unique<D3D12CompiledEffect>(
+            *owner_.Get(), bytes, sizeof(bytes));
+        const auto& parameters = spriteCompiledEffect_->GetDescription().parameters;
+        const auto matrix = std::find_if(
+            parameters.begin(), parameters.end(),
+            [](const CompiledEffectParameterDescription& parameter)
+            {
+                return parameter.name == "MatrixTransform";
+            });
+        if (matrix == parameters.end())
+            throw std::runtime_error(
+                "DirectX12 SpriteBatch: embedded SpriteEffect has no MatrixTransform parameter.");
+        spriteMatrixParameterIndex_ = matrix->runtimeIndex;
+#endif
     }
+
+    D3D12SpriteBatchRenderer::~D3D12SpriteBatchRenderer() = default;
 
     void D3D12SpriteBatchRenderer::Begin()
     {
@@ -236,6 +281,14 @@ namespace CNA::Internal::Renderers::DirectX12
     void D3D12SpriteBatchRenderer::FlushBatch()
     {
         if (pendingVertices_.empty()) return;
+
+#if defined(CNA_DIRECTX12_COMPILED_EFFECTS)
+        if (customEffect_ != nullptr && customEffect_->GetCompiledRuntimePtr() != nullptr)
+        {
+            FlushBatchWithCompiledEffect();
+            return;
+        }
+#endif
 
         if (!owner_->HasBoundColorTargetEXT())
         {
@@ -449,6 +502,84 @@ namespace CNA::Internal::Renderers::DirectX12
         pendingIndices_.clear();
         currentTexture_ = nullptr;
     }
+
+#if defined(CNA_DIRECTX12_COMPILED_EFFECTS)
+    void D3D12SpriteBatchRenderer::ApplyCompiledSpriteVertexShader(
+        float viewportWidth, float viewportHeight)
+    {
+        if (!spriteCompiledEffect_ || customEffect_ == nullptr ||
+            viewportWidth <= 0.0f || viewportHeight <= 0.0f)
+            throw std::runtime_error(
+                "DirectX12 SpriteBatch: compiled stock vertex effect is unavailable.");
+        const Matrix projection = Matrix::CreateOrthographicOffCenter(
+            0.0f, viewportWidth, viewportHeight, 0.0f, 0.0f, -1.0f);
+        float values[16];
+        projection.ToColumnMajor(values);
+        spriteCompiledEffect_->SetParameterValue(
+            spriteMatrixParameterIndex_, values, sizeof(values));
+        spriteCompiledEffect_->SetTechnique(0);
+
+        auto& graphicsDevice = customEffect_->getGraphicsDeviceInternal();
+        CompiledEffectDeviceState state;
+        state.blend = &graphicsDevice.getBlendStateProperty();
+        state.depthStencil = &graphicsDevice.getDepthStencilStateProperty();
+        state.rasterizer = &graphicsDevice.getRasterizerStateProperty();
+        state.samplerStates = &graphicsDevice.getSamplerStatesProperty();
+        state.vertexSamplerStates = &graphicsDevice.getVertexSamplerStatesProperty();
+        CompiledEffectPassStateChanges ignored;
+        spriteCompiledEffect_->ApplyPass(0, state, ignored);
+    }
+
+    void D3D12SpriteBatchRenderer::FlushBatchWithCompiledEffect()
+    {
+        ICompiledEffectRuntime* runtime = customEffect_->GetCompiledRuntimePtr();
+        if (runtime == nullptr || currentTexture_ == nullptr)
+            throw std::runtime_error(
+                "DirectX12 SpriteBatch: compiled-effect batch state is incomplete.");
+        if (!owner_->HasBoundColorTargetEXT())
+            throw std::runtime_error(
+                "DirectX12 SpriteBatch: no render target is bound.");
+
+        vb_.SetDataWithOptions(
+            pendingVertices_.data(), static_cast<int>(pendingVertices_.size()),
+            sizeof(Sprite2DVertex), SetDataOptions::Discard);
+        ib_.SetData16WithOptions(
+            pendingIndices_.data(), static_cast<int>(pendingIndices_.size()),
+            SetDataOptions::Discard);
+
+        float viewportWidth = 0.0f;
+        float viewportHeight = 0.0f;
+        owner_->GetSpriteViewportSizeEXT(viewportWidth, viewportHeight);
+        owner_->ApplySamplerState(
+            0, pendingFilter_, pendingAddressU_, pendingAddressV_, 1);
+        owner_->ApplySamplerMipState(0, pendingMaxMipLevel_, pendingLodBias_);
+        owner_->ApplySamplerAddressW(0, pendingAddressW_);
+
+        auto* technique = customEffect_->getCurrentTechniqueProperty();
+        const int passCount = technique != nullptr
+            ? technique->getPassesProperty().getCountProperty() : 0;
+        if (passCount == 0)
+            throw System::InvalidOperationException(
+                "DirectX12 SpriteBatch: compiled Effect needs a technique with a pass.");
+
+        ApplyCompiledSpriteVertexShader(viewportWidth, viewportHeight);
+        const auto& textures =
+            customEffect_->getGraphicsDeviceInternal().getTexturesProperty();
+        GpuDrawParams params;
+        for (int pass = 0; pass < passCount; ++pass)
+        {
+            technique->getPassesProperty()[pass].Apply();
+            owner_->RecordCompiledEffectDrawEXT(
+                vb_, &ib_, PrimitiveType::TriangleList,
+                static_cast<int>(pendingIndices_.size() / 3), 1, params, *runtime,
+                currentTexture_, &textures);
+        }
+
+        pendingVertices_.clear();
+        pendingIndices_.clear();
+        currentTexture_ = nullptr;
+    }
+#endif
 
     void D3D12SpriteBatchRenderer::Draw(const ITextureRenderer& texture, float x, float y)
     {

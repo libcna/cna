@@ -5,6 +5,7 @@
 #include "CNA/Internal/Renderers/D3DCommon/D3DVertexFormatHelper.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <iterator>
 
 namespace CNA::Internal::Renderers::DirectX12
@@ -13,6 +14,7 @@ namespace CNA::Internal::Renderers::DirectX12
 
     namespace
     {
+        std::atomic<std::uint64_t> nextCustomProgramId{1};
         // Same "BlendEnable disabled only for the exact Blend::One/Blend::Zero Opaque combination"
         // heuristic D3D11BlendStateCache::GetOrCreate already established (D3D11StateObjectCache.cpp)
         // -- kept consistent across both renderers rather than re-derived. XNA Blend::One's real
@@ -24,6 +26,11 @@ namespace CNA::Internal::Renderers::DirectX12
             const bool alphaOpaque = (alphaSrcBlend == 0 /*One*/ && alphaDstBlend == 1 /*Zero*/);
             return !(colorOpaque && alphaOpaque);
         }
+    }
+
+    std::uint64_t NextD3D12CustomProgramIdEXT()
+    {
+        return nextCustomProgramId.fetch_add(1, std::memory_order_relaxed);
     }
 
     ComPtr<ID3D12PipelineState> D3D12PipelineStateCache::GetOrCreate(ID3D12Device* device,

@@ -259,6 +259,7 @@ shared.
 | EasyGL family (`OPENGLES2`, `OPENGLES3`, `OPENGL33`, `WEBGL1`, `WEBGL2`) | **true** | `CNA_EASYGL_COMPILED_EFFECTS` (off by default) | MojoShader's OpenGL adapter; passes the full shared contract, including multi-stream and instanced draws |
 | `VULKAN` | **true** | `CNA_VULKAN_COMPILED_EFFECTS` (off by default) | CNA's MojoShader SPIR-V binding; passes every applicable shared section, with multi-stream input refused renderer-wide |
 | `DIRECTX11` | **true** | `CNA_DIRECTX11_COMPILED_EFFECTS` (off by default) | MojoShader's D3D11 adapter; all 18 shared/public-path tests pass, including multi-stream, instancing, SpriteBatch, and 2D/cube/volume sampling |
+| `DIRECTX12` | **true** | `CNA_DIRECTX12_COMPILED_EFFECTS` (off by default) | CNA's MojoShader HLSL/D3DCompile binding; all 19 focused/shared tests pass, including multi-stream, instancing, SpriteBatch, 2D/cube/volume sampling and post-device teardown |
 | every other renderer identity | false | — | No compiled-effect runtime yet, or no programmable shader target at all |
 
 EasyGL selects the MojoShader source dialect from the renderer instance that owns the GL context:
@@ -267,7 +268,7 @@ identities use `glsles3`. It deliberately does not accept `MOJOSHADER_glBestProf
 `glspirv` on a newer desktop driver: that adapter assumes a complete vertex/pixel pair, while an
 XNA Effect pass may validly assign only one stage and inherit the other at draw time.
 
-The four opt-in options exist because MojoShader is a fetched dependency those renderers do not
+The five opt-in options exist because MojoShader is a fetched dependency those renderers do not
 otherwise need. With the option off the renderer reports `CompiledEffects == false` and refuses a
 compiled `Effect` exactly like any unsupported backend -- the capability never claims more than the
 build actually contains.
@@ -285,7 +286,7 @@ the public vertex-texture surface, for example, reaches no CNA renderer, so a co
 not expected to invent that renderer capability. A **compiled-Effect-specific** limitation is one
 the renderer supports elsewhere but this draw route cannot preserve. `plans/plan_fx.md` section
 10.5 is the authoritative per-renderer table. In particular, cube sampling is no longer a
-limitation: FNA3D, SDL_GPU, EasyGL, Vulkan, and DirectX 11 all pass the compiled cube-sampler
+limitation: FNA3D, SDL_GPU, EasyGL, Vulkan, DirectX 11, and DirectX 12 all pass the compiled cube-sampler
 contract.
 
 Vulkan joined the supported set on 2026-08-18 (`CNA_VULKAN_COMPILED_EFFECTS=ON`). It is the one
@@ -299,9 +300,11 @@ vertex input is refused renderer-wide, for stock draws equally.
 
 DirectX 11 joined the supported set on 2026-09-09 through MojoShader's native D3D11 adapter. Its
 opt-in route passes the shared public-path suite through Wine+DXVK on a private headless display,
-including multi-stream, instancing, SpriteBatch, and 2D/cube/volume sampling. DirectX 12, DirectX 9,
-and Metal are the remaining planned waves; each becomes true only after the same executed quality
-gate. Fixed-function, 2D-only and CPU renderers stay intentionally unsupported. `plans/plan_fx.md`
+including multi-stream, instancing, SpriteBatch, and 2D/cube/volume sampling. DirectX 12 joined on
+2026-09-10 through CNA's own nine-function MojoShader HLSL backend and `D3DCompile`; its opt-in
+route passes the same public paths through Wine+vkd3d-proton. DirectX 9 and Metal are the remaining
+planned waves; each becomes true only after the same executed quality gate. Fixed-function, 2D-only
+and CPU renderers stay intentionally unsupported. `plans/plan_fx.md`
 Phase G tracks the rollout, and its own section 10.3 -- not the one below, which belongs to this
 page -- classifies every renderer identity.
 

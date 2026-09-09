@@ -815,6 +815,15 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12")
     set(RENDERER_TARGET "cna_renderer_directx12")
     list(APPEND _cna_identity_defines CNA_RENDERER_DIRECTX12)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_DIRECTX12")
+    # plans/plan_fx.md FX-134: D3D12 has no MojoShader adapter, so CNA supplies the backend while
+    # keeping the dependency absent from ordinary D3D12 builds.
+    option(CNA_DIRECTX12_COMPILED_EFFECTS
+           "Build DirectX 12 support for compiled XNA Effect bytecode (plans/plan_fx.md FX-134)" OFF)
+    if(CNA_DIRECTX12_COMPILED_EFFECTS)
+        include(cmake/ThirdPartyFNA3D.cmake)
+        cna_configure_mojoshader()
+        add_compile_definitions(CNA_DIRECTX12_COMPILED_EFFECTS)
+    endif()
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECT2D")
     message(STATUS "CNA: Using DIRECT2D graphics renderer (Windows-only, 2D-only)")
     set(RENDERER_DIR "modules/renderers/direct2d")
