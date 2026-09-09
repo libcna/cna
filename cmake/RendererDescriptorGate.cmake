@@ -113,7 +113,8 @@ function(cna_add_renderer_descriptor_gate)
     # public root is namespaced CNA/Internal/Renderers/<Family>/, so making them all reachable here
     # cannot shadow anything.
     file(GLOB _family_include_roots "${_renderers_dir}/*/include")
-    foreach(_root IN LISTS _family_include_roots)
+    file(GLOB _shared_include_roots "${_renderers_dir}/common/*/include")
+    foreach(_root IN LISTS _family_include_roots _shared_include_roots)
         if(IS_DIRECTORY "${_root}")
             target_include_directories(cna_renderer_descriptor_gate PRIVATE "${_root}")
         endif()
