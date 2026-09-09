@@ -285,10 +285,13 @@ class MrtStockEffectContractTest final : public Game
         RenderTargetCube cube(
             device, kSize, false, SurfaceFormat::Color, DepthFormat::None, 0,
             RenderTargetUsage::PreserveContents);
+        RenderTargetCube secondCube(
+            device, kSize, false, SurfaceFormat::Color, DepthFormat::None, 0,
+            RenderTargetUsage::PreserveContents);
         device.SetRenderTargets({
             RenderTargetBinding(first.get()),
             RenderTargetBinding(static_cast<Texture*>(&cube), CubeMapFace::PositiveX),
-            RenderTargetBinding(static_cast<Texture*>(&cube), CubeMapFace::NegativeX),
+            RenderTargetBinding(static_cast<Texture*>(&secondCube), CubeMapFace::NegativeX),
             RenderTargetBinding(fourth.get()),
         });
         device.Clear(kClear);
@@ -298,9 +301,9 @@ class MrtStockEffectContractTest final : public Game
         device.SetRenderTargets({});
         Check(Near(ReadCenter(*first), kSource) &&
                   Near(ReadCubeCenter(cube, CubeMapFace::PositiveX), kClear) &&
-                  Near(ReadCubeCenter(cube, CubeMapFace::NegativeX), kClear) &&
+                  Near(ReadCubeCenter(secondCube, CubeMapFace::NegativeX), kClear) &&
                   Near(ReadCenter(*fourth), kClear),
-              "2D plus two faces of one cube remain four distinct ordered CPU attachments");
+              "2D plus faces of two cube resources remain four ordered attachments");
 
         device.SetRenderTargets({
             RenderTargetBinding(static_cast<Texture*>(&cube), CubeMapFace::PositiveY),
@@ -412,6 +415,7 @@ public:
     MrtStockEffectContractTest()
     {
         manager_ = std::make_unique<GraphicsDeviceManager>(this);
+        manager_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         manager_->setPreferredBackBufferWidthProperty(64);
         manager_->setPreferredBackBufferHeightProperty(64);
     }

@@ -4462,24 +4462,33 @@ namespace Microsoft::Xna::Framework::Graphics
             }
         }
 
-        // XNA/FNA/native MRT compatibility is subresource-based. Different faces of one cube are
-        // distinct and may be bound together; the identical face (or 2D slice) may not occupy two
-        // slots. Dimensions and real device-applied sample counts must agree.
+        // SOFTWARE-220: Microsoft XNA compares the render-target resource identity, not the
+        // selected cube subresource, before binding an MRT set. It also requires every target to
+        // have the same dimensions, real sample count and pixel size. Formats with the same pixel
+        // size remain compatible, so comparing exact SurfaceFormat values would be too strict.
         for (std::size_t i = 1; i < descriptors.size(); ++i)
         {
+            for (std::size_t previous = 0; previous < i; ++previous)
+            {
+                if (publicTargets[i] == publicTargets[previous])
+                    throw System::ArgumentException(
+                        "SetRenderTargets: the same render target cannot be bound to more than "
+                        "one slot.");
+            }
             if (descriptors[i].GetWidth() != descriptors[0].GetWidth()
                 || descriptors[i].GetHeight() != descriptors[0].GetHeight())
-                throw std::runtime_error(
+                throw System::ArgumentException(
                     "SetRenderTargets: render targets must have matching dimensions.");
             if (descriptors[i].GetAppliedMultiSampleCount()
                 != descriptors[0].GetAppliedMultiSampleCount())
-                throw std::runtime_error(
+                throw System::ArgumentException(
                     "SetRenderTargets: render targets must have matching applied sample counts.");
-            for (std::size_t previous = 0; previous < i; ++previous)
-                if (descriptors[i].IsSameSubresource(descriptors[previous]))
-                    throw std::runtime_error(
-                        "SetRenderTargets: the same render-target subresource cannot be bound "
-                        "to more than one slot.");
+            if (Texture::GetFormatSizeEXT(
+                    renderTargets[i].getRenderTargetProperty()->getFormatProperty())
+                != Texture::GetFormatSizeEXT(
+                    renderTargets[0].getRenderTargetProperty()->getFormatProperty()))
+                throw System::ArgumentException(
+                    "SetRenderTargets: render targets must have matching pixel sizes.");
         }
 
         if (renderer_)

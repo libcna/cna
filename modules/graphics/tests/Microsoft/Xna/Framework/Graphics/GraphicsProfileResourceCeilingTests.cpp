@@ -13,6 +13,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
+#include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DynamicIndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DynamicVertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
@@ -22,6 +23,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
@@ -38,6 +40,7 @@ using Microsoft::Xna::Framework::Graphics::GraphicsAdapter;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Rectangle;
 using Microsoft::Xna::Framework::Graphics::BufferUsage;
+using Microsoft::Xna::Framework::Graphics::CubeMapFace;
 using Microsoft::Xna::Framework::Graphics::DynamicIndexBuffer;
 using Microsoft::Xna::Framework::Graphics::DynamicVertexBuffer;
 using Microsoft::Xna::Framework::Graphics::DepthFormat;
@@ -49,6 +52,7 @@ using Microsoft::Xna::Framework::Graphics::PresentationParameters;
 using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 using Microsoft::Xna::Framework::Graphics::RenderTargetCube;
 using Microsoft::Xna::Framework::Graphics::RenderTargetBinding;
+using Microsoft::Xna::Framework::Graphics::RenderTargetUsage;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 using Microsoft::Xna::Framework::Graphics::Texture3D;
@@ -101,6 +105,54 @@ TEST(GraphicsProfileResourceCeilingTest, HiDefPermitsVolumeAndMrtButEnforcesItsO
     RenderTarget2D second(device, 1, 1);
     EXPECT_NO_THROW(
         device.SetRenderTargets({RenderTargetBinding(&first), RenderTargetBinding(&second)}));
+    device.SetRenderTargets({});
+}
+
+TEST(GraphicsProfileResourceCeilingTest, MrtRejectsTwoFacesOfTheSameCubeResource)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+    PresentationParameters parameters;
+    GraphicsDevice device(
+        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef, parameters);
+    RenderTargetCube cube(device, 4, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                          RenderTargetUsage::PreserveContents);
+
+    EXPECT_THROW(
+        device.SetRenderTargets({
+            RenderTargetBinding(&cube, CubeMapFace::PositiveX),
+            RenderTargetBinding(&cube, CubeMapFace::NegativeX),
+        }),
+        System::ArgumentException);
+    EXPECT_TRUE(device.GetRenderTargets().empty());
+}
+
+TEST(GraphicsProfileResourceCeilingTest, MrtRejectsDifferentPixelSizes)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+    PresentationParameters parameters;
+    GraphicsDevice device(
+        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef, parameters);
+    RenderTarget2D color(device, 4, 4, false, SurfaceFormat::Color, DepthFormat::None);
+    RenderTarget2D wide(device, 4, 4, false, SurfaceFormat::Rgba64, DepthFormat::None);
+
+    EXPECT_THROW(
+        device.SetRenderTargets({RenderTargetBinding(&color), RenderTargetBinding(&wide)}),
+        System::ArgumentException);
+    EXPECT_TRUE(device.GetRenderTargets().empty());
+}
+
+TEST(GraphicsProfileResourceCeilingTest, MrtPermitsDifferentFormatsWithTheSamePixelSize)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+    PresentationParameters parameters;
+    GraphicsDevice device(
+        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef, parameters);
+    RenderTarget2D color(device, 4, 4, false, SurfaceFormat::Color, DepthFormat::None);
+    RenderTarget2D single(device, 4, 4, false, SurfaceFormat::Single, DepthFormat::None);
+
+    EXPECT_NO_THROW(
+        device.SetRenderTargets({RenderTargetBinding(&color), RenderTargetBinding(&single)}));
+    ASSERT_EQ(device.GetRenderTargets().size(), 2u);
     device.SetRenderTargets({});
 }
 
