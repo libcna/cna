@@ -934,6 +934,27 @@ namespace CNA::Internal::Renderers::EasyGL
         // live behind CNA_EASYGL_COMPILED_EFFECTS -- a build without compiled effects, which is
         // the default, would not compile. Compiled-effect draws narrow it and put it back
         // (see SetCompiledEffectDepthRangeEXT).
+    public:
+        /**
+         * @brief Whether the viewport currently programmed is the default one.
+         *
+         * @note CNAEXT — CNA extension, not XNA API. The sprite batcher needs to tell a game-set
+         * sub-viewport from the default one, and cannot do it by comparing live GL state: a window
+         * resize moves the presentation rectangle while the GL viewport still holds the previous
+         * one. This is decided in SetViewport(), when the rectangle is fresh.
+         *
+         * @return true when the last programmed viewport was the presentation rectangle (or, with
+         *         a render target bound, that target's full extent).
+         */
+        CNAEXT [[nodiscard]] bool ViewportIsDefaultEXT() const { return viewportIsDefault_; }
+
+    private:
+        // Whether the last SetViewport() was the default viewport -- i.e. the presentation
+        // rectangle -- rather than a sub-viewport the game asked for. Decided when the viewport is
+        // set, while the rectangle is fresh, because the alternative (comparing live GL state
+        // against the rectangle later) cannot tell a game's sub-viewport from a default viewport
+        // that a window resize has since made stale. See the sprite flush for what depends on it.
+        bool viewportIsDefault_ = true;
         float viewportMinDepth_ = 0.0f;
         float viewportMaxDepth_ = 1.0f;
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)

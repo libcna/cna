@@ -154,11 +154,31 @@ Effect on the failing case, 800x480 drawable, virtual 240x240, letterbox `(160,0
 | after | `(0,0)-(792,476)` |
 | expected | fill `(160,0,480x480)` |
 
-So the vertical half of the error is gone and the horizontal half is not: the sprite still spans the
-full drawable width instead of the letterbox rectangle. Whatever sets the GL viewport last before
-the batch rasterizes is still handing it the whole drawable — the next step is to measure the GL
-viewport at flush time rather than reason about it, which is what the earlier note here should have
-said instead of listing candidates.
+So the vertical half of the error is gone and the horizontal half is not.
+
+**Measured at flush time on the second pass** (`CNA_EASYGL_SPRITE_VIEWPORT_DEBUG=1`, an env-gated
+print left in the sprite flush because the next person needs it too):
+
+```
+[spritevp] entry=(160,0,480x480) def=(160,0,480x480) custom=0 full=(800x480) log=(240x240)
+           atDraw=(160,0,480x480)
+```
+
+Everything the renderer does is now right: the rasterizer viewport IS the letterbox rectangle and
+the projection IS the logical size. **The test's remaining failure is a readback question, not a
+raster one** — `GetBackBufferData` addresses the *logical* backbuffer by its own contract, and this
+test reads at *physical* coordinates (`box.x + box.width/2`). Those agree only when the two spaces
+coincide. Whether the test or the readback is wrong is the open question; do not "fix" the renderer
+to satisfy it without settling that first.
+
+**A second, real defect is still open, and it is the one a user sees.** SAMPLE-077 at 960x800 now
+draws in the right place — the content moved from the drawable origin back to the letterbox
+rectangle — but the layout *inside* the rectangle is still wrong: the checkerboard panel renders as
+a narrow vertical strip and the four menu ellipses do not render at all. The sample sets no
+`Viewport`, no scissor and no `RenderTarget2D`, so none of those explain it; the next suspect is the
+batch `transform_` or a second draw path. Reproduce with
+`SAMPLE-077 .../scripts/probe-resize.sh 960 800`, compare `evidence/resize-final.png` against
+`evidence/original-windows-hidef-diagnostic/01-page1.png`.
 
 Full suite after the change: `CnaGraphicsTests` 2369 passed, this one still failing, nothing else
 regressed. `SAMPLE-077` at its native 480x800 renders byte-identically to before the change.
@@ -169,6 +189,18 @@ is a shipped `✅` sample and its menu is misplaced badly enough to be unusable 
 not exactly its 480x800 back buffer — the owner reported it as "the menu is cut off and the third
 item cannot be launched". Reproduction:
 `/rv/tmp/samples/SAMPLE-077-DynamicMenu_4_0/scripts/probe-resize.sh 960 800`.
+
+### The two causes found so far
+
+1. **The discriminator** asked whether the GL viewport differed from the whole drawable. Under
+   Letterbox the default viewport is the presentation rectangle, which differs by construction, so
+   the default viewport was classified as a game-set sub-viewport. Fixed.
+2. **Staleness.** A window resize moves the presentation rectangle while the GL viewport still
+   holds the previous one, so *any* comparison of live GL state against the fresh rectangle reads
+   the stale viewport as a custom one — and then preserves it. That is what left SAMPLE-077 drawing
+   at the old rectangle's origin after a resize. Fixed by deciding default-versus-custom inside
+   `SetViewport()`, while the rectangle is the one the call was derived from, and exposing it as
+   `EasyGLRenderer::ViewportIsDefaultEXT()`.
 
 ### What the rest of the correction is likely to be — **not** measured
 

@@ -4304,9 +4304,14 @@ if (ProfileUsesGlslEs100())
         if (!haveRt && graphicsRenderer_)
             graphicsRenderer_->GetDefaultViewportRect(defX, defY, defW, defH);
         const int defGlY = (fullH > 0) ? (fullH - defY - defH) : defY;
-        const bool customVp = curVw > 0 && curVh > 0 && defW > 0 && defH > 0
-                              && (curVx != defX || curVy != defGlY
-                                  || curVw != defW || curVh != defH);
+
+        // Ask the renderer's own record rather than comparing live GL state: a window resize moves
+        // the presentation rectangle, and the GL viewport still holds the previous one until the
+        // next SetViewport(). Comparing here would read that stale rectangle as a game-set
+        // sub-viewport and then keep it -- which is precisely what left SAMPLE-077 drawing its menu
+        // at the old rectangle's origin after a resize.
+        const bool customVp = graphicsRenderer_ != nullptr
+                              && !graphicsRenderer_->ViewportIsDefaultEXT();
 
         // Task 1078: a custom-effect draw into a bound RenderTarget2D must size its viewport
         // and orthographic projection to that RT, not the window -- getPhysicalSize()/
@@ -4341,9 +4346,9 @@ if (ProfileUsesGlslEs100())
         }
         else if (graphicsRenderer_)
         {
-            // The default viewport IS the presentation rectangle, and GraphicsDevice has already
-            // pushed it. Resetting to the full drawable here is what discarded the letterbox bars;
-            // leave it alone and project by the logical size, which is what the game draws in.
+            // The default viewport IS the presentation rectangle, so re-assert the CURRENT one --
+            // that both keeps the letterbox bars (resetting to the full drawable is what discarded
+            // them) and repairs a rectangle the last resize left stale.
             if (defW > 0 && defH > 0)
                 device_.set_viewport(defX, defGlY, defW, defH);
             graphicsRenderer_->getLogicalSize(logW, logH);
@@ -4354,6 +4359,17 @@ if (ProfileUsesGlslEs100())
             device_.get_viewport(vx, vy, vw, vh);
             logW = vw;
             logH = vh;
+        }
+
+        if (std::getenv("CNA_EASYGL_SPRITE_VIEWPORT_DEBUG") != nullptr)
+        {
+            int gx = 0, gy = 0, gw = 0, gh = 0;
+            device_.get_viewport(gx, gy, gw, gh);
+            std::fprintf(stderr,
+                "[spritevp] entry=(%d,%d,%dx%d) def=(%d,%d,%dx%d) defGlY=%d custom=%d "
+                "full=(%dx%d) log=(%dx%d) atDraw=(%d,%d,%dx%d) haveRt=%d\n",
+                curVx, curVy, curVw, curVh, defX, defY, defW, defH, defGlY,
+                customVp ? 1 : 0, fullW, fullH, logW, logH, gx, gy, gw, gh, haveRt ? 1 : 0);
         }
 
         const Matrix orthoM = Matrix::CreateOrthographicOffCenter(
@@ -6585,6 +6601,19 @@ if (!ProfileIsEs2ApiGeneration())
         }
         device.set_viewport(x, fbH - y - h, w, h);
         device.set_depth_range(minDepth, maxDepth);
+        // Record whether this is the default viewport while the presentation rectangle is still
+        // the one this call was derived from.
+        if (bound_ == nullptr || bound_->height == 0)
+        {
+            int defX = 0, defY = 0, defW = 0, defH = 0;
+            GetDefaultViewportRect(defX, defY, defW, defH);
+            viewportIsDefault_ = (defW > 0 && defH > 0 && x == defX && y == defY
+                                  && w == defW && h == defH);
+        }
+        else
+        {
+            viewportIsDefault_ = (x == 0 && y == 0 && w == bound_->width && h == bound_->height);
+        }
         viewportMinDepth_ = minDepth;
         viewportMaxDepth_ = maxDepth;
     }
