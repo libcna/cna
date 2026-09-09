@@ -6,7 +6,9 @@
 // C  The indexed command preserves binding offset + FirstIndex + BaseVertex independently.
 // D  BaseInstance selects one retained per-instance record even after public buffer disposal.
 // E  A compute shader writes the indexed command and the draw consumes it without CPU readback.
-// F  No Vulkan validation message is added by the complete exercise.
+// F  SpriteBatch -> compute -> copy -> XNA 3D -> indirect -> present remains one ordered submit.
+// G  Deferred compute/copy add no one-time submission or queue-wide wait.
+// H  No Vulkan validation message is added by the complete exercise.
 
 #include "CNA/Graphics/ComputeShader.hpp"
 #include "CNA/Graphics/StorageBuffer.hpp"
@@ -21,6 +23,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
@@ -29,6 +32,10 @@
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBufferBinding.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
@@ -60,6 +67,7 @@ using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Game;
 using Microsoft::Xna::Framework::GameTime;
 using Microsoft::Xna::Framework::Matrix;
+using Microsoft::Xna::Framework::Rectangle;
 using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::GraphicsDeviceManager;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -352,9 +360,97 @@ protected:
                       " rightR=" + std::to_string(probes[1].getRProperty()));
         }
 
+        {
+            Texture2D blue(device, 1, 1);
+            const Color bluePixel(0, 0, 255, 255);
+            blue.SetData(&bluePixel, 1);
+            SpriteBatch sprites(device);
+
+            constexpr StorageBufferUsage sourceUsage =
+                StorageBufferUsage::Storage | StorageBufferUsage::TransferSource;
+            constexpr StorageBufferUsage destinationUsage =
+                StorageBufferUsage::TransferDestination | StorageBufferUsage::IndirectArguments;
+            StorageBuffer produced(
+                device, StorageBufferDescriptor(
+                            sizeof(IndirectDrawIndexedArguments), sourceUsage,
+                            StorageBufferCpuAccess::None));
+            StorageBuffer consumed(
+                device, StorageBufferDescriptor(
+                            sizeof(IndirectDrawIndexedArguments), destinationUsage,
+                            StorageBufferCpuAccess::Read | StorageBufferCpuAccess::Write));
+            const IndirectDrawIndexedArguments zero{};
+            consumed.setBytes(&zero, sizeof(zero));
+            const Vertex redTriangle[3] = {
+                {-1.0f, -1.0f, 0.0f, 255, 0, 0, 255},
+                {-1.0f,  3.0f, 0.0f, 255, 0, 0, 255},
+                { 3.0f, -1.0f, 0.0f, 255, 0, 0, 255},
+            };
+            const Vertex greenQuad[6] = {
+                {-1.0f, -1.0f, 0.0f, 0, 255, 0, 255},
+                {-1.0f,  3.0f, 0.0f, 0, 255, 0, 255},
+                { 3.0f, -1.0f, 0.0f, 0, 255, 0, 255},
+                {-1.0f, -1.0f, 0.0f, 0, 255, 0, 255},
+                {-1.0f,  3.0f, 0.0f, 0, 255, 0, 255},
+                { 3.0f, -1.0f, 0.0f, 0, 255, 0, 255},
+            };
+            VertexBuffer greenVertices(device, vertexLayout, 6, BufferUsage::None);
+            greenVertices.SetDataRaw(greenQuad, 6, sizeof(Vertex));
+
+            device.Clear(Color(0, 0, 0, 255));
+            device.setBlendStateProperty(BlendState::Opaque);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            sprites.Begin(
+                SpriteSortMode::Deferred, BlendState::Opaque,
+                const_cast<SamplerState*>(&SamplerState::PointClamp),
+                nullptr, nullptr, nullptr, Matrix::getIdentityProperty());
+            sprites.Draw(
+                blue, Rectangle(0, 0, 64, 64), Rectangle(0, 0, 1, 1), Color::White);
+            sprites.End();
+
+            const std::uint64_t oneTimeBefore = renderer->GetOneTimeCommandCountEXT();
+            const std::uint64_t submitsBefore = renderer->GetFrameSubmitCountEXT();
+            {
+                ComputeShader writer(device, CommandProgram());
+                writer.bindStorageBuffer(0, produced);
+                writer.dispatch(1);
+            }
+            produced.copyTo(consumed, 0, 0, sizeof(IndirectDrawArguments));
+            effect.Apply();
+            device.DrawUserPrimitives(
+                PrimitiveType::TriangleList, redTriangle, 0, 1, vertexLayout);
+            device.SetVertexBuffer(&greenVertices);
+            device.DrawPrimitivesIndirectEXT(
+                PrimitiveType::TriangleList, *consumed.getRendererEXT(), 0);
+            device.SetVertexBuffer(nullptr);
+
+            Color center(0, 0, 0, 0);
+            const Rectangle centerRect(32, 32, 1, 1);
+            device.GetBackBufferData(&centerRect, &center, 0, 1);
+            IndirectDrawArguments observed{};
+            consumed.getBytes(&observed, sizeof(observed));
+            const bool finalGreen = center.getGProperty() > 200 &&
+                                    center.getRProperty() < 50 && center.getBProperty() < 50;
+            check(finalGreen,
+                  "F mixed SpriteBatch, compute, copy, XNA 3D, indirect, present order",
+                  "center=(" + std::to_string(center.getRProperty()) + "," +
+                      std::to_string(center.getGProperty()) + "," +
+                      std::to_string(center.getBProperty()) + ") command=(" +
+                      std::to_string(observed.VertexCount) + "," +
+                      std::to_string(observed.InstanceCount) + "," +
+                      std::to_string(observed.FirstVertex) + "," +
+                      std::to_string(observed.BaseInstance) + ")");
+            check(renderer->GetOneTimeCommandCountEXT() == oneTimeBefore &&
+                      renderer->GetFrameSubmitCountEXT() == submitsBefore + 1,
+                  "G routine compute and copy share the frame submission",
+                  "oneTime=" + std::to_string(oneTimeBefore) + "->" +
+                      std::to_string(renderer->GetOneTimeCommandCountEXT()) +
+                      " frameSubmits=" + std::to_string(submitsBefore) + "->" +
+                      std::to_string(renderer->GetFrameSubmitCountEXT()));
+        }
+
         const std::size_t validationAfter = renderer->GetValidationMessagesEXT().size();
         check(validationAfter == validationBefore,
-              "F indirect draws add no Vulkan validation messages",
+              "H indirect and mixed-order work add no Vulkan validation messages",
               std::to_string(validationBefore) + " -> " +
                   std::to_string(validationAfter));
 

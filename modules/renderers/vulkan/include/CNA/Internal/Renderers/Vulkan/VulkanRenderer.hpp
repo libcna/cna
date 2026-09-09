@@ -14,6 +14,7 @@
 #include <array>
 #include <bit>
 #include <map>
+#include <memory>
 #include <tuple>
 #include <string>
 #include <utility>
@@ -1471,7 +1472,7 @@ namespace CNA::Internal::Renderers::Vulkan
          */
         VulkanComputeShaderRenderer(VulkanRenderer* owner, const std::string& computeSrc);
 
-        /** @brief Releases the compute pipeline, descriptor objects and shader module. */
+        /** @brief Fence-retires the compute pipeline, descriptor objects and shader module. */
         ~VulkanComputeShaderRenderer() override;
 
         /**
@@ -1538,7 +1539,7 @@ namespace CNA::Internal::Renderers::Vulkan
         [[nodiscard]] std::string GetCompileError() const override { return compileError_; }
 
         /**
-         * @brief Records, submits and synchronously completes one compute dispatch.
+         * @brief Enqueues one immutable compute dispatch in public-call order.
          *
          * @param groupsX Work-group count on X.
          * @param groupsY Work-group count on Y.
@@ -1549,7 +1550,7 @@ namespace CNA::Internal::Renderers::Vulkan
         /** @brief Clears a binding that names a storage buffer being destroyed. */
         void ForgetStorageBufferEXT(const VulkanStorageBufferRenderer* buffer) noexcept;
 
-        /** @brief Destroys Vulkan handles immediately while the owning device exists. */
+        /** @brief Retires Vulkan handles while the owning device exists. */
         void ReleaseVulkanResources();
 
         /** @brief Forgets the renderer after device teardown. */
@@ -1568,13 +1569,27 @@ namespace CNA::Internal::Renderers::Vulkan
             int accessMode = 2;
         };
 
+        struct DescriptorCacheEntry
+        {
+            std::vector<VkBuffer> buffers;
+            std::vector<VkImageView> images;
+            VkDescriptorSet set = VK_NULL_HANDLE;
+            bool initialized = false;
+        };
+
+        static constexpr std::uint32_t DescriptorCacheCapacity = 64;
+
         void ReleaseProgramEXT();
+        [[nodiscard]] VkDescriptorSet GetOrCreateDescriptorSetEXT(
+            const std::vector<VkBuffer>& buffers, const std::vector<VkImageView>& images,
+            const std::vector<VkDescriptorBufferInfo>& bufferInfos,
+            const std::vector<VkDescriptorImageInfo>& imageInfos);
 
         VulkanRenderer* owner_ = nullptr;
         VkShaderModule shaderModule_ = VK_NULL_HANDLE;
         VkDescriptorSetLayout descriptorSetLayout_ = VK_NULL_HANDLE;
         VkDescriptorPool descriptorPool_ = VK_NULL_HANDLE;
-        VkDescriptorSet descriptorSet_ = VK_NULL_HANDLE;
+        std::vector<DescriptorCacheEntry> descriptorCache_;
         VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
         VkPipeline pipeline_ = VK_NULL_HANDLE;
         std::vector<uint32_t> storageBindingSlots_;
@@ -3543,7 +3558,7 @@ namespace CNA::Internal::Renderers::Vulkan
                              int groupsY, int groupsZ) override;
 
         /**
-         * @brief Fulfils a compute memory-barrier request after the synchronous v1 dispatch.
+         * @brief Fulfils a compatibility barrier request through automatic ordered dependencies.
          *
          * @param barrierBits CNA graphics memory-barrier bits.
          */
@@ -4843,6 +4858,37 @@ namespace CNA::Internal::Renderers::Vulkan
             std::uint64_t order = 0;
         };
         std::vector<PendingTimestamp> pendingTimestamps_;
+        /** @brief One compute dispatch or buffer copy in the frame's public-call order. */
+        struct PendingModernCommand {
+            enum class Kind { Compute, BufferCopy } kind = Kind::Compute;
+            std::uint64_t segment = 0;
+            std::shared_ptr<VulkanRTSource> rt;
+            std::uint64_t order = 0;
+
+            VkPipeline pipeline = VK_NULL_HANDLE;
+            VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
+            VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
+            std::vector<std::uint8_t> pushConstantBytes;
+            std::uint32_t groupsX = 0, groupsY = 0, groupsZ = 0;
+            std::vector<std::shared_ptr<VulkanStorageBufferRenderer>> storageBuffers;
+            struct StorageImageUse {
+                std::shared_ptr<VulkanStorageTexture2DRenderer> image;
+                int accessMode = 2;
+            };
+            std::vector<StorageImageUse> storageImages;
+
+            std::shared_ptr<VulkanStorageBufferRenderer> copySource;
+            std::shared_ptr<VulkanStorageBufferRenderer> copyDestination;
+            VkDeviceSize sourceOffset = 0;
+            VkDeviceSize destinationOffset = 0;
+            VkDeviceSize byteSize = 0;
+        };
+        std::vector<PendingModernCommand> pendingModernCommands_;
+        void QueueComputeDispatchEXT(PendingModernCommand&& command);
+        void QueueStorageBufferCopyEXT(PendingModernCommand&& command);
+        void RecordModernCommandEXT(VkCommandBuffer cb, const PendingModernCommand& command);
+        void FlushPendingModernCommandsForHostEXT();
+        void SplitRenderPassForModernCommandEXT();
         /**
          * @brief Queues one timestamp at the current public command position.
          * @param timer Timer record that owns the query pool.
@@ -4906,6 +4952,8 @@ namespace CNA::Internal::Renderers::Vulkan
             /// layout while one of those is still named by a recorded frame is the kind of
             /// ordering question this queue exists to stop having to reason about.
             std::vector<VkDescriptorSetLayout> descriptorSetLayouts;
+            /// Descriptor pools owned by retired compute programs; their sets die with the pool.
+            std::vector<VkDescriptorPool> descriptorPools;
             std::vector<VkQueryPool>       queryPools;
             std::vector<VkDescriptorSet>   descriptorSets; // all allocated from descriptorPool_
             // REMED-GFX-076: effect descriptor sets evicted from the seven per-frame effect caches

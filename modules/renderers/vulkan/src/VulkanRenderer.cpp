@@ -1156,6 +1156,7 @@ namespace CNA::Internal::Renderers::Vulkan
         if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE || image_ == VK_NULL_HANDLE ||
             data == nullptr || (usage_ & UINT32_C(32)) == 0)
             return false;
+        owner_->FlushPendingModernCommandsForHostEXT();
         VkBuffer stagingBuffer = VK_NULL_HANDLE;
         VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
         void* mapped = nullptr;
@@ -1190,6 +1191,7 @@ namespace CNA::Internal::Renderers::Vulkan
         if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE || image_ == VK_NULL_HANDLE ||
             data == nullptr || (usage_ & UINT32_C(16)) == 0)
             return false;
+        owner_->FlushPendingModernCommandsForHostEXT();
         VkBuffer stagingBuffer = VK_NULL_HANDLE;
         VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
         owner_->CreateBuffer(
@@ -12645,9 +12647,9 @@ namespace CNA::Internal::Renderers::Vulkan
 
         // MOD-2245: an indirect-command fetch is outside every render pass, so its producer
         // dependency must be established here as well. This one barrier covers host uploads,
-        // transfer copies and the synchronous compute submission that may have produced any
-        // pending argument buffer. The selected graphics queue is ordered with those submissions;
-        // the barrier supplies the missing availability/visibility scope for command reads.
+        // transfer copies and compute work that may have produced any pending argument buffer.
+        // MOD-2247's per-command barriers now supply this dependency at the exact ordered boundary;
+        // this conservative frame-prefix barrier remains valid for CPU-produced arguments.
         const bool recordsIndirect = std::any_of(
             pending3D_.begin(), pending3D_.end(), [&](const Pending3DDraw& draw) {
                 return draw.indirectBuffer != VK_NULL_HANDLE &&
@@ -13640,6 +13642,8 @@ namespace CNA::Internal::Renderers::Vulkan
             std::vector<const PendingClear*> clears;
             /// Public-stream position of this segment's earliest draw; none = no draw at all.
             uint64_t        firstDrawOrder = std::numeric_limits<uint64_t>::max();
+            /// Last command position in this segment, used by a narrow readback flush.
+            uint64_t        lastOrder = 0;
         };
         std::vector<PassSegment> segments;
         auto segmentFor = [&segments](uint64_t id, VulkanRTSource* rt) -> PassSegment& {
@@ -13658,21 +13662,28 @@ namespace CNA::Internal::Renderers::Vulkan
         // a backbuffer Clear() opens a segment for the same reason -- a frame whose only backbuffer
         // command in a cycle is a Clear() must still get that cycle's own load action.
         // pendingClears_ is already in public call order, so each segment's list comes out ordered.
-        for (const auto& c : pendingClears_)
-            segmentFor(c.segment, c.rt.get()).clears.push_back(&c);
+        for (const auto& c : pendingClears_) {
+            PassSegment& seg = segmentFor(c.segment, c.rt.get());
+            seg.clears.push_back(&c);
+            seg.lastOrder = std::max(seg.lastOrder, c.order);
+        }
         for (const auto& entry : activeBatches_) {
             PassSegment& seg = segmentFor(entry.segment, entry.rt.get());
             seg.firstDrawOrder = std::min(seg.firstDrawOrder, entry.order);
+            seg.lastOrder = std::max(seg.lastOrder, entry.order);
         }
         for (const auto& draw : pending3D_) {
             PassSegment& seg = segmentFor(draw.segment, draw.rt.get());
             seg.firstDrawOrder = std::min(seg.firstDrawOrder, draw.order);
+            seg.lastOrder = std::max(seg.lastOrder, draw.order);
         }
         // MOD-2246: a timer range can legitimately surround a render-target bind cycle, so its
         // endpoints may live in otherwise-empty backbuffer segments on either side. Retaining
         // those segments is what places the timestamps on opposite sides of the measured pass.
-        for (const auto& event : pendingTimestamps_)
-            segmentFor(event.segment, event.rt.get());
+        for (const auto& event : pendingTimestamps_) {
+            PassSegment& seg = segmentFor(event.segment, event.rt.get());
+            seg.lastOrder = std::max(seg.lastOrder, event.order);
+        }
         std::sort(segments.begin(), segments.end(),
                   [](const PassSegment& l, const PassSegment& r) { return l.id < r.id; });
 
@@ -13691,6 +13702,11 @@ namespace CNA::Internal::Renderers::Vulkan
                                    return !recordedByFlush(seg.rt, seg.id);
                                }),
                            segments.end());
+
+        std::uint64_t flushMaxOrder = 0;
+        if (rtOnly)
+            for (const auto& seg : segments)
+                flushMaxOrder = std::max(flushMaxOrder, seg.lastOrder);
 
         // REMED-GFX-143: the swapchain image must be cleared/stored and left in PRESENT_SRC_KHR
         // every rendered frame even when the game drew nothing to it, which the single trailing pass
@@ -13732,7 +13748,23 @@ namespace CNA::Internal::Renderers::Vulkan
             ++recordedDebugRegionEndCountEXT_;
         };
 
+        std::vector<bool> modernRecorded(pendingModernCommands_.size(), false);
+        auto recordModernBeforeSegment = [&](const std::uint64_t segment)
+        {
+            for (std::size_t i = 0; i < pendingModernCommands_.size(); ++i)
+            {
+                const auto& command = pendingModernCommands_[i];
+                if (modernRecorded[i] || command.segment >= segment) continue;
+                if (rtOnly && command.order > flushMaxOrder) continue;
+                RecordModernCommandEXT(cb, command);
+                modernRecorded[i] = true;
+            }
+        };
+
         for (const auto& seg : segments) {
+            // MOD-2247: a modern command closes its issuing graphics segment and precedes every
+            // later segment. Record it outside both render passes, at that exact boundary.
+            recordModernBeforeSegment(seg.id);
             // plan_vulkan.md VULKAN-216: every pipeline built while recording this segment has to
             // rasterize with the sample count THIS segment's attachments carry. Set once per
             // segment rather than threaded through fourteen factory signatures, because it is a
@@ -13989,6 +14021,10 @@ namespace CNA::Internal::Renderers::Vulkan
             endDebugRegion();
         }
 
+        // A modern command issued after the frame's final graphics command has no following
+        // segment to pull it in, but it still precedes submission/presentation.
+        recordModernBeforeSegment(std::numeric_limits<std::uint64_t>::max());
+
         // REMED-GFX-074: a RenderTargetsOnly readback flush stops here -- no backbuffer pass, no
         // swapchain, no backbuffer readback. Consume the deferred entries this record emitted so
         // Present() does not replay them (no double-render), leaving the backbuffer's and every
@@ -14013,6 +14049,12 @@ namespace CNA::Internal::Renderers::Vulkan
                         return timestampRecordedByFlush(event);
                     }),
                 pendingTimestamps_.end());
+            std::vector<PendingModernCommand> unrecordedModernCommands;
+            unrecordedModernCommands.reserve(pendingModernCommands_.size());
+            for (std::size_t i = 0; i < pendingModernCommands_.size(); ++i)
+                if (!modernRecorded[i])
+                    unrecordedModernCommands.push_back(std::move(pendingModernCommands_[i]));
+            pendingModernCommands_ = std::move(unrecordedModernCommands);
             // REMED-GFX-151: a consumed cycle's sampling dependencies are spent with it, so the
             // graph stays the size of the still-pending frame rather than growing per readback.
             if (flushSegments != nullptr)
@@ -14035,6 +14077,7 @@ namespace CNA::Internal::Renderers::Vulkan
         pending3D_.clear();
         pendingClears_.clear();
         pendingTimestamps_.clear();
+        pendingModernCommands_.clear();
         // REMED-GFX-151: the whole frame was just recorded, so no sampling dependency survives it.
         segmentSampledGroups_.clear();
         // VULKAN-160: and this is the one instant at which a sampler can safely leave the cache.
@@ -14831,6 +14874,9 @@ namespace CNA::Internal::Renderers::Vulkan
         if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE)
             throw std::runtime_error("Vulkan storage buffer SetData after device disposal");
         if ((cpuAccess_ & (UINT32_C(1) << 1)) == 0 || mapped_ == nullptr) return false;
+        // A host write is itself an ordered public operation. Complete older deferred modern
+        // uses before changing their mapped input bytes; ordinary dispatch/copy paths do not wait.
+        owner_->FlushPendingModernCommandsForHostEXT();
         if (byteSize != 0)
             std::memcpy(static_cast<std::byte*>(mapped_) + byteOffset, data, byteSize);
         return true;
@@ -14846,8 +14892,9 @@ namespace CNA::Internal::Renderers::Vulkan
         if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE)
             throw std::runtime_error("Vulkan storage buffer GetData after device disposal");
         if ((cpuAccess_ & (UINT32_C(1) << 0)) == 0 || mapped_ == nullptr) return false;
-        // Every currently accepted producer submission completes before returning. Host-coherent
-        // memory therefore needs no invalidate at this transitional synchronous boundary.
+        // Requested host readback is the synchronization boundary; routine dispatch and copy
+        // remain deferred in the frame stream.
+        owner_->FlushPendingModernCommandsForHostEXT();
         if (byteSize != 0)
             std::memcpy(out, static_cast<const std::byte*>(mapped_) + byteOffset, byteSize);
         return true;
@@ -14874,31 +14921,16 @@ namespace CNA::Internal::Renderers::Vulkan
             throw std::invalid_argument("Vulkan storage buffer copy ranges overlap");
         if (byteSize == 0) return true;
 
-        VkCommandBuffer commandBuffer = owner_->BeginOneTimeCommands();
-        VkMemoryBarrier before{};
-        before.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-        before.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT |
-                               VK_ACCESS_HOST_WRITE_BIT;
-        before.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
-        vkCmdPipelineBarrier(
-            commandBuffer,
-            VK_PIPELINE_STAGE_ALL_COMMANDS_BIT | VK_PIPELINE_STAGE_HOST_BIT,
-            VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &before, 0, nullptr, 0, nullptr);
-        VkBufferCopy region{};
-        region.srcOffset = static_cast<VkDeviceSize>(sourceByteOffset);
-        region.dstOffset = static_cast<VkDeviceSize>(destinationByteOffset);
-        region.size = static_cast<VkDeviceSize>(byteSize);
-        vkCmdCopyBuffer(commandBuffer, buffer_, target->buffer_, 1, &region);
-        VkMemoryBarrier after{};
-        after.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-        after.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        after.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT |
-                              VK_ACCESS_HOST_READ_BIT;
-        vkCmdPipelineBarrier(
-            commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_PIPELINE_STAGE_ALL_COMMANDS_BIT | VK_PIPELINE_STAGE_HOST_BIT,
-            0, 1, &after, 0, nullptr, 0, nullptr);
-        owner_->EndOneTimeCommands(commandBuffer);
+        VulkanRenderer::PendingModernCommand command;
+        command.kind = VulkanRenderer::PendingModernCommand::Kind::BufferCopy;
+        command.copySource = std::dynamic_pointer_cast<VulkanStorageBufferRenderer>(
+            IStorageBufferRenderer::shared_from_this());
+        command.copyDestination = std::dynamic_pointer_cast<VulkanStorageBufferRenderer>(
+            target->IStorageBufferRenderer::shared_from_this());
+        command.sourceOffset = static_cast<VkDeviceSize>(sourceByteOffset);
+        command.destinationOffset = static_cast<VkDeviceSize>(destinationByteOffset);
+        command.byteSize = static_cast<VkDeviceSize>(byteSize);
+        owner_->QueueStorageBufferCopyEXT(std::move(command));
         return true;
     }
 
@@ -14922,7 +14954,8 @@ namespace CNA::Internal::Renderers::Vulkan
             retired.memories.push_back(memory_);
             memory_ = VK_NULL_HANDLE;
         }
-        owner_->RetireResources(std::move(retired));
+        if (!retired.buffers.empty() || !retired.memories.empty())
+            owner_->RetireResources(std::move(retired));
     }
 
     VulkanComputeShaderRenderer::VulkanComputeShaderRenderer(
@@ -14946,33 +14979,41 @@ namespace CNA::Internal::Renderers::Vulkan
     void VulkanComputeShaderRenderer::ReleaseProgramEXT()
     {
         if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE) return;
-        VkDevice device = owner_->device_;
+        VulkanRenderer::RetiredResources retired;
         if (pipeline_ != VK_NULL_HANDLE) {
-            vkDestroyPipeline(device, pipeline_, nullptr);
+            retired.pipelines.push_back(pipeline_);
             pipeline_ = VK_NULL_HANDLE;
         }
         if (pipelineLayout_ != VK_NULL_HANDLE) {
-            vkDestroyPipelineLayout(device, pipelineLayout_, nullptr);
+            retired.pipelineLayouts.push_back(pipelineLayout_);
             pipelineLayout_ = VK_NULL_HANDLE;
             if (owner_->liveComputePipelineLayoutCountEXT_ > 0)
                 --owner_->liveComputePipelineLayoutCountEXT_;
         }
         if (shaderModule_ != VK_NULL_HANDLE) {
-            vkDestroyShaderModule(device, shaderModule_, nullptr);
+            retired.shaderModules.push_back(shaderModule_);
             shaderModule_ = VK_NULL_HANDLE;
         }
         if (descriptorPool_ != VK_NULL_HANDLE) {
-            vkDestroyDescriptorPool(device, descriptorPool_, nullptr);
+            retired.descriptorPools.push_back(descriptorPool_);
             descriptorPool_ = VK_NULL_HANDLE;
-            if (descriptorSet_ != VK_NULL_HANDLE &&
-                owner_->liveComputeDescriptorSetCountEXT_ > 0)
-                --owner_->liveComputeDescriptorSetCountEXT_;
-            descriptorSet_ = VK_NULL_HANDLE;
+            const std::size_t liveSets = descriptorCache_.size();
+            owner_->liveComputeDescriptorSetCountEXT_ =
+                liveSets < owner_->liveComputeDescriptorSetCountEXT_
+                    ? owner_->liveComputeDescriptorSetCountEXT_ - liveSets
+                    : 0;
+            descriptorCache_.clear();
         }
         if (descriptorSetLayout_ != VK_NULL_HANDLE) {
-            vkDestroyDescriptorSetLayout(device, descriptorSetLayout_, nullptr);
+            retired.descriptorSetLayouts.push_back(descriptorSetLayout_);
             descriptorSetLayout_ = VK_NULL_HANDLE;
         }
+        const bool hasRetiredResources =
+            !retired.pipelines.empty() || !retired.pipelineLayouts.empty() ||
+            !retired.shaderModules.empty() || !retired.descriptorPools.empty() ||
+            !retired.descriptorSetLayouts.empty();
+        if (hasRetiredResources)
+            owner_->RetireResources(std::move(retired));
     }
 
     void VulkanComputeShaderRenderer::ReleaseVulkanResources()
@@ -15413,12 +15454,14 @@ namespace CNA::Internal::Renderers::Vulkan
 
             std::vector<VkDescriptorPoolSize> poolSizes;
             if (storageCount != 0)
-                poolSizes.push_back({VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, storageCount});
+                poolSizes.push_back({VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                                     storageCount * DescriptorCacheCapacity});
             if (storageImageCount != 0)
-                poolSizes.push_back({VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, storageImageCount});
+                poolSizes.push_back({VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                                     storageImageCount * DescriptorCacheCapacity});
             VkDescriptorPoolCreateInfo poolInfo{};
             poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-            poolInfo.maxSets = 1;
+            poolInfo.maxSets = DescriptorCacheCapacity;
             poolInfo.poolSizeCount = static_cast<std::uint32_t>(poolSizes.size());
             poolInfo.pPoolSizes = poolSizes.data();
             result = vkCreateDescriptorPool(owner_->device_, &poolInfo, nullptr, &descriptorPool_);
@@ -15434,13 +15477,15 @@ namespace CNA::Internal::Renderers::Vulkan
             allocateInfo.descriptorPool = descriptorPool_;
             allocateInfo.descriptorSetCount = 1;
             allocateInfo.pSetLayouts = &descriptorSetLayout_;
-            result = vkAllocateDescriptorSets(owner_->device_, &allocateInfo, &descriptorSet_);
+            DescriptorCacheEntry first;
+            result = vkAllocateDescriptorSets(owner_->device_, &allocateInfo, &first.set);
             if (result != VK_SUCCESS) {
                 compileError_ = "Vulkan compute shader: vkAllocateDescriptorSets failed (" +
                     std::to_string(static_cast<int>(result)) + ")";
                 ReleaseProgramEXT();
                 return false;
             }
+            descriptorCache_.push_back(std::move(first));
             ++owner_->liveComputeDescriptorSetCountEXT_;
             ++owner_->computeDescriptorSetAllocationCountEXT_;
         }
@@ -15612,6 +15657,70 @@ namespace CNA::Internal::Renderers::Vulkan
         }
     }
 
+    VkDescriptorSet VulkanComputeShaderRenderer::GetOrCreateDescriptorSetEXT(
+        const std::vector<VkBuffer>& buffers, const std::vector<VkImageView>& images,
+        const std::vector<VkDescriptorBufferInfo>& bufferInfos,
+        const std::vector<VkDescriptorImageInfo>& imageInfos)
+    {
+        if (descriptorSetLayout_ == VK_NULL_HANDLE) return VK_NULL_HANDLE;
+
+        DescriptorCacheEntry* selected = nullptr;
+        for (auto& entry : descriptorCache_)
+        {
+            if (entry.initialized && entry.buffers == buffers && entry.images == images)
+                return entry.set;
+            if (!entry.initialized && selected == nullptr) selected = &entry;
+        }
+        if (selected == nullptr)
+        {
+            if (descriptorCache_.size() >= DescriptorCacheCapacity)
+                throw std::runtime_error(
+                    "Vulkan compute shader: immutable descriptor snapshot cache is full");
+            VkDescriptorSetAllocateInfo allocateInfo{};
+            allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+            allocateInfo.descriptorPool = descriptorPool_;
+            allocateInfo.descriptorSetCount = 1;
+            allocateInfo.pSetLayouts = &descriptorSetLayout_;
+            DescriptorCacheEntry entry;
+            if (vkAllocateDescriptorSets(owner_->device_, &allocateInfo, &entry.set) != VK_SUCCESS)
+                throw std::runtime_error(
+                    "Vulkan compute shader: descriptor snapshot allocation failed");
+            descriptorCache_.push_back(std::move(entry));
+            selected = &descriptorCache_.back();
+            ++owner_->liveComputeDescriptorSetCountEXT_;
+            ++owner_->computeDescriptorSetAllocationCountEXT_;
+        }
+
+        std::vector<VkWriteDescriptorSet> writes(
+            storageBindingSlots_.size() + storageImageBindingSlots_.size());
+        for (std::size_t i = 0; i < storageBindingSlots_.size(); ++i)
+        {
+            auto& write = writes[i];
+            write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            write.dstSet = selected->set;
+            write.dstBinding = storageBindingSlots_[i];
+            write.descriptorCount = 1;
+            write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            write.pBufferInfo = &bufferInfos[i];
+        }
+        for (std::size_t i = 0; i < storageImageBindingSlots_.size(); ++i)
+        {
+            auto& write = writes[storageBindingSlots_.size() + i];
+            write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            write.dstSet = selected->set;
+            write.dstBinding = storageImageBindingSlots_[i];
+            write.descriptorCount = 1;
+            write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+            write.pImageInfo = &imageInfos[i];
+        }
+        vkUpdateDescriptorSets(owner_->device_, static_cast<std::uint32_t>(writes.size()),
+                               writes.data(), 0, nullptr);
+        selected->buffers = buffers;
+        selected->images = images;
+        selected->initialized = true;
+        return selected->set;
+    }
+
     void VulkanComputeShaderRenderer::DispatchEXT(
         const int groupsX, const int groupsY, const int groupsZ)
     {
@@ -15644,81 +15753,49 @@ namespace CNA::Internal::Renderers::Vulkan
         }
 
         std::vector<VkDescriptorBufferInfo> infos(storageBindingSlots_.size());
+        std::vector<VkBuffer> bufferHandles;
+        std::vector<std::shared_ptr<VulkanStorageBufferRenderer>> retainedBuffers;
+        bufferHandles.reserve(storageBindingSlots_.size());
+        retainedBuffers.reserve(storageBindingSlots_.size());
         std::vector<VkDescriptorImageInfo> imageInfos(storageImageBindingSlots_.size());
-        std::vector<VkWriteDescriptorSet> writes(
-            storageBindingSlots_.size() + storageImageBindingSlots_.size());
+        std::vector<VkImageView> imageViews;
+        imageViews.reserve(storageImageBindingSlots_.size());
         for (std::size_t i = 0; i < storageBindingSlots_.size(); ++i) {
             const uint32_t binding = storageBindingSlots_[i];
             auto* buffer = storageBuffers.at(binding);
+            retainedBuffers.push_back(std::dynamic_pointer_cast<VulkanStorageBufferRenderer>(
+                buffer->IStorageBufferRenderer::shared_from_this()));
+            bufferHandles.push_back(buffer->GetBufferEXT());
             auto& info = infos[i];
             info.buffer = buffer->GetBufferEXT();
             info.offset = 0;
             info.range = static_cast<VkDeviceSize>(buffer->GetByteSize());
-            auto& write = writes[i];
-            write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            write.dstSet = descriptorSet_;
-            write.dstBinding = binding;
-            write.descriptorCount = 1;
-            write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            write.pBufferInfo = &info;
         }
         for (std::size_t i = 0; i < storageImageBindingSlots_.size(); ++i) {
             const uint32_t binding = storageImageBindingSlots_[i];
             auto& info = imageInfos[i];
             info.imageView = storageImages.at(binding)->GetStorageImageViewEXT();
             info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-            auto& write = writes[storageBindingSlots_.size() + i];
-            write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            write.dstSet = descriptorSet_;
-            write.dstBinding = binding;
-            write.descriptorCount = 1;
-            write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-            write.pImageInfo = &info;
+            imageViews.push_back(info.imageView);
         }
-        if (!writes.empty()) {
-            vkUpdateDescriptorSets(owner_->device_, static_cast<uint32_t>(writes.size()),
-                                   writes.data(), 0, nullptr);
-        }
+        const VkDescriptorSet descriptorSet = GetOrCreateDescriptorSetEXT(
+            bufferHandles, imageViews, infos, imageInfos);
 
-        VkCommandBuffer commandBuffer = owner_->BeginOneTimeCommands();
+        VulkanRenderer::PendingModernCommand command;
+        command.kind = VulkanRenderer::PendingModernCommand::Kind::Compute;
+        command.pipeline = pipeline_;
+        command.pipelineLayout = pipelineLayout_;
+        command.descriptorSet = descriptorSet;
+        command.pushConstantBytes = std::move(pushConstantBytes);
+        command.groupsX = static_cast<std::uint32_t>(groupsX);
+        command.groupsY = static_cast<std::uint32_t>(groupsY);
+        command.groupsZ = static_cast<std::uint32_t>(groupsZ);
+        command.storageBuffers = std::move(retainedBuffers);
         for (const uint32_t binding : storageImageBindingSlots_) {
-            storageImages.at(binding)->PrepareForComputeEXT(
-                commandBuffer, storageImageSlots_.at(binding).accessMode);
+            command.storageImages.push_back(
+                {storageImages.at(binding), storageImageSlots_.at(binding).accessMode});
         }
-        VkMemoryBarrier hostToCompute{};
-        hostToCompute.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-        hostToCompute.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-        hostToCompute.dstAccessMask =
-            VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-        vkCmdPipelineBarrier(
-            commandBuffer, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-            0, 1, &hostToCompute, 0, nullptr, 0, nullptr);
-        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_);
-        if (descriptorSet_ != VK_NULL_HANDLE) {
-            vkCmdBindDescriptorSets(
-                commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout_, 0,
-                1, &descriptorSet_, 0, nullptr);
-        }
-        if (!pushConstantBytes.empty()) {
-            vkCmdPushConstants(
-                commandBuffer, pipelineLayout_, VK_SHADER_STAGE_COMPUTE_BIT, 0,
-                static_cast<uint32_t>(pushConstantBytes.size()), pushConstantBytes.data());
-        }
-        vkCmdDispatch(commandBuffer,
-                      static_cast<uint32_t>(groupsX),
-                      static_cast<uint32_t>(groupsY),
-                      static_cast<uint32_t>(groupsZ));
-        VkMemoryBarrier computeToHost{};
-        computeToHost.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-        computeToHost.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-        computeToHost.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
-        vkCmdPipelineBarrier(
-            commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_HOST_BIT,
-            0, 1, &computeToHost, 0, nullptr, 0, nullptr);
-        // This is MOD-2241's explicitly synchronous public readback boundary. MOD-2247 moves
-        // dispatches into the renderer's monotonic frame ordering; MOD-2253 keeps only requested
-        // readback synchronous. There is no second queue, device, or presentation lifecycle.
-        owner_->EndOneTimeCommands(commandBuffer);
+        owner_->QueueComputeDispatchEXT(std::move(command));
     }
 
     std::unique_ptr<IComputeShaderRenderer> VulkanRenderer::CreateComputeShader(
@@ -15771,10 +15848,9 @@ namespace CNA::Internal::Renderers::Vulkan
 
     void VulkanRenderer::MemoryBarrierEXT(int /*barrierBits*/)
     {
-        // DispatchEXT already records shader-write -> host-read and waits for submission
-        // completion, which is stronger than the public wrapper's immediate post-dispatch barrier.
-        // It is semantically fulfilled, not ignored. MOD-2247/2249 replace this synchronous
-        // boundary with resource-tracked barriers once compute joins deferred command ordering.
+        // Dispatch and copy records already carry their producer/consumer dependencies in the
+        // renderer's one ordered stream. The compatibility call is therefore fulfilled without a
+        // second command queue, submit, or wait; MOD-2248/2249 refine the conservative masks.
     }
 
     bool VulkanRenderer::SupportsComputeShadersEXT() const
@@ -16067,6 +16143,107 @@ namespace CNA::Internal::Renderers::Vulkan
     {
         currentRT_ = std::move(rt);
         ++currentSegment_;
+    }
+
+    void VulkanRenderer::SplitRenderPassForModernCommandEXT()
+    {
+        // Compute and transfer commands are illegal inside a render pass. Advancing the logical
+        // segment leaves the target bound but guarantees that later graphics work receives a new
+        // native pass, with the modern command recorded between the two passes.
+        BeginRenderPassSegmentEXT(currentRT_);
+    }
+
+    void VulkanRenderer::QueueComputeDispatchEXT(PendingModernCommand&& command)
+    {
+        command.segment = currentSegment_;
+        command.rt = currentRT_;
+        command.order = NextCommandOrderEXT();
+        pendingModernCommands_.push_back(std::move(command));
+        SplitRenderPassForModernCommandEXT();
+    }
+
+    void VulkanRenderer::QueueStorageBufferCopyEXT(PendingModernCommand&& command)
+    {
+        command.segment = currentSegment_;
+        command.rt = currentRT_;
+        command.order = NextCommandOrderEXT();
+        pendingModernCommands_.push_back(std::move(command));
+        SplitRenderPassForModernCommandEXT();
+    }
+
+    void VulkanRenderer::RecordModernCommandEXT(
+        const VkCommandBuffer cb, const PendingModernCommand& command)
+    {
+        if (command.kind == PendingModernCommand::Kind::BufferCopy)
+        {
+            VkMemoryBarrier before{};
+            before.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+            before.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT |
+                                   VK_ACCESS_HOST_WRITE_BIT;
+            before.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+            vkCmdPipelineBarrier(
+                cb, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT | VK_PIPELINE_STAGE_HOST_BIT,
+                VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &before, 0, nullptr, 0, nullptr);
+            VkBufferCopy region{};
+            region.srcOffset = command.sourceOffset;
+            region.dstOffset = command.destinationOffset;
+            region.size = command.byteSize;
+            vkCmdCopyBuffer(
+                cb, command.copySource->GetBufferEXT(),
+                command.copyDestination->GetBufferEXT(), 1, &region);
+            VkMemoryBarrier after{};
+            after.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+            after.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            after.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT |
+                                  VK_ACCESS_HOST_READ_BIT;
+            vkCmdPipelineBarrier(
+                cb, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                VK_PIPELINE_STAGE_ALL_COMMANDS_BIT | VK_PIPELINE_STAGE_HOST_BIT,
+                0, 1, &after, 0, nullptr, 0, nullptr);
+            return;
+        }
+
+        for (const auto& image : command.storageImages)
+            image.image->PrepareForComputeEXT(cb, image.accessMode);
+        VkMemoryBarrier before{};
+        before.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+        before.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT |
+                               VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
+        before.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+        vkCmdPipelineBarrier(
+            cb, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT | VK_PIPELINE_STAGE_HOST_BIT,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            0, 1, &before, 0, nullptr, 0, nullptr);
+        vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, command.pipeline);
+        if (command.descriptorSet != VK_NULL_HANDLE)
+            vkCmdBindDescriptorSets(
+                cb, VK_PIPELINE_BIND_POINT_COMPUTE, command.pipelineLayout, 0,
+                1, &command.descriptorSet, 0, nullptr);
+        if (!command.pushConstantBytes.empty())
+            vkCmdPushConstants(
+                cb, command.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
+                static_cast<std::uint32_t>(command.pushConstantBytes.size()),
+                command.pushConstantBytes.data());
+        vkCmdDispatch(cb, command.groupsX, command.groupsY, command.groupsZ);
+        VkMemoryBarrier after{};
+        after.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+        after.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+        after.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT |
+                              VK_ACCESS_HOST_READ_BIT;
+        vkCmdPipelineBarrier(
+            cb, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            VK_PIPELINE_STAGE_ALL_COMMANDS_BIT | VK_PIPELINE_STAGE_HOST_BIT,
+            0, 1, &after, 0, nullptr, 0, nullptr);
+    }
+
+    void VulkanRenderer::FlushPendingModernCommandsForHostEXT()
+    {
+        if (pendingModernCommands_.empty()) return;
+        VkCommandBuffer cb = BeginOneTimeCommands();
+        for (const auto& command : pendingModernCommands_)
+            RecordModernCommandEXT(cb, command);
+        EndOneTimeCommands(cb);
+        pendingModernCommands_.clear();
     }
 
     // REMED-GFX-140 / Task 875: record this bind cycle's clear values, and mark the cycle as
@@ -16584,6 +16761,8 @@ namespace CNA::Internal::Renderers::Vulkan
             for (VkPipelineLayout pl : r.pipelineLayouts) if (pl != VK_NULL_HANDLE) vkDestroyPipelineLayout(device_, pl, nullptr);
             for (VkShaderModule sm : r.shaderModules) if (sm != VK_NULL_HANDLE) vkDestroyShaderModule(device_, sm, nullptr);
             for (VkQueryPool qp : r.queryPools)      if (qp != VK_NULL_HANDLE) vkDestroyQueryPool(device_, qp, nullptr);
+            for (VkDescriptorPool dp : r.descriptorPools)
+                if (dp != VK_NULL_HANDLE) vkDestroyDescriptorPool(device_, dp, nullptr);
             // VULKAN-253: after the sets allocated from them have been freed above.
             for (VkDescriptorSetLayout dl : r.descriptorSetLayouts)
                 if (dl != VK_NULL_HANDLE) vkDestroyDescriptorSetLayout(device_, dl, nullptr);

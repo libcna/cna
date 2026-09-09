@@ -19,8 +19,9 @@ slice submits synchronously, and an old lifetime document told Vulkan callers to
 `vkDeviceWaitIdle`. Those are measured transitional gaps, not contracts to preserve.
 Subsequent `MOD-2229`/`MOD-2245` work made storage buffers tracked and proved deferred argument
 retention through fence retirement. `MOD-2246` put timestamp/debug records in the same monotonic
-graphics order and retires submitted query pools on that fence; synchronous dispatch and full mixed-command ordering remain
-the transitional parts owned by `MOD-2247`–`MOD-2253`.
+graphics order and retires submitted query pools on that fence. `MOD-2247` then placed compute and
+buffer copies in that order as immutable records, splitting render passes at their exact command
+positions; narrow readback waits and resource-state refinement remain owned by `MOD-2248`–`MOD-2253`.
 
 ## Decision
 
@@ -182,5 +183,5 @@ resource correctly.
   normative when that overview or an older renderer note conflicts with it.
 
 Implementation is intentionally split across the later Phase 22 rows. Accepting this ADR does not
-claim that the transitional synchronous Vulkan compute path or every existing renderer resource
-already satisfies it.
+claim that every existing renderer resource or Vulkan's remaining readback/transition paths already
+satisfy it.

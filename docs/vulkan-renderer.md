@@ -89,12 +89,13 @@ creation. Other constant shapes and non-storage descriptors are rejected precise
 accepted and ignored. The permanent oracle proves all 256 elements of `C = A + B`, then uses sparse
 output slot 7 plus `uCount`/`uScale` to change only 173 elements.
 
-Each program allocates at most one descriptor set and one pipeline layout, reuses both across
-dispatches, snapshots resource/scalar bindings at dispatch issue time, and reclaims both at program
-destruction. Test-only live/cumulative native counters prove that 33 repeated dispatches allocate
-nothing further and that the live counts return to their baseline. Invalid or name-stripped
-bytecode, a missing or
-undeclared slot, an unknown/mistyped scalar, an access mismatch and unsupported descriptor shapes
+Each program owns one pipeline layout and a bounded cache of immutable descriptor snapshots (at
+most 64 distinct binding combinations). Repeated bindings reuse a snapshot, while a binding change
+cannot rewrite a set already named by deferred work. Resource/scalar state is captured at dispatch
+issue time and native objects are fence-retired at program destruction. Test-only live/cumulative
+counters prove that 33 repeated dispatches allocate nothing further and that the live counts return
+to their baseline. Invalid or name-stripped bytecode, a missing or undeclared slot, an
+unknown/mistyped scalar, an access mismatch and unsupported descriptor shapes
 all fail explicitly instead of becoming a silent no-op or a validation error.
 
 `StorageBufferDescriptor` declares storage, transfer-source/destination, indirect, vertex and
@@ -118,13 +119,14 @@ and optional full-chain sampled view remain internal. The `Vulkan_ShaderEffect_B
 oracle writes `(0.25, 0.5, 0.75, 1)` in compute, reads back the exact quantised bytes and samples the
 same texel through a later fragment draw, while also testing slot/access refusal and binding clear.
 
-The v1 compute implementation is transitionally synchronous at **every dispatch**: it records
-host-write → shader read/write and shader-write → host-read dependencies, submits on the existing
-queue and waits before `dispatch` returns, even when no `StorageBuffer::getBytes` follows. That is
-stronger than correctness requires and is not the accepted final contract.
-`docs/adr/0001-modern-gpu-ordering-lifetime.md` permits blocking only at a requested synchronous
-readback boundary; `MOD-2247`–`MOD-2253` own integration into deferred public-call ordering,
-resource-tracked barriers, fence-safe retirement and removal of this routine wait. Optional
+`MOD-2247` makes dispatch and storage-buffer copies immutable entries in the same monotonic order as
+clear, SpriteBatch, XNA 3D, indirect draws, timestamps and presentation. A compute/copy boundary
+closes the current render-pass segment, records outside both passes and leaves the same target bound
+for following graphics. Routine dispatch/copy therefore add no one-time submit or queue/device wait;
+requested CPU buffer/image readback remains their synchronous fallback. Storage-image sampling also
+retains its older synchronous transition. Conservative automatic dependencies currently cover
+host/transfer/compute and following graphics/indirect access; `MOD-2248`–`MOD-2253` own finer
+resource tracking and those remaining transition/readback stalls. Optional
 extended storage-image formats and legal bridges from existing XNA textures/render targets remain
 `MOD-2244`; the dedicated `StorageTexture2D` path is claimed here.
 
@@ -149,15 +151,15 @@ The queued draw owns a share of the argument renderer record. Disposing its publ
 `StorageBuffer` after enqueue therefore remains logically immediate but cannot invalidate the
 unrecorded `VkBuffer`; once the command has been recorded, the allocation enters the existing
 frame-generation retirement queue and is destroyed only after the consuming fence. A single
-automatic host/transfer/compute-write → indirect-command-read barrier is recorded before relevant
-render passes. The current compute producer is still synchronously submitted, so integration of
-all modern commands into one deferred order remains `MOD-2247`–`MOD-2250`, but callers need no
-manual barrier for correctness.
+automatic host/transfer/compute-write → indirect-command-read dependency is recorded before use.
+Compute and copies now share the consuming frame submission (`MOD-2247`), so callers need no manual
+barrier for correctness.
 
-The six-leg oracle uses non-zero command offsets for both routes, separates every geometry offset,
+The eight-leg oracle uses non-zero command offsets for both routes, separates every geometry offset,
 selects instance one, disposes an accepted argument before render-target flush, and has SPIR-V
-compute write a command that is drawn without readback. It passes **6/6 on RADV and llvmpipe** with
-zero new validation messages. Wireframe renders filled because the CPU cannot rebuild a line list
+compute write a command that is drawn without readback, then proves SpriteBatch → compute → GPU copy
+→ XNA 3D → indirect → present with one frame submit and no new one-time command. It passes **8/8 on
+RADV and llvmpipe** with zero new validation messages. Wireframe renders filled because the CPU cannot rebuild a line list
 without the hidden count; compiled FX is refused because its current pipeline route likewise needs
 that count.
 
@@ -312,8 +314,8 @@ records before destroying the Vulkan device.
 
 Two current implementation gaps are stated rather than normalized into the contract:
 
-- compute dispatch and the current storage-image sampling transition use one-time command buffers
-  and wait immediately (`MOD-2247`/`MOD-2249`/`MOD-2251`/`MOD-2253`); and
+- the current storage-image sampling transition still uses a one-time command buffer and waits
+  immediately (`MOD-2251`/`MOD-2253`); and
 - off-screen dependency readback currently begins with `DeviceWaitIdleEXT` instead of waiting only
   for the requested dependency closure's submission (`MOD-2253`).
 
