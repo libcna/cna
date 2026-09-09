@@ -82,17 +82,17 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Gets the pass at the specified index (mutable overload).
          *
          * @param index Zero-based index of the pass.
-         * @return Reference to the pass.
+         * @return Pointer to the pass, or nullptr if @p index is outside the collection.
          */
-        [[nodiscard]] EffectPass& operator[](int index);
+        [[nodiscard]] EffectPass* operator[](int index);
 
         /**
          * @brief Gets the pass at the specified index (const overload).
          *
          * @param index Zero-based index of the pass.
-         * @return Const reference to the pass.
+         * @return Const pointer to the pass, or nullptr if @p index is outside the collection.
          */
-        [[nodiscard]] const EffectPass& operator[](int index) const;
+        [[nodiscard]] const EffectPass* operator[](int index) const;
 
         /**
          * @brief Gets the pass with the specified name.

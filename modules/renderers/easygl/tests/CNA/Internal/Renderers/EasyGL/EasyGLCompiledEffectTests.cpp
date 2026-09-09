@@ -569,7 +569,7 @@ TEST(EasyGLCompiledEffectTest, PixelShaderOnlyPassAppliesOnDesktopCoreContext)
     options.includeSampler = true;
     Effect effect(device, CNA::TestSupport::BuildSyntheticEffect(options));
 
-    EXPECT_NO_THROW(effect.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply());
+    EXPECT_NO_THROW(effect.getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply());
 }
 
 // plans/plan_fx.md FX-084/FX-086: the shared draw matrix. Each of these renders the compiled effect's
@@ -767,7 +767,7 @@ TEST(EasyGLCompiledEffectDrawTest, DeviceTextureAndSamplerOverridesRemainAuthori
     device.setRasterizerStateProperty(RasterizerState::CullNone);
     device.setDepthStencilStateProperty(DepthStencilState::None);
     device.setBlendStateProperty(BlendState::Opaque);
-    effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+    effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
 
     device.getTexturesProperty()(0, &deviceTexture);
     device.getSamplerStatesProperty()[0] = SamplerState::PointWrap;
@@ -889,7 +889,7 @@ TEST(EasyGLCompiledEffectDrawTest, MultipleRenderTargetSamplersKeepTheirOwnTextu
     device.setRasterizerStateProperty(RasterizerState::CullNone);
     device.setDepthStencilStateProperty(DepthStencilState::None);
     device.setBlendStateProperty(BlendState::Opaque);
-    effect.getTechniquesProperty()[0].getPassesProperty()[0].Apply();
+    effect.getTechniquesProperty()[0]->getPassesProperty()[0]->Apply();
     device.SetVertexBuffer(&vertexBuffer);
     device.setIndicesProperty(nullptr);
     device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
@@ -980,7 +980,7 @@ TEST(EasyGLCompiledEffectDrawTest, CompiledDrawObjectsSurviveAContextRecreation)
         device.setRasterizerStateProperty(RasterizerState::CullNone);
         device.setDepthStencilStateProperty(DepthStencilState::None);
         device.setBlendStateProperty(BlendState::Opaque);
-        effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
         device.DrawUserPrimitives(PrimitiveType::TriangleList, static_cast<const void*>(quad), 0, 2,
                                   CNA::TestSupport::SamplingQuadDeclaration());
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));

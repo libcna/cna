@@ -8088,7 +8088,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             }
             for (int pass = 0; pass < passCount; ++pass)
             {
-                technique->getPassesProperty()[pass].Apply();
+                technique->getPassesProperty()[pass]->Apply();
                 for (std::size_t i = runStart; i < runEnd; ++i)
                 {
                     const PendingSpriteEXT& sprite = pendingSprites_[i];
@@ -8185,7 +8185,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             // and applying the passes around it here is the same order XNA produces.
             for (int pass = 0; pass < passCount; ++pass)
             {
-                technique->getPassesProperty()[pass].Apply();
+                technique->getPassesProperty()[pass]->Apply();
                 owner_->QueueSprite(texture, nativeTexture, destinationRectangle, sourceRectangle,
                                     color, rotation, origin, effects, layerDepth, transform_,
                                     textureFilter_, addressU_, addressV_, customEffectRenderer,

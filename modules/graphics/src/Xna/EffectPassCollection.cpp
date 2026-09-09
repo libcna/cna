@@ -1,13 +1,19 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/EffectPassCollection.hpp"
-#include <stdexcept>
 
 namespace Microsoft::Xna::Framework::Graphics
 {
     int EffectPassCollection::getCountProperty() const { return (int)elements_.size(); }
 
-    EffectPass& EffectPassCollection::operator[](int index) { return *elements_.at(index); }
-    const EffectPass& EffectPassCollection::operator[](int index) const { return *elements_.at(index); }
+    EffectPass* EffectPassCollection::operator[](int index)
+    {
+        return index >= 0 && index < getCountProperty() ? elements_[index].get() : nullptr;
+    }
+
+    const EffectPass* EffectPassCollection::operator[](int index) const
+    {
+        return index >= 0 && index < getCountProperty() ? elements_[index].get() : nullptr;
+    }
 
     EffectPass* EffectPassCollection::operator[](const std::string& name)
     {

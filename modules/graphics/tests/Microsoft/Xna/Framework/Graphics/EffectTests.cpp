@@ -154,7 +154,7 @@ TEST(EffectTest, ConstructorCreatesExactlyOneDefaultTechnique)
     TestEffect fx(gd);
 
     ASSERT_EQ(fx.getTechniquesProperty().getCountProperty(), 1);
-    EXPECT_EQ(fx.getTechniquesProperty()[0].getNameProperty(), "Default");
+    EXPECT_EQ(fx.getTechniquesProperty()[0]->getNameProperty(), "Default");
 }
 
 TEST(EffectTest, ConstructorSelectsFirstTechniqueAsCurrent)
@@ -163,7 +163,7 @@ TEST(EffectTest, ConstructorSelectsFirstTechniqueAsCurrent)
     TestEffect fx(gd);
 
     ASSERT_NE(fx.getCurrentTechniqueProperty(), nullptr);
-    EXPECT_EQ(fx.getCurrentTechniqueProperty(), &fx.getTechniquesProperty()[0]);
+    EXPECT_EQ(fx.getCurrentTechniqueProperty(), fx.getTechniquesProperty()[0]);
 }
 
 TEST(EffectTest, ConstructorLeavesParametersEmpty)
@@ -181,7 +181,7 @@ TEST(EffectTest, GetTechniquesConstOverloadMatchesMutable)
     TestEffect fx(gd);
 
     const Effect& constFx = fx;
-    EXPECT_EQ(&constFx.getTechniquesProperty()[0], &fx.getTechniquesProperty()[0]);
+    EXPECT_EQ(constFx.getTechniquesProperty()[0], fx.getTechniquesProperty()[0]);
 }
 
 TEST(EffectTest, GraphicsDeviceInternalReturnsOwningDevice)
@@ -269,7 +269,7 @@ TEST(EffectTest, AuthenticXna4EffectAcceptsRepeatedAndAuxiliaryObjectRecords)
          ++techniqueIndex)
     {
         EXPECT_EQ(effect.getTechniquesProperty()[techniqueIndex]
-                      .getPassesProperty().getCountProperty(),
+                      ->getPassesProperty().getCountProperty(),
                   1);
     }
 }
@@ -287,14 +287,14 @@ TEST(EffectTest, AuthenticXna4ShaderStateIdentifiersSurvivePassApplication)
 
     TestEffect effect(gd, racingEffect);
     ASSERT_GE(effect.getTechniquesProperty().getCountProperty(), 2);
-    EffectTechnique& technique = effect.getTechniquesProperty()[1];
+    EffectTechnique& technique = *effect.getTechniquesProperty()[1];
     ASSERT_EQ(technique.getPassesProperty().getCountProperty(), 1);
     effect.setCurrentTechniqueProperty(&technique);
 
     // The authentic XNA 4 payload stores VertexShader/PixelShader as MojoShader render-state
     // identifiers 146/147. If either identifier is incorrectly stripped to 18/19, applying this
     // pass reports unsupported FogStart/FogEnd before any draw can occur.
-    EXPECT_NO_THROW(technique.getPassesProperty()[0].Apply());
+    EXPECT_NO_THROW(technique.getPassesProperty()[0]->Apply());
 }
 
 TEST(EffectTest, RejectsInvalidRenderStateIdentifierBeforeEnumConversion)
@@ -526,7 +526,7 @@ TEST_F(EffectApplyTest, DisposeIsIdempotentAndDoesNotThrow)
 
 TEST_F(EffectApplyTest, ApplyOnPassThrowsObjectDisposedExceptionWhenOwnerEffectDisposed)
 {
-    EffectPass& p0 = fx.getTechniquesProperty()[0].getPassesProperty()[0];
+    EffectPass& p0 = *fx.getTechniquesProperty()[0]->getPassesProperty()[0];
     fx.Dispose();
     EXPECT_THROW(p0.Apply(), System::ObjectDisposedException);
 }
@@ -542,7 +542,7 @@ TEST_F(EffectApplyTest, ApplyOnPassThrowsObjectDisposedExceptionWhenOwnerEffectD
 
 TEST_F(EffectApplyTest, ApplyOnPassOfCurrentTechniqueSucceedsAndInvokesOnApply)
 {
-    EffectPass& p0 = fx.getTechniquesProperty()[0].getPassesProperty()[0];
+    EffectPass& p0 = *fx.getTechniquesProperty()[0]->getPassesProperty()[0];
 
     EXPECT_NO_THROW(p0.Apply());
     EXPECT_EQ(fx.applyCount, 1);
@@ -550,7 +550,7 @@ TEST_F(EffectApplyTest, ApplyOnPassOfCurrentTechniqueSucceedsAndInvokesOnApply)
 
 TEST_F(EffectApplyTest, ApplyOnPassNotInCurrentTechniqueThrowsInvalidOperationException)
 {
-    EffectPass& originalPass = fx.getTechniquesProperty()[0].getPassesProperty()[0];
+    EffectPass& originalPass = *fx.getTechniquesProperty()[0]->getPassesProperty()[0];
     EffectTechnique unrelated(nullptr, "Unrelated");
 
     fx.setCurrentTechniqueProperty(&unrelated);
@@ -561,7 +561,7 @@ TEST_F(EffectApplyTest, ApplyOnPassNotInCurrentTechniqueThrowsInvalidOperationEx
 
 TEST_F(EffectApplyTest, ApplyWithNullCurrentTechniqueThrowsInvalidOperationException)
 {
-    EffectPass& p0 = fx.getTechniquesProperty()[0].getPassesProperty()[0];
+    EffectPass& p0 = *fx.getTechniquesProperty()[0]->getPassesProperty()[0];
 
     fx.setCurrentTechniqueProperty(nullptr);
 
@@ -574,8 +574,8 @@ TEST_F(EffectApplyTest, ApplyWithNullCurrentTechniqueThrowsInvalidOperationExcep
 TEST_F(EffectApplyTest, ApplyIsConsistentAcrossInterleavedTechniqueSwitches)
 {
     fx.getTechniquesProperty().Add(EffectTechnique(&fx, "Second"));
-    EffectPass& firstPass = fx.getTechniquesProperty()[0].getPassesProperty()[0];
-    EffectPass& secondPass = fx.getTechniquesProperty()[1].getPassesProperty()[0];
+    EffectPass& firstPass = *fx.getTechniquesProperty()[0]->getPassesProperty()[0];
+    EffectPass& secondPass = *fx.getTechniquesProperty()[1]->getPassesProperty()[0];
 
     // CurrentTechnique still points at [0] (set at construction) — applying [1]'s pass
     // must fail, and applying [0]'s pass must keep succeeding.
@@ -585,7 +585,7 @@ TEST_F(EffectApplyTest, ApplyIsConsistentAcrossInterleavedTechniqueSwitches)
 
     // Switch CurrentTechnique to [1]: now [1]'s pass succeeds and [0]'s pass fails —
     // no stale state lingers from the previous technique being current.
-    fx.setCurrentTechniqueProperty(&fx.getTechniquesProperty()[1]);
+    fx.setCurrentTechniqueProperty(fx.getTechniquesProperty()[1]);
     EXPECT_THROW(firstPass.Apply(), System::InvalidOperationException);
     EXPECT_NO_THROW(secondPass.Apply());
     EXPECT_EQ(fx.applyCount, 2);
@@ -611,24 +611,24 @@ TEST_F(EffectApplyTest, CurrentTechniquePropertyPassCollectionTracksSelectedTech
 
     // Immediately after construction, CurrentTechnique's own Passes collection
     // must be technique [0]'s, not technique [1]'s.
-    EXPECT_EQ(&fx.getCurrentTechniqueProperty()->getPassesProperty()[0],
-              &fx.getTechniquesProperty()[0].getPassesProperty()[0]);
-    EXPECT_NO_THROW(fx.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply());
+    EXPECT_EQ(fx.getCurrentTechniqueProperty()->getPassesProperty()[0],
+              fx.getTechniquesProperty()[0]->getPassesProperty()[0]);
+    EXPECT_NO_THROW(fx.getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply());
 
-    fx.setCurrentTechniqueProperty(&fx.getTechniquesProperty()[1]);
+    fx.setCurrentTechniqueProperty(fx.getTechniquesProperty()[1]);
 
     // After switching, CurrentTechnique's own Passes collection must now be
     // technique [1]'s — a real toggle, not a one-directional/stale snapshot.
-    EXPECT_EQ(&fx.getCurrentTechniqueProperty()->getPassesProperty()[0],
-              &fx.getTechniquesProperty()[1].getPassesProperty()[0]);
-    EXPECT_NO_THROW(fx.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply());
+    EXPECT_EQ(fx.getCurrentTechniqueProperty()->getPassesProperty()[0],
+              fx.getTechniquesProperty()[1]->getPassesProperty()[0]);
+    EXPECT_NO_THROW(fx.getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply());
 
-    fx.setCurrentTechniqueProperty(&fx.getTechniquesProperty()[0]);
+    fx.setCurrentTechniqueProperty(fx.getTechniquesProperty()[0]);
 
     // Switching back restores [0]'s pass collection as current — bidirectional.
-    EXPECT_EQ(&fx.getCurrentTechniqueProperty()->getPassesProperty()[0],
-              &fx.getTechniquesProperty()[0].getPassesProperty()[0]);
-    EXPECT_NO_THROW(fx.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply());
+    EXPECT_EQ(fx.getCurrentTechniqueProperty()->getPassesProperty()[0],
+              fx.getTechniquesProperty()[0]->getPassesProperty()[0]);
+    EXPECT_NO_THROW(fx.getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply());
 }
 
 // -----------------------------------------------------------------------
@@ -689,13 +689,13 @@ TEST(EffectTest, CloneGetsIndependentTechniqueNotAliasedToOriginal)
     // original's, so EffectPass::Apply()'s owner_/techniqueId_ check on either
     // side can never accidentally resolve against the other effect's state.
     EXPECT_NE(clone->getCurrentTechniqueProperty(), fx.getCurrentTechniqueProperty());
-    EXPECT_NE(&clone->getTechniquesProperty()[0].getPassesProperty()[0],
-              &fx.getTechniquesProperty()[0].getPassesProperty()[0]);
+    EXPECT_NE(clone->getTechniquesProperty()[0]->getPassesProperty()[0],
+              fx.getTechniquesProperty()[0]->getPassesProperty()[0]);
 
     // Applying the clone's pass must not affect the original's apply count, and
     // vice versa — confirms there is no shared/aliased state between the two.
     auto& clonedTestFx = static_cast<TestEffect&>(*clone);
-    clone->getTechniquesProperty()[0].getPassesProperty()[0].Apply();
+    clone->getTechniquesProperty()[0]->getPassesProperty()[0]->Apply();
     EXPECT_EQ(clonedTestFx.applyCount, 1);
     EXPECT_EQ(fx.applyCount, 0);
 }

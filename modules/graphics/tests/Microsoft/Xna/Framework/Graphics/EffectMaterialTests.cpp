@@ -86,8 +86,8 @@ TEST(EffectMaterialTest, CarriesTheSourceEffectsParametersAcross)
               source.getParametersProperty().getCountProperty());
     for (int i = 0; i < source.getParametersProperty().getCountProperty(); ++i)
     {
-        EXPECT_EQ(material.getParametersProperty()[i].getNameProperty(),
-                  source.getParametersProperty()[i].getNameProperty());
+        EXPECT_EQ(material.getParametersProperty()[i]->getNameProperty(),
+                  source.getParametersProperty()[i]->getNameProperty());
     }
 }
 
@@ -100,7 +100,7 @@ TEST(EffectMaterialTest, ParametersAreReachableByName)
     const auto bytes = LoadCompiledEffectFixture();
     ASSERT_FALSE(bytes.empty());
     CompiledSourceEffect source(gd, bytes);
-    const std::string firstName = source.getParametersProperty()[0].getNameProperty();
+    const std::string firstName = source.getParametersProperty()[0]->getNameProperty();
 
     EffectMaterial material(source);
     // The lookup that returned nullptr before this fix, which a game then dereferenced.
@@ -132,7 +132,7 @@ TEST(EffectMaterialTest, CloningANonCompiledSourceGivesTheBareDefaultTechnique)
     EffectMaterial material(source);
 
     ASSERT_EQ(material.getTechniquesProperty().getCountProperty(), 1);
-    EXPECT_EQ(material.getTechniquesProperty()[0].getNameProperty(), "Default");
+    EXPECT_EQ(material.getTechniquesProperty()[0]->getNameProperty(), "Default");
     EXPECT_NE(material.getCurrentTechniqueProperty(), nullptr);
 }
 
@@ -148,8 +148,8 @@ TEST(EffectMaterialTest, TheCloneIsIndependentOfItsSource)
     EffectMaterial a(source);
     EffectMaterial b(source);
 
-    EXPECT_NE(&a.getParametersProperty()[0], &source.getParametersProperty()[0]);
-    EXPECT_NE(&a.getParametersProperty()[0], &b.getParametersProperty()[0]);
+    EXPECT_NE(a.getParametersProperty()[0], source.getParametersProperty()[0]);
+    EXPECT_NE(a.getParametersProperty()[0], b.getParametersProperty()[0]);
 }
 
 // SAMPLE-032: EffectParameter stores a raw Texture*, so a material whose parameters name

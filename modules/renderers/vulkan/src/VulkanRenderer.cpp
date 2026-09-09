@@ -1332,7 +1332,7 @@ namespace CNA::Internal::Renderers::Vulkan
             }
             for (int pass = 0; pass < passCount; ++pass)
             {
-                technique->getPassesProperty()[pass].Apply();
+                technique->getPassesProperty()[pass]->Apply();
                 for (std::size_t i = runStart; i < runEnd; ++i)
                     QueueCompiledSpriteEXT(pendingCompiledSprites_[i], runtime);
             }
@@ -1461,7 +1461,7 @@ namespace CNA::Internal::Renderers::Vulkan
             }
             for (int pass = 0; pass < passCount; ++pass)
             {
-                technique->getPassesProperty()[pass].Apply();
+                technique->getPassesProperty()[pass]->Apply();
                 QueueCompiledSpriteEXT(sprite, compiledRuntime);
             }
             return;

@@ -244,7 +244,7 @@ TEST_F(BasicEffectDefaultsTest, ExposesAuthenticXnaParameterGraph)
     ASSERT_EQ(parameters.getCountProperty(), static_cast<int>(expected.size()));
     for (int i = 0; i < parameters.getCountProperty(); ++i)
     {
-        const EffectParameter& actual = parameters[i];
+        const EffectParameter& actual = *parameters[i];
         const ExpectedParameter& wanted = expected[static_cast<std::size_t>(i)];
         EXPECT_EQ(actual.getNameProperty(), wanted.name) << "parameter " << i;
         EXPECT_EQ(actual.getParameterClassProperty(), wanted.parameterClass) << wanted.name;

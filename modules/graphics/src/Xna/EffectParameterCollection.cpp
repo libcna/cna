@@ -5,8 +5,15 @@ namespace Microsoft::Xna::Framework::Graphics
 {
     int EffectParameterCollection::getCountProperty() const { return (int)elements_.size(); }
 
-    EffectParameter& EffectParameterCollection::operator[](int index) { return *elements_.at(index); }
-    const EffectParameter& EffectParameterCollection::operator[](int index) const { return *elements_.at(index); }
+    EffectParameter* EffectParameterCollection::operator[](int index)
+    {
+        return index >= 0 && index < getCountProperty() ? elements_[index].get() : nullptr;
+    }
+
+    const EffectParameter* EffectParameterCollection::operator[](int index) const
+    {
+        return index >= 0 && index < getCountProperty() ? elements_[index].get() : nullptr;
+    }
 
     EffectParameter* EffectParameterCollection::operator[](const std::string& name)
     {

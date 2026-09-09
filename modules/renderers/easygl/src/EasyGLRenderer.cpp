@@ -5446,7 +5446,7 @@ if (ProfileUsesGlslEs100())
             customEffect_->getGraphicsDeviceInternal().getSamplerStatesProperty();
         for (int pass = 0; pass < passCount; ++pass)
         {
-            technique->getPassesProperty()[pass].Apply();
+            technique->getPassesProperty()[pass]->Apply();
             vao.bind();
             graphicsRenderer_->BindCompiledEffectForDrawEXT(&stream, 1, *runtime,
                                                             current_texture_, &deviceTextures,

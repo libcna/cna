@@ -42,7 +42,7 @@ protected:
         EffectTechnique* def = fx.getCurrentTechniqueProperty();
         check(def != nullptr,
               "getCurrentTechniqueProperty() is non-null after construction");
-        check(def == &fx.getTechniquesProperty()[0],
+        check(def == fx.getTechniquesProperty()[0],
               "getCurrentTechniqueProperty() points to Techniques[0]");
 
         // Techniques[0] is accessible by index and name.
@@ -52,12 +52,12 @@ protected:
               "Techniques[\"Default\"] resolves to non-null");
 
         // Passes[0] of the default technique exists.
-        EffectPassCollection& passes = fx.getTechniquesProperty()[0].getPassesProperty();
+        EffectPassCollection& passes = fx.getTechniquesProperty()[0]->getPassesProperty();
         check(passes.getCountProperty() >= 1,
               "Techniques[0].Passes has at least one pass");
 
         // setCurrentTechniqueProperty round-trip.
-        EffectTechnique* t0 = &fx.getTechniquesProperty()[0];
+        EffectTechnique* t0 = fx.getTechniquesProperty()[0];
         fx.setCurrentTechniqueProperty(t0);
         check(fx.getCurrentTechniqueProperty() == t0,
               "getCurrentTechniqueProperty() returns the value set via setter");
@@ -66,7 +66,7 @@ protected:
         bool applyOk = false;
         try
         {
-            passes[0].Apply();
+            passes[0]->Apply();
             applyOk = true;
         }
         catch (...) {}

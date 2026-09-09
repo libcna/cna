@@ -33,7 +33,7 @@ TEST(EffectTechniqueTest, NamedConstructorSeedsOneDefaultPass)
     // EffectTechnique(owner, name) pre-adds a default "P0" pass
     EffectTechnique t(nullptr, "T");
     EXPECT_EQ(t.getPassesProperty().getCountProperty(), 1);
-    EXPECT_EQ(t.getPassesProperty()[0].getNameProperty(), "P0");
+    EXPECT_EQ(t.getPassesProperty()[0]->getNameProperty(), "P0");
 }
 
 TEST(EffectTechniqueTest, AddPassIncreasesCount)
@@ -49,8 +49,8 @@ TEST(EffectTechniqueTest, PassAccessibleByIndex)
     EffectTechnique t(nullptr, "T");
     // [0] = "P0" (seeded by constructor), [1] = "Extra"
     t.getPassesProperty().Add(EffectPass(nullptr, "Extra"));
-    EXPECT_EQ(t.getPassesProperty()[0].getNameProperty(), "P0");
-    EXPECT_EQ(t.getPassesProperty()[1].getNameProperty(), "Extra");
+    EXPECT_EQ(t.getPassesProperty()[0]->getNameProperty(), "P0");
+    EXPECT_EQ(t.getPassesProperty()[1]->getNameProperty(), "Extra");
 }
 
 TEST(EffectTechniqueTest, PassAccessibleByName)

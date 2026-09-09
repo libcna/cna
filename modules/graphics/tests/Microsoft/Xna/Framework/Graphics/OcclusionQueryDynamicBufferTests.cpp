@@ -8,7 +8,7 @@
 // occlusion_query_test and easygl_textured_quad_test integration tests.
 // What can be verified without a GPU:
 //  - EffectPass: Apply() with null owner (no-op), annotations empty
-//  - EffectPassCollection: out-of-bounds throws, range-for, const overloads
+//  - EffectPassCollection: out-of-bounds null results, range-for, const overloads
 //  - BufferUsage enum values (used by DynamicVertexBuffer constructor)
 //  - IndexElementSize enum values (used by DynamicIndexBuffer constructor)
 
@@ -97,26 +97,26 @@ TEST(EffectPassCollectionTest, DefaultConstructorIsEmpty)
     EXPECT_EQ(col.getCountProperty(), 0);
 }
 
-TEST(EffectPassCollectionTest, IndexOutOfBoundsThrows)
+TEST(EffectPassCollectionTest, IndexOutOfBoundsReturnsNull)
 {
     EffectPassCollection col;
     col.Add(EffectPass(nullptr, "P0"));
-    EXPECT_THROW({ [[maybe_unused]] EffectPass& p = col[1]; }, std::out_of_range);
+    EXPECT_EQ(col[1], nullptr);
 }
 
-TEST(EffectPassCollectionTest, NegativeIndexThrows)
+TEST(EffectPassCollectionTest, NegativeIndexReturnsNull)
 {
     EffectPassCollection col;
     col.Add(EffectPass(nullptr, "P0"));
-    EXPECT_THROW({ [[maybe_unused]] EffectPass& p = col[-1]; }, std::out_of_range);
+    EXPECT_EQ(col[-1], nullptr);
 }
 
-TEST(EffectPassCollectionTest, ConstIndexOutOfBoundsThrows)
+TEST(EffectPassCollectionTest, ConstIndexOutOfBoundsReturnsNull)
 {
     EffectPassCollection col;
     col.Add(EffectPass(nullptr, "P0"));
     const EffectPassCollection& cref = col;
-    EXPECT_THROW({ [[maybe_unused]] const EffectPass& p = cref[1]; }, std::out_of_range);
+    EXPECT_EQ(cref[1], nullptr);
 }
 
 TEST(EffectPassCollectionTest, ConstIndexByNameFound)
@@ -167,7 +167,8 @@ TEST(EffectPassCollectionTest, MutableIndexAllowsAccess)
 {
     EffectPassCollection col;
     col.Add(EffectPass(nullptr, "Mutable"));
-    EXPECT_EQ(col[0].getNameProperty(), "Mutable");
+    ASSERT_NE(col[0], nullptr);
+    EXPECT_EQ(col[0]->getNameProperty(), "Mutable");
 }
 
 TEST(EffectPassCollectionTest, AddMultiplePasses)
@@ -176,6 +177,8 @@ TEST(EffectPassCollectionTest, AddMultiplePasses)
     col.Add(EffectPass(nullptr, "X"));
     col.Add(EffectPass(nullptr, "Y"));
     EXPECT_EQ(col.getCountProperty(), 2);
-    EXPECT_EQ(col[0].getNameProperty(), "X");
-    EXPECT_EQ(col[1].getNameProperty(), "Y");
+    ASSERT_NE(col[0], nullptr);
+    ASSERT_NE(col[1], nullptr);
+    EXPECT_EQ(col[0]->getNameProperty(), "X");
+    EXPECT_EQ(col[1]->getNameProperty(), "Y");
 }

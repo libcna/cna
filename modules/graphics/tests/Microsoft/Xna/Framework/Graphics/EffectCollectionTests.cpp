@@ -49,8 +49,10 @@ TEST(EffectTechniqueCollectionTest, IndexByIntReturnsTechnique)
     EffectTechniqueCollection col;
     col.Add(EffectTechnique(nullptr, "Alpha"));
     col.Add(EffectTechnique(nullptr, "Beta"));
-    EXPECT_EQ(col[0].getNameProperty(), "Alpha");
-    EXPECT_EQ(col[1].getNameProperty(), "Beta");
+    ASSERT_NE(col[0], nullptr);
+    ASSERT_NE(col[1], nullptr);
+    EXPECT_EQ(col[0]->getNameProperty(), "Alpha");
+    EXPECT_EQ(col[1]->getNameProperty(), "Beta");
 }
 
 TEST(EffectTechniqueCollectionTest, IndexByNameReturnsCorrectTechnique)
@@ -75,7 +77,19 @@ TEST(EffectTechniqueCollectionTest, ConstIndexByIntReturnsTechnique)
     EffectTechniqueCollection col;
     col.Add(EffectTechnique(nullptr, "T"));
     const EffectTechniqueCollection& cref = col;
-    EXPECT_EQ(cref[0].getNameProperty(), "T");
+    ASSERT_NE(cref[0], nullptr);
+    EXPECT_EQ(cref[0]->getNameProperty(), "T");
+}
+
+TEST(EffectTechniqueCollectionTest, InvalidIntegerIndicesReturnNull)
+{
+    EffectTechniqueCollection col;
+    col.Add(EffectTechnique(nullptr, "T"));
+    const EffectTechniqueCollection& cref = col;
+    EXPECT_EQ(col[-1], nullptr);
+    EXPECT_EQ(col[1], nullptr);
+    EXPECT_EQ(cref[-1], nullptr);
+    EXPECT_EQ(cref[1], nullptr);
 }
 
 TEST(EffectTechniqueCollectionTest, ConstIndexByNameReturnsTechnique)
@@ -123,8 +137,10 @@ TEST(EffectParameterCollectionTest, IndexByIntReturnsParameter)
     EffectParameterCollection col;
     col.Add(MakeParam("First"));
     col.Add(MakeParam("Second"));
-    EXPECT_EQ(col[0].getNameProperty(), "First");
-    EXPECT_EQ(col[1].getNameProperty(), "Second");
+    ASSERT_NE(col[0], nullptr);
+    ASSERT_NE(col[1], nullptr);
+    EXPECT_EQ(col[0]->getNameProperty(), "First");
+    EXPECT_EQ(col[1]->getNameProperty(), "Second");
 }
 
 TEST(EffectParameterCollectionTest, IndexByNameReturnsCorrectParameter)
@@ -149,7 +165,8 @@ TEST(EffectParameterCollectionTest, ConstIndexByIntReturnsParameter)
     EffectParameterCollection col;
     col.Add(MakeParam("P"));
     const EffectParameterCollection& cref = col;
-    EXPECT_EQ(cref[0].getNameProperty(), "P");
+    ASSERT_NE(cref[0], nullptr);
+    EXPECT_EQ(cref[0]->getNameProperty(), "P");
 }
 
 TEST(EffectParameterCollectionTest, ConstIndexByNameReturnsParameter)
@@ -260,40 +277,24 @@ TEST(EffectParameterCollectionTest, GetParameterBySemanticFirstMatchWinsOnDuplic
     EXPECT_EQ(p->getNameProperty(), "first");
 }
 
-// Task 359: FNA's `this[int index]` returns `elements[index]` on a plain `List<EffectParameter>`,
-// which throws ArgumentOutOfRangeException for a negative or >=Count index (standard List<T>
-// indexer behavior) — distinct from `this[string name]`/GetParameterBySemantic, which return null
-// instead of throwing. CNA's operator[](int) already uses std::vector::at(), which throws
-// std::out_of_range for the same negative/>=size cases (matching this project's established
-// out-of-range convention, e.g. DisplayModeCollectionTest). These tests lock in that distinction
-// and the previously-untested empty-collection edge case for every lookup surface.
-
-TEST(EffectParameterCollectionTest, IndexByIntNegativeThrowsOutOfRange)
-{
-    EffectParameterCollection col;
-    col.Add(MakeParam("Only"));
-    EXPECT_THROW({ [[maybe_unused]] EffectParameter& p = col[-1]; }, std::out_of_range);
-}
-
-TEST(EffectParameterCollectionTest, IndexByIntEqualToCountThrowsOutOfRange)
-{
-    EffectParameterCollection col;
-    col.Add(MakeParam("Only"));
-    EXPECT_THROW({ [[maybe_unused]] EffectParameter& p = col[1]; }, std::out_of_range);
-}
-
-TEST(EffectParameterCollectionTest, ConstIndexByIntOutOfRangeThrowsOutOfRange)
+// SOFTWARE-255: recovered Microsoft XNA checks every Effect collection integer index explicitly
+// and returns null when it is negative or not less than Count. This intentionally differs from
+// FNA's List-backed implementation, which throws for these parameter indices.
+TEST(EffectParameterCollectionTest, InvalidIntegerIndicesReturnNull)
 {
     EffectParameterCollection col;
     col.Add(MakeParam("Only"));
     const EffectParameterCollection& cref = col;
-    EXPECT_THROW({ [[maybe_unused]] const EffectParameter& p = cref[5]; }, std::out_of_range);
+    EXPECT_EQ(col[-1], nullptr);
+    EXPECT_EQ(col[1], nullptr);
+    EXPECT_EQ(cref[-1], nullptr);
+    EXPECT_EQ(cref[5], nullptr);
 }
 
-TEST(EffectParameterCollectionTest, IndexByIntOnEmptyCollectionThrowsOutOfRange)
+TEST(EffectParameterCollectionTest, IndexByIntOnEmptyCollectionReturnsNull)
 {
     EffectParameterCollection col;
-    EXPECT_THROW({ [[maybe_unused]] EffectParameter& p = col[0]; }, std::out_of_range);
+    EXPECT_EQ(col[0], nullptr);
 }
 
 TEST(EffectParameterCollectionTest, IndexByNameOnEmptyCollectionReturnsNull)
@@ -319,9 +320,9 @@ TEST(EffectParameterCollectionTest, PointerStableAcrossReallocatingAdd)
 {
     EffectParameterCollection col;
     col.Add(MakeParam("First"));
-    EffectParameter* first = &col[0];
+    EffectParameter* first = col[0];
     for (int i = 0; i < 64; ++i) col.Add(MakeParam("P" + std::to_string(i)));
-    EXPECT_EQ(first, &col[0]);
+    EXPECT_EQ(first, col[0]);
     EXPECT_EQ(first->getNameProperty(), "First");
 }
 
@@ -347,8 +348,10 @@ TEST(EffectPassCollectionTest, IndexByIntReturnsPass)
     EffectPassCollection col;
     col.Add(EffectPass(nullptr, "Pass0"));
     col.Add(EffectPass(nullptr, "Pass1"));
-    EXPECT_EQ(col[0].getNameProperty(), "Pass0");
-    EXPECT_EQ(col[1].getNameProperty(), "Pass1");
+    ASSERT_NE(col[0], nullptr);
+    ASSERT_NE(col[1], nullptr);
+    EXPECT_EQ(col[0]->getNameProperty(), "Pass0");
+    EXPECT_EQ(col[1]->getNameProperty(), "Pass1");
 }
 
 TEST(EffectPassCollectionTest, IndexByNameReturnsCorrectPass)
@@ -385,8 +388,8 @@ TEST(EffectPassCollectionTest, PointerStableAcrossReallocatingAdd)
 {
     EffectPassCollection col;
     col.Add(EffectPass(nullptr, "First"));
-    EffectPass* first = &col[0];
+    EffectPass* first = col[0];
     for (int i = 0; i < 64; ++i) col.Add(EffectPass(nullptr, "P" + std::to_string(i)));
-    EXPECT_EQ(first, &col[0]);
+    EXPECT_EQ(first, col[0]);
     EXPECT_EQ(first->getNameProperty(), "First");
 }

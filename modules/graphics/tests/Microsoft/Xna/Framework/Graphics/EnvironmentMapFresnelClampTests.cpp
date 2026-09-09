@@ -139,7 +139,7 @@ namespace
             for (int i = 0; i < effect.getCurrentTechniqueProperty()->getPassesProperty()
                                         .getCountProperty(); ++i)
             {
-                effect.getCurrentTechniqueProperty()->getPassesProperty()[i].Apply();
+                effect.getCurrentTechniqueProperty()->getPassesProperty()[i]->Apply();
                 device.DrawUserPrimitives(PrimitiveType::TriangleList, quad.data(), 0, 2);
             }
             device.SetRenderTarget(nullptr);

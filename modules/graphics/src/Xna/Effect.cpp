@@ -763,7 +763,7 @@ namespace Microsoft::Xna::Framework::Graphics
         , device_(&device)
     {
         techniques_.Add(EffectTechnique(this, "Default"));
-        currentTechnique_ = &techniques_[0];
+        currentTechnique_ = techniques_[0];
     }
 
     Effect::Effect(GraphicsDevice& device, const std::string& stockTechniqueName)
@@ -771,7 +771,7 @@ namespace Microsoft::Xna::Framework::Graphics
         , device_(&device)
     {
         techniques_.Add(EffectTechnique(this, stockTechniqueName));
-        currentTechnique_ = &techniques_[0];
+        currentTechnique_ = techniques_[0];
     }
 
     Effect::Effect(GraphicsDevice& device, const std::vector<SharpRuntime::bytecs>& effectCode)
@@ -850,7 +850,7 @@ namespace Microsoft::Xna::Framework::Graphics
             // device-only constructor -- has nothing for the renderer to clone, so the
             // clone gets the same single "Default" technique a bare Effect has.
             techniques_.Add(EffectTechnique(this, "Default"));
-            currentTechnique_ = &techniques_[0];
+            currentTechnique_ = techniques_[0];
             return;
         }
 
@@ -870,15 +870,15 @@ namespace Microsoft::Xna::Framework::Graphics
                                    cloneSource.parameters_.getCountProperty());
         for (int i = 0; i < count; ++i)
         {
-            parameters_[i].CopyMutableValueFromInternal(cloneSource.parameters_[i]);
+            parameters_[i]->CopyMutableValueFromInternal(*cloneSource.parameters_[i]);
         }
 
         for (int i = 0; i < cloneSource.techniques_.getCountProperty(); ++i)
         {
-            if (&cloneSource.techniques_[i] == cloneSource.currentTechnique_ &&
+            if (cloneSource.techniques_[i] == cloneSource.currentTechnique_ &&
                 i < techniques_.getCountProperty())
             {
-                setCurrentTechniqueProperty(&techniques_[i]);
+                setCurrentTechniqueProperty(techniques_[i]);
                 break;
             }
         }
@@ -910,7 +910,7 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             for (int i = 0; i < techniques_.getCountProperty(); ++i)
             {
-                if (&techniques_[i] == value)
+                if (techniques_[i] == value)
                 {
                     compiledRuntime_->SetTechnique(value->getIndexInternal());
                     break;
@@ -1132,7 +1132,7 @@ namespace Microsoft::Xna::Framework::Graphics
             techniques_.Add(std::move(technique));
         }
 
-        currentTechnique_ = &techniques_[0];
+        currentTechnique_ = techniques_[0];
         compiledRuntime_->SetTechnique(0);
     }
 

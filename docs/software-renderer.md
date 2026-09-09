@@ -402,6 +402,10 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
 - **Model name lookups expose XNA collection failures** (`SOFTWARE-254`) — missing bones/meshes
   throw `KeyNotFoundException`; empty lookup names throw `ArgumentNullException` before changing
   the caller's out pointer, identically above Software and EasyGL.
+- **Effect integer indexers retain XNA's nullable object semantics** (`SOFTWARE-255`) — annotation,
+  parameter, pass and technique collections return a stable object pointer for a valid index and
+  null for either invalid direction. This intentionally follows recovered Microsoft XNA over
+  FNA's list-index exception, and is exercised on stock graphs plus a parsed EasyGL Effect graph.
 - **The classic SpriteBatch/SpriteFont parity corpus executes on the CPU** (`SOFTWARE-138`).
   Eighteen renderer-independent scenes shared with EasyGL cover flips, rotation/origin, both scale
   overloads, source rectangles, layer sorting, transforms, render targets, viewports, scissor,

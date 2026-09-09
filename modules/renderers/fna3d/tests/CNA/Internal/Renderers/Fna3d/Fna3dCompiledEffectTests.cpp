@@ -238,31 +238,31 @@ namespace
             (void) parameter.getColumnCountProperty();
             const auto& annotations = parameter.getAnnotationsProperty();
             for (int i = 0; i < annotations.getCountProperty(); ++i)
-                (void) annotations[i].getNameProperty();
+                (void) annotations[i]->getNameProperty();
             const auto& elements = parameter.getElementsProperty();
             for (int i = 0; i < elements.getCountProperty(); ++i)
-                self(elements[i], depth + 1, self);
+                self(*elements[i], depth + 1, self);
             const auto& members = parameter.getStructureMembersProperty();
             for (int i = 0; i < members.getCountProperty(); ++i)
-                self(members[i], depth + 1, self);
+                self(*members[i], depth + 1, self);
         };
 
         auto& parameters = effect.getParametersProperty();
-        for (int i = 0; i < parameters.getCountProperty(); ++i) walk(parameters[i], 0, walk);
+        for (int i = 0; i < parameters.getCountProperty(); ++i) walk(*parameters[i], 0, walk);
 
         auto& techniques = effect.getTechniquesProperty();
         for (int i = 0; i < techniques.getCountProperty(); ++i)
         {
-            effect.setCurrentTechniqueProperty(&techniques[i]);
-            auto& passes = techniques[i].getPassesProperty();
-            for (int pass = 0; pass < passes.getCountProperty(); ++pass) passes[pass].Apply();
+            effect.setCurrentTechniqueProperty(techniques[i]);
+            auto& passes = techniques[i]->getPassesProperty();
+            for (int pass = 0; pass < passes.getCountProperty(); ++pass) passes[pass]->Apply();
         }
 
         std::unique_ptr<Effect> clone(effect.Clone());
         if (clone && clone->getCurrentTechniqueProperty() != nullptr)
         {
             auto& passes = clone->getCurrentTechniqueProperty()->getPassesProperty();
-            for (int pass = 0; pass < passes.getCountProperty(); ++pass) passes[pass].Apply();
+            for (int pass = 0; pass < passes.getCountProperty(); ++pass) passes[pass]->Apply();
         }
     }
 
@@ -480,7 +480,7 @@ namespace
             for (std::size_t i = 0; i < annotations->arrayValue.size(); ++i)
             {
                 EXPECT_EQ(parameter.getAnnotationsProperty()[static_cast<int>(i)]
-                              .getNameProperty(),
+                              ->getNameProperty(),
                           OracleString(annotations->arrayValue[i], "name"));
             }
         }
@@ -493,7 +493,7 @@ namespace
             for (std::size_t i = 0; i < elements->arrayValue.size(); ++i)
             {
                 ExpectParameterMatchesOracle(
-                    parameter.getElementsProperty()[static_cast<int>(i)],
+                    *parameter.getElementsProperty()[static_cast<int>(i)],
                     elements->arrayValue[i], path + "[" + std::to_string(i) + "]",
                     insideStructure);
             }
@@ -507,7 +507,7 @@ namespace
             for (std::size_t i = 0; i < members->arrayValue.size(); ++i)
             {
                 ExpectParameterMatchesOracle(
-                    parameter.getStructureMembersProperty()[static_cast<int>(i)],
+                    *parameter.getStructureMembersProperty()[static_cast<int>(i)],
                     members->arrayValue[i], path + "." + OracleString(
                         members->arrayValue[i], "name"), true);
             }
@@ -547,7 +547,7 @@ TEST(Fna3dCompiledEffectTest, StockFixtureReflectionMatchesTheFnaOracle)
         for (std::size_t i = 0; i < parameters->arrayValue.size(); ++i)
         {
             ExpectParameterMatchesOracle(
-                effect.getParametersProperty()[static_cast<int>(i)],
+                *effect.getParametersProperty()[static_cast<int>(i)],
                 parameters->arrayValue[i], OracleString(parameters->arrayValue[i], "name"));
         }
 
@@ -558,16 +558,17 @@ TEST(Fna3dCompiledEffectTest, StockFixtureReflectionMatchesTheFnaOracle)
         for (std::size_t t = 0; t < techniques->arrayValue.size(); ++t)
         {
             const JsonValue& expectedTechnique = techniques->arrayValue[t];
-            auto& technique = effect.getTechniquesProperty()[static_cast<int>(t)];
-            EXPECT_EQ(technique.getNameProperty(), OracleString(expectedTechnique, "name"));
+            EffectTechnique* technique = effect.getTechniquesProperty()[static_cast<int>(t)];
+            ASSERT_NE(technique, nullptr);
+            EXPECT_EQ(technique->getNameProperty(), OracleString(expectedTechnique, "name"));
 
             const JsonValue* passes = expectedTechnique.FindMember("passes");
             ASSERT_NE(passes, nullptr);
-            ASSERT_EQ(technique.getPassesProperty().getCountProperty(),
+            ASSERT_EQ(technique->getPassesProperty().getCountProperty(),
                       static_cast<int>(passes->arrayValue.size()));
             for (std::size_t p = 0; p < passes->arrayValue.size(); ++p)
             {
-                EXPECT_EQ(technique.getPassesProperty()[static_cast<int>(p)].getNameProperty(),
+                EXPECT_EQ(technique->getPassesProperty()[static_cast<int>(p)]->getNameProperty(),
                           OracleString(passes->arrayValue[p], "name"));
             }
         }
@@ -606,7 +607,7 @@ TEST(Fna3dCompiledEffectTest, CompilerProducedFixtureAppliesItsStatesAndSamplers
     // P0 binds the pixel shader that actually samples FxSampler, so this is the pass whose
     // sampler register the Effect Framework reports -- the states below travel with the shader
     // that uses the sampler, not with the effect as a whole.
-    technique->getPassesProperty()[0].Apply();
+    technique->getPassesProperty()[0]->Apply();
     const SamplerState& sampler = device.getSamplerStatesProperty()[0];
     EXPECT_EQ(sampler.getFilterProperty(), TextureFilter::MinPointMagLinearMipPoint);
     EXPECT_EQ(sampler.getAddressUProperty(), TextureAddressMode::Mirror);
@@ -614,7 +615,7 @@ TEST(Fna3dCompiledEffectTest, CompilerProducedFixtureAppliesItsStatesAndSamplers
     EXPECT_EQ(sampler.getMaxAnisotropyProperty(), 8);
     EXPECT_EQ(device.getTexturesProperty()[0], &texture);
 
-    technique->getPassesProperty()[1].Apply();
+    technique->getPassesProperty()[1]->Apply();
 
     // The render states the source declares on StatePass.
     const DepthStencilState& depth = device.getDepthStencilStateProperty();
@@ -810,7 +811,7 @@ TEST(Fna3dCompiledEffectTest, SyntheticFixtureReflectsAnnotationsTechniquesAndEx
     ASSERT_EQ(weightValues.size(), 2u);
     EXPECT_FLOAT_EQ(weightValues[0], 0.2f);
     EXPECT_FLOAT_EQ(weightValues[1], 0.8f);
-    weights->getElementsProperty()[1].SetValue(0.6f);
+    weights->getElementsProperty()[1]->SetValue(0.6f);
     EXPECT_FLOAT_EQ(weights->GetValueSingleArray(2)[1], 0.6f);
 
     auto* lighting = effect.getParametersProperty()["Lighting"];
@@ -835,29 +836,29 @@ TEST(Fna3dCompiledEffectTest, SyntheticFixtureReflectsAnnotationsTechniquesAndEx
     ASSERT_EQ(thresholdValues.size(), 2u);
     EXPECT_FLOAT_EQ(thresholdValues[0], 0.9f);
     EXPECT_FLOAT_EQ(thresholdValues[1], 1.0f);
-    thresholds->getElementsProperty()[1].SetValue(1.25f);
+    thresholds->getElementsProperty()[1]->SetValue(1.25f);
     EXPECT_FLOAT_EQ(thresholds->GetValueSingleArray(2)[1], 1.25f);
 
     auto& techniques = effect.getTechniquesProperty();
     ASSERT_EQ(techniques.getCountProperty(), 2);
-    EXPECT_EQ(techniques[0].getNameProperty(), "FirstTechnique");
-    EXPECT_EQ(techniques[1].getNameProperty(), "SecondTechnique");
-    const auto* quality = techniques[0].getAnnotationsProperty()["Quality"];
+    EXPECT_EQ(techniques[0]->getNameProperty(), "FirstTechnique");
+    EXPECT_EQ(techniques[1]->getNameProperty(), "SecondTechnique");
+    const auto* quality = techniques[0]->getAnnotationsProperty()["Quality"];
     ASSERT_NE(quality, nullptr);
     EXPECT_EQ(quality->GetValueInt32(), 7);
-    ASSERT_EQ(techniques[0].getPassesProperty().getCountProperty(), 2);
-    ASSERT_EQ(techniques[1].getPassesProperty().getCountProperty(), 1);
-    EXPECT_EQ(techniques[0].getPassesProperty()[0].getNameProperty(), "P0");
-    EXPECT_EQ(techniques[0].getPassesProperty()[1].getNameProperty(), "StatePass");
-    const auto* tag = techniques[0].getPassesProperty()[1].getAnnotationsProperty()["PassTag"];
+    ASSERT_EQ(techniques[0]->getPassesProperty().getCountProperty(), 2);
+    ASSERT_EQ(techniques[1]->getPassesProperty().getCountProperty(), 1);
+    EXPECT_EQ(techniques[0]->getPassesProperty()[0]->getNameProperty(), "P0");
+    EXPECT_EQ(techniques[0]->getPassesProperty()[1]->getNameProperty(), "StatePass");
+    const auto* tag = techniques[0]->getPassesProperty()[1]->getAnnotationsProperty()["PassTag"];
     ASSERT_NE(tag, nullptr);
     EXPECT_EQ(tag->GetValueInt32(), 3);
 
-    EXPECT_NO_THROW(techniques[0].getPassesProperty()[0].Apply());
-    EXPECT_NO_THROW(techniques[0].getPassesProperty()[1].Apply());
-    EXPECT_THROW(techniques[1].getPassesProperty()[0].Apply(), InvalidOperationException);
-    effect.setCurrentTechniqueProperty(&techniques[1]);
-    EXPECT_NO_THROW(techniques[1].getPassesProperty()[0].Apply());
+    EXPECT_NO_THROW(techniques[0]->getPassesProperty()[0]->Apply());
+    EXPECT_NO_THROW(techniques[0]->getPassesProperty()[1]->Apply());
+    EXPECT_THROW(techniques[1]->getPassesProperty()[0]->Apply(), InvalidOperationException);
+    effect.setCurrentTechniqueProperty(techniques[1]);
+    EXPECT_NO_THROW(techniques[1]->getPassesProperty()[0]->Apply());
 
     std::unique_ptr<Effect> clone(effect.Clone());
     ASSERT_NE(clone, nullptr);
@@ -911,8 +912,8 @@ TEST(Fna3dCompiledEffectTest, SyntheticFixtureAcceptsEveryFnaRenderStateToken)
 
     GraphicsDevice device;
     Effect effect(device, BuildSyntheticConformanceEffect(states));
-    ASSERT_EQ(effect.getTechniquesProperty()[0].getPassesProperty().getCountProperty(), 2);
-    EXPECT_NO_THROW(effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply());
+    ASSERT_EQ(effect.getTechniquesProperty()[0]->getPassesProperty().getCountProperty(), 2);
+    EXPECT_NO_THROW(effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply());
 }
 
 namespace
@@ -927,7 +928,7 @@ namespace
         options.samplerStates = states;
         options.samplerRegister = samplerRegister;
         Effect effect(device, BuildSyntheticEffect(options));
-        effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
         return device.getSamplerStatesProperty()[static_cast<int>(samplerRegister)];
     }
 }
@@ -968,9 +969,9 @@ TEST(Fna3dCompiledEffectTest, ClonedSamplerEffectKeepsItsOwnTextureBinding)
     std::unique_ptr<Effect> clone(effect.Clone());
     clone->getParametersProperty()["FxTexture"]->SetValue(&second);
 
-    effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+    effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
     EXPECT_EQ(device.getTexturesProperty()[0], &first);
-    clone->getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+    clone->getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
     EXPECT_EQ(device.getTexturesProperty()[0], &second);
 }
 
@@ -985,7 +986,7 @@ TEST(Fna3dCompiledEffectTest, SyntheticBlendFactorStateMatchesFnaByteOrderingInP
     shader.getParametersProperty()["DiffuseColor"]->SetValue(
         Vector4(1.0f, 1.0f, 1.0f, 1.0f));
     shader.getParametersProperty()["ShaderIndex"]->SetValue(3);
-    shader.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply();
+    shader.getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply();
 
     const std::vector<SyntheticRenderState> states = {
         {MOJOSHADER_RS_ZENABLE, MOJOSHADER_ZB_FALSE},
@@ -997,7 +998,7 @@ TEST(Fna3dCompiledEffectTest, SyntheticBlendFactorStateMatchesFnaByteOrderingInP
         {MOJOSHADER_RS_BLENDOP, MOJOSHADER_BLENDOP_ADD},
     };
     Effect stateEffect(device, BuildSyntheticConformanceEffect(states));
-    stateEffect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+    stateEffect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
 
     device.Clear(Color::Black);
     const VertexPositionColor vertices[6] = {
@@ -1026,7 +1027,7 @@ TEST(Fna3dCompiledEffectTest, SyntheticFixtureRejectsUnknownRenderStateTransacti
     Effect effect(device, BuildSyntheticConformanceEffect({{177u, 0u}}));
     try
     {
-        effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
         FAIL() << "an unknown Effect Framework render state must never be ignored";
     }
     catch (const std::runtime_error& error)
@@ -1102,7 +1103,7 @@ TEST(Fna3dCompiledEffectTest, ParsesAndAppliesEveryProvenanceTrackedStockFixture
         ASSERT_GT(effect.getParametersProperty().getCountProperty(), 0);
         ASSERT_NE(effect.getCurrentTechniqueProperty(), nullptr);
         ASSERT_GT(effect.getCurrentTechniqueProperty()->getPassesProperty().getCountProperty(), 0);
-        EXPECT_NO_THROW(effect.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply());
+        EXPECT_NO_THROW(effect.getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply());
     }
 }
 
@@ -1117,14 +1118,14 @@ TEST(Fna3dCompiledEffectTest, ReflectsAndAppliesRealXnaEffectBytecode)
     Effect effect(device, bytes);
 
     ASSERT_EQ(effect.getTechniquesProperty().getCountProperty(), 1);
-    ASSERT_EQ(effect.getTechniquesProperty()[0].getPassesProperty().getCountProperty(), 1);
+    ASSERT_EQ(effect.getTechniquesProperty()[0]->getPassesProperty().getCountProperty(), 1);
     EXPECT_GT(effect.getParametersProperty().getCountProperty(), 0);
 
     auto* worldViewProjection = effect.getParametersProperty()["WorldViewProj"];
     ASSERT_NE(worldViewProjection, nullptr);
     const Matrix value = Matrix::CreateTranslation(7.0f, 11.0f, 13.0f);
     worldViewProjection->SetValue(value);
-    effect.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply();
+    effect.getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply();
     EXPECT_EQ(worldViewProjection->GetValueMatrix(), value);
 }
 
@@ -1148,12 +1149,12 @@ TEST(Fna3dCompiledEffectTest, MatrixArrayElementsSharePaddedTopLevelStorage)
     EXPECT_EQ(values[1], second);
 
     const Matrix replacement = Matrix::CreateTranslation(11.0f, 13.0f, 17.0f);
-    bones->getElementsProperty()[1].SetValue(replacement);
+    bones->getElementsProperty()[1]->SetValue(replacement);
     values = bones->GetValueMatrixArray(2);
     ASSERT_EQ(values.size(), 2u);
     EXPECT_EQ(values[0], first);
     EXPECT_EQ(values[1], replacement);
-    EXPECT_NO_THROW(effect.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply());
+    EXPECT_NO_THROW(effect.getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply());
 }
 
 TEST(Fna3dCompiledEffectTest, CloneHasIndependentParameterStorageAndNativeEffect)
@@ -1176,7 +1177,7 @@ TEST(Fna3dCompiledEffectTest, CloneHasIndependentParameterStorageAndNativeEffect
 
     cloneParameter->SetValue(Microsoft::Xna::Framework::Vector3(1.0f, 0.0f, 0.0f));
     EXPECT_NE(cloneParameter->GetValueVector3(), originalParameter->GetValueVector3());
-    EXPECT_NO_THROW(clone->getCurrentTechniqueProperty()->getPassesProperty()[0].Apply());
+    EXPECT_NO_THROW(clone->getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply());
 }
 
 TEST(Fna3dCompiledEffectTest, RepeatedClonesApplyAndDisposeIndependently)
@@ -1192,11 +1193,11 @@ TEST(Fna3dCompiledEffectTest, RepeatedClonesApplyAndDisposeIndependently)
         clone->getParametersProperty()["DiffuseColor"]->SetValue(
             Microsoft::Xna::Framework::Vector3(
                 static_cast<float>(i) / 31.0f, 0.5f, 1.0f));
-        EXPECT_NO_THROW(clone->getCurrentTechniqueProperty()->getPassesProperty()[0].Apply());
+        EXPECT_NO_THROW(clone->getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply());
         clone->Dispose();
         EXPECT_TRUE(clone->getIsDisposedProperty());
     }
-    EXPECT_NO_THROW(original.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply());
+    EXPECT_NO_THROW(original.getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply());
 }
 
 TEST(Fna3dCompiledEffectTest, DisposingSelectedEffectPreventsStaleDraw)
@@ -1206,7 +1207,7 @@ TEST(Fna3dCompiledEffectTest, DisposingSelectedEffectPreventsStaleDraw)
 
     GraphicsDevice device;
     Effect effect(device, LoadStockEffect("BasicEffect.fxb"));
-    effect.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply();
+    effect.getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply();
     effect.Dispose();
 
     const VertexPositionColor triangle[3] = {
@@ -1229,7 +1230,7 @@ TEST(Fna3dCompiledEffectTest, DeviceDisposalReleasesCompiledEffectBeforeRenderer
 {
     GraphicsDevice device;
     auto effect = std::make_unique<Effect>(device, LoadStockEffect("BasicEffect.fxb"));
-    effect->getCurrentTechniqueProperty()->getPassesProperty()[0].Apply();
+    effect->getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply();
 
     EXPECT_NO_THROW(device.Dispose());
     EXPECT_TRUE(effect->getIsDisposedProperty());
@@ -1246,7 +1247,7 @@ TEST(Fna3dCompiledEffectTest, CompiledEffectSurvivesDeviceReset)
     effect.getParametersProperty()["WorldViewProj"]->SetValue(Matrix::getIdentityProperty());
     effect.getParametersProperty()["DiffuseColor"]->SetValue(Vector4(0.0f, 1.0f, 0.0f, 1.0f));
     effect.getParametersProperty()["ShaderIndex"]->SetValue(3);
-    effect.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply();
+    effect.getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply();
 
     PresentationParameters parameters = device.getPresentationParametersProperty().Clone();
     parameters.setBackBufferWidthProperty(
@@ -1264,7 +1265,7 @@ TEST(Fna3dCompiledEffectTest, CompiledEffectSurvivesDeviceReset)
     device.setRasterizerStateProperty(RasterizerState::CullNone);
     device.setDepthStencilStateProperty(DepthStencilState::None);
     device.Clear(Color::Black);
-    effect.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply();
+    effect.getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply();
 
     const VertexPositionColor vertices[6] = {
         { Vector3(-1.0f, 1.0f, 0.5f), Color::White },
@@ -1307,15 +1308,15 @@ TEST(Fna3dCompiledEffectTest, CloneChainsStayIndependentInAnyDisposalOrder)
         EXPECT_EQ(chain[generation]->getParametersProperty()["ShaderIndex"]->GetValueInt32(),
                   static_cast<int>(generation) + 2);
         EXPECT_NO_THROW(chain[generation]->getCurrentTechniqueProperty()
-                            ->getPassesProperty()[0].Apply());
+                            ->getPassesProperty()[0]->Apply());
     }
 
     // Disposing the middle of the chain must not disturb either end.
     chain[1].reset();
-    EXPECT_NO_THROW(root->getCurrentTechniqueProperty()->getPassesProperty()[0].Apply());
-    EXPECT_NO_THROW(chain[3]->getCurrentTechniqueProperty()->getPassesProperty()[0].Apply());
+    EXPECT_NO_THROW(root->getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply());
+    EXPECT_NO_THROW(chain[3]->getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply());
     root.reset();
-    EXPECT_NO_THROW(chain[3]->getCurrentTechniqueProperty()->getPassesProperty()[0].Apply());
+    EXPECT_NO_THROW(chain[3]->getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply());
     EXPECT_EQ(chain[3]->getParametersProperty()["ShaderIndex"]->GetValueInt32(), 5);
 }
 
@@ -1323,16 +1324,16 @@ TEST(Fna3dCompiledEffectTest, DisposedCompiledEffectRejectsEveryLaterApply)
 {
     GraphicsDevice device;
     Effect effect(device, LoadStockEffect("BasicEffect.fxb"));
-    effect.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply();
+    effect.getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply();
     effect.Dispose();
 
     EXPECT_THROW(effect.Apply(), System::ObjectDisposedException);
-    EXPECT_THROW(effect.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply(),
+    EXPECT_THROW(effect.getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply(),
                  System::ObjectDisposedException);
     // Disposal is idempotent, and the device stays usable for a fresh effect.
     EXPECT_NO_THROW(effect.Dispose());
     Effect replacement(device, LoadStockEffect("BasicEffect.fxb"));
-    EXPECT_NO_THROW(replacement.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply());
+    EXPECT_NO_THROW(replacement.getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply());
 }
 
 TEST(Fna3dCompiledEffectTest, RepeatedNativeConstructionFailureLeavesTheDeviceUsable)
@@ -1362,7 +1363,7 @@ TEST(Fna3dCompiledEffectTest, RepeatedNativeConstructionFailureLeavesTheDeviceUs
     SyntheticEffectOptions valid;
     valid.includeSampler = true;
     Effect effect(device, BuildSyntheticEffect(valid));
-    EXPECT_NO_THROW(effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply());
+    EXPECT_NO_THROW(effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply());
 }
 
 TEST(Fna3dCompiledEffectTest, RepeatedCreateApplyDisposeCyclesStayStable)
@@ -1375,15 +1376,15 @@ TEST(Fna3dCompiledEffectTest, RepeatedCreateApplyDisposeCyclesStayStable)
         Effect effect(device, bytes);
         effect.getParametersProperty()["MatrixTransform"]->SetValue(
             Matrix::getIdentityProperty());
-        effect.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply();
+        effect.getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply();
         std::unique_ptr<Effect> clone(effect.Clone());
-        clone->getCurrentTechniqueProperty()->getPassesProperty()[0].Apply();
+        clone->getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply();
         // The clone is destroyed first on even cycles and last on odd ones.
         if ((cycle & 1) == 0) clone.reset();
         effect.Dispose();
     }
     Effect survivor(device, bytes);
-    EXPECT_NO_THROW(survivor.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply());
+    EXPECT_NO_THROW(survivor.getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply());
 }
 
 TEST(Fna3dCompiledEffectTest, SelectedCompiledEffectUnlocksInstancedDrawing)
@@ -1425,7 +1426,7 @@ TEST(Fna3dCompiledEffectTest, SelectedCompiledEffectUnlocksInstancedDrawing)
     compiled.getParametersProperty()["WorldViewProj"]->SetValue(Matrix::getIdentityProperty());
     compiled.getParametersProperty()["DiffuseColor"]->SetValue(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
     compiled.getParametersProperty()["ShaderIndex"]->SetValue(3);
-    compiled.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply();
+    compiled.getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply();
     EXPECT_NO_THROW(
         device.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0, 3, 0, 1, 2));
 }
@@ -1458,7 +1459,7 @@ TEST(Fna3dCompiledEffectTest, ContentManagerLoadsXnbEffectAndRendersIt)
     device.setRasterizerStateProperty(RasterizerState::CullNone);
     device.setDepthStencilStateProperty(DepthStencilState::None);
     device.Clear(Color::Black);
-    effect->getCurrentTechniqueProperty()->getPassesProperty()[0].Apply();
+    effect->getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply();
 
     const VertexPositionColor vertices[6] = {
         { Vector3(-1.0f, 1.0f, 0.5f), Color(40, 80, 230, 255) },
@@ -1536,7 +1537,7 @@ TEST(Fna3dCompiledEffectTest, CompiledBasicEffectRendersThroughDrawUserPrimitive
     device.setRasterizerStateProperty(RasterizerState::CullNone);
     device.setDepthStencilStateProperty(DepthStencilState::None);
     device.Clear(Color::Black);
-    effect.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply();
+    effect.getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply();
 
     const VertexPositionColor vertices[6] = {
         { Vector3(-1.0f, 1.0f, 0.5f), Color(220, 30, 40, 255) },
@@ -1572,7 +1573,7 @@ TEST(Fna3dCompiledEffectTest, CompiledSpriteEffectRendersThroughDrawUserPrimitiv
         device, 1, 1, std::vector<std::uint8_t>{255, 255, 255, 255});
     parameters["MatrixTransform"]->SetValue(Matrix::getIdentityProperty());
     parameters["Texture"]->SetValue(&white);
-    effect.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply();
+    effect.getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply();
     device.setRasterizerStateProperty(RasterizerState::CullNone);
     device.setDepthStencilStateProperty(DepthStencilState::None);
     device.Clear(Color::Black);

@@ -184,11 +184,13 @@ namespace CNA::TestSupport
 
         auto& parameters = effect.getParametersProperty();
         ASSERT_EQ(parameters.getCountProperty(), 5);
-        EXPECT_EQ(parameters[0].getNameProperty(), "Gain");
-        EXPECT_EQ(parameters[1].getNameProperty(), "Tint");
-        EXPECT_EQ(parameters[2].getNameProperty(), "Lighting");
-        EXPECT_EQ(parameters[3].getNameProperty(), "Transform");
-        EXPECT_EQ(parameters[4].getNameProperty(), "Weights");
+        EXPECT_EQ(parameters[-1], nullptr);
+        EXPECT_EQ(parameters[5], nullptr);
+        EXPECT_EQ(parameters[0]->getNameProperty(), "Gain");
+        EXPECT_EQ(parameters[1]->getNameProperty(), "Tint");
+        EXPECT_EQ(parameters[2]->getNameProperty(), "Lighting");
+        EXPECT_EQ(parameters[3]->getNameProperty(), "Transform");
+        EXPECT_EQ(parameters[4]->getNameProperty(), "Weights");
 
         ASSERT_NE(parameters["Gain"], nullptr);
         EXPECT_EQ(parameters["Gain"]->getSemanticProperty(), "SCALAR");
@@ -216,13 +218,17 @@ namespace CNA::TestSupport
                   EffectParameterClass::Struct);
         const auto& members = parameters["Lighting"]->getStructureMembersProperty();
         ASSERT_EQ(members.getCountProperty(), 3);
-        EXPECT_EQ(members[0].getNameProperty(), "Intensity");
-        EXPECT_EQ(members[1].getNameProperty(), "Direction");
-        EXPECT_EQ(members[2].getNameProperty(), "Thresholds");
+        EXPECT_EQ(members[-1], nullptr);
+        EXPECT_EQ(members[3], nullptr);
+        EXPECT_EQ(members[0]->getNameProperty(), "Intensity");
+        EXPECT_EQ(members[1]->getNameProperty(), "Direction");
+        EXPECT_EQ(members[2]->getNameProperty(), "Thresholds");
 
         const auto& annotations = parameters["Gain"]->getAnnotationsProperty();
         ASSERT_EQ(annotations.getCountProperty(), 1);
-        EXPECT_EQ(annotations[0].getNameProperty(), "Visible");
+        EXPECT_EQ(annotations[-1], nullptr);
+        EXPECT_EQ(annotations[1], nullptr);
+        EXPECT_EQ(annotations[0]->getNameProperty(), "Visible");
     }
 
     /**
@@ -234,25 +240,29 @@ namespace CNA::TestSupport
 
         auto& techniques = effect.getTechniquesProperty();
         ASSERT_EQ(techniques.getCountProperty(), 2);
-        EXPECT_EQ(techniques[0].getNameProperty(), "FirstTechnique");
-        EXPECT_EQ(techniques[1].getNameProperty(), "SecondTechnique");
-        EXPECT_EQ(effect.getCurrentTechniqueProperty(), &techniques[0])
+        EXPECT_EQ(techniques[-1], nullptr);
+        EXPECT_EQ(techniques[2], nullptr);
+        EXPECT_EQ(techniques[0]->getNameProperty(), "FirstTechnique");
+        EXPECT_EQ(techniques[1]->getNameProperty(), "SecondTechnique");
+        EXPECT_EQ(effect.getCurrentTechniqueProperty(), techniques[0])
             << "construction must select the first reflected technique";
 
-        ASSERT_EQ(techniques[0].getAnnotationsProperty().getCountProperty(), 1);
-        EXPECT_EQ(techniques[0].getAnnotationsProperty()[0].getNameProperty(), "Quality");
+        ASSERT_EQ(techniques[0]->getAnnotationsProperty().getCountProperty(), 1);
+        EXPECT_EQ(techniques[0]->getAnnotationsProperty()[0]->getNameProperty(), "Quality");
 
-        auto& passes = techniques[0].getPassesProperty();
+        auto& passes = techniques[0]->getPassesProperty();
         ASSERT_EQ(passes.getCountProperty(), 2);
-        EXPECT_EQ(passes[0].getNameProperty(), "P0");
-        EXPECT_EQ(passes[1].getNameProperty(), "StatePass");
-        ASSERT_EQ(techniques[1].getPassesProperty().getCountProperty(), 1);
-        EXPECT_EQ(techniques[1].getPassesProperty()[0].getNameProperty(), "P1");
+        EXPECT_EQ(passes[-1], nullptr);
+        EXPECT_EQ(passes[2], nullptr);
+        EXPECT_EQ(passes[0]->getNameProperty(), "P0");
+        EXPECT_EQ(passes[1]->getNameProperty(), "StatePass");
+        ASSERT_EQ(techniques[1]->getPassesProperty().getCountProperty(), 1);
+        EXPECT_EQ(techniques[1]->getPassesProperty()[0]->getNameProperty(), "P1");
 
         // Each pass applies itself, not pass zero, and selecting the second technique works.
-        EXPECT_NO_THROW(passes[1].Apply());
-        effect.setCurrentTechniqueProperty(&techniques[1]);
-        EXPECT_NO_THROW(techniques[1].getPassesProperty()[0].Apply());
+        EXPECT_NO_THROW(passes[1]->Apply());
+        effect.setCurrentTechniqueProperty(techniques[1]);
+        EXPECT_NO_THROW(techniques[1]->getPassesProperty()[0]->Apply());
     }
 
     /**
@@ -280,7 +290,7 @@ namespace CNA::TestSupport
         };
 
         Effect effect(device, BuildSyntheticConformanceEffect(states));
-        effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
 
         const DepthStencilState& depth = device.getDepthStencilStateProperty();
         EXPECT_FALSE(depth.getDepthBufferEnableProperty());
@@ -322,7 +332,7 @@ namespace CNA::TestSupport
 
         Effect rasterizerOnly(device, BuildSyntheticConformanceEffect(
             {{Fx::RsFillMode, Fx::FillWireframe}}));
-        rasterizerOnly.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+        rasterizerOnly.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
 
         EXPECT_EQ(device.getBlendStateProperty().getColorSourceBlendProperty(),
                   BlendState::NonPremultiplied.getColorSourceBlendProperty());
@@ -351,7 +361,7 @@ namespace CNA::TestSupport
             options.samplerStates = states;
             options.samplerRegister = samplerRegister;
             Effect effect(device, BuildSyntheticEffect(options));
-            effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
             return device.getSamplerStatesProperty()[static_cast<int>(samplerRegister)];
         };
 
@@ -463,7 +473,7 @@ namespace CNA::TestSupport
         const Color pixels[4] = {Color::Red, Color::Red, Color::Red, Color::Red};
         texture.SetData(pixels, 4);
         parameters["FxTexture"]->SetValue(&texture);
-        effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
         EXPECT_EQ(device.getTexturesProperty()[0], &texture);
 
         // A pass that assigns no texture leaves the slot the game selected alone.
@@ -474,7 +484,7 @@ namespace CNA::TestSupport
         withoutTexture.includeSampler = true;
         withoutTexture.samplerStates = {{Fx::SampAddressV, Fx::AddressMirror}};
         Effect other(device, BuildSyntheticEffect(withoutTexture));
-        other.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+        other.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
         EXPECT_EQ(device.getTexturesProperty()[0], &selected);
     }
 
@@ -485,7 +495,7 @@ namespace CNA::TestSupport
     {
         Effect effect(device, BuildSyntheticConformanceEffect({}));
         effect.getParametersProperty()["Gain"]->SetValue(0.75f);
-        effect.setCurrentTechniqueProperty(&effect.getTechniquesProperty()[1]);
+        effect.setCurrentTechniqueProperty(effect.getTechniquesProperty()[1]);
 
         std::unique_ptr<Effect> clone(effect.Clone());
         ASSERT_NE(clone, nullptr);
@@ -501,9 +511,9 @@ namespace CNA::TestSupport
         EXPECT_FLOAT_EQ(effect.getParametersProperty()["Gain"]->GetValueSingle(), 0.75f)
             << "mutating a clone must not reach its source";
 
-        EXPECT_NO_THROW(clone->getCurrentTechniqueProperty()->getPassesProperty()[0].Apply());
+        EXPECT_NO_THROW(clone->getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply());
         clone.reset();
-        EXPECT_NO_THROW(effect.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply())
+        EXPECT_NO_THROW(effect.getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply())
             << "disposing a clone must leave its source usable";
     }
 
@@ -518,23 +528,23 @@ namespace CNA::TestSupport
         {
             SCOPED_TRACE("cycle " + std::to_string(cycle));
             Effect effect(device, bytes);
-            effect.getTechniquesProperty()[0].getPassesProperty()[0].Apply();
+            effect.getTechniquesProperty()[0]->getPassesProperty()[0]->Apply();
             std::unique_ptr<Effect> clone(effect.Clone());
-            clone->getTechniquesProperty()[0].getPassesProperty()[0].Apply();
+            clone->getTechniquesProperty()[0]->getPassesProperty()[0]->Apply();
             if ((cycle & 1) == 0) clone.reset();
             effect.Dispose();
         }
 
         Effect disposed(device, bytes);
-        disposed.getTechniquesProperty()[0].getPassesProperty()[0].Apply();
+        disposed.getTechniquesProperty()[0]->getPassesProperty()[0]->Apply();
         disposed.Dispose();
         EXPECT_THROW(disposed.Apply(), System::ObjectDisposedException);
-        EXPECT_THROW(disposed.getTechniquesProperty()[0].getPassesProperty()[0].Apply(),
+        EXPECT_THROW(disposed.getTechniquesProperty()[0]->getPassesProperty()[0]->Apply(),
                      System::ObjectDisposedException);
         EXPECT_NO_THROW(disposed.Dispose()) << "disposal must be idempotent";
 
         Effect replacement(device, bytes);
-        EXPECT_NO_THROW(replacement.getTechniquesProperty()[0].getPassesProperty()[0].Apply())
+        EXPECT_NO_THROW(replacement.getTechniquesProperty()[0]->getPassesProperty()[0]->Apply())
             << "the device must still build a fresh effect after a disposal";
     }
 
@@ -603,8 +613,8 @@ namespace CNA::TestSupport
         EXPECT_FLOAT_EQ(weights[1], 0.625f);
         auto& elements = parameters["Weights"]->getElementsProperty();
         ASSERT_EQ(elements.getCountProperty(), 2);
-        EXPECT_FLOAT_EQ(elements[1].GetValueSingle(), 0.625f);
-        elements[1].SetValue(0.875f);
+        EXPECT_FLOAT_EQ(elements[1]->GetValueSingle(), 0.625f);
+        elements[1]->SetValue(0.875f);
         EXPECT_FLOAT_EQ(parameters["Weights"]->GetValueSingleArray(2)[1], 0.875f)
             << "an element view writes into its parent's own storage, not a copy";
 
@@ -612,13 +622,13 @@ namespace CNA::TestSupport
         ASSERT_NE(parameters["Lighting"], nullptr);
         auto& members = parameters["Lighting"]->getStructureMembersProperty();
         ASSERT_EQ(members.getCountProperty(), 3);
-        members[0].SetValue(0.5f);
-        EXPECT_FLOAT_EQ(members[0].GetValueSingle(), 0.5f);
-        members[1].SetValue(Vector3(0.1f, 0.2f, 0.3f));
-        EXPECT_FLOAT_EQ(members[1].GetValueVector3().Y, 0.2f);
-        ASSERT_EQ(members[2].getElementsProperty().getCountProperty(), 2);
-        members[2].getElementsProperty()[1].SetValue(0.9f);
-        EXPECT_FLOAT_EQ(members[2].GetValueSingleArray(2)[1], 0.9f);
+        members[0]->SetValue(0.5f);
+        EXPECT_FLOAT_EQ(members[0]->GetValueSingle(), 0.5f);
+        members[1]->SetValue(Vector3(0.1f, 0.2f, 0.3f));
+        EXPECT_FLOAT_EQ(members[1]->GetValueVector3().Y, 0.2f);
+        ASSERT_EQ(members[2]->getElementsProperty().getCountProperty(), 2);
+        members[2]->getElementsProperty()[1]->SetValue(0.9f);
+        EXPECT_FLOAT_EQ(members[2]->GetValueSingleArray(2)[1], 0.9f);
 
         // Strings follow XNA 4.0's own EffectParameter.SetValue(string)/GetValueString(), which
         // reject a parameter whose reflected type is not String rather than silently succeeding.
@@ -685,12 +695,12 @@ namespace CNA::TestSupport
         EXPECT_NO_THROW((void) parameters["Gain"]->GetValueSingle());
         EXPECT_NO_THROW((void) parameters["Transform"]->GetValueMatrix());
         EXPECT_NO_THROW((void) parameters["Lighting"]->getStructureMembersProperty()[0]
-                                   .GetValueSingle())
+                                   ->GetValueSingle())
             << "a Struct parameter has real numeric storage and must not be caught by this guard";
 
         // Applying an effect that carries a string parameter must not try to upload it: a string
         // object's value storage is its object-table index, not text.
-        EXPECT_NO_THROW(stringEffect.getTechniquesProperty()[0].getPassesProperty()[0].Apply());
+        EXPECT_NO_THROW(stringEffect.getTechniquesProperty()[0]->getPassesProperty()[0]->Apply());
     }
 
     /**
@@ -710,7 +720,7 @@ namespace CNA::TestSupport
         ASSERT_NE(parameters["Tint"], nullptr);
         ASSERT_NE(parameters["Transform"], nullptr);
         parameters["Transform"]->SetValue(Matrix::getIdentityProperty());
-        EffectPass& pass = effect.getTechniquesProperty()[0].getPassesProperty()[1];
+        EffectPass& pass = *effect.getTechniquesProperty()[0]->getPassesProperty()[1];
 
         // A quad already in clip space, so the identity Transform passes it straight through.
         struct ClipVertex { float x, y, z; };
@@ -908,7 +918,7 @@ namespace CNA::TestSupport
             << "the multi-stream fixture declares the parameter its vertex shader scales by";
         parameters["Transform"]->SetValue(Matrix::getIdentityProperty());
         parameters["Tint"]->SetValue(Vector4(0.5f, 0.25f, 0.75f, 1.0f));
-        EffectPass& pass = effect.getTechniquesProperty()[0].getPassesProperty()[1];
+        EffectPass& pass = *effect.getTechniquesProperty()[0]->getPassesProperty()[1];
 
         struct PositionVertex { float x, y, z; };
         struct OffsetVertex { float x, y, z, w; };
@@ -1061,7 +1071,7 @@ namespace CNA::TestSupport
         parameters["Transform"]->SetValue(Matrix::getIdentityProperty());
         parameters["Tint"]->SetValue(Vector4(0.5f, 0.25f, 0.75f, 1.0f));
         parameters["StreamMix"]->SetValue(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
-        EffectPass& pass = effect.getTechniquesProperty()[0].getPassesProperty()[1];
+        EffectPass& pass = *effect.getTechniquesProperty()[0]->getPassesProperty()[1];
 
         struct PositionVertex { float x, y, z; };
         struct OffsetVertex { float x, y, z, w; };
@@ -1336,7 +1346,7 @@ namespace CNA::TestSupport
         parameters["Tint"]->SetValue(Vector4(1.0f, 0.0f, 0.0f, 0.5f));
         parameters["Transform"]->SetValue(Matrix::CreateOrthographicOffCenter(
             0.0f, static_cast<float>(kSize), static_cast<float>(kSize), 0.0f, -1.0f, 1.0f));
-        ASSERT_EQ(effect.getTechniquesProperty()[0].getPassesProperty().getCountProperty(), 2)
+        ASSERT_EQ(effect.getTechniquesProperty()[0]->getPassesProperty().getCountProperty(), 2)
             << "this contract needs a fixture whose current technique has two distinguishable passes";
 
         Texture2D sprite(device, 1, 1);
@@ -1736,7 +1746,7 @@ namespace CNA::TestSupport
         Effect effect(device, BuildSyntheticDrawableEffect());
         auto& parameters = effect.getParametersProperty();
         parameters["Transform"]->SetValue(Matrix::getIdentityProperty());
-        EffectPass& pass = effect.getTechniquesProperty()[0].getPassesProperty()[1];
+        EffectPass& pass = *effect.getTechniquesProperty()[0]->getPassesProperty()[1];
 
         struct ClipVertex { float x, y, z; };
         const VertexDeclaration declaration(static_cast<int>(sizeof(ClipVertex)), {
@@ -1834,7 +1844,7 @@ namespace CNA::TestSupport
             device.setRasterizerStateProperty(RasterizerState::CullNone);
             device.setDepthStencilStateProperty(DepthStencilState::None);
             device.setBlendStateProperty(BlendState::Opaque);
-            effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
             device.DrawUserPrimitives(PrimitiveType::TriangleList,
                                       static_cast<const void*>(quad), 0, 2, declaration);
             device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
@@ -1984,7 +1994,7 @@ namespace CNA::TestSupport
         for (int i = 0; i < 6; ++i)
             compiledQuad[i] = ClipVertex{corners[i].X, corners[i].Y, corners[i].Z};
         const int compiledRow = paintedRow([&] {
-            compiled.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+            compiled.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
             device.DrawUserPrimitives(PrimitiveType::TriangleList,
                                       static_cast<const void*>(compiledQuad), 0, 2, declaration);
         });
@@ -2164,7 +2174,7 @@ namespace CNA::TestSupport
             device.setRasterizerStateProperty(RasterizerState::CullNone);
             device.setDepthStencilStateProperty(DepthStencilState::None);
             device.setBlendStateProperty(BlendState::Opaque);
-            effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
             device.DrawUserPrimitives(PrimitiveType::TriangleList,
                                       static_cast<const void*>(quad), 0, 2, declaration);
             device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
@@ -2219,7 +2229,7 @@ namespace CNA::TestSupport
             parameters["Transform"]->SetValue(Matrix::getIdentityProperty());
             parameters["Tint"]->SetValue(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
             parameters["FxTexture"]->SetValue(&red);
-            EffectPass& pass = effect.getTechniquesProperty()[0].getPassesProperty()[1];
+            EffectPass& pass = *effect.getTechniquesProperty()[0]->getPassesProperty()[1];
 
             SamplingQuadVertex quad[6];
             FillSamplingQuad(quad, 0.5f, 0.5f);
@@ -2440,7 +2450,7 @@ namespace CNA::TestSupport
                 device.setRasterizerStateProperty(RasterizerState::CullNone);
                 device.setDepthStencilStateProperty(DepthStencilState::None);
                 device.setBlendStateProperty(BlendState::Opaque);
-                effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+                effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
                 device.DrawUserPrimitives(PrimitiveType::TriangleList,
                                           static_cast<const void*>(ramp), 0, 2, declaration);
                 device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
@@ -2564,7 +2574,7 @@ namespace CNA::TestSupport
             device.setRasterizerStateProperty(RasterizerState::CullNone);
             device.setDepthStencilStateProperty(DepthStencilState::None);
             device.setBlendStateProperty(BlendState::Opaque);
-            effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
             device.DrawUserPrimitives(PrimitiveType::TriangleList,
                                       static_cast<const void*>(texturedQuad), 0, 2, declaration);
             device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
@@ -2671,7 +2681,7 @@ namespace CNA::TestSupport
             device.setRasterizerStateProperty(RasterizerState::CullNone);
             device.setDepthStencilStateProperty(DepthStencilState::None);
             device.setBlendStateProperty(BlendState::Opaque);
-            effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
             device.DrawUserPrimitives(PrimitiveType::TriangleList,
                                       static_cast<const void*>(quad), 0, 2, declaration);
             device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
@@ -2788,7 +2798,7 @@ namespace CNA::TestSupport
             device.setBlendStateProperty(BlendState::Opaque);
             try
             {
-                effect->getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+                effect->getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
                 device.DrawUserPrimitives(PrimitiveType::TriangleList,
                                           static_cast<const void*>(quad), 0, 2, declaration);
             }
@@ -2962,21 +2972,22 @@ namespace CNA::TestSupport
             EXPECT_NEAR(actual.getBProperty(), expected.getBProperty(), 3);
         };
 
-        auto& firstTechnique = effect.getTechniquesProperty()[0];
-        ASSERT_EQ(firstTechnique.getPassesProperty().getCountProperty(), 2);
-        expectColor(drawWithPass(firstTechnique.getPassesProperty()[0]), rotated,
+        auto* firstTechnique = effect.getTechniquesProperty()[0];
+        ASSERT_NE(firstTechnique, nullptr);
+        ASSERT_EQ(firstTechnique->getPassesProperty().getCountProperty(), 2);
+        expectColor(drawWithPass(*firstTechnique->getPassesProperty()[0]), rotated,
                     "pass 0 must draw with pass 0's own program");
-        expectColor(drawWithPass(firstTechnique.getPassesProperty()[1]), straight,
+        expectColor(drawWithPass(*firstTechnique->getPassesProperty()[1]), straight,
                     "pass 1 must draw with pass 1's own program");
         // Back again: a backend that cached the first pass it ever saw fails here.
-        expectColor(drawWithPass(firstTechnique.getPassesProperty()[0]), rotated,
+        expectColor(drawWithPass(*firstTechnique->getPassesProperty()[0]), rotated,
                     "re-selecting pass 0 must go back to pass 0's program");
 
         // Another technique's pass is a third selection, resolved by name rather than by ordinal.
-        effect.setCurrentTechniqueProperty(&effect.getTechniquesProperty()[1]);
+        effect.setCurrentTechniqueProperty(effect.getTechniquesProperty()[1]);
         auto& secondTechnique = *effect.getCurrentTechniqueProperty();
         ASSERT_EQ(secondTechnique.getNameProperty(), "SecondTechnique");
-        expectColor(drawWithPass(secondTechnique.getPassesProperty()[0]), straight,
+        expectColor(drawWithPass(*secondTechnique.getPassesProperty()[0]), straight,
                     "SecondTechnique's only pass carries the unrotated program");
     }
 

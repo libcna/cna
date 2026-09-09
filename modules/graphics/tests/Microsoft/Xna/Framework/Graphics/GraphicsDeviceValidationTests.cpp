@@ -771,7 +771,7 @@ TEST(GraphicsDeviceValidationTest, SetVertexBuffers_EmptyClearsSingularBinding)
     gd.SetVertexBuffer(&vertexBuffer);
     gd.SetVertexBuffers({});
     Microsoft::Xna::Framework::Graphics::BasicEffect effect(gd);
-    effect.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply();
+    effect.getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply();
 
     try
     {
