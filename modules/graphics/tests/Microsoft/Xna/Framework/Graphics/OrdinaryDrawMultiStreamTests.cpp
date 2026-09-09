@@ -103,6 +103,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/NotSupportedException.hpp"
+#include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 
 using CNA::GraphicsCapability;
@@ -1594,22 +1595,22 @@ TEST_F(OrdinaryDrawMultiStreamTest, UnsupportedRendererRejectsMultiStreamDetermi
 // contract, not a pixel one. XNA's SetVertexBuffers rejects a null binding outright, so a
 // half-described vertex can never reach a draw in the first place.
 // ---------------------------------------------------------------------------
-TEST_F(OrdinaryDrawMultiStreamTest, NullSecondaryStreamBindingIsAcceptedAsUnusedSlot)
+TEST_F(OrdinaryDrawMultiStreamTest, NullSecondaryStreamBindingRejectsAndKeepsProcessedPrefix)
 {
     VertexBuffer positionBuffer(
         device, PositionOnlyDeclaration(), kBufferElementCount, BufferUsage::None);
 
-    // FNA performs no per-element null check in SetVertexBuffers: a null-buffer binding is a
-    // legal unused slot (FNA itself stores VertexBufferBinding.None), and the draw dispatch
-    // skips it. REMED-GFX-222 removed the bind-time rejection this test formerly asserted.
-    EXPECT_NO_THROW(device.SetVertexBuffers({
-        VertexBufferBinding(&positionBuffer, kPrefixOffset, 0),
-        VertexBufferBinding(),
-    }));
+    // Microsoft XNA rejects a null entry and its finally block retains only the valid prefix
+    // applied before the failure. FNA's acceptance diverges and later dereferences the null slot.
+    EXPECT_THROW(
+        device.SetVertexBuffers({
+            VertexBufferBinding(&positionBuffer, kPrefixOffset, 0),
+            VertexBufferBinding(),
+        }),
+        System::ArgumentException);
     const auto bound = device.GetVertexBuffers();
-    ASSERT_EQ(bound.size(), 2u);
+    ASSERT_EQ(bound.size(), 1u);
     EXPECT_EQ(bound[0].getVertexBufferProperty(), &positionBuffer);
-    EXPECT_EQ(bound[1].getVertexBufferProperty(), nullptr);
 }
 
 // ---------------------------------------------------------------------------
@@ -1648,5 +1649,5 @@ TEST_F(OrdinaryDrawMultiStreamTest, BindingStateKeepsEverySlotsOwnBufferAndOffse
         tooMany.emplace_back(&positionBuffer, 0, 0);
     EXPECT_THROW(
         device.SetVertexBuffers(tooMany),
-        System::ArgumentOutOfRangeException);
+        System::NotSupportedException);
 }

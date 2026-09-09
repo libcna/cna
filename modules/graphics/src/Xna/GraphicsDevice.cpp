@@ -4573,20 +4573,23 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::SetVertexBuffer(const VertexBuffer* vertexBuffer, int vertexOffset)
     {
         ThrowIfDisposed();
+        if (vertexBuffer == nullptr)
+        {
+            currentVertexBuffer_ = nullptr;
+            currentVertexBuffers_.clear();
+            return;
+        }
         System::ArgumentOutOfRangeException::ThrowIfNegative(vertexOffset, "vertexOffset");
-        if (vertexBuffer && vertexBuffer->getIsDisposedProperty())
+        if (vertexBuffer->getIsDisposedProperty())
             throw System::ObjectDisposedException(vertexBuffer->getNameProperty());
-        if (vertexBuffer && vertexBuffer->getGraphicsDeviceProperty() != this)
+        if (vertexBuffer->getGraphicsDeviceProperty() != this)
             throw System::InvalidOperationException(
                 "SetVertexBuffer: the vertex buffer belongs to a different GraphicsDevice.");
 
         currentVertexBuffer_ = vertexBuffer;
         currentVertexBuffers_.clear();
-        if (vertexBuffer != nullptr)
-        {
-            currentVertexBuffers_.emplace_back(
-                const_cast<VertexBuffer*>(vertexBuffer), vertexOffset, 0);
-        }
+        currentVertexBuffers_.emplace_back(
+            const_cast<VertexBuffer*>(vertexBuffer), vertexOffset, 0);
     }
 
     void GraphicsDevice::SetVertexBuffers(const std::vector<VertexBufferBinding>& vertexBuffers)
@@ -4594,25 +4597,46 @@ namespace Microsoft::Xna::Framework::Graphics
         ThrowIfDisposed();
         constexpr int kMaxVertexBufferBindings = 16; // XNA4 HiDef spec limit
         if (static_cast<int>(vertexBuffers.size()) > kMaxVertexBufferBindings)
-            throw System::ArgumentOutOfRangeException(
-                "vertexBuffers",
-                std::to_string(vertexBuffers.size()),
-                "Max Vertex Buffers supported is " + std::to_string(kMaxVertexBufferBindings));
+            throw System::NotSupportedException(
+                "Max Vertex Buffers supported is "
+                + std::to_string(kMaxVertexBufferBindings) + ".");
 
-        for (const VertexBufferBinding& binding : vertexBuffers)
+        // Microsoft XNA applies bindings in order and its finally block keeps only the prefix
+        // processed before a validation failure. FNA accepts null entries, but doing so diverges
+        // from the higher-authority Microsoft implementation and later fails during vertex fetch.
+        std::size_t processed = 0;
+        currentVertexBuffers_.reserve(vertexBuffers.size());
+        try
         {
-            const VertexBuffer* const buffer = binding.getVertexBufferProperty();
-            if (buffer != nullptr && buffer->getIsDisposedProperty())
-                throw System::ObjectDisposedException(buffer->getNameProperty());
-            if (buffer != nullptr && buffer->getGraphicsDeviceProperty() != this)
-                throw System::InvalidOperationException(
-                    "SetVertexBuffers: a vertex buffer belongs to a different GraphicsDevice.");
+            for (; processed < vertexBuffers.size(); ++processed)
+            {
+                const VertexBufferBinding& binding = vertexBuffers[processed];
+                const VertexBuffer* const buffer = binding.getVertexBufferProperty();
+                if (buffer == nullptr)
+                    throw System::ArgumentException(
+                        "SetVertexBuffers: null vertex-buffer bindings are not allowed.");
+                if (buffer->getIsDisposedProperty())
+                    throw System::ObjectDisposedException(buffer->getNameProperty());
+                if (buffer->getGraphicsDeviceProperty() != this)
+                    throw System::InvalidOperationException(
+                        "SetVertexBuffers: a vertex buffer belongs to a different GraphicsDevice.");
+
+                if (processed < currentVertexBuffers_.size())
+                    currentVertexBuffers_[processed] = binding;
+                else
+                    currentVertexBuffers_.push_back(binding);
+            }
+        }
+        catch (...)
+        {
+            currentVertexBuffers_.resize(processed);
+            currentVertexBuffer_ = currentVertexBuffers_.empty()
+                ? nullptr
+                : currentVertexBuffers_[0].getVertexBufferProperty();
+            throw;
         }
 
-        // A null-buffer binding is a legal unused slot in XNA -- FNA itself stores
-        // VertexBufferBinding.None entries -- so only the binding count is validated here;
-        // the draw dispatch already skips defaulted bindings.
-        currentVertexBuffers_ = vertexBuffers;
+        currentVertexBuffers_.resize(vertexBuffers.size());
         currentVertexBuffer_ = vertexBuffers.empty()
             ? nullptr
             : vertexBuffers[0].getVertexBufferProperty();

@@ -345,16 +345,16 @@ namespace Microsoft::Xna::Framework::Graphics
         void SetVertexBuffer(const VertexBuffer* vertexBuffer);
         /**
          * @brief Binds a vertex buffer with an explicit vertex offset.
-         * @param vertexBuffer The vertex buffer to bind.
-         * @param vertexOffset Offset (in vertices) into the buffer.
+         * @param vertexBuffer The vertex buffer to bind, or nullptr to unbind.
+         * @param vertexOffset Offset (in vertices) into the buffer; ignored when unbinding.
          */
         void SetVertexBuffer(const VertexBuffer* vertexBuffer, int vertexOffset);
         /**
          * @brief Binds multiple vertex buffers simultaneously.
-         * @param vertexBuffers Vector of vertex buffer bindings to apply. A binding whose
-         *        vertex buffer is null is a legal unused slot; an empty vector is valid and
-         *        unbinds all vertex buffers.
-         * @throws System::ArgumentOutOfRangeException if more than 16 bindings are supplied.
+         * @param vertexBuffers Vector of non-null vertex buffer bindings to apply. An empty
+         *        vector is valid and unbinds all vertex buffers.
+         * @throws System::ArgumentException if any binding contains a null vertex buffer.
+         * @throws System::NotSupportedException if more than 16 bindings are supplied.
          */
         void SetVertexBuffers(const std::vector<VertexBufferBinding>& vertexBuffers);
         /**

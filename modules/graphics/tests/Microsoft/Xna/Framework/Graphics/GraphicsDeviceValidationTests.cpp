@@ -547,39 +547,50 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_DefaultNullBindingThrows)
 // GraphicsDevice.SetVertexBuffers — public binding validation and empty unbind
 // =============================================================================
 
-TEST(GraphicsDeviceValidationTest, SetVertexBuffers_DefaultNullBindingIsAccepted)
-{
-    GraphicsDevice gd;
-    EXPECT_NO_THROW(gd.SetVertexBuffers({VertexBufferBinding()}));
-    ASSERT_EQ(gd.GetVertexBuffers().size(), 1u);
-    EXPECT_EQ(gd.GetVertexBuffers()[0].getVertexBufferProperty(), nullptr);
-}
-
-TEST(GraphicsDeviceValidationTest, SetVertexBuffers_SeventeenBindingsThrow)
-{
-    GraphicsDevice gd;
-    EXPECT_THROW(
-        gd.SetVertexBuffers(std::vector<VertexBufferBinding>(17)),
-        System::ArgumentOutOfRangeException);
-}
-
-TEST(GraphicsDeviceValidationTest, SetVertexBuffers_DisposedSecondaryBufferThrowsTransactionally)
+TEST(GraphicsDeviceValidationTest, SetVertexBuffers_DefaultNullBindingThrowsAndClearsState)
 {
     GraphicsDevice gd;
     if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
         GTEST_SKIP() << "renderer has no 3D pipeline";
 
     VertexBuffer live(gd, 3);
+    gd.SetVertexBuffer(&live);
+    EXPECT_THROW(gd.SetVertexBuffers({VertexBufferBinding()}), System::ArgumentException);
+    EXPECT_TRUE(gd.GetVertexBuffers().empty());
+    EXPECT_EQ(gd.GetVertexBuffer(), nullptr);
+}
+
+TEST(GraphicsDeviceValidationTest, SetVertexBuffers_SeventeenBindingsThrowNotSupported)
+{
+    GraphicsDevice gd;
+    EXPECT_THROW(
+        gd.SetVertexBuffers(std::vector<VertexBufferBinding>(17)),
+        System::NotSupportedException);
+}
+
+TEST(GraphicsDeviceValidationTest, SetVertexBuffers_FailureKeepsOnlyProcessedPrefix)
+{
+    GraphicsDevice gd;
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline";
+
+    VertexBuffer oldBuffer(gd, 3);
+    VertexBuffer newBuffer(gd, 3);
     VertexBuffer disposed(gd, 3);
     disposed.Dispose();
-    gd.SetVertexBuffer(&live);
+    gd.SetVertexBuffer(&oldBuffer);
 
     EXPECT_THROW(
-        gd.SetVertexBuffers({VertexBufferBinding(&live, 0, 0),
+        gd.SetVertexBuffers({VertexBufferBinding(&newBuffer, 0, 0),
                              VertexBufferBinding(&disposed, 0, 0)}),
         System::ObjectDisposedException);
     ASSERT_EQ(gd.GetVertexBuffers().size(), 1u);
-    EXPECT_EQ(gd.GetVertexBuffers()[0].getVertexBufferProperty(), &live);
+    EXPECT_EQ(gd.GetVertexBuffers()[0].getVertexBufferProperty(), &newBuffer);
+    EXPECT_EQ(gd.GetVertexBuffer(), &newBuffer);
+
+    EXPECT_NO_THROW(gd.SetVertexBuffer(nullptr, -1));
+    EXPECT_TRUE(gd.GetVertexBuffers().empty());
+    EXPECT_EQ(gd.GetVertexBuffer(), nullptr);
 }
 
 TEST(GraphicsDeviceValidationTest, SetVertexBuffers_EmptyClearsSingularBinding)
