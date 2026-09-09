@@ -19,12 +19,14 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
@@ -41,12 +43,14 @@ using Microsoft::Xna::Framework::Rectangle;
 using Microsoft::Xna::Framework::Graphics::BufferUsage;
 using Microsoft::Xna::Framework::Graphics::CubeMapFace;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
 using Microsoft::Xna::Framework::Graphics::IndexBuffer;
 using Microsoft::Xna::Framework::Graphics::IndexElementSize;
 using Microsoft::Xna::Framework::Graphics::PrimitiveType;
 using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 using Microsoft::Xna::Framework::Graphics::RenderTargetBinding;
 using Microsoft::Xna::Framework::Graphics::RenderTargetCube;
+using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 using Microsoft::Xna::Framework::Graphics::TextureCollection;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 using Microsoft::Xna::Framework::Graphics::VertexBuffer;
@@ -264,6 +268,7 @@ TEST(TextureCollectionValidationTest, ActiveRenderTargetCannotBindToPixelTexture
 TEST(TextureCollectionValidationTest, ActiveRenderTargetCannotBindToVertexTextureSlot)
 {
     GraphicsDevice gd;
+    gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     RenderTarget2D target(gd, 4, 4);
     if (!BindOrSkip(gd, target))
     {
@@ -288,6 +293,53 @@ TEST(TextureCollectionValidationTest, RenderTargetCanBindForSamplingAfterUnbind)
 
     EXPECT_NO_THROW(gd.getTexturesProperty()(0, &target));
     EXPECT_EQ(gd.getTexturesProperty()[0], static_cast<Texture2D*>(&target));
+}
+
+TEST(TextureCollectionValidationTest, OwnedCollectionsRespectProfileSlotCounts)
+{
+    GraphicsDevice gd;
+
+    EXPECT_NO_THROW(gd.getTexturesProperty()(15, nullptr));
+    EXPECT_THROW(gd.getTexturesProperty()(16, nullptr), std::out_of_range);
+    EXPECT_THROW((void)gd.getVertexTexturesProperty()[0], std::out_of_range);
+    EXPECT_THROW(gd.getVertexTexturesProperty()(0, nullptr), std::out_of_range);
+    EXPECT_THROW((void)gd.getVertexSamplerStatesProperty()[0], std::out_of_range);
+
+    gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
+    EXPECT_NO_THROW(gd.getVertexTexturesProperty()(3, nullptr));
+    EXPECT_THROW(gd.getVertexTexturesProperty()(4, nullptr), std::out_of_range);
+    EXPECT_NO_THROW((void)gd.getVertexSamplerStatesProperty()[3]);
+    EXPECT_THROW((void)gd.getVertexSamplerStatesProperty()[4], std::out_of_range);
+}
+
+TEST(TextureCollectionValidationTest, VertexTextureFormatAndValidationOrderMatchXna)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+    GraphicsDevice gd;
+    gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
+    Texture2D color(gd, 1, 1, false, SurfaceFormat::Color);
+    Texture2D single(gd, 1, 1, false, SurfaceFormat::Single);
+
+    EXPECT_THROW(
+        gd.getVertexTexturesProperty()(0, &color),
+        System::NotSupportedException);
+    EXPECT_NO_THROW(gd.getVertexTexturesProperty()(0, &single));
+    EXPECT_EQ(gd.getVertexTexturesProperty()[0], &single);
+
+    color.Dispose();
+    EXPECT_THROW(
+        gd.getTexturesProperty()(TextureCollection::MaxTextures, &color),
+        System::ObjectDisposedException);
+}
+
+TEST(TextureCollectionValidationTest, OwnedCollectionRejectsUseAfterDeviceDisposal)
+{
+    GraphicsDevice gd;
+    TextureCollection& textures = gd.getTexturesProperty();
+    gd.Dispose();
+
+    EXPECT_THROW((void)textures[0], System::ObjectDisposedException);
+    EXPECT_THROW(textures(0, nullptr), System::ObjectDisposedException);
 }
 
 // =============================================================================
@@ -662,8 +714,8 @@ TEST(GraphicsDeviceValidationTest, ForeignTexturesAreRejectedTransactionally)
         Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
     owner.SetGraphicsProfileEXT(
         Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
-    Texture2D local(receiving, 1, 1);
-    Texture2D foreign(owner, 1, 1);
+    Texture2D local(receiving, 1, 1, false, SurfaceFormat::Single);
+    Texture2D foreign(owner, 1, 1, false, SurfaceFormat::Single);
 
     receiving.getTexturesProperty()(0, &local);
     EXPECT_THROW(

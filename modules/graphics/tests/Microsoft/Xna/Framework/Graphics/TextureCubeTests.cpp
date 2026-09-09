@@ -919,7 +919,8 @@ TEST_F(TextureCubeTest, DisposeUnbindsFromGraphicsDeviceTextures)
 
 TEST_F(TextureCubeTest, DisposeUnbindsFromGraphicsDeviceVertexTextures)
 {
-    auto tex = std::make_unique<TextureCube>(gd, 4, false, SurfaceFormat::Color);
+    gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
+    auto tex = std::make_unique<TextureCube>(gd, 4, false, SurfaceFormat::Single);
     gd.getVertexTexturesProperty()(0, tex.get());
     ASSERT_EQ(gd.getVertexTexturesProperty()[0], static_cast<Texture*>(tex.get()));
 

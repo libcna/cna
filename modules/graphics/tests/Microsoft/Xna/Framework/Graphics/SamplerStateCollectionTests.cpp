@@ -97,8 +97,9 @@ TEST(GraphicsDeviceSamplerStatesTest, DefaultSamplerStatesAreLinearWrap)
 TEST(GraphicsDeviceSamplerStatesTest, DefaultVertexSamplerStatesAreLinearWrap)
 {
     GraphicsDevice gd;
+    gd.SetGraphicsProfileEXT(Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
     auto& states = gd.getVertexSamplerStatesProperty();
-    for (int i = 0; i < SamplerStateCollection::MaxSamplers; ++i)
+    for (int i = 0; i < 4; ++i)
     {
         EXPECT_EQ(states[i].getNameProperty(), "SamplerState.LinearWrap") << "slot " << i;
     }

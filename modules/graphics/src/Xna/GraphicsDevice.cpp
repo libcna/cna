@@ -336,8 +336,10 @@ namespace Microsoft::Xna::Framework::Graphics
           depthStencilState_(DepthStencilState::Default),
           rasterizerState_(RasterizerState::CullCounterClockwise),
           blendFactor_(Color::White),
-          textures_(this),
-          vertexTextures_(this)
+          textures_(this, false),
+          samplerStates_(this, false),
+          vertexTextures_(this, true),
+          vertexSamplerStates_(this, true)
     {
         CNA::Platform::IPlatformGlContext* const glContext = platform_->GetGlContext();
         const CNA::Platform::GlContextBinding callerGlBinding =
