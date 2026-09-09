@@ -6,6 +6,7 @@
 
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IVertexType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -17,7 +18,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * is plain old data (POD-ish) so it can be uploaded directly to a GPU
      * vertex buffer.
      */
-    struct VertexPositionColor
+    struct VertexPositionColor : public IVertexType
     {
         /** @brief Position in object space. */
         Microsoft::Xna::Framework::Vector3 Position;
@@ -48,6 +49,15 @@ namespace Microsoft::Xna::Framework::Graphics
          * @return Const reference to the VertexDeclaration for VertexPositionColor.
          */
         [[nodiscard]] static const ::Microsoft::Xna::Framework::Graphics::VertexDeclaration& getVertexDeclarationStatic();
+
+        /**
+         * @brief Returns the vertex declaration for this instance.
+         * @return The static VertexPositionColor declaration.
+         */
+        [[nodiscard]] const VertexDeclaration& getVertexDeclarationProperty() const override
+        {
+            return getVertexDeclarationStatic();
+        }
 
         /**
          * @brief Tests equality by comparing Position and Color.

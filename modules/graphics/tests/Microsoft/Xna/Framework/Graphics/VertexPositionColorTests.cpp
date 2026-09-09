@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <gtest/gtest.h>
+#include <type_traits>
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IVertexType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
@@ -11,6 +13,7 @@ using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
 using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+using Microsoft::Xna::Framework::Graphics::IVertexType;
 using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
 
 // --- Default constructor ---
@@ -72,6 +75,15 @@ TEST(VertexPositionColorTest, DeclarationColorOffset)
     EXPECT_EQ(elems[1].getOffsetProperty(), 12);
     EXPECT_EQ(elems[1].getVertexElementFormatProperty(), VertexElementFormat::Color);
     EXPECT_EQ(elems[1].getVertexElementUsageProperty(),  VertexElementUsage::Color);
+}
+
+TEST(VertexPositionColorTest, ImplementsIVertexTypeAndReturnsItsStaticDeclaration)
+{
+    EXPECT_TRUE((std::is_base_of_v<IVertexType, VertexPositionColor>));
+    const VertexPositionColor vertex;
+    const IVertexType& vertexType = vertex;
+    EXPECT_EQ(&vertexType.getVertexDeclarationProperty(),
+              &VertexPositionColor::getVertexDeclarationStatic());
 }
 
 // sizeof(VertexPositionColor) is 40 rather than the XNA-expected 16 due to the Color vtable issue above.
