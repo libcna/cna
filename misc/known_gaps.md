@@ -44,7 +44,8 @@ first keeps both promises; the second is smaller.
 
 ## 2. No `FontTextureProcessor`: a marker bitmap cannot become a `SpriteFont`
 
-**Found:** 2026-09-09, through SAMPLE-090 (BitmapFontMaker).
+**Found:** 2026-09-09, through SAMPLE-090 (BitmapFontMaker), whose row was cancelled the same day as a
+design-time WinForms tool. The gap is not cancelled with it: it is about the format, not the tool.
 
 XNA has two routes from authored content into a `SpriteFont`:
 
@@ -67,7 +68,8 @@ the same `SpriteFont` the description route already emits. The runtime side need
 
 ## 3. `IntermediateSerializer` XML is read for exactly one schema
 
-**Found:** 2026-09-09, through SAMPLE-093 (CurveEditor).
+**Found:** 2026-09-09, through SAMPLE-093 (CurveEditor), whose row was cancelled the same day as a
+design-time WinForms tool. The gap is not cancelled with it: it is about the envelope, not the editor.
 
 XNA's content pipeline can take a `.xml` source asset in `IntermediateSerializer` form — an
 `<XnaContent><Asset Type="...">` document — and import **any** type it names. That is how a project
