@@ -1743,6 +1743,35 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                             VertexChannelNames::Normal(), channel);
                     };
                     if (declaresNormals) { addNormals(); }
+                    // The colour goes after the *first* texture-coordinate set, and any further
+                    // sets follow it: the genuine importer answers `Normal0, TextureCoordinate0,
+                    // Color0, TextureCoordinate1` for a mesh carrying two sets and a colour,
+                    // whatever order the `Layer` block names them in -- SAMPLE-142's
+                    // `AircraftCarrier.FBX` names UV, TransparentUV, Color and answers the colour
+                    // in the middle (measured, `fbx_uv_two_sets_colour.fbx`;
+                    // plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-179`).
+                    const auto addColors = [&]
+                    {
+                        if (colors.stride == 0u || colors.values.empty())
+                        {
+                            return;
+                        }
+                        std::vector<Vector4> channel;
+                        for (std::size_t v = 0; v < used.size(); ++v)
+                        {
+                            const std::vector<double> value = colors.At(cornerOf[v], used[v], 0u);
+                            // Not quantized, where the .x route's colours are.
+                            channel.push_back(value.size() >= 4u
+                                                  ? Vector4(static_cast<float>(value[0]),
+                                                            static_cast<float>(value[1]),
+                                                            static_cast<float>(value[2]),
+                                                            static_cast<float>(value[3]))
+                                                  : Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+                        }
+                        batchContent->getVerticesProperty().getChannelsProperty().Add<Vector4>(
+                            VertexChannelNames::Color(0), channel);
+                    };
+                    bool coloursAdded = false;
                     for (const UvSet& set : uvSets)
                     {
                         std::vector<Vector2> channel;
@@ -1766,24 +1795,13 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                             VertexChannelNames::TextureCoordinate(
                                 static_cast<SharpRuntime::intcs>(set.index)),
                             channel);
-                    }
-                    if (colors.stride != 0u && !colors.values.empty())
-                    {
-                        std::vector<Vector4> channel;
-                        for (std::size_t v = 0; v < used.size(); ++v)
+                        if (!coloursAdded)
                         {
-                            const std::vector<double> value = colors.At(cornerOf[v], used[v], 0u);
-                            // Not quantized, where the .x route's colours are.
-                            channel.push_back(value.size() >= 4u
-                                                  ? Vector4(static_cast<float>(value[0]),
-                                                            static_cast<float>(value[1]),
-                                                            static_cast<float>(value[2]),
-                                                            static_cast<float>(value[3]))
-                                                  : Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+                            coloursAdded = true;
+                            addColors();
                         }
-                        batchContent->getVerticesProperty().getChannelsProperty().Add<Vector4>(
-                            VertexChannelNames::Color(0), channel);
                     }
+                    if (!coloursAdded) { addColors(); }
                     if (!declaresNormals) { addNormals(); }
                 }
                 node = mesh;

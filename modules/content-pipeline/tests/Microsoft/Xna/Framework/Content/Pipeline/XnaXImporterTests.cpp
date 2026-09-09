@@ -691,6 +691,11 @@ TEST(XnaFbxImporter, EveryFileAnswersTheGraphXnaAnswers)
           // comparing what the file holds answers five -- which is the shape SAMPLE-142's
           // `AircraftCarrier.FBX` has sixty-one times (`XNASWEEP-178`).
           "fbx_uv_narrow.fbx",
+          // Where the colour goes when a mesh carries more than one texture-coordinate set: after
+          // the *first* of them, with the rest following. The genuine importer answers
+          // `Normal0, TextureCoordinate0, Color0, TextureCoordinate1` for this quad, whatever
+          // order its `Layer` block names the elements in (`XNASWEEP-179`).
+          "fbx_uv_two_sets_colour.fbx",
           "fbx_oblique.fbx", "fbx_prerotation_units.fbx",
           "fbx_quad_polygon.fbx", "fbx_quad_textured.fbx",
           // The scene lists its children in the order the file connects them, and a `Material`

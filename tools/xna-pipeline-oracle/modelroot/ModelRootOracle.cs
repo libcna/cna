@@ -48,8 +48,29 @@ internal static class ModelRootOracle
         public override string OutputDirectory { get { return "bin"; } }
         public override string OutputFilename { get { return "out.xnb"; } }
         public override OpaqueDataDictionary Parameters { get { return new OpaqueDataDictionary(); } }
-        public override TargetPlatform TargetPlatform { get { return TargetPlatform.Windows; } }
-        public override GraphicsProfile TargetProfile { get { return GraphicsProfile.HiDef; } }
+        // `CNA_MODELROOT_PLATFORM=WindowsPhone` and `CNA_MODELROOT_PROFILE=Reach` ask the
+        // processors what they do for a target that refuses custom shaders, which is the question
+        // SAMPLE-028's phone build asks (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-174`).
+        public override TargetPlatform TargetPlatform
+        {
+            get
+            {
+                string named = Environment.GetEnvironmentVariable("CNA_MODELROOT_PLATFORM");
+                return string.IsNullOrEmpty(named)
+                    ? TargetPlatform.Windows
+                    : (TargetPlatform)Enum.Parse(typeof(TargetPlatform), named);
+            }
+        }
+        public override GraphicsProfile TargetProfile
+        {
+            get
+            {
+                string named = Environment.GetEnvironmentVariable("CNA_MODELROOT_PROFILE");
+                return string.IsNullOrEmpty(named)
+                    ? GraphicsProfile.HiDef
+                    : (GraphicsProfile)Enum.Parse(typeof(GraphicsProfile), named);
+            }
+        }
         public override void AddDependency(string filename) { }
         public override void AddOutputFile(string filename) { }
         // `ModelProcessor` converts every material through this, so throwing here fails the whole

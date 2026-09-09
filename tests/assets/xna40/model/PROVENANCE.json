@@ -440,6 +440,11 @@
       "thirdParty": false
     },
     {
+      "file": "fbx_uv_two_sets_colour.fbx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
       "file": "fbx_wrapped_values.fbx",
       "origin": "generated",
       "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",

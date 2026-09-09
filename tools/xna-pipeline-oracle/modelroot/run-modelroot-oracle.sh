@@ -32,6 +32,12 @@ mcs -sdk:4 -platform:x86 -target:exe -nologo -out:"$build/ModelRootOracle.exe" \
 rm -rf "$build/fixtures"; mkdir -p "$build/fixtures"
 cp "$fixtures"/*.fbx "$build/fixtures/" 2>/dev/null || true
 cp "$fixtures"/*.x "$build/fixtures/" 2>/dev/null || true
+# What a model *names* has to be beside it: a `.x` `EffectInstance` resolves its effect and its
+# parameter textures at import time and refuses the file when they are not there
+# (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-174`).
+cp "$fixtures"/*.fx "$build/fixtures/" 2>/dev/null || true
+cp "$fixtures"/*.tga "$build/fixtures/" 2>/dev/null || true
+cp "$fixtures"/*.png "$build/fixtures/" 2>/dev/null || true
 win_in="$(env WINEPREFIX="$prefix" WINEDEBUG=-all wine winepath -w "$build/fixtures" 2>/dev/null)"
 win_out="$(env WINEPREFIX="$prefix" WINEDEBUG=-all wine winepath -w "$build/out.txt" 2>/dev/null)"
 env -u WAYLAND_DISPLAY DISPLAY="${CNA_XNA40_DISPLAY:-:99}" WINEPREFIX="$prefix" WINEDEBUG=-all \
