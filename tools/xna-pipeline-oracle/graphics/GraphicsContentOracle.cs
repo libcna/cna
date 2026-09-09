@@ -1751,6 +1751,42 @@ namespace Cna.Xna40.GraphicsOracle
                 MaterialContent result = processor.Process(material, context);
                 return DescribeMaterial(result) + " built=" + context.Built;
             });
+            // A stock material carrying a channel its effect does not read. The importer answers
+            // every texture channel a mesh declares, and what the processor does with the ones the
+            // effect has no parameter for is what decides whether a file the sample does not ship
+            // is ever opened (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-175`).
+            Record("materialprocessor/unused_channel", () =>
+            {
+                var processor = new MaterialProcessor();
+                var material = new BasicMaterialContent();
+                material.Texture = new ExternalReference<TextureContent>("cat.tga");
+                material.Textures.Add("Specular", new ExternalReference<TextureContent>("shine.tga"));
+                material.Textures.Add("Reflection", new ExternalReference<TextureContent>("mirror.tga"));
+                var context = new RecordingProcessorContext();
+                MaterialContent result = processor.Process(material, context);
+                return DescribeMaterial(result) + " built=" + context.Built;
+            });
+            // The same question for the four values `DefaultEffect` takes: what a stock material
+            // becomes, and which of its textures are built once it has become that
+            // (`XNASWEEP-175`).
+            foreach (MaterialProcessorDefaultEffect effect in
+                         Enum.GetValues(typeof(MaterialProcessorDefaultEffect)))
+            {
+                MaterialProcessorDefaultEffect chosen = effect;
+                Record("materialprocessor/default_effect_" + chosen.ToString(), () =>
+                {
+                    var processor = new MaterialProcessor();
+                    processor.DefaultEffect = chosen;
+                    var material = new BasicMaterialContent();
+                    material.DiffuseColor = new Vector3(0.25f, 0.5f, 0.75f);
+                    material.SpecularPower = 12.5f;
+                    material.Texture = new ExternalReference<TextureContent>("cat.tga");
+                    material.Textures.Add("Specular", new ExternalReference<TextureContent>("shine.tga"));
+                    var context = new RecordingProcessorContext();
+                    MaterialContent result = processor.Process(material, context);
+                    return DescribeMaterial(result) + " built=" + context.Built;
+                });
+            }
             Record("materialprocessor/effect_material", () =>
             {
                 var processor = new MaterialProcessor();

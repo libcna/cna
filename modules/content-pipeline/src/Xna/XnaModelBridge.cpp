@@ -78,8 +78,12 @@ namespace CNA::Content::Pipeline
                 data.textureReference = ReferenceOf(environment->getTextureProperty());
                 data.environmentMapReference = ReferenceOf(environment->getEnvironmentMapProperty());
                 data.environmentMapAmount = environment->getEnvironmentMapAmountProperty().value_or(1.0f);
+                // Zero, not white: an `EnvironmentMapMaterialContent` that carries no specular is
+                // written with (0,0,0), which is `EnvironmentMapEffect`'s own default. Measured on
+                // SAMPLE-037's genuine `head.xnb` (plans/plan_xna_sample_xnb_sweep.md
+                // `XNASWEEP-175`).
                 data.environmentMapSpecular =
-                    environment->getEnvironmentMapSpecularProperty().value_or(Vector3(1, 1, 1));
+                    environment->getEnvironmentMapSpecularProperty().value_or(Vector3(0, 0, 0));
                 data.fresnelFactor = environment->getFresnelFactorProperty().value_or(1.0f);
                 data.diffuseColor = environment->getDiffuseColorProperty().value_or(Vector3(1, 1, 1));
                 data.emissiveColor = environment->getEmissiveColorProperty().value_or(Vector3(0, 0, 0));

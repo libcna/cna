@@ -896,6 +896,69 @@ TEST(XnaMaterialProcessor, BuildsEveryTextureItNames)
     EXPECT_EQ(plainResult + " built=" + none.Built(), Expected("materialprocessor/base_material"));
 }
 
+// A stock material carries whatever texture channels the importer answered, and the processor
+// opens only the one its effect reads. That is what makes producing every channel safe: SAMPLE-037's
+// `head.fbx` names a `Head_Spec.TGA` the sample does not ship, and the genuine build does not open
+// it (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-175`).
+TEST(XnaMaterialProcessor, BuildsOnlyTheTextureItsEffectReads)
+{
+    Processors::MaterialProcessor processor;
+    auto material = std::make_shared<Graphics::BasicMaterialContent>();
+    material->setTextureProperty(
+        std::make_shared<Microsoft::Xna::Framework::Content::Pipeline::ExternalReference<TextureContent>>("cat.tga"));
+    material->getTexturesProperty().Set(
+        "Specular",
+        std::make_shared<Microsoft::Xna::Framework::Content::Pipeline::ExternalReference<TextureContent>>("shine.tga"));
+    material->getTexturesProperty().Set(
+        "Reflection",
+        std::make_shared<Microsoft::Xna::Framework::Content::Pipeline::ExternalReference<TextureContent>>("mirror.tga"));
+    RecordingContext context;
+    const std::shared_ptr<Graphics::MaterialContent> result = processor.Process(material, context);
+    const std::string expected = Expected("materialprocessor/unused_channel");
+    EXPECT_EQ("built=" + context.Built(), expected.substr(expected.find("built=")));
+    EXPECT_EQ(DescribeMaterial(result, "BasicMaterialContent"),
+              expected.substr(0, expected.find(" built=")));
+}
+
+// What `DefaultEffect` turns a stock material into, over all five values it takes. The opaque data
+// and the textures come across as they were; only the type changes, and only the diffuse texture is
+// built whatever the type is (`XNASWEEP-175`).
+TEST(XnaMaterialProcessor, DefaultEffectDecidesWhatAMaterialBecomes)
+{
+    static const std::pair<Processors::MaterialProcessorDefaultEffect, const char*> cases[] = {
+        {Processors::MaterialProcessorDefaultEffect::BasicEffect, "BasicEffect"},
+        {Processors::MaterialProcessorDefaultEffect::SkinnedEffect, "SkinnedEffect"},
+        {Processors::MaterialProcessorDefaultEffect::EnvironmentMapEffect, "EnvironmentMapEffect"},
+        {Processors::MaterialProcessorDefaultEffect::DualTextureEffect, "DualTextureEffect"},
+        {Processors::MaterialProcessorDefaultEffect::AlphaTestEffect, "AlphaTestEffect"}};
+    for (const auto& [effect, name] : cases)
+    {
+        Processors::MaterialProcessor processor;
+        processor.setDefaultEffectProperty(effect);
+        auto material = std::make_shared<Graphics::BasicMaterialContent>();
+        material->setDiffuseColorProperty(Vector3(0.25f, 0.5f, 0.75f));
+        material->setSpecularPowerProperty(12.5f);
+        material->setTextureProperty(
+            std::make_shared<Microsoft::Xna::Framework::Content::Pipeline::ExternalReference<TextureContent>>(
+                "cat.tga"));
+        material->getTexturesProperty().Set(
+            "Specular",
+            std::make_shared<Microsoft::Xna::Framework::Content::Pipeline::ExternalReference<TextureContent>>(
+                "shine.tga"));
+        RecordingContext context;
+        const std::shared_ptr<Graphics::MaterialContent> result = processor.Process(material, context);
+        const std::string expected = Expected(std::string("materialprocessor/default_effect_") + name);
+        EXPECT_EQ(result->GetTypeName().substr(result->GetTypeName().rfind('.') + 1),
+                  expected.substr(0, expected.find(' '))) << name;
+        EXPECT_EQ("built=" + context.Built(), expected.substr(expected.find("built="))) << name;
+        // The opaque data survives the change of type, entry for entry and in order.
+        EXPECT_EQ(result->getOpaqueDataProperty().getKeysProperty(),
+                  (std::vector<std::string>{"DiffuseColor", "SpecularPower"})) << name;
+        EXPECT_EQ(result->getTexturesProperty().getKeysProperty(),
+                  (std::vector<std::string>{"Texture", "Specular"})) << name;
+    }
+}
+
 TEST(XnaMaterialProcessor, ForwardsItsPropertiesAndBuildsTheEffect)
 {
     Processors::MaterialProcessor processor;

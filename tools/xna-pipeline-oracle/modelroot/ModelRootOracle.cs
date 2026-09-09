@@ -55,20 +55,51 @@ internal static class ModelRootOracle
         // `ModelProcessor` converts every material through this, so throwing here fails the whole
         // process with `NotSupportedException` before a single bone is reached. What the root
         // transform is does not depend on what a material converts to, so the input is handed
-        // straight back where the types allow and a default otherwise.
+        // straight back where the types allow and a default otherwise -- unless
+        // `CNA_MODELROOT_MATERIALS=1` asks for the real `MaterialProcessor`, which is the only way
+        // to see what `DefaultEffect` turns a material into
+        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-175`).
         public override TOutput Convert<TInput, TOutput>(TInput input, string processorName,
                                                          OpaqueDataDictionary processorParameters)
         {
+            if (Environment.GetEnvironmentVariable("CNA_MODELROOT_MATERIALS") == "1" &&
+                processorName == "MaterialProcessor" && input is MaterialContent)
+            {
+                MaterialProcessor material = new MaterialProcessor();
+                foreach (KeyValuePair<string, object> entry in processorParameters)
+                {
+                    switch (entry.Key)
+                    {
+                        case "DefaultEffect":
+                            material.DefaultEffect = (MaterialProcessorDefaultEffect)entry.Value;
+                            break;
+                        case "ColorKeyEnabled": material.ColorKeyEnabled = (bool)entry.Value; break;
+                        case "GenerateMipmaps": material.GenerateMipmaps = (bool)entry.Value; break;
+                        case "PremultiplyTextureAlpha": material.PremultiplyTextureAlpha = (bool)entry.Value; break;
+                        case "ResizeTexturesToPowerOfTwo": material.ResizeTexturesToPowerOfTwo = (bool)entry.Value; break;
+                        default: break;
+                    }
+                }
+                object answered = material.Process((MaterialContent)(object)input, this);
+                if (answered is TOutput) { return (TOutput)answered; }
+            }
             if (input is TOutput) { return (TOutput)(object)input; }
             return default(TOutput);
         }
         public override TOutput BuildAndLoadAsset<TInput, TOutput>(ExternalReference<TInput> source,
             string processorName, OpaqueDataDictionary processorParameters, string importerName)
         { return default(TOutput); }
+        // Every asset the processor asks to have built, recorded rather than built: which textures
+        // a material actually builds is what says whether a channel the importer answered ever
+        // reaches the build (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-175`).
+        public static readonly List<string> Built = new List<string>();
         public override ExternalReference<TOutput> BuildAsset<TInput, TOutput>(
             ExternalReference<TInput> source, string processorName,
             OpaqueDataDictionary processorParameters, string importerName, string assetName)
-        { return new ExternalReference<TOutput>(source.Filename); }
+        {
+            Built.Add(processorName + " " + Path.GetFileName(source.Filename));
+            return new ExternalReference<TOutput>(source.Filename);
+        }
     }
 
     private static string F(float value)
@@ -225,6 +256,38 @@ internal static class ModelRootOracle
                                     F(mesh.BoundingSphere.Radius) + " parts=" +
                                     mesh.MeshParts.Count + "\n");
                     }
+                    if (Environment.GetEnvironmentVariable("CNA_MODELROOT_MATERIALS") == "1")
+                    {
+                        for (int mi = 0; mi < model.Meshes.Count; mi++)
+                        {
+                            ModelMeshContent mesh = model.Meshes[mi];
+                            for (int pi = 0; pi < mesh.MeshParts.Count; pi++)
+                            {
+                                MaterialContent used = mesh.MeshParts[pi].Material;
+                                text.Append(name + "|material " + mi + " " + pi + " " +
+                                            (used == null ? "<null>" : used.GetType().Name) + "\n");
+                                if (used == null) { continue; }
+                                foreach (KeyValuePair<string, object> entry in used.OpaqueData)
+                                {
+                                    text.Append(name + "|materialData " + mi + " " + pi + " " +
+                                                entry.Key + "=" +
+                                                (entry.Value == null ? "<null>" : entry.Value.ToString()) + "\n");
+                                }
+                                foreach (KeyValuePair<string, ExternalReference<TextureContent>> one
+                                             in used.Textures)
+                                {
+                                    text.Append(name + "|materialTexture " + mi + " " + pi + " " +
+                                                one.Key + "=" +
+                                                (one.Value == null ? "<null>" : Path.GetFileName(one.Value.Filename)) + "\n");
+                                }
+                            }
+                        }
+                    }
+                    foreach (string one in Processing.Built)
+                    {
+                        text.Append(name + "|built " + one + "\n");
+                    }
+                    Processing.Built.Clear();
                     foreach (ModelBoneContent bone in model.Bones)
                     {
                         text.Append(name + "|bone " + bone.Index + " " +
