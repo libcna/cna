@@ -4031,6 +4031,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     GraphicsDeviceStatus GraphicsDevice::getGraphicsDeviceStatusProperty() const
     {
+        ThrowIfDisposed();
         // plans/plan_dx9.md D9-34: tracks the real renderer-reported status via deviceStatus_ (updated by
         // the deviceEventCallback lambda in createRenderer()). Every renderer except D3D9 never calls
         // that callback, so this stays Normal for them -- identical behavior to before this field
@@ -4040,6 +4041,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     DisplayMode GraphicsDevice::getDisplayModeProperty() const
     {
+        ThrowIfDisposed();
         if (presentationParameters_.getIsFullScreenProperty())
         {
             int w = 0, h = 0;

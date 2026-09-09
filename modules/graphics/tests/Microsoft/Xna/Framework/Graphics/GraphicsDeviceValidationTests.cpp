@@ -83,6 +83,10 @@ TEST(GraphicsDeviceLifecycleTest, RendererFacingOperationsRejectUseAfterDeviceDi
     EXPECT_THROW(static_cast<void>(gd.getViewportProperty()), System::ObjectDisposedException);
     EXPECT_THROW(static_cast<void>(gd.getScissorRectangleProperty()),
                  System::ObjectDisposedException);
+    EXPECT_THROW(static_cast<void>(gd.getDisplayModeProperty()),
+                 System::ObjectDisposedException);
+    EXPECT_THROW(static_cast<void>(gd.getGraphicsDeviceStatusProperty()),
+                 System::ObjectDisposedException);
     EXPECT_THROW(gd.SetVertexBuffer(nullptr), System::ObjectDisposedException);
     EXPECT_THROW(gd.SetVertexBuffers({}), System::ObjectDisposedException);
     EXPECT_THROW(gd.SetIndexBuffer(nullptr), System::ObjectDisposedException);
