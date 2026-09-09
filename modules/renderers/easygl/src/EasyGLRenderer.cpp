@@ -4287,8 +4287,26 @@ if (ProfileUsesGlslEs100())
         int fullW = 0, fullH = 0;
         if (haveRt) { fullW = rtW; fullH = rtH; }
         else if (graphicsRenderer_) graphicsRenderer_->getPhysicalSize(fullW, fullH);
-        const bool customVp = curVw > 0 && curVh > 0 && fullW > 0 && fullH > 0
-                              && (curVx != 0 || curVy != 0 || curVw != fullW || curVh != fullH);
+
+        // The DEFAULT viewport is the presentation rectangle, and under Letterbox or Overscan that
+        // is NOT the whole drawable. Asking "does the GL viewport differ from the full target"
+        // therefore answered yes for the default viewport as soon as bars existed, and the branch
+        // below then sized the sprite projection to the rectangle's PHYSICAL extent instead of the
+        // logical one -- putting a sprite that covers the whole logical area into a corner of the
+        // box. That is PresentationRectangleTest.ALetterboxedDefaultViewportIsNotACustomSubViewport,
+        // and it is what broke SAMPLE-077 in any window whose size is not exactly the sample's
+        // 480x800 back buffer once Letterbox became the default presentation mode.
+        //
+        // Compare against the presentation rectangle instead. GetDefaultViewportRect() answers in
+        // top-left-origin coordinates and GL's viewport origin is bottom-left, so the Y needs the
+        // same flip SetViewport() itself applies.
+        int defX = 0, defY = 0, defW = fullW, defH = fullH;
+        if (!haveRt && graphicsRenderer_)
+            graphicsRenderer_->GetDefaultViewportRect(defX, defY, defW, defH);
+        const int defGlY = (fullH > 0) ? (fullH - defY - defH) : defY;
+        const bool customVp = curVw > 0 && curVh > 0 && defW > 0 && defH > 0
+                              && (curVx != defX || curVy != defGlY
+                                  || curVw != defW || curVh != defH);
 
         // Task 1078: a custom-effect draw into a bound RenderTarget2D must size its viewport
         // and orthographic projection to that RT, not the window -- getPhysicalSize()/
@@ -4296,9 +4314,24 @@ if (ProfileUsesGlslEs100())
         // test because those tests' RTs all coincidentally matched the window size.
         if (customVp)
         {
-            // Keep the custom GL viewport (do NOT reset to the full target); project by Viewport.W/H.
-            logW = curVw;
-            logH = curVh;
+            // A genuine sub-viewport: keep the GL viewport GraphicsDevice already mapped, and
+            // project by its size in LOGICAL units, because XNA builds the sprite ortho from
+            // Viewport.Width/Height and CNA's public Viewport is logical. The presentation
+            // rectangle carries the logical-to-physical scale, so dividing by it converts back.
+            int logicalW = 0, logicalH = 0;
+            if (!haveRt && graphicsRenderer_) graphicsRenderer_->getLogicalSize(logicalW, logicalH);
+            if (!haveRt && logicalW > 0 && logicalH > 0 && defW > 0 && defH > 0)
+            {
+                logW = static_cast<int>(std::lround(
+                    static_cast<double>(curVw) * logicalW / defW));
+                logH = static_cast<int>(std::lround(
+                    static_cast<double>(curVh) * logicalH / defH));
+            }
+            else
+            {
+                logW = curVw;
+                logH = curVh;
+            }
         }
         else if (haveRt)
         {
@@ -4308,10 +4341,11 @@ if (ProfileUsesGlslEs100())
         }
         else if (graphicsRenderer_)
         {
-            int physW = 0, physH = 0;
-            graphicsRenderer_->getPhysicalSize(physW, physH);
-            if (physW > 0 && physH > 0)
-                device_.set_viewport(0, 0, physW, physH);
+            // The default viewport IS the presentation rectangle, and GraphicsDevice has already
+            // pushed it. Resetting to the full drawable here is what discarded the letterbox bars;
+            // leave it alone and project by the logical size, which is what the game draws in.
+            if (defW > 0 && defH > 0)
+                device_.set_viewport(defX, defGlY, defW, defH);
             graphicsRenderer_->getLogicalSize(logW, logH);
         }
         if (logW <= 0 || logH <= 0)

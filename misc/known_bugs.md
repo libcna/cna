@@ -135,7 +135,42 @@ Every file the test exercises — `GraphicsDevice.cpp`, `SpriteBatch.cpp` and al
 `modules/renderers/easygl` — is byte-identical to `next`, so this is `next`'s EasyGL behaviour, not
 a merge interaction.
 
-### What the correction is likely to be — **not** measured
+### Partly fixed on 2026-09-09, and the rest is measured now
+
+**The discriminator was one of the two causes and is fixed** (`modules/renderers/easygl/src/
+EasyGLRenderer.cpp`, sprite flush). It asked *"does the GL viewport differ from the full target?"*,
+and under Letterbox the **default** viewport is the presentation rectangle, which differs from the
+drawable by construction — so the default viewport was classified as a game-set sub-viewport and
+the sprite projection was sized to the rectangle's PHYSICAL extent instead of the logical one. It
+now compares against `GetDefaultViewportRect()` (with the same Y flip `SetViewport` applies), keeps
+the presentation rectangle as the rasterizer viewport instead of resetting to the whole drawable,
+and converts a genuine sub-viewport back into logical units before building the ortho.
+
+Effect on the failing case, 800x480 drawable, virtual 240x240, letterbox `(160,0,480x480)`:
+
+| | sprite bounding box |
+|---|---|
+| before | `(0,245)-(792,476)` |
+| after | `(0,0)-(792,476)` |
+| expected | fill `(160,0,480x480)` |
+
+So the vertical half of the error is gone and the horizontal half is not: the sprite still spans the
+full drawable width instead of the letterbox rectangle. Whatever sets the GL viewport last before
+the batch rasterizes is still handing it the whole drawable — the next step is to measure the GL
+viewport at flush time rather than reason about it, which is what the earlier note here should have
+said instead of listing candidates.
+
+Full suite after the change: `CnaGraphicsTests` 2369 passed, this one still failing, nothing else
+regressed. `SAMPLE-077` at its native 480x800 renders byte-identically to before the change.
+
+**Why it matters more than it did this morning.** Letterbox became the default presentation mode on
+2026-09-08 (`f13701188`), so this is no longer a corner a game opts into. `SAMPLE-077` (DynamicMenu)
+is a shipped `✅` sample and its menu is misplaced badly enough to be unusable in any window that is
+not exactly its 480x800 back buffer — the owner reported it as "the menu is cut off and the third
+item cannot be launched". Reproduction:
+`/rv/tmp/samples/SAMPLE-077-DynamicMenu_4_0/scripts/probe-resize.sh 960 800`.
+
+### What the rest of the correction is likely to be — **not** measured
 
 `WEBGPU-162` names three parts, and EasyGL demonstrably has the first (`EasyGLSurfaceState::
 GetDefaultViewportRect()` predates it and its answer is correct above). The two untested candidates
