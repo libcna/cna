@@ -112,6 +112,7 @@ constexpr float kBlue  = 1.0f;
 TEST(HdrRenderTargetRoundTripTest, AFloatTargetKeepsValuesAboveOne)
 {
     GraphicsDevice gd;
+    gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     if (!gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Vector4))
         GTEST_SKIP() << "this renderer/driver has no RGBA32F render targets";
 
@@ -139,6 +140,7 @@ TEST(HdrRenderTargetRoundTripTest, AColourTargetClampsTheSameRender)
     // "this driver never clamped anything anyway"; this shows the two formats genuinely differ,
     // and documents what an 8-bit target does with the same draw.
     GraphicsDevice gd;
+    gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     if (!CanReadRenderTargetsBack(gd))
         GTEST_SKIP() << "this renderer cannot read a render target back to the CPU";
 
@@ -169,6 +171,7 @@ TEST(HdrRenderTargetRoundTripTest, AHalfFloatTargetKeepsValuesAboveOne)
     // HalfVector4 -- the shared layer pairs each float format with the element type that matches
     // its storage exactly, and refuses a mismatched one rather than widening behind the caller.
     GraphicsDevice gd;
+    gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     if (!gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HdrBlendable))
         GTEST_SKIP() << "this renderer/driver has no RGBA16F render targets";
 
@@ -196,6 +199,7 @@ TEST(HdrRenderTargetRoundTripTest, AHalfFloatTargetKeepsValuesAboveOne)
 TEST(HdrRenderTargetRoundTripTest, EveryClassicFloatLayoutKeepsItsDeclaredChannels)
 {
     GraphicsDevice gd;
+    gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     if (!gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Vector4) ||
         !gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HdrBlendable))
         GTEST_SKIP() << "this renderer/driver lacks the classic float target matrix";
@@ -272,6 +276,7 @@ TEST(HdrRenderTargetRoundTripTest, RasterAndAdditiveBlendRemainInTheFloatDomain)
 TEST(HdrRenderTargetRoundTripTest, AFloatTargetSamplesWithoutAnRgba8Intermediate)
 {
     GraphicsDevice gd;
+    gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     if (!gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Vector4))
         GTEST_SKIP() << "this renderer/driver has no RGBA32F render targets";
 
@@ -301,6 +306,7 @@ TEST(HdrRenderTargetRoundTripTest, AFloatTargetSamplesWithoutAnRgba8Intermediate
 TEST(HdrRenderTargetRoundTripTest, FloatTargetPartialAndMipTransfersKeepExactTypedValues)
 {
     GraphicsDevice gd;
+    gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     if (!gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Vector4))
         GTEST_SKIP() << "this renderer/driver has no RGBA32F render targets";
 
@@ -345,6 +351,7 @@ TEST(HdrRenderTargetRoundTripTest, AFloatCubeTargetIsCreatedInTheRequestedFormat
     // face by face into float storage. A cube that reported HdrBlendable while holding 8-bit texels
     // would make every IBL product quietly wrong.
     GraphicsDevice gd;
+    gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     if (!gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HdrBlendable))
         GTEST_SKIP() << "this renderer/driver has no RGBA16F render targets";
 
@@ -434,16 +441,15 @@ TEST(HdrRenderTargetRoundTripTest, AFloatCubeTargetSamplesWithoutAnRgba8Intermed
     EXPECT_EQ(centre.getAProperty(), 255);
 }
 
-TEST(HdrRenderTargetRoundTripTest, AnUnsupportedCubeFormatIsRefused)
+TEST(HdrRenderTargetRoundTripTest, AnUnsupportedCubePreferredFormatIsSubstituted)
 {
     GraphicsDevice gd;
+    gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     if (gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Dxt1))
         GTEST_SKIP() << "this renderer claims a compressed render-target format; test not applicable";
 
-    EXPECT_ANY_THROW({
-        RenderTargetCube cube(gd, kSize, false, SurfaceFormat::Dxt1, DepthFormat::None);
-        (void)cube.getFormatProperty();
-    });
+    RenderTargetCube cube(gd, kSize, false, SurfaceFormat::Dxt1, DepthFormat::None);
+    EXPECT_EQ(cube.getFormatProperty(), SurfaceFormat::Color);
 }
 
 TEST(HdrRenderTargetRoundTripTest, AFloatTargetCarriesARealDepthBuffer)
@@ -453,6 +459,7 @@ TEST(HdrRenderTargetRoundTripTest, AFloatTargetCarriesARealDepthBuffer)
     // framebuffer once depth joins it, which MOD-119's completeness check now reports as a throw;
     // this asserts the combination is accepted and the depth attachment is real.
     GraphicsDevice gd;
+    gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     if (!gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HdrBlendable))
         GTEST_SKIP() << "this renderer/driver has no RGBA16F render targets";
 
@@ -476,6 +483,7 @@ TEST(HdrRenderTargetRoundTripTest, AMultisampledFloatTargetResolvesWithoutClampi
     // resolve blit either fails or lands in 8-bit storage. Reading back after the unbind exercises
     // the resolve path, so a clamped value here would mean the multisample side stayed RGBA8.
     GraphicsDevice gd;
+    gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     if (!gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HdrBlendable))
         GTEST_SKIP() << "this renderer/driver has no RGBA16F render targets";
 
@@ -505,6 +513,7 @@ TEST(HdrRenderTargetRoundTripTest, AFloatTargetGeneratesAMipChain)
     // chain has to exist and carry the same unclamped values. A uniform clear makes every level's
     // expected content identical, which is what lets level 1 be asserted at all.
     GraphicsDevice gd;
+    gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     if (!gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HdrBlendable))
         GTEST_SKIP() << "this renderer/driver has no RGBA16F render targets";
 

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 
 #include "CNA/Platform/CurrentPlatform.hpp"
 #include "CNA/Platform/IPlatformSystemServices.hpp"
@@ -351,10 +352,13 @@ namespace Microsoft::Xna::Framework::Graphics
         const auto& queries =
             CNA::Internal::Renderers::GraphicsRendererRegistry::Default().adapterQueries;
 
-        const bool supported = queries.isRenderTargetFormatSupported != nullptr
-            ? queries.isRenderTargetFormatSupported(
-                  static_cast<int>(graphicsProfile), static_cast<int>(format))
-            : isSupportedRenderTargetFormat(format);
+        const bool profileSupported =
+            Texture::IsRenderTargetFormatAllowedByProfileEXT(graphicsProfile, format);
+        const bool supported = profileSupported &&
+            (queries.isRenderTargetFormatSupported != nullptr
+                ? queries.isRenderTargetFormatSupported(
+                      static_cast<int>(graphicsProfile), static_cast<int>(format))
+                : isSupportedRenderTargetFormat(format));
 
         selectedFormat = supported ? format : SurfaceFormat::Color;
         selectedDepthFormat = depthFormat;

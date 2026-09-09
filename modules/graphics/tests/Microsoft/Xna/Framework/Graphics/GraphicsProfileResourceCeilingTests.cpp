@@ -216,6 +216,33 @@ TEST(GraphicsProfileResourceCeilingTest, RenderTargetsReuseTextureProfileShapeLi
             hiDef, 3, true, SurfaceFormat::Color, DepthFormat::None));
 }
 
+TEST(GraphicsProfileResourceCeilingTest, RenderTargetsSubstituteProfileUnsupportedPreferredFormats)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+    PresentationParameters parameters;
+    {
+        GraphicsDevice reach(
+            GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach, parameters);
+        RenderTarget2D target2D(
+            reach, 2, 2, false, SurfaceFormat::Single, DepthFormat::None);
+        RenderTargetCube targetCube(
+            reach, 2, false, SurfaceFormat::Single, DepthFormat::None);
+        EXPECT_EQ(target2D.getFormatProperty(), SurfaceFormat::Color);
+        EXPECT_EQ(targetCube.getFormatProperty(), SurfaceFormat::Color);
+        EXPECT_FALSE(reach.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Single));
+    }
+
+    GraphicsDevice hiDef(
+        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef, parameters);
+    ASSERT_TRUE(hiDef.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Single));
+    RenderTarget2D target2D(
+        hiDef, 2, 2, false, SurfaceFormat::Single, DepthFormat::None);
+    RenderTargetCube targetCube(
+        hiDef, 2, false, SurfaceFormat::Single, DepthFormat::None);
+    EXPECT_EQ(target2D.getFormatProperty(), SurfaceFormat::Single);
+    EXPECT_EQ(targetCube.getFormatProperty(), SurfaceFormat::Single);
+}
+
 TEST(GraphicsProfileResourceCeilingTest, VertexBuffersRespectTheSharedSixtyFourMiBMinusOneLimit)
 {
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);

@@ -407,6 +407,23 @@ TEST_F(GraphicsAdapterTest, QueryRenderTargetFormatSubstitutesUnsupportedFormat)
     EXPECT_EQ(selectedFormat, SurfaceFormat::Color);
 }
 
+TEST_F(GraphicsAdapterTest, QueryRenderTargetFormatSubstitutesHiDefOnlyFormatUnderReach)
+{
+    GraphicsAdapter& def = GraphicsAdapter::getDefaultAdapterProperty();
+    SurfaceFormat selectedFormat;
+    DepthFormat selectedDepthFormat;
+    SharpRuntime::intcs selectedMultiSampleCount;
+
+    const bool accepted = def.QueryRenderTargetFormat(
+        GraphicsProfile::Reach, SurfaceFormat::Single, DepthFormat::None, 0,
+        selectedFormat, selectedDepthFormat, selectedMultiSampleCount);
+
+    EXPECT_FALSE(accepted);
+    EXPECT_EQ(selectedFormat, SurfaceFormat::Color);
+    EXPECT_EQ(selectedDepthFormat, DepthFormat::None);
+    EXPECT_EQ(selectedMultiSampleCount, 0);
+}
+
 TEST_F(GraphicsAdapterTest, QueryRenderTargetFormatDoesNotPromiseRgba64OnGles)
 {
     const CNA::GraphicsRendererType renderer =

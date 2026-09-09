@@ -40,6 +40,25 @@ namespace Microsoft::Xna::Framework::Graphics
         return static_cast<int>(result >> 1);
     }
 
+    static SurfaceFormat SelectRenderTargetFormatEXT(
+        GraphicsDevice& device, SurfaceFormat preferredFormat)
+    {
+        if (!Texture::IsRenderTargetFormatAllowedByProfileEXT(
+                device.getGraphicsProfileProperty(), preferredFormat))
+            return SurfaceFormat::Color;
+
+        switch (device.GetRenderer().ClassifyRenderTargetFormatEXT(
+            static_cast<int>(preferredFormat)))
+        {
+            case CNA::Internal::Renderers::RendererFormatVerdict::Supported:
+                return preferredFormat;
+            case CNA::Internal::Renderers::RendererFormatVerdict::Unsupported:
+            case CNA::Internal::Renderers::RendererFormatVerdict::Defer:
+                return SurfaceFormat::Color;
+        }
+        return SurfaceFormat::Color;
+    }
+
     static std::shared_ptr<IRenderTargetRenderer> CreateValidatedRenderTargetRenderer(
         GraphicsDevice& device, int width, int height, SurfaceFormat format,
         DepthFormat depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
@@ -116,10 +135,12 @@ namespace Microsoft::Xna::Framework::Graphics
                                    DepthFormat preferredDepthFormat,
                                    int preferredMultiSampleCount,
                                    RenderTargetUsage usage)
-        : Texture2D(device, width, height, preferredFormat,
+        : Texture2D(device, width, height, SelectRenderTargetFormatEXT(device, preferredFormat),
                     mipMap ? CalculateMipLevels(width, height) : 1,
                     CreateValidatedRenderTargetRenderer(
-                            device, width, height, preferredFormat, preferredDepthFormat,
+                            device, width, height,
+                            SelectRenderTargetFormatEXT(device, preferredFormat),
+                            preferredDepthFormat,
                             // REMED-GFX-136: one shared mapping for both public render targets.
                             // The literal `usage == PreserveContents` this replaces contradicted
                             // GraphicsDevice::SetRenderTargets, which only ever clears a

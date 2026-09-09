@@ -40,6 +40,25 @@ namespace Microsoft::Xna::Framework::Graphics
         return static_cast<int>(result >> 1);
     }
 
+    static SurfaceFormat SelectRenderTargetFormatEXT(
+        GraphicsDevice& device, SurfaceFormat preferredFormat)
+    {
+        if (!Texture::IsRenderTargetFormatAllowedByProfileEXT(
+                device.getGraphicsProfileProperty(), preferredFormat))
+            return SurfaceFormat::Color;
+
+        switch (device.GetRenderer().ClassifyRenderTargetFormatEXT(
+            static_cast<int>(preferredFormat)))
+        {
+            case CNA::Internal::Renderers::RendererFormatVerdict::Supported:
+                return preferredFormat;
+            case CNA::Internal::Renderers::RendererFormatVerdict::Unsupported:
+            case CNA::Internal::Renderers::RendererFormatVerdict::Defer:
+                return SurfaceFormat::Color;
+        }
+        return SurfaceFormat::Color;
+    }
+
     static std::unique_ptr<IRenderTargetCubeRenderer> CreateValidatedRenderTargetCubeRenderer(
         GraphicsDevice& device, int size, DepthFormat depthFormat, RenderTargetUsage usage,
         bool mipMap, int preferredMultiSampleCount, SurfaceFormat format)
@@ -72,13 +91,14 @@ namespace Microsoft::Xna::Framework::Graphics
                                        DepthFormat preferredDepthFormat,
                                        int preferredMultiSampleCount,
                                        RenderTargetUsage usage)
-        : TextureCube(device, size, preferredFormat,
+        : TextureCube(device, size, SelectRenderTargetFormatEXT(device, preferredFormat),
                       // IRenderTargetCubeRenderer : ITextureCubeRenderer — pass single renderer
                       // to TextureCube so sampling and rendering share the same GPU image.
                       std::shared_ptr<ITextureCubeRenderer>(
                           CreateValidatedRenderTargetCubeRenderer(
                               device, size, preferredDepthFormat, usage, mipMap,
-                              preferredMultiSampleCount, preferredFormat).release()),
+                              preferredMultiSampleCount,
+                              SelectRenderTargetFormatEXT(device, preferredFormat)).release()),
                       mipMap ? CalculateMipLevels(size) : 1)
         , size_(size)
         , depthFormat_(preferredDepthFormat)

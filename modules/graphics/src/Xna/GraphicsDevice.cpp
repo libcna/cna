@@ -2986,6 +2986,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     bool GraphicsDevice::SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat format) const
     {
+        if (!Texture::IsRenderTargetFormatAllowedByProfileEXT(graphicsProfile_, format))
+            return false;
         // plans/plan_modern.md MOD-103/MOD-104: asks the same question RenderTarget2D's constructor asks
         // (plans/plan_runtimerenderer.md design decision 9's tri-state verdict), so the two can never
         // disagree -- a format this returns true for is a format RenderTarget2D will accept, and one
