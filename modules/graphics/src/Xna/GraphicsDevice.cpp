@@ -4501,9 +4501,10 @@ namespace Microsoft::Xna::Framework::Graphics
             const auto& binding = renderTargets[i];
             Texture* texture = binding.getRenderTargetProperty();
             if (!texture)
-                throw std::invalid_argument(
+                throw System::ArgumentException(
                     "SetRenderTargets: binding " + std::to_string(i)
-                    + " has a null render target.");
+                    + " has a null render target.",
+                    "renderTargets");
             if (texture->getIsDisposedProperty())
                 throw System::ObjectDisposedException(texture->getNameProperty());
             // SOFTWARE-221: XNA resources are owned by one GraphicsDevice. Accepting a target

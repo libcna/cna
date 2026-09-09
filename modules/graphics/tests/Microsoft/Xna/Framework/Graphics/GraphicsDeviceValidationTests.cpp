@@ -696,7 +696,7 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_DefaultNullBindingThrows)
     GraphicsDevice gd;
     EXPECT_THROW(
         gd.SetRenderTargets({RenderTargetBinding()}),
-        std::invalid_argument);
+        System::ArgumentException);
 }
 
 // =============================================================================
