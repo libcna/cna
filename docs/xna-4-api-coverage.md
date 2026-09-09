@@ -674,10 +674,11 @@ implemented and exercised by the `demo_*` avatar/net examples and their own test
   at `End()`, and Vulkan's records into `activeBatches_` for replay at `Present`, while the texture
   upload submits immediately either way.
 - **Refused rather than scheduled**, with the cost written down: on Vulkan, honouring it means a
-  `vkDeviceWaitIdle` + submit + `vkQueueWaitIdle` per sprite on an off-screen target, and on the
-  backbuffer it means undoing `REMED-GFX-144`'s one-acquire-one-submit-one-present-per-frame
-  contract, which exists to fix a real defect. `docs/vulkan-renderer.md` carries the measured
-  number. The equivalent figure for EasyGL has **not** been taken: its build directory belongs to
+  synchronous dependency-closure submit/fence per sprite on an off-screen target (`MOD-2253`
+  removed the older queue/device-wide waits), and on the backbuffer it means undoing
+  `REMED-GFX-144`'s one-acquire-one-submit-one-present-per-frame contract, which exists to fix a
+  real defect. `docs/vulkan-renderer.md` carries the measured historical number. The equivalent
+  figure for EasyGL has **not** been taken: its build directory belongs to
   another session on this machine, and the test's cost leg runs on whichever renderer hosts it, so
   the number is one `ctest` away for whoever owns that tree.
 - **What a game does instead:** `End()` the batch before mutating the texture. That is one

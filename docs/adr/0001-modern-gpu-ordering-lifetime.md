@@ -28,8 +28,10 @@ folded their dependency closure into the single requested image-readback submiss
 reflects readonly graphics storage buffers into immutable retained descriptor snapshots
 and derives compute-write to vertex/fragment-read plus indirect-fetch dependencies at the exact
 consuming segment. `MOD-2251` extends that same tracked order across render-target, compute-image
-and sampled-image uses and removes the eager storage-sampling wait. Remaining bridges and narrow
-readback stalls are owned by `MOD-2244`/`MOD-2253`.
+and sampled-image uses and removes the eager storage-sampling wait. `MOD-2253` folds off-screen
+producer passes, readback transitions and the requested copy into one submit/fence, replaces
+one-time queue-idle calls with submission fences and proves bounded modern-resource churn over
+2,048 frames. Remaining legal image bridges are owned by `MOD-2244`.
 
 ## Decision
 
@@ -125,6 +127,12 @@ Backend mappings are:
 
 Frame-slot reuse and presentation may apply bounded queue back-pressure. They still must not turn
 routine disposal, upload, draw or dispatch into a global idle.
+
+Vulkan's `Vulkan_RtFlushStallCost` pins the readback rule structurally: zero device waits, zero
+extra one-time submissions and exactly one requested-closure fence. Its
+`Vulkan_ModernAllocatorStress` companion runs 2,048 presented frames with 32 resize requests and
+2,048 staging/buffer/timer churn cycles on RADV and llvmpipe; live staging and retirement state stay
+bounded and drain to zero with no validation message (`MOD-2253`).
 
 ### 6. Reject from cached capability facts before native mutation
 

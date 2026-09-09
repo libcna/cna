@@ -14,6 +14,7 @@
 #include <array>
 #include <bit>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <tuple>
@@ -3316,7 +3317,7 @@ namespace CNA::Internal::Renderers::Vulkan
          * @brief Test-only: how many one-time command submissions this renderer has performed.
          *
          * plans/plan_vulkan.md `VULKAN-396`. Legacy texture transfers and synchronous readbacks
-         * go through `EndOneTimeCommands`, which submits and then waits the queue. Deferred
+         * go through `EndOneTimeCommands`, which submits and waits its own fence. Deferred
          * storage-image uploads from `MOD-2249` deliberately do not increment this counter.
          *
          * @return Number of completed one-time command submissions since construction.
@@ -3344,7 +3345,7 @@ namespace CNA::Internal::Renderers::Vulkan
             return logicalResourceBarrierElisionCountEXT_;
         }
         /**
-         * @brief Test-only: total nanoseconds spent inside those `vkQueueWaitIdle` calls.
+         * @brief Test-only: total nanoseconds spent waiting for one-time submission fences.
          *
          * plans/plan_vulkan.md `VULKAN-396`, whose whole point is that this must be measured
          * rather than argued about. Device-dependent by nature: a test may print and bound it,
@@ -3356,6 +3357,12 @@ namespace CNA::Internal::Renderers::Vulkan
         CNAEXT [[nodiscard]] uint64_t GetOneTimeCommandWaitNanosEXT() const noexcept
         {
             return oneTimeCommandWaitNanosEXT_;
+        }
+
+        /** @brief Returns how many synchronous command submissions waited on their own fence. */
+        CNAEXT [[nodiscard]] uint64_t GetSynchronousCommandFenceWaitCountEXT() const noexcept
+        {
+            return synchronousCommandFenceWaitCountEXT_;
         }
 
         /** @brief Returns live descriptor sets owned by Vulkan compute programs. */
@@ -3381,6 +3388,39 @@ namespace CNA::Internal::Renderers::Vulkan
         {
             return computePipelineLayoutCreationCountEXT_;
         }
+
+        /** @brief Returns live native compute pipelines. */
+        CNAEXT [[nodiscard]] std::size_t GetLiveComputePipelineCountEXT() const noexcept
+        {
+            return liveComputePipelineCountEXT_;
+        }
+
+        /** @brief Returns all native compute-pipeline creations since construction. */
+        CNAEXT [[nodiscard]] uint64_t GetComputePipelineCreationCountEXT() const noexcept
+        {
+            return computePipelineCreationCountEXT_;
+        }
+
+        /** @brief Returns live immutable storage-image upload staging allocations. */
+        CNAEXT [[nodiscard]] std::size_t GetLiveModernStagingAllocationCountEXT() const noexcept
+        {
+            return liveModernStagingAllocationCountEXT_;
+        }
+
+        /** @brief Returns all immutable storage-image upload staging allocations. */
+        CNAEXT [[nodiscard]] uint64_t GetModernStagingAllocationCountEXT() const noexcept
+        {
+            return modernStagingAllocationCountEXT_;
+        }
+
+        /** @brief Returns the number of fence-retirement buckets awaiting collection. */
+        CNAEXT [[nodiscard]] std::size_t GetPendingRetiredResourceBucketCountEXT() const noexcept
+        {
+            return retiredResources_.size();
+        }
+
+        /** @brief Returns native handles awaiting fence-retirement collection. */
+        CNAEXT [[nodiscard]] std::size_t GetPendingRetiredNativeHandleCountEXT() const noexcept;
 
         /** @brief Returns the number of live renderer-owned texture-array records. */
         CNAEXT [[nodiscard]] std::size_t GetLiveTexture2DArrayCountEXT() const noexcept
@@ -4059,10 +4099,12 @@ namespace CNA::Internal::Renderers::Vulkan
         uint64_t deviceWaitIdleCountEXT_ = 0;
         /// plan_vulkan.md VULKAN-392: VkBuffer handles handed to the retirement queue.
         uint64_t retiredBufferCountEXT_ = 0;
-        /// plan_vulkan.md VULKAN-396: one-time command submissions, and the time their queue
-        /// waits cost. Both device-dependent in magnitude, both structural in ratio.
+        /// plan_vulkan.md VULKAN-396/MOD-2253: one-time command submissions and the time their
+        /// individual completion-fence waits cost.
         uint64_t oneTimeCommandCountEXT_ = 0;
         uint64_t oneTimeCommandWaitNanosEXT_ = 0;
+        /// MOD-2253: every synchronous helper waits one submission fence, never the whole queue.
+        uint64_t synchronousCommandFenceWaitCountEXT_ = 0;
         /// MOD-2248: exact logical-resource barriers emitted and compatible uses elided.
         std::uint64_t logicalResourceBarrierCountEXT_ = 0;
         std::uint64_t logicalResourceBarrierElisionCountEXT_ = 0;
@@ -4071,6 +4113,11 @@ namespace CNA::Internal::Renderers::Vulkan
         uint64_t computeDescriptorSetAllocationCountEXT_ = 0;
         std::size_t liveComputePipelineLayoutCountEXT_ = 0;
         uint64_t computePipelineLayoutCreationCountEXT_ = 0;
+        std::size_t liveComputePipelineCountEXT_ = 0;
+        uint64_t computePipelineCreationCountEXT_ = 0;
+        /// MOD-2253: immutable upload staging allocations live only in the retirement window.
+        std::size_t liveModernStagingAllocationCountEXT_ = 0;
+        uint64_t modernStagingAllocationCountEXT_ = 0;
         /// plans/plan_modern.md MOD-2246: timer-pool allocation/reuse instrumentation.
         std::uint64_t gpuTimerQueryPoolCreateCountEXT_ = 0;
         std::uint64_t gpuTimerQueryResetCountEXT_ = 0;
@@ -5197,6 +5244,8 @@ namespace CNA::Internal::Renderers::Vulkan
             /// bound. A `VkSampler` outlives its cache entry by as long as any recorded frame can
             /// still reference it, which is what this queue is for.
             std::vector<VkSampler>         samplers;
+            /// MOD-2253: number of storage-image upload staging buffer/memory pairs in this bucket.
+            std::size_t modernStagingAllocations = 0;
         };
         std::vector<RetiredResources>                                    retiredResources_;
         // MRT proxies are retired as whole objects: SetRenderTargets() replaces the live proxy
@@ -5764,7 +5813,8 @@ namespace CNA::Internal::Renderers::Vulkan
         void RecordCommandBuffer(VkCommandBuffer cb, uint32_t imageIndex,
                                  RecordMode mode = RecordMode::Full,
                                  VulkanRTSource* onlyRT = nullptr,
-                                 const std::vector<uint64_t>* flushSegments = nullptr);
+                                 const std::vector<uint64_t>* flushSegments = nullptr,
+                                 const std::function<void(VkCommandBuffer)>& afterRenderTargets = {});
 
         // REMED-GFX-151: the render-to-texture dependency graph for the frame being accumulated --
         // (bind cycle, group of a render target that cycle SAMPLES). Populated at enqueue time,
@@ -5829,16 +5879,17 @@ namespace CNA::Internal::Renderers::Vulkan
                                          VkImage image, VkImageView view, VkFramebuffer fb) const;
 
         // REMED-GFX-074: if `rt` has pending deferred work, record + submit ONLY its off-screen
-        // pass now (no present, no swapchain, no frame-bookkeeping advance) so its colour image
-        // holds the rendered result before a GetData readback, then drop the consumed entries so
-        // Present() never replays them (no double-render). No-op if nothing is queued for `rt`.
+        // pass now (no present, no swapchain, no frame-bookkeeping advance), append the supplied
+        // GetData transition/copy commands, and drop the consumed entries so Present() never
+        // replays them (no double-render). With no pending pass, it records only the copy.
         // REMED-GFX-194: `mrtAttachmentPass` is the exact immutable 2D or cube-face destination
         // being read. Each MRT proxy retains those pass objects in public attachment order, so the
         // lookup distinguishes resource, cube face, mip chain, attachment slot and binding cycle
         // without falling back to parent-cube or resolve-view identity.
         void FlushDeferredRenderTarget(VulkanRTSource* rt,
                                        const VulkanTargetPassEXT* mrtAttachmentPass,
-                                       int requestedMipLevel);
+                                       int requestedMipLevel,
+                                       const std::function<void(VkCommandBuffer)>& recordReadback);
 
         // Submits one frame (render + optional deferred readback copy). When deferSwap is
         // true the swapchain image is acquired, rendered and the GPU is waited on, but
@@ -5857,8 +5908,9 @@ namespace CNA::Internal::Renderers::Vulkan
                               VkBuffer& buf, VkDeviceMemory& mem, void** mapped = nullptr);
         VkCommandBuffer BeginOneTimeCommands();
         void            EndOneTimeCommands(VkCommandBuffer cb);
+        void            SubmitAndWaitCommandBufferEXT(VkCommandBuffer cb, bool countOneTime);
         /// plan_vulkan.md VULKAN-401: record a layout transition into a caller's command buffer,
-        /// so a multi-step operation on one image costs one queue wait instead of one per step.
+        /// so a multi-step operation on one image costs one completion wait instead of one per step.
         void RecordImageLayoutTransition(VkCommandBuffer cb, VkImage img,
                                          VkImageLayout from, VkImageLayout to,
                                          uint32_t baseMipLevel = 0);

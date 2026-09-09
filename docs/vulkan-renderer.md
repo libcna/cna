@@ -148,7 +148,8 @@ exact twelve steady-state hazards, survives disposing both public buffers after 
 accepted, and emits zero validation messages on RADV and llvmpipe. `MOD-2251` shares render-target
 colour state with compute, transitions both render-target and dedicated storage images at the
 consuming segment without an eager submit, and proves render → compute → sampled render through a
-channel-shuffling image-load/store oracle. `MOD-2253` owns the remaining readback stalls. Optional
+channel-shuffling image-load/store oracle. `MOD-2253` folds target readback's producer closure,
+transitions and copy into one submission/fence and removes queue/device idle waits. Optional
 extended storage-image formats and an ordinary-`Texture2D` bridge, where its allocation contract
 can legally provide one, remain `MOD-2244`; the dedicated `StorageTexture2D` and `RenderTarget2D`
 paths are claimed here.
@@ -338,10 +339,12 @@ sampled views are evicted/retired with the owning image, and renderer teardown d
 records before destroying the Vulkan device. `Vulkan_ModernResourceLifetime` verifies the complete
 submit/resize/device-teardown matrix 10/10 on both RADV and llvmpipe with validation enabled.
 
-One current implementation gap is stated rather than normalized into the contract:
-
-- off-screen dependency readback currently begins with `DeviceWaitIdleEXT` instead of waiting only
-  for the requested dependency closure's submission (`MOD-2253`).
+`MOD-2253` also replaces every one-time `vkQueueWaitIdle` with a short-lived fence attached to the
+specific submission. `Vulkan_RtFlushStallCost` pins off-screen readback at zero device waits, zero
+extra one-time submissions and exactly one dependency-closure fence. The 2,048-frame
+`Vulkan_ModernAllocatorStress` gate adds 32 resize requests and per-frame staging/buffer/timer churn:
+descriptor and compute-pipeline counts remain constant, live staging peaks at 4, pending retirement
+at 15 buckets/29 handles, then every transient count drains to zero on RADV and llvmpipe.
 
 Normal `Dispose()` must never add a queue/device idle. Device teardown, loss/recovery and a
 requested synchronous readback are the only relevant completion boundaries, with readback waiting
@@ -781,14 +784,14 @@ only make the two renderers disagree.
 **What honouring it would cost here**, which is the half a refusal owes a reader:
 
 - **On an off-screen target** the machinery exists — `FlushDeferredRenderTarget` records, submits
-  and waits — but it opens with a full `vkDeviceWaitIdle`, then a `vkQueueSubmit` and a
-  `vkQueueWaitIdle`. That is a complete pipeline stall per sprite, not a draw call per sprite.
+  and waits. Since `MOD-2253` it waits only the reusable frame-slot fence and one fence attached to
+  the exact producer/copy submission; the historical measurement below predates that narrowing but
+  still demonstrates the inherent cost of forcing one synchronous CPU readback per sprite.
   Measured on llvmpipe under Xvfb `:99` on 2026-09-07, at 64 one-sprite batches:
   three runs gave **443, 505 and 525 µs added per sprite**, making the
   forced-submission route **2.7× to 3.4×** the cost of the batched one. On real hardware it is
   far worse, not better: on RADV (AMD Radeon 780M, Xwayland `:150`) the same 64 sprites cost
-  7.9 ms batched and 91.6 ms forced — **1.31 ms added per sprite, ×11.6** — because a device
-  wait is cheap only when there is no real pipeline to drain.
+  7.9 ms batched and 91.6 ms forced — **1.31 ms added per sprite, ×11.6**.
 - **On the backbuffer** — where a `SpriteBatch` normally draws — there is no such path at all, and
   its absence is deliberate: `FlushDeferredRenderTarget` excludes backbuffer cycles because they
   need a swapchain image and `REMED-GFX-144`'s one-acquire-one-submit-one-present-per-frame

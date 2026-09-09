@@ -2229,6 +2229,11 @@ if (device.SupportsCapability(GraphicsCapability::ComputeShaders)) {
   cannot invalidate the command. The same records survive swapchain recreation unchanged and are
   released/disconnected before terminal device teardown; `Vulkan_ModernResourceLifetime` verifies
   all modern resource families on RADV and llvmpipe.
+- **Vulkan synchronization/allocator bound**: routine compute, upload and disposal stay in the
+  deferred frame and never idle the queue/device. CPU readback records only its producer closure
+  plus copy and waits that submit's fence. `Vulkan_ModernAllocatorStress` holds descriptors and
+  pipelines constant while 2,048 staging/buffer/timer cycles and 32 resize requests drain through a
+  bounded retirement window on RADV and llvmpipe (`MOD-2253`).
 - **`Texture2D::GetData` never shows compute writes.** It answers from the CPU pixels the texture
   was uploaded with. Compute output reaches the CPU through a storage buffer, or reaches the screen
   by being sampled in a draw.

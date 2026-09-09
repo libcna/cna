@@ -1,29 +1,23 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_vulkan.md VULKAN-399: how often does a render-target-sampling frame reach
-// FlushDeferredRenderTarget's full-device stall, and what does it cost?
+// plans/plan_vulkan.md VULKAN-399 / plans/plan_modern.md MOD-2253:
+// prove render-target readback is one dependency-closure submission and one fence wait.
 //
 // The rule this file exists to satisfy
 // ------------------------------------
-// VULKAN-399 was opened as a MEASURE-FIRST row, with an explicit non-goal of removing the stall
-// because it is a stall. VULKAN-392's counting found it: three of the four surviving
-// vkDeviceWaitIdle calls are teardown or reconfiguration, but this one is mid-frame, on the path a
-// game takes whenever it renders to a target and samples it in the same frame -- shadow maps,
-// post-process chains, reflection passes.
+// VULKAN-399 measured the original path and established that ordinary target sampling never
+// reached it. MOD-2253 later tightened the synchronous CPU-readback boundary itself.
 //
-// What the stall is, read out of the function rather than guessed: the flush is serialized on BOTH
-// sides. DeviceWaitIdleEXT(), then a one-time command buffer, then RecordCommandBuffer for the
-// segments this flush owes, then vkQueueSubmit with NO fence and NO semaphore, then
-// vkQueueWaitIdle, then vkFreeCommandBuffers. The leading wait orders the replay after previously
-// submitted frame work, which nothing else does because the submit carries no semaphore; the
-// trailing one exists because the command buffer is freed on the next line.
+// The current path waits the reusable frame slot's fence before writing its ring allocations, then
+// records the exact producer closure, both image-layout transitions and the image-to-buffer copy in
+// one command buffer. It submits that buffer with its own fence and waits exactly that fence. Same-
+// queue submission order supplies the dependency on older work; no queue/device idle is needed.
 //
 // What is asserted and what is only printed
 // -----------------------------------------
 // The same split VULKAN-396 used, for the same reason. STRUCTURAL, asserted: the scene really does
-// reach the flush, and the stall count per sampling frame is a small fixed number rather than
-// growing with the number of draws -- a per-draw stall would be a different and far worse finding
-// than a per-flush one. TIMING is printed and never failed on: a suite that fails on an absolute
-// duration reports the GPU rather than the renderer.
+// reach the flush, ordinary sampling has no synchronous submission, and one readback adds exactly
+// one closure-fence wait with no device wait or legacy one-time submission. TIMING is printed and
+// never failed on: a suite that fails on an absolute duration reports the GPU, not the renderer.
 //
 // Exit code 0 = PASS, 1 = FAIL.
 
@@ -109,16 +103,21 @@ protected:
         dev.Clear(Color(255, 0, 0, 255));
         dev.SetRenderTarget(nullptr);
 
-        // Leg C/D FIRST, while the target's work is still queued. FlushDeferredRenderTarget
-        // returns early when the target has no pending cycle (`if (!hasPendingCycle) return;`), so
-        // a readback issued after anything drained the queues never reaches the stall at all --
-        // which is what the first draft of this test accidentally measured, and why it read zero.
+        // Leg C-F first, while the target's work is still queued, so the readback has both a real
+        // producer closure and a transfer to combine.
         const std::uint64_t beforeReadback = vk->GetDeviceWaitIdleCountEXT();
+        const std::uint64_t beforeReadbackOneTime = vk->GetOneTimeCommandCountEXT();
+        const std::uint64_t beforeReadbackFence =
+            vk->GetSynchronousCommandFenceWaitCountEXT();
         const auto readbackBegin = std::chrono::steady_clock::now();
         std::vector<Color> pixels(16 * 16);
         const Rectangle sub(0, 0, 16, 16);
         target.GetData(0, &sub, pixels.data(), 0, static_cast<int>(pixels.size()));
         const std::uint64_t readbackStalls = vk->GetDeviceWaitIdleCountEXT() - beforeReadback;
+        const std::uint64_t readbackOneTime =
+            vk->GetOneTimeCommandCountEXT() - beforeReadbackOneTime;
+        const std::uint64_t readbackFences =
+            vk->GetSynchronousCommandFenceWaitCountEXT() - beforeReadbackFence;
         const double readbackMs = std::chrono::duration_cast<std::chrono::microseconds>(
                                       std::chrono::steady_clock::now() - readbackBegin).count() / 1000.0;
 
@@ -153,19 +152,27 @@ protected:
                   std::to_string(stalls) + " full-device stalls -- rendering to a target and "
                   "sampling it does NOT reach the flush at all; only a readback does");
 
-        // ---- legs C and D: the path that ACTUALLY reaches the flush -------------
+        // ---- legs C-F: the synchronous dependency-closure path ------------------
         check(!pixels.empty() && pixels[0].getRProperty() >= 200,
               "C the readback really read the target: first texel=(" +
                   std::to_string(pixels[0].getRProperty()) + "," +
                   std::to_string(pixels[0].getGProperty()) + "," +
                   std::to_string(pixels[0].getBProperty()) + ")");
-        check(readbackStalls <= 2,
+        check(readbackStalls == 0,
               "D one RenderTarget2D.GetData costs " + std::to_string(readbackStalls) +
-                  " full-device stalls -- bounded per readback, not per queued segment");
+                  " full-device stalls");
+        check(readbackFences == 1,
+              "E one RenderTarget2D.GetData costs exactly " +
+                  std::to_string(readbackFences) + " dependency-closure fence wait");
+        check(readbackOneTime == 0,
+              "F producer passes, transitions and copy use one combined submit, not " +
+                  std::to_string(readbackOneTime) + " extra one-time submits");
 
         // ---- timing, printed and never failed on --------------------------------
-        std::printf("[measure] one RenderTarget2D.GetData: %llu device stalls, %.2f ms\n",
-                    static_cast<unsigned long long>(readbackStalls), readbackMs);
+        std::printf("[measure] one RenderTarget2D.GetData: %llu device stalls, %llu closure-fence "
+                    "waits, %.2f ms\n",
+                    static_cast<unsigned long long>(readbackStalls),
+                    static_cast<unsigned long long>(readbackFences), readbackMs);
         std::printf("[measure] one render-target-sampling frame: %llu device stalls, %.2f ms of "
                     "wall clock for %d sampling draws (%dx%d window)\n",
                     static_cast<unsigned long long>(stalls), ms, kSpritesPerFrame,

@@ -1494,6 +1494,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             cna_register_renderer_test(NAME Vulkan_ModernResourceLifetime
                 COMMAND cna_test_vulkan_modern_resource_lifetime
                 TIMEOUT 90 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+            # plans/plan_modern.md MOD-2253: 2,048 presented frames, 32 real resizes and one
+            # allocation/disposal cycle per frame prove modern caches and fence retirement remain
+            # bounded while routine commands add no queue/device-wide idle wait.
+            cna_vulkan_test(cna_test_vulkan_modern_allocator_stress
+                            vulkan_modern_allocator_stress_test.cpp)
+            cna_register_renderer_test(NAME Vulkan_ModernAllocatorStress
+                COMMAND cna_test_vulkan_modern_allocator_stress
+                TIMEOUT 180 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
         endif()
 
         # plans/plan_vulkan.md VULKAN-098 (F-19): this renderer's clip-space depth range is XNA's

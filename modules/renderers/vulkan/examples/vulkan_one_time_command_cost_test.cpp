@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_vulkan.md VULKAN-396: what does the per-one-time-command `vkQueueWaitIdle` actually
-// cost?
+// plans/plan_vulkan.md VULKAN-396 / plans/plan_modern.md MOD-2253: measure the synchronous
+// per-one-time-command completion-fence wait.
 //
 // The rule this file exists to satisfy
 // ------------------------------------
@@ -10,9 +10,10 @@
 //
 // What the wait is
 // ----------------
-// `EndOneTimeCommands` submits the buffer with no fence, waits the whole queue, then frees the
-// command buffer -- and the free is why the wait is there: freeing a command buffer that is still
-// executing is illegal. Every texture upload, layout transition and readback goes through it.
+// `EndOneTimeCommands` submits the buffer with a private fence, waits that fence, then frees the
+// command buffer -- and the free is why a completion wait is there: freeing a command buffer that
+// is still executing is illegal. MOD-2253 replaced the wider queue-idle operation without changing
+// the synchronous transfer contract this test measures.
 //
 // Fixed versus device-dependent, which is the distinction that makes this test useful rather than
 // flaky (the same split `Vulkan_CapabilitySnapshot` uses):
@@ -102,12 +103,12 @@ protected:
         // ---- structural, asserted on any device ---------------------------------
         // plan_vulkan.md VULKAN-401 tightened this from "at least one each" to EXACTLY one each.
         // Before that row a texture cost three -- barrier, copy, barrier, each its own submission
-        // and its own queue wait -- and this leg failed at 144 for 48 uploads.
+        // and its own completion wait -- and this leg failed at 144 for 48 uploads.
         check(cmds == static_cast<std::uint64_t>(kTextures),
               "A " + std::to_string(kTextures) + " texture uploads cost " +
                   std::to_string(cmds) + " one-time commands, exactly one each");
         check(nanos > 0,
-              "B the queue waits are real time, not a no-op (" + std::to_string(nanos) + " ns)");
+              "B the fence waits are real time, not a no-op (" + std::to_string(nanos) + " ns)");
 
         // ---- timing, printed and never failed on --------------------------------
         const double perWaitUs   = cmds  ? (static_cast<double>(nanos) / cmds) / 1000.0 : 0.0;
@@ -115,7 +116,7 @@ protected:
         const double waitShare   = workNanos ? (100.0 * static_cast<double>(nanos) /
                                                 static_cast<double>(workNanos)) : 0.0;
         std::printf("[measure] %d uploads of %dx%d: %llu one-time commands, "
-                    "%.1f us per queue wait, %.1f ms of work, waits are %.1f%% of it\n",
+                    "%.1f us per fence wait, %.1f ms of work, waits are %.1f%% of it\n",
                     kTextures, kSize, kSize,
                     static_cast<unsigned long long>(cmds), perWaitUs, workMs, waitShare);
         std::printf("[measure] device-dependent: recorded here on this run's adapter, "

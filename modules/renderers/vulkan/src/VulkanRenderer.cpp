@@ -1129,6 +1129,9 @@ namespace CNA::Internal::Renderers::Vulkan
         VulkanRenderer::RetiredResources retired;
         retired.buffers.push_back(stagingBuffer);
         retired.memories.push_back(stagingMemory);
+        retired.modernStagingAllocations = 1;
+        ++owner_->liveModernStagingAllocationCountEXT_;
+        ++owner_->modernStagingAllocationCountEXT_;
         owner_->RetireResources(std::move(retired));
         owner_->QueueStorageImageUploadEXT(std::move(command));
         return true;
@@ -1863,8 +1866,6 @@ namespace CNA::Internal::Renderers::Vulkan
         // capability instead of handing the caller its own zero-initialized scratch buffer.
         if (!owner_ || colorImage_ == VK_NULL_HANDLE || !data || dataLength <= 0) return false;
 
-        owner_->FlushDeferredRenderTarget(pass_.get(), pass_.get(), level);
-
         VkDevice dev = owner_->device_;
         VkBuffer       stagingBuf = VK_NULL_HANDLE;
         VkDeviceMemory stagingMem = VK_NULL_HANDLE;
@@ -1874,14 +1875,6 @@ namespace CNA::Internal::Renderers::Vulkan
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             stagingBuf, stagingMem, &mapped);
 
-        // Every colorImage_ level is in SHADER_READ_ONLY_OPTIMAL outside a render pass (the RT
-        // render pass finalLayout plus mip generation, or the constructor's init barrier for a
-        // never-rendered target). Transition only the level this copy addresses.
-        owner_->TransitionImageLayout(colorImage_,
-            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            static_cast<uint32_t>(level));
-
-        VkCommandBuffer cb = owner_->BeginOneTimeCommands();
         VkBufferImageCopy region{};
         region.imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, static_cast<uint32_t>(level), 0, 1 };
         region.imageOffset      = { x, y, 0 };
@@ -1891,31 +1884,40 @@ namespace CNA::Internal::Renderers::Vulkan
         // whatever this fresh host-visible allocation already contained": if the pre- and post-copy
         // bytes are identical, no image content reached the caller at all.
         const auto* preSrc = static_cast<const uint8_t*>(mapped);
-        VkTargetReadbackTraceEXT("rt2d.read.native call=%llu image=0x%llx mipLevel=%u baseLayer=%u "
-                                 "layerCount=%u srcLayout=TRANSFER_SRC_OPTIMAL offset=(%d,%d,0) "
-                                 "extent=(%u,%u,%u) stagingBytes=%d preCopyStaging=(%u,%u,%u,%u) "
-                                 "cb=%p",
-                                 callIndex,
-                                 static_cast<unsigned long long>(
-                                     reinterpret_cast<std::uintptr_t>(colorImage_)),
-                                 region.imageSubresource.mipLevel,
-                                 region.imageSubresource.baseArrayLayer,
-                                 region.imageSubresource.layerCount,
-                                 region.imageOffset.x, region.imageOffset.y,
-                                 region.imageExtent.width, region.imageExtent.height,
-                                 region.imageExtent.depth, dataLength,
-                                 dataLength >= 4 ? static_cast<unsigned>(preSrc[0]) : 0u,
-                                 dataLength >= 4 ? static_cast<unsigned>(preSrc[1]) : 0u,
-                                 dataLength >= 4 ? static_cast<unsigned>(preSrc[2]) : 0u,
-                                 dataLength >= 4 ? static_cast<unsigned>(preSrc[3]) : 0u,
-                                 static_cast<void*>(cb));
-        vkCmdCopyImageToBuffer(cb, colorImage_, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                                stagingBuf, 1, &region);
-        owner_->EndOneTimeCommands(cb);
-
-        owner_->TransitionImageLayout(colorImage_,
-            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            static_cast<uint32_t>(level));
+        owner_->FlushDeferredRenderTarget(
+            pass_.get(), pass_.get(), level,
+            [&](const VkCommandBuffer cb)
+            {
+                // Every level is sampled outside a render pass. MOD-2253 records transition,
+                // copy and restore behind the producer closure in the same submission.
+                owner_->RecordImageLayoutTransition(
+                    cb, colorImage_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, static_cast<uint32_t>(level));
+                VkTargetReadbackTraceEXT(
+                    "rt2d.read.native call=%llu image=0x%llx mipLevel=%u baseLayer=%u "
+                    "layerCount=%u srcLayout=TRANSFER_SRC_OPTIMAL offset=(%d,%d,0) "
+                    "extent=(%u,%u,%u) stagingBytes=%d preCopyStaging=(%u,%u,%u,%u) cb=%p",
+                    callIndex,
+                    static_cast<unsigned long long>(
+                        reinterpret_cast<std::uintptr_t>(colorImage_)),
+                    region.imageSubresource.mipLevel,
+                    region.imageSubresource.baseArrayLayer,
+                    region.imageSubresource.layerCount,
+                    region.imageOffset.x, region.imageOffset.y,
+                    region.imageExtent.width, region.imageExtent.height,
+                    region.imageExtent.depth, dataLength,
+                    dataLength >= 4 ? static_cast<unsigned>(preSrc[0]) : 0u,
+                    dataLength >= 4 ? static_cast<unsigned>(preSrc[1]) : 0u,
+                    dataLength >= 4 ? static_cast<unsigned>(preSrc[2]) : 0u,
+                    dataLength >= 4 ? static_cast<unsigned>(preSrc[3]) : 0u,
+                    static_cast<void*>(cb));
+                vkCmdCopyImageToBuffer(
+                    cb, colorImage_, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                    stagingBuf, 1, &region);
+                owner_->RecordImageLayoutTransition(
+                    cb, colorImage_, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, static_cast<uint32_t>(level));
+            });
 
         const bool isBGRA = surfaceFormat_ == static_cast<int>(
             Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color) &&
@@ -12760,26 +12762,63 @@ namespace CNA::Internal::Renderers::Vulkan
 
     void VulkanRenderer::EndOneTimeCommands(VkCommandBuffer cb)
     {
-        vkEndCommandBuffer(cb);
+        if (vkEndCommandBuffer(cb) != VK_SUCCESS)
+        {
+            vkFreeCommandBuffers(device_, commandPool_, 1, &cb);
+            throw std::runtime_error("vkEndCommandBuffer failed");
+        }
+        SubmitAndWaitCommandBufferEXT(cb, true);
+    }
+
+    void VulkanRenderer::SubmitAndWaitCommandBufferEXT(
+        const VkCommandBuffer cb, const bool countOneTime)
+    {
+        VkFenceCreateInfo fenceInfo{};
+        fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        VkFence completionFence = VK_NULL_HANDLE;
+        if (vkCreateFence(device_, &fenceInfo, nullptr, &completionFence) != VK_SUCCESS)
+        {
+            vkFreeCommandBuffers(device_, commandPool_, 1, &cb);
+            throw std::runtime_error("vkCreateFence failed for synchronous command submission");
+        }
+
         VkSubmitInfo si{};
         si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         si.commandBufferCount = 1; si.pCommandBuffers = &cb;
-        vkQueueSubmit(graphicsQueue_, 1, &si, VK_NULL_HANDLE);
-        // plan_vulkan.md VULKAN-396: the wait is timed rather than argued about. It is here
-        // because the command buffer is freed on the next line and freeing one still executing is
-        // illegal -- so the question this instrumentation answers is not "why is it here" but
-        // "what does it cost", which no amount of reading can settle.
+        const VkResult submitResult =
+            vkQueueSubmit(graphicsQueue_, 1, &si, completionFence);
+        if (submitResult != VK_SUCCESS)
+        {
+            vkDestroyFence(device_, completionFence, nullptr);
+            vkFreeCommandBuffers(device_, commandPool_, 1, &cb);
+            CheckDeviceLostEXT("vkQueueSubmit", submitResult);
+            throw std::runtime_error("vkQueueSubmit failed for synchronous command submission");
+        }
+
+        // MOD-2253: synchronous transfers and CPU readback still wait for the requested work, but
+        // they wait only for this submission's completion token. Queue/device-wide idle calls also
+        // wait for unrelated work and make later concurrency impossible without buying correctness.
         const auto waitBegin = std::chrono::steady_clock::now();
-        vkQueueWaitIdle(graphicsQueue_);
-        oneTimeCommandWaitNanosEXT_ += static_cast<uint64_t>(
+        const VkResult waitResult =
+            vkWaitForFences(device_, 1, &completionFence, VK_TRUE, UINT64_MAX);
+        const auto waitNanos = static_cast<uint64_t>(
             std::chrono::duration_cast<std::chrono::nanoseconds>(
                 std::chrono::steady_clock::now() - waitBegin).count());
-        ++oneTimeCommandCountEXT_;
+        ++synchronousCommandFenceWaitCountEXT_;
+        if (countOneTime)
+        {
+            oneTimeCommandWaitNanosEXT_ += waitNanos;
+            ++oneTimeCommandCountEXT_;
+        }
+        vkDestroyFence(device_, completionFence, nullptr);
         vkFreeCommandBuffers(device_, commandPool_, 1, &cb);
+        CheckDeviceLostEXT("vkWaitForFences", waitResult);
+        if (waitResult != VK_SUCCESS)
+            throw std::runtime_error("vkWaitForFences failed for synchronous command submission");
     }
 
     // plan_vulkan.md VULKAN-401: the RECORDING half, so a caller performing several steps on one
-    // image can put them in one command buffer and pay one queue wait instead of one per step.
+    // image can put them in one command buffer and pay one completion wait instead of one per step.
     void VulkanRenderer::RecordImageLayoutTransition(VkCommandBuffer cb, VkImage img,
                                                      VkImageLayout from, VkImageLayout to,
                                                      uint32_t baseMipLevel)
@@ -12892,8 +12931,10 @@ namespace CNA::Internal::Renderers::Vulkan
     }
 
     void VulkanRenderer::RecordCommandBuffer(VkCommandBuffer cb, uint32_t imageIndex,
-                                                    RecordMode mode, VulkanRTSource* onlyRT,
-                                                    const std::vector<uint64_t>* flushSegments)
+                                             RecordMode mode, VulkanRTSource* onlyRT,
+                                             const std::vector<uint64_t>* flushSegments,
+                                             const std::function<void(VkCommandBuffer)>&
+                                                 afterRenderTargets)
     {
         // REMED-GFX-074: RenderTargetsOnly records off-screen passes for a GetData readback flush --
         // Phase 2 (backbuffer) and the backbuffer readback are skipped, and only what this record
@@ -14471,6 +14512,7 @@ namespace CNA::Internal::Renderers::Vulkan
                         }),
                     pendingSampledImages_.end());
             }
+            if (afterRenderTargets) afterRenderTargets(cb);
             if (vkEndCommandBuffer(cb) != VK_SUCCESS)
                 throw std::runtime_error("vkEndCommandBuffer failed");
             return;
@@ -14948,9 +14990,9 @@ namespace CNA::Internal::Renderers::Vulkan
     {
         // plan_vulkan.md VULKAN-392: the ONLY place this renderer calls vkDeviceWaitIdle, so
         // GetDeviceWaitIdleCountEXT() cannot under-count and a stall reintroduced anywhere is
-        // visible to a test. The four remaining callers are all reconfiguration or teardown --
-        // the destructor, RecreateSwapchain, ApplyMultiSampleCount and FlushDeferredRenderTarget
-        // -- never a per-draw path.
+        // visible to a test. MOD-2253 removed the readback caller; the three remaining callers are
+        // all reconfiguration or teardown: the destructor, RecreateSwapchain and
+        // ApplyMultiSampleCount.
         ++deviceWaitIdleCountEXT_;
         vkDeviceWaitIdle(device_);
     }
@@ -15396,6 +15438,8 @@ namespace CNA::Internal::Renderers::Vulkan
         if (pipeline_ != VK_NULL_HANDLE) {
             retired.pipelines.push_back(pipeline_);
             pipeline_ = VK_NULL_HANDLE;
+            if (owner_->liveComputePipelineCountEXT_ > 0)
+                --owner_->liveComputePipelineCountEXT_;
         }
         if (pipelineLayout_ != VK_NULL_HANDLE) {
             retired.pipelineLayouts.push_back(pipelineLayout_);
@@ -15949,6 +15993,8 @@ namespace CNA::Internal::Renderers::Vulkan
             ReleaseProgramEXT();
             return false;
         }
+        ++owner_->liveComputePipelineCountEXT_;
+        ++owner_->computePipelineCreationCountEXT_;
         return true;
     }
 
@@ -17292,6 +17338,22 @@ namespace CNA::Internal::Renderers::Vulkan
         retiredResources_.push_back(std::move(r));
     }
 
+    std::size_t VulkanRenderer::GetPendingRetiredNativeHandleCountEXT() const noexcept
+    {
+        std::size_t count = 0;
+        for (const auto& retired : retiredResources_)
+        {
+            count += retired.imageViews.size() + retired.images.size() +
+                     retired.buffers.size() + retired.memories.size() +
+                     retired.framebuffers.size() + retired.pipelines.size() +
+                     retired.pipelineLayouts.size() + retired.shaderModules.size() +
+                     retired.descriptorSetLayouts.size() + retired.descriptorPools.size() +
+                     retired.queryPools.size() + retired.descriptorSets.size() +
+                     retired.poolDescriptorSets.size() + retired.samplers.size();
+        }
+        return count;
+    }
+
     // REMED-GFX-075: evict every persistent per-(view,sampler) descriptor-set cache entry keyed on a
     // dying sampled view, moving the cached VkDescriptorSet into `into` for frame-fence-gated free.
     // Prevents a later resource that reuses the freed VkImageView handle value from being handed a
@@ -17511,6 +17573,10 @@ namespace CNA::Internal::Renderers::Vulkan
             // VULKAN-253: after the sets allocated from them have been freed above.
             for (VkDescriptorSetLayout dl : r.descriptorSetLayouts)
                 if (dl != VK_NULL_HANDLE) vkDestroyDescriptorSetLayout(device_, dl, nullptr);
+            liveModernStagingAllocationCountEXT_ =
+                r.modernStagingAllocations < liveModernStagingAllocationCountEXT_
+                    ? liveModernStagingAllocationCountEXT_ - r.modernStagingAllocations
+                    : 0;
         };
         // GFX-095 MRT framebuffers borrow their targets' attachment views. Destroy an eligible
         // proxy before the same-generation resource bucket can free those views.
@@ -17659,11 +17725,11 @@ namespace CNA::Internal::Renderers::Vulkan
     }
 
     // REMED-GFX-074: record + submit the off-screen passes a GetData readback of `rt` depends on
-    // now (no present), so `rt`'s colour image holds the queued sprite/3D result, then drop the
-    // consumed entries so the eventual Present() does not replay them. No-op when nothing is queued
-    // for `rt` (its colour image already holds the last rendered content). A device wait first
-    // ensures no in-flight frame is still using the per-frame ring buffers / UBO pools this record
-    // reuses.
+    // now (no present), so `rt`'s colour image holds the queued sprite/3D result, then append the
+    // requested copy and drop the consumed entries so the eventual Present() does not replay them.
+    // When nothing is queued, the same single command buffer contains only the requested copy.
+    // Waiting the current ring slot's fence before CPU writes protects its mapped buffers; queue
+    // submission order protects every other prior use without a device- or queue-wide idle wait.
     //
     // REMED-GFX-151: "the passes it DEPENDS ON", not "`rt`'s passes". Pre-fix this recorded the
     // segments naming `rt` and nothing else, which silently assumed a target's content depends only
@@ -17687,10 +17753,11 @@ namespace CNA::Internal::Renderers::Vulkan
     // REMED-GFX-143's ascending-id backbuffer contract intact.
     void VulkanRenderer::FlushDeferredRenderTarget(
         VulkanRTSource* rt, const VulkanTargetPassEXT* mrtAttachmentPass,
-        int requestedMipLevel)
+        int requestedMipLevel,
+        const std::function<void(VkCommandBuffer)>& recordReadback)
     {
         lastMrtReadbackMatchesEXT_.clear();
-        if (!initialized_ || !rt || device_ == VK_NULL_HANDLE) return;
+        if (!initialized_ || !rt || device_ == VK_NULL_HANDLE || !recordReadback) return;
 
         // Every pending OFF-SCREEN bind cycle this frame, with the group that owns it. Backbuffer
         // cycles are excluded: they need a swapchain image, REMED-GFX-144's one-acquire-one-submit-
@@ -17747,8 +17814,6 @@ namespace CNA::Internal::Renderers::Vulkan
         for (const auto& s : pendingSegments)
             for (const void* g : groups)
                 if (s.group == g && !alreadyNeeded(s.id)) { flushSegments.push_back(s.id); break; }
-        if (flushSegments.empty()) return;
-
         // Transitive closure over the producers each needed cycle samples.
         for (std::size_t i = 0; i < flushSegments.size(); ++i) {
             const uint64_t consumer = flushSegments[i];
@@ -17761,7 +17826,18 @@ namespace CNA::Internal::Renderers::Vulkan
         }
         std::sort(flushSegments.begin(), flushSegments.end());
 
-        DeviceWaitIdleEXT();
+        // MOD-2253: RecordCommandBuffer may refill this frame slot's persistently mapped vertex/
+        // uniform rings. Wait only for that slot, exactly as SubmitFrame does, instead of idling
+        // the whole device. The readback submission itself follows every older graphics-queue
+        // submission by Vulkan queue order and gets its own completion fence below.
+        CheckDeviceLostEXT(
+            "vkWaitForFences",
+            vkWaitForFences(
+                device_, 1, &inFlightFences_[currentFrame_], VK_TRUE, UINT64_MAX));
+        ++frameFenceWaitCountEXT_;
+        completedFrameGeneration_ = std::max(
+            completedFrameGeneration_, frameFenceGenerations_[currentFrame_]);
+        ProcessRetiredResources(false);
 
         VkCommandBufferAllocateInfo ai{};
         ai.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -17771,21 +17847,13 @@ namespace CNA::Internal::Renderers::Vulkan
         VkCommandBuffer cb = VK_NULL_HANDLE;
         if (vkAllocateCommandBuffers(device_, &ai, &cb) != VK_SUCCESS) return;
 
-        // One command buffer, one submit: every pass this flush owes, in ascending segment order.
-        // Producer and consumer land in the same submission and are ordered by pass order plus each
-        // render pass's own COLOR_ATTACHMENT_WRITE -> SHADER_READ exit dependency, so no extra
-        // barrier, fence, queue wait or submit is introduced. This also REMOVES the pre-fix
-        // submit-per-MRT-proxy loop, whose passes could only be ordered by the order the proxies
-        // happened to be discovered.
-        RecordCommandBuffer(cb, 0, RecordMode::RenderTargetsOnly, rt, &flushSegments);
-
-        VkSubmitInfo si{};
-        si.sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        si.commandBufferCount = 1;
-        si.pCommandBuffers    = &cb;
-        vkQueueSubmit(graphicsQueue_, 1, &si, VK_NULL_HANDLE);
-        vkQueueWaitIdle(graphicsQueue_);
-        vkFreeCommandBuffers(device_, commandPool_, 1, &cb);
+        // One command buffer, one submit and one completion-fence wait: every producer pass in
+        // ascending public order, the target pass, both copy-layout transitions and the copy. The
+        // CPU readback is inherently synchronous, but unrelated device/queue work is not made the
+        // synchronization primitive and there is no submit/wait between dependency and copy.
+        RecordCommandBuffer(
+            cb, 0, RecordMode::RenderTargetsOnly, rt, &flushSegments, recordReadback);
+        SubmitAndWaitCommandBufferEXT(cb, false);
     }
 
     void VulkanRenderer::SetStringMarkerEXT(const char* marker)
@@ -21531,10 +21599,9 @@ namespace CNA::Internal::Renderers::Vulkan
 
         // REMED-GFX-074/GFX-194 readback flush, keyed by this face's exact immutable pass and the
         // requested level. A direct or MRT face producer still queued for Present must be recorded
-        // BEFORE the copy. A no-op when no matching producer binding cycle remains pending.
+        // before the copy in the same submission.
         VulkanTargetPassEXT* const facePass =
             facePasses_[static_cast<std::size_t>(face)].get();
-        owner_->FlushDeferredRenderTarget(facePass, facePass, level);
 
         VkDevice dev = owner_->device_;
         VkBuffer       stagingBuf = VK_NULL_HANDLE;
@@ -21551,43 +21618,46 @@ namespace CNA::Internal::Renderers::Vulkan
             return false;
         }
 
-        // Every level of every layer sits in SHADER_READ_ONLY_OPTIMAL outside a render pass (the
-        // constructor's up-front barrier, the RT render pass's finalLayout, and MaybeGenerateMips'
-        // own restore all agree on that), so only this face layer's requested level moves.
-        VkCommandBuffer cb = owner_->BeginOneTimeCommands();
-        VkImageMemoryBarrier toXfer{};
-        toXfer.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        toXfer.oldLayout           = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        toXfer.newLayout           = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        toXfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        toXfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        toXfer.image               = image_;
-        toXfer.subresourceRange    = { VK_IMAGE_ASPECT_COLOR_BIT,
-                                        static_cast<uint32_t>(level), 1,
-                                        static_cast<uint32_t>(face), 1 };
-        toXfer.srcAccessMask       = VK_ACCESS_SHADER_READ_BIT;
-        toXfer.dstAccessMask       = VK_ACCESS_TRANSFER_READ_BIT;
-        vkCmdPipelineBarrier(cb,
-            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-            0, 0, nullptr, 0, nullptr, 1, &toXfer);
-
         VkBufferImageCopy region{};
         region.imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT,
                                      static_cast<uint32_t>(level),
                                      static_cast<uint32_t>(face), 1 };
         region.imageOffset      = { x, y, 0 };
         region.imageExtent      = { static_cast<uint32_t>(w), static_cast<uint32_t>(h), 1 };
-        vkCmdCopyImageToBuffer(cb, image_, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                                stagingBuf, 1, &region);
+        owner_->FlushDeferredRenderTarget(
+            facePass, facePass, level,
+            [&](const VkCommandBuffer cb)
+            {
+                // Every layer/mip is sampled outside a pass. Move only the requested face, copy,
+                // and restore it behind its exact producer closure in this command buffer.
+                VkImageMemoryBarrier toXfer{};
+                toXfer.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                toXfer.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                toXfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+                toXfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                toXfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                toXfer.image = image_;
+                toXfer.subresourceRange = {
+                    VK_IMAGE_ASPECT_COLOR_BIT, static_cast<uint32_t>(level), 1,
+                    static_cast<uint32_t>(face), 1};
+                toXfer.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+                toXfer.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+                vkCmdPipelineBarrier(
+                    cb, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &toXfer);
 
-        VkImageMemoryBarrier toRead = toXfer;
-        std::swap(toRead.oldLayout, toRead.newLayout);
-        std::swap(toRead.srcAccessMask, toRead.dstAccessMask);
-        vkCmdPipelineBarrier(cb,
-            VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-            0, 0, nullptr, 0, nullptr, 1, &toRead);
+                vkCmdCopyImageToBuffer(
+                    cb, image_, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                    stagingBuf, 1, &region);
 
-        owner_->EndOneTimeCommands(cb);
+                VkImageMemoryBarrier toRead = toXfer;
+                std::swap(toRead.oldLayout, toRead.newLayout);
+                std::swap(toRead.srcAccessMask, toRead.dstAccessMask);
+                vkCmdPipelineBarrier(
+                    cb, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1,
+                    &toRead);
+            });
 
         // A cube RENDER TARGET carries the swapchain format (see the constructor), not a plain
         // TextureCube's fixed RGBA8 -- the same correction VulkanRenderTargetRenderer::GetData makes.
