@@ -905,6 +905,65 @@ namespace Microsoft::Xna::Framework::Graphics
                     "Thirty-two-bit user indices are not supported by the Reach graphics profile.");
             }
         }
+
+        [[nodiscard]] Blend AdjustAlphaBlendForProfile(Blend blend)
+        {
+            switch (blend)
+            {
+                case Blend::SourceColor:             return Blend::SourceAlpha;
+                case Blend::InverseSourceColor:      return Blend::InverseSourceAlpha;
+                case Blend::DestinationColor:        return Blend::DestinationAlpha;
+                case Blend::InverseDestinationColor: return Blend::InverseDestinationAlpha;
+                default:                             return blend;
+            }
+        }
+
+        [[nodiscard]] bool UsesSeparateBlendFactors(Blend color, Blend alpha)
+        {
+            return AdjustAlphaBlendForProfile(color) != AdjustAlphaBlendForProfile(alpha);
+        }
+
+        void ValidateBlendStateForProfile(GraphicsProfile profile, const BlendState& state)
+        {
+            if (profile == GraphicsProfile::Reach)
+            {
+                if (UsesSeparateBlendFactors(state.getColorSourceBlendProperty(),
+                                             state.getAlphaSourceBlendProperty()) ||
+                    UsesSeparateBlendFactors(state.getColorDestinationBlendProperty(),
+                                             state.getAlphaDestinationBlendProperty()) ||
+                    state.getColorBlendFunctionProperty() !=
+                        state.getAlphaBlendFunctionProperty())
+                {
+                    throw System::NotSupportedException(
+                        "Separate alpha blending is not supported by the Reach graphics profile.");
+                }
+                if (state.getColorDestinationBlendProperty() == Blend::SourceAlphaSaturation ||
+                    state.getAlphaDestinationBlendProperty() == Blend::SourceAlphaSaturation)
+                {
+                    throw System::NotSupportedException(
+                        "SourceAlphaSaturation is not supported as a destination blend factor by "
+                        "the Reach graphics profile.");
+                }
+            }
+
+            const auto invalidMinMaxFactors = [](BlendFunction function,
+                                                 Blend source,
+                                                 Blend destination)
+            {
+                return (function == BlendFunction::Min || function == BlendFunction::Max) &&
+                       (source != Blend::One || destination != Blend::One);
+            };
+            if (invalidMinMaxFactors(state.getColorBlendFunctionProperty(),
+                                     state.getColorSourceBlendProperty(),
+                                     state.getColorDestinationBlendProperty()) ||
+                invalidMinMaxFactors(state.getAlphaBlendFunctionProperty(),
+                                     state.getAlphaSourceBlendProperty(),
+                                     state.getAlphaDestinationBlendProperty()))
+            {
+                throw System::NotSupportedException(
+                    "Min and Max blend functions require One/One factors on XNA profiles.");
+            }
+        }
     }
 
     int GraphicsDevice::CurrentVertexBufferOffset() const
@@ -3804,6 +3863,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::setBlendStateProperty(const BlendState& value)
     {
         ThrowIfDisposed();
+        ValidateBlendStateForProfile(graphicsProfile_, value);
         if (renderer_)
         {
             // REMED-GFX-077: the four per-MRT colour write masks + the coverage sample mask travel

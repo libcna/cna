@@ -157,6 +157,8 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Sets the blend state.
          * @param value The new blend state to apply.
+         * @throws System::NotSupportedException if the state uses a blend combination forbidden
+         *         by the active graphics profile.
          */
         void setBlendStateProperty(const BlendState& value);
         /** @brief Returns the current blend state (const). */
