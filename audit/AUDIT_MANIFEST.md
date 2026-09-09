@@ -4,7 +4,7 @@ This is the authoritative index of every manifest shard. Each shard file under `
 
 Manifest shards are an organizational device only (grouped roughly by subsystem/backend so progress can be tracked and committed in logical batches) — they are not called out by name in the audit prompt itself, but every eligible file from the full repository inventory appears in exactly one shard below.
 
-**Totals: 2367 AUDIT-eligible files across 105 shards, 337 EXEMPT files across 8 reason-categories, 2704 tracked files overall.**
+**Totals: 2369 AUDIT-eligible files across 105 shards, 337 EXEMPT files across 8 reason-categories, 2706 tracked files overall.**
 
 **Note (as of Task #8/#9 closing out):** every one of the 105 shards below was fully `AUDITED`
 (`PENDING: 0` in every row) at that point, independently reconciled against each shard's own
@@ -15,10 +15,10 @@ AUDIT-eligible files then tracked. This full resync was originally deferred to P
 
 **Note (`plans/plan_modern.md` `MOD-12`):** the statement above no longer describes the whole tree, and is
 kept as the record of where Task #8/#9 left it rather than quietly amended. The `cna-graphics` shard
-has grown from 7 files to 77: the `CNA::Graphics` engine layer was five enums and a settings bag when
+has grown from 7 files to 79: the `CNA::Graphics` engine layer was five enums and a settings bag when
 it was audited, and `plans/plan_modern.md` has since made it the largest body of new work in the
-repository. Its 70 new rows are `PENDING` — work-queue entries, not audits — so the tree-wide claim
-is now "104 shards complete, `cna-graphics` at 7/77". Every one of those 70 files landed with its own
+repository. Its 72 new rows are `PENDING` — work-queue entries, not audits — so the tree-wide claim
+is now "104 shards complete, `cna-graphics` at 7/79". Every one of those 72 files landed with its own
 tests and a verified build under its plan row; what is outstanding is the independent audit pass, not
 the implementation.
 
@@ -53,7 +53,7 @@ layout (`include/…`, `src/…`, `tests/…`). The repository has since moved t
 | Shard | Files | Status rollup |
 |---|---|---|
 | [`cna-devices`](manifest/cna-devices.md) | 39 | PENDING: 0 / AUDITED: 39 (complete) |
-| [`cna-graphics`](manifest/cna-graphics.md) | 77 | PENDING: 70 / AUDITED: 7 (grown by `plans/plan_modern.md` MOD-12) |
+| [`cna-graphics`](manifest/cna-graphics.md) | 79 | PENDING: 72 / AUDITED: 7 (grown by `plans/plan_modern.md` MOD-12) |
 | [`cna-input`](manifest/cna-input.md) | 31 | PENDING: 0 / AUDITED: 31 (complete) |
 | [`cna-internal-core`](manifest/cna-internal-core.md) | 113 | PENDING: 0 / AUDITED: 113 (complete) |
 | [`cna-root-utilities`](manifest/cna-root-utilities.md) | 15 | PENDING: 0 / AUDITED: 15 (complete) |

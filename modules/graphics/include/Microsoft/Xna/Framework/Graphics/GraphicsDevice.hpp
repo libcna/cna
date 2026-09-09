@@ -53,6 +53,7 @@ namespace CNA::Platform
 namespace CNA::Internal
 {
     class Texture2DArrayGraphicsDeviceTestPeer;
+    class StorageTexture2DGraphicsDeviceTestPeer;
 }
 
 namespace Microsoft::Xna::Framework
@@ -1649,5 +1650,6 @@ namespace Microsoft::Xna::Framework::Graphics
         friend class Microsoft::Xna::Framework::Game;
         friend class Microsoft::Xna::Framework::Content::ContentReader;
         friend class CNA::Internal::Texture2DArrayGraphicsDeviceTestPeer;
+        friend class CNA::Internal::StorageTexture2DGraphicsDeviceTestPeer;
     };
 }

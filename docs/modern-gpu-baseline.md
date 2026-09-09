@@ -213,7 +213,7 @@ tree, not about native API potential.
 | MOD-2224 | Supplied | Default and Vulkan constructor/format/limit contract suites are permanent. |
 | MOD-2225 | Supplied | Immutable `Texture2DArrayDescriptor`, usage mask and tracked `Texture2DArray` facade validate cached live limits/format usages before a false-by-default renderer factory. No native handle is exposed. |
 | MOD-2226 | Supplied | Exact layer/mip/rectangle upload and readback validate native-format bytes and compressed blocks before dispatch. `ShaderEffect` array binding retains only the internal record and refuses unsupported renderers; Vulkan samples bindings 16..18. |
-| MOD-2227 | Absent | No dedicated storage texture resource. |
+| MOD-2227 | Supplied | Immutable `StorageTexture2DDescriptor`, declared storage/sampling/transfer usage and tracked `StorageTexture2D` validate live limits plus combined format facts before a false-by-default renderer factory; exact mip/rectangle transfers expose no native handle or barrier. |
 | MOD-2228 | Partial | `ComputeShader::bindImage(Texture2D&)` exists; the storage-texture overload, retention and portable path do not. |
 | MOD-2229 | Partial | Basic compute-gated `StorageBuffer` exists without usage/access intent, ranges, staging policy or resource tracking. |
 | MOD-2230 | Absent | No typed constant-buffer wrapper or binding. |

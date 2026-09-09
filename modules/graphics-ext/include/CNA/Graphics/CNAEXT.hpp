@@ -110,6 +110,7 @@
 #include "CNA/Graphics/AutoExposureEXT.hpp"
 #include "CNA/Graphics/ComputeShader.hpp"
 #include "CNA/Graphics/StorageBuffer.hpp"
+#include "CNA/Graphics/StorageTexture2D.hpp"
 #include "CNA/Graphics/Texture2DArray.hpp"
 
 // ---- Instancing, LOD and culling -------------------------------------------------------------

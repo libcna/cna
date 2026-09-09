@@ -14,6 +14,23 @@ something breaks.
 
 ---
 
+## Revision 5 — 2026-09-09
+
+### Dedicated storage-texture resource (`MOD-2227`)
+
+- `StorageTexture2DUsage` declares storage read/write, sampling/filtering and transfer intent.
+  Every valid description has at least one storage access; filtering cannot be requested without
+  sampling.
+- `StorageTexture2DDescriptor` validates dimensions, complete mip chains, formats and usage bits
+  without a device. `StorageTexture2D` then requires known live texture/storage-image limits and
+  every combined per-format usage before renderer allocation or resource registration.
+- Exact mip/rectangle upload and readback share the texture-array rules for native-format byte
+  counts, overflow and compressed-block alignment. The tracked public resource owns only a shared
+  renderer-neutral record; native images, layouts and barriers remain hidden.
+
+Revision 5 publishes the portable allocation/transfer/lifetime contract. The default factory and
+transfers refuse; compute binding is `MOD-2228` and Vulkan allocation is `MOD-2244`.
+
 ## Revision 4 — 2026-09-09
 
 ### Texture-array transfers and sampled binding (`MOD-2226`)

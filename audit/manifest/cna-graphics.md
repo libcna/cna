@@ -2,7 +2,7 @@
 
 [<- Back to AUDIT_MANIFEST.md](../AUDIT_MANIFEST.md)
 
-Files in this shard: **77**
+Files in this shard: **79**
 
 Grown by `plans/plan_modern.md` `MOD-12`. The five files audited before that plan began were
 the whole of `CNA::Graphics` at the time; the engine layer has since become the plan's
@@ -54,38 +54,40 @@ physical `modules/graphics-ext/` location as well.
 | 40 | `include/CNA/Graphics/SpotShadowMap.hpp` | PENDING | [SpotShadowMap.hpp.audit.md](../include/CNA/Graphics/SpotShadowMap.hpp.audit.md) |
 | 41 | `include/CNA/Graphics/SsaoPass.hpp` | PENDING | [SsaoPass.hpp.audit.md](../include/CNA/Graphics/SsaoPass.hpp.audit.md) |
 | 42 | `include/CNA/Graphics/StorageBuffer.hpp` | PENDING | [StorageBuffer.hpp.audit.md](../include/CNA/Graphics/StorageBuffer.hpp.audit.md) |
-| 43 | `include/CNA/Graphics/Texture2DArray.hpp` | PENDING | [Texture2DArray.hpp.audit.md](../include/CNA/Graphics/Texture2DArray.hpp.audit.md) |
-| 44 | `include/CNA/Graphics/TonemapPass.hpp` | PENDING | [TonemapPass.hpp.audit.md](../include/CNA/Graphics/TonemapPass.hpp.audit.md) |
-| 45 | `include/CNA/Graphics/TonemappingMode.hpp` | AUDITED | [TonemappingMode.hpp.audit.md](../include/CNA/Graphics/TonemappingMode.hpp.audit.md) |
-| 46 | `src/CNA/Graphics/AsciiPostProcessEffect.cpp` | PENDING | [AsciiPostProcessEffect.cpp.audit.md](../src/CNA/Graphics/AsciiPostProcessEffect.cpp.audit.md) |
-| 47 | `src/CNA/Graphics/AutoExposureEXT.cpp` | PENDING | [AutoExposureEXT.cpp.audit.md](../src/CNA/Graphics/AutoExposureEXT.cpp.audit.md) |
-| 48 | `src/CNA/Graphics/BlitPass.cpp` | PENDING | [BlitPass.cpp.audit.md](../src/CNA/Graphics/BlitPass.cpp.audit.md) |
-| 49 | `src/CNA/Graphics/BloomPass.cpp` | PENDING | [BloomPass.cpp.audit.md](../src/CNA/Graphics/BloomPass.cpp.audit.md) |
-| 50 | `src/CNA/Graphics/CRTEffect.cpp` | PENDING | [CRTEffect.cpp.audit.md](../src/CNA/Graphics/CRTEffect.cpp.audit.md) |
-| 51 | `src/CNA/Graphics/CascadedShadowMap.cpp` | PENDING | [CascadedShadowMap.cpp.audit.md](../src/CNA/Graphics/CascadedShadowMap.cpp.audit.md) |
-| 52 | `src/CNA/Graphics/ComputeShader.cpp` | PENDING | [ComputeShader.cpp.audit.md](../src/CNA/Graphics/ComputeShader.cpp.audit.md) |
-| 53 | `src/CNA/Graphics/CubeShadowMap.cpp` | PENDING | [CubeShadowMap.cpp.audit.md](../src/CNA/Graphics/CubeShadowMap.cpp.audit.md) |
-| 54 | `src/CNA/Graphics/DepthEffect.cpp` | PENDING | [DepthEffect.cpp.audit.md](../src/CNA/Graphics/DepthEffect.cpp.audit.md) |
-| 55 | `src/CNA/Graphics/EngineException.cpp` | PENDING | [EngineException.cpp.audit.md](../src/CNA/Graphics/EngineException.cpp.audit.md) |
-| 56 | `src/CNA/Graphics/EngineLayerVersion.cpp` | PENDING | [EngineLayerVersion.cpp.audit.md](../src/CNA/Graphics/EngineLayerVersion.cpp.audit.md) |
-| 57 | `src/CNA/Graphics/EnvironmentProcessor.cpp` | PENDING | [EnvironmentProcessor.cpp.audit.md](../src/CNA/Graphics/EnvironmentProcessor.cpp.audit.md) |
-| 58 | `src/CNA/Graphics/FrustumCullerEXT.cpp` | PENDING | [FrustumCullerEXT.cpp.audit.md](../src/CNA/Graphics/FrustumCullerEXT.cpp.audit.md) |
-| 59 | `src/CNA/Graphics/FullscreenPass.cpp` | PENDING | [FullscreenPass.cpp.audit.md](../src/CNA/Graphics/FullscreenPass.cpp.audit.md) |
-| 60 | `src/CNA/Graphics/FxaaPass.cpp` | PENDING | [FxaaPass.cpp.audit.md](../src/CNA/Graphics/FxaaPass.cpp.audit.md) |
-| 61 | `src/CNA/Graphics/InstancedRendererEXT.cpp` | PENDING | [InstancedRendererEXT.cpp.audit.md](../src/CNA/Graphics/InstancedRendererEXT.cpp.audit.md) |
-| 62 | `src/CNA/Graphics/LodGroupEXT.cpp` | PENDING | [LodGroupEXT.cpp.audit.md](../src/CNA/Graphics/LodGroupEXT.cpp.audit.md) |
-| 63 | `src/CNA/Graphics/MaterialBinding.cpp` | PENDING | [MaterialBinding.cpp.audit.md](../src/CNA/Graphics/MaterialBinding.cpp.audit.md) |
-| 64 | `src/CNA/Graphics/PbrMaterial.cpp` | AUDITED | [PbrMaterial.cpp.audit.md](../src/CNA/Graphics/PbrMaterial.cpp.audit.md) |
-| 65 | `src/CNA/Graphics/PostProcessChain.cpp` | PENDING | [PostProcessChain.cpp.audit.md](../src/CNA/Graphics/PostProcessChain.cpp.audit.md) |
-| 66 | `src/CNA/Graphics/PostProcessPass.cpp` | PENDING | [PostProcessPass.cpp.audit.md](../src/CNA/Graphics/PostProcessPass.cpp.audit.md) |
-| 67 | `src/CNA/Graphics/RenderPipeline.cpp` | PENDING | [RenderPipeline.cpp.audit.md](../src/CNA/Graphics/RenderPipeline.cpp.audit.md) |
-| 68 | `src/CNA/Graphics/RenderPipelineSettings.cpp` | AUDITED | [RenderPipelineSettings.cpp.audit.md](../src/CNA/Graphics/RenderPipelineSettings.cpp.audit.md) |
-| 69 | `src/CNA/Graphics/RenderTargetPool.cpp` | PENDING | [RenderTargetPool.cpp.audit.md](../src/CNA/Graphics/RenderTargetPool.cpp.audit.md) |
-| 70 | `src/CNA/Graphics/RequireCapability.cpp` | PENDING | [RequireCapability.cpp.audit.md](../src/CNA/Graphics/RequireCapability.cpp.audit.md) |
-| 71 | `src/CNA/Graphics/ShadowMap.cpp` | PENDING | [ShadowMap.cpp.audit.md](../src/CNA/Graphics/ShadowMap.cpp.audit.md) |
-| 72 | `src/CNA/Graphics/Skybox.cpp` | PENDING | [Skybox.cpp.audit.md](../src/CNA/Graphics/Skybox.cpp.audit.md) |
-| 73 | `src/CNA/Graphics/SpotShadowMap.cpp` | PENDING | [SpotShadowMap.cpp.audit.md](../src/CNA/Graphics/SpotShadowMap.cpp.audit.md) |
-| 74 | `src/CNA/Graphics/SsaoPass.cpp` | PENDING | [SsaoPass.cpp.audit.md](../src/CNA/Graphics/SsaoPass.cpp.audit.md) |
-| 75 | `src/CNA/Graphics/StorageBuffer.cpp` | PENDING | [StorageBuffer.cpp.audit.md](../src/CNA/Graphics/StorageBuffer.cpp.audit.md) |
-| 76 | `src/CNA/Graphics/Texture2DArray.cpp` | PENDING | [Texture2DArray.cpp.audit.md](../src/CNA/Graphics/Texture2DArray.cpp.audit.md) |
-| 77 | `src/CNA/Graphics/TonemapPass.cpp` | PENDING | [TonemapPass.cpp.audit.md](../src/CNA/Graphics/TonemapPass.cpp.audit.md) |
+| 43 | `include/CNA/Graphics/StorageTexture2D.hpp` | PENDING | [StorageTexture2D.hpp.audit.md](../include/CNA/Graphics/StorageTexture2D.hpp.audit.md) |
+| 44 | `include/CNA/Graphics/Texture2DArray.hpp` | PENDING | [Texture2DArray.hpp.audit.md](../include/CNA/Graphics/Texture2DArray.hpp.audit.md) |
+| 45 | `include/CNA/Graphics/TonemapPass.hpp` | PENDING | [TonemapPass.hpp.audit.md](../include/CNA/Graphics/TonemapPass.hpp.audit.md) |
+| 46 | `include/CNA/Graphics/TonemappingMode.hpp` | AUDITED | [TonemappingMode.hpp.audit.md](../include/CNA/Graphics/TonemappingMode.hpp.audit.md) |
+| 47 | `src/CNA/Graphics/AsciiPostProcessEffect.cpp` | PENDING | [AsciiPostProcessEffect.cpp.audit.md](../src/CNA/Graphics/AsciiPostProcessEffect.cpp.audit.md) |
+| 48 | `src/CNA/Graphics/AutoExposureEXT.cpp` | PENDING | [AutoExposureEXT.cpp.audit.md](../src/CNA/Graphics/AutoExposureEXT.cpp.audit.md) |
+| 49 | `src/CNA/Graphics/BlitPass.cpp` | PENDING | [BlitPass.cpp.audit.md](../src/CNA/Graphics/BlitPass.cpp.audit.md) |
+| 50 | `src/CNA/Graphics/BloomPass.cpp` | PENDING | [BloomPass.cpp.audit.md](../src/CNA/Graphics/BloomPass.cpp.audit.md) |
+| 51 | `src/CNA/Graphics/CRTEffect.cpp` | PENDING | [CRTEffect.cpp.audit.md](../src/CNA/Graphics/CRTEffect.cpp.audit.md) |
+| 52 | `src/CNA/Graphics/CascadedShadowMap.cpp` | PENDING | [CascadedShadowMap.cpp.audit.md](../src/CNA/Graphics/CascadedShadowMap.cpp.audit.md) |
+| 53 | `src/CNA/Graphics/ComputeShader.cpp` | PENDING | [ComputeShader.cpp.audit.md](../src/CNA/Graphics/ComputeShader.cpp.audit.md) |
+| 54 | `src/CNA/Graphics/CubeShadowMap.cpp` | PENDING | [CubeShadowMap.cpp.audit.md](../src/CNA/Graphics/CubeShadowMap.cpp.audit.md) |
+| 55 | `src/CNA/Graphics/DepthEffect.cpp` | PENDING | [DepthEffect.cpp.audit.md](../src/CNA/Graphics/DepthEffect.cpp.audit.md) |
+| 56 | `src/CNA/Graphics/EngineException.cpp` | PENDING | [EngineException.cpp.audit.md](../src/CNA/Graphics/EngineException.cpp.audit.md) |
+| 57 | `src/CNA/Graphics/EngineLayerVersion.cpp` | PENDING | [EngineLayerVersion.cpp.audit.md](../src/CNA/Graphics/EngineLayerVersion.cpp.audit.md) |
+| 58 | `src/CNA/Graphics/EnvironmentProcessor.cpp` | PENDING | [EnvironmentProcessor.cpp.audit.md](../src/CNA/Graphics/EnvironmentProcessor.cpp.audit.md) |
+| 59 | `src/CNA/Graphics/FrustumCullerEXT.cpp` | PENDING | [FrustumCullerEXT.cpp.audit.md](../src/CNA/Graphics/FrustumCullerEXT.cpp.audit.md) |
+| 60 | `src/CNA/Graphics/FullscreenPass.cpp` | PENDING | [FullscreenPass.cpp.audit.md](../src/CNA/Graphics/FullscreenPass.cpp.audit.md) |
+| 61 | `src/CNA/Graphics/FxaaPass.cpp` | PENDING | [FxaaPass.cpp.audit.md](../src/CNA/Graphics/FxaaPass.cpp.audit.md) |
+| 62 | `src/CNA/Graphics/InstancedRendererEXT.cpp` | PENDING | [InstancedRendererEXT.cpp.audit.md](../src/CNA/Graphics/InstancedRendererEXT.cpp.audit.md) |
+| 63 | `src/CNA/Graphics/LodGroupEXT.cpp` | PENDING | [LodGroupEXT.cpp.audit.md](../src/CNA/Graphics/LodGroupEXT.cpp.audit.md) |
+| 64 | `src/CNA/Graphics/MaterialBinding.cpp` | PENDING | [MaterialBinding.cpp.audit.md](../src/CNA/Graphics/MaterialBinding.cpp.audit.md) |
+| 65 | `src/CNA/Graphics/PbrMaterial.cpp` | AUDITED | [PbrMaterial.cpp.audit.md](../src/CNA/Graphics/PbrMaterial.cpp.audit.md) |
+| 66 | `src/CNA/Graphics/PostProcessChain.cpp` | PENDING | [PostProcessChain.cpp.audit.md](../src/CNA/Graphics/PostProcessChain.cpp.audit.md) |
+| 67 | `src/CNA/Graphics/PostProcessPass.cpp` | PENDING | [PostProcessPass.cpp.audit.md](../src/CNA/Graphics/PostProcessPass.cpp.audit.md) |
+| 68 | `src/CNA/Graphics/RenderPipeline.cpp` | PENDING | [RenderPipeline.cpp.audit.md](../src/CNA/Graphics/RenderPipeline.cpp.audit.md) |
+| 69 | `src/CNA/Graphics/RenderPipelineSettings.cpp` | AUDITED | [RenderPipelineSettings.cpp.audit.md](../src/CNA/Graphics/RenderPipelineSettings.cpp.audit.md) |
+| 70 | `src/CNA/Graphics/RenderTargetPool.cpp` | PENDING | [RenderTargetPool.cpp.audit.md](../src/CNA/Graphics/RenderTargetPool.cpp.audit.md) |
+| 71 | `src/CNA/Graphics/RequireCapability.cpp` | PENDING | [RequireCapability.cpp.audit.md](../src/CNA/Graphics/RequireCapability.cpp.audit.md) |
+| 72 | `src/CNA/Graphics/ShadowMap.cpp` | PENDING | [ShadowMap.cpp.audit.md](../src/CNA/Graphics/ShadowMap.cpp.audit.md) |
+| 73 | `src/CNA/Graphics/Skybox.cpp` | PENDING | [Skybox.cpp.audit.md](../src/CNA/Graphics/Skybox.cpp.audit.md) |
+| 74 | `src/CNA/Graphics/SpotShadowMap.cpp` | PENDING | [SpotShadowMap.cpp.audit.md](../src/CNA/Graphics/SpotShadowMap.cpp.audit.md) |
+| 75 | `src/CNA/Graphics/SsaoPass.cpp` | PENDING | [SsaoPass.cpp.audit.md](../src/CNA/Graphics/SsaoPass.cpp.audit.md) |
+| 76 | `src/CNA/Graphics/StorageBuffer.cpp` | PENDING | [StorageBuffer.cpp.audit.md](../src/CNA/Graphics/StorageBuffer.cpp.audit.md) |
+| 77 | `src/CNA/Graphics/StorageTexture2D.cpp` | PENDING | [StorageTexture2D.cpp.audit.md](../src/CNA/Graphics/StorageTexture2D.cpp.audit.md) |
+| 78 | `src/CNA/Graphics/Texture2DArray.cpp` | PENDING | [Texture2DArray.cpp.audit.md](../src/CNA/Graphics/Texture2DArray.cpp.audit.md) |
+| 79 | `src/CNA/Graphics/TonemapPass.cpp` | PENDING | [TonemapPass.cpp.audit.md](../src/CNA/Graphics/TonemapPass.cpp.audit.md) |

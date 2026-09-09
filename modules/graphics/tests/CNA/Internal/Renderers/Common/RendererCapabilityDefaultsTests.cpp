@@ -76,6 +76,11 @@ namespace
     {
     };
 
+    class DefaultsOnlyStorageTexture2DRenderer final
+        : public CNA::Internal::Renderers::IStorageTexture2DRenderer
+    {
+    };
+
     class DefaultsOnlyEffectRenderer final
         : public CNA::Internal::Renderers::IEffectRenderer
     {
@@ -213,6 +218,12 @@ TEST(RendererCapabilityDefaultsTest, TextureArrayFactoryDefaultsToUnsupported)
     EXPECT_EQ(renderer.CreateTexture2DArrayEXT(4, 3, 2, 1, 0, UINT32_C(1)), nullptr);
 }
 
+TEST(RendererCapabilityDefaultsTest, StorageTextureFactoryDefaultsToUnsupported)
+{
+    DefaultsOnlyRenderer renderer;
+    EXPECT_EQ(renderer.CreateStorageTexture2DEXT(4, 3, 1, 0, UINT32_C(2)), nullptr);
+}
+
 TEST(RendererCapabilityDefaultsTest, TextureArrayOperationsAndBindingDefaultToUnsupported)
 {
     DefaultsOnlyTexture2DArrayRenderer texture;
@@ -222,6 +233,15 @@ TEST(RendererCapabilityDefaultsTest, TextureArrayOperationsAndBindingDefaultToUn
     EXPECT_FALSE(texture.SetData(0, 0, 0, 0, 1, 1, bytes, sizeof(bytes)));
     EXPECT_FALSE(texture.GetData(0, 0, 0, 0, 1, 1, bytes, sizeof(bytes)));
     EXPECT_FALSE(effect.BindTexture2DArrayEXT(0, {}));
+}
+
+TEST(RendererCapabilityDefaultsTest, StorageTextureTransfersDefaultToUnsupported)
+{
+    DefaultsOnlyStorageTexture2DRenderer texture;
+    unsigned char bytes[4]{};
+
+    EXPECT_FALSE(texture.SetData(0, 0, 0, 1, 1, bytes, sizeof(bytes)));
+    EXPECT_FALSE(texture.GetData(0, 0, 0, 1, 1, bytes, sizeof(bytes)));
 }
 
 TEST(RendererCapabilityDefaultsTest, AppliedMultiSampleCountEchoesTheRequest)

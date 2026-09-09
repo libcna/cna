@@ -584,6 +584,58 @@ namespace CNA::Internal::Renderers
     };
 
     /**
+     * @brief Renderer-owned record for one two-dimensional storage texture.
+     *
+     * `CNA::Graphics::StorageTexture2D` owns this record through shared lifetime identity so a
+     * deferred compute binding can retain native work without retaining or dereferencing the
+     * public `GraphicsResource`. The interface deliberately exposes no native image/view handle.
+     * Defaults refuse transfers so an unimplemented renderer cannot silently discard bytes.
+     */
+    class IStorageTexture2DRenderer
+        : public std::enable_shared_from_this<IStorageTexture2DRenderer>
+    {
+    public:
+        /** @brief Releases the renderer-owned storage-texture record. */
+        virtual ~IStorageTexture2DRenderer() = default;
+
+        /**
+         * @brief Uploads one validated rectangle of one mip level.
+         * @param mipLevel Zero-based mip level.
+         * @param x Rectangle origin on the x axis.
+         * @param y Rectangle origin on the y axis.
+         * @param width Rectangle width in texels.
+         * @param height Rectangle height in texels.
+         * @param data Source bytes.
+         * @param byteCount Exact source-byte count.
+         * @return True only after the complete byte range has been accepted.
+         */
+        [[nodiscard]] virtual bool SetData(
+            int /*mipLevel*/, int /*x*/, int /*y*/, int /*width*/, int /*height*/,
+            const void* /*data*/, std::size_t /*byteCount*/)
+        {
+            return false;
+        }
+
+        /**
+         * @brief Reads one validated rectangle of one mip level.
+         * @param mipLevel Zero-based mip level.
+         * @param x Rectangle origin on the x axis.
+         * @param y Rectangle origin on the y axis.
+         * @param width Rectangle width in texels.
+         * @param height Rectangle height in texels.
+         * @param data Destination bytes.
+         * @param byteCount Exact destination-byte count.
+         * @return True only after the complete requested byte range has been written.
+         */
+        [[nodiscard]] virtual bool GetData(
+            int /*mipLevel*/, int /*x*/, int /*y*/, int /*width*/, int /*height*/,
+            void* /*data*/, std::size_t /*byteCount*/) const
+        {
+            return false;
+        }
+    };
+
+    /**
      * Renderer texture handle. Shared lifetime identity lets bounded consumers retain weak
      * bindings without keeping disposed public Texture2D resources alive or storing raw pointers.
      */
@@ -2306,6 +2358,27 @@ namespace CNA::Internal::Renderers
         virtual std::unique_ptr<ITexture2DArrayRenderer> CreateTexture2DArrayEXT(
             int /*width*/, int /*height*/, int /*layerCount*/, int /*mipLevelCount*/,
             int /*surfaceFormat*/, std::uint32_t /*usage*/)
+        {
+            return nullptr;
+        }
+
+        /**
+         * @brief Creates a two-dimensional storage texture, or refuses it by returning null.
+         *
+         * The factory is false by default. A renderer may override it only when its published
+         * storage-image limit and all requested per-format usages describe the same implemented
+         * allocation and transfer path.
+         *
+         * @param width Level-zero width in texels.
+         * @param height Level-zero height in texels.
+         * @param mipLevelCount Number of allocated mip levels.
+         * @param surfaceFormat `SurfaceFormat` ordinal.
+         * @param usage `CNA::Graphics::StorageTexture2DUsage` bit mask.
+         * @return Renderer-owned record, or null when this path is unavailable.
+         */
+        virtual std::unique_ptr<IStorageTexture2DRenderer> CreateStorageTexture2DEXT(
+            int /*width*/, int /*height*/, int /*mipLevelCount*/, int /*surfaceFormat*/,
+            std::uint32_t /*usage*/)
         {
             return nullptr;
         }
