@@ -1117,7 +1117,12 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             // pair (measured, fbx/fbx_material_factor_texture.fbx).
             copy->setAlphaProperty(base->getAlphaProperty().value_or(1.0f));
             copy->setSpecularColorProperty(base->getSpecularColorProperty().value_or(Vector3(0, 0, 0)));
-            copy->setSpecularPowerProperty(base->getSpecularPowerProperty().value_or(0.0f));
+            // Passed through as it is, present or absent. A Lambert has no specular power and
+            // the genuine importer answers a material without one, textured or not
+            // (`fbx_material_lambert_textured.fbx`); materialising the absence as 0 here made a
+            // textured Lambert carry 0 into the `.xnb` where XNA carries `BasicEffect`'s own
+            // default of 16 (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-171`).
+            copy->setSpecularPowerProperty(base->getSpecularPowerProperty());
             for (const auto& [name, path] : resolved)
             {
                 if (name == "Texture")

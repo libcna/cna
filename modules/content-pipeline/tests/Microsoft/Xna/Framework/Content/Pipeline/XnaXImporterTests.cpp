@@ -656,6 +656,13 @@ TEST(XnaFbxImporter, EveryFileAnswersTheGraphXnaAnswers)
     for (const std::string& fixture :
          {"fbx_bare_mesh.fbx", "fbx_cameras.fbx", "fbx_hierarchy.fbx",
           "fbx_material_factor_texture.fbx", "fbx_material_legacy.fbx",
+          // A Lambert material *with* a texture. A Lambert has no specular power, and the
+          // material the genuine importer answers for this one carries a diffuse, an emissive,
+          // an alpha and a specular colour and no `SpecularPower` at all -- so the model built
+          // from it takes `BasicEffect`'s own default of 16, and materialising the absence as 0
+          // is what put a 0 in two of the corpus's references
+          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-171`).
+          "fbx_material_lambert_textured.fbx",
           "fbx_oblique.fbx", "fbx_prerotation_units.fbx",
           "fbx_quad_polygon.fbx", "fbx_quad_textured.fbx",
           // The scene lists its children in the order the file connects them, and a `Material`
