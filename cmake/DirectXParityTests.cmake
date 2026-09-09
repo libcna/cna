@@ -914,6 +914,10 @@ function(cna_register_d3d_parity_tests)
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/graphics_adapter_query_contract_test.cpp"
         DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 600)
     cna_d3d_parity_fixture(
+        NAME RendererCapabilityTruth TARGET renderer_capability_truth DIRECTX12_ORDER 2350
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/renderer_capability_truth_test.cpp"
+        DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 600)
+    cna_d3d_parity_fixture(
         NAME ViewportResetAfterResize TARGET viewport_reset_after_resize
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/viewport_reset_after_resize_test.cpp"
         DIRECTX11_TIMEOUT 300 DIRECTX11_ONLY

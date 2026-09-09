@@ -107,13 +107,13 @@ namespace CNA::Internal::Renderers::DirectX12
         /// objects, so a post-process pass that believes its shader ran is right.
         [[nodiscard]] bool ExecutesShaderEffectSourceEXT() const override { return true; }
 
-        /** @brief Reports the complete D3D12 capability surface, including multi-stream input. */
-        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override
-        {
-            if (capability == CNA::GraphicsCapability::MultiStreamVertexInput)
-                return true;
-            return IGraphicsRenderer::SupportsCapability(capability);
-        }
+        /**
+         * @brief Reports the complete runtime-backed D3D12 capability surface.
+         *
+         * @param capability Capability to query.
+         * @return true only when this renderer and its current device implement the capability.
+         */
+        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
         void GetViewportSize(int& width, int& height) override;
         /**
          * @brief Returns the physical back-buffer rectangle used for logical presentation.

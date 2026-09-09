@@ -132,13 +132,13 @@ namespace CNA::Internal::Renderers::DirectX11
         /// objects, so a post-process pass that believes its shader ran is right.
         [[nodiscard]] bool ExecutesShaderEffectSourceEXT() const override { return true; }
 
-        /** @brief Reports the complete D3D11 capability surface, including multi-stream input. */
-        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override
-        {
-            if (capability == CNA::GraphicsCapability::MultiStreamVertexInput)
-                return true;
-            return IGraphicsRenderer::SupportsCapability(capability);
-        }
+        /**
+         * @brief Reports the complete runtime-backed D3D11 capability surface.
+         *
+         * @param capability Capability to query.
+         * @return true only when this renderer and its current device implement the capability.
+         */
+        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
 
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void ClearDepth(float depth) override;

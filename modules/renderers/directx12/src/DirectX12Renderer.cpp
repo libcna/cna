@@ -2005,6 +2005,46 @@ namespace CNA::Internal::Renderers::DirectX12
         return D3DCommon::IsXnaBlockCompressedSurfaceFormat(surfaceFormat);
     }
 
+    bool DirectX12Renderer::SupportsCapability(CNA::GraphicsCapability capability) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+
+        switch (capability)
+        {
+        case CNA::GraphicsCapability::ThreeD:
+        case CNA::GraphicsCapability::DepthStencilBuffer:
+        case CNA::GraphicsCapability::MultipleRenderTargets:
+        case CNA::GraphicsCapability::AnisotropicFiltering:
+        case CNA::GraphicsCapability::WireFrame:
+        case CNA::GraphicsCapability::OcclusionQuery:
+        case CNA::GraphicsCapability::CustomEffects:
+        case CNA::GraphicsCapability::Texture3D:
+        case CNA::GraphicsCapability::MultiStreamVertexInput:
+        case CNA::GraphicsCapability::Instancing:
+        case CNA::GraphicsCapability::StencilBuffer:
+        case CNA::GraphicsCapability::AdditiveBlending:
+            return true;
+        case CNA::GraphicsCapability::MultiSampleAntiAliasing:
+            return ClampBackBufferMultiSampleCount(
+                device_.Get(), DXGI_FORMAT_R8G8B8A8_UNORM, 4) > 1;
+        case CNA::GraphicsCapability::CompiledEffects:
+            return SupportsCompiledEffects();
+        case CNA::GraphicsCapability::FloatRenderTargets:
+            return ClassifyRenderTargetFormatEXT(static_cast<int>(SurfaceFormat::Vector4)) ==
+                   RendererFormatVerdict::Supported;
+        case CNA::GraphicsCapability::HalfFloatRenderTargets:
+            return ClassifyRenderTargetFormatEXT(static_cast<int>(SurfaceFormat::HdrBlendable)) ==
+                   RendererFormatVerdict::Supported;
+        case CNA::GraphicsCapability::HalfFloatTextureLinearFiltering:
+            return SupportsHalfFloatTextureLinearFilteringEXT();
+        case CNA::GraphicsCapability::ComputeShaders:
+            return SupportsComputeShadersEXT();
+        case CNA::GraphicsCapability::IndirectDraw:
+            return SupportsIndirectDrawEXT();
+        }
+        return false;
+    }
+
     bool DirectX12Renderer::IsCompressedCubeTransferFormatEXT(int surfaceFormat) const
     {
         return D3DCommon::IsXnaBlockCompressedSurfaceFormat(surfaceFormat);
