@@ -96,8 +96,20 @@ namespace Cna.Xna40.ModelOracle
         private static readonly bool Exact =
             Environment.GetEnvironmentVariable("CNA_MODEL_ORACLE_EXACT") == "1";
 
+        // `CNA_MODEL_ORACLE_BITS=1` prints every float as its raw IEEE-754 bits. "R" cannot answer
+        // two questions this campaign keeps asking: .NET 4.0's `ToString` prints `-0` as `0`, so a
+        // sign of zero is invisible, and a decimal round trip has to be trusted rather than read.
+        // The bits are neither (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-170`).
+        private static readonly bool Bits =
+            Environment.GetEnvironmentVariable("CNA_MODEL_ORACLE_BITS") == "1";
+
         private static string F(float value)
         {
+            if (Bits)
+            {
+                return "0x" + BitConverter.ToUInt32(BitConverter.GetBytes(value), 0)
+                                          .ToString("X8", CultureInfo.InvariantCulture);
+            }
             return Exact
                 ? value.ToString("R", CultureInfo.InvariantCulture)
                 : value.ToString("0.######", CultureInfo.InvariantCulture);

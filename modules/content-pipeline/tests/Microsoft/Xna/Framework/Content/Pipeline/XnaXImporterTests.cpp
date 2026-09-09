@@ -475,6 +475,14 @@ TEST(XnaXImporter, EveryFileAnswersTheGraphXnaAnswers)
           // same normal six times under six indices, and XNA answers four vertices, not six
           // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-148`).
           "normal_duplicate_values.x",
+          // What a `MeshNormals` entry becomes, in one file: the six axis directions, which is
+          // where the sign of the zero the basis change leaves in Z is observable -- `(0, -1, 0)`
+          // answers `-0` where the *position* at the same coordinates answers `+0`; two non-unit
+          // normals, which show that the `.x` route normalizes and the FBX route does not; and
+          // three near-unit ones taken from SAMPLE-014's own models, where a float sum of squares
+          // and a double one give different floats
+          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-170`).
+          "x_normal_rules.x",
           "oblique_normals.x", "quad_textured.x", "transform_z.x", "two_materials.x",
           "with_templates.x", "zero_power.x"})
     {

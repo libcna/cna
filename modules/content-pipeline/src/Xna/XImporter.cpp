@@ -75,6 +75,45 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             return static_cast<std::size_t>(value);
         }
 
+        /**
+         * @brief A `MeshNormals` entry as the pipeline holds it: the basis change, then normalized.
+         *
+         * Two things separate this from the position conversion below, and both are measured on
+         * the genuine importer over `x_normal_rules.x`.
+         *
+         * **The basis change is a transform, and not the same one a position gets.** A position at
+         * `(0, -1, 0)` comes back with `+0` in Z; a *normal* at `(0, -1, 0)` comes back with `-0`,
+         * which is what an accumulation whose first term is `x * -0` leaves behind and what
+         * neither a plain negation nor a `+ 0.0f` can produce. The other five axis directions and
+         * the zero vector agree with the same matrix.
+         *
+         * **The normalization is wide.** The sum of squares and the square root are computed in
+         * `double` and rounded to a `float` once, and the three components are *divided* by it.
+         * `(0.855686, 0, 0.517496)` -- SAMPLE-014's own, 4.2e-7 longer than unit -- answers
+         * `0x3F5B0E38`; a float sum of squares answers `0x3F5B0E3A` and multiplying by a float
+         * reciprocal `0x3F5B0E39`. Over `asteroid1.x`'s 396 declared normals the wide division
+         * reproduces all 396 and the float form 230.
+         *
+         * A position is neither transformed this way nor normalized: `0.855686` stays
+         * `0x3F5B0E3D` (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-170`).
+         */
+        [[nodiscard]] Vector3 ConvertNormal(const Vector3 value)
+        {
+            static constexpr float kNegativeZero = -0.0f;
+            const float x = ((value.X * 1.0f) + (value.Y * 0.0f)) + (value.Z * 0.0f);
+            const float y = ((value.X * 0.0f) + (value.Y * 1.0f)) + (value.Z * 0.0f);
+            const float z = ((value.X * kNegativeZero) + (value.Y * 0.0f)) + (value.Z * -1.0f);
+            const double wide = (static_cast<double>(x) * static_cast<double>(x)) +
+                                (static_cast<double>(y) * static_cast<double>(y)) +
+                                (static_cast<double>(z) * static_cast<double>(z));
+            const float length = static_cast<float>(std::sqrt(wide));
+            if (!(length > 0.0f))
+            {
+                return Vector3(x, y, z);
+            }
+            return Vector3(x / length, y / length, z / length);
+        }
+
         /** @brief The left-handed source vector as the right-handed pipeline holds it. */
         [[nodiscard]] Vector3 Convert(const Vector3 value)
         {
@@ -313,15 +352,13 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 const std::size_t count = Count(*object2, normalAt++);
                 for (std::size_t i = 0; i < count; ++i)
                 {
-                    Vector3 normal = Convert(
-                        Vector3(At(*object2, normalAt), At(*object2, normalAt + 1), At(*object2, normalAt + 2)));
-                    // The `.x` route normalizes what the file declares and the FBX route does not.
-                    // Measured on both genuine importers: a `MeshNormals` entry of `(0, 0, 2)`
-                    // comes back `(0, 0, -1)` and `0.801785` comes back `0.801784`, while an
-                    // `.fbx` mesh's normals are answered as the file's own floats bit for bit
-                    // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-167`).
-                    normal.Normalize();
-                    normals.push_back(normal);
+                    // The `.x` route normalizes what the file declares and the FBX route does
+                    // not. Measured on both genuine importers: a `MeshNormals` entry of
+                    // `(0, 0, 2)` comes back `(0, 0, -1)` and `0.801785` comes back `0.801784`,
+                    // while an `.fbx` mesh's normals are answered as the file's own floats bit for
+                    // bit (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-167`).
+                    normals.push_back(ConvertNormal(
+                        Vector3(At(*object2, normalAt), At(*object2, normalAt + 1), At(*object2, normalAt + 2))));
                     normalAt += 3u;
                 }
                 const std::size_t normalFaceCount = Count(*object2, normalAt++);

@@ -547,6 +547,12 @@
       "thirdParty": false
     },
     {
+      "file": "x_normal_rules.x",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_normal_rule_fixture.py",
+      "thirdParty": false
+    },
+    {
       "file": "zero_power.x",
       "origin": "generated",
       "generator": "tools/xna-pipeline-oracle/model/make-model-fixtures.py",
