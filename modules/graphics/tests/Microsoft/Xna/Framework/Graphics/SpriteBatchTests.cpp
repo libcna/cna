@@ -175,7 +175,7 @@ TEST(SpriteBatchTest, DefaultConstructorDoesNotThrow)
 TEST(SpriteBatchTest, EndWithoutBeginThrows)
 {
     SpriteBatch batch;
-    EXPECT_THROW(batch.End(), std::runtime_error);
+    EXPECT_THROW(batch.End(), System::InvalidOperationException);
 }
 
 TEST(SpriteBatchTest, BeginWithoutRendererDoesNotThrow)
@@ -500,7 +500,7 @@ TEST(SpriteBatchTest, DrawXYBeforeBeginThrows)
 {
     SpriteBatch batch;
     Texture2D tex;
-    EXPECT_THROW(batch.Draw(tex, 0.0f, 0.0f), std::runtime_error);
+    EXPECT_THROW(batch.Draw(tex, 0.0f, 0.0f), System::InvalidOperationException);
 }
 
 TEST(SpriteBatchTest, DrawRectRectColorBeforeBeginThrows)
@@ -509,7 +509,7 @@ TEST(SpriteBatchTest, DrawRectRectColorBeforeBeginThrows)
     Texture2D tex;
     Rectangle dest{0, 0, 32, 32};
     Rectangle src{0, 0, 32, 32};
-    EXPECT_THROW(batch.Draw(tex, dest, src, Color::White), std::runtime_error);
+    EXPECT_THROW(batch.Draw(tex, dest, src, Color::White), System::InvalidOperationException);
 }
 
 TEST(SpriteBatchTest, DrawRectRectColorRotOriEffLayerBeforeBeginThrows)
@@ -521,7 +521,7 @@ TEST(SpriteBatchTest, DrawRectRectColorRotOriEffLayerBeforeBeginThrows)
     EXPECT_THROW(
         batch.Draw(tex, dest, src, Color::White, 0.0f, Vector2::Zero,
                    SpriteEffects::None, 0.0f),
-        std::runtime_error);
+        System::InvalidOperationException);
 }
 
 // --- DrawString guard: throws when called before Begin ---
@@ -545,7 +545,7 @@ TEST(SpriteBatchTest, DrawStringStdStringBeforeBeginThrows)
     SpriteFont font = makeEmptyFont();
     EXPECT_THROW(
         batch.DrawString(font, std::string("hi"), Vector2::Zero, Color::White),
-        std::runtime_error);
+        System::InvalidOperationException);
 }
 
 TEST(SpriteBatchTest, DrawStringScalarScaleBeforeBeginThrows)
@@ -555,7 +555,7 @@ TEST(SpriteBatchTest, DrawStringScalarScaleBeforeBeginThrows)
     EXPECT_THROW(
         batch.DrawString(font, std::string("hi"), Vector2::Zero, Color::White,
                          0.0f, Vector2::Zero, 1.0f, SpriteEffects::None, 0.0f),
-        std::runtime_error);
+        System::InvalidOperationException);
 }
 
 TEST(SpriteBatchTest, DrawStringVec2ScaleBeforeBeginThrows)
@@ -566,7 +566,7 @@ TEST(SpriteBatchTest, DrawStringVec2ScaleBeforeBeginThrows)
         batch.DrawString(font, std::string("hi"), Vector2::Zero, Color::White,
                          0.0f, Vector2::Zero, Vector2(1.0f, 1.0f),
                          SpriteEffects::None, 0.0f),
-        std::runtime_error);
+        System::InvalidOperationException);
 }
 
 // -----------------------------------------------------------------------
@@ -577,7 +577,7 @@ TEST(SpriteBatchTest, DrawVec2ColorBeforeBeginThrows)
 {
     SpriteBatch batch;
     Texture2D tex;
-    EXPECT_THROW(batch.Draw(tex, Vector2::Zero, Color::White), std::runtime_error);
+    EXPECT_THROW(batch.Draw(tex, Vector2::Zero, Color::White), System::InvalidOperationException);
 }
 
 TEST(SpriteBatchTest, DrawVec2OptSrcColorBeforeBeginThrows)
@@ -585,7 +585,7 @@ TEST(SpriteBatchTest, DrawVec2OptSrcColorBeforeBeginThrows)
     SpriteBatch batch;
     Texture2D tex;
     EXPECT_THROW(batch.Draw(tex, Vector2::Zero, std::optional<Rectangle>{}, Color::White),
-                 std::runtime_error);
+                 System::InvalidOperationException);
 }
 
 TEST(SpriteBatchTest, DrawVec2OptSrcColorRotOriScaleEffLayerBeforeBeginThrows)
@@ -595,7 +595,7 @@ TEST(SpriteBatchTest, DrawVec2OptSrcColorRotOriScaleEffLayerBeforeBeginThrows)
     EXPECT_THROW(
         batch.Draw(tex, Vector2::Zero, std::optional<Rectangle>{}, Color::White,
                    0.0f, Vector2::Zero, 1.0f, SpriteEffects::None, 0.0f),
-        std::runtime_error);
+        System::InvalidOperationException);
 }
 
 TEST(SpriteBatchTest, DrawVec2OptSrcColorRotOriVec2ScaleEffLayerBeforeBeginThrows)
@@ -605,14 +605,15 @@ TEST(SpriteBatchTest, DrawVec2OptSrcColorRotOriVec2ScaleEffLayerBeforeBeginThrow
     EXPECT_THROW(
         batch.Draw(tex, Vector2::Zero, std::optional<Rectangle>{}, Color::White,
                    0.0f, Vector2::Zero, Vector2(1.0f, 1.0f), SpriteEffects::None, 0.0f),
-        std::runtime_error);
+        System::InvalidOperationException);
 }
 
 TEST(SpriteBatchTest, DrawRectColorBeforeBeginThrows)
 {
     SpriteBatch batch;
     Texture2D tex;
-    EXPECT_THROW(batch.Draw(tex, Rectangle(0, 0, 32, 32), Color::White), std::runtime_error);
+    EXPECT_THROW(batch.Draw(tex, Rectangle(0, 0, 32, 32), Color::White),
+                 System::InvalidOperationException);
 }
 
 TEST(SpriteBatchTest, DrawRectOptSrcColorBeforeBeginThrows)
@@ -621,7 +622,7 @@ TEST(SpriteBatchTest, DrawRectOptSrcColorBeforeBeginThrows)
     Texture2D tex;
     EXPECT_THROW(
         batch.Draw(tex, Rectangle(0, 0, 32, 32), std::optional<Rectangle>{}, Color::White),
-        std::runtime_error);
+        System::InvalidOperationException);
 }
 
 TEST(SpriteBatchTest, DrawRectOptSrcColorRotOriEffLayerBeforeBeginThrows)
@@ -631,7 +632,7 @@ TEST(SpriteBatchTest, DrawRectOptSrcColorRotOriEffLayerBeforeBeginThrows)
     EXPECT_THROW(
         batch.Draw(tex, Rectangle(0, 0, 32, 32), std::optional<Rectangle>{}, Color::White,
                    0.0f, Vector2::Zero, SpriteEffects::None, 0.0f),
-        std::runtime_error);
+        System::InvalidOperationException);
 }
 
 // -----------------------------------------------------------------------
@@ -645,7 +646,7 @@ TEST(SpriteBatchTest, DrawStringStringBuilderBeforeBeginThrows)
     System::Text::StringBuilder sb;
     sb.Append("hi");
     EXPECT_THROW(batch.DrawString(font, sb, Vector2::Zero, Color::White),
-                 std::runtime_error);
+                 System::InvalidOperationException);
 }
 
 TEST(SpriteBatchTest, DrawStringStringBuilderScalarScaleBeforeBeginThrows)
@@ -657,7 +658,7 @@ TEST(SpriteBatchTest, DrawStringStringBuilderScalarScaleBeforeBeginThrows)
     EXPECT_THROW(
         batch.DrawString(font, sb, Vector2::Zero, Color::White,
                          0.0f, Vector2::Zero, 1.0f, SpriteEffects::None, 0.0f),
-        std::runtime_error);
+        System::InvalidOperationException);
 }
 
 TEST(SpriteBatchTest, DrawStringStringBuilderVec2ScaleBeforeBeginThrows)
@@ -669,7 +670,7 @@ TEST(SpriteBatchTest, DrawStringStringBuilderVec2ScaleBeforeBeginThrows)
     EXPECT_THROW(
         batch.DrawString(font, sb, Vector2::Zero, Color::White,
                          0.0f, Vector2::Zero, Vector2(1.0f, 1.0f), SpriteEffects::None, 0.0f),
-        std::runtime_error);
+        System::InvalidOperationException);
 }
 
 // -----------------------------------------------------------------------
@@ -680,7 +681,21 @@ TEST(SpriteBatchTest, BeginTwiceWithoutEndThrows)
 {
     SpriteBatch batch;
     batch.Begin();
-    EXPECT_THROW(batch.Begin(), std::runtime_error);
+    EXPECT_THROW(batch.Begin(), System::InvalidOperationException);
+}
+
+TEST(SpriteBatchTest, OrderingErrorsUseXnaInvalidOperationException)
+{
+    SpriteBatch batch;
+    Texture2D texture;
+
+    EXPECT_THROW(batch.End(), System::InvalidOperationException);
+    EXPECT_THROW(batch.Draw(texture, Vector2::Zero, Color::White),
+                 System::InvalidOperationException);
+
+    batch.Begin();
+    EXPECT_THROW(batch.Begin(), System::InvalidOperationException);
+    batch.End();
 }
 
 TEST(SpriteBatchTest, BeginEndBeginEndDoesNotThrow)

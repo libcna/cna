@@ -232,7 +232,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         throwIfDisposed();
         if (begun)
-            throw std::runtime_error("Begin has been called before calling End.");
+            throw System::InvalidOperationException("Begin has been called before calling End.");
 
         blendState_ = blendState ? *blendState : BlendState::AlphaBlend;
         samplerState_ = samplerState ? *samplerState : SamplerState::LinearClamp;
@@ -290,7 +290,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         throwIfDisposed();
         if (!begun)
-            throw std::runtime_error("End was called, but Begin has not yet been called.");
+            throw System::InvalidOperationException("End was called, but Begin has not yet been called.");
         // FNA clears its front-end guard before PrepRenderState/FlushBatch. A backend exception
         // therefore ends this Begin/End session and a caller that catches it may start another.
         begun = false;
@@ -464,7 +464,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void SpriteBatch::Draw(const Texture2D& texture, float x, float y)
     {
         throwIfDisposed();
-        if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
+        if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
         if (!renderer_) return;
         const float destinationX = ValidateDestinationComponent(x, "x");
         const float destinationY = ValidateDestinationComponent(y, "y");
@@ -484,7 +484,7 @@ namespace Microsoft::Xna::Framework::Graphics
                            Color color)
     {
         throwIfDisposed();
-        if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
+        if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
         if (!renderer_) return;
         pushSprite(texture, destinationRectangle, sourceRectangle,
                    color, 0.0f, Vector2::Zero, SpriteEffects::None, 0.0f);
@@ -500,7 +500,7 @@ namespace Microsoft::Xna::Framework::Graphics
                            float layerDepth)
     {
         throwIfDisposed();
-        if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
+        if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
         if (!renderer_) return;
         pushSprite(texture, destinationRectangle, sourceRectangle,
                    color, rotation_rad, origin, effect, layerDepth);
@@ -517,7 +517,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void SpriteBatch::Draw(const Texture2D& texture, Vector2 position, Color color)
     {
         throwIfDisposed();
-        if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
+        if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
         if (!renderer_) return;
         const float destinationX = ValidateDestinationComponent(position.X, "position");
         const float destinationY = ValidateDestinationComponent(position.Y, "position");
@@ -534,7 +534,7 @@ namespace Microsoft::Xna::Framework::Graphics
                            std::optional<Rectangle> sourceRectangle, Color color)
     {
         throwIfDisposed();
-        if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
+        if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
         if (!renderer_) return;
         const float destinationX = ValidateDestinationComponent(position.X, "position");
         const float destinationY = ValidateDestinationComponent(position.Y, "position");
@@ -555,7 +555,7 @@ namespace Microsoft::Xna::Framework::Graphics
                            SpriteEffects effects, float layerDepth)
     {
         throwIfDisposed();
-        if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
+        if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
         if (!renderer_) return;
         const float destinationX = ValidateDestinationComponent(position.X, "position");
         const float destinationY = ValidateDestinationComponent(position.Y, "position");
@@ -579,7 +579,7 @@ namespace Microsoft::Xna::Framework::Graphics
                            SpriteEffects effects, float layerDepth)
     {
         throwIfDisposed();
-        if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
+        if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
         if (!renderer_) return;
         const float destinationX = ValidateDestinationComponent(position.X, "position");
         const float destinationY = ValidateDestinationComponent(position.Y, "position");
@@ -601,7 +601,7 @@ namespace Microsoft::Xna::Framework::Graphics
                            const Rectangle& destinationRectangle, Color color)
     {
         throwIfDisposed();
-        if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
+        if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
         if (!renderer_) return;
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
@@ -614,7 +614,7 @@ namespace Microsoft::Xna::Framework::Graphics
                            std::optional<Rectangle> sourceRectangle, Color color)
     {
         throwIfDisposed();
-        if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
+        if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
         if (!renderer_) return;
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
@@ -633,7 +633,7 @@ namespace Microsoft::Xna::Framework::Graphics
                            float layerDepth)
     {
         throwIfDisposed();
-        if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
+        if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
         if (!renderer_) return;
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
@@ -682,7 +682,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                  float layerDepth)
     {
         throwIfDisposed();
-        if (!begun) throw std::runtime_error("SpriteBatch::DrawString called before Begin().");
+        if (!begun) throw System::InvalidOperationException("SpriteBatch::DrawString called before Begin().");
         if (!renderer_ || text.empty()) return;
 
         const Texture2D& texture = spriteFont.textureValue_;
