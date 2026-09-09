@@ -243,6 +243,13 @@ did not fail — it crashed, because the caster's effect failed to compile and t
 no effect applied. Portable packages use the language/stage query to select a payload; subsystems
 still ask their own semantic capability before promising a visible result.
 
+**Explicit code values.** `ShaderCodeEXT` is the owned input atom for portable shader packages. It
+stores one exact language/dialect, stage, non-empty entry point, diagnostic label and either owned
+text or owned bytes. The text and binary constructors reject a language from the other form;
+SPIR-V additionally requires whole 32-bit words. Selection therefore never guesses a language from
+payload contents, and temporary caller strings or byte vectors may be destroyed immediately after
+construction.
+
 ### Every renderer identity
 
 `plans/plan_modern.md` `MOD-1698`. The table above compares subsystems across the three renderers this

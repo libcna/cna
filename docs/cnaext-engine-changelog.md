@@ -14,6 +14,21 @@ something breaks.
 
 ---
 
+## Revision 13 — 2026-09-10
+
+### Owned explicit shader code (`MOD-2211`)
+
+- `ShaderCodeEXT` owns one exact language, stage, entry point, diagnostic source label and either
+  source text or binary bytes. Copying or moving the value never retains caller storage.
+- Text construction accepts only the three GLSL dialects, HLSL, MSL and WGSL; binary construction
+  accepts only SPIR-V and DXIL. Unknown, sentinel and future identity values are refused rather
+  than classified from their bytes.
+- Empty entry points/payloads and SPIR-V sizes that are not complete 32-bit words fail during value
+  construction, before a renderer or native compiler can see the payload.
+
+The C header carries the same engine-layer revision marker. The C ABI remains 0.26.0; no shader
+payload handle has been published at the C boundary.
+
 ## Revision 12 — 2026-09-10
 
 ### Explicit shader language and stage support (`MOD-2210`)

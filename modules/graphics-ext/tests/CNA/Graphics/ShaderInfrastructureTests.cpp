@@ -12,6 +12,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/Graphics/BloomPass.hpp"
+#include "CNA/Graphics/ShaderCodeEXT.hpp"
 #include "CNA/Graphics/ShaderDiagnostics.hpp"
 #include "CNA/Graphics/ShaderEffectFactory.hpp"
 #include "CNA/GraphicsCapability.hpp"
@@ -19,12 +20,17 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 
+#include <array>
+#include <cstdint>
 #include <stdexcept>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace {
 
 using CNA::Graphics::ShaderEffectFactory;
+using CNA::Graphics::ShaderCodeEXT;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::ShaderEffect;
 
@@ -52,6 +58,168 @@ void main() { FragColor = texture(texture1, TexCoord); }
 /// Not GLSL at all. Every compiler rejects it, which is the point: MOD-219 is about what happens
 /// when a shader fails, and a subtly-wrong shader might compile on some driver.
 constexpr const char* kBroken = "this is not a shader; it is a sentence.";
+
+// =====================================================================================
+// MOD-2211: explicit, owned source/binary payloads
+// =====================================================================================
+
+TEST(ShaderCodeEXTTest, TextOwnsEveryFieldAndSurvivesCopyAndMove)
+{
+    std::string entryPoint = "main";
+    std::string label = "post/tonemap.frag";
+    std::string source = "void main() {}";
+    ShaderCodeEXT code(
+        CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Fragment,
+        entryPoint, label, source);
+
+    entryPoint.clear();
+    label.clear();
+    source.clear();
+    EXPECT_EQ(code.getLanguage(), CNA::ShaderLanguageEXT::GlslEs);
+    EXPECT_EQ(code.getStage(), CNA::ShaderStageEXT::Fragment);
+    EXPECT_EQ(code.getEntryPoint(), "main");
+    EXPECT_EQ(code.getSourceLabel(), "post/tonemap.frag");
+    EXPECT_TRUE(code.isText());
+    EXPECT_FALSE(code.isBinary());
+    EXPECT_EQ(code.getPayloadByteSize(), 14U);
+    EXPECT_EQ(code.getText(), "void main() {}");
+    EXPECT_THROW((void)code.getBytes(), std::logic_error);
+
+    ShaderCodeEXT copy = code;
+    ShaderCodeEXT moved = std::move(copy);
+    EXPECT_EQ(moved.getText(), code.getText());
+    EXPECT_NE(moved.getText().data(), code.getText().data());
+}
+
+TEST(ShaderCodeEXTTest, BinaryOwnsEveryFieldAndSurvivesCallerMutation)
+{
+    std::vector<std::uint8_t> bytes = {0x03, 0x02, 0x23, 0x07};
+    ShaderCodeEXT code(
+        CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Compute,
+        "main", "compute/cull.spv", bytes);
+
+    bytes[0] = 0;
+    EXPECT_EQ(code.getLanguage(), CNA::ShaderLanguageEXT::SpirV);
+    EXPECT_EQ(code.getStage(), CNA::ShaderStageEXT::Compute);
+    EXPECT_EQ(code.getEntryPoint(), "main");
+    EXPECT_EQ(code.getSourceLabel(), "compute/cull.spv");
+    EXPECT_FALSE(code.isText());
+    EXPECT_TRUE(code.isBinary());
+    EXPECT_EQ(code.getPayloadByteSize(), 4U);
+    EXPECT_EQ(code.getBytes(), (std::vector<std::uint8_t>{0x03, 0x02, 0x23, 0x07}));
+    EXPECT_THROW((void)code.getText(), std::logic_error);
+}
+
+TEST(ShaderCodeEXTTest, EveryDeclaredLanguageAcceptsOnlyItsPayloadForm)
+{
+    constexpr std::array textLanguages = {
+        CNA::ShaderLanguageEXT::GlslDesktop,
+        CNA::ShaderLanguageEXT::GlslEs,
+        CNA::ShaderLanguageEXT::GlslVulkan,
+        CNA::ShaderLanguageEXT::Hlsl,
+        CNA::ShaderLanguageEXT::Msl,
+        CNA::ShaderLanguageEXT::Wgsl
+    };
+    for (const auto language : textLanguages)
+    {
+        EXPECT_NO_THROW(ShaderCodeEXT(
+            language, CNA::ShaderStageEXT::Vertex, "main", "text", "source"));
+        EXPECT_THROW(ShaderCodeEXT(
+            language, CNA::ShaderStageEXT::Vertex, "main", "binary",
+            std::vector<std::uint8_t>{1}), std::invalid_argument);
+    }
+
+    constexpr std::array binaryLanguages = {
+        CNA::ShaderLanguageEXT::SpirV,
+        CNA::ShaderLanguageEXT::Dxil
+    };
+    for (const auto language : binaryLanguages)
+    {
+        const std::vector<std::uint8_t> bytes = language == CNA::ShaderLanguageEXT::SpirV
+            ? std::vector<std::uint8_t>{1, 2, 3, 4}
+            : std::vector<std::uint8_t>{1};
+        EXPECT_NO_THROW(ShaderCodeEXT(
+            language, CNA::ShaderStageEXT::Vertex, "main", "binary", bytes));
+        EXPECT_THROW(ShaderCodeEXT(
+            language, CNA::ShaderStageEXT::Vertex, "main", "text", "source"),
+            std::invalid_argument);
+    }
+}
+
+TEST(ShaderCodeEXTTest, UnknownFutureAndSentinelLanguagesAreRejected)
+{
+    constexpr std::array invalidLanguages = {
+        CNA::ShaderLanguageEXT::Unknown,
+        CNA::ShaderLanguageEXT::Count,
+        static_cast<CNA::ShaderLanguageEXT>(999)
+    };
+    for (const auto language : invalidLanguages)
+    {
+        EXPECT_THROW(ShaderCodeEXT(
+            language, CNA::ShaderStageEXT::Vertex, "main", "text", "source"),
+            std::invalid_argument);
+        EXPECT_THROW(ShaderCodeEXT(
+            language, CNA::ShaderStageEXT::Vertex, "main", "binary",
+            std::vector<std::uint8_t>{1, 2, 3, 4}), std::invalid_argument);
+    }
+}
+
+TEST(ShaderCodeEXTTest, UnknownFutureAndSentinelStagesAreRejected)
+{
+    constexpr std::array invalidStages = {
+        CNA::ShaderStageEXT::Unknown,
+        CNA::ShaderStageEXT::Count,
+        static_cast<CNA::ShaderStageEXT>(999)
+    };
+    for (const auto stage : invalidStages)
+    {
+        EXPECT_THROW(ShaderCodeEXT(
+            CNA::ShaderLanguageEXT::GlslEs, stage, "main", "text", "source"),
+            std::invalid_argument);
+        EXPECT_THROW(ShaderCodeEXT(
+            CNA::ShaderLanguageEXT::SpirV, stage, "main", "binary",
+            std::vector<std::uint8_t>{1, 2, 3, 4}), std::invalid_argument);
+    }
+}
+
+TEST(ShaderCodeEXTTest, EmptyEntryPointAndPayloadsAreRejectedButAnEmptyLabelIsAllowed)
+{
+    EXPECT_THROW(ShaderCodeEXT(
+        CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Fragment,
+        "", "text", "source"), std::invalid_argument);
+    EXPECT_THROW(ShaderCodeEXT(
+        CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Compute,
+        "", "binary", std::vector<std::uint8_t>{1, 2, 3, 4}),
+        std::invalid_argument);
+    EXPECT_THROW(ShaderCodeEXT(
+        CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Fragment,
+        "main", "text", ""), std::invalid_argument);
+    EXPECT_THROW(ShaderCodeEXT(
+        CNA::ShaderLanguageEXT::Dxil, CNA::ShaderStageEXT::Compute,
+        "main", "binary", std::vector<std::uint8_t>{}), std::invalid_argument);
+
+    const ShaderCodeEXT unlabeled(
+        CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Fragment,
+        "main", "", "source");
+    EXPECT_TRUE(unlabeled.getSourceLabel().empty());
+}
+
+TEST(ShaderCodeEXTTest, SpirVRequiresWholeWordsWhileDxilRemainsByteAddressed)
+{
+    for (const std::size_t byteCount : {1U, 2U, 3U, 5U, 6U, 7U})
+    {
+        EXPECT_THROW(ShaderCodeEXT(
+            CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Compute,
+            "main", "bad.spv", std::vector<std::uint8_t>(byteCount, 0)),
+            std::invalid_argument);
+    }
+    EXPECT_NO_THROW(ShaderCodeEXT(
+        CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Compute,
+        "main", "one-word.spv", std::vector<std::uint8_t>(4, 0)));
+    EXPECT_NO_THROW(ShaderCodeEXT(
+        CNA::ShaderLanguageEXT::Dxil, CNA::ShaderStageEXT::Compute,
+        "main", "byte.dxil", std::vector<std::uint8_t>{0}));
+}
 
 // =====================================================================================
 // MOD-210: compiled once per name, per device
