@@ -1604,9 +1604,10 @@ namespace CNA::Internal::Renderers::Vulkan
     /**
      * @brief SPIR-V compute pipeline implementing CNA's existing compute-shader seam.
      *
-     * plans/plan_modern.md MOD-2241/MOD-2242/MOD-2228. SPIR-V reflection creates only the set-zero
-     * storage-buffer and storage-image slots the module declares, maps named 32-bit scalar push
-     * constants, and preserves image format/access metadata for deterministic binding validation.
+     * plans/plan_modern.md MOD-2241/MOD-2242/MOD-2228/MOD-2233. SPIR-V reflection creates only the
+     * set-zero storage-buffer, storage-image and sampled-image slots the module declares, maps
+     * named 32-bit scalar push constants, and preserves resource metadata for deterministic
+     * binding validation.
      */
     class VulkanComputeShaderRenderer final : public IComputeShaderRenderer
     {
@@ -1675,12 +1676,17 @@ namespace CNA::Internal::Renderers::Vulkan
             int accessMode) override;
 
         /**
-         * @brief Refuses sampled-texture binding until the Vulkan compute layout describes it.
-         *
-         * @param unit Sampler binding index.
+         * @brief Retains a Vulkan Texture2D or RenderTarget2D at a reflected sampled-image slot.
+         * @param unit Direct set-zero combined-image-sampler binding.
          * @param texture Texture requested by the caller.
          */
         void BindTexture(int unit, ITextureRenderer* texture) override;
+
+        /** @copydoc IComputeShaderRenderer::UsesDirectSampledTextureBindingsEXT */
+        [[nodiscard]] bool UsesDirectSampledTextureBindingsEXT() const override
+        {
+            return true;
+        }
 
         /** @brief Returns whether module and compute pipeline creation succeeded. */
         [[nodiscard]] bool IsValid() const override { return pipeline_ != VK_NULL_HANDLE; }
@@ -1710,6 +1716,13 @@ namespace CNA::Internal::Renderers::Vulkan
         /** @brief Clears a binding that names a storage buffer being destroyed. */
         void ForgetStorageBufferEXT(const VulkanStorageBufferRenderer* buffer) noexcept;
 
+        /**
+         * @brief Returns whether an immutable descriptor snapshot retains a sampler handle.
+         * @param sampler Native sampler considered for cache eviction.
+         * @return True while destroying @p sampler would invalidate a cached descriptor.
+         */
+        [[nodiscard]] bool ReferencesSamplerEXT(VkSampler sampler) const noexcept;
+
         /** @brief Retires Vulkan handles while the owning device exists. */
         void ReleaseVulkanResources();
 
@@ -1733,6 +1746,8 @@ namespace CNA::Internal::Renderers::Vulkan
         {
             std::vector<VkBuffer> buffers;
             std::vector<VkImageView> images;
+            std::vector<VkSampler> samplers;
+            std::vector<std::shared_ptr<void>> retainedResources;
             VkDescriptorSet set = VK_NULL_HANDLE;
             bool initialized = false;
         };
@@ -1742,8 +1757,11 @@ namespace CNA::Internal::Renderers::Vulkan
         void ReleaseProgramEXT();
         [[nodiscard]] VkDescriptorSet GetOrCreateDescriptorSetEXT(
             const std::vector<VkBuffer>& buffers, const std::vector<VkImageView>& images,
+            const std::vector<VkSampler>& samplers,
+            const std::vector<std::shared_ptr<void>>& retainedResources,
             const std::vector<VkDescriptorBufferInfo>& bufferInfos,
-            const std::vector<VkDescriptorImageInfo>& imageInfos);
+            const std::vector<VkDescriptorImageInfo>& storageImageInfos,
+            const std::vector<VkDescriptorImageInfo>& sampledImageInfos);
 
         VulkanRenderer* owner_ = nullptr;
         VkShaderModule shaderModule_ = VK_NULL_HANDLE;
@@ -1762,6 +1780,11 @@ namespace CNA::Internal::Renderers::Vulkan
             renderTargetImages_;
         std::unordered_map<uint32_t, std::shared_ptr<VulkanTextureRenderer>>
             textureImages_;
+        std::vector<uint32_t> sampledImageBindingSlots_;
+        std::unordered_map<uint32_t, std::shared_ptr<VulkanTextureRenderer>>
+            sampledTextures_;
+        std::unordered_map<uint32_t, std::shared_ptr<VulkanRenderTargetRenderer>>
+            sampledRenderTargets_;
         std::unordered_map<std::string, ScalarSlot> scalarSlots_;
         std::vector<uint8_t> pushConstantBytes_;
         std::string compileError_;
@@ -5244,6 +5267,11 @@ namespace CNA::Internal::Renderers::Vulkan
                 int accessMode = 2;
             };
             std::vector<StorageImageUse> storageImages;
+            struct SampledImageUse {
+                std::shared_ptr<VulkanTextureRenderer> texture;
+                std::shared_ptr<VulkanRenderTargetRenderer> renderTarget;
+            };
+            std::vector<SampledImageUse> sampledImages;
 
             std::shared_ptr<VulkanStorageBufferRenderer> copySource;
             std::shared_ptr<VulkanStorageBufferRenderer> copyDestination;
@@ -5261,6 +5289,7 @@ namespace CNA::Internal::Renderers::Vulkan
         void QueueStorageBufferCopyEXT(PendingModernCommand&& command);
         void QueueStorageImageUploadEXT(PendingModernCommand&& command);
         void RecordModernCommandEXT(VkCommandBuffer cb, const PendingModernCommand& command);
+        void FlushModernSampledRenderTargetsEXT();
         void FlushPendingModernCommandsForHostEXT(
             const VulkanStorageBufferRenderer* targetBuffer = nullptr,
             VulkanResourceIntent hostIntent = VulkanResourceIntent::CpuRead);

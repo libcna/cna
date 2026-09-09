@@ -132,7 +132,8 @@ the detailed query by `MOD-2260`; it consumes desktop GLSL vertex and fragment p
 |---|---:|---:|---:|
 | Shader-effect source execution | S | U | S |
 | Compute shaders + storage-buffer dispatch | S | S | U |
-| Compute image binding | U | U | U |
+| Compute image binding | U | S | U |
+| Compute sampling of `Texture2D` / `RenderTarget2D` | S | S | U |
 | Indirect drawing | S | S | U |
 | GPU timers | S | S | U |
 | Shadow sampling | S | U | U |
@@ -199,6 +200,39 @@ are still zero; those are classification gaps, not permission to assume unlimite
   layer limit. EasyGL and OpenGL4 still report no storage-image or texture-array path; their
   portability work belongs to `MOD-2261`.
 
+## XNA/modern resource interoperability (`MOD-2233`)
+
+The bridge is typed and opt-in. CNA never exposes a native image layout, memory barrier, image
+alias, descriptor or buffer handle, and never treats matching byte sizes as permission to
+reinterpret one resource class as another. A legal bind validates the live resource, owning
+`GraphicsDevice`, immutable usage and (where relevant) exact format before renderer work. An
+accepted deferred operation retains the renderer-owned record rather than the public wrapper, so
+later rebinding or disposal cannot invalidate work already issued.
+
+| Public resource | Graphics sampling/drawing | Compute use | Copy/alias contract |
+|---|---|---|---|
+| XNA `Texture2D` | Existing SpriteBatch, stock-effect and `ShaderEffect` sampling. | `ComputeShader::bindTexture` samples it on EasyGL and Vulkan. `bindImage` is a separate storage-image bridge and works only when `isImageBindingSupported()` and that exact format/allocation permit the requested access. | XNA CPU `SetData`/`GetData` only; no GPU copy or buffer alias. A full ordinary-texture `SetData` may replace its shared renderer record for content-cache isolation, so perform it before binding or bind again afterward. |
+| XNA `RenderTarget2D` | Existing render-target output and texture sampling. | `bindTexture` samples it on EasyGL and Vulkan. Vulkan also accepts exact storage-capable targets through `bindImage`; queued attachment producers are found transitively before compute. | No public image alias or GPU-copy API. The existing render-target readback remains format-aware. |
+| XNA `VertexBuffer` / `DynamicVertexBuffer` | XNA vertex input only. | No compute binding overload. | No alias or GPU copy to/from `StorageBuffer`. |
+| XNA `IndexBuffer` / `DynamicIndexBuffer` | XNA indexed drawing only. | No compute binding overload. | No alias or GPU copy to/from `StorageBuffer`. |
+| `Texture2DArray` | `ShaderEffect::SetTextureArrayEXT` when its immutable descriptor declares sampling. | No compute binding overload in the current portable contract. | Exact declared CPU layer/mip/rectangle transfers only; no alias or GPU copy. |
+| `StorageTexture2D` | `ShaderEffect::SetStorageTextureEXT` only when `Sampled` was declared. | `bindStorageTexture` uses the declared read/write subset and exact format-qualified storage image. It is intentionally not accepted by `bindTexture`. | Exact declared CPU transfers only; no image alias or GPU-copy method. |
+| `StorageBuffer` / `StorageBufferT<T>` | Higher-level GPU-driven paths may bind it as shader storage; indirect draw accepts only `IndirectArguments`. `Vertex`/`Index` remain allocation intents until an explicit typed draw bridge exists. | `bindStorageBuffer` requires the `Storage` role. | `copyTo` accepts only another same-device `StorageBuffer` with matching transfer roles and valid non-overlapping ranges. It never aliases an XNA vertex/index buffer. |
+
+The listed Vulkan transitions are internal uses in one ordered command stream: attachment/transfer
+writes become sampled reads, and compute/transfer writes become their next declared consumers at
+the consuming command. The caller does not invoke `ComputeShader::barrier` for any bridge in this
+table. That older method remains available for renderer-specific legacy code, but it is not part of
+the correctness contract above.
+
+The shared `ModernResourceInteropTypeTest` compile-time matrix pins which public types can cross
+each overload. `ComputeTest.PortableComputeSamplesTexture2DAndRetainsItsDeferredLifetime`,
+`PortableComputeSamplesDeferredRenderTargetWithoutPublicBarriers` and
+`TextureInteropRejectsDisposedForeignAndInvalidAccessBeforeBackendWork` use one generated package
+on EasyGL and Vulkan. `VulkanRejectsAnIntegerSamplerBeforeItCanAliasAFloatTexture` additionally
+pins the SPIR-V sampled-component contract; Vulkan runs pass on both RADV and llvmpipe with Khronos
+validation enabled.
+
 ## Per-task reconciliation
 
 `Supplied` means the present tree already satisfies the row and its permanent evidence. `Partial`
@@ -231,9 +265,9 @@ tree, not about native API potential.
 | MOD-2228 | Supplied | `ComputeShader::bindStorageTexture` validates explicit access/device/lifetime and forwards the retained internal record through a false-by-default renderer seam. Vulkan reflects exact SPIR-V image slot/format/access metadata; the live oracle proves compute write to byte-exact readback and a sampled draw. |
 | MOD-2229 | Supplied | Immutable usage/CPU-access descriptors, tracked lifetime, overflow-safe ranges and GPU copies are public. Vulkan allocates exact role flags, keeps CPU-none memory unmapped and proves staging-through-copy on two devices. |
 | MOD-2230 | Absent | No typed constant-buffer wrapper or binding. |
-| MOD-2231 | Partial | Canonical argument structs and indirect draw calls exist, but argument storage cannot be created independently of compute support. |
+| MOD-2231 | Supplied | `StorageBufferUsage::IndirectArguments` is independently creatable on an indirect-capable device without compute or a storage-buffer byte limit; mixed compute-written arguments explicitly require both roles. |
 | MOD-2232 | Supplied | Engine revision 8 adds the direct, detailed-feature-gated base-instance draw; Vulkan retains the shifted instance range and proves instance one independently on RADV and llvmpipe. |
-| MOD-2233 | Partial | A few ad-hoc XNA texture/buffer bridges exist; no documented/tested interoperability and lifetime matrix exists. |
+| MOD-2233 | Supplied | The typed matrix above defines every legal XNA/new-resource bridge and explicit non-alias. One generated compute package proves Texture2D and deferred RenderTarget2D sampling, retained lifetime, automatic ordering and deterministic validation on EasyGL plus Vulkan/RADV/llvmpipe. |
 | MOD-2240 | Supplied | Vulkan discovery separates supported and enabled facts and records its ordered queue. |
 | MOD-2241 | Supplied | Vulkan implements the existing compute/storage-buffer baseline. |
 | MOD-2242 | Supplied | Vulkan reflects bounded SSBO/push-constant bindings and reuses descriptors. |

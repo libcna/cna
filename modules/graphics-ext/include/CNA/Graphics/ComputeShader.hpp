@@ -126,9 +126,12 @@ namespace CNA::Graphics {
          * the texture, so this is the route that works on every context with compute at all.
          *
          * @param unit        The texture unit to bind to; must not be negative.
-         * @param samplerName The `sampler2D` uniform's name, which is set to @p unit.
+         * @param samplerName The `sampler2D` uniform's name for source-language renderers.
+         *                    Descriptor-language renderers use @p unit directly.
          * @param texture     The texture.
-         * @throws std::invalid_argument If @p unit is negative.
+         * @throws std::invalid_argument If @p unit is negative or @p texture belongs to another
+         *         graphics device.
+         * @throws System::ObjectDisposedException If @p texture is disposed.
          */
         void bindTexture(int unit, const std::string& samplerName,
                          Microsoft::Xna::Framework::Graphics::Texture2D& texture);
@@ -151,7 +154,9 @@ namespace CNA::Graphics {
          * @param unit    The image unit the shader declares; must not be negative.
          * @param texture The texture.
          * @param access  How the shader will use it.
-         * @throws std::invalid_argument If @p unit is negative.
+         * @throws std::invalid_argument If @p unit or @p access is invalid, or if @p texture
+         *         belongs to another graphics device.
+         * @throws System::ObjectDisposedException If @p texture is disposed.
          * @throws System::NotSupportedException If @ref isImageBindingSupported is false -- a
          *         binding the driver would reject is refused here, where the reason can be said.
          */

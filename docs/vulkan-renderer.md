@@ -2,7 +2,7 @@
 
 ## Status of this document
 
-**Complete as of 2026-09-10 (`VULKAN-480`, updated by `REMED-GFX-203`, `MOD-2222`–`MOD-2223`, `MOD-2232`, `MOD-2240`–`MOD-2244` and `MOD-2228`), and written after the re-audits it depends on**
+**Complete as of 2026-09-10 (`VULKAN-480`, updated by `REMED-GFX-203`, `MOD-2222`–`MOD-2223`, `MOD-2232`–`MOD-2233`, `MOD-2240`–`MOD-2244` and `MOD-2228`), and written after the re-audits it depends on**
 (`VULKAN-470`–`VULKAN-474`) so that what it claims was checked rather than remembered. Every
 section names the row that put it there and the test that keeps it true; a claim with no test named
 beside it is not in here.
@@ -47,6 +47,7 @@ measures on (§*Environment* below).
 | Multi-stream vertex input | supported | fixed |
 | Compiled XNA `.fx` effects | **unsupported** here | fixed |
 | SPIR-V compute shaders, storage buffers and exact format-qualified storage images | supported | device |
+| XNA `Texture2D` / `RenderTarget2D` compute sampling | supported | device |
 | Indirect drawing, including non-zero base instance | supported | device |
 | XNA `Texture2D` / `RenderTarget2D` compute-image binding | supported when that exact allocation is storage-capable | device |
 | Float32 / Float16 `RenderTarget2D`, half-float linear filtering | supported | device |
@@ -78,15 +79,15 @@ Two entries need their sentence rather than a cell:
 
 `MOD-2229`/`MOD-2241`–`MOD-2242`. **Test:** `Vulkan_ComputeStorageBuffer` — raw SPIR-V compute bytecode runs on
 the renderer’s existing graphics/compute queue. Internal reflection builds descriptor set 0 from
-the storage-buffer and format-qualified storage-image bindings the module actually declares,
-including sparse slot numbers; there is no public native descriptor-set API and no fixed four-slot
-layout.
+the storage-buffer, format-qualified storage-image and combined `sampler2D` bindings the module
+actually declares, including sparse slot numbers; there is no public native descriptor-set API
+and no fixed four-slot layout.
 Image reflection accepts only set-0, non-arrayed, single-sample `image2D` declarations and retains
 their SPIR-V format plus `NonReadable`/`NonWritable` access contract. Named signed-int32 and float32
 members of a SPIR-V push-constant `Block` map to `ComputeShader::setUniform`, with names, offsets,
 four-byte alignment, types, range size and the device limit validated before native object
-creation. Other constant shapes and non-storage descriptors are rejected precisely rather than
-accepted and ignored. The permanent oracle proves all 256 elements of `C = A + B`, then uses sparse
+creation. Other constant and descriptor shapes are rejected precisely rather than accepted and
+ignored. The permanent oracle proves all 256 elements of `C = A + B`, then uses sparse
 output slot 7 plus `uCount`/`uScale` to change only 173 elements.
 
 Each program owns one pipeline layout and a bounded cache of immutable descriptor snapshots (at
@@ -97,6 +98,18 @@ counters prove that 33 repeated dispatches allocate nothing further and that the
 to their baseline. Invalid or name-stripped bytecode, a missing or undeclared slot, an
 unknown/mistyped scalar, an access mismatch and unsupported descriptor shapes
 all fail explicitly instead of becoming a silent no-op or a validation error.
+
+`MOD-2233` adds the sampled XNA-resource half without a second image type. A reflected set-zero
+combined sampler accepts the binding number passed to `ComputeShader::bindTexture`; source-language
+renderers still receive the named sampler uniform, while SPIR-V uses the descriptor binding
+directly. Only an unqualified float32 `sampler2D` is admitted, matching the numeric class exposed
+by CNA's XNA colour textures; integer samplers fail during reflection rather than aliasing an
+incompatible view. Both ordinary `Texture2D` and `RenderTarget2D` retain their exact internal
+image/view and format. The immutable dispatch record retains the sampled resource, transitions it to
+`SHADER_READ_ONLY_OPTIMAL` at consumption, and pulls every pending render-target producer into a
+synchronous result readback's dependency closure. All five tests pass on RADV and llvmpipe; the
+four backend-neutral cases also pass on EasyGL. The Vulkan runs enable Khronos validation and
+report no message.
 
 `StorageBufferDescriptor` declares storage, transfer-source/destination, indirect, vertex and
 index roles separately from CPU read/write intent. Vulkan translates only the requested roles to
@@ -160,9 +173,9 @@ colour state with compute, transitions both render-target and dedicated storage 
 consuming segment without an eager submit, and proves render → compute → sampled render through a
 channel-shuffling image-load/store oracle. `MOD-2253` folds target readback's producer closure,
 transitions and copy into one submission/fence and removes queue/device idle waits. Optional
-format gates and ordinary/XNA image bridges are completed by `MOD-2244`: the readback closure now
-also follows render-target inputs of every included compute command, so reading destination B
-cannot run an `A → B` dispatch before A's pending producer pass.
+format gates and ordinary/XNA storage-image bridges are completed by `MOD-2244`; `MOD-2233`
+extends the readback closure to sampled render-target inputs as well. Reading a compute result can
+therefore never run its dispatch before a sampled target's pending producer pass.
 
 ### Indirect drawing
 
@@ -325,8 +338,8 @@ The existing XNA Vulkan paths snapshot mutable draw state, retain deferred rende
 destinations independently of their public wrappers, evict descriptor entries that mention dying
 views and retire images, buffers, views, pipelines, layouts, descriptors and queries only after the
 consuming frame fence. `MOD-2252` applies and verifies the same path for storage buffers, compute
-programs, dedicated, ordinary-texture and render-target storage images, texture arrays and
-timestamp pools. Commands
+programs, dedicated, ordinary-texture and render-target storage images, compute-sampled XNA
+textures/targets, texture arrays and timestamp pools. Commands
 retain internal records through command recording; resize preserves their handles; terminal device
 teardown releases handles and disconnects externally retained records before destroying `VkDevice`.
 Applications neither receive the native device nor wait it idle before disposal.

@@ -426,6 +426,20 @@ namespace CNA::Internal::Renderers
          */
         virtual void BindTexture(int /*unit*/, ITextureRenderer* /*texture*/) {}
 
+        /**
+         * @brief Returns whether sampled textures use direct descriptor binding numbers.
+         *
+         * Source-language renderers return false and receive a matching integer sampler uniform
+         * after @ref BindTexture. Descriptor-language renderers return true because @p unit is
+         * already the shader binding and no name-based uniform exists.
+         *
+         * @return True when the sampled-texture binding is direct.
+         */
+        [[nodiscard]] virtual bool UsesDirectSampledTextureBindingsEXT() const
+        {
+            return false;
+        }
+
         /** @brief Returns whether a program is currently linked and usable. */
         [[nodiscard]] virtual bool IsValid() const = 0;
 

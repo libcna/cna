@@ -14,15 +14,23 @@
 #include "CNA/Graphics/ComputeShader.hpp"
 #include "CNA/Graphics/ShaderPackageEXT.hpp"
 #include "CNA/Graphics/StorageBuffer.hpp"
+#include "CNA/Graphics/StorageTexture2D.hpp"
+#include "CNA/Graphics/Texture2DArray.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/GraphicsImageAccess.hpp"
 #include "CNA/GraphicsMemoryBarrier.hpp"
+#include "ModernResourceInteropShaderPackage.generated.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "System/NotSupportedException.hpp"
+#include "System/ObjectDisposedException.hpp"
 
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -30,15 +38,23 @@
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Vector4;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::IndexBuffer;
+using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
+using Microsoft::Xna::Framework::Graphics::VertexBuffer;
 using CNA::GraphicsCapability;
 using CNA::GraphicsImageAccess;
 using CNA::GraphicsMemoryBarrier;
+using CNA::ShaderCompilationExceptionEXT;
 using CNA::Graphics::ComputeShader;
+using CNA::Graphics::ShaderBindingRequirementEXT;
+using CNA::Graphics::ShaderBindingTypeEXT;
 using CNA::Graphics::ShaderCodeEXT;
 using CNA::Graphics::ShaderPackageEXT;
 using CNA::Graphics::StorageBuffer;
 using CNA::Graphics::StorageBufferT;
+using CNA::Graphics::StorageTexture2D;
+using CNA::Graphics::Texture2DArray;
 
 namespace {
 
@@ -65,7 +81,107 @@ void main() {
 }
 )";
 
+    template<std::size_t N>
+    [[nodiscard]] std::vector<std::uint8_t> ToBytes(
+        const std::uint32_t (&words)[N])
+    {
+        const auto* begin = reinterpret_cast<const std::uint8_t*>(words);
+        return std::vector<std::uint8_t>(begin, begin + sizeof(words));
+    }
+
+    [[nodiscard]] ShaderPackageEXT MakeModernResourceInteropPackage()
+    {
+        using namespace CNA::Tests::ModernResourceInterop;
+        return ShaderPackageEXT(
+            {
+                ShaderCodeEXT(
+                    CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Compute,
+                    "main", std::string(kPayloads[0].source),
+                    std::string(kEasyGlComputeSource)),
+                ShaderCodeEXT(
+                    CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Compute,
+                    "main", std::string(kPayloads[1].source),
+                    ToBytes(kVulkanComputeSpirV)),
+            },
+            {CNA::ShaderStageEXT::Compute},
+            {
+                ShaderBindingRequirementEXT(
+                    "uSource", 0, ShaderBindingTypeEXT::SampledTexture2D,
+                    CNA::ShaderStageEXT::Compute),
+                ShaderBindingRequirementEXT(
+                    "Output", 1, ShaderBindingTypeEXT::StorageBuffer,
+                    CNA::ShaderStageEXT::Compute),
+            });
+    }
+
+    void ExpectColorNear(const Vector4& actual, const Color& expected)
+    {
+        constexpr float kByteTolerance = 1.0f / 255.0f;
+        EXPECT_NEAR(
+            actual.X, static_cast<float>(expected.getRProperty()) / 255.0f, kByteTolerance);
+        EXPECT_NEAR(
+            actual.Y, static_cast<float>(expected.getGProperty()) / 255.0f, kByteTolerance);
+        EXPECT_NEAR(
+            actual.Z, static_cast<float>(expected.getBProperty()) / 255.0f, kByteTolerance);
+        EXPECT_NEAR(
+            actual.W, static_cast<float>(expected.getAProperty()) / 255.0f, kByteTolerance);
+    }
+
+    template<typename T>
+    concept ComputeSampledBindable = requires(ComputeShader& shader, T& resource)
+    {
+        shader.bindTexture(0, std::string(), resource);
+    };
+
+    template<typename T>
+    concept ComputeStorageBindable = requires(ComputeShader& shader, T& resource)
+    {
+        shader.bindStorageBuffer(0, resource);
+    };
+
+    template<typename T>
+    concept ComputeStorageImageBindable = requires(ComputeShader& shader, T& resource)
+    {
+        shader.bindStorageTexture(0, resource, GraphicsImageAccess::ReadOnly);
+    };
+
+    template<typename T>
+    concept StorageBufferCopyDestination = requires(StorageBuffer& source, T& destination)
+    {
+        source.copyTo(destination, 0, 0, 0);
+    };
+
+    static_assert(ComputeSampledBindable<Texture2D>);
+    static_assert(ComputeSampledBindable<RenderTarget2D>);
+    static_assert(!ComputeSampledBindable<VertexBuffer>);
+    static_assert(!ComputeSampledBindable<IndexBuffer>);
+    static_assert(!ComputeSampledBindable<Texture2DArray>);
+    static_assert(!ComputeSampledBindable<StorageTexture2D>);
+    static_assert(ComputeStorageBindable<StorageBuffer>);
+    static_assert(!ComputeStorageBindable<VertexBuffer>);
+    static_assert(!ComputeStorageBindable<IndexBuffer>);
+    static_assert(ComputeStorageImageBindable<StorageTexture2D>);
+    static_assert(StorageBufferCopyDestination<StorageBuffer>);
+    static_assert(!StorageBufferCopyDestination<VertexBuffer>);
+    static_assert(!StorageBufferCopyDestination<IndexBuffer>);
+
 } // namespace
+
+TEST(ModernResourceInteropTypeTest, OnlyDeclaredTypesCrossComputeAndGpuCopyBoundaries)
+{
+    // MOD-2233: this is deliberately a compile-time API-shape test as well as a runtime report.
+    // XNA vertex/index buffers never become typeless aliases merely because StorageBuffer has
+    // future Vertex/Index allocation-intent bits.
+    EXPECT_TRUE(ComputeSampledBindable<Texture2D>);
+    EXPECT_TRUE(ComputeSampledBindable<RenderTarget2D>);
+    EXPECT_TRUE(ComputeStorageBindable<StorageBuffer>);
+    EXPECT_TRUE(ComputeStorageImageBindable<StorageTexture2D>);
+    EXPECT_TRUE(StorageBufferCopyDestination<StorageBuffer>);
+    EXPECT_FALSE(ComputeSampledBindable<VertexBuffer>);
+    EXPECT_FALSE(ComputeSampledBindable<IndexBuffer>);
+    EXPECT_FALSE(StorageBufferCopyDestination<VertexBuffer>);
+    EXPECT_FALSE(StorageBufferCopyDestination<IndexBuffer>);
+}
 
 TEST_F(ComputeTest, TheCapabilityAndTheLimitsAgreeWithEachOther)
 {
@@ -243,6 +359,111 @@ TEST_F(ComputeTest, AVectorBufferRoundTripsThroughTheTypedView)
 
     std::vector<Vector4> tooMany(kCount + 1);
     EXPECT_THROW(buffer.setData(tooMany), std::invalid_argument);
+}
+
+TEST_F(ComputeTest, PortableComputeSamplesTexture2DAndRetainsItsDeferredLifetime)
+{
+    // MOD-2233: rebinding the shader after dispatch removes its mutable reference to `source`.
+    // Disposing that public Texture2D then proves the accepted immutable command owns enough
+    // image/format lifetime to finish without dereferencing the disposed wrapper.
+    const ShaderPackageEXT package = MakeModernResourceInteropPackage();
+    const auto selection = package.selectFor(gd);
+    if (!selection.isUsable()) GTEST_SKIP() << selection.getDiagnostic();
+
+    const Color kExpected(51, 102, 153, 255);
+    auto source = std::make_unique<Texture2D>(gd, 1, 1);
+    source->SetData(&kExpected, 1);
+    StorageBufferT<Vector4> output(gd, 1);
+    output.setData({Vector4::Zero});
+    ComputeShader shader(gd, package);
+    shader.bindTexture(0, "uSource", *source);
+    shader.bindStorageBuffer(1, output.getBuffer());
+    shader.dispatch(1);
+
+    const Color replacementColor = Color::Blue;
+    Texture2D replacement(gd, 1, 1);
+    replacement.SetData(&replacementColor, 1);
+    shader.bindTexture(0, "uSource", replacement);
+    source->Dispose();
+
+    const auto result = output.getData();
+    ASSERT_EQ(result.size(), 1u);
+    ExpectColorNear(result.front(), kExpected);
+}
+
+TEST_F(ComputeTest, PortableComputeSamplesDeferredRenderTargetWithoutPublicBarriers)
+{
+    // MOD-2233: Vulkan queues the clear and the compute dispatch separately. The synchronous
+    // storage-buffer readback must discover and submit the sampled target's producer first; no
+    // image layout or memory-barrier enum is exposed to the caller.
+    const ShaderPackageEXT package = MakeModernResourceInteropPackage();
+    const auto selection = package.selectFor(gd);
+    if (!selection.isUsable()) GTEST_SKIP() << selection.getDiagnostic();
+
+    const Color kExpected(64, 128, 192, 255);
+    RenderTarget2D source(gd, 1, 1);
+    gd.SetRenderTarget(&source);
+    gd.Clear(kExpected);
+    gd.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+    StorageBufferT<Vector4> output(gd, 1);
+    output.setData({Vector4::Zero});
+    ComputeShader shader(gd, package);
+    shader.bindTexture(0, "uSource", source);
+    shader.bindStorageBuffer(1, output.getBuffer());
+    shader.dispatch(1);
+
+    const auto result = output.getData();
+    ASSERT_EQ(result.size(), 1u);
+    ExpectColorNear(result.front(), kExpected);
+}
+
+TEST_F(ComputeTest, VulkanRejectsAnIntegerSamplerBeforeItCanAliasAFloatTexture)
+{
+    if (!gd.SupportsShaderLanguageEXT(
+            CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Compute))
+        GTEST_SKIP() << "this renderer does not consume SPIR-V compute payloads";
+
+    using namespace CNA::Tests::ModernResourceInterop;
+    try
+    {
+        ComputeShader shader(
+            gd, ShaderCodeEXT(
+                    CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Compute,
+                    "main", std::string(kPayloads[2].source),
+                    ToBytes(kVulkanUnsignedSamplerComputeSpirV)));
+        FAIL() << "an unsigned sampler must not compile against CNA's float-sampled XNA textures";
+    }
+    catch (const ShaderCompilationExceptionEXT& error)
+    {
+        EXPECT_NE(std::string(error.what()).find("float32 sampler2D"), std::string::npos)
+            << error.what();
+    }
+}
+
+TEST_F(ComputeTest, TextureInteropRejectsDisposedForeignAndInvalidAccessBeforeBackendWork)
+{
+    const ShaderPackageEXT package = MakeModernResourceInteropPackage();
+    const auto selection = package.selectFor(gd);
+    if (!selection.isUsable()) GTEST_SKIP() << selection.getDiagnostic();
+
+    ComputeShader shader(gd, package);
+    Texture2D disposed(gd, 1, 1);
+    disposed.Dispose();
+    EXPECT_THROW(
+        shader.bindTexture(0, "uSource", disposed), System::ObjectDisposedException);
+
+    Texture2D live(gd, 1, 1);
+    EXPECT_THROW(
+        shader.bindImage(0, live, static_cast<GraphicsImageAccess>(999)),
+        std::invalid_argument);
+
+    GraphicsDevice foreignDevice;
+    Texture2D foreign(foreignDevice, 1, 1);
+    EXPECT_THROW(shader.bindTexture(0, "uSource", foreign), std::invalid_argument);
+    EXPECT_THROW(
+        shader.bindImage(0, foreign, GraphicsImageAccess::ReadOnly),
+        std::invalid_argument);
 }
 
 TEST_F(ComputeTest, ImageBindingEitherWorksOrRefusesWithItsReason)

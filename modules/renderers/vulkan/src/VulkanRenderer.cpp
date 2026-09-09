@@ -1304,6 +1304,7 @@ namespace CNA::Internal::Renderers::Vulkan
             static_cast<VkDeviceSize>(byteCount), VK_BUFFER_USAGE_TRANSFER_DST_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             stagingBuffer, stagingMemory);
+        owner_->FlushModernSampledRenderTargetsEXT();
         VkCommandBuffer commandBuffer = owner_->BeginOneTimeCommands();
         // Requested readback is the single synchronous boundary: replay every older immutable
         // upload/compute/copy and this image copy in one ordered submission, rather than waiting
@@ -15797,6 +15798,9 @@ namespace CNA::Internal::Renderers::Vulkan
         textureImages_.clear();
         storageImageSlots_.clear();
         storageImageBindingSlots_.clear();
+        sampledTextures_.clear();
+        sampledRenderTargets_.clear();
+        sampledImageBindingSlots_.clear();
         scalarSlots_.clear();
         pushConstantBytes_.clear();
     }
@@ -15812,6 +15816,9 @@ namespace CNA::Internal::Renderers::Vulkan
         storageImages_.clear();
         renderTargetImages_.clear();
         textureImages_.clear();
+        sampledImageBindingSlots_.clear();
+        sampledTextures_.clear();
+        sampledRenderTargets_.clear();
         scalarSlots_.clear();
         pushConstantBytes_.clear();
         if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE) {
@@ -15848,6 +15855,7 @@ namespace CNA::Internal::Renderers::Vulkan
         };
         struct ImageType
         {
+            uint32_t sampledType = 0;
             uint32_t dimension = 0;
             uint32_t depth = 0;
             uint32_t arrayed = 0;
@@ -15860,6 +15868,7 @@ namespace CNA::Internal::Renderers::Vulkan
         constexpr uint16_t OpTypeInt = 21;
         constexpr uint16_t OpTypeFloat = 22;
         constexpr uint16_t OpTypeImage = 25;
+        constexpr uint16_t OpTypeSampledImage = 27;
         constexpr uint16_t OpTypeStruct = 30;
         constexpr uint16_t OpTypePointer = 32;
         constexpr uint16_t OpVariable = 59;
@@ -15905,6 +15914,7 @@ namespace CNA::Internal::Renderers::Vulkan
         std::unordered_map<uint32_t, std::vector<uint32_t>> structMembers;
         std::unordered_map<uint32_t, ScalarType> scalarTypes;
         std::unordered_map<uint32_t, ImageType> imageTypes;
+        std::unordered_map<uint32_t, uint32_t> sampledImageTypes;
         std::unordered_map<uint64_t, std::string> memberNames;
         std::unordered_map<uint64_t, uint32_t> memberOffsets;
         std::unordered_map<uint32_t, bool> blockTypes;
@@ -15939,8 +15949,11 @@ namespace CNA::Internal::Renderers::Vulkan
                     ScalarKind::Float32, words[cursor + 2] == 32};
             } else if (opcode == OpTypeImage && wordCount >= 9) {
                 imageTypes[words[cursor + 1]] = {
-                    words[cursor + 3], words[cursor + 4], words[cursor + 5],
-                    words[cursor + 6], words[cursor + 7], words[cursor + 8]};
+                    words[cursor + 2], words[cursor + 3], words[cursor + 4],
+                    words[cursor + 5], words[cursor + 6], words[cursor + 7],
+                    words[cursor + 8]};
+            } else if (opcode == OpTypeSampledImage && wordCount == 3) {
+                sampledImageTypes[words[cursor + 1]] = words[cursor + 2];
             } else if (opcode == OpTypeStruct && wordCount >= 2) {
                 structMembers[words[cursor + 1]] = std::vector<uint32_t>(
                     words.begin() + static_cast<std::ptrdiff_t>(cursor + 2),
@@ -16101,11 +16114,20 @@ namespace CNA::Internal::Renderers::Vulkan
             const bool isStorageImage =
                 variable.storageClass == StorageClassUniformConstant &&
                 imageIt != imageTypes.end() && imageIt->second.sampled == 2;
+            const auto sampledTypeIt = sampledImageTypes.find(pointer.pointeeType);
+            const auto sampledImageIt = sampledTypeIt != sampledImageTypes.end()
+                ? imageTypes.find(sampledTypeIt->second)
+                : imageTypes.end();
+            const bool isSampledImage =
+                variable.storageClass == StorageClassUniformConstant &&
+                sampledImageIt != imageTypes.end() && sampledImageIt->second.sampled == 1;
             const bool duplicateBinding =
                 std::find(storageBindingSlots_.begin(), storageBindingSlots_.end(),
                           bindingIt->second) != storageBindingSlots_.end() ||
                 std::find(storageImageBindingSlots_.begin(), storageImageBindingSlots_.end(),
-                          bindingIt->second) != storageImageBindingSlots_.end();
+                          bindingIt->second) != storageImageBindingSlots_.end() ||
+                std::find(sampledImageBindingSlots_.begin(), sampledImageBindingSlots_.end(),
+                          bindingIt->second) != sampledImageBindingSlots_.end();
             if (duplicateBinding) {
                 compileError_ =
                     "Vulkan compute shader: duplicate set 0 descriptor binding " +
@@ -16150,19 +16172,42 @@ namespace CNA::Internal::Renderers::Vulkan
                 textureImages_.emplace(bindingIt->second, nullptr);
                 continue;
             }
+            if (isSampledImage) {
+                const ImageType& image = sampledImageIt->second;
+                const auto sampledScalarIt = scalarTypes.find(image.sampledType);
+                if (image.dimension != 1 || image.depth != 0 || image.arrayed != 0 ||
+                    image.multisampled != 0 || image.format != 0 ||
+                    sampledScalarIt == scalarTypes.end() ||
+                    !sampledScalarIt->second.supported ||
+                    sampledScalarIt->second.kind != ScalarKind::Float32)
+                {
+                    compileError_ =
+                        "Vulkan compute shader: set 0 binding " +
+                        std::to_string(bindingIt->second) +
+                        " is not an unqualified, non-arrayed, single-sample float32 sampler2D";
+                    return false;
+                }
+                sampledImageBindingSlots_.push_back(bindingIt->second);
+                sampledTextures_.emplace(bindingIt->second, nullptr);
+                sampledRenderTargets_.emplace(bindingIt->second, nullptr);
+                continue;
+            }
             {
                 compileError_ =
                     "Vulkan compute shader: set 0 binding " +
                     std::to_string(bindingIt->second) +
-                    " is neither a reflected storage buffer nor a storage image2D";
+                    " is neither a reflected storage buffer, storage image2D nor sampler2D";
                 return false;
             }
         }
         std::sort(storageBindingSlots_.begin(), storageBindingSlots_.end());
         std::sort(storageImageBindingSlots_.begin(), storageImageBindingSlots_.end());
+        std::sort(sampledImageBindingSlots_.begin(), sampledImageBindingSlots_.end());
         const auto storageCount = static_cast<uint32_t>(storageBindingSlots_.size());
         const auto storageImageCount =
             static_cast<uint32_t>(storageImageBindingSlots_.size());
+        const auto sampledImageCount =
+            static_cast<uint32_t>(sampledImageBindingSlots_.size());
         if (storageCount >
                 owner_->physicalDeviceProperties_.limits.maxPerStageDescriptorStorageBuffers ||
             storageCount >
@@ -16181,7 +16226,20 @@ namespace CNA::Internal::Renderers::Vulkan
                 "device descriptor limits";
             return false;
         }
-        if (static_cast<std::uint64_t>(storageCount) + storageImageCount >
+        if (sampledImageCount >
+                owner_->physicalDeviceProperties_.limits.maxPerStageDescriptorSampledImages ||
+            sampledImageCount >
+                owner_->physicalDeviceProperties_.limits.maxDescriptorSetSampledImages ||
+            sampledImageCount >
+                owner_->physicalDeviceProperties_.limits.maxPerStageDescriptorSamplers ||
+            sampledImageCount >
+                owner_->physicalDeviceProperties_.limits.maxDescriptorSetSamplers) {
+            compileError_ =
+                "Vulkan compute shader: reflected sampled-image/sampler count exceeds the selected "
+                "device descriptor limits";
+            return false;
+        }
+        if (static_cast<std::uint64_t>(storageCount) + storageImageCount + sampledImageCount >
             owner_->physicalDeviceProperties_.limits.maxPerStageResources) {
             compileError_ =
                 "Vulkan compute shader: reflected descriptor count exceeds the selected "
@@ -16203,13 +16261,18 @@ namespace CNA::Internal::Renderers::Vulkan
         }
 
         std::vector<VkDescriptorSetLayoutBinding> bindings;
-        bindings.reserve(storageBindingSlots_.size() + storageImageBindingSlots_.size());
+        bindings.reserve(storageBindingSlots_.size() + storageImageBindingSlots_.size() +
+                         sampledImageBindingSlots_.size());
         for (const uint32_t binding : storageBindingSlots_) {
             bindings.push_back({binding, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1,
                                 VK_SHADER_STAGE_COMPUTE_BIT, nullptr});
         }
         for (const uint32_t binding : storageImageBindingSlots_) {
             bindings.push_back({binding, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1,
+                                VK_SHADER_STAGE_COMPUTE_BIT, nullptr});
+        }
+        for (const uint32_t binding : sampledImageBindingSlots_) {
+            bindings.push_back({binding, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1,
                                 VK_SHADER_STAGE_COMPUTE_BIT, nullptr});
         }
         std::sort(bindings.begin(), bindings.end(), [](const auto& left, const auto& right) {
@@ -16236,6 +16299,9 @@ namespace CNA::Internal::Renderers::Vulkan
             if (storageImageCount != 0)
                 poolSizes.push_back({VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
                                      storageImageCount * DescriptorCacheCapacity});
+            if (sampledImageCount != 0)
+                poolSizes.push_back({VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                                     sampledImageCount * DescriptorCacheCapacity});
             VkDescriptorPoolCreateInfo poolInfo{};
             poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
             poolInfo.maxSets = DescriptorCacheCapacity;
@@ -16479,10 +16545,37 @@ namespace CNA::Internal::Renderers::Vulkan
     }
 
     void VulkanComputeShaderRenderer::BindTexture(
-        int /*unit*/, ITextureRenderer* /*texture*/)
+        const int unit, ITextureRenderer* texture)
     {
-        throw std::runtime_error(
-            "Vulkan compute shader: sampled-texture binding has no Vulkan compute layout yet");
+        if (unit < 0 ||
+            !sampledTextures_.contains(static_cast<std::uint32_t>(unit)))
+            throw std::out_of_range(
+                "Vulkan compute shader: sampled-image binding " + std::to_string(unit) +
+                " is not declared by this SPIR-V module in set 0");
+        if (texture == nullptr) {
+            sampledTextures_[static_cast<std::uint32_t>(unit)].reset();
+            sampledRenderTargets_[static_cast<std::uint32_t>(unit)].reset();
+            return;
+        }
+        if (dynamic_cast<VulkanRenderTargetRenderer*>(texture) != nullptr)
+        {
+            auto native = std::dynamic_pointer_cast<VulkanRenderTargetRenderer>(
+                texture->shared_from_this());
+            if (native == nullptr || !native->IsOwnedByEXT(owner_))
+                throw std::invalid_argument(
+                    "Vulkan compute shader: sampled RenderTarget2D belongs to another renderer");
+            sampledRenderTargets_[static_cast<std::uint32_t>(unit)] = std::move(native);
+            sampledTextures_[static_cast<std::uint32_t>(unit)].reset();
+            return;
+        }
+        auto native = std::dynamic_pointer_cast<VulkanTextureRenderer>(
+            texture->shared_from_this());
+        if (native == nullptr || !native->IsOwnedByEXT(owner_))
+            throw std::invalid_argument(
+                "Vulkan compute shader: sampled Texture2D belongs to another renderer");
+        native->participatesInModernOrder_ = true;
+        sampledTextures_[static_cast<std::uint32_t>(unit)] = std::move(native);
+        sampledRenderTargets_[static_cast<std::uint32_t>(unit)].reset();
     }
 
     void VulkanComputeShaderRenderer::ForgetStorageBufferEXT(
@@ -16494,17 +16587,32 @@ namespace CNA::Internal::Renderers::Vulkan
         }
     }
 
+    bool VulkanComputeShaderRenderer::ReferencesSamplerEXT(
+        const VkSampler sampler) const noexcept
+    {
+        for (const auto& entry : descriptorCache_)
+            if (entry.initialized &&
+                std::find(entry.samplers.begin(), entry.samplers.end(), sampler) !=
+                    entry.samplers.end())
+                return true;
+        return false;
+    }
+
     VkDescriptorSet VulkanComputeShaderRenderer::GetOrCreateDescriptorSetEXT(
         const std::vector<VkBuffer>& buffers, const std::vector<VkImageView>& images,
+        const std::vector<VkSampler>& samplers,
+        const std::vector<std::shared_ptr<void>>& retainedResources,
         const std::vector<VkDescriptorBufferInfo>& bufferInfos,
-        const std::vector<VkDescriptorImageInfo>& imageInfos)
+        const std::vector<VkDescriptorImageInfo>& storageImageInfos,
+        const std::vector<VkDescriptorImageInfo>& sampledImageInfos)
     {
         if (descriptorSetLayout_ == VK_NULL_HANDLE) return VK_NULL_HANDLE;
 
         DescriptorCacheEntry* selected = nullptr;
         for (auto& entry : descriptorCache_)
         {
-            if (entry.initialized && entry.buffers == buffers && entry.images == images)
+            if (entry.initialized && entry.buffers == buffers && entry.images == images &&
+                entry.samplers == samplers)
                 return entry.set;
             if (!entry.initialized && selected == nullptr) selected = &entry;
         }
@@ -16529,7 +16637,8 @@ namespace CNA::Internal::Renderers::Vulkan
         }
 
         std::vector<VkWriteDescriptorSet> writes(
-            storageBindingSlots_.size() + storageImageBindingSlots_.size());
+            storageBindingSlots_.size() + storageImageBindingSlots_.size() +
+            sampledImageBindingSlots_.size());
         for (std::size_t i = 0; i < storageBindingSlots_.size(); ++i)
         {
             auto& write = writes[i];
@@ -16548,12 +16657,25 @@ namespace CNA::Internal::Renderers::Vulkan
             write.dstBinding = storageImageBindingSlots_[i];
             write.descriptorCount = 1;
             write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-            write.pImageInfo = &imageInfos[i];
+            write.pImageInfo = &storageImageInfos[i];
+        }
+        for (std::size_t i = 0; i < sampledImageBindingSlots_.size(); ++i)
+        {
+            auto& write = writes[
+                storageBindingSlots_.size() + storageImageBindingSlots_.size() + i];
+            write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            write.dstSet = selected->set;
+            write.dstBinding = sampledImageBindingSlots_[i];
+            write.descriptorCount = 1;
+            write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            write.pImageInfo = &sampledImageInfos[i];
         }
         vkUpdateDescriptorSets(owner_->device_, static_cast<std::uint32_t>(writes.size()),
                                writes.data(), 0, nullptr);
         selected->buffers = buffers;
         selected->images = images;
+        selected->samplers = samplers;
+        selected->retainedResources = retainedResources;
         selected->initialized = true;
         return selected->set;
     }
@@ -16577,6 +16699,8 @@ namespace CNA::Internal::Renderers::Vulkan
         const auto storageImages = storageImages_;
         const auto renderTargetImages = renderTargetImages_;
         const auto textureImages = textureImages_;
+        const auto sampledTextures = sampledTextures_;
+        const auto sampledRenderTargets = sampledRenderTargets_;
         const auto pushConstantBytes = pushConstantBytes_;
         for (const uint32_t binding : storageBindingSlots_) {
             if (storageBuffers.at(binding) == nullptr)
@@ -16592,20 +16716,38 @@ namespace CNA::Internal::Renderers::Vulkan
                     "Vulkan compute shader: required set 0 storage-image binding " +
                     std::to_string(binding) + " is not bound");
         }
+        for (const uint32_t binding : sampledImageBindingSlots_) {
+            if (sampledTextures.at(binding) == nullptr &&
+                sampledRenderTargets.at(binding) == nullptr)
+                throw std::runtime_error(
+                    "Vulkan compute shader: required set 0 sampled-image binding " +
+                    std::to_string(binding) + " is not bound");
+        }
 
         std::vector<VkDescriptorBufferInfo> infos(storageBindingSlots_.size());
         std::vector<VkBuffer> bufferHandles;
         std::vector<std::shared_ptr<VulkanStorageBufferRenderer>> retainedBuffers;
+        std::vector<std::shared_ptr<void>> retainedDescriptorResources;
         bufferHandles.reserve(storageBindingSlots_.size());
         retainedBuffers.reserve(storageBindingSlots_.size());
+        retainedDescriptorResources.reserve(
+            storageBindingSlots_.size() + storageImageBindingSlots_.size() +
+            sampledImageBindingSlots_.size());
         std::vector<VkDescriptorImageInfo> imageInfos(storageImageBindingSlots_.size());
         std::vector<VkImageView> imageViews;
-        imageViews.reserve(storageImageBindingSlots_.size());
+        imageViews.reserve(
+            storageImageBindingSlots_.size() + sampledImageBindingSlots_.size());
+        std::vector<VkDescriptorImageInfo> sampledImageInfos(
+            sampledImageBindingSlots_.size());
+        std::vector<VkSampler> sampledSamplers;
+        sampledSamplers.reserve(sampledImageBindingSlots_.size());
         for (std::size_t i = 0; i < storageBindingSlots_.size(); ++i) {
             const uint32_t binding = storageBindingSlots_[i];
             auto* buffer = storageBuffers.at(binding);
-            retainedBuffers.push_back(std::dynamic_pointer_cast<VulkanStorageBufferRenderer>(
-                buffer->IStorageBufferRenderer::shared_from_this()));
+            auto retained = std::dynamic_pointer_cast<VulkanStorageBufferRenderer>(
+                buffer->IStorageBufferRenderer::shared_from_this());
+            retainedBuffers.push_back(retained);
+            retainedDescriptorResources.push_back(std::move(retained));
             bufferHandles.push_back(buffer->GetBufferEXT());
             auto& info = infos[i];
             info.buffer = buffer->GetBufferEXT();
@@ -16622,9 +16764,35 @@ namespace CNA::Internal::Renderers::Vulkan
                     : textureImages.at(binding)->GetStorageImageViewEXT());
             info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
             imageViews.push_back(info.imageView);
+            if (storageImages.at(binding) != nullptr)
+                retainedDescriptorResources.push_back(storageImages.at(binding));
+            else if (renderTargetImages.at(binding) != nullptr)
+                retainedDescriptorResources.push_back(renderTargetImages.at(binding));
+            else
+                retainedDescriptorResources.push_back(textureImages.at(binding));
+        }
+        for (std::size_t i = 0; i < sampledImageBindingSlots_.size(); ++i) {
+            const uint32_t binding = sampledImageBindingSlots_[i];
+            auto& info = sampledImageInfos[i];
+            info.sampler = binding < std::size(owner_->slotSamplers_) &&
+                           owner_->slotSamplers_[binding] != VK_NULL_HANDLE
+                ? owner_->slotSamplers_[binding]
+                : owner_->defaultSampler_;
+            info.imageView = sampledRenderTargets.at(binding) != nullptr
+                ? sampledRenderTargets.at(binding)->GetVkImageView()
+                : sampledTextures.at(binding)->GetVkImageView();
+            info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            imageViews.push_back(info.imageView);
+            sampledSamplers.push_back(info.sampler);
+            if (sampledRenderTargets.at(binding) != nullptr)
+                retainedDescriptorResources.push_back(sampledRenderTargets.at(binding));
+            else
+                retainedDescriptorResources.push_back(sampledTextures.at(binding));
         }
         const VkDescriptorSet descriptorSet = GetOrCreateDescriptorSetEXT(
-            bufferHandles, imageViews, infos, imageInfos);
+            bufferHandles, imageViews, sampledSamplers, retainedDescriptorResources,
+            infos, imageInfos,
+            sampledImageInfos);
 
         VulkanRenderer::PendingModernCommand command;
         command.kind = VulkanRenderer::PendingModernCommand::Kind::Compute;
@@ -16641,6 +16809,10 @@ namespace CNA::Internal::Renderers::Vulkan
                 storageImages.at(binding), renderTargetImages.at(binding),
                 textureImages.at(binding),
                 storageImageSlots_.at(binding).accessMode});
+        }
+        for (const uint32_t binding : sampledImageBindingSlots_) {
+            command.sampledImages.push_back({
+                sampledTextures.at(binding), sampledRenderTargets.at(binding)});
         }
         owner_->QueueComputeDispatchEXT(std::move(command));
     }
@@ -17360,6 +17532,16 @@ namespace CNA::Internal::Renderers::Vulkan
                 throw std::logic_error(
                     "Vulkan compute dispatch lost its retained storage-image record");
         }
+        for (const auto& image : command.sampledImages)
+        {
+            if (image.renderTarget != nullptr)
+                image.renderTarget->PrepareForSamplingEXT(cb);
+            else if (image.texture != nullptr)
+                image.texture->PrepareForSamplingEXT(cb);
+            else
+                throw std::logic_error(
+                    "Vulkan compute dispatch lost its retained sampled-image record");
+        }
         vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, command.pipeline);
         if (command.descriptorSet != VK_NULL_HANDLE)
             vkCmdBindDescriptorSets(
@@ -17373,10 +17555,41 @@ namespace CNA::Internal::Renderers::Vulkan
         vkCmdDispatch(cb, command.groupsX, command.groupsY, command.groupsZ);
     }
 
+    void VulkanRenderer::FlushModernSampledRenderTargetsEXT()
+    {
+        std::vector<std::shared_ptr<VulkanRenderTargetRenderer>> targets;
+        std::vector<const void*> groups;
+        for (const auto& command : pendingModernCommands_)
+        {
+            for (const auto& sampled : command.sampledImages)
+            {
+                if (sampled.renderTarget == nullptr ||
+                    sampled.renderTarget->PassEXT() == nullptr)
+                    continue;
+                const void* group =
+                    sampled.renderTarget->PassEXT()->DepthStencilOwnerEXT();
+                if (std::find(groups.begin(), groups.end(), group) != groups.end())
+                    continue;
+                groups.push_back(group);
+                targets.push_back(sampled.renderTarget);
+            }
+        }
+        for (const auto& target : targets)
+        {
+            FlushDeferredRenderTarget(
+                target->PassEXT().get(), target->PassEXT().get(), 0,
+                [](const VkCommandBuffer) {});
+        }
+    }
+
     void VulkanRenderer::FlushPendingModernCommandsForHostEXT(
         const VulkanStorageBufferRenderer* targetBuffer,
         const VulkanResourceIntent hostIntent)
     {
+        // A synchronous result read may be the first operation that materializes a render target
+        // sampled by an older compute dispatch. Submit those producer passes first; the closure in
+        // FlushDeferredRenderTarget preserves every cross-target dependency and public call order.
+        FlushModernSampledRenderTargetsEXT();
         bool targetNeedsBarrier = false;
         if (targetBuffer != nullptr && targetBuffer->usageState_.initialized)
         {
@@ -17832,6 +18045,8 @@ namespace CNA::Internal::Renderers::Vulkan
         const auto pinned = [this](VkSampler s) {
             if (s == defaultSampler_) return true;
             for (VkSampler slot : slotSamplers_) if (slot == s) return true;
+            for (const auto* shader : liveComputeShaders_)
+                if (shader != nullptr && shader->ReferencesSamplerEXT(s)) return true;
             return false;
         };
 
@@ -18266,6 +18481,11 @@ namespace CNA::Internal::Renderers::Vulkan
                     expanded = addGroupBefore(
                         command.rt->DepthStencilOwnerEXT(), command.segment) || expanded;
                 for (const auto& image : command.storageImages)
+                    if (image.renderTarget != nullptr && image.renderTarget->PassEXT() != nullptr)
+                        expanded = addGroupBefore(
+                            image.renderTarget->PassEXT()->DepthStencilOwnerEXT(),
+                            command.segment) || expanded;
+                for (const auto& image : command.sampledImages)
                     if (image.renderTarget != nullptr && image.renderTarget->PassEXT() != nullptr)
                         expanded = addGroupBefore(
                             image.renderTarget->PassEXT()->DepthStencilOwnerEXT(),

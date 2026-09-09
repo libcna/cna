@@ -163,9 +163,16 @@ namespace CNA::Graphics {
         if (unit < 0)
             throw std::invalid_argument(
                 "CNA::Graphics::ComputeShader::bindTexture: the texture unit must not be negative");
+        if (texture.getIsDisposedProperty())
+            throw System::ObjectDisposedException("Texture2D");
+        if (texture.getGraphicsDeviceProperty() != &device_)
+            throw std::invalid_argument(
+                "CNA::Graphics::ComputeShader::bindTexture: the texture belongs to another "
+                "GraphicsDevice");
         renderer_->Bind();
         renderer_->BindTexture(unit, &texture.GetRenderer());
-        renderer_->SetUniformInt(samplerName.c_str(), unit);
+        if (!renderer_->UsesDirectSampledTextureBindingsEXT())
+            renderer_->SetUniformInt(samplerName.c_str(), unit);
     }
 
     bool ComputeShader::isImageBindingSupported() const
@@ -185,6 +192,14 @@ namespace CNA::Graphics {
             throw std::invalid_argument(
                 "CNA::Graphics::ComputeShader::bindImage: the texture belongs to another "
                 "GraphicsDevice");
+        if (access != CNA::GraphicsImageAccess::ReadOnly &&
+            access != CNA::GraphicsImageAccess::WriteOnly &&
+            access != CNA::GraphicsImageAccess::ReadWrite)
+        {
+            throw std::invalid_argument(
+                "CNA::Graphics::ComputeShader::bindImage: access is outside "
+                "GraphicsImageAccess");
+        }
         if (!isImageBindingSupported())
             throw System::NotSupportedException(
                 "CNA::Graphics::ComputeShader::bindImage: the '"
