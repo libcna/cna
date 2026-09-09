@@ -7,6 +7,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SamplerStateCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureAddressMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::SamplerState;
@@ -65,19 +66,20 @@ TEST(SamplerStateCollectionTest, IndexerAssignmentUpdatesSlot)
 TEST(SamplerStateCollectionTest, NegativeIndexThrows)
 {
     SamplerStateCollection coll;
-    EXPECT_THROW((void)coll[-1], std::out_of_range);
+    EXPECT_THROW((void)coll[-1], System::ArgumentOutOfRangeException);
 }
 
 TEST(SamplerStateCollectionTest, IndexAtMaxThrows)
 {
     SamplerStateCollection coll;
-    EXPECT_THROW((void)coll[SamplerStateCollection::MaxSamplers], std::out_of_range);
+    EXPECT_THROW((void)coll[SamplerStateCollection::MaxSamplers],
+                 System::ArgumentOutOfRangeException);
 }
 
 TEST(SamplerStateCollectionTest, ConstIndexerNegativeThrows)
 {
     const SamplerStateCollection coll;
-    EXPECT_THROW((void)coll[-1], std::out_of_range);
+    EXPECT_THROW((void)coll[-1], System::ArgumentOutOfRangeException);
 }
 
 // -----------------------------------------------------------------------

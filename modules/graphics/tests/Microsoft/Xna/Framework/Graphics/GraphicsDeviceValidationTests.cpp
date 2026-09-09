@@ -265,13 +265,14 @@ TEST(TextureCollectionValidationTest, GetNullSlot_ReturnsNull)
 TEST(TextureCollectionValidationTest, NegativeIndex_ThrowsOutOfRange)
 {
     TextureCollection col;
-    EXPECT_THROW(col(-1, nullptr), std::out_of_range);
+    EXPECT_THROW(col(-1, nullptr), System::ArgumentOutOfRangeException);
 }
 
 TEST(TextureCollectionValidationTest, IndexAtMax_ThrowsOutOfRange)
 {
     TextureCollection col;
-    EXPECT_THROW(col(TextureCollection::MaxTextures, nullptr), std::out_of_range);
+    EXPECT_THROW(col(TextureCollection::MaxTextures, nullptr),
+                 System::ArgumentOutOfRangeException);
 }
 
 TEST(TextureCollectionValidationTest, IndexAtLastSlot_DoesNotThrow)
@@ -404,16 +405,21 @@ TEST(TextureCollectionValidationTest, OwnedCollectionsRespectProfileSlotCounts)
     GraphicsDevice gd;
 
     EXPECT_NO_THROW(gd.getTexturesProperty()(15, nullptr));
-    EXPECT_THROW(gd.getTexturesProperty()(16, nullptr), std::out_of_range);
-    EXPECT_THROW((void)gd.getVertexTexturesProperty()[0], std::out_of_range);
-    EXPECT_THROW(gd.getVertexTexturesProperty()(0, nullptr), std::out_of_range);
-    EXPECT_THROW((void)gd.getVertexSamplerStatesProperty()[0], std::out_of_range);
+    EXPECT_THROW(gd.getTexturesProperty()(16, nullptr), System::ArgumentOutOfRangeException);
+    EXPECT_THROW((void)gd.getVertexTexturesProperty()[0],
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW(gd.getVertexTexturesProperty()(0, nullptr),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW((void)gd.getVertexSamplerStatesProperty()[0],
+                 System::ArgumentOutOfRangeException);
 
     gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     EXPECT_NO_THROW(gd.getVertexTexturesProperty()(3, nullptr));
-    EXPECT_THROW(gd.getVertexTexturesProperty()(4, nullptr), std::out_of_range);
+    EXPECT_THROW(gd.getVertexTexturesProperty()(4, nullptr),
+                 System::ArgumentOutOfRangeException);
     EXPECT_NO_THROW((void)gd.getVertexSamplerStatesProperty()[3]);
-    EXPECT_THROW((void)gd.getVertexSamplerStatesProperty()[4], std::out_of_range);
+    EXPECT_THROW((void)gd.getVertexSamplerStatesProperty()[4],
+                 System::ArgumentOutOfRangeException);
 }
 
 TEST(TextureCollectionValidationTest, VertexTextureFormatAndValidationOrderMatchXna)

@@ -2,6 +2,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SamplerStateCollection.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 #include <stdexcept>
 
@@ -32,7 +33,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (index < 0 || index >= ActiveSamplerCount())
         {
-            throw std::out_of_range("Sampler index out of range.");
+            throw System::ArgumentOutOfRangeException("index");
         }
         return samplers_[static_cast<std::size_t>(index)];
     }
@@ -41,7 +42,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (index < 0 || index >= ActiveSamplerCount())
         {
-            throw std::out_of_range("Sampler index out of range.");
+            throw System::ArgumentOutOfRangeException("index");
         }
         return samplers_[static_cast<std::size_t>(index)];
     }

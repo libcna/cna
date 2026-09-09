@@ -4,6 +4,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
@@ -36,7 +37,7 @@ namespace Microsoft::Xna::Framework::Graphics
             throw System::ObjectDisposedException("GraphicsDevice");
         if (index < 0 || index >= ActiveTextureCount())
         {
-            throw std::out_of_range("Texture index out of range.");
+            throw System::ArgumentOutOfRangeException("index");
         }
         return textures_[static_cast<std::size_t>(index)];
     }
@@ -78,7 +79,7 @@ namespace Microsoft::Xna::Framework::Graphics
         }
         if (index < 0 || index >= ActiveTextureCount())
         {
-            throw std::out_of_range("Texture index out of range.");
+            throw System::ArgumentOutOfRangeException("index");
         }
         if (texture != nullptr && graphicsDevice_ != nullptr
             && texture->getGraphicsDeviceProperty() != nullptr

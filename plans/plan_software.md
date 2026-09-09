@@ -78,6 +78,8 @@
 > profile `NotSupportedException`, now restored by `SOFTWARE-229`.
 > `SOFTWARE-230` completes the adjacent binding validation by replacing the remaining native
 > `std::invalid_argument` leak for a null binding with XNA's `ArgumentException`.
+> The collection exception pass then found that every invalid texture/sampler index leaked
+> `std::out_of_range`; `SOFTWARE-231` restores the public `ArgumentOutOfRangeException` contract.
 > Deferred CNAEXT-modern and
 > non-applicable physical GPU/window behavior remain separately classified.
 > The executable task table is below; the evidence ledger is
@@ -301,6 +303,7 @@ its own tests and plan evidence in the same commit.
 | SOFTWARE-228 | Unbind active render targets during `GraphicsDevice.Reset` | ✅ | Completed 2026-09-09. Recovered Microsoft XNA saves ordinary draw state, calls `SetRenderTargets(null, 0)` before resetting the backbuffer, and deliberately omits render targets from `SavedDeviceState.Restore`. CNA left `currentRenderTargets_` and `renderTargetBound_` intact while resizing/reconfiguring the renderer. A reset performed with an 8x6 target bound therefore continued to report that target and made the next `Present()` throw, even though the renderer had established a backbuffer. The shared Reset path now unbinds after `DeviceResetting` and before presentation mutation, giving normal target finalization/discard semantics and backbuffer viewport/scissor restoration. The public lifecycle discriminator passes on Software and desktop EasyGL; full suites pass 2,437/2,492 with 55 classified skips and 2,449/2,508 with 59 skips respectively. |
 | SOFTWARE-229 | Restore Microsoft XNA MRT ceiling exception semantics | ✅ | Completed 2026-09-09. CNA's hard four-binding guard threw `std::invalid_argument`, backed by an old FNA implementation-detail test, before its later profile-aware `NotSupportedException` path could run. Recovered Microsoft XNA compares the requested count with `ProfileCapabilities.MaxRenderTargets` and reports the profile feature failure. The common hard ceiling now throws `System::NotSupportedException`; the discriminator explicitly selects HiDef so five targets challenge the four-slot ceiling rather than Reach's one-target rule. It passes on Software and desktop EasyGL, and both full suites retain the SOFTWARE-228 baselines. |
 | SOFTWARE-230 | Restore XNA null render-target binding exception semantics | ✅ | Completed 2026-09-09. A default `RenderTargetBinding` is representable in CNA and reached a shared `std::invalid_argument`, with an existing test pinning that native exception. Recovered Microsoft XNA checks every binding's render-target reference and throws `ArgumentException(NullNotAllowed)`. The shared loop now reports `System::ArgumentException` with the public parameter name before renderer work or state mutation. The corrected focused test passes on Software and desktop EasyGL; full suites retain 2,437/2,492 with 55 classified skips and 2,449/2,508 with 59 skips. |
+| SOFTWARE-231 | Restore XNA texture/sampler collection index exceptions | ✅ | Completed 2026-09-09. Microsoft XNA's `TextureCollection` and `SamplerStateCollection` getters/setters throw `ArgumentOutOfRangeException("index")` outside the profile-sized slot array. CNA leaked `std::out_of_range` from all four shared access paths, and eight existing assertions pinned that native type across standalone, Reach and HiDef collections. Both classes now throw the SharpRuntime exception for negative, pixel upper-bound, Reach zero-slot and HiDef four-slot failures. Eight focused boundary tests pass on Software and desktop EasyGL; both full suites retain the SOFTWARE-230 counts and classified skips. |
 
 ### Current dependency order
 Tasks through `SOFTWARE-161` plus `SOFTWARE-166/167/169/170/171/172/174/175/176/177/179..197/199..206/208..225` are complete except for the intentionally
@@ -345,7 +348,7 @@ renderer-side batch state after a deferred submission exception so the public ob
 reusable as FNA's cleared guard promises. `SOFTWARE-219` closes the remaining recovered
 `VerifyCanDraw` texture-state branch by enforcing Reach clamp-only sampling for conditional NPOT
 Texture2D resources without restricting HiDef.
-`SOFTWARE-220..230` close the subsequent recovered render-target compatibility/identity/no-op
+`SOFTWARE-220..231` close the subsequent recovered render-target compatibility/identity/no-op
 rules, common cross-device vertex/index/texture binding omissions, and Microsoft-specific plural
 vertex-binding validation/state behavior that FNA does not reproduce, followed by the public
 texture/sampler collection profile, format, and device-lifecycle boundary and the active-surface
@@ -358,6 +361,7 @@ the renderer's backbuffer is reconfigured.
 failure instead of preserving FNA's array-copy implementation detail.
 `SOFTWARE-230` removes the remaining native exception leak from a null member of the public target
 binding array.
+`SOFTWARE-231` applies the same exception-fidelity pass to both public sampler-indexed collections.
 `SOFTWARE-100` remains yellow for the previously recorded
 repository-wide blockers; that status does not excuse any renderer gap found here.
 
