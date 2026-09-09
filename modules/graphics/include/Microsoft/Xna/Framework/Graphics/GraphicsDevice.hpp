@@ -380,6 +380,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param primitiveType  The type of primitive to draw.
          * @param vertexStart    Index of the first vertex to draw.
          * @param primitiveCount Number of primitives to draw.
+         * @throws System::NotSupportedException if @p primitiveCount exceeds the active graphics
+         *         profile limit.
          */
         void DrawPrimitives(PrimitiveType primitiveType, int vertexStart, int primitiveCount);
         /**
@@ -392,6 +394,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param numVertices    Number of vertices referenced.
          * @param startIndex     Location in the index buffer to start reading.
          * @param primitiveCount Number of primitives to draw.
+         * @throws System::NotSupportedException if @p primitiveCount exceeds the active graphics
+         *         profile limit.
          */
         void DrawIndexedPrimitives(PrimitiveType primitiveType,
                                    int baseVertex, int minVertexIndex,
@@ -424,6 +428,8 @@ namespace Microsoft::Xna::Framework::Graphics
          *         declared vertex range leaves the bound vertex buffer after its binding offset
          *         and @p baseVertex; or if the required per-instance element range leaves its
          *         bound buffer after applying binding offset and instance frequency.
+         * @throws System::NotSupportedException if @p primitiveCount or @p instanceCount exceeds
+         *         the active graphics profile limit.
          */
         void DrawInstancedPrimitives(PrimitiveType primitiveType,
                                      int baseVertex, int minVertexIndex,
@@ -484,6 +490,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param vertexData     Pointer to the raw vertex data (assumed VertexPositionColor layout).
          * @param vertexOffset   Offset into @p vertexData (in vertices) to start drawing from.
          * @param primitiveCount Number of primitives to draw.
+         * @throws System::NotSupportedException if @p primitiveCount exceeds the active graphics
+         *         profile limit.
          */
         void DrawUserPrimitives(PrimitiveType primitiveType, const void* vertexData,
                                 int vertexOffset, int primitiveCount);
@@ -620,6 +628,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param indexData      Pointer to the raw index data.
          * @param indexOffset    Offset into @p indexData (in indices).
          * @param primitiveCount Number of primitives to draw.
+         * @throws System::NotSupportedException if @p primitiveCount exceeds the active graphics
+         *         profile limit.
          */
         void DrawUserIndexedPrimitives(PrimitiveType primitiveType,
                                        const void* vertexData, int vertexOffset, int numVertices,

@@ -78,6 +78,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/NotSupportedException.hpp"
 
 // plans/plan_runtimerenderer.md RTR-P9-9: this file's bgfx blocks call bgfx:: directly and hold a
 // BgfxRenderer pointer, so they stay COMPILE-time -- no runtime predicate makes a type exist. The
@@ -1117,7 +1118,7 @@ TEST_F(NonIndexedDrawRangeTest, RejectedNonIndexedRangesRenderNothing)
     EXPECT_THROW(
         device.DrawPrimitives(
             PrimitiveType::TriangleList, 0, std::numeric_limits<int>::max()),
-        System::ArgumentOutOfRangeException);
+        System::NotSupportedException);
 
     const FrameSnapshot pixels =
         CaptureBackbuffer(device, layout.width, layout.height);
@@ -1215,13 +1216,13 @@ TEST_F(NonIndexedDrawRangeTest, PublicContractValidatesEveryNonIndexedRangeBefor
     EXPECT_THROW(
         device.DrawPrimitives(
             PrimitiveType::TriangleList, 0, std::numeric_limits<int>::max()),
-        System::ArgumentOutOfRangeException);
+        System::NotSupportedException);
     EXPECT_THROW(
         device.DrawPrimitives(
             PrimitiveType::PointListEXT,
             std::numeric_limits<int>::max(),
             std::numeric_limits<int>::max()),
-        System::ArgumentOutOfRangeException);
+        System::NotSupportedException);
 }
 
 
@@ -1824,13 +1825,13 @@ TEST_F(NonIndexedDrawRangeTest, SoftwareValidInvalidValidNonIndexedSequenceKeeps
     EXPECT_THROW(
         device.DrawPrimitives(
             PrimitiveType::TriangleList, 0, std::numeric_limits<int>::max()),
-        System::ArgumentOutOfRangeException);
+        System::NotSupportedException);
     EXPECT_THROW(
         device.DrawPrimitives(
             PrimitiveType::PointListEXT,
             std::numeric_limits<int>::max(),
             std::numeric_limits<int>::max()),
-        System::ArgumentOutOfRangeException);
+        System::NotSupportedException);
     EXPECT_THROW(
         device.DrawPrimitives(static_cast<PrimitiveType>(999), 0, 1),
         System::InvalidOperationException);

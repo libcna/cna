@@ -86,6 +86,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/NotSupportedException.hpp"
 
 // plans/plan_runtimerenderer.md RTR-P9-9: this file's bgfx blocks call bgfx:: directly and hold a
 // BgfxRenderer pointer, so they stay COMPILE-time -- no runtime predicate makes a type exist. The
@@ -1530,13 +1531,12 @@ TEST_F(InstancedDrawRangeTest, InvalidInstancedRangesAreRejectedNotClamped)
             PrimitiveType::TriangleList, 0, 0, kIndexCount, 0, 1, kRowCount + 1),
         System::ArgumentOutOfRangeException);
 
-    // Topology-count overflow: 3 * primitiveCount must be computed in checked arithmetic and
-    // rejected, never wrapped into a small valid-looking count.
+    // Microsoft XNA rejects the profile-count violation before topology expansion can overflow.
     EXPECT_THROW(
         device.DrawInstancedPrimitives(
             PrimitiveType::TriangleList, 0, 0, kIndexCount, 0,
             std::numeric_limits<int>::max(), 1),
-        System::ArgumentOutOfRangeException);
+        System::NotSupportedException);
 
     // A rejected request must leave the device able to draw the valid range that follows it.
     device.Clear(Color::Black);

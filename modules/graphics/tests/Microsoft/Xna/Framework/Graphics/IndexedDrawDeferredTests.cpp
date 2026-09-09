@@ -50,6 +50,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/NotSupportedException.hpp"
 
 // plans/plan_runtimerenderer.md RTR-P9-9: these three blocks need their renderer's own headers and
 // types, so they stay COMPILE-time -- no runtime predicate makes a type exist. The condition
@@ -2877,7 +2878,7 @@ TEST_F(IndexedDrawDeferredTest, PublicContractValidatesEveryIndexedRangeBeforeSu
             9,
             0,
             std::numeric_limits<int>::max()),
-        System::ArgumentOutOfRangeException);
+        System::NotSupportedException);
     EXPECT_THROW(
         device.DrawIndexedPrimitives(
             PrimitiveType::TriangleList, 0, 0, 9, 0, 0),
