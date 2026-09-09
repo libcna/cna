@@ -235,14 +235,6 @@ namespace Microsoft::Xna::Framework
             return static_cast<float>(std::sqrt(x * x + y * y + z * z));
         }
 
-        /** @brief `Vector3.DistanceSquared(a, b)`, likewise. */
-        [[nodiscard]] inline float WideDistanceSquared(const Vector3& left, const Vector3& right) noexcept
-        {
-            const double x = static_cast<double>(left.X) - static_cast<double>(right.X);
-            const double y = static_cast<double>(left.Y) - static_cast<double>(right.Y);
-            const double z = static_cast<double>(left.Z) - static_cast<double>(right.Z);
-            return static_cast<float>(x * x + y * y + z * z);
-        }
     }
 
     BoundingSphere BoundingSphere::CreateFromPoints(const std::vector<Vector3>& points)
@@ -270,9 +262,18 @@ namespace Microsoft::Xna::Framework
             if (pt.Z > maxz.Z) maxz = pt;
         }
 
-        const float sqDistX = WideDistanceSquared(maxx, minx);
-        const float sqDistY = WideDistanceSquared(maxy, miny);
-        const float sqDistZ = WideDistanceSquared(maxz, minz);
+        // The widest axis is chosen by the *distance* between its two extreme points, not by the
+        // square of it. The two readings differ only where one squared span rounds above another's
+        // and the single-precision square root of both is the same float, which is a real shape
+        // and not a contrived one: SAMPLE-142's cylinder has its Y extremes 6.2500005 apart
+        // squared and its Z extremes 6.25, and 2.5 is the root of both, so squaring seeds the
+        // sphere from Y and XNA seeds it from Z. Measured on the genuine framework over the
+        // `span/*` sets of tests/reference/xna40/framework/bounding-sphere-oracle.txt: fourteen
+        // point sets built to separate the two, all fourteen answered by the distance and none by
+        // its square, with the 431 sets that were already there unchanged (`XNASWEEP-168`).
+        const float spanX = WideDistance(maxx, minx);
+        const float spanY = WideDistance(maxy, miny);
+        const float spanZ = WideDistance(maxz, minz);
 
         Vector3 min = minx;
         Vector3 max = maxx;
@@ -284,15 +285,18 @@ namespace Microsoft::Xna::Framework
         // after a model's mesh bounding sphere disagreed with XNA's in the build differential.
         // FNA uses greater-than here, and this is one of the places FNA and XNA differ
         // (plans/plan_xnapipeline_parity.md XNAPP-266).
-        if (sqDistY >= sqDistX && sqDistY >= sqDistZ)
+        float span = spanX;
+        if (spanY >= spanX && spanY >= spanZ)
         {
             max = maxy;
             min = miny;
+            span = spanY;
         }
-        if (sqDistZ >= sqDistX && sqDistZ >= sqDistY)
+        if (spanZ >= spanX && spanZ >= spanY)
         {
             max = maxz;
             min = minz;
+            span = spanZ;
         }
 
         // The seed is the midpoint of that pair and *half their distance* -- not the distance from
@@ -303,7 +307,7 @@ namespace Microsoft::Xna::Framework
             static_cast<float>((static_cast<double>(min.X) + static_cast<double>(max.X)) * 0.5),
             static_cast<float>((static_cast<double>(min.Y) + static_cast<double>(max.Y)) * 0.5),
             static_cast<float>((static_cast<double>(min.Z) + static_cast<double>(max.Z)) * 0.5));
-        float radius = WideDistance(max, min) * 0.5f;
+        float radius = span * 0.5f;
 
         for (const Vector3& pt : points)
         {

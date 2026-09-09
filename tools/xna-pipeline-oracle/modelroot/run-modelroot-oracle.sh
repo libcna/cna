@@ -17,7 +17,8 @@ build="$repo/build/xna-pipeline-oracle/modelroot"
 mkdir -p "$build" "$(dirname "$out")"
 for dll in Microsoft.Xna.Framework.dll Microsoft.Xna.Framework.Graphics.dll \
            Microsoft.Xna.Framework.Content.Pipeline.dll \
-           Microsoft.Xna.Framework.Content.Pipeline.FBXImporter.dll; do
+           Microsoft.Xna.Framework.Content.Pipeline.FBXImporter.dll \
+           Microsoft.Xna.Framework.Content.Pipeline.XImporter.dll; do
     cp "$refs/$dll" "$build/"
 done
 native="${CNA_XNA40_NATIVE:-$prefix/drive_c/Program Files/Common Files/Microsoft Shared/XNA/Framework/v4.0/XnaNative.dll}"
@@ -26,8 +27,11 @@ mcs -sdk:4 -platform:x86 -target:exe -nologo -out:"$build/ModelRootOracle.exe" \
     -r:"$build/Microsoft.Xna.Framework.dll" -r:"$build/Microsoft.Xna.Framework.Graphics.dll" \
     -r:"$build/Microsoft.Xna.Framework.Content.Pipeline.dll" \
     -r:"$build/Microsoft.Xna.Framework.Content.Pipeline.FBXImporter.dll" \
+    -r:"$build/Microsoft.Xna.Framework.Content.Pipeline.XImporter.dll" \
     "$here/ModelRootOracle.cs"
-rm -rf "$build/fixtures"; mkdir -p "$build/fixtures"; cp "$fixtures"/*.fbx "$build/fixtures/"
+rm -rf "$build/fixtures"; mkdir -p "$build/fixtures"
+cp "$fixtures"/*.fbx "$build/fixtures/" 2>/dev/null || true
+cp "$fixtures"/*.x "$build/fixtures/" 2>/dev/null || true
 win_in="$(env WINEPREFIX="$prefix" WINEDEBUG=-all wine winepath -w "$build/fixtures" 2>/dev/null)"
 win_out="$(env WINEPREFIX="$prefix" WINEDEBUG=-all wine winepath -w "$build/out.txt" 2>/dev/null)"
 env -u WAYLAND_DISPLAY DISPLAY="${CNA_XNA40_DISPLAY:-:99}" WINEPREFIX="$prefix" WINEDEBUG=-all \

@@ -85,6 +85,31 @@ internal static class ModelRootOracle
         return "[" + string.Join(" ", parts.ToArray()) + "]";
     }
 
+    private static void DescribePositions(StringBuilder text, string file, NodeContent node,
+                                         string path)
+    {
+        string here = path + "/" + (node.Name == null ? "<null>" : node.Name);
+        MeshContent mesh = node as MeshContent;
+        if (mesh != null)
+        {
+            var parts = new List<string>();
+            foreach (Vector3 p in mesh.Positions)
+            {
+                parts.Add("(" + F(p.X) + "," + F(p.Y) + "," + F(p.Z) + ")");
+            }
+            text.Append(file + "|positions " + here + " " + mesh.Positions.Count + " " +
+                        string.Join(" ", parts.ToArray()) + "\n");
+            foreach (GeometryContent geometry in mesh.Geometry)
+            {
+                var indices = new List<string>();
+                foreach (int i in geometry.Vertices.PositionIndices) { indices.Add(i.ToString(CultureInfo.InvariantCulture)); }
+                text.Append(file + "|positionIndices " + here + " " +
+                            string.Join(",", indices.ToArray()) + "\n");
+            }
+        }
+        foreach (NodeContent child in node.Children) { DescribePositions(text, file, child, here); }
+    }
+
     private static void DescribeNormals(StringBuilder text, string file, NodeContent node,
                                        string path)
     {
@@ -116,14 +141,18 @@ internal static class ModelRootOracle
         string directory = args[0];
         using (StreamWriter writer = new StreamWriter(args[1]))
         {
-            string[] files = Directory.GetFiles(directory, "*.fbx");
+            var found = new List<string>(Directory.GetFiles(directory, "*.fbx"));
+            found.AddRange(Directory.GetFiles(directory, "*.x"));
+            string[] files = found.ToArray();
             Array.Sort(files);
             foreach (string file in files)
             {
                 string name = Path.GetFileName(file);
                 try
                 {
-                    NodeContent root = new FbxImporter().Import(file, new Importing());
+                    NodeContent root = file.EndsWith(".x", StringComparison.OrdinalIgnoreCase)
+                        ? (NodeContent)new XImporter().Import(file, new Importing())
+                        : new FbxImporter().Import(file, new Importing());
                     var text = new StringBuilder();
                     // `CNA_MODELROOT_TRANSFORM_SCENE=<sx>,<sy>,<sz>` runs `MeshHelper.TransformScene`
                     // over the imported graph with that scale and prints every normal channel
@@ -143,7 +172,59 @@ internal static class ModelRootOracle
                         writer.Write(text.ToString());
                         continue;
                     }
-                    ModelContent model = new ModelProcessor().Process(root, new Processing());
+                    ModelProcessor processor = new ModelProcessor();
+                    // `CNA_MODELROOT_PROCESSOR=RotationX=-90;Scale=0.1;DefaultEffect=...` sets the
+                    // processor's own properties before it runs, because several of the corpus's
+                    // models are built with them and what they do to a bone's transform is exactly
+                    // what is being measured (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-172`).
+                    string settings = Environment.GetEnvironmentVariable("CNA_MODELROOT_PROCESSOR");
+                    if (!string.IsNullOrEmpty(settings))
+                    {
+                        foreach (string pair in settings.Split(';'))
+                        {
+                            if (pair.Length == 0) { continue; }
+                            int split = pair.IndexOf('=');
+                            string key = pair.Substring(0, split);
+                            string value = pair.Substring(split + 1);
+                            switch (key)
+                            {
+                                case "RotationX": processor.RotationX = float.Parse(value, CultureInfo.InvariantCulture); break;
+                                case "RotationY": processor.RotationY = float.Parse(value, CultureInfo.InvariantCulture); break;
+                                case "RotationZ": processor.RotationZ = float.Parse(value, CultureInfo.InvariantCulture); break;
+                                case "Scale": processor.Scale = float.Parse(value, CultureInfo.InvariantCulture); break;
+                                case "SwapWindingOrder": processor.SwapWindingOrder = bool.Parse(value); break;
+                                case "GenerateTangentFrames": processor.GenerateTangentFrames = bool.Parse(value); break;
+                                case "DefaultEffect":
+                                    processor.DefaultEffect = (MaterialProcessorDefaultEffect)Enum.Parse(
+                                        typeof(MaterialProcessorDefaultEffect), value);
+                                    break;
+                                default: throw new ArgumentException("unknown processor property " + key);
+                            }
+                        }
+                    }
+                    ModelContent model = processor.Process(root, new Processing());
+                    // `CNA_MODELROOT_POSITIONS=1` prints every mesh's positions *after* the
+                    // processor has run, because XNA's `ModelProcessor` mutates the graph it is
+                    // given and the bounding sphere is computed over whatever the positions are by
+                    // then (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-168`).
+                    if (Environment.GetEnvironmentVariable("CNA_MODELROOT_POSITIONS") == "1")
+                    {
+                        DescribePositions(text, name, root, "");
+                    }
+                    // Every mesh's bounding sphere, at round-trip precision. What XNA computes it
+                    // *over* is the open question, so the answer has to be read rather than
+                    // assumed (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-168`).
+                    for (int mi = 0; mi < model.Meshes.Count; mi++)
+                    {
+                        ModelMeshContent mesh = model.Meshes[mi];
+                        text.Append(name + "|sphere " + mi + " " +
+                                    (mesh.Name == null ? "<null>" : mesh.Name) + " centre=(" +
+                                    F(mesh.BoundingSphere.Center.X) + "," +
+                                    F(mesh.BoundingSphere.Center.Y) + "," +
+                                    F(mesh.BoundingSphere.Center.Z) + ") radius=" +
+                                    F(mesh.BoundingSphere.Radius) + " parts=" +
+                                    mesh.MeshParts.Count + "\n");
+                    }
                     foreach (ModelBoneContent bone in model.Bones)
                     {
                         text.Append(name + "|bone " + bone.Index + " " +

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-134: the point sets the BoundingSphere oracle runs.
+"""plans/plan_xna_sample_xnb_sweep.md XNASWEEP-134/XNASWEEP-168: the point sets the BoundingSphere oracle runs.
 
 `BoundingSphere.CreateFromPoints` is an iterative sphere-growing pass, so the only way to pin what
 it does is to hand the genuine framework point sets whose shapes separate the candidate rules and
@@ -14,7 +14,10 @@ compare bit for bit. Four families do that:
                   rounding, and one point outside it, so a single growth step is isolated;
   * `box/*`    -- a box whose corners are listed with duplicates, the shape a mesh's control-point
                   list actually has, over growing prefixes: a point that lands exactly on the
-                  sphere either grows it or does not, and the corpus's models are decided by it.
+                  sphere either grows it or does not, and the corpus's models are decided by it;
+  * `span/*`   -- two axes whose extents have the same length and different squared lengths, which
+                  is the only shape that says whether the widest axis is chosen by `Distance` or by
+                  `DistanceSquared` (`XNASWEEP-168`).
 
 Deterministic: the same seed produces the same file. Written by hand into the repository, not taken
 from any sample's content.
@@ -75,6 +78,41 @@ def cases():
         duplicated.extend(corners[(step * 2) % 8:(step * 2) % 8 + 4])
     for length in range(2, len(duplicated) + 1):
         out.append(("box/%02d" % length, duplicated[:length]))
+
+    # `span/*` -- two axes whose extents are the same length and not the same squared length.
+    #
+    # The seed of the sphere is the widest axis, and "widest" can be read as the distance between
+    # that axis's two extreme points or as the square of it. The two readings differ only where a
+    # squared span rounds above another's and the square root of both rounds to the same float, and
+    # a cylinder in the corpus does exactly that: its Y extremes are 6.2500005 apart squared and
+    # its Z extremes 6.25, and 2.5 is the single-precision root of both. Each case here is that
+    # shape deliberately -- a pair whose squared span is one ulp over L*L and whose length is
+    # exactly L, and a second pair, on the later axis, whose span is exactly L both ways. Reading
+    # the span squared seeds from the first pair; reading it as a length ties, and a tie goes to
+    # the later axis, which seeds from the second. The two seeds are placed far enough apart that
+    # the answers cannot be confused.
+    for index, (dx, dy, dz, length) in enumerate([
+            (1.5, 2.0, 0.000699999975040555, 2.5),
+            (2.494291067123413, 0.1636705994606018, 0.041525036096572876, 2.5),
+            (1.5381286144256592, 1.9704573154449463, 0.03819317743182182, 2.5),
+            (9.201226234436035, 3.9115512371063232, 0.1928943544626236, 10.0),
+            (7.428255081176758, 6.6943254470825195, 0.08389818668365479, 10.0),
+            (39.24144744873047, 7.711873531341553, 0.7974483370780945, 40.0),
+            (6.785238742828369, 39.418663024902344, 0.36000341176986694, 40.0)]):
+        dx, dy, dz = f32(dx), f32(dy), f32(dz)
+        wide = float(dx) * dx + float(dy) * dy + float(dz) * dz
+        assert f32(wide) > f32(length * length), "the squared span must round above L*L"
+        assert f32(math.sqrt(wide)) == f32(length), "and its root must be exactly L"
+        near = [(f32(-dx / 2), f32(-dy / 2), f32(-dz / 2)), (f32(dx / 2), f32(dy / 2), f32(dz / 2))]
+        # The exact pair sits on z, inside the near pair on x and y and outside it on z, and its
+        # midpoint is nowhere near the near pair's, which is the origin.
+        qx, qy = f32(dx / 4), f32(dy / 4)
+        exact = [(qx, qy, f32(-length / 2 + length / 8)), (qx, qy, f32(length / 2 + length / 8))]
+        assert f32(exact[1][2] - exact[0][2]) == f32(length)
+        assert abs(exact[0][2]) > abs(near[0][2]) and abs(exact[1][2]) > abs(near[1][2])
+        assert near[0][0] < qx < near[1][0] and near[0][1] < qy < near[1][1]
+        out.append(("span/%02d" % index, near + exact))
+        out.append(("span/%02d_reordered" % index, exact + near))
     return out
 
 
