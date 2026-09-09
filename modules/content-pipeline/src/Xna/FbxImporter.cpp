@@ -11,6 +11,7 @@
 #include <iterator>
 #include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -705,12 +706,35 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             }
         };
 
-        [[nodiscard]] Layer ReadLayer(const Canon::FbxNode& mesh, const std::string& element,
-                                      const std::string& valuesName, const std::string& indexName,
-                                      const std::size_t stride)
+        /** @brief The layer element of a name and a `TypedIndex`, or the first of that name. */
+        [[nodiscard]] const Canon::FbxNode* FindLayerElement(const Canon::FbxNode& mesh,
+                                                             const std::string& element,
+                                                             const std::size_t typedIndex)
+        {
+            const Canon::FbxNode* first = nullptr;
+            for (const Canon::FbxNode& child : mesh.children)
+            {
+                if (child.name != element)
+                {
+                    continue;
+                }
+                if (first == nullptr)
+                {
+                    first = &child;
+                }
+                if (static_cast<std::size_t>(std::max(0.0, child.Number(0, 0.0))) == typedIndex)
+                {
+                    return &child;
+                }
+            }
+            return first;
+        }
+
+        [[nodiscard]] Layer ReadLayerNode(const Canon::FbxNode* node,
+                                          const std::string& valuesName,
+                                          const std::string& indexName, const std::size_t stride)
         {
             Layer layer;
-            const Canon::FbxNode* node = mesh.Find(element);
             if (node == nullptr)
             {
                 return layer;
@@ -737,6 +761,13 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 }
             }
             return layer;
+        }
+
+        [[nodiscard]] Layer ReadLayer(const Canon::FbxNode& mesh, const std::string& element,
+                                      const std::string& valuesName, const std::string& indexName,
+                                      const std::size_t stride)
+        {
+            return ReadLayerNode(mesh.Find(element), valuesName, indexName, stride);
         }
     }
 
@@ -1054,19 +1085,29 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             }
             return {};
         };
-        std::map<std::pair<std::int64_t, std::int64_t>, std::shared_ptr<BasicMaterialContent>> textured;
+        std::map<std::string, std::shared_ptr<BasicMaterialContent>> textured;
+        // `channels` is (dictionary key, texture object identity), in XNA's own channel order; the
+        // first entry, when it is `Texture`, is what `BasicMaterialContent.Texture` answers.
         const auto withTexture =
             [&](const std::shared_ptr<BasicMaterialContent>& base, const std::int64_t materialIdentity,
-                const std::int64_t textureIdentity) -> std::shared_ptr<BasicMaterialContent>
+                const std::vector<std::pair<std::string, std::int64_t>>& channels)
+            -> std::shared_ptr<BasicMaterialContent>
         {
-            if (textureIdentity == 0) { return base; }
-            std::string named = textureFile(textureIdentity);
-            if (named.empty()) { return base; }
-            const std::pair<std::int64_t, std::int64_t> key{materialIdentity, textureIdentity};
+            std::vector<std::pair<std::string, std::string>> resolved;
+            for (const auto& [name, identity] : channels)
+            {
+                if (identity == 0) { continue; }
+                std::string named = textureFile(identity);
+                if (named.empty()) { continue; }
+                // Spelled the way the tool that wrote the file spells a path, as the `.x` route does.
+                std::replace(named.begin(), named.end(), '\\', '/');
+                resolved.emplace_back(name, (sourceDirectory / named).lexically_normal().string());
+            }
+            if (resolved.empty()) { return base; }
+            std::string key = std::to_string(materialIdentity);
+            for (const auto& [name, path] : resolved) { key += "\x1f" + name + "\x1f" + path; }
             const auto found = textured.find(key);
             if (found != textured.end()) { return found->second; }
-            // Spelled the way the tool that wrote the file spells a path, as the `.x` route does.
-            std::replace(named.begin(), named.end(), '\\', '/');
             auto copy = std::make_shared<BasicMaterialContent>();
             copy->setNameProperty(base->getNameProperty());
             copy->setDiffuseColorProperty(base->getDiffuseColorProperty().value_or(Vector3(0, 0, 0)));
@@ -1077,8 +1118,19 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             copy->setAlphaProperty(base->getAlphaProperty().value_or(1.0f));
             copy->setSpecularColorProperty(base->getSpecularColorProperty().value_or(Vector3(0, 0, 0)));
             copy->setSpecularPowerProperty(base->getSpecularPowerProperty().value_or(0.0f));
-            copy->setTextureProperty(std::make_shared<ExternalReference<Graphics::TextureContent>>(
-                (sourceDirectory / named).lexically_normal().string()));
+            for (const auto& [name, path] : resolved)
+            {
+                if (name == "Texture")
+                {
+                    copy->setTextureProperty(
+                        std::make_shared<ExternalReference<Graphics::TextureContent>>(path));
+                }
+                else
+                {
+                    copy->getTexturesProperty().Add(
+                        name, std::make_shared<ExternalReference<Graphics::TextureContent>>(path));
+                }
+            }
             textured.emplace(key, copy);
             return copy;
         };
@@ -1143,9 +1195,21 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     Layer layer;
                     std::size_t index = 0u;
                 };
+                // Every `LayerElement` type some `Layer` block of this mesh names. Both the UV
+                // sets and the material's texture channels turn on it: a layer element the
+                // geometry declares but no `Layer` names is not read at all.
+                std::set<std::string> namedElements;
                 std::vector<UvSet> uvSets;
                 {
-                    std::vector<std::pair<std::size_t, std::string>> declared;  // (layer, element)
+                    struct Declared
+                    {
+                        std::size_t layer = 0u;
+                        std::string element;
+                        std::size_t typedIndex = 0u;
+                    };
+                    std::vector<Declared> declared;
+                    bool named = false;
+                    namedElements.clear();
                     for (const Canon::FbxNode& child : geometry->children)
                     {
                         if (child.name != "Layer") { continue; }
@@ -1153,19 +1217,61 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                             child.properties.empty()
                                 ? 0u
                                 : static_cast<std::size_t>(std::max(0.0, child.Number(0, 0.0)));
+                        // A layer's own entries, so that "does this layer name a texture element"
+                        // is asked of the layer and not of the file.
+                        std::vector<Declared> here;
+                        bool hasTexture = false;
                         for (const Canon::FbxNode& element : child.children)
                         {
                             if (element.name != "LayerElement") { continue; }
                             const Canon::FbxNode* type = element.Find("Type");
                             if (type == nullptr) { continue; }
                             const std::string spelled = type->Text(0);
-                            if (spelled == "LayerElementUV" || spelled == "LayerElementReflectionUV")
+                            namedElements.insert(spelled);
+                            const std::size_t typedIndex = element.Find("TypedIndex") != nullptr
+                                ? static_cast<std::size_t>(std::max(
+                                      0.0, element.Find("TypedIndex")->Number(0, 0.0)))
+                                : 0u;
+                            if (spelled.size() > 2u && spelled.compare(spelled.size() - 2u, 2u, "UV") == 0)
                             {
-                                declared.emplace_back(layerNumber, spelled);
+                                named = true;
+                                // The same UV element type twice in one layer is one channel, and
+                                // the last entry wins (measured, `uv2d_two_transpuv`).
+                                const auto same = std::find_if(here.begin(), here.end(),
+                                    [&spelled](const Declared& row) { return row.element == spelled; });
+                                if (same != here.end())
+                                {
+                                    same->typedIndex = typedIndex;
+                                }
+                                else
+                                {
+                                    here.push_back(Declared{layerNumber, spelled, typedIndex});
+                                }
+                            }
+                            else if (spelled.find("Texture") != std::string::npos)
+                            {
+                                hasTexture = true;
+                            }
+                        }
+                        for (Declared& row : here)
+                        {
+                            // `LayerElementUV` is always read. A UV set of any other texture
+                            // channel -- `LayerElementTransparentUV`, `...SpecularUV`,
+                            // `...BumpUV`, `...EmissiveUV`, `...ReflectionUV` -- is read only when
+                            // the same `Layer` block also names a texture element, whichever one
+                            // and whether or not a texture is connected to the mesh. Measured on
+                            // the genuine importer over 29 probes
+                            // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-166`): the same file
+                            // with the texture entry removed from the `Layer` answers one channel
+                            // and with it answers two, and a `LayerElementTexture` naming a
+                            // texture that is not connected is enough.
+                            if (row.element == "LayerElementUV" || hasTexture)
+                            {
+                                declared.push_back(row);
                             }
                         }
                     }
-                    if (declared.empty())
+                    if (!named)
                     {
                         // No `Layer` block names one: read whichever element is present, at zero.
                         for (const char* element : {"LayerElementUV", "LayerElementReflectionUV"})
@@ -1180,11 +1286,13 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     else
                     {
                         std::vector<std::size_t> taken;
-                        for (const auto& [layerNumber, element] : declared)
+                        for (const Declared& row : declared)
                         {
-                            Layer read = ReadLayer(*geometry, element, "UV", "UVIndex", 2u);
+                            Layer read = ReadLayerNode(
+                                FindLayerElement(*geometry, row.element, row.typedIndex),
+                                "UV", "UVIndex", 2u);
                             if (read.stride == 0u || read.values.empty()) { continue; }
-                            std::size_t index = layerNumber;
+                            std::size_t index = row.layer;
                             while (std::find(taken.begin(), taken.end(), index) != taken.end())
                             {
                                 ++index;
@@ -1216,6 +1324,45 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                                              "TextureId", "", 1u);
                 }
                 textureLayer.reference = "Direct";
+
+                // Every texture channel the mesh's `Layer` blocks name, and what the genuine
+                // importer calls it in the material's `Textures` dictionary. The order is XNA's
+                // own and not the `Layer` block's -- a file naming them in the reverse order comes
+                // back in this one -- and three element types the FBX 6 format defines are simply
+                // not read: `Emissive`, `Diffuse` and `Displacement` produce nothing. A texture
+                // element the geometry declares but no `Layer` names produces nothing either
+                // (measured over eleven probes, plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-166`).
+                struct TextureChannel
+                {
+                    const char* element;
+                    const char* key;
+                };
+                static constexpr TextureChannel kTextureChannels[] = {
+                    {"LayerElementTexture", "Texture"},
+                    {"LayerElementAmbientTextures", "Ambient"},
+                    {"LayerElementSpecularTextures", "Specular"},
+                    {"LayerElementShininessTextures", "SpecularPower"},
+                    {"LayerElementNormalMapTextures", "NormalMap"},
+                    {"LayerElementBumpTextures", "Bump"},
+                    {"LayerElementTransparentTextures", "Transparency"},
+                    {"LayerElementReflectionTextures", "Reflection"},
+                };
+                struct NamedTextureLayer
+                {
+                    std::string key;
+                    Layer layer;
+                };
+                std::vector<NamedTextureLayer> namedTextures;
+                for (const TextureChannel& channel : kTextureChannels)
+                {
+                    if (namedElements.find(channel.element) == namedElements.end())
+                    {
+                        continue;
+                    }
+                    Layer read = ReadLayer(*geometry, channel.element, "TextureId", "", 1u);
+                    read.reference = "Direct";
+                    namedTextures.push_back(NamedTextureLayer{channel.key, std::move(read)});
+                }
 
                 // Walk the polygons, gathering each one's control points and which material it uses.
                 struct Polygon
@@ -1472,9 +1619,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                             // whose *second* material's polygons are the textured ones and whose
                             // first material's are all -1: XNA leaves that first batch without a
                             // texture and CNA gave it one (`XNASWEEP-141`).
-                            std::int64_t texture = 0;
-                            if (geometry->Find("LayerElementTexture") != nullptr ||
-                                geometry->Find("LayerElementReflectionTextures") != nullptr)
+                            std::vector<std::pair<std::string, std::int64_t>> channels;
+                            for (const NamedTextureLayer& named : namedTextures)
                             {
                                 int identifier = -1;
                                 for (const Polygon& polygon : polygons)
@@ -1487,10 +1633,15 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                                     // has a texture: `fbx_texture_second_batch.fbx` is one batch
                                     // whose two polygons carry -1 and 0, and the genuine importer
                                     // answers a material with no texture at all.
-                                    identifier = polygon.texture;
+                                    const std::vector<double> value = named.layer.At(
+                                        polygon.corners.empty() ? 0u : polygon.corners.front(),
+                                        polygon.controlPoints.empty() ? 0u
+                                                                      : polygon.controlPoints.front(),
+                                        static_cast<std::size_t>(&polygon - polygons.data()));
+                                    identifier = value.empty() ? -1 : static_cast<int>(value.front());
                                     break;
                                 }
-                                if (identifier < 0 && textureLayer.stride == 0u)
+                                if (identifier < 0 && named.layer.stride == 0u)
                                 {
                                     // No per-polygon list at all: the ordinal is all there is.
                                     identifier = static_cast<int>(batch);
@@ -1498,11 +1649,13 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                                 if (identifier >= 0 &&
                                     static_cast<std::size_t>(identifier) < object.textures.size())
                                 {
-                                    texture = object.textures[static_cast<std::size_t>(identifier)];
+                                    channels.emplace_back(
+                                        named.key,
+                                        object.textures[static_cast<std::size_t>(identifier)]);
                                 }
                             }
                             batchContent->setMaterialProperty(
-                                withTexture(material->second, batchMaterials[batch], texture));
+                                withTexture(material->second, batchMaterials[batch], channels));
                         }
                     }
                     // Normals, then texture coordinates, then colours: the order the genuine

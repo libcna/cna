@@ -85,6 +85,32 @@ internal static class ModelRootOracle
         return "[" + string.Join(" ", parts.ToArray()) + "]";
     }
 
+    private static void DescribeNormals(StringBuilder text, string file, NodeContent node,
+                                       string path)
+    {
+        string here = path + "/" + (node.Name == null ? "<null>" : node.Name);
+        MeshContent mesh = node as MeshContent;
+        if (mesh != null)
+        {
+            foreach (GeometryContent geometry in mesh.Geometry)
+            {
+                foreach (VertexChannel channel in geometry.Vertices.Channels)
+                {
+                    VertexChannel<Vector3> typed = channel as VertexChannel<Vector3>;
+                    if (typed == null) { continue; }
+                    var parts = new List<string>();
+                    foreach (Vector3 one in typed)
+                    {
+                        parts.Add("(" + F(one.X) + "," + F(one.Y) + "," + F(one.Z) + ")");
+                    }
+                    text.Append(file + "|" + here + " " + channel.Name + " " +
+                                string.Join(" ", parts.ToArray()) + "\n");
+                }
+            }
+        }
+        foreach (NodeContent child in node.Children) { DescribeNormals(text, file, child, here); }
+    }
+
     private static int Main(string[] args)
     {
         string directory = args[0];
@@ -98,8 +124,26 @@ internal static class ModelRootOracle
                 try
                 {
                     NodeContent root = new FbxImporter().Import(file, new Importing());
-                    ModelContent model = new ModelProcessor().Process(root, new Processing());
                     var text = new StringBuilder();
+                    // `CNA_MODELROOT_TRANSFORM_SCENE=<sx>,<sy>,<sz>` runs `MeshHelper.TransformScene`
+                    // over the imported graph with that scale and prints every normal channel
+                    // afterwards, at round-trip precision. That is the one question a built `.xnb`
+                    // cannot answer on its own: whether the method normalizes what it transforms
+                    // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-167`).
+                    string scene = Environment.GetEnvironmentVariable("CNA_MODELROOT_TRANSFORM_SCENE");
+                    if (!string.IsNullOrEmpty(scene))
+                    {
+                        string[] parts = scene.Split(',');
+                        Matrix transform = Matrix.CreateScale(
+                            float.Parse(parts[0], CultureInfo.InvariantCulture),
+                            float.Parse(parts[1], CultureInfo.InvariantCulture),
+                            float.Parse(parts[2], CultureInfo.InvariantCulture));
+                        MeshHelper.TransformScene(root, transform);
+                        DescribeNormals(text, name, root, "");
+                        writer.Write(text.ToString());
+                        continue;
+                    }
+                    ModelContent model = new ModelProcessor().Process(root, new Processing());
                     foreach (ModelBoneContent bone in model.Bones)
                     {
                         text.Append(name + "|bone " + bone.Index + " " +

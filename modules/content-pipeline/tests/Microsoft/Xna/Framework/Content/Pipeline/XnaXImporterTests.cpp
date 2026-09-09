@@ -739,6 +739,18 @@ TEST(XnaFbxImporter, EveryFileAnswersTheGraphXnaAnswers)
           "fbx_unit_scale_pivot.fbx", "fbx_unit_scale_offset.fbx", "fbx_unit_scale_both.fbx",
           "fbx_unit_scale_plain.fbx", "fbx_unit_scale_two.fbx", "fbx_unit_scale_child.fbx",
           "fbx_unit_scale_siblings.fbx",
+          // A UV set is not only `LayerElementUV`. Every `LayerElement...UV` a `Layer` block names
+          // is one, in the block's own order -- but a set other than the diffuse one is read only
+          // when that same block also names a *texture* element, whichever one, and whether or not
+          // a texture is connected to the mesh. `..._pair` names one and answers two channels;
+          // `..._no_texture` is the same file with the texture entry removed and answers one;
+          // `..._unnamed` declares the second set without naming it and answers one; `..._alone`
+          // has only the transparency set and it takes index 0; `..._three_types` answers three;
+          // and `..._same_type_twice` names one type at two `TypedIndex`es and answers one channel
+          // carrying the second (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-166`).
+          "fbx_uv_transparent_pair.fbx", "fbx_uv_transparent_no_texture.fbx",
+          "fbx_uv_transparent_unnamed.fbx", "fbx_uv_transparent_alone.fbx",
+          "fbx_uv_three_types.fbx", "fbx_uv_same_type_twice.fbx",
           "fbx_two_materials.fbx"})
     {
         ImporterContext context;

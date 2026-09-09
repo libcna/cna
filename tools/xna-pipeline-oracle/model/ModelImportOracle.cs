@@ -87,9 +87,20 @@ namespace Cna.Xna40.ModelOracle
             return Path.GetFileName(path);
         }
 
+        // Rounded to six decimals by default, which is what every committed reference carries.
+        // `CNA_MODEL_ORACLE_EXACT=1` prints the round-trip form instead, for an investigation that
+        // turns on a single ulp -- a rounded transform cannot tell -4.4e-08 from 6.1e-17, and
+        // cannot tell one float from the one below it (plans/plan_xna_sample_xnb_sweep.md
+        // `XNASWEEP-121`, `XNASWEEP-153`). It is deliberately not the default: turning it on would
+        // rewrite every reference in the corpus for no measurement anybody asked for.
+        private static readonly bool Exact =
+            Environment.GetEnvironmentVariable("CNA_MODEL_ORACLE_EXACT") == "1";
+
         private static string F(float value)
         {
-            return value.ToString("0.######", CultureInfo.InvariantCulture);
+            return Exact
+                ? value.ToString("R", CultureInfo.InvariantCulture)
+                : value.ToString("0.######", CultureInfo.InvariantCulture);
         }
 
         private static string Describe(Matrix m)

@@ -379,6 +379,42 @@
       "thirdParty": false
     },
     {
+      "file": "fbx_uv_same_type_twice.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_uv2_probes.py",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_uv_three_types.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_uv2_probes.py",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_uv_transparent_alone.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_uv2_probes.py",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_uv_transparent_no_texture.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_uv2_probes.py",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_uv_transparent_pair.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_uv2_probes.py",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_uv_transparent_unnamed.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_uv2_probes.py",
+      "thirdParty": false
+    },
+    {
       "file": "fbx_uv_two_sets.fbx",
       "origin": "authored",
       "thirdParty": false

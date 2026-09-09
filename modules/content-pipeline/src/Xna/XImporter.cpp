@@ -78,7 +78,13 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         /** @brief The left-handed source vector as the right-handed pipeline holds it. */
         [[nodiscard]] Vector3 Convert(const Vector3 value)
         {
-            return Vector3(value.X, value.Y, -value.Z);
+            // `+ 0.0f` is not decoration. XNA's importer applies the basis change as a transform,
+            // so every component is a sum ending in a zero term, and IEEE addition turns a
+            // negative zero into a positive one: a `.x` vertex at `z = 0` comes back `0`, where
+            // negating it on its own answers `-0`. Same bits everywhere else, and the difference
+            // used to be invisible because `MeshHelper.TransformScene` ran over every model and
+            // washed the sign out (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-167`).
+            return Vector3(value.X + 0.0f, value.Y + 0.0f, -value.Z + 0.0f);
         }
 
         /**
@@ -307,8 +313,15 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 const std::size_t count = Count(*object2, normalAt++);
                 for (std::size_t i = 0; i < count; ++i)
                 {
-                    normals.push_back(Convert(
-                        Vector3(At(*object2, normalAt), At(*object2, normalAt + 1), At(*object2, normalAt + 2))));
+                    Vector3 normal = Convert(
+                        Vector3(At(*object2, normalAt), At(*object2, normalAt + 1), At(*object2, normalAt + 2)));
+                    // The `.x` route normalizes what the file declares and the FBX route does not.
+                    // Measured on both genuine importers: a `MeshNormals` entry of `(0, 0, 2)`
+                    // comes back `(0, 0, -1)` and `0.801785` comes back `0.801784`, while an
+                    // `.fbx` mesh's normals are answered as the file's own floats bit for bit
+                    // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-167`).
+                    normal.Normalize();
+                    normals.push_back(normal);
                     normalAt += 3u;
                 }
                 const std::size_t normalFaceCount = Count(*object2, normalAt++);

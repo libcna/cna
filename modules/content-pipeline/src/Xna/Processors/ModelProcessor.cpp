@@ -187,7 +187,17 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
                                   Matrix::CreateRotationX(MathHelper::ToRadians(getRotationXProperty())) *
                                   Matrix::CreateRotationY(MathHelper::ToRadians(getRotationYProperty())) *
                                   Matrix::CreateScale(getScaleProperty());
-        Graphics::MeshHelper::TransformScene(input, adjustment);
+        // ...and only when there is one. `MeshHelper.TransformScene` **normalizes** every normal,
+        // tangent and binormal it transforms -- measured on the genuine method, which answers
+        // `(0, 0, 1)` for a declared `(0, 0, 2)` -- so running it with the identity is not the
+        // no-op it looks like: it would move a declared normal by an ulp or two. XNA's own build
+        // does not: `SphereLowPoly.xnb`'s normals are the `.fbx`'s own floats, bit for bit, and
+        // CNA's differed on 17 of 89 by exactly what normalizing them gives
+        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-167`).
+        if (adjustment != Matrix::getIdentityProperty())
+        {
+            Graphics::MeshHelper::TransformScene(input, adjustment);
+        }
 
         // The skeleton is found once, before any geometry is processed, because the blend indices
         // every skinned batch writes are positions in this one list.
