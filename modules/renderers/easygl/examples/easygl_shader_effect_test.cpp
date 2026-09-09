@@ -29,6 +29,8 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/ShaderLanguageEXT.hpp"
 
 #include <cstdio>
 #include <memory>
@@ -93,6 +95,36 @@ protected:
     {
         Game::Initialize();
         auto& device = getGraphicsDeviceProperty();
+
+        const auto dialect = device.GetShaderDialectEXT();
+        const bool dialectOk = dialect == CNA::Internal::Renderers::ShaderDialectEXT::GlslEs;
+        const bool graphicsLanguageOk = device.SupportsShaderLanguageEXT(
+            CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Vertex)
+            && device.SupportsShaderLanguageEXT(
+                CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Fragment);
+        const bool computeLanguageOk = device.SupportsShaderLanguageEXT(
+            CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Compute)
+            == device.SupportsCapability(CNA::GraphicsCapability::ComputeShaders);
+        const bool refusalOk = !device.SupportsShaderLanguageEXT(
+            CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Fragment)
+            && !device.SupportsShaderLanguageEXT(
+                CNA::ShaderLanguageEXT::Unknown, CNA::ShaderStageEXT::Vertex)
+            && !device.SupportsShaderLanguageEXT(
+                static_cast<CNA::ShaderLanguageEXT>(999), CNA::ShaderStageEXT::Fragment)
+            && !device.SupportsShaderLanguageEXT(
+                CNA::ShaderLanguageEXT::GlslEs, static_cast<CNA::ShaderStageEXT>(999));
+        if (!dialectOk || !graphicsLanguageOk || !computeLanguageOk || !refusalOk)
+        {
+            std::printf("[FAIL] EasyGLShaderEffect: shader language contract mismatch "
+                        "(dialect=%d, graphics=%d, compute=%d, refusal=%d)\n",
+                        static_cast<int>(dialect), graphicsLanguageOk, computeLanguageOk,
+                        refusalOk);
+            done_ = true;
+            Exit();
+            return;
+        }
+        std::printf("[PASS] EasyGLShaderEffect: GLSL language/stage contract\n");
+
         sb_ = std::make_unique<SpriteBatch>(device);
 
         // 1×1 solid-white texture — the red-tint shader will colourise it.

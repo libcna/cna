@@ -2,6 +2,7 @@
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
 #include "CNA/Internal/Graphics/SrgbTransfer.hpp"
 #include "CNA/Internal/Renderers/EasyGL/GlProfile.hpp"
+#include "CNA/ShaderLanguageEXT.hpp"
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
 #include "CNA/Internal/Renderers/EasyGL/EasyGLCompiledEffect.hpp"
 #include "Fna3dStockEffectBlobs.hpp"
@@ -5637,6 +5638,32 @@ if (!ProfileIsEs2ApiGeneration())
         return ProbeFloatRenderTargetSupportEXT(storage.isFullFloat)
             ? RendererFormatVerdict::Supported
             : RendererFormatVerdict::Unsupported;
+    }
+
+    ShaderDialectEXT EasyGLRenderer::GetShaderDialectEXT() const
+    {
+        return IsDesktopCoreProfile(profile_) ? ShaderDialectEXT::GlslDesktop
+                                              : ShaderDialectEXT::GlslEs;
+    }
+
+    bool EasyGLRenderer::SupportsShaderLanguageEXT(const int language, const int stage) const
+    {
+        const auto expectedLanguage = IsDesktopCoreProfile(profile_)
+            ? CNA::ShaderLanguageEXT::GlslDesktop
+            : CNA::ShaderLanguageEXT::GlslEs;
+        if (language != static_cast<int>(expectedLanguage)) return false;
+        switch (static_cast<CNA::ShaderStageEXT>(stage))
+        {
+            case CNA::ShaderStageEXT::Vertex:
+            case CNA::ShaderStageEXT::Fragment:
+                return true;
+            case CNA::ShaderStageEXT::Compute:
+                return SupportsComputeShadersEXT();
+            case CNA::ShaderStageEXT::Unknown:
+            case CNA::ShaderStageEXT::Count:
+                return false;
+        }
+        return false;
     }
 
     bool EasyGLRenderer::SupportsComputeShadersEXT() const

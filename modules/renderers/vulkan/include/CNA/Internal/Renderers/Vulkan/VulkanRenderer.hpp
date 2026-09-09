@@ -2518,6 +2518,16 @@ namespace CNA::Internal::Renderers::Vulkan
             GetShaderDialectEXT() const override;
 
         /**
+         * @brief Reports the explicit shader payloads consumed by the Vulkan paths.
+         *
+         * @param language Raw `CNA::ShaderLanguageEXT` ordinal.
+         * @param stage Raw `CNA::ShaderStageEXT` ordinal.
+         * @return True for SPIR-V vertex/fragment payloads and for SPIR-V compute payloads when
+         *         compute is supported; false for every other pair.
+         */
+        [[nodiscard]] bool SupportsShaderLanguageEXT(int language, int stage) const override;
+
+        /**
          * @brief CNAEXT. A `Texture3D` bound to a `ShaderEffect` is sampled by that shader here.
          *
          * plan_vulkan.md VULKAN-164. `VulkanEffectRenderer::BindTexture3D` writes the volume into

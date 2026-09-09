@@ -41,6 +41,7 @@
 #include "CNA/DisplayColorSpace.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/RendererCapabilityProfile.hpp"
+#include "CNA/ShaderLanguageEXT.hpp"
 #include "CNA/Unsupported3DGraphicsCallBehavior.hpp"
 
 namespace CNA::Platform
@@ -1104,6 +1105,19 @@ namespace Microsoft::Xna::Framework::Graphics
          *         has not declared one -- which means "do not guess", not "no shaders".
          */
         CNAEXT [[nodiscard]] CNA::Internal::Renderers::ShaderDialectEXT GetShaderDialectEXT() const;
+
+        /**
+         * @brief Returns whether the active renderer consumes an explicit shader payload pair.
+         *
+         * plans/plan_modern.md `MOD-2210`. This is a live renderer query, not a mapping from the
+         * renderer's name. Unknown, sentinel and invalid enum values return false.
+         *
+         * @param language The payload's declared source language or binary format.
+         * @param stage The programmable stage implemented by the payload.
+         * @return True only when the active renderer's implemented path consumes that exact pair.
+         */
+        CNAEXT [[nodiscard]] bool SupportsShaderLanguageEXT(
+            CNA::ShaderLanguageEXT language, CNA::ShaderStageEXT stage) const;
 
         /**
          * @brief Returns which graphics renderer THIS DEVICE is using.

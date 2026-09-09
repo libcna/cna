@@ -2447,6 +2447,21 @@ namespace Microsoft::Xna::Framework::Graphics
         return renderer_->GetShaderDialectEXT();
     }
 
+    bool GraphicsDevice::SupportsShaderLanguageEXT(
+        const CNA::ShaderLanguageEXT language, const CNA::ShaderStageEXT stage) const
+    {
+        const int languageOrdinal = static_cast<int>(language);
+        const int stageOrdinal = static_cast<int>(stage);
+        if (renderer_ == nullptr || languageOrdinal <= static_cast<int>(CNA::ShaderLanguageEXT::Unknown)
+            || languageOrdinal >= static_cast<int>(CNA::ShaderLanguageEXT::Count)
+            || stageOrdinal <= static_cast<int>(CNA::ShaderStageEXT::Unknown)
+            || stageOrdinal >= static_cast<int>(CNA::ShaderStageEXT::Count))
+        {
+            return false;
+        }
+        return renderer_->SupportsShaderLanguageEXT(languageOrdinal, stageOrdinal);
+    }
+
     bool GraphicsDevice::SupportsCapability(CNA::GraphicsCapability capability) const
     {
         // CompiledEffects was appended after many renderer-specific capability switches were

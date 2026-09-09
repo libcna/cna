@@ -1640,6 +1640,23 @@ namespace CNA::Internal::Renderers::EasyGL
         /// renderer does not rely on, so it is reported false there.
         [[nodiscard]] bool SupportsHalfFloatTextureLinearFilteringEXT() const override;
 
+        /**
+         * @brief Returns the GLSL dialect consumed by this renderer instance's active profile.
+         *
+         * @return Desktop GLSL for OpenGL33 and GLSL ES for the GLES/WebGL profiles.
+         */
+        [[nodiscard]] ShaderDialectEXT GetShaderDialectEXT() const override;
+
+        /**
+         * @brief Reports the explicit shader payloads consumed by the EasyGL paths.
+         *
+         * @param language Raw `CNA::ShaderLanguageEXT` ordinal.
+         * @param stage Raw `CNA::ShaderStageEXT` ordinal.
+         * @return True for the active profile's exact GLSL dialect at vertex/fragment stages and
+         *         at compute when compute is supported; false for every other pair.
+         */
+        [[nodiscard]] bool SupportsShaderLanguageEXT(int language, int stage) const override;
+
         /// plans/plan_modern.md MOD-1510: compute shaders, which need GL ES 3.1 or desktop GL 4.3. The
         /// answer is the *runtime* context's version, not the compile-time profile: this renderer
         /// asks for ES 3.0 and routinely receives 3.2, and refusing compute on a context that has

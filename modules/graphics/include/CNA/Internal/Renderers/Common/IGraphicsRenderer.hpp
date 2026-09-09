@@ -2298,6 +2298,25 @@ namespace CNA::Internal::Renderers
             return ShaderDialectEXT::Unknown;
         }
 
+        /**
+         * @brief Whether this renderer's implemented path consumes one explicit shader payload.
+         *
+         * plans/plan_modern.md `MOD-2210`. The renderer boundary deliberately carries raw
+         * append-only ordinals rather than depending on a public extension enum. The shared
+         * default refuses every language/stage pair, including unknown and future values, so a
+         * renderer cannot acquire support merely because a new identity was appended.
+         *
+         * @param language `CNA::ShaderLanguageEXT` ordinal.
+         * @param stage `CNA::ShaderStageEXT` ordinal.
+         * @return True only when the implemented shader intake consumes that exact pair.
+         */
+        [[nodiscard]] virtual bool SupportsShaderLanguageEXT(int language, int stage) const
+        {
+            (void)language;
+            (void)stage;
+            return false;
+        }
+
         [[nodiscard]] virtual RendererFormatVerdict ClassifySurfaceFormatEXT(int surfaceFormat) const
         {
             (void)surfaceFormat;

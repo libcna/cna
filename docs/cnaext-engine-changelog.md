@@ -14,6 +14,24 @@ something breaks.
 
 ---
 
+## Revision 12 — 2026-09-10
+
+### Explicit shader language and stage support (`MOD-2210`)
+
+- `ShaderLanguageEXT` publishes append-only identities for desktop GLSL, GLSL ES, Vulkan GLSL,
+  HLSL, MSL, WGSL, SPIR-V and DXIL. The three GLSL dialects remain distinct so selection cannot
+  send source to an incompatible compiler; `ShaderStageEXT` independently identifies vertex,
+  fragment and compute payloads.
+- `GraphicsDevice::SupportsShaderLanguageEXT` asks the live renderer whether its implemented path
+  consumes one exact language/stage pair. Unknown, invalid and newly appended values are refused by
+  the shared renderer default rather than inferred from a renderer name.
+- EasyGL declares GLSL graphics stages and runtime-gated GLSL compute, and now reports its exact
+  desktop-versus-ES legacy dialect. Vulkan declares SPIR-V graphics stages and device-gated SPIR-V
+  compute while explicitly refusing GLSL source.
+
+The C header carries the same engine-layer revision marker. The C ABI remains 0.26.0; portable
+shader-package C routes have not been published and remain within the binding plan's boundary.
+
 ## Revision 11 — 2026-09-10
 
 ### Complete Vulkan storage-image bridges (`MOD-2244`)

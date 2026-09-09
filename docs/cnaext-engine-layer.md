@@ -225,19 +225,23 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 | Display colour space | 🟨 `Srgb` only — the encoding is complete, the swap chain is not | 🟨 same | 🟨 same | 🟨 — no CNA platform back end offers an HDR swap chain, so every renderer answers `Srgb` and refuses the rest |
 | Per-object velocity | ✅ opt-in; a third target with MRT, a third pass without | ⬜ | ⬜ | ⬜ — off by default everywhere, and motion blur stays camera-only, which is what it was before |
 
-**Asking a renderer what it will actually do.** Three questions, and they are not the same question:
+**Asking a renderer what it will actually do.** These questions are related, but they are not the
+same question:
 
 | Question | Answers |
 |---|---|
 | `SupportsCapability(GraphicsCapability::CustomEffects)` | whether the renderer can compile *some* custom effect — not that it takes this layer's shader language |
+| `SupportsShaderLanguageEXT(language, stage)` | whether the live renderer's implemented path consumes that exact explicit payload pair, including the exact desktop/ES/Vulkan GLSL dialect; unknown, invalid and future values default to false |
 | `SupportsShadowSamplingEXT()` | whether its lit shaders really *sample* the shadow state every effect accepts |
 | `SupportsImageBasedLightingEXT()` | whether its PBR shader really shades from a bound environment |
 
 The distinction is not academic: the Vulkan renderer answers **true** to the first and **false** to
-the other two, because its `ShaderEffect` takes SPIR-V bytecode while this layer's passes and
+the last two, while its language query accepts SPIR-V and refuses GLSL, because its `ShaderEffect`
+takes SPIR-V bytecode while this layer's passes and
 shadow casters hand it GLSL source. Before those two queries existed, the shadow example on Vulkan
 did not fail — it crashed, because the caster's effect failed to compile and the draw proceeded with
-no effect applied. Ask all three.
+no effect applied. Portable packages use the language/stage query to select a payload; subsystems
+still ask their own semantic capability before promising a visible result.
 
 ### Every renderer identity
 

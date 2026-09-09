@@ -35,6 +35,7 @@
 #include "CNA/Graphics/EngineException.hpp"
 #include "CNA/Graphics/EngineLayerVersion.hpp"
 #include "CNA/Graphics/RequireCapability.hpp"
+#include "CNA/ShaderLanguageEXT.hpp"
 
 // ---- Configuration and enumerations -------------------------------------------------------
 #include "CNA/Graphics/RenderPipelineSettings.hpp"

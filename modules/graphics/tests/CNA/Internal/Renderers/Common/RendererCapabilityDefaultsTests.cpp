@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/ShaderLanguageEXT.hpp"
 
 #include <limits>
 #include <memory>
@@ -240,6 +241,36 @@ TEST(RendererCapabilityDefaultsTest, ModernGpuCapabilitySeamsDefaultToUnsupporte
     EXPECT_FALSE(renderer.SupportsComputeShadersEXT());
     EXPECT_FALSE(renderer.SupportsIndirectDrawEXT());
     EXPECT_FALSE(renderer.SupportsBaseInstanceDrawingEXT());
+}
+
+TEST(RendererCapabilityDefaultsTest, ShaderLanguageAndStageOrdinalsAreStableAndDefaultToUnsupported)
+{
+    using CNA::ShaderLanguageEXT;
+    using CNA::ShaderStageEXT;
+
+    EXPECT_EQ(static_cast<int>(ShaderLanguageEXT::Unknown), 0);
+    EXPECT_EQ(static_cast<int>(ShaderLanguageEXT::GlslDesktop), 1);
+    EXPECT_EQ(static_cast<int>(ShaderLanguageEXT::GlslEs), 2);
+    EXPECT_EQ(static_cast<int>(ShaderLanguageEXT::GlslVulkan), 3);
+    EXPECT_EQ(static_cast<int>(ShaderLanguageEXT::Hlsl), 4);
+    EXPECT_EQ(static_cast<int>(ShaderLanguageEXT::Msl), 5);
+    EXPECT_EQ(static_cast<int>(ShaderLanguageEXT::Wgsl), 6);
+    EXPECT_EQ(static_cast<int>(ShaderLanguageEXT::SpirV), 7);
+    EXPECT_EQ(static_cast<int>(ShaderLanguageEXT::Dxil), 8);
+    EXPECT_EQ(static_cast<int>(ShaderLanguageEXT::Count), 9);
+
+    EXPECT_EQ(static_cast<int>(ShaderStageEXT::Unknown), 0);
+    EXPECT_EQ(static_cast<int>(ShaderStageEXT::Vertex), 1);
+    EXPECT_EQ(static_cast<int>(ShaderStageEXT::Fragment), 2);
+    EXPECT_EQ(static_cast<int>(ShaderStageEXT::Compute), 3);
+    EXPECT_EQ(static_cast<int>(ShaderStageEXT::Count), 4);
+
+    DefaultsOnlyRenderer renderer;
+    for (int language = -1; language <= static_cast<int>(ShaderLanguageEXT::Count); ++language)
+    {
+        for (int stage = -1; stage <= static_cast<int>(ShaderStageEXT::Count); ++stage)
+            EXPECT_FALSE(renderer.SupportsShaderLanguageEXT(language, stage));
+    }
 }
 
 TEST(RendererCapabilityDefaultsTest, TextureArrayFactoryDefaultsToUnsupported)

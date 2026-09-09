@@ -7,6 +7,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
 #include "CNA/Logger.hpp"
+#include "CNA/ShaderLanguageEXT.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
 #include "CNA/Internal/Renderers/Vulkan/VulkanCompiledEffect.hpp"
@@ -2924,6 +2925,23 @@ namespace CNA::Internal::Renderers::Vulkan
         // VULKAN-250. Not device-dependent and not build-dependent: this renderer has exactly one
         // custom-effect intake, and CompileProgram rejects anything that is not SPIR-V words.
         return CNA::Internal::Renderers::ShaderDialectEXT::SpirV;
+    }
+
+    bool VulkanRenderer::SupportsShaderLanguageEXT(const int language, const int stage) const
+    {
+        if (language != static_cast<int>(CNA::ShaderLanguageEXT::SpirV)) return false;
+        switch (static_cast<CNA::ShaderStageEXT>(stage))
+        {
+            case CNA::ShaderStageEXT::Vertex:
+            case CNA::ShaderStageEXT::Fragment:
+                return true;
+            case CNA::ShaderStageEXT::Compute:
+                return SupportsComputeShadersEXT();
+            case CNA::ShaderStageEXT::Unknown:
+            case CNA::ShaderStageEXT::Count:
+                return false;
+        }
+        return false;
     }
 
     void VulkanRenderer::RequirePbrStrideEXT(std::size_t stride, bool skinned) const

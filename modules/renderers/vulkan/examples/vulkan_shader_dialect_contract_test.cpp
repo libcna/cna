@@ -24,6 +24,7 @@
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/ShaderLanguageEXT.hpp"
 
 #include <cstdio>
 #include <memory>
@@ -82,6 +83,29 @@ protected:
               "A the declared dialect is already-compiled SpirV bytecode",
               "ordinal " + std::to_string(static_cast<int>(dialect)) + ", expected "
                   + std::to_string(static_cast<int>(ShaderDialectEXT::SpirV)));
+        check(dev.SupportsShaderLanguageEXT(
+                  CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Vertex)
+                  && dev.SupportsShaderLanguageEXT(
+                      CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Fragment),
+              "A2 the live renderer accepts explicit SPIR-V graphics-stage payloads",
+              "vertex and fragment queried independently");
+        check(dev.SupportsShaderLanguageEXT(
+                  CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Compute)
+                  == dev.SupportsCapability(CNA::GraphicsCapability::ComputeShaders),
+              "A3 SPIR-V compute language support follows the implemented compute path",
+              dev.SupportsCapability(CNA::GraphicsCapability::ComputeShaders)
+                  ? "compute is available and SPIR-V is accepted"
+                  : "compute is unavailable and the pair is refused");
+        check(!dev.SupportsShaderLanguageEXT(
+                  CNA::ShaderLanguageEXT::GlslVulkan, CNA::ShaderStageEXT::Vertex)
+                  && !dev.SupportsShaderLanguageEXT(
+                      CNA::ShaderLanguageEXT::Unknown, CNA::ShaderStageEXT::Vertex)
+                  && !dev.SupportsShaderLanguageEXT(
+                      static_cast<CNA::ShaderLanguageEXT>(999), CNA::ShaderStageEXT::Fragment)
+                  && !dev.SupportsShaderLanguageEXT(
+                      CNA::ShaderLanguageEXT::SpirV, static_cast<CNA::ShaderStageEXT>(999)),
+              "A4 Vulkan GLSL, unknown and invalid payload pairs are refused",
+              "support is not inferred from the Vulkan renderer identity");
 
         // B + C: the payload a caller acting on that answer would most plausibly send.
         ShaderEffect glslEffect(dev, std::string(kVulkanGlslVert), std::string(kVulkanGlslFrag));
