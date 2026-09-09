@@ -289,6 +289,20 @@ classic compiled pixel-shader execution path and are explicit SOFTWARE-164 accep
 The separate renderer-wide vertex-stage collections remain SOFTWARE-168. EasyGL ES/WebGL's
 wireframe limitation remains SOFTWARE-178.
 
+#### State-object identity and disposal
+
+| Question | XNA/FNA evidence | CNA Software/EasyGL evidence | Verdict/task |
+|---|---|---|---|
+| Does assigning a state retain the same object? | FNA's device setters retain `BlendState`, `DepthStencilState` and `RasterizerState` references, while `SamplerStateCollection` stores the supplied `SamplerState` reference. A later mutation of that object is therefore visible when FNA next applies it | CNA stores all four families by value. `GraphicsDeviceDefaultStateTest.MutatingBlendStateAfterAssignmentDoesNotAffectDevice` explicitly requires the assigned copy to remain unchanged, and both renderers consume that shared cache | SHARED CLASSIC-XNA GAP, pre-existing graphics Task 869 / SOFTWARE-198 ⬜ |
+| Is `Dispose()` itself supposed to make a state unreadable or unbindable? | No. FNA's state types own only their state record; `GraphicsResource.Dispose` marks/untracks them and `GraphicsDevice.ApplyState` continues reading the record without an `IsDisposed` guard | CNA state getters likewise remain readable. Throwing merely because a state was disposed would diverge from FNA rather than repair it | no renderer gap; lifecycle audit disproved the initial use-after-dispose hypothesis |
+| Does a copied state preserve the source object's disposal/identity? | Not applicable: XNA/FNA retain the original object, so the same `IsDisposed`, `Name`, `Tag` and event identity is returned | `GraphicsResource::operator=` deliberately resets disposal and state setters expose the independent copy through the device | part of SOFTWARE-198; cannot be repaired by a draw-time disposed guard |
+
+This is not a Software-versus-EasyGL output difference; it is a shared renderer-neutral Core
+deviation, which the challenge rules explicitly forbid using as evidence for full XNA/Core
+conformance. A faithful repair changes public ownership and lifetime across four state families,
+SpriteBatch, static presets and C/C++ call sites, so it is recorded rather than disguised as a
+small pre-draw state patch.
+
 ### Capability truth table
 
 `SupportsCapability` is treated as a stable renderer ability query; whether the *currently bound*

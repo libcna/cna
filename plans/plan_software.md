@@ -20,7 +20,12 @@
 > Framework bytecode while Software rejects it. That is distinct from deferred CNAEXT
 > `ShaderEffect` support and is now an explicit multi-phase backlog. The same challenge also found
 > inert public vertex-stage texture/sampler collections and the missing 14 non-Color HiDef
-> `Texture3D` formats. Deferred CNAEXT-modern and
+> `Texture3D` formats. The final lifecycle/state-object pass also reclassified the repository's
+> pre-existing Task 869 as an in-scope shared XNA conformance gap: EasyGL and Software both copy
+> assigned state objects, while XNA/FNA retain their reference identity and therefore observe
+> later mutation of the assigned object. That cross-renderer architecture work is now explicit as
+> `SOFTWARE-198`, rather than being hidden by pixel parity between the two CNA renderers.
+> Deferred CNAEXT-modern and
 > non-applicable physical GPU/window behavior remain separately classified.
 > The executable task table is below; the evidence ledger is
 > `docs/software-easygl-parity-ledger.md`.
@@ -209,6 +214,7 @@ its own tests and plan evidence in the same commit.
 | SOFTWARE-195 | Reject draws through buffers disposed after binding | ✅ | Completed 2026-09-09. `SetVertexBuffer`/`SetIndexBuffer` rejected an already disposed resource, but disposing a live resource after binding left the GraphicsDevice cache pointing at it. The next classic non-indexed draw exited with SIGSEGV 139 at the unchecked null renderer dereference before repair; the indexed route had the same static defect. GraphicsDevice now validates the primary and every plural vertex binding plus the index binding before range inspection or renderer submission, including the two indirect extension routes that share those caches. The two public regressions pass on Software and desktop EasyGL, and the 113-test Software lifecycle/indexed/non-indexed/multi-stream/instancing selection passes 111 with its two named renderer-selector skips. |
 | SOFTWARE-196 | Close the adversarial property, capability, inherited-default and skip audit | ✅ | Completed 2026-09-09. The parity ledger now names every public SamplerState, RasterizerState, BlendState and DepthStencilState property, its EasyGL/Software consumption path, behavioral proof and verdict. It separately audits all 19 capability entries and every inherited classic renderer-default family. All 55 baseline Software `CnaGraphicsTests` skips are classified by exact family and count: 49 are negative controls, foreign-renderer selectors, platform-only or CNAEXT; the remaining six are all compiled-Effect evidence for SOFTWARE-162..165. The audit found no unrecorded Software-only stock-effect state omission. `AddressW` and MRT masks 1-3 remain explicitly dependent on the compiled pixel executor, public vertex samplers remain SOFTWARE-168, non-Color volume formats remain SOFTWARE-173 and EasyGL ES/WebGL wireframe remains SOFTWARE-178. |
 | SOFTWARE-197 | Restore XNA validation on every `DrawUserPrimitives` / `DrawUserIndexedPrimitives` pointer path | ✅ | Completed 2026-09-09. Microsoft's XNA reference contract requires null-array, invalid-offset and non-positive indexed-vertex-count rejection. CNA's declaration-aware raw routes already checked lower bounds, but the four ordinary typed non-indexed and eight typed indexed overloads performed unchecked pointer arithmetic; the legacy raw routes did too. Safe middle-pointer discriminators failed every negative-offset assertion before repair, zero indexed vertices fell through to backend allocation, and public `PrimitiveVerts(TriangleList, INT_MAX)` silently overflowed. One shared pre-copy validator now rejects null vertex/index data, negative offsets, non-positive counts and non-representable byte/primitive ranges before any allocation, pointer arithmetic or renderer call across typed/raw/declaration paths. The focused Software contract passes 48/48; the same shared tests pass on desktop EasyGL. The established pointer translation cannot observe the caller allocation's upper length like a managed C# array, so that unavoidable C++ boundary is recorded in `CHECKLIST.md` rather than falsely claimed as checked. |
+| SOFTWARE-198 | Restore XNA reference identity for graphics state objects | ⬜ | The adversarial lifecycle pass confirmed the previously recorded `plans/plan_graphics.md` Task 869 is inside this campaign's renderer-neutral Core boundary, even though it is shared by Software and EasyGL. FNA's `GraphicsDevice.BlendState`, `DepthStencilState` and `RasterizerState` retain the assigned C# object; its sampler collection likewise retains each `SamplerState`. Mutation after assignment is consequently visible at the next applicable state flush, and `GraphicsDevice` returns the same object's lifecycle/identity. CNA instead copies all four state families by value, and `GraphicsResource::operator=` additionally resets `IsDisposed`; `GraphicsDeviceDefaultStateTest.MutatingBlendStateAfterAssignmentDoesNotAffectDevice` explicitly pins that known divergence. Disposal itself is not a use-after-dispose error here: FNA's state records are CPU-only, `Dispose()` merely marks/untracks them, and `ApplyState()` continues reading their fields. Genuine repair requires an ownership-safe reference representation for four public state families, temporaries/static presets, SpriteBatch, C/C++ callers and every renderer, plus migration of tests that currently require the copy. This is a cross-cutting public architecture change rather than a bounded renderer patch; it remains open and materially prevents full XNA/Core conformance even though it cannot distinguish Software from EasyGL. |
 
 ### Current dependency order
 
@@ -232,7 +238,9 @@ effect, SpriteBatch, capability, validation and lifecycle findings from the fina
 `SOFTWARE-196` closes the required property/capability/default-method/skip evidence audit without
 papering over its remaining gaps, and `SOFTWARE-197` closes every validation condition knowable
 from CNA's established pointer-based `DrawUser*` signatures before source memory is touched,
-without misclassifying the four still-open classic dependency groups as parity.
+without misclassifying the still-open classic dependency groups as parity. `SOFTWARE-198` records
+the shared state-object reference-identity deviation that the final lifecycle pass found was
+already proven under graphics Task 869 but absent from this parity plan.
 `SOFTWARE-100` remains yellow for the previously recorded
 repository-wide blockers; that status does not excuse any renderer gap found here.
 
