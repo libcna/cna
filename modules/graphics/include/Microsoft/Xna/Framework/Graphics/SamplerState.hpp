@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <memory>
+
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsResource.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureAddressMode.hpp"
@@ -27,6 +29,19 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /** @brief Creates a SamplerState with XNA-compatible default values. */
         SamplerState();
+
+        /**
+         * @brief Copy-constructs an independent mutable C++ state value.
+         * @param other State whose properties initialize this value.
+         */
+        CNAEXT SamplerState(const SamplerState& other);
+
+        /**
+         * @brief Assigns the same reference-style state payload as another wrapper.
+         * @param other State whose payload is assigned.
+         * @return This state wrapper.
+         */
+        CNAEXT SamplerState& operator=(const SamplerState& other);
 
         /** @brief Returns the fully-qualified .NET type name of this object. */
         CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
@@ -115,12 +130,25 @@ namespace Microsoft::Xna::Framework::Graphics
                      TextureAddressMode addressV,
                      TextureAddressMode addressW);
 
-        TextureAddressMode addressU_;
-        TextureAddressMode addressV_;
-        TextureAddressMode addressW_;
-        TextureFilter filter_;
-        int maxAnisotropy_;
-        int maxMipLevel_;
-        float mipMapLevelOfDetailBias_;
+        struct State
+        {
+            TextureAddressMode addressU = TextureAddressMode::Wrap;
+            TextureAddressMode addressV = TextureAddressMode::Wrap;
+            TextureAddressMode addressW = TextureAddressMode::Wrap;
+            TextureFilter filter = TextureFilter::Linear;
+            int maxAnisotropy = 4;
+            int maxMipLevel = 0;
+            float mipMapLevelOfDetailBias = 0.0f;
+            bool isBound = false;
+        };
+
+        void ThrowIfBound() const;
+        void BindForUse() const;
+        void MarkCollectionSlot();
+
+        std::shared_ptr<State> state_;
+        bool bindOnAssignment_ = false;
+
+        friend class SamplerStateCollection;
     };
 }

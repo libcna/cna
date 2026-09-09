@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <memory>
+
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsResource.hpp"
@@ -21,6 +23,19 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /** @brief Creates a DepthStencilState with XNA-compatible default values. */
         DepthStencilState();
+
+        /**
+         * @brief Copy-constructs an independent mutable C++ state value.
+         * @param other State whose properties initialize this value.
+         */
+        CNAEXT DepthStencilState(const DepthStencilState& other);
+
+        /**
+         * @brief Assigns the same reference-style state payload as another wrapper.
+         * @param other State whose payload is assigned.
+         * @return This state wrapper.
+         */
+        CNAEXT DepthStencilState& operator=(const DepthStencilState& other);
 
         /** @brief Returns the fully-qualified .NET type name of this object. */
         CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
@@ -204,21 +219,32 @@ namespace Microsoft::Xna::Framework::Graphics
     private:
         DepthStencilState(const std::string& name, bool depthEnable, bool depthWriteEnable);
 
-        bool depthBufferEnable_;
-        bool depthBufferWriteEnable_;
-        CompareFunction depthBufferFunction_;
-        bool stencilEnable_;
-        CompareFunction stencilFunction_;
-        int stencilMask_;
-        int stencilWriteMask_;
-        int referenceStencil_;
-        StencilOperation stencilFail_;
-        StencilOperation stencilDepthBufferFail_;
-        StencilOperation stencilPass_;
-        bool twoSidedStencilMode_;
-        CompareFunction counterClockwiseStencilFunction_;
-        StencilOperation counterClockwiseStencilFail_;
-        StencilOperation counterClockwiseStencilDepthBufferFail_;
-        StencilOperation counterClockwiseStencilPass_;
+        struct State
+        {
+            bool depthBufferEnable = true;
+            bool depthBufferWriteEnable = true;
+            CompareFunction depthBufferFunction = CompareFunction::LessEqual;
+            bool stencilEnable = false;
+            CompareFunction stencilFunction = CompareFunction::Always;
+            int stencilMask = 0x7FFFFFFF;
+            int stencilWriteMask = 0x7FFFFFFF;
+            int referenceStencil = 0;
+            StencilOperation stencilFail = StencilOperation::Keep;
+            StencilOperation stencilDepthBufferFail = StencilOperation::Keep;
+            StencilOperation stencilPass = StencilOperation::Keep;
+            bool twoSidedStencilMode = false;
+            CompareFunction counterClockwiseStencilFunction = CompareFunction::Always;
+            StencilOperation counterClockwiseStencilFail = StencilOperation::Keep;
+            StencilOperation counterClockwiseStencilDepthBufferFail = StencilOperation::Keep;
+            StencilOperation counterClockwiseStencilPass = StencilOperation::Keep;
+            bool isBound = false;
+        };
+
+        void ThrowIfBound() const;
+        void BindForUse() const;
+
+        std::shared_ptr<State> state_;
+
+        friend class GraphicsDevice;
     };
 }

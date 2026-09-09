@@ -20,6 +20,8 @@ namespace Microsoft::Xna::Framework::Graphics
         , graphicsDevice_(graphicsDevice)
         , vertexStage_(vertexStage)
     {
+        for (auto& sampler : samplers_)
+            sampler.MarkCollectionSlot();
     }
 
     int SamplerStateCollection::ActiveSamplerCount() const

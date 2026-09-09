@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <memory>
+
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CullMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/FillMode.hpp"
@@ -21,6 +23,19 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /** @brief Creates a RasterizerState with XNA-compatible default values. */
         RasterizerState();
+
+        /**
+         * @brief Copy-constructs an independent mutable C++ state value.
+         * @param other State whose properties initialize this value.
+         */
+        CNAEXT RasterizerState(const RasterizerState& other);
+
+        /**
+         * @brief Assigns the same reference-style state payload as another wrapper.
+         * @param other State whose payload is assigned.
+         * @return This state wrapper.
+         */
+        CNAEXT RasterizerState& operator=(const RasterizerState& other);
 
         /** @brief Returns the fully-qualified .NET type name of this object. */
         CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
@@ -94,11 +109,22 @@ namespace Microsoft::Xna::Framework::Graphics
     private:
         RasterizerState(const std::string& name, CullMode cullMode);
 
-        CullMode cullMode_;
-        float depthBias_;
-        FillMode fillMode_;
-        bool multiSampleAntiAlias_;
-        bool scissorTestEnable_;
-        float slopeScaleDepthBias_;
+        struct State
+        {
+            CullMode cullMode = CullMode::CullCounterClockwiseFace;
+            float depthBias = 0.0f;
+            FillMode fillMode = FillMode::Solid;
+            bool multiSampleAntiAlias = true;
+            bool scissorTestEnable = false;
+            float slopeScaleDepthBias = 0.0f;
+            bool isBound = false;
+        };
+
+        void ThrowIfBound() const;
+        void BindForUse() const;
+
+        std::shared_ptr<State> state_;
+
+        friend class GraphicsDevice;
     };
 }

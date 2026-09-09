@@ -4069,6 +4069,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         ThrowIfDisposed();
         ValidateBlendStateForProfile(graphicsProfile_, value);
+        value.BindForUse();
         if (renderer_)
         {
             // REMED-GFX-077: the four per-MRT colour write masks + the coverage sample mask travel
@@ -4105,6 +4106,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::setDepthStencilStateProperty(const DepthStencilState& value)
     {
         ThrowIfDisposed();
+        value.BindForUse();
         if (renderer_)
         {
             renderer_->ApplyDepthStencilState(
@@ -4137,6 +4139,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::setRasterizerStateProperty(const RasterizerState& value)
     {
         ThrowIfDisposed();
+        value.BindForUse();
         if (renderer_)
         {
             renderer_->ApplyRasterizerState(

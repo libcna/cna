@@ -99,6 +99,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
+#include "System/InvalidOperationException.hpp"
 
 #include <array>
 #include <cstdint>
@@ -144,9 +145,8 @@ namespace
         /// A degenerate (zero-width or zero-height) rectangle rasterizes nothing.
         bool emptyScissorDrawsNothing;
         /**
-         * A ScissorRectangle reaching past the bound target is REJECTED with a diagnostic instead
-         * of being clipped to the target. True only where the renderer's declared job is to validate
-         * (Headless, HEADLESS-23); every rendering renderer clips, which is the CNA/FNA contract.
+         * A ScissorRectangle reaching past the bound target is rejected by GraphicsDevice before
+         * renderer dispatch, matching the recovered Microsoft XNA setter validation.
          */
         bool outOfBoundsScissorRejected;
         bool wantHiDefProfile;
@@ -154,7 +154,7 @@ namespace
 
 #if defined(CNA_RENDERER_WEBGPU)
     constexpr Contract kContract{"WEBGPU", Support::Exact, Support::Exact, true,
-                                 true, true, true, true, false, false};
+                                 true, true, true, true, true, false};
 #elif defined(CNA_RENDERER_VULKAN)
     // `emptyScissorDrawsNothing` false: measured here. `VulkanRenderer`'s `computeScissor`
     // returns the WHOLE framebuffer for `sw == 0 || sh == 0`, so a degenerate rectangle does not
@@ -162,27 +162,27 @@ namespace
     // the degenerate case; it is recorded as its own finding rather than fixed here, and check E1
     // asserts the IGNORED outcome exactly so the declaration is falsifiable in both directions.
     constexpr Contract kContract{"VULKAN", Support::Exact, Support::Exact, true,
-                                 true, true, true, false, false, false};
+                                 true, true, true, false, true, false};
 #elif defined(CNA_RENDERER_EASYGL)
     // `emptyScissorDrawsNothing` false: measured here, by a DIFFERENT mechanism from Vulkan's.
     // `EasyGLRenderer::SetScissorRect` returns early on `w <= 0 || h <= 0` and leaves the
     // previously installed rectangle in place, so a degenerate rectangle is not merely unclipping,
     // it never reaches the renderer at all. Same observable, recorded as its own finding.
     constexpr Contract kContract{"EASYGL", Support::Exact, Support::Exact, true,
-                                 true, true, true, false, false, false};
+                                 true, true, true, false, true, true};
 #elif defined(CNA_RENDERER_BGFX)
     // `emptyScissorDrawsNothing` false: measured here, the same observable as Vulkan and EasyGL.
     constexpr Contract kContract{"BGFX", Support::Exact, Support::Exact, true,
-                                 true, true, true, false, false, false};
+                                 true, true, true, false, true, false};
 #elif defined(CNA_RENDERER_SDL_GPU)
     // SdlGpu has no `ReadBackbuffer` override at all, so `GetBackBufferData` raises; its
     // render-target oracle still answers every render-target question in this file.
     // `emptyScissorDrawsNothing` false: measured here, the same observable as Vulkan and EasyGL.
     constexpr Contract kContract{"SDL_GPU", Support::Unsupported, Support::Exact, true,
-                                 true, true, true, false, false, false};
+                                 true, true, true, false, true, false};
 #elif defined(CNA_RENDERER_SOFTWARE)
     constexpr Contract kContract{"SOFTWARE", Support::Exact, Support::Exact, true,
-                                 true, true, true, true, false, false};
+                                 true, true, true, true, true, true};
 #elif defined(CNA_RENDERER_HEADLESS)
     // Headless rasterizes nothing and its readback is REMED-GFX-127/130's deterministic refusal.
     // Every sequence must still be legal. `outOfBoundsScissorRejected` true: this is the renderer
@@ -194,13 +194,13 @@ namespace
                                  true, true, true, true, true, false};
 #elif defined(CNA_RENDERER_DIRECTX11)
     constexpr Contract kContract{"DIRECTX11", Support::Exact, Support::Exact, true,
-                                 true, true, true, true, false, false};
+                                 true, true, true, true, true, false};
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr Contract kContract{"DIRECTX9", Support::Exact, Support::Exact, true,
-                                 true, true, true, true, false, true};
+                                 true, true, true, true, true, true};
 #elif defined(CNA_RENDERER_LLGL)
     constexpr Contract kContract{"LLGL", Support::Exact, Support::Exact, true,
-                                 true, true, true, true, false, false};
+                                 true, true, true, true, true, false};
 #else
 #error "REMED-GFX-146: this renderer has no declared deferred-scissor contract."
 #endif
@@ -1952,12 +1952,12 @@ class DeferredScissorCaptureTest : public Game
     }
 
     /**
-     * @brief K3 -- two DISTINCT RasterizerState objects with equal values behave identically, and
-     *        mutating the object after the draw changes nothing.
+     * @brief K3 -- two distinct RasterizerState objects with equal values behave identically and
+     *        both become immutable after binding.
      */
     void RunRasterizerStateIdentity(GraphicsDevice& dev)
     {
-        const std::string label = "K3 RasterizerState identity and post-draw mutation";
+        const std::string label = "K3 RasterizerState identity and bind-time freeze";
         keepAlive_.clear();
         if (!kContract.draws3D || !kContract.targetScissorApplies)
         {
@@ -1992,12 +1992,20 @@ class DeferredScissorCaptureTest : public Game
             dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
             dev.SetVertexBuffer(nullptr);
         }
-        // Mutating the state objects AFTER both draws were queued must reach neither of them.
-        first.setScissorTestEnableProperty(false);
-        second.setScissorTestEnableProperty(false);
-        second.setCullModeProperty(CullMode::CullClockwiseFace);
+        bool firstRejected = false;
+        bool secondScissorRejected = false;
+        bool secondCullRejected = false;
+        try { first.setScissorTestEnableProperty(false); }
+        catch (const System::InvalidOperationException&) { firstRejected = true; }
+        try { second.setScissorTestEnableProperty(false); }
+        catch (const System::InvalidOperationException&) { secondScissorRejected = true; }
+        try { second.setCullModeProperty(CullMode::CullClockwiseFace); }
+        catch (const System::InvalidOperationException&) { secondCullRejected = true; }
         SetScissor(dev, 0, 0, kRTW, kRTH);
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        check(firstRejected && secondScissorRejected && secondCullRejected,
+              label + ": bound source objects reject property mutation");
 
         if (!CanJudgeTarget(label)) return;
         const Image image = ReadTarget(*rt, kRTW, kRTH);
@@ -2008,16 +2016,12 @@ class DeferredScissorCaptureTest : public Game
     }
 
     /**
-     * @brief K4 -- mutations made through GraphicsDevice.RasterizerState are consumed by the next
-     *        draw without requiring the state object to be assigned again.
-     *
-     * FNA reapplies RasterizerState unconditionally in GraphicsDevice.ApplyState() before every
-     * draw. CNA exposes the same current object by mutable reference, so merely caching the values
-     * installed by the last assignment leaves its public state and native state inconsistent.
+     * @brief K4 -- the current GraphicsDevice.RasterizerState rejects mutation after binding;
+     *        state changes require a newly assigned mutable instance.
      */
     void RunCurrentRasterizerStateMutation(GraphicsDevice& dev)
     {
-        const std::string label = "K4 current RasterizerState in-place mutation";
+        const std::string label = "K4 current RasterizerState bind-time freeze";
         keepAlive_.clear();
         if (!kContract.draws3D || !kContract.targetScissorApplies)
         {
@@ -2035,10 +2039,11 @@ class DeferredScissorCaptureTest : public Game
         fx_->Apply();
         SetScissor(dev, 0, 0, kRTW / 2, kRTH);
 
-        // Assignment installs disabled native state. The in-place mutation must still enable the
-        // left-half clip for the next draw.
+        bool enableRejected = false;
         dev.setRasterizerStateProperty(Raster(false));
-        dev.getRasterizerStateProperty().setScissorTestEnableProperty(true);
+        try { dev.getRasterizerStateProperty().setScissorTestEnableProperty(true); }
+        catch (const System::InvalidOperationException&) { enableRejected = true; }
+        dev.setRasterizerStateProperty(Raster(true));
         {
             VertexBuffer& vb = MakeVb(dev, FullQuad(kRed));
             dev.SetVertexBuffer(&vb);
@@ -2046,10 +2051,11 @@ class DeferredScissorCaptureTest : public Game
             dev.SetVertexBuffer(nullptr);
         }
 
-        // Reverse the transition. This bottom-half quad must reach the right half because the
-        // current object's new disabled value is consumed at this draw.
+        bool disableRejected = false;
         dev.setRasterizerStateProperty(Raster(true));
-        dev.getRasterizerStateProperty().setScissorTestEnableProperty(false);
+        try { dev.getRasterizerStateProperty().setScissorTestEnableProperty(false); }
+        catch (const System::InvalidOperationException&) { disableRejected = true; }
+        dev.setRasterizerStateProperty(Raster(false));
         {
             VertexBuffer& vb = MakeVb(dev, Quad(-1.0f, 1.0f, -1.0f, 0.0f, 0.5f, kBlue));
             dev.SetVertexBuffer(&vb);
@@ -2060,6 +2066,9 @@ class DeferredScissorCaptureTest : public Game
         SetScissor(dev, 0, 0, kRTW, kRTH);
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
         dev.setRasterizerStateProperty(Raster(true));
+
+        check(enableRejected && disableRejected,
+              label + ": current bound state rejects property mutation");
 
         if (!CanJudgeTarget(label)) return;
         const Image image = ReadTarget(*rt, kRTW, kRTH);

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <memory>
+
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Blend.hpp"
@@ -25,6 +27,19 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /** @brief Creates a BlendState with XNA-compatible default values. */
         BlendState();
+
+        /**
+         * @brief Copy-constructs an independent mutable C++ state value.
+         * @param other State whose properties initialize this value.
+         */
+        CNAEXT BlendState(const BlendState& other);
+
+        /**
+         * @brief Assigns the same reference-style state payload as another wrapper.
+         * @param other State whose payload is assigned.
+         * @return This state wrapper.
+         */
+        CNAEXT BlendState& operator=(const BlendState& other);
 
         /** @brief Returns the fully-qualified .NET type name of this object. */
         CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
@@ -164,17 +179,28 @@ namespace Microsoft::Xna::Framework::Graphics
     private:
         BlendState(const std::string& name, Blend colorSrc, Blend alphaSrc, Blend colorDst, Blend alphaDst);
 
-        BlendFunction alphaBlendFunction_;
-        Blend alphaDestinationBlend_;
-        Blend alphaSourceBlend_;
-        BlendFunction colorBlendFunction_;
-        Blend colorDestinationBlend_;
-        Blend colorSourceBlend_;
-        ColorWriteChannels colorWriteChannels_;
-        ColorWriteChannels colorWriteChannels1_;
-        ColorWriteChannels colorWriteChannels2_;
-        ColorWriteChannels colorWriteChannels3_;
-        Color blendFactor_;
-        int multiSampleMask_;
+        struct State
+        {
+            BlendFunction alphaBlendFunction = BlendFunction::Add;
+            Blend alphaDestinationBlend = Blend::Zero;
+            Blend alphaSourceBlend = Blend::One;
+            BlendFunction colorBlendFunction = BlendFunction::Add;
+            Blend colorDestinationBlend = Blend::Zero;
+            Blend colorSourceBlend = Blend::One;
+            ColorWriteChannels colorWriteChannels = ColorWriteChannels::All;
+            ColorWriteChannels colorWriteChannels1 = ColorWriteChannels::All;
+            ColorWriteChannels colorWriteChannels2 = ColorWriteChannels::All;
+            ColorWriteChannels colorWriteChannels3 = ColorWriteChannels::All;
+            Color blendFactor{255, 255, 255, 255};
+            int multiSampleMask = -1;
+            bool isBound = false;
+        };
+
+        void ThrowIfBound() const;
+        void BindForUse() const;
+
+        std::shared_ptr<State> state_;
+
+        friend class GraphicsDevice;
     };
 }
