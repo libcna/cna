@@ -121,6 +121,56 @@ namespace Microsoft::Xna::Framework::Graphics
             return false;
         }
 
+        [[nodiscard]] constexpr bool IsPointFilterOnlyFormat(const SurfaceFormat format)
+        {
+            switch (format)
+            {
+                case SurfaceFormat::Single:
+                case SurfaceFormat::Vector2:
+                case SurfaceFormat::Vector4:
+                case SurfaceFormat::HalfSingle:
+                case SurfaceFormat::HalfVector2:
+                case SurfaceFormat::HalfVector4:
+                case SurfaceFormat::HdrBlendable:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        [[nodiscard]] constexpr bool IsNonBlendableRenderTargetFormat(
+            const SurfaceFormat format)
+        {
+            switch (format)
+            {
+                case SurfaceFormat::Single:
+                case SurfaceFormat::Vector2:
+                case SurfaceFormat::Vector4:
+                case SurfaceFormat::HalfSingle:
+                case SurfaceFormat::HalfVector2:
+                case SurfaceFormat::HalfVector4:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        [[nodiscard]] bool RequiresRenderTargetBlendSupport(const BlendState& state)
+        {
+            const bool blendingEnabled =
+                state.getColorSourceBlendProperty() != Blend::One ||
+                state.getColorDestinationBlendProperty() != Blend::Zero ||
+                state.getColorBlendFunctionProperty() != BlendFunction::Add ||
+                state.getAlphaSourceBlendProperty() != Blend::One ||
+                state.getAlphaDestinationBlendProperty() != Blend::Zero ||
+                state.getAlphaBlendFunctionProperty() != BlendFunction::Add;
+            return blendingEnabled ||
+                state.getColorWriteChannelsProperty() != ColorWriteChannels::All ||
+                state.getColorWriteChannels1Property() != ColorWriteChannels::All ||
+                state.getColorWriteChannels2Property() != ColorWriteChannels::All ||
+                state.getColorWriteChannels3Property() != ColorWriteChannels::All;
+        }
+
         int toSwapInterval(PresentInterval pi)
         {
             switch (pi)
@@ -3758,6 +3808,74 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
+    void GraphicsDevice::validateDrawState(
+        const CNA::Internal::Renderers::GpuDrawParams* drawParams) const
+    {
+        // Microsoft XNA's VerifyCanDraw performs these profile restrictions only when a draw is
+        // submitted. HiDef can allocate float/half resources, but their D3D9 storage does not
+        // permit filtered sampling; six of those formats also do not permit blending or masked
+        // color writes. Keeping the guard shared makes ordinary draws and SpriteBatch use the same
+        // rules and prevents capable CPU/GL backends from silently offering behavior XNA rejects.
+        const auto validateFilteredTexture = [this](const SurfaceFormat format, const int slot)
+        {
+            if (slot >= 0 && slot < SamplerStateCollection::MaxSamplers &&
+                IsPointFilterOnlyFormat(format) &&
+                samplerStates_[slot].getFilterProperty() != TextureFilter::Point)
+            {
+                throw System::NotSupportedException(
+                    "The active GraphicsProfile does not support filtering SurfaceFormat " +
+                    std::to_string(static_cast<int>(format)) + ".");
+            }
+        };
+
+        CNA::Internal::Renderers::GpuDrawParams currentEffectParams;
+        if (drawParams == nullptr && currentEffect_ != nullptr)
+        {
+            currentEffect_->FillGpuDrawParams(currentEffectParams);
+            drawParams = &currentEffectParams;
+        }
+        if (drawParams != nullptr)
+        {
+            if (drawParams->texture0 != nullptr)
+                validateFilteredTexture(
+                    static_cast<SurfaceFormat>(drawParams->texture0->GetSurfaceFormatEXT()), 0);
+            if (drawParams->texture1 != nullptr)
+                validateFilteredTexture(
+                    static_cast<SurfaceFormat>(drawParams->texture1->GetSurfaceFormatEXT()), 1);
+            if (drawParams->envMap != nullptr)
+                validateFilteredTexture(
+                    static_cast<SurfaceFormat>(drawParams->envMap->GetSurfaceFormatEXT()), 1);
+
+            // Compiled Effect passes bind through the public device collection. Stock effects and
+            // SpriteBatch instead carry the exact textures above; validating stale public slot 0
+            // in those paths would reject a texture the draw has actually replaced.
+            if (drawParams->compiledDeviceTextures != nullptr)
+            {
+                for (int slot = 0; slot < TextureCollection::MaxTextures; ++slot)
+                {
+                    if (const Texture* texture = (*drawParams->compiledDeviceTextures)[slot])
+                        validateFilteredTexture(texture->getFormatProperty(), slot);
+                }
+            }
+        }
+
+        if (RequiresRenderTargetBlendSupport(blendState_))
+        {
+            for (const RenderTargetBinding& binding : currentRenderTargets_)
+            {
+                const Texture* target = binding.getRenderTargetProperty();
+                if (target != nullptr &&
+                    IsNonBlendableRenderTargetFormat(target->getFormatProperty()))
+                {
+                    throw System::NotSupportedException(
+                        "The active GraphicsProfile does not support blending or masked color "
+                        "writes for SurfaceFormat " +
+                        std::to_string(static_cast<int>(target->getFormatProperty())) + ".");
+                }
+            }
+        }
+    }
+
     void GraphicsDevice::applySamplerStatesToRenderer()
     {
         if (!renderer_)
@@ -3765,6 +3883,8 @@ namespace Microsoft::Xna::Framework::Graphics
             ThrowIfDisposed();
             return;
         }
+
+        validateDrawState();
 
         // FNA reapplies RasterizerState at every draw, rather than only when the property object is
         // assigned. The current state is publicly mutable through GraphicsDevice.RasterizerState,

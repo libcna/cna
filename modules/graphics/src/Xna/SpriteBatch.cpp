@@ -373,6 +373,12 @@ namespace Microsoft::Xna::Framework::Graphics
     void SpriteBatch::flushSingle(const SpriteInfo& s)
     {
         if (!renderer_ || !s.texture) return;
+        if (graphicsDevice_ != nullptr)
+        {
+            GpuDrawParams params;
+            params.texture0 = s.texture.get();
+            graphicsDevice_->validateDrawState(&params);
+        }
         renderer_->Draw(*s.texture,
                        s.destX, s.destY, s.destWidth, s.destHeight,
                        s.srcRect, s.color,

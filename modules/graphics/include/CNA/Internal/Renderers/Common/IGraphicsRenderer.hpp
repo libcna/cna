@@ -365,6 +365,16 @@ namespace CNA::Internal::Renderers
     public:
         virtual ~ITextureCubeRenderer() = default;
         /**
+         * @brief Returns the raw SurfaceFormat ordinal used to create this cube texture.
+         *
+         * The default is SurfaceFormat::Color (ordinal 0), whose XNA sampling rules impose no
+         * point-filter-only restriction. Renderers that retain another declared format override
+         * this so GraphicsDevice can enforce XNA's draw-time profile restrictions.
+         *
+         * @return The declared SurfaceFormat ordinal.
+         */
+        [[nodiscard]] virtual int GetSurfaceFormatEXT() const noexcept { return 0; }
+        /**
          * @brief Uploads raw RGBA8 pixels into a sub-rectangle of a single cube face.
          *
          * REMED-GFX-135, the write-side counterpart of `GetData`'s contract below. Returns **true

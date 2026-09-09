@@ -608,6 +608,13 @@ namespace CNA::Internal::Renderers::EasyGL
         /** @brief Returns the cube edge length in texels. */
         [[nodiscard]] int GetSizeEXT() const noexcept override { return size_; }
 
+        /**
+         * @brief Returns the declared SurfaceFormat ordinal retained by this cube.
+         * @return The raw SurfaceFormat ordinal supplied at construction.
+         */
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override
+        { return surfaceFormat_; }
+
         /** @brief Forgets the cube's GL name after its context is lost. */
         void release_gl_handle_only() override;
 

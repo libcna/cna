@@ -739,6 +739,12 @@ namespace CNA::Internal::Renderers::Software
 
         [[nodiscard]] int GetSize() const { return size_; }
         /**
+         * @brief Returns the declared SurfaceFormat ordinal retained by this cube.
+         * @return The raw SurfaceFormat ordinal supplied at construction.
+         */
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override
+        { return surfaceFormat_; }
+        /**
          * @brief How many mip levels this cube ALLOCATED, counting from level 0.
          *
          * REMED-GFX-182. This is the chain `TextureCube` declared and REMED-GFX-135 gave storage to,

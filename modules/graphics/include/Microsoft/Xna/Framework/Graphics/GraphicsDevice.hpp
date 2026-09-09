@@ -1592,6 +1592,8 @@ namespace Microsoft::Xna::Framework::Graphics
         void SetVirtualResolution(int width, int height);
         void SetPresentationMode(int mode);
         void applyPresentationParametersToWindow();
+        void validateDrawState(
+            const CNA::Internal::Renderers::GpuDrawParams* drawParams = nullptr) const;
         void applySamplerStatesToRenderer();
 
         /**

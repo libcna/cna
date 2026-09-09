@@ -439,7 +439,7 @@ TEST(ClassicTextureFormat, PointSamplingExpandsChannelsAndPreservesDeclaredRange
     }
 }
 
-TEST(ClassicTextureFormat, HalfVector4LinearFilteringMatchesTheAdvertisedCapability)
+TEST(ClassicTextureFormat, HalfVector4PhysicalLinearCapabilityDoesNotBypassXnaRestriction)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
                           PresentationParameters());
@@ -477,17 +477,13 @@ TEST(ClassicTextureFormat, HalfVector4LinearFilteringMatchesTheAdvertisedCapabil
     effect.setTextureEnabledProperty(true);
     effect.Apply();
     device.SetVertexBuffer(&buffer);
-    device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+    EXPECT_THROW(device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2),
+                 System::NotSupportedException);
     device.SetVertexBuffer(nullptr);
     device.SetRenderTarget(nullptr);
 
-    Color actual;
-    const Rectangle centre(4, 4, 1, 1);
-    target.GetData(0, &centre, &actual, 0, 1);
-    EXPECT_NEAR(actual.getRProperty(), 128, 3);
-    EXPECT_NEAR(actual.getGProperty(), 0, 2);
-    EXPECT_NEAR(actual.getBProperty(), 128, 3);
-    EXPECT_NEAR(actual.getAProperty(), 255, 2);
+    // This CNAEXT capability describes what the implementation can do physically. Microsoft XNA
+    // still marks HalfVector4 as an InvalidFilterFormat and refuses the classic draw above.
     EXPECT_TRUE(device.SupportsCapability(
         CNA::GraphicsCapability::HalfFloatTextureLinearFiltering));
 }

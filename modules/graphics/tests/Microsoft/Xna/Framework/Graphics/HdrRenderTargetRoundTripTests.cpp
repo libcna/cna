@@ -243,17 +243,18 @@ TEST(HdrRenderTargetRoundTripTest, EveryClassicFloatLayoutKeepsItsDeclaredChanne
     EXPECT_FLOAT_EQ(halfRgba.ToVector4().W, 0.25f);
 }
 
-TEST(HdrRenderTargetRoundTripTest, RasterAndAdditiveBlendRemainInTheFloatDomain)
+TEST(HdrRenderTargetRoundTripTest, HdrBlendableRasterAndAdditiveBlendRemainInTheFloatDomain)
 {
     GraphicsDevice gd(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
                       PresentationParameters());
-    if (!gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Vector4))
-        GTEST_SKIP() << "this renderer/driver has no RGBA32F render targets";
+    if (!gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HdrBlendable))
+        GTEST_SKIP() << "this renderer/driver has no blendable RGBA16F render targets";
 
-    Texture2D source(gd, 1, 1, false, SurfaceFormat::Vector4);
-    const Vector4 sourceTexel(0.75f, 0.25f, -0.5f, 1.0f);
+    Texture2D source(gd, 1, 1, false, SurfaceFormat::HdrBlendable);
+    const HalfVector4 sourceTexel(0.75f, 0.25f, -0.5f, 1.0f);
     source.SetData(&sourceTexel, 1);
-    RenderTarget2D target(gd, kSize, kSize, false, SurfaceFormat::Vector4, DepthFormat::None);
+    RenderTarget2D target(
+        gd, kSize, kSize, false, SurfaceFormat::HdrBlendable, DepthFormat::None);
     SpriteBatch batch(gd);
     SamplerState point = SamplerState::PointClamp;
 
@@ -264,9 +265,10 @@ TEST(HdrRenderTargetRoundTripTest, RasterAndAdditiveBlendRemainInTheFloatDomain)
     batch.End();
     gd.SetRenderTarget(nullptr);
 
-    std::vector<Vector4> pixels(static_cast<std::size_t>(kSize) * kSize);
+    std::vector<HalfVector4> pixels(static_cast<std::size_t>(kSize) * kSize);
     target.GetData(pixels.data(), static_cast<int>(pixels.size()));
-    const Vector4& centre = pixels[static_cast<std::size_t>(kSize / 2) * kSize + kSize / 2];
+    const Vector4 centre =
+        pixels[static_cast<std::size_t>(kSize / 2) * kSize + kSize / 2].ToVector4();
     EXPECT_FLOAT_EQ(centre.X, 1.5f);
     EXPECT_FLOAT_EQ(centre.Y, 0.5f);
     EXPECT_FLOAT_EQ(centre.Z, 1.5f);
