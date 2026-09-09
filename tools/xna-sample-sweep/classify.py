@@ -158,7 +158,16 @@ def main(argv=None):
         for row in unit["rows"]:
             if row["result"] != "differs":
                 continue
-            relative = row["reference"][len(unit["outputRoot"]) + 1:]
+            # `sweep.py` already resolved which of CNA's outputs this reference was compared
+            # with, and records it in `asset` -- which is not always the reference's own spelling.
+            # The corpus has one `bin/Content/textures/` where CNA writes a `Textures/` the project
+            # authored and a `textures/` a model's nested output authored, and deriving the path
+            # from the reference again here looked in the wrong one of the two: 60 of Spacewar's
+            # references came back `payload-unreadable` and were counted `UNEXPLAINED`
+            # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-184`, `XNASWEEP-191`).
+            relative = row.get("asset")
+            relative = (relative + ".xnb") if relative else \
+                row["reference"][len(unit["outputRoot"]) + 1:]
             jobs.append((os.path.join(root, row["reference"]),
                          os.path.join(args.units, slug(unit["outputRoot"]),
                                       relative.replace("/", os.sep))))
