@@ -1556,6 +1556,39 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-112`).
                     using VertexKey = std::tuple<std::size_t, std::vector<double>,
                                                  std::vector<double>, std::vector<double>>;
+                    // The values are compared as the `float`s they will be *stored* as, not as the
+                    // doubles the file holds, and a texture coordinate is stored flipped: two
+                    // corners whose channel values differ only past the 24th bit are one vertex.
+                    // SAMPLE-142's `AircraftCarrier.FBX` has three such pairs in one geometry and
+                    // fifty-eight in another, all of them in the V of a texture coordinate;
+                    // comparing what the file holds answers 2,483 and 1,159 vertices where the
+                    // genuine importer answers 2,480 and 1,101
+                    // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-178`).
+                    const auto narrowed = [](std::vector<double> values)
+                    {
+                        for (double& value : values)
+                        {
+                            value = static_cast<float>(value);
+                        }
+                        return values;
+                    };
+                    // Every texture-coordinate set the mesh carries, each as it is stored: a mesh
+                    // with two of them has vertices that differ only in the second, and a key that
+                    // reads the first alone would make them one.
+                    const auto storedTextureCoordinates = [&uvSets](const std::size_t corner,
+                                                                   const std::size_t controlPoint)
+                    {
+                        std::vector<double> stored;
+                        stored.reserve(uvSets.size() * 2u);
+                        for (const UvSet& set : uvSets)
+                        {
+                            const std::vector<double> value = set.layer.At(corner, controlPoint, 0u);
+                            stored.push_back(value.size() >= 2u ? static_cast<float>(value[0]) : 0.0f);
+                            stored.push_back(value.size() >= 2u ? static_cast<float>(1.0 - value[1])
+                                                                : 0.0f);
+                        }
+                        return stored;
+                    };
                     std::map<VertexKey, SharpRuntime::intcs> local;
                     std::vector<SharpRuntime::intcs> indices;
                     std::vector<std::size_t> cornerOf;      // the polygon-vertex each local vertex came from
@@ -1576,9 +1609,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                         {
                             const std::size_t controlPoint = polygon.controlPoints[c];
                             const std::size_t corner = polygon.corners[c];
-                            VertexKey key{controlPoint, normals.At(corner, controlPoint, 0u),
-                                          uvs.At(corner, controlPoint, 0u),
-                                          colors.At(corner, controlPoint, 0u)};
+                            VertexKey key{controlPoint,
+                                          narrowed(normals.At(corner, controlPoint, 0u)),
+                                          storedTextureCoordinates(corner, controlPoint),
+                                          narrowed(colors.At(corner, controlPoint, 0u))};
                             const auto found = local.find(key);
                             if (found == local.end())
                             {

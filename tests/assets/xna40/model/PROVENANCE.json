@@ -136,6 +136,16 @@
       "thirdParty": false
     },
     {
+      "file": "fbx_normal_narrow.fbx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_uv_narrow.fbx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
       "file": "fbx_reflection_texture.fbx",
       "origin": "authored",
       "thirdParty": false

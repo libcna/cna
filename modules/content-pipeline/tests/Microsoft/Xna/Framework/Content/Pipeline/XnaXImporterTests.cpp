@@ -680,6 +680,17 @@ TEST(XnaFbxImporter, EveryFileAnswersTheGraphXnaAnswers)
           // no texture -- which is what SAMPLE-131's own `p1_piece.xnb` has
           // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-177`).
           "fbx_reflection_texture.fbx",
+          // A vertex is the `float` values it will be stored as, not the doubles the file holds.
+          // Two corners of this quad share a control point and carry normals that differ only past
+          // the 24th bit; the genuine importer answers four vertices, and comparing the doubles
+          // answers six (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-178`).
+          "fbx_normal_narrow.fbx",
+          // And the same question for a texture coordinate, which is stored *flipped*: two corners
+          // of this quad share a control point and carry V values that differ as doubles and agree
+          // once `float(1.0 - v)` has been taken. The genuine importer answers four vertices, and
+          // comparing what the file holds answers five -- which is the shape SAMPLE-142's
+          // `AircraftCarrier.FBX` has sixty-one times (`XNASWEEP-178`).
+          "fbx_uv_narrow.fbx",
           "fbx_oblique.fbx", "fbx_prerotation_units.fbx",
           "fbx_quad_polygon.fbx", "fbx_quad_textured.fbx",
           // The scene lists its children in the order the file connects them, and a `Material`
