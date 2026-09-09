@@ -18,6 +18,7 @@
 // P  The complete exercise produces no new Vulkan validation warnings or errors.
 
 #include "CNA/Graphics/ComputeShader.hpp"
+#include "CNA/Graphics/ShaderPackageEXT.hpp"
 #include "CNA/Graphics/StorageBuffer.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
@@ -39,6 +40,10 @@
 #include <vector>
 
 using CNA::Graphics::ComputeShader;
+using CNA::Graphics::ShaderBindingRequirementEXT;
+using CNA::Graphics::ShaderBindingTypeEXT;
+using CNA::Graphics::ShaderCodeEXT;
+using CNA::Graphics::ShaderPackageEXT;
 using CNA::Graphics::StorageBuffer;
 using CNA::Graphics::StorageBufferCpuAccess;
 using CNA::Graphics::StorageBufferDescriptor;
@@ -192,6 +197,12 @@ namespace
             reinterpret_cast<const char*>(kVectorAddSpirV), sizeof(kVectorAddSpirV));
     }
 
+    std::vector<std::uint8_t> VectorAddProgramBytes()
+    {
+        const auto* begin = reinterpret_cast<const std::uint8_t*>(kVectorAddSpirV);
+        return std::vector<std::uint8_t>(begin, begin + sizeof(kVectorAddSpirV));
+    }
+
     std::string ScaledVectorAddProgram()
     {
         return std::string(
@@ -320,7 +331,45 @@ protected:
               std::to_string(kElementCount) + " elements in each of three buffers");
 
         const std::size_t validationBefore = renderer->GetValidationMessagesEXT().size();
-        ComputeShader vectorAdd(device, VectorAddProgram());
+        bool portableOverloadsOk = false;
+        std::unique_ptr<ComputeShader> ownedVectorAdd;
+        {
+            ShaderCodeEXT code(
+                CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Compute,
+                "main", "vector-add.comp.spv", VectorAddProgramBytes());
+            ComputeShader direct(device, code);
+            const bool directOk = direct.isValid()
+                && direct.getSelectedLanguageEXT() == CNA::ShaderLanguageEXT::SpirV
+                && direct.getSelectedCodeEXT() != nullptr
+                && direct.getSelectedCodeEXT()->getSourceLabel() == "vector-add.comp.spv";
+            ShaderPackageEXT package(
+                {ShaderCodeEXT(
+                     CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Compute,
+                     "main", "vector-add.comp.glsl", "source"),
+                 code},
+                {CNA::ShaderStageEXT::Compute},
+                {ShaderBindingRequirementEXT(
+                     "a", 0, ShaderBindingTypeEXT::StorageBuffer,
+                     CNA::ShaderStageEXT::Compute),
+                 ShaderBindingRequirementEXT(
+                     "b", 1, ShaderBindingTypeEXT::StorageBuffer,
+                     CNA::ShaderStageEXT::Compute),
+                 ShaderBindingRequirementEXT(
+                     "output", 2, ShaderBindingTypeEXT::StorageBuffer,
+                     CNA::ShaderStageEXT::Compute)});
+            ownedVectorAdd = std::make_unique<ComputeShader>(device, package);
+            portableOverloadsOk = directOk && ownedVectorAdd->isValid()
+                && ownedVectorAdd->getSelectedLanguageEXT() == CNA::ShaderLanguageEXT::SpirV;
+        }
+        ComputeShader& vectorAdd = *ownedVectorAdd;
+        portableOverloadsOk = portableOverloadsOk
+            && vectorAdd.getSelectedCodeEXT() != nullptr
+            && vectorAdd.getSelectedCodeEXT()->getBytes() == VectorAddProgramBytes();
+        check(portableOverloadsOk,
+              "F0 code and package overloads retain selected SPIR-V after package destruction",
+              vectorAdd.getSelectedCodeEXT() == nullptr
+                  ? "no selected payload"
+                  : vectorAdd.getSelectedCodeEXT()->getSourceLabel());
         vectorAdd.bindStorageBuffer(0, inputA.getBuffer());
         vectorAdd.bindStorageBuffer(1, inputB.getBuffer());
         vectorAdd.bindStorageBuffer(2, output.getBuffer());

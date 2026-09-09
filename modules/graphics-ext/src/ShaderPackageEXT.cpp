@@ -6,6 +6,8 @@
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/RendererCapabilityProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <algorithm>
 #include <array>
@@ -402,6 +404,88 @@ namespace CNA::Graphics
         return ShaderPackageSelectionEXT(
             CNA::ShaderLanguageEXT::Unknown, {}, diagnostic.str());
     }
+}
+
+#endif // CNA_CNAEXT
+
+#ifdef CNA_CNAEXT
+
+namespace Microsoft::Xna::Framework::Graphics
+{
+    namespace
+    {
+        [[nodiscard]] std::string PortablePayloadBytes(
+            const CNA::Graphics::ShaderCodeEXT& code)
+        {
+            if (code.isText()) return code.getText();
+            const auto& bytes = code.getBytes();
+            return std::string(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+        }
+    }
+
+    ShaderEffect::ShaderEffect(
+        GraphicsDevice& device, const CNA::Graphics::ShaderCodeEXT& vertexCode,
+        const CNA::Graphics::ShaderCodeEXT& fragmentCode)
+        : ShaderEffect(device, PreparePortablePayload(device, vertexCode, fragmentCode))
+    {
+    }
+
+    ShaderEffect::ShaderEffect(
+        GraphicsDevice& device, const CNA::Graphics::ShaderPackageEXT& package)
+        : ShaderEffect(device, PreparePortablePayload(device, package))
+    {
+    }
+
+    ShaderEffect::ShaderEffect(GraphicsDevice& device, PreparedPortablePayload payload)
+        : ShaderEffect(device, payload.vertexSource, payload.fragmentSource)
+    {
+        selectedShaderLanguageEXT_ = payload.language;
+    }
+
+    ShaderEffect::PreparedPortablePayload ShaderEffect::PreparePortablePayload(
+        GraphicsDevice& device, const CNA::Graphics::ShaderCodeEXT& vertexCode,
+        const CNA::Graphics::ShaderCodeEXT& fragmentCode)
+    {
+        if (vertexCode.getStage() != CNA::ShaderStageEXT::Vertex
+            || fragmentCode.getStage() != CNA::ShaderStageEXT::Fragment)
+            throw std::invalid_argument(
+                "ShaderEffect: explicit code must be ordered Vertex, Fragment");
+        if (vertexCode.getLanguage() != fragmentCode.getLanguage())
+            throw std::invalid_argument(
+                "ShaderEffect: vertex and fragment code must use the same language");
+        return PreparePortablePayload(
+            device,
+            CNA::Graphics::ShaderPackageEXT(
+                {vertexCode, fragmentCode},
+                {CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment}));
+    }
+
+    ShaderEffect::PreparedPortablePayload ShaderEffect::PreparePortablePayload(
+        GraphicsDevice& device, const CNA::Graphics::ShaderPackageEXT& package)
+    {
+        if (package.getRequiredStages().size() != 2
+            || !package.requiresStage(CNA::ShaderStageEXT::Vertex)
+            || !package.requiresStage(CNA::ShaderStageEXT::Fragment))
+        {
+            throw std::invalid_argument(
+                "ShaderEffect: package must require exactly Vertex and Fragment");
+        }
+        const CNA::Graphics::ShaderPackageSelectionEXT selection = package.selectFor(device);
+        if (!selection.isUsable())
+            throw System::NotSupportedException(selection.getDiagnostic());
+        const auto* vertex = selection.findStage(CNA::ShaderStageEXT::Vertex);
+        const auto* fragment = selection.findStage(CNA::ShaderStageEXT::Fragment);
+        if (vertex == nullptr || fragment == nullptr)
+            throw std::logic_error(
+                "ShaderEffect: usable selection has no complete graphics payload pair");
+        if (vertex->getEntryPoint() != "main" || fragment->getEntryPoint() != "main")
+            throw std::invalid_argument(
+                "ShaderEffect: the existing renderer path requires entry point 'main'");
+        return PreparedPortablePayload{
+            PortablePayloadBytes(*vertex), PortablePayloadBytes(*fragment),
+            selection.getLanguage()};
+    }
+
 }
 
 #endif // CNA_CNAEXT

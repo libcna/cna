@@ -44,6 +44,11 @@ namespace Microsoft::Xna::Framework::Graphics
         return effectRenderer_->GetCompileError();
     }
 
+    CNA::ShaderLanguageEXT ShaderEffect::GetSelectedShaderLanguageEXT() const noexcept
+    {
+        return selectedShaderLanguageEXT_;
+    }
+
     void ShaderEffect::SetUniformMat4(const char* name, const float* matrix)
     {
         if (effectRenderer_) effectRenderer_->SetUniformMat4(name, matrix);
@@ -149,6 +154,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     Effect* ShaderEffect::Clone()
     {
-        return new ShaderEffect(*device_, vertSrc_, fragSrc_);
+        auto* clone = new ShaderEffect(*device_, vertSrc_, fragSrc_);
+        clone->selectedShaderLanguageEXT_ = selectedShaderLanguageEXT_;
+        return clone;
     }
 }

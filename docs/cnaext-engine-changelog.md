@@ -14,6 +14,27 @@ something breaks.
 
 ---
 
+## Revision 16 — 2026-09-10
+
+### Existing shader objects accept portable payloads (`MOD-2214`)
+
+- `ComputeShader` accepts either one compute `ShaderCodeEXT` or a compute-only
+  `ShaderPackageEXT`. `ShaderEffect` accepts a same-language vertex/fragment code pair or an
+  exactly vertex+fragment package. No parallel shader object hierarchy was introduced.
+- Package constructors select exactly once against the live device. Compute programs retain the
+  complete chosen code descriptor; effects retain the exact selected text/binary bytes in their
+  existing source storage, and both objects expose the selected language for inspection. Legacy
+  string constructors continue to report `Unknown` because their language remains implicit.
+- The bridge delegates to each renderer's existing string/byte program factory. Those factories
+  currently expose only entry point `main`, so another declared entry point is refused explicitly
+  instead of being silently ignored. Package refusal carries the complete selection diagnostic.
+- The `ShaderEffect` overload implementation lives in graphics-ext, preserving the one-way module
+  dependency: graphics-ext may know graphics-core and portable packages, while graphics-core does
+  not link back to graphics-ext.
+
+The C header carries the same engine-layer revision marker. The C ABI remains 0.26.0 and keeps its
+existing source-string shader entry points.
+
 ## Revision 15 — 2026-09-10
 
 ### Deterministic live-device shader selection (`MOD-2213`)

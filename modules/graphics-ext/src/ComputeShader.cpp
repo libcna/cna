@@ -5,6 +5,7 @@
 
 #include "CNA/Graphics/StorageBuffer.hpp"
 #include "CNA/Graphics/StorageTexture2D.hpp"
+#include "CNA/Graphics/ShaderPackageEXT.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -13,6 +14,7 @@
 #include "System/ObjectDisposedException.hpp"
 
 #include <stdexcept>
+#include <utility>
 
 namespace CNA::Graphics {
 
@@ -40,6 +42,61 @@ namespace CNA::Graphics {
             throw std::runtime_error("CNA::Graphics::ComputeShader: the program did not compile: "
                                      + compileError_);
         }
+    }
+
+    ComputeShader::ComputeShader(GraphicsDevice& device, const ShaderCodeEXT& code)
+        : ComputeShader(device, preparePortablePayload(device, code))
+    {
+    }
+
+    ComputeShader::ComputeShader(GraphicsDevice& device, const ShaderPackageEXT& package)
+        : ComputeShader(device, preparePortablePayload(device, package))
+    {
+    }
+
+    ComputeShader::ComputeShader(GraphicsDevice& device, PreparedPortablePayload payload)
+        : ComputeShader(device, payload.source)
+    {
+        selectedCode_.emplace(std::move(payload.code));
+    }
+
+    ComputeShader::PreparedPortablePayload ComputeShader::preparePortablePayload(
+        GraphicsDevice& device, const ShaderCodeEXT& code)
+    {
+        return preparePortablePayload(
+            device, ShaderPackageEXT({code}, {CNA::ShaderStageEXT::Compute}));
+    }
+
+    ComputeShader::PreparedPortablePayload ComputeShader::preparePortablePayload(
+        GraphicsDevice& device, const ShaderPackageEXT& package)
+    {
+        if (package.getRequiredStages().size() != 1
+            || !package.requiresStage(CNA::ShaderStageEXT::Compute))
+        {
+            throw std::invalid_argument(
+                "CNA::Graphics::ComputeShader: a package must require only Compute");
+        }
+        const ShaderPackageSelectionEXT selection = package.selectFor(device);
+        if (!selection.isUsable())
+            throw System::NotSupportedException(selection.getDiagnostic());
+        const ShaderCodeEXT* code = selection.findStage(CNA::ShaderStageEXT::Compute);
+        if (code == nullptr)
+            throw std::logic_error(
+                "CNA::Graphics::ComputeShader: usable selection has no Compute payload");
+        if (code->getEntryPoint() != "main")
+            throw std::invalid_argument(
+                "CNA::Graphics::ComputeShader: the existing renderer path requires entry point "
+                "'main'");
+
+        std::string source;
+        if (code->isText())
+            source = code->getText();
+        else
+        {
+            const auto& bytes = code->getBytes();
+            source.assign(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+        }
+        return PreparedPortablePayload{std::move(source), *code};
     }
 
     ComputeShader::~ComputeShader() = default;
@@ -203,6 +260,18 @@ namespace CNA::Graphics {
     bool ComputeShader::isValid() const { return renderer_ != nullptr && renderer_->IsValid(); }
 
     const std::string& ComputeShader::getCompileError() const { return compileError_; }
+
+    CNA::ShaderLanguageEXT ComputeShader::getSelectedLanguageEXT() const noexcept
+    {
+        return selectedCode_.has_value()
+            ? selectedCode_->getLanguage()
+            : CNA::ShaderLanguageEXT::Unknown;
+    }
+
+    const ShaderCodeEXT* ComputeShader::getSelectedCodeEXT() const noexcept
+    {
+        return selectedCode_.has_value() ? &*selectedCode_ : nullptr;
+    }
 
 } // namespace CNA::Graphics
 

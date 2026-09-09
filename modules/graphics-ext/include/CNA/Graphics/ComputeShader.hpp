@@ -5,8 +5,10 @@
 
 #include "CNA/GraphicsImageAccess.hpp"
 #include "CNA/GraphicsMemoryBarrier.hpp"
+#include "CNA/Graphics/ShaderCodeEXT.hpp"
 
 #include <memory>
+#include <optional>
 #include <string>
 
 namespace Microsoft::Xna::Framework::Graphics {
@@ -23,6 +25,7 @@ namespace CNA::Graphics {
 
     class StorageBuffer;
     class StorageTexture2D;
+    class ShaderPackageEXT;
 
     /**
      * @brief One compute program, and the dispatches of it.
@@ -57,6 +60,29 @@ namespace CNA::Graphics {
          */
         ComputeShader(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device,
                       const std::string& source);
+
+        /**
+         * @brief Compiles one explicitly identified compute payload through the existing path.
+         * @param device The device to compile on.
+         * @param code Descriptor whose stage must be `Compute`; it is copied into the program.
+         * @throws std::invalid_argument If the stage or entry point cannot use the existing path.
+         * @throws System::NotSupportedException If the live renderer refuses the exact language.
+         * @throws std::runtime_error If the selected program does not compile.
+         */
+        ComputeShader(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device,
+                      const ShaderCodeEXT& code);
+
+        /**
+         * @brief Selects and compiles one complete compute variant from a shader package.
+         * @param device The live device used once for deterministic package selection.
+         * @param package Package whose sole required stage must be `Compute`.
+         * @throws std::invalid_argument If the package is not compute-only or its selected entry
+         *         point cannot use the existing path.
+         * @throws System::NotSupportedException If no package variant is usable.
+         * @throws std::runtime_error If the selected program does not compile.
+         */
+        ComputeShader(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device,
+                      const ShaderPackageEXT& package);
 
         /** @brief Releases the program. */
         ~ComputeShader();
@@ -185,10 +211,39 @@ namespace CNA::Graphics {
         /** @brief Returns the compiler log from a failed compile; empty after a successful one. */
         [[nodiscard]] const std::string& getCompileError() const;
 
+        /**
+         * @brief Returns the explicit selected language, or `Unknown` for the legacy string path.
+         * @return Language retained by the code/package constructor.
+         */
+        [[nodiscard]] CNA::ShaderLanguageEXT getSelectedLanguageEXT() const noexcept;
+
+        /**
+         * @brief Returns the retained selected code descriptor.
+         * @return Pointer owned by this program, or null for the legacy string constructor.
+         */
+        [[nodiscard]] const ShaderCodeEXT* getSelectedCodeEXT() const noexcept;
+
     private:
+        struct PreparedPortablePayload
+        {
+            std::string source;
+            ShaderCodeEXT code;
+        };
+
+        ComputeShader(
+            Microsoft::Xna::Framework::Graphics::GraphicsDevice& device,
+            PreparedPortablePayload payload);
+        static PreparedPortablePayload preparePortablePayload(
+            Microsoft::Xna::Framework::Graphics::GraphicsDevice& device,
+            const ShaderCodeEXT& code);
+        static PreparedPortablePayload preparePortablePayload(
+            Microsoft::Xna::Framework::Graphics::GraphicsDevice& device,
+            const ShaderPackageEXT& package);
+
         Microsoft::Xna::Framework::Graphics::GraphicsDevice& device_;
         std::unique_ptr<CNA::Internal::Renderers::IComputeShaderRenderer> renderer_;
         std::string compileError_;
+        std::optional<ShaderCodeEXT> selectedCode_;
     };
 
 /** @} */ // end of cnaext_engine

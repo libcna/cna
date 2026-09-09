@@ -26,6 +26,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "CNA/Graphics/ShaderPackageEXT.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <cstdio>
@@ -37,6 +38,8 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
+using CNA::Graphics::ShaderCodeEXT;
+using CNA::Graphics::ShaderPackageEXT;
 
 // ---------------------------------------------------------------------------
 // Pre-compiled SPIR-V for the tint shaders (NDC pixel-coord vertex + tint frag).
@@ -179,6 +182,12 @@ static const uint32_t kTintFragSpv[] = {
 };
 static const size_t kTintFragSpv_size = 1216;
 
+static std::vector<std::uint8_t> ShaderBytes(const std::uint32_t* words, const std::size_t bytes)
+{
+    const auto* begin = reinterpret_cast<const std::uint8_t*>(words);
+    return std::vector<std::uint8_t>(begin, begin + bytes);
+}
+
 class VulkanShaderEffectTest : public Game
 {
     std::unique_ptr<SpriteBatch> sb_;
@@ -211,10 +220,48 @@ protected:
         device.Clear(Color(0, 255, 0, 255)); // green background
         device.SetDepthTestEnabled(false);
 
-        // Build ShaderEffect from pre-compiled SPIR-V bytes.
-        std::string vertSpv(reinterpret_cast<const char*>(kTintVertSpv), kTintVertSpv_size);
-        std::string fragSpv(reinterpret_cast<const char*>(kTintFragSpv), kTintFragSpv_size);
-        ShaderEffect fx(device, vertSpv, fragSpv);
+        bool portableOverloadsOk = false;
+        std::unique_ptr<ShaderEffect> ownedEffect;
+        {
+            ShaderCodeEXT vertexCode(
+                CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Vertex,
+                "main", "tint.vert.spv", ShaderBytes(kTintVertSpv, kTintVertSpv_size));
+            ShaderCodeEXT fragmentCode(
+                CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Fragment,
+                "main", "tint.frag.spv", ShaderBytes(kTintFragSpv, kTintFragSpv_size));
+
+            ShaderEffect direct(device, vertexCode, fragmentCode);
+            const bool directOk = direct.IsEffectValid()
+                && direct.GetSelectedShaderLanguageEXT() == CNA::ShaderLanguageEXT::SpirV
+                && direct.GetVertexSource().size() == kTintVertSpv_size
+                && direct.GetFragmentSource().size() == kTintFragSpv_size;
+
+            ShaderPackageEXT package(
+                {ShaderCodeEXT(
+                     CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Vertex,
+                     "VSMain", "tint.hlsl", "hlsl vertex"),
+                 ShaderCodeEXT(
+                     CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Fragment,
+                     "PSMain", "tint.hlsl", "hlsl fragment"),
+                 vertexCode, fragmentCode},
+                {CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment});
+            ownedEffect = std::make_unique<ShaderEffect>(device, package);
+            portableOverloadsOk = directOk && ownedEffect->IsEffectValid()
+                && ownedEffect->GetSelectedShaderLanguageEXT()
+                    == CNA::ShaderLanguageEXT::SpirV;
+        }
+        ShaderEffect& fx = *ownedEffect;
+        std::unique_ptr<Effect> clonedEffect(fx.Clone());
+        auto* clonedShaderEffect = dynamic_cast<ShaderEffect*>(clonedEffect.get());
+        portableOverloadsOk = portableOverloadsOk
+            && fx.GetSelectedShaderLanguageEXT() == CNA::ShaderLanguageEXT::SpirV
+            && fx.GetVertexSource().size() == kTintVertSpv_size
+            && fx.GetFragmentSource().size() == kTintFragSpv_size
+            && clonedShaderEffect != nullptr && clonedShaderEffect->IsEffectValid()
+            && clonedShaderEffect->GetSelectedShaderLanguageEXT()
+                == CNA::ShaderLanguageEXT::SpirV;
+        std::printf("[%s] MOD-2214: direct code and package overloads retain selected SPIR-V\n",
+                    portableOverloadsOk ? "ok" : "FAIL");
 
         if (!fx.IsEffectValid())
         {
@@ -307,7 +354,7 @@ protected:
             if (!namesIt) arraysOk = false;
         }
 
-        if (centOk && bgOk && arraysOk)
+        if (centOk && bgOk && arraysOk && portableOverloadsOk)
         {
             std::printf("[PASS] VulkanShaderEffect: centre=(%d,%d,%d) bg=(%d,%d,%d)\n",
                         centPx.getRProperty(), centPx.getGProperty(), centPx.getBProperty(),
@@ -317,12 +364,13 @@ protected:
         else
         {
             std::printf("[FAIL] VulkanShaderEffect: centre=(%d,%d,%d) bg=(%d,%d,%d)"
-                        " arrays=%s\n"
+                        " arrays=%s portableOverloads=%s\n"
                         "       expected: centre=red, bg=green, all four array setters accepted "
                         "and an over-capacity one refused\n",
                         centPx.getRProperty(), centPx.getGProperty(), centPx.getBProperty(),
                         bgPx.getRProperty(),   bgPx.getGProperty(),   bgPx.getBProperty(),
-                        arraysOk ? "ok" : "FAILED");
+                        arraysOk ? "ok" : "FAILED",
+                        portableOverloadsOk ? "ok" : "FAILED");
         }
         Exit();
     }

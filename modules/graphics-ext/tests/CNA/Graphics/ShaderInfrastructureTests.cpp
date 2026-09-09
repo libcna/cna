@@ -594,6 +594,30 @@ TEST(ShaderPackageSelectionEXTTest, RequiredVertexStorageBindingIsCapabilityChec
         std::string::npos);
 }
 
+TEST(ShaderPackageOverloadTest, ShaderEffectRejectsMismatchedCodeAndWrongPackageStages)
+{
+    GraphicsDevice device;
+    const ShaderCodeEXT vertex(
+        CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Vertex,
+        "main", "effect.vert", "source");
+    const ShaderCodeEXT fragment(
+        CNA::ShaderLanguageEXT::GlslDesktop, CNA::ShaderStageEXT::Fragment,
+        "main", "effect.frag", "source");
+    EXPECT_THROW(ShaderEffect(device, vertex, fragment), std::invalid_argument);
+    EXPECT_THROW(
+        ShaderEffect(
+            device, ShaderPackageEXT(
+                        {vertex}, {CNA::ShaderStageEXT::Vertex})),
+        std::invalid_argument);
+}
+
+TEST(ShaderPackageOverloadTest, LegacyShaderEffectReportsNoExplicitSelectedLanguage)
+{
+    GraphicsDevice device;
+    ShaderEffect effect(device, kVertex, kFragment);
+    EXPECT_EQ(effect.GetSelectedShaderLanguageEXT(), CNA::ShaderLanguageEXT::Unknown);
+}
+
 // =====================================================================================
 // MOD-210: compiled once per name, per device
 // =====================================================================================

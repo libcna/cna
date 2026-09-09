@@ -2,6 +2,7 @@
 #pragma once
 
 #include "CNA/CNAHelper.hpp"
+#include "CNA/ShaderLanguageEXT.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IEffectMatrices.hpp"
@@ -11,7 +12,12 @@
 
 namespace CNA::Internal::Renderers { class IEffectRenderer; }
 #ifdef CNA_CNAEXT
-namespace CNA::Graphics { class Texture2DArray; class StorageTexture2D; }
+namespace CNA::Graphics {
+    class ShaderCodeEXT;
+    class ShaderPackageEXT;
+    class Texture2DArray;
+    class StorageTexture2D;
+}
 #endif
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -39,6 +45,31 @@ namespace Microsoft::Xna::Framework::Graphics
                            const std::string& vertSrc,
                            const std::string& fragSrc);
 
+#ifdef CNA_CNAEXT
+        /**
+         * @brief Compiles an explicitly identified vertex/fragment pair through this effect.
+         * @param device The live device used to validate both exact language/stage pairs.
+         * @param vertexCode Vertex payload.
+         * @param fragmentCode Fragment payload in the same language as @p vertexCode.
+         * @throws std::invalid_argument If stages, languages or entry points are incompatible.
+         * @throws System::NotSupportedException If the live renderer refuses the exact language.
+         */
+        CNAEXT ShaderEffect(
+            GraphicsDevice& device, const CNA::Graphics::ShaderCodeEXT& vertexCode,
+            const CNA::Graphics::ShaderCodeEXT& fragmentCode);
+
+        /**
+         * @brief Selects and compiles one vertex/fragment variant from a shader package.
+         * @param device The live device used once for deterministic package selection.
+         * @param package Package whose required stages must be exactly vertex and fragment.
+         * @throws std::invalid_argument If the package stage contract or selected entry points are
+         *         incompatible with the existing effect path.
+         * @throws System::NotSupportedException If no package variant is usable.
+         */
+        CNAEXT ShaderEffect(
+            GraphicsDevice& device, const CNA::Graphics::ShaderPackageEXT& package);
+#endif
+
         // Destructor defined in .cpp to avoid incomplete-type error on IEffectRenderer.
         ~ShaderEffect();
 
@@ -62,6 +93,12 @@ namespace Microsoft::Xna::Framework::Graphics
          *         keeps no log.
          */
         CNAEXT [[nodiscard]] std::string GetCompileErrorEXT() const;
+
+        /**
+         * @brief Returns the explicit selected language, or `Unknown` for the string constructor.
+         * @return Language retained by a code/package constructor for this effect's lifetime.
+         */
+        CNAEXT [[nodiscard]] CNA::ShaderLanguageEXT GetSelectedShaderLanguageEXT() const noexcept;
 
         /** @brief Sets a column-major 4×4 matrix uniform by name. */
         /**
@@ -310,8 +347,25 @@ namespace Microsoft::Xna::Framework::Graphics
         void Dispose(bool disposing) override;
 
     private:
+#ifdef CNA_CNAEXT
+        struct PreparedPortablePayload
+        {
+            std::string vertexSource;
+            std::string fragmentSource;
+            CNA::ShaderLanguageEXT language;
+        };
+
+        ShaderEffect(GraphicsDevice& device, PreparedPortablePayload payload);
+        static PreparedPortablePayload PreparePortablePayload(
+            GraphicsDevice& device, const CNA::Graphics::ShaderCodeEXT& vertexCode,
+            const CNA::Graphics::ShaderCodeEXT& fragmentCode);
+        static PreparedPortablePayload PreparePortablePayload(
+            GraphicsDevice& device, const CNA::Graphics::ShaderPackageEXT& package);
+#endif
+
         std::string vertSrc_;
         std::string fragSrc_;
+        CNA::ShaderLanguageEXT selectedShaderLanguageEXT_ = CNA::ShaderLanguageEXT::Unknown;
         std::unique_ptr<CNA::Internal::Renderers::IEffectRenderer> effectRenderer_;
         Matrix world_      = Matrix::getIdentityProperty();
         Matrix view_       = Matrix::getIdentityProperty();

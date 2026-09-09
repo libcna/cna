@@ -12,6 +12,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/Graphics/ComputeShader.hpp"
+#include "CNA/Graphics/ShaderPackageEXT.hpp"
 #include "CNA/Graphics/StorageBuffer.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/GraphicsImageAccess.hpp"
@@ -34,6 +35,8 @@ using CNA::GraphicsCapability;
 using CNA::GraphicsImageAccess;
 using CNA::GraphicsMemoryBarrier;
 using CNA::Graphics::ComputeShader;
+using CNA::Graphics::ShaderCodeEXT;
+using CNA::Graphics::ShaderPackageEXT;
 using CNA::Graphics::StorageBuffer;
 using CNA::Graphics::StorageBufferT;
 
@@ -98,6 +101,52 @@ TEST_F(ComputeTest, WithoutSupportBothWrappersRefuseByName)
     EXPECT_THROW(ComputeShader(gd, kDoubler), System::NotSupportedException);
 }
 
+TEST_F(ComputeTest, PortableOverloadsRejectWrongStagesAndNonMainEntryPoints)
+{
+    const ShaderCodeEXT vertex(
+        CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Vertex,
+        "main", "wrong.vert", "source");
+    EXPECT_THROW(ComputeShader(gd, vertex), std::invalid_argument);
+    EXPECT_THROW(
+        ComputeShader(
+            gd, ShaderPackageEXT(
+                    {vertex}, {CNA::ShaderStageEXT::Vertex})),
+        std::invalid_argument);
+
+    CNA::ShaderLanguageEXT supportedLanguage = CNA::ShaderLanguageEXT::Unknown;
+    for (const auto language : {CNA::ShaderLanguageEXT::SpirV,
+                                CNA::ShaderLanguageEXT::GlslDesktop,
+                                CNA::ShaderLanguageEXT::GlslEs})
+    {
+        if (gd.SupportsShaderLanguageEXT(language, CNA::ShaderStageEXT::Compute))
+        {
+            supportedLanguage = language;
+            break;
+        }
+    }
+    if (supportedLanguage == CNA::ShaderLanguageEXT::Unknown) return;
+
+    if (supportedLanguage == CNA::ShaderLanguageEXT::SpirV)
+    {
+        EXPECT_THROW(
+            ComputeShader(
+                gd, ShaderCodeEXT(
+                        supportedLanguage, CNA::ShaderStageEXT::Compute,
+                        "notMain", "compute.spv",
+                        std::vector<std::uint8_t>{1, 2, 3, 4})),
+            std::invalid_argument);
+    }
+    else
+    {
+        EXPECT_THROW(
+            ComputeShader(
+                gd, ShaderCodeEXT(
+                        supportedLanguage, CNA::ShaderStageEXT::Compute,
+                        "notMain", "compute.glsl", "source")),
+            std::invalid_argument);
+    }
+}
+
 TEST_F(ComputeTest, AStorageBufferRoundTripsAMegabyteExactly)
 {
     // MOD-1512.
@@ -160,6 +209,8 @@ TEST_F(ComputeTest, ADispatchDoublesEveryElementOfABuffer)
     ComputeShader doubler(gd, kDoubler);
     EXPECT_TRUE(doubler.isValid());
     EXPECT_TRUE(doubler.getCompileError().empty());
+    EXPECT_EQ(doubler.getSelectedLanguageEXT(), CNA::ShaderLanguageEXT::Unknown);
+    EXPECT_EQ(doubler.getSelectedCodeEXT(), nullptr);
     doubler.bindStorageBuffer(0, values.getBuffer());
     doubler.setUniform("uCount", kCount);
     doubler.dispatch(kCount / 64);
