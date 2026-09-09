@@ -313,6 +313,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the value of this parameter from a boolean array.
          *
          * @param value The array of boolean values to store.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not numeric.
          */
         void SetValue(const std::vector<bool>& value);
 
@@ -329,6 +330,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the value of this parameter from an integer array.
          *
          * @param value The array of integer values to store.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not numeric.
          */
         void SetValue(const std::vector<int>& value);
 
@@ -345,6 +347,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the value of this parameter from a float array.
          *
          * @param value The array of float values to store.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not numeric.
          */
         void SetValue(const std::vector<float>& value);
 
@@ -532,6 +535,7 @@ namespace Microsoft::Xna::Framework::Graphics
         void RequireArrayValueShape(EffectParameterClass parameterClass,
                                     std::size_t valueCount,
                                     bool enforceElementCount) const;
+        void RequireCompiledNumericArrayClass() const;
         void SetCompiledScalarValue(float floatingValue, int integerValue,
                                     bool sourceIsInteger);
         void RequireTextureGetterParameter(EffectParameterType requestedType) const;

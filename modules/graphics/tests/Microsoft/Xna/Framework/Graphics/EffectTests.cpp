@@ -455,6 +455,29 @@ TEST(EffectTest, CompiledScalarSettersBroadcastAndRejectArrayParents)
     EXPECT_THROW(weights->SetValue(true), System::InvalidCastException);
 }
 
+TEST(EffectTest, CompiledNumericArraySettersRejectStructureParameters)
+{
+    GraphicsDevice gd;
+    const auto bytes = LoadConformanceCompiledEffectFixture();
+    ASSERT_FALSE(bytes.empty());
+
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+    {
+        GTEST_SKIP() << "renderer does not execute compiled effects";
+    }
+
+    Effect effect(gd, bytes);
+    auto* lighting = effect.getParametersProperty()["Lighting"];
+    ASSERT_NE(lighting, nullptr);
+
+    EXPECT_THROW(lighting->SetValue(std::vector<bool>{true}),
+                 System::InvalidCastException);
+    EXPECT_THROW(lighting->SetValue(std::vector<int>{1}),
+                 System::InvalidCastException);
+    EXPECT_THROW(lighting->SetValue(std::vector<float>{1.0f}),
+                 System::InvalidCastException);
+}
+
 TEST(EffectTest, AuthenticXna4EffectAcceptsRepeatedAndAuxiliaryObjectRecords)
 {
     GraphicsDevice gd;

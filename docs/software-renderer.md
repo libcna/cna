@@ -451,6 +451,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   bool, int and float overloads reject array parents and broadcast their converted value across
   every reflected vector or matrix component, matching recovered Microsoft XNA behavior instead
   of changing only the first register cell. Standalone CNA/C API parameters remain lenient.
+- **Compiled numeric-array setters reject structures** (`SOFTWARE-269`) — bool, int and float
+  arrays accept only reflected Scalar, Vector or Matrix classes, as Microsoft XNA does, rather
+  than overwriting the raw backing cells of a Structure parameter.
 - **The classic SpriteBatch/SpriteFont parity corpus executes on the CPU** (`SOFTWARE-138`).
   Eighteen renderer-independent scenes shared with EasyGL cover flips, rotation/origin, both scale
   overloads, source rectangles, layer sorting, transforms, render targets, viewports, scissor,

@@ -315,6 +315,14 @@ namespace Microsoft::Xna::Framework::Graphics
             throw System::InvalidCastException();
     }
 
+    void EffectParameter::RequireCompiledNumericArrayClass() const
+    {
+        if (paramClass_ != EffectParameterClass::Scalar &&
+            paramClass_ != EffectParameterClass::Vector &&
+            paramClass_ != EffectParameterClass::Matrix)
+            throw System::InvalidCastException();
+    }
+
     void EffectParameter::SetCompiledScalarValue(float floatingValue, int integerValue,
                                                  bool sourceIsInteger)
     {
@@ -654,6 +662,7 @@ namespace Microsoft::Xna::Framework::Graphics
         RequireNumericParameter("SetValue(bool[])");
         if (compiledStorage_)
         {
+            RequireCompiledNumericArrayClass();
             const int columns = std::max(columnCount_, 1);
             for (std::size_t i = 0; i < v.size(); ++i)
             {
@@ -684,6 +693,7 @@ namespace Microsoft::Xna::Framework::Graphics
         RequireNumericParameter("SetValue(int[])");
         if (compiledStorage_)
         {
+            RequireCompiledNumericArrayClass();
             const int columns = std::max(columnCount_, 1);
             for (std::size_t i = 0; i < v.size(); ++i)
             {
@@ -712,6 +722,7 @@ namespace Microsoft::Xna::Framework::Graphics
         RequireNumericParameter("SetValue(float[])");
         if (compiledStorage_)
         {
+            RequireCompiledNumericArrayClass();
             const int columns = std::max(columnCount_, 1);
             for (std::size_t i = 0; i < v.size(); ++i)
             {
