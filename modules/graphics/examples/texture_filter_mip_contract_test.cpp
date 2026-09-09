@@ -995,15 +995,17 @@ class TextureFilterMipContractTest : public Game
               "L1 MaxMipLevel=1 is a lower LOD bound, not a clamp to exactly level 1");
         check(SoleLevel(Draw3D(dev, 8, 8, *mipFlat_, sampler(99, 0.0f)), flatLevels_) == 3,
               "L2 MaxMipLevel beyond the resource chain clamps to its last stored level");
+        check(SoleLevel(Draw3D(dev, 8, 8, *mipFlat_, sampler(-1, 0.0f)), flatLevels_) == 3,
+              "L3 XNA's unsigned MaxMipLevel write maps a negative value to the last level");
 
         if constexpr (kLodBiasObservable)
         {
             check(SoleLevel(Draw3D(dev, 4, 4, *mipFlat_, sampler(0, 1.0f)), flatLevels_) == 2,
-                  "L3 positive LOD bias shifts lambda 1 to level 2");
+                  "L4 positive LOD bias shifts lambda 1 to level 2");
             check(SoleLevel(Draw3D(dev, 2, 2, *mipFlat_, sampler(0, -1.0f)), flatLevels_) == 1,
-                  "L4 negative LOD bias shifts lambda 2 to level 1");
+                  "L5 negative LOD bias shifts lambda 2 to level 1");
             check(SoleLevel(Draw3D(dev, 2, 2, *mipFlat_, sampler(2, -2.0f)), flatLevels_) == 2,
-                  "L5 MaxMipLevel clamps after a negative LOD bias");
+                  "L6 MaxMipLevel clamps after a negative LOD bias");
 
             const int biased = SoleLevel(
                 Draw3D(dev, 4, 4, *mipFlat_, sampler(0, 1.0f)), flatLevels_);
@@ -1012,26 +1014,28 @@ class TextureFilterMipContractTest : public Game
             const int clamped = SoleLevel(
                 Draw3D(dev, 4, 4, *mipFlat_, sampler(2, 0.0f)), flatLevels_);
             check(biased == 2 && reset == 1 && clamped == 2,
-                  "L6 bias/default/clamp transitions do not leak between draws");
+                  "L7 bias/default/clamp transitions do not leak between draws");
         }
         else
         {
-            note("L3-L6 LOD bias is unrepresentable on this OpenGL ES profile; FNA3D applies it "
+            note("L4-L7 LOD bias is unrepresentable on this OpenGL ES profile; FNA3D applies it "
                  "only on desktop GL");
         }
 
         check(SoleLevel(DrawSprite(dev, 8, 8, *mipFlat_, sampler(2, 0.0f)), flatLevels_) == 2,
-              "L7 SpriteBatch forwards MaxMipLevel to its sampler");
+              "L8 SpriteBatch forwards MaxMipLevel to its sampler");
+        check(SoleLevel(DrawSprite(dev, 8, 8, *mipFlat_, sampler(-1, 0.0f)), flatLevels_) == 3,
+              "L9 SpriteBatch preserves XNA's negative-to-last MaxMipLevel rule");
         if constexpr (kLodBiasObservable)
         {
             check(SoleLevel(DrawSprite(dev, 4, 4, *mipFlat_, sampler(0, 1.0f)), flatLevels_) == 2,
-                  "L8 SpriteBatch forwards MipMapLevelOfDetailBias to its sampler");
+                  "L10 SpriteBatch forwards MipMapLevelOfDetailBias to its sampler");
 
             const SamplerState linear = MakeSampler(
                 TextureFilter::Linear, TextureAddressMode::Clamp,
                 TextureAddressMode::Clamp, 0, 1.0f);
             check(SoleLevel(Draw3D(dev, 4, 4, *mipFlat_, linear), flatLevels_) == 2,
-                  "L9 LOD bias applies before linear mip selection too");
+                  "L11 LOD bias applies before linear mip selection too");
         }
     }
 
@@ -1039,6 +1043,9 @@ public:
     TextureFilterMipContractTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        // This contract deliberately includes a mipped 6x6 texture. XNA Reach rejects mipped
+        // non-power-of-two resources, so the sampling oracle must request the HiDef profile.
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kBBW);
         gdm_->setPreferredBackBufferHeightProperty(kBBH);
     }

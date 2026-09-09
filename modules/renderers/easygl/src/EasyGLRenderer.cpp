@@ -8006,9 +8006,11 @@ else
         if (!s.is_created()) s.create();
         // XNA's MaxMipLevel is the most detailed level the sampler may use, which is a lower bound
         // on the computed level of detail -- GL_TEXTURE_MIN_LOD, the same mapping FNA3D's SDL_GPU
-        // driver makes with min_lod.
+        // driver makes with min_lod. Microsoft writes the signed property through D3D9's DWORD
+        // sampler-state channel, so negative values first convert to UInt32 and clamp to the
+        // resource's least-detailed available level rather than becoming zero.
         s.set_parameter(::easygl::SamplerParameter::MinLod,
-                        static_cast<float>(std::max(maxMipLevel, 0)));
+                        static_cast<float>(static_cast<std::uint32_t>(maxMipLevel)));
         if (ProfileIsDesktopCore())
         {
             // Desktop-only: GL_TEXTURE_LOD_BIAS (0x8501) does not exist in OpenGL ES at all, which

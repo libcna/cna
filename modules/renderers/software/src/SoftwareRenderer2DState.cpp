@@ -649,7 +649,7 @@ namespace CNA::Internal::Renderers::Software
         if (slot < 0 || slot >= kMaxSamplerSlots)
             throw std::runtime_error("SoftwareRenderer::ApplySamplerMipState: slot must be 0..15");
         SoftwareSamplerState& s = samplerSlots_[static_cast<std::size_t>(slot)];
-        s.maxMipLevel = std::max(0, maxMipLevel);
+        s.maxMipLevel = maxMipLevel;
         s.lodBias = lodBias;
     }
 

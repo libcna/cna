@@ -1199,8 +1199,13 @@ namespace CNA::Internal::Renderers::Software
             // FNA3D maps MaxMipLevel to the sampler's minimum LOD and adds the explicit bias before
             // that clamp. Despite its historical XNA name, MaxMipLevel therefore means "most
             // detailed permitted level", not the largest numeric level the sampler may reach.
+            // Microsoft writes the signed property through D3D9's DWORD state channel, so perform
+            // that UInt32 conversion here at the common CPU sampling boundary; this covers both
+            // GraphicsDevice sampler slots and SpriteBatch's renderer-private sampler snapshot.
             const float biased = lambda + sampler.lodBias;
-            const float minLevel = static_cast<float>(std::clamp(sampler.maxMipLevel, 0, levels - 1));
+            const float minLevel = static_cast<float>(std::min(
+                static_cast<std::uint32_t>(sampler.maxMipLevel),
+                static_cast<std::uint32_t>(levels - 1)));
             const float clamped = std::clamp(std::max(biased, minLevel), 0.0f, maxLevel);
             const bool effectiveMagnify = clamped <= 0.0f && (magnify || biased < 0.0f);
             if (!(clamped > 0.0f))
