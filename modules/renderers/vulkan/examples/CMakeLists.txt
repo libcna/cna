@@ -1477,6 +1477,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             cna_register_renderer_test(NAME Vulkan_IndirectDraw
                 COMMAND cna_test_vulkan_indirect_draw
                 TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+            # plans/plan_modern.md MOD-2246: selected queue timestamp facts, asynchronous result
+            # collection, query-pool reuse, zero device waits, ordered marker labels, balanced pass
+            # regions and one-copy structured logger delivery are one native contract.
+            cna_vulkan_test(cna_test_vulkan_gpu_timer_debug
+                            vulkan_gpu_timer_debug_test.cpp)
+            cna_register_renderer_test(NAME Vulkan_GpuTimerDebug
+                COMMAND cna_test_vulkan_gpu_timer_debug
+                TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
         endif()
 
         # plans/plan_vulkan.md VULKAN-098 (F-19): this renderer's clip-space depth range is XNA's

@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <exception>
@@ -554,6 +555,14 @@ protected:
                 physical, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D,
                 VK_IMAGE_TILING_OPTIMAL, arrayUsage, 0, &arrayProperties) == VK_SUCCESS
                 ? arrayProperties.maxArrayLayers : 0;
+        const std::uint64_t expectedTimestampPicoseconds =
+            renderer->GetGraphicsQueueTimestampValidBitsEXT() != 0 &&
+                    limits.timestampPeriod > 0.0f
+                ? std::max<std::uint64_t>(
+                      1, static_cast<std::uint64_t>(
+                             std::llround(static_cast<long double>(limits.timestampPeriod) *
+                                          1000.0L)))
+                : 0;
         const bool limitsExact =
             EqualLimit(CNA::RendererLimit::MaxTextureDimension,
                        ClampToInt(limits.maxImageDimension2D)) &&
@@ -580,20 +589,20 @@ protected:
                        expectedStorageAlignment) &&
             EqualLimit(CNA::RendererLimit::MinUniformBufferOffsetAlignment,
                        limits.minUniformBufferOffsetAlignment) &&
-            EqualLimit(CNA::RendererLimit::TimestampPeriodPicoseconds, 0);
+            EqualLimit(CNA::RendererLimit::TimestampPeriodPicoseconds,
+                       expectedTimestampPicoseconds);
         Check(limitsExact, "I every new published limit equals this physical-device snapshot");
 
-        const bool remainingNativeOnlyLimitsExist =
-            renderer->GetPhysicalDevicePropertiesEXT().limits.timestampPeriod > 0.0F;
-        Check(remainingNativeOnlyLimitsExist && expectedArrayLayers > 0 &&
+        Check(expectedArrayLayers > 0 &&
                   device.GetRendererLimitEXT(
                       CNA::RendererLimit::MaxTextureArrayLayers).value == expectedArrayLayers &&
                   device.GetRendererLimitEXT(
                       CNA::RendererLimit::MaxStorageImagesPerShaderStage).value ==
                           expectedStorageImages &&
                   device.GetRendererLimitEXT(
-                      CNA::RendererLimit::TimestampPeriodPicoseconds).value == 0,
-              "J array/storage-image limits publish while the timestamp gap stays zero");
+                      CNA::RendererLimit::TimestampPeriodPicoseconds).value ==
+                          expectedTimestampPicoseconds,
+              "J array, storage-image and timestamp limits publish implemented paths only");
 
         Check(renderer->GetValidationMessagesEXT().empty(),
               "K capability queries and constructor contracts emit no Vulkan validation message",

@@ -30,6 +30,7 @@ namespace CNA::Internal::Renderers::Vulkan
     class VulkanComputeShaderRenderer;       // forward
     class VulkanTexture2DArrayRenderer;      // forward
     class VulkanStorageTexture2DRenderer;    // forward
+    class VulkanGpuTimerRenderer;            // forward
 
     // -------------------------------------------------------------------------
     // Vertex types (internal to the Vulkan renderer)
@@ -1765,6 +1766,69 @@ namespace CNA::Internal::Renderers::Vulkan
     };
 
     // -------------------------------------------------------------------------
+    // VulkanGpuTimerRenderer
+    // -------------------------------------------------------------------------
+
+    /**
+     * @brief Owns one reusable pair of Vulkan timestamp queries.
+     *
+     * `Begin()` and `End()` enqueue ordered timestamp records into the owning renderer; they do
+     * not submit work or wait. The same two query slots are reset and reused after each sample.
+     */
+    class VulkanGpuTimerRenderer final : public IGpuTimerRenderer
+    {
+        friend class VulkanRenderer;
+
+    public:
+        /**
+         * @brief Creates a timestamp-query pair for one graphics device.
+         * @param owner Owning Vulkan renderer.
+         */
+        explicit VulkanGpuTimerRenderer(VulkanRenderer* owner);
+
+        /** @brief Retires the query pool without waiting for the device. */
+        ~VulkanGpuTimerRenderer() override;
+
+        /** @brief Enqueues the start timestamp unless a range is already open. */
+        void Begin() override;
+
+        /** @brief Enqueues the end timestamp for the currently open range. */
+        void End() override;
+
+        /**
+         * @brief Reports whether both timestamp values can be read without waiting.
+         * @return True only after the GPU has completed the closed range.
+         */
+        [[nodiscard]] bool IsResultAvailable() const override;
+
+        /**
+         * @brief Returns the completed timestamp delta converted with the device timestamp period.
+         * @return Elapsed nanoseconds, or zero while unavailable.
+         */
+        [[nodiscard]] std::uint64_t ElapsedNanoseconds() const override;
+
+        /** @brief Retires the native query pool while the owning device is alive. */
+        void ReleaseVulkanResources();
+
+        /** @brief Forgets the renderer after device teardown. */
+        void DisconnectOwner() noexcept { owner_ = nullptr; }
+
+    private:
+        VulkanRenderer* owner_ = nullptr;
+        VkQueryPool pool_ = VK_NULL_HANDLE;
+        std::uint64_t serial_ = 0;
+        bool open_ = false;
+        bool ended_ = false;
+        bool beginRecorded_ = false;
+        bool endRecorded_ = false;
+        VkFence completionFence_ = VK_NULL_HANDLE;
+        std::uint64_t submissionGeneration_ = 0;
+        mutable bool submissionComplete_ = false;
+        mutable bool resultCached_ = false;
+        mutable std::array<std::uint64_t, 2> completedTimestamps_{};
+    };
+
+    // -------------------------------------------------------------------------
     // VulkanRenderTargetCubeRenderer
     // -------------------------------------------------------------------------
 
@@ -2183,6 +2247,7 @@ namespace CNA::Internal::Renderers::Vulkan
         friend class VulkanComputeShaderRenderer;
         friend class VulkanTexture2DArrayRenderer;
         friend class VulkanStorageTexture2DRenderer;
+        friend class VulkanGpuTimerRenderer;
 
     public:
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
@@ -3022,6 +3087,78 @@ namespace CNA::Internal::Renderers::Vulkan
             return deviceWaitIdleCountEXT_;
         }
         /**
+         * @brief Returns the valid timestamp-bit count of the selected graphics queue.
+         * @return Queue-family timestamp bits; zero means timestamp queries are unsupported.
+         */
+        CNAEXT [[nodiscard]] std::uint32_t GetGraphicsQueueTimestampValidBitsEXT() const noexcept
+        {
+            return graphicsQueueTimestampValidBits_;
+        }
+        /**
+         * @brief Returns how many Vulkan timer query pools this renderer has created.
+         * @return Cumulative successful `VkQueryPool` creation count.
+         */
+        CNAEXT [[nodiscard]] std::uint64_t GetGpuTimerQueryPoolCreateCountEXT() const noexcept
+        {
+            return gpuTimerQueryPoolCreateCountEXT_;
+        }
+        /**
+         * @brief Returns how many reusable timer pairs have been reset for another measurement.
+         * @return Cumulative timestamp-pair reset count recorded into command buffers.
+         */
+        CNAEXT [[nodiscard]] std::uint64_t GetGpuTimerQueryResetCountEXT() const noexcept
+        {
+            return gpuTimerQueryResetCountEXT_;
+        }
+        /**
+         * @brief Reports whether command-buffer debug labels are available.
+         * @return True when insert, begin-region and end-region entry points were loaded.
+         */
+        CNAEXT [[nodiscard]] bool SupportsDebugUtilsLabelsEXT() const noexcept
+        {
+            return debugUtilsEnabled_ && pfnCmdInsertDebugLabel_ != nullptr &&
+                   pfnCmdBeginDebugLabel_ != nullptr && pfnCmdEndDebugLabel_ != nullptr;
+        }
+        /**
+         * @brief Reports whether debug-utils messages reach the installed CNA callback.
+         * @return True when both the submit function and messenger are live.
+         */
+        CNAEXT [[nodiscard]] bool SupportsDebugUtilsMessagesEXT() const noexcept
+        {
+            return debugUtilsEnabled_ && pfnSubmitDebugMessage_ != nullptr &&
+                   debugMessenger_ != VK_NULL_HANDLE;
+        }
+        /**
+         * @brief Submits one test warning through `VK_EXT_debug_utils`.
+         * @param message Owned by the caller for the duration of this synchronous call.
+         * @return True when a debug-utils messenger accepted the submission.
+         */
+        CNAEXT bool SubmitDebugUtilsMessageForTestEXT(const char* message) const;
+        /**
+         * @brief Returns how many public string markers were recorded as debug labels.
+         * @return Cumulative inserted-label count.
+         */
+        CNAEXT [[nodiscard]] std::uint64_t GetRecordedDebugMarkerCountEXT() const noexcept
+        {
+            return recordedDebugMarkerCountEXT_;
+        }
+        /**
+         * @brief Returns how many structured command-buffer regions began recording.
+         * @return Cumulative begin-region count.
+         */
+        CNAEXT [[nodiscard]] std::uint64_t GetRecordedDebugRegionBeginCountEXT() const noexcept
+        {
+            return recordedDebugRegionBeginCountEXT_;
+        }
+        /**
+         * @brief Returns how many structured command-buffer regions ended recording.
+         * @return Cumulative end-region count.
+         */
+        CNAEXT [[nodiscard]] std::uint64_t GetRecordedDebugRegionEndCountEXT() const noexcept
+        {
+            return recordedDebugRegionEndCountEXT_;
+        }
+        /**
          * @brief Test-only: how many vertex/index buffers have been retired for deferred free.
          *
          * plans/plan_vulkan.md `VULKAN-392`. Lets a test show that the buffer create/destroy
@@ -3513,10 +3650,22 @@ namespace CNA::Internal::Renderers::Vulkan
         [[nodiscard]] std::uint64_t GetMinUniformBufferOffsetAlignmentEXT() const override;
 
         /**
-         * @brief Returns zero until Vulkan GPU timestamp queries are implemented by MOD-2246.
-         * @return Zero in the current implementation.
+         * @brief Returns one selected-device timestamp tick in integer picoseconds.
+         * @return Rounded picoseconds per tick, or zero when the graphics queue has no timestamps.
          */
         [[nodiscard]] std::uint64_t GetTimestampPeriodPicosecondsEXT() const override;
+
+        /**
+         * @brief Reports whether the selected graphics queue supports timestamp queries.
+         * @return True when the queue exposes valid timestamp bits and a positive period.
+         */
+        [[nodiscard]] bool SupportsGpuTimerEXT() const override;
+
+        /**
+         * @brief Creates one reusable Vulkan timestamp-query pair.
+         * @return A timer renderer, or null when timestamp queries are unavailable.
+         */
+        std::unique_ptr<IGpuTimerRenderer> CreateGpuTimerEXT() override;
 
         // ---- Graphics state: IMPLEMENTED ----
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
@@ -3651,6 +3800,7 @@ namespace CNA::Internal::Renderers::Vulkan
         RendererSurfaceInfo surfaceInfo_;
         CNA::Platform::IPlatformVulkanSurface* platformSurfaceService_ = nullptr;
         VkInstance       instance_       = VK_NULL_HANDLE;
+        bool             debugUtilsEnabled_ = false;
         VkDebugUtilsMessengerEXT debugMessenger_ = VK_NULL_HANDLE;
         std::vector<std::string> validationMessages_;
         /// REMED-GFX-144: pMessageIdName per entry of validationMessages_, same order and size.
@@ -3672,6 +3822,8 @@ namespace CNA::Internal::Renderers::Vulkan
         /// plans/plan_modern.md MOD-2240: the existing ordered submission queue is also the first
         /// modern-command queue where its flags permit; CNA does not claim async compute.
         VkQueueFlags graphicsQueueFlags_ = 0;
+        /// plans/plan_modern.md MOD-2246: zero is Vulkan's explicit no-timestamps queue answer.
+        std::uint32_t graphicsQueueTimestampValidBits_ = 0;
         VkQueue  graphicsQueue_       = VK_NULL_HANDLE;
         VkQueue  presentQueue_        = VK_NULL_HANDLE;
 
@@ -3681,6 +3833,10 @@ namespace CNA::Internal::Renderers::Vulkan
         std::vector<VkSemaphore> imageAvailableSemaphores_;
         std::vector<VkSemaphore> renderFinishedSemaphores_;
         std::vector<VkFence>     inFlightFences_;
+        /// MOD-2246: generation last submitted through each reusable frame fence.
+        std::array<std::uint64_t, MaxFramesInFlight> frameFenceGenerations_{};
+        /// Highest submission generation whose frame fence has been observed signalled.
+        std::uint64_t completedFrameGeneration_ = 0;
 
         // REMED-GFX-144: bounded frame/swapchain instrumentation. A synchronization regression that
         // can only read pixels proves nothing about the model that produced them, and one that can
@@ -3702,6 +3858,13 @@ namespace CNA::Internal::Renderers::Vulkan
         uint64_t computeDescriptorSetAllocationCountEXT_ = 0;
         std::size_t liveComputePipelineLayoutCountEXT_ = 0;
         uint64_t computePipelineLayoutCreationCountEXT_ = 0;
+        /// plans/plan_modern.md MOD-2246: timer-pool allocation/reuse instrumentation.
+        std::uint64_t gpuTimerQueryPoolCreateCountEXT_ = 0;
+        std::uint64_t gpuTimerQueryResetCountEXT_ = 0;
+        /// MOD-2246: structured debug-label instrumentation; commands remain optional.
+        std::uint64_t recordedDebugMarkerCountEXT_ = 0;
+        std::uint64_t recordedDebugRegionBeginCountEXT_ = 0;
+        std::uint64_t recordedDebugRegionEndCountEXT_ = 0;
         /// plans/plan_modern.md MOD-2243: array image records handed to deferred retirement.
         uint64_t retiredTexture2DArrayCountEXT_ = 0;
         /// The single funnel for vkDeviceWaitIdle, so the counter above cannot miss one.
@@ -4252,6 +4415,7 @@ namespace CNA::Internal::Renderers::Vulkan
         std::vector<VulkanRenderTargetRenderer*>  liveRenderTargets_;
         std::vector<VulkanStorageBufferRenderer*> liveStorageBuffers_;
         std::vector<VulkanComputeShaderRenderer*> liveComputeShaders_;
+        std::vector<VulkanGpuTimerRenderer*>       liveGpuTimers_;
         VulkanComputeShaderRenderer* boundComputeShader_ = nullptr;
         // VULKAN-407: the three classes that were in no list at all. Without them a Texture3D,
         // TextureCube or RenderTargetCube outliving its GraphicsDevice leaked every Vulkan object
@@ -4664,6 +4828,28 @@ namespace CNA::Internal::Renderers::Vulkan
         };
         std::vector<PendingClear> pendingClears_;
         /**
+         * @brief One deferred timestamp write in the same ordered stream as graphics work.
+         *
+         * The public timer owns the query pool. Its destructor removes unrecorded events and
+         * fence-retires the pool, so the raw timer pointer is never dereferenced after destruction.
+         */
+        struct PendingTimestamp {
+            VulkanGpuTimerRenderer* timer = nullptr;
+            VkQueryPool pool = VK_NULL_HANDLE;
+            std::uint64_t serial = 0;
+            bool begin = false;
+            std::uint64_t segment = 0;
+            std::shared_ptr<VulkanRTSource> rt;
+            std::uint64_t order = 0;
+        };
+        std::vector<PendingTimestamp> pendingTimestamps_;
+        /**
+         * @brief Queues one timestamp at the current public command position.
+         * @param timer Timer record that owns the query pool.
+         * @param begin True for slot zero/top-of-pipe, false for slot one/bottom-of-pipe.
+         */
+        void QueueGpuTimestampEXT(VulkanGpuTimerRenderer* timer, bool begin);
+        /**
          * @brief Records one public Clear() call. REMED-GFX-129/140/143, Task 875.
          *
          * @param color   The caller cleared the colour target.
@@ -4780,9 +4966,15 @@ namespace CNA::Internal::Renderers::Vulkan
         // pointer, keeping the draw) and from activeOcclusionQuery_, so RecordCommandBuffer never
         // dereferences the freed query wrapper. The VkQueryPool itself is retired separately.
         void PurgeDeferredQuery(VulkanOcclusionQueryRenderer* q);
+        /** @brief Removes every unrecorded event belonging to a destroyed/restarted GPU timer. */
+        void PurgeDeferredGpuTimer(VulkanGpuTimerRenderer* timer);
 
-        // Cached vkCmdInsertDebugUtilsLabelEXT — loaded once after device creation, nullptr if unsupported.
+        // MOD-2246: cached optional debug-utils entry points. Labels work without validation;
+        // message submission additionally requires the validation messenger installed above.
         PFN_vkCmdInsertDebugUtilsLabelEXT pfnCmdInsertDebugLabel_ = nullptr;
+        PFN_vkCmdBeginDebugUtilsLabelEXT pfnCmdBeginDebugLabel_ = nullptr;
+        PFN_vkCmdEndDebugUtilsLabelEXT pfnCmdEndDebugLabel_ = nullptr;
+        PFN_vkSubmitDebugUtilsMessageEXT pfnSubmitDebugMessage_ = nullptr;
 
         // --- Virtual (game) resolution for 2D NDC mapping ---
         int virtualWidth_  = 0;

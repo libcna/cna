@@ -102,7 +102,7 @@ namespace
         Origin origin;
     };
 
-    /// The checked-in snapshot. Measured 2026-09-05 on **llvmpipe (LLVM 19.1.7, 256 bits)** under
+    /// The checked-in snapshot. Measured 2026-09-10 on **llvmpipe (LLVM 19.1.7, 256 bits)** under
     /// Xvfb, which is the device this project's virtual display provides; see plan_vulkan.md §8.
     ///
     /// It is a C++ table rather than a data file on purpose: it cannot go missing, no build
@@ -138,7 +138,7 @@ namespace
         { "feature.Float16RenderTargets", "supported", Origin::Device },
         { "feature.Float16TextureLinearFiltering", "supported", Origin::Device },
         { "feature.Float32RenderTargets", "supported", Origin::Device },
-        { "feature.GpuTimers", "unsupported", Origin::Fixed },
+        { "feature.GpuTimers", "supported", Origin::Device },
         { "feature.ImageBasedLighting", "unsupported", Origin::Fixed },
         { "feature.IndirectDrawing", "supported", Origin::Device },
         { "feature.InstancedDrawing", "supported", Origin::Fixed },
@@ -181,7 +181,7 @@ namespace
         { "limit.MaxVertexStreams", "16", Origin::Fixed },
         { "limit.MinStorageBufferOffsetAlignment", "16", Origin::Device },
         { "limit.MinUniformBufferOffsetAlignment", "16", Origin::Device },
-        { "limit.TimestampPeriodPicoseconds", "0", Origin::Fixed },
+        { "limit.TimestampPeriodPicoseconds", "1000", Origin::Device },
         { "query.executesShaderEffectSource", "false", Origin::Fixed },
         { "query.maxComputeWorkGroupInvocations", "1024", Origin::Device },
         { "query.maxTextureDimension", "16384", Origin::Device },

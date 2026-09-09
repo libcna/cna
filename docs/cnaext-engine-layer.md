@@ -219,7 +219,7 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 | Debanding dither | ✅ needs executed effect source | ⬜ | ⬜ | ⬜ — off by default everywhere, and a renderer that does not run the tonemap shader was not dithering before either |
 | Aerial perspective | ✅ needs the prepass depth and executed effect source | ⬜ | ⬜ | ⬜ — `AerialPerspectivePass::isSupported()` is false and the frame keeps the unaltered geometry it had |
 | Debug drawing and gizmos | ✅ needs only `BasicEffect` and a line draw | ✅ | ✅ | ✅ — `DebugDraw` uses nothing an XNA `BasicEffect` does not already provide |
-| GPU timer queries | ✅ probed: `GL_EXT_disjoint_timer_query` is present on this machine's Mesa ES driver | ⬜ | ⬜ | ⬜ — `GpuTimer::isSupported()` is false and names the missing extension; no CPU fallback is offered |
+| GPU timer queries | ✅ probed: `GL_EXT_disjoint_timer_query` is present on this machine's Mesa ES driver | ✅ queue/device-gated timestamp queries, nonblocking and recycled (`MOD-2246`) | ⬜ | ⬜ — `GpuTimer::isSupported()` is false and names the missing native path; no CPU fallback is offered |
 | Decals | ✅ needs the prepass and `CustomEffects` | ⬜ | ⬜ | ⬜ — `DecalPass` reports `isSupported()` false and draws nothing rather than washing the frame |
 | Spatial upscaling | ✅ | ⬜ | ⬜ | ⬜ — without executed effect source the pass copies its input through at the target size, which is the hardware stretch it was replacing |
 | Display colour space | 🟨 `Srgb` only — the encoding is complete, the swap chain is not | 🟨 same | 🟨 same | 🟨 — no CNA platform back end offers an HDR swap chain, so every renderer answers `Srgb` and refuses the rest |
@@ -1322,9 +1322,12 @@ build that never asks for one. The cluster gizmo draws **slices, not tiles** —
 slices is 3072 boxes, a thicket rather than a picture.
 
 **`GpuTimer` refuses rather than substituting a CPU clock.** On GL ES it needs
-`GL_EXT_disjoint_timer_query`; where that is absent `isSupported()` is false and
-`getUnsupportedReason()` says so. A wall-clock number wearing a GPU name measures when the driver
-*accepted* the work, which is precisely what GPU timing exists to see past.
+`GL_EXT_disjoint_timer_query`. Vulkan needs timestamp support on the selected graphics queue and a
+positive device `timestampPeriod`; it reuses one two-slot query pool per timer, submits the range
+with the ordinary deferred frame and polls availability without a queue/device-wide wait. Where a
+renderer has no implemented native path, `isSupported()` is false and `getUnsupportedReason()`
+says so. A wall-clock number wearing a GPU name measures when the driver *accepted* the work, which
+is precisely what GPU timing exists to see past.
 
 ```cpp
 pipeline.setGpuTimingEnabledEXT(true);       // off by default
@@ -1342,6 +1345,10 @@ Two properties of the per-pass timing are load-bearing:
   a working measurement of a one-pass chain.
 - **An unavailable timer produces an empty list, not a list of zeroes**, so a caller can tell "not
   measured here" from "this pass took no time".
+
+On a deferred renderer such as Vulkan, a standalone range becomes queryable only after the
+enclosing frame is submitted (normally by `Present`). Calling `end()` itself never forces a submit
+or turns an asynchronous measurement into a hidden synchronization point.
 
 The costs, and what they turned out to say about the existing table, are in
 [`cnaext-perf.md`](cnaext-perf.md).

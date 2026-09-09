@@ -50,7 +50,8 @@ measures on (§*Environment* below).
 | Indirect drawing, including non-zero base instance | supported | device |
 | Legacy XNA `Texture2D` compute-image binding | **unsupported** | fixed |
 | Float32 / Float16 `RenderTarget2D`, half-float linear filtering | supported | device |
-| GPU timers, shadow sampling, image-based lighting | **unsupported** | fixed |
+| GPU timers | supported when the selected graphics queue exposes timestamps | device |
+| Shadow sampling, image-based lighting | **unsupported** | fixed |
 
 Two entries need their sentence rather than a cell:
 
@@ -204,8 +205,10 @@ exact `vkGetPhysicalDeviceImageFormatProperties` query for the usage combination
 detailed profile then intersects sampling, linear filtering, transfer, mip and attachment facts
 with those implemented paths. Storage read/write is published only for the exact `Color`/`Rgba8`
 path implemented by `MOD-2228`; storage atomics and optional extended formats remain unsupported.
-Timestamp period remains zero until `MOD-2246`, while texture-array layers publish the sampled
-2D-array image limit implemented by `MOD-2226`. `Vulkan_FormatLimitQueries`
+Timestamp period is published in integer picoseconds only when the selected graphics queue exposes
+timestamp bits and the period is positive; llvmpipe reports 1000 ps and RADV 10019 ps in the
+permanent `MOD-2246` runs. Texture-array layers publish the sampled 2D-array image limit
+implemented by `MOD-2226`. `Vulkan_FormatLimitQueries`
 compares every answer with the raw properties at runtime and keeps the remaining native-only
 negative controls. Since `MOD-2224`, it also attempts the
 public base, full-mip-chain and highest-supported-MSAA `RenderTarget2D` constructor for all 27
@@ -258,6 +261,21 @@ has `VK_QUEUE_COMPUTE_BIT`, the required storage-buffer slots exist, and the dev
 usable compute limits. There is no second queue lifecycle and no asynchronous-compute promise.
 This keeps compute, copy and graphics on the one queue that later synchronization rows bring into
 the same deferred public-call ordering domain.
+
+`MOD-2246` adds timestamps without adding a submission domain. Each `GpuTimer` owns one two-slot
+query pool, recycles it across samples, and places reset/begin/end commands into the same monotonic
+order as clear, SpriteBatch and 3D work. `poll()` first checks the range's frame fence with
+`vkGetFenceStatus`, then uses explicit query availability and caches the first complete pair. This
+also prevents a new pool's pre-reset undefined payload from becoming a false first sample. It
+never requests a blocking result and timer creation/use/destruction adds no
+queue/device-wide idle. A submitted pool is retired on the consuming frame fence.
+
+The same row discovers optional `VK_EXT_debug_utils` independently of validation so RenderDoc-style
+markers and per-pass regions remain useful in ordinary builds. Each recorded render-pass segment
+has one balanced region, `SetStringMarkerEXT` inserts an in-stream marker, and validation/debug
+messages are classified into `CNA::Logger`'s GPU category exactly once while the renderer keeps its
+diagnostic capture. If the extension is absent, these debug operations remain honest no-ops and
+the timestamp path is unaffected.
 
 ### Portable ordering and lifetime contract
 
@@ -673,8 +691,9 @@ short form a reader needs before opening it.
 | `SpriteSortMode::Immediate` honoured at the renderer boundary | EasyGL does not override `SetImmediateMode` at all. |
 | Precise occlusion counts on real hardware | `VK_QUERY_CONTROL_PRECISE_BIT` with the feature enabled, answered honestly through `PixelCountIsPreciseEXT` (`VULKAN-370`). |
 
-**Differences that are gaps, and are owned:** GPU timers, shadow sampling and image-based lighting
-are all `false` here and implemented on EasyGL. They are outside
+**Differences that are gaps, and are owned:** shadow sampling and image-based lighting are `false`
+here and implemented on EasyGL. GPU timing reached parity in `MOD-2246`; it is enabled only from
+the selected queue/device facts. The two remaining gaps are outside
 this campaign's scope — the ordinary XNA graphics surface — and `plans/plan_modern.md` owns the
 engine layer that uses them. The capability profile reports them `false` rather than accepting the
 call and doing nothing, which is the property that matters: `GraphicsDevice`'s three relevant EXT queries

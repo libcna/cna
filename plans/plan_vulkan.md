@@ -1204,7 +1204,7 @@ Classifications: `PARITY` · `VULKAN_STRONGER` · `TEST_GAP` · `IMPLEMENTATION_
 | Query reset / reuse cycle | `EasyGL_OcclusionQuery_Cycle` | `Vulkan_OcclusionQuery_Cycle` — the same source, registered on both | `PARITY` (was `TEST_GAP` when this matrix was written; closed and re-checked 2026-09-07 by `VULKAN-473`) | `VULKAN-371` |
 | Default-state occlusion behaviour | — | `Vulkan_GraphicsDevice_DefaultStateOcclusion` (shared source) | `PARITY` | — |
 | `PixelCountIsPreciseEXT` | overridden (`false` on GLES3) | overridden, and it reports the device's own `occlusionQueryPrecise` feature | `VULKAN_STRONGER` — EasyGL answers a fixed `false` for a whole GL profile; Vulkan answers what the selected device can actually do, and asks for the precise bit exactly when it may | `VULKAN-370` ✅ |
-| GPU timers / debug regions | — | `SetStringMarkerEXT` implemented | `CNAEXT_OUT_OF_SCOPE` | — |
+| GPU timers / debug regions | `GpuTimerTest` | `Vulkan_GpuTimerDebug`; `SetStringMarkerEXT` and pass labels | `CNAEXT_OUT_OF_SCOPE`, supplied later by `MOD-2246` | `MOD-2246` ✅ |
 
 ### 10.11 Validation, robustness and bounded resources
 
@@ -2061,8 +2061,8 @@ deleting the row would leave the count smaller with no account of why.
 | `IGraphicsRenderer` | `SupportsComputeImageBindingEXT` | default | `return false` | CNAEXT_OUT_OF_SCOPE | Honest absence. |
 | `IGraphicsRenderer` | `GetMaxVertexShaderStorageBlocksEXT` | default | `return 0` | CNAEXT_OUT_OF_SCOPE | Consistent with no Vulkan vertex-stage storage-buffer binding route; compute storage buffers exist separately. |
 | `IGraphicsRenderer` | `BindStorageBufferForDrawEXT` | default | no-op | CNAEXT_OUT_OF_SCOPE | Unreachable through the graphics-shader feature contract, whose published block count remains zero; compute binding is a separate implemented route. |
-| `IGraphicsRenderer` | `SupportsGpuTimerEXT` | default | `return false` | CNAEXT_OUT_OF_SCOPE | Honest absence. |
-| `IGraphicsRenderer` | `CreateGpuTimerEXT` | default | `return nullptr` | CNAEXT_OUT_OF_SCOPE | Honest absence. |
+| `IGraphicsRenderer` | `SupportsGpuTimerEXT` | default | `return false` | ~~CNAEXT_OUT_OF_SCOPE~~ → **NO LONGER IN A.1** | Honest absence when this classic audit closed; `MOD-2246` now answers from the selected queue timestamp bits and device period. |
+| `IGraphicsRenderer` | `CreateGpuTimerEXT` | default | `return nullptr` | ~~CNAEXT_OUT_OF_SCOPE~~ → **NO LONGER IN A.1** | `MOD-2246` now creates a recycled two-slot Vulkan timestamp-query implementation and proves it on RADV and llvmpipe. |
 | `IGraphicsRenderer` | `GetMaxComputeWorkGroupCountEXT` | default | `return 0` | ~~CNAEXT_OUT_OF_SCOPE~~ → **NO LONGER IN A.1** | `MOD-2240` publishes the selected device's three-dimensional dispatch-count limits. |
 | `IGraphicsRenderer` | `GetMaxComputeWorkGroupSizeEXT` | default | `return 0` | ~~CNAEXT_OUT_OF_SCOPE~~ → **NO LONGER IN A.1** | `MOD-2240` publishes the selected device's three-dimensional local-size limits. |
 | `IGraphicsRenderer` | `GetMaxComputeWorkGroupInvocationsEXT` | default | `return 0` | ~~CNAEXT_OUT_OF_SCOPE~~ → **NO LONGER IN A.1** | `MOD-2240` publishes the selected device's invocation ceiling. |

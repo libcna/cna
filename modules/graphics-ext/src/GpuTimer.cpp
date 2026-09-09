@@ -19,7 +19,7 @@ namespace CNA::Graphics {
         {
             unsupportedReason_ =
                 "the " + std::string(device.GetGraphicsRendererName()) + " renderer has no GPU timer query "
-                "(GL ES needs GL_EXT_disjoint_timer_query, desktop GL needs 3.3 or ARB_timer_query)";
+                "(the selected device/API exposes no implemented timestamp-query path)";
             return;
         }
         renderer_ = renderer.CreateGpuTimerEXT();

@@ -6,6 +6,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
+#include "CNA/Logger.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
 #include "CNA/Internal/Renderers/Vulkan/VulkanCompiledEffect.hpp"
@@ -2586,7 +2587,7 @@ namespace CNA::Internal::Renderers::Vulkan
         if (!(surfaceInfo_.displayScale > 0.0f)) surfaceInfo_.displayScale = 1.0f;
 
         CreateInstance();
-        if (sEnableValidation) SetupDebugMessenger();
+        if (sEnableValidation && debugUtilsEnabled_) SetupDebugMessenger();
         CreateSurface();
         PickPhysicalDevice();
         CreateLogicalDevice();
@@ -3379,6 +3380,11 @@ namespace CNA::Internal::Renderers::Vulkan
         // Step 2: destroy buffers and memory.
         // MOD-2241: compute pipelines own descriptor sets that name storage buffers. Tear those
         // objects down first, then their buffers, while the device is idle and still alive.
+        for (auto* timer : liveGpuTimers_) {
+            timer->ReleaseVulkanResources();
+            timer->DisconnectOwner();
+        }
+        liveGpuTimers_.clear();
         for (auto* shader : liveComputeShaders_) {
             shader->ReleaseVulkanResources();
             shader->DisconnectOwner();
@@ -3734,7 +3740,35 @@ namespace CNA::Internal::Renderers::Vulkan
         exts.reserve(platformExtensions.size() + 3);
         for (const std::string& extension : platformExtensions)
             exts.push_back(extension.c_str());
-        if (sEnableValidation) exts.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+        // MOD-2246: debug labels are useful in RenderDoc even in a release build, so debug-utils
+        // availability is discovered independently of validation. A missing optional extension
+        // leaves labels/messages unsupported instead of making instance creation fail.
+        {
+            std::uint32_t count = 0;
+            vkEnumerateInstanceExtensionProperties(nullptr, &count, nullptr);
+            std::vector<VkExtensionProperties> available(count);
+            if (count != 0)
+                vkEnumerateInstanceExtensionProperties(nullptr, &count, available.data());
+            debugUtilsEnabled_ = std::any_of(
+                available.begin(), available.end(), [](const VkExtensionProperties& extension) {
+                    return std::strcmp(extension.extensionName,
+                                       VK_EXT_DEBUG_UTILS_EXTENSION_NAME) == 0;
+                });
+        }
+        if (debugUtilsEnabled_)
+        {
+            if (std::none_of(
+                    platformExtensions.begin(), platformExtensions.end(),
+                    [](const std::string& extension) {
+                        return extension == VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
+                    }))
+                exts.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+        }
+        else if (sEnableValidation)
+            CNA::Logger::Warn(
+                "Vulkan validation is enabled, but VK_EXT_debug_utils is unavailable; "
+                "structured validation output is disabled.",
+                CNA::LogCategory::GPU);
         // REMED-GFX-144: VK_EXT_validation_features is provided by the Khronos layer itself, so it
         // is requested only when that layer is really going in.
         const bool wantSyncValidation = sEnableValidation && sRequestSyncValidation;
@@ -3829,7 +3863,9 @@ namespace CNA::Internal::Renderers::Vulkan
         auto fn = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(
             vkGetInstanceProcAddr(instance_, "vkCreateDebugUtilsMessengerEXT"));
         if (!fn || fn(instance_, &info, nullptr, &debugMessenger_) != VK_SUCCESS)
-            std::cerr << "[Vulkan] Warning: could not set up validation debug messenger\n";
+            CNA::Logger::Warn(
+                "Vulkan: could not set up the validation debug messenger.",
+                CNA::LogCategory::GPU);
     }
 
     VKAPI_ATTR VkBool32 VKAPI_CALL VulkanRenderer::DebugCallback(
@@ -3847,11 +3883,20 @@ namespace CNA::Internal::Renderers::Vulkan
                 renderer->validationMessageIdNames_.emplace_back(
                     d->pMessageIdName != nullptr ? d->pMessageIdName : "");
             }
-            // VULKAN-180: the recording above is unconditional; only the echo can be silenced,
-            // and only by a test that is provoking the layer deliberately.
+            // VULKAN-180: recording is unconditional; only the echo can be silenced. MOD-2246
+            // routes that single echo through CNA's structured logger rather than also writing a
+            // second raw stderr line, so a custom sink sees one classified GPU diagnostic.
             if (renderer == nullptr || renderer->validationEcho_)
-                std::cerr << "[Vulkan Validation] "
-                          << (d != nullptr && d->pMessage != nullptr ? d->pMessage : "") << '\n';
+            {
+                // Keep the established prefix inside the one structured logger record: the
+                // repository-wide CTest gate keys on it, while Logger supplies severity/category.
+                const std::string message = std::string("[Vulkan Validation] ") +
+                    (d != nullptr && d->pMessage != nullptr ? d->pMessage : "");
+                if (sev >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
+                    CNA::Logger::Error(message, CNA::LogCategory::GPU);
+                else
+                    CNA::Logger::Warn(message, CNA::LogCategory::GPU);
+            }
         }
         return VK_FALSE;
     }
@@ -3903,6 +3948,7 @@ namespace CNA::Internal::Renderers::Vulkan
             graphicsQueueFamily_ = *gfx;
             presentQueueFamily_  = *pres;
             graphicsQueueFlags_  = qps[*gfx].queueFlags;
+            graphicsQueueTimestampValidBits_ = qps[*gfx].timestampValidBits;
             break;
         }
         if (physicalDevice_ == VK_NULL_HANDLE)
@@ -4063,6 +4109,12 @@ namespace CNA::Internal::Renderers::Vulkan
         vkGetDeviceQueue(device_, presentQueueFamily_,  0, &presentQueue_);
         pfnCmdInsertDebugLabel_ = reinterpret_cast<PFN_vkCmdInsertDebugUtilsLabelEXT>(
             vkGetDeviceProcAddr(device_, "vkCmdInsertDebugUtilsLabelEXT"));
+        pfnCmdBeginDebugLabel_ = reinterpret_cast<PFN_vkCmdBeginDebugUtilsLabelEXT>(
+            vkGetDeviceProcAddr(device_, "vkCmdBeginDebugUtilsLabelEXT"));
+        pfnCmdEndDebugLabel_ = reinterpret_cast<PFN_vkCmdEndDebugUtilsLabelEXT>(
+            vkGetDeviceProcAddr(device_, "vkCmdEndDebugUtilsLabelEXT"));
+        pfnSubmitDebugMessage_ = reinterpret_cast<PFN_vkSubmitDebugUtilsMessageEXT>(
+            vkGetInstanceProcAddr(instance_, "vkSubmitDebugUtilsMessageEXT"));
 
         // Task 456: one-time startup capability dump. This renderer previously had NO startup log
         // at all (unlike several sibling renderers, which print something at initialization) --
@@ -12529,6 +12581,17 @@ namespace CNA::Internal::Renderers::Vulkan
                    std::find(flushSegments->begin(), flushSegments->end(), segment)
                        != flushSegments->end();
         };
+        auto timestampRecordedByFlush = [&](const PendingTimestamp& event) {
+            if (!recordedByFlush(event.rt.get(), event.segment)) return false;
+            if (event.begin || (event.timer != nullptr && event.timer->beginRecorded_)) return true;
+            return std::any_of(
+                pendingTimestamps_.begin(), pendingTimestamps_.end(),
+                [&](const PendingTimestamp& candidate) {
+                    return candidate.timer == event.timer && candidate.serial == event.serial &&
+                           candidate.begin &&
+                           recordedByFlush(candidate.rt.get(), candidate.segment);
+                });
+        };
         VkCommandBufferBeginInfo bi{};
         bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         if (vkBeginCommandBuffer(cb, &bi) != VK_SUCCESS)
@@ -12558,6 +12621,25 @@ namespace CNA::Internal::Renderers::Vulkan
                 q->recordedThisFrame_ = false;
                 if (q->pool_ != VK_NULL_HANDLE)
                     vkCmdResetQueryPool(cb, q->pool_, 0, 1);
+            }
+        }
+
+        // MOD-2246: reset a timer's two slots in the same command buffer that writes its begin
+        // timestamp. Reset is deliberately recorded rather than performed through a one-time
+        // submit, so Begin()/End() add no queue/device wait and one pool is recycled indefinitely.
+        {
+            std::vector<VkQueryPool> timerPools;
+            for (const auto& event : pendingTimestamps_)
+            {
+                if (!event.begin || event.pool == VK_NULL_HANDLE) continue;
+                if (rtOnly && !timestampRecordedByFlush(event)) continue;
+                if (std::find(timerPools.begin(), timerPools.end(), event.pool) == timerPools.end())
+                    timerPools.push_back(event.pool);
+            }
+            for (const VkQueryPool pool : timerPools)
+            {
+                vkCmdResetQueryPool(cb, pool, 0, 2);
+                ++gpuTimerQueryResetCountEXT_;
             }
         }
 
@@ -12938,6 +13020,7 @@ namespace CNA::Internal::Renderers::Vulkan
                         lbl.color[0]   = 1.0f; lbl.color[1] = 1.0f;
                         lbl.color[2]   = 1.0f; lbl.color[3] = 1.0f;
                         pfnCmdInsertDebugLabel_(cb, &lbl);
+                        ++recordedDebugMarkerCountEXT_;
                     }
                     continue;
                 }
@@ -13446,18 +13529,28 @@ namespace CNA::Internal::Renderers::Vulkan
                                        float vpW, float vpH,
                                        uint64_t afterOrder, uint64_t beforeOrder)
         {
-            struct Item { uint64_t order; bool sprite; };
+            enum class Kind { Sprite, Draw3D, Timestamp };
+            struct Item {
+                uint64_t order;
+                Kind kind;
+                const PendingTimestamp* timestamp = nullptr;
+            };
             std::vector<Item> items;
-            items.reserve(activeBatches_.size() + pending3D_.size());
+            items.reserve(activeBatches_.size() + pending3D_.size() + pendingTimestamps_.size());
             for (const auto& e : activeBatches_) {
                 if (e.rt.get() != targetRT || e.segment != segment) continue;
                 if (e.order <= afterOrder || e.order >= beforeOrder) continue;
-                items.push_back({ e.order, true });
+                items.push_back({ e.order, Kind::Sprite });
             }
             for (const auto& d : pending3D_) {
                 if (d.rt.get() != targetRT || d.segment != segment) continue;
                 if (d.order <= afterOrder || d.order >= beforeOrder) continue;
-                items.push_back({ d.order, false });
+                items.push_back({ d.order, Kind::Draw3D });
+            }
+            for (const auto& event : pendingTimestamps_) {
+                if (event.rt.get() != targetRT || event.segment != segment) continue;
+                if (event.order <= afterOrder || event.order >= beforeOrder) continue;
+                items.push_back({ event.order, Kind::Timestamp, &event });
             }
             if (items.empty()) return;
             std::sort(items.begin(), items.end(),
@@ -13465,12 +13558,53 @@ namespace CNA::Internal::Renderers::Vulkan
 
             std::size_t i = 0;
             while (i < items.size()) {
+                if (items[i].kind == Kind::Timestamp)
+                {
+                    const PendingTimestamp& event = *items[i].timestamp;
+                    if ((!rtOnly || timestampRecordedByFlush(event)) &&
+                        event.timer != nullptr && event.pool != VK_NULL_HANDLE &&
+                        event.timer->serial_ == event.serial)
+                    {
+                        vkCmdWriteTimestamp(
+                            cb,
+                            event.begin ? VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
+                                        : VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                            event.pool, event.begin ? 0u : 1u);
+                        if (event.begin) event.timer->beginRecorded_ = true;
+                        else
+                        {
+                            event.timer->endRecorded_ = true;
+                            // A new pool's result/availability contents are undefined until its
+                            // first recorded reset executes. Associate this sample with the full
+                            // frame fence so poll cannot cache that pre-reset payload as result 0.
+                            // The RT-only path waits its narrow submission before returning, so it
+                            // may mark completion immediately from the caller's perspective.
+                            if (rtOnly)
+                            {
+                                event.timer->completionFence_ = VK_NULL_HANDLE;
+                                event.timer->submissionGeneration_ = 0;
+                                event.timer->submissionComplete_ = true;
+                            }
+                            else
+                            {
+                                event.timer->completionFence_ =
+                                    inFlightFences_[currentFrame_];
+                                event.timer->submissionGeneration_ = frameGeneration_ + 1;
+                                event.timer->submissionComplete_ = false;
+                            }
+                        }
+                    }
+                    ++i;
+                    continue;
+                }
                 std::size_t j = i;
-                while (j + 1 < items.size() && items[j + 1].sprite == items[i].sprite) ++j;
+                while (j + 1 < items.size() && items[j + 1].kind == items[i].kind) ++j;
                 const uint64_t lo = items[i].order - 1;
                 const uint64_t hi = items[j].order + 1;
-                if (items[i].sprite) drawSpritesFor(targetRT, segment, vpW, vpH, lo, hi);
-                else                 draw3DFor(targetRT, segment, lo, hi);
+                if (items[i].kind == Kind::Sprite)
+                    drawSpritesFor(targetRT, segment, vpW, vpH, lo, hi);
+                else
+                    draw3DFor(targetRT, segment, lo, hi);
                 i = j + 1;
             }
         };
@@ -13534,6 +13668,11 @@ namespace CNA::Internal::Renderers::Vulkan
             PassSegment& seg = segmentFor(draw.segment, draw.rt.get());
             seg.firstDrawOrder = std::min(seg.firstDrawOrder, draw.order);
         }
+        // MOD-2246: a timer range can legitimately surround a render-target bind cycle, so its
+        // endpoints may live in otherwise-empty backbuffer segments on either side. Retaining
+        // those segments is what places the timestamps on opposite sides of the measured pass.
+        for (const auto& event : pendingTimestamps_)
+            segmentFor(event.segment, event.rt.get());
         std::sort(segments.begin(), segments.end(),
                   [](const PassSegment& l, const PassSegment& r) { return l.id < r.id; });
 
@@ -13573,6 +13712,26 @@ namespace CNA::Internal::Renderers::Vulkan
         }
         std::size_t backbufferSeen = 0;
 
+        auto beginDebugRegion = [&](const std::string& label)
+        {
+            if (!SupportsDebugUtilsLabelsEXT()) return;
+            VkDebugUtilsLabelEXT native{};
+            native.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
+            native.pLabelName = label.c_str();
+            native.color[0] = 0.20f;
+            native.color[1] = 0.55f;
+            native.color[2] = 0.95f;
+            native.color[3] = 1.0f;
+            pfnCmdBeginDebugLabel_(cb, &native);
+            ++recordedDebugRegionBeginCountEXT_;
+        };
+        auto endDebugRegion = [&]()
+        {
+            if (!SupportsDebugUtilsLabelsEXT()) return;
+            pfnCmdEndDebugLabel_(cb);
+            ++recordedDebugRegionEndCountEXT_;
+        };
+
         for (const auto& seg : segments) {
             // plan_vulkan.md VULKAN-216: every pipeline built while recording this segment has to
             // rasterize with the sample count THIS segment's attachments carry. Set once per
@@ -13582,6 +13741,10 @@ namespace CNA::Internal::Renderers::Vulkan
                 ? sampleCount_
                 : (seg.rt ? seg.rt->GetMsaaSampleCountEXT() : VK_SAMPLE_COUNT_1_BIT);
             SetPipelineColorFormatsEXT(seg.isBackbuffer ? nullptr : seg.rt);
+            const std::string debugRegionLabel = std::string("CNA ") +
+                (seg.isBackbuffer ? "backbuffer" : "render target") + " segment " +
+                std::to_string(seg.id);
+            beginDebugRegion(debugRegionLabel);
             if (seg.isBackbuffer) {
                 ++backbufferSeen;
                 const bool isFirstBackbuffer = (backbufferSeen == 1);
@@ -13597,7 +13760,13 @@ namespace CNA::Internal::Renderers::Vulkan
                 // set by ANY clear in the cycle, which is precisely how "draw, then Clear" ended up
                 // running the clear first.
                 const PendingClear* folded =
-                    (!seg.clears.empty() && seg.clears.front()->order < seg.firstDrawOrder)
+                    (!seg.clears.empty() && seg.clears.front()->order < seg.firstDrawOrder &&
+                     std::none_of(
+                         pendingTimestamps_.begin(), pendingTimestamps_.end(),
+                         [&seg](const PendingTimestamp& event) {
+                             return event.rt.get() == seg.rt && event.segment == seg.id &&
+                                    event.order < seg.clears.front()->order;
+                         }))
                         ? seg.clears.front()
                         : nullptr;
 
@@ -13721,6 +13890,7 @@ namespace CNA::Internal::Renderers::Vulkan
                 }
 
                 vkCmdEndRenderPass(cb);
+                endDebugRegion();
                 continue;
             }
 
@@ -13748,6 +13918,12 @@ namespace CNA::Internal::Renderers::Vulkan
             // bind for a result the load action already produces.
             const PendingClear* folded =
                 (!seg.clears.empty() && seg.clears.front()->order < seg.firstDrawOrder &&
+                 std::none_of(
+                     pendingTimestamps_.begin(), pendingTimestamps_.end(),
+                     [&seg](const PendingTimestamp& event) {
+                         return event.rt.get() == seg.rt && event.segment == seg.id &&
+                                event.order < seg.clears.front()->order;
+                     }) &&
                  rt->ColorLoadOpIsClearEXT())
                     ? seg.clears.front()
                     : nullptr;
@@ -13810,6 +13986,7 @@ namespace CNA::Internal::Renderers::Vulkan
 
             // Task 878: regenerate this RT's mip chain (no-op unless it actually owns mips).
             rt->MaybeGenerateMips(cb);
+            endDebugRegion();
         }
 
         // REMED-GFX-074: a RenderTargetsOnly readback flush stops here -- no backbuffer pass, no
@@ -13829,6 +14006,13 @@ namespace CNA::Internal::Renderers::Vulkan
             pendingClears_.erase(std::remove_if(pendingClears_.begin(), pendingClears_.end(),
                 [&recordedByFlush](const PendingClear& c) { return recordedByFlush(c.rt.get(), c.segment); }),
                 pendingClears_.end());
+            pendingTimestamps_.erase(
+                std::remove_if(
+                    pendingTimestamps_.begin(), pendingTimestamps_.end(),
+                    [&](const PendingTimestamp& event) {
+                        return timestampRecordedByFlush(event);
+                    }),
+                pendingTimestamps_.end());
             // REMED-GFX-151: a consumed cycle's sampling dependencies are spent with it, so the
             // graph stays the size of the still-pending frame rather than growing per readback.
             if (flushSegments != nullptr)
@@ -13850,6 +14034,7 @@ namespace CNA::Internal::Renderers::Vulkan
         activeBatches_.clear();
         pending3D_.clear();
         pendingClears_.clear();
+        pendingTimestamps_.clear();
         // REMED-GFX-151: the whole frame was just recorded, so no sampling dependency survives it.
         segmentSampledGroups_.clear();
         // VULKAN-160: and this is the one instant at which a sampler can safely leave the cache.
@@ -13953,6 +14138,8 @@ namespace CNA::Internal::Renderers::Vulkan
                            vkWaitForFences(device_, 1, &inFlightFences_[currentFrame_], VK_TRUE,
                                            UINT64_MAX));
         ++frameFenceWaitCountEXT_;
+        completedFrameGeneration_ = std::max(
+            completedFrameGeneration_, frameFenceGenerations_[currentFrame_]);
 
         // REMED-GFX-075: the current frame slot's fence just signalled, so free any retired
         // deferred-resource handles whose consuming frame is now provably complete (see
@@ -14011,6 +14198,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // generation clock so resources retired during this frame's build are freed only after this
         // submit's fence has completed (generation + MaxFramesInFlight later). See RetireResources.
         ++frameGeneration_;
+        frameFenceGenerations_[currentFrame_] = frameGeneration_;
         VkLifetimeTraceEXT("frame.submitted  gen=%llu retiredBuckets=%zu",
                            static_cast<unsigned long long>(frameGeneration_),
                            retiredResources_.size());
@@ -14025,6 +14213,8 @@ namespace CNA::Internal::Renderers::Vulkan
                            vkWaitForFences(device_, 1, &inFlightFences_[currentFrame_], VK_TRUE,
                                            UINT64_MAX));
             ++frameFenceWaitCountEXT_;
+            completedFrameGeneration_ = std::max(
+                completedFrameGeneration_, frameFenceGenerations_[currentFrame_]);
             deferredPresentImageIndex_ = imageIndex;
             hasDeferredPresent_        = true;
             return true;
@@ -15744,7 +15934,29 @@ namespace CNA::Internal::Renderers::Vulkan
 
     std::uint64_t VulkanRenderer::GetTimestampPeriodPicosecondsEXT() const
     {
-        return 0;
+        if (!SupportsGpuTimerEXT()) return 0;
+        const long double picoseconds =
+            static_cast<long double>(physicalDeviceProperties_.limits.timestampPeriod) * 1000.0L;
+        if (!(picoseconds > 0.0L)) return 0;
+        if (picoseconds >=
+            static_cast<long double>(std::numeric_limits<std::uint64_t>::max()))
+            return std::numeric_limits<std::uint64_t>::max();
+        return std::max<std::uint64_t>(
+            1, static_cast<std::uint64_t>(std::llround(picoseconds)));
+    }
+
+    bool VulkanRenderer::SupportsGpuTimerEXT() const
+    {
+        return device_ != VK_NULL_HANDLE && graphicsQueueTimestampValidBits_ != 0 &&
+               physicalDeviceProperties_.limits.timestampPeriod > 0.0f;
+    }
+
+    std::unique_ptr<IGpuTimerRenderer> VulkanRenderer::CreateGpuTimerEXT()
+    {
+        if (!SupportsGpuTimerEXT()) return nullptr;
+        auto timer = std::make_unique<VulkanGpuTimerRenderer>(this);
+        if (timer->pool_ == VK_NULL_HANDLE) return nullptr;
+        return timer;
     }
 
     std::unique_ptr<ISpriteBatchRenderer> VulkanRenderer::CreateSpriteBatch()
@@ -15885,6 +16097,20 @@ namespace CNA::Internal::Renderers::Vulkan
                            static_cast<const void*>(currentRT_.get()),
                            static_cast<unsigned long long>(currentSegment_),
                            color ? 1 : 0, depth ? 1 : 0, stencil ? 1 : 0);
+    }
+
+    void VulkanRenderer::QueueGpuTimestampEXT(VulkanGpuTimerRenderer* timer, const bool begin)
+    {
+        if (timer == nullptr || timer->pool_ == VK_NULL_HANDLE) return;
+        PendingTimestamp event;
+        event.timer = timer;
+        event.pool = timer->pool_;
+        event.serial = timer->serial_;
+        event.begin = begin;
+        event.segment = currentSegment_;
+        event.rt = currentRT_;
+        event.order = NextCommandOrderEXT();
+        pendingTimestamps_.push_back(std::move(event));
     }
 
     namespace
@@ -16393,6 +16619,16 @@ namespace CNA::Internal::Renderers::Vulkan
         if (activeOcclusionQuery_ == q) activeOcclusionQuery_ = nullptr;
     }
 
+    void VulkanRenderer::PurgeDeferredGpuTimer(VulkanGpuTimerRenderer* timer)
+    {
+        if (timer == nullptr) return;
+        pendingTimestamps_.erase(
+            std::remove_if(
+                pendingTimestamps_.begin(), pendingTimestamps_.end(),
+                [timer](const PendingTimestamp& event) { return event.timer == timer; }),
+            pendingTimestamps_.end());
+    }
+
     // REMED-GFX-166: see the header. The two counts at the end are the whole point -- they say, at
     // the instant of disposal, how much already-issued work would still have to run for this
     // resource's observable effect to survive.
@@ -16612,6 +16848,21 @@ namespace CNA::Internal::Renderers::Vulkan
         m.markerLabel = marker;
         m.rt          = currentRT_;
         PushPending3DDraw(std::move(m));
+    }
+
+    bool VulkanRenderer::SubmitDebugUtilsMessageForTestEXT(const char* message) const
+    {
+        if (!SupportsDebugUtilsMessagesEXT() || message == nullptr || message[0] == '\0')
+            return false;
+        VkDebugUtilsMessengerCallbackDataEXT data{};
+        data.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CALLBACK_DATA_EXT;
+        data.pMessageIdName = "CNA-MOD-2246";
+        data.messageIdNumber = 2246;
+        data.pMessage = message;
+        pfnSubmitDebugMessage_(
+            instance_, VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT,
+            VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT, &data);
+        return true;
     }
 
     void VulkanRenderer::DrawColoredPrimitives(
@@ -19713,6 +19964,148 @@ namespace CNA::Internal::Renderers::Vulkan
     }
 
     int VulkanOcclusionQueryRenderer::PixelCount() const { return pixelCount_; }
+
+    // --- VulkanGpuTimerRenderer ---
+
+    VulkanGpuTimerRenderer::VulkanGpuTimerRenderer(VulkanRenderer* owner)
+        : owner_(owner)
+    {
+        if (owner_ == nullptr || !owner_->SupportsGpuTimerEXT()) return;
+        VkQueryPoolCreateInfo info{};
+        info.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+        info.queryType = VK_QUERY_TYPE_TIMESTAMP;
+        info.queryCount = 2;
+        if (vkCreateQueryPool(owner_->device_, &info, nullptr, &pool_) != VK_SUCCESS)
+        {
+            pool_ = VK_NULL_HANDLE;
+            return;
+        }
+        ++owner_->gpuTimerQueryPoolCreateCountEXT_;
+        owner_->liveGpuTimers_.push_back(this);
+    }
+
+    VulkanGpuTimerRenderer::~VulkanGpuTimerRenderer()
+    {
+        if (owner_ != nullptr)
+        {
+            auto& timers = owner_->liveGpuTimers_;
+            timers.erase(std::remove(timers.begin(), timers.end(), this), timers.end());
+        }
+        ReleaseVulkanResources();
+    }
+
+    void VulkanGpuTimerRenderer::ReleaseVulkanResources()
+    {
+        if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE) return;
+        owner_->PurgeDeferredGpuTimer(this);
+        if (pool_ != VK_NULL_HANDLE)
+        {
+            VulkanRenderer::RetiredResources retired;
+            retired.queryPools.push_back(pool_);
+            pool_ = VK_NULL_HANDLE;
+            owner_->RetireResources(std::move(retired));
+        }
+        open_ = false;
+        ended_ = false;
+        beginRecorded_ = false;
+        endRecorded_ = false;
+        completionFence_ = VK_NULL_HANDLE;
+        submissionGeneration_ = 0;
+        submissionComplete_ = false;
+        resultCached_ = false;
+        completedTimestamps_ = {};
+    }
+
+    void VulkanGpuTimerRenderer::Begin()
+    {
+        if (owner_ == nullptr || pool_ == VK_NULL_HANDLE || open_) return;
+        // The public wrapper exposes only one pending result. Reopening therefore discards an
+        // unrecorded older range and recycles this same pair; a submitted older use is ordered
+        // before the reset by the renderer's single graphics queue.
+        owner_->PurgeDeferredGpuTimer(this);
+        ++serial_;
+        open_ = true;
+        ended_ = false;
+        beginRecorded_ = false;
+        endRecorded_ = false;
+        completionFence_ = VK_NULL_HANDLE;
+        submissionGeneration_ = 0;
+        submissionComplete_ = false;
+        resultCached_ = false;
+        completedTimestamps_ = {};
+        owner_->QueueGpuTimestampEXT(this, true);
+    }
+
+    void VulkanGpuTimerRenderer::End()
+    {
+        if (owner_ == nullptr || pool_ == VK_NULL_HANDLE || !open_) return;
+        owner_->QueueGpuTimestampEXT(this, false);
+        open_ = false;
+        ended_ = true;
+    }
+
+    bool VulkanGpuTimerRenderer::IsResultAvailable() const
+    {
+        if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE ||
+            pool_ == VK_NULL_HANDLE || !ended_ || !beginRecorded_ || !endRecorded_)
+            return false;
+        if (resultCached_) return true;
+        if (!submissionComplete_)
+        {
+            if (submissionGeneration_ != 0 &&
+                owner_->completedFrameGeneration_ >= submissionGeneration_)
+            {
+                submissionComplete_ = true;
+            }
+            else if (completionFence_ != VK_NULL_HANDLE &&
+                     vkGetFenceStatus(owner_->device_, completionFence_) == VK_SUCCESS)
+            {
+                submissionComplete_ = true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+        // Read an explicit availability word beside each value. In particular this prevents a
+        // newly allocated pool's undefined result payload from being mistaken for a completed
+        // first sample while the submitted reset/write commands are still ahead in the queue.
+        std::array<std::uint64_t, 4> valuesAndAvailability{};
+        if (vkGetQueryPoolResults(
+                owner_->device_, pool_, 0, 2, sizeof(valuesAndAvailability),
+                valuesAndAvailability.data(), sizeof(std::uint64_t) * 2,
+                VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT) != VK_SUCCESS ||
+            valuesAndAvailability[1] == 0 || valuesAndAvailability[3] == 0)
+            return false;
+        completedTimestamps_ = { valuesAndAvailability[0], valuesAndAvailability[2] };
+        resultCached_ = true;
+        return true;
+    }
+
+    std::uint64_t VulkanGpuTimerRenderer::ElapsedNanoseconds() const
+    {
+        if (!IsResultAvailable()) return 0;
+
+        const std::uint32_t validBits = owner_->graphicsQueueTimestampValidBits_;
+        std::uint64_t ticks = 0;
+        if (validBits >= 64)
+        {
+            ticks = completedTimestamps_[1] - completedTimestamps_[0];
+        }
+        else if (validBits != 0)
+        {
+            const std::uint64_t mask = (UINT64_C(1) << validBits) - 1;
+            ticks = (completedTimestamps_[1] - completedTimestamps_[0]) & mask;
+        }
+
+        const long double nanoseconds = static_cast<long double>(ticks) *
+            static_cast<long double>(owner_->physicalDeviceProperties_.limits.timestampPeriod);
+        if (!(nanoseconds > 0.0L)) return 0;
+        if (nanoseconds >=
+            static_cast<long double>(std::numeric_limits<std::uint64_t>::max()))
+            return std::numeric_limits<std::uint64_t>::max();
+        return static_cast<std::uint64_t>(std::llround(nanoseconds));
+    }
 
     // --- VulkanRenderTargetCubeRenderer ---
 

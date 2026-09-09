@@ -45,7 +45,7 @@ need content, audio, media, storage or the engine extension module.
 | `Microsoft::Xna::Framework::Graphics::ShaderEffect` | `modules/graphics` | Existing CNAEXT vertex/fragment payload object. Its two string payloads remain renderer-specific. |
 | `CNA::Graphics::ComputeShader` | `modules/graphics-ext` | Existing CNAEXT compute object with renderer-specific string source, scalar setters, buffer/texture/image binding, dispatch and a caller-visible barrier method. |
 | `CNA::Graphics::StorageBufferDescriptor`, `StorageBuffer`, `StorageBufferT<T>` | `modules/graphics-ext` | Compute-gated tracked byte buffer and typed wrapper with immutable GPU roles, direct CPU-access intent, exact range transfer and GPU-side copy. The size-only constructor preserves its compatible legacy contract. |
-| `CNA::Graphics::GpuTimer` | `modules/graphics-ext` | Existing nonblocking timer wrapper; EasyGL implements it, Vulkan/OpenGL4 do not at this baseline. |
+| `CNA::Graphics::GpuTimer` | `modules/graphics-ext` | Existing nonblocking timer wrapper; EasyGL implemented it at this baseline and Vulkan implements the same contract since `MOD-2246`. OpenGL4 remains unsupported. |
 | `CNA::GraphicsImageAccess` | `modules/graphics` | Three image-access values used by `ComputeShader::bindImage(Texture2D&)`. |
 | `CNA::GraphicsMemoryBarrier` and its bit operators | `modules/graphics` | Portable-looking caller barrier mask. Phase 22 replaces the need for callers to drive normal correctness with renderer-owned usage transitions. |
 | `CNA::IndirectDrawArguments`, `IndirectDrawIndexedArguments` | `modules/graphics` | Canonical 16-byte/20-byte GPU argument layouts; both already contain base-instance fields. |
@@ -133,7 +133,7 @@ OpenGL4 accepts the object while its current source-execution query remains fals
 | Compute shaders + storage-buffer dispatch | S | S | U |
 | Compute image binding | U | U | U |
 | Indirect drawing | S | S | U |
-| GPU timers | S | U | U |
+| GPU timers | S | S | U |
 | Shadow sampling | S | U | U |
 | Image-based lighting | S | U | U |
 | Texture3D sampling | S | S | U |
@@ -167,11 +167,12 @@ path is unavailable or not yet classified; a large native device value is not pu
 | `MaxColorAttachments` | 0 | 4 | 0 |
 | `MinStorageBufferOffsetAlignment` | 0 | 16 | 0 |
 | `MinUniformBufferOffsetAlignment` | 0 | 16 | 0 |
-| `TimestampPeriodPicoseconds` | 0 | 0 | 0 |
+| `TimestampPeriodPicoseconds` | 0 | 1000 | 0 |
 
-The Vulkan values are the llvmpipe reference snapshot; array layers and storage-image descriptors
-became publishable with their matching CNA paths, while timestamp period remains deliberately zero
-until `MOD-2246`. EasyGL has several working older paths whose newly appended detailed limit fields
+The Vulkan values are the llvmpipe reference snapshot; array layers, storage-image descriptors and
+timestamp period became publishable with their matching CNA paths. RADV reports 10019 ps rather
+than llvmpipe's 1000 ps, which is why the value remains device-origin. EasyGL has several working
+older paths whose newly appended detailed limit fields
 are still zero; those are classification gaps, not permission to assume unlimited values.
 
 ### Format support
@@ -229,15 +230,15 @@ tree, not about native API potential.
 | MOD-2243 | Supplied | Vulkan allocation, full-array views, subresource transfers, sampled descriptors and retirement pass both the functional oracle and an independent 27-format × 5-usage raw-device/factory/lifetime matrix on RADV and llvmpipe. |
 | MOD-2244 | Partial | Vulkan now has the dedicated format-qualified `rgba8` storage-image path used by `MOD-2228`; optional extended formats and legal bridges from supported existing XNA textures/render targets remain open. |
 | MOD-2245 | Supplied | Vulkan gates on enabled `drawIndirectFirstInstance`, executes both canonical commands without CPU readback, preserves every geometry/instance offset, retains deferred argument lifetime and inserts the automatic indirect-read dependency. The six-leg oracle passes on RADV and llvmpipe. |
-| MOD-2246 | Partial | Shared `GpuTimer` exists; Vulkan has no timestamp-query implementation and publishes zero period. |
-| MOD-2247 | Partial | XNA Vulkan work has ordered submission, but the current compute slice uses a separate synchronous submission boundary. |
+| MOD-2246 | Supplied | Vulkan recycles two-slot timestamp pools, converts with the selected device period, polls without blocking and integrates optional debug-utils labels/messages with one logger copy. The eight-leg native oracle passes on RADV and llvmpipe. |
+| MOD-2247 | Partial | Timestamp/debug records now share the XNA command-order counter and replay domain, but the current compute slice still uses a separate synchronous submission boundary. |
 | MOD-2248 | Absent | No internal logical resource-usage tracker. |
 | MOD-2249 | Partial | The current buffer compute path emits host/compute barriers, but routine dispatch completion still waits synchronously. |
 | MOD-2250 | Partial | Compute-write to indirect-command fetch is automatic and tested without readback; storage-buffer vertex/fragment consumption and full GPU-driven stale-frame oracles remain. |
 | MOD-2251 | Absent | No two-way render-target/storage-image transition path. |
-| MOD-2252 | Partial | Arrays, storage images and buffers use tracked records and fence retirement; the indirect test disposes its argument before deferred flush. Shader/query and resize/teardown matrix coverage remains. |
-| MOD-2253 | Partial | Compute descriptor reuse is bounded; broader modern allocators and removal of routine global waits remain open. |
-| MOD-2254 | Partial | Float, array, storage-buffer/image, base-instance, indirect and early-disposal gates run validation-clean on two devices; timer, mixed-order, recovery, stress and sanitizer legs remain. |
+| MOD-2252 | Partial | Arrays, storage images and buffers use tracked records and fence retirement; indirect arguments and timer query pools have early-disposal coverage. Shader and resize/teardown matrix coverage remains. |
+| MOD-2253 | Partial | Compute descriptors and per-timer query pools are bounded/reused, and timing adds no routine global wait; broader modern allocators and the older synchronous compute/readback boundaries remain open. |
+| MOD-2254 | Partial | Float, array, storage-buffer/image, base-instance, indirect, timer/debug and early-disposal gates run validation-clean on two devices; mixed-order, recovery, stress and sanitizer legs remain. |
 | MOD-2260 | Partial | OpenGL4 has a 4.1-floor renderer and measured 4.5 context, but does not independently discover modern subsets. |
 | MOD-2261 | Partial | OpenGL4's XNA baseline is substantial; the Phase 22 float/array/compute/image/indirect/timer contracts are unimplemented. |
 | MOD-2262 | Partial | The capability probe is shared; the functional modern-GPU contract suite does not yet exist. |

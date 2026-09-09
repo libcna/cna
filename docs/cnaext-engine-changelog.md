@@ -14,6 +14,26 @@ something breaks.
 
 ---
 
+## Revision 10 — 2026-09-10
+
+### Vulkan GPU timing and structured debug integration (`MOD-2246`)
+
+- `GpuTimer` now uses native Vulkan timestamp queries whenever the selected graphics queue exposes
+  timestamp bits and the device publishes a positive `timestampPeriod`. Results remain
+  asynchronous: `end()` records no wait, `poll()` asks for availability, and ordinary timing adds
+  no `vkDeviceWaitIdle` or `vkQueueWaitIdle`.
+- Each Vulkan timer owns one two-slot query pool and recycles it across samples. Query reset and
+  writes are recorded in the same ordered command buffer as the clear/SpriteBatch/3D work being
+  measured, while destruction retires a submitted pool on the consuming frame fence.
+- `VK_EXT_debug_utils`, when present, labels recorded render-pass regions and string markers even
+  without validation enabled. Validation/debug messages enter `CNA::Logger` exactly once with GPU
+  category and severity; the renderer's captured-message diagnostics remain available without a
+  second stderr copy.
+
+The C header carries the same engine-layer revision marker. The C ABI remains 0.26.0: the existing
+timer and capability routes changed only from an honest Vulkan refusal/zero to device-derived
+support.
+
 ## Revision 9 — 2026-09-09
 
 ### Device-gated Vulkan indirect drawing (`MOD-2245`)
