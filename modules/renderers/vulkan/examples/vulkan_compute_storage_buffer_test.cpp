@@ -6,7 +6,7 @@
 // D  Stripped scalar-name metadata fails before native allocation.
 // E  StorageBuffer's public CPU upload/readback round-trip preserves every element.
 // F  A three-SSBO SPIR-V vector add dispatch produces every expected result.
-// G  Unknown/mistyped names, undeclared/missing slots, and images fail explicitly.
+// G  Unknown/mistyped names and undeclared/missing slots fail; the RT image bridge is reported.
 // H  Reflected sparse SSBO slots and named int32/float32 push constants drive real output.
 // I  Repeated dispatches reuse one descriptor set/layout and destruction reclaims both.
 // J  Descriptor and pipeline-layout destruction returns live counts to baseline.
@@ -365,8 +365,8 @@ protected:
                 std::string(error.what()).find("binding 2") != std::string::npos;
         }
         check(slotRejected && unknownScalarRejected && missingBindingRejected &&
-                  !vectorAdd.isImageBindingSupported(),
-              "G undeclared, unknown, missing, and image bindings fail explicitly",
+                  vectorAdd.isImageBindingSupported(),
+              "G undeclared/unknown/missing bindings fail and RT image support is reported",
               "slot4=" + std::string(slotRejected ? "refused" : "accepted") +
                   " unknownScalar=" +
                   std::string(unknownScalarRejected ? "refused" : "accepted") +

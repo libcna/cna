@@ -27,8 +27,9 @@ read-after-read uses. `MOD-2249` placed immutable storage-image uploads in that 
 folded their dependency closure into the single requested image-readback submission. `MOD-2250`
 reflects readonly graphics storage buffers into immutable retained descriptor snapshots
 and derives compute-write to vertex/fragment-read plus indirect-fetch dependencies at the exact
-consuming segment. Remaining bridges and narrow readback stalls are owned by `MOD-2251`–
-`MOD-2253`.
+consuming segment. `MOD-2251` extends that same tracked order across render-target, compute-image
+and sampled-image uses and removes the eager storage-sampling wait. Remaining bridges and narrow
+readback stalls are owned by `MOD-2244`/`MOD-2253`.
 
 ## Decision
 

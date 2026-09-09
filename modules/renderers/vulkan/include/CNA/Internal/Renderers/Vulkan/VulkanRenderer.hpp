@@ -189,6 +189,12 @@ namespace CNA::Internal::Renderers::Vulkan
         int           mipLevels     = 1;
         /** @brief Array layer of `mipImage` this pass owns (a cube face index, else 0). */
         uint32_t      mipLayer      = 0;
+        /** @brief MOD-2251: single-sample colour image shared by render, compute and sampling. */
+        VkImage       trackedColorImage = VK_NULL_HANDLE;
+        /** @brief MOD-2251: mip-zero storage view; null when this target has no legal bridge. */
+        VkImageView   storageImageView = VK_NULL_HANDLE;
+        /** @brief MOD-2251: logical usage for every mip of @ref trackedColorImage. */
+        std::vector<VulkanResourceUsageState> colorUsageStates;
 
         /** @brief @copydoc VulkanRTSource::GetFramebuffer */
         VkFramebuffer GetFramebuffer()          const override { return framebuffer; }
@@ -472,8 +478,8 @@ namespace CNA::Internal::Renderers::Vulkan
 
         /** @brief Records a dependency and transitions mip zero to compute `GENERAL` layout. */
         void PrepareForComputeEXT(VkCommandBuffer commandBuffer, int accessMode);
-        /** @brief Synchronously makes every mip visible to subsequent fragment sampling. */
-        [[nodiscard]] bool PrepareForSamplingEXT();
+        /** @brief Records an ordered sampled-read transition for every mip without submitting. */
+        void PrepareForSamplingEXT(VkCommandBuffer commandBuffer);
         /** @brief Returns the single-mip view used by storage-image descriptors. */
         [[nodiscard]] VkImageView GetStorageImageViewEXT() const noexcept { return storageView_; }
         /** @brief Returns the full-mip view used by sampled descriptors. */
@@ -611,6 +617,26 @@ namespace CNA::Internal::Renderers::Vulkan
         // an ordinary texture (on-the-fly descriptor sets built by RecordCommandBuffer's texture
         // dispatch), not just via GetDescriptorSet()'s own precreated one.
         VkImageView     GetVkImageView()           const override { return colorSampleView_; }
+
+        /** @brief Returns whether this target's resolve image has a legal storage-image usage. */
+        [[nodiscard]] bool IsStorageImageCapableEXT() const noexcept
+        {
+            return pass_ != nullptr && pass_->storageImageView != VK_NULL_HANDLE;
+        }
+        /** @brief Returns whether this target was allocated by @p owner. */
+        [[nodiscard]] bool IsOwnedByEXT(const VulkanRenderer* owner) const noexcept
+        {
+            return owner_ == owner;
+        }
+        /** @brief Returns the mip-zero view used by compute storage-image descriptors. */
+        [[nodiscard]] VkImageView GetStorageImageViewEXT() const noexcept
+        {
+            return pass_ != nullptr ? pass_->storageImageView : VK_NULL_HANDLE;
+        }
+        /** @brief Records the exact prior-use to compute dependency for mip zero. */
+        void PrepareForComputeEXT(VkCommandBuffer commandBuffer, int accessMode);
+        /** @brief Records the exact prior-use to sampled-read dependency for every mip. */
+        void PrepareForSamplingEXT(VkCommandBuffer commandBuffer);
 
         // REMED-GFX-074: real GPU readback of this render target's colour image so that
         // RenderTarget2D::GetData() observes prior sprite/3D rendering into it even BEFORE
@@ -899,7 +925,7 @@ namespace CNA::Internal::Renderers::Vulkan
          * nothing and a shader that reads set 1 gets whatever the pipeline layout's own default
          * says -- which is why the layout is created with all four bindings written.
          */
-        VkDescriptorSet GetOrCreateBoundTextureSetEXT();
+        VkDescriptorSet GetOrCreateBoundTextureSetEXT(std::uint64_t segment);
         /**
          * @brief Builds the immutable set-2 storage-buffer snapshot required by this effect.
          *
@@ -1573,7 +1599,7 @@ namespace CNA::Internal::Renderers::Vulkan
         void BindStorageBuffer(int binding, IStorageBufferRenderer* buffer) override;
 
         /**
-         * @brief Refuses storage-image binding until MOD-2244 implements image usage tracking.
+         * @brief Binds a storage-capable Color RenderTarget2D as a compute image.
          *
          * @param unit Image binding index.
          * @param texture Texture requested by the caller.
@@ -1660,6 +1686,8 @@ namespace CNA::Internal::Renderers::Vulkan
         std::unordered_map<uint32_t, StorageImageSlot> storageImageSlots_;
         std::unordered_map<uint32_t, std::shared_ptr<VulkanStorageTexture2DRenderer>>
             storageImages_;
+        std::unordered_map<uint32_t, std::shared_ptr<VulkanRenderTargetRenderer>>
+            renderTargetImages_;
         std::unordered_map<std::string, ScalarSlot> scalarSlots_;
         std::vector<uint8_t> pushConstantBytes_;
         std::string compileError_;
@@ -3647,6 +3675,12 @@ namespace CNA::Internal::Renderers::Vulkan
         /** @brief Returns whether the selected ordered queue and limits support CNA compute. */
         [[nodiscard]] bool SupportsComputeShadersEXT() const override;
 
+        /** @brief Reports the legal Color RenderTarget2D storage-image bridge. */
+        [[nodiscard]] bool SupportsComputeImageBindingEXT() const override
+        {
+            return SupportsComputeShadersEXT() && GetMaxStorageImagesPerShaderStageEXT() > 0;
+        }
+
         /**
          * @brief Returns this device's maximum dispatch group count for one axis.
          *
@@ -3724,8 +3758,8 @@ namespace CNA::Internal::Renderers::Vulkan
         [[nodiscard]] int GetMaxSampledTexturesPerShaderStageEXT() const override;
 
         /**
-         * @brief Returns zero until storage-image binding is implemented by MOD-2244.
-         * @return Zero in the current implementation.
+         * @brief Returns the implemented storage-image descriptor ceiling.
+         * @return Smaller of the native per-stage and descriptor-set limits.
          */
         [[nodiscard]] int GetMaxStorageImagesPerShaderStageEXT() const override;
 
@@ -4977,6 +5011,7 @@ namespace CNA::Internal::Renderers::Vulkan
             std::vector<std::shared_ptr<VulkanStorageBufferRenderer>> storageBuffers;
             struct StorageImageUse {
                 std::shared_ptr<VulkanStorageTexture2DRenderer> image;
+                std::shared_ptr<VulkanRenderTargetRenderer> renderTarget;
                 int accessMode = 2;
             };
             std::vector<StorageImageUse> storageImages;
@@ -5672,6 +5707,13 @@ namespace CNA::Internal::Renderers::Vulkan
         // `VulkanRTSource::DepthStencilOwnerEXT()` value, the same key the flush and the recorder
         // use for "one target", so a dependency and the work satisfying it cannot drift apart.
         std::vector<std::pair<uint64_t, const void*>> segmentSampledGroups_;
+        struct PendingSampledImageUseEXT
+        {
+            std::uint64_t segment = 0;
+            std::shared_ptr<VulkanStorageTexture2DRenderer> storage;
+            std::shared_ptr<VulkanRenderTargetRenderer> renderTarget;
+        };
+        std::vector<PendingSampledImageUseEXT> pendingSampledImages_;
         // REMED-GFX-194 test diagnostics: exact pending proxy cycles and public attachment slots
         // selected for the latest 2D/cube target read. Never participates in selection or replay.
         std::vector<std::pair<uint64_t, uint32_t>> lastMrtReadbackMatchesEXT_;
@@ -5683,6 +5725,11 @@ namespace CNA::Internal::Renderers::Vulkan
         void NoteSampledRenderTargetGroupEXT(uint64_t segment, const void* group);
         /** @brief SpriteBatch entry point: notes @p tex if it is a render target. */
         void NoteSampledRenderTargetEXT(uint64_t segment, const IVulkanSamplable* tex);
+        /** @brief Retains and tracks a sampled two-dimensional render target. */
+        void NoteSampledTextureEXT(uint64_t segment, const ITextureRenderer* texture);
+        /** @brief Retains and tracks a sampled dedicated storage texture. */
+        void NoteSampledStorageTextureEXT(
+            uint64_t segment, std::shared_ptr<VulkanStorageTexture2DRenderer> texture);
         /** @brief Notes every render target a 3D draw samples, across all GpuDrawParams slots. */
         void NoteSampledSourcesEXT(const GpuDrawParams& params);
 

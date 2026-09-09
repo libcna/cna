@@ -1186,19 +1186,14 @@ namespace CNA::Internal::Renderers::Vulkan
         RecordUsage(commandBuffer, 0, intent);
     }
 
-    bool VulkanStorageTexture2DRenderer::PrepareForSamplingEXT()
+    void VulkanStorageTexture2DRenderer::PrepareForSamplingEXT(
+        const VkCommandBuffer commandBuffer)
     {
-        if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE || sampledView_ == VK_NULL_HANDLE ||
-            (usage_ & UINT32_C(4)) == 0)
-            return false;
-        VkCommandBuffer commandBuffer = owner_->BeginOneTimeCommands();
         owner_->RecordImageUsageEXT(
             commandBuffer, image_, mipUsageStates_,
             static_cast<std::uint32_t>(mipLevelCount_), VK_IMAGE_ASPECT_COLOR_BIT,
             0, static_cast<std::uint32_t>(mipLevelCount_), 0, 1,
             VulkanResourceIntent::SampledRead);
-        owner_->EndOneTimeCommands(commandBuffer);
-        return true;
     }
 
     void VulkanStorageTexture2DRenderer::ReleaseVulkanResources()
@@ -1331,10 +1326,25 @@ namespace CNA::Internal::Renderers::Vulkan
         colorInfo.arrayLayers   = 1;
         colorInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
         colorInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
+        VkFormatProperties colorFormatProperties{};
+        vkGetPhysicalDeviceFormatProperties(
+            owner_->physicalDevice_, colorVkFormat_, &colorFormatProperties);
+        VkImageFormatProperties storageImageProperties{};
+        const VkImageUsageFlags baseColorUsage =
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        const bool storageImageCapable =
+            colorVkFormat_ == VK_FORMAT_R8G8B8A8_UNORM &&
+            (colorFormatProperties.optimalTilingFeatures &
+             VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) != 0 &&
+            vkGetPhysicalDeviceImageFormatProperties(
+                owner_->physicalDevice_, colorVkFormat_, VK_IMAGE_TYPE_2D,
+                VK_IMAGE_TILING_OPTIMAL, baseColorUsage | VK_IMAGE_USAGE_STORAGE_BIT, 0,
+                &storageImageProperties) == VK_SUCCESS;
         // TRANSFER_SRC/DST (Task 878): needed by MaybeGenerateMips' vkCmdBlitImage cascade when
         // levelCount_ > 1; harmless to always request even for non-mipmapped RTs.
-        colorInfo.usage         = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
-                                  VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        colorInfo.usage         = baseColorUsage |
+                                  (storageImageCapable ? VK_IMAGE_USAGE_STORAGE_BIT : 0u);
         colorInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
         colorInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         if (vkCreateImage(dev, &colorInfo, nullptr, &colorImage_) != VK_SUCCESS)
@@ -1608,6 +1618,13 @@ namespace CNA::Internal::Renderers::Vulkan
         pass_->mipImage      = colorImage_;
         pass_->mipLevels     = levelCount_;
         pass_->mipLayer      = 0;
+        pass_->trackedColorImage = colorImage_;
+        pass_->storageImageView = storageImageCapable ? colorView_ : VK_NULL_HANDLE;
+        pass_->colorUsageStates.assign(
+            static_cast<std::size_t>(levelCount_),
+            VulkanResourceUsageState{
+                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, true, false});
 
         owner_->liveRenderTargets_.push_back(this);
         VkLifetimeTraceEXT("rt2d.create      renderer=%p image=0x%llx sampleView=0x%llx "
@@ -1619,6 +1636,33 @@ namespace CNA::Internal::Renderers::Vulkan
         VkLifetimeTraceEXT("rt2d.pass        renderer=%p pass=%p fb=0x%llx renderPass=0x%llx",
                            static_cast<const void*>(this), static_cast<const void*>(pass_.get()),
                            VkH(pass_->framebuffer), VkH(pass_->renderPass));
+    }
+
+    void VulkanRenderTargetRenderer::PrepareForComputeEXT(
+        const VkCommandBuffer commandBuffer, const int accessMode)
+    {
+        if (!IsStorageImageCapableEXT())
+            throw std::logic_error("Vulkan render target has no storage-image bridge");
+        const VulkanResourceIntent intent = accessMode == 0
+            ? VulkanResourceIntent::ShaderRead
+            : (accessMode == 1 ? VulkanResourceIntent::ShaderWrite
+                               : VulkanResourceIntent::ShaderReadWrite);
+        owner_->RecordImageUsageEXT(
+            commandBuffer, pass_->trackedColorImage, pass_->colorUsageStates,
+            static_cast<std::uint32_t>(pass_->colorUsageStates.size()),
+            VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1, intent);
+    }
+
+    void VulkanRenderTargetRenderer::PrepareForSamplingEXT(
+        const VkCommandBuffer commandBuffer)
+    {
+        if (pass_ == nullptr || pass_->trackedColorImage == VK_NULL_HANDLE) return;
+        owner_->RecordImageUsageEXT(
+            commandBuffer, pass_->trackedColorImage, pass_->colorUsageStates,
+            static_cast<std::uint32_t>(pass_->colorUsageStates.size()),
+            VK_IMAGE_ASPECT_COLOR_BIT, 0,
+            static_cast<std::uint32_t>(pass_->colorUsageStates.size()), 0, 1,
+            VulkanResourceIntent::SampledRead);
     }
 
     void VulkanRenderTargetRenderer::ReleaseVulkanResources()
@@ -2022,7 +2066,8 @@ namespace CNA::Internal::Renderers::Vulkan
                 // VULKAN-253: built here, at End(), for the same reason the push constants are
                 // copied here -- this is the last moment the effect is guaranteed alive and its
                 // bindings are guaranteed to be the ones this batch was drawn with.
-                snapshot->customBoundSet  = customEffectRenderer_->GetOrCreateBoundTextureSetEXT();
+                snapshot->customBoundSet =
+                    customEffectRenderer_->GetOrCreateBoundTextureSetEXT(activeSegment_);
                 snapshot->customStorageSet =
                     customEffectRenderer_->GetOrCreateDrawStorageSetEXT(
                         snapshot->customStorageBuffers);
@@ -2873,10 +2918,11 @@ namespace CNA::Internal::Renderers::Vulkan
         switch (static_cast<SurfaceFormat>(surfaceFormatOrdinal))
         {
             case SurfaceFormat::Color:
-                out = { swapchainFormat_ != VK_FORMAT_UNDEFINED
-                            ? swapchainFormat_
-                            : VK_FORMAT_R8G8B8A8_UNORM,
-                        4 };
+                // MOD-2251: an off-screen XNA Color target is canonical RGBA8 storage, not a
+                // mirror of the presentation surface's platform-selected channel order. SPIR-V
+                // can name this exact storage representation (`rgba8`); it has no `bgra8` image
+                // format with which a common BGRA swapchain allocation could be legally matched.
+                out = { VK_FORMAT_R8G8B8A8_UNORM, 4 };
                 return true;
             case SurfaceFormat::Rgba64:
                 out = { VK_FORMAT_R16G16B16A16_UNORM, 8 };
@@ -6003,7 +6049,8 @@ namespace CNA::Internal::Renderers::Vulkan
         boundSetDirty_ = true;
     }
 
-    VkDescriptorSet VulkanEffectRenderer::GetOrCreateBoundTextureSetEXT()
+    VkDescriptorSet VulkanEffectRenderer::GetOrCreateBoundTextureSetEXT(
+        const std::uint64_t segment)
     {
         if (!owner_ || owner_->device_ == VK_NULL_HANDLE) return VK_NULL_HANDLE;
         // The set is built even when the game bound NOTHING, and that is deliberate. A shader is
@@ -6025,9 +6072,10 @@ namespace CNA::Internal::Renderers::Vulkan
                     ? owner_->slotSamplers_[static_cast<std::size_t>(u)]
                     : owner_->defaultSampler_;
             auto& storage = boundStorageTextures_[static_cast<std::size_t>(u)];
-            if (storage != nullptr && !storage->PrepareForSamplingEXT())
-                throw System::NotSupportedException(
-                    "CNA Vulkan: a bound StorageTexture2D could not be transitioned for sampling");
+            if (storage != nullptr)
+                owner_->NoteSampledStorageTextureEXT(segment, storage);
+            owner_->NoteSampledTextureEXT(
+                segment, boundTextures_[static_cast<std::size_t>(u)]);
         }
         if (!boundSetDirty_ && boundSet_ != VK_NULL_HANDLE && boundSetSamplers_ == wantSamplers)
             return boundSet_;
@@ -14036,6 +14084,16 @@ namespace CNA::Internal::Renderers::Vulkan
             // MOD-2247: a modern command closes its issuing graphics segment and precedes every
             // later segment. Record it outside both render passes, at that exact boundary.
             recordModernBeforeSegment(seg.id);
+            // MOD-2251: image descriptors declare SHADER_READ_ONLY_OPTIMAL. Apply the transition
+            // after every earlier compute producer and before entering the consuming render pass.
+            for (const auto& use : pendingSampledImages_)
+            {
+                if (use.segment != seg.id) continue;
+                if (use.storage != nullptr)
+                    use.storage->PrepareForSamplingEXT(cb);
+                else if (use.renderTarget != nullptr)
+                    use.renderTarget->PrepareForSamplingEXT(cb);
+            }
             // MOD-2250: a graphics storage descriptor is a shader read, not a vertex-input read.
             // Transition every retained draw snapshot here, outside the render pass and after any
             // compute producer that split the preceding segment.
@@ -14232,6 +14290,22 @@ namespace CNA::Internal::Renderers::Vulkan
             }
 
             VulkanRTSource* rt = seg.rt;
+            // MOD-2251: a target may have been used as a GENERAL-layout compute image between
+            // bind cycles. Its render pass declares SHADER_READ_ONLY_OPTIMAL (preserve/resolve)
+            // or UNDEFINED (discard) as the external colour state, so first chain the compute
+            // access into the pass's existing fragment-to-colour external dependency. Normal
+            // render-target cycles already end in this layout and pay nothing here.
+            if (auto* pass = dynamic_cast<VulkanTargetPassEXT*>(rt);
+                pass != nullptr && !pass->colorUsageStates.empty() &&
+                pass->colorUsageStates.front().layout !=
+                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+            {
+                RecordImageUsageEXT(
+                    cb, pass->trackedColorImage, pass->colorUsageStates,
+                    static_cast<std::uint32_t>(pass->colorUsageStates.size()),
+                    VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1,
+                    VulkanResourceIntent::SampledRead);
+            }
             VkLifetimeTraceEXT("record.segment   seg=%llu rt=%p fb=0x%llx pass=0x%llx %dx%d "
                                "clears=%zu firstDraw=%llu",
                                static_cast<unsigned long long>(seg.id),
@@ -14323,6 +14397,22 @@ namespace CNA::Internal::Renderers::Vulkan
 
             // Task 878: regenerate this RT's mip chain (no-op unless it actually owns mips).
             rt->MaybeGenerateMips(cb);
+            // MOD-2251: render-pass finalLayout (and mip generation) leaves every level sampled,
+            // but the producing access remains a write. Retain both facts so a later compute image
+            // access gets COLOR/TRANSFER -> COMPUTE visibility as well as the GENERAL transition.
+            if (auto* pass = dynamic_cast<VulkanTargetPassEXT*>(rt);
+                pass != nullptr && pass->trackedColorImage != VK_NULL_HANDLE)
+            {
+                for (std::size_t mip = 0; mip < pass->colorUsageStates.size(); ++mip)
+                {
+                    pass->colorUsageStates[mip] = {
+                        mip == 0 ? VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+                                 : VK_PIPELINE_STAGE_TRANSFER_BIT,
+                        mip == 0 ? VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+                                 : VK_ACCESS_TRANSFER_WRITE_BIT,
+                        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, true, true};
+                }
+            }
             endDebugRegion();
         }
 
@@ -14363,6 +14453,7 @@ namespace CNA::Internal::Renderers::Vulkan
             // REMED-GFX-151: a consumed cycle's sampling dependencies are spent with it, so the
             // graph stays the size of the still-pending frame rather than growing per readback.
             if (flushSegments != nullptr)
+            {
                 segmentSampledGroups_.erase(
                     std::remove_if(segmentSampledGroups_.begin(), segmentSampledGroups_.end(),
                         [flushSegments](const std::pair<uint64_t, const void*>& e) {
@@ -14370,6 +14461,16 @@ namespace CNA::Internal::Renderers::Vulkan
                                    != flushSegments->end();
                         }),
                     segmentSampledGroups_.end());
+                pendingSampledImages_.erase(
+                    std::remove_if(
+                        pendingSampledImages_.begin(), pendingSampledImages_.end(),
+                        [flushSegments](const PendingSampledImageUseEXT& use) {
+                            return std::find(
+                                flushSegments->begin(), flushSegments->end(), use.segment) !=
+                                flushSegments->end();
+                        }),
+                    pendingSampledImages_.end());
+            }
             if (vkEndCommandBuffer(cb) != VK_SUCCESS)
                 throw std::runtime_error("vkEndCommandBuffer failed");
             return;
@@ -14385,6 +14486,7 @@ namespace CNA::Internal::Renderers::Vulkan
         pendingModernCommands_.clear();
         // REMED-GFX-151: the whole frame was just recorded, so no sampling dependency survives it.
         segmentSampledGroups_.clear();
+        pendingSampledImages_.clear();
         // VULKAN-160: and this is the one instant at which a sampler can safely leave the cache.
         // Both gates are open here: the pending queues are empty, so no CPU record still holds a
         // sampler handle, and the GPU side is handled by retiring rather than destroying.
@@ -15333,6 +15435,7 @@ namespace CNA::Internal::Renderers::Vulkan
         storageBuffers_.clear();
         storageBindingSlots_.clear();
         storageImages_.clear();
+        renderTargetImages_.clear();
         storageImageSlots_.clear();
         storageImageBindingSlots_.clear();
         scalarSlots_.clear();
@@ -15348,6 +15451,7 @@ namespace CNA::Internal::Renderers::Vulkan
         storageImageBindingSlots_.clear();
         storageImageSlots_.clear();
         storageImages_.clear();
+        renderTargetImages_.clear();
         scalarSlots_.clear();
         pushConstantBytes_.clear();
         if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE) {
@@ -15682,6 +15786,7 @@ namespace CNA::Internal::Renderers::Vulkan
                 storageImageSlots_.emplace(
                     bindingIt->second, StorageImageSlot{image.format, accessMode});
                 storageImages_.emplace(bindingIt->second, nullptr);
+                renderTargetImages_.emplace(bindingIt->second, nullptr);
                 continue;
             }
             {
@@ -15903,11 +16008,48 @@ namespace CNA::Internal::Renderers::Vulkan
     }
 
     void VulkanComputeShaderRenderer::BindImageTexture(
-        int /*unit*/, ITextureRenderer* /*texture*/, int /*accessMode*/)
+        const int unit, ITextureRenderer* texture, const int accessMode)
     {
-        throw std::runtime_error(
-            "Vulkan compute shader: mutable XNA Texture2D has no legal storage-image bridge; "
-            "bind a CNA StorageTexture2D or complete the remaining MOD-2244 bridge work");
+        if (unit < 0 ||
+            !storageImageSlots_.contains(static_cast<std::uint32_t>(unit)))
+            throw std::out_of_range(
+                "Vulkan compute shader: storage-image binding " + std::to_string(unit) +
+                " is not declared by this SPIR-V module in set 0");
+        if (accessMode < 0 || accessMode > 2)
+            throw std::invalid_argument(
+                "Vulkan compute shader: storage-image access is outside GraphicsImageAccess");
+        const auto& slot = storageImageSlots_.at(static_cast<std::uint32_t>(unit));
+        if (slot.accessMode != accessMode)
+            throw std::invalid_argument(
+                "Vulkan compute shader: storage-image access does not match the SPIR-V "
+                "NonReadable/NonWritable declaration");
+        if (texture == nullptr) {
+            renderTargetImages_[static_cast<std::uint32_t>(unit)].reset();
+            storageImages_[static_cast<std::uint32_t>(unit)].reset();
+            return;
+        }
+        auto* raw = dynamic_cast<VulkanRenderTargetRenderer*>(texture);
+        if (raw == nullptr)
+            throw System::NotSupportedException(
+                "CNA Vulkan: only a RenderTarget2D with storage-capable Color backing can be "
+                "bound through ComputeShader::bindImage; ordinary Texture2D allocations are "
+                "sampled/transfer resources and are not silently aliased as storage images");
+        auto native = std::dynamic_pointer_cast<VulkanRenderTargetRenderer>(
+            texture->shared_from_this());
+        if (native == nullptr || !native->IsOwnedByEXT(owner_) ||
+            !native->IsStorageImageCapableEXT())
+            throw System::NotSupportedException(
+                "CNA Vulkan: this RenderTarget2D format/allocation has no legal storage-image "
+                "bridge");
+        std::uint32_t nativeImageFormat = 0;
+        if (!MapVkFormatToSpirvStorageImageFormatEXT(
+                native->GetVkFormatEXT(), nativeImageFormat) ||
+            nativeImageFormat != slot.spirvImageFormat)
+            throw std::invalid_argument(
+                "Vulkan compute shader: render-target format does not match the SPIR-V image "
+                "format at binding " + std::to_string(unit));
+        renderTargetImages_[static_cast<std::uint32_t>(unit)] = std::move(native);
+        storageImages_[static_cast<std::uint32_t>(unit)].reset();
     }
 
     bool VulkanComputeShaderRenderer::BindStorageTexture2DEXT(
@@ -15929,6 +16071,7 @@ namespace CNA::Internal::Renderers::Vulkan
                 "NonReadable/NonWritable declaration");
         if (texture == nullptr) {
             storageImages_[static_cast<std::uint32_t>(unit)].reset();
+            renderTargetImages_[static_cast<std::uint32_t>(unit)].reset();
             return true;
         }
         auto native = std::dynamic_pointer_cast<VulkanStorageTexture2DRenderer>(texture);
@@ -15949,6 +16092,7 @@ namespace CNA::Internal::Renderers::Vulkan
                 "Vulkan compute shader: storage texture usage does not cover the requested "
                 "access");
         storageImages_[static_cast<std::uint32_t>(unit)] = std::move(native);
+        renderTargetImages_[static_cast<std::uint32_t>(unit)].reset();
         return true;
     }
 
@@ -16049,6 +16193,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // immutable state without a later bind/setUniform call changing an already-issued dispatch.
         const auto storageBuffers = storageBuffers_;
         const auto storageImages = storageImages_;
+        const auto renderTargetImages = renderTargetImages_;
         const auto pushConstantBytes = pushConstantBytes_;
         for (const uint32_t binding : storageBindingSlots_) {
             if (storageBuffers.at(binding) == nullptr)
@@ -16057,7 +16202,8 @@ namespace CNA::Internal::Renderers::Vulkan
                     std::to_string(binding) + " is not bound");
         }
         for (const uint32_t binding : storageImageBindingSlots_) {
-            if (storageImages.at(binding) == nullptr)
+            if (storageImages.at(binding) == nullptr &&
+                renderTargetImages.at(binding) == nullptr)
                 throw std::runtime_error(
                     "Vulkan compute shader: required set 0 storage-image binding " +
                     std::to_string(binding) + " is not bound");
@@ -16085,7 +16231,9 @@ namespace CNA::Internal::Renderers::Vulkan
         for (std::size_t i = 0; i < storageImageBindingSlots_.size(); ++i) {
             const uint32_t binding = storageImageBindingSlots_[i];
             auto& info = imageInfos[i];
-            info.imageView = storageImages.at(binding)->GetStorageImageViewEXT();
+            info.imageView = storageImages.at(binding) != nullptr
+                ? storageImages.at(binding)->GetStorageImageViewEXT()
+                : renderTargetImages.at(binding)->GetStorageImageViewEXT();
             info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
             imageViews.push_back(info.imageView);
         }
@@ -16103,8 +16251,9 @@ namespace CNA::Internal::Renderers::Vulkan
         command.groupsZ = static_cast<std::uint32_t>(groupsZ);
         command.storageBuffers = std::move(retainedBuffers);
         for (const uint32_t binding : storageImageBindingSlots_) {
-            command.storageImages.push_back(
-                {storageImages.at(binding), storageImageSlots_.at(binding).accessMode});
+            command.storageImages.push_back({
+                storageImages.at(binding), renderTargetImages.at(binding),
+                storageImageSlots_.at(binding).accessMode});
         }
         owner_->QueueComputeDispatchEXT(std::move(command));
     }
@@ -16794,7 +16943,15 @@ namespace CNA::Internal::Renderers::Vulkan
             trackedBuffers.push_back(buffer.get());
         }
         for (const auto& image : command.storageImages)
-            image.image->PrepareForComputeEXT(cb, image.accessMode);
+        {
+            if (image.image != nullptr)
+                image.image->PrepareForComputeEXT(cb, image.accessMode);
+            else if (image.renderTarget != nullptr)
+                image.renderTarget->PrepareForComputeEXT(cb, image.accessMode);
+            else
+                throw std::logic_error(
+                    "Vulkan compute dispatch lost its retained storage-image record");
+        }
         vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, command.pipeline);
         if (command.descriptorSet != VK_NULL_HANDLE)
             vkCmdBindDescriptorSets(
@@ -17459,8 +17616,32 @@ namespace CNA::Internal::Renderers::Vulkan
         // An IVulkanSamplable and an ITextureRenderer are separate bases of the same object, so the
         // cast has to go through the most-derived object rather than between siblings.
         if (const auto* rt = dynamic_cast<const VulkanRenderTargetRenderer*>(tex))
-            if (rt->PassEXT())
-                NoteSampledRenderTargetGroupEXT(segment, rt->PassEXT()->DepthStencilOwnerEXT());
+            NoteSampledTextureEXT(segment, rt);
+    }
+
+    void VulkanRenderer::NoteSampledTextureEXT(
+        const uint64_t segment, const ITextureRenderer* texture)
+    {
+        const auto* raw = dynamic_cast<const VulkanRenderTargetRenderer*>(texture);
+        if (raw == nullptr || raw->PassEXT() == nullptr) return;
+        NoteSampledRenderTargetGroupEXT(
+            segment, raw->PassEXT()->DepthStencilOwnerEXT());
+        auto retained = std::dynamic_pointer_cast<VulkanRenderTargetRenderer>(
+            const_cast<ITextureRenderer*>(texture)->shared_from_this());
+        if (retained == nullptr) return;
+        for (const auto& use : pendingSampledImages_)
+            if (use.segment == segment && use.renderTarget == retained) return;
+        pendingSampledImages_.push_back({segment, nullptr, std::move(retained)});
+    }
+
+    void VulkanRenderer::NoteSampledStorageTextureEXT(
+        const uint64_t segment,
+        std::shared_ptr<VulkanStorageTexture2DRenderer> texture)
+    {
+        if (texture == nullptr) return;
+        for (const auto& use : pendingSampledImages_)
+            if (use.segment == segment && use.storage == texture) return;
+        pendingSampledImages_.push_back({segment, std::move(texture), nullptr});
     }
 
     // REMED-GFX-151: every render target this draw samples, in one place, so a new stock-effect
@@ -17473,7 +17654,7 @@ namespace CNA::Internal::Renderers::Vulkan
             params.pbrMetallicRoughnessMap, params.pbrEmissiveMap, params.pbrOcclusionMap
         };
         for (const ITextureRenderer* t : slots)
-            NoteSampledRenderTargetGroupEXT(currentSegment_, SampledRenderTargetGroupEXT(t));
+            NoteSampledTextureEXT(currentSegment_, t);
         NoteSampledRenderTargetGroupEXT(currentSegment_, SampledRenderTargetGroupEXT(params.envMap));
     }
 
@@ -17944,7 +18125,7 @@ namespace CNA::Internal::Renderers::Vulkan
         const VkImageView texView = vs ? vs->GetVkImageView() : defaultWhiteView_;
         d.descSet = GetOrCreateTexSamplerDescSet(texView, slotSamplers_[0] != VK_NULL_HANDLE
                                                            ? slotSamplers_[0] : defaultSampler_);
-        d.customBoundSet = fx->GetOrCreateBoundTextureSetEXT();
+        d.customBoundSet = fx->GetOrCreateBoundTextureSetEXT(currentSegment_);
         d.customStorageSet =
             fx->GetOrCreateDrawStorageSetEXT(d.customStorageBuffers);
         d.customLayout   = fx->GetPipelineLayout();

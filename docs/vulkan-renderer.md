@@ -48,7 +48,7 @@ measures on (§*Environment* below).
 | Compiled XNA `.fx` effects | **unsupported** here | fixed |
 | SPIR-V compute shaders, storage buffers and dedicated `rgba8` storage images | supported | device |
 | Indirect drawing, including non-zero base instance | supported | device |
-| Legacy XNA `Texture2D` compute-image binding | **unsupported** | fixed |
+| XNA `RenderTarget2D` compute-image binding | supported for exact storage-capable `Color`; ordinary `Texture2D` is refused | device |
 | Float32 / Float16 `RenderTarget2D`, half-float linear filtering | supported | device |
 | GPU timers | supported when the selected graphics queue exposes timestamps | device |
 | Shadow sampling, image-based lighting | **unsupported** | fixed |
@@ -109,8 +109,8 @@ GPU-only buffer, a 256-float compute result copied back through staging, overflo
 zero new validation messages. The size-only constructor retains its former implicit storage,
 two-way transfer, indirect and CPU read/write behavior.
 
-`MOD-2228` adds `ComputeShader::bindStorageTexture` without changing the legacy
-`bindImage(Texture2D&)` contract. Vulkan currently allocates only exact `SurfaceFormat::Color` /
+`MOD-2228` adds `ComputeShader::bindStorageTexture`; `MOD-2251` implements the legal
+`bindImage(Texture2D&)` bridge for a `RenderTarget2D`. Vulkan currently allocates only exact `SurfaceFormat::Color` /
 `VK_FORMAT_R8G8B8A8_UNORM` storage images, whose `Rgba8` SPIR-V format does not require the optional
 `shaderStorageImageExtendedFormats` feature. The immutable resource declaration controls storage
 read/write, sampling/filtering and transfer flags; the factory intersects the complete requested
@@ -118,13 +118,17 @@ usage with format features and `vkGetPhysicalDeviceImageFormatProperties`. A mip
 and optional full-chain sampled view remain internal. The `Vulkan_ShaderEffect_BoundTexture`
 oracle writes `(0.25, 0.5, 0.75, 1)` in compute, reads back the exact quantised bytes and samples the
 same texel through a later fragment draw, while also testing slot/access refusal and binding clear.
+An off-screen `Color` render target uses canonical `VK_FORMAT_R8G8B8A8_UNORM`, independently of
+the swapchain's platform-selected channel order, and requests storage usage only when the complete
+attachment/sampled/transfer/storage combination is supported. The bridge reuses mip zero's image
+and view; it does not copy or expose a layout. Ordinary Vulkan `Texture2D` allocations have no
+storage usage and fail explicitly.
 
 `MOD-2247` makes dispatch and storage-buffer copies immutable entries in the same monotonic order as
 clear, SpriteBatch, XNA 3D, indirect draws, timestamps and presentation. A compute/copy boundary
 closes the current render-pass segment, records outside both passes and leaves the same target bound
 for following graphics. Routine dispatch/copy therefore add no one-time submit or queue/device wait;
-requested CPU buffer/image readback remains their synchronous fallback. Storage-image sampling also
-retains its older synchronous submission boundary. `MOD-2248` replaces the coarse command-wide
+requested CPU buffer/image readback remains their synchronous fallback. `MOD-2248` replaces the coarse command-wide
 barriers with an internal logical-use tracker. Buffers retain accumulated CPU, transfer, compute
 and indirect intent; storage images retain the same state independently for every mip. Write
 hazards and layout changes emit buffer/image barriers at the consuming command, while compatible
@@ -141,11 +145,13 @@ pass; an indirect command from the same dispatch independently transitions to in
 11-leg native oracle moves one GPU-authored instance left and right, changes its fragment result,
 then writes a zero instance count, without CPU buffer readback or a routine submit. It reports the
 exact twelve steady-state hazards, survives disposing both public buffers after the final draw was
-accepted, and emits zero validation messages on RADV and llvmpipe. `MOD-2251`–
-`MOD-2253` own the remaining renderer paths and transition/readback stalls. Optional extended
-storage-image formats and legal bridges from existing XNA textures/render targets remain
-`MOD-2244`; the dedicated
-`StorageTexture2D` path is claimed here.
+accepted, and emits zero validation messages on RADV and llvmpipe. `MOD-2251` shares render-target
+colour state with compute, transitions both render-target and dedicated storage images at the
+consuming segment without an eager submit, and proves render → compute → sampled render through a
+channel-shuffling image-load/store oracle. `MOD-2253` owns the remaining readback stalls. Optional
+extended storage-image formats and an ordinary-`Texture2D` bridge, where its allocation contract
+can legally provide one, remain `MOD-2244`; the dedicated `StorageTexture2D` and `RenderTarget2D`
+paths are claimed here.
 
 ### Indirect drawing
 
@@ -329,10 +335,8 @@ rather than adding descriptors beyond the established fragment-stage ceiling. It
 sampled views are evicted/retired with the owning image, and renderer teardown disconnects surviving
 records before destroying the Vulkan device.
 
-Two current implementation gaps are stated rather than normalized into the contract:
+One current implementation gap is stated rather than normalized into the contract:
 
-- the current storage-image sampling transition still uses a one-time command buffer and waits
-  immediately (`MOD-2251`/`MOD-2253`); and
 - off-screen dependency readback currently begins with `DeviceWaitIdleEXT` instead of waiting only
   for the requested dependency closure's submission (`MOD-2253`).
 

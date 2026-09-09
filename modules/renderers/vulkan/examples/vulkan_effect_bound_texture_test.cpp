@@ -41,6 +41,10 @@
 //   O  Repeated sampling of the same image layout emits no redundant Vulkan image barrier.
 //   P  Storage-image upload/compute/upload enqueue without a routine queue/device-wide wait.
 //   Q  One requested readback submits that exact order once and observes the final upload.
+//   R  MOD-2251: a Color RenderTarget2D is a legal compute image, while an ordinary Texture2D is
+//      refused because its native allocation has no storage usage.
+//   S  A render-target clear feeds a compute imageLoad, the compute imageStore feeds an ordinary
+//      SpriteBatch sample, and the two exact tracked barriers occur without an eager submit/wait.
 //
 // Exit code 0 = all PASS, 1 = any FAIL.
 
@@ -71,6 +75,7 @@
 
 #include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstdio>
@@ -282,6 +287,40 @@ std::string ArrayFragmentSpirV(const float layer)
         throw std::runtime_error("the embedded sampler3D SPIR-V patch contract drifted");
     return {reinterpret_cast<const char*>(words.data()), words.size() * sizeof(words[0])};
 }
+
+std::string ReadWriteStorageImageSpirV()
+{
+    std::vector<std::uint32_t> words(
+        std::begin(kStorageImageWriteSpv), std::end(kStorageImageWriteSpv));
+    words[3] = 0x00000016; // IDs through %21.
+
+    const std::array<std::uint32_t, 3> nonReadable{
+        0x00030047, 0x00000009, 0x00000019};
+    const auto decoration = std::search(
+        words.begin(), words.end(), nonReadable.begin(), nonReadable.end());
+    if (decoration == words.end())
+        throw std::runtime_error("the embedded storage-image access decoration drifted");
+    words.erase(decoration, decoration + static_cast<std::ptrdiff_t>(nonReadable.size()));
+
+    const std::array<std::uint32_t, 4> constantWrite{
+        0x00040063, 0x00000013, 0x00000011, 0x0000000f};
+    const auto write = std::search(
+        words.begin(), words.end(), constantWrite.begin(), constantWrite.end());
+    if (write == words.end())
+        throw std::runtime_error("the embedded storage-image write instruction drifted");
+    const std::array<std::uint32_t, 14> readShuffleWrite{
+        // %20 = OpImageRead %v4float %19 %zeroCoordinate
+        0x00050062, 0x00000004, 0x00000014, 0x00000013, 0x00000011,
+        // %21 = OpVectorShuffle %v4float %20 %20 2 0 1 3
+        0x0009004f, 0x00000004, 0x00000015, 0x00000014, 0x00000014,
+        0x00000002, 0x00000000, 0x00000001, 0x00000003};
+    const auto at = words.erase(write, write + static_cast<std::ptrdiff_t>(constantWrite.size()));
+    const auto after = words.insert(at, readShuffleWrite.begin(), readShuffleWrite.end());
+    words.insert(
+        after + static_cast<std::ptrdiff_t>(readShuffleWrite.size()),
+        {0x00040063, 0x00000013, 0x00000011, 0x00000015});
+    return {reinterpret_cast<const char*>(words.data()), words.size() * sizeof(words[0])};
+}
 #endif
 }  // namespace
 
@@ -350,6 +389,26 @@ class VulkanEffectBoundTextureTest final : public Game
         return p[kN * kN / 2];
     }
 
+    Color DrawOrdinary(GraphicsDevice& dev, Texture2D& source)
+    {
+        RenderTarget2D rt(dev, kN, kN, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                          RenderTargetUsage::DiscardContents);
+        dev.setBlendStateProperty(BlendState::Opaque);
+        dev.SetRenderTarget(&rt);
+        dev.Clear(Color(1, 2, 3, 255));
+        {
+            SamplerState point = SamplerState::PointClamp;
+            SpriteBatch sb(dev);
+            sb.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, nullptr);
+            sb.Draw(source, Rectangle(0, 0, kN, kN), kWhite);
+            sb.End();
+        }
+        dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        std::vector<Color> p(static_cast<std::size_t>(kN * kN), Color(0, 0, 0, 0));
+        rt.GetData(p.data(), 0, kN * kN);
+        return p[kN * kN / 2];
+    }
+
 protected:
     void Draw(const GameTime&) override
     {
@@ -369,6 +428,45 @@ protected:
         auto green = Solid(dev, kGreen);
 
 #ifdef CNA_CNAEXT
+        {
+            using CNA::Graphics::ComputeShader;
+            RenderTarget2D bridge(
+                dev, 1, 1, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                RenderTargetUsage::DiscardContents);
+            dev.SetRenderTarget(&bridge);
+            dev.Clear(Color(32, 64, 192, 255));
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+            ComputeShader imageProgram(dev, ReadWriteStorageImageSpirV());
+            bool ordinaryRefused = false;
+            try {
+                imageProgram.bindImage(
+                    0, *white, CNA::GraphicsImageAccess::ReadWrite);
+            } catch (const System::NotSupportedException&) {
+                ordinaryRefused = true;
+            }
+            imageProgram.bindImage(
+                0, bridge, CNA::GraphicsImageAccess::ReadWrite);
+            const std::uint64_t oneTimeBefore = Renderer().GetOneTimeCommandCountEXT();
+            const std::uint64_t deviceWaitBefore = Renderer().GetDeviceWaitIdleCountEXT();
+            const std::uint64_t barriersBefore =
+                Renderer().GetLogicalResourceBarrierCountEXT();
+            imageProgram.dispatch(1);
+            const bool queuedWithoutWait =
+                Renderer().GetOneTimeCommandCountEXT() == oneTimeBefore &&
+                Renderer().GetDeviceWaitIdleCountEXT() == deviceWaitBefore;
+            const Color bridged = DrawOrdinary(dev, bridge);
+            const std::uint64_t barrierDelta =
+                Renderer().GetLogicalResourceBarrierCountEXT() - barriersBefore;
+            check(imageProgram.isImageBindingSupported() && ordinaryRefused,
+                  "R Color RenderTarget2D has the compute-image bridge and ordinary Texture2D "
+                  "is refused");
+            check(Is(bridged, Color(192, 32, 64, 255)) && barrierDelta == 2 &&
+                      queuedWithoutWait,
+                  "S render-target write -> compute read/write -> sampled render is ordered: " +
+                      Text(bridged) + " barriers=" + std::to_string(barrierDelta));
+        }
+
         {
             using CNA::Graphics::ComputeShader;
             using CNA::Graphics::StorageTexture2D;

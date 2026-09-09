@@ -100,6 +100,12 @@ namespace CNA::Graphics {
         if (unit < 0)
             throw std::invalid_argument(
                 "CNA::Graphics::ComputeShader::bindImage: the image unit must not be negative");
+        if (texture.getIsDisposedProperty())
+            throw System::ObjectDisposedException("Texture2D");
+        if (texture.getGraphicsDeviceProperty() != &device_)
+            throw std::invalid_argument(
+                "CNA::Graphics::ComputeShader::bindImage: the texture belongs to another "
+                "GraphicsDevice");
         if (!isImageBindingSupported())
             throw System::NotSupportedException(
                 "CNA::Graphics::ComputeShader::bindImage: the '"
