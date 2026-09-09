@@ -896,8 +896,8 @@ behavior or a genuinely unimplemented feature).
 | `SimulatedLatency` / `SimulatedPacketLoss` | Implemented | Phase 6 — a real receive-side delayed-delivery queue / probabilistic drop on real ENet traffic, deterministic under test (injectable clock/seeded RNG); scoped to AppData delivered to local gamers, not session-management/relay traffic. |
 | `LocalNetworkGamer.SendData`/`ReceiveData`, `PacketReader`/`PacketWriter` | Implemented | Real serialization over the real transport. |
 | `NetworkSession.Dispose()` / lifecycle | Implemented | Phases 2, 12-14 — several confirmed real bugs (double-dispose use-after-free, async callbacks never invoked, enumerator null-deref after Dispose) found and fixed. |
-| `NetworkSessionType::PlayerMatch` / `Ranked` | Documented stub | No matchmaking renderer exists to implement them against; out of scope for a local/LAN-focused transport. |
-| Session invites (`InviteAcceptedEventArgs`, invite-based join) | Documented stub | Same reason as PlayerMatch/Ranked — no online invite renderer exists. |
+| `NetworkSessionType::PlayerMatch` / `Ranked` | Refused | No matchmaking service exists to implement them against; out of scope for a local/LAN-focused transport. `Create`/`Find` throw `GamerServicesNotAvailableException` naming the missing service rather than returning a session no peer can reach (SAMPLE-096, `misc/known_gaps.md`). |
+| Session invites (`InviteAcceptedEventArgs`, invite-based join) | Refused | Same reason as PlayerMatch/Ranked — no online invite service exists. `NetworkSession::InviteAccepted` is declared (it is real XNA API) but nothing can raise it, and `JoinInvited`/`EndJoinInvited` refuse rather than building a session from fixed values. |
 
 ---
 

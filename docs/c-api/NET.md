@@ -201,8 +201,12 @@ belongs to the process and takes no session handle.
 already in the session the instant a handler subscribes, so the callback fires before
 `cna_network_session_subscribe_gamer_joined` returns whenever the session is not empty.
 
-Nothing in the canonical implementation currently raises the three leaderboard events or
-`InviteAccepted`; their subscriptions are real and released normally, but no delivery happens yet.
+Nothing in the canonical implementation raises the three leaderboard events or `InviteAccepted`;
+their subscriptions are real and released normally, but no delivery happens. For `InviteAccepted`
+that is permanent rather than pending: there is no invitation service, which is also why the
+`join_invited` routes answer `CNA_RESULT_NOT_SUPPORTED` instead of returning a session assembled
+from fixed values. A `PlayerMatch` or `Ranked` create/find answers the same way, for the same
+reason. See `misc/known_gaps.md`.
 
 ## Discovery, join and the fake-async pairs
 

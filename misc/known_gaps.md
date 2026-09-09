@@ -96,28 +96,33 @@ on one type table.
 
 ---
 
-## 4. `PlayerMatch` and `Ranked` sessions are accepted, where XNA refuses them
+## 4. There is no online matchmaking or invitation service
 
 **Found:** 2026-09-09, through SAMPLE-096 (Invites).
+**Partly closed the same day:** the divergence half — see below.
 
 CNA implements real transport for exactly one `NetworkSessionType`. `ENetBackend::
-RealNetworkingEnabled` (`modules/net/src/Internal/ENetBackend.cpp:1147`) is
+RealNetworkingEnabled` (`modules/net/src/Internal/ENetBackend.cpp`) is
 
 ```cpp
 return sessionType == NetworkSessionType::SystemLink;
 ```
 
-and `Local`, `LocalWithLeaderboards`, `PlayerMatch` and `Ranked` are what the codebase calls
-**synthetic** types: `NetworkSessionTypePolicyTests.cpp` sweeps all four and asserts no port is
-bound, no discovery runs, `Update()` never throws and no wire traffic exists. That much is a
-deliberate, tested boundary, and it is not what this entry is about.
+`Local` and `LocalWithLeaderboards` are offline session types in XNA too, so a single machine
+genuinely is the whole session and nothing is missing about them. `PlayerMatch` and `Ranked` are
+different: they are Xbox LIVE matchmaking types, where the service finds the peers. There is no such
+service here, and none is planned. The same absence covers invitations — nothing can raise
+`NetworkSession::InviteAccepted`, because nothing delivers an invitation.
 
-What this entry is about is the **shape of the refusal**, because there is not one.
+### What was closed, and what remains
+
+The gap first recorded here was not the absence but the **silence about it**:
 
 | | `NetworkSession.Create(PlayerMatch, 4, 16)`, one local profile signed in, offline |
 |---|---|
-| Real XNA 4.0 | **throws**; the message names the signed-in-gamer and LIVE-profile requirement |
-| CNA `next` | **succeeds**; returns a session whose `SessionType` is `PlayerMatch`, with no port, no discovery and no peer that can ever arrive |
+| Real XNA 4.0 | throws; the message names the signed-in-gamer and LIVE-profile requirement |
+| CNA before 2026-09-09 | succeeded, returning a session of type `PlayerMatch` with no port, no discovery and no peer that could ever arrive |
+| CNA now | throws `GamerServicesNotAvailableException`, naming the missing service |
 
 The XNA half is a capture, not a reading: SAMPLE-096's unchanged `Invites.exe` under the local
 XNA 4.0 install on an isolated offline Xvfb signs in `Player1`, reaches the A/B menu, and answers A
@@ -125,20 +130,18 @@ with that error —
 `/rv/tmp/samples/SAMPLE-096-InvitesSample_4_0/evidence/original-windows-reach/02-after-local-sign-in.png`
 and `03-offline-player-match-create.png`.
 
-`NetworkSession::JoinInvited` behaves the same way. It does not refuse: it builds a
-`NetworkSession` of type `PlayerMatch` out of nothing (`NetworkSession.cpp`, `EndJoinInvited`),
-with no invitation token, no host address and no transport. A caller that follows XNA's own
-contract — subscribe to `InviteAccepted`, call `JoinInvited` from the handler — therefore gets a
-session object back rather than an error, and simply never sees another gamer.
+`Create`, `Find` and `JoinInvited` (with their `Begin*` forms) now refuse; `EndJoinInvited` refuses
+every result, because no `Begin` can produce one and completing a foreign result as an invited join
+was a way around the refusal. Through the C ABI all of these answer `CNA_RESULT_NOT_SUPPORTED`,
+whose own documented meaning is already "the platform has no gamer services at all".
 
-**Why this is a gap and not a bug.** Nothing here is broken relative to its own design; the
-synthetic-type policy is deliberate and covered by tests. But this project's platform rule is that
-*capabilities are promises: unsupported behavior refuses explicitly*, and these two entry points
-promise a matchmaking session and deliver an empty room. Closing it is a decision, not a repair.
+**`Join(AvailableNetworkSession*)` deliberately still accepts a `PlayerMatch` entry.** Its input can
+no longer come from `Find`, so such an entry can only be constructed directly by a binding, and
+`NetworkSessionTest.JoinDoesNotActivateTransportForSyntheticPlayerMatchSession` exists to keep that
+path from waiting on a handshake that will never arrive (a real SAMPLE-091 bug). Refusing there
+would delete that regression guard without closing anything a game can reach.
 
-**Closing it** means picking the refusal and stating it once: throw from `BeginCreate`/`BeginFind`
-for `PlayerMatch`/`Ranked`, and from `BeginJoinInvited` when no invitation is pending, with an
-exception a game can catch and display — which is exactly what SAMPLE-096 does with the message.
-The four `NetworkSessionTypePolicyTest` cases that construct synthetic sessions would move to
-asserting the refusal instead; `Local` and `LocalWithLeaderboards` are a separate question, since
-XNA genuinely supports both offline.
+**Closing the rest** means the service itself: identity, friends/presence, matchmaking, invitation
+delivery and address handoff, for native and browser. That is the scope `SAMPLES-DEC-004` and
+`SAMPLES-DEC-006` put to the owner, and it is why SAMPLE-096 is a non-port rather than a blocked
+port.

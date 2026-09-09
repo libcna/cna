@@ -13,10 +13,13 @@
 
 #include "CNA/Internal/Net/ENetBackend.hpp"
 #include "CNA/Internal/Net/ENetDiscoveryService.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/GameStartedEventArgs.hpp"
 #include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
+#include <any>
 #include <chrono>
 #include <string>
 #include <vector>
@@ -37,6 +40,21 @@ namespace {
     constexpr NetworkSessionType kSyntheticTypes[] = {
         NetworkSessionType::Local,
         NetworkSessionType::LocalWithLeaderboards,
+        NetworkSessionType::PlayerMatch,
+        NetworkSessionType::Ranked,
+    };
+
+    // The two synthetic types a game can still CREATE. Both are offline session types in XNA too,
+    // so a single machine really is the whole session and there is nothing missing about them.
+    constexpr NetworkSessionType kOfflineSyntheticTypes[] = {
+        NetworkSessionType::Local,
+        NetworkSessionType::LocalWithLeaderboards,
+    };
+
+    // The two that are refused (SAMPLE-096, misc/known_gaps.md). They are Xbox LIVE matchmaking
+    // types: the service finds the peers. With no service, a created session is a room no peer can
+    // reach, so create/find refuse instead of handing one back.
+    constexpr NetworkSessionType kMatchmakingTypes[] = {
         NetworkSessionType::PlayerMatch,
         NetworkSessionType::Ranked,
     };
@@ -68,14 +86,14 @@ TEST(NetworkSessionTypePolicyTest, RealNetworkingEnabledIsFalseForEverySynthetic
 }
 
 TEST(NetworkSessionTypePolicyTest, CreatingASessionNeverBindsARealPortForSyntheticTypes) {
-    for (NetworkSessionType type : kSyntheticTypes) {
+    for (NetworkSessionType type : kOfflineSyntheticTypes) {
         SyntheticSessionFixture fixture(type, "Player");
         EXPECT_EQ(ENetBackend::GetBoundPort(fixture.session), 0) << "type=" << static_cast<int>(type);
     }
 }
 
 TEST(NetworkSessionTypePolicyTest, UpdateNeverBindsAPortOrThrowsForSyntheticTypes) {
-    for (NetworkSessionType type : kSyntheticTypes) {
+    for (NetworkSessionType type : kOfflineSyntheticTypes) {
         SyntheticSessionFixture fixture(type, "Player");
         EXPECT_NO_THROW(fixture.session->Update());
         EXPECT_EQ(ENetBackend::GetBoundPort(fixture.session), 0) << "type=" << static_cast<int>(type);
@@ -83,7 +101,7 @@ TEST(NetworkSessionTypePolicyTest, UpdateNeverBindsAPortOrThrowsForSyntheticType
 }
 
 TEST(NetworkSessionTypePolicyTest, ConnectToHostIsNoOpForEverySyntheticType) {
-    for (NetworkSessionType type : kSyntheticTypes) {
+    for (NetworkSessionType type : kOfflineSyntheticTypes) {
         SyntheticSessionFixture fixture(type, "Player");
         EXPECT_NO_THROW(ENetBackend::ConnectToHost(fixture.session, "127.0.0.1", 12345));
         EXPECT_EQ(fixture.session->getAllGamersProperty().getCountProperty(), 1) << "type=" << static_cast<int>(type);
@@ -92,7 +110,7 @@ TEST(NetworkSessionTypePolicyTest, ConnectToHostIsNoOpForEverySyntheticType) {
 }
 
 TEST(NetworkSessionTypePolicyTest, SendDataStaysFullySyntheticForEverySyntheticType) {
-    for (NetworkSessionType type : kSyntheticTypes) {
+    for (NetworkSessionType type : kOfflineSyntheticTypes) {
         SyntheticSessionFixture fixture(type, "Player");
         LocalNetworkGamer* gamer = fixture.session->getLocalGamersProperty()[0];
 
@@ -108,7 +126,7 @@ TEST(NetworkSessionTypePolicyTest, SendDataStaysFullySyntheticForEverySyntheticT
 }
 
 TEST(NetworkSessionTypePolicyTest, StartGameEndGameWorkLocallyButNeverBindAPortForSyntheticTypes) {
-    for (NetworkSessionType type : kSyntheticTypes) {
+    for (NetworkSessionType type : kOfflineSyntheticTypes) {
         SyntheticSessionFixture fixture(type, "Player");
 
         int startedCount = 0;
@@ -142,4 +160,80 @@ TEST(NetworkSessionTypePolicyTest, FindReturnsEmptyImmediatelyForEverySyntheticT
         // nothing after paying the full window's cost.
         EXPECT_LT(elapsedMs, 50) << "type=" << static_cast<int>(type);
     }
+}
+
+// SAMPLE-096 (Invites) measured the gap this closes: real XNA refuses
+// NetworkSession.Create(PlayerMatch, ...) for a signed-in profile that is not LIVE-eligible and the
+// sample prints the reason on screen, while CNA used to succeed and hand back a session with no
+// port, no discovery and no peer that could ever arrive. The synthetic no-op policy above is
+// deliberate; having no refusal was not.
+TEST(NetworkSessionTypePolicyTest, CreateRefusesEveryMatchmakingType) {
+    SignedInGamer gamer = SignedInGamer::CreateInternal("Player");
+    for (NetworkSessionType type : kMatchmakingTypes) {
+        EXPECT_THROW(
+            NetworkSession::Create(type, std::vector<SignedInGamer*>{&gamer}, 8, 0,
+                                   NetworkSessionProperties{}),
+            Microsoft::Xna::Framework::GamerServices::GamerServicesNotAvailableException
+        ) << "type=" << static_cast<int>(type);
+        EXPECT_THROW(
+            NetworkSession::Create(type, 1, 8),
+            Microsoft::Xna::Framework::GamerServices::GamerServicesNotAvailableException
+        ) << "type=" << static_cast<int>(type);
+    }
+}
+
+TEST(NetworkSessionTypePolicyTest, FindRefusesEveryMatchmakingType) {
+    SignedInGamer gamer = SignedInGamer::CreateInternal("Player");
+    for (NetworkSessionType type : kMatchmakingTypes) {
+        EXPECT_THROW(
+            NetworkSession::Find(type, 1, NetworkSessionProperties{}),
+            Microsoft::Xna::Framework::GamerServices::GamerServicesNotAvailableException
+        ) << "type=" << static_cast<int>(type);
+        EXPECT_THROW(
+            NetworkSession::Find(type, std::vector<SignedInGamer*>{&gamer},
+                                 NetworkSessionProperties{}),
+            Microsoft::Xna::Framework::GamerServices::GamerServicesNotAvailableException
+        ) << "type=" << static_cast<int>(type);
+    }
+}
+
+// A refusal that leaves activeAction_/activeSession_ set would brick every later Begin* call for
+// the rest of the process (the failure mode Task 6.1 already fixed for a throwing constructor), so
+// prove the refusing path is reachable twice and that an ordinary SystemLink-shaped call still
+// works afterwards.
+TEST(NetworkSessionTypePolicyTest, ARefusedTypeLeavesNoPendingActionBehind) {
+    EXPECT_THROW(
+        NetworkSession::Create(NetworkSessionType::PlayerMatch, 1, 8),
+        Microsoft::Xna::Framework::GamerServices::GamerServicesNotAvailableException
+    );
+    EXPECT_THROW(
+        NetworkSession::Create(NetworkSessionType::PlayerMatch, 1, 8),
+        Microsoft::Xna::Framework::GamerServices::GamerServicesNotAvailableException
+    );
+
+    SyntheticSessionFixture fixture(NetworkSessionType::Local, "Player");
+    EXPECT_EQ(fixture.session->getSessionTypeProperty(), NetworkSessionType::Local);
+}
+
+// XNA's contract calls JoinInvited from an InviteAccepted handler. Nothing raises that event here,
+// so no invitation can be pending; the old behaviour built a PlayerMatch session out of nothing.
+TEST(NetworkSessionTypePolicyTest, JoinInvitedRefusesBecauseNoInvitationCanBePending) {
+    SignedInGamer gamer = SignedInGamer::CreateInternal("Player");
+    EXPECT_THROW(
+        NetworkSession::JoinInvited(1),
+        Microsoft::Xna::Framework::GamerServices::GamerServicesNotAvailableException
+    );
+    EXPECT_THROW(
+        NetworkSession::JoinInvited(std::vector<SignedInGamer*>{&gamer}),
+        Microsoft::Xna::Framework::GamerServices::GamerServicesNotAvailableException
+    );
+    EXPECT_THROW(
+        NetworkSession::BeginJoinInvited(1, System::AsyncCallback{}, std::any{}),
+        Microsoft::Xna::Framework::GamerServices::GamerServicesNotAvailableException
+    );
+    // Argument validation still wins over the refusal, as it does everywhere else here.
+    EXPECT_THROW(
+        NetworkSession::BeginJoinInvited(0, System::AsyncCallback{}, std::any{}),
+        System::ArgumentOutOfRangeException
+    );
 }
