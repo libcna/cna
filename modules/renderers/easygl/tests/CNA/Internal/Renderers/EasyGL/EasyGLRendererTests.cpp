@@ -366,9 +366,6 @@ TEST(EasyGLSurfaceState, InvalidScaleFallsBackToUnscaledClientCoordinates)
     EXPECT_EQ(height, 180);
 }
 
-} // namespace
-#endif
-
 // Letterbox is the default presentation mode since 2026-09-08, and it is the only one of the five
 // that reproduces XNA: GraphicsDevice.Viewport is the backbuffer whatever shape the window is.
 // The pair of numbers below is exactly what Yacht needs -- a 480x800 phone backbuffer presented
@@ -452,3 +449,6 @@ TEST(EasyGLDepthBias, DepthFormatOrdinalsMapToTheirRealPrecision)
     // against no depth buffer cannot be observed.
     EXPECT_EQ(CNA::Internal::Renderers::EasyGL::EasyGLDepthBufferBits(0), 24);
 }
+
+} // namespace
+#endif
