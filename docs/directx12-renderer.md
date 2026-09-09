@@ -145,12 +145,12 @@ instead of the shared renderer-neutral fixture.
 
 ## Known limitations (2026-09-09)
 
-- **Per-call GPU synchronization remains.** Draws, clears, resolves and uploads normally close,
-  submit and wait on their own command list. The two allocator slots do not yet provide frame-scoped
-  pipelining. `DX-237` owns frame recording and constant-buffer lifetime; `DX-238` then owns the
-  upload ring and differential `SetDataOptions` behavior.
-- **An occlusion query spans one draw.** The synchronous draw architecture brackets each draw
-  independently, so a query cannot yet accumulate several draws. `DX-240` depends on `DX-237`.
+- **CPU-visible operations remain synchronization boundaries.** `DX-237` records clears, draws and
+  resolves per frame, while `DX-238` stages buffer and texture uploads through persistently mapped
+  frame rings. CPU texture/back-buffer readback, CPU mip generation, resize/recreation and teardown
+  still submit pending work and wait deliberately. Occlusion queries are asynchronous since
+  `DX-240`: public `Begin()`/`End()` span any number of frame-list draws and `IsComplete()` polls the
+  resolve fence without forcing a submit or wait.
 - **Plain Wine cannot create the swap chain used by this vkd3d-proton build.** The matched
   `scripts/run-proton-vkd3d.sh` launch is required for windowed tests. This is not an untested-only
   path: `BackbufferResize`, `RealWindowResize` and `ViewportResetAfterResize` are registered

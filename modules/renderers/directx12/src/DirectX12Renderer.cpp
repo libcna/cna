@@ -2754,9 +2754,6 @@ namespace CNA::Internal::Renderers::DirectX12
 
         ID3D12GraphicsCommandList* cmdList = GetFrameCommandListEXT();
         RetainFrameObjectEXT(d3dVb.GetResourceEXT());
-        // DX-120: see activeOcclusionQueryHeap_'s own doc comment -- BeginQuery/EndQuery must
-        // share this exact command-list submission with the draw below.
-        if (activeOcclusionQueryHeap_) cmdList->BeginQuery(activeOcclusionQueryHeap_, D3D12_QUERY_TYPE_OCCLUSION, 0);
 
         TransitionAndBindRenderTargetsEXT(cmdList);
 
@@ -2781,8 +2778,6 @@ namespace CNA::Internal::Renderers::DirectX12
 
         const UINT vertexCount = static_cast<UINT>(VertexCountForPrimitives(primitive, primitiveCount));
         cmdList->DrawInstanced(vertexCount, 1, 0, 0);
-
-        if (activeOcclusionQueryHeap_) cmdList->EndQuery(activeOcclusionQueryHeap_, D3D12_QUERY_TYPE_OCCLUSION, 0);
     }
 
     void DirectX12Renderer::DrawIndexedColoredPrimitives(
@@ -2843,9 +2838,6 @@ namespace CNA::Internal::Renderers::DirectX12
         ID3D12GraphicsCommandList* cmdList = GetFrameCommandListEXT();
         RetainFrameObjectEXT(d3dVb.GetResourceEXT());
         RetainFrameObjectEXT(d3dIb.GetResourceEXT());
-        // DX-120: see activeOcclusionQueryHeap_'s own doc comment -- BeginQuery/EndQuery must
-        // share this exact command-list submission with the draw below.
-        if (activeOcclusionQueryHeap_) cmdList->BeginQuery(activeOcclusionQueryHeap_, D3D12_QUERY_TYPE_OCCLUSION, 0);
 
         TransitionAndBindRenderTargetsEXT(cmdList);
 
@@ -2872,8 +2864,6 @@ namespace CNA::Internal::Renderers::DirectX12
 
         const UINT indexCount = static_cast<UINT>(VertexCountForPrimitives(primitive, primitiveCount));
         cmdList->DrawIndexedInstanced(indexCount, 1, 0, 0, 0);
-
-        if (activeOcclusionQueryHeap_) cmdList->EndQuery(activeOcclusionQueryHeap_, D3D12_QUERY_TYPE_OCCLUSION, 0);
     }
 
     // DX-111 (continued): extends the colored3d-only pipeline above to textured3d/colored_textured3d/
@@ -2969,9 +2959,6 @@ namespace CNA::Internal::Renderers::DirectX12
                 samplerHandles[static_cast<std::size_t>(slot)] =
                     GetSamplerGpuHandleEXT(slot);
 
-            if (activeOcclusionQueryHeap_)
-                cmdList->BeginQuery(activeOcclusionQueryHeap_, D3D12_QUERY_TYPE_OCCLUSION, 0);
-
             TransitionAndBindRenderTargetsEXT(cmdList);
             const D3D12_VIEWPORT viewport = GetEffectiveViewportEXT();
             const D3D12_RECT scissor = GetEffectiveScissorEXT();
@@ -3033,8 +3020,6 @@ namespace CNA::Internal::Renderers::DirectX12
                 cmdList->DrawInstanced(
                     elementCount, 1, static_cast<UINT>(params.vertexStart), 0);
 
-            if (activeOcclusionQueryHeap_)
-                cmdList->EndQuery(activeOcclusionQueryHeap_, D3D12_QUERY_TYPE_OCCLUSION, 0);
             return;
         }
 
@@ -3755,9 +3740,6 @@ namespace CNA::Internal::Renderers::DirectX12
         if (ib != nullptr)
             RetainFrameObjectEXT(
                 static_cast<const D3D12IndexBufferRenderer&>(*ib).GetResourceEXT());
-        // DX-120: see activeOcclusionQueryHeap_'s own doc comment -- BeginQuery/EndQuery must
-        // share this exact command-list submission with the draw below.
-        if (activeOcclusionQueryHeap_) cmdList->BeginQuery(activeOcclusionQueryHeap_, D3D12_QUERY_TYPE_OCCLUSION, 0);
 
         TransitionAndBindRenderTargetsEXT(cmdList);
 
@@ -3832,7 +3814,6 @@ namespace CNA::Internal::Renderers::DirectX12
             cmdList->DrawInstanced(vertexCount, 1, static_cast<UINT>(params.vertexStart), 0);
         }
 
-        if (activeOcclusionQueryHeap_) cmdList->EndQuery(activeOcclusionQueryHeap_, D3D12_QUERY_TYPE_OCCLUSION, 0);
     }
 
     void DirectX12Renderer::DrawPrimitivesEx(
@@ -3925,9 +3906,6 @@ namespace CNA::Internal::Renderers::DirectX12
                 params.vertexStreams[static_cast<std::size_t>(stream)].buffer);
             if (buffer) RetainFrameObjectEXT(buffer->GetResourceEXT());
         }
-        // DX-120: see activeOcclusionQueryHeap_'s own doc comment -- BeginQuery/EndQuery must
-        // share this exact command-list submission with the draw below.
-        if (activeOcclusionQueryHeap_) cmdList->BeginQuery(activeOcclusionQueryHeap_, D3D12_QUERY_TYPE_OCCLUSION, 0);
 
         TransitionAndBindRenderTargetsEXT(cmdList);
 
@@ -3958,7 +3936,6 @@ namespace CNA::Internal::Renderers::DirectX12
                                       static_cast<UINT>(params.startIndex),
                                       static_cast<INT>(params.baseVertex), 0);
 
-        if (activeOcclusionQueryHeap_) cmdList->EndQuery(activeOcclusionQueryHeap_, D3D12_QUERY_TYPE_OCCLUSION, 0);
     }
 }
 

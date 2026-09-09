@@ -574,6 +574,14 @@ namespace CNA::Internal::Renderers::DirectX12
         void RetainFrameObjectEXT(IUnknown* object);
         /** @brief Submits the currently open frame list without waiting for its new fence. */
         std::uint64_t SubmitFrameCommandsEXT();
+        /** @brief Returns the fence value reserved for the open frame list, or zero if none is open.
+         *
+         * @return The monotonically increasing value that submission of the current list will signal.
+         */
+        [[nodiscard]] std::uint64_t GetActiveFrameFenceValueEXT() const noexcept
+        {
+            return activeFrameFenceValue_;
+        }
         /** @brief Submits all pending work and waits for the shared GPU fence to complete. */
         void WaitForGpuIdleEXT() { WaitForGpuIdle(); }
         /** @brief Number of actual waits required before a busy frame slot could be reused. */
@@ -731,14 +739,6 @@ namespace CNA::Internal::Renderers::DirectX12
          *  (1,1,1) shape already established by alpha_test3d, same binding-slot layout sprite2d
          *  needs: 1 CBV @ b0, 1 SRV @ t0, 1 static sampler @ s0). */
         [[nodiscard]] D3D12RootSignatureCache& GetRootSignatureCacheEXT() { return rootSigCache_; }
-
-        /** @brief DX-120 CNAEXT: sets or clears the active slot-zero occlusion-query heap.
-         *
-         * Draw methods currently bracket each individual draw with BeginQuery/EndQuery on the
-         * shared frame list. This preserves the established one-draw contract; DX-240 moves the
-         * begin/end commands to the public query boundaries so one query can span several draws.
-         */
-        void SetActiveOcclusionQueryEXT(ID3D12QueryHeap* heap) { activeOcclusionQueryHeap_ = heap; }
 
     private:
         std::shared_ptr<void> lifetimeToken_ = std::make_shared<int>(0);
@@ -1132,12 +1132,5 @@ namespace CNA::Internal::Renderers::DirectX12
         IRenderTargetRenderer* currentMrtTargets_[kMaxMrtTargets] = {};
         int currentMrtCount_ = 0;
 
-        // DX-120: the currently-active occlusion query heap (non-owning, nullptr when no query is
-        // active), always slot 0. Real, non-obvious constraint discovered while landing DX-120:
-        // BeginQuery()/EndQuery() must be recorded in the same command-list submission as the draws
-        // they bracket. The current implementation wraps each draw individually on the shared frame
-        // list, preserving the original one-draw behavior. DX-240 moves those commands to the query
-        // object's Begin()/End() boundaries to support multi-draw accumulation.
-        ID3D12QueryHeap* activeOcclusionQueryHeap_ = nullptr;
     };
 }

@@ -1,4 +1,4 @@
-// plans/plan_dx.md Phase DX13 (DX-120).
+// plans/plan_dx.md DX-120/DX-240.
 #include "CNA/Internal/Renderers/DirectX12/D3D12OcclusionQuery.hpp"
 #include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
 
@@ -55,55 +55,64 @@ namespace CNA::Internal::Renderers::DirectX12
             throw std::runtime_error("D3D12OcclusionQueryRenderer: readback CreateCommittedResource failed, hr=" + FormatHr(hr));
     }
 
+    D3D12OcclusionQueryRenderer::~D3D12OcclusionQueryRenderer()
+    {
+        if (!active_ || !renderer_)
+            return;
+
+        // FNA does not validate an active query's disposal. Balance the native command so the
+        // shared frame list remains valid, but do not manufacture a result for a disposed object.
+        try
+        {
+            ID3D12GraphicsCommandList* cmdList = renderer_->GetFrameCommandListEXT();
+            renderer_->RetainFrameObjectEXT(queryHeap_.Get());
+            cmdList->EndQuery(queryHeap_.Get(), D3D12_QUERY_TYPE_OCCLUSION, 0);
+        }
+        catch (...)
+        {
+            // Destruction cannot recover a renderer that is itself being torn down.
+        }
+    }
+
     void D3D12OcclusionQueryRenderer::Begin()
     {
-        // Real, non-obvious constraint found while landing this task: BeginQuery()/EndQuery() must
-        // be recorded within the SAME command-list submission as the draw(s) they bracket (a
-        // Vulkan/vkd3d-proton requirement) -- a genuinely separate Begin()-only submission here,
-        // followed by the game's own separately-submitted draw call(s), followed by a separately-
-        // submitted End(), does NOT correctly capture any samples (confirmed: PixelCount() reported
-        // 0 for a visible full-viewport triangle before this fix). Rather than record BeginQuery
-        // here, this now just marks the query heap "active" on the owning renderer --
-        // DirectX12Renderer's own draw-recording methods (DrawColoredPrimitives/
-        // DrawIndexedColoredPrimitives/DrawPrimitivesExImpl/DrawInstancedPrimitivesEx) check
-        // SetActiveOcclusionQueryEXT()'s tracked heap and record BeginQuery/EndQuery around their
-        // own single command-list submission when set -- correct for exactly one draw call between
-        // Begin()/End() (see this class's own header doc comment for the multi-draw gap).
-        resolved_ = false;
-        renderer_->SetActiveOcclusionQueryEXT(queryHeap_.Get());
+        // FNA forwards invalid sequences without validation. A duplicate Begin therefore remains
+        // non-throwing, but must not emit an invalid nested D3D12 query command.
+        if (active_)
+            return;
+
+        ID3D12GraphicsCommandList* cmdList = renderer_->GetFrameCommandListEXT();
+        renderer_->RetainFrameObjectEXT(queryHeap_.Get());
+        cmdList->BeginQuery(queryHeap_.Get(), D3D12_QUERY_TYPE_OCCLUSION, 0);
+        completionFenceValue_ = 0;
+        active_ = true;
     }
 
     void D3D12OcclusionQueryRenderer::End()
     {
-        renderer_->SetActiveOcclusionQueryEXT(nullptr);
+        // Preserve FNA's non-throwing End-before-Begin and duplicate-End behavior without recording
+        // an unmatched native EndQuery command.
+        if (!active_)
+            return;
 
-        // The EndQuery() itself already happened inside the intervening draw call's own command
-        // list (see Begin()'s own doc comment) -- this submission only resolves the now-complete
-        // query result into the CPU-readable readback buffer.
-        ID3D12GraphicsCommandList* cmdList = renderer_->BeginImmediateCommandsEXT();
-
+        ID3D12GraphicsCommandList* cmdList = renderer_->GetFrameCommandListEXT();
+        renderer_->RetainFrameObjectEXT(queryHeap_.Get());
+        renderer_->RetainFrameObjectEXT(readbackBuffer_.Get());
+        cmdList->EndQuery(queryHeap_.Get(), D3D12_QUERY_TYPE_OCCLUSION, 0);
         cmdList->ResolveQueryData(queryHeap_.Get(), D3D12_QUERY_TYPE_OCCLUSION, 0, 1, readbackBuffer_.Get(), 0);
-
-        HRESULT hr = cmdList->Close();
-        if (FAILED(hr))
-            throw std::runtime_error("D3D12OcclusionQueryRenderer::End: command list Close failed, hr=" + FormatHr(hr));
-        renderer_->ExecuteCommandListAndWaitEXT(cmdList);
-
-        // ExecuteCommandListAndWaitEXT only returns once the GPU has genuinely finished this
-        // submission, including the ResolveQueryData call above -- see this class's own header
-        // doc comment for why that makes "complete" trivially true here, unlike D3D11's async
-        // GetData(DONOTFLUSH) polling.
-        resolved_ = true;
+        completionFenceValue_ = renderer_->GetActiveFrameFenceValueEXT();
+        active_ = false;
     }
 
     bool D3D12OcclusionQueryRenderer::IsComplete() const
     {
-        return resolved_;
+        return completionFenceValue_ != 0 &&
+               renderer_->GetFenceEXT()->GetCompletedValue() >= completionFenceValue_;
     }
 
     int D3D12OcclusionQueryRenderer::PixelCount() const
     {
-        if (!resolved_) return 0;
+        if (!IsComplete()) return 0;
 
         std::uint64_t count = 0;
         void* mapped = nullptr;
