@@ -675,7 +675,7 @@ namespace
         {
             ADD_FAILURE() << what << " did not finish within " << seconds << " seconds.";
             std::cerr.flush();
-            std::quick_exit(1);
+            ::_Exit(1);
         }
         pending.get();
     }
