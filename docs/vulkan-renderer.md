@@ -133,9 +133,18 @@ names render-target, sampled, vertex and index uses so later bridges do not expo
 state. `MOD-2249` adds storage-image uploads as immutable staging-backed records in that order:
 upload → compute → upload performs no immediate submit or wait, and a requested image readback
 records that complete dependency chain plus its copy in one synchronous submission. The staging
-allocation retires behind the consuming frame fence. `MOD-2250`–`MOD-2253` own the remaining
-renderer paths and transition/readback stalls. Optional extended storage-image formats and legal
-bridges from existing XNA textures/render targets remain `MOD-2244`; the dedicated
+allocation retires behind the consuming frame fence. `MOD-2250` reflects readonly storage-buffer
+descriptors from SPIR-V set 2 for both vertex and fragment stages, builds an exact immutable draw
+set, and retains every buffer in the accepted SpriteBatch/3D snapshot. The logical tracker emits a
+compute-write to vertex/fragment-shader-read transition immediately before the consuming render
+pass; an indirect command from the same dispatch independently transitions to indirect fetch. The
+11-leg native oracle moves one GPU-authored instance left and right, changes its fragment result,
+then writes a zero instance count, without CPU buffer readback or a routine submit. It reports the
+exact twelve steady-state hazards, survives disposing both public buffers after the final draw was
+accepted, and emits zero validation messages on RADV and llvmpipe. `MOD-2251`–
+`MOD-2253` own the remaining renderer paths and transition/readback stalls. Optional extended
+storage-image formats and legal bridges from existing XNA textures/render targets remain
+`MOD-2244`; the dedicated
 `StorageTexture2D` path is claimed here.
 
 ### Indirect drawing

@@ -46,6 +46,9 @@ namespace CNA::Internal::Renderers::Vulkan
         ShaderRead,
         ShaderWrite,
         ShaderReadWrite,
+        VertexShaderRead,
+        FragmentShaderRead,
+        GraphicsShaderRead,
         RenderTargetWrite,
         SampledRead,
         IndirectRead,
@@ -897,6 +900,15 @@ namespace CNA::Internal::Renderers::Vulkan
          * says -- which is why the layout is created with all four bindings written.
          */
         VkDescriptorSet GetOrCreateBoundTextureSetEXT();
+        /**
+         * @brief Builds the immutable set-2 storage-buffer snapshot required by this effect.
+         *
+         * @param uses Receives shared buffer records and their reflected graphics-stage intent.
+         * @return Descriptor set two, or null when neither shader declares a storage buffer.
+         */
+        VkDescriptorSet GetOrCreateDrawStorageSetEXT(
+            std::vector<std::pair<std::shared_ptr<VulkanStorageBufferRenderer>,
+                                  VulkanResourceIntent>>& uses);
         /// VULKAN-253: creates the set-1 layout if it does not exist yet. Called from
         /// CompileProgram, because the pipeline layout must declare the set before any
         /// pipeline is made from it, and again from the set builder.
@@ -947,6 +959,17 @@ namespace CNA::Internal::Renderers::Vulkan
         /// XNA the texture at sampler register `u` is governed by `SamplerStates[u]`, so unit 1
         /// can differ from unit 0 and the freshness test has to see that.
         std::array<VkSampler, kMaxEffectBoundTextures> boundSetSamplers_{};
+        struct DrawStorageBindingEXT
+        {
+            std::uint32_t binding = 0;
+            VkShaderStageFlags stages = 0;
+        };
+        std::vector<DrawStorageBindingEXT> drawStorageBindings_;
+        static constexpr std::uint32_t DrawStorageSetCapacity = 64;
+        VkDescriptorSetLayout drawStorageLayout_ = VK_NULL_HANDLE;
+        VkDescriptorPool drawStoragePool_ = VK_NULL_HANDLE;
+        VkDescriptorSet drawStorageSet_ = VK_NULL_HANDLE;
+        std::vector<std::weak_ptr<VulkanStorageBufferRenderer>> drawStorageSetBuffers_;
         /// VULKAN-252: the CPU-side copy of the four arrays, in the layout the buffer holds. Each
         /// element occupies 16 bytes for `float`, `vec2` and `vec3` alike, which is what std140
         /// does to an array of any of them -- so a shader declaring `float uFloats[72]` reads
@@ -1146,6 +1169,10 @@ namespace CNA::Internal::Renderers::Vulkan
             /// End() cannot change what the recorded frame samples. VK_NULL_HANDLE when the effect
             /// bound nothing, in which case the replay binds no second set at all.
             VkDescriptorSet             customBoundSet  = VK_NULL_HANDLE;
+            /// MOD-2250: reflected set-2 storage buffers and their retained native records.
+            VkDescriptorSet             customStorageSet = VK_NULL_HANDLE;
+            std::vector<std::pair<std::shared_ptr<VulkanStorageBufferRenderer>,
+                                  VulkanResourceIntent>> customStorageBuffers;
             // REMED-GFX-013: scissor state captured at End() so a SpriteBatch filling a render
             // target is clipped correctly regardless of later frame-global scissor changes (e.g.
             // Task 338's ScissorRectangle reset on RT unbind). enabled==false or a zero-sized rect
@@ -3670,6 +3697,21 @@ namespace CNA::Internal::Renderers::Vulkan
         [[nodiscard]] int GetMaxComputeStorageBufferBindingsEXT() const override;
 
         /**
+         * @brief Returns the native vertex-stage storage-buffer descriptor ceiling.
+         * @return Maximum readable storage-buffer blocks, or zero when the draw path is unavailable.
+         */
+        [[nodiscard]] int GetMaxVertexShaderStorageBlocksEXT() const override;
+
+        /**
+         * @brief Selects one storage buffer for a following reflected graphics-shader binding.
+         *
+         * @param binding SPIR-V descriptor-set-two binding number.
+         * @param buffer Live storage-buffer record to snapshot when the draw is accepted.
+         */
+        void BindStorageBufferForDrawEXT(
+            int binding, const IStorageBufferRenderer& buffer) override;
+
+        /**
          * @brief Returns zero until sampled texture arrays are implemented by MOD-2243.
          * @return Zero in the current implementation.
          */
@@ -4488,6 +4530,8 @@ namespace CNA::Internal::Renderers::Vulkan
         std::vector<VulkanComputeShaderRenderer*> liveComputeShaders_;
         std::vector<VulkanGpuTimerRenderer*>       liveGpuTimers_;
         VulkanComputeShaderRenderer* boundComputeShader_ = nullptr;
+        std::unordered_map<std::uint32_t, std::weak_ptr<VulkanStorageBufferRenderer>>
+            boundDrawStorageBuffers_;
         // VULKAN-407: the three classes that were in no list at all. Without them a Texture3D,
         // TextureCube or RenderTargetCube outliving its GraphicsDevice leaked every Vulkan object
         // it owned and read a destroyed VulkanRenderer on the way out.
@@ -4564,6 +4608,10 @@ namespace CNA::Internal::Renderers::Vulkan
             VkPipelineLayout        customLayout    = VK_NULL_HANDLE;
             /// The effect's set-1 descriptor set: bound textures and the array uniforms.
             VkDescriptorSet         customBoundSet  = VK_NULL_HANDLE;
+            /// MOD-2250: reflected set-2 graphics storage-buffer descriptors and lifetimes.
+            VkDescriptorSet         customStorageSet = VK_NULL_HANDLE;
+            std::vector<std::pair<std::shared_ptr<VulkanStorageBufferRenderer>,
+                                  VulkanResourceIntent>> customStorageBuffers;
             // Task 899: true for BasicEffect draws with no alpha-test/dual-tex/env-map/skinned/
             // lit-textured override (stride 16/20/24) -- routes to the new fog-capable
             // colored3d/textured3d/colored_textured3d bundle. Left false (default) by the legacy

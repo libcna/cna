@@ -231,10 +231,10 @@ tree, not about native API potential.
 | MOD-2244 | Partial | Vulkan now has the dedicated format-qualified `rgba8` storage-image path used by `MOD-2228`; optional extended formats and legal bridges from supported existing XNA textures/render targets remain open. |
 | MOD-2245 | Supplied | Vulkan gates on enabled `drawIndirectFirstInstance`, executes both canonical commands without CPU readback, preserves every geometry/instance offset, retains deferred argument lifetime and inserts the automatic indirect-read dependency. The six-leg oracle passes on RADV and llvmpipe. |
 | MOD-2246 | Supplied | Vulkan recycles two-slot timestamp pools, converts with the selected device period, polls without blocking and integrates optional debug-utils labels/messages with one logger copy. The eight-leg native oracle passes on RADV and llvmpipe. |
-| MOD-2247 | Partial | Timestamp/debug records now share the XNA command-order counter and replay domain, but the current compute slice still uses a separate synchronous submission boundary. |
-| MOD-2248 | Absent | No internal logical resource-usage tracker. |
-| MOD-2249 | Partial | The current buffer compute path emits host/compute barriers, but routine dispatch completion still waits synchronously. |
-| MOD-2250 | Partial | Compute-write to indirect-command fetch is automatic and tested without readback; storage-buffer vertex/fragment consumption and full GPU-driven stale-frame oracles remain. |
+| MOD-2247 | Supplied | Immutable compute, buffer-copy and image-upload records share the existing XNA ordering/segment domain; routine dispatch/copy add no separate submission or wait. |
+| MOD-2248 | Supplied | Per-buffer and per-image-subresource logical usage derives exact Vulkan barriers internally and elides compatible repeated reads. |
+| MOD-2249 | Supplied | Storage-image uploads are immutable ordered records; one requested readback records upload/compute/upload plus copy in one synchronous submission. |
+| MOD-2250 | Supplied | Reflected readonly set-2 storage buffers feed vertex and fragment stages from immutable retained draw snapshots. A compute-authored transform, fragment value and indirect count prove fresh left/right/zero frames with exact dependencies on RADV and llvmpipe. |
 | MOD-2251 | Absent | No two-way render-target/storage-image transition path. |
 | MOD-2252 | Partial | Arrays, storage images and buffers use tracked records and fence retirement; indirect arguments and timer query pools have early-disposal coverage. Shader and resize/teardown matrix coverage remains. |
 | MOD-2253 | Partial | Compute descriptors and per-timer query pools are bounded/reused, and timing adds no routine global wait; broader modern allocators and the older synchronous compute/readback boundaries remain open. |

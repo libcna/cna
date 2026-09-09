@@ -24,8 +24,11 @@ buffer copies in that order as immutable records, splitting render passes at the
 positions. `MOD-2248` added the internal logical-use state machine and per-mip image state, replacing
 the coarse modern-command barriers with exact buffer/image dependencies and eliding compatible
 read-after-read uses. `MOD-2249` placed immutable storage-image uploads in that same order and
-folded their dependency closure into the single requested image-readback submission. Remaining
-bridges and narrow readback stalls are owned by `MOD-2250`–`MOD-2253`.
+folded their dependency closure into the single requested image-readback submission. `MOD-2250`
+reflects readonly graphics storage buffers into immutable retained descriptor snapshots
+and derives compute-write to vertex/fragment-read plus indirect-fetch dependencies at the exact
+consuming segment. Remaining bridges and narrow readback stalls are owned by `MOD-2251`–
+`MOD-2253`.
 
 ## Decision
 

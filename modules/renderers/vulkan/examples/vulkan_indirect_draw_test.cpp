@@ -6,9 +6,12 @@
 // C  The indexed command preserves binding offset + FirstIndex + BaseVertex independently.
 // D  BaseInstance selects one retained per-instance record even after public buffer disposal.
 // E  A compute shader writes the indexed command and the draw consumes it without CPU readback.
-// F  SpriteBatch -> compute -> copy -> XNA 3D -> indirect -> present remains one ordered submit.
-// G  Deferred compute/copy add no one-time submission or queue-wide wait.
-// H  No Vulkan validation message is added by the complete exercise.
+// F  A native SPIR-V effect reflects and binds a sparse vertex-stage storage-buffer slot.
+// G  Compute-written data drive fresh left, right, and culled frames through early disposal.
+// H  The compute-to-graphics path adds no one-time submission and records both dependencies.
+// I  SpriteBatch -> compute -> copy -> XNA 3D -> indirect -> present remains one ordered submit.
+// J  Deferred compute/copy add no one-time submission or queue-wide wait.
+// K  No Vulkan validation message is added by the complete exercise.
 
 #include "CNA/Graphics/ComputeShader.hpp"
 #include "CNA/Graphics/StorageBuffer.hpp"
@@ -33,6 +36,7 @@
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
@@ -166,6 +170,184 @@ namespace
         return std::string(
             reinterpret_cast<const char*>(kWriteIndexedCommandSpirV),
             sizeof(kWriteIndexedCommandSpirV));
+    }
+
+    // Offline libshaderc output. Compute writes one instance transform plus its indexed indirect
+    // command; the vertex shader reads that transform from descriptor set 2, binding 6. The
+    // compute module is intentionally unoptimized so its push-constant member names survive for
+    // the renderer's named-scalar reflection.
+    constexpr std::uint32_t kDrawStorageComputeSpirV[] = {
+        0x07230203u, 0x00010000u, 0x000d000bu, 0x0000003bu, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
+        0x00000001u, 0x4c534c47u, 0x6474732eu, 0x3035342eu, 0x00000000u, 0x0003000eu, 0x00000000u, 0x00000001u,
+        0x0005000fu, 0x00000005u, 0x00000004u, 0x6e69616du, 0x00000000u, 0x00060010u, 0x00000004u, 0x00000011u,
+        0x00000001u, 0x00000001u, 0x00000001u, 0x00030003u, 0x00000002u, 0x000001c2u, 0x000a0004u, 0x475f4c47u,
+        0x4c474f4fu, 0x70635f45u, 0x74735f70u, 0x5f656c79u, 0x656e696cu, 0x7269645fu, 0x69746365u, 0x00006576u,
+        0x00080004u, 0x475f4c47u, 0x4c474f4fu, 0x6e695f45u, 0x64756c63u, 0x69645f65u, 0x74636572u, 0x00657669u,
+        0x00040005u, 0x00000004u, 0x6e69616du, 0x00000000u, 0x00050005u, 0x0000000au, 0x6e617274u, 0x726f6673u,
+        0x0000006du, 0x00040005u, 0x00000014u, 0x61726150u, 0x0000736du, 0x00040006u, 0x00000014u, 0x00000000u,
+        0x00005875u, 0x00050006u, 0x00000014u, 0x00000001u, 0x756f4375u, 0x0000746eu, 0x00040005u, 0x00000016u,
+        0x61726170u, 0x0000736du, 0x00060005u, 0x00000020u, 0x69736956u, 0x42656c62u, 0x6b636f6cu, 0x00000000u,
+        0x00050006u, 0x00000020u, 0x00000000u, 0x6c726f77u, 0x00000064u, 0x00040005u, 0x00000022u, 0x69736976u,
+        0x00656c62u, 0x00060005u, 0x00000027u, 0x6d6d6f43u, 0x42646e61u, 0x6b636f6cu, 0x00000000u, 0x00050006u,
+        0x00000027u, 0x00000000u, 0x6d6d6f63u, 0x00646e61u, 0x00060005u, 0x00000029u, 0x7074756fu, 0x6f437475u,
+        0x6e616d6du, 0x00000064u, 0x00030047u, 0x00000014u, 0x00000002u, 0x00050048u, 0x00000014u, 0x00000000u,
+        0x00000023u, 0x00000000u, 0x00050048u, 0x00000014u, 0x00000001u, 0x00000023u, 0x00000004u, 0x00040047u,
+        0x0000001fu, 0x00000006u, 0x00000040u, 0x00030047u, 0x00000020u, 0x00000003u, 0x00040048u, 0x00000020u,
+        0x00000000u, 0x00000005u, 0x00050048u, 0x00000020u, 0x00000000u, 0x00000007u, 0x00000010u, 0x00040048u,
+        0x00000020u, 0x00000000u, 0x00000019u, 0x00050048u, 0x00000020u, 0x00000000u, 0x00000023u, 0x00000000u,
+        0x00030047u, 0x00000022u, 0x00000019u, 0x00040047u, 0x00000022u, 0x00000021u, 0x00000000u, 0x00040047u,
+        0x00000022u, 0x00000022u, 0x00000000u, 0x00040047u, 0x00000026u, 0x00000006u, 0x00000004u, 0x00030047u,
+        0x00000027u, 0x00000003u, 0x00040048u, 0x00000027u, 0x00000000u, 0x00000019u, 0x00050048u, 0x00000027u,
+        0x00000000u, 0x00000023u, 0x00000000u, 0x00030047u, 0x00000029u, 0x00000019u, 0x00040047u, 0x00000029u,
+        0x00000021u, 0x00000001u, 0x00040047u, 0x00000029u, 0x00000022u, 0x00000000u, 0x00040047u, 0x0000003au,
+        0x0000000bu, 0x00000019u, 0x00020013u, 0x00000002u, 0x00030021u, 0x00000003u, 0x00000002u, 0x00030016u,
+        0x00000006u, 0x00000020u, 0x00040017u, 0x00000007u, 0x00000006u, 0x00000004u, 0x00040018u, 0x00000008u,
+        0x00000007u, 0x00000004u, 0x00040020u, 0x00000009u, 0x00000007u, 0x00000008u, 0x0004002bu, 0x00000006u,
+        0x0000000bu, 0x3f800000u, 0x0004002bu, 0x00000006u, 0x0000000cu, 0x00000000u, 0x0007002cu, 0x00000007u,
+        0x0000000du, 0x0000000bu, 0x0000000cu, 0x0000000cu, 0x0000000cu, 0x0007002cu, 0x00000007u, 0x0000000eu,
+        0x0000000cu, 0x0000000bu, 0x0000000cu, 0x0000000cu, 0x0007002cu, 0x00000007u, 0x0000000fu, 0x0000000cu,
+        0x0000000cu, 0x0000000bu, 0x0000000cu, 0x0007002cu, 0x00000007u, 0x00000010u, 0x0000000cu, 0x0000000cu,
+        0x0000000cu, 0x0000000bu, 0x0007002cu, 0x00000008u, 0x00000011u, 0x0000000du, 0x0000000eu, 0x0000000fu,
+        0x00000010u, 0x00040015u, 0x00000012u, 0x00000020u, 0x00000001u, 0x0004002bu, 0x00000012u, 0x00000013u,
+        0x00000003u, 0x0004001eu, 0x00000014u, 0x00000006u, 0x00000012u, 0x00040020u, 0x00000015u, 0x00000009u,
+        0x00000014u, 0x0004003bu, 0x00000015u, 0x00000016u, 0x00000009u, 0x0004002bu, 0x00000012u, 0x00000017u,
+        0x00000000u, 0x00040020u, 0x00000018u, 0x00000009u, 0x00000006u, 0x00040015u, 0x0000001bu, 0x00000020u,
+        0x00000000u, 0x0004002bu, 0x0000001bu, 0x0000001cu, 0x00000000u, 0x00040020u, 0x0000001du, 0x00000007u,
+        0x00000006u, 0x0003001du, 0x0000001fu, 0x00000008u, 0x0003001eu, 0x00000020u, 0x0000001fu, 0x00040020u,
+        0x00000021u, 0x00000002u, 0x00000020u, 0x0004003bu, 0x00000021u, 0x00000022u, 0x00000002u, 0x00040020u,
+        0x00000024u, 0x00000002u, 0x00000008u, 0x0003001du, 0x00000026u, 0x0000001bu, 0x0003001eu, 0x00000027u,
+        0x00000026u, 0x00040020u, 0x00000028u, 0x00000002u, 0x00000027u, 0x0004003bu, 0x00000028u, 0x00000029u,
+        0x00000002u, 0x0004002bu, 0x0000001bu, 0x0000002au, 0x00000006u, 0x00040020u, 0x0000002bu, 0x00000002u,
+        0x0000001bu, 0x0004002bu, 0x00000012u, 0x0000002du, 0x00000001u, 0x00040020u, 0x0000002eu, 0x00000009u,
+        0x00000012u, 0x0004002bu, 0x00000012u, 0x00000033u, 0x00000002u, 0x0004002bu, 0x00000012u, 0x00000036u,
+        0x00000004u, 0x00040017u, 0x00000038u, 0x0000001bu, 0x00000003u, 0x0004002bu, 0x0000001bu, 0x00000039u,
+        0x00000001u, 0x0006002cu, 0x00000038u, 0x0000003au, 0x00000039u, 0x00000039u, 0x00000039u, 0x00050036u,
+        0x00000002u, 0x00000004u, 0x00000000u, 0x00000003u, 0x000200f8u, 0x00000005u, 0x0004003bu, 0x00000009u,
+        0x0000000au, 0x00000007u, 0x0003003eu, 0x0000000au, 0x00000011u, 0x00050041u, 0x00000018u, 0x00000019u,
+        0x00000016u, 0x00000017u, 0x0004003du, 0x00000006u, 0x0000001au, 0x00000019u, 0x00060041u, 0x0000001du,
+        0x0000001eu, 0x0000000au, 0x00000013u, 0x0000001cu, 0x0003003eu, 0x0000001eu, 0x0000001au, 0x0004003du,
+        0x00000008u, 0x00000023u, 0x0000000au, 0x00060041u, 0x00000024u, 0x00000025u, 0x00000022u, 0x00000017u,
+        0x00000017u, 0x0003003eu, 0x00000025u, 0x00000023u, 0x00060041u, 0x0000002bu, 0x0000002cu, 0x00000029u,
+        0x00000017u, 0x00000017u, 0x0003003eu, 0x0000002cu, 0x0000002au, 0x00050041u, 0x0000002eu, 0x0000002fu,
+        0x00000016u, 0x0000002du, 0x0004003du, 0x00000012u, 0x00000030u, 0x0000002fu, 0x0004007cu, 0x0000001bu,
+        0x00000031u, 0x00000030u, 0x00060041u, 0x0000002bu, 0x00000032u, 0x00000029u, 0x00000017u, 0x0000002du,
+        0x0003003eu, 0x00000032u, 0x00000031u, 0x00060041u, 0x0000002bu, 0x00000034u, 0x00000029u, 0x00000017u,
+        0x00000033u, 0x0003003eu, 0x00000034u, 0x0000001cu, 0x00060041u, 0x0000002bu, 0x00000035u, 0x00000029u,
+        0x00000017u, 0x00000013u, 0x0003003eu, 0x00000035u, 0x0000001cu, 0x00060041u, 0x0000002bu, 0x00000037u,
+        0x00000029u, 0x00000017u, 0x00000036u, 0x0003003eu, 0x00000037u, 0x0000001cu, 0x000100fdu, 0x00010038u,
+    };
+    constexpr std::uint32_t kDrawStorageVertexSpirV[] = {
+        0x07230203u, 0x00010000u, 0x000d000bu, 0x0000002bu, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
+        0x00000001u, 0x4c534c47u, 0x6474732eu, 0x3035342eu, 0x00000000u, 0x0003000eu, 0x00000000u, 0x00000001u,
+        0x000a000fu, 0x00000000u, 0x00000004u, 0x6e69616du, 0x00000000u, 0x0000000du, 0x00000016u, 0x0000001du,
+        0x00000027u, 0x00000029u, 0x00030047u, 0x0000000bu, 0x00000002u, 0x00050048u, 0x0000000bu, 0x00000000u,
+        0x0000000bu, 0x00000000u, 0x00050048u, 0x0000000bu, 0x00000001u, 0x0000000bu, 0x00000001u, 0x00050048u,
+        0x0000000bu, 0x00000002u, 0x0000000bu, 0x00000003u, 0x00050048u, 0x0000000bu, 0x00000003u, 0x0000000bu,
+        0x00000004u, 0x00040047u, 0x00000011u, 0x00000006u, 0x00000040u, 0x00030047u, 0x00000012u, 0x00000003u,
+        0x00040048u, 0x00000012u, 0x00000000u, 0x00000005u, 0x00050048u, 0x00000012u, 0x00000000u, 0x00000007u,
+        0x00000010u, 0x00040048u, 0x00000012u, 0x00000000u, 0x00000018u, 0x00050048u, 0x00000012u, 0x00000000u,
+        0x00000023u, 0x00000000u, 0x00030047u, 0x00000014u, 0x00000018u, 0x00040047u, 0x00000014u, 0x00000021u,
+        0x00000006u, 0x00040047u, 0x00000014u, 0x00000022u, 0x00000002u, 0x00040047u, 0x00000016u, 0x0000000bu,
+        0x0000002bu, 0x00040047u, 0x0000001du, 0x0000001eu, 0x00000000u, 0x00040047u, 0x00000027u, 0x0000001eu,
+        0x00000000u, 0x00040047u, 0x00000029u, 0x0000001eu, 0x00000001u, 0x00020013u, 0x00000002u, 0x00030021u,
+        0x00000003u, 0x00000002u, 0x00030016u, 0x00000006u, 0x00000020u, 0x00040017u, 0x00000007u, 0x00000006u,
+        0x00000004u, 0x00040015u, 0x00000008u, 0x00000020u, 0x00000000u, 0x0004002bu, 0x00000008u, 0x00000009u,
+        0x00000001u, 0x0004001cu, 0x0000000au, 0x00000006u, 0x00000009u, 0x0006001eu, 0x0000000bu, 0x00000007u,
+        0x00000006u, 0x0000000au, 0x0000000au, 0x00040020u, 0x0000000cu, 0x00000003u, 0x0000000bu, 0x0004003bu,
+        0x0000000cu, 0x0000000du, 0x00000003u, 0x00040015u, 0x0000000eu, 0x00000020u, 0x00000001u, 0x0004002bu,
+        0x0000000eu, 0x0000000fu, 0x00000000u, 0x00040018u, 0x00000010u, 0x00000007u, 0x00000004u, 0x0003001du,
+        0x00000011u, 0x00000010u, 0x0003001eu, 0x00000012u, 0x00000011u, 0x00040020u, 0x00000013u, 0x00000002u,
+        0x00000012u, 0x0004003bu, 0x00000013u, 0x00000014u, 0x00000002u, 0x00040020u, 0x00000015u, 0x00000001u,
+        0x0000000eu, 0x0004003bu, 0x00000015u, 0x00000016u, 0x00000001u, 0x00040020u, 0x00000018u, 0x00000002u,
+        0x00000010u, 0x00040017u, 0x0000001bu, 0x00000006u, 0x00000003u, 0x00040020u, 0x0000001cu, 0x00000001u,
+        0x0000001bu, 0x0004003bu, 0x0000001cu, 0x0000001du, 0x00000001u, 0x0004002bu, 0x00000006u, 0x0000001fu,
+        0x3f800000u, 0x00040020u, 0x00000025u, 0x00000003u, 0x00000007u, 0x0004003bu, 0x00000025u, 0x00000027u,
+        0x00000003u, 0x00040020u, 0x00000028u, 0x00000001u, 0x00000007u, 0x0004003bu, 0x00000028u, 0x00000029u,
+        0x00000001u, 0x00050036u, 0x00000002u, 0x00000004u, 0x00000000u, 0x00000003u, 0x000200f8u, 0x00000005u,
+        0x0004003du, 0x0000000eu, 0x00000017u, 0x00000016u, 0x00060041u, 0x00000018u, 0x00000019u, 0x00000014u,
+        0x0000000fu, 0x00000017u, 0x0004003du, 0x00000010u, 0x0000001au, 0x00000019u, 0x0004003du, 0x0000001bu,
+        0x0000001eu, 0x0000001du, 0x00050051u, 0x00000006u, 0x00000020u, 0x0000001eu, 0x00000000u, 0x00050051u,
+        0x00000006u, 0x00000021u, 0x0000001eu, 0x00000001u, 0x00050051u, 0x00000006u, 0x00000022u, 0x0000001eu,
+        0x00000002u, 0x00070050u, 0x00000007u, 0x00000023u, 0x00000020u, 0x00000021u, 0x00000022u, 0x0000001fu,
+        0x00050091u, 0x00000007u, 0x00000024u, 0x0000001au, 0x00000023u, 0x00050041u, 0x00000025u, 0x00000026u,
+        0x0000000du, 0x0000000fu, 0x0003003eu, 0x00000026u, 0x00000024u, 0x0004003du, 0x00000007u, 0x0000002au,
+        0x00000029u, 0x0003003eu, 0x00000027u, 0x0000002au, 0x000100fdu, 0x00010038u,
+    };
+    constexpr std::uint32_t kDrawStorageFragmentSpirV[] = {
+        0x07230203u, 0x00010000u, 0x000d000bu, 0x00000022u, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
+        0x00000001u, 0x4c534c47u, 0x6474732eu, 0x3035342eu, 0x00000000u, 0x0003000eu, 0x00000000u, 0x00000001u,
+        0x0007000fu, 0x00000004u, 0x00000004u, 0x6e69616du, 0x00000000u, 0x00000009u, 0x00000021u, 0x00030010u,
+        0x00000004u, 0x00000007u, 0x00030003u, 0x00000002u, 0x000001c2u, 0x000a0004u, 0x475f4c47u, 0x4c474f4fu,
+        0x70635f45u, 0x74735f70u, 0x5f656c79u, 0x656e696cu, 0x7269645fu, 0x69746365u, 0x00006576u, 0x00080004u,
+        0x475f4c47u, 0x4c474f4fu, 0x6e695f45u, 0x64756c63u, 0x69645f65u, 0x74636572u, 0x00657669u, 0x00040005u,
+        0x00000004u, 0x6e69616du, 0x00000000u, 0x00050005u, 0x00000009u, 0x4374756fu, 0x726f6c6fu, 0x00000000u,
+        0x00060005u, 0x0000000cu, 0x69736956u, 0x42656c62u, 0x6b636f6cu, 0x00000000u, 0x00050006u, 0x0000000cu,
+        0x00000000u, 0x6c726f77u, 0x00000064u, 0x00040005u, 0x0000000eu, 0x69736976u, 0x00656c62u, 0x00040005u,
+        0x00000021u, 0x6f436e69u, 0x00726f6cu, 0x00040047u, 0x00000009u, 0x0000001eu, 0x00000000u, 0x00040047u,
+        0x0000000bu, 0x00000006u, 0x00000040u, 0x00030047u, 0x0000000cu, 0x00000003u, 0x00040048u, 0x0000000cu,
+        0x00000000u, 0x00000005u, 0x00050048u, 0x0000000cu, 0x00000000u, 0x00000007u, 0x00000010u, 0x00040048u,
+        0x0000000cu, 0x00000000u, 0x00000018u, 0x00050048u, 0x0000000cu, 0x00000000u, 0x00000023u, 0x00000000u,
+        0x00030047u, 0x0000000eu, 0x00000018u, 0x00040047u, 0x0000000eu, 0x00000021u, 0x00000006u, 0x00040047u,
+        0x0000000eu, 0x00000022u, 0x00000002u, 0x00040047u, 0x00000021u, 0x0000001eu, 0x00000000u, 0x00020013u,
+        0x00000002u, 0x00030021u, 0x00000003u, 0x00000002u, 0x00030016u, 0x00000006u, 0x00000020u, 0x00040017u,
+        0x00000007u, 0x00000006u, 0x00000004u, 0x00040020u, 0x00000008u, 0x00000003u, 0x00000007u, 0x0004003bu,
+        0x00000008u, 0x00000009u, 0x00000003u, 0x00040018u, 0x0000000au, 0x00000007u, 0x00000004u, 0x0003001du,
+        0x0000000bu, 0x0000000au, 0x0003001eu, 0x0000000cu, 0x0000000bu, 0x00040020u, 0x0000000du, 0x00000002u,
+        0x0000000cu, 0x0004003bu, 0x0000000du, 0x0000000eu, 0x00000002u, 0x00040015u, 0x0000000fu, 0x00000020u,
+        0x00000001u, 0x0004002bu, 0x0000000fu, 0x00000010u, 0x00000000u, 0x0004002bu, 0x0000000fu, 0x00000011u,
+        0x00000003u, 0x00040015u, 0x00000012u, 0x00000020u, 0x00000000u, 0x0004002bu, 0x00000012u, 0x00000013u,
+        0x00000000u, 0x00040020u, 0x00000014u, 0x00000002u, 0x00000006u, 0x0004002bu, 0x00000006u, 0x00000017u,
+        0x00000000u, 0x00020014u, 0x00000018u, 0x0004002bu, 0x00000006u, 0x0000001au, 0x3f800000u, 0x0007002cu,
+        0x00000007u, 0x0000001bu, 0x0000001au, 0x00000017u, 0x00000017u, 0x0000001au, 0x0007002cu, 0x00000007u,
+        0x0000001cu, 0x00000017u, 0x00000017u, 0x0000001au, 0x0000001au, 0x00040017u, 0x0000001du, 0x00000018u,
+        0x00000004u, 0x00040020u, 0x00000020u, 0x00000001u, 0x00000007u, 0x0004003bu, 0x00000020u, 0x00000021u,
+        0x00000001u, 0x00050036u, 0x00000002u, 0x00000004u, 0x00000000u, 0x00000003u, 0x000200f8u, 0x00000005u,
+        0x00080041u, 0x00000014u, 0x00000015u, 0x0000000eu, 0x00000010u, 0x00000010u, 0x00000011u, 0x00000013u,
+        0x0004003du, 0x00000006u, 0x00000016u, 0x00000015u, 0x000500b8u, 0x00000018u, 0x00000019u, 0x00000016u,
+        0x00000017u, 0x00070050u, 0x0000001du, 0x0000001eu, 0x00000019u, 0x00000019u, 0x00000019u, 0x00000019u,
+        0x000600a9u, 0x00000007u, 0x0000001fu, 0x0000001eu, 0x0000001bu, 0x0000001cu, 0x0003003eu, 0x00000009u,
+        0x0000001fu, 0x000100fdu, 0x00010038u,
+    };
+
+    template<std::size_t N>
+    std::string SpirVProgram(const std::uint32_t (&words)[N])
+    {
+        return std::string(reinterpret_cast<const char*>(words), sizeof(words));
+    }
+
+    std::string DrawStorageVertexWithoutReadonly()
+    {
+        std::string result = SpirVProgram(kDrawStorageVertexSpirV);
+        bool changed = false;
+        for (std::size_t cursor = 5; cursor < result.size() / sizeof(std::uint32_t);)
+        {
+            std::uint32_t instruction = 0;
+            std::memcpy(&instruction, result.data() + cursor * sizeof(std::uint32_t),
+                        sizeof(instruction));
+            const std::uint16_t wordCount = static_cast<std::uint16_t>(instruction >> 16u);
+            const std::uint16_t opcode = static_cast<std::uint16_t>(instruction & 0xffffu);
+            if (wordCount == 0 || cursor + wordCount > result.size() / sizeof(std::uint32_t))
+                return {};
+            const std::size_t decorationWord =
+                opcode == 71 && wordCount >= 3 ? cursor + 2 :
+                (opcode == 72 && wordCount >= 4 ? cursor + 3 : 0);
+            if (decorationWord != 0)
+            {
+                std::uint32_t decoration = 0;
+                std::memcpy(&decoration,
+                            result.data() + decorationWord * sizeof(std::uint32_t),
+                            sizeof(decoration));
+                if (decoration == 24)
+                {
+                    constexpr std::uint32_t NonReadable = 25;
+                    std::memcpy(result.data() + decorationWord * sizeof(std::uint32_t),
+                                &NonReadable, sizeof(NonReadable));
+                    changed = true;
+                }
+            }
+            cursor += wordCount;
+        }
+        return changed ? result : std::string{};
     }
 }
 
@@ -356,8 +538,113 @@ protected:
             const bool selected = probes[0] == kClear && probes[1].getRProperty() > 200;
             check(selected,
                   "E compute-generated command drives count and first instance without readback",
-                  "leftR=" + std::to_string(probes[0].getRProperty()) +
-                      " rightR=" + std::to_string(probes[1].getRProperty()));
+                      "leftR=" + std::to_string(probes[0].getRProperty()) +
+                          " rightR=" + std::to_string(probes[1].getRProperty()));
+        }
+
+        {
+            StorageBuffer visible(
+                device, StorageBufferDescriptor(
+                            sizeof(InstanceMatrix), StorageBufferUsage::Storage,
+                            StorageBufferCpuAccess::None));
+            constexpr StorageBufferUsage commandUsage =
+                StorageBufferUsage::Storage | StorageBufferUsage::IndirectArguments;
+            StorageBuffer command(
+                device, StorageBufferDescriptor(
+                            sizeof(IndirectDrawIndexedArguments), commandUsage,
+                            StorageBufferCpuAccess::None));
+            ComputeShader producer(device, SpirVProgram(kDrawStorageComputeSpirV));
+            producer.bindStorageBuffer(0, visible);
+            producer.bindStorageBuffer(1, command);
+            ShaderEffect drawEffect(
+                device, SpirVProgram(kDrawStorageVertexSpirV),
+                SpirVProgram(kDrawStorageFragmentSpirV));
+            ShaderEffect writableEffect(
+                device, DrawStorageVertexWithoutReadonly(),
+                SpirVProgram(kDrawStorageFragmentSpirV));
+            const bool writableRejected =
+                !writableEffect.IsEffectValid() &&
+                writableEffect.GetCompileErrorEXT().find("readonly") != std::string::npos;
+
+            check(renderer->GetMaxVertexShaderStorageBlocksEXT() > 0 &&
+                      drawEffect.IsEffectValid() && writableRejected,
+                  "F native SPIR-V reflects readonly vertex/fragment storage binding 6",
+                  "maxVertexSSBO=" +
+                      std::to_string(renderer->GetMaxVertexShaderStorageBlocksEXT()) +
+                      " effect=" +
+                      std::string(drawEffect.IsEffectValid()
+                                      ? "valid" : drawEffect.GetCompileErrorEXT()) +
+                      " writable=" + (writableRejected ? "refused" : "accepted"));
+
+            const auto drawProduced = [&](const float x, const int count, bool& queuedDeferred,
+                                          const bool disposeBuffers) {
+                RenderTarget2D target(
+                    device, kSize, kSize, false, SurfaceFormat::Color,
+                    DepthFormat::None, 0, RenderTargetUsage::DiscardContents);
+                const std::uint64_t oneTimeBeforeQueue =
+                    renderer->GetOneTimeCommandCountEXT();
+                producer.setUniform("uX", x);
+                producer.setUniform("uCount", count);
+                producer.dispatch(1);
+
+                device.SetRenderTarget(&target);
+                device.Clear(kClear);
+                drawEffect.Apply();
+                renderer->BindStorageBufferForDrawEXT(6, *visible.getRendererEXT());
+                device.SetVertexBuffer(&mesh);
+                device.SetIndexBuffer(&quadIndices);
+                device.DrawIndexedPrimitivesIndirectEXT(
+                    PrimitiveType::TriangleList, *command.getRendererEXT(), 0);
+                device.SetIndexBuffer(nullptr);
+                device.SetVertexBuffer(nullptr);
+                device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+                if (disposeBuffers) {
+                    visible.Dispose();
+                    command.Dispose();
+                }
+                queuedDeferred =
+                    renderer->GetOneTimeCommandCountEXT() == oneTimeBeforeQueue;
+                return ReadHorizontalProbes(target);
+            };
+
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            bool warmupDeferred = false;
+            const auto warmup = drawProduced(0.0f, 0, warmupDeferred, false);
+            (void) warmup;
+            const std::uint64_t barriersBefore =
+                renderer->GetLogicalResourceBarrierCountEXT();
+            bool leftDeferred = false;
+            bool rightDeferred = false;
+            bool culledDeferred = false;
+            const auto left = drawProduced(-0.5f, 1, leftDeferred, false);
+            const auto culled = drawProduced(0.0f, 0, culledDeferred, false);
+            const auto right = drawProduced(0.5f, 1, rightDeferred, true);
+            const auto isRed = [](const Color& color) {
+                return color.getRProperty() > 200 && color.getGProperty() < 50;
+            };
+            const auto isBlue = [](const Color& color) {
+                return color.getBProperty() > 200 && color.getGProperty() < 50;
+            };
+            const bool framesFresh =
+                isRed(left[0]) && left[1] == kClear &&
+                right[0] == kClear && isBlue(right[1]) &&
+                culled[0] == kClear && culled[1] == kClear;
+            check(framesFresh,
+                  "G compute output drives fresh left, right, and culled draws through disposal",
+                  "leftR=(" + std::to_string(left[0].getRProperty()) + "," +
+                      std::to_string(left[1].getRProperty()) + ") rightB=(" +
+                      std::to_string(right[0].getBProperty()) + "," +
+                      std::to_string(right[1].getBProperty()) + ") culledR=(" +
+                      std::to_string(culled[0].getRProperty()) + "," +
+                      std::to_string(culled[1].getRProperty()) + ")");
+            const std::uint64_t barriers =
+                renderer->GetLogicalResourceBarrierCountEXT() - barriersBefore;
+            check(leftDeferred && rightDeferred && culledDeferred && barriers == 12,
+                  "H compute-to-graphics stays deferred and records exact SSBO/indirect hazards",
+                  "queued=" + std::string(leftDeferred ? "1" : "0") +
+                      std::string(rightDeferred ? "1" : "0") +
+                      std::string(culledDeferred ? "1" : "0") +
+                      " barriers=" + std::to_string(barriers));
         }
 
         {
@@ -431,7 +718,7 @@ protected:
             const bool finalGreen = center.getGProperty() > 200 &&
                                     center.getRProperty() < 50 && center.getBProperty() < 50;
             check(finalGreen,
-                  "F mixed SpriteBatch, compute, copy, XNA 3D, indirect, present order",
+                  "I mixed SpriteBatch, compute, copy, XNA 3D, indirect, present order",
                   "center=(" + std::to_string(center.getRProperty()) + "," +
                       std::to_string(center.getGProperty()) + "," +
                       std::to_string(center.getBProperty()) + ") command=(" +
@@ -441,7 +728,7 @@ protected:
                       std::to_string(observed.BaseInstance) + ")");
             check(renderer->GetOneTimeCommandCountEXT() == oneTimeBefore &&
                       renderer->GetFrameSubmitCountEXT() == submitsBefore + 1,
-                  "G routine compute and copy share the frame submission",
+                  "J routine compute and copy share the frame submission",
                   "oneTime=" + std::to_string(oneTimeBefore) + "->" +
                       std::to_string(renderer->GetOneTimeCommandCountEXT()) +
                       " frameSubmits=" + std::to_string(submitsBefore) + "->" +
@@ -450,7 +737,7 @@ protected:
 
         const std::size_t validationAfter = renderer->GetValidationMessagesEXT().size();
         check(validationAfter == validationBefore,
-              "H indirect and mixed-order work add no Vulkan validation messages",
+              "K indirect and mixed-order work add no Vulkan validation messages",
               std::to_string(validationBefore) + " -> " +
                   std::to_string(validationAfter));
 

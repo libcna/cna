@@ -2023,6 +2023,9 @@ namespace CNA::Internal::Renderers::Vulkan
                 // copied here -- this is the last moment the effect is guaranteed alive and its
                 // bindings are guaranteed to be the ones this batch was drawn with.
                 snapshot->customBoundSet  = customEffectRenderer_->GetOrCreateBoundTextureSetEXT();
+                snapshot->customStorageSet =
+                    customEffectRenderer_->GetOrCreateDrawStorageSetEXT(
+                        snapshot->customStorageBuffers);
                 std::memcpy(snapshot->customPushConst, customEffectRenderer_->GetPushConst(),
                             sizeof(snapshot->customPushConst));
             }
@@ -5481,6 +5484,18 @@ namespace CNA::Internal::Renderers::Vulkan
             r.descriptorSetLayouts.push_back(boundLayout_);
             boundLayout_ = VK_NULL_HANDLE;
         }
+        if (drawStorageSet_ != VK_NULL_HANDLE && drawStoragePool_ != VK_NULL_HANDLE) {
+            r.poolDescriptorSets.emplace_back(drawStoragePool_, drawStorageSet_);
+            drawStorageSet_ = VK_NULL_HANDLE;
+        }
+        if (drawStorageLayout_ != VK_NULL_HANDLE) {
+            r.descriptorSetLayouts.push_back(drawStorageLayout_);
+            drawStorageLayout_ = VK_NULL_HANDLE;
+        }
+        if (drawStoragePool_ != VK_NULL_HANDLE) {
+            r.descriptorPools.push_back(drawStoragePool_);
+            drawStoragePool_ = VK_NULL_HANDLE;
+        }
         // VULKAN-252: the array buffer is named by the same retired set, so it leaves on the same
         // fence rather than being destroyed under a frame that still reads it.
         if (uniformBuffer_ != VK_NULL_HANDLE) {
@@ -5534,6 +5549,190 @@ namespace CNA::Internal::Renderers::Vulkan
         if (refuseNonSpirv(vertSpv, "vertex") || refuseNonSpirv(fragSpv, "fragment"))
             return false;
 
+        drawStorageBindings_.clear();
+        const auto reflectDrawStorage = [this](
+            const std::string& blob, const VkShaderStageFlagBits stage,
+            const char* stageName) -> bool
+        {
+            constexpr std::uint16_t OpTypePointer = 32;
+            constexpr std::uint16_t OpTypeStruct = 30;
+            constexpr std::uint16_t OpVariable = 59;
+            constexpr std::uint16_t OpDecorate = 71;
+            constexpr std::uint16_t OpMemberDecorate = 72;
+            constexpr std::uint32_t DecorationBlock = 2;
+            constexpr std::uint32_t DecorationBufferBlock = 3;
+            constexpr std::uint32_t DecorationNonWritable = 24;
+            constexpr std::uint32_t DecorationBinding = 33;
+            constexpr std::uint32_t DecorationDescriptorSet = 34;
+            constexpr std::uint32_t StorageClassUniform = 2;
+            constexpr std::uint32_t StorageClassStorageBuffer = 12;
+            struct PointerType
+            {
+                std::uint32_t storageClass = 0;
+                std::uint32_t pointeeType = 0;
+            };
+            struct Variable
+            {
+                std::uint32_t pointerType = 0;
+                std::uint32_t storageClass = 0;
+            };
+
+            std::vector<std::uint32_t> words(blob.size() / sizeof(std::uint32_t));
+            std::memcpy(words.data(), blob.data(), blob.size());
+            std::unordered_map<std::uint32_t, PointerType> pointers;
+            std::unordered_map<std::uint32_t, Variable> variables;
+            std::unordered_map<std::uint32_t, std::uint32_t> bindings;
+            std::unordered_map<std::uint32_t, std::uint32_t> sets;
+            std::unordered_map<std::uint32_t, bool> blockTypes;
+            std::unordered_map<std::uint32_t, bool> bufferBlockTypes;
+            std::unordered_map<std::uint32_t, bool> nonWritable;
+            std::unordered_map<std::uint32_t, std::uint32_t> structMemberCounts;
+            std::unordered_map<std::uint64_t, bool> nonWritableMembers;
+            for (std::size_t cursor = 5; cursor < words.size();)
+            {
+                const std::uint32_t instruction = words[cursor];
+                const std::uint16_t wordCount =
+                    static_cast<std::uint16_t>(instruction >> 16u);
+                const std::uint16_t opcode =
+                    static_cast<std::uint16_t>(instruction & 0xffffu);
+                if (wordCount == 0 || cursor + wordCount > words.size()) {
+                    compileError_ = std::string("Vulkan ShaderEffect: malformed ") +
+                        stageName + " SPIR-V instruction stream";
+                    return false;
+                }
+                if (opcode == OpTypePointer && wordCount == 4) {
+                    pointers[words[cursor + 1]] = {
+                        words[cursor + 2], words[cursor + 3]};
+                } else if (opcode == OpTypeStruct && wordCount >= 2) {
+                    structMemberCounts[words[cursor + 1]] = wordCount - 2;
+                } else if (opcode == OpVariable && wordCount >= 4) {
+                    variables[words[cursor + 2]] = {
+                        words[cursor + 1], words[cursor + 3]};
+                } else if (opcode == OpDecorate && wordCount >= 3) {
+                    const std::uint32_t target = words[cursor + 1];
+                    const std::uint32_t decoration = words[cursor + 2];
+                    if (decoration == DecorationBlock)
+                        blockTypes[target] = true;
+                    else if (decoration == DecorationBufferBlock)
+                        bufferBlockTypes[target] = true;
+                    else if (decoration == DecorationNonWritable)
+                        nonWritable[target] = true;
+                    else if (decoration == DecorationBinding && wordCount >= 4)
+                        bindings[target] = words[cursor + 3];
+                    else if (decoration == DecorationDescriptorSet && wordCount >= 4)
+                        sets[target] = words[cursor + 3];
+                } else if (opcode == OpMemberDecorate && wordCount >= 4 &&
+                           words[cursor + 3] == DecorationNonWritable) {
+                    const std::uint64_t member =
+                        (static_cast<std::uint64_t>(words[cursor + 1]) << 32u) |
+                        words[cursor + 2];
+                    nonWritableMembers[member] = true;
+                }
+                cursor += wordCount;
+            }
+
+            for (const auto& [variableId, variable] : variables)
+            {
+                const auto pointer = pointers.find(variable.pointerType);
+                if (pointer == pointers.end() ||
+                    pointer->second.storageClass != variable.storageClass)
+                    continue;
+                const bool storageBuffer =
+                    (variable.storageClass == StorageClassStorageBuffer &&
+                     blockTypes.contains(pointer->second.pointeeType)) ||
+                    (variable.storageClass == StorageClassUniform &&
+                     bufferBlockTypes.contains(pointer->second.pointeeType));
+                if (!storageBuffer) continue;
+
+                bool allMembersReadOnly = false;
+                const auto memberCount =
+                    structMemberCounts.find(pointer->second.pointeeType);
+                if (memberCount != structMemberCounts.end() && memberCount->second != 0) {
+                    allMembersReadOnly = true;
+                    for (std::uint32_t member = 0;
+                         member < memberCount->second && allMembersReadOnly; ++member) {
+                        const std::uint64_t key =
+                            (static_cast<std::uint64_t>(pointer->second.pointeeType) << 32u) |
+                            member;
+                        allMembersReadOnly = nonWritableMembers.contains(key);
+                    }
+                }
+                if (!nonWritable.contains(variableId) &&
+                    !nonWritable.contains(pointer->second.pointeeType) &&
+                    !allMembersReadOnly) {
+                    compileError_ = std::string("Vulkan ShaderEffect: ") + stageName +
+                        " storage buffers must be declared readonly; the draw binding API "
+                        "publishes shader-read access only";
+                    return false;
+                }
+
+                const auto binding = bindings.find(variableId);
+                const auto set = sets.find(variableId);
+                if (binding == bindings.end() || set == sets.end()) {
+                    compileError_ = std::string("Vulkan ShaderEffect: ") + stageName +
+                        " storage buffers need explicit descriptor set and binding decorations";
+                    return false;
+                }
+                if (set->second != 2) {
+                    compileError_ = std::string("Vulkan ShaderEffect: ") + stageName +
+                        " storage buffer binding " + std::to_string(binding->second) +
+                        " declares set " + std::to_string(set->second) +
+                        "; graphics storage buffers use set 2 (sets 0 and 1 are textures)";
+                    return false;
+                }
+                if (binding->second >
+                    static_cast<std::uint32_t>(std::numeric_limits<int>::max())) {
+                    compileError_ = std::string("Vulkan ShaderEffect: ") + stageName +
+                        " storage-buffer binding is not representable by the public int binding "
+                        "API";
+                    return false;
+                }
+
+                const auto existing = std::find_if(
+                    drawStorageBindings_.begin(), drawStorageBindings_.end(),
+                    [&](const DrawStorageBindingEXT& candidate) {
+                        return candidate.binding == binding->second;
+                    });
+                if (existing == drawStorageBindings_.end()) {
+                    drawStorageBindings_.push_back({binding->second, stage});
+                } else if ((existing->stages & stage) != 0) {
+                    compileError_ = std::string("Vulkan ShaderEffect: duplicate ") + stageName +
+                        " storage buffer binding " + std::to_string(binding->second);
+                    return false;
+                } else {
+                    existing->stages |= stage;
+                }
+            }
+            return true;
+        };
+        if (!reflectDrawStorage(vertSpv, VK_SHADER_STAGE_VERTEX_BIT, "vertex") ||
+            !reflectDrawStorage(fragSpv, VK_SHADER_STAGE_FRAGMENT_BIT, "fragment"))
+            return false;
+        std::sort(
+            drawStorageBindings_.begin(), drawStorageBindings_.end(),
+            [](const DrawStorageBindingEXT& left, const DrawStorageBindingEXT& right) {
+                return left.binding < right.binding;
+            });
+        const auto countStage = [this](const VkShaderStageFlagBits stage) {
+            return static_cast<std::uint32_t>(std::count_if(
+                drawStorageBindings_.begin(), drawStorageBindings_.end(),
+                [stage](const DrawStorageBindingEXT& binding) {
+                    return (binding.stages & stage) != 0;
+                }));
+        };
+        const auto& limits = owner_->physicalDeviceProperties_.limits;
+        if (countStage(VK_SHADER_STAGE_VERTEX_BIT) >
+                limits.maxPerStageDescriptorStorageBuffers ||
+            countStage(VK_SHADER_STAGE_FRAGMENT_BIT) >
+                limits.maxPerStageDescriptorStorageBuffers ||
+            drawStorageBindings_.size() > limits.maxDescriptorSetStorageBuffers ||
+            (!drawStorageBindings_.empty() && limits.maxBoundDescriptorSets < 3)) {
+            compileError_ =
+                "Vulkan ShaderEffect: reflected graphics storage buffers exceed the selected "
+                "device descriptor limits";
+            return false;
+        }
+
         VkShaderModuleCreateInfo mci{};
         mci.sType    = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
         mci.codeSize = vertSpv.size();
@@ -5545,6 +5744,47 @@ namespace CNA::Internal::Renderers::Vulkan
         mci.pCode    = reinterpret_cast<const uint32_t*>(fragSpv.data());
         if (vkCreateShaderModule(owner_->device_, &mci, nullptr, &fragModule_) != VK_SUCCESS) {
             compileError_ = "Failed to create fragment shader module"; return false;
+        }
+
+        if (!drawStorageBindings_.empty())
+        {
+            std::vector<VkDescriptorSetLayoutBinding> bindings;
+            bindings.reserve(drawStorageBindings_.size());
+            for (const DrawStorageBindingEXT& reflected : drawStorageBindings_) {
+                VkDescriptorSetLayoutBinding binding{};
+                binding.binding = reflected.binding;
+                binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                binding.descriptorCount = 1;
+                binding.stageFlags = reflected.stages;
+                bindings.push_back(binding);
+            }
+            VkDescriptorSetLayoutCreateInfo layoutInfo{};
+            layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+            layoutInfo.bindingCount = static_cast<std::uint32_t>(bindings.size());
+            layoutInfo.pBindings = bindings.data();
+            if (vkCreateDescriptorSetLayout(
+                    owner_->device_, &layoutInfo, nullptr, &drawStorageLayout_) != VK_SUCCESS) {
+                compileError_ =
+                    "Vulkan ShaderEffect: failed to create graphics storage-buffer layout";
+                return false;
+            }
+
+            VkDescriptorPoolSize poolSize{};
+            poolSize.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            poolSize.descriptorCount =
+                static_cast<std::uint32_t>(bindings.size()) * DrawStorageSetCapacity;
+            VkDescriptorPoolCreateInfo poolInfo{};
+            poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+            poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+            poolInfo.maxSets = DrawStorageSetCapacity;
+            poolInfo.poolSizeCount = 1;
+            poolInfo.pPoolSizes = &poolSize;
+            if (vkCreateDescriptorPool(
+                    owner_->device_, &poolInfo, nullptr, &drawStoragePool_) != VK_SUCCESS) {
+                compileError_ =
+                    "Vulkan ShaderEffect: failed to create graphics storage-buffer pool";
+                return false;
+            }
         }
 
         VkPushConstantRange pcRange{};
@@ -5561,10 +5801,11 @@ namespace CNA::Internal::Renderers::Vulkan
         // Declaring a set a shader does not use costs nothing at draw time: an unbound set is only
         // an error if something reads it.
         EnsureBoundTextureLayoutEXT();
-        const VkDescriptorSetLayout setLayouts[] = { owner_->descriptorSetLayout_, boundLayout_ };
+        const VkDescriptorSetLayout setLayouts[] = {
+            owner_->descriptorSetLayout_, boundLayout_, drawStorageLayout_};
         VkPipelineLayoutCreateInfo pli{};
         pli.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        pli.setLayoutCount         = 2;
+        pli.setLayoutCount         = drawStorageLayout_ != VK_NULL_HANDLE ? 3u : 2u;
         pli.pSetLayouts            = setLayouts;
         pli.pushConstantRangeCount = 1;
         pli.pPushConstantRanges    = &pcRange;
@@ -5957,6 +6198,95 @@ namespace CNA::Internal::Renderers::Vulkan
         boundSetSamplers_ = wantSamplers;
         boundSetDirty_    = false;
         return boundSet_;
+    }
+
+    VkDescriptorSet VulkanEffectRenderer::GetOrCreateDrawStorageSetEXT(
+        std::vector<std::pair<std::shared_ptr<VulkanStorageBufferRenderer>,
+                              VulkanResourceIntent>>& uses)
+    {
+        uses.clear();
+        if (drawStorageBindings_.empty()) return VK_NULL_HANDLE;
+        if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE ||
+            drawStorageLayout_ == VK_NULL_HANDLE || drawStoragePool_ == VK_NULL_HANDLE)
+            throw std::runtime_error(
+                "CNA Vulkan: the ShaderEffect graphics storage-buffer layout is unavailable");
+
+        std::vector<std::shared_ptr<VulkanStorageBufferRenderer>> buffers;
+        buffers.reserve(drawStorageBindings_.size());
+        for (const DrawStorageBindingEXT& reflected : drawStorageBindings_)
+        {
+            const auto found = owner_->boundDrawStorageBuffers_.find(reflected.binding);
+            std::shared_ptr<VulkanStorageBufferRenderer> buffer =
+                found == owner_->boundDrawStorageBuffers_.end()
+                    ? nullptr : found->second.lock();
+            if (buffer == nullptr || !buffer->IsOwnedByEXT(owner_) ||
+                buffer->GetBufferEXT() == VK_NULL_HANDLE) {
+                throw System::NotSupportedException(
+                    "CNA Vulkan: ShaderEffect descriptor set 2 binding " +
+                    std::to_string(reflected.binding) +
+                    " has no live storage buffer; call BindStorageBufferForDrawEXT before draw");
+            }
+            buffers.push_back(std::move(buffer));
+        }
+
+        bool reusable = drawStorageSet_ != VK_NULL_HANDLE &&
+                        drawStorageSetBuffers_.size() == buffers.size();
+        for (std::size_t i = 0; reusable && i < buffers.size(); ++i)
+            reusable = drawStorageSetBuffers_[i].lock() == buffers[i];
+        if (!reusable)
+        {
+            if (drawStorageSet_ != VK_NULL_HANDLE) {
+                VulkanRenderer::RetiredResources retired;
+                retired.poolDescriptorSets.emplace_back(drawStoragePool_, drawStorageSet_);
+                owner_->RetireResources(std::move(retired));
+                drawStorageSet_ = VK_NULL_HANDLE;
+            }
+
+            VkDescriptorSetAllocateInfo allocate{};
+            allocate.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+            allocate.descriptorPool = drawStoragePool_;
+            allocate.descriptorSetCount = 1;
+            allocate.pSetLayouts = &drawStorageLayout_;
+            if (vkAllocateDescriptorSets(
+                    owner_->device_, &allocate, &drawStorageSet_) != VK_SUCCESS) {
+                throw System::NotSupportedException(
+                    "CNA Vulkan: a ShaderEffect exhausted its bounded 64-set graphics storage "
+                    "snapshot pool before older frame-fence retirements completed");
+            }
+
+            std::vector<VkDescriptorBufferInfo> infos(buffers.size());
+            std::vector<VkWriteDescriptorSet> writes(buffers.size());
+            for (std::size_t i = 0; i < buffers.size(); ++i)
+            {
+                infos[i].buffer = buffers[i]->GetBufferEXT();
+                infos[i].offset = 0;
+                infos[i].range = VK_WHOLE_SIZE;
+                writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                writes[i].dstSet = drawStorageSet_;
+                writes[i].dstBinding = drawStorageBindings_[i].binding;
+                writes[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                writes[i].descriptorCount = 1;
+                writes[i].pBufferInfo = &infos[i];
+            }
+            vkUpdateDescriptorSets(
+                owner_->device_, static_cast<std::uint32_t>(writes.size()),
+                writes.data(), 0, nullptr);
+            drawStorageSetBuffers_.assign(buffers.begin(), buffers.end());
+        }
+
+        uses.reserve(buffers.size());
+        for (std::size_t i = 0; i < buffers.size(); ++i)
+        {
+            const VkShaderStageFlags stages = drawStorageBindings_[i].stages;
+            const VulkanResourceIntent intent =
+                stages == VK_SHADER_STAGE_VERTEX_BIT
+                    ? VulkanResourceIntent::VertexShaderRead
+                    : (stages == VK_SHADER_STAGE_FRAGMENT_BIT
+                           ? VulkanResourceIntent::FragmentShaderRead
+                           : VulkanResourceIntent::GraphicsShaderRead);
+            uses.emplace_back(std::move(buffers[i]), intent);
+        }
+        return drawStorageSet_;
     }
 
     void VulkanEffectRenderer::BindTextureCube(
@@ -12880,6 +13210,11 @@ namespace CNA::Internal::Renderers::Vulkan
                     vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
                         activeLayout, 1, 1, &snapshot->customBoundSet, 0, nullptr);
                 }
+                if (snapshot->hasCustomEffect &&
+                    snapshot->customStorageSet != VK_NULL_HANDLE) {
+                    vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        activeLayout, 2, 1, &snapshot->customStorageSet, 0, nullptr);
+                }
                 for (const auto& d : draws) {
                     vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
                         activeLayout, 0, 1, &d.descSet, 0, nullptr);
@@ -13230,6 +13565,10 @@ namespace CNA::Internal::Renderers::Vulkan
                     if (sets[0] != VK_NULL_HANDLE && sets[1] != VK_NULL_HANDLE)
                         vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                                 draw.customLayout, 0, 2, sets, 0, nullptr);
+                    if (draw.customStorageSet != VK_NULL_HANDLE)
+                        vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                                draw.customLayout, 2, 1,
+                                                &draw.customStorageSet, 0, nullptr);
                 } else
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
                 if (draw.useCompiledEffect) {
@@ -13697,6 +14036,24 @@ namespace CNA::Internal::Renderers::Vulkan
             // MOD-2247: a modern command closes its issuing graphics segment and precedes every
             // later segment. Record it outside both render passes, at that exact boundary.
             recordModernBeforeSegment(seg.id);
+            // MOD-2250: a graphics storage descriptor is a shader read, not a vertex-input read.
+            // Transition every retained draw snapshot here, outside the render pass and after any
+            // compute producer that split the preceding segment.
+            for (const auto& batch : activeBatches_)
+            {
+                if (batch.segment != seg.id || batch.snapshot == nullptr) continue;
+                for (const auto& [buffer, intent] :
+                     batch.snapshot->customStorageBuffers)
+                    RecordBufferUsageEXT(
+                        cb, buffer->GetBufferEXT(), buffer->usageState_, intent);
+            }
+            for (const auto& draw : pending3D_)
+            {
+                if (draw.segment != seg.id) continue;
+                for (const auto& [buffer, intent] : draw.customStorageBuffers)
+                    RecordBufferUsageEXT(
+                        cb, buffer->GetBufferEXT(), buffer->usageState_, intent);
+            }
             // MOD-2248: indirect fetch dependencies are buffer-specific and must be recorded
             // outside the render pass. A modern producer necessarily split the prior segment, so
             // this point is both the exact ordered boundary and legal Vulkan command placement.
@@ -15881,6 +16238,42 @@ namespace CNA::Internal::Renderers::Vulkan
             limits.maxDescriptorSetStorageBuffers));
     }
 
+    int VulkanRenderer::GetMaxVertexShaderStorageBlocksEXT() const
+    {
+        if (!SupportsComputeShadersEXT() ||
+            physicalDeviceProperties_.limits.maxBoundDescriptorSets < 3)
+            return 0;
+        const auto& limits = physicalDeviceProperties_.limits;
+        return ClampVulkanLimitToInt(std::min(
+            limits.maxPerStageDescriptorStorageBuffers,
+            limits.maxDescriptorSetStorageBuffers));
+    }
+
+    void VulkanRenderer::BindStorageBufferForDrawEXT(
+        const int binding, const IStorageBufferRenderer& buffer)
+    {
+        if (binding < 0)
+            throw std::out_of_range(
+                "CNA Vulkan: graphics storage-buffer binding must not be negative");
+        const auto* native = dynamic_cast<const VulkanStorageBufferRenderer*>(&buffer);
+        if (native == nullptr || !native->IsOwnedByEXT(this) ||
+            native->GetBufferEXT() == VK_NULL_HANDLE)
+            throw std::invalid_argument(
+                "CNA Vulkan: graphics storage-buffer binding requires a live buffer from this "
+                "renderer");
+        if ((native->GetUsageEXT() & UINT32_C(1)) == 0)
+            throw System::NotSupportedException(
+                "CNA Vulkan: graphics shader binding requires StorageBufferUsage::Storage");
+        const auto base = std::const_pointer_cast<IStorageBufferRenderer>(
+            buffer.shared_from_this());
+        const auto retained =
+            std::dynamic_pointer_cast<VulkanStorageBufferRenderer>(base);
+        if (retained == nullptr)
+            throw std::logic_error(
+                "CNA Vulkan: graphics storage-buffer binding lost its shared native record");
+        boundDrawStorageBuffers_[static_cast<std::uint32_t>(binding)] = retained;
+    }
+
     int VulkanRenderer::GetMaxTextureArrayLayersEXT() const
     {
         if (physicalDevice_ == VK_NULL_HANDLE) return 0;
@@ -16188,6 +16581,22 @@ namespace CNA::Internal::Renderers::Vulkan
             usage.access = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
             usage.layout = image ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED;
             usage.writes = true;
+            break;
+        case VulkanResourceIntent::VertexShaderRead:
+            usage.stages = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
+            usage.access = VK_ACCESS_SHADER_READ_BIT;
+            usage.layout = image ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED;
+            break;
+        case VulkanResourceIntent::FragmentShaderRead:
+            usage.stages = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+            usage.access = VK_ACCESS_SHADER_READ_BIT;
+            usage.layout = image ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED;
+            break;
+        case VulkanResourceIntent::GraphicsShaderRead:
+            usage.stages =
+                VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+            usage.access = VK_ACCESS_SHADER_READ_BIT;
+            usage.layout = image ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED;
             break;
         case VulkanResourceIntent::RenderTargetWrite:
             usage.stages = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -17536,6 +17945,8 @@ namespace CNA::Internal::Renderers::Vulkan
         d.descSet = GetOrCreateTexSamplerDescSet(texView, slotSamplers_[0] != VK_NULL_HANDLE
                                                            ? slotSamplers_[0] : defaultSampler_);
         d.customBoundSet = fx->GetOrCreateBoundTextureSetEXT();
+        d.customStorageSet =
+            fx->GetOrCreateDrawStorageSetEXT(d.customStorageBuffers);
         d.customLayout   = fx->GetPipelineLayout();
 
         // Created HERE rather than at record time, unlike every stock family: a 3D draw already
