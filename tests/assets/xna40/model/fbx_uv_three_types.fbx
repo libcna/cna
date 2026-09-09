@@ -99,24 +99,6 @@ Objects:  {
 			TextureAlpha: 1
 			TextureId: 0
 		}
-		LayerElementTransparentTextures: 0 {
-			Version: 101
-			Name: ""
-			MappingInformationType: "AllSame"
-			ReferenceInformationType: "IndexToDirect"
-			BlendMode: "Translucent"
-			TextureAlpha: 1
-			TextureId: 0
-		}
-		LayerElementReflectionTextures: 0 {
-			Version: 101
-			Name: ""
-			MappingInformationType: "AllSame"
-			ReferenceInformationType: "IndexToDirect"
-			BlendMode: "Translucent"
-			TextureAlpha: 1
-			TextureId: 0
-		}
 		Layer: 0 {
 			Version: 100
 			LayerElement:  {
@@ -129,14 +111,6 @@ Objects:  {
 			}
 			LayerElement:  {
 				Type: "LayerElementTexture"
-				TypedIndex: 0
-			}
-			LayerElement:  {
-				Type: "LayerElementTransparentTextures"
-				TypedIndex: 0
-			}
-			LayerElement:  {
-				Type: "LayerElementReflectionTextures"
 				TypedIndex: 0
 			}
 			LayerElement:  {

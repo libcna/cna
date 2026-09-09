@@ -527,15 +527,15 @@ FREE_PROBES += [
 # fixture is only worth committing when a test reads it.
 COMMITTED = {
     # both UV sets, and the texture element that lets the second one through
-    "fbx_uv_transparent_pair": ("uv2_one_texture_transp_uv",),
+    "fbx_uv_transparent_pair": ("uv2b_transpuv_diffuse_only",),
     # the same file with the texture entry taken out of the Layer block: one channel
     "fbx_uv_transparent_no_texture": ("uv2b_transpuv_no_texture",),
     # the UV set declared but not named by the Layer: one channel
-    "fbx_uv_transparent_unnamed": ("uv2b_transpuv_not_in_layer",),
+    "fbx_uv_transparent_unnamed": ("uv2f_transpuv_unnamed_diffuse",),
     # three UV element types at once, and three channels in the Layer's own order
-    "fbx_uv_three_types": ("uv2b_three_uv_types",),
+    "fbx_uv_three_types": ("uv2f_three_types_diffuse",),
     # a Transparency UV set with no diffuse one: it takes index 0
-    "fbx_uv_transparent_alone": ("uv2b_transpuv_alone",),
+    "fbx_uv_transparent_alone": ("uv2f_transpuv_alone_diffuse",),
     # the same UV element type named twice by one Layer: one channel, the last entry
     "fbx_uv_same_type_twice": ("uv2d_two_transpuv",),
 }
@@ -609,6 +609,38 @@ FREE_PROBES += [
           ("LayerElementTransparentTextures", 0), ("LayerElementEmissiveTextures", 0),
           ("LayerElementReflectionTextures", 0), ("LayerElementUV", 0)]},
      ["MapA", "MapB"], True),
+]
+
+
+# Batch six: the same three questions with **only** the diffuse texture element named, so that a
+# committed fixture turns on the UV rule alone. `uv2b_transpuv_diffuse_only` already showed the
+# second set does not need its own texture channel; these carry that through the other cases, and
+# they are what the committed fixtures are generated from -- CNA's importer answers the material's
+# `Texture` and no other channel (see the `XNASWEEP-166` row), so a fixture that declared the other
+# texture elements would be measuring something production deliberately does not do.
+FREE_PROBES += [
+    ("uv2f_transpuv_unnamed_diffuse",
+     [uv_element("LayerElementUV", 0, "UVChannel_DIFFUSE0", UV_A),
+      uv_element("LayerElementTransparentUV", 0, "UVChannel_TRANSPARENT0", UV_B),
+      texture_element("LayerElementTexture", 0, 0)],
+     {0: [("LayerElementNormal", 0), ("LayerElementMaterial", 0), ("LayerElementTexture", 0),
+          ("LayerElementUV", 0)]},
+     ["MapA"], True),
+    ("uv2f_transpuv_alone_diffuse",
+     [uv_element("LayerElementTransparentUV", 0, "UVChannel_TRANSPARENT0", UV_B),
+      texture_element("LayerElementTexture", 0, 0)],
+     {0: [("LayerElementNormal", 0), ("LayerElementMaterial", 0), ("LayerElementTexture", 0),
+          ("LayerElementTransparentUV", 0)]},
+     ["MapA"], True),
+    ("uv2f_three_types_diffuse",
+     [uv_element("LayerElementUV", 0, "UVChannel_DIFFUSE0", UV_A),
+      uv_element("LayerElementTransparentUV", 0, "UVChannel_TRANSPARENT0", UV_B),
+      uv_element("LayerElementReflectionUV", 0, "UVChannel_REFLECTION0", UV_C),
+      texture_element("LayerElementTexture", 0, 0)],
+     {0: [("LayerElementNormal", 0), ("LayerElementMaterial", 0), ("LayerElementTexture", 0),
+          ("LayerElementUV", 0), ("LayerElementTransparentUV", 0),
+          ("LayerElementReflectionUV", 0)]},
+     ["MapA"], True),
 ]
 
 

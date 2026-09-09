@@ -59,6 +59,13 @@ Objects:  {
 			ReferenceInformationType: "Direct"
 			Normals: 0,0,1,0,0,1,0,0,1,0,0,1
 		}
+		LayerElementMaterial: 0 {
+			Version: 101
+			Name: ""
+			MappingInformationType: "AllSame"
+			ReferenceInformationType: "IndexToDirect"
+			Materials: 0
+		}
 		LayerElementUV: 0 {
 			Version: 101
 			Name: "UVChannel_DIFFUSE0"
@@ -75,23 +82,7 @@ Objects:  {
 			UV: 0.11,0.22,0.33,0.44,0.55,0.66,0.77,0.88
 			UVIndex: 0,1,2,0,2,3
 		}
-		LayerElementMaterial: 0 {
-			Version: 101
-			Name: ""
-			MappingInformationType: "AllSame"
-			ReferenceInformationType: "IndexToDirect"
-			Materials: 0
-		}
 		LayerElementTexture: 0 {
-			Version: 101
-			Name: ""
-			MappingInformationType: "AllSame"
-			ReferenceInformationType: "IndexToDirect"
-			BlendMode: "Translucent"
-			TextureAlpha: 1
-			TextureId: 0
-		}
-		LayerElementTransparentTextures: 0 {
 			Version: 101
 			Name: ""
 			MappingInformationType: "AllSame"
@@ -115,19 +106,11 @@ Objects:  {
 				TypedIndex: 0
 			}
 			LayerElement:  {
-				Type: "LayerElementTransparentTextures"
-				TypedIndex: 0
-			}
-			LayerElement:  {
 				Type: "LayerElementUV"
 				TypedIndex: 0
 			}
 			LayerElement:  {
 				Type: "LayerElementTransparentUV"
-				TypedIndex: 0
-			}
-			LayerElement:  {
-				Type: "LayerElementSmoothing"
 				TypedIndex: 0
 			}
 		}

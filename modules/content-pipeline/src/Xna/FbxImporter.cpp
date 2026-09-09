@@ -1337,15 +1337,18 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     const char* element;
                     const char* key;
                 };
+                //
+                // Only the diffuse channel is produced. The others are measured and deliberately
+                // not built: on `head.fbx` (SAMPLE-037) the specular channel names a
+                // `Head_Spec.TGA` that the sample does not ship, and the genuine build answers one
+                // texture -- `Head_Diff_0.xnb` -- and no error, so whatever XNA resolves that
+                // channel against, it is narrower than "the texture the polygon's `TextureId`
+                // names among those connected to the mesh". Producing it here makes
+                // `MaterialProcessor` build a file that is not there. The channel names stay in
+                // the table so the next attempt starts from what was measured rather than from
+                // nothing.
                 static constexpr TextureChannel kTextureChannels[] = {
                     {"LayerElementTexture", "Texture"},
-                    {"LayerElementAmbientTextures", "Ambient"},
-                    {"LayerElementSpecularTextures", "Specular"},
-                    {"LayerElementShininessTextures", "SpecularPower"},
-                    {"LayerElementNormalMapTextures", "NormalMap"},
-                    {"LayerElementBumpTextures", "Bump"},
-                    {"LayerElementTransparentTextures", "Transparency"},
-                    {"LayerElementReflectionTextures", "Reflection"},
                 };
                 struct NamedTextureLayer
                 {
@@ -1355,13 +1358,23 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 std::vector<NamedTextureLayer> namedTextures;
                 for (const TextureChannel& channel : kTextureChannels)
                 {
-                    if (namedElements.find(channel.element) == namedElements.end())
+                    if (geometry->Find(channel.element) == nullptr)
                     {
                         continue;
                     }
                     Layer read = ReadLayer(*geometry, channel.element, "TextureId", "", 1u);
                     read.reference = "Direct";
                     namedTextures.push_back(NamedTextureLayer{channel.key, std::move(read)});
+                }
+                if (namedTextures.empty() &&
+                    geometry->Find("LayerElementReflectionTextures") != nullptr)
+                {
+                    // An older Maya exporter writes the diffuse channel under this name and no
+                    // `LayerElementTexture` at all (SAMPLE-131's `p1_piece.fbx`).
+                    Layer read = ReadLayer(*geometry, "LayerElementReflectionTextures", "TextureId",
+                                           "", 1u);
+                    read.reference = "Direct";
+                    namedTextures.push_back(NamedTextureLayer{"Texture", std::move(read)});
                 }
 
                 // Walk the polygons, gathering each one's control points and which material it uses.
