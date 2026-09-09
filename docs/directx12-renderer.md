@@ -2,19 +2,17 @@
 
 ## Status
 
-The D3D12 renderer is a **native Windows Direct3D 12 graphics renderer**, verified 2026-07-14 on this
-Debian dev machine via Windows cross-compilation + Wine+vkd3d-proton (see "Development environment"
-below). The **routine CTest suite runs off-screen** (real GPU proof, but not through a live window) —
-presentation through a real window/swap chain is separately proven, but only via a manual diagnostic
-(`modules/renderers/directx12/examples/directx12_swapchain_diag.cpp`, through a Proton-managed launch), not the routine CTest, since
-that launch is too heavy for a normal CI run on this dev loop. See "Known limitations" for the exact
-boundary. Select it with:
+The D3D12 renderer is a **native Windows Direct3D 12 graphics renderer**, verified on this Debian
+development machine through Windows cross-compilation and Wine+vkd3d-proton. Most CTests use the
+real GPU through an off-screen public `GraphicsDevice`; three resize/presentation fixtures use a
+Proton-managed real-window launch. Select it with:
 
 ```bash
 cmake -S . -B cmake-build-d3d12 -G Ninja \
   -DCMAKE_TOOLCHAIN_FILE="$PWD/cmake/toolchains/mingw-w64.cmake" \
   -DCNA_GRAPHICS_RENDERER=DIRECTX12 \
-  -DCNA_BUILD_TESTS=ON
+  -DCNA_BUILD_TESTS=ON \
+  -DCNA_SHARP_RUNTIME_ROOT="$PWD/../sharp-runtimenext"
 cmake --build cmake-build-d3d12
 ```
 
@@ -45,38 +43,24 @@ D3D12 is CNA's second native Direct3D renderer, built directly on top of `D3D11`
 struct layouts) rather than developed from scratch — `plans/plan_dx.md` Phase DX12's own intro explicitly
 deferred detailed D3D12 design until D3D11's own dev-loop lessons could inform it.
 
-**What it proves**: a real `ID3D12Device` executing CNA's XNA-shaped `IGraphicsRenderer` contract —
-real command queues, descriptor heaps, command lists, fences with genuine N=2-frame back-pressure, a
-real per-resource barrier-transition tracker, pipeline state objects (including real runtime-settable
-`BlendState`/`DepthStencilState`/`RasterizerState`), root signatures, real per-slot dynamic
-`SamplerState`, vertex/index buffers, 2D/cube/3D textures, a real `RenderTarget2D`/`RenderTargetCube`/
-MRT implementation with real mip-chain generation and device-queried MSAA (2D leg only, resolved via
-`ResolveSubresource()` on unbind), real occlusion queries, all 10 stock HLSL shader
-variants plus the `AlphaTestEffect.VertexColorEnabled`-specific `alpha_test_colored3d` sibling (the
-exact same `hlsl_shaders.hpp` DXBC bytecode `D3D11` compiles and uses — design decision 5's reuse
-bootstrap, not a re-derivation), a real `SpriteBatch` with runtime-compiled custom-`ShaderEffect`
-support, and a real, functionally-proven device-removed recovery path — all pixel-verified via real
-GPU readback (off-screen for the routine CTest suite; through a live window for the separate Proton
-diagnostic, see "Known limitations"), not just "the API call returned `S_OK`."
+**What it proves**: a real `ID3D12Device` executes CNA's public XNA-shaped graphics contract.
+The shared corpus covers buffers, every core-XNA texture format, 2D/cube render targets including
+MSAA and MRT, state objects, SpriteBatch/SpriteFont, all stock effects, models/content, runtime HLSL
+`ShaderEffect`, queries, presentation and deterministic device recovery. These paths are verified by
+GPU readback rather than only successful API return values. D3D12-specific descriptor and command
+invariants remain in the deliberately small smoke executable.
 
-**What it is not (yet)**:
-- **Not routinely presenting to a window in CTest.** Swap-chain *creation* genuinely works (a
-  properly Proton-managed launch, `scripts/run-proton-vkd3d.sh`) and `Present()`/back-buffer
-  rendering are real and proven through a live window (`DX-116`) — but only via a manual diagnostic
-  (`modules/renderers/directx12/examples/directx12_swapchain_diag.cpp`), not the routine `DirectX12_Smoke` CTest, since Proton's own
-  bootstrap launch is too heavy/slow for a normal CTest run on this dev loop. See "Known
-  limitations" for the full plain-Wine-vs-Proton distinction.
-- **Not verified on real Windows.** `plans/plan_dx.md` `DX-114` (the D3D12 equivalent of `D3D11`'s
-  `DX-90`) is explicitly `needs_human` — no real Windows machine is available in this dev
-  environment.
-- **`D3D12TextureCubeRenderer::GetData()`** was a no-op — now real (`DX-123`).
-- Runtime-settable blend/depth-stencil/rasterizer state objects, per-slot `SamplerState`, occlusion
-  queries, `Texture3D`, custom `ShaderEffect` compilation, and `SpriteBatch::Begin(effect)`'s own
-  integration on top of it are all real and independently CTest-proven now (`DX-118`/`DX-119`/
-  `DX-120`/`DX-122`/`DX-121`) — see "Known limitations" for what's still genuinely open.
-- Stock `SpriteBatch` PSOs consume the active XNA blend factors/functions, write mask and sample
-  mask (`DX-163`). Premultiplied `BlendState::AlphaBlend` is real; translucent sprites no longer
-  pass through an opaque hardcoded PSO.
+**Measured state, 2026-09-09 (`plans/plan_dx.md` Phase DX17).** `ctest -L DIRECTX12` passes
+**264/264**, with no CTest skips, and `D3D12_Smoke` passes **25/25** retained internal checks. The
+shared registration inventory contains **265 declarations: 262 renderer-neutral fixtures, two
+reasoned D3D11-native exceptions and one D3D12-native exception**. This result used the fixed
+`sharp-runtimenext` checkout, Wine+vkd3d-proton and private virtual Xwayland `:4`; no physical
+display was used.
+
+The renderer has two command-lifetime modes today: ordinary draw/clear/upload operations still
+submit and wait synchronously, while the three real-window resize fixtures use the Proton wrapper.
+The allocated two-frame fence/allocator machinery is not yet production frame pipelining; replacing
+the per-call waits is explicitly `DX-237`, followed by upload staging in `DX-238`.
 
 ## Development environment: Wine + vkd3d-proton dev-loop
 
@@ -122,18 +106,19 @@ prefix**:
 scripts/run-wine-vkd3d.sh cmake-build-d3d12/examples/directx12_smoke_test.exe
 ```
 
-CTest wires this in automatically — `ctest --test-dir cmake-build-d3d12 -R D3D12` runs the D3D12
-test through the same wrapper.
+CTest wires this in automatically — `ctest --test-dir cmake-build-d3d12 -L DIRECTX12` runs the
+complete D3D12 label through either the routine Wine wrapper or the explicitly selected Proton
+window wrapper.
 
 ## Writing a D3D12 test
 
-Like `D3D11`, D3D12 tests are not ordinary `Game`-subclass examples — the routine CTest suite has no
-Proton-managed window/`Present()` path to drive one through (Proton's own bootstrap launch is too
-heavy for a normal CTest run, see "Known limitations"). All correctness tests live in
-`modules/renderers/directx12/examples/directx12_smoke_test.cpp` (`DirectX12_Smoke` CTest, the single registered D3D12 CTest — checks
-lettered A through VV as of `DX-113`/`DX-117`/`DX-121`/`DX-136`/`DX-144`/`DX-149`–`DX-155`, plus
-the later contract checks and `DX-163`'s SpriteBatch AlphaBlend oracle (**261/261 passing**), and talk to the real
-`ID3D12Device`/command queue/list fairly directly. The general off-screen pixel-readback shape:
+Renderer-neutral behavior belongs in a public `Game`/`GraphicsDevice` fixture and is declared once
+with `cna_d3d_parity_fixture()` in `cmake/DirectXParityTests.cmake`; it then runs on D3D11 and D3D12.
+A one-renderer exception requires a human-readable reason. Mark a fixture `DIRECTX12_PROTON` only
+when it genuinely requires a real window; the default wrapper supplies the off-screen public device.
+Use a native D3D12 executable only for an invariant that cannot be observed through the public API,
+such as descriptor-heap generation or resource-state tracking. A native pixel diagnostic follows
+this shape:
 
 ```cpp
 // 1. Create (or reuse) a real DirectX12Renderer/device.
@@ -155,115 +140,32 @@ the later contract checks and `DX-163`'s SpriteBatch AlphaBlend oracle (**261/26
 //    painting nothing, due to an unset PSO cull-mode default.)
 ```
 
-Continue the existing check-lettering convention (currently through double letters, `AA`–`NN`)
-rather than starting a new scheme.
+`D3D12_Smoke` keeps its local check naming, but new public conformance proof must not be added there
+instead of the shared renderer-neutral fixture.
 
-## Known limitations (2026-07-14, re-audited against `plans/plan_dx.md`'s actual `DX-100`–`DX-148` row
-status — most of this section's earlier revisions predated Phase DX13/DX14/DX15 landing and were
-significantly stale; re-derived from source, not copy-edited)
+## Known limitations (2026-09-09)
 
-> **Partially superseded on 2026-09-06 by Phase DX17.** Everything below still describes the
-> swap-chain/real-Windows boundary correctly, but several *rendering* gaps it does not mention have
-> since been closed, and a few things it presents as working were measured not to be. What changed,
-> each with the row that changed it and the fixture that proves it:
->
-> * `GraphicsDevice.ScissorRectangle` and `RasterizerState.ScissorTestEnable` were a complete no-op,
->   including for `SpriteBatch` — now real (`DX-201`).
-> * The whole stencil half of `DepthStencilState` was discarded, and `GraphicsDevice.ReferenceStencil`
->   was swallowed by an un-overridden virtual — both real now (`DX-202`, `DX-203`), and `SpriteBatch`
->   honours them too (`DX-210`).
-> * `RasterizerState.DepthBias`/`SlopeScaleDepthBias` were dropped (`DX-206`). Both are now
->   pixel-proven. `DX-256` measured XNA's constant term as a normalized depth offset and added the
->   target-format conversion required by D3D12's native integer `DepthBias` field.
-> * `GraphicsDevice.BlendFactor` had no operand at all, so `Blend::BlendFactor` sampled whatever the
->   command list defaulted to (`DX-204`).
-> * **Every pipeline state hardcoded `SampleDesc.Count = 1`**, so no draw into the MSAA render
->   targets this section describes as "real" was legal. The clear/resolve proofs it cites never
->   exercised a draw. Fixed and pixel-proven by a differential AA test (`DX-207`).
-> * `LineList`, `LineStrip` and `PointListEXT` threw by name (`DX-208`).
-> * `GraphicsDevice.GetBackBufferData` threw — there was no `ReadBackbuffer` override (`DX-205`) —
->   and a windowless device could not `Clear()` or draw at all until the game bound a
->   `RenderTarget2D` (`DX-241`).
-> * **A `RenderTarget2D` bound through the public `GraphicsDevice.SetRenderTarget` had no
->   depth-stencil view**, because the one-target case routes through the MRT path and that path
->   dropped it (`DX-255`); the cube-face path had the same omission (`DX-209`). Depth and stencil
->   testing inside a render target did not work at all.
-> * Microsoft XNA 4.0's stock 3D path uses D3D9 integer pixel centres, measured as 100/100 against
->   81/100 for D3D10+ half-integers on the discriminating `3x3 -> 10x10` geometry. D3D12 now uses
->   the same viewport-derived D3DCommon correction as D3D11, while SpriteBatch remains unshifted
->   because XNA measured it at 100/100 half-integer (`DX-253`). `DirectX12_XnaPixelCenter` and the
->   former U2/descriptor failures are green. The remaining SpriteBatch render-target-source and
->   C7 ordinal failures are separately owned by `DX-258`/`DX-259`.
->
-> The latest `ctest -L DIRECTX12` run has **32 registered tests, 27 passed and 5 failed**. The
-> remaining failures are listed in the plan per fixture, each owned by a task row.
+- **Per-call GPU synchronization remains.** Draws, clears, resolves and uploads normally close,
+  submit and wait on their own command list. The two allocator slots do not yet provide frame-scoped
+  pipelining. `DX-237` owns frame recording and constant-buffer lifetime; `DX-238` then owns the
+  upload ring and differential `SetDataOptions` behavior.
+- **An occlusion query spans one draw.** The synchronous draw architecture brackets each draw
+  independently, so a query cannot yet accumulate several draws. `DX-240` depends on `DX-237`.
+- **Plain Wine cannot create the swap chain used by this vkd3d-proton build.** The matched
+  `scripts/run-proton-vkd3d.sh` launch is required for windowed tests. This is not an untested-only
+  path: `BackbufferResize`, `RealWindowResize` and `ViewportResetAfterResize` are registered
+  Proton CTests and pass on the private virtual display. The remaining native present/tearing,
+  exclusive-fullscreen, WARP and real-driver coverage belongs to `DX-114`.
+- **A genuine device-removal trigger is not available in this environment.** `DX-244` proves the
+  complete public two-phase loss/restore path for 16 cycles, including resources, loaded content and
+  events; `DX-114` must still prove that a native `DXGI_ERROR_DEVICE_REMOVED` reaches that path.
+- **Compiled XNA `Effect` bytecode is unsupported.** `SupportsCompiledEffects()` is false and
+  `CreateCompiledEffect()` returns null. Runtime-source `ShaderEffect` and all stock effects are
+  working paths. `plans/plan_dx.md` `DX-248` records the unassigned D3D12 ownership decision;
+  the implementation itself belongs in `plans/plan_fx.md`, not DX17.
+- **Native Windows execution remains a separate gate.** The Wine+vkd3d-proton results prove CNA's
+  renderer behavior but do not substitute for the MSVC, WARP and vendor-driver evidence required by
+  `DX-114` and `DX-246`.
 
-- **Swap-chain presentation under *plain* Wine does not work — but under a properly Proton-managed
-  launch, it does.** `CreateSwapChainForHwnd`/`FLIP_DISCARD` crashes under plain Wine: a null-pointer
-  read inside Wine's own `dxgi.dll` (`d3d12_swapchain_init` → `vkd3d_instance_get_vk_instance
-  (instance=0)`), reproduced twice (`DX-100`'s raw spike, then `DX-102`'s dedicated
-  `modules/renderers/directx12/examples/directx12_swapchain_diag.cpp` diagnostic with a full symbolized backtrace) — a genuine
-  architecture mismatch between Debian's system `dxgi.dll` and vkd3d-proton's separately-overridden
-  `d3d12.dll`, **not a CNA bug**. `DX-102` later found the real fix: a properly Proton-managed launch
-  (`scripts/run-proton-vkd3d.sh`) gives vkd3d-proton the matched DLL pair it expects, and swap-chain
-  *creation* genuinely succeeds. `DX-116` then closed real `Present()`/back-buffer rendering on top
-  of that — a real 10-frame `Clear()`+`Present()` loop through a live window, verified twice from a
-  clean log, zero crashes. **The routine `DirectX12_Smoke` CTest still constructs off-screen** (Proton's
-  own bootstrap is too heavy/slow for a normal CTest run), so this is a real, permanent split: use
-  `DirectX12_Smoke`/plain Wine for routine pixel-correctness work, `run-proton-vkd3d.sh` for anything
-  that genuinely needs a live window. Full tearing/vsync/exclusive-fullscreen policy-branch
-  verification and window resize (`D3D11`'s own `DX-29` equivalent) remain open, real, scoped gaps.
-- **Not verified on real Windows hardware at all.** `DX-114` (MSVC build, real DXGI present/tearing,
-  full device-lost recovery trigger, WARP fallback) is `needs_human` — no such machine is available.
-- **MSAA render targets** are now real for both `D3D12RenderTargetRenderer` (`DX-117` follow-up,
-  device-queried via `CheckFeatureSupport(D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS)`, resolved via a
-  real `ResolveSubresource()` on unbind, Checks OO0/OO1) and `D3D12RenderTargetCubeRenderer`
-  (`DX-152` — a previously deliberate scope exclusion, since reopened: `D3D12_SRV_DIMENSION_TEXTURECUBE`
-  has no multisampled variant, so the MSAA color resource is RTV-only and a separate single-sample
-  resource is resolved into on unbind, face-scoped, Checks SS0/SS1). `D3D12RenderTargetRenderer`/
-  `D3D12RenderTargetCubeRenderer` are otherwise real (`DX-117`, including real MRT and, as of
-  `DX-144`, real mip-chain generation for both 2D and cube — a CPU box-filter downsample cascade,
-  not D3D11's driver-level `GenerateMips()`; `RenderTargetCube` only regenerates the active face's
-  own chain on unbind, the same honest single-active-face scope `D3D11RenderTargetCubeRenderer`'s own
-  test coverage already has). Per-target MSAA-resolve-on-unbind for `N>1` MRT (`D3D11`'s own
-  `DX-143` equivalent) was not attempted for D3D12 — a real, scoped follow-up.
-- **Device-removed recovery is real but its trigger is untestable here.** `RecreateDeviceEXT()`
-  (`DX-110`) genuinely tears down and rebuilds every device-lifetime resource, and is functionally
-  proven (fresh GPU work round-trips through the recreated device) — but a genuine
-  `DXGI_ERROR_DEVICE_REMOVED` cannot be triggered on this dev loop, so the detection *trigger* path
-  itself (as opposed to the recovery logic) is unverified. Same honest constraint `D3D11`'s own
-  `DX-27`/`DX-90` gap has.
-- **`AlphaTestEffect.VertexColorEnabled`** now has a real dedicated shader variant
-  (`alpha_test_colored3d`, stride 24) and dedicated tests (`DX-136`) — previously a real gap
-  (`alpha_test3d` had no vertex-color attribute at all), now closed on both D3D11 and D3D12.
-- **`SpriteBatch::Begin(effect)`** (`D3D11`'s own `DX-71`) is now fully real and independently
-  CTest-proven (`DX-121`, Checks NN0/NN1) — the runtime `D3DCompile()` custom-`ShaderEffect` path
-  (Checks BB1–BB4) and the `SpriteBatch`-specific integration on top of it were closed separately;
-  `PresentationParameters::HeadlessEXT` removed the windowed-`GraphicsDevice` blocker that
-  originally kept the integration itself from being independently proven.
-- **The following are all real and closed now, despite earlier revisions of this section claiming
-  otherwise** — re-verify against `plans/plan_dx.md`'s own row status before trusting any *other* specific
-  claim in this file, since this whole section was significantly stale before this re-audit:
-  runtime-settable `BlendState`/`DepthStencilState`/`RasterizerState` → PSO objects (`DX-118`,
-  replacing the old hardcoded `depthEnable=false`/`cullMode=None` PSO defaults); real per-slot
-  dynamic `SamplerState` across 16 slots, a real `D3D12SamplerCache` (`DX-119`, replacing the old
-  single hardcoded static sampler); a real public `D3D12RenderTargetRenderer`/
-  `D3D12RenderTargetCubeRenderer` implementing `IRenderTargetRenderer` for real, including MRT
-  (`DX-117`, replacing the old test-only `BindOffscreenColorTargetEXT()`-only story); real
-  `D3D12Texture3DRenderer` (`DX-122`); real `D3D12TextureCubeRenderer::GetData()` readback (`DX-123`,
-  no longer a no-op); real `D3D12OcclusionQueryRenderer` (`DX-120`, `CreateOcclusionQuery()` no longer
-  falls through to a silent `nullptr`).
-- **`d3dx12.h`** (Microsoft's optional D3D12 helper header, e.g. `D3D12CalcSubresource()`) is absent
-  from this machine's MinGW-w64 D3D12 headers (`DX-100`'s own finding) — the whole renderer uses raw
-  `ID3D12*` calls directly.
-- **`CnaTests` (the gtest suite) now builds and links for D3D12**, same as `D3D11` — the
-  MinGW/Windows-cross-target `::setenv()` portability gap `DX-15` found and fixed applied equally to
-  both renderers (the fix is in the shared `tests/` sources, not renderer-specific). Confirmed running
-  under plain Wine for test groups that don't create a live `GraphicsDevice` window (7/7 passed).
-  Test groups that do create one hit this same page's own already-documented plain-Wine swap-chain
-  limitation (`DX-100`/`DX-102`) and need the Proton launch path, not plain `wine`, to run — no new
-  gap, just this pre-existing one now reachable through `CnaTests` too.
-
-See `plans/plan_dx.md` for the full task-by-task status (`DX-100` through `DX-148`) and design rationale,
-and `docs/graphics-renderer-feature-matrix.md` for a row-by-row comparison against the other
-established renderers (including `D3D11`).
+See `plans/plan_dx.md` for the authoritative task-by-task status and design rationale, and
+`docs/graphics-renderer-feature-matrix.md` for the cross-renderer comparison.
