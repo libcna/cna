@@ -8,6 +8,8 @@
 #include "System/NotSupportedException.hpp"
 
 #include <algorithm>
+#include <bit>
+#include <cstdint>
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -47,6 +49,30 @@ namespace Microsoft::Xna::Framework::Graphics
         // exception with a renderer-specific failure.
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(width, "width");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(height, "height");
+        const int profile = static_cast<int>(device.getGraphicsProfileProperty());
+        const int maxSize = device.GetRenderer().GetMaxTextureSizeForProfileEXT(profile);
+        if (width > maxSize || height > maxSize)
+        {
+            throw System::NotSupportedException(
+                "RenderTarget2D exceeds the active graphics profile's maximum texture size.");
+        }
+        constexpr std::int64_t maximumAspectRatio = 2048;
+        const std::int64_t larger = std::max(width, height);
+        const std::int64_t smaller = std::min(width, height);
+        if (larger > smaller * maximumAspectRatio)
+        {
+            throw System::NotSupportedException(
+                "RenderTarget2D's aspect ratio exceeds the active graphics profile limit of "
+                "2048:1.");
+        }
+        if (device.getGraphicsProfileProperty() == GraphicsProfile::Reach && mipMap &&
+            (!std::has_single_bit(static_cast<unsigned int>(width)) ||
+             !std::has_single_bit(static_cast<unsigned int>(height))))
+        {
+            throw System::NotSupportedException(
+                "Mipmapped non-power-of-two RenderTarget2D resources are not supported by the "
+                "Reach graphics profile.");
+        }
         // plans/plan_runtimerenderer.md design decision 9: renderability is the renderer's own question.
         // A renderer that answers Defer accepts the framework's rule, which is what every renderer
         // except SKIA did when this was an #ifdef block.

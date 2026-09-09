@@ -4,8 +4,10 @@
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <algorithm>
+#include <bit>
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -39,15 +41,27 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
     static std::unique_ptr<IRenderTargetCubeRenderer> CreateValidatedRenderTargetCubeRenderer(
-        IGraphicsRenderer* renderer, int size, DepthFormat depthFormat, RenderTargetUsage usage,
+        GraphicsDevice& device, int size, DepthFormat depthFormat, RenderTargetUsage usage,
         bool mipMap, int preferredMultiSampleCount, SurfaceFormat format)
     {
         // Constructor arguments are evaluated before TextureCube can validate its base state.
         // Keep invalid dimensions out of the renderer and preserve XNA's public exception type.
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(size, "size");
-        if (!renderer)
-            return nullptr;
-        return renderer->CreateRenderTargetCubeEXT(
+        const int profile = static_cast<int>(device.getGraphicsProfileProperty());
+        const int maxSize = device.GetRenderer().GetMaxCubeSizeForProfileEXT(profile);
+        if (size > maxSize)
+        {
+            throw System::NotSupportedException(
+                "RenderTargetCube exceeds the active graphics profile's maximum cube size.");
+        }
+        if (device.getGraphicsProfileProperty() == GraphicsProfile::Reach &&
+            !std::has_single_bit(static_cast<unsigned int>(size)))
+        {
+            throw System::NotSupportedException(
+                "Non-power-of-two RenderTargetCube resources are not supported by the Reach "
+                "graphics profile.");
+        }
+        return device.GetRenderer().CreateRenderTargetCubeEXT(
             size, static_cast<int>(depthFormat),
             RenderTargetUsagePreservesContentsEXT(usage), mipMap,
             ClosestMSAAPower(preferredMultiSampleCount), static_cast<int>(format));
@@ -63,7 +77,7 @@ namespace Microsoft::Xna::Framework::Graphics
                       // to TextureCube so sampling and rendering share the same GPU image.
                       std::shared_ptr<ITextureCubeRenderer>(
                           CreateValidatedRenderTargetCubeRenderer(
-                              device.renderer_.get(), size, preferredDepthFormat, usage, mipMap,
+                              device, size, preferredDepthFormat, usage, mipMap,
                               preferredMultiSampleCount, preferredFormat).release()),
                       mipMap ? CalculateMipLevels(size) : 1)
         , size_(size)
