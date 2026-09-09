@@ -2,7 +2,7 @@
 
 ## Status
 
-The Software renderer is a **CPU-only rasterizer graphics renderer**, verified 2026-09-08. Select it
+The Software renderer is a **CPU-only rasterizer graphics renderer**, verified 2026-09-09. Select it
 with:
 
 ```bash
@@ -394,6 +394,11 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   into one target and switches targets before `End`. Software leaves the sprite in the target that
   was active at `Draw`, matching XNA/FNA; the audit used that CPU behavior to catch and repair an
   EasyGL renderer-private queue that had delayed the sprite until `End`.
+- **Classic draw failures follow Microsoft XNA's public error contract** (`SOFTWARE-253`) —
+  buffered draws validate counts and profile ceilings before checking shader/index/vertex state,
+  missing state raises `InvalidOperationException`, and user-array null/range checks precede the
+  shader check. The public 32-bit user-index overload remains the deliberate exception: under
+  Reach its profile refusal occurs first, exactly where Microsoft places that gate.
 - **The classic SpriteBatch/SpriteFont parity corpus executes on the CPU** (`SOFTWARE-138`).
   Eighteen renderer-independent scenes shared with EasyGL cover flips, rotation/origin, both scale
   overloads, source rectangles, layer sorting, transforms, render targets, viewports, scissor,

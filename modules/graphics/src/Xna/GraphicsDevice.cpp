@@ -1366,15 +1366,7 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         renderer_->Ensure3DSupported("GraphicsDevice::DrawPrimitives");
 
-        if (currentVertexBuffer_ == nullptr)
-            throw std::runtime_error("GraphicsDevice::DrawPrimitives: no vertex buffer is bound.");
-        ThrowIfBoundVertexBufferDisposed();
-
-        if (currentEffect_ == nullptr)
-            throw std::runtime_error("GraphicsDevice::DrawPrimitives: no effect has been applied.");
-
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
-        System::ArgumentOutOfRangeException::ThrowIfNegative(vertexStart, "vertexStart");
         ValidateProfilePrimitiveCount(graphicsProfile_, primitiveCount);
 
         // REMED-GFX-113: vertexStart is a vertex-element offset and primitiveCount fixes the exact
@@ -1383,6 +1375,16 @@ namespace Microsoft::Xna::Framework::Graphics
         // request that leaves the buffer is an error, never a silently clamped or widened draw.
         const int consumedVertexCount =
             CheckedPrimitiveElementCount(primitiveType, primitiveCount);
+
+        if (currentEffect_ == nullptr)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawPrimitives: no effect has been applied.");
+        if (currentVertexBuffer_ == nullptr)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawPrimitives: no vertex buffer is bound.");
+        ThrowIfBoundVertexBufferDisposed();
+        System::ArgumentOutOfRangeException::ThrowIfNegative(vertexStart, "vertexStart");
+
         const int availableVertexCount = currentVertexBuffer_->getVertexCountProperty();
         // REMED-GFX-200: the binding offset moves the whole range, so it is part of what must fit.
         const int bindingVertexOffset = CurrentVertexBufferOffset();
@@ -1441,25 +1443,27 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         renderer_->Ensure3DSupported("GraphicsDevice::DrawIndexedPrimitives");
 
-        if (currentVertexBuffer_ == nullptr)
-            throw std::runtime_error("GraphicsDevice::DrawIndexedPrimitives: no vertex buffer is bound.");
-        ThrowIfBoundVertexBufferDisposed();
-
-        if (currentIndexBuffer_ == nullptr)
-            throw std::runtime_error("GraphicsDevice::DrawIndexedPrimitives: no index buffer is bound.");
-        ThrowIfBoundIndexBufferDisposed();
-
-        if (currentEffect_ == nullptr)
-            throw std::runtime_error("GraphicsDevice::DrawIndexedPrimitives: no effect has been applied.");
-
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
-        System::ArgumentOutOfRangeException::ThrowIfNegative(startIndex, "startIndex");
-        System::ArgumentOutOfRangeException::ThrowIfNegative(minVertexIndex, "minVertexIndex");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(numVertices, "numVertices");
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
         ValidateProfilePrimitiveCount(graphicsProfile_, primitiveCount);
 
         const int consumedIndexCount =
             CheckedPrimitiveElementCount(primitiveType, primitiveCount);
+
+        if (currentEffect_ == nullptr)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawIndexedPrimitives: no effect has been applied.");
+        if (currentIndexBuffer_ == nullptr)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawIndexedPrimitives: no index buffer is bound.");
+        ThrowIfBoundIndexBufferDisposed();
+        if (currentVertexBuffer_ == nullptr)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawIndexedPrimitives: no vertex buffer is bound.");
+        ThrowIfBoundVertexBufferDisposed();
+        System::ArgumentOutOfRangeException::ThrowIfNegative(startIndex, "startIndex");
+        System::ArgumentOutOfRangeException::ThrowIfNegative(minVertexIndex, "minVertexIndex");
+
         const int availableIndexCount = currentIndexBuffer_->GetRenderer().GetIndexCount();
         if (startIndex > availableIndexCount ||
             consumedIndexCount > availableIndexCount - startIndex)
@@ -1534,26 +1538,10 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         renderer_->Ensure3DSupported("GraphicsDevice::DrawInstancedPrimitives");
 
-        if (currentVertexBuffer_ == nullptr)
-            throw std::runtime_error(
-                "GraphicsDevice::DrawInstancedPrimitives: no vertex buffer is bound.");
-        ThrowIfBoundVertexBufferDisposed();
-
-        if (currentIndexBuffer_ == nullptr)
-            throw std::runtime_error(
-                "GraphicsDevice::DrawInstancedPrimitives: no index buffer is bound.");
-        ThrowIfBoundIndexBufferDisposed();
-
-        if (currentEffect_ == nullptr)
-            throw std::runtime_error(
-                "GraphicsDevice::DrawInstancedPrimitives: no effect has been applied.");
-
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
-        System::ArgumentOutOfRangeException::ThrowIfNegative(startIndex, "startIndex");
-        System::ArgumentOutOfRangeException::ThrowIfNegative(minVertexIndex, "minVertexIndex");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(numVertices, "numVertices");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(instanceCount, "instanceCount");
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
         ValidateProfilePrimitiveCount(graphicsProfile_, primitiveCount);
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(instanceCount, "instanceCount");
         ValidateProfilePrimitiveCount(graphicsProfile_, instanceCount, "instanceCount");
 
         // REMED-GFX-118: the instanced entry point takes the same indexed contract as
@@ -1565,6 +1553,21 @@ namespace Microsoft::Xna::Framework::Graphics
         // independently: it never widens or narrows the geometry range.
         const int consumedIndexCount =
             CheckedPrimitiveElementCount(primitiveType, primitiveCount);
+
+        if (currentEffect_ == nullptr)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawInstancedPrimitives: no effect has been applied.");
+        if (currentIndexBuffer_ == nullptr)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawInstancedPrimitives: no index buffer is bound.");
+        ThrowIfBoundIndexBufferDisposed();
+        if (currentVertexBuffer_ == nullptr)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawInstancedPrimitives: no vertex buffer is bound.");
+        ThrowIfBoundVertexBufferDisposed();
+        System::ArgumentOutOfRangeException::ThrowIfNegative(startIndex, "startIndex");
+        System::ArgumentOutOfRangeException::ThrowIfNegative(minVertexIndex, "minVertexIndex");
+
         const int availableIndexCount = currentIndexBuffer_->GetRenderer().GetIndexCount();
         if (startIndex > availableIndexCount ||
             consumedIndexCount > availableIndexCount - startIndex)
@@ -1784,12 +1787,12 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
 
-        if (currentEffect_ == nullptr)
-            throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
-
         const int totalVerts = ValidateUserPrimitiveArguments(
             vertexData, vertexOffset, primitiveType, primitiveCount,
             static_cast<std::int64_t>(sizeof(VertexPositionColor)), graphicsProfile_);
+        if (currentEffect_ == nullptr)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
 
         // vertexData points to an array of VertexPositionColor starting at vertexOffset.
         const auto* vertices = static_cast<const VertexPositionColor*>(vertexData) + vertexOffset;
@@ -1839,13 +1842,13 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
 
-        if (currentEffect_ == nullptr)
-            throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
-
         const int indexCount = ValidateUserIndexedArguments(
             vertexData, vertexOffset, numVertices, indexData, indexOffset, primitiveType,
             primitiveCount, static_cast<std::int64_t>(sizeof(VertexPositionColor)),
             static_cast<std::int64_t>(sizeof(std::uint16_t)), graphicsProfile_);
+        if (currentEffect_ == nullptr)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
 
         // Pack vertices from caller array (assumed VertexPositionColor layout).
         const auto* vertices = static_cast<const VertexPositionColor*>(vertexData) + vertexOffset;
@@ -1984,10 +1987,10 @@ namespace Microsoft::Xna::Framework::Graphics
                                            std::int64_t vertexSize,
                                            GraphicsProfile graphicsProfile)
         {
+            System::ArgumentNullException::ThrowIfNull(vertexData, "vertexData");
             System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(
                 primitiveCount, "primitiveCount");
             ValidateProfilePrimitiveCount(graphicsProfile, primitiveCount);
-            System::ArgumentNullException::ThrowIfNull(vertexData, "vertexData");
             const int vertexCount = CheckedPrimitiveElementCount(primitiveType, primitiveCount);
             ValidateUserSourceRange(vertexOffset, vertexCount, vertexSize,
                                     "vertexOffset", "primitiveCount");
@@ -2005,14 +2008,16 @@ namespace Microsoft::Xna::Framework::Graphics
                                          std::int64_t indexSize,
                                          GraphicsProfile graphicsProfile)
         {
-            System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(
-                primitiveCount, "primitiveCount");
-            System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(
-                numVertices, "numVertices");
-            ValidateProfilePrimitiveCount(graphicsProfile, primitiveCount);
+            // The 32-bit-index profile gate lives in XNA's public UInt32 overload and therefore
+            // precedes the shared array/range validation. For UInt16 this is a no-op.
             ValidateProfileUserIndexWidth(graphicsProfile, indexSize);
             System::ArgumentNullException::ThrowIfNull(vertexData, "vertexData");
             System::ArgumentNullException::ThrowIfNull(indexData, "indexData");
+            System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(
+                numVertices, "numVertices");
+            System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(
+                primitiveCount, "primitiveCount");
+            ValidateProfilePrimitiveCount(graphicsProfile, primitiveCount);
             const int indexCount = CheckedPrimitiveElementCount(primitiveType, primitiveCount);
             ValidateUserSourceRange(vertexOffset, numVertices, vertexSize,
                                     "vertexOffset", "numVertices");
@@ -2047,11 +2052,12 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
-        if (!currentEffect_)
-            throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
         const int n = ValidateUserPrimitiveArguments(
             data, offset, type, count, static_cast<std::int64_t>(sizeof(VertexPositionColor)),
             graphicsProfile_);
+        if (!currentEffect_)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
         auto* packed = static_cast<GpuVPC*>(AcquireUserVertexScratch(static_cast<std::size_t>(n) * sizeof(GpuVPC)));
         for (int i = 0; i < n; ++i)
         {
@@ -2077,11 +2083,12 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
-        if (!currentEffect_)
-            throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
         const int n = ValidateUserPrimitiveArguments(
             data, offset, type, count, static_cast<std::int64_t>(sizeof(VertexPositionTexture)),
             graphicsProfile_);
+        if (!currentEffect_)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
         auto* packed = static_cast<GpuVPT*>(AcquireUserVertexScratch(static_cast<std::size_t>(n) * sizeof(GpuVPT)));
         for (int i = 0; i < n; ++i)
         {
@@ -2107,11 +2114,12 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
-        if (!currentEffect_)
-            throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
         const int n = ValidateUserPrimitiveArguments(
             data, offset, type, count,
             static_cast<std::int64_t>(sizeof(VertexPositionColorTexture)), graphicsProfile_);
+        if (!currentEffect_)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
         auto* packed = static_cast<GpuVPCT*>(AcquireUserVertexScratch(static_cast<std::size_t>(n) * sizeof(GpuVPCT)));
         for (int i = 0; i < n; ++i)
         {
@@ -2137,11 +2145,12 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
-        if (!currentEffect_)
-            throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
         const int n = ValidateUserPrimitiveArguments(
             data, offset, type, count,
             static_cast<std::int64_t>(sizeof(VertexPositionNormalTexture)), graphicsProfile_);
+        if (!currentEffect_)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
         auto* packed = static_cast<GpuVPNT*>(AcquireUserVertexScratch(static_cast<std::size_t>(n) * sizeof(GpuVPNT)));
         for (int i = 0; i < n; ++i)
         {
@@ -2174,12 +2183,13 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
-        if (!currentEffect_)
-            throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
         vertexDeclaration.ValidateForProfile(graphicsProfile_);
         const int stride = ValidateUserVertexDeclaration(vertexDeclaration);
         const int n      = ValidateUserPrimitiveArguments(
             vertexData, vertexOffset, type, primitiveCount, stride, graphicsProfile_);
+        if (!currentEffect_)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
         // Apply vertexOffset in bytes then upload n vertices worth of raw data.
         const auto* src = static_cast<const std::uint8_t*>(vertexData)
                           + static_cast<std::ptrdiff_t>(vertexOffset) * stride;
@@ -2208,8 +2218,6 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
-        if (!currentEffect_)
-            throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
         vertexDeclaration.ValidateForProfile(graphicsProfile_);
         const int stride = ValidateUserVertexDeclaration(vertexDeclaration);
         if (stride != CNA::Internal::Graphics::VertexStreamStride<VertexT>)
@@ -2222,6 +2230,9 @@ namespace Microsoft::Xna::Framework::Graphics
         const int n = ValidateUserPrimitiveArguments(
             vertexData, vertexOffset, type, primitiveCount,
             static_cast<std::int64_t>(sizeof(VertexT)), graphicsProfile_);
+        if (!currentEffect_)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
         auto* packed = static_cast<Stream*>(
             AcquireUserVertexScratch(static_cast<std::size_t>(n) * sizeof(Stream)));
         for (int i = 0; i < n; ++i)
@@ -2280,12 +2291,13 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
-        if (!currentEffect_)
-            throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         const int ic = ValidateUserIndexedArguments(
             vertices, vOffset, numVerts, indices, iOffset, type, primCount,
             static_cast<std::int64_t>(sizeof(VertexPositionColor)),
             static_cast<std::int64_t>(sizeof(std::uint16_t)), graphicsProfile_);
+        if (!currentEffect_)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         auto* packed = static_cast<GpuVPC*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPC)));
         for (int i = 0; i < numVerts; ++i)
         {
@@ -2315,12 +2327,13 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
-        if (!currentEffect_)
-            throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         const int ic = ValidateUserIndexedArguments(
             vertices, vOffset, numVerts, indices, iOffset, type, primCount,
             static_cast<std::int64_t>(sizeof(VertexPositionTexture)),
             static_cast<std::int64_t>(sizeof(std::uint16_t)), graphicsProfile_);
+        if (!currentEffect_)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         auto* packed = static_cast<GpuVPT*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPT)));
         for (int i = 0; i < numVerts; ++i)
         {
@@ -2350,12 +2363,13 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
-        if (!currentEffect_)
-            throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         const int ic = ValidateUserIndexedArguments(
             vertices, vOffset, numVerts, indices, iOffset, type, primCount,
             static_cast<std::int64_t>(sizeof(VertexPositionColorTexture)),
             static_cast<std::int64_t>(sizeof(std::uint16_t)), graphicsProfile_);
+        if (!currentEffect_)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         auto* packed = static_cast<GpuVPCT*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPCT)));
         for (int i = 0; i < numVerts; ++i)
         {
@@ -2385,12 +2399,13 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
-        if (!currentEffect_)
-            throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         const int ic = ValidateUserIndexedArguments(
             vertices, vOffset, numVerts, indices, iOffset, type, primCount,
             static_cast<std::int64_t>(sizeof(VertexPositionNormalTexture)),
             static_cast<std::int64_t>(sizeof(std::uint16_t)), graphicsProfile_);
+        if (!currentEffect_)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         auto* packed = static_cast<GpuVPNT*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPNT)));
         for (int i = 0; i < numVerts; ++i)
         {
@@ -2422,12 +2437,13 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
-        if (!currentEffect_)
-            throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         const int ic = ValidateUserIndexedArguments(
             vertices, vOffset, numVerts, indices, iOffset, type, primCount,
             static_cast<std::int64_t>(sizeof(VertexPositionColor)),
             static_cast<std::int64_t>(sizeof(std::uint32_t)), graphicsProfile_);
+        if (!currentEffect_)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         auto* packed = static_cast<GpuVPC*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPC)));
         for (int i = 0; i < numVerts; ++i)
         {
@@ -2457,12 +2473,13 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
-        if (!currentEffect_)
-            throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         const int ic = ValidateUserIndexedArguments(
             vertices, vOffset, numVerts, indices, iOffset, type, primCount,
             static_cast<std::int64_t>(sizeof(VertexPositionTexture)),
             static_cast<std::int64_t>(sizeof(std::uint32_t)), graphicsProfile_);
+        if (!currentEffect_)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         auto* packed = static_cast<GpuVPT*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPT)));
         for (int i = 0; i < numVerts; ++i)
         {
@@ -2492,12 +2509,13 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
-        if (!currentEffect_)
-            throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         const int ic = ValidateUserIndexedArguments(
             vertices, vOffset, numVerts, indices, iOffset, type, primCount,
             static_cast<std::int64_t>(sizeof(VertexPositionColorTexture)),
             static_cast<std::int64_t>(sizeof(std::uint32_t)), graphicsProfile_);
+        if (!currentEffect_)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         auto* packed = static_cast<GpuVPCT*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPCT)));
         for (int i = 0; i < numVerts; ++i)
         {
@@ -2527,12 +2545,13 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
-        if (!currentEffect_)
-            throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         const int ic = ValidateUserIndexedArguments(
             vertices, vOffset, numVerts, indices, iOffset, type, primCount,
             static_cast<std::int64_t>(sizeof(VertexPositionNormalTexture)),
             static_cast<std::int64_t>(sizeof(std::uint32_t)), graphicsProfile_);
+        if (!currentEffect_)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         auto* packed = static_cast<GpuVPNT*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPNT)));
         for (int i = 0; i < numVerts; ++i)
         {
@@ -2568,13 +2587,14 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
-        if (!currentEffect_)
-            throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         vd.ValidateForProfile(graphicsProfile_);
         const int stride = ValidateUserVertexDeclaration(vd);
         const int ic     = ValidateUserIndexedArguments(
             vertexData, vOffset, numVerts, indexData, iOffset, type, primCount, stride,
             static_cast<std::int64_t>(sizeof(std::uint16_t)), graphicsProfile_);
+        if (!currentEffect_)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         const auto* src  = static_cast<const std::uint8_t*>(vertexData)
                            + static_cast<std::ptrdiff_t>(vOffset) * stride;
         auto vb = renderer_->CreateVertexBuffer(numVerts);
@@ -2602,13 +2622,14 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
-        if (!currentEffect_)
-            throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         vd.ValidateForProfile(graphicsProfile_);
         const int stride = ValidateUserVertexDeclaration(vd);
         const int ic     = ValidateUserIndexedArguments(
             vertexData, vOffset, numVerts, indexData, iOffset, type, primCount, stride,
             static_cast<std::int64_t>(sizeof(std::uint32_t)), graphicsProfile_);
+        if (!currentEffect_)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         const auto* src  = static_cast<const std::uint8_t*>(vertexData)
                            + static_cast<std::ptrdiff_t>(vOffset) * stride;
         auto vb = renderer_->CreateVertexBuffer(numVerts);
@@ -2642,8 +2663,6 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
-        if (!currentEffect_)
-            throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         vertexDeclaration.ValidateForProfile(graphicsProfile_);
         const int stride = ValidateUserVertexDeclaration(vertexDeclaration);
         if (stride != CNA::Internal::Graphics::VertexStreamStride<VertexT>)
@@ -2657,6 +2676,9 @@ namespace Microsoft::Xna::Framework::Graphics
             vertexData, vertexOffset, numVertices, indexData, indexOffset, type, primitiveCount,
             static_cast<std::int64_t>(sizeof(VertexT)),
             static_cast<std::int64_t>(sizeof(IndexT)), graphicsProfile_);
+        if (!currentEffect_)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         auto* packed = static_cast<Stream*>(
             AcquireUserVertexScratch(static_cast<std::size_t>(numVertices) * sizeof(Stream)));
         for (int i = 0; i < numVertices; ++i)

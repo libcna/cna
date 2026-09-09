@@ -34,6 +34,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "System/ArgumentException.hpp"
+#include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
@@ -769,13 +770,15 @@ TEST(GraphicsDeviceValidationTest, SetVertexBuffers_EmptyClearsSingularBinding)
     VertexBuffer vertexBuffer(gd, 3);
     gd.SetVertexBuffer(&vertexBuffer);
     gd.SetVertexBuffers({});
+    Microsoft::Xna::Framework::Graphics::BasicEffect effect(gd);
+    effect.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply();
 
     try
     {
         gd.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
         FAIL() << "DrawPrimitives unexpectedly accepted an empty vertex-buffer state";
     }
-    catch (const std::runtime_error& ex)
+    catch (const System::InvalidOperationException& ex)
     {
         EXPECT_NE(
             std::string(ex.what()).find("no vertex buffer"),
@@ -838,6 +841,125 @@ TEST(GraphicsDeviceValidationTest, ForeignTexturesAreRejectedTransactionally)
         receiving.getVertexTexturesProperty()(0, &foreign),
         System::InvalidOperationException);
     EXPECT_EQ(receiving.getVertexTexturesProperty()[0], &local);
+}
+
+TEST(GraphicsDeviceDrawValidationTest, NumericArgumentsPrecedeMissingShaderAndData)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+    GraphicsDevice gd;
+    const std::array<VertexPositionColor, 3> vertices{};
+    const std::array<std::uint16_t, 3> indices{0, 1, 2};
+
+    // Recovered Microsoft XNA validates the public numeric contract before VerifyCanDraw asks
+    // whether shaders and buffered input are installed.
+    EXPECT_THROW(
+        gd.DrawPrimitives(PrimitiveType::TriangleList, 0, 0),
+        System::ArgumentOutOfRangeException);
+    EXPECT_THROW(
+        gd.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 0, 0, 1),
+        System::ArgumentOutOfRangeException);
+    EXPECT_THROW(
+        gd.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0, 0, 0, 1, 1),
+        System::ArgumentOutOfRangeException);
+    EXPECT_THROW(
+        gd.DrawUserPrimitives(PrimitiveType::TriangleList, vertices.data(), 0, 0),
+        System::ArgumentOutOfRangeException);
+    EXPECT_THROW(
+        gd.DrawUserIndexedPrimitives(
+            PrimitiveType::TriangleList, vertices.data(), 0, 0, indices.data(), 0, 1),
+        System::ArgumentOutOfRangeException);
+}
+
+TEST(GraphicsDeviceDrawValidationTest, MissingShaderUsesInvalidOperationAcrossClassicDrawFamilies)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+    GraphicsDevice gd;
+    const std::array<VertexPositionColor, 3> vertices{};
+    const std::array<std::uint16_t, 3> indices{0, 1, 2};
+
+    // VerifyCanDraw reports a missing shader before buffered input. User-primitives have their
+    // arrays and ranges validated first, then reach the same shader requirement.
+    EXPECT_THROW(
+        gd.DrawPrimitives(PrimitiveType::TriangleList, 0, 1),
+        System::InvalidOperationException);
+    EXPECT_THROW(
+        gd.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 3, 0, 1),
+        System::InvalidOperationException);
+    EXPECT_THROW(
+        gd.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0, 3, 0, 1, 1),
+        System::InvalidOperationException);
+    EXPECT_THROW(
+        gd.DrawUserPrimitives(PrimitiveType::TriangleList, vertices.data(), 0, 1),
+        System::InvalidOperationException);
+    EXPECT_THROW(
+        gd.DrawUserIndexedPrimitives(
+            PrimitiveType::TriangleList, vertices.data(), 0, 3, indices.data(), 0, 1),
+        System::InvalidOperationException);
+}
+
+TEST(GraphicsDeviceDrawValidationTest, ValidationPrecedenceMatchesRecoveredXna)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+    GraphicsDevice gd;
+    const std::array<VertexPositionColor, 3> vertices{};
+
+    auto expectRangeParameter = [](const char* parameterName, auto&& action)
+    {
+        try
+        {
+            action();
+            FAIL() << "Expected ArgumentOutOfRangeException for " << parameterName;
+        }
+        catch (const System::ArgumentOutOfRangeException& exception)
+        {
+            EXPECT_EQ(exception.getParamNameProperty(), parameterName);
+        }
+    };
+
+    // Buffered indexed families validate numVertices, primitiveCount, then instanceCount before
+    // VerifyCanDraw. CNA's extra negative-offset guards run only after that XNA state check.
+    expectRangeParameter("numVertices", [&]
+    {
+        gd.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 0, 0, 0);
+    });
+    expectRangeParameter("primitiveCount", [&]
+    {
+        gd.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0, 3, 0, 0, 0);
+    });
+    expectRangeParameter("instanceCount", [&]
+    {
+        gd.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0, 3, 0, 1, 0);
+    });
+    EXPECT_THROW(
+        gd.DrawPrimitives(PrimitiveType::TriangleList, -1, 1),
+        System::InvalidOperationException);
+
+    // User-array null checks precede numeric range checks. The UInt32 overload's Reach-profile
+    // gate is public in XNA and precedes even those shared checks.
+    EXPECT_THROW(
+        gd.DrawUserPrimitives(
+            PrimitiveType::TriangleList,
+            static_cast<const VertexPositionColor*>(nullptr), 0, 0),
+        System::ArgumentNullException);
+    EXPECT_THROW(
+        gd.DrawUserIndexedPrimitives(
+            PrimitiveType::TriangleList,
+            static_cast<const VertexPositionColor*>(nullptr), 0, 0,
+            static_cast<const std::uint16_t*>(nullptr), 0, 0),
+        System::ArgumentNullException);
+    EXPECT_THROW(
+        gd.DrawUserIndexedPrimitives(
+            PrimitiveType::TriangleList, vertices.data(), 0, 0,
+            static_cast<const std::uint16_t*>(nullptr), 0, 0),
+        System::ArgumentNullException);
+
+    gd.SetGraphicsProfileEXT(GraphicsProfile::Reach);
+    EXPECT_THROW(
+        gd.DrawUserIndexedPrimitives(
+            PrimitiveType::TriangleList,
+            static_cast<const VertexPositionColor*>(nullptr), 0, 0,
+            static_cast<const std::uint32_t*>(nullptr), 0, 0),
+        System::NotSupportedException);
 }
 
 // Regression test for a real reported crash (cna-template/missing.md): the single-argument

@@ -133,6 +133,9 @@ TEST(GraphicsProfileDrawLimitTest, UserDrawsUseTheProfileCeilingAndReachRejectsW
     BoundTriangle hiDef(GraphicsProfile::HiDef);
     constexpr int reachMaximum = 65'535;
     constexpr int hiDefMaximum = 1'048'575;
+    const VertexPositionColor vertex(Vector3(), Color::White);
+    const std::uint16_t index16 = 0;
+    const std::uint32_t index32 = 0;
 
     EXPECT_THROW(
         reach.device.DrawUserPrimitives(
@@ -143,6 +146,10 @@ TEST(GraphicsProfileDrawLimitTest, UserDrawsUseTheProfileCeilingAndReachRejectsW
         reach.device.DrawUserPrimitives(
             PrimitiveType::TriangleStrip, static_cast<const VertexPositionColor*>(nullptr),
             0, reachMaximum + 1),
+        System::ArgumentNullException);
+    EXPECT_THROW(
+        reach.device.DrawUserPrimitives(
+            PrimitiveType::TriangleStrip, &vertex, 0, reachMaximum + 1),
         System::NotSupportedException);
 
     EXPECT_THROW(
@@ -154,13 +161,16 @@ TEST(GraphicsProfileDrawLimitTest, UserDrawsUseTheProfileCeilingAndReachRejectsW
         reach.device.DrawUserIndexedPrimitives(
             PrimitiveType::TriangleStrip, static_cast<const VertexPositionColor*>(nullptr), 0, 1,
             static_cast<const std::uint16_t*>(nullptr), 0, reachMaximum + 1),
-        System::NotSupportedException);
-
-    const VertexPositionColor vertex(Vector3(), Color::White);
-    const std::uint32_t index = 0;
+        System::ArgumentNullException);
     EXPECT_THROW(
         reach.device.DrawUserIndexedPrimitives(
-            PrimitiveType::TriangleList, &vertex, 0, 1, &index, 0, 1),
+            PrimitiveType::TriangleStrip, &vertex, 0, 1,
+            &index16, 0, reachMaximum + 1),
+        System::NotSupportedException);
+
+    EXPECT_THROW(
+        reach.device.DrawUserIndexedPrimitives(
+            PrimitiveType::TriangleList, &vertex, 0, 1, &index32, 0, 1),
         System::NotSupportedException);
 
     EXPECT_THROW(
@@ -172,5 +182,9 @@ TEST(GraphicsProfileDrawLimitTest, UserDrawsUseTheProfileCeilingAndReachRejectsW
         hiDef.device.DrawUserPrimitives(
             PrimitiveType::TriangleStrip, static_cast<const VertexPositionColor*>(nullptr),
             0, hiDefMaximum + 1),
+        System::ArgumentNullException);
+    EXPECT_THROW(
+        hiDef.device.DrawUserPrimitives(
+            PrimitiveType::TriangleStrip, &vertex, 0, hiDefMaximum + 1),
         System::NotSupportedException);
 }

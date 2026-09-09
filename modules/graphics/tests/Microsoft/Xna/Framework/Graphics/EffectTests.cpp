@@ -25,6 +25,7 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ArgumentException.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 #include "CNA/TestSupport/TestPaths.hpp"
 
@@ -464,7 +465,9 @@ TEST_F(EffectApplyTest, DrawPrimitivesThrowsWithoutPriorApply)
     vb.SetData(vpc.data(), 3);
     gd.SetVertexBuffer(&vb);
 
-    EXPECT_THROW(gd.DrawPrimitives(PrimitiveType::TriangleList, 0, 1), std::runtime_error);
+    EXPECT_THROW(
+        gd.DrawPrimitives(PrimitiveType::TriangleList, 0, 1),
+        System::InvalidOperationException);
 }
 
 TEST_F(EffectApplyTest, ApplyMakesEffectCurrentSoDrawPrimitivesNoLongerThrowsForMissingEffect)

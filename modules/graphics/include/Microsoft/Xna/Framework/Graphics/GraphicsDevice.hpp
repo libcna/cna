@@ -397,6 +397,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param primitiveType  The type of primitive to draw.
          * @param vertexStart    Index of the first vertex to draw.
          * @param primitiveCount Number of primitives to draw.
+         * @throws System::InvalidOperationException if no effect or vertex buffer is bound.
          * @throws System::NotSupportedException if @p primitiveCount exceeds the active graphics
          *         profile limit.
          */
@@ -411,6 +412,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param numVertices    Number of vertices referenced.
          * @param startIndex     Location in the index buffer to start reading.
          * @param primitiveCount Number of primitives to draw.
+         * @throws System::InvalidOperationException if no effect, index buffer, or vertex buffer
+         *         is bound.
          * @throws System::NotSupportedException if @p primitiveCount exceeds the active graphics
          *         profile limit.
          */
@@ -438,7 +441,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param startIndex     Location in the index buffer to start reading.
          * @param primitiveCount Number of primitives per instance.
          * @param instanceCount  Number of instances to draw.
-         * @throws std::runtime_error if no vertex buffer, index buffer or effect is bound.
+         * @throws System::InvalidOperationException if no effect, index buffer, or vertex buffer
+         *         is bound.
          * @throws System::ArgumentOutOfRangeException if @p primitiveCount, @p numVertices or
          *         @p instanceCount is not positive; if @p minVertexIndex or @p startIndex is
          *         negative; if the requested index range leaves the bound index buffer; if the
@@ -507,6 +511,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param vertexData     Pointer to the raw vertex data (assumed VertexPositionColor layout).
          * @param vertexOffset   Offset into @p vertexData (in vertices) to start drawing from.
          * @param primitiveCount Number of primitives to draw.
+         * @throws System::InvalidOperationException if no effect has been applied.
          * @throws System::NotSupportedException if @p primitiveCount exceeds the active graphics
          *         profile limit.
          */
@@ -645,6 +650,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param indexData      Pointer to the raw index data.
          * @param indexOffset    Offset into @p indexData (in indices).
          * @param primitiveCount Number of primitives to draw.
+         * @throws System::InvalidOperationException if no effect has been applied.
          * @throws System::NotSupportedException if @p primitiveCount exceeds the active graphics
          *         profile limit.
          */
