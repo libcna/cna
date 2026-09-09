@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_vulkan.md VULKAN-250 (finding F-08): the renderer must state the shader dialect a
+// plans/plan_vulkan.md VULKAN-250 and plans/plan_modern.md MOD-2213: the renderer must state the shader dialect a
 // custom ShaderEffect has to be written in.
 //
 // GetShaderDialectEXT() exists precisely so an application need not infer the dialect from the
@@ -24,11 +24,13 @@
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Graphics/ShaderPackageEXT.hpp"
 #include "CNA/ShaderLanguageEXT.hpp"
 
 #include <cstdio>
 #include <memory>
 #include <string>
+#include <vector>
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -106,6 +108,101 @@ protected:
                       CNA::ShaderLanguageEXT::SpirV, static_cast<CNA::ShaderStageEXT>(999)),
               "A4 Vulkan GLSL, unknown and invalid payload pairs are refused",
               "support is not inferred from the Vulkan renderer identity");
+
+        {
+            using namespace CNA::Graphics;
+            std::vector<ShaderCodeEXT> variants;
+            variants.emplace_back(
+                CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Vertex,
+                "main", "effect.vert.glsl", "source");
+            variants.emplace_back(
+                CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Fragment,
+                "main", "effect.frag.glsl", "source");
+            variants.emplace_back(
+                CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Vertex,
+                "main", "effect.vert.spv", std::vector<std::uint8_t>{1, 2, 3, 4});
+            variants.emplace_back(
+                CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Fragment,
+                "main", "effect.frag.spv", std::vector<std::uint8_t>{5, 6, 7, 8});
+            const auto selection = ShaderPackageEXT(
+                std::move(variants),
+                {CNA::ShaderStageEXT::Fragment, CNA::ShaderStageEXT::Vertex},
+                {ShaderBindingRequirementEXT(
+                    "source", 0, ShaderBindingTypeEXT::SampledTexture2D,
+                    CNA::ShaderStageEXT::Fragment)}).selectFor(dev);
+            const auto* vertex = selection.findStage(CNA::ShaderStageEXT::Vertex);
+            check(selection.isUsable()
+                      && selection.getLanguage() == CNA::ShaderLanguageEXT::SpirV
+                      && selection.getCode().size() == 2
+                      && selection.getCode()[0].getStage() == CNA::ShaderStageEXT::Fragment
+                      && vertex != nullptr && vertex->isBinary()
+                      && selection.findStage(CNA::ShaderStageEXT::Compute) == nullptr
+                      && selection.getDiagnostic().find("SpirV") != std::string::npos,
+                  "A5 package selection chooses owned SPIR-V regardless of declaration order",
+                  selection.getDiagnostic());
+        }
+
+        {
+            using namespace CNA::Graphics;
+            const auto selection = ShaderPackageEXT(
+                {ShaderCodeEXT(
+                     CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Vertex,
+                     "main", "first.vert.spv", std::vector<std::uint8_t>{1, 2, 3, 4}),
+                 ShaderCodeEXT(
+                     CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Vertex,
+                     "main", "second.vert.spv", std::vector<std::uint8_t>{5, 6, 7, 8})},
+                {CNA::ShaderStageEXT::Vertex}).selectFor(dev);
+            check(!selection.isUsable()
+                      && selection.getLanguage() == CNA::ShaderLanguageEXT::Unknown
+                      && selection.getCode().empty()
+                      && selection.findStage(CNA::ShaderStageEXT::Vertex) == nullptr
+                      && selection.getDiagnostic().find("ambiguous duplicate Vertex")
+                          != std::string::npos
+                      && selection.getDiagnostic().find("first.vert.spv") != std::string::npos
+                      && selection.getDiagnostic().find("second.vert.spv") != std::string::npos,
+                  "A6 an ambiguous live-language stage is rejected with both labels",
+                  selection.getDiagnostic());
+        }
+
+        {
+            using namespace CNA::Graphics;
+            const auto selection = ShaderPackageEXT(
+                {ShaderCodeEXT(
+                     CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Vertex,
+                     "VSMain", "unavailable.hlsl", "source"),
+                 ShaderCodeEXT(
+                     CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Vertex,
+                     "main", "unavailable.glsl", "source")},
+                {CNA::ShaderStageEXT::Vertex}).selectFor(dev);
+            const auto glsl = selection.getDiagnostic().find("GlslEs");
+            const auto hlsl = selection.getDiagnostic().find("Hlsl");
+            check(!selection.isUsable() && glsl != std::string::npos
+                      && hlsl != std::string::npos && glsl < hlsl
+                      && selection.getDiagnostic().find("renderer rejects GlslEs/Vertex")
+                          != std::string::npos
+                      && selection.getDiagnostic().find("renderer rejects Hlsl/Vertex")
+                          != std::string::npos,
+                  "A7 refusal lists every considered variant in stable preference order",
+                  selection.getDiagnostic());
+        }
+
+        {
+            using namespace CNA::Graphics;
+            const auto selection = ShaderPackageEXT(
+                {ShaderCodeEXT(
+                    CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Compute,
+                    "main", "storage.comp.spv", std::vector<std::uint8_t>{1, 2, 3, 4})},
+                {CNA::ShaderStageEXT::Compute},
+                {ShaderBindingRequirementEXT(
+                    "output", 0, ShaderBindingTypeEXT::StorageTexture2D,
+                    CNA::ShaderStageEXT::Compute)}).selectFor(dev);
+            const bool expected = dev.SupportsCapability(
+                CNA::GraphicsCapability::ComputeShaders)
+                && dev.SupportsRendererFeatureEXT(CNA::RendererFeature::ComputeImageBinding);
+            check(selection.isUsable() == expected,
+                  "A8 package selection follows the live compute-image capability",
+                  selection.getDiagnostic());
+        }
 
         // B + C: the payload a caller acting on that answer would most plausibly send.
         ShaderEffect glslEffect(dev, std::string(kVulkanGlslVert), std::string(kVulkanGlslFrag));

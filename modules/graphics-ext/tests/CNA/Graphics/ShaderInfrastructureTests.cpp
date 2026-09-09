@@ -35,6 +35,7 @@ using CNA::Graphics::ShaderCodeEXT;
 using CNA::Graphics::ShaderBindingRequirementEXT;
 using CNA::Graphics::ShaderBindingTypeEXT;
 using CNA::Graphics::ShaderPackageEXT;
+using CNA::Graphics::ShaderPackageSelectionEXT;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::ShaderEffect;
 
@@ -423,6 +424,174 @@ TEST(ShaderPackageEXTTest, BindingsAreUniquePerStageAndConsistentAcrossStages)
             ShaderBindingRequirementEXT(
                 "texture", 0, ShaderBindingTypeEXT::SampledTexture2D,
                 CNA::ShaderStageEXT::Fragment)}));
+}
+
+// =====================================================================================
+// MOD-2213: deterministic live-device shader-package selection
+// =====================================================================================
+
+TEST(ShaderPackageSelectionEXTTest, StablePreferenceIgnoresDeclarationOrderAndOwnsSelectedCode)
+{
+    GraphicsDevice device;
+    std::vector<ShaderCodeEXT> variants;
+    const auto add = [&variants](const CNA::ShaderLanguageEXT language,
+                                 const CNA::ShaderStageEXT stage,
+                                 const std::string& label) {
+        if (language == CNA::ShaderLanguageEXT::SpirV
+            || language == CNA::ShaderLanguageEXT::Dxil)
+        {
+            variants.emplace_back(
+                language, stage, "main", label,
+                std::vector<std::uint8_t>{1, 2, 3, 4});
+        }
+        else
+            variants.emplace_back(language, stage, "main", label, "source");
+    };
+
+    constexpr std::array declarationOrder = {
+        CNA::ShaderLanguageEXT::Wgsl,
+        CNA::ShaderLanguageEXT::Msl,
+        CNA::ShaderLanguageEXT::Hlsl,
+        CNA::ShaderLanguageEXT::GlslVulkan,
+        CNA::ShaderLanguageEXT::GlslEs,
+        CNA::ShaderLanguageEXT::GlslDesktop,
+        CNA::ShaderLanguageEXT::Dxil,
+        CNA::ShaderLanguageEXT::SpirV
+    };
+    for (const auto language : declarationOrder)
+    {
+        add(language, CNA::ShaderStageEXT::Vertex, "vertex");
+        add(language, CNA::ShaderStageEXT::Fragment, "fragment");
+    }
+
+    ShaderPackageSelectionEXT selection = ShaderPackageEXT(
+        std::move(variants),
+        {CNA::ShaderStageEXT::Fragment, CNA::ShaderStageEXT::Vertex}).selectFor(device);
+
+    constexpr std::array preference = {
+        CNA::ShaderLanguageEXT::SpirV,
+        CNA::ShaderLanguageEXT::Dxil,
+        CNA::ShaderLanguageEXT::GlslDesktop,
+        CNA::ShaderLanguageEXT::GlslEs,
+        CNA::ShaderLanguageEXT::GlslVulkan,
+        CNA::ShaderLanguageEXT::Hlsl,
+        CNA::ShaderLanguageEXT::Msl,
+        CNA::ShaderLanguageEXT::Wgsl
+    };
+    auto expected = CNA::ShaderLanguageEXT::Unknown;
+    if (device.SupportsCapability(CNA::GraphicsCapability::CustomEffects))
+    {
+        for (const auto language : preference)
+        {
+            if (device.SupportsShaderLanguageEXT(language, CNA::ShaderStageEXT::Vertex)
+                && device.SupportsShaderLanguageEXT(language, CNA::ShaderStageEXT::Fragment))
+            {
+                expected = language;
+                break;
+            }
+        }
+    }
+
+    EXPECT_EQ(selection.isUsable(), expected != CNA::ShaderLanguageEXT::Unknown);
+    EXPECT_EQ(selection.getLanguage(), expected);
+    if (selection.isUsable())
+    {
+        ASSERT_EQ(selection.getCode().size(), 2U);
+        EXPECT_EQ(selection.getCode()[0].getStage(), CNA::ShaderStageEXT::Fragment);
+        EXPECT_EQ(selection.getCode()[1].getStage(), CNA::ShaderStageEXT::Vertex);
+        ASSERT_NE(selection.findStage(CNA::ShaderStageEXT::Vertex), nullptr);
+        EXPECT_EQ(selection.findStage(CNA::ShaderStageEXT::Vertex)->getSourceLabel(), "vertex");
+        EXPECT_EQ(selection.findStage(CNA::ShaderStageEXT::Compute), nullptr);
+        EXPECT_NE(selection.getDiagnostic().find(": selected"), std::string::npos);
+    }
+}
+
+TEST(ShaderPackageSelectionEXTTest, DuplicateLiveStageIsAmbiguousAndNeverChosen)
+{
+    GraphicsDevice device;
+    constexpr std::array preference = {
+        CNA::ShaderLanguageEXT::SpirV,
+        CNA::ShaderLanguageEXT::Dxil,
+        CNA::ShaderLanguageEXT::GlslDesktop,
+        CNA::ShaderLanguageEXT::GlslEs,
+        CNA::ShaderLanguageEXT::GlslVulkan,
+        CNA::ShaderLanguageEXT::Hlsl,
+        CNA::ShaderLanguageEXT::Msl,
+        CNA::ShaderLanguageEXT::Wgsl
+    };
+    auto language = CNA::ShaderLanguageEXT::Unknown;
+    for (const auto candidate : preference)
+    {
+        if (device.SupportsShaderLanguageEXT(candidate, CNA::ShaderStageEXT::Vertex))
+        {
+            language = candidate;
+            break;
+        }
+    }
+    if (language == CNA::ShaderLanguageEXT::Unknown
+        || !device.SupportsCapability(CNA::GraphicsCapability::CustomEffects))
+        GTEST_SKIP() << "this renderer has no selectable graphics shader language";
+
+    std::vector<ShaderCodeEXT> variants;
+    const auto add = [&variants, language](const char* label) {
+        if (language == CNA::ShaderLanguageEXT::SpirV
+            || language == CNA::ShaderLanguageEXT::Dxil)
+            variants.emplace_back(
+                language, CNA::ShaderStageEXT::Vertex, "main", label,
+                std::vector<std::uint8_t>{1, 2, 3, 4});
+        else
+            variants.emplace_back(
+                language, CNA::ShaderStageEXT::Vertex, "main", label, "source");
+    };
+    add("first");
+    add("second");
+
+    const auto selection = ShaderPackageEXT(
+        std::move(variants), {CNA::ShaderStageEXT::Vertex}).selectFor(device);
+    EXPECT_FALSE(selection.isUsable());
+    EXPECT_EQ(selection.getLanguage(), CNA::ShaderLanguageEXT::Unknown);
+    EXPECT_TRUE(selection.getCode().empty());
+    EXPECT_EQ(selection.findStage(CNA::ShaderStageEXT::Vertex), nullptr);
+    EXPECT_NE(selection.getDiagnostic().find("ambiguous duplicate Vertex"), std::string::npos);
+    EXPECT_NE(selection.getDiagnostic().find("first"), std::string::npos);
+    EXPECT_NE(selection.getDiagnostic().find("second"), std::string::npos);
+}
+
+TEST(ShaderPackageSelectionEXTTest, RequiredVertexStorageBindingIsCapabilityChecked)
+{
+    GraphicsDevice device;
+    CNA::ShaderLanguageEXT language = CNA::ShaderLanguageEXT::Unknown;
+    for (const auto candidate : {CNA::ShaderLanguageEXT::SpirV,
+                                 CNA::ShaderLanguageEXT::GlslDesktop,
+                                 CNA::ShaderLanguageEXT::GlslEs})
+    {
+        if (device.SupportsShaderLanguageEXT(candidate, CNA::ShaderStageEXT::Vertex))
+        {
+            language = candidate;
+            break;
+        }
+    }
+    if (language == CNA::ShaderLanguageEXT::Unknown)
+        GTEST_SKIP() << "this renderer has no selectable vertex language";
+
+    std::vector<ShaderCodeEXT> variants;
+    if (language == CNA::ShaderLanguageEXT::SpirV)
+        variants.emplace_back(
+            language, CNA::ShaderStageEXT::Vertex, "main", "vertex",
+            std::vector<std::uint8_t>{1, 2, 3, 4});
+    else
+        variants.emplace_back(
+            language, CNA::ShaderStageEXT::Vertex, "main", "vertex", "source");
+    const auto selection = ShaderPackageEXT(
+        std::move(variants), {CNA::ShaderStageEXT::Vertex},
+        {ShaderBindingRequirementEXT(
+            "instances", 2147483647, ShaderBindingTypeEXT::StorageBuffer,
+            CNA::ShaderStageEXT::Vertex)}).selectFor(device);
+
+    EXPECT_FALSE(selection.isUsable());
+    EXPECT_NE(
+        selection.getDiagnostic().find("exceeds vertex storage-buffer bindings"),
+        std::string::npos);
 }
 
 // =====================================================================================

@@ -8,6 +8,11 @@
 #include <string>
 #include <vector>
 
+namespace Microsoft::Xna::Framework::Graphics
+{
+    class GraphicsDevice;
+}
+
 namespace CNA::Graphics
 {
     /** @addtogroup cnaext_engine
@@ -82,6 +87,59 @@ namespace CNA::Graphics
     };
 
     /**
+     * @brief Owned result of selecting one complete language from a shader package.
+     *
+     * A usable result owns exactly one code value for every required stage. An unusable result
+     * owns no code and carries a deterministic diagnostic that lists every considered language,
+     * code label and refusal reason.
+     */
+    class ShaderPackageSelectionEXT final
+    {
+    public:
+        /**
+         * @brief Returns whether the package had one complete unambiguous usable language.
+         * @return True only when selected code is available for every required stage.
+         */
+        [[nodiscard]] bool isUsable() const noexcept;
+
+        /**
+         * @brief Returns the selected language or `Unknown` when selection failed.
+         * @return Exact selected source language or binary format.
+         */
+        [[nodiscard]] CNA::ShaderLanguageEXT getLanguage() const noexcept;
+
+        /**
+         * @brief Returns all selected stage payloads in the package's required-stage order.
+         * @return Owned immutable code values, or an empty collection after failure.
+         */
+        [[nodiscard]] const std::vector<ShaderCodeEXT>& getCode() const noexcept;
+
+        /**
+         * @brief Finds the selected payload for one stage.
+         * @param stage Stage to find.
+         * @return Pointer to the owned code value, or null when absent or selection failed.
+         */
+        [[nodiscard]] const ShaderCodeEXT* findStage(CNA::ShaderStageEXT stage) const noexcept;
+
+        /**
+         * @brief Returns the complete deterministic selection diagnostic.
+         * @return Owned success summary or complete considered-variant failure report.
+         */
+        [[nodiscard]] const std::string& getDiagnostic() const noexcept;
+
+    private:
+        friend class ShaderPackageEXT;
+
+        ShaderPackageSelectionEXT(
+            CNA::ShaderLanguageEXT language, std::vector<ShaderCodeEXT> code,
+            std::string diagnostic);
+
+        CNA::ShaderLanguageEXT language_ = CNA::ShaderLanguageEXT::Unknown;
+        std::vector<ShaderCodeEXT> code_;
+        std::string diagnostic_;
+    };
+
+    /**
      * @brief Owned renderer-neutral collection of shader variants and their portable contract.
      *
      * The package contains code and metadata only. It owns no renderer/native program and can be
@@ -134,6 +192,21 @@ namespace CNA::Graphics
          * @return True when @p stage occurs in the required-stage list.
          */
         [[nodiscard]] bool requiresStage(CNA::ShaderStageEXT stage) const noexcept;
+
+        /**
+         * @brief Selects one complete shader language for the live graphics device.
+         *
+         * Binary formats are preferred in fixed order (`SpirV`, then `Dxil`), followed by text
+         * languages in their public identity order. Declaration order never affects selection.
+         * Each required language/stage pair is queried from the live renderer; graphics and
+         * compute capabilities plus portable binding requirements are checked separately.
+         * Duplicate code for one language/stage makes that language ambiguous and unusable.
+         *
+         * @param device Live graphics device whose implemented paths and capabilities are queried.
+         * @return Owned selected code or an unusable result with every considered variant listed.
+         */
+        [[nodiscard]] ShaderPackageSelectionEXT selectFor(
+            const Microsoft::Xna::Framework::Graphics::GraphicsDevice& device) const;
 
     private:
         std::vector<ShaderCodeEXT> variants_;

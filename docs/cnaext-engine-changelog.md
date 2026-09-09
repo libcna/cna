@@ -14,6 +14,22 @@ something breaks.
 
 ---
 
+## Revision 15 — 2026-09-10
+
+### Deterministic live-device shader selection (`MOD-2213`)
+
+- `ShaderPackageEXT::selectFor` asks the live `GraphicsDevice` for every exact language/stage pair;
+  it never derives support from a renderer identity or converts one payload form into another.
+- Selection prefers SPIR-V, then DXIL, then the textual language identities in their published
+  order. Package declaration order cannot change the winner. One exact code value is required for
+  every package stage; duplicate language/stage payloads reject that candidate as ambiguous.
+- `ShaderPackageSelectionEXT` owns the chosen stage payloads and a deterministic diagnostic.
+  Failure lists every language actually present, every source label and every reason considered,
+  including incomplete stages, live renderer refusal and unavailable stage/resource capabilities.
+
+The C header carries the same engine-layer revision marker. The C ABI remains 0.26.0; package
+selection is currently a C++ engine-layer surface.
+
 ## Revision 14 — 2026-09-10
 
 ### Owned multi-language shader packages (`MOD-2212`)

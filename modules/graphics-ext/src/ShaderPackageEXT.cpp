@@ -3,8 +3,15 @@
 
 #ifdef CNA_CNAEXT
 
+#include "CNA/GraphicsCapability.hpp"
+#include "CNA/RendererCapabilityProfile.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+
 #include <algorithm>
+#include <array>
+#include <sstream>
 #include <stdexcept>
+#include <string_view>
 #include <utility>
 
 namespace CNA::Graphics
@@ -33,6 +40,121 @@ namespace CNA::Graphics
                     return false;
             }
             return false;
+        }
+
+        constexpr std::array ShaderLanguagePreference = {
+            CNA::ShaderLanguageEXT::SpirV,
+            CNA::ShaderLanguageEXT::Dxil,
+            CNA::ShaderLanguageEXT::GlslDesktop,
+            CNA::ShaderLanguageEXT::GlslEs,
+            CNA::ShaderLanguageEXT::GlslVulkan,
+            CNA::ShaderLanguageEXT::Hlsl,
+            CNA::ShaderLanguageEXT::Msl,
+            CNA::ShaderLanguageEXT::Wgsl
+        };
+
+        [[nodiscard]] std::string_view LanguageName(
+            const CNA::ShaderLanguageEXT language) noexcept
+        {
+            switch (language)
+            {
+                case CNA::ShaderLanguageEXT::Unknown: return "Unknown";
+                case CNA::ShaderLanguageEXT::GlslDesktop: return "GlslDesktop";
+                case CNA::ShaderLanguageEXT::GlslEs: return "GlslEs";
+                case CNA::ShaderLanguageEXT::GlslVulkan: return "GlslVulkan";
+                case CNA::ShaderLanguageEXT::Hlsl: return "Hlsl";
+                case CNA::ShaderLanguageEXT::Msl: return "Msl";
+                case CNA::ShaderLanguageEXT::Wgsl: return "Wgsl";
+                case CNA::ShaderLanguageEXT::SpirV: return "SpirV";
+                case CNA::ShaderLanguageEXT::Dxil: return "Dxil";
+                case CNA::ShaderLanguageEXT::Count: return "Count";
+            }
+            return "InvalidLanguage";
+        }
+
+        [[nodiscard]] std::string_view StageName(const CNA::ShaderStageEXT stage) noexcept
+        {
+            switch (stage)
+            {
+                case CNA::ShaderStageEXT::Unknown: return "Unknown";
+                case CNA::ShaderStageEXT::Vertex: return "Vertex";
+                case CNA::ShaderStageEXT::Fragment: return "Fragment";
+                case CNA::ShaderStageEXT::Compute: return "Compute";
+                case CNA::ShaderStageEXT::Count: return "Count";
+            }
+            return "InvalidStage";
+        }
+
+        [[nodiscard]] bool HasLanguage(
+            const std::vector<ShaderCodeEXT>& variants,
+            const CNA::ShaderLanguageEXT language) noexcept
+        {
+            return std::any_of(
+                variants.begin(), variants.end(),
+                [language](const ShaderCodeEXT& code) {
+                    return code.getLanguage() == language;
+                });
+        }
+
+        void AddFailure(std::vector<std::string>& failures, std::string failure)
+        {
+            if (std::find(failures.begin(), failures.end(), failure) == failures.end())
+                failures.push_back(std::move(failure));
+        }
+
+        void AddBindingRequirementFailures(
+            const Microsoft::Xna::Framework::Graphics::GraphicsDevice& device,
+            const std::vector<ShaderBindingRequirementEXT>& bindings,
+            std::vector<std::string>& failures)
+        {
+            for (const auto& binding : bindings)
+            {
+                const std::string prefix = "binding '" + binding.getName() + "' ("
+                    + std::string(StageName(binding.getStage())) + " "
+                    + std::to_string(binding.getBinding()) + ") ";
+                switch (binding.getType())
+                {
+                    case ShaderBindingTypeEXT::SampledTexture2D:
+                    case ShaderBindingTypeEXT::SampledTextureCube:
+                        break;
+                    case ShaderBindingTypeEXT::SampledTexture3D:
+                        if (!device.SupportsRendererFeatureEXT(
+                                CNA::RendererFeature::Texture3DSampling))
+                            AddFailure(failures, prefix + "requires Texture3DSampling");
+                        break;
+                    case ShaderBindingTypeEXT::SampledTexture2DArray:
+                    {
+                        const auto limit = device.GetRendererLimitEXT(
+                            CNA::RendererLimit::MaxTextureArrayLayers);
+                        if (!limit.known || limit.value == 0)
+                            AddFailure(failures, prefix + "requires sampled texture arrays");
+                        break;
+                    }
+                    case ShaderBindingTypeEXT::StorageBuffer:
+                        if (binding.getStage() == CNA::ShaderStageEXT::Compute
+                            && !device.SupportsCapability(
+                                CNA::GraphicsCapability::ComputeShaders))
+                            AddFailure(failures, prefix + "requires ComputeShaders");
+                        if (binding.getStage() == CNA::ShaderStageEXT::Vertex)
+                        {
+                            const auto limit = device.GetRendererLimitEXT(
+                                CNA::RendererLimit::MaxVertexShaderStorageBlocks);
+                            if (!limit.known || limit.value == 0
+                                || static_cast<std::uint64_t>(binding.getBinding()) >= limit.value)
+                                AddFailure(
+                                    failures, prefix + "exceeds vertex storage-buffer bindings");
+                        }
+                        break;
+                    case ShaderBindingTypeEXT::StorageTexture2D:
+                        if (binding.getStage() == CNA::ShaderStageEXT::Compute
+                            && !device.SupportsRendererFeatureEXT(
+                                CNA::RendererFeature::ComputeImageBinding))
+                            AddFailure(failures, prefix + "requires ComputeImageBinding");
+                        break;
+                    case ShaderBindingTypeEXT::Count:
+                        break;
+                }
+            }
         }
     }
 
@@ -64,6 +186,44 @@ namespace CNA::Graphics
     ShaderBindingTypeEXT ShaderBindingRequirementEXT::getType() const noexcept { return type_; }
 
     CNA::ShaderStageEXT ShaderBindingRequirementEXT::getStage() const noexcept { return stage_; }
+
+    ShaderPackageSelectionEXT::ShaderPackageSelectionEXT(
+        const CNA::ShaderLanguageEXT language, std::vector<ShaderCodeEXT> code,
+        std::string diagnostic)
+        : language_(language)
+        , code_(std::move(code))
+        , diagnostic_(std::move(diagnostic))
+    {
+    }
+
+    bool ShaderPackageSelectionEXT::isUsable() const noexcept
+    {
+        return language_ != CNA::ShaderLanguageEXT::Unknown && !code_.empty();
+    }
+
+    CNA::ShaderLanguageEXT ShaderPackageSelectionEXT::getLanguage() const noexcept
+    {
+        return language_;
+    }
+
+    const std::vector<ShaderCodeEXT>& ShaderPackageSelectionEXT::getCode() const noexcept
+    {
+        return code_;
+    }
+
+    const ShaderCodeEXT* ShaderPackageSelectionEXT::findStage(
+        const CNA::ShaderStageEXT stage) const noexcept
+    {
+        const auto found = std::find_if(
+            code_.begin(), code_.end(),
+            [stage](const ShaderCodeEXT& code) { return code.getStage() == stage; });
+        return found == code_.end() ? nullptr : &*found;
+    }
+
+    const std::string& ShaderPackageSelectionEXT::getDiagnostic() const noexcept
+    {
+        return diagnostic_;
+    }
 
     ShaderPackageEXT::ShaderPackageEXT(
         std::vector<ShaderCodeEXT> variants,
@@ -144,6 +304,103 @@ namespace CNA::Graphics
     {
         return std::find(requiredStages_.begin(), requiredStages_.end(), stage)
             != requiredStages_.end();
+    }
+
+    ShaderPackageSelectionEXT ShaderPackageEXT::selectFor(
+        const Microsoft::Xna::Framework::Graphics::GraphicsDevice& device) const
+    {
+        std::vector<std::string> packageFailures;
+        const bool needsGraphics = requiresStage(CNA::ShaderStageEXT::Vertex)
+            || requiresStage(CNA::ShaderStageEXT::Fragment);
+        if (needsGraphics
+            && !device.SupportsCapability(CNA::GraphicsCapability::CustomEffects))
+            AddFailure(packageFailures, "graphics stages require CustomEffects");
+        if (requiresStage(CNA::ShaderStageEXT::Compute)
+            && !device.SupportsCapability(CNA::GraphicsCapability::ComputeShaders))
+            AddFailure(packageFailures, "the compute stage requires ComputeShaders");
+        AddBindingRequirementFailures(device, bindingRequirements_, packageFailures);
+
+        std::vector<std::string> considered;
+        for (const auto language : ShaderLanguagePreference)
+        {
+            if (!HasLanguage(variants_, language)) continue;
+
+            std::ostringstream description;
+            description << LanguageName(language) << " {";
+            bool firstVariant = true;
+            for (const auto& variant : variants_)
+            {
+                if (variant.getLanguage() != language) continue;
+                if (!firstVariant) description << ", ";
+                firstVariant = false;
+                description << StageName(variant.getStage()) << "='"
+                            << (variant.getSourceLabel().empty()
+                                    ? std::string("<unnamed>")
+                                    : variant.getSourceLabel())
+                            << "'";
+            }
+            description << "}";
+
+            std::vector<std::string> failures = packageFailures;
+            std::vector<ShaderCodeEXT> selected;
+            selected.reserve(requiredStages_.size());
+            for (const auto stage : requiredStages_)
+            {
+                std::vector<const ShaderCodeEXT*> matches;
+                for (const auto& variant : variants_)
+                {
+                    if (variant.getLanguage() == language && variant.getStage() == stage)
+                        matches.push_back(&variant);
+                }
+                if (matches.empty())
+                {
+                    AddFailure(
+                        failures, "missing required " + std::string(StageName(stage)) + " code");
+                    continue;
+                }
+                if (matches.size() > 1)
+                {
+                    AddFailure(
+                        failures, "ambiguous duplicate " + std::string(StageName(stage))
+                            + " code");
+                    continue;
+                }
+                if (!device.SupportsShaderLanguageEXT(language, stage))
+                {
+                    AddFailure(
+                        failures, "renderer rejects " + std::string(LanguageName(language)) + "/"
+                            + std::string(StageName(stage)));
+                    continue;
+                }
+                selected.push_back(*matches.front());
+            }
+
+            if (failures.empty())
+            {
+                description << ": selected";
+                return ShaderPackageSelectionEXT(
+                    language, std::move(selected), description.str());
+            }
+
+            description << ": rejected (";
+            for (std::size_t index = 0; index < failures.size(); ++index)
+            {
+                if (index != 0) description << "; ";
+                description << failures[index];
+            }
+            description << ")";
+            considered.push_back(description.str());
+        }
+
+        std::ostringstream diagnostic;
+        diagnostic << "ShaderPackageEXT: no usable shader variant. Considered: ";
+        for (std::size_t index = 0; index < considered.size(); ++index)
+        {
+            if (index != 0) diagnostic << "; ";
+            diagnostic << considered[index];
+        }
+        return ShaderPackageSelectionEXT(
+            CNA::ShaderLanguageEXT::Unknown, {}, diagnostic.str());
     }
 }
 
