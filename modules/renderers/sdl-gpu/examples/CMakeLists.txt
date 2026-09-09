@@ -39,6 +39,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_smoke sdlgpu_smoke_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_Smoke COMMAND cna_test_sdlgpu_smoke
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    set_tests_properties(SdlGpu_Smoke PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
     # REMED-GFX-028: every real constructor acquisition is transactional, failed objects never
     # enter the window registry, and lazy command/pipeline/sampler/fallback failures remain

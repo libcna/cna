@@ -2534,6 +2534,16 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         virtualWidth_ = width;
         virtualHeight_ = height;
+        if (presentationMode_ == CnaPresentationMode::NativeBackBuffer && width > 0 && height > 0)
+        {
+            // A requested native backbuffer resize is the next swapchain extent. Window-system
+            // resize notification and SDL_gpu swapchain acquisition are both asynchronous, but
+            // GraphicsDevice must expose and capture the new full viewport immediately, before
+            // the first acquisition. The acquired extent replaces this prediction in
+            // EnsureFrameRendered(), so a platform-clamped size still becomes authoritative.
+            physicalWidth_ = width;
+            physicalHeight_ = height;
+        }
     }
 
     void SdlGpuRenderer::SetPresentationMode(int mode)

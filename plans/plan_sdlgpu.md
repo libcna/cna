@@ -21,8 +21,8 @@
 | EasyGL / SDL GPU renderer unit-test sources | 2 / 2 `.cpp` files |
 | SDL GPU registered integration tests | 85 CTests before parity-fixture registration |
 | Shared EasyGL parity fixtures available | 30 renderer-neutral sources in `modules/graphics/examples/parity` |
-| Tasks created by this audit | 28 (`SDLGPU-55`–`SDLGPU-82`) |
-| Completed / open / proven unavoidable | 4 / 24 / 0; `SDLGPU-80` is a candidate limitation, not yet counted complete |
+| Tasks created by this audit | 29 (`SDLGPU-55`–`SDLGPU-83`) |
+| Completed / open / proven unavoidable | 5 / 24 / 0; `SDLGPU-80` is a candidate limitation, not yet counted complete |
 | SDL GPU build | Stable `cmake-build-sdlgpu`, Debug, `CNA_GRAPHICS_RENDERER=SDL_GPU`, tests/examples ON |
 | EasyGL oracle build | Stable `cmake-build-debug`, Debug, `CNA_GRAPHICS_RENDERER=OPENGL33`, tests/examples ON |
 | Runtime driver | SDL 3.5.0 SDL_gpu Vulkan on AMD Radeon 780M / Mesa RADV 25.0.7; Khronos validation layer 1.4.309 present |
@@ -526,6 +526,24 @@ underlying API limitation proven after reasonable emulation analysis.
 - **Acceptance/test:** recompute the 246-row manifest with zero unexplained relevant rows; rerun all
   SDL tests, all shared parity/oracle tests and targeted EasyGL controls; record final commits/counts,
   validation status, unavoidable limits and every remaining task. Only then issue verdict A or B.
+
+### SDLGPU-83 — make the requested native viewport authoritative before first acquisition ✅
+
+- **Problem/public behavior:** a first draw at a non-default `NativeBackBuffer` size captured the
+  renderer's constructor-time 800×480 viewport even though the public presentation request was
+  256×128; lazy swapchain acquisition learned the real size only after the draw had been queued.
+- **Evidence:** the shared wireframe fixture rendered its solid triangle in the 800×480-scaled
+  upper-left of a 256×128 readback on both offscreen RADV and X11/lavapipe. Readback tracing showed
+  `backbuffer=256x128 viewport=800x480` immediately before acquisition; subsequent frames reported
+  256×128. EasyGL derives the logical size from the requested virtual dimensions.
+- **Location:** `SdlGpuRenderer::SetVirtualResolution`, first-frame smoke regression.
+- **Acceptance/test:** the renderer and public `GraphicsDevice.Viewport` both report the exact
+  requested 320×240 size on frame one, before any present/readback/acquisition; ordinary rendering
+  regressions remain green and native validation output is fatal.
+- **Result (2026-09-09):** `SetVirtualResolution` now treats a positive native request as the
+  pending swapchain extent immediately; the first real acquisition remains authoritative and
+  replaces it if the platform clamps the size. The expanded smoke test passes 30/30 on Vulkan,
+  including both first-frame exact-size checks, with validation diagnostics configured as fatal.
 
 ---
 

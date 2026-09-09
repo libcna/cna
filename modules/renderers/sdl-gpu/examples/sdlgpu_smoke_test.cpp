@@ -8,7 +8,9 @@
 //
 // Check A -- GameWindow handle returns a real, non-null SDL_Window.
 // Check B -- SDL_GetRenderer(window) is null (this renderer does not use SDL_Renderer).
-// Check C -- GetViewportSize() reports a positive width/height matching the real window.
+// Check C -- on the first frame, both the renderer and public GraphicsDevice viewport already
+//   report the requested native backbuffer dimensions. This must not wait for the first lazy
+//   swapchain acquisition to replace the renderer's constructor-time size.
 // Check D -- a real SdlGpuVertexBufferRenderer/SdlGpuIndexBufferRenderer round-trip: SetData()
 //   followed by GetVertexCount()/GetIndexCount() reports the exact count uploaded (Phase SDLGPU-5,
 //   SDLGPU-23) -- see sdlgpu_2d_test.cpp for the fuller Texture2D/SpriteBatch vertical-slice proof.
@@ -50,7 +52,7 @@ using namespace CNA::Internal::Renderers::SdlGpu;
 namespace
 {
     constexpr int kTotalFrames = 60;
-    constexpr int kExpectedChecks = 28;
+    constexpr int kExpectedChecks = 30;
 }
 
 class SdlGpuSmokeTest : public Game
@@ -82,6 +84,11 @@ protected:
             int height = 0;
             renderer.GetViewportSize(width, height);
             check(width > 0 && height > 0, "GetViewportSize() reports a positive size");
+            check(width == 320 && height == 240,
+                  "first-frame renderer viewport matches the requested native backbuffer");
+            const Viewport firstViewport = dev.getViewportProperty();
+            check(firstViewport.getWidthProperty() == 320 && firstViewport.getHeightProperty() == 240,
+                  "first-frame public Viewport matches the requested native backbuffer");
 
             auto vb = renderer.CreateVertexBuffer(3);
             const float verts[3 * 2] = {0, 0, 1, 0, 0, 1};
