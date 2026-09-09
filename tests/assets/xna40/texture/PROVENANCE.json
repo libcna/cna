@@ -53,6 +53,18 @@
       "thirdParty": false
     },
     {
+      "file": "gamma_45000.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "gamma_srgb.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
       "file": "garbage.tga",
       "origin": "generated",
       "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
@@ -155,9 +167,49 @@
       "thirdParty": false
     },
     {
+      "file": "probe_colorkey_alpha.png",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
       "file": "probe_cube.dds",
       "origin": "generated",
       "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_dxt3.dds",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_dxt3_blue_sweep.dds",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_dxt3_blue_sweep_hi.dds",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_dxt3_blue_sweep_lo.dds",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_dxt3_green_sweep.dds",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_dxt3_lerp.dds",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_dxt3_red_sweep.dds",
+      "origin": "authored",
       "thirdParty": false
     },
     {
@@ -170,6 +222,16 @@
       "file": "probe_impulse16.png",
       "origin": "generated",
       "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_mipchain.dds",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_mipchain_npot.dds",
+      "origin": "authored",
       "thirdParty": false
     },
     {

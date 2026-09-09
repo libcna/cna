@@ -180,6 +180,11 @@
       "thirdParty": false
     },
     {
+      "file": "xml_dictionary_order.xml",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
       "file": "xml_int.xml",
       "origin": "authored",
       "thirdParty": false

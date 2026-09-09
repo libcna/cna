@@ -1,0 +1,13 @@
+{
+  "format": "cna.xna40.corpus-provenance/1",
+  "comment": "plans/plan_xnapipeline_parity.md XNAPP-022: every black-box fixture in this directory, with where it came from. This one holds the point sets the BoundingSphere oracle was measured over, written by the oracle's own runner. Nothing here is third-party content and nothing was downloaded.",
+  "directory": "tests/assets/xna40/framework",
+  "files": [
+    {
+      "file": "bounding-sphere-points.txt",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/framework/run-bounding-sphere-oracle.sh",
+      "thirdParty": false
+    }
+  ]
+}

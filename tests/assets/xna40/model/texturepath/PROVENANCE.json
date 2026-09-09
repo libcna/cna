@@ -1,0 +1,12 @@
+{
+  "format": "cna.xna40.corpus-provenance/1",
+  "comment": "plans/plan_xna_sample_xnb_sweep.md XNASWEEP-140: the directory a `Texture`'s `FileName` and `RelativeFilename` fixtures resolve into, holding the one 1x1 TGA they name. Authored for this repository; nothing here is third-party content.",
+  "directory": "tests/assets/xna40/model/texturepath",
+  "files": [
+    {
+      "file": "fbx_texture_a.tga",
+      "origin": "authored",
+      "thirdParty": false
+    }
+  ]
+}

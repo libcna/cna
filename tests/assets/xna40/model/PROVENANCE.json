@@ -35,6 +35,11 @@
       "thirdParty": false
     },
     {
+      "file": "fbx7_geometry.fbx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
       "file": "fbx_bare_mesh.fbx",
       "origin": "generated",
       "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
@@ -49,6 +54,36 @@
       "thirdParty": false
     },
     {
+      "file": "fbx_bone_first_only.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_bone_is_root.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_bone_promoted.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_bone_scene_order.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_cameras.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "thirdParty": false
+    },
+    {
       "file": "fbx_empty.fbx",
       "origin": "generated",
       "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
@@ -56,10 +91,71 @@
       "thirdParty": false
     },
     {
+      "file": "fbx_float_rounding.fbx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_generated_normals.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_generated_normals_area.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_geometric_offset.fbx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
       "file": "fbx_hierarchy.fbx",
       "origin": "generated",
       "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
       "note": "FBX 6.1 ASCII, because XNA's importer carries FBX SDK 2011.3.1 and refuses 7400 and above.",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_light_marker.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_material_factor_texture.fbx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_material_gap.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_material_gap_negative.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_material_gap_skip.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_material_legacy.fbx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_material_order.fbx",
+      "origin": "authored",
       "thirdParty": false
     },
     {
@@ -84,6 +180,94 @@
       "thirdParty": false
     },
     {
+      "file": "fbx_pivots.fbx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_polygon12.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_polygon4.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_polygon5.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_polygon6.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_polygon7.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_polygon8.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_polygon8_reversed.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_polygon8_rotated.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_polygon_concave.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_polygon_concave6.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_polygon_mixed.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_polygon_tri_quad.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_postrotation.fbx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_prerotation_units.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "thirdParty": false
+    },
+    {
       "file": "fbx_quad_polygon.fbx",
       "origin": "generated",
       "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
@@ -95,6 +279,42 @@
       "origin": "generated",
       "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
       "note": "FBX 6.1 ASCII, because XNA's importer carries FBX SDK 2011.3.1 and refuses 7400 and above.",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_scene_order.fbx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_split_vertices.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_texture_b.tga",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_texture_path_filename.fbx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_texture_path_relative.fbx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_texture_second.tga",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_texture_second_batch.fbx",
+      "origin": "authored",
       "thirdParty": false
     },
     {
@@ -112,10 +332,68 @@
       "thirdParty": false
     },
     {
+      "file": "fbx_unit_scale_both.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_unit_scale_child.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_unit_scale_offset.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_unit_scale_pivot.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_unit_scale_plain.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_unit_scale_siblings.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_unit_scale_two.fbx",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_uv_layer_one.fbx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "fbx_uv_two_sets.fbx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
       "file": "fbx_wrapped_values.fbx",
       "origin": "generated",
       "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",
       "note": "FBX 6.1 ASCII with its value lists wrapped across lines the way an Autodesk exporter wraps them, which is the shape no fixture here had until the public samples were built.",
+      "thirdParty": false
+    },
+    {
+      "file": "generated_normals.x",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make-model-fixtures.py",
       "thirdParty": false
     },
     {
@@ -134,6 +412,16 @@
       "file": "missing_texture.x",
       "origin": "generated",
       "generator": "tools/xna-pipeline-oracle/model/make-model-fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "normal_duplicate_values.x",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "normal_per_face.x",
+      "origin": "authored",
       "thirdParty": false
     },
     {
@@ -218,6 +506,12 @@
     },
     {
       "file": "with_templates.x",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make-model-fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "zero_power.x",
       "origin": "generated",
       "generator": "tools/xna-pipeline-oracle/model/make-model-fixtures.py",
       "thirdParty": false
