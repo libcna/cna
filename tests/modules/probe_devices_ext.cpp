@@ -15,7 +15,7 @@ int main()
 #ifdef CNA_DEVICES
     CNA::Devices::FileDialogFilter filter;
     filter.Name = "All files";
-    filter.Extensions = "*";
+    filter.Pattern = "*";
     std::printf("devices-ext probe: filter '%s' power=%d\n", filter.Name.c_str(),
                 static_cast<int>(CNA::Devices::PowerState::OnBattery));
 #else
