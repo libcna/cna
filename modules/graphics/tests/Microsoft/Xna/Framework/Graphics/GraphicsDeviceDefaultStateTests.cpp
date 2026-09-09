@@ -253,6 +253,34 @@ TEST(GraphicsDeviceDefaultStateTest, DisposalAfterBindingInvalidatesAssignedPayl
                  System::ObjectDisposedException);
 }
 
+TEST(GraphicsDeviceDefaultStateTest, CustomStatesCanBeReappliedAcrossDevices)
+{
+    GraphicsDevice first;
+    GraphicsDevice second;
+
+    BlendState blend;
+    blend.setColorWriteChannelsProperty(ColorWriteChannels::None);
+    EXPECT_NO_THROW(first.setBlendStateProperty(blend));
+    EXPECT_NO_THROW(second.setBlendStateProperty(blend));
+    EXPECT_NO_THROW(first.setBlendStateProperty(blend));
+    EXPECT_EQ(second.getBlendStateProperty().getColorWriteChannelsProperty(),
+              ColorWriteChannels::None);
+
+    DepthStencilState depth;
+    depth.setDepthBufferEnableProperty(false);
+    EXPECT_NO_THROW(first.setDepthStencilStateProperty(depth));
+    EXPECT_NO_THROW(second.setDepthStencilStateProperty(depth));
+    EXPECT_NO_THROW(first.setDepthStencilStateProperty(depth));
+    EXPECT_FALSE(second.getDepthStencilStateProperty().getDepthBufferEnableProperty());
+
+    RasterizerState rasterizer;
+    rasterizer.setCullModeProperty(CullMode::None);
+    EXPECT_NO_THROW(first.setRasterizerStateProperty(rasterizer));
+    EXPECT_NO_THROW(second.setRasterizerStateProperty(rasterizer));
+    EXPECT_NO_THROW(first.setRasterizerStateProperty(rasterizer));
+    EXPECT_EQ(second.getRasterizerStateProperty().getCullModeProperty(), CullMode::None);
+}
+
 // Task 319: FNA's GraphicsDevice.ReferenceStencil is a real, independent device property
 // (FNA3D_Get/SetReferenceStencil) - but assigning a whole DepthStencilState (which carries its own
 // ReferenceStencil field) applies that state atomically, the same way BlendState.BlendFactor is

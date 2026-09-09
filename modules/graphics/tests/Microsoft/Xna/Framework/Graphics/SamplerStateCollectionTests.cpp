@@ -113,6 +113,20 @@ TEST(SamplerStateCollectionTest, DisposalAfterAssignmentInvalidatesSharedPayload
     EXPECT_EQ(coll[4].getNameProperty(), "SamplerState.LinearWrap");
 }
 
+TEST(GraphicsDeviceSamplerStatesTest, CustomSamplerCanBeReappliedAcrossDevices)
+{
+    GraphicsDevice first;
+    GraphicsDevice second;
+    SamplerState sampler;
+    sampler.setAddressUProperty(TextureAddressMode::Mirror);
+
+    EXPECT_NO_THROW(first.getSamplerStatesProperty()[3] = sampler);
+    EXPECT_NO_THROW(second.getSamplerStatesProperty()[3] = sampler);
+    EXPECT_NO_THROW(first.getSamplerStatesProperty()[4] = sampler);
+    EXPECT_EQ(second.getSamplerStatesProperty()[3].getAddressUProperty(),
+              TextureAddressMode::Mirror);
+}
+
 TEST(SamplerStateCollectionTest, NegativeIndexThrows)
 {
     SamplerStateCollection coll;
