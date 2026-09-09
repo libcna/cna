@@ -260,11 +260,16 @@ namespace Microsoft::Xna::Framework
 
     std::string Matrix::ToString() const
     {
+        // The outer braces are XNA's own: a `Matrix` boxed in a material's opaque data comes back
+        // from the genuine pipeline as `{ {M11:1 ...} {M21:...} {M31:...} {M41:...} }`, with the
+        // space after the first brace and before the last. Measured on the genuine importer over
+        // `x_effect_instance.x`, whose `EffectParamFloats` of sixteen floats is a `Matrix`
+        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-183`).
         std::ostringstream stream;
-        stream << "{M11:" << M11 << " M12:" << M12 << " M13:" << M13 << " M14:" << M14
+        stream << "{ {M11:" << M11 << " M12:" << M12 << " M13:" << M13 << " M14:" << M14
             << "} {M21:" << M21 << " M22:" << M22 << " M23:" << M23 << " M24:" << M24
             << "} {M31:" << M31 << " M32:" << M32 << " M33:" << M33 << " M34:" << M34
-            << "} {M41:" << M41 << " M42:" << M42 << " M43:" << M43 << " M44:" << M44 << "}";
+            << "} {M41:" << M41 << " M42:" << M42 << " M43:" << M43 << " M44:" << M44 << "} }";
         return stream.str();
     }
 
