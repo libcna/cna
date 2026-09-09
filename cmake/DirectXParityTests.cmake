@@ -671,6 +671,10 @@ function(cna_register_d3d_parity_tests)
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_active_msaa_readback_test.cpp"
         DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 600)
     cna_d3d_parity_fixture(
+        NAME MRT TARGET mrt DIRECTX12_ORDER 2165
+        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_mrt_test.cpp"
+        DIRECTX11_TIMEOUT 600 DIRECTX12_TIMEOUT 900)
+    cna_d3d_parity_fixture(
         NAME CompressedTexture_StorageContract TARGET compressed_texture_storage DIRECTX12_ORDER 1892
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/d3d_compressed_texture_contract_test.cpp"
         DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 600)
