@@ -32,6 +32,7 @@
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/ShaderLanguageEXT.hpp"
 #include "common/PortableTintShaderPackage.generated.hpp"
+#include "common/PortableTintShaderPackage.hpp"
 
 #include <cstdio>
 #include <memory>
@@ -140,7 +141,25 @@ protected:
         const int W = vp.getWidthProperty();
         const int H = vp.getHeightProperty();
 
-        ShaderEffect fx(device, kVertSrc, kFragSrc);
+        bool packageSelectionOk = true;
+        std::unique_ptr<ShaderEffect> ownedEffect;
+#ifdef CNA_CNAEXT
+        const auto package = CNA::Examples::PortableTint::CreatePackage();
+        const auto selection = package.selectFor(device);
+        ownedEffect = std::make_unique<ShaderEffect>(device, package);
+        packageSelectionOk = selection.isUsable()
+            && selection.getLanguage() == CNA::ShaderLanguageEXT::GlslEs
+            && ownedEffect->GetSelectedShaderLanguageEXT() == CNA::ShaderLanguageEXT::GlslEs
+            && selection.findStage(CNA::ShaderStageEXT::Vertex) != nullptr
+            && selection.findStage(CNA::ShaderStageEXT::Fragment) != nullptr;
+        std::printf("[%s] MOD-2217: portable package selected GLSL ES on EasyGL\n",
+                    packageSelectionOk ? "PASS" : "FAIL");
+#else
+        // The legacy constructor keeps this renderer test usable in the intentional CNAEXT-off
+        // configuration; MOD-2217's package-selection leg runs in the CNAEXT-on configuration.
+        ownedEffect = std::make_unique<ShaderEffect>(device, kVertSrc, kFragSrc);
+#endif
+        ShaderEffect& fx = *ownedEffect;
 
         if (!fx.IsEffectValid())
         {
@@ -175,7 +194,7 @@ protected:
         const bool centOk = (centPx.getRProperty() >= 200 && centPx.getGProperty() <= 50);
         const bool bgOk   = (bgPx.getGProperty()   >= 200 && bgPx.getRProperty()   <= 50);
 
-        if (centOk && bgOk)
+        if (centOk && bgOk && packageSelectionOk)
         {
             std::printf("[PASS] EasyGLShaderEffect: centre=(%d,%d,%d) bg=(%d,%d,%d)\n",
                         centPx.getRProperty(), centPx.getGProperty(), centPx.getBProperty(),

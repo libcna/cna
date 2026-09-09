@@ -27,7 +27,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "CNA/Graphics/ShaderPackageEXT.hpp"
-#include "common/PortableTintShaderPackage.generated.hpp"
+#include "common/PortableTintShaderPackage.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <cstdio>
@@ -100,19 +100,49 @@ protected:
                 && direct.GetVertexSource().size() == PortableTint::kVulkanVertexSpirVByteSize
                 && direct.GetFragmentSource().size() == PortableTint::kVulkanFragmentSpirVByteSize;
 
-            ShaderPackageEXT package(
-                {ShaderCodeEXT(
-                     CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Vertex,
-                     "VSMain", "tint.hlsl", "hlsl vertex"),
-                 ShaderCodeEXT(
-                     CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Fragment,
-                     "PSMain", "tint.hlsl", "hlsl fragment"),
-                 vertexCode, fragmentCode},
+            const ShaderPackageEXT package = PortableTint::CreatePackage();
+            const auto selection = package.selectFor(device);
+
+            const auto& variants = package.getVariants();
+            const ShaderPackageEXT sourceOnlyPackage(
+                {variants[0], variants[1]},
                 {CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment});
+            const auto refusal = sourceOnlyPackage.selectFor(device);
+            bool structuredRefusal = false;
+            try
+            {
+                ShaderEffect unsupported(device, sourceOnlyPackage);
+            }
+            catch (const CNA::ShaderCompilationExceptionEXT& error)
+            {
+                const auto& diagnostics = error.getDiagnostics();
+                structuredRefusal = diagnostics.size() == 2
+                    && diagnostics[0].getSourceLabel() == "easygl.vert.glsl"
+                    && diagnostics[0].getStage() == CNA::ShaderStageEXT::Vertex
+                    && diagnostics[1].getSourceLabel() == "easygl.frag.glsl"
+                    && diagnostics[1].getStage() == CNA::ShaderStageEXT::Fragment
+                    && diagnostics[0].getMessage() == refusal.getDiagnostic()
+                    && diagnostics[1].getMessage() == refusal.getDiagnostic();
+            }
+            catch (...)
+            {
+            }
+            const bool completeRefusal = structuredRefusal && !refusal.isUsable()
+                && refusal.getDiagnostic().find(
+                    "GlslEs {Vertex='easygl.vert.glsl', Fragment='easygl.frag.glsl'}")
+                    != std::string::npos
+                && refusal.getDiagnostic().find("renderer rejects GlslEs/Vertex")
+                    != std::string::npos
+                && refusal.getDiagnostic().find("renderer rejects GlslEs/Fragment")
+                    != std::string::npos;
             ownedEffect = std::make_unique<ShaderEffect>(device, package);
-            portableOverloadsOk = directOk && ownedEffect->IsEffectValid()
+            portableOverloadsOk = directOk && selection.isUsable()
+                && selection.getLanguage() == CNA::ShaderLanguageEXT::SpirV
+                && completeRefusal && ownedEffect->IsEffectValid()
                 && ownedEffect->GetSelectedShaderLanguageEXT()
                     == CNA::ShaderLanguageEXT::SpirV;
+            std::printf("[%s] MOD-2217: source-only refusal lists both generated stages\n",
+                        completeRefusal ? "ok" : "FAIL");
         }
         ShaderEffect& fx = *ownedEffect;
         std::unique_ptr<Effect> clonedEffect(fx.Clone());
@@ -124,7 +154,7 @@ protected:
             && clonedShaderEffect != nullptr && clonedShaderEffect->IsEffectValid()
             && clonedShaderEffect->GetSelectedShaderLanguageEXT()
                 == CNA::ShaderLanguageEXT::SpirV;
-        std::printf("[%s] MOD-2214: direct code and package overloads retain selected SPIR-V\n",
+        std::printf("[%s] MOD-2217: portable package selected SPIR-V on Vulkan\n",
                     portableOverloadsOk ? "ok" : "FAIL");
 
         if (!fx.IsEffectValid())
