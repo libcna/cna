@@ -449,9 +449,8 @@ TEST(TextureCollectionValidationTest, OwnedCollectionRejectsUseAfterDeviceDispos
 // =============================================================================
 // GraphicsDevice.SetRenderTargets — MAX_RENDERTARGET_BINDINGS=4 cap (Task 881)
 //
-// Matches FNA's real behavior: GraphicsDevice.MAX_RENDERTARGET_BINDINGS=4, and
-// SetRenderTargets's Array.Copy into the fixed-size renderTargetBindings array throws when
-// given more than 4 targets.
+// Microsoft XNA's profile ceiling is four under HiDef and reports a profile
+// NotSupportedException when it is exceeded.
 //
 // Real RenderTarget2D instances are used throughout so the cap tests reach only the fixed-size
 // binding limit. The explicit RenderTargetBinding constructors reject null, while a default
@@ -461,6 +460,7 @@ TEST(TextureCollectionValidationTest, OwnedCollectionRejectsUseAfterDeviceDispos
 TEST(GraphicsDeviceValidationTest, SetRenderTargets_FiveTargets_Throws)
 {
     GraphicsDevice gd;
+    gd.SetGraphicsProfileEXT(Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
     std::vector<std::unique_ptr<RenderTarget2D>> targets;
     std::vector<RenderTargetBinding> bindings;
     for (int i = 0; i < 5; ++i)
@@ -468,7 +468,7 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FiveTargets_Throws)
         targets.push_back(std::make_unique<RenderTarget2D>(gd, 4, 4));
         bindings.emplace_back(targets.back().get());
     }
-    EXPECT_THROW(gd.SetRenderTargets(bindings), std::invalid_argument);
+    EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
 }
 
 TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)

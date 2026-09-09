@@ -74,6 +74,8 @@
 > Reset-path review then proved that CNA retained active render-target bindings across a backbuffer
 > reset, contradicting Microsoft's explicit unbind and leaving `Present()` unusable;
 > `SOFTWARE-228` restores the reset boundary.
+> The MRT ceiling probe also corrected a stale FNA-led exception assertion: Microsoft reports a
+> profile `NotSupportedException`, now restored by `SOFTWARE-229`.
 > Deferred CNAEXT-modern and
 > non-applicable physical GPU/window behavior remain separately classified.
 > The executable task table is below; the evidence ledger is
@@ -295,6 +297,7 @@ its own tests and plan evidence in the same commit.
 | SOFTWARE-226 | Restore Microsoft XNA viewport/scissor validation and lifetime semantics | ✅ | Completed 2026-09-09. Recovered Microsoft XNA validates every assigned viewport against the active backbuffer or first render target, requires positive dimensions, an ordered 0..1 depth range, and validates scissor coordinates/extents against that same surface while allowing a zero-area boundary rectangle. CNA forwarded every value to the renderer and cached it, so renderer-dependent native behavior replaced a shared public contract; both getters also returned stale values after device disposal. Shared overflow-safe validation now runs before renderer mutation and commits only accepted state, target dimensions take precedence over the larger backbuffer, and both getters enforce device lifetime. Three new public validation tests plus the expanded lifecycle test pass on Software and desktop EasyGL. Full `CnaGraphicsTests` passes 2,436 with 55 classified skips out of 2,491 on Software and 2,448 with 59 skips out of 2,507 on desktop EasyGL. |
 | SOFTWARE-227 | Reject native-query GraphicsDevice properties after disposal | ✅ | Completed 2026-09-09. Recovered Microsoft XNA checks device disposal before reading both `DisplayMode` and `GraphicsDeviceStatus`; CNA returned adapter/cache-derived values after destruction. The shared getters now apply the same `ObjectDisposedException` boundary. The expanded renderer-facing lifecycle contract passes on Software and desktop EasyGL, and the unchanged full-suite baselines remain 2,436/2,491 with 55 classified skips and 2,448/2,507 with 59 skips respectively. The deliberately cached `Adapter`, `GraphicsProfile`, `PresentationParameters`, state, mask/factor and buffer properties remain readable where the recovered Microsoft getters do not perform this native-resource check. |
 | SOFTWARE-228 | Unbind active render targets during `GraphicsDevice.Reset` | ✅ | Completed 2026-09-09. Recovered Microsoft XNA saves ordinary draw state, calls `SetRenderTargets(null, 0)` before resetting the backbuffer, and deliberately omits render targets from `SavedDeviceState.Restore`. CNA left `currentRenderTargets_` and `renderTargetBound_` intact while resizing/reconfiguring the renderer. A reset performed with an 8x6 target bound therefore continued to report that target and made the next `Present()` throw, even though the renderer had established a backbuffer. The shared Reset path now unbinds after `DeviceResetting` and before presentation mutation, giving normal target finalization/discard semantics and backbuffer viewport/scissor restoration. The public lifecycle discriminator passes on Software and desktop EasyGL; full suites pass 2,437/2,492 with 55 classified skips and 2,449/2,508 with 59 skips respectively. |
+| SOFTWARE-229 | Restore Microsoft XNA MRT ceiling exception semantics | ✅ | Completed 2026-09-09. CNA's hard four-binding guard threw `std::invalid_argument`, backed by an old FNA implementation-detail test, before its later profile-aware `NotSupportedException` path could run. Recovered Microsoft XNA compares the requested count with `ProfileCapabilities.MaxRenderTargets` and reports the profile feature failure. The common hard ceiling now throws `System::NotSupportedException`; the discriminator explicitly selects HiDef so five targets challenge the four-slot ceiling rather than Reach's one-target rule. It passes on Software and desktop EasyGL, and both full suites retain the SOFTWARE-228 baselines. |
 
 ### Current dependency order
 Tasks through `SOFTWARE-161` plus `SOFTWARE-166/167/169/170/171/172/174/175/176/177/179..197/199..206/208..225` are complete except for the intentionally
@@ -339,7 +342,7 @@ renderer-side batch state after a deferred submission exception so the public ob
 reusable as FNA's cleared guard promises. `SOFTWARE-219` closes the remaining recovered
 `VerifyCanDraw` texture-state branch by enforcing Reach clamp-only sampling for conditional NPOT
 Texture2D resources without restricting HiDef.
-`SOFTWARE-220..228` close the subsequent recovered render-target compatibility/identity/no-op
+`SOFTWARE-220..229` close the subsequent recovered render-target compatibility/identity/no-op
 rules, common cross-device vertex/index/texture binding omissions, and Microsoft-specific plural
 vertex-binding validation/state behavior that FNA does not reproduce, followed by the public
 texture/sampler collection profile, format, and device-lifecycle boundary and the active-surface
@@ -348,6 +351,8 @@ viewport/scissor validation contract.
 device status without imposing disposal behavior on cached properties for which Microsoft does not.
 `SOFTWARE-228` closes the recovered reset transition by finalizing/unbinding active targets before
 the renderer's backbuffer is reconfigured.
+`SOFTWARE-229` corrects the adjacent over-ceiling exception type to Microsoft's profile feature
+failure instead of preserving FNA's array-copy implementation detail.
 `SOFTWARE-100` remains yellow for the previously recorded
 repository-wide blockers; that status does not excuse any renderer gap found here.
 

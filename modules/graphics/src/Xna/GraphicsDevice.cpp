@@ -4452,8 +4452,9 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
 
         if (renderTargets.size() > MAX_RENDERTARGET_BINDINGS)
-            throw std::invalid_argument("SetRenderTargets: at most " +
-                std::to_string(MAX_RENDERTARGET_BINDINGS) + " render targets may be bound at once.");
+            throw System::NotSupportedException(
+                "SetRenderTargets: at most " + std::to_string(MAX_RENDERTARGET_BINDINGS)
+                + " render targets may be bound at once.");
 
         // D9-103 follow-up: GraphicsProfile.Reach's own MaxRenderTargets=1 ceiling (D9-100's own
         // table) -- a SEPARATE, lower, software-imposed limit from MAX_RENDERTARGET_BINDINGS
