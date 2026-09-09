@@ -1318,7 +1318,11 @@ static int validate_device_extensions(CNA_Handle graphics_device)
         cna_graphics_device_set_graphics_profile_ext(
             graphics_device, CNA_GRAPHICS_PROFILE_REACH) != CNA_RESULT_SUCCESS ||
         cna_graphics_device_set_graphics_profile_ext(graphics_device, UINT32_C(5)) !=
-            CNA_RESULT_INVALID_ARGUMENT) {
+            CNA_RESULT_INVALID_ARGUMENT ||
+        /* OcclusionQuery is a HiDef-only XNA profile feature. Restore HiDef before the later
+           capability-backed public query contract runs. */
+        cna_graphics_device_set_graphics_profile_ext(
+            graphics_device, CNA_GRAPHICS_PROFILE_HI_DEF) != CNA_RESULT_SUCCESS) {
         return 0;
     }
 
@@ -1527,12 +1531,32 @@ static int validate_sprite_text_and_queries(CNA_Handle graphics_device)
     int32_t pixels = -1;
     CNA_Bool precise = UINT8_C(9);
     uint64_t query_type_bytes = 0U;
+    const CNA_Result fresh_pixel_count =
+        cna_occlusion_query_get_pixel_count(query, &pixels);
+    const CNA_Result end_before_begin = cna_occlusion_query_end(query);
+    const CNA_Result first_begin = cna_occlusion_query_begin(query);
+    const CNA_Result nested_begin = cna_occlusion_query_begin(query);
+    const CNA_Result first_end = cna_occlusion_query_end(query);
+    const CNA_Result repeated_end = cna_occlusion_query_end(query);
+    const CNA_Result reuse_before_observation = cna_occlusion_query_begin(query);
+    const CNA_Result completion_result =
+        cna_occlusion_query_get_is_complete(query, &complete);
+    const CNA_Result pixel_count_result =
+        cna_occlusion_query_get_pixel_count(query, &pixels);
+    const CNA_Result observed_reuse = cna_occlusion_query_begin(query);
+    const CNA_Result observed_reuse_end = cna_occlusion_query_end(query);
+
     ok = cna_occlusion_query_has_renderer(query, &has_renderer) == CNA_RESULT_SUCCESS &&
         cna_occlusion_query_has_renderer(query, 0) == CNA_RESULT_INVALID_ARGUMENT &&
-        is_supported(cna_occlusion_query_begin(query)) &&
-        is_supported(cna_occlusion_query_end(query)) &&
-        is_supported(cna_occlusion_query_get_is_complete(query, &complete)) &&
-        is_supported(cna_occlusion_query_get_pixel_count(query, &pixels)) &&
+        fresh_pixel_count == CNA_RESULT_INVALID_STATE &&
+        end_before_begin == CNA_RESULT_INVALID_STATE &&
+        first_begin == CNA_RESULT_SUCCESS && nested_begin == CNA_RESULT_INVALID_STATE &&
+        first_end == CNA_RESULT_SUCCESS && repeated_end == CNA_RESULT_INVALID_STATE &&
+        reuse_before_observation == CNA_RESULT_INVALID_STATE &&
+        completion_result == CNA_RESULT_SUCCESS &&
+        ((complete == CNA_TRUE && pixel_count_result == CNA_RESULT_SUCCESS && pixels >= 0) ||
+         (complete == CNA_FALSE && pixel_count_result == CNA_RESULT_INVALID_STATE)) &&
+        observed_reuse == CNA_RESULT_SUCCESS && observed_reuse_end == CNA_RESULT_SUCCESS &&
         /* CBIND-104: whether that count is a per-fragment tally or the boolean some backends can
            only answer. A coverage ratio computed from the boolean is 1/area rather than a
            fraction, so a caller has to be able to ask before dividing. The answer is the

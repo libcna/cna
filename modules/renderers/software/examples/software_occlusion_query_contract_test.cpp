@@ -28,6 +28,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
+#include "System/InvalidOperationException.hpp"
 
 #include <array>
 #include <cstdio>
@@ -107,8 +108,11 @@ class SoftwareOcclusionQueryContractTest final : public Game
         OcclusionQuery query(device);
         Check(query.HasRenderer() && query.isPixelCountPreciseEXT(),
               "query owns an exact renderer implementation");
-        Check(!query.getIsCompleteProperty() && query.getPixelCountProperty() == 0,
-              "a fresh query has no completed result");
+        bool freshPixelCountThrew = false;
+        try { (void) query.getPixelCountProperty(); }
+        catch (const System::InvalidOperationException&) { freshPixelCountThrew = true; }
+        Check(!query.getIsCompleteProperty() && freshPixelCountThrew,
+              "a fresh query is incomplete and rejects PixelCount");
         query.Begin();
         draw();
         Check(!query.getIsCompleteProperty(),
@@ -131,11 +135,17 @@ class SoftwareOcclusionQueryContractTest final : public Game
 
         DrawQuad(device, 0.6f, Color::Green);
         query.Begin();
-        query.Begin();
+        bool nestedBeginThrew = false;
+        try { query.Begin(); }
+        catch (const System::InvalidOperationException&) { nestedBeginThrew = true; }
         query.End();
-        query.End();
+        bool repeatedEndThrew = false;
+        try { query.End(); }
+        catch (const System::InvalidOperationException&) { repeatedEndThrew = true; }
+        Check(nestedBeginThrew && repeatedEndThrew,
+              "nested Begin and repeated End obey XNA's public query state machine");
         Check(query.getIsCompleteProperty() && query.getPixelCountProperty() == 0,
-              "Begin resets the prior result; repeated Begin/End is harmless and outside draws do not count");
+              "Begin resets the prior result and draws outside the interval do not count");
     }
 
     void CheckRasterGates(GraphicsDevice& device)
@@ -267,6 +277,7 @@ public:
     SoftwareOcclusionQueryContractTest()
     {
         graphics_ = std::make_unique<GraphicsDeviceManager>(this);
+        graphics_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         graphics_->setPreferredBackBufferWidthProperty(32);
         graphics_->setPreferredBackBufferHeightProperty(32);
     }

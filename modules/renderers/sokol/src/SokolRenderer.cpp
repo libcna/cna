@@ -1741,13 +1741,12 @@ namespace CNA::Internal::Renderers::Sokol
     void SokolOcclusionQueryRenderer::Begin()
     {
 #if CNA_SOKOL_HAS_GL_READBACK
-        // See this method's own header doc: a repeated Begin() with no intervening End() must not
-        // reach glBeginQuery a second time, or GL raises GL_INVALID_OPERATION that stays pending
-        // until sokol_gfx's own next GL call trips over it.
+        // Defensive native guard: the public object rejects a repeated Begin, while direct/native
+        // misuse must also avoid leaving GL_INVALID_OPERATION pending for sokol_gfx's next call.
         if (queryId_ == 0 || active_) return;
         // plans/plan_sokol.md SOKOL-43: OpenGL permits only one active GL_SAMPLES_PASSED query per
         // context, not per object -- a DIFFERENT query's outstanding Begin() must be refused here
-        // too, the same silent-absorb contract as a repeated Begin() on this same object.
+        // too; the public caller balances and observes an absorbed attempt before reuse.
         if (owner_ != nullptr && !owner_->TryActivateOcclusionQueryEXT(this)) return;
         active_ = true;
         // SOKOL_GLCORE is desktop GL, which reports the real sample count (GL_SAMPLES_PASSED);

@@ -6,8 +6,7 @@
 //   to the full backbuffer pixel count).
 // Check B -- a query wrapping a quad drawn entirely BEHIND a nearer opaque full-screen quad
 //   (real depth-test occlusion) reports PixelCount() == 0.
-// Check C -- IsComplete() reports true once PixelCount() has already forced the result to be
-//   available (glGetQueryObjectuiv(GL_QUERY_RESULT) blocks until ready).
+// Check C -- IsComplete() is observed before PixelCount(), as required by the XNA query lifecycle.
 // Check D -- 30 frames of the whole scene render with no exception.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
@@ -20,6 +19,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/OcclusionQuery.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
@@ -90,11 +90,13 @@ protected:
         visibleQuery.End();
         if (runChecks)
         {
-            const int visiblePixels = visibleQuery.getPixelCountProperty();
+            for (int i = 0; i < 100000 && !visibleQuery.getIsCompleteProperty(); ++i) {}
+            const bool visibleComplete = visibleQuery.getIsCompleteProperty();
+            const int visiblePixels = visibleComplete ? visibleQuery.getPixelCountProperty() : -1;
             Check(visiblePixels > 1000,
                   "visible full-screen quad reports PixelCount() > 1000: got=" + std::to_string(visiblePixels));
-            Check(visibleQuery.getIsCompleteProperty(),
-                  "IsComplete() is true once PixelCount() has forced the result to be available");
+            Check(visibleComplete,
+                  "IsComplete() makes the visible result available before PixelCount is read");
         }
 
         // Check B: fully occluded quad (nearer opaque quad drawn first, real depth test).
@@ -106,7 +108,9 @@ protected:
         occludedQuery.End();
         if (runChecks)
         {
-            const int occludedPixels = occludedQuery.getPixelCountProperty();
+            for (int i = 0; i < 100000 && !occludedQuery.getIsCompleteProperty(); ++i) {}
+            const bool occludedComplete = occludedQuery.getIsCompleteProperty();
+            const int occludedPixels = occludedComplete ? occludedQuery.getPixelCountProperty() : -1;
             Check(occludedPixels == 0,
                   "fully-occluded quad (behind a nearer opaque one) reports PixelCount() == 0: got=" + std::to_string(occludedPixels));
         }
@@ -124,6 +128,7 @@ public:
     OpenGL2OcclusionQueryTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(320);
         gdm_->setPreferredBackBufferHeightProperty(240);
         gdm_->setSynchronizeWithVerticalRetraceProperty(false);

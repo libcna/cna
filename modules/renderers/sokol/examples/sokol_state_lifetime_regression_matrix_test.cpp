@@ -32,6 +32,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/OcclusionQuery.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
@@ -128,9 +129,10 @@ class StateLifetimeRegressionMatrixTest : public CNA::Examples::PixelTestGame
             device.GetBackBufferData(&probe, &px, 0, 1);
     }
 
-    /// Runs one interleaving round: `first` begins, `second`'s overlapping Begin() must be
-    /// silently absorbed (SOKOL-43), a BIG quad is drawn and captured only by `first`, `first`
-    /// ends (releasing the slot), `second` then begins for real and captures a SMALL quad.
+    /// Runs one interleaving round: `first` begins, `second`'s overlapping native Begin() is
+    /// absorbed (SOKOL-43), and the public attempted cycle is balanced/observed. A BIG quad is
+    /// captured only by `first`; after it releases the slot, `second` begins for real and captures
+    /// a SMALL quad.
     /// Returns {firstPixelCount, secondPixelCount}.
     std::pair<int, int> RunInterleavingRound(GraphicsDevice& device, BasicEffect& fx,
                                               OcclusionQuery& first, OcclusionQuery& second)
@@ -141,7 +143,9 @@ class StateLifetimeRegressionMatrixTest : public CNA::Examples::PixelTestGame
         device.setRasterizerStateProperty(RasterizerState::CullNone);
 
         first.Begin();
-        second.Begin();  // overlapping -- must be silently absorbed, not a second real query.
+        second.Begin();  // public cycle starts, but its overlapping native query is absorbed.
+        second.End();
+        (void) second.getIsCompleteProperty();
         DrawOccluderQuad(device, fx, 20.0f, 20.0f, 200.0f);  // big
         first.End();
 
@@ -301,6 +305,7 @@ public:
     StateLifetimeRegressionMatrixTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kBackBufferWidth);
         gdm_->setPreferredBackBufferHeightProperty(kBackBufferHeight);
     }

@@ -20,6 +20,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Creates an occlusion query for the specified graphics device.
          *
          * @param device Graphics device that will execute the query.
+         * @throws System::NotSupportedException if the profile or renderer does not support
+         * occlusion queries.
          */
         explicit OcclusionQuery(GraphicsDevice& device);
 
@@ -32,6 +34,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Gets whether the occlusion query result is available without blocking.
          * @return true if the query result can be read without stalling the CPU.
+         * @throws System::ObjectDisposedException if this query has been disposed.
          */
         [[nodiscard]] bool getIsCompleteProperty() const;
 
@@ -43,6 +46,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * Ask @ref isPixelCountPreciseEXT before dividing this by an area.
          *
          * @return Visible pixel count from the most recently completed query.
+         * @throws System::InvalidOperationException if no completed result is available.
+         * @throws System::ObjectDisposedException if this query has been disposed.
          */
         [[nodiscard]] int getPixelCountProperty() const;
 
@@ -55,17 +60,30 @@ namespace Microsoft::Xna::Framework::Graphics
          * fraction, so a game that needs one has to be able to ask which it is holding.
          *
          * @return true when the pixel count is a genuine per-fragment tally.
+         * @throws System::ObjectDisposedException if this query has been disposed.
          */
         CNAEXT [[nodiscard]] bool isPixelCountPreciseEXT() const;
 
-        /** @brief Begins the occlusion query; all draw calls until End() are counted. */
+        /**
+         * @brief Begins the occlusion query; all draw calls until End() are counted.
+         * @throws System::InvalidOperationException if a query is already active or the previous
+         * result has not yet been observed through IsComplete.
+         * @throws System::ObjectDisposedException if this query has been disposed.
+         */
         void Begin();
 
-        /** @brief Ends the occlusion query and makes or submits its result for evaluation. */
+        /**
+         * @brief Ends the occlusion query and makes or submits its result for evaluation.
+         * @throws System::InvalidOperationException if Begin has not started a query.
+         * @throws System::ObjectDisposedException if this query has been disposed.
+         */
         void End();
 
         /** @brief Returns true while the native query renderer is still alive (CNA extension). */
         CNAEXT [[nodiscard]] bool HasRenderer() const { return renderer_ != nullptr; }
+
+        /** @brief Exposes GraphicsResource::Dispose() alongside the protected lifecycle hook. */
+        using GraphicsResource::Dispose;
 
     protected:
         /**
@@ -84,5 +102,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
     private:
         std::unique_ptr<CNA::Internal::Renderers::IOcclusionQueryRenderer> renderer_;
+        mutable int pixelCount_ = 0;
+        bool isInBeginEndPair_ = false;
+        bool hasCalledBegin_ = false;
+        mutable bool hasIsCompleteBeenQueried_ = true;
     };
 }

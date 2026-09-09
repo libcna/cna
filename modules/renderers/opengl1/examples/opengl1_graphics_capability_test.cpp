@@ -4,7 +4,7 @@
 // true/false", but that the *reason* it returns that value is real: AnisotropicFiltering is
 // cross-checked against OpenGL1Renderer's own runtime extension detection (not a static
 // guess), and the "false" capabilities are cross-checked against the shared-default behavior
-// (CreateOcclusionQuery() returning nullptr) that backs each "false" claim, the same way
+// (public construction rejecting unsupported capabilities) that backs each "false" claim, the same way
 // sdlrenderer_graphics_capability_test.cpp/directx3_graphics_capability_test.cpp/
 // canvas_graphics_capability_test.cpp do for their own (much narrower) 2D-only renderers.
 //
@@ -28,12 +28,14 @@
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/OcclusionQuery.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_opengl.h>
@@ -168,13 +170,18 @@ protected:
         }
         else
         {
-            // Honest degraded-behavior check for a driver that genuinely lacks the extension --
-            // matches this file's own pre-item-23 assertion.
-            OcclusionQuery q(dev);
-            q.Begin();
-            q.End();
-            check(!q.getIsCompleteProperty() && q.getPixelCountProperty() == 0,
-                  "OcclusionQuery=false backs a real OcclusionQuery object that never completes");
+            bool rejected = false;
+            try
+            {
+                OcclusionQuery q(dev);
+                (void)q;
+            }
+            catch (const System::NotSupportedException&)
+            {
+                rejected = true;
+            }
+            check(rejected,
+                  "OcclusionQuery=false rejects public construction with NotSupportedException");
         }
 
         // WireFrame=true must actually work, not just report true.
@@ -195,6 +202,7 @@ public:
     OpenGL1GraphicsCapabilityTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(32);
         gdm_->setPreferredBackBufferHeightProperty(16);
     }

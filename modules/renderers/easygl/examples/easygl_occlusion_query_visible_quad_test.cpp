@@ -19,6 +19,7 @@
 // Exit code 0 = all PASS, 1 = at least one FAIL.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
+#include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
@@ -28,6 +29,7 @@
 #include "Microsoft/Xna/Framework/Graphics/EffectPassCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectTechnique.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/OcclusionQuery.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
@@ -56,6 +58,7 @@ namespace
 
 class OcclusionQueryVisibleQuadTest : public Game
 {
+    std::unique_ptr<GraphicsDeviceManager> graphics_;
     std::unique_ptr<VertexBuffer> vb_;
     std::unique_ptr<IndexBuffer>  ib_;
     bool done_   = false;
@@ -149,6 +152,12 @@ protected:
     }
 
 public:
+    OcclusionQueryVisibleQuadTest()
+    {
+        graphics_ = std::make_unique<GraphicsDeviceManager>(this);
+        graphics_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
+    }
+
     int getResult() const { return result_; }
 };
 

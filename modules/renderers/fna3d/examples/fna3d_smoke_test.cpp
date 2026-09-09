@@ -18,10 +18,12 @@
 // Exit code 0 = all checks PASS, 1 = any FAILs, 77 = skipped (no display).
 
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
 #include "Microsoft/Xna/Framework/Graphics/OcclusionQuery.hpp"
@@ -35,6 +37,7 @@
 #include "common/PixelTestGame.hpp"
 
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 using namespace Microsoft::Xna::Framework;
@@ -65,7 +68,15 @@ namespace
 
 class Fna3dSmokeTest : public CNA::Examples::PixelTestGame
 {
+    std::unique_ptr<GraphicsDeviceManager> graphicsDeviceManager_;
+
 public:
+    Fna3dSmokeTest()
+    {
+        graphicsDeviceManager_ = std::make_unique<GraphicsDeviceManager>(this);
+        graphicsDeviceManager_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
+    }
+
     void RunTest() override
     {
         auto& device = getGraphicsDeviceProperty();

@@ -3980,9 +3980,8 @@ namespace CNA::Internal::Renderers::Software
 
     void SoftwareOcclusionQueryRenderer::Begin()
     {
-        // Native XNA/FNA exposes no public sequence validation. A repeated Begin on this query
-        // keeps the interval open, while a different already-active query owns the renderer-wide
-        // slot until it ends. Neither case throws or corrupts the active measurement.
+        // OcclusionQuery owns XNA's public Begin/End state machine. Keep the renderer guard as a
+        // defensive native invariant for a different already-active query.
         if (active_ || owner_ == nullptr || !owner_->TryActivateOcclusionQuery(this))
             return;
         pixelCount_ = 0;

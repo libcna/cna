@@ -26,6 +26,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/OcclusionQuery.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
@@ -209,6 +210,7 @@ public:
     LlglOcclusionQueryTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kSize);
         gdm_->setPreferredBackBufferHeightProperty(kSize);
         gdm_->setSynchronizeWithVerticalRetraceProperty(false);

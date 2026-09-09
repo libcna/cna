@@ -4,28 +4,13 @@
 // Constructs an OcclusionQuery on the EasyGL device, calls Begin()/End(),
 // verifies IsComplete eventually becomes true and PixelCount >= 0.
 //
-// Task 442: invalid call sequence -- End() before any Begin(). Task 441's audit of FNA's real
-// OcclusionQuery.cs found ZERO C#-level validation of Begin/End call sequence -- Begin()/End() are
-// pure one-line forwards to FNA3D_QueryBegin/FNA3D_QueryEnd with no state tracking at all, so there
-// is no "FNA exception" to match for this sequence (correcting this task's own stale Notes-column
-// framing). This instead confirms CNA's own OcclusionQuery correctly mirrors that lack of
-// validation: End() before Begin() must not throw or crash, matching FNA's own unvalidated shape.
+// SOFTWARE-199 supersedes Tasks 442-444's FNA-only conclusion. Recovered Microsoft XNA 4.0 code
+// contains an explicit managed state machine: unavailable PixelCount, End-before-Begin, nested
+// Begin, repeated End, and reuse before observing IsComplete all throw InvalidOperationException.
 //
-// Task 443: invalid call sequence -- double Begin() (Begin() called twice with no intervening
-// End()). Same Task 441 finding applies: FNA's Begin() is a pure one-line forward to
-// FNA3D_QueryBegin with no state tracking, so there is no "FNA exception" to match here either.
-// Confirms CNA's own Begin() correctly mirrors that lack of validation too.
-//
-// Task 444: invalid call sequence -- double End() (a valid Begin()/End() cycle followed by a
-// second, unmatched End()). Same Task 441 finding applies once more: FNA's End() is a pure
-// one-line forward to FNA3D_QueryEnd with no state tracking, so there is no "FNA exception" to
-// match here either. This closes the Tasks 442-444 invalid-call-sequence trio.
-//
-// Task 449: destroying (the C++ destructor -- CNA's own OcclusionQuery::Dispose() doesn't touch
-// renderer_ at all, matching FNA's own inherited GraphicsResource.Dispose(bool) shape closely, so
-// the real renderer teardown happens in ~OcclusionQuery(), not Dispose()) a query while it's still
-// "active" (Begin() called, no matching End()) must be safe -- no crash, no corrupted GL/renderer
-// state affecting subsequently-created queries. EasyGL's own GL query object is owned by an
+// Task 449: destroying a query while it's still "active" (Begin() called, no matching End()) must
+// be safe -- no crash, no corrupted GL/renderer state affecting subsequently-created queries.
+// EasyGL's own GL query object is owned by an
 // easygl::Query member with RAII semantics (its own destructor calls glDeleteQueries
 // unconditionally); per the GL spec, deleting an active query object is well-defined (deletion is
 // deferred internally until the query is no longer active), so this should already be safe -- this
@@ -37,7 +22,9 @@
 // Exit code 0 = PASS, 1 = FAIL.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
+#include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/OcclusionQuery.hpp"
 
 #include <cstdio>
@@ -59,6 +46,8 @@ static void check(bool cond, const char* label)
 
 class OcclusionQueryTest : public Game
 {
+    std::unique_ptr<GraphicsDeviceManager> graphics_;
+
 protected:
     void Initialize() override
     {
@@ -72,20 +61,30 @@ protected:
         check(q.GetTypeName() == "Microsoft.Xna.Framework.Graphics.OcclusionQuery",
               "GetTypeName");
 
-        // Before Begin: IsComplete may be true or false; PixelCount >= 0
-        check(q.getPixelCountProperty() >= 0, "PixelCount >= 0 before query");
+        // Before Begin the result is unavailable.
+        bool unavailableThrew = false;
+        try { (void) q.getPixelCountProperty(); }
+        catch (...) { unavailableThrew = true; }
+        check(unavailableThrew, "PixelCount throws before the first completed query");
 
         // Begin / End cycle
         q.Begin();
         q.End();
 
-        // After End: PixelCount still >= 0 (result may not be ready yet)
-        check(q.getPixelCountProperty() >= 0, "PixelCount >= 0 after End");
-
-        // IsComplete returns a bool without crashing
+        // IsComplete returns a bool without crashing. PixelCount is legal only when it is true.
         bool complete = q.getIsCompleteProperty();
-        (void)complete;
         check(true, "getIsCompleteProperty() does not crash");
+        bool postEndPixelCountMatched = false;
+        try
+        {
+            const int count = q.getPixelCountProperty();
+            postEndPixelCountMatched = complete && count >= 0;
+        }
+        catch (...)
+        {
+            postEndPixelCountMatched = !complete;
+        }
+        check(postEndPixelCountMatched, "PixelCount availability matches IsComplete");
 
         // Task 442: invalid sequence -- End() before any Begin() call on a fresh query.
         {
@@ -99,11 +98,7 @@ protected:
             {
                 threw = true;
             }
-            check(!threw, "End() before Begin() does not throw (matches FNA's own lack of validation)");
-            check(q2.getPixelCountProperty() >= 0, "PixelCount >= 0 after End-before-Begin");
-            bool complete2 = q2.getIsCompleteProperty();
-            (void)complete2;
-            check(true, "getIsCompleteProperty() does not crash after End-before-Begin");
+            check(threw, "End() before Begin() throws");
         }
 
         // Task 443: invalid sequence -- double Begin() with no intervening End().
@@ -119,11 +114,9 @@ protected:
             {
                 threw = true;
             }
-            check(!threw, "double Begin() does not throw (matches FNA's own lack of validation)");
+            check(threw, "double Begin() throws");
             q3.End();
-            check(q3.getPixelCountProperty() >= 0, "PixelCount >= 0 after double-Begin then End");
-            bool complete3 = q3.getIsCompleteProperty();
-            (void)complete3;
+            (void) q3.getIsCompleteProperty();
             check(true, "getIsCompleteProperty() does not crash after double-Begin");
         }
 
@@ -142,10 +135,8 @@ protected:
             {
                 threw = true;
             }
-            check(!threw, "double End() does not throw (matches FNA's own lack of validation)");
-            check(q4.getPixelCountProperty() >= 0, "PixelCount >= 0 after double-End");
-            bool complete4 = q4.getIsCompleteProperty();
-            (void)complete4;
+            check(threw, "double End() throws");
+            (void) q4.getIsCompleteProperty();
             check(true, "getIsCompleteProperty() does not crash after double-End");
         }
 
@@ -178,11 +169,18 @@ protected:
             OcclusionQuery q5(device);
             q5.Begin();
             q5.End();
-            check(q5.getPixelCountProperty() >= 0,
-                  "a fresh query still works normally after 50 active-disposed queries");
+            (void) q5.getIsCompleteProperty();
+            check(true, "a fresh query still works normally after 50 active-disposed queries");
         }
 
         Exit();
+    }
+
+public:
+    OcclusionQueryTest()
+    {
+        graphics_ = std::make_unique<GraphicsDeviceManager>(this);
+        graphics_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
     }
 };
 

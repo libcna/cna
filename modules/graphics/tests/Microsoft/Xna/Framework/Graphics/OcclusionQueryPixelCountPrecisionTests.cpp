@@ -21,11 +21,17 @@
 #include "Microsoft/Xna/Framework/Graphics/EffectPass.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectPassCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectTechnique.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/OcclusionQuery.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "System/InvalidOperationException.hpp"
+#include "System/NotSupportedException.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 using CNA::GraphicsCapability;
 using Microsoft::Xna::Framework::Color;
@@ -34,18 +40,28 @@ using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Graphics::BasicEffect;
 using Microsoft::Xna::Framework::Graphics::BlendState;
 using Microsoft::Xna::Framework::Graphics::EffectPass;
+using Microsoft::Xna::Framework::Graphics::GraphicsAdapter;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
 using Microsoft::Xna::Framework::Graphics::OcclusionQuery;
+using Microsoft::Xna::Framework::Graphics::PresentationParameters;
 using Microsoft::Xna::Framework::Graphics::PrimitiveType;
 using Microsoft::Xna::Framework::Graphics::RasterizerState;
 using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
 
 namespace
 {
+    TEST(OcclusionQueryProfileContractTest, ReachProfileRejectsConstruction)
+    {
+        GraphicsDevice reachDevice;
+        EXPECT_THROW(OcclusionQuery query(reachDevice), System::NotSupportedException);
+    }
+
     class OcclusionQueryPixelCountPrecisionTest : public ::testing::Test
     {
     protected:
-        GraphicsDevice device;
+        GraphicsDevice device{GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                              PresentationParameters()};
 
         void SetUp() override
         {
@@ -55,6 +71,41 @@ namespace
                 GTEST_SKIP() << "Renderer explicitly does not support occlusion queries";
         }
     };
+
+    // SOFTWARE-199: recovered Microsoft XNA 4.0 code owns this public state machine above the
+    // native query. FNA delegates these invalid sequences to FNA3D/GL, but that lower-authority
+    // behavior cannot replace XNA's explicit InvalidOperationException contract.
+    TEST_F(OcclusionQueryPixelCountPrecisionTest, XnaLifecycleRejectsUnavailableAndInvalidSequences)
+    {
+        OcclusionQuery fresh(device);
+        EXPECT_FALSE(fresh.getIsCompleteProperty());
+        EXPECT_THROW((void) fresh.getPixelCountProperty(), System::InvalidOperationException);
+        EXPECT_THROW(fresh.End(), System::InvalidOperationException);
+
+        fresh.Begin();
+        EXPECT_THROW(fresh.Begin(), System::InvalidOperationException);
+        fresh.End();
+        EXPECT_THROW(fresh.End(), System::InvalidOperationException);
+
+        OcclusionQuery reusable(device);
+        reusable.Begin();
+        reusable.End();
+        EXPECT_THROW(reusable.Begin(), System::InvalidOperationException)
+            << "XNA requires IsComplete/PixelCount to be queried before reusing the object";
+
+        // XNA records that IsComplete was queried even when the native result is not ready yet.
+        // That observation, rather than completion itself, permits the next Begin.
+        (void) reusable.getIsCompleteProperty();
+        EXPECT_NO_THROW(reusable.Begin());
+        EXPECT_NO_THROW(reusable.End());
+
+        OcclusionQuery disposed(device);
+        disposed.Dispose();
+        EXPECT_THROW((void) disposed.getIsCompleteProperty(), System::ObjectDisposedException);
+        EXPECT_THROW((void) disposed.getPixelCountProperty(), System::ObjectDisposedException);
+        EXPECT_THROW(disposed.Begin(), System::ObjectDisposedException);
+        EXPECT_THROW(disposed.End(), System::ObjectDisposedException);
+    }
 
     TEST_F(OcclusionQueryPixelCountPrecisionTest, PixelCountMatchesWhatTheQuerySaysItIs)
     {

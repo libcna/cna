@@ -30,6 +30,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/OcclusionQuery.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
@@ -133,8 +134,9 @@ class VulkanOcclusionQueryPixelCountTest : public Game
             const Rectangle reg(kSize / 2, kSize / 2, 1, 1);
             dev.GetBackBufferData(&reg, &centre, 0, 1);
 
-            complete   = query->getIsCompleteProperty();
-            pixelCount = query->getPixelCountProperty();
+            complete = query->getIsCompleteProperty();
+            if (complete)
+                pixelCount = query->getPixelCountProperty();
 
             if (complete || frame >= kMaxPollFrames)
                 break;
@@ -184,8 +186,9 @@ class VulkanOcclusionQueryPixelCountTest : public Game
             const Rectangle reg(kSize / 2, kSize / 2, 1, 1);
             dev.GetBackBufferData(&reg, &centre, 0, 1);
 
-            complete   = query->getIsCompleteProperty();
-            pixelCount = query->getPixelCountProperty();
+            complete = query->getIsCompleteProperty();
+            if (complete)
+                pixelCount = query->getPixelCountProperty();
 
             if (complete || frame >= kMaxPollFrames)
                 break;
@@ -254,6 +257,7 @@ public:
     VulkanOcclusionQueryPixelCountTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kSize);
         gdm_->setPreferredBackBufferHeightProperty(kSize);
     }

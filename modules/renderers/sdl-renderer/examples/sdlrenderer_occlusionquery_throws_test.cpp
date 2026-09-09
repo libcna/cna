@@ -1,32 +1,19 @@
 // SPDX-License-Identifier: MS-PL
-// Task 727: Verify OcclusionQuery::Begin/End throw correctly on SDL_Renderer.
-//
-// Found and fixed a real bug while investigating: SdlRenderer never overrode
-// CreateOcclusionQuery, so it fell through to IGraphicsRenderer's own default (silent nullptr, no
-// throw) -- OcclusionQuery construction silently succeeded with a permanently-null renderer, and
-// Begin()/End() both guard with `if (renderer_) ...`, silently no-op-ing instead of ever running a
-// real occlusion query. Every OTHER 3D-only entry point on this renderer (CreateVertexBuffer,
-// CreateIndexBuffer16, DrawColoredPrimitives, etc.) throws loudly and immediately -- this was the
-// one inconsistent silent gap. Confirmed safe to fix (unlike Task 725's Texture3D/TextureCube,
-// which has a 94-test blast radius): OcclusionQuery's only existing test coverage is
-// EasyGL_OcclusionQuery_Cycle (examples/occlusion_query_test.cpp), registered ONLY for the EasyGL
-// renderer -- zero existing SDL_Renderer-run tests construct an OcclusionQuery at all.
-//
-// Fixed by adding SdlRenderer::CreateOcclusionQuery() -> ThrowNo3D("CreateOcclusionQuery"),
-// mirroring CreateVertexBuffer/CreateIndexBuffer16's exact pattern (Tasks 720-723). Since
-// construction itself now throws first, Begin()/End() can never actually be reached on a valid
-// instance on this renderer -- same shape as Task 720's DrawPrimitives/VertexBuffer finding.
+// Task 727 + SOFTWARE-199: verify the public OcclusionQuery constructor rejects SDL_Renderer's
+// missing capability with the XNA-compatible typed exception. Begin()/End() are consequently
+// unreachable on this renderer.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/OcclusionQuery.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <cstdio>
-#include <cstring>
 #include <memory>
 #include <string>
 
@@ -47,16 +34,16 @@ class SdlOcclusionQueryThrowsTest : public Game
     }
 
     template <typename F>
-    static bool ThrowsExactRuntimeError(F&& fn, const std::string& expectedMessage)
+    static bool ThrowsNotSupported(F&& fn)
     {
         try
         {
             fn();
             return false;
         }
-        catch (const std::runtime_error& e)
+        catch (const System::NotSupportedException&)
         {
-            return std::strcmp(e.what(), expectedMessage.c_str()) == 0;
+            return true;
         }
         catch (const std::exception&)
         {
@@ -72,10 +59,8 @@ protected:
 
         auto& dev = getGraphicsDeviceProperty();
 
-        check(ThrowsExactRuntimeError(
-                  [&] { OcclusionQuery q(dev); (void)q; },
-                  "SDL_Renderer does not support 3D: CreateOcclusionQuery"),
-              "OcclusionQuery construction throws the exact expected message on SDL_Renderer");
+        check(ThrowsNotSupported([&] { OcclusionQuery q(dev); (void)q; }),
+              "OcclusionQuery construction throws NotSupportedException on SDL_Renderer");
 
         // --- Since construction always throws, Begin()/End() can never be reached on a valid
         //     instance -- there is no way to construct one to call them on. This mirrors Task
@@ -98,6 +83,7 @@ public:
     SdlOcclusionQueryThrowsTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(32);
         gdm_->setPreferredBackBufferHeightProperty(16);
         gdm_->setPreferredPresentationModeProperty(PresentationMode::NativeBackBuffer);

@@ -32,6 +32,7 @@
 #include "CNA/RendererTestGate.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "System/NotSupportedException.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
@@ -39,8 +40,11 @@
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CullMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/OcclusionQuery.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
@@ -152,7 +156,8 @@ struct FragOut {
 TEST(WebGpuMrtOcclusionContract, MultipleRenderTargetsCapabilityIsTrue)
 {
     CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::WebGPU);
-    GraphicsDevice gd;
+    GraphicsDevice gd(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                      PresentationParameters());
     EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::MultipleRenderTargets))
         << "WebGPU implements MRT (WEBGPU-85/86/87) but SupportsCapability reports false";
 }
@@ -238,10 +243,13 @@ TEST(WebGpuMrtOcclusionContract, OcclusionQueryCapabilityIsTrue)
     EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::OcclusionQuery))
         << "WebGPU implements occlusion queries (WEBGPU-84) but SupportsCapability reports false";
     // The query object must be real: constructing and running Begin()/End() must not throw, and a
-    // fresh query reports not-complete with a zero count before any frame resolves it.
+    // fresh query reports not-complete before any frame resolves it.
     OcclusionQuery query(gd);
     EXPECT_NO_THROW({ query.Begin(); query.End(); });
-    EXPECT_EQ(0, query.getPixelCountProperty());
+    if (query.getIsCompleteProperty())
+        EXPECT_EQ(0, query.getPixelCountProperty());
+    else
+        EXPECT_THROW((void) query.getPixelCountProperty(), System::InvalidOperationException);
 }
 
 #endif  // CNA_RENDERER_WEBGPU
