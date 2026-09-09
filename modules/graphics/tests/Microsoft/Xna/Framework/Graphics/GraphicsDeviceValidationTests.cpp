@@ -38,6 +38,7 @@ using namespace CNA::Testing::Renderers;
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Rectangle;
+using Microsoft::Xna::Framework::Graphics::BufferUsage;
 using Microsoft::Xna::Framework::Graphics::CubeMapFace;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::IndexBuffer;
@@ -607,6 +608,63 @@ TEST(GraphicsDeviceValidationTest, SetVertexBuffers_EmptyClearsSingularBinding)
             std::string(ex.what()).find("no vertex buffer"),
             std::string::npos);
     }
+}
+
+TEST(GraphicsDeviceValidationTest, ForeignBuffersAreRejectedTransactionally)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+    GraphicsDevice receiving;
+    GraphicsDevice owner;
+    receiving.SetGraphicsProfileEXT(
+        Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
+    owner.SetGraphicsProfileEXT(
+        Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
+
+    VertexBuffer localVertex(
+        receiving, VertexPositionColor::getVertexDeclarationStatic(), 3, BufferUsage::None);
+    VertexBuffer foreignVertex(
+        owner, VertexPositionColor::getVertexDeclarationStatic(), 3, BufferUsage::None);
+    receiving.SetVertexBuffer(&localVertex);
+    EXPECT_THROW(receiving.SetVertexBuffer(&foreignVertex), System::InvalidOperationException);
+    EXPECT_EQ(receiving.GetVertexBuffer(), &localVertex);
+    EXPECT_THROW(
+        receiving.SetVertexBuffers({VertexBufferBinding(&localVertex),
+                                    VertexBufferBinding(&foreignVertex)}),
+        System::InvalidOperationException);
+    ASSERT_FALSE(receiving.GetVertexBuffers().empty());
+    EXPECT_EQ(receiving.GetVertexBuffers().size(), 1u);
+    EXPECT_EQ(receiving.GetVertexBuffers()[0].getVertexBufferProperty(), &localVertex);
+
+    IndexBuffer localIndex(receiving, IndexElementSize::SixteenBits, 3, BufferUsage::None);
+    IndexBuffer foreignIndex(owner, IndexElementSize::SixteenBits, 3, BufferUsage::None);
+    receiving.SetIndexBuffer(&localIndex);
+    EXPECT_THROW(receiving.SetIndexBuffer(&foreignIndex), System::InvalidOperationException);
+    EXPECT_EQ(receiving.GetIndexBuffer(), &localIndex);
+}
+
+TEST(GraphicsDeviceValidationTest, ForeignTexturesAreRejectedTransactionally)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+    GraphicsDevice receiving;
+    GraphicsDevice owner;
+    receiving.SetGraphicsProfileEXT(
+        Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
+    owner.SetGraphicsProfileEXT(
+        Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
+    Texture2D local(receiving, 1, 1);
+    Texture2D foreign(owner, 1, 1);
+
+    receiving.getTexturesProperty()(0, &local);
+    EXPECT_THROW(
+        receiving.getTexturesProperty()(0, &foreign),
+        System::InvalidOperationException);
+    EXPECT_EQ(receiving.getTexturesProperty()[0], &local);
+
+    receiving.getVertexTexturesProperty()(0, &local);
+    EXPECT_THROW(
+        receiving.getVertexTexturesProperty()(0, &foreign),
+        System::InvalidOperationException);
+    EXPECT_EQ(receiving.getVertexTexturesProperty()[0], &local);
 }
 
 // Regression test for a real reported crash (cna-template/missing.md): the single-argument

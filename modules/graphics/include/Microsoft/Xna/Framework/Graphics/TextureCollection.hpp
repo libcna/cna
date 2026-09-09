@@ -28,8 +28,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Binds a texture to the given sampler slot.
          * @param index   Sampler slot index (0 to MaxTextures-1).
          * @param texture Pointer to the texture to bind, or nullptr to unbind.
-         * @throws System::InvalidOperationException if @p texture is currently bound as a
-         *         render target on the owning GraphicsDevice.
+         * @throws System::InvalidOperationException if @p texture belongs to another
+         *         GraphicsDevice or is currently bound as a render target on the owning device.
          */
         void operator()(int index, Texture* texture);
 

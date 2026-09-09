@@ -853,6 +853,9 @@ namespace Microsoft::Xna::Framework::Graphics
         ThrowIfDisposed();
         if (indexBuffer && indexBuffer->getIsDisposedProperty())
             throw System::ObjectDisposedException(indexBuffer->getNameProperty());
+        if (indexBuffer && indexBuffer->getGraphicsDeviceProperty() != this)
+            throw System::InvalidOperationException(
+                "SetIndexBuffer: the index buffer belongs to a different GraphicsDevice.");
         currentIndexBuffer_ = indexBuffer;
     }
 
@@ -4573,6 +4576,9 @@ namespace Microsoft::Xna::Framework::Graphics
         System::ArgumentOutOfRangeException::ThrowIfNegative(vertexOffset, "vertexOffset");
         if (vertexBuffer && vertexBuffer->getIsDisposedProperty())
             throw System::ObjectDisposedException(vertexBuffer->getNameProperty());
+        if (vertexBuffer && vertexBuffer->getGraphicsDeviceProperty() != this)
+            throw System::InvalidOperationException(
+                "SetVertexBuffer: the vertex buffer belongs to a different GraphicsDevice.");
 
         currentVertexBuffer_ = vertexBuffer;
         currentVertexBuffers_.clear();
@@ -4598,6 +4604,9 @@ namespace Microsoft::Xna::Framework::Graphics
             const VertexBuffer* const buffer = binding.getVertexBufferProperty();
             if (buffer != nullptr && buffer->getIsDisposedProperty())
                 throw System::ObjectDisposedException(buffer->getNameProperty());
+            if (buffer != nullptr && buffer->getGraphicsDeviceProperty() != this)
+                throw System::InvalidOperationException(
+                    "SetVertexBuffers: a vertex buffer belongs to a different GraphicsDevice.");
         }
 
         // A null-buffer binding is a legal unused slot in XNA -- FNA itself stores

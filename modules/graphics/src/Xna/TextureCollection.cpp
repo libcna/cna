@@ -40,6 +40,13 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             throw System::ObjectDisposedException(texture->getNameProperty());
         }
+        if (texture != nullptr && graphicsDevice_ != nullptr
+            && texture->getGraphicsDeviceProperty() != nullptr
+            && texture->getGraphicsDeviceProperty() != graphicsDevice_)
+        {
+            throw System::InvalidOperationException(
+                "The texture belongs to a different GraphicsDevice.");
+        }
         if (texture != nullptr && graphicsDevice_ != nullptr)
         {
             for (const auto& binding : graphicsDevice_->GetRenderTargets())
