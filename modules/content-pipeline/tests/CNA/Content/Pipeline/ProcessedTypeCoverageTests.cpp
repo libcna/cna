@@ -28,7 +28,9 @@
 #include <string>
 #include <vector>
 
-#if !defined(_WIN32)
+#if defined(_WIN32)
+#include <process.h>
+#else
 #include <unistd.h>
 #endif
 
@@ -44,6 +46,15 @@ namespace Pipeline = CNA::Content::Pipeline;
 
 namespace
 {
+    [[nodiscard]] int CurrentProcessId()
+    {
+#if defined(_WIN32)
+        return ::_getpid();
+#else
+        return ::getpid();
+#endif
+    }
+
     /** @brief The containers the production compiler can be asked for. */
     constexpr Pipeline::ContentOutputFormat kFormats[] = {
         Pipeline::ContentOutputFormat::Cnb,
@@ -241,7 +252,7 @@ TEST(ProcessedTypeCoverageTest, ASchemaOneModelBuildsToXnbAndSaysWhatItCannotCar
 
     const std::filesystem::path scratch =
         std::filesystem::temp_directory_path() /
-        ("cna_schema1_" + std::to_string(::getpid()));
+        ("cna_schema1_" + std::to_string(CurrentProcessId()));
     std::filesystem::create_directories(scratch / "src");
     std::filesystem::copy_file(fixture, scratch / "src" / "clips.glb",
                                std::filesystem::copy_options::overwrite_existing);
