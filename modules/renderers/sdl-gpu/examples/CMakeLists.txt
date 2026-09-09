@@ -42,6 +42,17 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     set_tests_properties(SdlGpu_Smoke PROPERTIES
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
+    # SDLGPU-61: SDL_gpu's native polygon-line fill draws every asymmetric triangle edge while
+    # leaving the interior empty. Reuse the exact EasyGL/WebGPU public fixture so the capability
+    # answer is backed by the same positive edge and negative interior oracle.
+    cna_sdlgpu_test(cna_test_sdlgpu_parity_fill_mode_wireframe
+                    ${CNA_GRAPHICS_EXAMPLES_DIR}/parity/parity_fill_mode_wireframe.cpp)
+    cna_register_renderer_test(NAME SdlGpu_Parity_fill_mode_wireframe
+        COMMAND cna_test_sdlgpu_parity_fill_mode_wireframe
+        TIMEOUT 60 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    set_tests_properties(SdlGpu_Parity_fill_mode_wireframe PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+
     # REMED-GFX-028: every real constructor acquisition is transactional, failed objects never
     # enter the window registry, and lazy command/pipeline/sampler/fallback failures remain
     # retryable. Resource callbacks make leaks/double-destruction observable independently of

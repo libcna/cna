@@ -137,8 +137,8 @@ protected:
 
             check(!dev.SupportsCapability(CNA::GraphicsCapability::MultipleRenderTargets),
                   "MRT is false until independent fragment outputs are implemented");
-            check(!dev.SupportsCapability(CNA::GraphicsCapability::WireFrame),
-                  "WireFrame is false until edge expansion is implemented");
+            check(dev.SupportsCapability(CNA::GraphicsCapability::WireFrame),
+                  "WireFrame is reported because native line fill is pixel-verified");
             check(!dev.SupportsCapability(CNA::GraphicsCapability::OcclusionQuery),
                   "OcclusionQuery is false because the underlying API exposes no query primitive");
             check(renderer.CreateOcclusionQuery() == nullptr,
@@ -160,7 +160,7 @@ protected:
             check(renderer.GetMaxVertexStreams() == 1,
                   "numeric vertex-stream limit agrees with the current encoder");
             const std::string_view limitations = renderer.GetAdditionalLimitationsTextEXT();
-            check(limitations.find("WireFrame") != std::string_view::npos &&
+            check(limitations.find("WireFrame") == std::string_view::npos &&
                       limitations.find("OcclusionQuery") != std::string_view::npos,
                   "generated capability report names qualitative limitations");
         }

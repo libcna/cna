@@ -3,7 +3,7 @@
 > **Current verdict (audit opened 2026-09-09): B. CLASSIC SDL GPU ↔ EASYGL PARITY NOT YET
 > REACHED.** The current renderer is a substantial, real Vulkan-backed implementation, but live
 > source and pixel tests demonstrate ordinary-XNA gaps in semantic vertex declarations,
-> instancing/multiple streams, wireframe, texture/render-target formats, independent MRT outputs,
+> instancing/multiple streams, texture/render-target formats, independent MRT outputs,
 > sampler propagation and cube-face command ordering. The inherited
 > capability default also advertises features SDL GPU does not implement. This verdict supersedes
 > historical completion banners below; those remain as implementation history, not current truth.
@@ -19,10 +19,11 @@
 | Renderer under test | `modules/renderers/sdl-gpu/{include,src,tests,examples}` |
 | EasyGL / SDL GPU example sources | 246 / 38 `.cpp` files (source count, not capability count) |
 | EasyGL / SDL GPU renderer unit-test sources | 2 / 2 `.cpp` files |
-| SDL GPU registered integration tests | 85 CTests before parity-fixture registration |
+| SDL GPU registered integration tests | 86 CTests (85 baseline plus the first shared parity fixture) |
 | Shared EasyGL parity fixtures available | 30 renderer-neutral sources in `modules/graphics/examples/parity` |
+| Shared parity fixtures registered for SDL GPU | 1/30 (`parity_fill_mode_wireframe`) |
 | Tasks created by this audit | 29 (`SDLGPU-55`–`SDLGPU-83`) |
-| Completed / open / proven unavoidable | 5 / 24 / 0; `SDLGPU-80` is a candidate limitation, not yet counted complete |
+| Completed / open / proven unavoidable | 6 / 23 / 0; `SDLGPU-80` is a candidate limitation, not yet counted complete |
 | SDL GPU build | Stable `cmake-build-sdlgpu`, Debug, `CNA_GRAPHICS_RENDERER=SDL_GPU`, tests/examples ON |
 | EasyGL oracle build | Stable `cmake-build-debug`, Debug, `CNA_GRAPHICS_RENDERER=OPENGL33`, tests/examples ON |
 | Runtime driver | SDL 3.5.0 SDL_gpu Vulkan on AMD Radeon 780M / Mesa RADV 25.0.7; Khronos validation layer 1.4.309 present |
@@ -85,7 +86,7 @@ underlying limitation with no correct reasonable emulation; `out` excluded moder
 | Depth compare/write | All comparisons | Mapped into immutable pipeline | `~` — shared 8×3 oracle pending; `SDLGPU-58` |
 | Stencil masks/ops/two-sided/reference | Full front/back state | Full descriptor and dynamic reference | `~` — shared exhaustive oracle/cache A→B→A pending; `SDLGPU-58` |
 | Cull/scissor/viewport/depth range | Full GL state | Deferred snapshots, most targeted tests pass | `~` — shared cross-renderer oracle pending; `SDLGPU-58`, `68` |
-| FillMode.WireFrame | Renderer-side triangle-edge expansion | Accepted through inherited capability but no implementation | `∅` — feasible renderer-side emulation; `SDLGPU-61` |
+| FillMode.WireFrame | Renderer-side triangle-edge expansion | Native `SDL_GPU_FILLMODE_LINE` in every ordinary pipeline | `=` — shared asymmetric three-edge fixture passes; `SDLGPU-61` |
 | Constant/slope depth bias | GL polygon offset with XNA normalization | Per-format normalized-to-native conversion in every immutable pipeline; SpriteBatch uses projected layer depth | `=` — expanded 67/67 pixel/cache oracle, validation clean; `SDLGPU-65` |
 | Sampler filter/address/anisotropy | All stock/effect slots | Descriptor key contains them | `≠` — capacity and propagation failures; `SDLGPU-63`, `64` |
 | MaxMipLevel/LOD bias/AddressW | Applied on ordinary draws | cached, but stock commands omit MaxMipLevel/LOD bias and volume AddressW | `≠`; `SDLGPU-64` |
@@ -290,14 +291,23 @@ underlying API limitation proven after reasonable emulation analysis.
 - **Acceptance/test:** shared split-stream and instanced fixtures pass, including nonzero vertex/
   base/start/instance offsets, per-instance signatures, frequency and lifetime snapshots.
 
-### SDLGPU-61 — emulate FillMode.WireFrame ⬜
+### SDLGPU-61 — verify and advertise FillMode.WireFrame ✅
 
-- **Problem/public behavior:** XNA wireframe is currently accepted but rasterized solid.
-- **Evidence:** EasyGL expands triangle edges to lines; SDL_gpu exposes no polygon-mode field but
-  renderer-side index/vertex expansion is reasonable.
-- **Location:** deferred primitive/indexed draw encoding and transient geometry lifetime.
-- **Acceptance/test:** shared wireframe fixture shows edges with empty interior for lists/strips and
-  indexed/non-indexed calls without reordering neighboring draws.
+- **Problem/public behavior:** the parity audit initially classified XNA wireframe as absent and
+  the capability profile reported false, despite the live renderer already baking the requested
+  fill mode into its immutable pipelines.
+- **Evidence:** `FillRasterizerState` maps the queued state snapshot to
+  `SDL_GPU_FILLMODE_LINE`; SDL 3.5 exposes that native polygon-line mode. EasyGL's implementation
+  is a renderer-side edge expansion, so output—not implementation technique—is the contract.
+- **Location:** capability profile/report and the shared EasyGL/WebGPU wireframe fixture.
+- **Acceptance/test:** the same asymmetric triangle under Solid and WireFrame has a filled versus
+  empty interior, all three wire edges have positive coverage, the images are distinct, the
+  capability is true, and validation diagnostics are fatal.
+- **Result (2026-09-09):** the unchanged native line-fill implementation passes all ten shared
+  discriminators on Vulkan: Solid fills 169/169 interior pixels, WireFrame fills 0/169, all three
+  wire-edge probes contain exactly nine lit pixels, and the two interiors differ by 246. The
+  renderer now reports `WireFrame=true` and no longer lists it as a limitation; the expanded
+  30/30 smoke profile agrees. Both tests treat validation diagnostics as fatal.
 
 ### SDLGPU-62 — match PointClamp texel-center sampling for 3D draws ⬜
 

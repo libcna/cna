@@ -1480,8 +1480,9 @@ namespace CNA::Internal::Renderers::SdlGpu
                             device_, depthStencilFormat_, SDL_GPU_SAMPLECOUNT_2));
             case CNA::GraphicsCapability::CompiledEffects:
                 return SupportsCompiledEffects();
-            case CNA::GraphicsCapability::MultipleRenderTargets:
             case CNA::GraphicsCapability::WireFrame:
+                return true;
+            case CNA::GraphicsCapability::MultipleRenderTargets:
             case CNA::GraphicsCapability::OcclusionQuery:
             case CNA::GraphicsCapability::MultiStreamVertexInput:
             case CNA::GraphicsCapability::Instancing:
@@ -1498,8 +1499,8 @@ namespace CNA::Internal::Renderers::SdlGpu
     std::string_view SdlGpuRenderer::GetAdditionalLimitationsTextEXT() const
     {
         return "SDL GPU currently supports one vertex stream and one independently writable "
-               "color target. FillMode.WireFrame, DrawInstancedPrimitives and OcclusionQuery "
-               "are not implemented; SDL_gpu 3.5 exposes no occlusion-query primitive.";
+               "color target. DrawInstancedPrimitives and OcclusionQuery are not implemented; "
+               "SDL_gpu 3.5 exposes no occlusion-query primitive.";
     }
 
     SDL_GPUTextureFormat SdlGpuRenderer::QueryDepthStencilFormat(SDL_GPUDevice* device)
