@@ -18,6 +18,7 @@
 #include "CNA/Internal/Renderers/D3DCommon/D3DStateMapping.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -121,6 +122,93 @@ namespace CNA::Internal::Renderers::DirectX12
             }
             view.BufferLocation += byteOffset;
             view.SizeInBytes -= static_cast<UINT>(byteOffset);
+        }
+
+        void BuildVertexInputLayout(
+            const GpuDrawParams& params, bool includeInstanceStreams,
+            std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& combinedElements,
+            std::vector<D3DVertexInputElement>& inputElements)
+        {
+            combinedElements.clear();
+            inputElements.clear();
+            for (int i = 0; i < params.vertexStreamCount; ++i)
+            {
+                const auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
+                if (stream.instanceFrequency != 0)
+                    continue;
+                const auto* buffer =
+                    static_cast<const D3D12VertexBufferRenderer*>(stream.buffer);
+                if (buffer == nullptr || buffer->GetDeclarationEXT().GetElements().empty())
+                    throw System::NotSupportedException(
+                        "DirectX12 multi-stream input requires every per-vertex buffer to carry "
+                        "a VertexDeclaration.");
+                for (const auto& source : buffer->GetDeclarationEXT().GetElements())
+                {
+                    auto combined = source;
+                    combined.setOffsetProperty(
+                        source.getOffsetProperty() + stream.combinedByteBase);
+                    combinedElements.push_back(combined);
+                }
+            }
+
+            for (const auto& combined : combinedElements)
+            {
+                const auto mapped =
+                    MapCombinedOffsetToStream(params, combined.getOffsetProperty());
+                const auto& stream =
+                    params.vertexStreams[static_cast<std::size_t>(mapped.streamIndex)];
+                auto local = combined;
+                local.setOffsetProperty(mapped.byteOffsetInStream);
+                inputElements.push_back({local, stream.slot, 0, false});
+            }
+
+            if (!includeInstanceStreams)
+                return;
+            for (int i = 0; i < params.vertexStreamCount; ++i)
+            {
+                const auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
+                if (stream.instanceFrequency <= 0)
+                    continue;
+                const auto* buffer =
+                    static_cast<const D3D12VertexBufferRenderer*>(stream.buffer);
+                if (buffer == nullptr || buffer->GetDeclarationEXT().GetElements().empty())
+                    throw System::NotSupportedException(
+                        "DirectX12 instancing requires every per-instance buffer to carry a "
+                        "VertexDeclaration.");
+                for (const auto& element : buffer->GetDeclarationEXT().GetElements())
+                {
+                    inputElements.push_back(
+                        {element, stream.slot, stream.instanceFrequency, true});
+                }
+            }
+        }
+
+        void BindVertexStreams(
+            ID3D12GraphicsCommandList* commandList,
+            const D3D12VertexBufferRenderer& fallback, const GpuDrawParams& params)
+        {
+            D3D12_VERTEX_BUFFER_VIEW views[kMaxVertexStreams]{};
+            if (params.vertexStreamCount == 0)
+            {
+                views[0] = fallback.GetViewEXT();
+            }
+            else
+            {
+                for (int i = 0; i < params.vertexStreamCount; ++i)
+                {
+                    const auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
+                    if (stream.slot < 0 || stream.slot >= kMaxVertexStreams ||
+                        stream.buffer == nullptr)
+                        continue;
+                    const auto& buffer =
+                        *static_cast<const D3D12VertexBufferRenderer*>(stream.buffer);
+                    views[stream.slot] = buffer.GetViewEXT();
+                    AdvanceVertexBufferView(views[stream.slot], stream.vertexOffset);
+                }
+            }
+
+            commandList->IASetVertexBuffers(
+                0, static_cast<UINT>(kMaxVertexStreams), views);
         }
 
         /// D3D12_PRIMITIVE_TOPOLOGY is D3D_PRIMITIVE_TOPOLOGY under the hood -- same underlying enum
@@ -945,7 +1033,6 @@ namespace CNA::Internal::Renderers::DirectX12
         defaultFlatNormalTexture_.reset();
         // REMED-GFX-123: every cached step-rate PSO is device-tied, so the whole map goes, not just
         // the one that happened to be built last.
-        instancedPsos_.clear();
         // The bound off-screen color target (if any) was owned by the caller and lived on the old
         // device -- it's gone too; the caller must recreate its render target and rebind after
         // calling RecreateDeviceEXT(), same as it must recreate any of its own DX-109 resources.
@@ -2474,8 +2561,16 @@ namespace CNA::Internal::Renderers::DirectX12
         }
 
         const auto& d3dVb = static_cast<const D3D12VertexBufferRenderer&>(vb);
-        const std::size_t stride = d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
-        const auto& vertexElements = d3dVb.GetDeclarationEXT().GetElements();
+        const std::size_t fallbackStride =
+            d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
+        const bool multiStream = HasMultipleVertexStreams(params);
+        std::vector<Microsoft::Xna::Framework::Graphics::VertexElement> combinedElements;
+        std::vector<D3DVertexInputElement> inputElements;
+        if (multiStream)
+            BuildVertexInputLayout(params, false, combinedElements, inputElements);
+        const std::size_t stride = CombinedVertexStrideOr(params, fallbackStride);
+        const auto& vertexElements = multiStream
+            ? combinedElements : d3dVb.GetDeclarationEXT().GetElements();
         using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
         using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
         const bool hasDeclaration = !vertexElements.empty();
@@ -2692,6 +2787,7 @@ namespace CNA::Internal::Renderers::DirectX12
         psoDesc.variant = variant;
         psoDesc.strideInBytes = stride;
         psoDesc.vertexElements = vertexElements;
+        psoDesc.vertexInputElements = inputElements;
         psoDesc.topologyType = static_cast<int>(ToD3D12TopologyType(primitive)); // plans/plan_dx.md DX-208
         // DX-118: depth/cull/blend state is now real and runtime-settable -- see
         // DrawColoredPrimitives's own equivalent block for the full rationale/history.
@@ -3224,8 +3320,7 @@ namespace CNA::Internal::Renderers::DirectX12
         cmdList->OMSetBlendFactor(currentBlendFactor_); // plans/plan_dx.md DX-204
         cmdList->IASetPrimitiveTopology(nativeTopology);
 
-        D3D12_VERTEX_BUFFER_VIEW vbView = d3dVb.GetViewEXT();
-        cmdList->IASetVertexBuffers(0, 1, &vbView);
+        BindVertexStreams(cmdList, d3dVb, params);
         if (ib != nullptr)
         {
             const auto& d3dIb = static_cast<const D3D12IndexBufferRenderer&>(*ib);
@@ -3305,91 +3400,6 @@ namespace CNA::Internal::Renderers::DirectX12
         DrawPrimitivesExImpl(vb, &ib, world, view, projection, primitive, primitiveCount, params);
     }
 
-    ID3D12PipelineState* DirectX12Renderer::GetOrCreateInstancedPsoEXT(
-        ID3D12RootSignature* rootSig, UINT instanceStepRate)
-    {
-        // plans/plan_dx.md DX-239 / DX-207: the key is everything this pipeline state bakes in -- the step
-        // rate, the render-target format, the depth-stencil format and the sample count. Keyed on
-        // the step rate alone, a second target with a different format or sample count silently got
-        // the first target's pipeline state, because a cache hit looks like a cache hit.
-        const InstancedPsoKey key{instanceStepRate,
-                                  static_cast<unsigned int>(boundColorFormat_),
-                                  static_cast<unsigned int>(boundDsvFormat_),
-                                  GetBoundColorSampleCountEXT()};
-        auto cached = instancedPsos_.find(key);
-        if (cached != instancedPsos_.end())
-            return cached->second.Get();
-
-        const uint8_t* vsBytes = nullptr; std::size_t vsSize = 0;
-        const uint8_t* psBytes = nullptr; std::size_t psSize = 0;
-        GetVertexShaderBytecode(D3DShaderVariant::Instanced3d, vsBytes, vsSize);
-        GetPixelShaderBytecode(D3DShaderVariant::Instanced3d, psBytes, psSize);
-        if (!vsBytes || !psBytes)
-            throw std::runtime_error("DirectX12Renderer: missing instanced3d DXBC bytecode");
-
-        // Mirrors DirectX11Renderer::GetOrCreateInstancedInputLayoutEXT()'s own element list
-        // exactly -- POSITION0 (per-vertex, slot 0) + INSTANCEWORLD0-3 (per-instance, slot 1).
-        // REMED-GFX-123: InstanceDataStepRate carries the public
-        // VertexBufferBinding.InstanceFrequency instead of a hardcoded 1, same as D3D11.
-        const D3D12_INPUT_ELEMENT_DESC kElements[] = {
-            { "POSITION",      0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 0,  D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,   0 },
-            { "INSTANCEWORLD", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 0,  D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, instanceStepRate },
-            { "INSTANCEWORLD", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 16, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, instanceStepRate },
-            { "INSTANCEWORLD", 2, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 32, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, instanceStepRate },
-            { "INSTANCEWORLD", 3, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 48, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, instanceStepRate },
-        };
-
-        D3D12_GRAPHICS_PIPELINE_STATE_DESC desc{};
-        desc.pRootSignature = rootSig;
-        desc.VS = {vsBytes, vsSize};
-        desc.PS = {psBytes, psSize};
-        desc.InputLayout = {kElements, static_cast<UINT>(std::size(kElements))};
-        desc.IBStripCutValue = D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;
-        desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-        // REMED-GFX-077: this instanced-3d PSO is created ONCE and cached in instancedPso_ (it also
-        // hardcodes opaque BlendEnable=FALSE, ignoring the current BlendState entirely). Honouring a
-        // dynamic ColorWriteChannels/MultiSampleMask here would require keying it like the main PSO
-        // cache — a documented gap for the instanced fast path, consistent with its existing opaque
-        // hardcode, not a silent drop.
-        desc.SampleMask = UINT_MAX;
-        desc.SampleDesc.Count = GetBoundColorSampleCountEXT(); // plans/plan_dx.md DX-207
-        desc.NodeMask = 0;
-
-        // Same honest hardcoded-defaults simplification every other D3D12 draw uses today (no
-        // D3D12 Phase-DX7-equivalent state-object cache exists yet).
-        desc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-        desc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
-        desc.RasterizerState.FrontCounterClockwise = FALSE;
-        desc.RasterizerState.DepthClipEnable = TRUE;
-
-        D3D12_RENDER_TARGET_BLEND_DESC& rt0 = desc.BlendState.RenderTarget[0];
-        rt0.BlendEnable = FALSE;
-        rt0.SrcBlend = D3D12_BLEND_ONE;
-        rt0.DestBlend = D3D12_BLEND_ZERO;
-        rt0.BlendOp = D3D12_BLEND_OP_ADD;
-        rt0.SrcBlendAlpha = D3D12_BLEND_ONE;
-        rt0.DestBlendAlpha = D3D12_BLEND_ZERO;
-        rt0.BlendOpAlpha = D3D12_BLEND_OP_ADD;
-        rt0.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
-
-        desc.DepthStencilState.DepthEnable = FALSE;
-        desc.DepthStencilState.StencilEnable = FALSE;
-
-        desc.NumRenderTargets = 1;
-        desc.RTVFormats[0] = boundColorFormat_;
-        // DX-239: the depth-stencil format is part of the key above, so it can be honoured here
-        // instead of hardcoded away -- an instanced draw into a target with a depth buffer used to
-        // silently get a pipeline state built for no depth buffer at all.
-        desc.DSVFormat = boundDsvFormat_;
-
-        ComPtr<ID3D12PipelineState> pso;
-        HRESULT hr = device_->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(pso.ReleaseAndGetAddressOf()));
-        if (FAILED(hr))
-            throw std::runtime_error("DirectX12Renderer: instanced3d CreateGraphicsPipelineState failed, hr=" + FormatHr(hr));
-        auto inserted = instancedPsos_.emplace(key, std::move(pso));
-        return inserted.first->second.Get();
-    }
-
     void DirectX12Renderer::DrawInstancedPrimitivesEx(
         const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,
         const Matrix& world, const Matrix& view, const Matrix& projection,
@@ -3407,31 +3417,38 @@ namespace CNA::Internal::Renderers::DirectX12
             DrawIndexedPrimitivesEx(vb, ib, world, view, projection, primitive, primitiveCount, params);
             return;
         }
-        // REMED-GFX-202: one stream of each rate (REMED-GFX-207 tracks widening it); a wider array
-        // is rejected rather than truncated.
-        RejectUnsupportedStreamCombination(params, "The D3D12 renderer");
-        // REMED-GFX-DECL-GUARD: the geometry stream's declaration, same stride table.
-        RequireFaithfulDeclarationEXT(vb, "instanced");
-        const auto* perVertexStream = FirstPerVertexStream(params);
         if (!boundColorResource_)
         {
             NotYetImplemented("DrawInstancedPrimitivesEx (no off-screen color target bound -- "
                               "BindOffscreenColorTargetEXT; see Clear()'s own note)");
         }
 
-        const auto& d3dVb     = static_cast<const D3D12VertexBufferRenderer&>(vb);
-        const auto& d3dIb     = static_cast<const D3D12IndexBufferRenderer&>(ib);
-        const auto& d3dInstVb =
-            static_cast<const D3D12VertexBufferRenderer&>(*instanceStream->buffer);
+        const auto& d3dVb = static_cast<const D3D12VertexBufferRenderer&>(vb);
+        const auto& d3dIb = static_cast<const D3D12IndexBufferRenderer&>(ib);
+        std::vector<Microsoft::Xna::Framework::Graphics::VertexElement> combinedElements;
+        std::vector<D3DVertexInputElement> inputElements;
+        BuildVertexInputLayout(params, true, combinedElements, inputElements);
+        const bool hasColor = DeclarationHasElement(
+            combinedElements,
+            Microsoft::Xna::Framework::Graphics::VertexElementUsage::Color);
+        const auto variant = hasColor
+            ? D3DShaderVariant::InstancedColored3d
+            : D3DShaderVariant::Instanced3d;
 
         auto rootSig = rootSigCache_.GetOrCreate(device_.Get(), /*numCbvs=*/1, /*numSrvs=*/0, /*numSamplers=*/0);
         if (!rootSig)
             throw std::runtime_error("DrawInstancedPrimitivesEx: failed to create root signature");
-        // REMED-GFX-123: instanceFrequency is zero only when no per-instance stream is bound, and
-        // the no-instance-stream fallback above already took that case.
-        const UINT instanceStepRate =
-            static_cast<UINT>(std::max(1, instanceStream->instanceFrequency));
-        ID3D12PipelineState* pso = GetOrCreateInstancedPsoEXT(rootSig.Get(), instanceStepRate);
+
+        D3D12PipelineStateDesc psoDesc;
+        psoDesc.variant = variant;
+        psoDesc.strideInBytes = CombinedVertexStrideOr(
+            params, d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16);
+        psoDesc.vertexElements = combinedElements;
+        psoDesc.vertexInputElements = inputElements;
+        psoDesc.topologyType = static_cast<int>(ToD3D12TopologyType(primitive));
+        FillPsoStateFromCurrentEXT(psoDesc);
+        auto pso = psoCache_.GetOrCreate(
+            device_.Get(), rootSig.Get(), psoDesc, boundColorFormat_, boundDsvFormat_);
         if (!pso)
             throw std::runtime_error("DrawInstancedPrimitivesEx: failed to create instanced3d PSO");
 
@@ -3445,6 +3462,7 @@ namespace CNA::Internal::Renderers::DirectX12
         perDraw.DiffuseColor[1] = params.diffuseColor[1];
         perDraw.DiffuseColor[2] = params.diffuseColor[2];
         perDraw.DiffuseColor[3] = params.diffuseColor[3];
+        perDraw.VertexColorEnabled = params.vertexColorEnabled ? 1.0f : 0.0f;
 
         ID3D12Resource* perDrawCB = GetOrCreatePerDrawConstantBufferEXT();
         std::memcpy(perDrawConstantBufferMapped_, &perDraw, sizeof(perDraw));
@@ -3452,13 +3470,14 @@ namespace CNA::Internal::Renderers::DirectX12
         ID3D12CommandAllocator* allocator = GetCommandAllocatorEXT(0);
         ID3D12GraphicsCommandList* cmdList = GetCommandListEXT();
         allocator->Reset();
-        cmdList->Reset(allocator, pso);
+        cmdList->Reset(allocator, pso.Get());
         // DX-120: see activeOcclusionQueryHeap_'s own doc comment -- BeginQuery/EndQuery must
         // share this exact command-list submission with the draw below.
         if (activeOcclusionQueryHeap_) cmdList->BeginQuery(activeOcclusionQueryHeap_, D3D12_QUERY_TYPE_OCCLUSION, 0);
 
         resourceStates_.TransitionTo(cmdList, boundColorResource_, D3D12_RESOURCE_STATE_RENDER_TARGET);
-        cmdList->OMSetRenderTargets(1, &boundColorRtv_, FALSE, nullptr);
+        cmdList->OMSetRenderTargets(
+            1, &boundColorRtv_, FALSE, boundDsv_.ptr != 0 ? &boundDsv_ : nullptr);
 
         D3D12_VIEWPORT viewport = GetEffectiveViewportEXT();  // REMED-GFX-064: honor custom Viewport
         D3D12_RECT scissor = GetEffectiveScissorEXT(); // DX-201
@@ -3466,22 +3485,12 @@ namespace CNA::Internal::Renderers::DirectX12
         cmdList->RSSetScissorRects(1, &scissor);
 
         cmdList->SetGraphicsRootSignature(rootSig.Get());
-        cmdList->SetPipelineState(pso);
+        cmdList->SetPipelineState(pso.Get());
         cmdList->OMSetStencilRef(static_cast<UINT>(currentReferenceStencil_)); // DX-203
         cmdList->OMSetBlendFactor(currentBlendFactor_); // DX-204
         cmdList->IASetPrimitiveTopology(nativeTopology);
 
-        // REMED-GFX-123: a D3D12 vertex-buffer view has no separate offset field, so the public
-        // VertexBufferBinding.VertexOffset -- an ELEMENT offset -- has to move BufferLocation and
-        // shrink SizeInBytes by the same byte count, converted with that stream's own stride
-        // exactly once. The per-vertex stream's offset stays independent of BaseVertexLocation
-        // below: the IA adds the base vertex to the decoded index and then fetches at
-        // `BufferLocation + index * stride`, so both apply once.
-        D3D12_VERTEX_BUFFER_VIEW vbViews[2] = { d3dVb.GetViewEXT(), d3dInstVb.GetViewEXT() };
-        AdvanceVertexBufferView(
-            vbViews[0], perVertexStream != nullptr ? perVertexStream->vertexOffset : 0);
-        AdvanceVertexBufferView(vbViews[1], instanceStream->vertexOffset);
-        cmdList->IASetVertexBuffers(0, 2, vbViews);
+        BindVertexStreams(cmdList, d3dVb, params);
         D3D12_INDEX_BUFFER_VIEW ibView = d3dIb.GetViewEXT();
         cmdList->IASetIndexBuffer(&ibView);
 

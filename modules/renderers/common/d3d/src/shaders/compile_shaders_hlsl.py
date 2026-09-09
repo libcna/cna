@@ -68,6 +68,7 @@ SHADERS = [
     ("sprite2d.vert.hlsl",           "main", "vs_5_0", "kSprite2dVertDxbc"),
     ("sprite2d.frag.hlsl",           "main", "ps_5_0", "kSprite2dFragDxbc"),
     ("instanced3d.vert.hlsl",        "main", "vs_5_0", "kInstanced3dVertDxbc"),
+    ("instanced3d.vert.hlsl",        "main", "vs_5_0", "kInstancedColored3dVertDxbc", "CNA_INSTANCED_VERTEX_COLOR_INPUT"),
     ("instanced3d.frag.hlsl",        "main", "ps_5_0", "kInstanced3dFragDxbc"),
     ("alpha_test_colored3d.vert.hlsl", "main", "vs_5_0", "kAlphaTestColored3dVertDxbc"),
     ("alpha_test_colored3d.vert.hlsl", "main", "vs_5_0", "kAlphaTestUntexturedColored3dVertDxbc", "CNA_ALPHA_TEST_UNTEXTURED_INPUT"),

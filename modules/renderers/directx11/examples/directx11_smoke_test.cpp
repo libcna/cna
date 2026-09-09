@@ -2308,6 +2308,10 @@ protected:
             };
             auto vbInst = renderer.CreateVertexBuffer(3);
             vbInst->SetData(kTriInst, 3, sizeof(VP3));
+            vbInst->SetVertexDeclaration(VertexDeclaration(
+                sizeof(VP3),
+                {VertexElement(0, VertexElementFormat::Vector3,
+                               VertexElementUsage::Position, 0)}));
 
             static const uint16_t kTriInstIdx[3] = {0, 1, 2};
             auto ibInst = renderer.CreateIndexBuffer16(3);
@@ -2322,6 +2326,18 @@ protected:
             };
             auto instVb = renderer.CreateVertexBuffer(1);
             instVb->SetData(kInstanceWorld, 1, sizeof(kInstanceWorld));
+            instVb->SetVertexDeclaration(VertexDeclaration(
+                sizeof(kInstanceWorld),
+                {
+                    VertexElement(0, VertexElementFormat::Vector4,
+                                  VertexElementUsage::TextureCoordinate, 1),
+                    VertexElement(16, VertexElementFormat::Vector4,
+                                  VertexElementUsage::TextureCoordinate, 2),
+                    VertexElement(32, VertexElementFormat::Vector4,
+                                  VertexElementUsage::TextureCoordinate, 3),
+                    VertexElement(48, VertexElementFormat::Vector4,
+                                  VertexElementUsage::TextureCoordinate, 4),
+                }));
 
             GpuDrawParams ip;
             // REMED-GFX-202: the classic two-stream instanced binding set, in the shared

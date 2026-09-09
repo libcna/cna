@@ -55,6 +55,8 @@ namespace CNA::Internal::Renderers::DirectX12
         D3DShaderVariant variant = D3DShaderVariant::Colored3d;
         std::size_t strideInBytes = 16;
         std::vector<Microsoft::Xna::Framework::Graphics::VertexElement> vertexElements;
+        /// DX-222: explicit native slots/classifications for a multi-stream or instanced draw.
+        std::vector<D3DCommon::D3DVertexInputElement> vertexInputElements;
 
         // Blend (D3DStateMapping::BlendToD3D11 / BlendFunctionToD3D11 ordinals -- raw
         // Microsoft::Xna::Framework::Graphics enum ordinals, fed through D3DStateMapping's own
@@ -140,6 +142,7 @@ namespace CNA::Internal::Renderers::DirectX12
         {
             return std::make_tuple(static_cast<int>(variant), strideInBytes,
                                    D3DCommon::VertexDeclarationCacheKey(vertexElements),
+                                   D3DCommon::VertexInputLayoutCacheKey(vertexInputElements),
                                    colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend,
                                    colorBlendFunc, alphaBlendFunc,
                                    depthEnable, depthWriteEnable, depthFunc,

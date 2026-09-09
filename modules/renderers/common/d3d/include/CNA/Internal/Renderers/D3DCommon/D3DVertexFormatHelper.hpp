@@ -19,9 +19,30 @@ namespace CNA::Internal::Renderers::D3DCommon
 {
     using D3DVertexDeclarationKey = std::vector<std::array<int, 4>>;
 
+    /**
+     * @brief One XNA vertex element after assignment to a native D3D input slot.
+     *
+     * Ordinary elements retain their XNA semantic. The stock instanced path sets
+     * @ref instanceWorldSemantic for its public TextureCoordinate1..4 matrix columns, which the
+     * shared HLSL names INSTANCEWORLD0..3.
+     */
+    struct D3DVertexInputElement
+    {
+        Microsoft::Xna::Framework::Graphics::VertexElement element;
+        int inputSlot = 0;
+        int instanceStepRate = 0;
+        bool instanceWorldSemantic = false;
+    };
+
+    using D3DVertexInputLayoutKey = std::vector<std::array<int, 7>>;
+
     /// Returns a stable, value-based cache key for a caller-provided vertex declaration.
     D3DVertexDeclarationKey VertexDeclarationCacheKey(
         const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& elements);
+
+    /// Returns a stable key containing every element, slot, classification and step rate.
+    D3DVertexInputLayoutKey VertexInputLayoutCacheKey(
+        const std::vector<D3DVertexInputElement>& elements);
 
     /// Translates a caller-provided XNA vertex declaration to D3D11 input elements.
     /// Returns false if an element carries an invalid format, usage or negative offset/index.
@@ -33,6 +54,16 @@ namespace CNA::Internal::Renderers::D3DCommon
     /// Returns false if an element carries an invalid format, usage or negative offset/index.
     bool InputElementsForDeclarationD3D12(
         const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& elements,
+        std::vector<D3D12_INPUT_ELEMENT_DESC>& output);
+
+    /// Translates an explicitly slotted layout to D3D11 input elements.
+    bool InputElementsForLayout(
+        const std::vector<D3DVertexInputElement>& elements,
+        std::vector<D3D11_INPUT_ELEMENT_DESC>& output);
+
+    /// Translates an explicitly slotted layout to D3D12 input elements.
+    bool InputElementsForLayoutD3D12(
+        const std::vector<D3DVertexInputElement>& elements,
         std::vector<D3D12_INPUT_ELEMENT_DESC>& output);
 
     /// Returns whether the declaration contains the requested semantic and usage index.

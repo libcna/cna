@@ -45,8 +45,8 @@ namespace CNA::Internal::Renderers::DirectX12
         D3D12VertexBufferRenderer(DirectX12Renderer* renderer, int vertex_capacity);
 
         void SetData(const void* data, int vertex_count, std::size_t stride_in_bytes) override;
-        // DX-221: ordinary draws translate this declaration into their native input layout.
-        // Instanced draws still use the legacy stride table and validate it before submission.
+        // DX-221/DX-222: every ordinary and instanced draw translates this declaration into its
+        // native input layout.
         void SetVertexDeclaration(const VertexDeclaration& vertexDeclaration) override
         {
             declaration_.Remember(vertexDeclaration);
@@ -81,19 +81,6 @@ namespace CNA::Internal::Renderers::DirectX12
         UINT byteWidth_ = 0;
         CNA::Internal::Graphics::DeclaredVertexLayout declaration_;
     };
-
-    /// REMED-GFX-DECL-GUARD: protects the still-table-driven instanced route by throwing
-    /// `System::NotSupportedException` unless @p vb's declaration matches its stride-table entry.
-    /// Pure: creates nothing, queues nothing and leaves no partial native object behind, so a
-    /// rejected draw cannot poison the device. An out-of-table stride is left to the table's own
-    /// established rejection.
-    inline void RequireFaithfulDeclarationEXT(const IVertexBufferRenderer& vb, const char* route)
-    {
-        const auto& d3dVb = static_cast<const D3D12VertexBufferRenderer&>(vb);
-        CNA::Internal::Graphics::RequireFaithfulVertexDeclaration(
-            d3dVb.GetDeclarationEXT(), static_cast<int>(d3dVb.GetStrideEXT()),
-            CNA::Internal::Graphics::UnlistedStrideLayout::RendererRefusesIt, "DIRECTX12", route);
-    }
 
     /// Real D3D12 index buffer renderer (DX-109). Supports both 16-bit (DXGI_FORMAT_R16_UINT) and
     /// 32-bit (DXGI_FORMAT_R32_UINT) indices, fixed at construction time -- same convention as

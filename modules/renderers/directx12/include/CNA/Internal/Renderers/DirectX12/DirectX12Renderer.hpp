@@ -26,9 +26,6 @@
 #include <functional>
 #include <vector>
 #include <memory>
-#include <map>
-#include <tuple>
-#include <unordered_map>
 
 namespace CNA::Internal::Renderers::DirectX12
 {
@@ -108,6 +105,14 @@ namespace CNA::Internal::Renderers::DirectX12
         /// D3D12EffectRenderer::CompileProgram() runs a real D3DCompile() on the caller's HLSL and binds the resulting shader
         /// objects, so a post-process pass that believes its shader ran is right.
         [[nodiscard]] bool ExecutesShaderEffectSourceEXT() const override { return true; }
+
+        /** @brief Reports the complete D3D12 capability surface, including multi-stream input. */
+        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override
+        {
+            if (capability == CNA::GraphicsCapability::MultiStreamVertexInput)
+                return true;
+            return IGraphicsRenderer::SupportsCapability(capability);
+        }
         void GetViewportSize(int& width, int& height) override;
         /**
          * @brief Returns the physical back-buffer rectangle used for logical presentation.
@@ -398,11 +403,8 @@ namespace CNA::Internal::Renderers::DirectX12
                                      PrimitiveType primitive, int primitiveCount,
                                      const GpuDrawParams& params) override;
 
-        /// DX-111 (finish): real instanced3d dispatch -- mirrors
-        /// DirectX11Renderer::DrawInstancedPrimitivesEx's own fallback (no per-instance VB means
-        /// this isn't really an instanced draw) and hand-built dual-vertex-stream PSO/input-layout
-        /// shape (POSITION @ slot 0 per-vertex, INSTANCEWORLD0-3 @ slot 1 per-instance) -- see
-        /// GetOrCreateInstancedPsoEXT's own doc comment for why this bypasses D3D12PipelineStateCache.
+        /// DX-111/DX-222: real instanced3d dispatch. Every bound declaration, input slot,
+        /// instance step rate and stream-local offset enters the shared pipeline-state cache.
         void DrawInstancedPrimitivesEx(const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,
                                        const Matrix& world, const Matrix& view, const Matrix& projection,
                                        PrimitiveType primitive, int primitiveCount, int instanceCount,
@@ -779,18 +781,6 @@ namespace CNA::Internal::Renderers::DirectX12
         /// GetOrCreatePbrLightsConstantBufferEXT.
         ID3D12Resource* GetOrCreatePbrLightsConstantBufferEXT();
 
-        /// DX-111 (finish): instanced3d's own hand-built PSO -- deliberately NOT resolved via
-        /// D3D12PipelineStateCache/D3DVertexFormatHelper::InputElementsForStrideD3D12 (which only
-        /// covers a single per-vertex stream), since instanced3d needs a genuinely different
-        /// 2-input-slot layout: POSITION0 (12 bytes, per-vertex, slot 0) + INSTANCEWORLD0-3 (4 x
-        /// float4 rows, per-instance, slot 1) -- mirrors DirectX11Renderer's own
-        /// GetOrCreateInstancedInputLayoutEXT() element list exactly, and D3D12SpriteBatchRenderer's
-        /// own precedent for hand-building a PSO when the stride-keyed cache's assumptions don't fit
-        /// (this file's own instancedPsos_ use the (1,0,0) root-signature shape -- PerDraw@b0 only,
-        /// no texture -- matching instanced3d.frag.hlsl's own real (textureless) declaration).
-        ID3D12PipelineState* GetOrCreateInstancedPsoEXT(ID3D12RootSignature* rootSig,
-                                                       UINT instanceStepRate);
-
         /// DX-111 (continued): resolves the real SRV GPU descriptor handle to bind for a
         /// GpuDrawParams texture slot -- mirrors DirectX11Renderer's own GetSrvForTextureEXT,
         /// but D3D12TextureRenderer is the only real ITextureRenderer concrete type this renderer has
@@ -1001,20 +991,6 @@ namespace CNA::Internal::Renderers::DirectX12
         // across every draw that needs a fallback.
         std::unique_ptr<ITextureRenderer> defaultWhiteTexture_;
         std::unique_ptr<ITextureRenderer> defaultFlatNormalTexture_;
-        // DX-111 (finish): instanced3d's own hand-built PSO (see GetOrCreateInstancedPsoEXT's doc
-        // comment) -- reused across DrawInstancedPrimitivesEx calls.
-        // REMED-GFX-123: keyed by InstanceDataStepRate. The rate is baked into the PSO's input
-        // layout, so a single cached PSO would silently reuse the previous draw's
-        // VertexBufferBinding.InstanceFrequency. One entry per distinct rate (one or two in
-        // practice), so alternating frequencies never build a PSO per draw.
-        /// plans/plan_dx.md DX-239 (reconciling REMED-GFX-199): keyed on everything the instanced pipeline
-        /// state bakes in, not on the step rate alone. It bakes in the render-target format, the
-        /// depth-stencil format and (DX-207) the sample count as well, so a step rate reused against
-        /// a differently-formatted or multisampled target used to return a pipeline state built for
-        /// the previous one -- silently, because a cache hit looks like a cache hit.
-        using InstancedPsoKey = std::tuple<UINT, unsigned int, unsigned int, unsigned int>;
-        std::map<InstancedPsoKey, ComPtr<ID3D12PipelineState>> instancedPsos_;
-
         // DX-111: the currently-bound off-screen color target (see BindOffscreenColorTargetEXT's own
         // doc comment) -- non-owning, the caller/test retains ownership of the resource itself.
         ID3D12Resource* boundColorResource_ = nullptr;

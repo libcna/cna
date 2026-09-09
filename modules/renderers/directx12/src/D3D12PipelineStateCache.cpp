@@ -45,7 +45,15 @@ namespace CNA::Internal::Renderers::DirectX12
         UINT inputElementCount = 0;
         std::vector<D3D12_INPUT_ELEMENT_DESC> translatedElements;
         const D3D12_INPUT_ELEMENT_DESC* inputElements = nullptr;
-        if (!desc.vertexElements.empty())
+        if (!desc.vertexInputElements.empty())
+        {
+            if (InputElementsForLayoutD3D12(desc.vertexInputElements, translatedElements))
+            {
+                inputElements = translatedElements.data();
+                inputElementCount = static_cast<UINT>(translatedElements.size());
+            }
+        }
+        else if (!desc.vertexElements.empty())
         {
             if (InputElementsForDeclarationD3D12(desc.vertexElements, translatedElements))
             {

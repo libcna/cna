@@ -46,6 +46,8 @@ namespace CNA::Internal::Renderers::D3DCommon
         Skinned3dFloatIndices,
         Sprite2d,
         Instanced3d,
+        /// Instanced3d with BasicEffect's COLOR0 multiplier input.
+        InstancedColored3d,
         /// plans/plan_dx.md DX-136: alpha_test3d's stride-24 (VertexPositionColorTexture) sibling --
         /// gives AlphaTestEffect.VertexColorEnabled a real vertex-color attribute to multiply
         /// against, which plain AlphaTest3d (stride 20, Position+UV only) never carries.

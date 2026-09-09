@@ -49,13 +49,22 @@ namespace CNA::Internal::Renderers::DirectX11
             ID3D11Device* device, D3DShaderVariant variant, std::size_t strideInBytes,
             const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& elements);
 
+        /// Returns a cached layout whose elements already carry their native stream slots and
+        /// per-instance step rates. The complete stream shape participates in the cache key.
+        ComPtr<ID3D11InputLayout> GetOrCreate(
+            ID3D11Device* device, D3DShaderVariant variant, std::size_t strideInBytes,
+            const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& elements,
+            const std::vector<CNA::Internal::Renderers::D3DCommon::D3DVertexInputElement>&
+                inputElements);
+
         /// Drops every cached layout (CNAEXT -- device-lost recovery, DX-27, will need this once
         /// it does full three-lifetime-group teardown/recreation).
         void Clear() { cache_.clear(); }
 
     private:
         using Key = std::tuple<int, std::size_t,
-            CNA::Internal::Renderers::D3DCommon::D3DVertexDeclarationKey>;
+            CNA::Internal::Renderers::D3DCommon::D3DVertexDeclarationKey,
+            CNA::Internal::Renderers::D3DCommon::D3DVertexInputLayoutKey>;
         std::map<Key, ComPtr<ID3D11InputLayout>> cache_;
     };
 }

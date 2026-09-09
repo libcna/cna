@@ -51,6 +51,28 @@ namespace CNA::Internal::Renderers::D3DCommon
             return DXGI_FORMAT_UNKNOWN;
         }
 
+        bool NativeSemantic(
+            const D3DVertexInputElement& input, const char*& name, UINT& index)
+        {
+            const auto usage = input.element.getVertexElementUsageProperty();
+            const int usageIndex = input.element.getUsageIndexProperty();
+            if (input.instanceWorldSemantic)
+            {
+                if (usage != VertexElementUsage::TextureCoordinate ||
+                    usageIndex < 1 || usageIndex > 4)
+                    return false;
+                name = "INSTANCEWORLD";
+                index = static_cast<UINT>(usageIndex - 1);
+                return true;
+            }
+
+            name = SemanticName(usage);
+            if (name == nullptr || usageIndex < 0)
+                return false;
+            index = static_cast<UINT>(usageIndex);
+            return true;
+        }
+
         // Stride 16: VertexPositionColor.
         const D3D11_INPUT_ELEMENT_DESC kStride16[] = {
             { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0,  D3D11_INPUT_PER_VERTEX_DATA, 0 },
@@ -196,6 +218,27 @@ namespace CNA::Internal::Renderers::D3DCommon
         return key;
     }
 
+    D3DVertexInputLayoutKey VertexInputLayoutCacheKey(
+        const std::vector<D3DVertexInputElement>& elements)
+    {
+        D3DVertexInputLayoutKey key;
+        key.reserve(elements.size());
+        for (const auto& input : elements)
+        {
+            const auto& element = input.element;
+            key.push_back({
+                element.getOffsetProperty(),
+                static_cast<int>(element.getVertexElementFormatProperty()),
+                static_cast<int>(element.getVertexElementUsageProperty()),
+                element.getUsageIndexProperty(),
+                input.inputSlot,
+                input.instanceStepRate,
+                input.instanceWorldSemantic ? 1 : 0,
+            });
+        }
+        return key;
+    }
+
     bool InputElementsForDeclaration(
         const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& elements,
         std::vector<D3D11_INPUT_ELEMENT_DESC>& output)
@@ -251,6 +294,75 @@ namespace CNA::Internal::Renderers::D3DCommon
                 static_cast<UINT>(element.getOffsetProperty()),
                 D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,
                 0,
+            });
+        }
+        return !output.empty();
+    }
+
+    bool InputElementsForLayout(
+        const std::vector<D3DVertexInputElement>& elements,
+        std::vector<D3D11_INPUT_ELEMENT_DESC>& output)
+    {
+        output.clear();
+        output.reserve(elements.size());
+        for (const auto& input : elements)
+        {
+            const auto& element = input.element;
+            const char* semantic = nullptr;
+            UINT semanticIndex = 0;
+            const DXGI_FORMAT format = DxgiFormat(element.getVertexElementFormatProperty());
+            if (!NativeSemantic(input, semantic, semanticIndex) ||
+                format == DXGI_FORMAT_UNKNOWN || element.getOffsetProperty() < 0 ||
+                input.inputSlot < 0 || input.instanceStepRate < 0)
+            {
+                output.clear();
+                return false;
+            }
+
+            output.push_back({
+                semantic,
+                semanticIndex,
+                format,
+                static_cast<UINT>(input.inputSlot),
+                static_cast<UINT>(element.getOffsetProperty()),
+                input.instanceStepRate > 0 ? D3D11_INPUT_PER_INSTANCE_DATA
+                                           : D3D11_INPUT_PER_VERTEX_DATA,
+                static_cast<UINT>(input.instanceStepRate),
+            });
+        }
+        return !output.empty();
+    }
+
+    bool InputElementsForLayoutD3D12(
+        const std::vector<D3DVertexInputElement>& elements,
+        std::vector<D3D12_INPUT_ELEMENT_DESC>& output)
+    {
+        output.clear();
+        output.reserve(elements.size());
+        for (const auto& input : elements)
+        {
+            const auto& element = input.element;
+            const char* semantic = nullptr;
+            UINT semanticIndex = 0;
+            const DXGI_FORMAT format = DxgiFormat(element.getVertexElementFormatProperty());
+            if (!NativeSemantic(input, semantic, semanticIndex) ||
+                format == DXGI_FORMAT_UNKNOWN || element.getOffsetProperty() < 0 ||
+                input.inputSlot < 0 || input.instanceStepRate < 0)
+            {
+                output.clear();
+                return false;
+            }
+
+            output.push_back({
+                semantic,
+                semanticIndex,
+                format,
+                static_cast<UINT>(input.inputSlot),
+                static_cast<UINT>(element.getOffsetProperty()),
+                input.instanceStepRate > 0
+                    ? D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA
+                    : D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,
+                static_cast<UINT>(input.instanceStepRate),
             });
         }
         return !output.empty();

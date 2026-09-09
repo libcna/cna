@@ -2961,6 +2961,10 @@ int main()
         // exact per-instance DiffuseColor -- both non-zero color components at their saturated 0/1
         // extremes, so there is no rounding ambiguity in the final UNORM8 byte comparison.
         struct VP3 { float x, y, z; };
+        using Microsoft::Xna::Framework::Graphics::VertexDeclaration;
+        using Microsoft::Xna::Framework::Graphics::VertexElement;
+        using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+        using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
         static const VP3 kTriInst[3] = {
             {-1.0f, -1.0f, 0.0f},
             { 3.0f, -1.0f, 0.0f},
@@ -2968,6 +2972,10 @@ int main()
         };
         D3D12VertexBufferRenderer vbInst(&renderer, 3);
         vbInst.SetData(kTriInst, 3, sizeof(VP3));
+        vbInst.SetVertexDeclaration(VertexDeclaration(
+            sizeof(VP3),
+            {VertexElement(0, VertexElementFormat::Vector3,
+                           VertexElementUsage::Position, 0)}));
 
         static const uint16_t kTriInstIdx[3] = {0, 1, 2};
         D3D12IndexBufferRenderer ibInst(&renderer, 3, /*thirtyTwoBit=*/false);
@@ -2982,6 +2990,18 @@ int main()
         };
         D3D12VertexBufferRenderer instVb(&renderer, 1);
         instVb.SetData(kInstanceWorld, 1, sizeof(kInstanceWorld));
+        instVb.SetVertexDeclaration(VertexDeclaration(
+            sizeof(kInstanceWorld),
+            {
+                VertexElement(0, VertexElementFormat::Vector4,
+                              VertexElementUsage::TextureCoordinate, 1),
+                VertexElement(16, VertexElementFormat::Vector4,
+                              VertexElementUsage::TextureCoordinate, 2),
+                VertexElement(32, VertexElementFormat::Vector4,
+                              VertexElementUsage::TextureCoordinate, 3),
+                VertexElement(48, VertexElementFormat::Vector4,
+                              VertexElementUsage::TextureCoordinate, 4),
+            }));
 
         GpuDrawParams ip;
         // REMED-GFX-202: the classic two-stream instanced binding set, in the shared

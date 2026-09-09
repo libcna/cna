@@ -23,6 +23,7 @@
 #include <cstring>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace CNA::Internal::Renderers::DirectX11
 {
@@ -85,6 +86,102 @@ namespace CNA::Internal::Renderers::DirectX11
             }
             throw std::runtime_error(
                 "DirectX11 renderer does not support the requested PrimitiveType value");
+        }
+
+        void BuildVertexInputLayout(
+            const GpuDrawParams& params, bool includeInstanceStreams,
+            std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& combinedElements,
+            std::vector<D3DCommon::D3DVertexInputElement>& inputElements)
+        {
+            combinedElements.clear();
+            inputElements.clear();
+            for (int i = 0; i < params.vertexStreamCount; ++i)
+            {
+                const auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
+                if (stream.instanceFrequency != 0)
+                    continue;
+                const auto* buffer =
+                    static_cast<const D3D11VertexBufferRenderer*>(stream.buffer);
+                if (buffer == nullptr || buffer->GetDeclarationEXT().GetElements().empty())
+                    throw System::NotSupportedException(
+                        "DirectX11 multi-stream input requires every per-vertex buffer to carry "
+                        "a VertexDeclaration.");
+                for (const auto& source : buffer->GetDeclarationEXT().GetElements())
+                {
+                    auto combined = source;
+                    combined.setOffsetProperty(
+                        source.getOffsetProperty() + stream.combinedByteBase);
+                    combinedElements.push_back(combined);
+                }
+            }
+
+            for (const auto& combined : combinedElements)
+            {
+                const auto mapped =
+                    MapCombinedOffsetToStream(params, combined.getOffsetProperty());
+                const auto& stream =
+                    params.vertexStreams[static_cast<std::size_t>(mapped.streamIndex)];
+                auto local = combined;
+                local.setOffsetProperty(mapped.byteOffsetInStream);
+                inputElements.push_back({local, stream.slot, 0, false});
+            }
+
+            if (!includeInstanceStreams)
+                return;
+            for (int i = 0; i < params.vertexStreamCount; ++i)
+            {
+                const auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
+                if (stream.instanceFrequency <= 0)
+                    continue;
+                const auto* buffer =
+                    static_cast<const D3D11VertexBufferRenderer*>(stream.buffer);
+                if (buffer == nullptr || buffer->GetDeclarationEXT().GetElements().empty())
+                    throw System::NotSupportedException(
+                        "DirectX11 instancing requires every per-instance buffer to carry a "
+                        "VertexDeclaration.");
+                for (const auto& element : buffer->GetDeclarationEXT().GetElements())
+                {
+                    inputElements.push_back(
+                        {element, stream.slot, stream.instanceFrequency, true});
+                }
+            }
+        }
+
+        void BindVertexStreams(
+            ID3D11DeviceContext* context, const D3D11VertexBufferRenderer& fallback,
+            const GpuDrawParams& params)
+        {
+            ID3D11Buffer* buffers[kMaxVertexStreams]{};
+            UINT strides[kMaxVertexStreams]{};
+            UINT offsets[kMaxVertexStreams]{};
+            if (params.vertexStreamCount == 0)
+            {
+                buffers[0] = fallback.GetBufferEXT();
+                strides[0] = static_cast<UINT>(fallback.GetStrideEXT());
+            }
+            else
+            {
+                for (int i = 0; i < params.vertexStreamCount; ++i)
+                {
+                    const auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
+                    if (stream.slot < 0 || stream.slot >= kMaxVertexStreams ||
+                        stream.buffer == nullptr)
+                        continue;
+                    const auto& buffer =
+                        *static_cast<const D3D11VertexBufferRenderer*>(stream.buffer);
+                    const UINT stride = static_cast<UINT>(stream.strideInBytes > 0
+                        ? stream.strideInBytes : buffer.GetStrideEXT());
+                    buffers[stream.slot] = buffer.GetBufferEXT();
+                    strides[stream.slot] = stride;
+                    offsets[stream.slot] = static_cast<UINT>(
+                        static_cast<std::size_t>(std::max(stream.vertexOffset, 0)) * stride);
+                }
+            }
+
+            // D3D11 IA state survives draw calls. Rebinding all public slots explicitly clears a
+            // secondary stream left by a wider preceding draw.
+            context->IASetVertexBuffers(
+                0, static_cast<UINT>(kMaxVertexStreams), buffers, strides, offsets);
         }
 
         /// DX-62: resolves the real SRV to bind for a GpuDrawParams texture slot. Two concrete
@@ -1667,39 +1764,6 @@ namespace CNA::Internal::Renderers::DirectX11
         return defaultFlatNormalSrv_.Get();
     }
 
-    ID3D11InputLayout* DirectX11Renderer::GetOrCreateInstancedInputLayoutEXT(UINT instanceStepRate)
-    {
-        auto cached = instancedInputLayouts_.find(instanceStepRate);
-        if (cached != instancedInputLayouts_.end())
-            return cached->second.Get();
-
-        // REMED-GFX-123: InstanceDataStepRate carries the public
-        // VertexBufferBinding.InstanceFrequency -- "advance to the next per-instance record once
-        // every N drawn instances" -- instead of the hardcoded 1 this layout used to bake in.
-        const D3D11_INPUT_ELEMENT_DESC elements[] = {
-            { "POSITION",      0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 0,  D3D11_INPUT_PER_VERTEX_DATA,   0 },
-            { "INSTANCEWORLD", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 0,  D3D11_INPUT_PER_INSTANCE_DATA, instanceStepRate },
-            { "INSTANCEWORLD", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 16, D3D11_INPUT_PER_INSTANCE_DATA, instanceStepRate },
-            { "INSTANCEWORLD", 2, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 32, D3D11_INPUT_PER_INSTANCE_DATA, instanceStepRate },
-            { "INSTANCEWORLD", 3, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 48, D3D11_INPUT_PER_INSTANCE_DATA, instanceStepRate },
-        };
-
-        const uint8_t* vsBytes = nullptr;
-        std::size_t vsSize = 0;
-        D3DCommon::GetVertexShaderBytecode(D3DCommon::D3DShaderVariant::Instanced3d, vsBytes, vsSize);
-        if (vsBytes == nullptr || vsSize == 0)
-            return nullptr;
-
-        ComPtr<ID3D11InputLayout> layout;
-        const HRESULT hr = device_->CreateInputLayout(
-            elements, ARRAYSIZE(elements), vsBytes, vsSize, layout.ReleaseAndGetAddressOf());
-        if (FAILED(hr) || !layout)
-            return nullptr;
-
-        auto inserted = instancedInputLayouts_.emplace(instanceStepRate, std::move(layout));
-        return inserted.first->second.Get();
-    }
-
     void DirectX11Renderer::DrawPrimitivesExImpl(
         const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
         const Matrix& world, const Matrix& view, const Matrix& projection,
@@ -1707,8 +1771,16 @@ namespace CNA::Internal::Renderers::DirectX11
     {
         // DX-62/DX-63/DX-64/DX-65/DX-66/DX-67: real effect-aware variant dispatch.
         const auto& d3dVb = static_cast<const D3D11VertexBufferRenderer&>(vb);
-        const std::size_t stride = d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
-        const auto& vertexElements = d3dVb.GetDeclarationEXT().GetElements();
+        const std::size_t fallbackStride =
+            d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
+        const bool multiStream = HasMultipleVertexStreams(params);
+        std::vector<Microsoft::Xna::Framework::Graphics::VertexElement> combinedElements;
+        std::vector<D3DCommon::D3DVertexInputElement> inputElements;
+        if (multiStream)
+            BuildVertexInputLayout(params, false, combinedElements, inputElements);
+        const std::size_t stride = CombinedVertexStrideOr(params, fallbackStride);
+        const auto& vertexElements = multiStream
+            ? combinedElements : d3dVb.GetDeclarationEXT().GetElements();
         using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
         using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
         const bool hasDeclaration = !vertexElements.empty();
@@ -1872,7 +1944,7 @@ namespace CNA::Internal::Renderers::DirectX11
             throw std::runtime_error("DrawPrimitivesEx: failed to create shader objects for the selected variant");
 
         auto layout = inputLayoutCache_.GetOrCreate(
-            device_.Get(), variant, stride, vertexElements);
+            device_.Get(), variant, stride, vertexElements, inputElements);
         if (!layout)
             throw std::runtime_error("DrawPrimitivesEx: failed to create input layout for the selected variant/stride");
 
@@ -2370,10 +2442,7 @@ namespace CNA::Internal::Renderers::DirectX11
             cbs[1] = fogCB;
         }
 
-        ID3D11Buffer* vbRaw = d3dVb.GetBufferEXT();
-        const UINT strideU = static_cast<UINT>(stride);
-        const UINT offset = 0;
-        context_->IASetVertexBuffers(0, 1, &vbRaw, &strideU, &offset);
+        BindVertexStreams(context_.Get(), d3dVb, params);
         if (ib != nullptr)
         {
             const auto& d3dIb = static_cast<const D3D11IndexBufferRenderer&>(*ib);
@@ -2442,36 +2511,26 @@ namespace CNA::Internal::Renderers::DirectX11
             DrawIndexedPrimitivesEx(vb, ib, world, view, projection, primitive, primitiveCount, params);
             return;
         }
-        // REMED-GFX-202: this renderer binds exactly one stream of each rate (REMED-GFX-207 tracks
-        // widening it), so a wider array is rejected rather than truncated.
-        RejectUnsupportedStreamCombination(params, "The D3D11 renderer");
-        // REMED-GFX-DECL-GUARD: the geometry stream's declaration, same stride table.
-        RequireFaithfulDeclarationEXT(vb, "instanced");
-        const auto* perVertexStream = FirstPerVertexStream(params);
-
-        const auto& d3dVb     = static_cast<const D3D11VertexBufferRenderer&>(vb);
-        const auto& d3dIb     = static_cast<const D3D11IndexBufferRenderer&>(ib);
-        const auto& d3dInstVb =
-            static_cast<const D3D11VertexBufferRenderer&>(*instanceStream->buffer);
-        const std::size_t perVertexStride = d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
-        // REMED-GFX-123: the per-instance stream's own declared stride, not a hardcoded 64. The
-        // instanced3d layout reads INSTANCEWORLD0-3 at 0/16/32/48, so a 64-byte record is what it
-        // needs, but the stride is also what turns the public element offset below into bytes --
-        // taking it from the bound buffer keeps those two uses of "one instance record" identical.
-        const std::size_t instanceStride =
-            d3dInstVb.GetStrideEXT() > 0 ? d3dInstVb.GetStrideEXT() : 64;
-
-        constexpr auto variant = D3DCommon::D3DShaderVariant::Instanced3d;
+        const auto& d3dVb = static_cast<const D3D11VertexBufferRenderer&>(vb);
+        const auto& d3dIb = static_cast<const D3D11IndexBufferRenderer&>(ib);
+        std::vector<Microsoft::Xna::Framework::Graphics::VertexElement> combinedElements;
+        std::vector<D3DCommon::D3DVertexInputElement> inputElements;
+        BuildVertexInputLayout(params, true, combinedElements, inputElements);
+        const bool hasColor = D3DCommon::DeclarationHasElement(
+            combinedElements,
+            Microsoft::Xna::Framework::Graphics::VertexElementUsage::Color);
+        const auto variant = hasColor
+            ? D3DCommon::D3DShaderVariant::InstancedColored3d
+            : D3DCommon::D3DShaderVariant::Instanced3d;
         auto vs = D3DCommon::CreateVertexShaderForVariant(device_.Get(), variant);
         auto ps = D3DCommon::CreatePixelShaderForVariant(device_.Get(), variant);
         if (!vs || !ps)
             throw std::runtime_error("DrawInstancedPrimitivesEx: failed to create instanced3d shader objects");
 
-        // REMED-GFX-123: instanceFrequency is zero only when no per-instance stream is bound, and
-        // the no-instance-stream fallback above already took that case.
-        const UINT instanceStepRate =
-            static_cast<UINT>(std::max(1, instanceStream->instanceFrequency));
-        ID3D11InputLayout* layout = GetOrCreateInstancedInputLayoutEXT(instanceStepRate);
+        const std::size_t combinedStride = CombinedVertexStrideOr(
+            params, d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16);
+        auto layout = inputLayoutCache_.GetOrCreate(
+            device_.Get(), variant, combinedStride, combinedElements, inputElements);
         if (!layout)
             throw std::runtime_error("DrawInstancedPrimitivesEx: failed to create instanced3d input layout");
 
@@ -2485,27 +2544,14 @@ namespace CNA::Internal::Renderers::DirectX11
         perDraw.DiffuseColor[1] = params.diffuseColor[1];
         perDraw.DiffuseColor[2] = params.diffuseColor[2];
         perDraw.DiffuseColor[3] = params.diffuseColor[3];
+        perDraw.VertexColorEnabled = params.vertexColorEnabled ? 1.0f : 0.0f;
 
         ID3D11Buffer* perDrawCB = GetOrCreatePerDrawConstantBufferEXT();
         UpdateDynamicConstantBufferEXT(perDrawCB, &perDraw, sizeof(perDraw));
 
-        // REMED-GFX-123: IASetVertexBuffers takes BYTE offsets, while the public
-        // VertexBufferBinding.VertexOffset this carries is in vertex ELEMENTS -- convert with each
-        // stream's own stride, exactly once, and only here at the native binding. The per-vertex
-        // stream's offset is independent of BaseVertexLocation below: the IA adds the base vertex to
-        // the decoded index and then fetches at `offset + index * stride`, so both apply once.
-        ID3D11Buffer* vbs[2] = { d3dVb.GetBufferEXT(), d3dInstVb.GetBufferEXT() };
-        UINT strides[2] = { static_cast<UINT>(perVertexStride), static_cast<UINT>(instanceStride) };
-        UINT offsets[2] = {
-            static_cast<UINT>(
-                static_cast<std::size_t>(perVertexStream != nullptr ? perVertexStream->vertexOffset : 0) *
-                perVertexStride),
-            static_cast<UINT>(
-                static_cast<std::size_t>(instanceStream->vertexOffset) * instanceStride),
-        };
-        context_->IASetVertexBuffers(0, 2, vbs, strides, offsets);
+        BindVertexStreams(context_.Get(), d3dVb, params);
         context_->IASetIndexBuffer(d3dIb.GetBufferEXT(), d3dIb.GetFormatEXT(), 0);
-        context_->IASetInputLayout(layout);
+        context_->IASetInputLayout(layout.Get());
         context_->IASetPrimitiveTopology(ToD3D11Topology(primitive));
         context_->VSSetShader(vs.Get(), nullptr, 0);
         context_->PSSetShader(ps.Get(), nullptr, 0);

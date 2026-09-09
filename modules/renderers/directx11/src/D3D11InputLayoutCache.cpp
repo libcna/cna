@@ -16,9 +16,19 @@ namespace CNA::Internal::Renderers::DirectX11
         ID3D11Device* device, D3DShaderVariant variant, std::size_t strideInBytes,
         const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& declaration)
     {
+        static const std::vector<D3DCommon::D3DVertexInputElement> noInputElements;
+        return GetOrCreate(device, variant, strideInBytes, declaration, noInputElements);
+    }
+
+    ComPtr<ID3D11InputLayout> D3D11InputLayoutCache::GetOrCreate(
+        ID3D11Device* device, D3DShaderVariant variant, std::size_t strideInBytes,
+        const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& declaration,
+        const std::vector<D3DCommon::D3DVertexInputElement>& inputLayout)
+    {
         const Key key{
             static_cast<int>(variant), strideInBytes,
-            CNA::Internal::Renderers::D3DCommon::VertexDeclarationCacheKey(declaration)};
+            D3DCommon::VertexDeclarationCacheKey(declaration),
+            D3DCommon::VertexInputLayoutCacheKey(inputLayout)};
         const auto it = cache_.find(key);
         if (it != cache_.end())
             return it->second;
@@ -28,10 +38,17 @@ namespace CNA::Internal::Renderers::DirectX11
         UINT elementCount = 0;
         std::vector<D3D11_INPUT_ELEMENT_DESC> translatedElements;
         const D3D11_INPUT_ELEMENT_DESC* elements = nullptr;
-        if (!declaration.empty())
+        if (!inputLayout.empty())
         {
-            if (CNA::Internal::Renderers::D3DCommon::InputElementsForDeclaration(
-                    declaration, translatedElements))
+            if (D3DCommon::InputElementsForLayout(inputLayout, translatedElements))
+            {
+                elements = translatedElements.data();
+                elementCount = static_cast<UINT>(translatedElements.size());
+            }
+        }
+        else if (!declaration.empty())
+        {
+            if (D3DCommon::InputElementsForDeclaration(declaration, translatedElements))
             {
                 elements = translatedElements.data();
                 elementCount = static_cast<UINT>(translatedElements.size());
@@ -39,8 +56,7 @@ namespace CNA::Internal::Renderers::DirectX11
         }
         else
         {
-            elements = CNA::Internal::Renderers::D3DCommon::InputElementsForStride(
-                strideInBytes, elementCount);
+            elements = D3DCommon::InputElementsForStride(strideInBytes, elementCount);
         }
         if (elements == nullptr || elementCount == 0 || device == nullptr)
         {
@@ -50,7 +66,7 @@ namespace CNA::Internal::Renderers::DirectX11
 
         const uint8_t* vsBytes = nullptr;
         std::size_t vsSize = 0;
-        CNA::Internal::Renderers::D3DCommon::GetVertexShaderBytecode(variant, vsBytes, vsSize);
+        D3DCommon::GetVertexShaderBytecode(variant, vsBytes, vsSize);
         if (vsBytes == nullptr || vsSize == 0)
         {
             cache_.emplace(key, layout);

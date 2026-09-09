@@ -15,7 +15,6 @@
 
 #include <cstddef>
 #include <memory>
-#include <unordered_map>
 
 namespace CNA::Internal::Renderers::DirectX11
 {
@@ -132,6 +131,14 @@ namespace CNA::Internal::Renderers::DirectX11
         /// D3D11EffectRenderer::CompileProgram() runs a real D3DCompile() on the caller's HLSL and binds the resulting shader
         /// objects, so a post-process pass that believes its shader ran is right.
         [[nodiscard]] bool ExecutesShaderEffectSourceEXT() const override { return true; }
+
+        /** @brief Reports the complete D3D11 capability surface, including multi-stream input. */
+        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override
+        {
+            if (capability == CNA::GraphicsCapability::MultiStreamVertexInput)
+                return true;
+            return IGraphicsRenderer::SupportsCapability(capability);
+        }
 
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void ClearDepth(float depth) override;
@@ -586,15 +593,5 @@ namespace CNA::Internal::Renderers::DirectX11
         ID3D11ShaderResourceView* GetOrCreateDefaultWhiteSrvEXT();
         ID3D11ShaderResourceView* GetOrCreateDefaultFlatNormalSrvEXT();
 
-        // Phase DIRECTX8 (DX-68): instanced3d's fixed 5-element input layout (POSITION0 @ slot 0,
-        // per-vertex; INSTANCEWORLD0-3 @ slot 1, per-instance) -- independent of the bound vertex
-        // buffer's own stride (the shader only reads Position, DX-13-hlsl's own row notes), so
-        // unlike D3D11InputLayoutCache this needs no stride key.
-        // REMED-GFX-123: it does need an InstanceDataStepRate key. The rate is baked into the
-        // native layout object, so a single cached layout would silently reuse the previous draw's
-        // VertexBufferBinding.InstanceFrequency. The map holds one layout per distinct rate (one or
-        // two entries in practice) so alternating frequencies never create a layout per draw.
-        std::unordered_map<UINT, ComPtr<ID3D11InputLayout>> instancedInputLayouts_;
-        ID3D11InputLayout* GetOrCreateInstancedInputLayoutEXT(UINT instanceStepRate);
     };
 }

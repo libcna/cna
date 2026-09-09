@@ -35,6 +35,7 @@ namespace CNA::Internal::Renderers::D3DCommon
                 case D3DShaderVariant::Skinned3dFloatIndices: return {kSkinned3dFloatIndicesVertDxbc, kSkinned3dFloatIndicesVertDxbc_size};
                 case D3DShaderVariant::Sprite2d:          return {kSprite2dVertDxbc, kSprite2dVertDxbc_size};
                 case D3DShaderVariant::Instanced3d:       return {kInstanced3dVertDxbc, kInstanced3dVertDxbc_size};
+                case D3DShaderVariant::InstancedColored3d: return {kInstancedColored3dVertDxbc, kInstancedColored3dVertDxbc_size};
                 case D3DShaderVariant::AlphaTestColored3d: return {kAlphaTestColored3dVertDxbc, kAlphaTestColored3dVertDxbc_size};
                 case D3DShaderVariant::AlphaTestUntexturedColored3d: return {kAlphaTestUntexturedColored3dVertDxbc, kAlphaTestUntexturedColored3dVertDxbc_size};
                 case D3DShaderVariant::LitTextured3dVertexLit: return {kLitTextured3dVertexLitVertDxbc, kLitTextured3dVertexLitVertDxbc_size};
@@ -78,6 +79,7 @@ namespace CNA::Internal::Renderers::D3DCommon
                 case D3DShaderVariant::Skinned3dFloatIndices: return {kSkinned3dFragDxbc, kSkinned3dFragDxbc_size};
                 case D3DShaderVariant::Sprite2d:          return {kSprite2dFragDxbc, kSprite2dFragDxbc_size};
                 case D3DShaderVariant::Instanced3d:       return {kInstanced3dFragDxbc, kInstanced3dFragDxbc_size};
+                case D3DShaderVariant::InstancedColored3d: return {kInstanced3dFragDxbc, kInstanced3dFragDxbc_size};
                 case D3DShaderVariant::AlphaTestColored3d: return {kAlphaTestColored3dFragDxbc, kAlphaTestColored3dFragDxbc_size};
                 case D3DShaderVariant::AlphaTestUntexturedColored3d: return {kAlphaTestColored3dFragDxbc, kAlphaTestColored3dFragDxbc_size};
                 case D3DShaderVariant::LitTextured3dVertexLit: return {kLitTextured3dVertexLitFragDxbc, kLitTextured3dVertexLitFragDxbc_size};
