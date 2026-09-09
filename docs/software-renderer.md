@@ -461,6 +461,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
 - **Compiled array getters preserve requested length and flat packing** (`SOFTWARE-271`) — every
   positive `count` produces that many zero-initialized results, available values are converted and
   packed from the reflected logical stream, and Matrix/transpose arrays zero-pad their tail.
+- **Compiled numeric-array setters convert to reflected storage** (`SOFTWARE-272`) — bool, int and
+  float array sources are converted cell-by-cell to the parameter's reflected Bool, Int32 or Single
+  representation instead of copying incompatible source-type bit patterns into compiled registers.
 - **The classic SpriteBatch/SpriteFont parity corpus executes on the CPU** (`SOFTWARE-138`).
   Eighteen renderer-independent scenes shared with EasyGL cover flips, rotation/origin, both scale
   overloads, source rectangles, layer sorting, transforms, render targets, viewports, scissor,

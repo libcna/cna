@@ -609,6 +609,39 @@ TEST(EffectTest, CompiledArrayGettersReturnRequestedLengthAndPackedValues)
     EXPECT_EQ(transposed.back(), Matrix());
 }
 
+TEST(EffectTest, CompiledNumericArraySettersConvertToReflectedStorageType)
+{
+    GraphicsDevice gd;
+    const auto bytes = LoadConformanceCompiledEffectFixture();
+    ASSERT_FALSE(bytes.empty());
+
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+    {
+        GTEST_SKIP() << "renderer does not execute compiled effects";
+    }
+
+    Effect effect(gd, bytes);
+    auto* gain = effect.getParametersProperty()["Gain"];
+    auto* tint = effect.getParametersProperty()["Tint"];
+    ASSERT_NE(gain, nullptr);
+    ASSERT_NE(tint, nullptr);
+
+    gain->SetValue(std::vector<int>{7});
+    EXPECT_FLOAT_EQ(gain->GetValueSingle(), 7.0f);
+    gain->SetValue(std::vector<bool>{true});
+    EXPECT_FLOAT_EQ(gain->GetValueSingle(), 1.0f);
+    tint->SetValue(std::vector<int>{1, 2, 3, 4});
+    EXPECT_EQ(tint->GetValueVector4(), Vector4(1.0f, 2.0f, 3.0f, 4.0f));
+
+    const auto stockBytes = LoadValidCompiledEffectFixture();
+    ASSERT_FALSE(stockBytes.empty());
+    Effect stock(gd, stockBytes);
+    auto* shaderIndex = stock.getParametersProperty()["ShaderIndex"];
+    ASSERT_NE(shaderIndex, nullptr);
+    shaderIndex->SetValue(std::vector<float>{7.0f});
+    EXPECT_EQ(shaderIndex->GetValueInt32(), 7);
+}
+
 TEST(EffectTest, AuthenticXna4EffectAcceptsRepeatedAndAuxiliaryObjectRecords)
 {
     GraphicsDevice gd;

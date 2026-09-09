@@ -801,7 +801,14 @@ namespace Microsoft::Xna::Framework::Graphics
                     (i % static_cast<std::size_t>(columns)) * 4;
                 if (cellOffset + sizeof(int) > compiledByteSize_) break;
                 const int cell = v[i] ? 1 : 0;
-                WriteCell(compiledStorage_->bytes, compiledByteOffset_ + cellOffset, cell);
+                if (paramType_ == EffectParameterType::Single)
+                    WriteCell(compiledStorage_->bytes, compiledByteOffset_ + cellOffset,
+                              static_cast<float>(cell));
+                else if (paramType_ == EffectParameterType::Int32 ||
+                         paramType_ == EffectParameterType::Bool)
+                    WriteCell(compiledStorage_->bytes, compiledByteOffset_ + cellOffset, cell);
+                else
+                    throw System::InvalidCastException();
             }
             compiledStorage_->dirty = true;
             return;
@@ -831,7 +838,14 @@ namespace Microsoft::Xna::Framework::Graphics
                 const std::size_t cellOffset = (i / static_cast<std::size_t>(columns)) * 16 +
                     (i % static_cast<std::size_t>(columns)) * 4;
                 if (cellOffset + sizeof(int) > compiledByteSize_) break;
-                WriteCell(compiledStorage_->bytes, compiledByteOffset_ + cellOffset, v[i]);
+                if (paramType_ == EffectParameterType::Single)
+                    WriteCell(compiledStorage_->bytes, compiledByteOffset_ + cellOffset,
+                              static_cast<float>(v[i]));
+                else if (paramType_ == EffectParameterType::Int32 ||
+                         paramType_ == EffectParameterType::Bool)
+                    WriteCell(compiledStorage_->bytes, compiledByteOffset_ + cellOffset, v[i]);
+                else
+                    throw System::InvalidCastException();
             }
             compiledStorage_->dirty = true;
             return;
@@ -860,7 +874,14 @@ namespace Microsoft::Xna::Framework::Graphics
                 const std::size_t cellOffset = (i / static_cast<std::size_t>(columns)) * 16 +
                     (i % static_cast<std::size_t>(columns)) * 4;
                 if (cellOffset + sizeof(float) > compiledByteSize_) break;
-                WriteCell(compiledStorage_->bytes, compiledByteOffset_ + cellOffset, v[i]);
+                if (paramType_ == EffectParameterType::Single)
+                    WriteCell(compiledStorage_->bytes, compiledByteOffset_ + cellOffset, v[i]);
+                else if (paramType_ == EffectParameterType::Int32 ||
+                         paramType_ == EffectParameterType::Bool)
+                    WriteCell(compiledStorage_->bytes, compiledByteOffset_ + cellOffset,
+                              static_cast<int>(v[i]));
+                else
+                    throw System::InvalidCastException();
             }
             compiledStorage_->dirty = true;
             return;
