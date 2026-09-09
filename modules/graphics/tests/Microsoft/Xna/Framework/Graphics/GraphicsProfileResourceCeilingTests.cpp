@@ -10,6 +10,11 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DynamicIndexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DynamicVertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
@@ -17,11 +22,21 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "System/NotSupportedException.hpp"
 
 using Microsoft::Xna::Framework::Graphics::GraphicsAdapter;
+using Microsoft::Xna::Framework::Graphics::BufferUsage;
+using Microsoft::Xna::Framework::Graphics::DynamicIndexBuffer;
+using Microsoft::Xna::Framework::Graphics::DynamicVertexBuffer;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
+using Microsoft::Xna::Framework::Graphics::IndexBuffer;
+using Microsoft::Xna::Framework::Graphics::IndexElementSize;
 using Microsoft::Xna::Framework::Graphics::PresentationParameters;
 using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 using Microsoft::Xna::Framework::Graphics::RenderTargetBinding;
@@ -29,6 +44,11 @@ using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 using Microsoft::Xna::Framework::Graphics::Texture3D;
 using Microsoft::Xna::Framework::Graphics::TextureCube;
+using Microsoft::Xna::Framework::Graphics::VertexBuffer;
+using Microsoft::Xna::Framework::Graphics::VertexDeclaration;
+using Microsoft::Xna::Framework::Graphics::VertexElement;
+using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 
 TEST(GraphicsProfileResourceCeilingTest, ReachRejectsOversizedTexturesVolumeTexturesAndMrt)
 {
@@ -73,4 +93,68 @@ TEST(GraphicsProfileResourceCeilingTest, HiDefPermitsVolumeAndMrtButEnforcesItsO
     EXPECT_NO_THROW(
         device.SetRenderTargets({RenderTargetBinding(&first), RenderTargetBinding(&second)}));
     device.SetRenderTargets({});
+}
+
+TEST(GraphicsProfileResourceCeilingTest, VertexBuffersRespectTheSharedSixtyFourMiBMinusOneLimit)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+    PresentationParameters parameters;
+    GraphicsDevice device(
+        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef, parameters);
+    const VertexDeclaration declaration(4, {
+        VertexElement(0, VertexElementFormat::Single, VertexElementUsage::Position, 0),
+    });
+    constexpr int largestFourByteVertexCount = 16'777'215;
+
+    EXPECT_NO_THROW((void)VertexBuffer(
+        device, declaration, largestFourByteVertexCount, BufferUsage::None));
+    EXPECT_THROW((void)VertexBuffer(
+                     device, declaration, largestFourByteVertexCount + 1, BufferUsage::None),
+                 System::NotSupportedException);
+    EXPECT_THROW((void)DynamicVertexBuffer(
+                     device, declaration, largestFourByteVertexCount + 1, BufferUsage::None),
+                 System::NotSupportedException);
+}
+
+TEST(GraphicsProfileResourceCeilingTest, IndexBuffersRespectTheSharedSixtyFourMiBMinusOneLimit)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+    PresentationParameters parameters;
+    GraphicsDevice device(
+        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef, parameters);
+    constexpr int largestSixteenBitIndexCount = 33'554'431;
+    constexpr int largestThirtyTwoBitIndexCount = 16'777'215;
+
+    EXPECT_NO_THROW((void)IndexBuffer(
+        device, IndexElementSize::SixteenBits, largestSixteenBitIndexCount, BufferUsage::None));
+    EXPECT_THROW((void)IndexBuffer(
+                     device, IndexElementSize::SixteenBits,
+                     largestSixteenBitIndexCount + 1, BufferUsage::None),
+                 System::NotSupportedException);
+    EXPECT_NO_THROW((void)IndexBuffer(
+        device, IndexElementSize::ThirtyTwoBits,
+        largestThirtyTwoBitIndexCount, BufferUsage::None));
+    EXPECT_THROW((void)DynamicIndexBuffer(
+                     device, IndexElementSize::ThirtyTwoBits,
+                     largestThirtyTwoBitIndexCount + 1, BufferUsage::None),
+                 System::NotSupportedException);
+}
+
+TEST(GraphicsProfileResourceCeilingTest, ThirtyTwoBitIndicesAreHiDefOnly)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+    PresentationParameters parameters;
+    GraphicsDevice reach(
+        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach, parameters);
+    GraphicsDevice hiDef(
+        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef, parameters);
+
+    EXPECT_THROW((void)IndexBuffer(
+                     reach, IndexElementSize::ThirtyTwoBits, 1, BufferUsage::None),
+                 System::NotSupportedException);
+    EXPECT_THROW((void)DynamicIndexBuffer(
+                     reach, IndexElementSize::ThirtyTwoBits, 1, BufferUsage::None),
+                 System::NotSupportedException);
+    EXPECT_NO_THROW((void)IndexBuffer(
+        hiDef, IndexElementSize::ThirtyTwoBits, 1, BufferUsage::None));
 }

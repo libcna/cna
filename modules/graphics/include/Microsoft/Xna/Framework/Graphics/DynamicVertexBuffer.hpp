@@ -25,7 +25,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @throws System::ArgumentOutOfRangeException if @p vertexCount is not positive.
          * @throws System::ObjectDisposedException if @p vertexDeclaration is disposed.
          * @throws System::ArgumentException if a usage index is outside the XNA device range.
-         * @throws System::NotSupportedException if the declaration exceeds the active profile.
+         * @throws System::NotSupportedException if the declaration or buffer size exceeds the
+         *         active profile.
          */
         DynamicVertexBuffer(GraphicsDevice& device,
                             const VertexDeclaration& vertexDeclaration,

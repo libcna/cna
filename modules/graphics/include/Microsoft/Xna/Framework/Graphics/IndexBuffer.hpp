@@ -41,6 +41,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param indexCount       Number of indices the buffer can hold.
          * @param bufferUsage      Usage hint for the buffer.
          * @throws System::ArgumentOutOfRangeException if @p indexCount is not positive.
+         * @throws System::NotSupportedException if the element width or buffer size exceeds the
+         *         active profile.
          */
         IndexBuffer(GraphicsDevice& device,
                     IndexElementSize indexElementSize,

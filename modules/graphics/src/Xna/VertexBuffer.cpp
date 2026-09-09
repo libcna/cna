@@ -121,6 +121,15 @@ namespace Microsoft::Xna::Framework::Graphics
                 "The vertex count must be greater than zero.");
         }
         vertexDeclaration.ValidateForProfile(device.getGraphicsProfileProperty());
+
+        constexpr std::int64_t maximumBufferBytes = 67'108'863;
+        const std::int64_t byteCount =
+            static_cast<std::int64_t>(vertexDeclaration.getVertexStrideProperty()) * vertexCount;
+        if (byteCount > maximumBufferBytes)
+        {
+            throw System::NotSupportedException(
+                "The vertex buffer exceeds the active graphics profile limit of 67108863 bytes.");
+        }
         return device.GetRenderer().CreateVertexBuffer(vertexCount);
     }
 

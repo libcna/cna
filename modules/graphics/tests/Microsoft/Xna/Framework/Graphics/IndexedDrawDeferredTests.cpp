@@ -31,6 +31,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/DynamicIndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DynamicVertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
@@ -86,6 +87,7 @@ using Microsoft::Xna::Framework::Graphics::DepthFormat;
 using Microsoft::Xna::Framework::Graphics::DynamicIndexBuffer;
 using Microsoft::Xna::Framework::Graphics::DynamicVertexBuffer;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
 using Microsoft::Xna::Framework::Graphics::IndexBuffer;
 using Microsoft::Xna::Framework::Graphics::IndexElementSize;
 using Microsoft::Xna::Framework::Graphics::PrimitiveType;
@@ -352,6 +354,7 @@ namespace
         // calls that follow it, which only run once SetUp() has already let the test proceed.
         void SetUp() override
         {
+            device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
             if (!device.SupportsCapability(GraphicsCapability::ThreeD))
                 GTEST_SKIP() << "Renderer explicitly does not support indexed rendering";
         }
@@ -2981,6 +2984,7 @@ TEST(EasyGlIndexedDeviceLifecycleTest, ThirtyTwoBitDrawDoesNotPoisonNextDesktopC
 
     {
         GraphicsDevice firstDevice;
+        firstDevice.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
         firstDevice.setRasterizerStateProperty(RasterizerState::CullNone);
         firstDevice.setDepthStencilStateProperty(DepthStencilState::None);
         const auto red = CenterTriangle(Color::Red);

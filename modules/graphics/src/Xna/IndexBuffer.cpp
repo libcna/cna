@@ -33,6 +33,21 @@ namespace Microsoft::Xna::Framework::Graphics
                     "indexElementSize", std::to_string(static_cast<int>(indexElementSize)),
                     "Index buffers support only sixteen-bit or thirty-two-bit elements.");
             }
+            if (indexElementSize == IndexElementSize::ThirtyTwoBits &&
+                device.getGraphicsProfileProperty() == GraphicsProfile::Reach)
+            {
+                throw System::NotSupportedException(
+                    "Thirty-two-bit index buffers are not supported by the Reach graphics profile.");
+            }
+
+            constexpr std::int64_t maximumBufferBytes = 67'108'863;
+            const std::int64_t elementBytes =
+                indexElementSize == IndexElementSize::ThirtyTwoBits ? 4 : 2;
+            if (static_cast<std::int64_t>(indexCount) * elementBytes > maximumBufferBytes)
+            {
+                throw System::NotSupportedException(
+                    "The index buffer exceeds the active graphics profile limit of 67108863 bytes.");
+            }
             return indexElementSize == IndexElementSize::ThirtyTwoBits
                        ? device.GetRenderer().CreateIndexBuffer32(indexCount)
                        : device.GetRenderer().CreateIndexBuffer16(indexCount);
