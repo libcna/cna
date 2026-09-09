@@ -184,15 +184,15 @@ protected:
         triangleVb_->SetData(triVerts, 0, 3);
 
         const VertexPositionColor farVerts[6] = {
-            { Vector3(-1.0f, -1.0f, 0.5f), Color::Red }, { Vector3(-1.0f, 1.0f, 0.5f), Color::Red }, { Vector3(1.0f, -1.0f, 0.5f), Color::Red },
-            { Vector3(-1.0f, 1.0f, 0.5f), Color::Red }, { Vector3(1.0f, 1.0f, 0.5f), Color::Red }, { Vector3(1.0f, -1.0f, 0.5f), Color::Red },
+            { Vector3(-1.0f, -1.0f, 0.75f), Color::Red }, { Vector3(-1.0f, 1.0f, 0.75f), Color::Red }, { Vector3(1.0f, -1.0f, 0.75f), Color::Red },
+            { Vector3(-1.0f, 1.0f, 0.75f), Color::Red }, { Vector3(1.0f, 1.0f, 0.75f), Color::Red }, { Vector3(1.0f, -1.0f, 0.75f), Color::Red },
         };
         farQuadVb_ = std::make_unique<VertexBuffer>(dev, VertexPositionColor::getVertexDeclarationStatic(), 6, BufferUsage::None);
         farQuadVb_->SetData(farVerts, 0, 6);
 
         const VertexPositionColor nearVerts[6] = {
-            { Vector3(-1.0f, -1.0f, -0.5f), Color::Green }, { Vector3(-1.0f, 1.0f, -0.5f), Color::Green }, { Vector3(1.0f, -1.0f, -0.5f), Color::Green },
-            { Vector3(-1.0f, 1.0f, -0.5f), Color::Green }, { Vector3(1.0f, 1.0f, -0.5f), Color::Green }, { Vector3(1.0f, -1.0f, -0.5f), Color::Green },
+            { Vector3(-1.0f, -1.0f, 0.25f), Color::Green }, { Vector3(-1.0f, 1.0f, 0.25f), Color::Green }, { Vector3(1.0f, -1.0f, 0.25f), Color::Green },
+            { Vector3(-1.0f, 1.0f, 0.25f), Color::Green }, { Vector3(1.0f, 1.0f, 0.25f), Color::Green }, { Vector3(1.0f, -1.0f, 0.25f), Color::Green },
         };
         nearQuadVb_ = std::make_unique<VertexBuffer>(dev, VertexPositionColor::getVertexDeclarationStatic(), 6, BufferUsage::None);
         nearQuadVb_->SetData(nearVerts, 0, 6);

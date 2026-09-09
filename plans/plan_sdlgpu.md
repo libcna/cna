@@ -23,7 +23,7 @@
 | Shared EasyGL parity fixtures available | 30 renderer-neutral sources in `modules/graphics/examples/parity` |
 | Shared parity fixtures registered for SDL GPU | 1/30 (`parity_fill_mode_wireframe`) |
 | Tasks created by this audit | 30 (`SDLGPU-55`–`SDLGPU-84`) |
-| Completed / open / proven unavoidable | 8 / 22 / 0; `SDLGPU-80` is a candidate limitation, not yet counted complete |
+| Completed / open / proven unavoidable | 9 / 21 / 0; `SDLGPU-80` is a candidate limitation, not yet counted complete |
 | SDL GPU build | Stable `cmake-build-sdlgpu`, Debug, `CNA_GRAPHICS_RENDERER=SDL_GPU`, tests/examples ON |
 | EasyGL oracle build | Stable `cmake-build-debug`, Debug, `CNA_GRAPHICS_RENDERER=OPENGL33`, tests/examples ON |
 | Runtime driver | SDL 3.5.0 SDL_gpu Vulkan on AMD Radeon 780M / Mesa RADV 25.0.7; Khronos validation layer 1.4.309 present |
@@ -578,7 +578,7 @@ underlying API limitation proven after reasonable emulation analysis.
   replaces it if the platform clamps the size. The expanded smoke test passes 30/30 on Vulkan,
   including both first-frame exact-size checks, with validation diagnostics configured as fatal.
 
-### SDLGPU-84 — keep render-target depth oracles inside the XNA clip volume ⬜
+### SDLGPU-84 — keep render-target depth oracles inside the XNA clip volume ✅
 
 - **Problem/public behavior:** the SDL-only 2D and multisampled 2D render-target tests call an
   identity-projection vertex at Z=−0.5 “near.” After `SDLGPU-65` correctly enabled the XNA/D3D
@@ -588,6 +588,10 @@ underlying API limitation proven after reasonable emulation analysis.
 - **Location:** SDL GPU RenderTarget2D and RenderTarget2DMSAA test geometry only.
 - **Acceptance/test:** use valid, separated 0.25/0.75 clip depths; nearer green wins under both
   single-sample and MSAA targets, all other assertions remain green, validation clean.
+- **Result (2026-09-09):** both fixtures now use near Z=0.25 and far Z=0.75, entirely within the
+  XNA/Direct3D clip volume while retaining a large discriminating separation. The ordinary target
+  passes 7/7 and the 4x-MSAA resolve target passes 9/9; both CTests now make Vulkan validation
+  diagnostics fatal.
 
 ---
 
