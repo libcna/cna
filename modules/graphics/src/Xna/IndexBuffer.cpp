@@ -207,38 +207,86 @@ namespace Microsoft::Xna::Framework::Graphics
             throw System::ArgumentException(
                 "The destination offset must fall on an index boundary.", "offsetInBytes");
 
+        SetDataBytesAtInternal(offsetInBytes, data, startIndex, elementCount, elementSize,
+                               SetDataOptions::None, false);
+    }
+
+    void IndexBuffer::SetDataBytesAtInternal(const int offsetInBytes,
+                                             const void* const data,
+                                             const int startIndex,
+                                             const int elementCount,
+                                             const std::size_t elementSize,
+                                             SetDataOptions options,
+                                             const bool useOptions)
+    {
+        if (getIsDisposedProperty())
+            throw System::ObjectDisposedException("IndexBuffer");
+        if (offsetInBytes < 0)
+            throw System::ArgumentOutOfRangeException(
+                "offsetInBytes", std::to_string(offsetInBytes),
+                "This parameter must not be negative.");
+
         const std::size_t sourceByteOffset = CheckedByteOffset(startIndex, elementSize);
-        const std::size_t windowBytes =
+        const std::size_t byteCount =
             CheckedByteCount(elementCount, elementSize, "elementCount");
         if (elementCount == 0)
             return;
         if (data == nullptr)
             throw System::ArgumentNullException("data");
-        ThrowIfSetDataResourceInUse(SetDataOptions::None, false);
+        ThrowIfSetDataResourceInUse(options, useOptions);
 
+        const std::size_t nativeElementSize =
+            indexElementSize_ == IndexElementSize::ThirtyTwoBits
+                ? sizeof(std::uint32_t)
+                : sizeof(std::uint16_t);
         const std::size_t capacity =
-            CheckedByteCount(indexCount_, elementSize, "indexCount");
-        if (windowBytes > capacity - static_cast<std::size_t>(offsetInBytes))
+            CheckedByteCount(indexCount_, nativeElementSize, "indexCount");
+        const std::size_t destinationOffset = static_cast<std::size_t>(offsetInBytes);
+        if (destinationOffset > capacity || byteCount > capacity - destinationOffset)
             throw System::ArgumentOutOfRangeException(
                 "elementCount", std::to_string(elementCount),
-                "The windowed upload exceeds the IndexBuffer's logical capacity.");
-
-        // The shadow is where a window can be composed at all: the renderer contract replaces
-        // whole-buffer contents. Growing it to the buffer's full capacity is what makes indices
-        // never written by any upload read as zero rather than as whatever a shorter earlier
-        // upload happened to leave behind.
-        if (cpuShadow_.size() < capacity)
-            cpuShadow_.resize(capacity, 0U);
+                "The upload exceeds the IndexBuffer's logical byte capacity.");
 
         const auto* source = static_cast<const std::uint8_t*>(data) + sourceByteOffset;
-        std::copy(source, source + windowBytes,
-                  cpuShadow_.begin() + static_cast<std::ptrdiff_t>(offsetInBytes));
+        if (destinationOffset == 0 && elementSize == nativeElementSize)
+        {
+            if (auto* const losable =
+                    dynamic_cast<CNA::Internal::Graphics::IContentLosable*>(this))
+            {
+                losable->ClearContentLostEXT();
+            }
+            if (indexElementSize_ == IndexElementSize::ThirtyTwoBits)
+            {
+                if (useOptions)
+                    renderer_->SetData32WithOptions(source, elementCount, options);
+                else
+                    renderer_->SetData32(source, elementCount);
+            }
+            else
+            {
+                if (useOptions)
+                    renderer_->SetData16WithOptions(source, elementCount, options);
+                else
+                    renderer_->SetData16(source, elementCount);
+            }
+            cpuShadow_.assign(source, source + byteCount);
+            return;
+        }
 
-        const int uploadCount = static_cast<int>(capacity / elementSize);
-        if (dataElementSize == IndexElementSize::ThirtyTwoBits)
-            renderer_->SetData32(cpuShadow_.data(), uploadCount);
+        // The renderer contract has no byte-window operation. Compose the exact XNA-visible bytes
+        // in the shared shadow, then upload the whole native index buffer without forwarding a
+        // NoOverwrite promise that a whole-buffer transfer could not truthfully make.
+        if (cpuShadow_.size() < capacity)
+            cpuShadow_.resize(capacity, 0U);
+        std::copy(source, source + byteCount,
+                  cpuShadow_.begin() + static_cast<std::ptrdiff_t>(destinationOffset));
+
+        if (auto* const losable = dynamic_cast<CNA::Internal::Graphics::IContentLosable*>(this))
+            losable->ClearContentLostEXT();
+        if (indexElementSize_ == IndexElementSize::ThirtyTwoBits)
+            renderer_->SetData32(cpuShadow_.data(), indexCount_);
         else
-            renderer_->SetData16(cpuShadow_.data(), uploadCount);
+            renderer_->SetData16(cpuShadow_.data(), indexCount_);
     }
 
     void IndexBuffer::SetDataInternal(const void* data,
@@ -324,25 +372,43 @@ namespace Microsoft::Xna::Framework::Graphics
         if (bufferUsage_ == BufferUsage::WriteOnly)
             throw System::NotSupportedException(
                 "Calling GetData on a resource that was created with BufferUsage.WriteOnly is not supported.");
-
         const std::size_t elementSize =
             dataElementSize == IndexElementSize::ThirtyTwoBits
                 ? sizeof(std::uint32_t)
                 : sizeof(std::uint16_t);
-        const std::size_t byteOffset = CheckedByteOffset(startIndex, elementSize);
-        const std::size_t byteCount = CheckedByteCount(
-            elementCount, elementSize, "elementCount");
-
         if (dataElementSize != indexElementSize_)
             throw System::ArgumentException(
                 "The destination index width does not match the IndexBuffer element size.", "data");
+        GetDataBytesAtInternal(0, data, startIndex, elementCount, elementSize);
+    }
+
+    void IndexBuffer::GetDataBytesAtInternal(const int offsetInBytes,
+                                             void* const data,
+                                             const int startIndex,
+                                             const int elementCount,
+                                             const std::size_t elementSize) const
+    {
+        if (getIsDisposedProperty())
+            throw System::ObjectDisposedException("IndexBuffer");
+        if (bufferUsage_ == BufferUsage::WriteOnly)
+            throw System::NotSupportedException(
+                "Calling GetData on a resource that was created with BufferUsage.WriteOnly is not supported.");
+        if (offsetInBytes < 0)
+            throw System::ArgumentOutOfRangeException(
+                "offsetInBytes", std::to_string(offsetInBytes),
+                "This parameter must not be negative.");
+
+        const std::size_t destinationByteOffset = CheckedByteOffset(startIndex, elementSize);
+        const std::size_t byteCount =
+            CheckedByteCount(elementCount, elementSize, "elementCount");
 
         // Preserve the public null rule without allowing an empty operation to bypass range
         // validation: null is legal exactly when the requested range is empty.
         if (elementCount != 0 && data == nullptr)
             throw System::ArgumentNullException("data");
-        if (byteOffset > cpuShadow_.size() ||
-            byteCount > cpuShadow_.size() - byteOffset)
+        const std::size_t sourceByteOffset = static_cast<std::size_t>(offsetInBytes);
+        if (sourceByteOffset > cpuShadow_.size() ||
+            byteCount > cpuShadow_.size() - sourceByteOffset)
         {
             throw System::ArgumentOutOfRangeException(
                 "elementCount", std::to_string(elementCount),
@@ -352,7 +418,8 @@ namespace Microsoft::Xna::Framework::Graphics
         // As with SetData, an empty range is valid with a null pointer and must not reach memcpy.
         if (elementCount == 0)
             return;
-        std::memcpy(data, cpuShadow_.data() + byteOffset, byteCount);
+        std::memcpy(static_cast<std::uint8_t*>(data) + destinationByteOffset,
+                    cpuShadow_.data() + sourceByteOffset, byteCount);
     }
 
     void IndexBuffer::SetDataWithOptions(const std::uint16_t* data, int startIndex,

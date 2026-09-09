@@ -73,9 +73,9 @@ constraint), **diverges** (differs from XNA/FNA, but may be intentional).
 | | Status | Description |
 |---|---|---|
 | `VertexBuffer::GetData<T>` | **missing** | Not declared or implemented in CNA. FNA exposes three overloads that read vertex data back from the GPU via `FNA3D_GetVertexBufferData`. In CNA neither `IVertexBufferRenderer` nor `IIndexBufferRenderer` has a readback method, so `GetData` cannot be added without an `IGraphicsRenderer` interface change. |
-| `IndexBuffer::GetData<T>` | **missing** | Same as above — no `FNA3D_GetIndexBufferData` equivalent in the renderer interface. |
+| `IndexBuffer::GetData<T>` | **completed 2026-09-09 (`SOFTWARE-248`)** | The complete generic whole/slice/buffer-offset surface is served from the renderer-neutral CPU shadow. `startIndex` correctly selects the destination array, while `offsetInBytes` selects the buffer. |
 | `VertexBuffer::SetData` GPU offsetInBytes | **missing** | The `(int offsetInBytes, T[], int startIndex, int elementCount, int vertexStride)` overload (and the `DynamicVertexBuffer` variant with `SetDataOptions`) writes to a specific byte offset inside the GPU buffer. `IVertexBufferRenderer::SetData` only supports writing at offset 0. Implementing this correctly requires adding an `offsetInBytes` parameter to the renderer interface. |
-| `IndexBuffer::SetData` GPU offsetInBytes | **missing** | Same — `IIndexBufferRenderer` has no offsetInBytes variant. |
+| `IndexBuffer::SetData` GPU offsetInBytes | **completed 2026-09-09 (`SOFTWARE-248`)** | The classic generic overload composes byte-accurate windows in the shared CPU shadow and re-uploads the native buffer. `DynamicIndexBuffer` also exposes the offset/options form; this preserves XNA-visible results while costing a whole-buffer transfer. |
 
 ---
 

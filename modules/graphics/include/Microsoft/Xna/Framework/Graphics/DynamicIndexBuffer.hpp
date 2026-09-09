@@ -60,6 +60,9 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         System::EventHandler<System::EventArgs> ContentLost;
 
+        // Preserve the complete inherited XNA overload set alongside the streaming forms below.
+        using IndexBuffer::SetData;
+
         /**
          * @brief Uploads a slice of 16-bit indices with streaming semantics.
          *
@@ -100,6 +103,50 @@ namespace Microsoft::Xna::Framework::Graphics
                      SetDataOptions options)
         {
             IndexBuffer::SetDataWithOptions(data, startIndex, elementCount, options);
+        }
+
+        /**
+         * @brief Uploads an application-selected source-array slice with streaming semantics.
+         *
+         * @tparam TIndex Trivially-copyable source element type.
+         * @param data Pointer to the source array.
+         * @param startIndex First source-array element to read.
+         * @param elementCount Number of source elements to upload.
+         * @param options Streaming update option.
+         */
+        template<typename TIndex>
+        void SetData(const TIndex* data,
+                     int startIndex,
+                     int elementCount,
+                     SetDataOptions options)
+        {
+            static_assert(std::is_trivially_copyable_v<TIndex>,
+                          "DynamicIndexBuffer::SetData<T> requires a trivially-copyable type");
+            IndexBuffer::SetDataBytesAtInternal(
+                0, data, startIndex, elementCount, sizeof(TIndex), options, true);
+        }
+
+        /**
+         * @brief Uploads source elements into a byte window with streaming semantics.
+         *
+         * @tparam TIndex Trivially-copyable source element type.
+         * @param offsetInBytes Destination byte offset in this buffer.
+         * @param data Pointer to the source array.
+         * @param startIndex First source-array element to read.
+         * @param elementCount Number of source elements to upload.
+         * @param options Streaming update option.
+         */
+        template<typename TIndex>
+        void SetData(int offsetInBytes,
+                     const TIndex* data,
+                     int startIndex,
+                     int elementCount,
+                     SetDataOptions options)
+        {
+            static_assert(std::is_trivially_copyable_v<TIndex>,
+                          "DynamicIndexBuffer::SetData<T> requires a trivially-copyable type");
+            IndexBuffer::SetDataBytesAtInternal(
+                offsetInBytes, data, startIndex, elementCount, sizeof(TIndex), options, true);
         }
 
     private:

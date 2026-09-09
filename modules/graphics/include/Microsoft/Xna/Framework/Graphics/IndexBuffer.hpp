@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <type_traits>
 #include <vector>
 
 #include "CNA/CNAHelper.hpp"
@@ -164,6 +166,109 @@ namespace Microsoft::Xna::Framework::Graphics
         void GetData(std::uint32_t* data, int startIndex, int elementCount);
 
         /**
+         * @brief Uploads an array of application-selected index storage elements.
+         *
+         * This is the C++ form of XNA's generic `SetData<T>(T[])`. The bytes are copied exactly;
+         * the buffer's `IndexElementSize` controls how later draws interpret them.
+         *
+         * @tparam TIndex Trivially-copyable source element type.
+         * @param data Pointer to the source array.
+         * @param count Number of source elements to upload.
+         */
+        template<typename TIndex>
+        void SetData(const TIndex* data, int count)
+        {
+            static_assert(std::is_trivially_copyable_v<TIndex>,
+                          "IndexBuffer::SetData<T> requires a trivially-copyable type");
+            SetDataBytesAtInternal(0, data, 0, count, sizeof(TIndex),
+                                   SetDataOptions::None, false);
+        }
+
+        /**
+         * @brief Uploads a source-array slice of application-selected index storage elements.
+         *
+         * @tparam TIndex Trivially-copyable source element type.
+         * @param data Pointer to the source array.
+         * @param startIndex First source-array element to read.
+         * @param elementCount Number of source elements to upload.
+         */
+        template<typename TIndex>
+        void SetData(const TIndex* data, int startIndex, int elementCount)
+        {
+            static_assert(std::is_trivially_copyable_v<TIndex>,
+                          "IndexBuffer::SetData<T> requires a trivially-copyable type");
+            SetDataBytesAtInternal(0, data, startIndex, elementCount, sizeof(TIndex),
+                                   SetDataOptions::None, false);
+        }
+
+        /**
+         * @brief Uploads source elements into a byte window of this index buffer.
+         *
+         * @tparam TIndex Trivially-copyable source element type.
+         * @param offsetInBytes Destination byte offset in this buffer.
+         * @param data Pointer to the source array.
+         * @param startIndex First source-array element to read.
+         * @param elementCount Number of source elements to upload.
+         */
+        template<typename TIndex>
+        void SetData(int offsetInBytes, const TIndex* data, int startIndex, int elementCount)
+        {
+            static_assert(std::is_trivially_copyable_v<TIndex>,
+                          "IndexBuffer::SetData<T> requires a trivially-copyable type");
+            SetDataBytesAtInternal(offsetInBytes, data, startIndex, elementCount, sizeof(TIndex),
+                                   SetDataOptions::None, false);
+        }
+
+        /**
+         * @brief Reads index-buffer bytes into application-selected destination elements.
+         *
+         * @tparam TIndex Trivially-copyable destination element type.
+         * @param data Pointer to the destination array.
+         * @param count Number of destination elements to write.
+         */
+        template<typename TIndex>
+        void GetData(TIndex* data, int count)
+        {
+            static_assert(std::is_trivially_copyable_v<TIndex>,
+                          "IndexBuffer::GetData<T> requires a trivially-copyable type");
+            GetDataBytesAtInternal(0, data, 0, count, sizeof(TIndex));
+        }
+
+        /**
+         * @brief Reads index-buffer bytes into a destination-array slice.
+         *
+         * @tparam TIndex Trivially-copyable destination element type.
+         * @param data Pointer to the destination array.
+         * @param startIndex First destination-array element to write.
+         * @param elementCount Number of destination elements to write.
+         */
+        template<typename TIndex>
+        void GetData(TIndex* data, int startIndex, int elementCount)
+        {
+            static_assert(std::is_trivially_copyable_v<TIndex>,
+                          "IndexBuffer::GetData<T> requires a trivially-copyable type");
+            GetDataBytesAtInternal(0, data, startIndex, elementCount, sizeof(TIndex));
+        }
+
+        /**
+         * @brief Reads a byte window of this index buffer into a destination-array slice.
+         *
+         * @tparam TIndex Trivially-copyable destination element type.
+         * @param offsetInBytes Source byte offset in this buffer.
+         * @param data Pointer to the destination array.
+         * @param startIndex First destination-array element to write.
+         * @param elementCount Number of destination elements to write.
+         */
+        template<typename TIndex>
+        void GetData(int offsetInBytes, TIndex* data, int startIndex, int elementCount)
+        {
+            static_assert(std::is_trivially_copyable_v<TIndex>,
+                          "IndexBuffer::GetData<T> requires a trivially-copyable type");
+            GetDataBytesAtInternal(
+                offsetInBytes, data, startIndex, elementCount, sizeof(TIndex));
+        }
+
+        /**
          * @brief Internal accessor used by the renderer draw paths.
          */
         CNAEXT [[nodiscard]] CNA::Internal::Renderers::IIndexBufferRenderer& GetRenderer() const { return *renderer_; }
@@ -224,6 +329,14 @@ namespace Microsoft::Xna::Framework::Graphics
         void SetDataWithOptions(const std::uint32_t* data, int startIndex,
                                 int elementCount, SetDataOptions options);
 
+        void SetDataBytesAtInternal(int offsetInBytes,
+                                    const void* data,
+                                    int startIndex,
+                                    int elementCount,
+                                    std::size_t elementSize,
+                                    SetDataOptions options,
+                                    bool useOptions);
+
         /**
          * @brief Protected constructor used by DynamicIndexBuffer to pass the dynamic flag.
          *
@@ -247,6 +360,11 @@ namespace Microsoft::Xna::Framework::Graphics
 
     private:
         void ThrowIfSetDataResourceInUse(SetDataOptions options, bool useOptions) const;
+        void GetDataBytesAtInternal(int offsetInBytes,
+                                    void* data,
+                                    int startIndex,
+                                    int elementCount,
+                                    std::size_t elementSize) const;
         void SetDataAtInternal(int offsetInBytes,
                                const void* data,
                                int startIndex,

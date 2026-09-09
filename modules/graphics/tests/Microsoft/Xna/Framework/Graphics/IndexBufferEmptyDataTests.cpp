@@ -329,10 +329,10 @@ TEST_F(IndexBufferEmptyDataTest, EmptyGetDataAvoidsNullMemcpyButPreservesRangeCh
         static_cast<std::uint16_t*>(nullptr), static_cast<int>(source16.size()), 0));
     EXPECT_NO_THROW(buffer32.GetData(
         static_cast<std::uint32_t*>(nullptr), static_cast<int>(source32.size()), 0));
-    EXPECT_THROW(buffer16.GetData(static_cast<std::uint16_t*>(nullptr), 5, 0),
-                 System::ArgumentOutOfRangeException);
-    EXPECT_THROW(buffer32.GetData(static_cast<std::uint32_t*>(nullptr), 5, 0),
-                 System::ArgumentOutOfRangeException);
+    // startIndex addresses the destination array, not the buffer. A null zero-element C++ range
+    // therefore remains a no-op regardless of the (unobservable) destination position.
+    EXPECT_NO_THROW(buffer16.GetData(static_cast<std::uint16_t*>(nullptr), 5, 0));
+    EXPECT_NO_THROW(buffer32.GetData(static_cast<std::uint32_t*>(nullptr), 5, 0));
     EXPECT_THROW(buffer16.GetData(static_cast<std::uint16_t*>(nullptr), 1),
                  System::ArgumentNullException);
     EXPECT_THROW(buffer32.GetData(static_cast<std::uint32_t*>(nullptr), 1),

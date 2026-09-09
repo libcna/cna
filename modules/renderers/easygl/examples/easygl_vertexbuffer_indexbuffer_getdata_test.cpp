@@ -200,9 +200,9 @@ protected:
                   "IndexBuffer u16: GetData(count) round-trips SetData");
 
             std::uint16_t dstSlice[2]{};
-            ib.GetData(dstSlice, 1, 2);
+            ib.GetData(static_cast<int>(sizeof(std::uint16_t)), dstSlice, 0, 2);
             check(dstSlice[0] == 10 && dstSlice[1] == 15,
-                  "IndexBuffer u16: GetData(startIndex, count) round-trips slice");
+                  "IndexBuffer u16: GetData(offset, startIndex, count) round-trips slice");
 
             IndexBuffer ibWriteOnly(dev, IndexElementSize::SixteenBits, 4, BufferUsage::WriteOnly);
             ibWriteOnly.SetData(src, 4);
@@ -227,9 +227,9 @@ protected:
                   "IndexBuffer u32: GetData(count) round-trips SetData");
 
             std::uint32_t dstSlice[2]{};
-            ib.GetData(dstSlice, 1, 2);
+            ib.GetData(static_cast<int>(sizeof(std::uint32_t)), dstSlice, 0, 2);
             check(dstSlice[0] == 1000 && dstSlice[1] == 1500,
-                  "IndexBuffer u32: GetData(startIndex, count) round-trips slice");
+                  "IndexBuffer u32: GetData(offset, startIndex, count) round-trips slice");
 
             IndexBuffer ibWriteOnly(dev, IndexElementSize::ThirtyTwoBits, 4, BufferUsage::WriteOnly);
             ibWriteOnly.SetData(src, 4);
@@ -252,6 +252,7 @@ public:
     VertexIndexGetDataTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
     }
 
     int getResult() const { return fail_ > 0 ? 1 : 0; }
