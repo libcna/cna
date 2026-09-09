@@ -66,6 +66,20 @@ def main(argv):
         write(repo, ".gitignore", "build/\n")
         write(repo, "tools/provenance/third-party.json",
               json.dumps({"vendored": []}))
+        # Check 6's clean case: a source adapted from properly licensed third-party code, with the
+        # row that allows it. It must NOT be reported, or the gate makes the exception useless.
+        write(repo, "tools/provenance/derived-sources.json",
+              json.dumps({"derived": [
+                  {"path": "modules/core/src/Adapted.cpp", "upstreamProject": "example/upstream",
+                   "upstreamUrl": "https://example.invalid/upstream",
+                   "upstreamRevision": "0123456789abcdef", "license": "MIT",
+                   "licenseFile": "THIRD_PARTY_NOTICES.md", "spdx": "MIT",
+                   "whatWasTaken": "one function", "whatWasChanged": "nothing"}]}))
+        write(repo, "THIRD_PARTY_NOTICES.md", "MIT, Copyright (c) Microsoft Corporation\n")
+        write(repo, "modules/core/src/Adapted.cpp",
+              "// SPDX-License-Identifier: MIT\n"
+              "// Copyright (c) Microsoft Corporation.\n"
+              "int adapted();\n")
         write(repo, "modules/core/src/Clean.cpp", "// SPDX-License-Identifier: MS-PL\nint clean();\n")
         write(repo, "tests/assets/xna40/source/probe.xml", "<XnaContent />\n")
         write(repo, "tests/assets/xna40/source/PROVENANCE.json",
@@ -94,6 +108,26 @@ def main(argv):
         os.makedirs(os.path.join(repo, "vendor", "undeclared"), exist_ok=True)
         write(repo, "vendor/undeclared/README.md", "undeclared\n")
         write(repo, "tests/assets/xna40/source/unexplained.xml", "<XnaContent />\n")
+        # Check 6, the three ways a derived-source row and its file can come apart.
+        write(repo, "tools/provenance/derived-sources.json",
+              json.dumps({"derived": [
+                  {"path": "modules/core/src/Adapted.cpp", "upstreamProject": "example/upstream",
+                   "upstreamUrl": "https://example.invalid/upstream",
+                   "upstreamRevision": "0123456789abcdef", "license": "MIT",
+                   "licenseFile": "THIRD_PARTY_NOTICES.md", "spdx": "MS-PL",
+                   "whatWasTaken": "one function", "whatWasChanged": "nothing"},
+                  {"path": "modules/core/src/Vanished.cpp", "upstreamProject": "example/gone",
+                   "upstreamUrl": "https://example.invalid/gone",
+                   "upstreamRevision": "cafebabe", "license": "MIT",
+                   "licenseFile": "THIRD_PARTY_NOTICES.md", "spdx": "MIT",
+                   "whatWasTaken": "one function", "whatWasChanged": "nothing"},
+                  {"path": "modules/core/src/Unattributed.cpp", "upstreamProject": "example/other",
+                   "upstreamUrl": "https://example.invalid/other",
+                   "upstreamRevision": "d00d", "license": "MIT",
+                   "licenseFile": "THIRD_PARTY_NOTICES.md", "spdx": "MIT",
+                   "whatWasTaken": "one function", "whatWasChanged": "nothing"}]}))
+        write(repo, "modules/core/src/Unattributed.cpp",
+              "// SPDX-License-Identifier: MIT\nint unattributed();\n")
         git(repo, "add", "-A")
         git(repo, "commit", "-qm", "planted")
 
@@ -109,6 +143,9 @@ def main(argv):
             ("source", "modules/core/src/Foreign.cpp"),
             ("vendor", "vendor/undeclared"),
             ("corpus", "tests/assets/xna40/source/unexplained.xml"),
+            ("derived", "modules/core/src/Adapted.cpp"),
+            ("derived", "modules/core/src/Vanished.cpp"),
+            ("derived", "modules/core/src/Unattributed.cpp"),
         ]
         for row in expected:
             if row not in found:

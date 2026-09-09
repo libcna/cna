@@ -2,9 +2,11 @@
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/MeshHelper.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <map>
 #include <vector>
 
+#include "CNA/Internal/OptimizeFaces.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/VertexChannelNames.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
@@ -524,18 +526,40 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
             const std::vector<SharpRuntime::intcs> indices = IndicesOf(*geometry);
             const std::size_t vertexCount =
                 static_cast<std::size_t>(geometry->getVerticesProperty().getVertexCountProperty());
-            // XNA's optimization takes the triangles in reverse and renumbers the vertices in the
-            // order the reversed list first reaches them; a shuffled mesh comes out as the exact
-            // reverse of the order it went in (measured, meshhelper/optimize_for_cache_grid and
-            // optimize_for_cache_shuffled).
+            // XNA's method is the documented public D3DXOptimizeFaces, with the vertices
+            // renumbered in the order the reordered face list first reaches them: measured on
+            // 1,210 probes against genuine XNA 4.0 and the genuine D3DX9 redistributable with no
+            // disagreement (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-149). The face order comes
+            // from CNA::Internal::OptimizeFaces; the corner order inside a triangle never changes.
+            const std::size_t triangleCount = indices.size() / 3;
+            std::vector<std::uint32_t> faceIndices;
+            faceIndices.reserve(triangleCount * 3);
+            for (std::size_t i = 0; i < triangleCount * 3; ++i)
+            {
+                faceIndices.push_back(indices[i] < 0
+                    ? CNA::Internal::OptimizeFacesUnused
+                    : static_cast<std::uint32_t>(indices[i]));
+            }
+            const std::vector<std::uint32_t> faceRemap = CNA::Internal::OptimizeFaces(
+                faceIndices, CNA::Internal::BuildLegacyMeshAdjacency(faceIndices));
+
             std::vector<SharpRuntime::intcs> reordered;
             reordered.reserve(indices.size());
-            for (std::size_t triangle = indices.size() / 3; triangle > 0; --triangle)
+            for (const std::uint32_t source : faceRemap)
             {
+                if (source >= triangleCount)
+                {
+                    continue;
+                }
                 for (std::size_t k = 0; k < 3; ++k)
                 {
-                    reordered.push_back(indices[(triangle - 1) * 3 + k]);
+                    reordered.push_back(indices[static_cast<std::size_t>(source) * 3 + k]);
                 }
+            }
+            // An index list whose length is not a multiple of three keeps its tail unchanged.
+            for (std::size_t i = triangleCount * 3; i < indices.size(); ++i)
+            {
+                reordered.push_back(indices[i]);
             }
             std::vector<SharpRuntime::intcs> order;
             std::vector<SharpRuntime::intcs> remap(vertexCount, -1);

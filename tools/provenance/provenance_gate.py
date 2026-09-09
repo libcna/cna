@@ -35,6 +35,15 @@ What it checks, and what each check actually proves:
    `tools/provenance/third-party.json` with an upstream, a licence and a licence file that exists,
    and the manifest may not name a directory that is not there.
 
+6. **Every source adapted from someone else's is declared.** A production source may carry a
+   foreign copyright notice only when `tools/provenance/derived-sources.json` names it, with the
+   upstream project, the exact revision it was taken from, its licence and a licence file that is
+   in the tree. The manifest may not name a file that is not there, and a declared file must
+   actually carry the notice and the SPDX identifier its row claims -- so a row cannot outlive the
+   code it describes, and rewriting such a file back to CNA's own licence is a finding until its
+   row goes with it. This is what allows `XNASWEEP-149` to adapt Microsoft's MIT-licensed
+   DirectXMesh without turning check 3 off.
+
 Usage:
     provenance_gate.py [--repo <path>] [--json <file>]
 
@@ -88,6 +97,12 @@ MUST_BE_IGNORED = (
     "build/xna-pipeline-oracle/differential/run/Microsoft.Xna.Framework.Content.Pipeline.dll",
     "build/xna-pipeline-oracle/differential/run/XnaNative.dll",
 )
+
+# Check 6: the manifest of sources adapted from properly licensed third-party code, and the fields
+# a row must carry for the row to be worth anything.
+DERIVED_MANIFEST = "tools/provenance/derived-sources.json"
+DERIVED_REQUIRED = ("path", "upstreamProject", "upstreamUrl", "upstreamRevision", "license",
+                    "licenseFile", "spdx", "whatWasTaken", "whatWasChanged")
 
 
 def tracked_files(repo):
@@ -186,9 +201,18 @@ def main(argv):
 
     findings = []
     notes = []
-    counts = {"tracked": 0, "sources": 0, "fonts": 0, "vendored": 0, "fixtures": 0}
+    counts = {"tracked": 0, "sources": 0, "fonts": 0, "vendored": 0, "fixtures": 0, "derived": 0}
     names = tracked_files(repo)
     counts["tracked"] = len(names)
+
+    # Check 6's manifest, read before the sweep so that check 3 can consult it as it goes.
+    derived = {}
+    derived_seen = set()
+    if os.path.exists(os.path.join(repo, DERIVED_MANIFEST)):
+        document = json.loads(read(repo, DERIVED_MANIFEST).decode("utf-8"))
+        for row in document.get("derived", []):
+            derived[row.get("path", "")] = row
+    counts["derived"] = len(derived)
 
     for name in names:
         path = os.path.join(repo, name)
@@ -267,14 +291,58 @@ def main(argv):
             if "copyright" in lowered:
                 for marker in FOREIGN_ATTRIBUTION:
                     if marker in lowered:
+                        if name in derived:
+                            derived_seen.add(name)
+                            break
                         findings.append({"check": "source", "path": name,
                                          "detail": "carries a copyright notice naming %r" % marker})
                         break
+            if name in derived and name not in derived_seen and "copyright" not in lowered:
+                # Handled by check 6, which says it better; noted here so the sweep does not have
+                # to be read twice to see that the file was visited.
+                pass
             for marker in ("monogame", "/fna/", "fna-xna"):
                 if marker in lower:
                     findings.append({"check": "source", "path": name,
                                      "detail": "a production source whose path names %r" % marker})
                     break
+
+    # 6. Sources adapted from properly licensed third-party code.
+    tracked = set(names)
+    for path, row in sorted(derived.items()):
+        missing = [field for field in DERIVED_REQUIRED if not row.get(field)]
+        if missing:
+            findings.append({"check": "derived", "path": path,
+                             "detail": "its row is missing %s" % ", ".join(missing)})
+        if path not in tracked:
+            findings.append({"check": "derived", "path": path,
+                             "detail": "declared as adapted from %r, and not in the tree"
+                                       % row.get("upstreamProject", "?")})
+            continue
+        licence = row.get("licenseFile", "")
+        if licence and licence not in tracked:
+            findings.append({"check": "derived", "path": path,
+                             "detail": "names the licence file %r, which is not in the tree" % licence})
+        header = header_of(read(repo, path, 8192))
+        declared = None
+        for line in header.splitlines()[:3]:
+            if "SPDX-License-Identifier:" in line:
+                declared = line.split("SPDX-License-Identifier:", 1)[1]
+                declared = declared.replace("*/", "").replace("-->", "").strip()
+                break
+        if declared != row.get("spdx"):
+            findings.append({"check": "derived", "path": path,
+                             "detail": "declares %r where its row says %r"
+                                       % (declared, row.get("spdx"))})
+        if path not in derived_seen:
+            findings.append({"check": "derived", "path": path,
+                             "detail": "is declared as adapted from %r but carries no copyright "
+                                       "notice naming it. Either the adaptation is gone and the row "
+                                       "should go with it, or the attribution was removed."
+                                       % row.get("upstreamProject", "?")})
+        if row.get("upstreamRevision") and not row["upstreamRevision"].strip():
+            findings.append({"check": "derived", "path": path,
+                             "detail": "names no upstream revision"})
 
     # 4. The black-box corpus: every fixture named in its directory's provenance document.
     corpus_root = "tests/assets/xna40"

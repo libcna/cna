@@ -9,9 +9,11 @@
 // What the measurements settle, none of which the documentation says: a face normal is the
 // clockwise one, so a triangle wound counter-clockwise in the XY plane answers -Z; a vertex normal
 // is averaged over the faces meeting at its *position*, so the two vertices of a texture seam come
-// out with the same normal; overwriting a normal channel moves it to the end of the channel list;
-// and the cache optimization simply takes the triangles in reverse, renumbering the vertices in the
-// order the reversed list reaches them.
+// out with the same normal; and overwriting a normal channel moves it to the end of the channel
+// list. The cache optimization is `D3DXOptimizeFaces`, and a mesh with no shared vertices -- which
+// these fixtures are -- is the case where it answers the exact reverse, because every one of its
+// faces has the fewest possible neighbours; XnaOptimizeForCacheProbesTests.cpp is where the
+// general rule is measured (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-149).
 #include <gtest/gtest.h>
 
 #include <array>
@@ -657,7 +659,7 @@ TEST(XnaMeshHelper, MergesDuplicateVerticesAsXnaDoes)
     EXPECT_EQ(DescribeMeshFull(real), Expected("meshhelper/merge_duplicate_vertices_real"));
 }
 
-TEST(XnaMeshHelper, OptimizeForCacheReversesTheTriangles)
+TEST(XnaMeshHelper, OptimizeForCacheReordersTheTriangles)
 {
     std::shared_ptr<MeshContent> quad = Quad();
     MeshHelper::OptimizeForCache(quad);

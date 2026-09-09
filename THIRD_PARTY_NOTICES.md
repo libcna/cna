@@ -2,6 +2,64 @@ This project contains code derived from or based on portions of FNA.
 FNA is licensed under the Microsoft Public License (Ms-PL).
 FNA copyright: Ethan Lee and the MonoGame Team.
 
+## DirectXMesh (build-time mesh optimization in the Content Pipeline)
+
+`modules/content-pipeline/src/Internal/DirectXMeshOptimizeFaces.cpp` is adapted from Microsoft's
+open-source **DirectXMesh**, file `DirectXMesh/DirectXMeshOptimizeTVC.cpp`, at revision
+`bd17eb215d463d98f2b3a13082ce13979219314f` (tag `oct2025`) of
+<https://github.com/microsoft/DirectXMesh>. It is the classes `mesh_status` and `sim_vcache` and
+the function `VertexCacheStripReorderImpl` -- Hugues Hoppe's greedy strip-growing face reorder
+("Optimization of mesh locality for transparent vertex caching", SIGGRAPH 1999), which Microsoft
+documents as the same algorithm the legacy Direct3D 9 `D3DXOptimizeFaces` implemented, with
+defaults equivalent to `D3DXMESHOPT_DEVICEINDEPENDENT` (a simulated vertex cache of 12 and a
+restart threshold of 7).
+
+CNA uses it because genuine XNA 4.0's `MeshHelper.OptimizeForCache` **is** `D3DXOptimizeFaces`:
+1,210 measured probes, run through genuine XNA under Wine and through the genuine D3DX9
+redistributable, with no disagreement
+(`plans/plan_xna_sample_xnb_sweep.md` `XNASWEEP-149`). The adjacency the legacy entry point worked
+from is CNA's own black-box measurement and is a separate, MS-PL file,
+`modules/content-pipeline/src/Internal/LegacyMeshAdjacency.cpp`.
+
+What was changed is listed in the file's own header and in
+`tools/provenance/derived-sources.json`: the Direct3D types and `HRESULT` returns, the attribute
+subsets (a `GeometryContent` is one subset), the `uint16_t` overload and the strip-order route,
+and a face the walk never reaches is appended rather than dropped. No decision the algorithm makes
+was altered.
+
+No DirectXMesh binary or unmodified source file is committed to this repository, and CNA gains no
+build or runtime dependency on the project: only `cna_content_pipeline` holds the adapted file, and
+only `cna_content_compiler` links that module, so a game that calls `ContentManager.Load<Model>()`
+never reaches it. `tools/xna-pipeline-oracle/optimize/run-dxmesh-oracle.sh` builds the genuine
+upstream library from a checkout under `~/deps` for the comparison, pinned to the revision above,
+and that checkout is outside the repository.
+
+DirectXMesh is Copyright (c) Microsoft Corporation and is licensed under the MIT License:
+
+```
+MIT License
+
+Copyright (c) Microsoft Corporation.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE
+```
+
 ## Draco (glTF mesh-compression dependency)
 
 CNA vendors an unmodified `google/draco` checkout as `third_party/draco`, pinned by its gitlink to
