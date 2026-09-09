@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "namespace": "CNA::Examples::PortableTint",
+  "package": "portable_tint",
+  "payloads": [
+    {
+      "symbol": "kEasyGlVertexSource",
+      "source": "easygl.vert.glsl",
+      "language": "glsl-es",
+      "stage": "vertex",
+      "format": "text",
+      "entry_point": "main"
+    },
+    {
+      "symbol": "kEasyGlFragmentSource",
+      "source": "easygl.frag.glsl",
+      "language": "glsl-es",
+      "stage": "fragment",
+      "format": "text",
+      "entry_point": "main"
+    },
+    {
+      "symbol": "kVulkanVertexSpirV",
+      "source": "vulkan.vert.glsl",
+      "language": "spirv",
+      "source_language": "vulkan-glsl",
+      "stage": "vertex",
+      "format": "spirv",
+      "entry_point": "main"
+    },
+    {
+      "symbol": "kVulkanFragmentSpirV",
+      "source": "vulkan.frag.glsl",
+      "language": "spirv",
+      "source_language": "vulkan-glsl",
+      "stage": "fragment",
+      "format": "spirv",
+      "entry_point": "main"
+    }
+  ]
+}

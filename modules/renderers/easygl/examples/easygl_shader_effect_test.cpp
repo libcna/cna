@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 // Task 132: EasyGL integration test — ShaderEffect (GLSL) with SpriteBatch.
 //
-// Renders a white 1×1 texture through a custom GLSL ShaderEffect that outputs
-// only the red channel of the sampled texel, producing a red-tinted sprite
-// over a green background.
+// Renders a white 1×1 texture through the GLSL ES variant of the generated
+// portable tint package, producing a red-tinted sprite over a green background.
 //
 // Vertex shader matches the SpriteBatch attribute layout exactly:
 //   location 0 = vec2 aPos      (pixel coords)
@@ -12,11 +11,12 @@
 //   uniform mat4 projection     (set by SpriteBatch on the compiled program)
 //
 // Fragment shader:
-//   FragColor = vec4(texture(texture1, TexCoord).r, 0.0, 0.0, 1.0)
-//   → white texel → red output  (verifies custom GLSL replaces the built-in shader)
+//   FragColor = texture(texture1, TexCoord) * Color * uColor
+//   → white texel × red uniform → red output
 //
-// The sampler2D 'texture1' uniform defaults to texture unit 0, which is where
-// SpriteBatch binds the sprite texture, so no explicit uniform-integer set is needed.
+// The sampler2D 'texture1' uniform defaults to texture unit 0, where SpriteBatch
+// binds the sprite texture. The package source and Vulkan bytecode share the same
+// observable tint contract even though their renderer integration differs.
 //
 // Exit code 0 = PASS, 1 = FAIL.
 
@@ -31,6 +31,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/ShaderLanguageEXT.hpp"
+#include "common/PortableTintShaderPackage.generated.hpp"
 
 #include <cstdio>
 #include <memory>
@@ -40,48 +41,11 @@
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 
-// ---------------------------------------------------------------------------
-// GLSL ES 3.0 shaders — attribute layout matches EasyGLSpriteBatchRenderer.
-// ---------------------------------------------------------------------------
-
-static const char* kVertSrc = R"(#version 300 es
-precision highp float;
-
-layout(location = 0) in vec2 aPos;
-layout(location = 1) in vec2 aTexCoord;
-layout(location = 2) in vec4 aColor;
-
-out vec2 TexCoord;
-out vec4 Color;
-
-uniform mat4 projection;
-
-void main()
-{
-    gl_Position = projection * vec4(aPos, 0.0, 1.0);
-    TexCoord = aTexCoord;
-    Color = aColor;
-}
-)";
-
-// Red-tint fragment: output only the red channel of the sampled texel.
-// White texture (r=1) → red output (1, 0, 0, 1).
-static const char* kFragSrc = R"(#version 300 es
-precision mediump float;
-
-in vec2 TexCoord;
-in vec4 Color;
-
-out vec4 FragColor;
-
-uniform sampler2D texture1;
-
-void main()
-{
-    vec4 t = texture(texture1, TexCoord);
-    FragColor = vec4(t.r, 0.0, 0.0, t.a);
-}
-)";
+// The checked-in package is generated from the adjacent declared GLSL source files.
+static constexpr const char* kVertSrc =
+    CNA::Examples::PortableTint::kEasyGlVertexSource.data();
+static constexpr const char* kFragSrc =
+    CNA::Examples::PortableTint::kEasyGlFragmentSource.data();
 
 static const char* kBrokenFragSrc = R"(#version 300 es
 precision mediump float;
@@ -184,6 +148,9 @@ protected:
             Exit();
             return;
         }
+
+        fx.Apply();
+        fx.SetUniformVec4("uColor", 1.0f, 0.0f, 0.0f, 1.0f);
 
         device.Clear(Color(0, 255, 0, 255)); // green background
         device.SetDepthTestEnabled(false);
