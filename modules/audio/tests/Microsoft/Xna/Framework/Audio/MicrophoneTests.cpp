@@ -79,14 +79,21 @@ TEST(MicrophoneTest, AllReflectsTheSelectedRecordingCapability)
 #endif
 }
 
-TEST(MicrophoneTest, DefaultDeviceEntryIsNamedDefaultDevice)
+// XNA's Microphone.All is the machine's device list and Microphone.Default is a real device
+// reporting the driver's own name. CNA used to prepend a synthetic entry literally named
+// "Default Device", reproducing FNA; SAMPLE-098 caught the difference on screen against the real
+// XNA runtime, and CLAUDE.md makes XNA the tie-break. No entry may carry that invented name.
+TEST(MicrophoneTest, AllContainsOnlyRealDevicesWithNoInventedDefaultEntry)
 {
-    const auto& all = Microphone::getAllProperty();
 #if defined(CNA_AUDIO_PLATFORM_SDL2) || defined(CNA_AUDIO_PLATFORM_NULL)
     GTEST_SKIP() << "selected audio backend has no recording capability";
 #endif
+    const auto& all = Microphone::getAllProperty();
     ASSERT_FALSE(all.empty());
-    EXPECT_EQ(all[0]->Name, "Default Device");
+    for (const Microphone* microphone : all)
+    {
+        EXPECT_NE(microphone->Name, "Default Device");
+    }
 }
 
 TEST(MicrophoneTest, DefaultPropertyIsFirstEntryOrNullWhenRecordingIsUnsupported)

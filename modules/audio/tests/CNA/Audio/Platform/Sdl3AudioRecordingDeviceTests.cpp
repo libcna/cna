@@ -32,19 +32,24 @@ protected:
     }
 };
 
-TEST_F(Sdl3AudioRecordingDeviceTests, ProviderEnumeratesDefaultFirstAndSortedPhysicalDevices)
+// Real devices only, sorted by id. The provider used to prepend a synthetic "Default Device"
+// entry, reproducing FNA; XNA's Microphone.Default is a real enumerated device, and CLAUDE.md makes
+// XNA the tie-break. SDL3 cannot say which real device is the default, so no entry claims to be.
+TEST_F(Sdl3AudioRecordingDeviceTests, ProviderEnumeratesOnlyRealDevicesSortedById)
 {
     Sdl3AudioRecordingDeviceProvider provider;
     const auto devices = provider.GetDevices();
-    ASSERT_GE(devices.size(), 2u);
-    EXPECT_TRUE(devices.front().isDefault);
-    EXPECT_EQ(devices.front().name, "Default Device");
+    ASSERT_GE(devices.size(), 1u);
     EXPECT_EQ(std::count_if(devices.begin(), devices.end(), [](const auto& info)
     {
         return info.isDefault;
-    }), 1);
-    EXPECT_TRUE(std::is_sorted(devices.begin() + 1, devices.end(), [](const auto& left,
-                                                                     const auto& right)
+    }), 0);
+    EXPECT_EQ(std::count_if(devices.begin(), devices.end(), [](const auto& info)
+    {
+        return info.name == "Default Device";
+    }), 0);
+    EXPECT_TRUE(std::is_sorted(devices.begin(), devices.end(), [](const auto& left,
+                                                                 const auto& right)
     {
         return left.id < right.id;
     }));

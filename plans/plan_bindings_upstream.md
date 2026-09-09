@@ -40,11 +40,31 @@ CNA matches FNA faithfully in each case:
   bug for the same reason.
 
 A fourth of the same kind was found on 2026-09-09 by the sample campaign rather than by a
-binding, and is recorded as entry 5 of `misc/known_gaps.md`: `Microphone::All` carries a
-synthetic `"Default Device"` entry that FNA prepends and XNA does not have. It is listed
-here because this is where a reader looks for XNA-versus-FNA divergences, and because it
-is the only one of the four backed by a side-by-side capture of both runtimes on this
-machine rather than by reading IL.
+binding: `Microphone::All` carried a synthetic `"Default Device"` entry that FNA prepends
+(`SDL3_FNAPlatform.cs:1699,1707`) and XNA does not have. It was the only one of the four
+backed by a side-by-side capture of both runtimes on this machine rather than by reading
+IL — SAMPLE-098's whole HUD is `Microphone.Name`, and the unchanged XNA executable drew
+`PulseAudio Input is Stopped` where CNA drew `Default Device is Stopped`.
+
+**That one is fixed.** On 2026-09-09 the project owner restated the rule — *CNA should
+follow XNA faithfully, and FNA only after it* — and directed that this be implemented
+rather than recorded. The synthetic entry is gone, `Microphone::All` is the machine's
+device list, and `Microphone::Default` is a real device reporting the driver's own name.
+
+**The three above are the same class and are still open.** They were left as owner
+decisions because `CLAUDE.md` made FNA the behavioural reference; the tie-break has since
+been XNA (2026-09-04), and the owner has now restated it and acted on it once. Each still
+needs its own measurement and carries its own cost, so none was changed as a side effect
+of the microphone fix:
+
+| divergence | what XNA does | what closing it would cost |
+|---|---|---|
+| `GraphicsAdapter::getIsWideScreenProperty()` compares against `4.0f/3.0f` | compares against `1.6f` (read from IL by `cna-ruby`) | every mode between 1.334 and 1.6, and 16:10, changes classification |
+| `Microphone::setBufferDurationProperty()` reads `getMillisecondsProperty()` | reads `get_TotalMilliseconds`, so the `> 1000` branch is reachable and `set(get())` works at 1000 ms | a currently-unreachable branch starts throwing, which is the point |
+| `SoundEffectInstance::Apply3D` refuses more than one listener | *not yet measured against XNA IL* — recorded as a scope decision | unknown until measured |
+
+The first two are small and well-evidenced. The third should be measured before it is
+touched.
 - **Display modes carrying a hardcoded `SurfaceFormat::Color`**, which `cna-ruby` and
   `cna-swift` both recorded. `SurfaceFormat.Color // FIXME: Assumption!` is what FNA writes,
   four times over, in `SDL3_FNAPlatform.cs` and `SDL2_FNAPlatform.cs`.

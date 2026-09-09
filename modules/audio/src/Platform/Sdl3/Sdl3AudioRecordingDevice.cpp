@@ -245,15 +245,30 @@ namespace {
     {
         if (!audioSubsystemAcquired_) return {};
 
+        // Only real devices are enumerated, so `Microphone::All` is the machine's device list and
+        // `Microphone::Default` -- which is `All[0]` -- is a real device reporting the driver's own
+        // name for itself.
+        //
+        // FNA prepends a synthetic entry here instead, named "Default Device" and bound to
+        // SDL_AUDIO_DEVICE_DEFAULT_RECORDING (`SDL3_FNAPlatform.cs:1699,1707`, "First mic is always
+        // OS default"), and CNA used to reproduce that literally. XNA does not: its default
+        // microphone is a real enumerated device. The two were caught side by side by SAMPLE-098,
+        // whose entire HUD is `Microphone.Name` -- the unchanged XNA executable drew
+        // "PulseAudio Input is Stopped" where CNA drew "Default Device is Stopped", with the rest of
+        // the frame identical. Per CLAUDE.md, where XNA and FNA disagree CNA follows XNA, so the
+        // synthetic entry is gone.
+        //
+        // What that costs: the host's *current* default input route is no longer addressable
+        // through this provider, so a game does not follow the user changing their default device
+        // mid-session. XNA does not offer that either. `isDefault` stays on the info struct for a
+        // backend that can genuinely identify the default among real devices; SDL3 cannot, so this
+        // provider marks none, which the contract permits.
         int count = 0;
         SDL_AudioDeviceID* nativeDevices = SDL_GetAudioRecordingDevices(&count);
         std::vector<AudioRecordingDeviceInfo> result;
         if (nativeDevices && count > 0)
         {
-            result.reserve(static_cast<std::size_t>(count) + 1);
-            result.push_back({
-                static_cast<AudioRecordingDeviceId>(SDL_AUDIO_DEVICE_DEFAULT_RECORDING),
-                "Default Device", true});
+            result.reserve(static_cast<std::size_t>(count));
             for (int i = 0; i < count; ++i)
             {
                 const char* name = SDL_GetAudioDeviceName(nativeDevices[i]);
@@ -261,7 +276,7 @@ namespace {
                     static_cast<AudioRecordingDeviceId>(nativeDevices[i]),
                     name ? name : "", false});
             }
-            std::sort(result.begin() + 1, result.end(), [](const auto& left, const auto& right)
+            std::sort(result.begin(), result.end(), [](const auto& left, const auto& right)
             {
                 return left.id < right.id;
             });
