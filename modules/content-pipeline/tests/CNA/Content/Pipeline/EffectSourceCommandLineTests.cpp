@@ -240,7 +240,7 @@ namespace
                              "concurrently.";
             std::cerr.flush();
             std::cout.flush();
-            std::quick_exit(1);
+            ::_Exit(1);
         }
         pending.get();
     }
