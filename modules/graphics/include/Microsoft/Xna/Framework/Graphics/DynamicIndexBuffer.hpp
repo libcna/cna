@@ -18,7 +18,8 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Constructs a DynamicIndexBuffer with the given element size, index count, and usage hint.
          * @param device           The graphics device.
-         * @param indexElementSize Element size — SixteenBits or ThirtyTwoBits.
+         * @param indexElementSize Element size. Values other than SixteenBits are treated as
+         *        ThirtyTwoBits, matching XNA's enum-constructor behavior.
          * @param indexCount       Number of indices the buffer can hold.
          * @param bufferUsage      Usage hint for the buffer.
          * @throws System::ArgumentOutOfRangeException if @p indexCount is not positive.

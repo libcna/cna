@@ -37,7 +37,8 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Creates an index buffer with explicit element size and usage hint.
          * @param device           The graphics device.
-         * @param indexElementSize Element size — SixteenBits or ThirtyTwoBits.
+         * @param indexElementSize Element size. Values other than SixteenBits are treated as
+         *        ThirtyTwoBits, matching XNA's enum-constructor behavior.
          * @param indexCount       Number of indices the buffer can hold.
          * @param bufferUsage      Usage hint for the buffer.
          * @throws System::ArgumentOutOfRangeException if @p indexCount is not positive.
@@ -74,7 +75,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /**
          * @brief Returns the element size (16-bit or 32-bit) of indices in this buffer.
-         * @return The IndexElementSize value passed to the constructor.
+         * @return SixteenBits for a sixteen-bit buffer; otherwise ThirtyTwoBits.
          */
         [[nodiscard]] IndexElementSize getIndexElementSizeProperty() const { return indexElementSize_; }
 

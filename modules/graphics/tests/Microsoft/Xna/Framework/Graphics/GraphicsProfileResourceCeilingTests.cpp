@@ -158,3 +158,26 @@ TEST(GraphicsProfileResourceCeilingTest, ThirtyTwoBitIndicesAreHiDefOnly)
     EXPECT_NO_THROW((void)IndexBuffer(
         hiDef, IndexElementSize::ThirtyTwoBits, 1, BufferUsage::None));
 }
+
+TEST(GraphicsProfileResourceCeilingTest, IndexElementSizeEnumConstructorCanonicalizesNonSixteenValues)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+    PresentationParameters parameters;
+    GraphicsDevice reach(
+        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach, parameters);
+    GraphicsDevice hiDef(
+        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef, parameters);
+    constexpr auto invalidSize = static_cast<IndexElementSize>(99);
+
+    IndexBuffer staticBuffer(hiDef, invalidSize, 1, BufferUsage::None);
+    DynamicIndexBuffer dynamicBuffer(hiDef, invalidSize, 1, BufferUsage::None);
+    EXPECT_EQ(IndexElementSize::ThirtyTwoBits,
+              staticBuffer.getIndexElementSizeProperty());
+    EXPECT_EQ(IndexElementSize::ThirtyTwoBits,
+              dynamicBuffer.getIndexElementSizeProperty());
+
+    EXPECT_THROW((void)IndexBuffer(reach, invalidSize, 1, BufferUsage::None),
+                 System::NotSupportedException);
+    EXPECT_THROW((void)DynamicIndexBuffer(reach, invalidSize, 1, BufferUsage::None),
+                 System::NotSupportedException);
+}

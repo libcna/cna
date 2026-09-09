@@ -17,6 +17,14 @@ namespace Microsoft::Xna::Framework::Graphics
 {
     namespace
     {
+        constexpr IndexElementSize CanonicalizeIndexElementSize(
+            IndexElementSize indexElementSize) noexcept
+        {
+            return indexElementSize == IndexElementSize::SixteenBits
+                       ? IndexElementSize::SixteenBits
+                       : IndexElementSize::ThirtyTwoBits;
+        }
+
         std::unique_ptr<CNA::Internal::Renderers::IIndexBufferRenderer> CreateIndexBufferRenderer(
             GraphicsDevice& device,
             IndexElementSize indexElementSize,
@@ -26,13 +34,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 throw System::ArgumentOutOfRangeException(
                     "indexCount", std::to_string(indexCount),
                     "The index count must be greater than zero.");
-            if (indexElementSize != IndexElementSize::SixteenBits &&
-                indexElementSize != IndexElementSize::ThirtyTwoBits)
-            {
-                throw System::ArgumentOutOfRangeException(
-                    "indexElementSize", std::to_string(static_cast<int>(indexElementSize)),
-                    "Index buffers support only sixteen-bit or thirty-two-bit elements.");
-            }
+            indexElementSize = CanonicalizeIndexElementSize(indexElementSize);
             if (indexElementSize == IndexElementSize::ThirtyTwoBits &&
                 device.getGraphicsProfileProperty() == GraphicsProfile::Reach)
             {
@@ -104,7 +106,7 @@ namespace Microsoft::Xna::Framework::Graphics
                              bool /*dynamic*/)
         : GraphicsResource(&device)
         , renderer_(CreateIndexBufferRenderer(device, indexElementSize, indexCount))
-        , indexElementSize_(indexElementSize)
+        , indexElementSize_(CanonicalizeIndexElementSize(indexElementSize))
         , bufferUsage_(bufferUsage)
         , indexCount_(indexCount)
     {
