@@ -844,26 +844,78 @@ TEST(CnbProducerTest, OddSizedChunksAreWalkedThroughTheirRiffPadByte)
     EXPECT_NO_THROW((void)CNA::Content::Cnb::DecodeWavAsCnbSoundEffect(trailing, "trailing.wav"));
 }
 
-TEST(CnbProducerTest, AMalformedRiffDeclaredLengthIsRefused)
+// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-192: the RIFF header's declared length bounds
+// nothing, and the four values it refuses are the only four. Measured on the genuine `WavImporter`
+// (tests/reference/xna40/audio/audio-content-oracle.json, `wav/riff-size` and
+// `wav/riff-size-threshold`), which is what replaced the stricter reading `plans/plan_cnb.md`
+// CNBF-117 chose before it had been measured. SAMPLE-145's six `Whoosh` WAVs are the corpus's own
+// case: each declares a length 68 bytes short of the file, exactly the `smpl` chunk somebody
+// inserted after that length was computed, and XNA built all six.
+TEST(CnbProducerTest, TheRiffDeclaredLengthBoundsNothingAndOnlyItsFourShortestValuesAreRefused)
 {
     const std::vector<std::uint8_t> pcm = Pcm16(64u, 1u);
     const WavBuilder builder = WavBuilder{}.Fmt(1u, 1u, 44100u, 16u).Data(pcm);
     const std::vector<std::uint8_t> good = builder.Build();
     EXPECT_NO_THROW((void)CNA::Content::Cnb::DecodeWavAsCnbSoundEffect(good, "good.wav"));
 
-    // Longer than the file: a truncated download, and the value that bounds the chunk walk.
-    ExpectWavRefused(builder.Build(static_cast<std::uint32_t>(good.size())), "past the end",
-                     "RIFF length past the end of the file");
-    ExpectWavRefused(builder.Build(0xFFFFFFFFu), "past the end", "RIFF length 0xFFFFFFFF");
+    // Too short even for its own form identifier: 0, 1, 2 and 3, and no other value.
+    for (const std::uint32_t length : {0u, 1u, 2u, 3u})
+    {
+        const std::string what = "RIFF length " + std::to_string(length);
+        ExpectWavRefused(builder.Build(length), "too short", what.c_str());
+    }
 
-    // Too short even for its own form identifier.
-    ExpectWavRefused(builder.Build(0u), "too short", "RIFF length 0");
-    ExpectWavRefused(builder.Build(3u), "too short", "RIFF length 3");
+    // Past the end of the file, including the largest value the field can hold.
+    EXPECT_NO_THROW((void)CNA::Content::Cnb::DecodeWavAsCnbSoundEffect(
+        builder.Build(static_cast<std::uint32_t>(good.size())), "past.wav"));
+    EXPECT_NO_THROW((void)CNA::Content::Cnb::DecodeWavAsCnbSoundEffect(
+        builder.Build(0xFFFFFFFFu), "max.wav"));
 
-    // Shorter than the chunks it contains: the walk stops at the declared end, so 'data' is
-    // reported as running past the form rather than being read anyway.
-    ExpectWavRefused(builder.Build(static_cast<std::uint32_t>(good.size() - 8u - 20u)),
-                     "runs past the end of the RIFF form", "RIFF length cutting 'data' short");
+    // Shorter than the chunks it contains, including a length that cuts the 'data' chunk in half
+    // and one that stops before it begins. The whole of the declared 'data' chunk still comes back.
+    for (const std::uint32_t length : {4u, 12u, 20u, 36u,
+                                       static_cast<std::uint32_t>(good.size() - 8u - 20u)})
+    {
+        const CNA::Content::Cnb::CnbSoundEffectData answered =
+            CNA::Content::Cnb::DecodeWavAsCnbSoundEffect(builder.Build(length), "short.wav");
+        EXPECT_EQ(answered.samples.size(), pcm.size()) << "RIFF length " << length;
+    }
+}
+
+// XNASWEEP-192: a chunk the walk cannot read ends the walk rather than the import, so what an
+// unreadable chunk costs depends on whether 'fmt ' and 'data' were already found. `junk_after_data`
+// and `junk_before_data` in the same oracle case are the two measurements.
+TEST(CnbProducerTest, AnUnreadableChunkEndsTheWalkRatherThanTheImport)
+{
+    const std::vector<std::uint8_t> pcm = Pcm16(64u, 1u);
+    const std::vector<std::uint8_t> junk(16u, 0xA5u);  // a filler no other chunk holds
+
+    std::vector<std::uint8_t> after = WavBuilder{}
+                                          .Fmt(1u, 1u, 44100u, 16u)
+                                          .Data(pcm)
+                                          .Chunk("JUNK", junk, /*pad=*/false)
+                                          .Build();
+    std::vector<std::uint8_t> before = WavBuilder{}
+                                           .Fmt(1u, 1u, 44100u, 16u)
+                                           .Chunk("JUNK", junk, /*pad=*/false)
+                                           .Data(pcm)
+                                           .Build();
+    // Give each JUNK chunk a size no file could hold. Its size field is the four bytes before
+    // its payload, and its payload is the only run of sixteen 0xA5 bytes in either file.
+    const auto poison = [&junk](std::vector<std::uint8_t>& wav)
+    {
+        const auto at = std::search(wav.begin(), wav.end(), junk.begin(), junk.end());
+        ASSERT_NE(at, wav.end());
+        const std::size_t size = static_cast<std::size_t>(at - wav.begin()) - 4u;
+        wav[size + 0u] = 0x40u; wav[size + 1u] = 0x42u; wav[size + 2u] = 0x0Fu; wav[size + 3u] = 0u;
+    };
+    poison(after);
+    poison(before);
+
+    const CNA::Content::Cnb::CnbSoundEffectData answered =
+        CNA::Content::Cnb::DecodeWavAsCnbSoundEffect(after, "after.wav");
+    EXPECT_EQ(answered.samples.size(), pcm.size());
+    ExpectWavRefused(before, "no 'data' chunk", "an unreadable chunk before the data chunk");
 }
 
 TEST(CnbProducerTest, FmtFieldsThatDisagreeWithEachOtherAreRefused)

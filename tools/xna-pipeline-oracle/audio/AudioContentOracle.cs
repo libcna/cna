@@ -147,6 +147,83 @@ namespace Cna.Xna40.AudioOracle
             return path;
         }
 
+        // plans/plan_xna_sample_xnb_sweep.md XNASWEEP-192: one PCM16 WAV whose two size fields can
+        // be wrong on purpose. `riffDelta` is added to the RIFF form's size (int.MinValue writes a
+        // zero), `dataDelta` to the data chunk's declared size, and `trailing` bytes are appended
+        // after it without either size counting them.
+        private static string WriteWavSized(string directory, string name, int riffDelta,
+                                            int dataDelta, int trailing)
+        {
+            byte[] payload = Ramp(1600);
+            string path = Path.Combine(directory, name);
+            using (var stream = new FileStream(path, FileMode.Create, FileAccess.Write))
+            using (var writer = new BinaryWriter(stream))
+            {
+                int riff = 4 + 8 + 16 + 8 + payload.Length;
+                writer.Write(new char[] { 'R', 'I', 'F', 'F' });
+                writer.Write(riffDelta == int.MinValue ? 0 : riff + riffDelta);
+                writer.Write(new char[] { 'W', 'A', 'V', 'E' });
+                writer.Write(new char[] { 'f', 'm', 't', ' ' });
+                writer.Write(16);
+                writer.Write((ushort)1);
+                writer.Write((ushort)1);
+                writer.Write(8000);
+                writer.Write(16000);
+                writer.Write((ushort)2);
+                writer.Write((ushort)16);
+                writer.Write(new char[] { 'd', 'a', 't', 'a' });
+                writer.Write(payload.Length + dataDelta);
+                writer.Write(payload);
+                if (trailing > 0) writer.Write(new byte[trailing]);
+            }
+            return path;
+        }
+
+        /** The same file as WriteWavSized, with the RIFF size field written literally. */
+        private static string WriteWavSizedAbsolute(string directory, string name, int riffSize,
+                                                    int dataDelta, int trailing)
+        {
+            string path = WriteWavSized(directory, name, 0, dataDelta, trailing);
+            byte[] bytes = File.ReadAllBytes(path);
+            BitConverter.GetBytes(riffSize).CopyTo(bytes, 4);
+            File.WriteAllBytes(path, bytes);
+            return path;
+        }
+
+        /** A PCM16 WAV carrying a 'junk' chunk whose declared size runs past the end of the file. */
+        private static string WriteWavJunk(string directory, string name, bool beforeData)
+        {
+            byte[] payload = Ramp(1600);
+            string path = Path.Combine(directory, name);
+            using (var stream = new FileStream(path, FileMode.Create, FileAccess.Write))
+            using (var writer = new BinaryWriter(stream))
+            {
+                writer.Write(new char[] { 'R', 'I', 'F', 'F' });
+                writer.Write(4 + 8 + 16 + 8 + 16 + 8 + payload.Length);
+                writer.Write(new char[] { 'W', 'A', 'V', 'E' });
+                writer.Write(new char[] { 'f', 'm', 't', ' ' });
+                writer.Write(16);
+                writer.Write((ushort)1);
+                writer.Write((ushort)1);
+                writer.Write(8000);
+                writer.Write(16000);
+                writer.Write((ushort)2);
+                writer.Write((ushort)16);
+                Action junk = delegate()
+                {
+                    writer.Write(new char[] { 'J', 'U', 'N', 'K' });
+                    writer.Write(1000000);                       // far past the end of the file
+                    writer.Write(new byte[16]);
+                };
+                if (beforeData) junk();
+                writer.Write(new char[] { 'd', 'a', 't', 'a' });
+                writer.Write(payload.Length);
+                writer.Write(payload);
+                if (!beforeData) junk();
+            }
+            return path;
+        }
+
         private static byte[] Ramp(int count)
         {
             var bytes = new byte[count];
@@ -442,6 +519,83 @@ namespace Cna.Xna40.AudioOracle
                 string garbage = Path.Combine(work, "i_garbage.wav");
                 File.WriteAllBytes(garbage, new byte[] { 1, 2, 3, 4 });
                 probe("garbage", garbage);
+                return builder.ToString();
+            });
+
+            // plans/plan_xna_sample_xnb_sweep.md XNASWEEP-192: what bounds a chunk -- the RIFF
+            // form's declared size, or the file. SAMPLE-145's `Whoosh` WAVs each declare a RIFF
+            // size 68 bytes short of the file, which is exactly the `smpl` chunk somebody inserted
+            // after that size was computed, so the `data` chunk ends at the end of the file and
+            // past the end of the form. XNA built all six.
+            Record("wav/riff-size", () =>
+            {
+                var builder = new StringBuilder();
+                Action<string, string> probe = delegate(string label, string path)
+                {
+                    if (builder.Length > 0) builder.Append(' ');
+                    try
+                    {
+                        var importer = new WavImporter();
+                        AudioContent audio = importer.Import(path, new ProbeImporterContext());
+                        builder.Append(label + "=[" + Describe(audio) + "]");
+                    }
+                    catch (Exception error) { builder.Append(label + "=" + error.GetType().Name); }
+                };
+                // Every case is the same 1,600-byte PCM16 payload; only the two size fields and
+                // what follows the data chunk change. `exact` is the negative control.
+                probe("exact", WriteWavSized(work, "r_exact.wav", 0, 0, 0));
+                probe("riff_short_by_a_chunk", WriteWavSized(work, "r_short68.wav", -68, 0, 0));
+                probe("riff_short_by_one", WriteWavSized(work, "r_short1.wav", -1, 0, 0));
+                probe("riff_short_half_data", WriteWavSized(work, "r_shorthalf.wav", -800, 0, 0));
+                probe("riff_zero", WriteWavSized(work, "r_zero.wav", int.MinValue, 0, 0));
+                probe("riff_long_by_100", WriteWavSized(work, "r_long100.wav", 100, 0, 0));
+                probe("data_past_the_file", WriteWavSized(work, "r_datapast.wav", 0, 400, 0));
+                probe("data_short_by_400", WriteWavSized(work, "r_datashort.wav", 0, -400, 0));
+                probe("trailing_bytes", WriteWavSized(work, "r_trailing.wav", 0, 0, 64));
+                return builder.ToString();
+            });
+
+            // XNASWEEP-192, second round: where the refusal actually is, and what a `data` chunk
+            // that runs past the end of the file comes back holding.
+            Record("wav/riff-size-threshold", () =>
+            {
+                var builder = new StringBuilder();
+                Action<string, string> probe = delegate(string label, string path)
+                {
+                    if (builder.Length > 0) builder.Append(' ');
+                    try
+                    {
+                        var importer = new WavImporter();
+                        AudioContent audio = importer.Import(path, new ProbeImporterContext());
+                        var bytes = new byte[audio.Data.Count];
+                        audio.Data.CopyTo(bytes, 0);
+                        int trailingZeros = 0;
+                        while (trailingZeros < bytes.Length &&
+                               bytes[bytes.Length - 1 - trailingZeros] == 0) trailingZeros++;
+                        builder.Append(label + "=[dataLength=" + bytes.Length + " trailingZeros=" +
+                                       trailingZeros + "]");
+                    }
+                    catch (Exception error) { builder.Append(label + "=" + error.GetType().Name); }
+                };
+                foreach (int absolute in new int[] { 0, 1, 2, 3, 4, 11, 12, 20, 36, 1636, -1 })
+                {
+                    probe("riff_" + absolute,
+                          WriteWavSizedAbsolute(work, "t_riff" + absolute + ".wav", absolute, 0, 0));
+                }
+                probe("data_past_by_400", WriteWavSized(work, "t_datapast400.wav", 0, 400, 0));
+                probe("data_past_by_4000", WriteWavSized(work, "t_datapast4000.wav", 0, 4000, 0));
+                // Bytes after the last chunk, too few to be another chunk header. A walk bounded
+                // by the file has to decide what to do with them.
+                foreach (int trailing in new int[] { 1, 2, 3, 7, 8, 9 })
+                {
+                    probe("trailing_" + trailing,
+                          WriteWavSized(work, "t_trail" + trailing + ".wav", 0, 0, trailing));
+                }
+                // A junk chunk whose own size runs past the end of the file, once after the data
+                // chunk and once before it. This is what says whether a chunk the walk cannot read
+                // ends the walk or the file.
+                probe("junk_after_data", WriteWavJunk(work, "t_junkafter.wav", false));
+                probe("junk_before_data", WriteWavJunk(work, "t_junkbefore.wav", true));
                 return builder.ToString();
             });
 

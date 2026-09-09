@@ -204,26 +204,29 @@ namespace CNA::Content::Cnb
             FailWav(origin, "is not a RIFF/WAVE file.");
         }
 
-        // The RIFF header's own length field bounds the chunk list, and it is checked rather than
-        // ignored (plans/plan_cnb.md CNBF-117). A declared length longer than the file is a
-        // truncated download; a shorter one means the chunks after it are not part of this RIFF
-        // form and must not be walked into.
+        // The RIFF header's length field is checked for one thing only -- that it is at least the
+        // four bytes of its own 'WAVE' form identifier -- and bounds nothing. That is measured on
+        // the genuine `WavImporter` rather than assumed
+        // (tests/reference/xna40/audio/audio-content-oracle.json, `wav/riff-size` and
+        // `wav/riff-size-threshold`): a length of 0, 1, 2 or 3 is refused and every other value is
+        // accepted, including one that cuts the 'data' chunk in half, one 100 bytes past the end
+        // of the file, and `0xFFFFFFFF` -- all of which answer the whole of the declared 'data'
+        // chunk. SAMPLE-145's six `Whoosh` WAVs are the corpus's own case: each declares a length
+        // 68 bytes short of the file, which is exactly the `smpl` chunk somebody inserted after
+        // that length was computed, and XNA built all six
+        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-192`). This replaces the stricter reading
+        // `plans/plan_cnb.md` CNBF-117 chose before the importer had been measured.
         const std::uint32_t riffSize = ReadU32(wavBytes, 4u);
         if (riffSize < 4u)
         {
             FailWav(origin, "declares a RIFF length of " + std::to_string(riffSize) +
                                 " bytes, too short even for its own 'WAVE' form identifier.");
         }
-        if (static_cast<std::uint64_t>(riffSize) + 8u > wavBytes.size())
-        {
-            FailWav(origin, "declares a RIFF length of " + std::to_string(riffSize) +
-                                " bytes, which runs past the end of the " +
-                                std::to_string(wavBytes.size()) + "-byte file by " +
-                                std::to_string(static_cast<std::uint64_t>(riffSize) + 8u -
-                                               wavBytes.size()) +
-                                " byte(s).");
-        }
-        const std::size_t riffEnd = 8u + static_cast<std::size_t>(riffSize);
+        // The chunk walk is bounded by the file. A chunk that runs past *that* is still refused:
+        // the genuine importer answers it by reading past its own buffer -- a 1,600-byte payload
+        // whose 'data' chunk claims 4,000 more comes back 5,600 bytes long, and what those 4,000
+        // hold differs from run to run -- so there is no answer to reproduce.
+        const std::size_t fileEnd = wavBytes.size();
 
         bool haveFmt = false;
         std::uint16_t formatTag = 0u;
@@ -237,21 +240,37 @@ namespace CNA::Content::Cnb
         std::uint32_t loopStart = 0u;
         std::uint32_t loopLength = 0u;
 
-        // One pass over the chunk list, bounded by the RIFF form rather than by the file. Chunks
-        // are word-aligned and a chunk that claims to extend past the form is malformed, not
-        // something to read anyway.
+        // One pass over the chunk list, bounded by the file. A chunk whose declared size runs past
+        // the end of the file **ends the walk** rather than failing the import, which is what the
+        // genuine importer does and is separately measured: a chunk of an impossible size placed
+        // after the 'data' chunk is accepted and the same chunk placed before it is refused, so
+        // what fails is having no 'data' rather than the unreadable chunk itself
+        // (tests/reference/xna40/audio/audio-content-oracle.json `wav/riff-size-threshold`,
+        // `junk_after_data` and `junk_before_data`; plans/plan_xna_sample_xnb_sweep.md
+        // `XNASWEEP-192`). The same measurement is why trailing bytes too few to be another chunk
+        // header are ignored: one through nine of them are all accepted.
+        //
+        // The one deliberate divergence is a 'fmt ' or 'data' chunk that itself runs past the end
+        // of the file. XNA reads it anyway, past its own buffer: a 1,600-byte payload whose 'data'
+        // declares 4,000 more comes back 5,600 bytes long and the extra 4,000 differ from run to
+        // run. There is no answer to reproduce, so CNA refuses by name.
         std::size_t pos = 12u;
-        while (pos + 8u <= riffEnd)
+        while (pos + 8u <= fileEnd)
         {
             const std::uint8_t* id = wavBytes.data() + pos;
             const std::string idText(reinterpret_cast<const char*>(id), 4);
             const std::uint32_t chunkSize = ReadU32(wavBytes, pos + 4u);
             const std::size_t start = pos + 8u;
-            if (static_cast<std::uint64_t>(start) + chunkSize > riffEnd)
+            if (static_cast<std::uint64_t>(start) + chunkSize > fileEnd)
             {
-                FailWav(origin, "has a '" + idText + "' chunk claiming " +
-                                    std::to_string(chunkSize) +
-                                    " bytes, which runs past the end of the RIFF form.");
+                if (idText == "fmt " || idText == "data")
+                {
+                    FailWav(origin, "has a '" + idText + "' chunk claiming " +
+                                        std::to_string(chunkSize) +
+                                        " bytes, which runs past the end of the " +
+                                        std::to_string(wavBytes.size()) + "-byte file.");
+                }
+                break;
             }
             const std::size_t chunkEnd = start + chunkSize;
 
@@ -388,18 +407,12 @@ namespace CNA::Content::Cnb
             // and refusing on it would reject files every other tool plays.
             //
             // The pad byte is required only when something FOLLOWS the chunk: an odd-length chunk
-            // ending exactly at the form's end needs none, and every real encoder omits it there.
-            // `chunkEnd` cannot exceed `riffEnd` -- the bound above already refused that -- so the
+            // ending exactly at the file's end needs none, and every real encoder omits it there.
+            // `chunkEnd` cannot exceed `fileEnd` -- the bound above already stopped that -- so the
             // two cases here are the whole space.
             std::size_t next = chunkEnd;
-            if ((chunkSize & 1u) != 0u && chunkEnd < riffEnd) { next = chunkEnd + 1u; }
+            if ((chunkSize & 1u) != 0u && chunkEnd < fileEnd) { next = chunkEnd + 1u; }
             pos = next;
-        }
-        if (pos != riffEnd)
-        {
-            FailWav(origin, "has " + std::to_string(riffEnd - pos) +
-                                " byte(s) after its last chunk, too few to be another chunk "
-                                "header; the RIFF form and its chunk list disagree.");
         }
 
         if (!haveFmt) { FailWav(origin, "has no 'fmt ' chunk."); }
