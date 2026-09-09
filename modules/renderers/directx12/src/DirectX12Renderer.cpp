@@ -779,19 +779,56 @@ namespace CNA::Internal::Renderers::DirectX12
             FreeRtvDescriptorEXT(rtv);
             rtv = D3D12_CPU_DESCRIPTOR_HANDLE{};
         }
+        resourceStates_.UntrackResource(depthStencilResource_.Get());
         FreeDsvDescriptorEXT(depthStencilViewEXT_);
         depthStencilViewEXT_ = D3D12_CPU_DESCRIPTOR_HANDLE{};
         depthStencilResource_.Reset();
+        resourceStates_.UntrackResource(backBufferMsaaResource_.Get());
         FreeRtvDescriptorEXT(backBufferMsaaRtv_);
         backBufferMsaaRtv_ = D3D12_CPU_DESCRIPTOR_HANDLE{};
         backBufferMsaaResource_.Reset();
         appliedMultiSampleCount_ = 0;
-        for (auto& res : backBufferResources_) res.Reset();
+        for (auto& res : backBufferResources_)
+        {
+            resourceStates_.UntrackResource(res.Get());
+            res.Reset();
+        }
         // DX-241: the implicit off-screen back buffer is exactly as device-tied as the real one,
         // and shares the depth-stencil released just above.
+        resourceStates_.UntrackResource(offscreenBackBufferResource_.Get());
         FreeRtvDescriptorEXT(offscreenBackBufferRtv_);
         offscreenBackBufferRtv_ = D3D12_CPU_DESCRIPTOR_HANDLE{};
         offscreenBackBufferResource_.Reset();
+    }
+
+    void DirectX12Renderer::EnsureSwapChainSize()
+    {
+        if (!swapChainAvailable_ || !swapChain_ || !surface_) return;
+
+        const auto drawableSize = surface_->GetDrawableSize();
+        const int w = drawableSize.width;
+        const int h = drawableSize.height;
+        if (w <= 0 || h <= 0 || (w == width_ && h == height_)) return;
+
+        // ResizeBuffers requires every back-buffer reference to be released, and releasing any
+        // surface or descriptor while queued work still references it is invalid. Drain first,
+        // then tear down only the window-size lifetime group.
+        WaitForGpuIdle();
+        ReleaseWindowSizeDependentViews();
+
+        const UINT flags = allowTearingSupported_ ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0;
+        const HRESULT hr = swapChain_->ResizeBuffers(
+            0, static_cast<UINT>(w), static_cast<UINT>(h), DXGI_FORMAT_UNKNOWN, flags);
+        if (FAILED(hr))
+        {
+            CheckDeviceRemovedEXT(hr);
+            throw std::runtime_error(
+                "IDXGISwapChain3::ResizeBuffers failed, hr=" + FormatHr(hr));
+        }
+
+        width_ = w;
+        height_ = h;
+        CreateWindowSizeDependentViews();
     }
 
     D3D12_CPU_DESCRIPTOR_HANDLE DirectX12Renderer::AllocateRtvDescriptorEXT()
@@ -894,6 +931,13 @@ namespace CNA::Internal::Renderers::DirectX12
     void DirectX12Renderer::ExecuteCommandListAndWaitEXT(ID3D12CommandList* commandList)
     {
         commandQueue_->ExecuteCommandLists(1, &commandList);
+
+        WaitForGpuIdle();
+    }
+
+    void DirectX12Renderer::WaitForGpuIdle()
+    {
+        if (!commandQueue_ || !fence_ || !fenceEvent_) return;
 
         const std::uint64_t valueToSignal = nextFenceValue_++;
         HRESULT hr = commandQueue_->Signal(fence_.Get(), valueToSignal);
@@ -1656,6 +1700,8 @@ namespace CNA::Internal::Renderers::DirectX12
             NotYetImplemented("Present (no swap chain and no implicit off-screen back buffer -- "
                               "the device was never fully constructed)");
         }
+
+        EnsureSwapChainSize();
 
         // DX-116: transition the current back buffer to PRESENT before calling Present() -- D3D12's
         // own explicit-barrier requirement, unlike D3D11's implicit driver-managed transitions

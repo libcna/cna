@@ -15,7 +15,7 @@ function(cna_register_d3d_parity_tests)
 
     macro(cna_d3d_parity_fixture)
         cmake_parse_arguments(F
-            "DIRECTX11_ONLY;DIRECTX12_ONLY;DIRECTX12_NO_HEADLESS"
+            "DIRECTX11_ONLY;DIRECTX12_ONLY;DIRECTX12_NO_HEADLESS;DIRECTX12_PROTON"
             "NAME;TARGET;SOURCE;DIRECTX11_TIMEOUT;DIRECTX12_TIMEOUT;DIRECTX12_ORDER;REASON;DIRECTX11_ENVIRONMENT;WORKING_DIRECTORY"
             ""
             ${ARGN})
@@ -41,6 +41,7 @@ function(cna_register_d3d_parity_tests)
         set(_cna_d3d_fixture_${F_NAME}_DIRECTX11_ONLY "${F_DIRECTX11_ONLY}")
         set(_cna_d3d_fixture_${F_NAME}_DIRECTX12_ONLY "${F_DIRECTX12_ONLY}")
         set(_cna_d3d_fixture_${F_NAME}_DIRECTX12_NO_HEADLESS "${F_DIRECTX12_NO_HEADLESS}")
+        set(_cna_d3d_fixture_${F_NAME}_DIRECTX12_PROTON "${F_DIRECTX12_PROTON}")
         set(_cna_d3d_fixture_${F_NAME}_DIRECTX11_ENVIRONMENT "${F_DIRECTX11_ENVIRONMENT}")
         set(_cna_d3d_fixture_${F_NAME}_WORKING_DIRECTORY "${F_WORKING_DIRECTORY}")
         set(_cna_d3d_fixture_${F_NAME}_REASON "${F_REASON}")
@@ -920,8 +921,7 @@ function(cna_register_d3d_parity_tests)
     cna_d3d_parity_fixture(
         NAME ViewportResetAfterResize TARGET viewport_reset_after_resize
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/viewport_reset_after_resize_test.cpp"
-        DIRECTX11_TIMEOUT 300 DIRECTX11_ONLY
-        REASON "D3D12 swap-chain resize and its public resize proof remain DX-218")
+        DIRECTX11_TIMEOUT 300 DIRECTX12_TIMEOUT 900 DIRECTX12_PROTON)
 
     list(SORT _cna_d3d_fixture_keys)
     foreach(_cna_d3d_fixture_key IN LISTS _cna_d3d_fixture_keys)
@@ -953,7 +953,13 @@ function(cna_register_d3d_parity_tests)
             endif()
             set(_cna_d3d_target "cna_test_directx12_${_cna_d3d_fixture_${_cna_d3d_fixture}_TARGET}")
             cna_directx12_test(${_cna_d3d_target} "${_cna_d3d_fixture_${_cna_d3d_fixture}_SOURCE}")
-            cna_directx12_ctest_command(_cna_d3d_command ${_cna_d3d_target})
+            if(_cna_d3d_fixture_${_cna_d3d_fixture}_DIRECTX12_PROTON)
+                set(_cna_d3d_command
+                    ${CMAKE_SOURCE_DIR}/scripts/run-proton-vkd3d.sh
+                    $<TARGET_FILE:${_cna_d3d_target}>)
+            else()
+                cna_directx12_ctest_command(_cna_d3d_command ${_cna_d3d_target})
+            endif()
             set(_cna_d3d_timeout "${_cna_d3d_fixture_${_cna_d3d_fixture}_DIRECTX12_TIMEOUT}")
             if(NOT _cna_d3d_timeout)
                 set(_cna_d3d_timeout 300)
@@ -963,7 +969,8 @@ function(cna_register_d3d_parity_tests)
                 COMMAND ${_cna_d3d_command}
                 TIMEOUT ${_cna_d3d_timeout}
                 LABELS "DIRECTX12")
-            if(NOT _cna_d3d_fixture_${_cna_d3d_fixture}_DIRECTX12_NO_HEADLESS)
+            if(NOT _cna_d3d_fixture_${_cna_d3d_fixture}_DIRECTX12_NO_HEADLESS
+               AND NOT _cna_d3d_fixture_${_cna_d3d_fixture}_DIRECTX12_PROTON)
                 list(APPEND _cna_d3d_registration
                     ENVIRONMENT "CNA_FORCE_HEADLESS_DEVICE_EXT=DIRECTX12")
             endif()

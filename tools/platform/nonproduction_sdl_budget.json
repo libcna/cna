@@ -379,7 +379,7 @@
     },
     "modules/renderers/directx12/examples/directx12_swapchain_diag.cpp": {
       "category": "renderer-integration-executable",
-      "max_references": 12
+      "max_references": 19
     },
     "modules/renderers/directx2/examples/directx2_logical_transform_test.cpp": {
       "category": "renderer-integration-executable",

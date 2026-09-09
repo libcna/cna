@@ -726,6 +726,8 @@ namespace CNA::Internal::Renderers::DirectX12
         /// mean. EasyGL always has framebuffer 0 and D3D11 always has a swap chain; this is D3D12's
         /// equivalent of the target that is simply always there.
         void CreateOffscreenBackBufferResources();
+        /** @brief Resizes a live swap chain to the latest platform drawable size when needed. */
+        void EnsureSwapChainSize();
         /// Rebuilds the default multisampled colour surface and matching depth-stencil resource,
         /// then binds that colour surface (or the single-sample destination when MSAA is off).
         void RecreateDefaultRenderSurfaces(int requestedMultiSampleCount);
@@ -736,13 +738,12 @@ namespace CNA::Internal::Renderers::DirectX12
         [[nodiscard]] D3D12_CPU_DESCRIPTOR_HANDLE GetBackBufferDrawRtvEXT() const;
 
         [[nodiscard]] Matrix ApplyXnaPixelCenterEXT(const Matrix& transform) const;
-        /// DX-116: releases every window-size-dependent resource CreateWindowSizeDependentViews()
-        /// created -- back-buffer resources/RTV handles and the depth-stencil resource/DSV handle
-        /// (RTV/DSV heap slot *indices* are not reclaimed, matching DX-103's own documented
-        /// no-free-list-yet bump-allocator simplification). Used by RecreateDeviceEXT() (DX-110)
-        /// before tearing down the whole device; window resize (D3D11's own DX-29 equivalent) is
-        /// real, scoped follow-up work this task does not attempt.
+        /// DX-116/DX-218: releases every window-size-dependent resource and returns its RTV/DSV
+        /// descriptors to the fence-safe allocators. Used by resize and device recreation.
         void ReleaseWindowSizeDependentViews();
+
+        /** @brief Signals the direct queue and blocks until all prior work has completed. */
+        void WaitForGpuIdle();
 
         /// DX-111: lazily creates (once) an UPLOAD-heap, persistently-mapped constant buffer of
         /// exactly @p byteWidth bytes -- the standard D3D12 dynamic-CB idiom (map once at creation,
