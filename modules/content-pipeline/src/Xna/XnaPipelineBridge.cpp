@@ -676,7 +676,13 @@ namespace CNA::Content::Pipeline
                                     resolvedProcessorName, nestedParameters);
                 sibling != nullptr && sibling->logicalName != context_->LogicalName())
             {
-                context_->AddContentBuildDependency(sibling->logicalName);
+                // A *runtime* reference and not a build dependency. Nothing of the item's output
+                // reaches this one -- only its name does -- so this node neither waits for it nor
+                // rebuilds when it changes, and it does not fail when the item does. That last is
+                // the measured behaviour rather than a convenience: XNA's own Windows Phone build
+                // of SAMPLE-028 wrote a `Car.xnb` naming `ReplaceColor` and no `ReplaceColor.xnb`
+                // beside it, because the effect's own node failed and the model's did not
+                // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-174`).
                 context_->AddRuntimeReference(sibling->logicalName);
                 return outputPath(sibling->logicalName);
             }
@@ -820,10 +826,13 @@ namespace CNA::Content::Pipeline
         }
         const ContentProcessorParameters parameters = ToProcessorParameters(processorParameters);
         processor->ValidateParameters(parameters);
+        // The conversion is part of the same build and its own nested builds must see the same
+        // items: `MaterialProcessor` is reached only through `Convert`, and it is what asks for a
+        // material's effect (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-174`).
         CanonicalProcessorContext nested(context_->SourceRoot(), context_->SourcePath(), context_->LogicalName(),
                                        processor->Identity().name, parameters, context_->ExternalSourceRoots(),
                                        context_->Dependencies(), context_->Logger(), context_->OutputFormat(),
-                                       context_->Environment(), pipeline);
+                                       context_->Environment(), pipeline, context_->SiblingsShared());
         Xna::ContentObject result = processor->Process(input, nested);
         if (result.StableType() != outputTypeName)
         {
