@@ -32,28 +32,59 @@ protected:
     }
 };
 
-// Real devices only, sorted by id. The provider used to prepend a synthetic "Default Device"
-// entry, reproducing FNA; XNA's Microphone.Default is a real enumerated device, and CLAUDE.md makes
-// XNA the tie-break. SDL3 cannot say which real device is the default, so no entry claims to be.
-TEST_F(Sdl3AudioRecordingDeviceTests, ProviderEnumeratesOnlyRealDevicesSortedById)
+// Real devices only, the host's default first, the rest by id. The provider used to prepend a
+// synthetic "Default Device" entry, reproducing FNA; XNA's Microphone.Default is a real enumerated
+// device, and CLAUDE.md makes XNA the tie-break.
+TEST_F(Sdl3AudioRecordingDeviceTests, ProviderEnumeratesOnlyRealDevicesWithNoInventedName)
 {
     Sdl3AudioRecordingDeviceProvider provider;
     const auto devices = provider.GetDevices();
     ASSERT_GE(devices.size(), 1u);
     EXPECT_EQ(std::count_if(devices.begin(), devices.end(), [](const auto& info)
     {
-        return info.isDefault;
-    }), 0);
-    EXPECT_EQ(std::count_if(devices.begin(), devices.end(), [](const auto& info)
-    {
         return info.name == "Default Device";
     }), 0);
-    EXPECT_TRUE(std::is_sorted(devices.begin(), devices.end(), [](const auto& left,
-                                                                 const auto& right)
+    EXPECT_LE(std::count_if(devices.begin(), devices.end(), [](const auto& info)
     {
-        return left.id < right.id;
-    }));
+        return info.isDefault;
+    }), 1);
     EXPECT_EQ(provider.CreateDevice(0), nullptr);
+}
+
+// Microphone::Default is All[0], so ordering decides which device a game records from. Sorting by
+// id alone regressed SAMPLE-098 on native: the first entry became the machine's second,
+// unconnected microphone, so the sample captured silence. When the backend can name the default --
+// SDL_GetAudioDeviceName resolves the default pseudo-id -- that device must come first, and the
+// remainder stay in id order.
+TEST_F(Sdl3AudioRecordingDeviceTests, TheHostDefaultComesFirstAndTheRestStayInIdOrder)
+{
+    Sdl3AudioRecordingDeviceProvider provider;
+    const auto devices = provider.GetDevices();
+    ASSERT_GE(devices.size(), 1u);
+
+    const bool defaultKnown = std::any_of(devices.begin(), devices.end(), [](const auto& info)
+    {
+        return info.isDefault;
+    });
+    if (defaultKnown)
+    {
+        EXPECT_TRUE(devices.front().isDefault)
+            << "a known default must be All[0]; Microphone::Default reads exactly that entry";
+        EXPECT_TRUE(std::is_sorted(devices.begin() + 1, devices.end(), [](const auto& left,
+                                                                         const auto& right)
+        {
+            return left.id < right.id;
+        }));
+    }
+    else
+    {
+        // No default identified: plain id order, nothing claiming to be something it is not.
+        EXPECT_TRUE(std::is_sorted(devices.begin(), devices.end(), [](const auto& left,
+                                                                     const auto& right)
+        {
+            return left.id < right.id;
+        }));
+    }
 }
 
 TEST_F(Sdl3AudioRecordingDeviceTests, OpenStartsCaptureAndCloseIsIdempotent)
