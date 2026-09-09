@@ -3,7 +3,9 @@
 #include <gtest/gtest.h>
 #include "Microsoft/Xna/Framework/Graphics/DisplayMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
 
+using Microsoft::Xna::Framework::Rectangle;
 using Microsoft::Xna::Framework::Graphics::DisplayMode;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 
@@ -90,6 +92,21 @@ TEST(DisplayModeTest, FormatReturnsBgr565WhenSet)
 {
     DisplayMode dm(640, 480, SurfaceFormat::Bgr565);
     EXPECT_EQ(dm.getFormatProperty(), SurfaceFormat::Bgr565);
+}
+
+// --- TitleSafeArea / ToString ---
+
+TEST(DisplayModeTest, TitleSafeAreaCoversFullMode)
+{
+    const DisplayMode dm(1920, 1080, SurfaceFormat::Color);
+    EXPECT_EQ(dm.getTitleSafeAreaProperty(), Rectangle(0, 0, 1920, 1080));
+}
+
+TEST(DisplayModeTest, ToStringMatchesXnaFieldOrderAndSinglePrecision)
+{
+    const DisplayMode dm(1920, 1080, SurfaceFormat::Color);
+    EXPECT_EQ(dm.ToString(),
+              "{Width:1920 Height:1080 Format:Color AspectRatio:1.777778}");
 }
 
 // --- Equality ---

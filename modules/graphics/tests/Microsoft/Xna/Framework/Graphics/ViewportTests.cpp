@@ -351,3 +351,12 @@ TEST(ViewportTest, ToStringFormat)
     EXPECT_EQ(vp.ToString(),
               "{X:1 Y:2 Width:640 Height:480 MinDepth:0.25 MaxDepth:0.75}");
 }
+
+TEST(ViewportTest, ToStringUsesXnaSingleDefaultPrecision)
+{
+    Viewport vp(1, 2, 3, 4);
+    vp.setMinDepthProperty(1.0f / 3.0f);
+    vp.setMaxDepthProperty(2.0f / 3.0f);
+    EXPECT_EQ(vp.ToString(),
+              "{X:1 Y:2 Width:3 Height:4 MinDepth:0.3333333 MaxDepth:0.6666667}");
+}

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
+#include <iomanip>
 #include <sstream>
 #include <string>
 
@@ -109,7 +110,8 @@ namespace Microsoft::Xna::Framework::Graphics
     std::string Viewport::ToString() const
     {
         std::ostringstream result;
-        result << "{X:" << X_
+        result << std::setprecision(7)
+               << "{X:" << X_
                << " Y:" << Y_
                << " Width:" << Width_
                << " Height:" << Height_
