@@ -432,6 +432,10 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   partial `SetData`/`GetData` rejects both short and surplus element counts before mutation, and
   null/count/box failures expose Microsoft's named `System::Argument*Exception` families rather
   than renderer-independent native C++ exceptions.
+- **Compiled Effect texture access respects reflected types** (`SOFTWARE-264`) — the shared public
+  layer rejects incompatible texture getters and non-texture setters with `InvalidCastException`,
+  while generic `Texture` parameters accept every classic dimension. This is executable on
+  compiled-capable EasyGL; Software continues to report that larger subsystem unsupported.
 - **The classic SpriteBatch/SpriteFont parity corpus executes on the CPU** (`SOFTWARE-138`).
   Eighteen renderer-independent scenes shared with EasyGL cover flips, rotation/origin, both scale
   overloads, source rectangles, layer sorting, transforms, render targets, viewports, scissor,

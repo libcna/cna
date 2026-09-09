@@ -33,6 +33,7 @@
 #include "System/NotSupportedException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentException.hpp"
+#include "System/InvalidCastException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 #include "CNA/TestSupport/TestPaths.hpp"
@@ -83,6 +84,14 @@ namespace
         const std::filesystem::path path =
             CNA::TestSupport::CompiledEffectFixtureDirectory() /
             "racing-shadow-map-xna4.fxb";
+        std::ifstream input(path, std::ios::binary);
+        return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+    }
+
+    std::vector<SharpRuntime::bytecs> LoadConformanceCompiledEffectFixture()
+    {
+        const std::filesystem::path path =
+            CNA::TestSupport::CompiledEffectDirectory() / "CnaConformanceEffect.fxb";
         std::ifstream input(path, std::ios::binary);
         return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
     }
@@ -253,6 +262,47 @@ TEST(EffectTest, StructurallyValidFxReachesRendererCapabilityGate)
     {
         EXPECT_NO_THROW(TestEffect(gd, validEffect));
     }
+}
+
+TEST(EffectTest, CompiledTextureAccessorsValidateTheReflectedParameterType)
+{
+    GraphicsDevice gd;
+    const auto typedBytes = LoadValidCompiledEffectFixture();
+    const auto genericBytes = LoadConformanceCompiledEffectFixture();
+    ASSERT_FALSE(typedBytes.empty());
+    ASSERT_FALSE(genericBytes.empty());
+
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+    {
+        GTEST_SKIP() << "renderer does not execute compiled effects";
+    }
+
+    TestEffect typedEffect(gd, typedBytes);
+    TestEffect genericEffect(gd, genericBytes);
+    auto* scalar = typedEffect.getParametersProperty()["DiffuseColor"];
+    auto* texture2D = typedEffect.getParametersProperty()["Texture"];
+    auto* genericTexture = genericEffect.getParametersProperty()["FxTexture"];
+    ASSERT_NE(scalar, nullptr);
+    ASSERT_NE(texture2D, nullptr);
+    ASSERT_NE(genericTexture, nullptr);
+
+    EXPECT_THROW(static_cast<void>(scalar->GetValueTexture2D()), System::InvalidCastException);
+    EXPECT_THROW(static_cast<void>(scalar->GetValueTexture3D()), System::InvalidCastException);
+    EXPECT_THROW(static_cast<void>(scalar->GetValueTextureCube()), System::InvalidCastException);
+    EXPECT_THROW(scalar->SetValue(static_cast<Microsoft::Xna::Framework::Graphics::Texture*>(nullptr)),
+                 System::InvalidCastException);
+
+    EXPECT_EQ(texture2D->GetValueTexture2D(), nullptr);
+    EXPECT_THROW(static_cast<void>(texture2D->GetValueTexture3D()),
+                 System::InvalidCastException);
+    EXPECT_THROW(static_cast<void>(texture2D->GetValueTextureCube()),
+                 System::InvalidCastException);
+    EXPECT_NO_THROW(texture2D->SetValue(
+        static_cast<Microsoft::Xna::Framework::Graphics::Texture2D*>(nullptr)));
+
+    EXPECT_EQ(genericTexture->GetValueTexture2D(), nullptr);
+    EXPECT_EQ(genericTexture->GetValueTexture3D(), nullptr);
+    EXPECT_EQ(genericTexture->GetValueTextureCube(), nullptr);
 }
 
 TEST(EffectTest, AuthenticXna4EffectAcceptsRepeatedAndAuxiliaryObjectRecords)

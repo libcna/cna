@@ -275,6 +275,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Gets the value of this parameter as a Texture2D pointer.
          *
          * @return Pointer to the Texture2D, or nullptr if none is set.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a
+         *         Texture or Texture2D parameter.
          */
         [[nodiscard]] Texture2D* GetValueTexture2D() const;
 
@@ -282,6 +284,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Gets the value of this parameter as a Texture3D pointer.
          *
          * @return Pointer to the Texture3D, or nullptr if none is set.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a
+         *         Texture or Texture3D parameter.
          */
         [[nodiscard]] Texture3D* GetValueTexture3D() const;
 
@@ -289,6 +293,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Gets the value of this parameter as a TextureCube pointer.
          *
          * @return Pointer to the TextureCube, or nullptr if none is set.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a
+         *         Texture or TextureCube parameter.
          */
         [[nodiscard]] TextureCube* GetValueTextureCube() const;
 
@@ -433,6 +439,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the value of this parameter from a base Texture pointer.
          *
          * @param value Pointer to the texture to bind.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a
+         *         texture parameter.
          */
         void SetValue(Texture* value);
 
@@ -440,6 +448,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the value of this parameter from a Texture2D pointer.
          *
          * @param value Pointer to the Texture2D to bind.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a
+         *         texture parameter.
          */
         void SetValue(Texture2D* value);
 
@@ -447,6 +457,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the value of this parameter from a Texture3D pointer.
          *
          * @param value Pointer to the Texture3D to bind.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a
+         *         texture parameter.
          */
         void SetValue(Texture3D* value);
 
@@ -454,6 +466,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the value of this parameter from a TextureCube pointer.
          *
          * @param value Pointer to the TextureCube to bind.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a
+         *         texture parameter.
          */
         void SetValue(TextureCube* value);
 
@@ -475,6 +489,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
         void RequireStringParameter(const char* operation) const;
         void RequireNumericParameter(const char* operation) const;
+        void RequireTextureGetterParameter(EffectParameterType requestedType) const;
+        void RequireTextureSetterParameter() const;
 
         [[nodiscard]] bool IsCompiledInternal() const noexcept;
         [[nodiscard]] const void* GetRawValueInternal() const noexcept;

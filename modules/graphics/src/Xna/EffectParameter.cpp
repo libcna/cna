@@ -292,6 +292,27 @@ namespace Microsoft::Xna::Framework::Graphics
             "), whose value storage is an effect object-table index rather than a number.");
     }
 
+    void EffectParameter::RequireTextureGetterParameter(EffectParameterType requestedType) const
+    {
+        if (paramType_ == EffectParameterType::Texture || paramType_ == requestedType) return;
+        throw System::InvalidCastException();
+    }
+
+    void EffectParameter::RequireTextureSetterParameter() const
+    {
+        switch (paramType_)
+        {
+            case EffectParameterType::Texture:
+            case EffectParameterType::Texture1D:
+            case EffectParameterType::Texture2D:
+            case EffectParameterType::Texture3D:
+            case EffectParameterType::TextureCube:
+                return;
+            default:
+                throw System::InvalidCastException();
+        }
+    }
+
     Matrix EffectParameter::GetValueMatrix() const
     {
         RequireNumericParameter("GetValueMatrix");
@@ -510,18 +531,21 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     Texture2D* EffectParameter::GetValueTexture2D() const
     {
-        return compiledStorage_ ? dynamic_cast<Texture2D*>(compiledStorage_->texture)
-                                : texture2DData_;
+        if (!compiledStorage_) return texture2DData_;
+        RequireTextureGetterParameter(EffectParameterType::Texture2D);
+        return dynamic_cast<Texture2D*>(compiledStorage_->texture);
     }
     Texture3D* EffectParameter::GetValueTexture3D() const
     {
-        return compiledStorage_ ? dynamic_cast<Texture3D*>(compiledStorage_->texture)
-                                : texture3DData_;
+        if (!compiledStorage_) return texture3DData_;
+        RequireTextureGetterParameter(EffectParameterType::Texture3D);
+        return dynamic_cast<Texture3D*>(compiledStorage_->texture);
     }
     TextureCube* EffectParameter::GetValueTextureCube() const
     {
-        return compiledStorage_ ? dynamic_cast<TextureCube*>(compiledStorage_->texture)
-                                : textureCubeData_;
+        if (!compiledStorage_) return textureCubeData_;
+        RequireTextureGetterParameter(EffectParameterType::TextureCube);
+        return dynamic_cast<TextureCube*>(compiledStorage_->texture);
     }
 
     // --- SetValue ---
@@ -639,6 +663,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (compiledStorage_)
         {
+            RequireTextureSetterParameter();
             compiledStorage_->texture = v;
             compiledStorage_->dirty = true;
             return;
