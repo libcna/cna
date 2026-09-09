@@ -3827,6 +3827,22 @@ namespace Microsoft::Xna::Framework::Graphics
                     std::to_string(static_cast<int>(format)) + ".");
             }
         };
+        const auto validateNpotTexture = [this](const int width, const int height, const int slot)
+        {
+            const auto isPowerOfTwo = [](const int value)
+            {
+                return value > 0 && (value & (value - 1)) == 0;
+            };
+            if (graphicsProfile_ == GraphicsProfile::Reach &&
+                (!isPowerOfTwo(width) || !isPowerOfTwo(height)) &&
+                slot >= 0 && slot < SamplerStateCollection::MaxSamplers &&
+                (samplerStates_[slot].getAddressUProperty() != TextureAddressMode::Clamp ||
+                 samplerStates_[slot].getAddressVProperty() != TextureAddressMode::Clamp))
+            {
+                throw System::NotSupportedException(
+                    "Reach requires Clamp addressing for non-power-of-two Texture2D resources.");
+            }
+        };
 
         CNA::Internal::Renderers::GpuDrawParams currentEffectParams;
         if (drawParams == nullptr && currentEffect_ != nullptr)
@@ -3837,11 +3853,19 @@ namespace Microsoft::Xna::Framework::Graphics
         if (drawParams != nullptr)
         {
             if (drawParams->texture0 != nullptr)
+            {
                 validateFilteredTexture(
                     static_cast<SurfaceFormat>(drawParams->texture0->GetSurfaceFormatEXT()), 0);
+                validateNpotTexture(
+                    drawParams->texture0->GetWidth(), drawParams->texture0->GetHeight(), 0);
+            }
             if (drawParams->texture1 != nullptr)
+            {
                 validateFilteredTexture(
                     static_cast<SurfaceFormat>(drawParams->texture1->GetSurfaceFormatEXT()), 1);
+                validateNpotTexture(
+                    drawParams->texture1->GetWidth(), drawParams->texture1->GetHeight(), 1);
+            }
             if (drawParams->envMap != nullptr)
                 validateFilteredTexture(
                     static_cast<SurfaceFormat>(drawParams->envMap->GetSurfaceFormatEXT()), 1);
@@ -3854,7 +3878,14 @@ namespace Microsoft::Xna::Framework::Graphics
                 for (int slot = 0; slot < TextureCollection::MaxTextures; ++slot)
                 {
                     if (const Texture* texture = (*drawParams->compiledDeviceTextures)[slot])
+                    {
                         validateFilteredTexture(texture->getFormatProperty(), slot);
+                        if (const auto* texture2D = dynamic_cast<const Texture2D*>(texture))
+                        {
+                            validateNpotTexture(
+                                texture2D->getWidthProperty(), texture2D->getHeightProperty(), slot);
+                        }
+                    }
                 }
             }
         }

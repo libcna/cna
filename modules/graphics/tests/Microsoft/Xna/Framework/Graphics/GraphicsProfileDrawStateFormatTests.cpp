@@ -21,6 +21,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureAddressMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
@@ -42,11 +43,11 @@ namespace
         return parameters;
     }
 
-    class HiDefDraw
+    class ProfileDraw
     {
     public:
-        HiDefDraw()
-            : device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+        explicit ProfileDraw(const GraphicsProfile profile = GraphicsProfile::HiDef)
+            : device(GraphicsAdapter::getDefaultAdapterProperty(), profile,
                      SmallBackBuffer())
             , effect(device)
         {
@@ -75,7 +76,7 @@ namespace
 TEST(GraphicsProfileDrawStateFormatTest, FloatAndHalfTexturesRequirePurePointFiltering)
 {
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
-    HiDefDraw draw;
+    ProfileDraw draw;
     constexpr std::array restrictedFormats = {
         SurfaceFormat::Single,
         SurfaceFormat::Vector2,
@@ -105,7 +106,7 @@ TEST(GraphicsProfileDrawStateFormatTest, FloatAndHalfTexturesRequirePurePointFil
 TEST(GraphicsProfileDrawStateFormatTest, EveryMixedFilterIsRejectedForRestrictedTextures)
 {
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
-    HiDefDraw draw;
+    ProfileDraw draw;
     Texture2D texture(draw.device, 2, 2, false, SurfaceFormat::Single);
     draw.effect.setTextureProperty(&texture);
     draw.effect.setTextureEnabledProperty(true);
@@ -134,7 +135,7 @@ TEST(GraphicsProfileDrawStateFormatTest, EveryMixedFilterIsRejectedForRestricted
 TEST(GraphicsProfileDrawStateFormatTest, NonBlendableTargetsRejectBlendAndAllColorMasks)
 {
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
-    HiDefDraw draw;
+    ProfileDraw draw;
     constexpr std::array restrictedFormats = {
         SurfaceFormat::Single,
         SurfaceFormat::Vector2,
@@ -171,7 +172,7 @@ TEST(GraphicsProfileDrawStateFormatTest, NonBlendableTargetsRejectBlendAndAllCol
 TEST(GraphicsProfileDrawStateFormatTest, HdrBlendableTargetAllowsBlending)
 {
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
-    HiDefDraw draw;
+    ProfileDraw draw;
     RenderTarget2D target(
         draw.device, 8, 8, false, SurfaceFormat::HdrBlendable, DepthFormat::None);
     draw.device.SetRenderTarget(&target);
@@ -183,7 +184,7 @@ TEST(GraphicsProfileDrawStateFormatTest, HdrBlendableTargetAllowsBlending)
 TEST(GraphicsProfileDrawStateFormatTest, SpriteBatchEnforcesFilteringAtItsRealFlushTime)
 {
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
-    HiDefDraw draw;
+    ProfileDraw draw;
     Texture2D texture(draw.device, 2, 2, false, SurfaceFormat::Single);
     SpriteBatch batch(draw.device);
 
@@ -215,7 +216,7 @@ TEST(GraphicsProfileDrawStateFormatTest, SpriteBatchEnforcesFilteringAtItsRealFl
 TEST(GraphicsProfileDrawStateFormatTest, SpriteBatchRejectsBlendOnNonBlendableTarget)
 {
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
-    HiDefDraw draw;
+    ProfileDraw draw;
     Texture2D texture(draw.device, 1, 1, false, SurfaceFormat::Color);
     RenderTarget2D target(
         draw.device, 8, 8, false, SurfaceFormat::Single, DepthFormat::None);
@@ -227,4 +228,47 @@ TEST(GraphicsProfileDrawStateFormatTest, SpriteBatchRejectsBlendOnNonBlendableTa
     EXPECT_THROW(batch.Draw(texture, Vector2::Zero, Color::White),
                  System::NotSupportedException);
     batch.End();
+}
+
+TEST(GraphicsProfileDrawStateFormatTest, ReachNpotTextureRequiresClampOnBothAxes)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+    ProfileDraw draw(GraphicsProfile::Reach);
+    Texture2D texture(draw.device, 3, 5, false, SurfaceFormat::Color);
+    draw.effect.setTextureProperty(&texture);
+    draw.effect.setTextureEnabledProperty(true);
+    draw.effect.Apply();
+
+    draw.device.getSamplerStatesProperty()[0] = SamplerState::PointClamp;
+    EXPECT_NO_THROW(draw.Draw());
+
+    SamplerState wrapU = SamplerState::PointClamp;
+    wrapU.setAddressUProperty(TextureAddressMode::Wrap);
+    draw.device.getSamplerStatesProperty()[0] = wrapU;
+    EXPECT_THROW(draw.Draw(), System::NotSupportedException);
+
+    SamplerState mirrorV = SamplerState::PointClamp;
+    mirrorV.setAddressVProperty(TextureAddressMode::Mirror);
+    draw.device.getSamplerStatesProperty()[0] = mirrorV;
+    EXPECT_THROW(draw.Draw(), System::NotSupportedException);
+
+    SpriteBatch batch(draw.device);
+    batch.Begin(SpriteSortMode::Immediate, &BlendState::Opaque, &SamplerState::PointWrap,
+                nullptr, nullptr);
+    EXPECT_THROW(batch.Draw(texture, Vector2::Zero, Color::White),
+                 System::NotSupportedException);
+    batch.End();
+}
+
+TEST(GraphicsProfileDrawStateFormatTest, HiDefNpotTextureAllowsNonClampAddressing)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+    ProfileDraw draw(GraphicsProfile::HiDef);
+    Texture2D texture(draw.device, 3, 5, false, SurfaceFormat::Color);
+    draw.effect.setTextureProperty(&texture);
+    draw.effect.setTextureEnabledProperty(true);
+    draw.effect.Apply();
+    draw.device.getSamplerStatesProperty()[0] = SamplerState::PointWrap;
+
+    EXPECT_NO_THROW(draw.Draw());
 }
