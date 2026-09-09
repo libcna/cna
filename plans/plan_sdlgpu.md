@@ -22,8 +22,8 @@
 | SDL GPU registered integration tests | 86 CTests (85 baseline plus the first shared parity fixture) |
 | Shared EasyGL parity fixtures available | 30 renderer-neutral sources in `modules/graphics/examples/parity` |
 | Shared parity fixtures registered for SDL GPU | 1/30 (`parity_fill_mode_wireframe`) |
-| Tasks created by this audit | 29 (`SDLGPU-55`–`SDLGPU-83`) |
-| Completed / open / proven unavoidable | 7 / 22 / 0; `SDLGPU-80` is a candidate limitation, not yet counted complete |
+| Tasks created by this audit | 30 (`SDLGPU-55`–`SDLGPU-84`) |
+| Completed / open / proven unavoidable | 8 / 22 / 0; `SDLGPU-80` is a candidate limitation, not yet counted complete |
 | SDL GPU build | Stable `cmake-build-sdlgpu`, Debug, `CNA_GRAPHICS_RENDERER=SDL_GPU`, tests/examples ON |
 | EasyGL oracle build | Stable `cmake-build-debug`, Debug, `CNA_GRAPHICS_RENDERER=OPENGL33`, tests/examples ON |
 | Runtime driver | SDL 3.5.0 SDL_gpu Vulkan on AMD Radeon 780M / Mesa RADV 25.0.7; Khronos validation layer 1.4.309 present |
@@ -53,8 +53,8 @@ hidden:
    an RT bound (`SDLGPU-59`; cleanup robustness is part of the oracle fix).
 5. `SdlGpu_DescriptorCapacityContract`: 27-state and 256-texture sampler rotations interpolate
    instead of remaining point-exact (`SDLGPU-63`).
-6. `SdlGpu_PointSamplingContract`: 145/146; only the 3D non-integer 3×3→10×10 PointClamp mapping
-   differs (`SDLGPU-62`).
+6. `SdlGpu_PointSamplingContract`: the initial 145/146 result is resolved by `SDLGPU-62`; the
+  3D non-integer 3×3→10×10 PointClamp mapping now matches all 100 EasyGL/XNA texels.
 7. `SdlGpu_GraphicsDevice_OrderedClear`: the initial 45/46 result was an oracle defect, resolved by
    `SDLGPU-66`: the supposedly untouched face had undefined new-resource contents. After seeding it
    with a known sentinel, all 46 checks pass and prove that two later face cycles preserve it.
@@ -91,9 +91,9 @@ underlying limitation with no correct reasonable emulation; `out` excluded moder
 | Constant/slope depth bias | GL polygon offset with XNA normalization | Per-format normalized-to-native conversion in every immutable pipeline; SpriteBatch uses projected layer depth | `=` — expanded 67/67 pixel/cache oracle, validation clean; `SDLGPU-65` |
 | Sampler filter/address/anisotropy | All stock/effect slots | Descriptor key contains them | `≠` — capacity and propagation failures; `SDLGPU-63`, `64` |
 | MaxMipLevel/LOD bias/AddressW | Applied on ordinary draws | cached, but stock commands omit MaxMipLevel/LOD bias and volume AddressW | `≠`; `SDLGPU-64` |
-| Texture2D Color/mips/partial/NPOT/readback | Real upload + CPU/GPU read paths | Real RGBA8 upload; shared CPU shadow; authored mips | `=` for Color baseline; lifecycle sweep `SDLGPU-69`, `81` |
+| Texture2D Color/mips/partial/NPOT/readback | Real upload + CPU/GPU read paths | Real RGBA8 upload; shared CPU shadow; authored mips | `=` for Color baseline including 3D PointClamp; lifecycle sweep `SDLGPU-69`, `81` |
 | Texture2D ordinary non-Color formats | Packed, DXT native-or-decode, SNORM | classifier inherited and native resource hard-coded RGBA8 | `∅` though SDL has corresponding formats; `SDLGPU-69` |
-| Texture3D Color/mips/boxes/readback | Native volume path | Native RGBA8 path | `≠` only non-integer point sampling; `SDLGPU-62` |
+| Texture3D Color/mips/boxes/readback | Native volume path | Native RGBA8 path | `~` — format and volume-sampling sweep remains `SDLGPU-71` |
 | Texture3D surface format | constructor forwards format internally | public seam rejects non-Color; SDL constructor ignores argument | `∅`; `SDLGPU-71` |
 | TextureCube faces/mips/partial/readback | Native cube, DXT and formats | RGBA8 path has isolated face upload/readback/mips | `=` for Color baseline; formats remain `∅`; `SDLGPU-70` |
 | RenderTarget2D Color/depth/MSAA/readback/mips | Full classic path | Real Color target, resolve, readback, mips | `~` — preserve/zero-MSAA/transitions sweep; `SDLGPU-74` |
@@ -310,7 +310,7 @@ underlying API limitation proven after reasonable emulation analysis.
   renderer now reports `WireFrame=true` and no longer lists it as a limitation; the expanded
   30/30 smoke profile agrees. Both tests treat validation diagnostics as fatal.
 
-### SDLGPU-62 — match PointClamp texel-center sampling for 3D draws ⬜
+### SDLGPU-62 — match PointClamp texel-center sampling for 3D draws ✅
 
 - **Problem/public behavior:** a 3×3 texture scaled to 10×10 changes texels at different pixels.
 - **Evidence:** shared `SdlGpu_PointSamplingContract` passes 145/146; only non-integer 3D mapping
@@ -318,6 +318,15 @@ underlying API limitation proven after reasonable emulation analysis.
 - **Location:** stock textured vertex shader UV/pixel-center transform and sampling fixture.
 - **Acceptance/test:** exact 100-pixel signature matches the EasyGL control without regressing the
   already exact SpriteBatch and integer-scale cases.
+- **Result (2026-09-09):** every queued stock 3D family now post-multiplies its WVP by EasyGL's
+  measured 63/64-of-a-pixel Direct3D 9 correction in X and Y, using the exact viewport captured at
+  draw time. Multisampled destinations deliberately retain the unshifted matrix, matching EasyGL's
+  established coverage rule. `SdlGpu_PointSamplingContract` passes 146/146: the non-integer U2 leg
+  moved from 19 mismatches to zero while all SpriteBatch, integer-scale, custom-viewport, address,
+  minification and linear-filter controls remain exact. The 3D, Effects, EnvMap, EnvMapEmissive,
+  Skinned, BasicEffect fog and DepthBias regressions pass. The MSAA target control exposed an
+  unrelated invalid negative-Z depth fixture left latent by `SDLGPU-65`; it is isolated as
+  `SDLGPU-84`. Native validation diagnostics are fatal.
 
 ### SDLGPU-63 — preserve sampler identity at descriptor capacity ⬜
 
@@ -568,6 +577,17 @@ underlying API limitation proven after reasonable emulation analysis.
   pending swapchain extent immediately; the first real acquisition remains authoritative and
   replaces it if the platform clamps the size. The expanded smoke test passes 30/30 on Vulkan,
   including both first-frame exact-size checks, with validation diagnostics configured as fatal.
+
+### SDLGPU-84 — keep render-target depth oracles inside the XNA clip volume ⬜
+
+- **Problem/public behavior:** the SDL-only 2D and multisampled 2D render-target tests call an
+  identity-projection vertex at Z=−0.5 “near.” After `SDLGPU-65` correctly enabled the XNA/D3D
+  0..W depth clip, that quad is clipped and both tests misleadingly report a depth failure.
+- **Evidence:** the equivalent cube fixture had the same issue and passes at valid 0.25/0.75
+  depths; FNA3D's SDL_gpu driver explicitly enables depth clipping.
+- **Location:** SDL GPU RenderTarget2D and RenderTarget2DMSAA test geometry only.
+- **Acceptance/test:** use valid, separated 0.25/0.75 clip depths; nearer green wins under both
+  single-sample and MSAA targets, all other assertions remain green, validation clean.
 
 ---
 

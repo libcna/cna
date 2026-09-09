@@ -937,10 +937,8 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         // Mirrors VulkanRenderer::FillExtPushConst()'s 128-byte layout byte-for-byte
         // (DrawColoredPrimitives()'s hardcoded white/vertex-color-always-true behaviour).
-        void FillColoredUniforms(std::array<float, 32>& out, const Matrix& world, const Matrix& view,
-                                 const Matrix& projection)
+        void FillColoredUniforms(std::array<float, 32>& out, const Matrix& wvp)
         {
-            const Matrix wvp = world * view * projection;
             wvp.ToColumnMajor(out.data());
             out[16] = 1.0f; out[17] = 1.0f; out[18] = 1.0f; out[19] = 1.0f;
             for (int i = 20; i < 31; ++i) out[i] = 0.0f;
@@ -2951,6 +2949,37 @@ namespace CNA::Internal::Renderers::SdlGpu
         return rs;
     }
 
+    Matrix SdlGpuRenderer::ApplyXnaPixelCenter(const Matrix& wvp) const
+    {
+        bool multisampledDestination = false;
+        if (currentRenderTarget_ != nullptr)
+            multisampledDestination =
+                currentRenderTarget_->State()->sampleCount != SDL_GPU_SAMPLECOUNT_1;
+        else if (currentRenderTargetCube_ != nullptr)
+            multisampledDestination =
+                currentRenderTargetCube_->State()->sampleCount != SDL_GPU_SAMPLECOUNT_1;
+
+        const int width = viewportSet_ ? viewportW_
+            : currentRenderTarget_ != nullptr ? currentRenderTarget_->GetWidth()
+            : currentRenderTargetCube_ != nullptr ? currentRenderTargetCube_->GetSize()
+            : physicalWidth_;
+        const int height = viewportSet_ ? viewportH_
+            : currentRenderTarget_ != nullptr ? currentRenderTarget_->GetHeight()
+            : currentRenderTargetCube_ != nullptr ? currentRenderTargetCube_->GetSize()
+            : physicalHeight_;
+        if (multisampledDestination || width <= 0 || height <= 0)
+            return wvp;
+
+        // XNA 4.0 inherits Direct3D 9's integer window-pixel centres. SDL_gpu's Vulkan path uses
+        // the modern half-integer convention, so move geometry just under half a pixel right and
+        // down. The 63/64 margin is EasyGL's measured Wine/MonoGame-compatible correction: it
+        // avoids placing an edge exactly on the opposite tie while preserving XNA's top-left rule.
+        constexpr float kPixelCenterScale = 63.0f / 64.0f;
+        return wvp * Matrix::CreateTranslation(
+            kPixelCenterScale / static_cast<float>(width),
+            -kPixelCenterScale / static_cast<float>(height), 0.0f);
+    }
+
     std::unique_ptr<IVertexBufferRenderer> SdlGpuRenderer::CreateVertexBuffer(int vertex_capacity)
     {
         return std::make_unique<SdlGpuVertexBufferRenderer>(*this, vertex_capacity);
@@ -4040,13 +4069,14 @@ namespace CNA::Internal::Renderers::SdlGpu
         command.renderState = CaptureRenderState();
         if (params != nullptr)
         {
-            const Matrix wvp = world * view * projection;
+            const Matrix wvp = ApplyXnaPixelCenter(world * view * projection);
             FillExtUniforms(command.uniforms, wvp, *params);
             FillFogUniforms(command.fogUniforms, *params);  // REMED-GFX-009
         }
         else
         {
-            FillColoredUniforms(command.uniforms, world, view, projection);
+            FillColoredUniforms(
+                command.uniforms, ApplyXnaPixelCenter(world * view * projection));
         }
 
         if (ib != nullptr)
@@ -4096,7 +4126,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         command.depthFunc = depthCompareFunction_;
         command.depthWrite = depthWriteEnabled_;
         command.renderState = CaptureRenderState();
-        const Matrix wvp = world * view * projection;
+        const Matrix wvp = ApplyXnaPixelCenter(world * view * projection);
         FillExtUniforms(command.uniforms, wvp, params);
         FillFogUniforms(command.fogUniforms, params);  // REMED-GFX-009
         command.texture = ResolveSampledTextureEXT(params.texture0, "BasicEffect.Texture");
@@ -4152,7 +4182,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         command.depthFunc = depthCompareFunction_;
         command.depthWrite = depthWriteEnabled_;
         command.renderState = CaptureRenderState();
-        const Matrix wvp = world * view * projection;
+        const Matrix wvp = ApplyXnaPixelCenter(world * view * projection);
         FillExtUniforms(command.uniforms, wvp, params);
         FillFogUniforms(command.fogUniforms, params);  // REMED-GFX-009
         FillLitLightUniforms(command.lightUniforms, params);
@@ -4905,7 +4935,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         command.depthFunc = depthCompareFunction_;
         command.depthWrite = depthWriteEnabled_;
         command.renderState = CaptureRenderState();
-        const Matrix wvp = world * view * projection;
+        const Matrix wvp = ApplyXnaPixelCenter(world * view * projection);
         FillAlphaTestUniforms(command.uniforms, wvp, params);
         FillFogUniforms(command.fogUniforms, params);  // REMED-GFX-009
         command.texture = ResolveSampledTextureEXT(params.texture0, "AlphaTestEffect.Texture");
@@ -4954,7 +4984,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         command.depthFunc = depthCompareFunction_;
         command.depthWrite = depthWriteEnabled_;
         command.renderState = CaptureRenderState();
-        const Matrix wvp = world * view * projection;
+        const Matrix wvp = ApplyXnaPixelCenter(world * view * projection);
         FillExtUniforms(command.uniforms, wvp, params);
         FillFogUniforms(command.fogUniforms, params);  // REMED-GFX-009
         command.texture0 = ResolveSampledTextureEXT(params.texture0, "DualTextureEffect.Texture");
@@ -5018,7 +5048,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         command.depthFunc = depthCompareFunction_;
         command.depthWrite = depthWriteEnabled_;
         command.renderState = CaptureRenderState();
-        const Matrix wvp = world * view * projection;
+        const Matrix wvp = ApplyXnaPixelCenter(world * view * projection);
         FillEnvMapUniforms(command.uniforms, wvp, params);
         FillFogUniforms(command.fogUniforms, params);  // REMED-GFX-009
         FillEnvMapParams(command.envMapUniforms, params);
@@ -5106,7 +5136,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         command.depthFunc = depthCompareFunction_;
         command.depthWrite = depthWriteEnabled_;
         command.renderState = CaptureRenderState();
-        const Matrix wvp = world * view * projection;
+        const Matrix wvp = ApplyXnaPixelCenter(world * view * projection);
         FillExtUniforms(command.uniforms, wvp, params);
         FillFogUniforms(command.fogUniforms, params);  // REMED-GFX-009
         FillSkinnedBoneUniforms(command.boneUniforms, params);
@@ -5174,7 +5204,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         command.depthFunc = depthCompareFunction_;
         command.depthWrite = depthWriteEnabled_;
         command.renderState = CaptureRenderState();
-        const Matrix wvp = world * view * projection;
+        const Matrix wvp = ApplyXnaPixelCenter(world * view * projection);
         FillExtUniforms(command.uniforms, wvp, params);
         FillFogUniforms(command.fogUniforms, params);  // REMED-GFX-009
         FillLitLightUniforms(command.lightUniforms, params);

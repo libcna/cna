@@ -2549,6 +2549,14 @@ namespace CNA::Internal::Renderers::SdlGpu
         // draw carries the viewport and scissor it was issued under (per-draw capture, needed for
         // this deferred renderer -- see SetViewport()/SetScissorRect()).
         void PushDrawOrder(DrawKind kind, std::size_t index);
+        /**
+         * @brief Applies XNA 4.0's Direct3D 9 integer-pixel-center correction to a 3D WVP.
+         *
+         * @param wvp Unadjusted world-view-projection matrix.
+         * @return The matrix translated just under half a viewport pixel, or @p wvp unchanged
+         *         for a multisampled destination or a degenerate viewport.
+         */
+        [[nodiscard]] Matrix ApplyXnaPixelCenter(const Matrix& wvp) const;
         // REMED-GFX-064: applies SDL_SetGPUViewport for one queued draw, using the ref's captured
         // viewport if set, otherwise the pass's full render-target extents (byte-identical to the
         // pre-fix implicit full-target viewport). Called per draw from RenderQueuedDraws.

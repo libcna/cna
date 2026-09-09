@@ -469,6 +469,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         ${CNA_GRAPHICS_EXAMPLES_DIR}/point_sampling_contract_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_PointSamplingContract COMMAND cna_test_sdlgpu_point_sampling
         TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    set_tests_properties(SdlGpu_PointSamplingContract PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
     # REMED-GFX-151 cross-renderer control: the canonical XNA render-to-texture sequence -- render
     # into a target, unbind it, sample it -- must complete in ONE public frame with no intervening
