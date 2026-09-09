@@ -278,19 +278,44 @@ namespace Microsoft::Xna::Framework::Graphics
         // FNA clears its front-end guard before PrepRenderState/FlushBatch. A backend exception
         // therefore ends this Begin/End session and a caller that catches it may start another.
         begun = false;
-        if (sortMode_ != SpriteSortMode::Immediate)
-            applyRenderState();
-        if (renderer_)
+        bool rendererEndAttempted = false;
+        try
         {
             if (sortMode_ != SpriteSortMode::Immediate)
-                flushBatch();
-            renderer_->End();
-            renderer_->SetCustomEffect(nullptr);
-            // Deferred renderers may submit their final texture group only from End(). Retain
-            // every queued texture renderer through that call, then release the queue.
-            spriteQueue_.clear();
+                applyRenderState();
+            if (renderer_)
+            {
+                if (sortMode_ != SpriteSortMode::Immediate)
+                    flushBatch();
+                rendererEndAttempted = true;
+                renderer_->End();
+                renderer_->SetCustomEffect(nullptr);
+                // Deferred renderers may submit their final texture group only from End(). Retain
+                // every queued texture renderer through that call, then release the queue.
+                spriteQueue_.clear();
+            }
+            customEffect_ = nullptr;
         }
-        customEffect_ = nullptr;
+        catch (...)
+        {
+            // A shared validation or renderer draw can fail before the backend's End() is reached.
+            // Leaving that private begun flag set poisons the same SpriteBatch even though FNA's
+            // public guard is already clear. End an otherwise-unmatched renderer batch, discard
+            // retained sprites/effect state, then preserve the original exception.
+            spriteQueue_.clear();
+            if (renderer_)
+            {
+                if (!rendererEndAttempted)
+                {
+                    try { renderer_->End(); }
+                    catch (...) {}
+                }
+                try { renderer_->SetCustomEffect(nullptr); }
+                catch (...) {}
+            }
+            customEffect_ = nullptr;
+            throw;
+        }
     }
 
     // -----------------------------------------------------------------------
