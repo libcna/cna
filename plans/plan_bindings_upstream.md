@@ -38,6 +38,13 @@ CNA matches FNA faithfully in each case:
 - **`SoundEffectInstance::Apply3D`** refusing more than one listener, which
   `_bindings/fixcna-analysis.md` §2 already identified as a scope decision rather than a
   bug for the same reason.
+
+A fourth of the same kind was found on 2026-09-09 by the sample campaign rather than by a
+binding, and is recorded as entry 5 of `misc/known_gaps.md`: `Microphone::All` carries a
+synthetic `"Default Device"` entry that FNA prepends and XNA does not have. It is listed
+here because this is where a reader looks for XNA-versus-FNA divergences, and because it
+is the only one of the four backed by a side-by-side capture of both runtimes on this
+machine rather than by reading IL.
 - **Display modes carrying a hardcoded `SurfaceFormat::Color`**, which `cna-ruby` and
   `cna-swift` both recorded. `SurfaceFormat.Color // FIXME: Assumption!` is what FNA writes,
   four times over, in `SDL3_FNAPlatform.cs` and `SDL2_FNAPlatform.cs`.
