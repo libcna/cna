@@ -132,6 +132,7 @@ the detailed query by `MOD-2260`; it consumes desktop GLSL vertex and fragment p
 |---|---:|---:|---:|
 | Shader-effect source execution | S | U | S |
 | Compute shaders + storage-buffer dispatch | S | S | U |
+| Compute constant-buffer binding | S | S | U |
 | Compute image binding | U | S | U |
 | Compute sampling of `Texture2D` / `RenderTarget2D` | S | S | U |
 | Indirect drawing | S | S | U |
@@ -162,12 +163,12 @@ path is unavailable or not yet classified; a large native device value is not pu
 |---|---:|---:|---:|
 | `MaxTextureDimension` | 16384 | 16384 | 16384 |
 | `MaxVertexStreams` | 16 | 16 | 1 |
-| `MaxComputeWorkGroupCountX/Y/Z` | 65535 / 65535 / 65535 | 65535 / 65535 / 65535 | 0 / 0 / 0 |
+| `MaxComputeWorkGroupCountX/Y/Z` | 2147483646 / 65535 / 65535 | 65535 / 65535 / 65535 | 0 / 0 / 0 |
 | `MaxComputeWorkGroupSizeX/Y/Z` | 1024 / 1024 / 1024 | 1024 / 1024 / 1024 | 0 / 0 / 0 |
 | `MaxComputeWorkGroupInvocations` | 1024 | 1024 | 0 |
-| `MaxVertexShaderStorageBlocks` | 16 | 0 | 0 |
-| `MaxStorageBufferBytes` | 0 | 134217728 | 0 |
-| `MaxUniformBufferBytes` | 0 | 4608 | 0 |
+| `MaxVertexShaderStorageBlocks` | 16 | 1000000 | 0 |
+| `MaxStorageBufferBytes` | 4035026944 | 134217728 | 0 |
+| `MaxUniformBufferBytes` | 4035026944 | 65536 | 0 |
 | `MaxComputeStorageBufferBindings` | 0 | 1000000 | 0 |
 | `MaxTextureArrayLayers` | 0 | 2048 | 0 |
 | `MaxSampledTexturesPerShaderStage` | 0 | 15 | 0 |
@@ -176,14 +177,16 @@ path is unavailable or not yet classified; a large native device value is not pu
 | `MaxVertexInputAttributes` | 0 | 32 | 0 |
 | `MaxColorAttachments` | 0 | 4 | 0 |
 | `MinStorageBufferOffsetAlignment` | 0 | 16 | 0 |
-| `MinUniformBufferOffsetAlignment` | 0 | 16 | 0 |
+| `MinUniformBufferOffsetAlignment` | 4 | 16 | 0 |
 | `TimestampPeriodPicoseconds` | 0 | 1000 | 0 |
 
 The Vulkan values are the llvmpipe reference snapshot; array layers, storage-image descriptors and
 timestamp period became publishable with their matching CNA paths. RADV reports 10019 ps rather
-than llvmpipe's 1000 ps, which is why the value remains device-origin. EasyGL has several working
-older paths whose newly appended detailed limit fields
-are still zero; those are classification gaps, not permission to assume unlimited values.
+than llvmpipe's 1000 ps, which is why the value remains device-origin. The EasyGL compute and
+buffer-range/alignment values are the live Mesa OpenGL ES 3.2 values measured on the same host;
+they are device/context facts, not portable constants. EasyGL still has several working older paths whose other newly appended
+detailed limit fields are zero; those are classification gaps, not permission to assume unlimited
+values.
 
 ### Format support
 
@@ -217,7 +220,7 @@ later rebinding or disposal cannot invalidate work already issued.
 | XNA `IndexBuffer` / `DynamicIndexBuffer` | XNA indexed drawing only. | No compute binding overload. | No alias or GPU copy to/from `StorageBuffer`. |
 | `Texture2DArray` | `ShaderEffect::SetTextureArrayEXT` when its immutable descriptor declares sampling. | No compute binding overload in the current portable contract. | Exact declared CPU layer/mip/rectangle transfers only; no alias or GPU copy. |
 | `StorageTexture2D` | `ShaderEffect::SetStorageTextureEXT` only when `Sampled` was declared. | `bindStorageTexture` uses the declared read/write subset and exact format-qualified storage image. It is intentionally not accepted by `bindTexture`. | Exact declared CPU transfers only; no image alias or GPU-copy method. |
-| `StorageBuffer` / `StorageBufferT<T>` | Higher-level GPU-driven paths may bind it as shader storage; indirect draw accepts only `IndirectArguments`. `Vertex`/`Index` remain allocation intents until an explicit typed draw bridge exists. | `bindStorageBuffer` requires the `Storage` role. | `copyTo` accepts only another same-device `StorageBuffer` with matching transfer roles and valid non-overlapping ranges. It never aliases an XNA vertex/index buffer. |
+| `StorageBuffer` / `StorageBufferT<T>` / `ConstantBufferT<T>` | Higher-level GPU-driven paths may bind it as shader storage; indirect draw accepts only `IndirectArguments`. `Vertex`/`Index` remain allocation intents until an explicit typed draw bridge exists. | `bindStorageBuffer` requires the `Storage` role; `bindConstantBuffer` requires the independent `Constant` role. The typed constant wrapper owns this same shared resource rather than a second allocator. | `copyTo` accepts only another same-device `StorageBuffer` with matching transfer roles and valid non-overlapping ranges. It never aliases an XNA vertex/index buffer. |
 
 The listed Vulkan transitions are internal uses in one ordered command stream: attachment/transfer
 writes become sampled reads, and compute/transfer writes become their next declared consumers at
@@ -232,6 +235,31 @@ each overload. `ComputeTest.PortableComputeSamplesTexture2DAndRetainsItsDeferred
 on EasyGL and Vulkan. `VulkanRejectsAnIntegerSamplerBeforeItCanAliasAFloatTexture` additionally
 pins the SPIR-V sampled-component contract; Vulkan runs pass on both RADV and llvmpipe with Khronos
 validation enabled.
+
+## Typed constant buffers (`MOD-2230`)
+
+`ConstantBufferT<T>` is a constrained typed view over `StorageBuffer`, not another graphics
+resource family. `T` must be trivially copyable and standard-layout. Construction asks the live
+device for `MaxUniformBufferBytes` and `MinUniformBufferOffsetAlignment`, rounds the allocation up
+without overflow, declares only `StorageBufferUsage::Constant` plus CPU write access, and refuses
+an unknown, zero or insufficient contract before native allocation. `setData` copies the exact
+object representation and clears every alignment-padding byte; field order and shader-language
+block padding remain the caller's explicit responsibility.
+
+`ShaderBindingTypeEXT::ConstantBuffer` is append-only value 6. Package selection accepts its
+portable route only for a compute stage with a published uniform range and compute support.
+`ComputeShader::bindConstantBuffer` accepts either the typed wrapper or a compatible shared buffer,
+and validates the slot, lifetime, owning device and immutable role before renderer work. EasyGL
+uses `GL_UNIFORM_BUFFER` binding points and live GL size/alignment queries. Vulkan reflects set-zero
+SPIR-V `Uniform` + `Block` declarations, allocates `VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER` descriptors,
+tracks the buffer as a shader read and retains it through deferred dispatch completion.
+
+The generated `constant_buffer` package contains equivalent GLSL ES and SPIR-V compute programs.
+`ComputeTest.PortableConstantBufferExecutesRetainsLifetimeAndObservesUpdates` copies a real `vec4`
+from the constant buffer to an SSBO, destroys the first public wrapper before readback, then proves
+a replacement binding on the next dispatch. It passes on Mesa EasyGL, Vulkan llvmpipe and RADV;
+both Vulkan runs use Khronos validation and emit no message. Mock contracts separately pin every
+public method, constraint, padding byte, refusal and the renderer-neutral false default.
 
 ## Per-task reconciliation
 
@@ -264,7 +292,7 @@ tree, not about native API potential.
 | MOD-2227 | Supplied | Immutable `StorageTexture2DDescriptor`, declared storage/sampling/transfer usage and tracked `StorageTexture2D` validate live limits plus combined format facts before a false-by-default renderer factory; exact mip/rectangle transfers expose no native handle or barrier. |
 | MOD-2228 | Supplied | `ComputeShader::bindStorageTexture` validates explicit access/device/lifetime and forwards the retained internal record through a false-by-default renderer seam. Vulkan reflects exact SPIR-V image slot/format/access metadata; the live oracle proves compute write to byte-exact readback and a sampled draw. |
 | MOD-2229 | Supplied | Immutable usage/CPU-access descriptors, tracked lifetime, overflow-safe ranges and GPU copies are public. Vulkan allocates exact role flags, keeps CPU-none memory unmapped and proves staging-through-copy on two devices. |
-| MOD-2230 | Absent | No typed constant-buffer wrapper or binding. |
+| MOD-2230 | Supplied | `ConstantBufferT<T>` reuses the tracked shared-buffer core, validates live range/alignment and zeroes padding. Compute/package slots bind real GL uniform buffers and reflected Vulkan uniform descriptors; one generated package proves output, replacement and deferred lifetime on EasyGL, RADV and llvmpipe. |
 | MOD-2231 | Supplied | `StorageBufferUsage::IndirectArguments` is independently creatable on an indirect-capable device without compute or a storage-buffer byte limit; mixed compute-written arguments explicitly require both roles. |
 | MOD-2232 | Supplied | Engine revision 8 adds the direct, detailed-feature-gated base-instance draw; Vulkan retains the shifted instance range and proves instance one independently on RADV and llvmpipe. |
 | MOD-2233 | Supplied | The typed matrix above defines every legal XNA/new-resource bridge and explicit non-alias. One generated compute package proves Texture2D and deferred RenderTarget2D sampling, retained lifetime, automatic ordering and deterministic validation on EasyGL plus Vulkan/RADV/llvmpipe. |

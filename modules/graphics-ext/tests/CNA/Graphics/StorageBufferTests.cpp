@@ -5,6 +5,8 @@
 #include <gtest/gtest.h>
 
 #include "CNA/Graphics/ComputeShader.hpp"
+#include "CNA/Graphics/ConstantBuffer.hpp"
+#include "CNA/Graphics/ShaderPackageEXT.hpp"
 #include "CNA/Graphics/StorageBuffer.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -13,17 +15,24 @@
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstring>
 #include <limits>
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <type_traits>
 #include <utility>
 #include <vector>
 
 using CNA::Graphics::ComputeShader;
+using CNA::Graphics::ConstantBufferT;
+using CNA::Graphics::ShaderBindingRequirementEXT;
+using CNA::Graphics::ShaderBindingTypeEXT;
+using CNA::Graphics::ShaderCodeEXT;
+using CNA::Graphics::ShaderPackageEXT;
 using CNA::Graphics::StorageBuffer;
 using CNA::Graphics::StorageBufferCpuAccess;
 using CNA::Graphics::StorageBufferDescriptor;
@@ -62,6 +71,7 @@ namespace
         int readbackCalls = 0;
         int copyCalls = 0;
         int bindCalls = 0;
+        int constantBindCalls = 0;
         std::size_t createdBytes = 0;
         std::uint32_t createdUsage = 0;
         std::uint32_t createdCpuAccess = 0;
@@ -69,6 +79,8 @@ namespace
         std::size_t lastBytes = 0;
         bool acceptFactory = true;
         bool acceptTransfer = true;
+        bool acceptConstantBinding = true;
+        std::vector<std::uint8_t> lastUpload;
     };
 
     class RecordingStorageBufferRenderer final
@@ -109,8 +121,11 @@ namespace
             state_->lastOffset = byteOffset;
             state_->lastBytes = byteSize;
             if (!state_->acceptTransfer) return false;
-            if (byteSize != 0)
+            state_->lastUpload.assign(byteSize, UINT8_C(0));
+            if (byteSize != 0) {
                 std::memcpy(bytes_.data() + byteOffset, data, byteSize);
+                std::memcpy(state_->lastUpload.data(), data, byteSize);
+            }
             return true;
         }
 
@@ -170,6 +185,12 @@ namespace
             int, CNA::Internal::Renderers::IStorageBufferRenderer*) override
         {
             ++state_->bindCalls;
+        }
+        [[nodiscard]] bool BindConstantBufferEXT(
+            int, CNA::Internal::Renderers::IStorageBufferRenderer*) override
+        {
+            ++state_->constantBindCalls;
+            return state_->acceptConstantBinding;
         }
         [[nodiscard]] bool IsValid() const override { return true; }
         [[nodiscard]] std::string GetCompileError() const override { return {}; }
@@ -239,9 +260,23 @@ namespace
 
         [[nodiscard]] bool SupportsComputeShadersEXT() const override { return supportsCompute; }
         [[nodiscard]] bool SupportsIndirectDrawEXT() const override { return supportsIndirect; }
+        [[nodiscard]] bool SupportsShaderLanguageEXT(
+            const int language, const int stage) const override
+        {
+            return language == static_cast<int>(CNA::ShaderLanguageEXT::GlslEs) &&
+                   stage == static_cast<int>(CNA::ShaderStageEXT::Compute);
+        }
         [[nodiscard]] std::uint64_t GetMaxStorageBufferBytesEXT() const override
         {
             return maximumBytes;
+        }
+        [[nodiscard]] std::uint64_t GetMaxUniformBufferBytesEXT() const override
+        {
+            return maximumUniformBytes;
+        }
+        [[nodiscard]] std::uint64_t GetMinUniformBufferOffsetAlignmentEXT() const override
+        {
+            return uniformAlignment;
         }
         std::unique_ptr<CNA::Internal::Renderers::IStorageBufferRenderer>
         CreateStorageBuffer(const std::size_t byteSize) override
@@ -264,6 +299,8 @@ namespace
             CNA::Internal::Renderers::IComputeShaderRenderer*, int, int, int) override {}
 
         std::uint64_t maximumBytes = 1024;
+        std::uint64_t maximumUniformBytes = 1024;
+        std::uint64_t uniformAlignment = 16;
         bool supportsCompute = true;
         bool supportsIndirect = true;
         std::shared_ptr<StorageBufferTestState> state;
@@ -285,6 +322,16 @@ namespace
         int* destructions_;
     };
 
+    class DefaultConstantBindingComputeRenderer final
+        : public CNA::Internal::Renderers::IComputeShaderRenderer
+    {
+    public:
+        bool CompileProgram(const std::string&) override { return true; }
+        void Bind() override {}
+        [[nodiscard]] bool IsValid() const override { return true; }
+        [[nodiscard]] std::string GetCompileError() const override { return {}; }
+    };
+
     [[nodiscard]] std::unique_ptr<StorageBufferContractRenderer> MakeRenderer(
         int& destructions)
     {
@@ -297,7 +344,8 @@ namespace
         StorageBufferUsage::TransferDestination |
         StorageBufferUsage::IndirectArguments |
         StorageBufferUsage::Vertex |
-        StorageBufferUsage::Index;
+        StorageBufferUsage::Index |
+        StorageBufferUsage::Constant;
 
     constexpr StorageBufferCpuAccess FullCpuAccess =
         StorageBufferCpuAccess::Read | StorageBufferCpuAccess::Write;
@@ -309,6 +357,37 @@ static_assert(!std::is_copy_constructible_v<StorageBuffer>);
 static_assert(!std::is_copy_assignable_v<StorageBuffer>);
 static_assert(!std::is_move_constructible_v<StorageBuffer>);
 static_assert(!std::is_move_assignable_v<StorageBuffer>);
+
+namespace
+{
+    struct ConstantValue
+    {
+        float values[4];
+    };
+
+    struct NonStandardConstantBase
+    {
+        std::uint32_t first;
+    };
+
+    struct NonStandardConstant : NonStandardConstantBase
+    {
+        std::uint32_t second;
+    };
+
+    struct NonTrivialConstant
+    {
+        ~NonTrivialConstant() {}
+        std::uint32_t value;
+    };
+
+    template<typename T>
+    concept ConstantBufferValueAccepted = requires { typename ConstantBufferT<T>; };
+
+    static_assert(ConstantBufferValueAccepted<ConstantValue>);
+    static_assert(!ConstantBufferValueAccepted<NonStandardConstant>);
+    static_assert(!ConstantBufferValueAccepted<NonTrivialConstant>);
+}
 
 TEST(StorageBufferDescriptorTest, RetainsEveryFieldAndComposesEveryFlag)
 {
@@ -325,6 +404,8 @@ TEST(StorageBufferDescriptorTest, RetainsEveryFieldAndComposesEveryFlag)
               StorageBufferUsage::IndirectArguments);
     EXPECT_EQ(FullUsage & StorageBufferUsage::Vertex, StorageBufferUsage::Vertex);
     EXPECT_EQ(FullUsage & StorageBufferUsage::Index, StorageBufferUsage::Index);
+    EXPECT_EQ(FullUsage & StorageBufferUsage::Constant,
+              StorageBufferUsage::Constant);
     EXPECT_EQ(FullCpuAccess & StorageBufferCpuAccess::Read,
               StorageBufferCpuAccess::Read);
     EXPECT_EQ(FullCpuAccess & StorageBufferCpuAccess::Write,
@@ -602,6 +683,161 @@ TEST(StorageBufferTest, TypedViewChecksSizeAndForwardsExplicitIntent)
     EXPECT_THROW((StorageBufferT<std::uint64_t>(
                      device, std::numeric_limits<std::size_t>::max())),
                  std::invalid_argument);
+}
+
+TEST(ConstantBufferTest, TypedViewAlignsUsesSharedStorageAndZeroesEveryPaddingByte)
+{
+    GraphicsDevice device;
+    int destructions = 0;
+    auto renderer = MakeRenderer(destructions);
+    StorageBufferContractRenderer* const view = renderer.get();
+    renderer->uniformAlignment = 64;
+    renderer->maximumUniformBytes = 64;
+    CNA::Internal::StorageBufferGraphicsDeviceTestPeer::ReplaceRenderer(
+        device, std::move(renderer));
+
+    struct TinyConstant
+    {
+        std::uint32_t value;
+    };
+    ConstantBufferT<TinyConstant> constants(device);
+    EXPECT_EQ(constants.getBuffer().getByteSize(), 64U);
+    EXPECT_EQ(constants.getBuffer().getDescriptor().getUsage(),
+              StorageBufferUsage::Constant);
+    EXPECT_EQ(constants.getBuffer().getDescriptor().getCpuAccess(),
+              StorageBufferCpuAccess::Write);
+    EXPECT_EQ(view->state->createdBytes, 64U);
+    EXPECT_EQ(view->state->createdUsage,
+              static_cast<std::uint32_t>(StorageBufferUsage::Constant));
+    EXPECT_EQ(view->state->createdCpuAccess,
+              static_cast<std::uint32_t>(StorageBufferCpuAccess::Write));
+
+    const TinyConstant value{UINT32_C(0x12345678)};
+    constants.setData(value);
+    ASSERT_EQ(view->state->lastUpload.size(), 64U);
+    std::uint32_t uploaded = 0;
+    std::memcpy(&uploaded, view->state->lastUpload.data(), sizeof(uploaded));
+    EXPECT_EQ(uploaded, value.value);
+    EXPECT_TRUE(std::all_of(
+        view->state->lastUpload.begin() + static_cast<std::ptrdiff_t>(sizeof(value)),
+        view->state->lastUpload.end(),
+        [](const std::uint8_t byte) { return byte == 0; }));
+
+    const ConstantBufferT<TinyConstant>& readOnly = constants;
+    EXPECT_EQ(readOnly.getBuffer().getByteSize(), 64U);
+}
+
+TEST(ConstantBufferTest, RawAndTypedConstructionValidateNativeRangeAndAlignment)
+{
+    GraphicsDevice device;
+    int destructions = 0;
+    auto renderer = MakeRenderer(destructions);
+    StorageBufferContractRenderer* const view = renderer.get();
+    renderer->maximumUniformBytes = 32;
+    renderer->uniformAlignment = 16;
+    CNA::Internal::StorageBufferGraphicsDeviceTestPeer::ReplaceRenderer(
+        device, std::move(renderer));
+
+    StorageBuffer raw(
+        device, StorageBufferDescriptor(
+                    32, StorageBufferUsage::Constant,
+                    StorageBufferCpuAccess::Write));
+    EXPECT_EQ(raw.getByteSize(), 32U);
+    EXPECT_THROW(
+        StorageBuffer(
+            device, StorageBufferDescriptor(
+                        33, StorageBufferUsage::Constant,
+                        StorageBufferCpuAccess::Write)),
+        System::NotSupportedException);
+
+    view->uniformAlignment = 64;
+    CNA::Internal::StorageBufferGraphicsDeviceTestPeer::InvalidateCapabilityProfile(device);
+    EXPECT_THROW((ConstantBufferT<ConstantValue>{device}), System::NotSupportedException);
+
+    view->maximumUniformBytes = 1024;
+    view->uniformAlignment = 0;
+    CNA::Internal::StorageBufferGraphicsDeviceTestPeer::InvalidateCapabilityProfile(device);
+    EXPECT_THROW((ConstantBufferT<ConstantValue>{device}), System::NotSupportedException);
+
+    view->maximumUniformBytes = 0;
+    view->uniformAlignment = 16;
+    CNA::Internal::StorageBufferGraphicsDeviceTestPeer::InvalidateCapabilityProfile(device);
+    EXPECT_THROW((ConstantBufferT<ConstantValue>{device}), System::NotSupportedException);
+}
+
+TEST(ConstantBufferTest, ComputeBindingValidatesBothOverloadsAndBackendAcceptance)
+{
+    GraphicsDevice device;
+    int destructions = 0;
+    auto renderer = MakeRenderer(destructions);
+    StorageBufferContractRenderer* const view = renderer.get();
+    CNA::Internal::StorageBufferGraphicsDeviceTestPeer::ReplaceRenderer(
+        device, std::move(renderer));
+    ComputeShader shader(device, "recording compute");
+
+    ConstantBufferT<ConstantValue> typed(device);
+    shader.bindConstantBuffer(3, typed);
+    EXPECT_EQ(view->state->constantBindCalls, 1);
+
+    StorageBuffer raw(
+        device, StorageBufferDescriptor(
+                    16, StorageBufferUsage::Constant,
+                    StorageBufferCpuAccess::Write));
+    shader.bindConstantBuffer(4, raw);
+    EXPECT_EQ(view->state->constantBindCalls, 2);
+    EXPECT_THROW(shader.bindConstantBuffer(-1, raw), std::invalid_argument);
+
+    StorageBuffer storageOnly(
+        device, StorageBufferDescriptor(
+                    16, StorageBufferUsage::Storage,
+                    StorageBufferCpuAccess::None));
+    EXPECT_THROW(shader.bindConstantBuffer(0, storageOnly),
+                 System::NotSupportedException);
+
+    view->state->acceptConstantBinding = false;
+    EXPECT_THROW(shader.bindConstantBuffer(0, raw), System::NotSupportedException);
+    EXPECT_EQ(view->state->constantBindCalls, 3);
+
+    raw.Dispose();
+    EXPECT_THROW(shader.bindConstantBuffer(0, raw),
+                 System::ObjectDisposedException);
+
+    GraphicsDevice other;
+    int otherDestructions = 0;
+    CNA::Internal::StorageBufferGraphicsDeviceTestPeer::ReplaceRenderer(
+        other, MakeRenderer(otherDestructions));
+    ConstantBufferT<ConstantValue> foreign(other);
+    EXPECT_THROW(shader.bindConstantBuffer(0, foreign), std::invalid_argument);
+}
+
+TEST(ConstantBufferTest, RendererNeutralBindingDefaultRefusesExplicitly)
+{
+    DefaultConstantBindingComputeRenderer renderer;
+    EXPECT_FALSE(renderer.BindConstantBufferEXT(0, nullptr));
+}
+
+TEST(ConstantBufferTest, PackageSelectionRefusesAnUnpublishedUniformRange)
+{
+    GraphicsDevice device;
+    int destructions = 0;
+    auto renderer = MakeRenderer(destructions);
+    renderer->maximumUniformBytes = 0;
+    CNA::Internal::StorageBufferGraphicsDeviceTestPeer::ReplaceRenderer(
+        device, std::move(renderer));
+
+    const ShaderPackageEXT package(
+        {ShaderCodeEXT(
+            CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Compute,
+            "main", "constant.comp", "void main() {}")},
+        {CNA::ShaderStageEXT::Compute},
+        {ShaderBindingRequirementEXT(
+            "Parameters", 0, ShaderBindingTypeEXT::ConstantBuffer,
+            CNA::ShaderStageEXT::Compute)});
+    const auto selection = package.selectFor(device);
+
+    EXPECT_FALSE(selection.isUsable());
+    EXPECT_NE(selection.getDiagnostic().find("requires constant buffers"),
+              std::string::npos);
 }
 
 TEST(StorageBufferTest, ComputeBindingRequiresLiveSameDeviceStorageUsage)

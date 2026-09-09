@@ -2,7 +2,7 @@
 
 ## Status of this document
 
-**Complete as of 2026-09-10 (`VULKAN-480`, updated by `REMED-GFX-203`, `MOD-2222`–`MOD-2223`, `MOD-2232`–`MOD-2233`, `MOD-2240`–`MOD-2244` and `MOD-2228`), and written after the re-audits it depends on**
+**Complete as of 2026-09-10 (`VULKAN-480`, updated by `REMED-GFX-203`, `MOD-2222`–`MOD-2233`, `MOD-2240`–`MOD-2244`), and written after the re-audits it depends on**
 (`VULKAN-470`–`VULKAN-474`) so that what it claims was checked rather than remembered. Every
 section names the row that put it there and the test that keeps it true; a claim with no test named
 beside it is not in here.
@@ -46,7 +46,7 @@ measures on (§*Environment* below).
 | `ShaderEffect` **source execution** | unsupported | fixed |
 | Multi-stream vertex input | supported | fixed |
 | Compiled XNA `.fx` effects | **unsupported** here | fixed |
-| SPIR-V compute shaders, storage buffers and exact format-qualified storage images | supported | device |
+| SPIR-V compute shaders, storage/constant buffers and exact format-qualified storage images | supported | device |
 | XNA `Texture2D` / `RenderTarget2D` compute sampling | supported | device |
 | Indirect drawing, including non-zero base instance | supported | device |
 | XNA `Texture2D` / `RenderTarget2D` compute-image binding | supported when that exact allocation is storage-capable | device |
@@ -71,23 +71,27 @@ Two entries need their sentence rather than a cell:
 | `MaxTextureDimension` | 16384 | device |
 | `MaxVertexStreams` | 16 | fixed — public streams of each input rate are packed into one immutable native snapshot |
 | Compute group counts, local sizes and invocations | selected device's `VkPhysicalDeviceLimits` | device |
+| `MaxStorageBufferBytes`, `MaxUniformBufferBytes` | exact selected-device range limits | device |
+| Storage/uniform-buffer offset alignment | exact selected-device alignment limits | device |
 | `MaxTextureArrayLayers` | exact sampled-2D-array image limit | device |
 | `MaxSampledTexturesPerShaderStage` | min(15 implemented slots, native limits) | device |
 | `MaxStorageImagesPerShaderStage` | min(per-stage, descriptor-set storage-image limits) | device |
 
 ### Compute, storage buffers and storage textures
 
-`MOD-2229`/`MOD-2241`–`MOD-2242`. **Test:** `Vulkan_ComputeStorageBuffer` — raw SPIR-V compute bytecode runs on
+`MOD-2229`/`MOD-2230`/`MOD-2241`–`MOD-2242`. **Tests:**
+`Vulkan_ComputeStorageBuffer` and
+`ComputeTest.PortableConstantBufferExecutesRetainsLifetimeAndObservesUpdates` — raw SPIR-V compute bytecode runs on
 the renderer’s existing graphics/compute queue. Internal reflection builds descriptor set 0 from
-the storage-buffer, format-qualified storage-image and combined `sampler2D` bindings the module
-actually declares, including sparse slot numbers; there is no public native descriptor-set API
-and no fixed four-slot layout.
+the uniform-buffer, storage-buffer, format-qualified storage-image and combined `sampler2D`
+bindings the module actually declares, including sparse slot numbers; there is no public native
+descriptor-set API and no fixed four-slot layout.
 Image reflection accepts only set-0, non-arrayed, single-sample `image2D` declarations and retains
 their SPIR-V format plus `NonReadable`/`NonWritable` access contract. Named signed-int32 and float32
 members of a SPIR-V push-constant `Block` map to `ComputeShader::setUniform`, with names, offsets,
 four-byte alignment, types, range size and the device limit validated before native object
-creation. Other constant and descriptor shapes are rejected precisely rather than accepted and
-ignored. The permanent oracle proves all 256 elements of `C = A + B`, then uses sparse
+creation. Other push-constant and descriptor shapes are rejected precisely rather than accepted
+and ignored. The permanent oracle proves all 256 elements of `C = A + B`, then uses sparse
 output slot 7 plus `uCount`/`uScale` to change only 173 elements.
 
 Each program owns one pipeline layout and a bounded cache of immutable descriptor snapshots (at
@@ -111,12 +115,23 @@ synchronous result readback's dependency closure. All five tests pass on RADV an
 four backend-neutral cases also pass on EasyGL. The Vulkan runs enable Khronos validation and
 report no message.
 
-`StorageBufferDescriptor` declares storage, transfer-source/destination, indirect, vertex and
-index roles separately from CPU read/write intent. Vulkan translates only the requested roles to
-`VkBufferUsageFlags`. A CPU-none buffer requests device-local memory and is never mapped; direct
+`MOD-2230` adds the independent `Constant` role to `StorageBufferDescriptor` and the thin
+`ConstantBufferT<T>` view over that same tracked resource. The wrapper admits only trivially-copyable
+standard-layout values, rounds allocation to the published uniform-buffer alignment, checks the
+full `maxUniformBufferRange` and zeroes upload padding. SPIR-V `Uniform` + `Block` declarations in
+set zero become `VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER`; descriptor count limits, slot declaration,
+device ownership and role are checked before dispatch. The immutable command records a read-only
+resource use and retains the native allocation even if the first public wrapper is destroyed after
+dispatch. The generated cross-backend test copies two different `vec4` values into an SSBO across
+two dispatches and proves the first deferred dispatch survived rebinding and destruction on RADV
+and llvmpipe with zero validation messages.
+
+`StorageBufferDescriptor` declares storage, transfer-source/destination, indirect, vertex, index
+and constant roles separately from CPU read/write intent. Vulkan translates only the requested
+roles to `VkBufferUsageFlags`. A CPU-none buffer requests device-local memory and is never mapped; direct
 `setBytes`/`getBytes` therefore refuse it. Exact range copies allow a CPU-writable transfer source
 to initialize it and a CPU-readable transfer destination to retrieve it without exposing a native
-buffer or mapping. The same oracle now passes 15/15 on RADV and llvmpipe: it checks the exact six
+buffer or mapping. The same oracle now passes 17/17 on RADV and llvmpipe: it checks the exact seven
 native usage bits, mapped/unmapped allocation policy, a 17-byte unaligned ranged copy through a
 GPU-only buffer, a 256-float compute result copied back through staging, overflow-safe refusals and
 zero new validation messages. The size-only constructor retains its former implicit storage,

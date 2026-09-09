@@ -1605,9 +1605,9 @@ namespace CNA::Internal::Renderers::Vulkan
      * @brief SPIR-V compute pipeline implementing CNA's existing compute-shader seam.
      *
      * plans/plan_modern.md MOD-2241/MOD-2242/MOD-2228/MOD-2233. SPIR-V reflection creates only the
-     * set-zero storage-buffer, storage-image and sampled-image slots the module declares, maps
-     * named 32-bit scalar push constants, and preserves resource metadata for deterministic
-     * binding validation.
+     * set-zero constant-buffer, storage-buffer, storage-image and sampled-image slots the module
+     * declares, maps named 32-bit scalar push constants, and preserves resource metadata for
+     * deterministic binding validation.
      */
     class VulkanComputeShaderRenderer final : public IComputeShaderRenderer
     {
@@ -1660,6 +1660,10 @@ namespace CNA::Internal::Renderers::Vulkan
          * @param buffer Buffer to bind, or null to unbind it.
          */
         void BindStorageBuffer(int binding, IStorageBufferRenderer* buffer) override;
+
+        /** @copydoc IComputeShaderRenderer::BindConstantBufferEXT */
+        [[nodiscard]] bool BindConstantBufferEXT(
+            int binding, IStorageBufferRenderer* buffer) override;
 
         /**
          * @brief Binds a storage-capable Color RenderTarget2D as a compute image.
@@ -1759,6 +1763,7 @@ namespace CNA::Internal::Renderers::Vulkan
             const std::vector<VkBuffer>& buffers, const std::vector<VkImageView>& images,
             const std::vector<VkSampler>& samplers,
             const std::vector<std::shared_ptr<void>>& retainedResources,
+            const std::vector<VkDescriptorBufferInfo>& constantBufferInfos,
             const std::vector<VkDescriptorBufferInfo>& bufferInfos,
             const std::vector<VkDescriptorImageInfo>& storageImageInfos,
             const std::vector<VkDescriptorImageInfo>& sampledImageInfos);
@@ -1770,6 +1775,8 @@ namespace CNA::Internal::Renderers::Vulkan
         std::vector<DescriptorCacheEntry> descriptorCache_;
         VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
         VkPipeline pipeline_ = VK_NULL_HANDLE;
+        std::vector<uint32_t> constantBindingSlots_;
+        std::unordered_map<uint32_t, VulkanStorageBufferRenderer*> constantBuffers_;
         std::vector<uint32_t> storageBindingSlots_;
         std::unordered_map<uint32_t, VulkanStorageBufferRenderer*> storageBuffers_;
         std::vector<uint32_t> storageImageBindingSlots_;
@@ -5259,6 +5266,7 @@ namespace CNA::Internal::Renderers::Vulkan
             VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
             std::vector<std::uint8_t> pushConstantBytes;
             std::uint32_t groupsX = 0, groupsY = 0, groupsZ = 0;
+            std::vector<std::shared_ptr<VulkanStorageBufferRenderer>> constantBuffers;
             std::vector<std::shared_ptr<VulkanStorageBufferRenderer>> storageBuffers;
             struct StorageImageUse {
                 std::shared_ptr<VulkanStorageTexture2DRenderer> image;

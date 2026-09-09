@@ -15560,7 +15560,7 @@ namespace CNA::Internal::Renderers::Vulkan
         , usage_(usage)
         , cpuAccess_(cpuAccess)
     {
-        constexpr std::uint32_t AllowedUsage = UINT32_C(0x3F);
+        constexpr std::uint32_t AllowedUsage = UINT32_C(0x7F);
         constexpr std::uint32_t AllowedCpuAccess = UINT32_C(0x03);
         if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE)
             throw std::runtime_error("Vulkan storage buffer: renderer device is unavailable");
@@ -15575,6 +15575,11 @@ namespace CNA::Internal::Renderers::Vulkan
                 owner_->physicalDeviceProperties_.limits.maxStorageBufferRange)
             throw std::invalid_argument(
                 "Vulkan storage buffer: byte size exceeds maxStorageBufferRange");
+        if ((usage_ & (UINT32_C(1) << 6)) != 0 &&
+            static_cast<VkDeviceSize>(byteSize_) >
+                owner_->physicalDeviceProperties_.limits.maxUniformBufferRange)
+            throw std::invalid_argument(
+                "Vulkan storage buffer: byte size exceeds maxUniformBufferRange");
 
         if ((usage_ & (UINT32_C(1) << 0)) != 0)
             vkUsage_ |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
@@ -15588,6 +15593,8 @@ namespace CNA::Internal::Renderers::Vulkan
             vkUsage_ |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
         if ((usage_ & (UINT32_C(1) << 5)) != 0)
             vkUsage_ |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+        if ((usage_ & (UINT32_C(1) << 6)) != 0)
+            vkUsage_ |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
 
         memoryProperties_ = cpuAccess_ == 0
             ? VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
@@ -15791,6 +15798,8 @@ namespace CNA::Internal::Renderers::Vulkan
     void VulkanComputeShaderRenderer::ReleaseVulkanResources()
     {
         ReleaseProgramEXT();
+        constantBuffers_.clear();
+        constantBindingSlots_.clear();
         storageBuffers_.clear();
         storageBindingSlots_.clear();
         storageImages_.clear();
@@ -15809,6 +15818,8 @@ namespace CNA::Internal::Renderers::Vulkan
     {
         ReleaseProgramEXT();
         compileError_.clear();
+        constantBindingSlots_.clear();
+        constantBuffers_.clear();
         storageBindingSlots_.clear();
         storageBuffers_.clear();
         storageImageBindingSlots_.clear();
@@ -16110,6 +16121,9 @@ namespace CNA::Internal::Renderers::Vulkan
                  blockTypes.contains(pointer.pointeeType)) ||
                 (variable.storageClass == StorageClassUniform &&
                  bufferBlockTypes.contains(pointer.pointeeType));
+            const bool isConstantBuffer =
+                variable.storageClass == StorageClassUniform &&
+                blockTypes.contains(pointer.pointeeType);
             const auto imageIt = imageTypes.find(pointer.pointeeType);
             const bool isStorageImage =
                 variable.storageClass == StorageClassUniformConstant &&
@@ -16122,6 +16136,8 @@ namespace CNA::Internal::Renderers::Vulkan
                 variable.storageClass == StorageClassUniformConstant &&
                 sampledImageIt != imageTypes.end() && sampledImageIt->second.sampled == 1;
             const bool duplicateBinding =
+                std::find(constantBindingSlots_.begin(), constantBindingSlots_.end(),
+                          bindingIt->second) != constantBindingSlots_.end() ||
                 std::find(storageBindingSlots_.begin(), storageBindingSlots_.end(),
                           bindingIt->second) != storageBindingSlots_.end() ||
                 std::find(storageImageBindingSlots_.begin(), storageImageBindingSlots_.end(),
@@ -16137,6 +16153,11 @@ namespace CNA::Internal::Renderers::Vulkan
             if (isStorageBuffer) {
                 storageBindingSlots_.push_back(bindingIt->second);
                 storageBuffers_.emplace(bindingIt->second, nullptr);
+                continue;
+            }
+            if (isConstantBuffer) {
+                constantBindingSlots_.push_back(bindingIt->second);
+                constantBuffers_.emplace(bindingIt->second, nullptr);
                 continue;
             }
             if (isStorageImage) {
@@ -16196,13 +16217,16 @@ namespace CNA::Internal::Renderers::Vulkan
                 compileError_ =
                     "Vulkan compute shader: set 0 binding " +
                     std::to_string(bindingIt->second) +
-                    " is neither a reflected storage buffer, storage image2D nor sampler2D";
+                    " is neither a reflected constant buffer, storage buffer, storage image2D "
+                    "nor sampler2D";
                 return false;
             }
         }
+        std::sort(constantBindingSlots_.begin(), constantBindingSlots_.end());
         std::sort(storageBindingSlots_.begin(), storageBindingSlots_.end());
         std::sort(storageImageBindingSlots_.begin(), storageImageBindingSlots_.end());
         std::sort(sampledImageBindingSlots_.begin(), sampledImageBindingSlots_.end());
+        const auto constantCount = static_cast<uint32_t>(constantBindingSlots_.size());
         const auto storageCount = static_cast<uint32_t>(storageBindingSlots_.size());
         const auto storageImageCount =
             static_cast<uint32_t>(storageImageBindingSlots_.size());
@@ -16214,6 +16238,15 @@ namespace CNA::Internal::Renderers::Vulkan
                 owner_->physicalDeviceProperties_.limits.maxDescriptorSetStorageBuffers) {
             compileError_ =
                 "Vulkan compute shader: reflected storage-buffer count exceeds the selected "
+                "device descriptor limits";
+            return false;
+        }
+        if (constantCount >
+                owner_->physicalDeviceProperties_.limits.maxPerStageDescriptorUniformBuffers ||
+            constantCount >
+                owner_->physicalDeviceProperties_.limits.maxDescriptorSetUniformBuffers) {
+            compileError_ =
+                "Vulkan compute shader: reflected constant-buffer count exceeds the selected "
                 "device descriptor limits";
             return false;
         }
@@ -16239,7 +16272,8 @@ namespace CNA::Internal::Renderers::Vulkan
                 "device descriptor limits";
             return false;
         }
-        if (static_cast<std::uint64_t>(storageCount) + storageImageCount + sampledImageCount >
+        if (static_cast<std::uint64_t>(constantCount) + storageCount + storageImageCount +
+                sampledImageCount >
             owner_->physicalDeviceProperties_.limits.maxPerStageResources) {
             compileError_ =
                 "Vulkan compute shader: reflected descriptor count exceeds the selected "
@@ -16261,8 +16295,12 @@ namespace CNA::Internal::Renderers::Vulkan
         }
 
         std::vector<VkDescriptorSetLayoutBinding> bindings;
-        bindings.reserve(storageBindingSlots_.size() + storageImageBindingSlots_.size() +
-                         sampledImageBindingSlots_.size());
+        bindings.reserve(constantBindingSlots_.size() + storageBindingSlots_.size() +
+                         storageImageBindingSlots_.size() + sampledImageBindingSlots_.size());
+        for (const uint32_t binding : constantBindingSlots_) {
+            bindings.push_back({binding, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1,
+                                VK_SHADER_STAGE_COMPUTE_BIT, nullptr});
+        }
         for (const uint32_t binding : storageBindingSlots_) {
             bindings.push_back({binding, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1,
                                 VK_SHADER_STAGE_COMPUTE_BIT, nullptr});
@@ -16293,6 +16331,9 @@ namespace CNA::Internal::Renderers::Vulkan
             }
 
             std::vector<VkDescriptorPoolSize> poolSizes;
+            if (constantCount != 0)
+                poolSizes.push_back({VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                                     constantCount * DescriptorCacheCapacity});
             if (storageCount != 0)
                 poolSizes.push_back({VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
                                      storageCount * DescriptorCacheCapacity});
@@ -16434,6 +16475,26 @@ namespace CNA::Internal::Renderers::Vulkan
             throw std::invalid_argument(
                 "Vulkan compute shader: storage buffer belongs to another renderer");
         storageBuffers_[static_cast<uint32_t>(binding)] = native;
+    }
+
+    bool VulkanComputeShaderRenderer::BindConstantBufferEXT(
+        const int binding, IStorageBufferRenderer* buffer)
+    {
+        if (binding < 0 ||
+            !constantBuffers_.contains(static_cast<uint32_t>(binding)))
+            throw std::out_of_range(
+                "Vulkan compute shader: constant binding " + std::to_string(binding) +
+                " is not declared by this SPIR-V module in set 0");
+        auto* native = dynamic_cast<VulkanStorageBufferRenderer*>(buffer);
+        if (buffer != nullptr &&
+            (native == nullptr || !native->IsOwnedByEXT(owner_)))
+            throw std::invalid_argument(
+                "Vulkan compute shader: constant buffer belongs to another renderer");
+        if (native != nullptr &&
+            (native->GetUsageEXT() & (UINT32_C(1) << 6)) == 0)
+            return false;
+        constantBuffers_[static_cast<uint32_t>(binding)] = native;
+        return true;
     }
 
     void VulkanComputeShaderRenderer::BindImageTexture(
@@ -16581,6 +16642,10 @@ namespace CNA::Internal::Renderers::Vulkan
     void VulkanComputeShaderRenderer::ForgetStorageBufferEXT(
         const VulkanStorageBufferRenderer* buffer) noexcept
     {
+        for (auto& [binding, bound] : constantBuffers_) {
+            static_cast<void>(binding);
+            if (bound == buffer) bound = nullptr;
+        }
         for (auto& [binding, bound] : storageBuffers_) {
             static_cast<void>(binding);
             if (bound == buffer) bound = nullptr;
@@ -16602,6 +16667,7 @@ namespace CNA::Internal::Renderers::Vulkan
         const std::vector<VkBuffer>& buffers, const std::vector<VkImageView>& images,
         const std::vector<VkSampler>& samplers,
         const std::vector<std::shared_ptr<void>>& retainedResources,
+        const std::vector<VkDescriptorBufferInfo>& constantBufferInfos,
         const std::vector<VkDescriptorBufferInfo>& bufferInfos,
         const std::vector<VkDescriptorImageInfo>& storageImageInfos,
         const std::vector<VkDescriptorImageInfo>& sampledImageInfos)
@@ -16637,11 +16703,21 @@ namespace CNA::Internal::Renderers::Vulkan
         }
 
         std::vector<VkWriteDescriptorSet> writes(
-            storageBindingSlots_.size() + storageImageBindingSlots_.size() +
-            sampledImageBindingSlots_.size());
-        for (std::size_t i = 0; i < storageBindingSlots_.size(); ++i)
+            constantBindingSlots_.size() + storageBindingSlots_.size() +
+            storageImageBindingSlots_.size() + sampledImageBindingSlots_.size());
+        for (std::size_t i = 0; i < constantBindingSlots_.size(); ++i)
         {
             auto& write = writes[i];
+            write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            write.dstSet = selected->set;
+            write.dstBinding = constantBindingSlots_[i];
+            write.descriptorCount = 1;
+            write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            write.pBufferInfo = &constantBufferInfos[i];
+        }
+        for (std::size_t i = 0; i < storageBindingSlots_.size(); ++i)
+        {
+            auto& write = writes[constantBindingSlots_.size() + i];
             write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             write.dstSet = selected->set;
             write.dstBinding = storageBindingSlots_[i];
@@ -16651,7 +16727,8 @@ namespace CNA::Internal::Renderers::Vulkan
         }
         for (std::size_t i = 0; i < storageImageBindingSlots_.size(); ++i)
         {
-            auto& write = writes[storageBindingSlots_.size() + i];
+            auto& write = writes[constantBindingSlots_.size() +
+                                 storageBindingSlots_.size() + i];
             write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             write.dstSet = selected->set;
             write.dstBinding = storageImageBindingSlots_[i];
@@ -16662,7 +16739,8 @@ namespace CNA::Internal::Renderers::Vulkan
         for (std::size_t i = 0; i < sampledImageBindingSlots_.size(); ++i)
         {
             auto& write = writes[
-                storageBindingSlots_.size() + storageImageBindingSlots_.size() + i];
+                constantBindingSlots_.size() + storageBindingSlots_.size() +
+                storageImageBindingSlots_.size() + i];
             write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             write.dstSet = selected->set;
             write.dstBinding = sampledImageBindingSlots_[i];
@@ -16695,6 +16773,7 @@ namespace CNA::Internal::Renderers::Vulkan
 
         // Snapshot public bindings before command recording. MOD-2247 can enqueue the resulting
         // immutable state without a later bind/setUniform call changing an already-issued dispatch.
+        const auto constantBuffers = constantBuffers_;
         const auto storageBuffers = storageBuffers_;
         const auto storageImages = storageImages_;
         const auto renderTargetImages = renderTargetImages_;
@@ -16702,6 +16781,12 @@ namespace CNA::Internal::Renderers::Vulkan
         const auto sampledTextures = sampledTextures_;
         const auto sampledRenderTargets = sampledRenderTargets_;
         const auto pushConstantBytes = pushConstantBytes_;
+        for (const uint32_t binding : constantBindingSlots_) {
+            if (constantBuffers.at(binding) == nullptr)
+                throw std::runtime_error(
+                    "Vulkan compute shader: required set 0 constant binding " +
+                    std::to_string(binding) + " is not bound");
+        }
         for (const uint32_t binding : storageBindingSlots_) {
             if (storageBuffers.at(binding) == nullptr)
                 throw std::runtime_error(
@@ -16724,15 +16809,18 @@ namespace CNA::Internal::Renderers::Vulkan
                     std::to_string(binding) + " is not bound");
         }
 
+        std::vector<VkDescriptorBufferInfo> constantInfos(constantBindingSlots_.size());
         std::vector<VkDescriptorBufferInfo> infos(storageBindingSlots_.size());
         std::vector<VkBuffer> bufferHandles;
+        std::vector<std::shared_ptr<VulkanStorageBufferRenderer>> retainedConstantBuffers;
         std::vector<std::shared_ptr<VulkanStorageBufferRenderer>> retainedBuffers;
         std::vector<std::shared_ptr<void>> retainedDescriptorResources;
-        bufferHandles.reserve(storageBindingSlots_.size());
+        bufferHandles.reserve(constantBindingSlots_.size() + storageBindingSlots_.size());
+        retainedConstantBuffers.reserve(constantBindingSlots_.size());
         retainedBuffers.reserve(storageBindingSlots_.size());
         retainedDescriptorResources.reserve(
-            storageBindingSlots_.size() + storageImageBindingSlots_.size() +
-            sampledImageBindingSlots_.size());
+            constantBindingSlots_.size() + storageBindingSlots_.size() +
+            storageImageBindingSlots_.size() + sampledImageBindingSlots_.size());
         std::vector<VkDescriptorImageInfo> imageInfos(storageImageBindingSlots_.size());
         std::vector<VkImageView> imageViews;
         imageViews.reserve(
@@ -16741,6 +16829,19 @@ namespace CNA::Internal::Renderers::Vulkan
             sampledImageBindingSlots_.size());
         std::vector<VkSampler> sampledSamplers;
         sampledSamplers.reserve(sampledImageBindingSlots_.size());
+        for (std::size_t i = 0; i < constantBindingSlots_.size(); ++i) {
+            const uint32_t binding = constantBindingSlots_[i];
+            auto* buffer = constantBuffers.at(binding);
+            auto retained = std::dynamic_pointer_cast<VulkanStorageBufferRenderer>(
+                buffer->IStorageBufferRenderer::shared_from_this());
+            retainedConstantBuffers.push_back(retained);
+            retainedDescriptorResources.push_back(std::move(retained));
+            bufferHandles.push_back(buffer->GetBufferEXT());
+            auto& info = constantInfos[i];
+            info.buffer = buffer->GetBufferEXT();
+            info.offset = 0;
+            info.range = static_cast<VkDeviceSize>(buffer->GetByteSize());
+        }
         for (std::size_t i = 0; i < storageBindingSlots_.size(); ++i) {
             const uint32_t binding = storageBindingSlots_[i];
             auto* buffer = storageBuffers.at(binding);
@@ -16791,7 +16892,7 @@ namespace CNA::Internal::Renderers::Vulkan
         }
         const VkDescriptorSet descriptorSet = GetOrCreateDescriptorSetEXT(
             bufferHandles, imageViews, sampledSamplers, retainedDescriptorResources,
-            infos, imageInfos,
+            constantInfos, infos, imageInfos,
             sampledImageInfos);
 
         VulkanRenderer::PendingModernCommand command;
@@ -16803,6 +16904,7 @@ namespace CNA::Internal::Renderers::Vulkan
         command.groupsX = static_cast<std::uint32_t>(groupsX);
         command.groupsY = static_cast<std::uint32_t>(groupsY);
         command.groupsZ = static_cast<std::uint32_t>(groupsZ);
+        command.constantBuffers = std::move(retainedConstantBuffers);
         command.storageBuffers = std::move(retainedBuffers);
         for (const uint32_t binding : storageImageBindingSlots_) {
             command.storageImages.push_back({
@@ -16844,11 +16946,17 @@ namespace CNA::Internal::Renderers::Vulkan
     {
         constexpr std::uint32_t Storage = UINT32_C(1) << 0;
         constexpr std::uint32_t IndirectArguments = UINT32_C(1) << 3;
+        constexpr std::uint32_t Constant = UINT32_C(1) << 6;
         if (byteSize == 0 || usage == 0 ||
-            (usage & ~UINT32_C(0x3F)) != 0 || (cpuAccess & ~UINT32_C(0x03)) != 0)
+            (usage & ~UINT32_C(0x7F)) != 0 || (cpuAccess & ~UINT32_C(0x03)) != 0)
             return nullptr;
         if ((usage & Storage) != 0 && !SupportsComputeShadersEXT()) return nullptr;
         if ((usage & IndirectArguments) != 0 && !SupportsIndirectDrawEXT()) return nullptr;
+        if ((usage & Constant) != 0) {
+            const std::uint64_t maximum = GetMaxUniformBufferBytesEXT();
+            if (maximum == 0 || static_cast<std::uint64_t>(byteSize) > maximum)
+                return nullptr;
+        }
         auto buffer = std::make_unique<VulkanStorageBufferRenderer>(
             this, byteSize, usage, cpuAccess);
         liveStorageBuffers_.push_back(buffer.get());
@@ -16932,13 +17040,9 @@ namespace CNA::Internal::Renderers::Vulkan
 
     std::uint64_t VulkanRenderer::GetMaxUniformBufferBytesEXT() const
     {
-        if (device_ == VK_NULL_HANDLE) return 0;
-        constexpr std::uint64_t largestImplementedBinding =
-            static_cast<std::uint64_t>(VulkanEffectRenderer::kEffectUniformArrayCapacity) *
-            16U * sizeof(float);
-        return std::min<std::uint64_t>(
-            largestImplementedBinding,
-            physicalDeviceProperties_.limits.maxUniformBufferRange);
+        return device_ != VK_NULL_HANDLE
+            ? physicalDeviceProperties_.limits.maxUniformBufferRange
+            : UINT64_C(0);
     }
 
     int VulkanRenderer::GetMaxComputeStorageBufferBindingsEXT() const
@@ -17509,7 +17613,8 @@ namespace CNA::Internal::Renderers::Vulkan
         }
 
         std::vector<VulkanStorageBufferRenderer*> trackedBuffers;
-        trackedBuffers.reserve(command.storageBuffers.size());
+        trackedBuffers.reserve(
+            command.storageBuffers.size() + command.constantBuffers.size());
         for (const auto& buffer : command.storageBuffers)
         {
             if (std::find(trackedBuffers.begin(), trackedBuffers.end(), buffer.get()) !=
@@ -17518,6 +17623,16 @@ namespace CNA::Internal::Renderers::Vulkan
             RecordBufferUsageEXT(
                 cb, buffer->GetBufferEXT(), buffer->usageState_,
                 VulkanResourceIntent::ShaderReadWrite);
+            trackedBuffers.push_back(buffer.get());
+        }
+        for (const auto& buffer : command.constantBuffers)
+        {
+            if (std::find(trackedBuffers.begin(), trackedBuffers.end(), buffer.get()) !=
+                trackedBuffers.end())
+                continue;
+            RecordBufferUsageEXT(
+                cb, buffer->GetBufferEXT(), buffer->usageState_,
+                VulkanResourceIntent::ShaderRead);
             trackedBuffers.push_back(buffer.get());
         }
         for (const auto& image : command.storageImages)

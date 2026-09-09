@@ -26,7 +26,8 @@ namespace CNA::Graphics {
             static_cast<std::uint32_t>(StorageBufferUsage::TransferDestination) |
             static_cast<std::uint32_t>(StorageBufferUsage::IndirectArguments) |
             static_cast<std::uint32_t>(StorageBufferUsage::Vertex) |
-            static_cast<std::uint32_t>(StorageBufferUsage::Index);
+            static_cast<std::uint32_t>(StorageBufferUsage::Index) |
+            static_cast<std::uint32_t>(StorageBufferUsage::Constant);
 
         constexpr std::uint32_t AllowedStorageBufferCpuAccess =
             static_cast<std::uint32_t>(StorageBufferCpuAccess::Read) |
@@ -163,6 +164,21 @@ namespace CNA::Graphics {
             if (static_cast<std::uint64_t>(descriptor.getByteSize()) > maximum.value)
                 throw System::NotSupportedException(
                     "CNA::Graphics::StorageBuffer: byteSize " +
+                    std::to_string(descriptor.getByteSize()) +
+                    " exceeds the device maximum of " + std::to_string(maximum.value));
+        }
+        if (HasUsage(descriptor.getUsage(), StorageBufferUsage::Constant))
+        {
+            const CNA::RendererLimitValue maximum =
+                device.GetRendererLimitEXT(CNA::RendererLimit::MaxUniformBufferBytes);
+            if (!maximum.known || maximum.value == 0)
+                throw System::NotSupportedException(
+                    "CNA::Graphics::StorageBuffer: the '" +
+                    std::string(device.GetGraphicsRendererName()) +
+                    "' renderer exposes no implemented maximum constant-buffer size");
+            if (static_cast<std::uint64_t>(descriptor.getByteSize()) > maximum.value)
+                throw System::NotSupportedException(
+                    "CNA::Graphics::StorageBuffer: constant-buffer byteSize " +
                     std::to_string(descriptor.getByteSize()) +
                     " exceeds the device maximum of " + std::to_string(maximum.value));
         }

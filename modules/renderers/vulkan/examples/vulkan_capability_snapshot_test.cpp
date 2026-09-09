@@ -174,7 +174,7 @@ namespace
         { "limit.MaxStorageBufferBytes", "134217728", Origin::Device },
         { "limit.MaxStorageImagesPerShaderStage", "1000000", Origin::Device },
         { "limit.MaxTextureArrayLayers", "2048", Origin::Device },
-        { "limit.MaxUniformBufferBytes", "4608", Origin::Device },
+        { "limit.MaxUniformBufferBytes", "65536", Origin::Device },
         { "limit.MaxVertexInputAttributes", "32", Origin::Device },
         { "limit.MaxVertexInputBindings", "16", Origin::Device },
         { "limit.MaxVertexShaderStorageBlocks", "1000000", Origin::Device },

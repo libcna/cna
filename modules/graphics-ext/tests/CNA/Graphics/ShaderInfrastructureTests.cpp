@@ -407,7 +407,8 @@ TEST(ShaderPackageEXTTest, BindingKindsHaveStableUniqueOrdinals)
     EXPECT_EQ(static_cast<int>(ShaderBindingTypeEXT::SampledTexture2DArray), 3);
     EXPECT_EQ(static_cast<int>(ShaderBindingTypeEXT::StorageBuffer), 4);
     EXPECT_EQ(static_cast<int>(ShaderBindingTypeEXT::StorageTexture2D), 5);
-    EXPECT_EQ(static_cast<int>(ShaderBindingTypeEXT::Count), 6);
+    EXPECT_EQ(static_cast<int>(ShaderBindingTypeEXT::ConstantBuffer), 6);
+    EXPECT_EQ(static_cast<int>(ShaderBindingTypeEXT::Count), 7);
 }
 
 TEST(ShaderPackageEXTTest, BindingRequirementRejectsInvalidFields)
@@ -704,6 +705,43 @@ TEST(ShaderPackageSelectionEXTTest, RequiredVertexStorageBindingIsCapabilityChec
     EXPECT_FALSE(selection.isUsable());
     EXPECT_NE(
         selection.getDiagnostic().find("exceeds vertex storage-buffer bindings"),
+        std::string::npos);
+}
+
+TEST(ShaderPackageSelectionEXTTest, ConstantBuffersHaveOnlyThePublishedComputeRoute)
+{
+    GraphicsDevice device;
+    CNA::ShaderLanguageEXT language = CNA::ShaderLanguageEXT::Unknown;
+    for (const auto candidate : {CNA::ShaderLanguageEXT::SpirV,
+                                 CNA::ShaderLanguageEXT::GlslDesktop,
+                                 CNA::ShaderLanguageEXT::GlslEs})
+    {
+        if (device.SupportsShaderLanguageEXT(candidate, CNA::ShaderStageEXT::Vertex))
+        {
+            language = candidate;
+            break;
+        }
+    }
+    if (language == CNA::ShaderLanguageEXT::Unknown)
+        GTEST_SKIP() << "this renderer has no selectable vertex language";
+
+    std::vector<ShaderCodeEXT> variants;
+    if (language == CNA::ShaderLanguageEXT::SpirV)
+        variants.emplace_back(
+            language, CNA::ShaderStageEXT::Vertex, "main", "vertex",
+            std::vector<std::uint8_t>{1, 2, 3, 4});
+    else
+        variants.emplace_back(
+            language, CNA::ShaderStageEXT::Vertex, "main", "vertex", "source");
+    const auto selection = ShaderPackageEXT(
+        std::move(variants), {CNA::ShaderStageEXT::Vertex},
+        {ShaderBindingRequirementEXT(
+            "Parameters", 0, ShaderBindingTypeEXT::ConstantBuffer,
+            CNA::ShaderStageEXT::Vertex)}).selectFor(device);
+
+    EXPECT_FALSE(selection.isUsable());
+    EXPECT_NE(
+        selection.getDiagnostic().find("has no portable non-compute binding route yet"),
         std::string::npos);
 }
 

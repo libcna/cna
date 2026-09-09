@@ -12,6 +12,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/Graphics/ComputeShader.hpp"
+#include "CNA/Graphics/ConstantBuffer.hpp"
 #include "CNA/Graphics/ShaderPackageEXT.hpp"
 #include "CNA/Graphics/StorageBuffer.hpp"
 #include "CNA/Graphics/StorageTexture2D.hpp"
@@ -19,6 +20,7 @@
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/GraphicsImageAccess.hpp"
 #include "CNA/GraphicsMemoryBarrier.hpp"
+#include "ConstantBufferShaderPackage.generated.hpp"
 #include "ModernResourceInteropShaderPackage.generated.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
@@ -33,6 +35,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 using Microsoft::Xna::Framework::Color;
@@ -47,6 +50,7 @@ using CNA::GraphicsImageAccess;
 using CNA::GraphicsMemoryBarrier;
 using CNA::ShaderCompilationExceptionEXT;
 using CNA::Graphics::ComputeShader;
+using CNA::Graphics::ConstantBufferT;
 using CNA::Graphics::ShaderBindingRequirementEXT;
 using CNA::Graphics::ShaderBindingTypeEXT;
 using CNA::Graphics::ShaderCodeEXT;
@@ -107,6 +111,40 @@ void main() {
             {
                 ShaderBindingRequirementEXT(
                     "uSource", 0, ShaderBindingTypeEXT::SampledTexture2D,
+                    CNA::ShaderStageEXT::Compute),
+                ShaderBindingRequirementEXT(
+                    "Output", 1, ShaderBindingTypeEXT::StorageBuffer,
+                    CNA::ShaderStageEXT::Compute),
+            });
+    }
+
+    struct alignas(16) ConstantParameters
+    {
+        float value[4];
+    };
+
+    static_assert(sizeof(ConstantParameters) == 16);
+    static_assert(std::is_trivially_copyable_v<ConstantParameters>);
+    static_assert(std::is_standard_layout_v<ConstantParameters>);
+
+    [[nodiscard]] ShaderPackageEXT MakeConstantBufferPackage()
+    {
+        using namespace CNA::Tests::ConstantBuffer;
+        return ShaderPackageEXT(
+            {
+                ShaderCodeEXT(
+                    CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Compute,
+                    "main", std::string(kPayloads[0].source),
+                    std::string(kEasyGlComputeSource)),
+                ShaderCodeEXT(
+                    CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Compute,
+                    "main", std::string(kPayloads[1].source),
+                    ToBytes(kVulkanComputeSpirV)),
+            },
+            {CNA::ShaderStageEXT::Compute},
+            {
+                ShaderBindingRequirementEXT(
+                    "Parameters", 0, ShaderBindingTypeEXT::ConstantBuffer,
                     CNA::ShaderStageEXT::Compute),
                 ShaderBindingRequirementEXT(
                     "Output", 1, ShaderBindingTypeEXT::StorageBuffer,
@@ -416,6 +454,46 @@ TEST_F(ComputeTest, PortableComputeSamplesDeferredRenderTargetWithoutPublicBarri
     const auto result = output.getData();
     ASSERT_EQ(result.size(), 1u);
     ExpectColorNear(result.front(), kExpected);
+}
+
+TEST_F(ComputeTest, PortableConstantBufferExecutesRetainsLifetimeAndObservesUpdates)
+{
+    const ShaderPackageEXT package = MakeConstantBufferPackage();
+    const auto selection = package.selectFor(gd);
+    if (!selection.isUsable()) GTEST_SKIP() << selection.getDiagnostic();
+
+    const ConstantParameters first{{0.125f, 0.25f, 0.5f, 1.0f}};
+    auto constants = std::make_unique<ConstantBufferT<ConstantParameters>>(gd);
+    constants->setData(first);
+    StorageBufferT<Vector4> output(gd, 1);
+    output.setData({Vector4::Zero});
+
+    ComputeShader shader(gd, package);
+    shader.bindConstantBuffer(0, *constants);
+    shader.bindStorageBuffer(1, output.getBuffer());
+    shader.dispatch(1);
+
+    ConstantBufferT<ConstantParameters> replacement(gd);
+    const ConstantParameters second{{0.75f, 0.625f, 0.375f, 0.25f}};
+    replacement.setData(second);
+    shader.bindConstantBuffer(0, replacement);
+    constants.reset();
+
+    auto result = output.getData();
+    ASSERT_EQ(result.size(), 1U);
+    EXPECT_FLOAT_EQ(result[0].X, first.value[0]);
+    EXPECT_FLOAT_EQ(result[0].Y, first.value[1]);
+    EXPECT_FLOAT_EQ(result[0].Z, first.value[2]);
+    EXPECT_FLOAT_EQ(result[0].W, first.value[3]);
+
+    output.setData({Vector4::Zero});
+    shader.dispatch(1);
+    result = output.getData();
+    ASSERT_EQ(result.size(), 1U);
+    EXPECT_FLOAT_EQ(result[0].X, second.value[0]);
+    EXPECT_FLOAT_EQ(result[0].Y, second.value[1]);
+    EXPECT_FLOAT_EQ(result[0].Z, second.value[2]);
+    EXPECT_FLOAT_EQ(result[0].W, second.value[3]);
 }
 
 TEST_F(ComputeTest, VulkanRejectsAnIntegerSamplerBeforeItCanAliasAFloatTexture)

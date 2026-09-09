@@ -385,6 +385,22 @@ namespace CNA::Internal::Renderers
         virtual void BindStorageBuffer(int /*binding*/, IStorageBufferRenderer* /*buffer*/) {}
 
         /**
+         * @brief Binds a read-only uniform/constant buffer to one program binding point.
+         *
+         * Returning false is the renderer-neutral refusal path; implementations must not accept
+         * and silently discard a constant-buffer binding.
+         *
+         * @param binding The binding index declared by the shader.
+         * @param buffer Shared buffer record, or null to clear the slot.
+         * @return True when the binding operation is implemented and accepted.
+         */
+        [[nodiscard]] virtual bool BindConstantBufferEXT(
+            int /*binding*/, IStorageBufferRenderer* /*buffer*/)
+        {
+            return false;
+        }
+
+        /**
          * @brief Binds a texture as a readable/writable image.
          *
          * @param unit       The image unit the shader declares.

@@ -2341,7 +2341,7 @@ if (!ProfileIsEs2ApiGeneration())
     {
         if (byteSize_ == 0)
             throw std::invalid_argument("EasyGL buffer: byte size must be positive");
-        if (usage_ == 0 || (usage_ & ~UINT32_C(0x3F)) != 0)
+        if (usage_ == 0 || (usage_ & ~UINT32_C(0x7F)) != 0)
             throw std::invalid_argument("EasyGL buffer: usage mask is invalid");
         if ((cpuAccess_ & ~UINT32_C(0x03)) != 0)
             throw std::invalid_argument("EasyGL buffer: CPU-access mask is invalid");
@@ -2434,12 +2434,20 @@ if (!ProfileIsEs2ApiGeneration())
             return ::easygl::BufferTarget::ShaderStorage;
         if ((usage_ & (UINT32_C(1) << 3)) != 0)
             return ::easygl::BufferTarget::DrawIndirect;
+        if ((usage_ & (UINT32_C(1) << 6)) != 0)
+            return ::easygl::BufferTarget::Uniform;
         return ::easygl::BufferTarget::CopyWrite;
     }
 
     void EasyGLStorageBufferRenderer::BindBase(const int binding) const
     {
         buffer_.bind_base(::easygl::BufferTarget::ShaderStorage,
+                          static_cast<unsigned int>(binding));
+    }
+
+    void EasyGLStorageBufferRenderer::BindUniformBase(const int binding) const
+    {
+        buffer_.bind_base(::easygl::BufferTarget::Uniform,
                           static_cast<unsigned int>(binding));
     }
 
@@ -2505,6 +2513,32 @@ if (!ProfileIsEs2ApiGeneration())
     {
         if (buffer == nullptr) return;
         static_cast<EasyGLStorageBufferRenderer*>(buffer)->BindBase(binding);
+    }
+
+    bool EasyGLComputeShaderRenderer::BindConstantBufferEXT(
+        const int binding, IStorageBufferRenderer* buffer)
+    {
+        if (binding < 0) return false;
+        GLint stageBindings = 0;
+        GLint totalBindings = 0;
+        ::metagl::glGetIntegerv(
+            ::metagl::GetParameter::MaxComputeUniformBlocks, &stageBindings);
+        ::metagl::glGetIntegerv(
+            ::metagl::GetParameter::MaxUniformBufferBindings, &totalBindings);
+        if (binding >= stageBindings || binding >= totalBindings) return false;
+        if (buffer == nullptr)
+        {
+            ::metagl::glBindBufferBase(
+                ::metagl::BufferTarget::Uniform,
+                static_cast<GLuint>(binding), ::metagl::BufferId{0});
+            return true;
+        }
+        auto* native = dynamic_cast<EasyGLStorageBufferRenderer*>(buffer);
+        if (native == nullptr ||
+            (native->GetUsageEXT() & (UINT32_C(1) << 6)) == 0)
+            return false;
+        native->BindUniformBase(binding);
+        return true;
     }
 
     void EasyGLComputeShaderRenderer::BindImageTexture(const int unit, ITextureRenderer* texture,
@@ -5796,6 +5830,29 @@ if (!ProfileIsEs2ApiGeneration())
         return value > 0 ? static_cast<std::uint64_t>(value) : 0;
     }
 
+    std::uint64_t EasyGLRenderer::GetMaxUniformBufferBytesEXT() const
+    {
+        const auto& capabilities = device.capabilities();
+        const bool available = capabilities.is_webgl()
+            ? ProfileIs(GlProfile::WebGL2)
+            : (capabilities.is_opengles()
+                ? capabilities.is_at_least(3, 0)
+                : capabilities.is_opengl() && capabilities.is_at_least(3, 1));
+        if (!available) return 0;
+        GLint64 value = 0;
+        ::metagl::glGetInteger64v(::metagl::GetParameter::MaxUniformBlockSize, &value);
+        return value > 0 ? static_cast<std::uint64_t>(value) : 0;
+    }
+
+    std::uint64_t EasyGLRenderer::GetMinUniformBufferOffsetAlignmentEXT() const
+    {
+        if (GetMaxUniformBufferBytesEXT() == 0) return 0;
+        GLint value = 0;
+        ::metagl::glGetIntegerv(
+            ::metagl::GetParameter::UniformBufferOffsetAlignment, &value);
+        return value > 0 ? static_cast<std::uint64_t>(value) : 0;
+    }
+
     void EasyGLRenderer::BindStorageBufferForDrawEXT(const int binding,
                                                      const IStorageBufferRenderer& buffer)
     {
@@ -5832,11 +5889,17 @@ if (!ProfileIsEs2ApiGeneration())
         EnsureCallingThreadContext();
         constexpr std::uint32_t Storage = UINT32_C(1) << 0;
         constexpr std::uint32_t IndirectArguments = UINT32_C(1) << 3;
-        if (byteSize == 0 || usage == 0 || (usage & ~UINT32_C(0x3F)) != 0 ||
+        constexpr std::uint32_t Constant = UINT32_C(1) << 6;
+        if (byteSize == 0 || usage == 0 || (usage & ~UINT32_C(0x7F)) != 0 ||
             (cpuAccess & ~UINT32_C(0x03)) != 0)
             return nullptr;
         if ((usage & Storage) != 0 && !SupportsComputeShadersEXT()) return nullptr;
         if ((usage & IndirectArguments) != 0 && !SupportsIndirectDrawEXT()) return nullptr;
+        if ((usage & Constant) != 0) {
+            const std::uint64_t maximum = GetMaxUniformBufferBytesEXT();
+            if (maximum == 0 || static_cast<std::uint64_t>(byteSize) > maximum)
+                return nullptr;
+        }
         return std::make_unique<EasyGLStorageBufferRenderer>(byteSize, usage, cpuAccess);
     }
 

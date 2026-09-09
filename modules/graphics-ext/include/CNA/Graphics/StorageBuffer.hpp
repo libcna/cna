@@ -39,7 +39,9 @@ namespace CNA::Graphics {
         /** @brief The buffer may be consumed as vertex data by a compatible extension path. */
         Vertex = UINT32_C(1) << 4,
         /** @brief The buffer may be consumed as index data by a compatible extension path. */
-        Index = UINT32_C(1) << 5
+        Index = UINT32_C(1) << 5,
+        /** @brief Shaders may read the buffer through a uniform/constant-buffer binding. */
+        Constant = UINT32_C(1) << 6
     };
 
     /**

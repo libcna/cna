@@ -157,6 +157,32 @@ namespace CNA::Graphics {
         renderer_->BindStorageBuffer(binding, buffer.getRendererEXT());
     }
 
+    void ComputeShader::bindConstantBuffer(const int binding, StorageBuffer& buffer)
+    {
+        if (binding < 0)
+            throw std::invalid_argument(
+                "CNA::Graphics::ComputeShader::bindConstantBuffer: the binding must not be "
+                "negative");
+        if (buffer.getIsDisposedProperty())
+            throw System::ObjectDisposedException("StorageBuffer");
+        if (buffer.getGraphicsDeviceProperty() != &device_)
+            throw std::invalid_argument(
+                "CNA::Graphics::ComputeShader::bindConstantBuffer: the buffer belongs to another "
+                "GraphicsDevice");
+        if ((buffer.getDescriptor().getUsage() & StorageBufferUsage::Constant) ==
+            StorageBufferUsage::None)
+        {
+            throw System::NotSupportedException(
+                "CNA::Graphics::ComputeShader::bindConstantBuffer: Constant usage was not "
+                "declared");
+        }
+        renderer_->Bind();
+        if (!renderer_->BindConstantBufferEXT(binding, buffer.getRendererEXT()))
+            throw System::NotSupportedException(
+                "CNA::Graphics::ComputeShader::bindConstantBuffer: the active renderer refused "
+                "constant-buffer binding");
+    }
+
     void ComputeShader::bindTexture(const int unit, const std::string& samplerName,
                                     Texture2D& texture)
     {

@@ -36,6 +36,7 @@ namespace CNA::Graphics
                 case ShaderBindingTypeEXT::SampledTexture2DArray:
                 case ShaderBindingTypeEXT::StorageBuffer:
                 case ShaderBindingTypeEXT::StorageTexture2D:
+                case ShaderBindingTypeEXT::ConstantBuffer:
                     return true;
                 case ShaderBindingTypeEXT::Count:
                     return false;
@@ -152,6 +153,21 @@ namespace CNA::Graphics
                                 CNA::RendererFeature::ComputeImageBinding))
                             AddFailure(failures, prefix + "requires ComputeImageBinding");
                         break;
+                    case ShaderBindingTypeEXT::ConstantBuffer:
+                    {
+                        const auto limit = device.GetRendererLimitEXT(
+                            CNA::RendererLimit::MaxUniformBufferBytes);
+                        if (!limit.known || limit.value == 0)
+                            AddFailure(failures, prefix + "requires constant buffers");
+                        if (binding.getStage() != CNA::ShaderStageEXT::Compute)
+                            AddFailure(
+                                failures, prefix +
+                                "has no portable non-compute binding route yet");
+                        else if (!device.SupportsCapability(
+                                     CNA::GraphicsCapability::ComputeShaders))
+                            AddFailure(failures, prefix + "requires ComputeShaders");
+                        break;
+                    }
                     case ShaderBindingTypeEXT::Count:
                         break;
                 }

@@ -5,6 +5,7 @@
 
 #include "CNA/GraphicsImageAccess.hpp"
 #include "CNA/GraphicsMemoryBarrier.hpp"
+#include "CNA/Graphics/ConstantBuffer.hpp"
 #include "CNA/Graphics/ShaderCodeEXT.hpp"
 #include "CNA/ShaderDiagnosticEXT.hpp"
 
@@ -118,6 +119,31 @@ namespace CNA::Graphics {
          * @throws System::NotSupportedException If storage usage was not declared.
          */
         void bindStorageBuffer(int binding, StorageBuffer& buffer);
+
+        /**
+         * @brief Binds a shared buffer through a shader constant-buffer slot.
+         * @param binding Direct binding index declared by the compute program.
+         * @param buffer Buffer whose immutable usage includes `StorageBufferUsage::Constant`.
+         * @throws std::invalid_argument If @p binding is negative or the buffer belongs to a
+         *         different graphics device.
+         * @throws System::ObjectDisposedException If @p buffer is disposed.
+         * @throws System::NotSupportedException If constant usage was not declared or the active
+         *         renderer does not implement constant-buffer binding.
+         */
+        void bindConstantBuffer(int binding, StorageBuffer& buffer);
+
+        /**
+         * @brief Binds a typed constant buffer through its shared buffer resource.
+         * @tparam T Trivially-copyable standard-layout shader block value.
+         * @param binding Direct binding index declared by the compute program.
+         * @param buffer Typed constant buffer owned by the same graphics device.
+         */
+        template<typename T>
+            requires (std::is_trivially_copyable_v<T> && std::is_standard_layout_v<T>)
+        void bindConstantBuffer(int binding, ConstantBufferT<T>& buffer)
+        {
+            bindConstantBuffer(binding, buffer.getBuffer());
+        }
 
         /**
          * @brief Binds a texture the shader will sample, and sets its sampler uniform.

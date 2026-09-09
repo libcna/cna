@@ -23,7 +23,7 @@
  * consumer could notice a change — **including an addition**, because a consumer that feature-tests
  * on the revision needs the number to move when the feature arrives, not only when one breaks.
  */
-#define CNA_CNAEXT_ENGINE_VERSION 17
+#define CNA_CNAEXT_ENGINE_VERSION 18
 
 namespace CNA::Graphics {
 
@@ -41,7 +41,7 @@ namespace CNA::Graphics {
     /**
      * @brief Returns the engine-layer revision as text, for logs and about-boxes.
      *
-     * @return The revision in the form `"CNA engine layer 17"`.
+     * @return The revision in the form `"CNA engine layer 18"`.
      */
     [[nodiscard]] std::string getEngineLayerVersionString();
 

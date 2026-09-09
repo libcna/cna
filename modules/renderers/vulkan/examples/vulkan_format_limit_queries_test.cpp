@@ -634,8 +634,6 @@ protected:
                        limits.maxDescriptorSetStorageImages)
             : 0;
         constexpr std::uint32_t implementedSampledBindings = 15;
-        constexpr std::uint64_t largestImplementedUniformBinding =
-            UINT64_C(72) * UINT64_C(16) * sizeof(float);
         const std::uint64_t expectedSampled = std::min({
             implementedSampledBindings,
             limits.maxPerStageDescriptorSamplers,
@@ -671,8 +669,7 @@ protected:
                        std::min(UINT32_C(16), limits.maxVertexInputBindings)) &&
             EqualLimit(CNA::RendererLimit::MaxStorageBufferBytes, expectedStorageBytes) &&
             EqualLimit(CNA::RendererLimit::MaxUniformBufferBytes,
-                       std::min<std::uint64_t>(largestImplementedUniformBinding,
-                                               limits.maxUniformBufferRange)) &&
+                       limits.maxUniformBufferRange) &&
             EqualLimit(CNA::RendererLimit::MaxComputeStorageBufferBindings,
                        expectedComputeBindings) &&
             EqualLimit(CNA::RendererLimit::MaxTextureArrayLayers, expectedArrayLayers) &&

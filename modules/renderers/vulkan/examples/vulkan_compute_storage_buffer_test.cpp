@@ -10,7 +10,8 @@
 // H  Reflected sparse SSBO slots and named int32/float32 push constants drive real output.
 // I  Repeated dispatches reuse one descriptor set/layout and destruction reclaims both.
 // J  Descriptor and pipeline-layout destruction returns live counts to baseline.
-// K  Descriptor usage becomes exact VkBufferUsage and CPU-none memory is never mapped.
+// K  Every shared buffer role, including Constant, becomes exact VkBufferUsage and CPU-none
+//    memory is never mapped.
 // L  Range upload/copy/readback crosses a GPU-only buffer byte-exactly.
 // M  A GPU-only storage destination is written by compute and copied to CPU-readable staging.
 // N  Invalid access/range/overlap requests fail before native mutation.
@@ -542,14 +543,16 @@ protected:
             StorageBufferUsage::TransferDestination |
             StorageBufferUsage::IndirectArguments |
             StorageBufferUsage::Vertex |
-            StorageBufferUsage::Index;
+            StorageBufferUsage::Index |
+            StorageBufferUsage::Constant;
         constexpr VkBufferUsageFlags fullNativeUsage =
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
             VK_BUFFER_USAGE_TRANSFER_DST_BIT |
             VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
             VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
-            VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+            VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
+            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
         const std::size_t vectorBytes = kElementCount * sizeof(float);
         StorageBuffer gpuOnly(
             device, StorageBufferDescriptor(

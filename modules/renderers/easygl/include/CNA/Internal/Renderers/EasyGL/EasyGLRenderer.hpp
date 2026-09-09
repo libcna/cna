@@ -625,6 +625,12 @@ namespace CNA::Internal::Renderers::EasyGL
         void BindBase(int binding) const;
 
         /**
+         * @brief Binds this buffer to a uniform/constant-buffer binding point.
+         * @param binding Binding-point index.
+         */
+        void BindUniformBase(int binding) const;
+
+        /**
          * @brief Binds this buffer as the source of indirect-draw arguments.
          *
          * A buffer with both Storage and IndirectArguments roles can be written by compute and
@@ -655,6 +661,8 @@ namespace CNA::Internal::Renderers::EasyGL
         void SetUniformInt(const char* name, int value) override;
         void SetUniformFloat(const char* name, float value) override;
         void BindStorageBuffer(int binding, IStorageBufferRenderer* buffer) override;
+        [[nodiscard]] bool BindConstantBufferEXT(
+            int binding, IStorageBufferRenderer* buffer) override;
         void BindImageTexture(int unit, ITextureRenderer* texture, int accessMode) override;
         void BindTexture(int unit, ITextureRenderer* texture) override;
         [[nodiscard]] bool IsValid() const override { return valid_; }
@@ -1721,6 +1729,16 @@ namespace CNA::Internal::Renderers::EasyGL
          * @return Maximum bytes, or zero when shader storage is unavailable.
          */
         [[nodiscard]] std::uint64_t GetMaxStorageBufferBytesEXT() const override;
+        /**
+         * @brief Returns the live context's maximum uniform-block size.
+         * @return Maximum bytes, or zero when uniform buffers are unavailable.
+         */
+        [[nodiscard]] std::uint64_t GetMaxUniformBufferBytesEXT() const override;
+        /**
+         * @brief Returns the live context's required uniform-buffer offset alignment.
+         * @return Positive alignment, or zero when uniform buffers are unavailable.
+         */
+        [[nodiscard]] std::uint64_t GetMinUniformBufferOffsetAlignmentEXT() const override;
         void BindStorageBufferForDrawEXT(int binding,
                                          const IStorageBufferRenderer& buffer) override;
         std::unique_ptr<IComputeShaderRenderer> CreateComputeShader(

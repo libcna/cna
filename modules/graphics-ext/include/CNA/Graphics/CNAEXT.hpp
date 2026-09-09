@@ -32,6 +32,7 @@
  */
 
 // ---- Foundation ------------------------------------------------------------------------------
+#include "CNA/Graphics/ConstantBuffer.hpp"
 #include "CNA/Graphics/EngineException.hpp"
 #include "CNA/Graphics/EngineLayerVersion.hpp"
 #include "CNA/Graphics/RequireCapability.hpp"

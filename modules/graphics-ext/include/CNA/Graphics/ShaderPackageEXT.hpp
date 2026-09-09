@@ -34,8 +34,10 @@ namespace CNA::Graphics
         StorageBuffer = 4,
         /** @brief A two-dimensional storage texture. */
         StorageTexture2D = 5,
+        /** @brief A read-only uniform/constant buffer. */
+        ConstantBuffer = 6,
         /** @brief Number of declared binding kinds; not itself a binding kind. */
-        Count = 6
+        Count = 7
     };
 
     /** @brief One renderer-neutral logical resource binding required by a shader package. */

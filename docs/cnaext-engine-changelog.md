@@ -14,6 +14,24 @@ something breaks.
 
 ---
 
+## Revision 18 — 2026-09-10
+
+### Typed constant buffers (`MOD-2230`)
+
+- `StorageBufferUsage::Constant` adds an immutable uniform-buffer role to the existing shared
+  buffer resource. `ConstantBufferT<T>` accepts only trivially-copyable standard-layout values,
+  rounds allocations to the live backend alignment, checks the published byte-range ceiling and
+  zeroes padding on every upload.
+- `ComputeShader::bindConstantBuffer` binds either that typed wrapper or a role-compatible shared
+  `StorageBuffer`. `ShaderBindingTypeEXT::ConstantBuffer` is append-only identity 6; package
+  selection currently accepts its portable binding route only for compute stages.
+- EasyGL uses uniform-buffer binding points and reports the live GL limits. Vulkan reflects SPIR-V
+  uniform `Block` declarations, uses `VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER`, tracks read-only resource
+  access and retains buffers through deferred dispatch completion.
+
+The C header carries the same engine-layer revision marker. The C ABI remains 0.26.0; typed
+constant-buffer construction and binding are currently a C++ surface.
+
 ## Revision 17 — 2026-09-10
 
 ### Structured shader diagnostics (`MOD-2215`)
