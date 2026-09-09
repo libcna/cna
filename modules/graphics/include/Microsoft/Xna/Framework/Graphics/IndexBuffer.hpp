@@ -246,6 +246,7 @@ namespace Microsoft::Xna::Framework::Graphics
         void Dispose(bool disposing) override;
 
     private:
+        void ThrowIfSetDataResourceInUse(SetDataOptions options, bool useOptions) const;
         void SetDataAtInternal(int offsetInBytes,
                                const void* data,
                                int startIndex,

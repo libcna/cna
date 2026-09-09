@@ -1099,19 +1099,22 @@ TEST_F(InstancedVertexColorTest, QueuedInstancedDrawsKeepTheirOwnVertexColorStat
 
     BasicEffect effect(device);
     RenderTarget2D target = MakeTarget();
+    meshBuffer.SetDataRaw(meshA.data(), vertexCount, 16);
     device.SetVertexBuffers({VertexBufferBinding(&meshBuffer, 0, 0),
                              VertexBufferBinding(&instanceBuffer, 0, 1)});
     device.SetRenderTarget(&target);
     device.Clear(Color::Black);
 
-    meshBuffer.SetDataRaw(meshA.data(), vertexCount, 16);
     ApplyEffect(effect, true);
     device.DrawInstancedPrimitives(
         PrimitiveType::TriangleList, 0, 0, vertexCount, 0, quadCount * 2, 1);
 
     // Everything draw A captured now changes: the effect's VertexColorEnabled AND the bytes of the
     // very buffer it drew from.
+    device.SetVertexBuffers({});
     meshBuffer.SetDataRaw(meshB.data(), vertexCount, 16);
+    device.SetVertexBuffers({VertexBufferBinding(&meshBuffer, 0, 0),
+                             VertexBufferBinding(&instanceBuffer, 0, 1)});
     ApplyEffect(effect, false);
     device.DrawInstancedPrimitives(
         PrimitiveType::TriangleList, 0, 0, vertexCount, 0, quadCount * 2, 1);

@@ -817,6 +817,7 @@ TEST_F(NonIndexedDrawRangeTest, PersistentDrawHonorsFirstMiddleAndFinalRanges)
             CaptureBackbuffer(device, layout.width, layout.height);
         ExpectIntendedPrimitivesRendered(pixels, plan, rangeCase.label);
         ExpectRangeExclusive(pixels, plan, Color::Black, rangeCase.label);
+        device.SetVertexBuffer(nullptr);
     }
 }
 
@@ -942,9 +943,9 @@ TEST_F(NonIndexedDrawRangeTest, DeferredRangesSurviveBufferVersionChangesBetween
     device.Clear(Color::Black);
     device.SetVertexBuffer(&vertexBuffer);
 
-    vertexBuffer.SetData(versionA.data(), 0, vertexCount, SetDataOptions::None);
+    vertexBuffer.SetData(versionA.data(), 0, vertexCount, SetDataOptions::Discard);
     device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
-    vertexBuffer.SetData(versionB.data(), 0, vertexCount, SetDataOptions::None);
+    vertexBuffer.SetData(versionB.data(), 0, vertexCount, SetDataOptions::Discard);
     device.DrawPrimitives(PrimitiveType::TriangleList, (kSlotCount - 1) * 3, 1);
 
     const FrameSnapshot pixels =
@@ -1629,6 +1630,7 @@ TEST_F(NonIndexedDrawRangeTest, SoftwareNonIndexedDrawConsumesExactlyTheRequeste
         SCOPED_TRACE(consumed);
         ExpectIntendedPrimitivesRendered(pixels, plan, rangeCase.label);
         ExpectRangeExclusive(pixels, plan, Color::Black, rangeCase.label);
+        device.SetVertexBuffer(nullptr);
     }
 }
 
@@ -1902,7 +1904,9 @@ TEST_F(NonIndexedDrawRangeTest, SoftwareNonIndexedVertexStartScalesByTheDeclared
             PrimitiveType::TriangleList, kVertexStart, kPrimitiveCount);
         const FrameSnapshot pixels =
             CaptureBackbuffer(device, layout.width, layout.height);
-        return DescribeLitSlots(pixels, layout, Color::Black);
+        const std::string result = DescribeLitSlots(pixels, layout, Color::Black);
+        device.SetVertexBuffer(nullptr);
+        return result;
     };
 
     {

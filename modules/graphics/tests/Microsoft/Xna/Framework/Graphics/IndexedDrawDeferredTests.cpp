@@ -1188,6 +1188,7 @@ TEST_F(IndexedDrawDeferredTest, DeferredAtoBtoACapturesDataCountsAndLifetimes)
     device.SetIndexBuffer(&staticA);
     device.DrawIndexedPrimitives(
         PrimitiveType::TriangleList, 0, 0, 9, 0, 1);
+    device.SetIndexBuffer(nullptr);
     staticA.SetData(degenerateIndices.data(), 3);
 
     device.SetIndexBuffer(&dynamicB);
@@ -1248,12 +1249,16 @@ TEST_F(IndexedDrawDeferredTest, DeferredStaticVertexAtoBtoAPreservesEveryQueuedV
     // Multiple draws between updates intentionally share A's one immutable native version.
     device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
 
+    device.SetVertexBuffer(nullptr);
     buffer.SetData(sourceB.data(), 3);
+    device.SetVertexBuffer(&buffer);
     effect.setWorldProperty(Microsoft::Xna::Framework::Matrix::getIdentityProperty());
     effect.Apply();
     device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
 
+    device.SetVertexBuffer(nullptr);
     buffer.SetData(sourceA.data(), 3);
+    device.SetVertexBuffer(&buffer);
     effect.setWorldProperty(
         Microsoft::Xna::Framework::Matrix::CreateTranslation(0.68f, 0.0f, 0.0f));
     effect.Apply();
@@ -2499,11 +2504,11 @@ TEST_F(IndexedDrawDeferredTest, IndexedTriangleStripAtoBtoAPreservesWidthsRanges
     // must not retroactively select that format for the queued Uint32 draw.
     const std::array<std::uint16_t, 5> degenerate16{0, 0, 0, 0, 0};
     const std::array<std::uint32_t, 4> degenerate32{0, 0, 0, 0};
+    device.SetIndexBuffer(nullptr);
     static16A.SetData(degenerate16.data(), 5);
     dynamic32B.SetData(
         degenerate32.data(), 0, 4, SetDataOptions::Discard);
     static16C.SetData(degenerate16.data(), 5);
-    device.SetIndexBuffer(nullptr);
     device.SetVertexBuffer(nullptr);
     static16A.Dispose();
     dynamic32B.Dispose();

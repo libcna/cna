@@ -630,6 +630,7 @@ protected:
             device.SetRenderTarget(nullptr);
         }
         device.SetIndexBuffer(nullptr);
+        device.SetVertexBuffers({});
         return out;
     }
 
@@ -953,6 +954,7 @@ protected:
             device.SetRenderTarget(nullptr);
         }
         device.SetIndexBuffer(nullptr);
+        device.SetVertexBuffers({});
         out.frame = Capture(target);
         return out;
     }

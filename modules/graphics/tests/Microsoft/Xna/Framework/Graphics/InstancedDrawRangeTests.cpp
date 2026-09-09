@@ -1896,7 +1896,7 @@ TEST_F(InstancedDrawRangeTest, SourceUpdatesAfterAQueuedInstancedDrawDoNotAlterI
 
     meshBuffer.SetData(
         replacementMesh.data(), 0, static_cast<int>(replacementMesh.size()),
-        SetDataOptions::None);
+        SetDataOptions::Discard);
     // Queued against the band-3 mesh: slot 6, one instance -> cell (6, band 3).
     device.DrawInstancedPrimitives(
         PrimitiveType::TriangleList, 18, 0, kSlotCount * kVerticesPerSlot - 18, 0, 1, 1);
@@ -1956,7 +1956,7 @@ TEST_F(InstancedDrawRangeTest, DisposingAfterQueuedInstancedDrawsIsSafe)
         // Instance counts here only have to be legal -- this case is about lifetime, not pixels.
         meshBuffer.SetData(
             fixture.mesh.data(), 0, static_cast<int>(fixture.mesh.size()),
-            SetDataOptions::None);
+            SetDataOptions::Discard);
         device.DrawInstancedPrimitives(
             PrimitiveType::TriangleList, 18, 0, kSlotCount * kVerticesPerSlot - 18, 0, 1, 1);
 

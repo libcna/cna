@@ -792,7 +792,9 @@ protected:
             device.DrawIndexedPrimitives(
                 PrimitiveType::TriangleList, 0, 0, kMeshVertexCount, 0, kMeshPrimitiveCount);
         device.SetRenderTarget(nullptr);
-        return CaptureTarget(target);
+        FrameSnapshot result = CaptureTarget(target);
+        device.SetVertexBuffers({});
+        return result;
     }
 };
 

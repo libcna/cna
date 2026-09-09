@@ -576,6 +576,13 @@ namespace Microsoft::Xna::Framework::Graphics
                                  std::size_t uploadStride,
                                  SetDataOptions options,
                                  bool useOptions);
+        void ThrowIfSetDataResourceInUse(SetDataOptions options, bool useOptions) const;
+        void SetDataRawAtInternal(int offsetInBytes,
+                                  const void* data,
+                                  int count,
+                                  int stride,
+                                  SetDataOptions options,
+                                  bool useOptions);
 
         void SetDataInternal(const VertexPositionColor* data,
                              int startIndex,

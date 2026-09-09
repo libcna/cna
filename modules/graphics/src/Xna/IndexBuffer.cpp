@@ -6,6 +6,7 @@
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
@@ -213,6 +214,7 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         if (data == nullptr)
             throw System::ArgumentNullException("data");
+        ThrowIfSetDataResourceInUse(SetDataOptions::None, false);
 
         const std::size_t capacity =
             CheckedByteCount(indexCount_, elementSize, "indexCount");
@@ -246,10 +248,6 @@ namespace Microsoft::Xna::Framework::Graphics
                                       SetDataOptions options,
                                       bool useOptions)
     {
-        // CABI-15: see VertexBuffer::UploadValidatedData -- one clear on the write path.
-        if (auto* const losable = dynamic_cast<CNA::Internal::Graphics::IContentLosable*>(this)) {
-            losable->ClearContentLostEXT();
-        }
         if (getIsDisposedProperty())
             throw System::ObjectDisposedException("IndexBuffer");
 
@@ -271,10 +269,17 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         if (data == nullptr)
             throw System::ArgumentNullException("data");
+        ThrowIfSetDataResourceInUse(options, useOptions);
         if (elementCount > indexCount_)
             throw System::ArgumentOutOfRangeException(
                 "elementCount", std::to_string(elementCount),
                 "The upload exceeds the IndexBuffer's logical capacity.");
+
+        // CABI-15: clear loss only after every front-end failure, including resource-in-use, has
+        // been rejected and a real write is about to occur.
+        if (auto* const losable = dynamic_cast<CNA::Internal::Graphics::IContentLosable*>(this)) {
+            losable->ClearContentLostEXT();
+        }
 
         const auto* source = static_cast<const std::uint8_t*>(data) + byteOffset;
         if (dataElementSize == IndexElementSize::ThirtyTwoBits)
@@ -294,6 +299,19 @@ namespace Microsoft::Xna::Framework::Graphics
 
         // Task 930: cache exactly the logical source bytes for a future GetData() call.
         cpuShadow_.assign(source, source + byteCount);
+    }
+
+    void IndexBuffer::ThrowIfSetDataResourceInUse(SetDataOptions options,
+                                                  bool useOptions) const
+    {
+        if (useOptions &&
+            (options == SetDataOptions::Discard || options == SetDataOptions::NoOverwrite))
+        {
+            return;
+        }
+        GraphicsDevice* const device = getGraphicsDeviceProperty();
+        if (device != nullptr && device->GetIndexBuffer() == this)
+            throw System::InvalidOperationException("The index buffer resource is in use.");
     }
 
     void IndexBuffer::GetDataInternal(void* data,

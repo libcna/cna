@@ -7,6 +7,7 @@
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
@@ -224,6 +225,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                            SetDataOptions options,
                                            bool useOptions)
     {
+        ThrowIfSetDataResourceInUse(options, useOptions);
         // GFX-043: propagate this buffer's complete declaration before every real upload. The
         // shared empty branch returns before this method, so even declaration propagation is not
         // a renderer call for an empty operation.
@@ -242,6 +244,24 @@ namespace Microsoft::Xna::Framework::Graphics
             CheckedByteCount(elementCount, uploadStride, "elementCount");
         const auto* bytes = static_cast<const std::uint8_t*>(data);
         cpuShadow_.assign(bytes, bytes + byteCount);
+    }
+
+    void VertexBuffer::ThrowIfSetDataResourceInUse(SetDataOptions options,
+                                                   bool useOptions) const
+    {
+        if (useOptions &&
+            (options == SetDataOptions::Discard || options == SetDataOptions::NoOverwrite))
+        {
+            return;
+        }
+        GraphicsDevice* const device = getGraphicsDeviceProperty();
+        if (device == nullptr)
+            return;
+        for (const VertexBufferBinding& binding : device->GetVertexBuffers())
+        {
+            if (binding.getVertexBufferProperty() == this)
+                throw System::InvalidOperationException("The vertex buffer resource is in use.");
+        }
     }
 
     void VertexBuffer::SetData(const VertexPositionColor* data, int count)
@@ -811,7 +831,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void VertexBuffer::SetDataRawAtWithOptions(const int offsetInBytes, const void* const data,
                                                const int startIndex, const int elementCount,
-                                               const int stride, SetDataOptions)
+                                               const int stride, SetDataOptions options)
     {
         // Validated before any pointer arithmetic; SetDataRawAtEXT repeats the checks it owns.
         if (stride <= 0)
@@ -827,13 +847,20 @@ namespace Microsoft::Xna::Framework::Graphics
                 : static_cast<const std::uint8_t*>(data) +
                       static_cast<std::size_t>(startIndex) * static_cast<std::size_t>(stride);
 
-        // The streaming hint stops here on purpose -- see the header. The window is composed in
-        // the CPU shadow and uploaded whole, which cannot honour a NoOverwrite promise.
-        SetDataRawAtEXT(offsetInBytes, source, elementCount, stride);
+        SetDataRawAtInternal(
+            offsetInBytes, source, elementCount, stride, options, true);
     }
 
     void VertexBuffer::SetDataRawAtEXT(const int offsetInBytes, const void* const data,
                                        const int count, const int stride)
+    {
+        SetDataRawAtInternal(
+            offsetInBytes, data, count, stride, SetDataOptions::None, false);
+    }
+
+    void VertexBuffer::SetDataRawAtInternal(const int offsetInBytes, const void* const data,
+                                            const int count, const int stride,
+                                            SetDataOptions options, bool useOptions)
     {
         if (getIsDisposedProperty())
             throw System::ObjectDisposedException("VertexBuffer");
@@ -865,6 +892,7 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         if (data == nullptr)
             throw System::ArgumentNullException("data");
+        ThrowIfSetDataResourceInUse(options, useOptions);
 
         const std::size_t capacity =
             CheckedByteCount(vertexCount_, uploadStride, "vertexCount");
