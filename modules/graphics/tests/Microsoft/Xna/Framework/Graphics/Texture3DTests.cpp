@@ -5,7 +5,7 @@
 //   • Constructor properties (Width/Height/Depth/Format/LevelCount), including mipMap
 //     level-count math (Task 271 audit finding: previously hardcoded to 1 regardless of mipMap).
 //   • GetTypeName.
-//   • SetData/GetData argument guards (null data, elementCount<=0, negative startIndex,
+//   • SetData/GetData argument guards (null data, exact transfer size, negative startIndex,
 //     negative level, invalid box) for all overloads — previously missing entirely
 //     (Task 271 audit finding: null data caused a crash, negative startIndex caused an
 //     out-of-bounds read/write, matching the class of bug fixed for Texture2D in Tasks 265/266).
@@ -26,6 +26,7 @@
 #include <limits>
 #include <memory>
 #include <stdexcept>
+#include <typeinfo>
 #include <vector>
 
 #include "CNA/GraphicsCapability.hpp"
@@ -39,6 +40,8 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/ArgumentNullException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/ObjectDisposedException.hpp"
@@ -52,6 +55,25 @@ using Microsoft::Xna::Framework::Graphics::TextureCollection;
 
 namespace
 {
+template<typename TException, typename TCallable>
+void ExpectExactNamedException(TCallable&& callable, const char* parameterName)
+{
+    try
+    {
+        callable();
+        FAIL() << "expected " << typeid(TException).name();
+    }
+    catch (const TException& exception)
+    {
+        EXPECT_EQ(typeid(exception), typeid(TException));
+        EXPECT_EQ(exception.getParamNameProperty(), parameterName);
+    }
+    catch (...)
+    {
+        FAIL() << "unexpected exception type; expected " << typeid(TException).name();
+    }
+}
+
 /// Whether this renderer can fetch a volume texture's voxels back to the CPU.
 ///
 /// Storage and readback were the same question for every renderer until IGL, exactly as they were
@@ -187,30 +209,34 @@ TEST_F(Texture3DTest, MipMapTrueNonPowerOfTwo)
 // (both delegate to the 10-arg overload; guards live there)
 // -----------------------------------------------------------------------
 
-TEST_F(Texture3DTest, SetDataSimpleNullDataThrowsInvalidArgument)
+TEST_F(Texture3DTest, SetDataSimpleNullDataThrowsNamedArgumentNullException)
 {
     Texture3D tex(gd, 2, 2, 2, false, SurfaceFormat::Color);
-    EXPECT_THROW(tex.SetData(nullptr, 8), std::invalid_argument);
+    ExpectExactNamedException<System::ArgumentNullException>(
+        [&] { tex.SetData(nullptr, 8); }, "data");
 }
 
-TEST_F(Texture3DTest, SetDataSimpleZeroElementCountThrowsOutOfRange)
+TEST_F(Texture3DTest, SetDataSimpleZeroElementCountThrowsNamedArgumentOutOfRangeException)
 {
     Texture3D tex(gd, 2, 2, 2, false, SurfaceFormat::Color);
     Color buf[1] = { Color(0, 0, 0, 0) };
-    EXPECT_THROW(tex.SetData(buf, 0), std::out_of_range);
+    ExpectExactNamedException<System::ArgumentOutOfRangeException>(
+        [&] { tex.SetData(buf, 0); }, "elementCount");
 }
 
-TEST_F(Texture3DTest, SetDataStartIndexNullDataThrowsInvalidArgument)
+TEST_F(Texture3DTest, SetDataStartIndexNullDataThrowsNamedArgumentNullException)
 {
     Texture3D tex(gd, 2, 2, 2, false, SurfaceFormat::Color);
-    EXPECT_THROW(tex.SetData(nullptr, 0, 8), std::invalid_argument);
+    ExpectExactNamedException<System::ArgumentNullException>(
+        [&] { tex.SetData(nullptr, 0, 8); }, "data");
 }
 
-TEST_F(Texture3DTest, SetDataStartIndexNegativeStartIndexThrowsOutOfRange)
+TEST_F(Texture3DTest, SetDataStartIndexNegativeStartIndexUsesXnaHelperParameterName)
 {
     Texture3D tex(gd, 2, 2, 2, false, SurfaceFormat::Color);
     std::vector<Color> buf(8, Color(0, 0, 0, 0));
-    EXPECT_THROW(tex.SetData(buf.data(), -1, 8), std::out_of_range);
+    ExpectExactNamedException<System::ArgumentOutOfRangeException>(
+        [&] { tex.SetData(buf.data(), -1, 8); }, "dataIndex");
 }
 
 // REMED-GFX-135: both overloads used to be bare EXPECT_NO_THROWs, which a renderer that dropped the
@@ -288,34 +314,37 @@ TEST_F(Texture3DTest, SetDataAfterDisposeThrowsObjectDisposed)
 // — argument guards (Task 271: previously none of these existed at all)
 // -----------------------------------------------------------------------
 
-TEST_F(Texture3DTest, SetDataBoxNullDataThrowsInvalidArgument)
+TEST_F(Texture3DTest, SetDataBoxNullDataThrowsNamedArgumentNullException)
 {
     Texture3D tex(gd, 2, 2, 2, false, SurfaceFormat::Color);
-    EXPECT_THROW(tex.SetData(0, 0, 0, 2, 2, 0, 2, nullptr, 0, 4), std::invalid_argument);
+    ExpectExactNamedException<System::ArgumentNullException>(
+        [&] { tex.SetData(0, 0, 0, 2, 2, 0, 2, nullptr, 0, 4); }, "data");
 }
 
-TEST_F(Texture3DTest, SetDataBoxZeroElementCountThrowsOutOfRange)
+TEST_F(Texture3DTest, SetDataBoxZeroElementCountThrowsNamedArgumentOutOfRangeException)
 {
     Texture3D tex(gd, 2, 2, 2, false, SurfaceFormat::Color);
     Color buf[1] = { Color(0, 0, 0, 0) };
-    EXPECT_THROW(tex.SetData(0, 0, 0, 2, 2, 0, 1, buf, 0, 0), std::out_of_range);
+    ExpectExactNamedException<System::ArgumentOutOfRangeException>(
+        [&] { tex.SetData(0, 0, 0, 2, 2, 0, 1, buf, 0, 0); }, "elementCount");
 }
 
-TEST_F(Texture3DTest, SetDataBoxNegativeStartIndexThrowsOutOfRange)
+TEST_F(Texture3DTest, SetDataBoxNegativeStartIndexUsesXnaHelperParameterName)
 {
     Texture3D tex(gd, 2, 2, 2, false, SurfaceFormat::Color);
     std::vector<Color> buf(4, Color(0, 0, 0, 0));
-    EXPECT_THROW(tex.SetData(0, 0, 0, 2, 2, 0, 1, buf.data(), -1, 4), std::out_of_range);
+    ExpectExactNamedException<System::ArgumentOutOfRangeException>(
+        [&] { tex.SetData(0, 0, 0, 2, 2, 0, 1, buf.data(), -1, 4); }, "dataIndex");
 }
 
-TEST_F(Texture3DTest, SetDataBoxOverflowingTransferWindowThrowsOutOfRange)
+TEST_F(Texture3DTest, SetDataBoxOverflowingTransferWindowThrowsArgumentOutOfRangeException)
 {
     Texture3D texture(gd, 1, 1, 1, false, SurfaceFormat::Color);
     Color value(1, 2, 3, 4);
 
     EXPECT_THROW(texture.SetData(0, 0, 0, 1, 1, 0, 1, &value,
                                  (std::numeric_limits<int>::max)(), 1),
-                 std::out_of_range);
+                 System::ArgumentOutOfRangeException);
 }
 
 TEST_F(Texture3DTest, SetDataBoxNegativeLevelThrowsOutOfRange)
@@ -325,25 +354,28 @@ TEST_F(Texture3DTest, SetDataBoxNegativeLevelThrowsOutOfRange)
     EXPECT_THROW(tex.SetData(-1, 0, 0, 2, 2, 0, 1, buf.data(), 0, 4), std::out_of_range);
 }
 
-TEST_F(Texture3DTest, SetDataBoxNegativeLeftThrowsOutOfRange)
+TEST_F(Texture3DTest, SetDataBoxNegativeLeftThrowsNamedArgumentException)
 {
     Texture3D tex(gd, 2, 2, 2, false, SurfaceFormat::Color);
     std::vector<Color> buf(4, Color(0, 0, 0, 0));
-    EXPECT_THROW(tex.SetData(0, -1, 0, 2, 2, 0, 1, buf.data(), 0, 4), std::out_of_range);
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { tex.SetData(0, -1, 0, 2, 2, 0, 1, buf.data(), 0, 4); }, "box");
 }
 
-TEST_F(Texture3DTest, SetDataBoxLeftNotLessThanRightThrowsOutOfRange)
+TEST_F(Texture3DTest, SetDataBoxLeftNotLessThanRightThrowsNamedArgumentException)
 {
     Texture3D tex(gd, 2, 2, 2, false, SurfaceFormat::Color);
     std::vector<Color> buf(4, Color(0, 0, 0, 0));
-    EXPECT_THROW(tex.SetData(0, 2, 0, 2, 2, 0, 1, buf.data(), 0, 4), std::out_of_range);
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { tex.SetData(0, 2, 0, 2, 2, 0, 1, buf.data(), 0, 4); }, "box");
 }
 
-TEST_F(Texture3DTest, SetDataBoxFrontNotLessThanBackThrowsOutOfRange)
+TEST_F(Texture3DTest, SetDataBoxFrontNotLessThanBackThrowsNamedArgumentException)
 {
     Texture3D tex(gd, 2, 2, 2, false, SurfaceFormat::Color);
     std::vector<Color> buf(4, Color(0, 0, 0, 0));
-    EXPECT_THROW(tex.SetData(0, 0, 0, 2, 2, 1, 1, buf.data(), 0, 4), std::out_of_range);
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { tex.SetData(0, 0, 0, 2, 2, 1, 1, buf.data(), 0, 4); }, "box");
 }
 
 TEST_F(Texture3DTest, SetDataRejectsLevelAndBoxesOutsideMipBoundsWithoutMutation)
@@ -354,9 +386,9 @@ TEST_F(Texture3DTest, SetDataRejectsLevelAndBoxesOutsideMipBoundsWithoutMutation
     tex.SetData(1, 0, 0, 2, 2, 0, 2, baseline.data(), 0, 8);
 
     EXPECT_THROW(tex.SetData(3, 0, 0, 1, 1, 0, 1, replacement.data(), 0, 1), std::out_of_range);
-    EXPECT_THROW(tex.SetData(1, 0, 0, 3, 2, 0, 2, replacement.data(), 0, 12), std::out_of_range);
-    EXPECT_THROW(tex.SetData(1, 0, 0, 2, 3, 0, 2, replacement.data(), 0, 12), std::out_of_range);
-    EXPECT_THROW(tex.SetData(1, 0, 0, 2, 2, 0, 3, replacement.data(), 0, 12), std::out_of_range);
+    EXPECT_THROW(tex.SetData(1, 0, 0, 3, 2, 0, 2, replacement.data(), 0, 12), System::ArgumentException);
+    EXPECT_THROW(tex.SetData(1, 0, 0, 2, 3, 0, 2, replacement.data(), 0, 12), System::ArgumentException);
+    EXPECT_THROW(tex.SetData(1, 0, 0, 2, 2, 0, 3, replacement.data(), 0, 12), System::ArgumentException);
 
     if (!VolumeReadbackSupported()) return;
     std::vector<Color> got(8);
@@ -391,16 +423,26 @@ TEST_F(Texture3DTest, SetDataBoxWithinBoundsStoresOnlyThatSlice)
         EXPECT_EQ(got[i].getPackedValueProperty(), whole[0].getPackedValueProperty()) << "slice 1, i=" << i;
 }
 
-// Task 913: elementCount must cover the full requested region (right-left)*(bottom-top)*
-// (back-front) — previously unvalidated, so a too-small elementCount caused the renderer to
-// write/read past the caller-supplied buffer (confirmed via a live heap-corruption crash while
-// building Task 663's DDS test fixture for the analogous TextureCube gap).
-TEST_F(Texture3DTest, SetDataBoxElementCountLessThanRegionThrowsOutOfRange)
+TEST_F(Texture3DTest, SetDataRequiresExactElementCountForTheRequestedVolume)
 {
     Texture3D tex(gd, 2, 2, 2, false, SurfaceFormat::Color);
-    Color buf[1] = { Color(1, 2, 3, 4) };
-    // Region is 2x2x1=4 voxels; only 1 element provided.
-    EXPECT_THROW(tex.SetData(0, 0, 0, 2, 2, 0, 1, buf, 0, 1), std::out_of_range);
+    const Color baseline(9, 8, 7, 6);
+    std::vector<Color> initial(8, baseline);
+    std::vector<Color> buf(9, Color(1, 2, 3, 4));
+    tex.SetData(initial.data(), 8);
+
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { tex.SetData(0, 0, 0, 2, 2, 0, 1, buf.data(), 0, 1); }, "");
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { tex.SetData(0, 0, 0, 2, 2, 0, 1, buf.data(), 0, 5); }, "");
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { tex.SetData(buf.data(), 9); }, "");
+
+    if (!VolumeReadbackSupported()) return;
+    std::vector<Color> got(8);
+    tex.GetData(got.data(), 8);
+    for (const Color& color : got)
+        EXPECT_EQ(color, baseline);
 }
 
 // -----------------------------------------------------------------------
@@ -417,40 +459,44 @@ TEST_F(Texture3DTest, SetDataPointerEXTNullDataThrowsInvalidArgument)
 // GetData — argument guards (mirrors SetData's guards)
 // -----------------------------------------------------------------------
 
-TEST_F(Texture3DTest, GetDataSimpleNullDataThrowsInvalidArgument)
+TEST_F(Texture3DTest, GetDataSimpleNullDataThrowsNamedArgumentNullException)
 {
     Texture3D tex(gd, 2, 2, 2, false, SurfaceFormat::Color);
-    EXPECT_THROW(tex.GetData(nullptr, 8), std::invalid_argument);
+    ExpectExactNamedException<System::ArgumentNullException>(
+        [&] { tex.GetData(nullptr, 8); }, "data");
 }
 
-TEST_F(Texture3DTest, GetDataSimpleZeroElementCountThrowsOutOfRange)
+TEST_F(Texture3DTest, GetDataSimpleZeroElementCountThrowsNamedArgumentOutOfRangeException)
 {
     Texture3D tex(gd, 2, 2, 2, false, SurfaceFormat::Color);
     Color buf[1] = { Color(0, 0, 0, 0) };
-    EXPECT_THROW(tex.GetData(buf, 0), std::out_of_range);
+    ExpectExactNamedException<System::ArgumentOutOfRangeException>(
+        [&] { tex.GetData(buf, 0); }, "elementCount");
 }
 
-TEST_F(Texture3DTest, GetDataStartIndexNegativeStartIndexThrowsOutOfRange)
+TEST_F(Texture3DTest, GetDataStartIndexNegativeStartIndexUsesXnaHelperParameterName)
 {
     Texture3D tex(gd, 2, 2, 2, false, SurfaceFormat::Color);
     std::vector<Color> buf(8, Color(0, 0, 0, 0));
-    EXPECT_THROW(tex.GetData(buf.data(), -1, 8), std::out_of_range);
+    ExpectExactNamedException<System::ArgumentOutOfRangeException>(
+        [&] { tex.GetData(buf.data(), -1, 8); }, "dataIndex");
 }
 
-TEST_F(Texture3DTest, GetDataOverflowingTransferWindowThrowsOutOfRange)
+TEST_F(Texture3DTest, GetDataOverflowingTransferWindowThrowsArgumentOutOfRangeException)
 {
     Texture3D texture(gd, 1, 1, 1, false, SurfaceFormat::Color);
     Color destination(9, 8, 7, 6);
 
     EXPECT_THROW(texture.GetData(&destination, (std::numeric_limits<int>::max)(), 1),
-                 std::out_of_range);
+                 System::ArgumentOutOfRangeException);
     EXPECT_EQ(destination, Color(9, 8, 7, 6));
 }
 
-TEST_F(Texture3DTest, GetDataBoxNullDataThrowsInvalidArgument)
+TEST_F(Texture3DTest, GetDataBoxNullDataThrowsNamedArgumentNullException)
 {
     Texture3D tex(gd, 2, 2, 2, false, SurfaceFormat::Color);
-    EXPECT_THROW(tex.GetData(0, 0, 0, 2, 2, 0, 2, nullptr, 0, 4), std::invalid_argument);
+    ExpectExactNamedException<System::ArgumentNullException>(
+        [&] { tex.GetData(0, 0, 0, 2, 2, 0, 2, nullptr, 0, 4); }, "data");
 }
 
 TEST_F(Texture3DTest, GetDataBoxNegativeLevelThrowsOutOfRange)
@@ -460,11 +506,12 @@ TEST_F(Texture3DTest, GetDataBoxNegativeLevelThrowsOutOfRange)
     EXPECT_THROW(tex.GetData(-1, 0, 0, 2, 2, 0, 1, buf.data(), 0, 4), std::out_of_range);
 }
 
-TEST_F(Texture3DTest, GetDataBoxLeftNotLessThanRightThrowsOutOfRange)
+TEST_F(Texture3DTest, GetDataBoxLeftNotLessThanRightThrowsNamedArgumentException)
 {
     Texture3D tex(gd, 2, 2, 2, false, SurfaceFormat::Color);
     std::vector<Color> buf(4, Color(0, 0, 0, 0));
-    EXPECT_THROW(tex.GetData(0, 2, 0, 2, 2, 0, 1, buf.data(), 0, 4), std::out_of_range);
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { tex.GetData(0, 2, 0, 2, 2, 0, 1, buf.data(), 0, 4); }, "box");
 }
 
 TEST_F(Texture3DTest, GetDataRejectsLevelAndBoxesOutsideMipBoundsWithoutMutation)
@@ -473,19 +520,21 @@ TEST_F(Texture3DTest, GetDataRejectsLevelAndBoxesOutsideMipBoundsWithoutMutation
     const Color sentinel(0xCD, 0xCD, 0xCD, 0xCD);
     std::vector<Color> destination(27, sentinel);
 
-    const auto rejectedWithoutMutation = [&](int level, int right, int bottom, int back, int count)
+    EXPECT_THROW(tex.GetData(3, 0, 0, 1, 1, 0, 1,
+                             destination.data(), 0, 1), std::out_of_range);
+
+    const auto rejectedBoxWithoutMutation = [&](int right, int bottom, int back, int count)
     {
         std::fill(destination.begin(), destination.end(), sentinel);
-        EXPECT_THROW(tex.GetData(level, 0, 0, right, bottom, 0, back,
-                                 destination.data(), 0, count), std::out_of_range);
+        EXPECT_THROW(tex.GetData(1, 0, 0, right, bottom, 0, back,
+                                 destination.data(), 0, count), System::ArgumentException);
         for (const Color& color : destination)
             EXPECT_EQ(color.getPackedValueProperty(), sentinel.getPackedValueProperty());
     };
 
-    rejectedWithoutMutation(3, 1, 1, 1, 1);
-    rejectedWithoutMutation(1, 3, 2, 2, 12);
-    rejectedWithoutMutation(1, 2, 3, 2, 12);
-    rejectedWithoutMutation(1, 2, 2, 3, 12);
+    rejectedBoxWithoutMutation(3, 2, 2, 12);
+    rejectedBoxWithoutMutation(2, 3, 2, 12);
+    rejectedBoxWithoutMutation(2, 2, 3, 12);
 }
 
 // REMED-GFX-130 false-positive audit: this test used to be a bare EXPECT_NO_THROW, which asserted
@@ -520,13 +569,19 @@ TEST_F(Texture3DTest, GetDataBoxWithinBoundsReturnsUploadedSlice)
         EXPECT_EQ(buf[i].getPackedValueProperty(), uploaded[i].getPackedValueProperty()) << i;
 }
 
-// Task 913: see the identical SetData test above for the full rationale.
-TEST_F(Texture3DTest, GetDataBoxElementCountLessThanRegionThrowsOutOfRange)
+TEST_F(Texture3DTest, GetDataRequiresExactElementCountForTheRequestedVolume)
 {
     Texture3D tex(gd, 2, 2, 2, false, SurfaceFormat::Color);
-    Color buf[1] = { Color(0, 0, 0, 0) };
-    // Region is 2x2x1=4 voxels; only 1 element provided.
-    EXPECT_THROW(tex.GetData(0, 0, 0, 2, 2, 0, 1, buf, 0, 1), std::out_of_range);
+    std::vector<Color> buf(9, Color(0xCD, 0xCD, 0xCD, 0xCD));
+
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { tex.GetData(0, 0, 0, 2, 2, 0, 1, buf.data(), 0, 1); }, "");
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { tex.GetData(0, 0, 0, 2, 2, 0, 1, buf.data(), 0, 5); }, "");
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { tex.GetData(buf.data(), 9); }, "");
+    for (const Color& color : buf)
+        EXPECT_EQ(color, Color(0xCD, 0xCD, 0xCD, 0xCD));
 }
 
 // -----------------------------------------------------------------------

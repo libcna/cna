@@ -428,6 +428,10 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
 - **Stock-effect validation reports the XNA exception types** (`SOFTWARE-262`) —
   `EnvironmentMapEffect`/`SkinnedEffect` required-lighting, bone-palette and skin-weight guards use
   the recovered `NotSupportedException`/`Argument*Exception` contracts and parameter names.
+- **`Texture3D` transfers require an exact volume-sized count** (`SOFTWARE-263`) — a full or
+  partial `SetData`/`GetData` rejects both short and surplus element counts before mutation, and
+  null/count/box failures expose Microsoft's named `System::Argument*Exception` families rather
+  than renderer-independent native C++ exceptions.
 - **The classic SpriteBatch/SpriteFont parity corpus executes on the CPU** (`SOFTWARE-138`).
   Eighteen renderer-independent scenes shared with EasyGL cover flips, rotation/origin, both scale
   overloads, source rectangles, layer sorting, transforms, render targets, viewports, scissor,

@@ -107,14 +107,15 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param back         Back boundary (exclusive) of the sub-volume in texels.
          * @param data         Pointer to the source Color array.
          * @param startIndex   First element within @p data to start reading.
-         * @param elementCount Number of Color elements the caller offers; must be at least the
-         *                     number of voxels in the requested box, of which exactly that many
-         *                     are read starting at @p startIndex.
+         * @param elementCount Number of Color elements to upload; must exactly match the number
+         *                     of voxels in the requested box.
          * @throws System::ObjectDisposedException if this Texture3D has been disposed.
          * @throws System::NotSupportedException if this renderer cannot store the requested mip
          *         level or box.
-         * @throws std::invalid_argument if @p data is null.
-         * @throws std::out_of_range for an invalid level, startIndex, elementCount or box.
+         * @throws System::ArgumentNullException if @p data is null.
+         * @throws System::ArgumentOutOfRangeException for an invalid startIndex or elementCount.
+         * @throws System::ArgumentException if the box or total transfer size is invalid.
+         * @throws std::out_of_range if @p level is invalid.
          */
         void SetData(int level, int left, int top, int right, int bottom, int front, int back,
                      const Color* data, int startIndex, int elementCount);
@@ -177,15 +178,16 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param back         Back boundary (exclusive) in texels.
          * @param data         Output array to receive the Color data.
          * @param startIndex   First element within @p data to write to.
-         * @param elementCount Number of Color elements to read; must be at least the number of
+         * @param elementCount Number of Color elements to read; must exactly match the number of
          *                     voxels in the requested box.
          * @throws System::ObjectDisposedException if this texture has been disposed.
          * @throws System::NotSupportedException if this graphics renderer cannot read the requested
          *         volume/mip level back to the CPU (including renderers that create no volume
          *         resource at all).
-         * @throws std::invalid_argument if @p data is null.
-         * @throws std::out_of_range if @p level, @p startIndex, @p elementCount or the box is out
-         *         of range.
+         * @throws System::ArgumentNullException if @p data is null.
+         * @throws System::ArgumentOutOfRangeException for an invalid startIndex or elementCount.
+         * @throws System::ArgumentException if the box or total transfer size is invalid.
+         * @throws std::out_of_range if @p level is invalid.
          */
         void GetData(int level, int left, int top, int right, int bottom, int front, int back,
                      Color* data, int startIndex, int elementCount) const;

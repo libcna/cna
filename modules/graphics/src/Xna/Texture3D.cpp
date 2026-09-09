@@ -4,6 +4,8 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
@@ -34,23 +36,24 @@ namespace Microsoft::Xna::Framework::Graphics
         return std::max(1, base >> level);
     }
 
-    static void ValidateTransferWindowEXT(
-        const char* api, int startIndex, int elementCount, std::size_t requiredElements)
+    static void ValidateCopyArguments(int startIndex, int elementCount)
     {
-        if (static_cast<std::size_t>(elementCount) < requiredElements ||
-            requiredElements > static_cast<std::size_t>((std::numeric_limits<int>::max)()))
-        {
-            throw std::out_of_range(
-                std::string(api) +
-                ": elementCount is less than the number of voxels in the requested region");
-        }
+        if (startIndex < 0)
+            throw System::ArgumentOutOfRangeException("dataIndex");
+        if (elementCount <= 0)
+            throw System::ArgumentOutOfRangeException("elementCount");
         if (static_cast<std::int64_t>(startIndex) + static_cast<std::int64_t>(elementCount) >
             static_cast<std::int64_t>((std::numeric_limits<int>::max)()))
         {
-            throw std::out_of_range(
-                std::string(api) +
-                ": startIndex + elementCount does not fit in a 32-bit element index");
+            throw System::ArgumentOutOfRangeException("elementCount");
         }
+    }
+
+    static void ValidateTotalSize(int elementCount, std::size_t requiredElements)
+    {
+        if (requiredElements > static_cast<std::size_t>((std::numeric_limits<int>::max)()) ||
+            static_cast<std::size_t>(elementCount) != requiredElements)
+            throw System::ArgumentException("The data size does not match the requested volume.");
     }
 
     // D9-103 follow-up: D9-100's own table -- GraphicsProfile.Reach does not support volume
@@ -154,24 +157,20 @@ namespace Microsoft::Xna::Framework::Graphics
         if (getIsDisposedProperty())
             throw System::ObjectDisposedException("Texture3D");
         if (!data)
-            throw std::invalid_argument("Texture3D::SetData: data must not be null");
+            throw System::ArgumentNullException("data");
         ThrowIfDataTransferResourceInUseEXT(true);
-        if (elementCount <= 0)
-            throw std::out_of_range("Texture3D::SetData: elementCount must be > 0");
-        if (startIndex < 0)
-            throw std::out_of_range("Texture3D::SetData: startIndex must be >= 0");
         if (level < 0 || level >= levelCount_)
             throw std::out_of_range("Texture3D::SetData: level is outside the mip chain");
+        ValidateCopyArguments(startIndex, elementCount);
         if (left < 0 || left >= right || top < 0 || top >= bottom || front < 0 || front >= back)
-            throw std::out_of_range("Texture3D::SetData: box position/size is invalid");
+            throw System::ArgumentException("The box position or size is invalid.", "box");
         if (right > MipDimension(width_, level) || bottom > MipDimension(height_, level) ||
             back > MipDimension(depth_, level))
-            throw std::out_of_range("Texture3D::SetData: box is outside the mip level");
+            throw System::ArgumentException("The box is outside the mip level.", "box");
         const std::size_t boxVoxels =
             static_cast<std::size_t>(right - left) * static_cast<std::size_t>(bottom - top) *
             static_cast<std::size_t>(back - front);
-        ValidateTransferWindowEXT(
-            "Texture3D::SetData", startIndex, elementCount, boxVoxels);
+        ValidateTotalSize(elementCount, boxVoxels);
 
         // REMED-GFX-135 -- see TextureCube::SetData's identical note: converted to the REQUESTED
         // BOX rather than to elementCount, so the call never reads source elements it does not
@@ -234,19 +233,16 @@ namespace Microsoft::Xna::Framework::Graphics
         if (getIsDisposedProperty())
             throw System::ObjectDisposedException("Texture3D");
         if (!data)
-            throw std::invalid_argument("Texture3D::GetData: data must not be null");
+            throw System::ArgumentNullException("data");
         ThrowIfDataTransferResourceInUseEXT(false);
-        if (elementCount <= 0)
-            throw std::out_of_range("Texture3D::GetData: elementCount must be > 0");
-        if (startIndex < 0)
-            throw std::out_of_range("Texture3D::GetData: startIndex must be >= 0");
         if (level < 0 || level >= levelCount_)
             throw std::out_of_range("Texture3D::GetData: level is outside the mip chain");
+        ValidateCopyArguments(startIndex, elementCount);
         if (left < 0 || left >= right || top < 0 || top >= bottom || front < 0 || front >= back)
-            throw std::out_of_range("Texture3D::GetData: box position/size is invalid");
+            throw System::ArgumentException("The box position or size is invalid.", "box");
         if (right > MipDimension(width_, level) || bottom > MipDimension(height_, level) ||
             back > MipDimension(depth_, level))
-            throw std::out_of_range("Texture3D::GetData: box is outside the mip level");
+            throw System::ArgumentException("The box is outside the mip level.", "box");
 
         const int boxW = right - left;
         const int boxH = bottom - top;
@@ -254,8 +250,7 @@ namespace Microsoft::Xna::Framework::Graphics
         const std::size_t boxVoxels =
             static_cast<std::size_t>(boxW) * static_cast<std::size_t>(boxH) *
             static_cast<std::size_t>(boxD);
-        ValidateTransferWindowEXT(
-            "Texture3D::GetData", startIndex, elementCount, boxVoxels);
+        ValidateTotalSize(elementCount, boxVoxels);
         Texture::ValidateGetDataFormat(format_, 4);
 
         // REMED-GFX-130 -- see TextureCube::GetData for the full reasoning. `rgba` is scratch memory
