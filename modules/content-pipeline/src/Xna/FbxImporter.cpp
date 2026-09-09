@@ -1337,6 +1337,16 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 // not read: `Emissive`, `Diffuse` and `Displacement` produce nothing. A texture
                 // element the geometry declares but no `Layer` names produces nothing either
                 // (measured over eleven probes, plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-166`).
+                //
+                // All of them are produced, not only the diffuse one. What made that safe is a
+                // second measurement: `MaterialProcessor` builds only the texture the effect it is
+                // making actually uses, so a `Specular` channel naming a file the sample does not
+                // ship is carried and never opened -- SAMPLE-037's `head.fbx` names a
+                // `Head_Spec.TGA` that is not there, and the genuine processor builds
+                // `Head_Diff.tga` and nothing else (`XNASWEEP-175`). Mapping the reflection
+                // channel onto the diffuse one, which is what CNA did while only the diffuse
+                // channel was produced, is what gave SAMPLE-131's `p1_piece` a texture XNA's own
+                // build does not give it (`XNASWEEP-177`).
                 struct TextureChannel
                 {
                     const char* element;
@@ -1354,6 +1364,13 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 // nothing.
                 static constexpr TextureChannel kTextureChannels[] = {
                     {"LayerElementTexture", "Texture"},
+                    {"LayerElementAmbientTextures", "Ambient"},
+                    {"LayerElementSpecularTextures", "Specular"},
+                    {"LayerElementShininessTextures", "SpecularPower"},
+                    {"LayerElementNormalMapTextures", "NormalMap"},
+                    {"LayerElementBumpTextures", "Bump"},
+                    {"LayerElementTransparentTextures", "Transparency"},
+                    {"LayerElementReflectionTextures", "Reflection"},
                 };
                 struct NamedTextureLayer
                 {
@@ -1370,16 +1387,6 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     Layer read = ReadLayer(*geometry, channel.element, "TextureId", "", 1u);
                     read.reference = "Direct";
                     namedTextures.push_back(NamedTextureLayer{channel.key, std::move(read)});
-                }
-                if (namedTextures.empty() &&
-                    geometry->Find("LayerElementReflectionTextures") != nullptr)
-                {
-                    // An older Maya exporter writes the diffuse channel under this name and no
-                    // `LayerElementTexture` at all (SAMPLE-131's `p1_piece.fbx`).
-                    Layer read = ReadLayer(*geometry, "LayerElementReflectionTextures", "TextureId",
-                                           "", 1u);
-                    read.reference = "Direct";
-                    namedTextures.push_back(NamedTextureLayer{"Texture", std::move(read)});
                 }
 
                 // Walk the polygons, gathering each one's control points and which material it uses.

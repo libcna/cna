@@ -136,6 +136,11 @@
       "thirdParty": false
     },
     {
+      "file": "fbx_reflection_texture.fbx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
       "file": "fbx_material_gap.fbx",
       "origin": "generated",
       "generator": "tools/xna-pipeline-oracle/model/make_fbx_fixtures.py",

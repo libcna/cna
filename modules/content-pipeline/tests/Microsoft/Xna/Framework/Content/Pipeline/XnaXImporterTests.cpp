@@ -663,6 +663,13 @@ TEST(XnaFbxImporter, EveryFileAnswersTheGraphXnaAnswers)
           // is what put a 0 in two of the corpus's references
           // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-171`).
           "fbx_material_lambert_textured.fbx",
+          // The diffuse channel spelled the way an older Maya exporter spells it: a
+          // `LayerElementReflectionUV` and a `LayerElementReflectionTextures`, and no
+          // `LayerElementTexture` at all. The genuine importer answers the texture under
+          // `Reflection`, *not* under `Texture`, so the material a model built from it carries has
+          // no texture -- which is what SAMPLE-131's own `p1_piece.xnb` has
+          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-177`).
+          "fbx_reflection_texture.fbx",
           "fbx_oblique.fbx", "fbx_prerotation_units.fbx",
           "fbx_quad_polygon.fbx", "fbx_quad_textured.fbx",
           // The scene lists its children in the order the file connects them, and a `Material`
