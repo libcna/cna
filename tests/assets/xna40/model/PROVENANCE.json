@@ -563,6 +563,18 @@
       "thirdParty": false
     },
     {
+      "file": "x_position_merge.x",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_position_merge_fixture.py",
+      "thirdParty": false
+    },
+    {
+      "file": "x_position_batches.x",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/model/make_position_merge_fixture.py",
+      "thirdParty": false
+    },
+    {
       "file": "zero_power.x",
       "origin": "generated",
       "generator": "tools/xna-pipeline-oracle/model/make-model-fixtures.py",

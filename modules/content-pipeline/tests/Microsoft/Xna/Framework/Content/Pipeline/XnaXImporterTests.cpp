@@ -483,6 +483,16 @@ TEST(XnaXImporter, EveryFileAnswersTheGraphXnaAnswers)
           // and a double one give different floats
           // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-170`).
           "x_normal_rules.x",
+          // A mesh's position list holds each *different* position once, and the order is the order
+          // the material batches ask for them: this one declares eight vertices over five
+          // positions, two of which share a position and a normal, and XNA answers five positions
+          // and six vertices (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-173`).
+          "x_position_merge.x",
+          // And the order that list is built in: two materials, the second naming the *lower*
+          // vertices. A list deduplicated in file order answers them the file's way; the genuine
+          // importer answers the first material's positions first, because each batch adds what
+          // its own faces name (`XNASWEEP-173`).
+          "x_position_batches.x",
           "oblique_normals.x", "quad_textured.x", "transform_z.x", "two_materials.x",
           "with_templates.x", "zero_power.x"})
     {

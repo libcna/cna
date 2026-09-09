@@ -2,7 +2,10 @@
 #include "Microsoft/Xna/Framework/Content/Pipeline/ModelImporters.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstdint>
+#include <cstring>
 #include <exception>
 #include <filesystem>
 #include <fstream>
@@ -243,10 +246,44 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 positions.push_back(Convert(Vector3(At(object, at), At(object, at + 1), At(object, at + 2))));
                 at += 3u;
             }
-            for (const Vector3& position : positions)
+            // A mesh's positions are the *distinct* ones, and the order is the order the
+            // material batches ask for them: each batch adds the positions its own faces name, in
+            // ascending file order, and a position an earlier batch already added keeps the index
+            // it was given. The genuine importer answers 3,815 positions for Spacewar's `p1_bfg.x`,
+            // which declares 5,299 vertices and holds exactly 3,815 different ones, and 12,802 of
+            // `p2_dual.x`'s 23,305 -- in an order that is a *permutation* of the file's, and this
+            // is the permutation. Nothing about the vertex buffer depends on it; the mesh's
+            // bounding sphere does, because it is computed over this list and the growth pass is
+            // order-dependent (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-173`).
+            constexpr std::size_t kUnplaced = static_cast<std::size_t>(-1);
+            std::vector<std::size_t> positionOf(vertexCount, kUnplaced);
+            std::map<std::array<std::uint32_t, 3>, std::size_t> mergedPositions;
+            const auto placePosition = [&](const std::size_t vertex)
             {
-                mesh->getPositionsProperty().Add(position);
-            }
+                if (vertex >= positionOf.size() || positionOf[vertex] != kUnplaced)
+                {
+                    return;
+                }
+                std::array<std::uint32_t, 3> key{};
+                const float components[3] = {positions[vertex].X, positions[vertex].Y,
+                                             positions[vertex].Z};
+                for (std::size_t axis = 0; axis < 3u; ++axis)
+                {
+                    std::memcpy(&key[axis], &components[axis], sizeof(std::uint32_t));
+                }
+                const auto found = mergedPositions.find(key);
+                if (found != mergedPositions.end())
+                {
+                    positionOf[vertex] = found->second;
+                    return;
+                }
+                const std::size_t assigned =
+                    static_cast<std::size_t>(mesh->getPositionsProperty().getCountProperty());
+                mergedPositions.emplace(key, assigned);
+                mesh->getPositionsProperty().Add(positions[vertex]);
+                positionOf[vertex] = assigned;
+            };
+
             const std::size_t faceCount = Count(object, at++);
             std::vector<std::vector<std::size_t>> faces;
             faces.reserve(faceCount);
@@ -474,6 +511,52 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 }
             }
 
+            // A vertex is everything the file says about it, not its index: two entries carrying
+            // the same position, the same normal and the same channel values are one vertex, which
+            // is why `x_position_merge.x` declares eight and the genuine importer answers six.
+            // The other channels are grouped here into a class per file vertex so that the vertex
+            // key stays three integers wide (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-173`).
+            std::vector<std::size_t> channelClassOf(vertexCount, 0u);
+            {
+                std::map<std::string, std::size_t> classes;
+                for (std::size_t i = 0; i < vertexCount; ++i)
+                {
+                    std::string signature;
+                    const auto append = [&signature](float value)
+                    {
+                        std::uint32_t bits = 0;
+                        std::memcpy(&bits, &value, sizeof(bits));
+                        signature.append(reinterpret_cast<const char*>(&bits), sizeof(bits));
+                    };
+                    if (i < colors.size())
+                    {
+                        append(colors[i].X);
+                        append(colors[i].Y);
+                        append(colors[i].Z);
+                        append(colors[i].W);
+                    }
+                    signature.push_back('\x1f');
+                    if (i < textureCoordinates.size())
+                    {
+                        append(textureCoordinates[i].X);
+                        append(textureCoordinates[i].Y);
+                    }
+                    signature.push_back('\x1f');
+                    if (i < weights.size())
+                    {
+                        for (const BoneWeight& weight : weights[i])
+                        {
+                            signature += weight.getBoneNameProperty();
+                            signature.push_back('=');
+                            append(weight.getWeightProperty());
+                            signature.push_back(',');
+                        }
+                    }
+                    channelClassOf[i] =
+                        classes.emplace(signature, classes.size()).first->second;
+                }
+            }
+
             // One batch per material, or one batch for the whole mesh where the file names none.
             std::vector<std::size_t> materialPerFace(faces.size(), 0u);
             std::vector<std::shared_ptr<BasicMaterialContent>> materials;
@@ -521,11 +604,28 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
 
             for (std::size_t batch = 0; batch < batches; ++batch)
             {
+                // The batch's positions come first, in ascending file order, because that is the
+                // order the genuine importer adds them in (`XNASWEEP-173`).
+                {
+                    std::set<std::size_t> referenced;
+                    for (std::size_t face = 0; face < faces.size(); ++face)
+                    {
+                        if (!materials.empty() && materialPerFace[face] != batch)
+                        {
+                            continue;
+                        }
+                        referenced.insert(faces[face].begin(), faces[face].end());
+                    }
+                    for (const std::size_t vertex : referenced)
+                    {
+                        placePosition(vertex);
+                    }
+                }
                 // A batch's vertices are the mesh positions its own faces name, in first-use
                 // order, which is what makes its indices local and its position indices shared.
                 std::vector<std::size_t> used;
                 std::vector<std::size_t> usedNormals;
-                std::map<std::pair<std::size_t, std::size_t>, SharpRuntime::intcs> local;
+                std::map<std::tuple<std::size_t, std::size_t, std::size_t>, SharpRuntime::intcs> local;
                 std::vector<SharpRuntime::intcs> indices;
                 for (std::size_t face = 0; face < faces.size(); ++face)
                 {
@@ -540,7 +640,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     {
                         const std::size_t vertex = faces[face][corner];
                         // The key is the position *and* the normal the corner names, because a
-                        // vertex is both (`XNASWEEP-144`).
+                        // vertex is both (`XNASWEEP-144`) -- and the position is the *merged* one,
+                        // so two file vertices that name the same position and the same normal are
+                        // one vertex. `x_position_merge.x` declares eight vertices over five
+                        // positions and the genuine importer answers six (`XNASWEEP-173`).
                         std::size_t normalIndex = vertex;
                         if (face < normalFaces.size() && corner < normalFaces[face].size())
                         {
@@ -549,7 +652,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                         const std::size_t normalKey = normalIndex < canonicalNormal.size()
                                                           ? canonicalNormal[normalIndex]
                                                           : normalIndex;
-                        const std::pair<std::size_t, std::size_t> key{vertex, normalKey};
+                        const std::tuple<std::size_t, std::size_t, std::size_t> key{
+                            positionOf[vertex], normalKey, channelClassOf[vertex]};
                         const auto found = local.find(key);
                         if (found == local.end())
                         {
@@ -581,7 +685,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 positionIndices.reserve(used.size());
                 for (const std::size_t vertex : used)
                 {
-                    positionIndices.push_back(static_cast<SharpRuntime::intcs>(vertex));
+                    positionIndices.push_back(static_cast<SharpRuntime::intcs>(positionOf[vertex]));
                 }
                 geometry->getVerticesProperty().AddRange(positionIndices);
                 geometry->getIndicesProperty().AddRange(indices);
