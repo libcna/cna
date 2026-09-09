@@ -15,6 +15,7 @@
 #include "CNA/Graphics/ShaderCodeEXT.hpp"
 #include "CNA/Graphics/ShaderDiagnostics.hpp"
 #include "CNA/Graphics/ShaderEffectFactory.hpp"
+#include "CNA/Graphics/ShaderPackageEXT.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "EngineTestSupport.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -31,6 +32,9 @@ namespace {
 
 using CNA::Graphics::ShaderEffectFactory;
 using CNA::Graphics::ShaderCodeEXT;
+using CNA::Graphics::ShaderBindingRequirementEXT;
+using CNA::Graphics::ShaderBindingTypeEXT;
+using CNA::Graphics::ShaderPackageEXT;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::ShaderEffect;
 
@@ -219,6 +223,206 @@ TEST(ShaderCodeEXTTest, SpirVRequiresWholeWordsWhileDxilRemainsByteAddressed)
     EXPECT_NO_THROW(ShaderCodeEXT(
         CNA::ShaderLanguageEXT::Dxil, CNA::ShaderStageEXT::Compute,
         "main", "byte.dxil", std::vector<std::uint8_t>{0}));
+}
+
+// =====================================================================================
+// MOD-2212: owned multi-language packages and their stage/binding contract
+// =====================================================================================
+
+TEST(ShaderPackageEXTTest, OwnsMultiLanguageVariantsStagesAndBindingsAcrossCopyAndMove)
+{
+    std::vector<ShaderCodeEXT> variants;
+    variants.emplace_back(
+        CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Vertex,
+        "main", "effect.vert", "glsl vertex");
+    variants.emplace_back(
+        CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Fragment,
+        "main", "effect.frag", "glsl fragment");
+    variants.emplace_back(
+        CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Vertex,
+        "main", "effect.vert.spv", std::vector<std::uint8_t>{1, 2, 3, 4});
+    variants.emplace_back(
+        CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Fragment,
+        "main", "effect.frag.spv", std::vector<std::uint8_t>{5, 6, 7, 8});
+    variants.emplace_back(
+        CNA::ShaderLanguageEXT::Hlsl, CNA::ShaderStageEXT::Vertex,
+        "VSMain", "effect.hlsl", "hlsl vertex");
+    variants.emplace_back(
+        CNA::ShaderLanguageEXT::Wgsl, CNA::ShaderStageEXT::Fragment,
+        "fragmentMain", "effect.wgsl", "wgsl fragment");
+
+    std::vector<CNA::ShaderStageEXT> stages = {
+        CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment};
+    std::vector<ShaderBindingRequirementEXT> bindings;
+    bindings.emplace_back(
+        "sceneTexture", 0, ShaderBindingTypeEXT::SampledTexture2D,
+        CNA::ShaderStageEXT::Fragment);
+    ShaderPackageEXT package(variants, stages, bindings);
+    variants.clear();
+    stages.clear();
+    bindings.clear();
+
+    ASSERT_EQ(package.getVariants().size(), 6U);
+    EXPECT_EQ(package.getVariants()[0].getText(), "glsl vertex");
+    EXPECT_EQ(package.getVariants()[2].getBytes()[0], 1U);
+    EXPECT_EQ(package.getRequiredStages(),
+              (std::vector<CNA::ShaderStageEXT>{
+                  CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment}));
+    EXPECT_TRUE(package.requiresStage(CNA::ShaderStageEXT::Vertex));
+    EXPECT_TRUE(package.requiresStage(CNA::ShaderStageEXT::Fragment));
+    EXPECT_FALSE(package.requiresStage(CNA::ShaderStageEXT::Compute));
+    EXPECT_FALSE(package.requiresStage(static_cast<CNA::ShaderStageEXT>(999)));
+    ASSERT_EQ(package.getBindingRequirements().size(), 1U);
+    const auto& binding = package.getBindingRequirements()[0];
+    EXPECT_EQ(binding.getName(), "sceneTexture");
+    EXPECT_EQ(binding.getBinding(), 0);
+    EXPECT_EQ(binding.getType(), ShaderBindingTypeEXT::SampledTexture2D);
+    EXPECT_EQ(binding.getStage(), CNA::ShaderStageEXT::Fragment);
+
+    ShaderPackageEXT copy = package;
+    ShaderPackageEXT moved = std::move(copy);
+    EXPECT_EQ(moved.getVariants()[3].getSourceLabel(), "effect.frag.spv");
+    EXPECT_NE(moved.getVariants().data(), package.getVariants().data());
+}
+
+TEST(ShaderPackageEXTTest, BindingKindsHaveStableUniqueOrdinals)
+{
+    EXPECT_EQ(static_cast<int>(ShaderBindingTypeEXT::SampledTexture2D), 0);
+    EXPECT_EQ(static_cast<int>(ShaderBindingTypeEXT::SampledTextureCube), 1);
+    EXPECT_EQ(static_cast<int>(ShaderBindingTypeEXT::SampledTexture3D), 2);
+    EXPECT_EQ(static_cast<int>(ShaderBindingTypeEXT::SampledTexture2DArray), 3);
+    EXPECT_EQ(static_cast<int>(ShaderBindingTypeEXT::StorageBuffer), 4);
+    EXPECT_EQ(static_cast<int>(ShaderBindingTypeEXT::StorageTexture2D), 5);
+    EXPECT_EQ(static_cast<int>(ShaderBindingTypeEXT::Count), 6);
+}
+
+TEST(ShaderPackageEXTTest, BindingRequirementRejectsInvalidFields)
+{
+    EXPECT_THROW(ShaderBindingRequirementEXT(
+        "", 0, ShaderBindingTypeEXT::SampledTexture2D, CNA::ShaderStageEXT::Fragment),
+        std::invalid_argument);
+    EXPECT_THROW(ShaderBindingRequirementEXT(
+        "texture", -1, ShaderBindingTypeEXT::SampledTexture2D,
+        CNA::ShaderStageEXT::Fragment), std::invalid_argument);
+    EXPECT_THROW(ShaderBindingRequirementEXT(
+        "texture", 0, ShaderBindingTypeEXT::Count, CNA::ShaderStageEXT::Fragment),
+        std::invalid_argument);
+    EXPECT_THROW(ShaderBindingRequirementEXT(
+        "texture", 0, static_cast<ShaderBindingTypeEXT>(999),
+        CNA::ShaderStageEXT::Fragment), std::invalid_argument);
+    EXPECT_THROW(ShaderBindingRequirementEXT(
+        "texture", 0, ShaderBindingTypeEXT::SampledTexture2D,
+        CNA::ShaderStageEXT::Unknown), std::invalid_argument);
+    EXPECT_THROW(ShaderBindingRequirementEXT(
+        "texture", 0, ShaderBindingTypeEXT::SampledTexture2D,
+        static_cast<CNA::ShaderStageEXT>(999)), std::invalid_argument);
+}
+
+TEST(ShaderPackageEXTTest, EmptyVariantsOrRequiredStagesAreRejected)
+{
+    const ShaderCodeEXT code(
+        CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Vertex,
+        "main", "vertex", "source");
+    EXPECT_THROW(ShaderPackageEXT(
+        {}, std::vector<CNA::ShaderStageEXT>{CNA::ShaderStageEXT::Vertex}),
+        std::invalid_argument);
+    EXPECT_THROW(ShaderPackageEXT(
+        std::vector<ShaderCodeEXT>{code}, {}), std::invalid_argument);
+}
+
+TEST(ShaderPackageEXTTest, RequiredStagesMustBeValidUniqueAndRepresented)
+{
+    const ShaderCodeEXT vertex(
+        CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Vertex,
+        "main", "vertex", "source");
+    EXPECT_THROW(ShaderPackageEXT(
+        std::vector<ShaderCodeEXT>{vertex},
+        std::vector<CNA::ShaderStageEXT>{CNA::ShaderStageEXT::Unknown}),
+        std::invalid_argument);
+    EXPECT_THROW(ShaderPackageEXT(
+        std::vector<ShaderCodeEXT>{vertex},
+        std::vector<CNA::ShaderStageEXT>{static_cast<CNA::ShaderStageEXT>(999)}),
+        std::invalid_argument);
+    EXPECT_THROW(ShaderPackageEXT(
+        std::vector<ShaderCodeEXT>{vertex},
+        std::vector<CNA::ShaderStageEXT>{
+            CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Vertex}),
+        std::invalid_argument);
+    EXPECT_THROW(ShaderPackageEXT(
+        std::vector<ShaderCodeEXT>{vertex},
+        std::vector<CNA::ShaderStageEXT>{
+            CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment}),
+        std::invalid_argument);
+}
+
+TEST(ShaderPackageEXTTest, VariantsAndBindingsCannotUseUndeclaredStages)
+{
+    const ShaderCodeEXT vertex(
+        CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Vertex,
+        "main", "vertex", "source");
+    const ShaderCodeEXT fragment(
+        CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Fragment,
+        "main", "fragment", "source");
+    EXPECT_THROW(ShaderPackageEXT(
+        std::vector<ShaderCodeEXT>{vertex, fragment},
+        std::vector<CNA::ShaderStageEXT>{CNA::ShaderStageEXT::Vertex}),
+        std::invalid_argument);
+    EXPECT_THROW(ShaderPackageEXT(
+        std::vector<ShaderCodeEXT>{vertex},
+        std::vector<CNA::ShaderStageEXT>{CNA::ShaderStageEXT::Vertex},
+        std::vector<ShaderBindingRequirementEXT>{ShaderBindingRequirementEXT(
+            "texture", 0, ShaderBindingTypeEXT::SampledTexture2D,
+            CNA::ShaderStageEXT::Fragment)}), std::invalid_argument);
+}
+
+TEST(ShaderPackageEXTTest, BindingsAreUniquePerStageAndConsistentAcrossStages)
+{
+    const ShaderCodeEXT vertex(
+        CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Vertex,
+        "main", "vertex", "source");
+    const ShaderCodeEXT fragment(
+        CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Fragment,
+        "main", "fragment", "source");
+    const std::vector<ShaderCodeEXT> variants = {vertex, fragment};
+    const std::vector<CNA::ShaderStageEXT> stages = {
+        CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment};
+
+    EXPECT_THROW(ShaderPackageEXT(
+        variants, stages,
+        std::vector<ShaderBindingRequirementEXT>{
+            ShaderBindingRequirementEXT(
+                "texture", 0, ShaderBindingTypeEXT::SampledTexture2D,
+                CNA::ShaderStageEXT::Fragment),
+            ShaderBindingRequirementEXT(
+                "textureAgain", 0, ShaderBindingTypeEXT::SampledTexture2D,
+                CNA::ShaderStageEXT::Fragment)}), std::invalid_argument);
+    EXPECT_THROW(ShaderPackageEXT(
+        variants, stages,
+        std::vector<ShaderBindingRequirementEXT>{
+            ShaderBindingRequirementEXT(
+                "texture", 0, ShaderBindingTypeEXT::SampledTexture2D,
+                CNA::ShaderStageEXT::Vertex),
+            ShaderBindingRequirementEXT(
+                "other", 0, ShaderBindingTypeEXT::SampledTexture2D,
+                CNA::ShaderStageEXT::Fragment)}), std::invalid_argument);
+    EXPECT_THROW(ShaderPackageEXT(
+        variants, stages,
+        std::vector<ShaderBindingRequirementEXT>{
+            ShaderBindingRequirementEXT(
+                "texture", 0, ShaderBindingTypeEXT::SampledTexture2D,
+                CNA::ShaderStageEXT::Vertex),
+            ShaderBindingRequirementEXT(
+                "texture", 0, ShaderBindingTypeEXT::StorageBuffer,
+                CNA::ShaderStageEXT::Fragment)}), std::invalid_argument);
+    EXPECT_NO_THROW(ShaderPackageEXT(
+        variants, stages,
+        std::vector<ShaderBindingRequirementEXT>{
+            ShaderBindingRequirementEXT(
+                "texture", 0, ShaderBindingTypeEXT::SampledTexture2D,
+                CNA::ShaderStageEXT::Vertex),
+            ShaderBindingRequirementEXT(
+                "texture", 0, ShaderBindingTypeEXT::SampledTexture2D,
+                CNA::ShaderStageEXT::Fragment)}));
 }
 
 // =====================================================================================

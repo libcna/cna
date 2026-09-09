@@ -250,6 +250,13 @@ SPIR-V additionally requires whole 32-bit words. Selection therefore never guess
 payload contents, and temporary caller strings or byte vectors may be destroyed immediately after
 construction.
 
+`ShaderPackageEXT` owns several of those values plus its required stages and logical resource
+bindings. A binding has a diagnostic name, non-negative portable slot, resource kind and consuming
+stage; the package refuses missing required stages, undeclared stages and conflicting slots before
+selection. The package deliberately contains no live device or native program, so applications may
+copy, move, cache and ship GLSL, SPIR-V, HLSL, WGSL and other variants together without choosing a
+renderer while assembling assets.
+
 ### Every renderer identity
 
 `plans/plan_modern.md` `MOD-1698`. The table above compares subsystems across the three renderers this

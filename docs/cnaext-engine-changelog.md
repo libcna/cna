@@ -14,6 +14,23 @@ something breaks.
 
 ---
 
+## Revision 14 — 2026-09-10
+
+### Owned multi-language shader packages (`MOD-2212`)
+
+- `ShaderPackageEXT` owns one or more `ShaderCodeEXT` variants, an explicit non-empty set of
+  required stages and renderer-neutral logical resource-binding requirements. It contains no
+  device, renderer or native program and retains declaration order across copies and moves.
+- Binding requirements name a non-negative logical slot, one of six currently bindable portable
+  resource kinds and the stage that consumes it. Per-stage duplicates and inconsistent shared
+  slots are rejected during package construction.
+- Every required stage has at least one code variant and every code/binding stage is declared.
+  Incomplete and duplicate per-language candidates remain representable so `MOD-2213` can reject
+  them with a complete deterministic considered-variant diagnostic.
+
+The C header carries the same engine-layer revision marker. The C ABI remains 0.26.0; no package
+handle has been published at the C boundary.
+
 ## Revision 13 — 2026-09-10
 
 ### Owned explicit shader code (`MOD-2211`)
