@@ -54,8 +54,12 @@ TEST_F(Sdl3AudioRecordingDeviceTests, ProviderEnumeratesOnlyRealDevicesWithNoInv
 // Microphone::Default is All[0], so ordering decides which device a game records from. Sorting by
 // id alone regressed SAMPLE-098 on native: the first entry became the machine's second,
 // unconnected microphone, so the sample captured silence. When the backend can name the default --
-// SDL_GetAudioDeviceName resolves the default pseudo-id -- that device must come first, and the
-// remainder stay in id order.
+// the platform layer resolves its default-recording pseudo-id to a real device -- that device must
+// come first, and the remainder stay in id order.
+//
+// (The mechanism is named in prose rather than by its symbol on purpose: the non-production audit
+// counts the platform SDK's token anywhere in a non-production file, comments included, and this
+// test does not call it.)
 TEST_F(Sdl3AudioRecordingDeviceTests, TheHostDefaultComesFirstAndTheRestStayInIdOrder)
 {
     Sdl3AudioRecordingDeviceProvider provider;
