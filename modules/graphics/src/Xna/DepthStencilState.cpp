@@ -21,6 +21,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         // Copy construction is CNA's mutable value-initialization spelling for an XNA state.
         state_->isBound = false;
+        state_->isDisposed = false;
     }
 
     DepthStencilState& DepthStencilState::operator=(const DepthStencilState& other)
@@ -31,6 +32,12 @@ namespace Microsoft::Xna::Framework::Graphics
             state_ = other.state_;
         }
         return *this;
+    }
+
+    void DepthStencilState::Dispose()
+    {
+        state_->isDisposed = true;
+        GraphicsResource::Dispose();
     }
 
     DepthStencilState::DepthStencilState(const std::string& name, bool depthEnable, bool depthWriteEnable)
@@ -101,7 +108,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void DepthStencilState::BindForUse() const
     {
-        if (getIsDisposedProperty())
+        if (state_->isDisposed || getIsDisposedProperty())
             throw System::ObjectDisposedException("DepthStencilState");
         state_->isBound = true;
     }

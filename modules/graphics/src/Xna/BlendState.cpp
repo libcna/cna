@@ -23,6 +23,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // C++ value initialization from an XNA preset is CNA's construction spelling; it must
         // produce the mutable instance that C# would create with `new BlendState()`.
         state_->isBound = false;
+        state_->isDisposed = false;
     }
 
     BlendState& BlendState::operator=(const BlendState& other)
@@ -33,6 +34,12 @@ namespace Microsoft::Xna::Framework::Graphics
             state_ = other.state_;
         }
         return *this;
+    }
+
+    void BlendState::Dispose()
+    {
+        state_->isDisposed = true;
+        GraphicsResource::Dispose();
     }
 
     BlendState::BlendState(const std::string& name, Blend colorSrc, Blend alphaSrc, Blend colorDst, Blend alphaDst)
@@ -93,7 +100,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void BlendState::BindForUse() const
     {
-        if (getIsDisposedProperty())
+        if (state_->isDisposed || getIsDisposedProperty())
             throw System::ObjectDisposedException("BlendState");
         state_->isBound = true;
     }

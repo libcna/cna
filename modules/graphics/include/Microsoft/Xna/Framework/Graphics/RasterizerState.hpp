@@ -37,6 +37,9 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         CNAEXT RasterizerState& operator=(const RasterizerState& other);
 
+        /** @brief Marks this state and every assigned wrapper sharing its payload as disposed. */
+        void Dispose() override;
+
         /** @brief Returns the fully-qualified .NET type name of this object. */
         CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
@@ -118,6 +121,7 @@ namespace Microsoft::Xna::Framework::Graphics
             bool scissorTestEnable = false;
             float slopeScaleDepthBias = 0.0f;
             bool isBound = false;
+            bool isDisposed = false;
         };
 
         void ThrowIfBound() const;

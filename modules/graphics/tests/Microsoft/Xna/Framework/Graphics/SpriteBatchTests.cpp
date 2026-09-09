@@ -379,6 +379,121 @@ TEST(SpriteBatchTest, DeferredSamplerReadsEveryPropertyAtEndBoundary)
     EXPECT_FLOAT_EQ(recording->lodBias, -0.75f);
 }
 
+TEST(SpriteBatchTest, DeferredEndReadsLateMutationsFromEveryStatePayload)
+{
+    using Microsoft::Xna::Framework::Graphics::BlendState;
+    using Microsoft::Xna::Framework::Graphics::ColorWriteChannels;
+    using Microsoft::Xna::Framework::Graphics::CullMode;
+    using Microsoft::Xna::Framework::Graphics::DepthStencilState;
+    using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+    using Microsoft::Xna::Framework::Graphics::RasterizerState;
+    using Microsoft::Xna::Framework::Graphics::SamplerState;
+    using Microsoft::Xna::Framework::Graphics::TextureAddressMode;
+
+    GraphicsDevice device;
+    SpriteBatch batch(device);
+    BlendState blend;
+    SamplerState sampler;
+    DepthStencilState depth;
+    RasterizerState rasterizer;
+
+    batch.Begin(SpriteSortMode::Deferred, &blend, &sampler, &depth, &rasterizer);
+    blend.setColorWriteChannelsProperty(ColorWriteChannels::None);
+    sampler.setAddressUProperty(TextureAddressMode::Mirror);
+    depth.setDepthBufferEnableProperty(false);
+    rasterizer.setCullModeProperty(CullMode::None);
+    batch.End();
+
+    EXPECT_EQ(device.getBlendStateProperty().getColorWriteChannelsProperty(),
+              ColorWriteChannels::None);
+    EXPECT_EQ(device.getSamplerStatesProperty()[0].getAddressUProperty(),
+              TextureAddressMode::Mirror);
+    EXPECT_FALSE(device.getDepthStencilStateProperty().getDepthBufferEnableProperty());
+    EXPECT_EQ(device.getRasterizerStateProperty().getCullModeProperty(), CullMode::None);
+
+    EXPECT_THROW(blend.setColorWriteChannelsProperty(ColorWriteChannels::All),
+                 System::InvalidOperationException);
+    EXPECT_THROW(sampler.setAddressUProperty(TextureAddressMode::Clamp),
+                 System::InvalidOperationException);
+    EXPECT_THROW(depth.setDepthBufferEnableProperty(true), System::InvalidOperationException);
+    EXPECT_THROW(rasterizer.setCullModeProperty(CullMode::CullClockwiseFace),
+                 System::InvalidOperationException);
+}
+
+TEST(SpriteBatchTest, ImmediateBeginRejectsEveryDisposedStateFamily)
+{
+    using Microsoft::Xna::Framework::Graphics::BlendState;
+    using Microsoft::Xna::Framework::Graphics::DepthStencilState;
+    using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+    using Microsoft::Xna::Framework::Graphics::RasterizerState;
+    using Microsoft::Xna::Framework::Graphics::SamplerState;
+
+    GraphicsDevice device;
+    {
+        SpriteBatch batch(device);
+        BlendState blend;
+        blend.Dispose();
+        EXPECT_THROW(batch.Begin(SpriteSortMode::Immediate, &blend, nullptr, nullptr, nullptr),
+                     System::ObjectDisposedException);
+    }
+    {
+        SpriteBatch batch(device);
+        SamplerState sampler;
+        sampler.Dispose();
+        EXPECT_THROW(batch.Begin(SpriteSortMode::Immediate, &BlendState::Opaque, &sampler,
+                                 nullptr, nullptr),
+                     System::ObjectDisposedException);
+    }
+    {
+        SpriteBatch batch(device);
+        DepthStencilState depth;
+        depth.Dispose();
+        EXPECT_THROW(batch.Begin(SpriteSortMode::Immediate, &BlendState::Opaque, nullptr,
+                                 &depth, nullptr),
+                     System::ObjectDisposedException);
+    }
+    {
+        SpriteBatch batch(device);
+        RasterizerState rasterizer;
+        rasterizer.Dispose();
+        EXPECT_THROW(batch.Begin(SpriteSortMode::Immediate, &BlendState::Opaque, nullptr,
+                                 nullptr, &rasterizer),
+                     System::ObjectDisposedException);
+    }
+    {
+        SpriteBatch batch(device);
+        ASSERT_NO_THROW(batch.Begin(SpriteSortMode::Immediate, &BlendState::Opaque,
+                                    nullptr, nullptr, nullptr));
+        EXPECT_NO_THROW(batch.End());
+    }
+}
+
+TEST(SpriteBatchTest, DeferredEndRejectsDisposedStateAtBeginOrBeforeFlush)
+{
+    using Microsoft::Xna::Framework::Graphics::BlendState;
+    using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+    using Microsoft::Xna::Framework::Graphics::SamplerState;
+
+    GraphicsDevice device;
+    SpriteBatch batch(device);
+
+    SamplerState alreadyDisposed;
+    alreadyDisposed.Dispose();
+    ASSERT_NO_THROW(batch.Begin(SpriteSortMode::Deferred, &BlendState::Opaque,
+                                &alreadyDisposed, nullptr, nullptr));
+    EXPECT_THROW(batch.End(), System::ObjectDisposedException);
+
+    SamplerState disposedAfterBegin = SamplerState::PointClamp;
+    ASSERT_NO_THROW(batch.Begin(SpriteSortMode::Deferred, &BlendState::Opaque,
+                                &disposedAfterBegin, nullptr, nullptr));
+    disposedAfterBegin.Dispose();
+    EXPECT_THROW(batch.End(), System::ObjectDisposedException);
+
+    ASSERT_NO_THROW(batch.Begin(SpriteSortMode::Deferred, &BlendState::Opaque,
+                                nullptr, nullptr, nullptr));
+    EXPECT_NO_THROW(batch.End());
+}
+
 // --- Draw guard: throws when called before Begin (no-renderer batch) ---
 
 TEST(SpriteBatchTest, DrawXYBeforeBeginThrows)

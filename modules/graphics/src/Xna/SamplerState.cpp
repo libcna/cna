@@ -24,6 +24,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         // Copy construction is CNA's mutable value-initialization spelling for an XNA state.
         state_->isBound = false;
+        state_->isDisposed = false;
     }
 
     SamplerState& SamplerState::operator=(const SamplerState& other)
@@ -39,6 +40,12 @@ namespace Microsoft::Xna::Framework::Graphics
         state_ = other.state_;
         bindOnAssignment_ = bindOnAssignment;
         return *this;
+    }
+
+    void SamplerState::Dispose()
+    {
+        state_->isDisposed = true;
+        GraphicsResource::Dispose();
     }
 
     SamplerState::SamplerState(const std::string& name,
@@ -88,7 +95,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void SamplerState::BindForUse() const
     {
-        if (getIsDisposedProperty())
+        if (state_->isDisposed || getIsDisposedProperty())
             throw System::ObjectDisposedException("SamplerState");
         state_->isBound = true;
     }

@@ -5,8 +5,8 @@
 // thoroughly covered by Task 689. This task sweeps the remaining resource types touched by
 // Task 717's own disposed-guard audit -- RenderTarget2D, BlendState, SamplerState, SpriteBatch --
 // confirming calling Dispose() a SECOND time on each is always safe (no crash, no double-free,
-// no corrupted device state), and that each resource's already-established "no bug found"
-// post-disposal behavior from Task 717 still holds after the SECOND Dispose() call too.
+// no corrupted device state), and that Microsoft-compatible post-disposal guards still hold after
+// the SECOND Dispose() call too.
 //
 // Particular attention to RenderTarget2D: Task 717 fixed RenderTarget2D::Dispose() to clear its
 // cached rtRenderer_ raw pointer to nullptr (previously left dangling) -- this test confirms that
@@ -83,7 +83,7 @@ protected:
                   "RenderTarget2D::GetRenderTargetRenderer() is still safely null after a double-Dispose");
         }
 
-        // --- BlendState: double-Dispose is safe; still usable afterward (matches FNA's own lack of guard). ---
+        // --- BlendState: double-Dispose is safe; later application is still rejected. ---
         {
             BlendState bs;
             bs.Dispose();
@@ -91,10 +91,10 @@ protected:
             bool threw = false;
             try { dev.setBlendStateProperty(bs); }
             catch (const std::exception&) { threw = true; }
-            check(!threw, "A double-disposed BlendState can still be applied via setBlendStateProperty without throwing");
+            check(threw, "A double-disposed BlendState remains rejected by setBlendStateProperty");
         }
 
-        // --- SamplerState: double-Dispose is safe; still usable afterward. ---
+        // --- SamplerState: double-Dispose is safe; deferred application is still rejected. ---
         {
             SamplerState ss;
             ss.Dispose();
@@ -107,10 +107,10 @@ protected:
                 sb_->End();
             }
             catch (const std::exception&) { threw = true; }
-            check(!threw, "A double-disposed SamplerState can still be used via SpriteBatch::Begin without throwing");
+            check(threw, "A double-disposed SamplerState remains rejected at deferred End");
         }
 
-        // --- SpriteBatch: double-Dispose is safe; Begin/Draw/End still work afterward. ---
+        // --- SpriteBatch: double-Dispose is safe; later use is still rejected. ---
         {
             SpriteBatch localSb(dev);
             localSb.Dispose();
@@ -123,7 +123,7 @@ protected:
                 localSb.End();
             }
             catch (const std::exception&) { threw = true; }
-            check(!threw, "A double-disposed SpriteBatch's Begin/Draw/End still work normally");
+            check(threw, "A double-disposed SpriteBatch still rejects Begin");
         }
 
         // --- The device must remain fully usable after every double-Dispose above. ---

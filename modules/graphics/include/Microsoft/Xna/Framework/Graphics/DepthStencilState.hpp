@@ -37,6 +37,9 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         CNAEXT DepthStencilState& operator=(const DepthStencilState& other);
 
+        /** @brief Marks this state and every assigned wrapper sharing its payload as disposed. */
+        void Dispose() override;
+
         /** @brief Returns the fully-qualified .NET type name of this object. */
         CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
@@ -238,6 +241,7 @@ namespace Microsoft::Xna::Framework::Graphics
             StencilOperation counterClockwiseStencilDepthBufferFail = StencilOperation::Keep;
             StencilOperation counterClockwiseStencilPass = StencilOperation::Keep;
             bool isBound = false;
+            bool isDisposed = false;
         };
 
         void ThrowIfBound() const;

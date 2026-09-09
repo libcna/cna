@@ -102,6 +102,17 @@ TEST(SamplerStateCollectionTest, IndexerAssignmentRejectsDisposedSampler)
     EXPECT_EQ(coll[3].getNameProperty(), "SamplerState.LinearWrap");
 }
 
+TEST(SamplerStateCollectionTest, DisposalAfterAssignmentInvalidatesSharedPayload)
+{
+    SamplerStateCollection coll;
+    SamplerState custom;
+    coll[3] = custom;
+    custom.Dispose();
+
+    EXPECT_THROW(coll[4] = coll[3], System::ObjectDisposedException);
+    EXPECT_EQ(coll[4].getNameProperty(), "SamplerState.LinearWrap");
+}
+
 TEST(SamplerStateCollectionTest, NegativeIndexThrows)
 {
     SamplerStateCollection coll;

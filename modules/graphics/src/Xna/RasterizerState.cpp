@@ -21,6 +21,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         // Copy construction is CNA's mutable value-initialization spelling for an XNA state.
         state_->isBound = false;
+        state_->isDisposed = false;
     }
 
     RasterizerState& RasterizerState::operator=(const RasterizerState& other)
@@ -31,6 +32,12 @@ namespace Microsoft::Xna::Framework::Graphics
             state_ = other.state_;
         }
         return *this;
+    }
+
+    void RasterizerState::Dispose()
+    {
+        state_->isDisposed = true;
+        GraphicsResource::Dispose();
     }
 
     RasterizerState::RasterizerState(const std::string& name, CullMode cullMode)
@@ -70,7 +77,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void RasterizerState::BindForUse() const
     {
-        if (getIsDisposedProperty())
+        if (state_->isDisposed || getIsDisposedProperty())
             throw System::ObjectDisposedException("RasterizerState");
         state_->isBound = true;
     }

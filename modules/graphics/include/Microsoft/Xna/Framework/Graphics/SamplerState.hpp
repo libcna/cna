@@ -43,6 +43,9 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         CNAEXT SamplerState& operator=(const SamplerState& other);
 
+        /** @brief Marks this state and every assigned wrapper sharing its payload as disposed. */
+        void Dispose() override;
+
         /** @brief Returns the fully-qualified .NET type name of this object. */
         CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
@@ -140,6 +143,7 @@ namespace Microsoft::Xna::Framework::Graphics
             int maxMipLevel = 0;
             float mipMapLevelOfDetailBias = 0.0f;
             bool isBound = false;
+            bool isDisposed = false;
         };
 
         void ThrowIfBound() const;

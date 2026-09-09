@@ -41,6 +41,9 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         CNAEXT BlendState& operator=(const BlendState& other);
 
+        /** @brief Marks this state and every assigned wrapper sharing its payload as disposed. */
+        void Dispose() override;
+
         /** @brief Returns the fully-qualified .NET type name of this object. */
         CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
@@ -194,6 +197,7 @@ namespace Microsoft::Xna::Framework::Graphics
             Color blendFactor{255, 255, 255, 255};
             int multiSampleMask = -1;
             bool isBound = false;
+            bool isDisposed = false;
         };
 
         void ThrowIfBound() const;

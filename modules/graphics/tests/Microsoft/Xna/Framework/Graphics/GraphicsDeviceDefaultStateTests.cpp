@@ -230,6 +230,29 @@ TEST(GraphicsDeviceDefaultStateTest, DisposedStatesAreRejectedBeforeBinding)
     EXPECT_THROW(gd.setRasterizerStateProperty(rasterizer), System::ObjectDisposedException);
 }
 
+TEST(GraphicsDeviceDefaultStateTest, DisposalAfterBindingInvalidatesAssignedPayload)
+{
+    GraphicsDevice gd;
+
+    BlendState blend;
+    gd.setBlendStateProperty(blend);
+    blend.Dispose();
+    EXPECT_THROW(gd.setBlendStateProperty(gd.getBlendStateProperty()),
+                 System::ObjectDisposedException);
+
+    DepthStencilState depth;
+    gd.setDepthStencilStateProperty(depth);
+    depth.Dispose();
+    EXPECT_THROW(gd.setDepthStencilStateProperty(gd.getDepthStencilStateProperty()),
+                 System::ObjectDisposedException);
+
+    RasterizerState rasterizer;
+    gd.setRasterizerStateProperty(rasterizer);
+    rasterizer.Dispose();
+    EXPECT_THROW(gd.setRasterizerStateProperty(gd.getRasterizerStateProperty()),
+                 System::ObjectDisposedException);
+}
+
 // Task 319: FNA's GraphicsDevice.ReferenceStencil is a real, independent device property
 // (FNA3D_Get/SetReferenceStencil) - but assigning a whole DepthStencilState (which carries its own
 // ReferenceStencil field) applies that state atomically, the same way BlendState.BlendFactor is
