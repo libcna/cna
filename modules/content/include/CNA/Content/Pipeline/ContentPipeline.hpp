@@ -9,6 +9,7 @@
 #include <memory>
 #include <set>
 #include <shared_mutex>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <tuple>
@@ -581,6 +582,46 @@ namespace CNA::Content::Pipeline
     };
 
     /**
+     * @brief One other asset of the same build, as the coordinator holds it.
+     *
+     * XNA's build coordinator keeps every build it has been asked for and answers a repeated ask
+     * with the build it already has: `ContentProcessorContext.BuildAsset` creates a *request*, and
+     * a request that names the same source through the same importer, the same processor and the
+     * same parameters as one already in the build is that same request -- so it carries that
+     * request's asset name and produces no second output. Measured on the genuine `BuildContent`
+     * with a model whose material names an effect: with the effect an item of its own the model
+     * refers to the item's name (`shader`, and `shaders/mine` when the item is named that) and no
+     * `shader_0.xnb` is written, and with the item carrying one processor parameter -- even
+     * `DebugMode=Auto`, the default -- it is a different request again and `shader_0.xnb` comes
+     * back (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-174`).
+     *
+     * A nested texture never matches an item this way, because `MaterialProcessor` asks for its
+     * textures with six parameters and an item that names none carries none -- which is what the
+     * genuine build does too: `tex_0.xnb` is written beside `tex.xnb` in every arrangement of the
+     * two that was measured.
+     */
+    struct ContentBuildSibling
+    {
+        /** @brief The item's canonical primary source path. */
+        std::filesystem::path source;
+
+        /** @brief The item's logical ContentManager asset name. */
+        std::string logicalName;
+
+        /** @brief The importer identity the item resolves to. */
+        std::string importer;
+
+        /** @brief The item's explicit processor name, or empty when the imported type chooses. */
+        std::string processor;
+
+        /** @brief The item's processor parameters. */
+        ContentProcessorParameters parameters;
+
+        /** @brief Compares every field. */
+        bool operator==(const ContentBuildSibling&) const = default;
+    };
+
+    /**
      * @brief A checked in-memory value passed between heterogeneous pipeline components.
      *
      * Stable string identities drive registry selection and future persistent fingerprints.
@@ -790,7 +831,8 @@ namespace CNA::Content::Pipeline
                                 ContentBuildLogger& logger,
                                 ContentOutputFormat outputFormat = ContentOutputFormat::Cnb,
                                 ContentBuildEnvironment environment = {},
-                                const ContentPipeline* pipeline = nullptr);
+                                const ContentPipeline* pipeline = nullptr,
+                                std::shared_ptr<const std::vector<ContentBuildSibling>> siblings = {});
 
         /** @brief Processor contexts are call-scoped and cannot be copied. */
         ContentProcessorContext(const ContentProcessorContext&) = delete;
@@ -965,6 +1007,24 @@ namespace CNA::Content::Pipeline
          */
         [[nodiscard]] const std::vector<ContentWriterSchemaIdentity>& NestedWriterSchemas() const noexcept;
 
+        /**
+         * @brief Returns the other assets of the same build, or an empty span outside one.
+         *
+         * A processor starting a nested build consults this to see whether the asset it is about
+         * to ask for is already an item of the build it is part of; see ContentBuildSibling.
+         *
+         * @return The siblings, in the order the build lists them.
+         */
+        [[nodiscard]] std::span<const ContentBuildSibling> Siblings() const noexcept;
+
+        /**
+         * @brief Returns the shared sibling table itself, so a nested build request can carry it.
+         *
+         * @return The table, or null when this build has none.
+         */
+        [[nodiscard]] const std::shared_ptr<const std::vector<ContentBuildSibling>>&
+        SiblingsShared() const noexcept;
+
     private:
         friend class ContentPipeline;
         std::filesystem::path sourceRoot_;
@@ -978,6 +1038,7 @@ namespace CNA::Content::Pipeline
         ContentOutputFormat outputFormat_ = ContentOutputFormat::Cnb;
         ContentBuildEnvironment environment_;
         const ContentPipeline* pipeline_ = nullptr;
+        std::shared_ptr<const std::vector<ContentBuildSibling>> siblings_;
         std::vector<ContentAdditionalWriteOutput> nestedOutputs_;
         std::vector<ContentWriterSchemaIdentity> nestedWriterSchemas_;
     };
@@ -1486,6 +1547,17 @@ namespace CNA::Content::Pipeline
 
         /** @brief Optional scoped logger; null selects a no-op logger. */
         ContentBuildLogger* logger = nullptr;
+
+        /**
+         * @brief The other assets of the same build, or null when this build stands alone.
+         *
+         * Shared by every request of one build and inherited by every nested build, which is what
+         * makes a nested `BuildAsset` able to see that another item already asks for the same
+         * source in the same way. A single build with no siblings -- one asset built on its own,
+         * or a nested build inside it -- leaves this null and every nested asset gets a generated
+         * name, which is what happened before this existed.
+         */
+        std::shared_ptr<const std::vector<ContentBuildSibling>> siblings;
     };
 
     /** @brief Complete observable result of one in-memory content build. */

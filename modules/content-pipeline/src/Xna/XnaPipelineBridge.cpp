@@ -14,6 +14,7 @@
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/ProcessorEnums.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/PipelineException.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Tasks/XnaComponentNames.hpp"
 #include "System/NotSupportedException.hpp"
 
 namespace CNA::Content::Pipeline
@@ -441,7 +442,98 @@ namespace CNA::Content::Pipeline
             request.parameters = ToProcessorParameters(processorParameters);
             request.environment = context.Environment();
             request.logger = &context.Logger();
+            // The nested build is part of the same build and sees the same items, so a build it
+            // starts of its own can recognise an item the way this one did.
+            request.siblings = context.SiblingsShared();
             return request;
+        }
+
+        /**
+         * @brief The name the nested build asks the registry for, given XNA's name for it.
+         *
+         * XNA's own components reach one another by XNA's names -- `ModelProcessor` converts a
+         * material through `MaterialProcessor`, which builds a texture through `TextureProcessor`
+         * and an effect through `EffectProcessor` -- and a project names the same components the
+         * same way. A `.contentproj` is read through `MapXnaProcessorName`, so an item naming
+         * `EffectProcessor` is an item of `CNA.EffectSourceProcessor`; a nested build that kept
+         * the XNA spelling would be asking for a component the registry has not got, and the two
+         * seams would disagree about what one name means. The translation is therefore the same
+         * one, applied here.
+         *
+         * A component actually registered under the XNA name wins: that is how
+         * `MaterialProcessor` itself, the `TextureProcessor` front door that owns XNA's parameter
+         * spellings, and a game's own `RegisterXnaProcessor` component are reached. Only a name
+         * nothing answers to is translated (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-174`).
+         *
+         * @param pipeline The coordinator whose registry answers.
+         * @param processorName The name the processor asked for, possibly empty.
+         * @return The name to ask the registry for.
+         */
+        std::string NestedProcessorName(const ContentPipeline& pipeline, const std::string& processorName)
+        {
+            if (processorName.empty()) { return processorName; }
+            for (const std::shared_ptr<const ContentProcessor>& registered : pipeline.Registry().Processors())
+            {
+                if (registered != nullptr && registered->Identity().name == processorName)
+                {
+                    return processorName;
+                }
+            }
+            const Xna::Tasks::XnaComponentMapping mapping =
+                Xna::Tasks::MapXnaProcessorName(processorName);
+            if (!mapping.known || mapping.canonicalName.empty()) { return processorName; }
+            return mapping.canonicalName;
+        }
+
+        /**
+         * @brief The item of this build that already asks for exactly this build, if there is one.
+         *
+         * See `ContentBuildSibling`: XNA's coordinator answers a repeated request with the request
+         * it already holds, and the two are the same request when they name the same source, the
+         * same importer, the same processor and the same parameters. The importer is compared as
+         * *resolved*, because a nested build usually names none and takes the one the extension
+         * implies, which is the same importer an item that names it explicitly gets.
+         *
+         * @param context The processor's context, which carries the build's items.
+         * @param pipeline The coordinator whose registry resolves the importer.
+         * @param source The nested build's source, already opened.
+         * @param importerName The importer the nested build named, or empty for the default.
+         * @param processorName The processor the nested build asks the registry for.
+         * @param parameters The nested build's parameters.
+         * @return The matching item, or null.
+         */
+        const ContentBuildSibling* MatchingSibling(const CanonicalProcessorContext& context,
+                                                   const ContentPipeline& pipeline,
+                                                   const std::filesystem::path& source,
+                                                   const std::string& importerName,
+                                                   const std::string& processorName,
+                                                   const ContentProcessorParameters& parameters)
+        {
+            const std::span<const ContentBuildSibling> siblings = context.Siblings();
+            if (siblings.empty()) { return nullptr; }
+            std::error_code error;
+            const std::filesystem::path canonical = std::filesystem::weakly_canonical(source, error);
+            const std::filesystem::path& wanted = error ? source : canonical;
+            std::string resolvedImporter;
+            try
+            {
+                const std::shared_ptr<const ContentImporter> importer =
+                    pipeline.Registry().ResolveImporter(source, importerName);
+                if (importer != nullptr) { resolvedImporter = importer->Identity().name; }
+            }
+            catch (const std::exception&)
+            {
+                return nullptr;
+            }
+            for (const ContentBuildSibling& sibling : siblings)
+            {
+                if (sibling.source != wanted) { continue; }
+                if (sibling.importer != resolvedImporter) { continue; }
+                if (sibling.processor != processorName) { continue; }
+                if (!(sibling.parameters == parameters)) { continue; }
+                return &sibling;
+            }
+            return nullptr;
         }
 
         /// Identifies one nested build so a repeat under the same name is recognized as the same asset.
@@ -498,7 +590,9 @@ namespace CNA::Content::Pipeline
         try
         {
             nested = pipeline->ImportAndProcess(
-                NestedRequest(*context_, sourceFilename, logicalName, processorName, processorParameters, importerName),
+                NestedRequest(*context_, sourceFilename, logicalName,
+                              NestedProcessorName(*pipeline, processorName), processorParameters,
+                              importerName),
                 context_->Dependencies());
         }
         catch (...)
@@ -531,6 +625,63 @@ namespace CNA::Content::Pipeline
                 "ContentProcessorContext::BuildAsset needs a running pipeline; this context was created "
                 "outside a coordinator.");
         }
+        // The name a nested build asks the registry for is the canonical one; XNA's own name is
+        // what the processor wrote, and translating it here is what makes an item and a nested
+        // build that ask for the same processor ask for the *same* processor.
+        const std::string resolvedProcessorName = NestedProcessorName(*pipeline, processorName);
+
+        // The *name* is the authored spelling and the *file* is whatever the filesystem calls
+        // it: every `.x` and `.fbx` in the public XNA sample corpus was written on Windows, where
+        // a path is matched without regard to case. Spacewar's `asteroid1.x` names
+        // `..\textures\asteroid1.tga` beside a directory called `Textures`, and XNA's own build
+        // reads that file and writes the asset to `Content/textures/asteroid1_0.xnb` -- the
+        // authored case, not the disk's (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-115`).
+        std::string opened = sourceFilename;
+        {
+            std::error_code error;
+            if (!std::filesystem::is_regular_file(opened, error))
+            {
+                const std::filesystem::path root = context_->SourceRoot();
+                const std::filesystem::path relative =
+                    std::filesystem::path(sourceFilename).lexically_relative(root);
+                if (!relative.empty() && relative.begin()->string() != "..")
+                {
+                    const std::filesystem::path found =
+                        Xna::ResolveNamedSourceFileEXT(root, relative.generic_string());
+                    if (std::filesystem::is_regular_file(found, error)) { opened = found.string(); }
+                }
+            }
+        }
+
+        const std::string extension = ContentOutputFormatExtension(context_->OutputFormat());
+        const std::filesystem::path& outputRoot = context_->Environment().outputDirectory;
+        const auto outputPath = [&extension, &outputRoot](const std::string& name)
+        {
+            return outputRoot.empty() ? name + extension
+                                      : (outputRoot / (name + extension)).generic_string();
+        };
+
+        // An asset another item of this build already asks for in exactly this way *is* that item
+        // (see `ContentBuildSibling`): the reference is to the item's own name, and the item's own
+        // node builds it. Nothing is built here, which is what lets a model refer to an effect
+        // whose own build refuses the target -- XNA's Windows Phone build of SAMPLE-028 writes a
+        // `Car.xnb` naming `ReplaceColor` and no `ReplaceColor.xnb` beside it, because the model
+        // never compiled the effect (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-174`).
+        if (assetName.empty())
+        {
+            const ContentProcessorParameters nestedParameters =
+                ToProcessorParameters(processorParameters);
+            if (const ContentBuildSibling* sibling =
+                    MatchingSibling(*context_, *pipeline, opened, importerName,
+                                    resolvedProcessorName, nestedParameters);
+                sibling != nullptr && sibling->logicalName != context_->LogicalName())
+            {
+                context_->AddContentBuildDependency(sibling->logicalName);
+                context_->AddRuntimeReference(sibling->logicalName);
+                return outputPath(sibling->logicalName);
+            }
+        }
+
         // A nested build with no asset name of its own gets a *generated* one, and XNA's generated
         // names carry an index: a model's textures come out as `surface_0` and `second_0`, not
         // `surface` and `second`. The index is per derived name rather than a running counter --
@@ -539,7 +690,7 @@ namespace CNA::Content::Pipeline
         // model/x_textured produced `surface_0` and the intermediate `quad_textured_0.xml`).
         // Only `_0` is measured: a second build of the *same* source under a different processing
         // is refused below rather than given `_1` (plans/plan_xnapipeline_parity.md XNAPP-266).
-        const std::string key = NestedAssetKey(sourceFilename, importerName, processorName,
+        const std::string key = NestedAssetKey(sourceFilename, importerName, resolvedProcessorName,
                                                processorParameters);
         std::string logicalName = assetName;
         if (logicalName.empty())
@@ -569,11 +720,7 @@ namespace CNA::Content::Pipeline
         {
             throw Xna::PipelineException("BuildAsset: nested asset name '{0}' is the current asset's own name.", logicalName);
         }
-        const std::string extension = ContentOutputFormatExtension(context_->OutputFormat());
-        const std::filesystem::path& outputRoot = context_->Environment().outputDirectory;
-        const std::string filename = outputRoot.empty()
-                                         ? logicalName + extension
-                                         : (outputRoot / (logicalName + extension)).generic_string();
+        const std::string filename = outputPath(logicalName);
 
         // The same source built the same way twice is one asset; a different source (or a
         // different processing) under one name is a collision, as it is in XNA.
@@ -589,34 +736,12 @@ namespace CNA::Content::Pipeline
             return filename;
         }
 
-        // The *name* is the authored spelling and the *file* is whatever the filesystem calls
-        // it: every `.x` and `.fbx` in the public XNA sample corpus was written on Windows, where
-        // a path is matched without regard to case. Spacewar's `asteroid1.x` names
-        // `..\textures\asteroid1.tga` beside a directory called `Textures`, and XNA's own build
-        // reads that file and writes the asset to `Content/textures/asteroid1_0.xnb` -- the
-        // authored case, not the disk's (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-115`).
-        std::string opened = sourceFilename;
-        {
-            std::error_code error;
-            if (!std::filesystem::is_regular_file(opened, error))
-            {
-                const std::filesystem::path root = context_->SourceRoot();
-                const std::filesystem::path relative =
-                    std::filesystem::path(sourceFilename).lexically_relative(root);
-                if (!relative.empty() && relative.begin()->string() != "..")
-                {
-                    const std::filesystem::path found =
-                        Xna::ResolveNamedSourceFileEXT(root, relative.generic_string());
-                    if (std::filesystem::is_regular_file(found, error)) { opened = found.string(); }
-                }
-            }
-        }
-
         ContentBuildResult nested;
         try
         {
             nested = pipeline->Build(
-                NestedRequest(*context_, opened, logicalName, processorName, processorParameters, importerName));
+                NestedRequest(*context_, opened, logicalName, resolvedProcessorName,
+                              processorParameters, importerName));
         }
         catch (...)
         {

@@ -14,6 +14,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -170,6 +171,63 @@ namespace
         return static_cast<const System::Collections::ObjectModel::Collection<T>&>(collection);
     }
 
+    /** @brief The last segment of a .NET full name, which is what `Type.Name` answers. */
+    std::string ShortTypeName(const std::string& fullName)
+    {
+        const std::size_t dot = fullName.rfind('.');
+        return dot == std::string::npos ? fullName : fullName.substr(dot + 1);
+    }
+
+    /**
+     * @brief One opaque-data value, in the words `ModelImportOracle.cs` writes it in.
+     *
+     * The oracle formats the vector types itself and falls back to `value.ToString()`, whose
+     * default for a type that does not override it is the type's own full name -- which is how an
+     * `ExternalReference<EffectContent>` is printed. A `Matrix` overrides it, and CNA's `ToString`
+     * answers the same form (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-183`).
+     */
+    std::string DescribeOpaqueValue(const Xna::ContentObject& value)
+    {
+        if (Xna::Holds<Vector2>(value))
+        {
+            const Vector2 v = Xna::Unbox<Vector2>(value);
+            return "(" + F(v.X) + "," + F(v.Y) + ")";
+        }
+        if (Xna::Holds<Vector3>(value))
+        {
+            const Vector3 v = Xna::Unbox<Vector3>(value);
+            return "(" + F(v.X) + "," + F(v.Y) + "," + F(v.Z) + ")";
+        }
+        if (Xna::Holds<Vector4>(value))
+        {
+            const Vector4 v = Xna::Unbox<Vector4>(value);
+            return "(" + F(v.X) + "," + F(v.Y) + "," + F(v.Z) + "," + F(v.W) + ")";
+        }
+        if (Xna::Holds<Matrix>(value)) { return Xna::Unbox<Matrix>(value).ToString(); }
+        if (Xna::Holds<float>(value)) { return F(Xna::Unbox<float>(value)); }
+        if (Xna::Holds<SharpRuntime::intcs>(value))
+        {
+            return std::to_string(Xna::Unbox<SharpRuntime::intcs>(value));
+        }
+        // What is left is a type that does not override `ToString()`, whose .NET answer is the
+        // type's own name in `Type.ToString()` form -- a generic argument in single brackets.
+        // CNA's stable type name spells the same type in the `Type.FullName` form the XNB type
+        // table needs, with the argument in doubled brackets, so the one difference is undone
+        // here rather than in the pipeline (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-174`).
+        std::string name = value.StableType();
+        for (const auto& [doubled, single] : {std::pair<const char*, const char*>{"[[", "["},
+                                              std::pair<const char*, const char*>{"]]", "]"}})
+        {
+            for (std::size_t at = name.find(doubled); at != std::string::npos;
+                 at = name.find(doubled, at))
+            {
+                name.replace(at, 2, single);
+                at += 1;
+            }
+        }
+        return name;
+    }
+
     /** @brief The oracle's own walk over the graph, in the same order and the same words. */
     void Describe(std::string& text, const std::shared_ptr<Graphics::NodeContent>& node,
                   const std::string& path)
@@ -226,7 +284,7 @@ namespace
                         " channels=" + std::to_string(channels.getCountProperty()) + " material=" +
                         (batch->getMaterialProperty() == nullptr
                              ? std::string("null")
-                             : std::string("BasicMaterialContent:") +
+                             : ShortTypeName(batch->getMaterialProperty()->GetTypeName()) + ":" +
                                    (batch->getMaterialProperty()->getNameProperty().empty()
                                         ? "<null>"
                                         : batch->getMaterialProperty()->getNameProperty())) + "\n";
@@ -296,17 +354,7 @@ namespace
                 {
                     for (const auto& [key, value] : batch->getMaterialProperty()->getOpaqueDataProperty())
                     {
-                        std::string one;
-                        if (Xna::Holds<Vector3>(value))
-                        {
-                            const Vector3 v = Xna::Unbox<Vector3>(value);
-                            one = "(" + F(v.X) + "," + F(v.Y) + "," + F(v.Z) + ")";
-                        }
-                        else if (Xna::Holds<float>(value))
-                        {
-                            one = F(Xna::Unbox<float>(value));
-                        }
-                        text += "    materialData " + key + "=" + one + "\n";
+                        text += "    materialData " + key + "=" + DescribeOpaqueValue(value) + "\n";
                     }
                     for (const auto& [key, reference] : batch->getMaterialProperty()->getTexturesProperty())
                     {
@@ -493,12 +541,94 @@ TEST(XnaXImporter, EveryFileAnswersTheGraphXnaAnswers)
           // importer answers the first material's positions first, because each batch adds what
           // its own faces name (`XNASWEEP-173`).
           "x_position_batches.x",
+          // An object's type is a template name and the genuine reader matches it without regard
+          // to case: this one spells the frame, its transform, the mesh, its normals and its
+          // texture coordinates in upper case, the material list in lower, and the material and
+          // its texture file name in two mixed spellings -- and carries an object of a type no
+          // template defines, which is accepted and ignored
+          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-180`).
+          "x_type_name_case.x",
+          // A `Material` carrying an `EffectInstance` is an `EffectMaterialContent`: the opaque
+          // data is the effect reference and the instance's parameters in file order, an
+          // `EffectParamFloats` is typed by its count, and an `EffectParamString` is a *texture*
+          // under that parameter's name. None of the material's own colours survives
+          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-174`).
+          "x_effect_instance.x",
+          // The signs of the zeros the basis change leaves behind. The committed oracle rounds a
+          // negative zero to `0`, so this file's *values* are checked here and its *bits* by
+          // `ASignedZeroInANormalIsTheMatrixsOwn` below (`XNASWEEP-181`).
+          "x_normal_signed_zero.x",
           "oblique_normals.x", "quad_textured.x", "transform_z.x", "two_materials.x",
           "with_templates.x", "zero_power.x"})
     {
         ImporterContext context;
         ExpectSame(SortAnimations(Import(fixture, context)),
                    SortAnimations(Expected("x/" + fixture)), fixture);
+    }
+}
+
+// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-181: the sign of a zero in a `.x` normal, which the
+// committed oracle cannot carry -- .NET Framework's `ToString` writes a negative zero as `0`.
+// These are the bits the genuine importer answered for the same file, read with the oracle's
+// `CNA_MODEL_ORACLE_BITS=1` mode. They pin three things at once: `M31` is a negative zero, so a
+// normal whose `x` is `-0`, whose `y` is below zero and whose `z` is above it keeps the negative
+// zero and its positive-zero twin does not; a zero-length normal answers exactly `(+0, +0, +0)`
+// rather than the accumulation's own signs; and the fold of `XNASWEEP-148` does not collapse two
+// entries that hold the same three float *values* under different zero signs -- entries 10 and 11
+// are `(-0, -1, 1)` and `(+0, -1, 1)` and answer differently.
+TEST(XnaXImporter, ASignedZeroInANormalIsTheMatrixsOwn)
+{
+    static constexpr std::array<std::array<std::uint32_t, 3>, 12> expected = {{
+        {0x80000000u, 0xBF328506u, 0xBF377C29u},
+        {0x00000000u, 0xBF328506u, 0xBF377C29u},
+        {0x00000000u, 0x3F800000u, 0x00000000u},
+        {0x00000000u, 0xBF800000u, 0x00000000u},
+        {0x00000000u, 0xBF800000u, 0x00000000u},
+        {0x00000000u, 0xB58637BDu, 0x3F800000u},
+        {0x00000000u, 0xB58637BDu, 0x3F800000u},
+        {0x00000000u, 0xBF800000u, 0x80000000u},
+        {0x00000000u, 0x00000000u, 0x00000000u},
+        {0x00000000u, 0x00000000u, 0x00000000u},
+        {0x80000000u, 0xBF3504F3u, 0xBF3504F3u},
+        {0x00000000u, 0xBF3504F3u, 0xBF3504F3u},
+    }};
+
+    ImporterContext context;
+    XImporter importer;
+    const std::shared_ptr<Graphics::NodeContent> root =
+        importer.Import(Fixture("x_normal_signed_zero.x").string(), context);
+    ASSERT_NE(root, nullptr);
+    ASSERT_EQ(root->getChildrenProperty().getCountProperty(), 1);
+    const std::shared_ptr<Graphics::MeshContent> mesh =
+        std::dynamic_pointer_cast<Graphics::MeshContent>(
+            std::shared_ptr<Graphics::NodeContent>(root->getChildrenProperty()[0]));
+    ASSERT_NE(mesh, nullptr);
+    ASSERT_EQ(mesh->getGeometryProperty().getCountProperty(), 1);
+    const std::shared_ptr<Graphics::GeometryContent> geometry = mesh->getGeometryProperty()[0];
+    ASSERT_NE(geometry, nullptr);
+    const auto& channels = geometry->getVerticesProperty().getChannelsProperty();
+    std::shared_ptr<Graphics::VertexChannelBase> normals;
+    for (SharpRuntime::intcs at = 0; at < channels.getCountProperty(); ++at)
+    {
+        const std::shared_ptr<Graphics::VertexChannelBase>& channel = channels[at];
+        if (channel != nullptr && channel->getNameProperty() == "Normal0") { normals = channel; }
+    }
+    ASSERT_NE(normals, nullptr);
+    ASSERT_EQ(normals->getCountProperty(), static_cast<SharpRuntime::intcs>(expected.size()));
+    const auto bits = [](const float value)
+    {
+        std::uint32_t raw = 0;
+        std::memcpy(&raw, &value, sizeof(raw));
+        return raw;
+    };
+    for (std::size_t at = 0; at < expected.size(); ++at)
+    {
+        const Xna::ContentObject boxed = (*normals)[static_cast<SharpRuntime::intcs>(at)];
+        ASSERT_TRUE(Xna::Holds<Vector3>(boxed)) << "normal " << at;
+        const Vector3 normal = Xna::Unbox<Vector3>(boxed);
+        EXPECT_EQ(bits(normal.X), expected[at][0]) << "normal " << at << " X";
+        EXPECT_EQ(bits(normal.Y), expected[at][1]) << "normal " << at << " Y";
+        EXPECT_EQ(bits(normal.Z), expected[at][2]) << "normal " << at << " Z";
     }
 }
 

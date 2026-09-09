@@ -2,7 +2,9 @@
 #include "CNA/Content/Pipeline/XnaModelSourceContentPipeline.hpp"
 
 #include <filesystem>
+#include <functional>
 #include <memory>
+#include <variant>
 #include <string>
 #include <utility>
 #include <vector>
@@ -75,6 +77,67 @@ namespace CNA::Content::Pipeline
                     "loadable name.");
             }
             return logical;
+        }
+
+        /**
+         * @brief The same model with every asset reference as its loadable logical name.
+         *
+         * `XnaModelBridge` answers the references the *material* carries, which are file paths --
+         * a nested build's output, absolute under the output root. What an `.xnb` stores is the
+         * name a `ContentManager` loads, and the CNB conversions ask for it through the same
+         * resolver; the XNB route takes the model directly and therefore has to ask too
+         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-174`).
+         *
+         * @param model The model as the bridge answered it.
+         * @param resolve The authored-path-to-logical-name resolver.
+         * @return The model with every reference resolved.
+         */
+        [[nodiscard]] Xnb::XnbModelData WithResolvedReferences(
+            Xnb::XnbModelData model, const std::function<std::string(const std::string&)>& resolve)
+        {
+            const auto one = [&resolve](std::string& reference)
+            {
+                if (!reference.empty()) { reference = resolve(reference); }
+            };
+            for (Xnb::XnbModelSharedResourceData& resource : model.sharedResources)
+            {
+                if (auto* effect = std::get_if<Xnb::XnbBasicEffectData>(&resource.value))
+                {
+                    one(effect->textureReference);
+                }
+                else if (auto* alphaTest = std::get_if<Xnb::XnbAlphaTestEffectData>(&resource.value))
+                {
+                    one(alphaTest->textureReference);
+                }
+                else if (auto* dual = std::get_if<Xnb::XnbDualTextureEffectData>(&resource.value))
+                {
+                    one(dual->textureReference);
+                    one(dual->texture2Reference);
+                }
+                else if (auto* environment =
+                             std::get_if<Xnb::XnbEnvironmentMapEffectData>(&resource.value))
+                {
+                    one(environment->textureReference);
+                    one(environment->environmentMapReference);
+                }
+                else if (auto* skinned = std::get_if<Xnb::XnbSkinnedEffectData>(&resource.value))
+                {
+                    one(skinned->textureReference);
+                }
+                else if (auto* material = std::get_if<Xnb::XnbEffectMaterialData>(&resource.value))
+                {
+                    one(material->effectReference);
+                    for (auto& [name, value] : material->parameters.values)
+                    {
+                        static_cast<void>(name);
+                        if (auto* reference = std::get_if<Xnb::XnbExternalAssetReference>(&value))
+                        {
+                            one(reference->reference);
+                        }
+                    }
+                }
+            }
+            return model;
         }
 
         /** @brief The `.x` source route. */
@@ -308,6 +371,9 @@ namespace CNA::Content::Pipeline
                     return TextureLogicalName(outputRoot, authored);
                 };
                 ProcessedModelBundle bundle;
+                // The XNB route writes this graph itself; the CNB conversions below are for the
+                // CNB route alone (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-174`).
+                bundle.xnaModel = WithResolvedReferences(xnb, resolve);
                 try
                 {
                     bundle.primary = Xnb::ConvertXnbModelToCnb(xnb, resolve);
@@ -315,9 +381,20 @@ namespace CNA::Content::Pipeline
                 }
                 catch (const ContentLoadException& schema1Failure)
                 {
-                    bundle.primary = Xnb::ConvertXnbModelToCnbV2(xnb, resolve);
-                    context.LogInfo(std::string("selected Model schema 2 after the schema-1 "
-                                                "fidelity check: ") + schema1Failure.what());
+                    try
+                    {
+                        bundle.primary = Xnb::ConvertXnbModelToCnbV2(xnb, resolve);
+                        context.LogInfo(std::string("selected Model schema 2 after the schema-1 "
+                                                    "fidelity check: ") + schema1Failure.what());
+                    }
+                    catch (const ContentLoadException& schema2Failure)
+                    {
+                        // Not a build failure: the XNB route carries this model exactly, and only
+                        // a CNB output of it is impossible. The CNB writer says so by name.
+                        context.LogInfo(std::string("no frozen Model schema carries this model, so "
+                                                    "only the XNB route can write it: ") +
+                                        schema2Failure.what());
+                    }
                 }
                 return ContentValue::Create(ProcessedModelType, std::move(bundle));
             }

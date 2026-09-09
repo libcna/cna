@@ -2118,6 +2118,52 @@ namespace
     }
 
     /**
+     * @brief Every item of this build, as `ContentBuildSibling` describes one.
+     *
+     * The table is what lets a nested build recognise that the asset it is about to ask for is
+     * already an item of the build it is part of, and refer to that item rather than building a
+     * second copy under a generated name. It is computed once, before any node runs, so which
+     * name a nested build answers cannot depend on the order the nodes finish in.
+     *
+     * An item whose importer cannot be resolved is left out rather than described wrongly: its
+     * own node will fail with the reason, and nothing should match it in the meantime.
+     *
+     * @param builds Every item of this build.
+     * @param registry The frozen registry, which resolves each item's importer.
+     * @return The table, shared by every request of this build.
+     */
+    std::shared_ptr<const std::vector<Pipeline::ContentBuildSibling>> DescribeSiblings(
+        const std::vector<BuildItem>& builds, const Pipeline::ContentPipelineRegistry& registry)
+    {
+        auto siblings = std::make_shared<std::vector<Pipeline::ContentBuildSibling>>();
+        siblings->reserve(builds.size());
+        for (const BuildItem& build : builds)
+        {
+            Pipeline::ContentBuildSibling sibling;
+            std::error_code error;
+            const std::filesystem::path canonical =
+                std::filesystem::weakly_canonical(build.source, error);
+            sibling.source = error ? build.source : canonical;
+            sibling.logicalName = build.logicalName;
+            try
+            {
+                const std::shared_ptr<const Pipeline::ContentImporter> importer =
+                    registry.ResolveImporter(build.source, build.importer);
+                if (importer == nullptr) { continue; }
+                sibling.importer = importer->Identity().name;
+            }
+            catch (const std::exception&)
+            {
+                continue;
+            }
+            sibling.processor = build.processor;
+            sibling.parameters = build.parameters;
+            siblings->push_back(std::move(sibling));
+        }
+        return siblings;
+    }
+
+    /**
      * @brief Drops a nested build's copy of an asset another node in this build already owns.
      *
      * XNA's `MaterialProcessor` builds every texture a model's materials name as its own asset,
@@ -2164,7 +2210,8 @@ namespace
         const std::filesystem::path& sourceRoot, const std::filesystem::path& outputRoot,
         const Pipeline::ContentSourceRootCapabilities& externalSourceRoots,
         const std::filesystem::path& stagingRoot, const std::set<std::string>& plannedNodes,
-        const Pipeline::ContentBuildEnvironment& environment)
+        const Pipeline::ContentBuildEnvironment& environment,
+        const std::shared_ptr<const std::vector<Pipeline::ContentBuildSibling>>& siblings)
     {
         BuildNodePlan plan;
         plan.item = &item;
@@ -2194,6 +2241,7 @@ namespace
             request.outputFormat = item.format;
             request.parameters = item.parameters;
             request.environment = environment;
+            request.siblings = siblings;
             Pipeline::ContentBuildResult result = pipeline.Build(request);
             plan.messages = result.messages;
 
@@ -2262,7 +2310,8 @@ namespace
         const Pipeline::ContentSourceRootCapabilities& externalSourceRoots,
         const std::map<std::string, std::string>& effectiveFingerprints,
         const std::set<std::string>& plannedNodes,
-        const Pipeline::ContentBuildEnvironment& environment)
+        const Pipeline::ContentBuildEnvironment& environment,
+        const std::shared_ptr<const std::vector<Pipeline::ContentBuildSibling>>& siblings)
     {
         BuildNodeOutcome outcome;
         const BuildItem& item = *plan.item;
@@ -2320,6 +2369,7 @@ namespace
             request.outputFormat = item.format;
             request.parameters = item.parameters;
             request.environment = environment;
+            request.siblings = siblings;
             Pipeline::ContentBuildResult result = pipeline.Build(request);
             outcome.manifest = Pipeline::MakeContentBuildManifestEntry(
                 result, sourceRoot, outputRoot, item.output, externalSourceRoots);
@@ -2807,6 +2857,8 @@ namespace
         // on the order the nodes happen to finish in.
         std::set<std::string> plannedNodes;
         for (const BuildItem& build : builds) { plannedNodes.insert(build.logicalName); }
+        const std::shared_ptr<const std::vector<Pipeline::ContentBuildSibling>> siblings =
+            DescribeSiblings(builds, *registry);
         try
         {
             for (std::size_t offset = 0u; offset < builds.size(); offset += command.workers)
@@ -2817,7 +2869,7 @@ namespace
                     plans[offset] = PrepareBuildNode(
                         builds[offset], offset, pipeline, *registry, previousManifest,
                         loadedManifest.state, sourceRoot, outputRoot, externalSourceRoots,
-                        staging->Path(), plannedNodes, buildEnvironment);
+                        staging->Path(), plannedNodes, buildEnvironment, siblings);
                     continue;
                 }
 
@@ -2833,7 +2885,7 @@ namespace
                                 builds[index], index, pipeline, *registry, previousManifest,
                                 loadedManifest.state, sourceRoot, outputRoot,
                                 externalSourceRoots, staging->Path(), plannedNodes,
-                                buildEnvironment);
+                                buildEnvironment, siblings);
                         }));
                 }
                 for (std::size_t index = offset; index < end; ++index)
@@ -3084,7 +3136,7 @@ namespace
                 outcomes.push_back(ExecuteBuildNode(
                     plans[ready.front()], pipeline, sourceRoot, outputRoot,
                     externalSourceRoots, effectiveFingerprints, plannedNodes,
-                    buildEnvironment));
+                    buildEnvironment, siblings));
             }
             else
             {
@@ -3101,7 +3153,7 @@ namespace
                                 return ExecuteBuildNode(
                                     plans[index], pipeline, sourceRoot, outputRoot,
                                     externalSourceRoots, effectiveFingerprints, plannedNodes,
-                                    buildEnvironment);
+                                    buildEnvironment, siblings);
                             }));
                     }
                     for (std::future<BuildNodeOutcome>& future : futures)

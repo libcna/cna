@@ -371,7 +371,7 @@ namespace CNA::Content::Pipeline
                     "sources, not canonical XNB Model data.");
             }
             bundle.primary = *imported.canonicalModel;
-            if (const auto* schema1 = std::get_if<Cnb::CnbModelData>(&bundle.primary))
+            if (const auto* schema1 = std::get_if<Cnb::CnbModelData>(&*bundle.primary))
             {
                 AddModelRuntimeReferences(*schema1, context);
                 context.LogInfo("prepared canonical XNB Model schema-1 data for CNB encoding.");
@@ -379,7 +379,7 @@ namespace CNA::Content::Pipeline
             else
             {
                 AddModelRuntimeReferences(
-                    std::get<Cnb::CnbModelV2Data>(bundle.primary), context);
+                    std::get<Cnb::CnbModelV2Data>(*bundle.primary), context);
                 context.LogInfo("prepared canonical XNB Model schema-2 data for CNB encoding.");
             }
             return ContentValue::Create(ProcessedModelType, std::move(bundle));
@@ -456,7 +456,7 @@ namespace CNA::Content::Pipeline
                 referencedGeneratedTextures.insert(found->first);
                 reference = found->second;
             };
-            VisitTextureReferences(std::get<Cnb::CnbModelData>(bundle.primary), remap);
+            VisitTextureReferences(std::get<Cnb::CnbModelData>(*bundle.primary), remap);
             for (auto& [logicalName, model] : additionalModels)
             {
                 static_cast<void>(logicalName);
@@ -488,7 +488,7 @@ namespace CNA::Content::Pipeline
             }
         }
 
-        AddModelRuntimeReferences(std::get<Cnb::CnbModelData>(bundle.primary), context,
+        AddModelRuntimeReferences(std::get<Cnb::CnbModelData>(*bundle.primary), context,
                                   &generatedTextureLogicalNames);
         std::sort(bundle.children.begin(), bundle.children.end(),
                   [](const ProcessedModelChild& left, const ProcessedModelChild& right)
@@ -549,7 +549,19 @@ namespace CNA::Content::Pipeline
         ContentWriteResult result;
         result.assetTypeId = Cnb::CnbAssetTypeId::Model;
         result.assetTypeName = "Microsoft.Xna.Framework.Graphics.Model";
-        if (const auto* schema1 = std::get_if<Cnb::CnbModelData>(&bundle.primary))
+        if (!bundle.primary.has_value())
+        {
+            // Only one model shape reaches here without a canonical form, and saying which it is
+            // is more use than saying that a conversion failed (plans/plan_xna_sample_xnb_sweep.md
+            // `XNASWEEP-174`).
+            throw ContentLoadException(
+                "'" + logicalName +
+                "': neither frozen Model schema carries this model. An XNA model whose material "
+                "is an EffectMaterialContent references a compiled effect of the game's own and "
+                "carries a parameter table for it, which no CNB effect kind expresses; build it "
+                "to XNB, which does carry it.");
+        }
+        if (const auto* schema1 = std::get_if<Cnb::CnbModelData>(&*bundle.primary))
         {
             result.bytes = Cnb::EncodeModelToCnb(*schema1, logicalName);
             result.assetSchemaVersion = Cnb::CnbModelSchemaVersion;
@@ -557,7 +569,7 @@ namespace CNA::Content::Pipeline
         else
         {
             result.bytes = Cnb::EncodeModelV2ToCnb(
-                std::get<Cnb::CnbModelV2Data>(bundle.primary), logicalName);
+                std::get<Cnb::CnbModelV2Data>(*bundle.primary), logicalName);
             result.assetSchemaVersion = Cnb::CnbModelV2SchemaVersion;
         }
         result.additionalOutputs.reserve(bundle.children.size());

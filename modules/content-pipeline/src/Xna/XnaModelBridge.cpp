@@ -6,6 +6,8 @@
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/StockMaterials.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/OpaqueDataDictionary.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Processors/CompiledEffectContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/PipelineException.hpp"
 
 namespace CNA::Content::Pipeline
@@ -22,6 +24,101 @@ namespace CNA::Content::Pipeline
             const std::shared_ptr<Xna::ExternalReference<Graphics::TextureContent>>& reference)
         {
             return reference == nullptr ? std::string() : reference->getFilenameProperty();
+        }
+
+        /**
+         * @brief One parameter of an effect material, as the boxed value the table writes.
+         *
+         * The types are the ones the genuine importer produces for a `.x` `EffectInstance`, and
+         * they are the *count* of an `EffectParamFloats` rather than a declared type: one float is
+         * a `Single`, two a `Vector2`, three a `Vector3`, four a `Vector4`, sixteen a `Matrix`,
+         * and any other count a `Single[]`. Measured over a fixture carrying counts 1, 2, 3, 4,
+         * 16 and 5, 6, 9, 12 -- the genuine importer answers `System.Single[]` for the last four,
+         * and the genuine build writes them through `ArrayReader`1[[System.Single]]`
+         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-174`).
+         *
+         * @param key The parameter name, for the diagnostic.
+         * @param stored The boxed value.
+         * @return The value as the parameter table holds it.
+         * @throws Xna::PipelineException for a type the table cannot carry.
+         */
+        [[nodiscard]] Internal::Xnb::XnbEffectParameterValue EffectParameterOf(
+            const std::string& key, const Xna::ContentObject& stored)
+        {
+            if (Xna::Holds<bool>(stored)) { return Xna::Unbox<bool>(stored); }
+            if (Xna::Holds<SharpRuntime::intcs>(stored))
+            {
+                return static_cast<std::int32_t>(Xna::Unbox<SharpRuntime::intcs>(stored));
+            }
+            if (Xna::Holds<float>(stored)) { return Xna::Unbox<float>(stored); }
+            if (Xna::Holds<Microsoft::Xna::Framework::Vector2>(stored))
+            {
+                return Xna::Unbox<Microsoft::Xna::Framework::Vector2>(stored);
+            }
+            if (Xna::Holds<Vector3>(stored)) { return Xna::Unbox<Vector3>(stored); }
+            if (Xna::Holds<Microsoft::Xna::Framework::Vector4>(stored))
+            {
+                return Xna::Unbox<Microsoft::Xna::Framework::Vector4>(stored);
+            }
+            if (Xna::Holds<Microsoft::Xna::Framework::Matrix>(stored))
+            {
+                return Xna::Unbox<Microsoft::Xna::Framework::Matrix>(stored);
+            }
+            if (Xna::Holds<Microsoft::Xna::Framework::Quaternion>(stored))
+            {
+                return Xna::Unbox<Microsoft::Xna::Framework::Quaternion>(stored);
+            }
+            throw Xna::PipelineException(
+                "ToCanonicalModel: effect parameter '{0}' holds '{1}', which an XNB effect "
+                "material's parameter table cannot carry.",
+                key, stored.StableType());
+        }
+
+        /**
+         * @brief An effect material as the canonical effect resource it serializes to.
+         *
+         * The reference is the *compiled* effect the processor built, and the parameter table is
+         * every texture the material carries together with every opaque-data entry that is not
+         * one of the two the `Effect`/`CompiledEffect` properties are stored under -- both of
+         * which are the reference itself rather than a parameter. The table is written in sorted
+         * key order, with textures and values interleaved: measured on a fixture whose parameters
+         * are declared out of order and whose two textures sort first and third, and the genuine
+         * build answers all eight in ASCII order (plans/plan_xna_sample_xnb_sweep.md
+         * `XNASWEEP-174`).
+         *
+         * @param material The material.
+         * @return The canonical effect-material resource.
+         */
+        [[nodiscard]] Internal::Xnb::XnbEffectMaterialData EffectMaterialResourceOf(
+            const Graphics::EffectMaterialContent& material)
+        {
+            Internal::Xnb::XnbEffectMaterialData data;
+            if (const std::shared_ptr<Xna::ExternalReference<Processors::CompiledEffectContent>> compiled =
+                    material.getCompiledEffectProperty())
+            {
+                data.effectReference = compiled->getFilenameProperty();
+            }
+            const Graphics::TextureReferenceDictionary& textures = material.getTexturesProperty();
+            for (const std::string& key : textures.getKeysProperty())
+            {
+                std::shared_ptr<Xna::ExternalReference<Graphics::TextureContent>> reference;
+                if (!textures.TryGetValue(key, reference) || reference == nullptr) { continue; }
+                data.parameters.values[key] =
+                    Internal::Xnb::XnbExternalAssetReference{reference->getFilenameProperty()};
+            }
+            const Xna::OpaqueDataDictionary& opaque = material.getOpaqueDataProperty();
+            for (const std::string& key : opaque.getKeysProperty())
+            {
+                if (key == Graphics::EffectMaterialContent::EffectKey ||
+                    key == Graphics::EffectMaterialContent::CompiledEffectKey)
+                {
+                    continue;
+                }
+                Xna::ContentObject stored;
+                if (!opaque.TryGetValue(key, stored) || stored.Empty()) { continue; }
+                data.parameters.values[key] = EffectParameterOf(key, stored);
+            }
+            return data;
         }
 
         /** @brief One stock material as the canonical effect resource it serializes to. */
@@ -107,9 +204,15 @@ namespace CNA::Content::Pipeline
                 resource.value = data;
                 return resource;
             }
+            if (const auto* effect = dynamic_cast<const Graphics::EffectMaterialContent*>(&material))
+            {
+                resource.reader = "Microsoft.Xna.Framework.Content.EffectMaterialReader";
+                resource.value = EffectMaterialResourceOf(*effect);
+                return resource;
+            }
             throw Xna::PipelineException(
-                "ToCanonicalModel: material '{0}' is not one of the five stock materials an XNB "
-                "model can carry.",
+                "ToCanonicalModel: material '{0}' is not one of the five stock materials or an "
+                "effect material an XNB model can carry.",
                 material.GetTypeName());
         }
     }

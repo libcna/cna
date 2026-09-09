@@ -727,13 +727,27 @@ namespace CNA::Content::Pipeline
         const ContentSourceRootCapabilities& externalSourceRoots,
         ContentDependencyCollector& dependencies, ContentBuildLogger& logger,
         const ContentOutputFormat outputFormat, ContentBuildEnvironment environment,
-        const ContentPipeline* pipeline)
+        const ContentPipeline* pipeline,
+        std::shared_ptr<const std::vector<ContentBuildSibling>> siblings)
         : sourceRoot_(std::move(sourceRoot)), source_(std::move(source)),
           logicalName_(std::move(logicalName)), component_(std::move(component)),
           parameters_(&parameters), dependencies_(&dependencies), logger_(&logger),
           externalSourceRoots_(&externalSourceRoots), outputFormat_(outputFormat),
-          environment_(std::move(environment)), pipeline_(pipeline)
+          environment_(std::move(environment)), pipeline_(pipeline),
+          siblings_(std::move(siblings))
     {
+    }
+
+    std::span<const ContentBuildSibling> ContentProcessorContext::Siblings() const noexcept
+    {
+        if (siblings_ == nullptr) { return {}; }
+        return std::span<const ContentBuildSibling>(*siblings_);
+    }
+
+    const std::shared_ptr<const std::vector<ContentBuildSibling>>&
+    ContentProcessorContext::SiblingsShared() const noexcept
+    {
+        return siblings_;
     }
 
     const std::string& ContentProcessorContext::LogicalName() const noexcept
@@ -1442,7 +1456,8 @@ namespace CNA::Content::Pipeline
             ContentProcessorContext context(stage.root, stage.source, logicalName,
                                             processorIdentity.name, effective,
                                             externalSourceRoots, dependencies, logger,
-                                            request.outputFormat, request.environment, this);
+                                            request.outputFormat, request.environment, this,
+                                            request.siblings);
             stage.processed = stage.processor->Process(stage.imported, context);
             if (stage.processed.Empty())
             {

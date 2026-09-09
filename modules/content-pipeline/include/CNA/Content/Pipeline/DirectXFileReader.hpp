@@ -5,6 +5,7 @@
 #include <memory>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace CNA::Content::Pipeline
@@ -41,6 +42,24 @@ namespace CNA::Content::Pipeline
 
         /** @brief Names this object references by `{ Name }` rather than nesting. */
         std::vector<std::string> references;
+
+        /**
+         * @brief Whether this object's template name is @p name, ignoring ASCII letter case.
+         *
+         * An object's type is a *template* name, and the genuine reader resolves it against the
+         * template set without regard to case: `TextureFileName`, `TEXTUREFILENAME` and
+         * `texturefilename` all name the standard `TextureFilename`, and so do upper-case
+         * spellings of `Frame`, `FrameTransformMatrix`, `Mesh`, `MeshNormals`,
+         * `MeshTextureCoords`, `MeshMaterialList` and `Material` -- each measured against the
+         * genuine importer, which answers a byte-identical graph for every one of them
+         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-180`). SAMPLE-028's `Car.x` is the corpus
+         * file that needs it: it writes `TextureFileName`, and comparing the type exactly loses
+         * every texture the model has.
+         *
+         * @param name The template name to test against, in its standard spelling.
+         * @return True when the two names differ only in the case of ASCII letters.
+         */
+        [[nodiscard]] bool TypeIs(std::string_view name) const noexcept;
     };
 
     /** @brief A parsed `.x` file: its top-level objects, templates already dropped. */

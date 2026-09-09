@@ -12,6 +12,7 @@
 #include "CNA/Content/Cnb/CnbModelV2Data.hpp"
 #include "CNA/Content/Cnb/CnbTextureCodec.hpp"
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
+#include "CNA/Internal/Xnb/XnbCanonicalData.hpp"
 
 namespace CNA::Content::Pipeline
 {
@@ -88,8 +89,28 @@ namespace CNA::Content::Pipeline
     /** @brief Primary Model plus optional deterministic generated child assets. */
     struct ProcessedModelBundle
     {
-        /** @brief Primary canonical Model value with its selected schema carrier. */
-        CanonicalModelValue primary;
+        /**
+         * @brief Primary canonical Model value with its selected schema carrier, when it has one.
+         *
+         * Absent for the one model shape the two frozen CNB schemas cannot express: an XNA model
+         * whose material is an `EffectMaterialContent`, which references a compiled effect of the
+         * game's own and carries a parameter table for it. Neither schema has an effect kind for
+         * that, and inventing one would change a frozen schema to describe a thing only the XNB
+         * route can carry, so the CNB writer refuses that model by name instead
+         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-174`).
+         */
+        std::optional<CanonicalModelValue> primary;
+
+        /**
+         * @brief The XNA-shaped Model this bundle came from, when an XNA importer produced it.
+         *
+         * `XnaModelBridge::ToCanonicalModel` already answers exactly the graph the XNB writer
+         * writes, so the XNB route takes it directly rather than converting it to CNB and back.
+         * The detour was byte-neutral for everything the corpus contains -- it is what produced
+         * the sweep's byte-identical models -- but it cannot carry an effect material, and a
+         * round trip that exists only to be undone is not worth the fidelity risk either way.
+         */
+        std::optional<CNA::Internal::Xnb::XnbModelData> xnaModel;
 
         /** @brief Generated child values sorted by logical name. */
         std::vector<ProcessedModelChild> children;

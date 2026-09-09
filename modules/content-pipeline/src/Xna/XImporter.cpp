@@ -19,9 +19,12 @@
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentIdentity.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/ExternalReference.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/AnimationContent.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/EffectContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/StockMaterials.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/VertexChannelNames.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
@@ -90,6 +93,18 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          * neither a plain negation nor a `+ 0.0f` can produce. The other five axis directions and
          * the zero vector agree with the same matrix.
          *
+         * **The matrix is `[[1, +0, -0], [+0, 1, +0], [-0, +0, -1]]`, and the zero vector answers
+         * exactly `(+0, +0, +0)`.** `M31` is a negative zero as well as `M13`, and the two
+         * together are the only assignment of the six off-diagonal zero signs that reproduces all
+         * sixty-four sign combinations of `{+0, -0, +1, -1}^3` the genuine importer was measured
+         * over -- one fixture per combination, so no folding can hide one. Neither sign of zero
+         * is reachable from a source whose `x` is `+0`, which is why `x_normal_rules.x` could not
+         * see `M31`: it takes an `x` of `-0` with a `y` below zero and a `z` above it, which is
+         * `Car.x`'s `(-0.000000, -0.697342, 0.716738)` and eighty-six others like it. The
+         * zero-length branch is not the raw accumulation either -- `(-0, -0, -0)` accumulates to
+         * `(+0, -0, +0)` and the genuine importer answers `(+0, +0, +0)`
+         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-181`).
+         *
          * **The normalization is wide.** The sum of squares and the square root are computed in
          * `double` and rounded to a `float` once, and the three components are *divided* by it.
          * `(0.855686, 0, 0.517496)` -- SAMPLE-014's own, 4.2e-7 longer than unit -- answers
@@ -103,7 +118,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         [[nodiscard]] Vector3 ConvertNormal(const Vector3 value)
         {
             static constexpr float kNegativeZero = -0.0f;
-            const float x = ((value.X * 1.0f) + (value.Y * 0.0f)) + (value.Z * 0.0f);
+            const float x = ((value.X * 1.0f) + (value.Y * 0.0f)) + (value.Z * kNegativeZero);
             const float y = ((value.X * 0.0f) + (value.Y * 1.0f)) + (value.Z * 0.0f);
             const float z = ((value.X * kNegativeZero) + (value.Y * 0.0f)) + (value.Z * -1.0f);
             const double wide = (static_cast<double>(x) * static_cast<double>(x)) +
@@ -112,7 +127,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             const float length = static_cast<float>(std::sqrt(wide));
             if (!(length > 0.0f))
             {
-                return Vector3(x, y, z);
+                return Vector3(0.0f, 0.0f, 0.0f);
             }
             return Vector3(x / length, y / length, z / length);
         }
@@ -152,7 +167,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         {
             for (const Canon::DirectXFileObject& child : parent.children)
             {
-                if (child.type == type)
+                if (child.TypeIs(type))
                 {
                     return &child;
                 }
@@ -195,6 +210,20 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         /** @brief One vertex's worth of bone weights, gathered before the channel is built. */
         using WeightsPerVertex = std::vector<std::vector<BoneWeight>>;
 
+        /**
+         * @brief One `.x` `Material`, as the material content the genuine importer answers for it.
+         *
+         * A `Material` carrying an `EffectInstance` is an `EffectMaterialContent` and nothing of
+         * the material's own colours survives: the opaque data is the effect reference followed by
+         * the instance's parameters in the order the file writes them, and a string parameter is a
+         * *texture* under that parameter's name. Measured on the genuine importer with a fixture
+         * carrying one of each parameter template -- `EffectParamString`, `EffectParamFloats` and
+         * `EffectParamDWord` -- which answers `Effect`, `Tint=(0.25,0.5,0.75)`, `Passes=2` and
+         * `materialTexture DiffuseTexture` (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-174`).
+         */
+        [[nodiscard]] std::shared_ptr<Graphics::MaterialContent> ReadMaterialContent(
+            const Canon::DirectXFileObject& object, const Importing& importing);
+
         void ReadMaterial(const Canon::DirectXFileObject& object, BasicMaterialContent& material,
                           const Importing& importing)
         {
@@ -228,6 +257,107 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 material.setTextureProperty(std::make_shared<ExternalReference<Graphics::TextureContent>>(
                     (importing.directory / named).lexically_normal().string()));
             }
+        }
+
+        std::shared_ptr<Graphics::MaterialContent> ReadMaterialContent(const Canon::DirectXFileObject& object,
+                                                             const Importing& importing)
+        {
+            const Canon::DirectXFileObject* instance = Find(object, "EffectInstance");
+            if (instance == nullptr || instance->strings.empty())
+            {
+                auto basic = std::make_shared<BasicMaterialContent>();
+                ReadMaterial(object, *basic, importing);
+                return basic;
+            }
+            auto effect = std::make_shared<Graphics::EffectMaterialContent>();
+            std::string named = instance->strings.front();
+            std::replace(named.begin(), named.end(), '\\', '/');
+            effect->setEffectProperty(std::make_shared<ExternalReference<Graphics::EffectContent>>(
+                (importing.directory / named).lexically_normal().string()));
+            for (const Canon::DirectXFileObject& parameter : instance->children)
+            {
+                if (parameter.strings.empty())
+                {
+                    continue;
+                }
+                const std::string& key = parameter.strings.front();
+                if (parameter.TypeIs("EffectParamString"))
+                {
+                    if (parameter.strings.size() < 2u)
+                    {
+                        continue;
+                    }
+                    std::string value = parameter.strings[1];
+                    std::replace(value.begin(), value.end(), '\\', '/');
+                    effect->getTexturesProperty().Set(
+                        key, std::make_shared<ExternalReference<Graphics::TextureContent>>(
+                                 (importing.directory / value).lexically_normal().string()));
+                }
+                else if (parameter.TypeIs("EffectParamDWord"))
+                {
+                    if (parameter.numbers.empty())
+                    {
+                        continue;
+                    }
+                    effect->getOpaqueDataProperty().SetValue<SharpRuntime::intcs>(
+                        key, static_cast<SharpRuntime::intcs>(parameter.numbers.front()));
+                }
+                else if (parameter.TypeIs("EffectParamFloats"))
+                {
+                    // The first number is the count, and the count *is* the type: one float is a
+                    // `Single`, two a `Vector2`, three a `Vector3`, four a `Vector4`, sixteen a
+                    // `Matrix`, and every other count a `Single[]`. Measured on the genuine
+                    // importer over counts 1, 2, 3, 4, 16, 5, 6, 9 and 12
+                    // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-174`).
+                    if (parameter.numbers.empty()) { continue; }
+                    const auto count = static_cast<std::size_t>(parameter.numbers.front());
+                    if (parameter.numbers.size() < count + 1u) { continue; }
+                    const auto at = [&parameter](const std::size_t index)
+                    { return static_cast<float>(parameter.numbers[index + 1u]); };
+                    switch (count)
+                    {
+                        case 1u:
+                            effect->getOpaqueDataProperty().SetValue<float>(key, at(0));
+                            break;
+                        case 2u:
+                            effect->getOpaqueDataProperty().SetValue<Vector2>(
+                                key, Vector2(at(0), at(1)));
+                            break;
+                        case 3u:
+                            effect->getOpaqueDataProperty().SetValue<Vector3>(
+                                key, Vector3(at(0), at(1), at(2)));
+                            break;
+                        case 4u:
+                            effect->getOpaqueDataProperty().SetValue<Vector4>(
+                                key, Vector4(at(0), at(1), at(2), at(3)));
+                            break;
+                        case 16u:
+                        {
+                            Matrix matrix;
+                            matrix.M11 = at(0);  matrix.M12 = at(1);  matrix.M13 = at(2);  matrix.M14 = at(3);
+                            matrix.M21 = at(4);  matrix.M22 = at(5);  matrix.M23 = at(6);  matrix.M24 = at(7);
+                            matrix.M31 = at(8);  matrix.M32 = at(9);  matrix.M33 = at(10); matrix.M34 = at(11);
+                            matrix.M41 = at(12); matrix.M42 = at(13); matrix.M43 = at(14); matrix.M44 = at(15);
+                            effect->getOpaqueDataProperty().SetValue<Matrix>(key, matrix);
+                            break;
+                        }
+                        default:
+                            // The genuine importer answers a `Single[]` here and the genuine
+                            // writer writes it through `ArrayReader`1[[System.Single]]`. CNA has
+                            // no array-valued content object, so the file is refused rather than
+                            // built with the parameter missing: no `.x` in the corpus carries one,
+                            // and a model whose effect loses a parameter is worse than a build
+                            // that says why it stopped.
+                            throw InvalidContentException(
+                                "the EffectInstance parameter '" +
+                                key + "' has " + std::to_string(count) +
+                                " floats. XNA reads that as a Single[], which this pipeline has "
+                                "no content type for; 1, 2, 3, 4 and 16 floats are read as "
+                                "Single, Vector2, Vector3, Vector4 and Matrix.");
+                    }
+                }
+            }
+            return effect;
         }
 
         /** @brief Turns one `Mesh` object into a MeshContent, with every channel XNA fills. */
@@ -486,7 +616,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 {
                     break;
                 }
-                if (child.type != "SkinWeights" || child.strings.empty())
+                if (!child.TypeIs("SkinWeights") || child.strings.empty())
                 {
                     continue;
                 }
@@ -559,7 +689,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
 
             // One batch per material, or one batch for the whole mesh where the file names none.
             std::vector<std::size_t> materialPerFace(faces.size(), 0u);
-            std::vector<std::shared_ptr<BasicMaterialContent>> materials;
+            std::vector<std::shared_ptr<Graphics::MaterialContent>> materials;
             if (const Canon::DirectXFileObject* list = Find(object, "MeshMaterialList"); list != nullptr)
             {
                 std::size_t listAt = 0u;
@@ -571,13 +701,11 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 }
                 for (const Canon::DirectXFileObject& child : list->children)
                 {
-                    if (child.type != "Material")
+                    if (!child.TypeIs("Material"))
                     {
                         continue;
                     }
-                    auto material = std::make_shared<BasicMaterialContent>();
-                    ReadMaterial(child, *material, importing);
-                    materials.push_back(std::move(material));
+                    materials.push_back(ReadMaterialContent(child, importing));
                 }
                 // A `.x` may name its materials rather than nest them -- `{phong1SG}` refers to a
                 // `Material` declared elsewhere in the file, which is what every model an
@@ -589,9 +717,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 {
                     const auto found = importing.materialsByName.find(named);
                     if (found == importing.materialsByName.end()) { continue; }
-                    auto material = std::make_shared<BasicMaterialContent>();
-                    ReadMaterial(*found->second, *material, importing);
-                    materials.push_back(std::move(material));
+                    materials.push_back(ReadMaterialContent(*found->second, importing));
                 }
                 if (materials.size() != materialCount && !materials.empty())
                 {
@@ -776,21 +902,21 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             // in (measured: a file declaring Frame Bone0 then Mesh Skin answers Skin first).
             for (const Canon::DirectXFileObject& child : object.children)
             {
-                if (child.type == "FrameTransformMatrix")
+                if (child.TypeIs("FrameTransformMatrix"))
                 {
                     node->setTransformProperty(Convert(ReadMatrix(child, 0u)));
                 }
             }
             for (const Canon::DirectXFileObject& child : object.children)
             {
-                if (child.type == "Mesh")
+                if (child.TypeIs("Mesh"))
                 {
                     node->getChildrenProperty().Add(ReadMesh(child, importing));
                 }
             }
             for (const Canon::DirectXFileObject& child : object.children)
             {
-                if (child.type == "Frame")
+                if (child.TypeIs("Frame"))
                 {
                     auto sub = std::make_shared<NodeContent>();
                     ReadFrame(child, sub, importing);
@@ -891,12 +1017,12 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             std::set<double> times;
             for (const Canon::DirectXFileObject& child : object.children)
             {
-                if (child.type == "Frame" && animation.target.empty())
+                if (child.TypeIs("Frame") && animation.target.empty())
                 {
                     animation.target = child.name;
                     continue;
                 }
-                if (child.type != "AnimationKey")
+                if (!child.TypeIs("AnimationKey"))
                 {
                     continue;
                 }
@@ -993,7 +1119,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             double lastTick = 0.0;
             for (const Canon::DirectXFileObject& child : object.children)
             {
-                if (child.type != "Animation")
+                if (!child.TypeIs("Animation"))
                 {
                     continue;
                 }
@@ -1102,7 +1228,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         importing.directory = std::filesystem::path(filename).parent_path();
         for (const Canon::DirectXFileObject& object : parsed.objects)
         {
-            if (object.type == "AnimTicksPerSecond" && !object.numbers.empty())
+            if (object.TypeIs("AnimTicksPerSecond") && !object.numbers.empty())
             {
                 importing.ticksPerSecond = object.numbers.front();
             }
@@ -1110,7 +1236,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         // Every named object a `{Name}` reference can reach, wherever it is declared.
         const auto index = [&importing](const Canon::DirectXFileObject& object, auto&& self) -> void
         {
-            if (object.type == "Material" && !object.name.empty())
+            if (object.TypeIs("Material") && !object.name.empty())
             {
                 importing.materialsByName.emplace(object.name, &object);
             }
@@ -1125,15 +1251,15 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         std::size_t topLevelData = 0u;
         for (const Canon::DirectXFileObject& object : parsed.objects)
         {
-            if (object.type == "Frame") { ++topLevelFrames; }
-            if (object.type == "Frame" || object.type == "Mesh") { ++topLevelData; }
+            if (object.TypeIs("Frame")) { ++topLevelFrames; }
+            if (object.TypeIs("Frame") || object.TypeIs("Mesh")) { ++topLevelData; }
         }
         auto root = std::make_shared<NodeContent>();
         if (topLevelFrames == 1u && topLevelData == 1u)
         {
             for (const Canon::DirectXFileObject& object : parsed.objects)
             {
-                if (object.type == "Frame")
+                if (object.TypeIs("Frame"))
                 {
                     ReadFrame(object, root, importing);
                 }
@@ -1143,13 +1269,13 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         {
             for (const Canon::DirectXFileObject& object : parsed.objects)
             {
-                if (object.type == "Frame")
+                if (object.TypeIs("Frame"))
                 {
                     auto child = std::make_shared<NodeContent>();
                     ReadFrame(object, child, importing);
                     root->getChildrenProperty().Add(child);
                 }
-                else if (object.type == "Mesh")
+                else if (object.TypeIs("Mesh"))
                 {
                     root->getChildrenProperty().Add(ReadMesh(object, importing));
                 }
@@ -1164,7 +1290,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         }
         for (const Canon::DirectXFileObject& object : parsed.objects)
         {
-            if (object.type == "AnimationSet")
+            if (object.TypeIs("AnimationSet"))
             {
                 ReadAnimationSet(object, root, importing);
             }

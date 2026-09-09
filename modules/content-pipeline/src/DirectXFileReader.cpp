@@ -10,6 +10,21 @@
 
 namespace CNA::Content::Pipeline
 {
+    bool DirectXFileObject::TypeIs(const std::string_view name) const noexcept
+    {
+        if (type.size() != name.size()) { return false; }
+        for (std::size_t at = 0u; at < name.size(); ++at)
+        {
+            const auto lower = [](const char value)
+            {
+                return static_cast<char>(
+                    std::tolower(static_cast<unsigned char>(value)));
+            };
+            if (lower(type[at]) != lower(name[at])) { return false; }
+        }
+        return true;
+    }
+
     namespace
     {
         /** @brief What a token is, in both encodings. The binary values are the format's own. */

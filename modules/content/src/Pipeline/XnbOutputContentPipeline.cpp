@@ -439,11 +439,26 @@ namespace CNA::Content::Pipeline
                         "assets as their own sources.");
                 }
                 std::vector<std::string> warnings;
+                // An XNA-shaped model is already the graph this writer writes; converting it to
+                // CNB and back would only be undone here (plans/plan_xna_sample_xnb_sweep.md
+                // `XNASWEEP-174`).
+                if (bundle.xnaModel.has_value())
+                {
+                    return MakeResult(
+                        Xnb::WriteXnbAssetWithIdentity(*bundle.xnaModel, Options(), logicalName));
+                }
+                if (!bundle.primary.has_value())
+                {
+                    throw XnbWriteException(
+                        "'" + logicalName +
+                        "': this processed model has neither a canonical CNB form nor an "
+                        "XNA-shaped one, so there is nothing to write.");
+                }
                 const Xnb::XnbModelData model =
-                    std::holds_alternative<Cnb::CnbModelV2Data>(bundle.primary)
-                        ? ConvertModelV2ToXnb(std::get<Cnb::CnbModelV2Data>(bundle.primary),
+                    std::holds_alternative<Cnb::CnbModelV2Data>(*bundle.primary)
+                        ? ConvertModelV2ToXnb(std::get<Cnb::CnbModelV2Data>(*bundle.primary),
                                               logicalName)
-                        : ConvertModelSchema1ToXnb(std::get<Cnb::CnbModelData>(bundle.primary),
+                        : ConvertModelSchema1ToXnb(std::get<Cnb::CnbModelData>(*bundle.primary),
                                                    logicalName, warnings);
                 ContentWriteResult result =
                     MakeResult(Xnb::WriteXnbAssetWithIdentity(model, Options(), logicalName));
