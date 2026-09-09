@@ -22,7 +22,7 @@
 | SDL GPU registered integration tests | 85 CTests before parity-fixture registration |
 | Shared EasyGL parity fixtures available | 30 renderer-neutral sources in `modules/graphics/examples/parity` |
 | Tasks created by this audit | 28 (`SDLGPU-55`–`SDLGPU-82`) |
-| Completed / open / proven unavoidable | 2 / 26 / 0; `SDLGPU-80` is a candidate limitation, not yet counted complete |
+| Completed / open / proven unavoidable | 3 / 25 / 0; `SDLGPU-80` is a candidate limitation, not yet counted complete |
 | SDL GPU build | Stable `cmake-build-sdlgpu`, Debug, `CNA_GRAPHICS_RENDERER=SDL_GPU`, tests/examples ON |
 | EasyGL oracle build | Stable `cmake-build-debug`, Debug, `CNA_GRAPHICS_RENDERER=OPENGL33`, tests/examples ON |
 | Runtime driver | SDL 3.5.0 SDL_gpu Vulkan on AMD Radeon 780M / Mesa RADV 25.0.7; Khronos validation layer 1.4.309 present |
@@ -174,8 +174,8 @@ were checked individually in the declarations and implementations.
 | blend/depth/raster/sampler applications; BlendFactor/reference/scissor/viewport | all explicit | all explicit | classic; immutable-key and propagation verification (`SDLGPU-58/63–65`) |
 | buffer factories and colored/extended primitive/indexed draw hooks | explicit | explicit | classic (`SDLGPU-59/78`) |
 | `DrawInstancedPrimitivesEx`, `GetMaxVertexStreams`, multistream capability | explicit | draw inherited throw, max-stream/capability inherited false | classic XNA 4.0 (`SDLGPU-60`) |
-| `SupportsDepth*`, `Ensure3DSupported`, unsupported-call behavior, `CanBeginDrawEXT` | runtime-aware | mostly inherited permissive defaults | classic capability/profile truthfulness (`SDLGPU-57`) |
-| `SupportsCapability`, numeric texture/cube/volume/RT limits, limitations text | explicit runtime answers | inherited broad-true/unbounded defaults | publicly observable and currently false-promising (`SDLGPU-57`) |
+| `SupportsDepth*`, `Ensure3DSupported`, unsupported-call behavior, `CanBeginDrawEXT` | runtime-aware | depth/stencil availability is now exposed through explicit capability answers; other defaults retained where semantically applicable | classic capability/profile truthfulness (`SDLGPU-57`) |
+| `SupportsCapability`, numeric texture/cube/volume/RT limits, limitations text | explicit runtime answers | explicit exhaustive capability switch, one-stream limit and limitations text; format/device limits remain owned by their dedicated tasks | publicly observable; false promises removed by `SDLGPU-57` |
 | compiled-effect factory/runtime/support | explicit | explicit | ordinary Effect bytecode path in scope (`SDLGPU-79`) |
 | ShaderEffect dialect/source execution | EasyGL explicit | SDL dialect/compile path explicit | existing CNAEXT, `out` |
 | compute/storage/image, indirect draw, barriers, GPU timer, shadow/IBL, display-color-space extensions | EasyGL implements a subset | SDL mostly inherits safe false/no-op defaults | modern CNAEXT, `out` |
@@ -240,7 +240,7 @@ underlying API limitation proven after reasonable emulation analysis.
   and success expectation from that value. Incremental target build succeeded;
   `SdlGpu_ConstructorExceptionSafety` passes in 14.93 s on offscreen/Vulkan with validation fatal.
 
-### SDLGPU-57 — make capability and numeric-limit reporting truthful ⬜
+### SDLGPU-57 — make capability and numeric-limit reporting truthful ✅
 
 - **Problem/public behavior:** SDL GPU inherits broad `true`/unbounded defaults for unsupported
   wireframe, instancing, occlusion and device-dependent limits.
@@ -249,6 +249,14 @@ underlying API limitation proven after reasonable emulation analysis.
 - **Location:** `SdlGpuRenderer::{SupportsCapability,GetMax*}` and capability tests.
 - **Acceptance/test:** every public capability agrees with a successful discriminating operation or
   a truthful refusal; A→feature invocation produces no false-supported state.
+- **Result (2026-09-09):** accepted. SDL GPU now enumerates every `GraphicsCapability` instead of
+  inheriting catch-all true, runtime-probes 2× color+depth MSAA, reports the current one-stream
+  encoder limit, and contributes exact qualitative limitations. MRT reports false until distinct
+  outputs exist, while its already-supported multi-attachment bind/clear path remains callable.
+  Compiled effects follow the optional build's real `SupportsCompiledEffects()` result. Incremental
+  build succeeded; `SdlGpu_Smoke` passes 28/28 capability/lifecycle checks and the relinked
+  `SdlGpu_MRT` compatibility test also passes; the non-production SDL ratchet remains at/below its
+  existing budget.
 
 ### SDLGPU-58 — exhaustively verify immutable blend/depth/stencil/raster keys ⬜
 

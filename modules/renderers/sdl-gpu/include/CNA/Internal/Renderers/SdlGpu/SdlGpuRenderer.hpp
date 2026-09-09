@@ -1772,6 +1772,20 @@ namespace CNA::Internal::Renderers::SdlGpu
         SdlGpuRenderer(const SdlGpuRenderer&) = delete;
         SdlGpuRenderer& operator=(const SdlGpuRenderer&) = delete;
 
+        /**
+         * @brief Reports only capabilities that this renderer currently implements faithfully.
+         *
+         * @param capability Capability to query.
+         * @return True only when the corresponding public operation is implemented.
+         */
+        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
+
+        /** @brief Returns the one per-vertex stream the current draw encoder consumes faithfully. */
+        [[nodiscard]] int GetMaxVertexStreams() const override { return 1; }
+
+        /** @brief Describes current qualitative SDL_gpu API and renderer limitations. */
+        [[nodiscard]] std::string_view GetAdditionalLimitationsTextEXT() const override;
+
         /** @brief Queues a color-only clear, consumed on the next render pass. */
         void Clear(float r, float g, float b, float a) override;
         /** @brief Renders any pending clear and presents the swapchain texture. */

@@ -1422,6 +1422,51 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
     }
 
+    bool SdlGpuRenderer::SupportsCapability(const CNA::GraphicsCapability capability) const
+    {
+        switch (capability)
+        {
+            case CNA::GraphicsCapability::ThreeD:
+            case CNA::GraphicsCapability::AnisotropicFiltering:
+            case CNA::GraphicsCapability::CustomEffects:
+            case CNA::GraphicsCapability::Texture3D:
+            case CNA::GraphicsCapability::AdditiveBlending:
+                return true;
+            case CNA::GraphicsCapability::DepthStencilBuffer:
+            case CNA::GraphicsCapability::StencilBuffer:
+                return depthStencilFormat_ != SDL_GPU_TEXTUREFORMAT_INVALID;
+            case CNA::GraphicsCapability::MultiSampleAntiAliasing:
+                return device_ != nullptr &&
+                       SDL_GPUTextureSupportsSampleCount(
+                           device_, SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
+                           SDL_GPU_SAMPLECOUNT_2) &&
+                       (depthStencilFormat_ == SDL_GPU_TEXTUREFORMAT_INVALID ||
+                        SDL_GPUTextureSupportsSampleCount(
+                            device_, depthStencilFormat_, SDL_GPU_SAMPLECOUNT_2));
+            case CNA::GraphicsCapability::CompiledEffects:
+                return SupportsCompiledEffects();
+            case CNA::GraphicsCapability::MultipleRenderTargets:
+            case CNA::GraphicsCapability::WireFrame:
+            case CNA::GraphicsCapability::OcclusionQuery:
+            case CNA::GraphicsCapability::MultiStreamVertexInput:
+            case CNA::GraphicsCapability::Instancing:
+            case CNA::GraphicsCapability::FloatRenderTargets:
+            case CNA::GraphicsCapability::HalfFloatRenderTargets:
+            case CNA::GraphicsCapability::HalfFloatTextureLinearFiltering:
+            case CNA::GraphicsCapability::ComputeShaders:
+            case CNA::GraphicsCapability::IndirectDraw:
+                return false;
+        }
+        return false;
+    }
+
+    std::string_view SdlGpuRenderer::GetAdditionalLimitationsTextEXT() const
+    {
+        return "SDL GPU currently supports one vertex stream and one independently writable "
+               "color target. FillMode.WireFrame, DrawInstancedPrimitives and OcclusionQuery "
+               "are not implemented; SDL_gpu 3.5 exposes no occlusion-query primitive.";
+    }
+
     SDL_GPUTextureFormat SdlGpuRenderer::QueryDepthStencilFormat(SDL_GPUDevice* device)
     {
         // plans/plan_sdlgpu.md: SDL_gpu guarantees at most one of D24_UNORM_S8_UINT/D32_FLOAT_S8_UINT

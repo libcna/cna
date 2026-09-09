@@ -23,7 +23,8 @@
 //   GPU stalls on in-flight reads of the old backing memory, not what ends up readable afterward),
 //   so this is a real-API-usage/no-longer-silently-ignored proof, not a visually distinguishing one.
 //
-// Exit code 0 = all checks PASS, 1 = any FAILs.
+// SDLGPU-57 additionally freezes every current public capability answer and the two numeric limits
+// that would otherwise inherit wider common defaults. Exit code 0 = all checks PASS, 1 = any FAILs.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
@@ -40,6 +41,7 @@
 #include <cstdio>
 #include <memory>
 #include <stdexcept>
+#include <string_view>
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -48,6 +50,7 @@ using namespace CNA::Internal::Renderers::SdlGpu;
 namespace
 {
     constexpr int kTotalFrames = 60;
+    constexpr int kExpectedChecks = 28;
 }
 
 class SdlGpuSmokeTest : public Game
@@ -104,6 +107,55 @@ protected:
             ib->SetData16WithOptions(indicesNoOverwrite, 3, SetDataOptions::NoOverwrite);
             check(ib->GetIndexCount() == 3,
                   "IndexBuffer.SetData16WithOptions(Discard then NoOverwrite) round-trips the exact count");
+
+            check(dev.SupportsCapability(CNA::GraphicsCapability::ThreeD),
+                  "ThreeD is reported because stock 3D draws are implemented");
+            check(dev.SupportsCapability(CNA::GraphicsCapability::DepthStencilBuffer),
+                  "DepthStencilBuffer is reported for the selected combined format");
+            check(dev.SupportsCapability(CNA::GraphicsCapability::StencilBuffer),
+                  "StencilBuffer agrees with the selected combined format");
+            check(dev.SupportsCapability(CNA::GraphicsCapability::AnisotropicFiltering),
+                  "AnisotropicFiltering is enabled by the default SDL GPU device contract");
+            check(dev.SupportsCapability(CNA::GraphicsCapability::CustomEffects),
+                  "CustomEffects is reported because ShaderEffect executes");
+            check(dev.SupportsCapability(CNA::GraphicsCapability::Texture3D),
+                  "Texture3D is reported because storage and transfer are real");
+            check(dev.SupportsCapability(CNA::GraphicsCapability::AdditiveBlending),
+                  "AdditiveBlending is reported because the pixel contract passes");
+            check(dev.SupportsCapability(CNA::GraphicsCapability::CompiledEffects) ==
+                      renderer.SupportsCompiledEffects(),
+                  "CompiledEffects agrees with this build's optional runtime");
+            check(dev.SupportsCapability(CNA::GraphicsCapability::MultiSampleAntiAliasing),
+                  "MSAA is reported after the renderer's live color/depth format query");
+
+            check(!dev.SupportsCapability(CNA::GraphicsCapability::MultipleRenderTargets),
+                  "MRT is false until independent fragment outputs are implemented");
+            check(!dev.SupportsCapability(CNA::GraphicsCapability::WireFrame),
+                  "WireFrame is false until edge expansion is implemented");
+            check(!dev.SupportsCapability(CNA::GraphicsCapability::OcclusionQuery),
+                  "OcclusionQuery is false because the underlying API exposes no query primitive");
+            check(renderer.CreateOcclusionQuery() == nullptr,
+                  "OcclusionQuery factory agrees with the false capability");
+            check(!dev.SupportsCapability(CNA::GraphicsCapability::MultiStreamVertexInput),
+                  "MultiStreamVertexInput is false while one stream is consumed");
+            check(!dev.SupportsCapability(CNA::GraphicsCapability::Instancing),
+                  "Instancing is false while the draw hook is unimplemented");
+            check(!dev.SupportsCapability(CNA::GraphicsCapability::FloatRenderTargets) &&
+                      !dev.SupportsCapability(CNA::GraphicsCapability::HalfFloatRenderTargets),
+                  "float render-target capabilities remain false while factories substitute Color");
+            check(!dev.SupportsCapability(
+                      CNA::GraphicsCapability::HalfFloatTextureLinearFiltering),
+                  "half-float filtering is false while half-float storage is absent");
+            check(!dev.SupportsCapability(CNA::GraphicsCapability::ComputeShaders) &&
+                      !dev.SupportsCapability(CNA::GraphicsCapability::IndirectDraw),
+                  "out-of-scope modern capabilities are not inherited as true");
+
+            check(renderer.GetMaxVertexStreams() == 1,
+                  "numeric vertex-stream limit agrees with the current encoder");
+            const std::string_view limitations = renderer.GetAdditionalLimitationsTextEXT();
+            check(limitations.find("WireFrame") != std::string_view::npos &&
+                      limitations.find("OcclusionQuery") != std::string_view::npos,
+                  "generated capability report names qualitative limitations");
         }
 
         dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil,
@@ -115,8 +167,8 @@ protected:
         if (frame_ == kTotalFrames)
         {
             check(true, "60 frames of Clear()+Present() completed with no exception");
-            std::printf("=== %d/%d PASS ===\n", passCount_, 8);
-            result_ = (passCount_ == 8) ? 0 : 1;
+            std::printf("=== %d/%d PASS ===\n", passCount_, kExpectedChecks);
+            result_ = (passCount_ == kExpectedChecks) ? 0 : 1;
             Exit();
         }
     }
