@@ -31,6 +31,8 @@
 > constructor contract and closed CNA's previously untested upper-bound hole as `SOFTWARE-200`.
 > A subsequent value-type pass corrected the default `Viewport.MaxDepth` and exact public string
 > representation as `SOFTWARE-201`.
+> The same exact-value audit then removed FNA's double-braced `VertexElement.ToString()` divergence
+> from the Microsoft implementation as `SOFTWARE-202`.
 > Deferred CNAEXT-modern and
 > non-applicable physical GPU/window behavior remain separately classified.
 > The executable task table is below; the evidence ledger is
@@ -224,6 +226,7 @@ its own tests and plan evidence in the same commit.
 | SOFTWARE-199 | Restore Microsoft XNA's `OcclusionQuery` profile and lifecycle contract | ✅ | Completed 2026-09-09. The earlier FNA-only audit concluded that invalid Begin/End sequences were deliberately unvalidated, and Software's 43-check contract explicitly required repeated Begin/End to be harmless. Recovered Microsoft XNA 4.0 code disproves that conclusion: `PixelCount` calls `IsComplete` and throws while unavailable; End-before-Begin, nested Begin and repeated End throw; reuse requires an intervening IsComplete observation; and the Reach profile rejects construction. A safe pre-fix discriminator failed all five lifecycle assertions. `OcclusionQuery` now owns the recovered state machine above every renderer, refuses Reach or a renderer with no real query, caches a completed count and rejects use after disposal. Positive query fixtures request HiDef; the native C ABI exposes the same invalid-state results and its smoke contract exercises each transition. The shared profile/lifecycle/count selection passes 3/3 on Software, desktop EasyGL and OpenGLES3; Software's exact fragment-order contract passes 44/44, its capability factory passes 16/16, and EasyGL's cycle/visible/occluded programs all pass under Mesa/Xvfb. A clean full Software configuration build completed all 505 steps; a fresh C-ABI Software build and `CApi_GraphicsDeviceSmoke` pass; the separately enabled EasyGL classic compiled-effect family remains green at 39/39. |
 | SOFTWARE-200 | Enforce Microsoft XNA's upper bound for `VertexBufferBinding.VertexOffset` | ✅ | Completed 2026-09-09. CNA already rejected a negative offset and instance frequency, but accepted an offset equal to or greater than the bound buffer's `VertexCount`. Recovered Microsoft XNA 4.0 source requires `0 <= vertexOffset < VertexCount`; FNA's constructor omits this validation, so the Microsoft implementation controls. A safe pre-fix discriminator proved that both 16 and 17 were accepted for a 16-vertex buffer while the last legal offset 15 remained valid. The shared constructor now checks the buffer-relative upper bound before accepting the binding. All 16 focused constructor/property checks pass under Software, desktop EasyGL and OpenGLES3. |
 | SOFTWARE-201 | Restore default `Viewport` value semantics and exact `ToString` formatting | ✅ | Completed 2026-09-09. Microsoft XNA's `Viewport` is a value type with no parameterless constructor, so `default(Viewport)` has every field zero. CNA's explicit default constructor instead set `MaxDepth=1`, contradicting both that contract and its own “all fields zero” documentation; only the two parameterized constructors initialize the ordinary 0..1 depth range. CNA also used `std::to_string`, forcing six fractional digits where XNA's formatted output uses ordinary scalar formatting. Both pre-fix discriminators failed. The default now leaves `MaxDepth` zero and stream formatting produces the recovered exact field layout without forced trailing zeroes. All 24 focused Viewport tests pass. |
+| SOFTWARE-202 | Match Microsoft XNA's exact `VertexElement.ToString()` contract | ✅ | Completed 2026-09-09. FNA constructs its text by concatenating literal double braces and inserts an extra space after `UsageIndex:`; CNA copied that implementation and its tests only searched substrings. Recovered Microsoft XNA 4.0 instead passes escaped braces to `string.Format`, whose observable result has one opening/closing brace and no extra usage-index space. The exact pre-fix assertion failed with `{{Offset:0 Format:Color Usage:TextureCoordinate UsageIndex: 1}}`; CNA now produces `{Offset:0 Format:Color Usage:TextureCoordinate UsageIndex:1}`. The complete focused VertexElement suite passes. |
 
 ### Current dependency order
 
@@ -253,6 +256,8 @@ already proven under graphics Task 869 but absent from this parity plan. `SOFTWA
 the prior FNA-only query lifecycle conclusion with recovered Microsoft XNA behavior, and
 `SOFTWARE-200` restores the recovered constructor upper bound for vertex-buffer bindings.
 `SOFTWARE-201` corrects the recovered default and textual semantics of the public Viewport value.
+`SOFTWARE-202` restores Microsoft XNA's exact public VertexElement string result despite FNA's
+known divergent concatenation.
 `SOFTWARE-100` remains yellow for the previously recorded
 repository-wide blockers; that status does not excuse any renderer gap found here.
 

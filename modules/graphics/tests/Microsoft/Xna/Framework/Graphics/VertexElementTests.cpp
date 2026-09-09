@@ -186,11 +186,8 @@ TEST(VertexElementTest, ToStringContainsUsage)
 TEST(VertexElementTest, ToStringDefaultFormat)
 {
     VertexElement ve(0, VertexElementFormat::Color, VertexElementUsage::TextureCoordinate, 1);
-    const std::string s = ve.ToString();
-    EXPECT_NE(s.find("Offset:0"), std::string::npos);
-    EXPECT_NE(s.find("Format:Color"), std::string::npos);
-    EXPECT_NE(s.find("Usage:TextureCoordinate"), std::string::npos);
-    EXPECT_NE(s.find("UsageIndex: 1"), std::string::npos);
+    EXPECT_EQ(ve.ToString(),
+              "{Offset:0 Format:Color Usage:TextureCoordinate UsageIndex:1}");
 }
 
 // ── VertexElementFormat numeric values ──────────────────────────────────────

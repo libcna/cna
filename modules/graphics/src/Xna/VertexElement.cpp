@@ -42,10 +42,10 @@ namespace Microsoft::Xna::Framework::Graphics
                 default:                                   return std::to_string(static_cast<int>(u));
             }
         };
-        return "{{Offset:" + std::to_string(offset_)
+        return "{Offset:" + std::to_string(offset_)
              + " Format:" + fmtName(vertexElementFormat_)
              + " Usage:" + usageName(vertexElementUsage_)
-             + " UsageIndex: " + std::to_string(usageIndex_)
-             + "}}";
+             + " UsageIndex:" + std::to_string(usageIndex_)
+             + "}";
     }
 }

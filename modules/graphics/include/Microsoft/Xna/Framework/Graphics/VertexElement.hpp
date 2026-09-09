@@ -134,7 +134,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /**
          * @brief Returns a human-readable description of this element.
-         * @return String of the form "{{Offset:N Format:F Usage:U UsageIndex:I}}".
+         * @return String of the form "{Offset:N Format:F Usage:U UsageIndex:I}".
          */
         [[nodiscard]] std::string ToString() const;
 
