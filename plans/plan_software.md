@@ -71,6 +71,9 @@
 > The remaining native-query property probe then found that `DisplayMode` and
 > `GraphicsDeviceStatus` likewise survived device disposal; `SOFTWARE-227` restores their recovered
 > Microsoft lifetime boundary.
+> Reset-path review then proved that CNA retained active render-target bindings across a backbuffer
+> reset, contradicting Microsoft's explicit unbind and leaving `Present()` unusable;
+> `SOFTWARE-228` restores the reset boundary.
 > Deferred CNAEXT-modern and
 > non-applicable physical GPU/window behavior remain separately classified.
 > The executable task table is below; the evidence ledger is
@@ -291,6 +294,7 @@ its own tests and plan evidence in the same commit.
 | SOFTWARE-225 | Restore XNA texture/sampler collection profile, format and lifecycle boundaries | ✅ | Completed 2026-09-09. XNA exposes 16 pixel samplers but constructs zero vertex texture/sampler slots under Reach and four under HiDef; vertex texture fetch additionally permits only seven float/half formats. CNA created 16 slots for both stages in every profile, accepted Color vertex textures, checked index bounds before the supplied texture's disposal, and let an owned texture collection remain readable/writable after its GraphicsDevice was disposed. All three pre-fix discriminators failed (nine assertions). Owned collections are now profile/stage aware, validate device/value/format before range as XNA does, and retain standalone 16-slot CNA test fixtures. Nineteen focused collection/resource checks pass on Software and desktop EasyGL. Five older tests that exercised impossible Reach/Color vertex states now request HiDef plus an allowed float format or assert the truthful Color rejection. Full `CnaGraphicsTests` passes 2,433 with 55 classified skips out of 2,488 on Software and 2,445 with 59 skips out of 2,504 on desktop EasyGL. This closes collection bookkeeping only; `SOFTWARE-168` remains the explicit execution gap. |
 | SOFTWARE-226 | Restore Microsoft XNA viewport/scissor validation and lifetime semantics | ✅ | Completed 2026-09-09. Recovered Microsoft XNA validates every assigned viewport against the active backbuffer or first render target, requires positive dimensions, an ordered 0..1 depth range, and validates scissor coordinates/extents against that same surface while allowing a zero-area boundary rectangle. CNA forwarded every value to the renderer and cached it, so renderer-dependent native behavior replaced a shared public contract; both getters also returned stale values after device disposal. Shared overflow-safe validation now runs before renderer mutation and commits only accepted state, target dimensions take precedence over the larger backbuffer, and both getters enforce device lifetime. Three new public validation tests plus the expanded lifecycle test pass on Software and desktop EasyGL. Full `CnaGraphicsTests` passes 2,436 with 55 classified skips out of 2,491 on Software and 2,448 with 59 skips out of 2,507 on desktop EasyGL. |
 | SOFTWARE-227 | Reject native-query GraphicsDevice properties after disposal | ✅ | Completed 2026-09-09. Recovered Microsoft XNA checks device disposal before reading both `DisplayMode` and `GraphicsDeviceStatus`; CNA returned adapter/cache-derived values after destruction. The shared getters now apply the same `ObjectDisposedException` boundary. The expanded renderer-facing lifecycle contract passes on Software and desktop EasyGL, and the unchanged full-suite baselines remain 2,436/2,491 with 55 classified skips and 2,448/2,507 with 59 skips respectively. The deliberately cached `Adapter`, `GraphicsProfile`, `PresentationParameters`, state, mask/factor and buffer properties remain readable where the recovered Microsoft getters do not perform this native-resource check. |
+| SOFTWARE-228 | Unbind active render targets during `GraphicsDevice.Reset` | ✅ | Completed 2026-09-09. Recovered Microsoft XNA saves ordinary draw state, calls `SetRenderTargets(null, 0)` before resetting the backbuffer, and deliberately omits render targets from `SavedDeviceState.Restore`. CNA left `currentRenderTargets_` and `renderTargetBound_` intact while resizing/reconfiguring the renderer. A reset performed with an 8x6 target bound therefore continued to report that target and made the next `Present()` throw, even though the renderer had established a backbuffer. The shared Reset path now unbinds after `DeviceResetting` and before presentation mutation, giving normal target finalization/discard semantics and backbuffer viewport/scissor restoration. The public lifecycle discriminator passes on Software and desktop EasyGL; full suites pass 2,437/2,492 with 55 classified skips and 2,449/2,508 with 59 skips respectively. |
 
 ### Current dependency order
 Tasks through `SOFTWARE-161` plus `SOFTWARE-166/167/169/170/171/172/174/175/176/177/179..197/199..206/208..225` are complete except for the intentionally
@@ -335,13 +339,15 @@ renderer-side batch state after a deferred submission exception so the public ob
 reusable as FNA's cleared guard promises. `SOFTWARE-219` closes the remaining recovered
 `VerifyCanDraw` texture-state branch by enforcing Reach clamp-only sampling for conditional NPOT
 Texture2D resources without restricting HiDef.
-`SOFTWARE-220..227` close the subsequent recovered render-target compatibility/identity/no-op
+`SOFTWARE-220..228` close the subsequent recovered render-target compatibility/identity/no-op
 rules, common cross-device vertex/index/texture binding omissions, and Microsoft-specific plural
 vertex-binding validation/state behavior that FNA does not reproduce, followed by the public
 texture/sampler collection profile, format, and device-lifecycle boundary and the active-surface
 viewport/scissor validation contract.
 `SOFTWARE-227` completes the adjacent native-query property lifetime check for display mode and
 device status without imposing disposal behavior on cached properties for which Microsoft does not.
+`SOFTWARE-228` closes the recovered reset transition by finalizing/unbinding active targets before
+the renderer's backbuffer is reconfigured.
 `SOFTWARE-100` remains yellow for the previously recorded
 repository-wide blockers; that status does not excuse any renderer gap found here.
 

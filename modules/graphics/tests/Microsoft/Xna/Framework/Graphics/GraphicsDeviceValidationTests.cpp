@@ -178,6 +178,24 @@ TEST(GraphicsDeviceValidationTest, ViewportAndScissorUseActiveRenderTargetBounds
     EXPECT_EQ(gd.getScissorRectangleProperty(), validScissor);
 }
 
+TEST(GraphicsDeviceLifecycleTest, ResetUnbindsActiveRenderTargets)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+    GraphicsDevice gd;
+    RenderTarget2D target(gd, 8, 6);
+    gd.SetRenderTarget(&target);
+    ASSERT_EQ(gd.GetRenderTargets().size(), 1u);
+
+    gd.Reset();
+
+    EXPECT_TRUE(gd.GetRenderTargets().empty());
+    EXPECT_EQ(gd.getViewportProperty().getWidthProperty(),
+              gd.getPresentationParametersProperty().getBackBufferWidthProperty());
+    EXPECT_EQ(gd.getViewportProperty().getHeightProperty(),
+              gd.getPresentationParametersProperty().getBackBufferHeightProperty());
+    EXPECT_NO_THROW(gd.Present());
+}
+
 TEST(GraphicsDeviceLifecycleTest, DrawRejectsVertexBufferDisposedAfterBinding)
 {
     GraphicsDevice gd;

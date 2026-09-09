@@ -705,6 +705,13 @@ namespace Microsoft::Xna::Framework::Graphics
 
         DeviceResetting.Raise(this, System::EventArgs::Empty);
 
+        // SOFTWARE-228: Microsoft XNA saves ordinary draw state, explicitly unbinds every render
+        // target before resetting the backbuffer, and does not restore the target set afterward.
+        // Leaving CNA's binding alive makes the resized renderer and public device disagree and
+        // keeps Present() rejected even though Reset established a new backbuffer.
+        if (!currentRenderTargets_.empty())
+            SetRenderTargets({});
+
         PresentationParameters appliedPresentationParameters = presentationParameters.Clone();
         if (renderer_ != nullptr)
             NormalizeAppliedPresentationFormats(*renderer_, appliedPresentationParameters);
