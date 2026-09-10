@@ -380,6 +380,14 @@ python3 tools/xna-sample-sweep/classify.py \
 frozen copy under `build/xna-sample-sweep/bin/` for exactly that reason, and the
 first run of this campaign was invalidated by a mid-run relink.
 
+**`build/xna-sample-sweep/out/units/` holds run 59**, the sweep of this
+plan's own `HEAD`, and `sample-source-map.json` is the map that run used.
+Keeping both current is not housekeeping: a cached output or a map from an
+earlier run is what `XNASWEEP-226` cost, so a session that rebuilds part of the
+corpus writes into this directory rather than beside it, and says here which run
+it now holds. The 444 unit directories before run 59 included eleven whose build
+units no longer exist; the 433 here are exactly the map's.
+
 ### 11.1 The corpus
 
 | | | |
