@@ -6723,7 +6723,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             throw System::NotSupportedException(
                 "CNA SDL_GPU: this compiled effect's vertex shader samples a texture; vertex-stage "
-                "sampling is not implemented by this renderer's compiled-effect draw route yet.");
+                "texture sampling is unsupported by this renderer.");
         }
 
         effect.CaptureUniformSnapshotEXT(binding.vertexUniformBytes, binding.pixelUniformBytes);
@@ -8084,7 +8084,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 if (streams.count >= streams.declarations.size())
                 {
                     throw System::NotSupportedException(
-                        "CNA SDL_GPU: this stock draw uses more than eight vertex streams");
+                        "CNA SDL_GPU: this stock draw uses more than sixteen vertex streams");
                 }
 
                 auto& declaration = streams.declarations[streams.count];
