@@ -5,6 +5,18 @@ cna_add_renderer()
 target_link_libraries(${RENDERER_TARGET} PRIVATE SDL3::SDL3)
 set_property(TARGET ${RENDERER_TARGET} PROPERTY REQUIRES_PLATFORM SDL3)
 
+# plans/plan_sdlgpu.md SDLGPU-92: the built-in shader path links SDL_shadercross statically when
+# configured. Windows and Apple default this on because their native SDL_gpu drivers consume
+# DXBC/MSL, not SPIR-V. Linux/Android retain the direct dependency-free Vulkan route by default.
+if(CNA_SDL_GPU_SHADERCROSS)
+    if(NOT TARGET cna_sdl_shadercross)
+        message(FATAL_ERROR
+            "CNA_SDL_GPU_SHADERCROSS=ON but the pinned SDL_shadercross target was not configured")
+    endif()
+    target_link_libraries(${RENDERER_TARGET} PRIVATE cna_sdl_shadercross)
+    target_compile_definitions(${RENDERER_TARGET} PRIVATE CNA_SDL_GPU_SHADERCROSS)
+endif()
+
 # plans/plan_fx.md FX-061: compiled XNA effects go through MojoShader's own SDL_GPU adapter plus the
 # translation shared with every other compiled-effect backend. Opt-in, because MojoShader is a
 # fetched dependency this renderer does not otherwise need.

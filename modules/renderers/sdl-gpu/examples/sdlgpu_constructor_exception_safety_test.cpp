@@ -26,7 +26,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
-    constexpr std::size_t kResourceKindCount = 7;
+    constexpr std::size_t kResourceKindCount = 8;
 
     struct ResourceTracker
     {
@@ -406,6 +406,47 @@ namespace
                   "depth/stencil-unavailable renderer destroys every resource exactly once");
         }
 
+#if defined(CNA_SDL_GPU_SHADERCROSS)
+        void ExerciseShaderCrossConstruction(SDL_Window* window)
+        {
+            ResourceTracker tracker;
+            const SdlGpuTestHooksEXT hooks{
+                SdlGpuFailurePointEXT::None, &tracker, &ResourceTracker::OnResource,
+                /*forceNoDepthStencilFormat=*/false,
+                /*forceShaderCrossCompilation=*/true};
+            bool usable = false;
+            try
+            {
+                {
+                    SdlGpuRenderer renderer(
+                        window, 64, 64, CnaPresentationMode::FixedHeightDynamicWidth, 0,
+                        hooks);
+                    renderer.Clear(0.15f, 0.10f, 0.05f, 1.0f);
+                    renderer.Present();
+                    usable = renderer.Device() != nullptr;
+                }
+            }
+            catch (const std::exception& exception)
+            {
+                std::printf("       unexpected ShaderCross construction exception: %s\n",
+                            exception.what());
+            }
+
+            Check(usable,
+                  "ShaderCross reflects and creates every construction shader on a real device");
+            Check(tracker.Acquired(SdlGpuResourceKindEXT::ShaderCross) == 1 &&
+                      tracker.Released(SdlGpuResourceKindEXT::ShaderCross) == 1,
+                  "ShaderCross session is acquired and released exactly once");
+            Check(tracker.Acquired(SdlGpuResourceKindEXT::Shader) ==
+                      static_cast<int>(SdlGpuConstructionShaderCountEXT) &&
+                      tracker.Released(SdlGpuResourceKindEXT::Shader) ==
+                      static_cast<int>(SdlGpuConstructionShaderCountEXT),
+                  "ShaderCross construction owns every reflected stock shader exactly once");
+            Check(tracker.Balanced(),
+                  "ShaderCross construction leaves every native resource balanced");
+        }
+#endif
+
     private:
         int checks_ = 0;
         int failures_ = 0;
@@ -456,6 +497,9 @@ int main()
         "default flat-normal texture creation");
     test.ExerciseIndependentInstances(firstWindow, secondWindow);
     test.ExerciseNoDepthStencilCapability(firstWindow);
+#if defined(CNA_SDL_GPU_SHADERCROSS)
+    test.ExerciseShaderCrossConstruction(firstWindow);
+#endif
 
     SDL_DestroyWindow(secondWindow);
     SDL_DestroyWindow(firstWindow);

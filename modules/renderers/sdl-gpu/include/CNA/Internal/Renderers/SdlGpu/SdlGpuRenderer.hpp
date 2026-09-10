@@ -32,6 +32,32 @@ namespace CNA::Internal::Renderers::SdlGpu
     class SdlGpuCompiledEffect;
 #endif
 
+    /** @brief Stock-shader construction route selected for one SDL_gpu device. CNAEXT. */
+    enum class SdlGpuShaderCreationRouteEXT : std::uint8_t
+    {
+        /** @brief Submit CNA's committed SPIR-V blob directly to SDL_gpu. */
+        DirectSpirv,
+        /** @brief Reflect and compile the SPIR-V blob through SDL_shadercross. */
+        ShaderCross,
+        /** @brief Neither the device nor SDL_shadercross can consume or translate the blob. */
+        Unsupported
+    };
+
+    /**
+     * @brief Selects the stock-shader construction route from exact device/compiler formats.
+     *
+     * @param deviceFormats Formats consumed by the created SDL_gpu device.
+     * @param shaderCrossFormats Formats SDL_shadercross can produce from SPIR-V, or zero when the
+     * compiler is unavailable.
+     * @param forceShaderCross Test-only request to exercise reflection/compiler construction even
+     * when the device accepts SPIR-V directly.
+     * @return The route that can create a shader, or Unsupported when the format sets do not
+     * intersect.
+     */
+    CNAEXT [[nodiscard]] SdlGpuShaderCreationRouteEXT SelectSdlGpuShaderCreationRouteEXT(
+        SDL_GPUShaderFormat deviceFormats, SDL_GPUShaderFormat shaderCrossFormats,
+        bool forceShaderCross = false);
+
     /**
      * @brief The complete identity of one native `SDL_GPUSampler`, as a comparable value. CNAEXT.
      *
@@ -164,7 +190,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         FrameCommandBuffer,
         GraphicsPipeline,
         Sampler,
-        DefaultTexture
+        DefaultTexture,
+        /** @brief Process-wide SDL_shadercross compiler session. */
+        ShaderCross
     };
 
     /** @brief Acquisition/release edge reported by SdlGpuTestHooksEXT. CNAEXT. */
@@ -188,6 +216,8 @@ namespace CNA::Internal::Renderers::SdlGpu
                               SdlGpuResourceEventEXT event) noexcept = nullptr;
         /** @brief Forces the device-unavailable depth/stencil branch for capability testing. */
         bool forceNoDepthStencilFormat = false;
+        /** @brief Forces stock shaders through SDL_shadercross reflection/creation when available. */
+        bool forceShaderCrossCompilation = false;
     };
 
     /**
@@ -3237,6 +3267,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         SdlGpuTestHooksEXT testHooks_{};
         bool testFailureInjected_ = false;
         bool registeredForWindow_ = false;
+        bool shaderCrossAcquired_ = false;
         SDL_GPUTexture* depthStencilTexture_ = nullptr;
         SDL_GPUTextureFormat depthStencilFormat_ = SDL_GPU_TEXTUREFORMAT_INVALID;
         SDL_GPUSampleCount depthStencilSampleCount_ = SDL_GPU_SAMPLECOUNT_1;

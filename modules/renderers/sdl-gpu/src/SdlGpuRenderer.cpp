@@ -23,6 +23,9 @@
 #endif
 
 #include <SDL3/SDL.h>
+#if defined(CNA_SDL_GPU_SHADERCROSS)
+#include <SDL3_shadercross/SDL_shadercross.h>
+#endif
 
 #include <algorithm>
 #include <bit>
@@ -33,6 +36,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <limits>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 
@@ -83,8 +87,49 @@ namespace CNA::Internal::Renderers::SdlGpu
         return hash;
     }
 
+    SdlGpuShaderCreationRouteEXT SelectSdlGpuShaderCreationRouteEXT(
+        SDL_GPUShaderFormat deviceFormats, SDL_GPUShaderFormat shaderCrossFormats,
+        bool forceShaderCross)
+    {
+        const bool deviceAcceptsSpirv =
+            (deviceFormats & SDL_GPU_SHADERFORMAT_SPIRV) != 0;
+        const bool shaderCrossCanServeDevice =
+            (deviceFormats & shaderCrossFormats) != 0;
+        if (forceShaderCross && shaderCrossCanServeDevice)
+            return SdlGpuShaderCreationRouteEXT::ShaderCross;
+        if (deviceAcceptsSpirv)
+            return SdlGpuShaderCreationRouteEXT::DirectSpirv;
+        if (shaderCrossCanServeDevice)
+            return SdlGpuShaderCreationRouteEXT::ShaderCross;
+        return SdlGpuShaderCreationRouteEXT::Unsupported;
+    }
+
     namespace
     {
+#if defined(CNA_SDL_GPU_SHADERCROSS)
+        std::mutex shaderCrossSessionMutex;
+        std::size_t shaderCrossSessionReferences = 0;
+
+        bool AcquireShaderCrossSession()
+        {
+            std::scoped_lock lock(shaderCrossSessionMutex);
+            if (shaderCrossSessionReferences == 0 && !SDL_ShaderCross_Init())
+                return false;
+            ++shaderCrossSessionReferences;
+            return true;
+        }
+
+        void ReleaseShaderCrossSession() noexcept
+        {
+            std::scoped_lock lock(shaderCrossSessionMutex);
+            if (shaderCrossSessionReferences == 0)
+                return;
+            --shaderCrossSessionReferences;
+            if (shaderCrossSessionReferences == 0)
+                SDL_ShaderCross_Quit();
+        }
+#endif
+
         enum class ConstructionShader : std::size_t
         {
             SpriteVertex,
@@ -1654,6 +1699,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUTextureFormat depthStencilFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
         SDL_GPUSampleCount backbufferSampleCount = SDL_GPU_SAMPLECOUNT_1;
         int backbufferMultiSampleCount = 0;
+        SDL_GPUShaderFormat shaderCrossFormats = static_cast<SDL_GPUShaderFormat>(0);
+        bool shaderCrossAcquired = false;
         SdlGpuTestHooksEXT hooks{};
         std::array<SDL_GPUShader*, static_cast<std::size_t>(ConstructionShader::Count)> shaders{};
 
@@ -1692,6 +1739,14 @@ namespace CNA::Internal::Renderers::SdlGpu
                 NotifyResource(hooks, SdlGpuResourceKindEXT::Device,
                                SdlGpuResourceEventEXT::Released);
             }
+#if defined(CNA_SDL_GPU_SHADERCROSS)
+            if (shaderCrossAcquired)
+            {
+                ReleaseShaderCrossSession();
+                NotifyResource(hooks, SdlGpuResourceKindEXT::ShaderCross,
+                               SdlGpuResourceEventEXT::Released);
+            }
+#endif
         }
 
         void FailAt(SdlGpuFailurePointEXT point)
@@ -1704,7 +1759,59 @@ namespace CNA::Internal::Renderers::SdlGpu
                                     const char* diagnostic)
         {
             FailAt(failurePoint);
-            SDL_GPUShader* shader = SDL_CreateGPUShader(device, &createInfo);
+            const SdlGpuShaderCreationRouteEXT route = SelectSdlGpuShaderCreationRouteEXT(
+                SDL_GetGPUShaderFormats(device), shaderCrossFormats,
+                hooks.forceShaderCrossCompilation);
+            SDL_GPUShader* shader = nullptr;
+            if (route == SdlGpuShaderCreationRouteEXT::DirectSpirv)
+            {
+                shader = SDL_CreateGPUShader(device, &createInfo);
+            }
+#if defined(CNA_SDL_GPU_SHADERCROSS)
+            else if (route == SdlGpuShaderCreationRouteEXT::ShaderCross)
+            {
+                SDL_ShaderCross_SPIRV_Info crossInfo{};
+                crossInfo.bytecode = createInfo.code;
+                crossInfo.bytecode_size = createInfo.code_size;
+                crossInfo.entrypoint = createInfo.entrypoint;
+                crossInfo.shader_stage =
+                    createInfo.stage == SDL_GPU_SHADERSTAGE_VERTEX
+                        ? SDL_SHADERCROSS_SHADERSTAGE_VERTEX
+                        : SDL_SHADERCROSS_SHADERSTAGE_FRAGMENT;
+
+                SDL_ShaderCross_GraphicsShaderMetadata* metadata =
+                    SDL_ShaderCross_ReflectGraphicsSPIRV(
+                        crossInfo.bytecode, crossInfo.bytecode_size, 0);
+                if (metadata == nullptr)
+                    throw std::runtime_error(
+                        std::string(diagnostic) + "SDL_shadercross reflection failed: " +
+                        SDL_GetError());
+
+                const SDL_ShaderCross_GraphicsShaderResourceInfo& resources =
+                    metadata->resource_info;
+                const bool layoutMatches =
+                    resources.num_samplers == createInfo.num_samplers &&
+                    resources.num_storage_textures == createInfo.num_storage_textures &&
+                    resources.num_storage_buffers == createInfo.num_storage_buffers &&
+                    resources.num_uniform_buffers == createInfo.num_uniform_buffers;
+                if (!layoutMatches)
+                {
+                    SDL_free(metadata);
+                    throw std::runtime_error(
+                        std::string(diagnostic) +
+                        "SDL_shadercross reflected a resource layout that differs from CNA's "
+                        "pipeline contract");
+                }
+
+                shader = SDL_ShaderCross_CompileGraphicsShaderFromSPIRV(
+                    device, &crossInfo, &resources, 0);
+                SDL_free(metadata);
+            }
+#endif
+            if (route == SdlGpuShaderCreationRouteEXT::Unsupported)
+                throw std::runtime_error(
+                    std::string(diagnostic) +
+                    "the active SDL_gpu driver accepts none of CNA's available shader formats");
             if (shader == nullptr)
                 throw std::runtime_error(std::string(diagnostic) + SDL_GetError());
             shaders[static_cast<std::size_t>(slot)] = shader;
@@ -1727,6 +1834,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             owner.testHooks_ = hooks;
             owner.testFailureInjected_ = failureInjected;
             owner.registeredForWindow_ = rendererRegistered;
+            owner.shaderCrossAcquired_ = shaderCrossAcquired;
 
             owner.spriteVertexShader_ = shaders[static_cast<std::size_t>(ConstructionShader::SpriteVertex)];
             owner.spriteFragmentShader_ = shaders[static_cast<std::size_t>(ConstructionShader::SpriteFragment)];
@@ -1773,6 +1881,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             device = nullptr;
             windowClaimed = false;
             rendererRegistered = false;
+            shaderCrossAcquired = false;
         }
     };
 
@@ -1802,9 +1911,9 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         ConstructionResources resources(window_, testHooks);
 
-        // plans/plan_sdlgpu.md SDLGPU-6: request SPIR-V first -- the only shader format this device's
-        // vendored SDL3 compiles a driver for on Linux (Vulkan). DXBC/DXIL/MSL support (Windows/
-        // macOS drivers) is deferred to plans/plan_sdlgpu.md's Phase SDLGPU-13.
+        // plans/plan_sdlgpu.md SDLGPU-92: Vulkan consumes the committed SPIR-V directly. When
+        // configured, SDL_shadercross adds the formats it can translate that SPIR-V into, allowing
+        // SDL to choose its native D3D12 or Metal driver without maintaining divergent shaders.
         // debug_mode mirrors DirectX11Renderer::CreateDeviceResources()'s own #ifndef NDEBUG
         // CNA-side toggle (design decision 12: the validation/debug layer is a debug-build
         // convenience, never a hard requirement) -- a debug build asks the Vulkan driver for
@@ -1814,9 +1923,27 @@ namespace CNA::Internal::Renderers::SdlGpu
 #else
         resources.debugModeEnabled = false;
 #endif
+        SDL_GPUShaderFormat requestedShaderFormats = SDL_GPU_SHADERFORMAT_SPIRV;
+#if defined(CNA_SDL_GPU_SHADERCROSS)
+        if (!AcquireShaderCrossSession())
+            throw std::runtime_error(
+                std::string("CNA SDL_GPU: SDL_shadercross initialization failed: ") +
+                SDL_GetError());
+        resources.shaderCrossAcquired = true;
+        NotifyResource(testHooks, SdlGpuResourceKindEXT::ShaderCross,
+                       SdlGpuResourceEventEXT::Acquired);
+        resources.shaderCrossFormats = SDL_ShaderCross_GetSPIRVShaderFormats();
+        requestedShaderFormats = static_cast<SDL_GPUShaderFormat>(
+            requestedShaderFormats | resources.shaderCrossFormats);
+#else
+        if (!SDL_GPUSupportsShaderFormats(requestedShaderFormats, /*name=*/nullptr))
+            throw std::runtime_error(
+                "CNA SDL_GPU: no installed SDL_gpu driver accepts SPIR-V; rebuild with "
+                "CNA_SDL_GPU_SHADERCROSS=ON for native D3D12/Metal stock shaders");
+#endif
         resources.FailAt(SdlGpuFailurePointEXT::DeviceCreation);
         resources.device = SDL_CreateGPUDevice(
-            SDL_GPU_SHADERFORMAT_SPIRV, resources.debugModeEnabled, /*name=*/nullptr);
+            requestedShaderFormats, resources.debugModeEnabled, /*name=*/nullptr);
         if (resources.device == nullptr)
             throw std::runtime_error(
                 std::string("CNA SDL_GPU: SDL_CreateGPUDevice failed: ") + SDL_GetError());
@@ -1959,6 +2086,15 @@ namespace CNA::Internal::Renderers::SdlGpu
                                 SdlGpuResourceEventEXT::Released);
             device_ = nullptr;
         }
+#if defined(CNA_SDL_GPU_SHADERCROSS)
+        if (shaderCrossAcquired_)
+        {
+            ReleaseShaderCrossSession();
+            NotifyResourceEvent(SdlGpuResourceKindEXT::ShaderCross,
+                                SdlGpuResourceEventEXT::Released);
+            shaderCrossAcquired_ = false;
+        }
+#endif
     }
 
     bool SdlGpuRenderer::SupportsCapability(const CNA::GraphicsCapability capability) const

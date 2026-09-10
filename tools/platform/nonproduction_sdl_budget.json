@@ -751,7 +751,7 @@
     },
     "modules/renderers/sdl-gpu/examples/sdlgpu_constructor_exception_safety_test.cpp": {
       "category": "renderer-integration-executable",
-      "max_references": 38
+      "max_references": 39
     },
     "modules/renderers/sdl-gpu/examples/sdlgpu_depth_bias_test.cpp": {
       "category": "renderer-integration-executable",
@@ -828,6 +828,10 @@
     "modules/renderers/sdl-gpu/tests/CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffectTests.cpp": {
       "category": "renderer-native-runtime-test",
       "max_references": 18
+    },
+    "modules/renderers/sdl-gpu/tests/CNA/Internal/Renderers/SdlGpu/SdlGpuShaderCrossTests.cpp": {
+      "category": "renderer-native-runtime-test",
+      "max_references": 26
     },
     "modules/renderers/sdl-renderer/examples/sdlrenderer_blendstate_additive_test.cpp": {
       "category": "renderer-integration-executable",

@@ -8,12 +8,13 @@
 > half-rate `PresentInterval::Two`, and `OcclusionQuery`. Exact half-rate presentation and
 > occlusion queries are the two remaining EasyGL capabilities SDL_gpu cannot express;
 > `MultiSampleMask` is unimplemented in EasyGL too. SDL GPU reports the query limitation and
-> refuses construction instead of fabricating results. However, `SDLGPU-92`–`SDLGPU-96` remain
-> open: the renderer descriptor advertises SDL GPU without a platform qualification while device
-> creation and all built-in shaders currently require SPIR-V, so the ordinary renderer is not yet
-> a viable Metal or D3D12 implementation. Seven EasyGL defect findings (six distinct
+> refuses construction instead of fabricating results. `SDLGPU-92` now gives every built-in shader
+> a pinned ShaderCross route to native D3D12/Metal formats while preserving direct SPIR-V on
+> Vulkan. However, `SDLGPU-93`–`SDLGPU-96` remain open: compiled XNA effects still need the same
+> statically linked route, and the D3D12, Metal and Android/Vulkan paths still require native
+> runtime evidence. Seven EasyGL defect findings (six distinct
 > behavior families) are deliberately not copied. The final 188/188 SDL integration, 42/42
-> renderer-unit, 33/33 EasyGL
+> pre-portability renderer-unit, 33/33 EasyGL
 > oracle and 32/32 two-renderer corpus gates remain green on Linux/Vulkan. This verdict supersedes historical
 > completion banners below; those remain implementation history, not current truth.
 
@@ -23,7 +24,7 @@ The behavioral closeout below was accurate for its recorded Linux/Vulkan device,
 was not qualified narrowly enough. The post-close audit started at
 `8cd9ab7f45a05bef3a727598c8d9ef5cf8b04442`: `SdlGpuRendererDescriptor` uses
 `AlwaysAvailable`, while the constructor passes only `SDL_GPU_SHADERFORMAT_SPIRV` to
-`SDL_CreateGPUDevice` and all 25 construction shaders pass that same format to
+`SDL_CreateGPUDevice` and all 26 construction shaders pass that same format to
 `SDL_CreateGPUShader`. Vendored SDL 3.5 exposes Vulkan/SPIR-V, D3D12/DXBC-or-DXIL and
 Metal/MSL-or-metallib drivers. The current implementation therefore cannot substantiate the
 unqualified cross-platform capability that its descriptor advertises.
@@ -39,8 +40,8 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
 |---|---|
 | Re-audit starting branch / commit | `sdlgpu` / `8cd9ab7f45a05bef3a727598c8d9ef5cf8b04442` |
 | Newly created tasks | 6 (`SDLGPU-91`–`SDLGPU-96`) |
-| Completed / open | 1 / 5 after the scope correction (`SDLGPU-91` complete; `SDLGPU-92`–`96` open) |
-| Proven runtime configuration | Linux/Vulkan only; the existing 188 integration, 42 renderer-unit, 33 EasyGL-oracle and 32 shared-source gates remain the behavioral baseline |
+| Completed / open | 2 / 4 (`SDLGPU-91`–`92` complete; `SDLGPU-93`–`96` open) |
+| Proven runtime configuration | Linux/Vulkan only; the existing 188 integration, 33 EasyGL-oracle and 32 shared-source gates remain the behavioral baseline; the portability work's focused SDL GPU unit slice is now 46/46 |
 | Available local cross tools | MinGW-w64 and Wine are present; no Apple SDK/device, Android SDK/device, `dxc`, `spirv-cross`, SDL_shadercross executable or SDL_shadercross shared library was found |
 | Display constraint | All further Linux SDL tests must use `SDL_VIDEODRIVER=offscreen`; Windows GUI tests must use a headless/virtual display if runnable. Never use the host display. |
 
@@ -63,9 +64,9 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
   compiled-effect integration and each unavailable platform validation so one external SDK or
   device cannot block independent work.
 
-### SDLGPU-92 — compile built-in SPIR-V shaders for the active native SDL_gpu driver ⬜
+### SDLGPU-92 — compile built-in SPIR-V shaders for the active native SDL_gpu driver ✅
 
-- **Problem/public behavior:** SpriteBatch and every built-in XNA effect depend on 25 construction
+- **Problem/public behavior:** SpriteBatch and every built-in XNA effect depend on 26 construction
   shaders, all tagged SPIR-V. SDL_gpu's D3D12 and Metal drivers cannot consume those blobs.
 - **EasyGL/SDL evidence:** EasyGL compiles renderer-native stock GLSL; SDL_shadercross exposes
   SPIR-V reflection plus native `SDL_GPUShader` compilation and the pinned MojoShader adapter
@@ -77,7 +78,30 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
   native format; fail with a precise dependency/format diagnostic rather than a generic device
   error; unit-test selection, loading and failure cleanup; rerun constructor exception safety,
   renderer unit tests and validation-fatal stock-effect/SpriteBatch slices offscreen.
-- **Status:** open.
+- **Result (2026-09-10):** the renderer now requests direct SPIR-V plus every format provided by a
+  statically linked, pinned SDL_shadercross/SPIRV-Cross pair. Vulkan retains the direct
+  `SDL_CreateGPUShader` fast path; a Metal/D3D12 device selects a central reflected ShaderCross
+  path for all 26 stock shader objects. Reflection is checked against CNA's explicit sampler,
+  storage and uniform counts before pipeline use, and a disjoint format set fails explicitly.
+  ShaderCross initialization is process-refcounted so two renderer instances cannot make each
+  other's compiler functions invalid; both successful teardown and every injected constructor
+  failure release the session after all device resources. The dependency defaults on for Windows
+  and Apple and off for already-native Linux/Android, with an explicit diagnostic if an opt-out
+  build has no SPIR-V driver.
+
+  The official dependencies are pinned to SDL_shadercross
+  `1ff05bec573988a98ef9e0260b4da44f512b8367` and SPIRV-Cross
+  `vulkan-sdk-1.4.350.0`. CNA disables DXC and all unrelated CLI/test/tool targets; the sole narrow
+  upstream patch suppresses an unused install export that rejects an in-tree static dependency.
+  The stable Linux build used already downloaded sources and `--parallel 2`. Four pure
+  format-selection tests pass, and the offscreen/Vulkan forced-compiler constructor path reflects,
+  creates and balances all 26 real stock shaders: expanded constructor safety is **299/299**.
+  Reconfiguring that same stable tree with `CNA_SDL_GPU_SHADERCROSS=OFF` rebuilt only the affected
+  target and its direct-SPIR-V constructor matrix remained **295/295**, proving the default Linux
+  path does not acquire or require ShaderCross.
+  Validation-fatal smoke and stock-effect integration tests also pass, with no host-display use.
+  The post-close re-audit's hand-written count of 25 was corrected to the live 26; the historical
+  baseline's own 25 count remains accurate at its recorded starting commit.
 
 ### SDLGPU-93 — align ordinary compiled-effect device formats with the portable shader route ⬜
 
@@ -146,7 +170,7 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
 | Shared EasyGL parity fixtures available | 32 renderer-neutral sources in `modules/graphics/examples/parity` |
 | Shared parity fixtures registered for SDL GPU | 32/32 (all renderer-neutral sources, including the nine classic stock-effect fixtures) |
 | Tasks created by this audit | 36 (`SDLGPU-55`–`SDLGPU-90`); the later platform re-audit creates six more (`SDLGPU-91`–`96`) |
-| Completed / open / proven unavoidable | This closed Linux/Vulkan phase completed 36 / 0 tasks; the current renderer-wide ledger is 37 / 5. Three capability fields (`BlendState.MultiSampleMask`, exact half-rate `PresentInterval::Two`, and `OcclusionQuery`) are proven unavailable in current SDL_gpu; the first two are not separate tasks and the third is closed by `SDLGPU-80` |
+| Completed / open / proven unavoidable | This closed Linux/Vulkan phase completed 36 / 0 tasks; the current renderer-wide ledger is 38 / 4. Three capability fields (`BlendState.MultiSampleMask`, exact half-rate `PresentInterval::Two`, and `OcclusionQuery`) are proven unavailable in current SDL_gpu; the first two are not separate tasks and the third is closed by `SDLGPU-80` |
 | SDL GPU build | Stable `cmake-build-sdlgpu`, Debug, `CNA_GRAPHICS_RENDERER=SDL_GPU`, tests/examples and `CNA_SDL_GPU_COMPILED_EFFECTS` ON |
 | EasyGL oracle build | Stable `cmake-build-debug`, Debug, `CNA_GRAPHICS_RENDERER=OPENGL33`, tests/examples ON |
 | Runtime driver | SDL 3.5.0 SDL_gpu Vulkan on AMD Radeon 780M / Mesa RADV 25.0.7; Khronos validation layer 1.4.309 present |

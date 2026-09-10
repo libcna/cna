@@ -184,6 +184,10 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     # whether the selected failure point throws.
     cna_sdlgpu_test(cna_test_sdlgpu_constructor_exception_safety
                     sdlgpu_constructor_exception_safety_test.cpp)
+    if(CNA_SDL_GPU_SHADERCROSS)
+        target_compile_definitions(cna_test_sdlgpu_constructor_exception_safety PRIVATE
+            CNA_SDL_GPU_SHADERCROSS)
+    endif()
     cna_register_renderer_test(NAME SdlGpu_ConstructorExceptionSafety
         COMMAND cna_test_sdlgpu_constructor_exception_safety
         TIMEOUT 240 LABELS "SdlGpu"

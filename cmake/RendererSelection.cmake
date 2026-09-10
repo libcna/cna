@@ -932,6 +932,22 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     set(RENDERER_TARGET "cna_renderer_sdl_gpu")
     list(APPEND _cna_identity_defines CNA_RENDERER_SDL_GPU)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_SDL_GPU")
+    # plans/plan_sdlgpu.md SDLGPU-92: Vulkan consumes CNA's committed SPIR-V stock shaders
+    # directly. D3D12 and Metal require SDL_shadercross to translate those same blobs to DXBC or
+    # MSL. Keep Linux/Android's already-native route dependency-free by default, while making the
+    # dependency the default on the platforms that cannot construct the renderer without it.
+    if(WIN32 OR APPLE)
+        set(_cna_sdl_gpu_shadercross_default ON)
+    else()
+        set(_cna_sdl_gpu_shadercross_default OFF)
+    endif()
+    option(CNA_SDL_GPU_SHADERCROSS
+           "Enable portable SPIR-V stock shaders through SDL_shadercross"
+           ${_cna_sdl_gpu_shadercross_default})
+    if(CNA_SDL_GPU_SHADERCROSS)
+        include(cmake/ThirdPartySDLShaderCross.cmake)
+        cna_configure_sdl_shadercross()
+    endif()
     # plans/plan_fx.md FX-061: compiled XNA effects on this renderer go through MojoShader's own SDL_GPU
     # adapter, which emits SPIR-V -- the format this renderer already builds its pipelines from.
     # Off by default because it pulls a fetched dependency into a renderer that does not otherwise
