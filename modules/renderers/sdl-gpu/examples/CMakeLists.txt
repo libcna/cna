@@ -134,6 +134,35 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
             FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
     endforeach()
 
+    # SDLGPU-76: reuse the complete renderer-neutral SpriteBatch/SpriteFont corpus. Together these
+    # distinguish all four classic sort modes (including Immediate), layer depth, transforms,
+    # source rectangles, origin/rotation/nonuniform scale/subpixel placement, all flip combinations,
+    # blend-state restoration, render-target-local coordinates, glyph spacing/newlines and default
+    # character substitution. Keep validation fatal just like the earlier parity registrations.
+    foreach(sprite_parity_test IN ITEMS
+            sprite_geometry
+            sprite_state
+            sprite_font)
+        cna_sdlgpu_test(cna_test_sdlgpu_parity_${sprite_parity_test}
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/parity/parity_${sprite_parity_test}.cpp)
+        cna_register_renderer_test(NAME SdlGpu_Parity_${sprite_parity_test}
+            COMMAND cna_test_sdlgpu_parity_${sprite_parity_test}
+            TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+        set_tests_properties(SdlGpu_Parity_${sprite_parity_test} PROPERTIES
+            FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+    endforeach()
+
+    # SDLGPU-76: this older SDL_Renderer fixture is renderer-neutral despite its historical name.
+    # Reuse its precise XNA/FNA disposal policy, including the disposed Texture2D Draw rejection
+    # and the deliberately accepted disposed state/SpriteBatch cases, rather than cloning it.
+    cna_sdlgpu_test(cna_test_sdlgpu_spritebatch_disposed_guards
+        ${CMAKE_SOURCE_DIR}/modules/renderers/sdl-renderer/examples/sdlrenderer_disposed_guards_test.cpp)
+    cna_register_renderer_test(NAME SdlGpu_SpriteBatch_DisposedGuards
+        COMMAND cna_test_sdlgpu_spritebatch_disposed_guards
+        TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    set_tests_properties(SdlGpu_SpriteBatch_DisposedGuards PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+
     # REMED-GFX-028: every real constructor acquisition is transactional, failed objects never
     # enter the window registry, and lazy command/pipeline/sampler/fallback failures remain
     # retryable. Resource callbacks make leaks/double-destruction observable independently of
@@ -669,13 +698,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_RenderTarget_SamplingOrientation COMMAND cna_test_sdlgpu_rt_sampling_orientation
         TIMEOUT 120 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # REMED-GFX-153 cross-renderer source-selection and render-target-destination control. SDL_GPU's
-    # established missing swapchain-download boundary is asserted separately inside the fixture.
+    # REMED-GFX-153 cross-renderer source-selection and render-target-destination control. Since
+    # SDLGPU-68 the same fixture also exercises the exact swapchain-proxy readback route.
     cna_sdlgpu_test(cna_test_sdlgpu_gfx153_source_rectangle
         ${CNA_GRAPHICS_EXAMPLES_DIR}/source_rectangle_orientation_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_GFX153_SourceRectangleOrientation
         COMMAND cna_test_sdlgpu_gfx153_source_rectangle
         TIMEOUT 180 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    set_tests_properties(SdlGpu_GFX153_SourceRectangleOrientation PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
 
 
@@ -845,6 +876,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         ${CNA_GRAPHICS_EXAMPLES_DIR}/deferred_source_lifetime_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_DeferredSourceLifetime COMMAND cna_test_sdlgpu_deferred_source_lifetime
         TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    set_tests_properties(SdlGpu_DeferredSourceLifetime PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
     # REMED-GFX-168 cross-renderer control: destroying a RenderTarget2D that is STILL the bound
     # render target must never make the next SetRenderTarget transition unsafe, and must leave the
@@ -914,12 +947,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_3d_order_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_SpriteBatch3DOrder COMMAND cna_test_sdlgpu_spritebatch_3d_order
         TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    set_tests_properties(SdlGpu_SpriteBatch3DOrder PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
     # REMED-GFX-160: the XNA/FNA front-face winding contract. FNA's SpriteBatch emits
     # CLOCKWISE-as-displayed triangles and they must survive RasterizerState.CullCounterClockwise --
     # the state SpriteBatch.Begin itself defaults to -- so clockwise-as-displayed is XNA's FRONT face
-    # and each enum names the face it CULLS. This renderer has no public backbuffer readback, so the
-    # render-target legs carry the contract and the backbuffer ones record their boundary.
+    # and each enum names the face it CULLS. SDLGPU-68's proxy now lets the backbuffer legs carry
+    # the same pixel contract as the render-target controls.
     cna_sdlgpu_test(cna_test_sdlgpu_frontface_winding
         ${CNA_GRAPHICS_EXAMPLES_DIR}/frontface_winding_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_FrontFaceWinding COMMAND cna_test_sdlgpu_frontface_winding
@@ -1032,6 +1067,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
                     ${CNA_GRAPHICS_EXAMPLES_DIR}/backbuffer_pass_order_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_Backbuffer_PassOrder COMMAND cna_test_sdlgpu_backbuffer_pass_order
         TIMEOUT 120 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    set_tests_properties(SdlGpu_Backbuffer_PassOrder PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
     # REMED-GFX-116 cross-renderer control: every deferred draw must execute under the
     # GraphicsDevice.Viewport active at its own public call. WebGPU resolved it live when it

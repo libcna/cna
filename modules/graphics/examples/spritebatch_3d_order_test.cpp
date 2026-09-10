@@ -174,10 +174,10 @@ namespace
     constexpr bool kDraws3D = true;
     constexpr const char* kRendererName = "WEBGPU";
 #elif defined(CNA_RENDERER_SDL_GPU)
-    // SdlGpu has no ReadBackbuffer override at all, so GetBackBufferData raises. Its render-target
-    // legs still carry the whole contract.
+    // SDLGPU-68's backbuffer proxy makes the public readback exact, so the backbuffer legs carry
+    // the same ordering contract as the render-target controls instead of silently skipping it.
     constexpr bool kRasterizes = true;
-    constexpr bool kReadsBackbuffer = false;
+    constexpr bool kReadsBackbuffer = true;
     constexpr bool kDraws3D = true;
     constexpr const char* kRendererName = "SDL_GPU";
 #elif defined(CNA_RENDERER_SDL_RENDERER)

@@ -200,8 +200,8 @@ easygl_skinnedeffect_world_normal_test.cpp,classic-xna-covered-by-existing-sdlgp
 easygl_skinnedpbreffect_golden_test.cpp,modern-cnaext-out,-,ShaderEffect/PBR/glTF/sample-specific modern graphics path
 easygl_sprite_effects_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_spritebatch_blendstate_leak_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
-easygl_spritebatch_layerdepth_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-76,sort modes and layer depth
-easygl_spritebatch_rendertarget_size_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-76,render-target-local sprite coordinates
+easygl_spritebatch_layerdepth_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,SDLGPU-76,shared sprite-state oracle distinguishes all four sort modes and both layer-depth orders
+easygl_spritebatch_rendertarget_size_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,SDLGPU-76,shared sprite-state oracle verifies two target-local placements in opposite corners
 easygl_spritebatch_rotation_golden_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_spritebatch_rotation_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_spritebatch_scale_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
