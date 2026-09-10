@@ -325,8 +325,18 @@ final qualification.
 | `XNASWEEP-218` | A PNG's `gAMA` reaches GDI+ only when the image has an alpha channel. | [x] **Measured on the whole corpus, confirmed on two purpose-built files, and fixed -- 14 references.** The eighteen level-digest references left unexplained split into three source kinds, and the largest is fourteen `.png` whose *level 0* is one unit low on **every** RGB channel with alpha untouched. `XNASWEEP-109` established that GDI+ honours a PNG's own `gAMA`, measured against NetRumble's `barrierPurple.png`, and that is right; what it could not see from one file is when. Over every corpus source that declares a non-standard `gAMA` and no `sRGB` or `iCCP`, the split is exact and has no counterexample: **94 whose colour type is 6** are byte-identical or semantically identical *with* the correction, and **14 whose colour type is 2** differ *with* it and are byte-identical without. GDI+ loads a truecolour PNG without alpha as `Format24bppRgb` and one with alpha as `Format32bppArgb`, and only the second applies the file gamma. **Held out**: two eight-by-eight PNGs written for this, identical but for the alpha channel and both declaring `gAMA` 0.45, built through the genuine `BuildContent` -- the one without alpha comes back with all 256 channels equal to its source and the one with alpha with 122 of 256, and CNA now reproduces both **byte for byte**. `ApplyPngFileGammaEXT` reads IHDR's colour type and returns before looking for a `gAMA` when bit 2 is clear. |
 | `XNASWEEP-219` | The buffer decoder read an Xbox 360 container little-endian. | [x] **Fixed, and it was two references pretending to be a mechanism.** `XNASWEEP-210`'s decoder reads a vertex element with `struct.unpack('<3f')` whatever the container is, and the Xbox 360 target writes big-endian. SAMPLE-041's `Content-xbox/terrain.xnb` and SAMPLE-055's `Content-xbox/baseballbat.xnb` therefore came back with the position and the texture coordinate differing as well as the normal, at magnitudes no rounding produces -- which reads like a platform-specific defect and is the decoder byte-swapping itself. Read the way the container is written, the *only* element that differs is `NORMAL0`, at **1.59e-07** and **2.53e-07** of the larger magnitude, which is the same one-to-two-ulp rounding their Windows twins were already classified under. The parse already reports the platform; the decoder asks it now. |
 | `XNASWEEP-220` | `Stripe2.dds`: the alpha channel one lower, on every level of the file's own chain. | [x] **Closed, and the rule was already in this repository -- the alpha channel had simply been left out of it.** `XNASWEEP-136` measured that D3DX narrows an interpolated *colour* through an ordered dither, and `D3dxChannel` implements it; a DXT5 block's interpolated **alpha** took the truncated quotient instead. **The instrument**: `tests/assets/xna40/texture/dxt5_alpha_table.dds` is 1,024 blocks, one endpoint pair each, every alpha index twice, and `texture_dxt5_alpha_table.xnb` is the genuine build's answer. Against it, truncating is exact on **60%** of the interpolated texels and rounding on **75%** -- and the deviation is what names the rule rather than the fit: from truncation it is one-sided (0 or +1, mean +0.40) and from rounding it is **symmetric** (-1, 0, +1 at 1,373 / 7,641 / 1,194, mean -0.018), which is noise on a rounded base and not a rounding mode. Through `D3dxChannel` it is exact on **16,384 of 16,384**. Five float formulations, an 8-bit fixed-point model and round-half-to-even all fit the same 75%, which is what ruled a rounding mode out before the dither was looked for. **Result**: the probe rebuilds **byte-identical** to the genuine build, and both `Stripe2` references go from 350-plus differing alpha texels at level 0 to **3 bytes in the whole file** -- and those three are *colour*, at the 2x2 and 1x1 mips only, which is a different question and a smaller one (`XNASWEEP-222`). The `Hardware` expansion is untouched: a renderer's own upload path still sees the plain quotient, which is what a GPU does. |
-| `XNASWEEP-222` | Three bytes of colour at `Stripe2.dds`'s two smallest mips. | [ ] **Open, and it is what `XNASWEEP-220` left.** Both `Stripe2` references are now byte-identical except for **3 of 1,398,323 bytes**, all in the colour channels and all in levels 8 and 9 -- the 2x2 and the 1x1 -- with deltas of -1, -2 and +3. The alpha is exact on all ten levels and levels 0 to 7 are exact in every channel, so whatever this is belongs to a level smaller than the 4x4 block it is stored in: a 1x1 level is one block of which one texel is kept, and both the dither's `px & 3` and D3DX's own choice of which texel that is are candidates. **The clue, read off the block**: level 9's single block is `c0=0x1882 c1=0x10A2 lookup=0xFFFFFFFF`, so every texel selects index 3 -- the blend `(c0 + 2*c1) / 3` -- and CNA answers `(20, 19, 17)` accordingly. The genuine value is `(17, 21, 17)`, which is `c1` itself `(2, 5, 2)` expanded and dithered, not the blend. So the disagreement is about *which entry of the block's table* a 1x1 level takes, not about the arithmetic that fills the table -- and level 8's one differing byte is a single green channel at the block's (1, 1). The probe for it is a `.dds` whose chain runs down to 1x1 with known endpoints and a lookup that distinguishes all four entries, which is the same instrument `XNASWEEP-220` built one level up. |
+| `XNASWEEP-222` | Three bytes of colour at `Stripe2.dds`'s two smallest mips. | [x] **Closed, and it is three rules rather than one. Both `Stripe2` references are byte-identical, and the whole 1,398,323-byte file is.** **The instrument first.** 572 synthetic `.dds` files were built through the genuine `BuildContent` in nine batches, with `Stripe2.dds` itself as a control in the first of them: the harness reproduces its reference **byte for byte**, so what the probes say is what the pipeline says. **Rule one -- the dither's column.** The ordered 4x4 matrix `XNASWEEP-136` measured repeats over the destination, but on an *odd* row it does not start at column zero unless the surface is a whole number of blocks wide: it starts at `(-width) mod 4`. Read off flat blocks -- both endpoints the same 565 value, so nothing interpolates and the output *is* the threshold -- over level widths 1, 2, 3, 5, 6, 7, 9, 11, 14, 15, 18, 22, 28, 30, 36, 44 and 88, every row of each, three channels, all 32 five-bit endpoint values. It is `Stripe2`'s 2x2 level exactly: its (1,1) texel reads threshold 12 where a 4x4 reads 14, and 18.889 rounds up rather than down. **Rule two -- a level that is not a whole number of blocks is re-encoded.** D3DX cannot hold a partial block, so such a level goes back through a block compressor. The corner of that which is closed is the one the corpus needs: when a block's sixteen texels decode to a *single* colour, the level comes back as its 565 round trip, quantized **half to even**. `Stripe2`'s 1x1 level is exactly that -- `c0=0x1882 c1=0x10A2 lookup=0xFFFFFFFF`, every texel the blend `(19.19, 18.89, 16.45)`, which quantizes to `(2, 5, 2)` and so comes back as `c1` and stores `(17, 21, 17)`. The half-to-even is not decoration: only a three-colour block's midpoint can land on an exact half, and 149 blocks say the even neighbour is the one taken. **Rule three -- the three-colour rule belongs to every DXT kind.** A block whose `c0` is not above its `c1` answers the midpoint at index two and black at index three in DXT1, DXT3 **and** DXT5; only DXT1's index three is also transparent, because only DXT1 has no alpha of its own. Inert on this corpus -- its four DXT3 sources hold 21,326 such blocks and not one of them uses index two or three -- and wrong in CNA before this. **What was falsified.** Per-texel 565 quantization: a 2x2 level whose four texels are four collinear entries of its own block comes back *exact*, so the re-encode is a block fit and not a per-texel snap. The level being generated by the mip filter: a box filter of level 8 answers `(20, 18, 17, 18)` and the reference says `(17, 21, 17, 19)`. The level being read from the wrong offset: level 9's alpha is `a0` of level 9's own block and of no other. **What it does not reproduce, and why that is not a hole in the rule.** A partial-level block of three or more colours that does not carry both of its endpoints goes through D3DX's cluster-fit endpoint refinement, and so does the *alpha* half of the same re-encode; neither is implementable from a black box, and both are the mechanism the campaign already accepts as *two block compressors choose different endpoints for the same pixels*. The boundary is measured rather than asserted: **727 of 727 whole-block levels are exact, colour and alpha, over 1,602,288 texels**, and of 16,055 partial-level blocks 13,337 are. The corpus contains exactly **one** source with a partial level -- `Stripe2.dds` -- and every block of it is reproduced. **Held out.** Batch H is 70 chains whose shapes, endpoints and lookups were drawn after the rule was frozen, from a seed no discovery batch used; it is what found the three-colour rule's reach and the half-to-even, and it is included in the 2,329 levels the implementation is checked against. **The fix** is in `DxtUtil`'s D3DX path alone -- the renderers' `Hardware` expansion is untouched -- and `tools/xna-pipeline-oracle/texture/make_dxt_partial_level_fixtures.py` writes four fixtures whose genuine answers are committed beside the differential corpus, with three tests that fail if any of the three rules is removed. |
 | `XNASWEEP-221` | `riemerstexture.bmp`: a fifth of the image decodes to different colours. | [x] **Closed. The decoder under `ImageLoader` reads a bitmap from the wrong place when its pixels do not follow its header, and the two references are byte-identical now.** The row said to read the header before touching code, and the header is the whole story: 24 bits per pixel, uncompressed, `biClrUsed` **216** and `bfOffBits` **918** -- 864 bytes of colour table written for 256-colour displays sit between the DIB header and the pixels. An independent, spec-following decode of that file equals the **genuine reference byte for byte**, so XNA is right and CNA was wrong on 55,886 of 262,144 bytes. Varying one field at a time: with the table removed and the pixels at 54 CNA is **perfect**; with the table present and `biClrUsed` set to 0 it is wrong in exactly the same 55,886 bytes -- so the trigger is the *gap*, not the declared palette. A gap of **any** size corrupts it, and not proportionally: four bytes cost 38,984 and a whole row (768) costs 18,762, which is why reading it off the output could not name it. `spikes/bmp-offset-spike` reproduces every one of those counts **in the vendored `stb_image` alone**, outside CNA, which is what attributes the defect. **The fix**: `WithoutBitmapPixelGap` removes the filler and corrects `bfOffBits` before the bytes reach the decoder, and only above eight bits per pixel -- at eight or fewer the table *is* the palette and removing it would destroy the image. All ten gap sizes now decode identically, `riemerstexture.xnb` is byte-identical to its reference, and `ImageLoaderTests.ABitmapWhosePixelsDoNotFollowItsHeaderDecodesToTheSameImage` pins it. Clean under ASan+UBSan over 150 mutated headers. |
+| `XNASWEEP-223` | XNA's mip filter dithers through the same matrix, and takes the same shift. | [ ] **Open, measured, not yet implemented.** `XNASWEEP-222`'s shift is not a property of the block decoder: it is a property of the dither, and XNA's mip filter dithers through the same matrix (`XNASWEEP-136`). Eight uncompressed sources of 12x12, 20x20, 24x24, 28x28, 36x36, 40x24, 44x44 and 8x8 were built with `GenerateMipmaps` through the genuine pipeline: with the shift, **every generated level whose parent is even is byte-identical**; without it they differ by 6 to 102 bytes each. CNA's `HalveRgbaImage` has the unshifted matrix, so every generated mip level whose own width is not a multiple of four is wrong today. **What is left over** is 23 exact ties -- where the accumulator's remainder equals `16T + 8` -- of which 20 round up and 3 round down; an integer accumulator cannot separate them, so the filter's own arithmetic is finer than the model of it. Implement the shift, measure the corpus, and keep the ties as their own question. |
+| `XNASWEEP-224` | A DXT `.dds` is imported at its size rounded up to a whole number of blocks. | [ ] **Measured; no corpus case, so recorded rather than implemented.** A mipless DXT surface declared 5x5, 6x6, 7x7, 9x9 or 11x11 is imported as 8x8, 8x8, 8x8, 12x12 and 12x12, with the declared image in the corner and zeros elsewhere -- and a *mipped* one is too: a 22x22 chain becomes 24x24. Every one of the corpus's 29 `.dds` sources is already a multiple of four at level 0, so nothing here is reachable from it; the row exists so the next `.dds` that is not finds the measurement rather than the surprise. |
+| `XNASWEEP-225` | The genuine effect compiler's output is not the same twice. | [ ] **Measured, and it bears on `XNASWEEP-202` and on 102 accepted references.** Re-running the differential oracle over the *unchanged* committed corpus moved eight effect blobs: same source, same compiler, same prefix, same length, different bytes. `effect_fx_sampler_plain.xnb` differs in **5 of 596**, and every one of them is padding *after* a string's null terminator -- `0` against `'t'`, `'d'` against `'s'`, `'s','y','n'` against three zeros. Those are uninitialised bytes, not a version string and not a timestamp, so the 102 references accepted under *the blob carries its compiler's version string* rest on a reason that is true but is not the whole of it. The eight references were restored rather than re-recorded: re-recording a reference because the tool that wrote it is nondeterministic is how a corpus stops being one. |
+| `XNASWEEP-226` | The map on disk is four runs old, and reclassifying against it invents ten unexplained references. | [x] **Found and fixed by regenerating it; kept because it is the fourth harness defect of this shape.** `build/xna-sample-sweep/manifest/sample-source-map.json` is the run-40-era file -- 343 build units against run 54's 433, 7,022 mapped against 7,076, and **437 mappings that disagree**. Every run since 43 has used its own `-runNN` snapshot, so nothing was wrong with any run; what was wrong is that the *canonical* name is stale, and §11's own recipe names it. Reclassifying run 55 against it moved eight songs and two fonts from `ACCEPTED_DIFFERENCE` to `UNEXPLAINED`: both reasons are keyed on the processor the mapping names -- `SongProcessor`, and a `.spritefont` extension -- and the stale file names neither, because in it those references are not mapped to an item at all. It would have been read as ten regressions from a rule that cannot touch a song. **And the recipe was half the cause.** §11's own `map_sources.py` line did not pass
+`--synthesized`, so regenerating the file the way this plan says to produces a map that is *worse*
+than the stale one -- 327 build units and 6,728 mapped, because the seven samples `XNASWEEP-186`
+and `XNASWEEP-194` gave content projects to lose them again. With the flag the regenerated file is
+**identical to run 54's, mapping for mapping**, and the recipe now carries it. The same family as
+`XNASWEEP-208` (a stale provenance file), `XNASWEEP-209` and `XNASWEEP-212`: the harness measuring
+something other than what it says. |
 
 
 ---
@@ -344,7 +354,12 @@ python3 tools/xna-sample-sweep/runner_provenance.py \
 python3 tools/xna-sample-sweep/map_sources.py \
         --manifest build/xna-sample-sweep/manifest/sample-xnb-corpus.json \
         --provenance build/xna-sample-sweep/manifest/runner-provenance.json \
+        --synthesized build/xna-sample-sweep/synthesized \
         --out build/xna-sample-sweep/manifest/sample-source-map.json
+# --synthesized is not optional: without it the seven samples that ship no
+# .contentproj lose their projects again and the map falls to 327 build units
+# and 6,728 mapped, against 433 and 7,076 (XNASWEEP-186, XNASWEEP-194,
+# XNASWEEP-226).
 cp cmake-build-debug/cna-content build/xna-sample-sweep/bin/cna-content   # freeze it
 python3 tools/xna-sample-sweep/sweep.py \
         --map build/xna-sample-sweep/manifest/sample-source-map.json \
@@ -400,21 +415,29 @@ could read, none. Its two references were the floor of that class until
 which file the run that produced them selected; a build-unit description now says
 so and they are built.
 
-### 11.2 The sweep, run 54 (2026-09-10)
+### 11.2 The sweep, run 55 (2026-09-10)
 
-Printed by `python3 tools/xna-sample-sweep/status_table.py run42 run47 run53 run54`;
+Printed by `python3 tools/xna-sample-sweep/status_table.py run42 run47 run54 run55`;
 nothing below is typed. Run 42 is the last run of the previous session, 47 the
-first of this one, 52 the last full sweep, and 53 and 54 that sweep with the two
-samples the last two rules touch rebuilt -- SAMPLE-141 for `XNASWEEP-221` and
-SAMPLE-073 for `XNASWEEP-220`, each the only source in the corpus its rule
-reaches, checked rather than assumed.
+first of this one, 52 the last full sweep, and 53, 54 and 55 that sweep with the
+samples each of the last rules touches rebuilt -- SAMPLE-141 for `XNASWEEP-221`,
+SAMPLE-073 for `XNASWEEP-220` and again for `XNASWEEP-222`, each the only source
+in the corpus its rule reaches, checked rather than assumed.
 
-| | run42 | run47 | run53 | run54 |
+| | run42 | run47 | run54 | run55 |
 |---|---:|---:|---:|---:|
-| byte-identical | 4192 | 4245 | 4323 | **4323** |
-| differing | 1632 | 1645 | 1576 | **1576** |
+| byte-identical | 4192 | 4245 | 4323 | **4325** |
+| differing | 1632 | 1645 | 1576 | **1574** |
 | missing (CNA produced nothing) | 1871 | 1815 | 1806 | **1806** |
 | build units that finished | 168 | 260 | 260 | **260** |
+
+**The map a partial run is spliced into has to be the one that run used.** The
+`sample-source-map.json` this directory holds is the run-40-era file: 343 build
+units against run 54's 433, and 437 mappings that disagree. Reclassifying run 55
+against it moved ten references from `ACCEPTED_DIFFERENCE` to `UNEXPLAINED` --
+eight songs and two fonts whose accepted reason is keyed on the processor the
+mapping names, which the stale file does not name at all. Nothing had regressed;
+the harness was reading a different corpus. `XNASWEEP-226`.
 
 Run 47 is worth keeping for one reason: it looks like a regression and is not.
 `CORPUS_GAP` reaching 0 made 103 references comparable for the first time, and
@@ -526,16 +549,16 @@ ship, so four units failed to build. `XNASWEEP-175` is what finally explained it
 
 `taxonomy.py` puts all 7,726 into one class each, with the reason beside it.
 
-| class | run42 | run47 | run53 | run54 | what it means |
+| class | run42 | run47 | run54 | run55 | what it means |
 |---|---:|---:|---:|---:|---|
-| `IDENTICAL` | 4192 | 4245 | 4323 | **4323** | CNA's build is the reference, byte for byte. |
+| `IDENTICAL` | 4192 | 4245 | 4323 | **4325** | CNA's build is the reference, byte for byte. |
 | `SEMANTICALLY_IDENTICAL` | 761 | 742 | 751 | **751** | Everything a runtime reads is equal; the LZX stream, or a float's last bits, is not. |
 | `ACCEPTED_DIFFERENCE` | 851 | 808 | 815 | **815** | Measured, understood, not closable from here -- and every one now *proved* by its own reason (`XNASWEEP-215`). |
 | `CUSTOM_PIPELINE_GAP` | 1763 | 1797 | 1797 | **1797** | The asset needs a component the *sample* defines, in a .NET assembly C++ cannot load. |
 | `ENVIRONMENT_GAP` | 15 | 15 | 9 | **9** | This machine's, not CNA's: effects the June-2010 fxc refuses and fonts Windows has and this machine has not. |
 | `CORPUS_GAP` | 103 | 0 | 0 | **0** | The reference is in the corpus and the sweep has no way to build it. Closed by `XNASWEEP-163`. |
 | `REFERENCE_REMOVED` | 21 | 21 | 21 | **21** | The frozen reference is no longer in the read-only tree; §11.4.3 accounts for all 21. |
-| `UNEXPLAINED` | 20 | 98 | 10 | **10** | Everything else. |
+| `UNEXPLAINED` | 20 | 98 | 10 | **8** | Everything else. |
 | **total** | 7726 | 7726 | 7726 | **7726** | |
 
 **The accepted differences, and what proves each of them.**
@@ -559,22 +582,21 @@ target rather than only its audio.
 
 ### 11.3.1 What is still unexplained
 
-**Ten references, three mechanisms, every one owned by a row with a measurement
-under it.** There is no unexplained reference outside `.fbx`, `.x` and one
-`.dds`, and none of the three is a wrong formula: two are a float's last bits
-and the third is three bytes at a texture's two smallest mips.
+**Eight references, two mechanisms, every one owned by a row with a measurement
+under it.** There is no unexplained reference outside `.fbx` and `.x`, and
+neither is a wrong formula: both are a float's last bits. The third mechanism --
+three bytes at a texture's two smallest mips -- is closed (`XNASWEEP-222`).
 
 | count | what differs, measured | row |
 |---:|---|---|
 | 6 | RobotGame's mech skeletons: `root/bones[]/transform[]` and nothing else, worst **3.34e-06** of the larger magnitude -- above the 1e-6 the float tolerance accepts and far below anything a wrong formula gives. Two of the six also disagree about a mesh part's vertex buffer, which follows the bone. | `XNASWEEP-213` |
 | 2 | SAMPLE-141's `xwing.xnb`: `NORMAL0` and nothing else, worst **1.25e-05** (0.00073 of a degree). The index buffer is byte-identical and every position is, so both sides keep the same triangles and sum the same faces in a different order. | `XNASWEEP-199` |
-| 2 | SAMPLE-073's `Stripe2.dds`: **3 bytes of 1,398,323**, all colour, all in the 2x2 and 1x1 mips. The alpha was closed by `XNASWEEP-220` -- an interpolated alpha takes the same ordered dither an interpolated colour takes -- and what is left is which entry of a block's table a 1x1 level takes. | `XNASWEEP-222` |
 
-Field-level differences inside those ten: **14,264**, of 224,401 over every
-differing reference in the corpus. The number is large because six of the ten
+Field-level differences inside those eight: **14,379**, of 224,517 over every
+differing reference in the corpus. The number is large because six of the eight
 are skeletons with hundreds of bones each, not because the disagreement is.
 
-**What this session's rules did.** Four rules landed, and each was measured
+**What this session's rules did.** Five rules landed, and each was measured
 against the genuine pipeline before any code changed:
 
 * `XNASWEEP-201` -- the effect container's header describes the effect's
@@ -590,6 +612,10 @@ against the genuine pipeline before any code changed:
   by `XNASWEEP-136`; the alpha channel had been left out of it. Exact on 16,384
   of 16,384 probe texels, and both `Stripe2` references go from 350-plus
   differing alpha texels to three bytes of colour.
+* `XNASWEEP-222` -- the dither's *column* shifts by `(-width) mod 4` on an odd
+  row, a level that is not a whole number of blocks is re-encoded, and the
+  three-colour rule is not DXT1's alone. 727 of 727 whole-block levels exact
+  over 1,602,288 texels, and the three bytes `XNASWEEP-220` left are gone.
 
 Everything else this session found was the *harness* measuring something other
 than what it claimed: a stale manifest that silently un-fixed two landed rules

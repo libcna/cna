@@ -17,7 +17,6 @@
       "note": "A font sheet in XNA's own shape for FontTextureProcessor: three 5x7 glyph cells separated by magenta.",
       "thirdParty": false
     },
-
     {
       "file": "png_gamma_no_alpha.png",
       "origin": "generated",
@@ -38,7 +37,8 @@
       "generator": "tools/xna-pipeline-oracle/texture/make_dxt5_alpha_table.py",
       "note": "1,024 DXT5 blocks, each one endpoint pair carrying all eight alpha indices, so one build reads the whole interpolation table of whatever decoder converts it (XNASWEEP-220).",
       "thirdParty": false
-    },   {
+    },
+    {
       "file": "font_sheet_alpha_border.png",
       "origin": "generated",
       "generator": "tools/xna-pipeline-oracle/texture/make_font_sheet_fixtures.py",
@@ -277,6 +277,34 @@
       "file": "truncated.png",
       "origin": "generated",
       "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_dxt5_partial_pot.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_dxt_partial_level_fixtures.py",
+      "note": "A 4x4 DXT5 chain down to 1x1: a whole level, a 2x2 whose dither shifts and a 1x1 whose single colour comes back as its 565 round trip (XNASWEEP-222).",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_dxt5_partial_npot.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_dxt_partial_level_fixtures.py",
+      "note": "The same three rules at widths six and three, which shift by two and by one (XNASWEEP-222).",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_dxt5_three_colour.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_dxt_partial_level_fixtures.py",
+      "note": "A DXT5 block whose c0 is not above its c1: the three-colour rule is not DXT1's alone (XNASWEEP-222).",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_dxt1_three_colour.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_dxt_partial_level_fixtures.py",
+      "note": "Its DXT1 twin, where the same index is also fully transparent (XNASWEEP-222).",
       "thirdParty": false
     }
   ]

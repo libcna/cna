@@ -1282,6 +1282,54 @@
    },
    "platform": "Windows",
    "profile": "HiDef"
+  },
+  {
+   "case": "texture/dds_partial_levels_pot",
+   "source": "texture/probe_dxt5_partial_pot.dds",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "platform": "Windows",
+   "profile": "HiDef",
+   "parameters": {
+    "ColorKeyEnabled": "False",
+    "PremultiplyAlpha": "False"
+   }
+  },
+  {
+   "case": "texture/dds_partial_levels_npot",
+   "source": "texture/probe_dxt5_partial_npot.dds",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "platform": "Windows",
+   "profile": "HiDef",
+   "parameters": {
+    "ColorKeyEnabled": "False",
+    "PremultiplyAlpha": "False"
+   }
+  },
+  {
+   "case": "texture/dds_dxt5_three_colour",
+   "source": "texture/probe_dxt5_three_colour.dds",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "platform": "Windows",
+   "profile": "HiDef",
+   "parameters": {
+    "ColorKeyEnabled": "False",
+    "PremultiplyAlpha": "False"
+   }
+  },
+  {
+   "case": "texture/dds_dxt1_three_colour",
+   "source": "texture/probe_dxt1_three_colour.dds",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "platform": "Windows",
+   "profile": "HiDef",
+   "parameters": {
+    "ColorKeyEnabled": "False",
+    "PremultiplyAlpha": "False"
+   }
   }
  ]
 }

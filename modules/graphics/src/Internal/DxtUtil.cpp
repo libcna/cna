@@ -49,6 +49,28 @@ namespace CNA::Internal::Graphics
             {0, 8, 2, 10}, {6, 14, 4, 12}, {3, 11, 1, 9}, {5, 13, 7, 15}};
 
         /**
+         * @brief The threshold a destination texel dithers against.
+         *
+         * The matrix repeats over the destination every four columns and every four rows, but the
+         * column it starts from on an *odd* row is not zero unless the surface is a whole number
+         * of blocks wide: it is `(-width) mod 4`. Measured over level widths 1, 2, 3, 5, 6, 7, 9,
+         * 11, 14, 15, 18, 22, 28, 30, 36, 44 and 88, every row of each, all three colour channels
+         * and all thirty-two five-bit endpoint values, through the genuine pipeline
+         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-222`). The same shift governs XNA's mip
+         * filter, which dithers through this matrix too.
+         *
+         * @param px Destination column.
+         * @param py Destination row.
+         * @param width The destination surface's width.
+         * @return The threshold, 0 to 15.
+         */
+        [[nodiscard]] inline int DitherThreshold(int px, int py, int width)
+        {
+            const int shift = (py & 1) * ((4 - (width & 3)) & 3);
+            return kDitherThreshold[py & 3][(px + shift) & 3];
+        }
+
+        /**
          * @brief One channel of a block's texel, as D3DX answers it.
          *
          * The endpoint channels are not expanded to bytes and then interpolated: the value is the
@@ -60,14 +82,17 @@ namespace CNA::Internal::Graphics
          * @param denominator The value's exact denominator.
          * @param px Destination column, which with @p py selects the threshold.
          * @param py Destination row.
+         * @param width The destination surface's width.
          * @return The byte D3DX stores.
          */
-        [[nodiscard]] inline uint8_t D3dxChannel(int numerator, int denominator, int px, int py)
+        [[nodiscard]] inline uint8_t D3dxChannel(long long numerator, long long denominator,
+                                                 int px, int py, int width)
         {
-            const int base = numerator / denominator;
-            const int remainder = numerator - base * denominator;
-            const int threshold = kDitherThreshold[py & 3][px & 3];
-            const int value = base + (32 * remainder >= denominator * (2 * threshold + 1) ? 1 : 0);
+            const long long base = numerator / denominator;
+            const long long remainder = numerator - base * denominator;
+            const int threshold = DitherThreshold(px, py, width);
+            const long long value =
+                base + (32 * remainder >= denominator * (2 * threshold + 1) ? 1 : 0);
             return static_cast<uint8_t>(value < 0 ? 0 : (value > 255 ? 255 : value));
         }
     }
@@ -100,49 +125,199 @@ namespace CNA::Internal::Graphics
 
     namespace
     {
-        /** @brief The three channels of a 565 endpoint, as (numerator, denominator) pairs. */
-        struct EndpointChannels
+        /**
+         * @brief One texel of a colour block, exactly, before the dither narrows it.
+         *
+         * Every channel of every entry a block can describe is a rational over 31, 63, 93, 189, 62
+         * or 126, so `kExactDenominator` -- their least common multiple -- carries all of them
+         * with no rounding, which is what lets the re-encode below compare two colours exactly.
+         */
+        constexpr long long kExactDenominator = 11718;   // lcm(31, 63, 93, 189, 62, 126)
+
+        /** @brief A colour block's sixteen texels, exactly, and which of them have no colour. */
+        struct BlockTexels
         {
-            int numerator[3];
-            int denominator[3];
+            /** @brief Each texel's three channels, over `kExactDenominator`. */
+            long long channel[16][3];
+            /**
+             * @brief Index three of a three-colour block: black, and off the block's own line.
+             *
+             * It takes no part in the re-encode below -- a black that is not a colour the block
+             * describes would drag the endpoints off the line every other texel sits on -- and in
+             * DXT1, where the block has no alpha of its own, it is also fully transparent.
+             */
+            bool black[16];
         };
 
-        [[nodiscard]] inline EndpointChannels Channels(uint16_t colour)
+        /** @brief One 565 channel as a numerator over `kExactDenominator`. */
+        [[nodiscard]] inline long long Exact(int value, int bits)
         {
-            EndpointChannels out{};
-            out.numerator[0] = static_cast<int>((colour >> 11) & 0x1Fu) * 255;
-            out.denominator[0] = 31;
-            out.numerator[1] = static_cast<int>((colour >> 5) & 0x3Fu) * 255;
-            out.denominator[1] = 63;
-            out.numerator[2] = static_cast<int>(colour & 0x1Fu) * 255;
-            out.denominator[2] = 31;
-            return out;
+            return static_cast<long long>(value) * 255 * (kExactDenominator / bits);
         }
 
         /**
-         * @brief One texel of a colour block through D3DX's rule.
+         * @brief The sixteen exact colours a colour block decodes to.
          *
-         * @param first The first endpoint's channels.
-         * @param second The second endpoint's channels.
-         * @param weightFirst Numerator of the first endpoint's weight.
-         * @param weightSecond Numerator of the second endpoint's weight.
-         * @param weightTotal The two weights' denominator: 1 for an endpoint, 3 or 2 for a blend.
-         * @param px Destination column.
-         * @param py Destination row.
-         * @param rgb Receives the three bytes.
+         * A block whose `c0` is not above its `c1` takes the three-colour rule -- index two the
+         * midpoint, index three black -- and it does so in **every** DXT kind, not only in DXT1:
+         * measured on DXT1, DXT3 and DXT5 alike, where only DXT1's index three is also
+         * transparent, because only DXT1 has no alpha of its own
+         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-222`).
+         *
+         * @param c0 The block's first endpoint.
+         * @param c1 The block's second endpoint.
+         * @param lookup The block's two-bit index per texel.
+         * @return The block's texels.
          */
-        inline void D3dxTexel(const EndpointChannels& first, const EndpointChannels& second,
-                              int weightFirst, int weightSecond, int weightTotal, int px, int py,
-                              uint8_t* rgb)
+        [[nodiscard]] BlockTexels ExactBlockTexels(uint16_t c0, uint16_t c1, uint32_t lookup)
         {
+            constexpr int kBits[3] = {31, 63, 31};
+            const int first[3] = {static_cast<int>((c0 >> 11) & 0x1Fu),
+                                  static_cast<int>((c0 >> 5) & 0x3Fu),
+                                  static_cast<int>(c0 & 0x1Fu)};
+            const int second[3] = {static_cast<int>((c1 >> 11) & 0x1Fu),
+                                   static_cast<int>((c1 >> 5) & 0x3Fu),
+                                   static_cast<int>(c1 & 0x1Fu)};
+            const bool threeColour = c0 <= c1;
+            long long entry[4][3];
+            bool entryBlack[4] = {false, false, false, false};
             for (int channel = 0; channel < 3; ++channel)
             {
-                const int numerator = weightFirst * first.numerator[channel] * second.denominator[channel] +
-                                      weightSecond * second.numerator[channel] * first.denominator[channel];
-                const int denominator =
-                    weightTotal * first.denominator[channel] * second.denominator[channel];
-                rgb[channel] = D3dxChannel(numerator, denominator, px, py);
+                const long long a = Exact(first[channel], kBits[channel]);
+                const long long b = Exact(second[channel], kBits[channel]);
+                entry[0][channel] = a;
+                entry[1][channel] = b;
+                if (threeColour)
+                {
+                    entry[2][channel] = (a + b) / 2;
+                    entry[3][channel] = 0;
+                }
+                else
+                {
+                    entry[2][channel] = (2 * a + b) / 3;
+                    entry[3][channel] = (a + 2 * b) / 3;
+                }
             }
+            entryBlack[3] = threeColour;
+
+            BlockTexels texels{};
+            for (int texel = 0; texel < 16; ++texel)
+            {
+                const int index = static_cast<int>((lookup >> (2 * texel)) & 0x03u);
+                for (int channel = 0; channel < 3; ++channel)
+                {
+                    texels.channel[texel][channel] = entry[index][channel];
+                }
+                texels.black[texel] = entryBlack[index];
+            }
+            return texels;
+        }
+
+        /**
+         * @brief The 565 word nearest an exact colour, the way D3DX rounds one.
+         *
+         * Half to even. Only a three-colour block's midpoint entry can land on an exact half --
+         * an endpoint is already a 565 value and a third of two of them never is -- and that is
+         * where the even neighbour is the one the genuine pipeline answers, on 149 blocks where
+         * rounding away from zero answers the other one
+         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-222`).
+         */
+        [[nodiscard]] inline uint16_t Quantize565(const long long* colour)
+        {
+            constexpr int kBits[3] = {31, 63, 31};
+            int out[3];
+            for (int channel = 0; channel < 3; ++channel)
+            {
+                const long long scale = static_cast<long long>(kBits[channel]);
+                const long long denominator = 255 * kExactDenominator;
+                const long long numerator = colour[channel] * scale;
+                long long value = numerator / denominator;
+                const long long remainder = numerator - value * denominator;
+                if (2 * remainder > denominator ||
+                    (2 * remainder == denominator && (value & 1) != 0))
+                {
+                    ++value;
+                }
+                if (value < 0) { value = 0; }
+                if (value > scale) { value = scale; }
+                out[channel] = static_cast<int>(value);
+            }
+            return static_cast<uint16_t>((out[0] << 11) | (out[1] << 5) | out[2]);
+        }
+
+        /**
+         * @brief What a level whose blocks are not whole answers instead.
+         *
+         * D3DX cannot hold a level that is not a whole number of blocks across and down, so such a
+         * level is re-encoded: the two extreme texels of each block become its endpoints,
+         * quantized back to 565, and every texel then takes the nearest entry of the palette they
+         * describe. A block of one colour therefore comes back as a 565 round trip of it -- which
+         * is the whole of the difference at `Stripe2.dds`'s 1x1 level -- and a block whose texels
+         * span its own endpoints comes back unchanged. Measured over 2,009 levels of the genuine
+         * pipeline's own output; what it does not reproduce is in the row
+         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-222`).
+         *
+         * @param texels The block's texels, rewritten in place.
+         */
+        void RefitPartialBlock(BlockTexels& texels)
+        {
+            int low = -1;
+            int high = -1;
+            for (int texel = 0; texel < 16; ++texel)
+            {
+                if (texels.black[texel]) { continue; }
+                const auto lexicographic = [&texels](int a, int b)
+                {
+                    for (int channel = 0; channel < 3; ++channel)
+                    {
+                        if (texels.channel[a][channel] != texels.channel[b][channel])
+                        {
+                            return texels.channel[a][channel] < texels.channel[b][channel];
+                        }
+                    }
+                    return false;
+                };
+                if (low < 0 || lexicographic(texel, low)) { low = texel; }
+                if (high < 0 || lexicographic(high, texel)) { high = texel; }
+            }
+            if (low < 0) { return; }
+
+            const uint16_t q0 = Quantize565(texels.channel[high]);
+            const uint16_t q1 = Quantize565(texels.channel[low]);
+            const BlockTexels rebuilt = ExactBlockTexels(q0, q1, 0xE4E4E4E4u);
+            // 0xE4E4... is the lookup 0, 1, 2, 3 repeated, so `rebuilt` carries the four entries
+            // of the new palette in its first four texels.
+            for (int texel = 0; texel < 16; ++texel)
+            {
+                if (texels.black[texel]) { continue; }
+                int best = 0;
+                long long bestDistance = -1;
+                for (int candidate = 0; candidate < 4; ++candidate)
+                {
+                    long long distance = 0;
+                    for (int channel = 0; channel < 3; ++channel)
+                    {
+                        const long long delta =
+                            rebuilt.channel[candidate][channel] - texels.channel[texel][channel];
+                        distance += delta * delta;
+                    }
+                    if (bestDistance < 0 || distance < bestDistance)
+                    {
+                        bestDistance = distance;
+                        best = candidate;
+                    }
+                }
+                for (int channel = 0; channel < 3; ++channel)
+                {
+                    texels.channel[texel][channel] = rebuilt.channel[best][channel];
+                }
+            }
+        }
+
+        /** @brief True when a surface is not a whole number of blocks across and down. */
+        [[nodiscard]] inline bool IsPartialSurface(int width, int height)
+        {
+            return (width % 4) != 0 || (height % 4) != 0;
         }
     }
 
@@ -160,6 +335,13 @@ namespace CNA::Internal::Graphics
 
         uint32_t lookupTable = Read32(data, pos);
 
+        BlockTexels exact{};
+        if (expansion == DxtEndpointExpansion::D3dx)
+        {
+            exact = ExactBlockTexels(c0, c1, lookupTable);
+            if (IsPartialSurface(width, height)) { RefitPartialBlock(exact); }
+        }
+
         for (int blockY = 0; blockY < 4; ++blockY)
         {
             for (int blockX = 0; blockX < 4; ++blockX)
@@ -171,33 +353,17 @@ namespace CNA::Internal::Graphics
 
                 if (expansion == DxtEndpointExpansion::D3dx)
                 {
-                    const EndpointChannels first = Channels(c0);
-                    const EndpointChannels second = Channels(c1);
-                    uint8_t rgb[3] = {0, 0, 0};
-                    if (index == 3u && c0 <= c1)
+                    const int texel = 4 * blockY + blockX;
+                    if (exact.black[texel])
                     {
                         a = 0;
                     }
-                    else if (index == 0u)
-                    {
-                        D3dxTexel(first, second, 1, 0, 1, px, py, rgb);
-                    }
-                    else if (index == 1u)
-                    {
-                        D3dxTexel(first, second, 0, 1, 1, px, py, rgb);
-                    }
-                    else if (c0 > c1)
-                    {
-                        D3dxTexel(first, second, index == 2u ? 2 : 1, index == 2u ? 1 : 2, 3, px,
-                                  py, rgb);
-                    }
                     else
                     {
-                        D3dxTexel(first, second, 1, 1, 2, px, py, rgb);
+                        r = D3dxChannel(exact.channel[texel][0], kExactDenominator, px, py, width);
+                        g = D3dxChannel(exact.channel[texel][1], kExactDenominator, px, py, width);
+                        b = D3dxChannel(exact.channel[texel][2], kExactDenominator, px, py, width);
                     }
-                    r = rgb[0];
-                    g = rgb[1];
-                    b = rgb[2];
                 }
                 else if (c0 > c1)
                 {
@@ -293,6 +459,13 @@ namespace CNA::Internal::Graphics
 
         uint32_t lookupTable = Read32(data, pos);
 
+        BlockTexels exact{};
+        if (expansion == DxtEndpointExpansion::D3dx)
+        {
+            exact = ExactBlockTexels(c0, c1, lookupTable);
+            if (IsPartialSurface(width, height)) { RefitPartialBlock(exact); }
+        }
+
         int alphaIndex = 0;
         for (int blockY = 0; blockY < 4; ++blockY)
         {
@@ -312,16 +485,10 @@ namespace CNA::Internal::Graphics
                 int py = (y << 2) + blockY;
                 if (expansion == DxtEndpointExpansion::D3dx)
                 {
-                    const EndpointChannels first = Channels(c0);
-                    const EndpointChannels second = Channels(c1);
-                    uint8_t rgb[3] = {0, 0, 0};
-                    const int weightFirst = index == 0u ? 1 : (index == 1u ? 0 : (index == 2u ? 2 : 1));
-                    const int weightSecond = index == 0u ? 0 : (index == 1u ? 1 : (index == 2u ? 1 : 2));
-                    const int weightTotal = index < 2u ? 1 : 3;
-                    D3dxTexel(first, second, weightFirst, weightSecond, weightTotal, px, py, rgb);
-                    r = rgb[0];
-                    g = rgb[1];
-                    b = rgb[2];
+                    const int texel = 4 * blockY + blockX;
+                    r = D3dxChannel(exact.channel[texel][0], kExactDenominator, px, py, width);
+                    g = D3dxChannel(exact.channel[texel][1], kExactDenominator, px, py, width);
+                    b = D3dxChannel(exact.channel[texel][2], kExactDenominator, px, py, width);
                 }
                 else
                 {
@@ -406,6 +573,13 @@ namespace CNA::Internal::Graphics
 
         uint32_t lookupTable = Read32(data, pos);
 
+        BlockTexels exact{};
+        if (expansion == DxtEndpointExpansion::D3dx)
+        {
+            exact = ExactBlockTexels(c0, c1, lookupTable);
+            if (IsPartialSurface(width, height)) { RefitPartialBlock(exact); }
+        }
+
         for (int blockY = 0; blockY < 4; ++blockY)
         {
             for (int blockX = 0; blockX < 4; ++blockX)
@@ -435,7 +609,7 @@ namespace CNA::Internal::Graphics
                 {
                     const int numerator = static_cast<int>(8 - alphaIndex) * alpha0 +
                                           static_cast<int>(alphaIndex - 1) * alpha1;
-                    a = dithered ? D3dxChannel(numerator, 7, px, py)
+                    a = dithered ? D3dxChannel(numerator, 7, px, py, width)
                                  : static_cast<uint8_t>(numerator / 7);
                 }
                 else if (alphaIndex == 6)
@@ -446,21 +620,15 @@ namespace CNA::Internal::Graphics
                 {
                     const int numerator = static_cast<int>(6 - alphaIndex) * alpha0 +
                                           static_cast<int>(alphaIndex - 1) * alpha1;
-                    a = dithered ? D3dxChannel(numerator, 5, px, py)
+                    a = dithered ? D3dxChannel(numerator, 5, px, py, width)
                                  : static_cast<uint8_t>(numerator / 5);
                 }
                 if (expansion == DxtEndpointExpansion::D3dx)
                 {
-                    const EndpointChannels first = Channels(c0);
-                    const EndpointChannels second = Channels(c1);
-                    uint8_t rgb[3] = {0, 0, 0};
-                    const int weightFirst = index == 0u ? 1 : (index == 1u ? 0 : (index == 2u ? 2 : 1));
-                    const int weightSecond = index == 0u ? 0 : (index == 1u ? 1 : (index == 2u ? 1 : 2));
-                    const int weightTotal = index < 2u ? 1 : 3;
-                    D3dxTexel(first, second, weightFirst, weightSecond, weightTotal, px, py, rgb);
-                    r = rgb[0];
-                    g = rgb[1];
-                    b = rgb[2];
+                    const int texel = 4 * blockY + blockX;
+                    r = D3dxChannel(exact.channel[texel][0], kExactDenominator, px, py, width);
+                    g = D3dxChannel(exact.channel[texel][1], kExactDenominator, px, py, width);
+                    b = D3dxChannel(exact.channel[texel][2], kExactDenominator, px, py, width);
                 }
                 else
                 {
