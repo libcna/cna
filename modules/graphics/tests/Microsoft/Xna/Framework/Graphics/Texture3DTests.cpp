@@ -22,6 +22,7 @@
 
 #include <gtest/gtest.h>
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <limits>
 #include <memory>
@@ -307,6 +308,85 @@ TEST_F(Texture3DTest, SetDataNonZeroStartIndexUploadsOnlyItsOwnWindow)
         EXPECT_NE(got[static_cast<std::size_t>(i)].getPackedValueProperty(),
                   poison.getPackedValueProperty());
     }
+}
+
+TEST_F(Texture3DTest, GenericValueTypeRoundTripsWholeVolumeWithCallerWindows)
+{
+    struct RawWord
+    {
+        std::uint16_t low;
+        std::uint16_t high;
+        bool operator==(const RawWord&) const = default;
+    };
+    static_assert(std::is_trivially_copyable_v<RawWord>);
+    static_assert(sizeof(RawWord) == 4);
+
+    Texture3D texture(gd, 2, 1, 2, false, SurfaceFormat::Color);
+    const RawWord sentinel{0xBEEFu, 0xCAFEu};
+    const std::array<RawWord, 6> source{{
+        sentinel, {0x1122u, 0x3344u}, {0x5566u, 0x7788u},
+        {0x99AAu, 0xBBCCu}, {0xDDEEu, 0x0F10u}, sentinel}};
+    texture.SetData(source.data(), 1, 4);
+
+    if (!VolumeReadbackSupported())
+        return;
+    std::array<RawWord, 7> destination{};
+    destination.fill(sentinel);
+    texture.GetData(destination.data(), 2, 4);
+    EXPECT_EQ(destination[0], sentinel);
+    EXPECT_EQ(destination[1], sentinel);
+    EXPECT_TRUE(std::equal(source.begin() + 1, source.begin() + 5,
+                           destination.begin() + 2));
+    EXPECT_EQ(destination[6], sentinel);
+}
+
+TEST_F(Texture3DTest, GenericValueTypeRoundTripsAMipBoxWithCallerWindows)
+{
+    struct RawWord
+    {
+        std::uint16_t low;
+        std::uint16_t high;
+        bool operator==(const RawWord&) const = default;
+    };
+    static_assert(std::is_trivially_copyable_v<RawWord>);
+    static_assert(sizeof(RawWord) == 4);
+
+    Texture3D texture(gd, 4, 4, 4, true, SurfaceFormat::Color);
+    const RawWord baseline{0x1111u, 0x2222u};
+    const RawWord sentinel{0xBEEFu, 0xCAFEu};
+    std::array<RawWord, 8> initial{};
+    initial.fill(baseline);
+    texture.SetData(1, 0, 0, 2, 2, 0, 2, initial.data(), 0, 8);
+
+    const std::array<RawWord, 4> source{{
+        sentinel, {0x3456u, 0x789Au}, {0xBCDEu, 0xF012u}, sentinel}};
+    texture.SetData(1, 1, 0, 2, 2, 1, 2, source.data(), 1, 2);
+
+    if (!VolumeReadbackSupported())
+        return;
+    std::array<RawWord, 5> destination{};
+    destination.fill(sentinel);
+    texture.GetData(1, 1, 0, 2, 2, 1, 2, destination.data(), 2, 2);
+    EXPECT_EQ(destination[0], sentinel);
+    EXPECT_EQ(destination[1], sentinel);
+    EXPECT_EQ(destination[2], source[1]);
+    EXPECT_EQ(destination[3], source[2]);
+    EXPECT_EQ(destination[4], sentinel);
+
+    std::array<RawWord, 8> whole{};
+    texture.GetData(1, 0, 0, 2, 2, 0, 2, whole.data(), 0, 8);
+    EXPECT_EQ(whole[5], source[1]);
+    EXPECT_EQ(whole[7], source[2]);
+    for (std::size_t index : {0u, 1u, 2u, 3u, 4u, 6u})
+        EXPECT_EQ(whole[index], baseline) << index;
+}
+
+TEST_F(Texture3DTest, GenericValueTypeStillRequiresAWidthThatDividesTheFormat)
+{
+    Texture3D texture(gd, 1, 1, 1, false, SurfaceFormat::Color);
+    std::uint64_t value = 0u;
+    EXPECT_THROW(texture.SetData(&value, 1), System::ArgumentException);
+    EXPECT_THROW(texture.GetData(&value, 1), System::ArgumentException);
 }
 
 // REMED-GFX-135: SetData after Dispose() used to be a silent no-op, while GetData already threw.

@@ -487,6 +487,11 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   directly; EasyGL maps them to matching native volume images and uses an exact byte mirror for
   readback. Reach still refuses volume textures entirely, and compiled-effect sampling remains the
   separate `SOFTWARE-164` backlog.
+- **Texture3D accepts Microsoft's generic value-type transfer surface** (`SOFTWARE-278`) —
+  application-defined trivially copyable types, packed vectors, scalar/vector floats, Color and
+  byte elements all pass through the same exact-total and divisible-width validation. Their raw
+  object representations round-trip through whole volumes, mip boxes and nonzero caller windows;
+  a type wider than the declared texel format is rejected before storage or readback.
 - **Classic XNB Texture3D content keeps its authored representation** (`SOFTWARE-274`) — the
   FNA-order runtime reader constructs the serialized format and uploads each level's exact byte
   payload instead of coercing every volume to RGBA8. All fifteen legal HiDef formats and a
