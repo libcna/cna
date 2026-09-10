@@ -261,22 +261,8 @@
    ]
   },
   {
-   "case": "phone_png_texture_mipmaps",
-   "reason": "XNA's own mip kernel, and the last unit of it. The filter is measured rather than guessed: a single white texel on black reduces to a 2x2 of 48, 7, 7, 1 out of 255, which is the outer product of the separable four-tap {1/16, 7/16, 7/16, 1/16}, and a step edge confirms both that and the edge rule -- taps that fall outside are clamped, where wrapping is wrong by up to 24 units at a border. An odd dimension has no such alignment and XNA area-averages there instead, exactly, on a 3x2's alpha channel. CNA does all of that now (XNAPP-254), and what is left over the six mipmapped cases is 61 bytes of 2944 differing by exactly one, never more. No symmetric four-tap does better: sweeping the tap weight finds no value that beats 1/16, and the residual sits in both directions, which is what a dither looks like. Before the kernel was implemented these levels differed by up to 29 units. Measured again over a real photograph, SAMPLE-059's 256x256 CatTexture.tga, the residual is characterised rather than merely small: level 0 is byte-identical, every generated level differs, every differing byte differs by exactly one, and the sign is decided by the accumulator's own fraction. Sorted by distance from the rounding tie, the disagreement rate rises monotonically -- 0.5% at 112/256 from the tie, 19% at 80, 33% at 48, 45% at 16 -- and never once crosses over: below the tie XNA is always the higher value and above it always the lower. That is a dither applied before quantisation, of roughly half a least-significant bit, and no filter change reaches it: the kernel was re-fitted here over every symmetric six-tap with integer weights and {1,7,7,1} is the optimum, and neither float32, float64, normalised nor pairwise-summed arithmetic, nor truncation, half-up, half-even or half-down rounding, moves the count by more than eight bytes in 65,536. (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-123.)",
-   "paths": [
-    "root/levelDigests"
-   ]
-  },
-  {
    "case": "profile_dxt_reach",
    "reason": "Block compression is lossy and every encoder chooses its endpoints differently. XNA compresses through D3DX; CNA through its own encoder. The dimensions, mip count, format and level sizes agree -- only the compressed bytes differ, which is what two DXT encoders always do.",
-   "paths": [
-    "root/levelDigests"
-   ]
-  },
-  {
-   "case": "profile_mipmaps_npot_hidef",
-   "reason": "XNA's own mip kernel, and the last unit of it. The filter is measured rather than guessed: a single white texel on black reduces to a 2x2 of 48, 7, 7, 1 out of 255, which is the outer product of the separable four-tap {1/16, 7/16, 7/16, 1/16}, and a step edge confirms both that and the edge rule -- taps that fall outside are clamped, where wrapping is wrong by up to 24 units at a border. An odd dimension has no such alignment and XNA area-averages there instead, exactly, on a 3x2's alpha channel. CNA does all of that now (XNAPP-254), and what is left over the six mipmapped cases is 61 bytes of 2944 differing by exactly one, never more. No symmetric four-tap does better: sweeping the tap weight finds no value that beats 1/16, and the residual sits in both directions, which is what a dither looks like. Before the kernel was implemented these levels differed by up to 29 units. Measured again over a real photograph, SAMPLE-059's 256x256 CatTexture.tga, the residual is characterised rather than merely small: level 0 is byte-identical, every generated level differs, every differing byte differs by exactly one, and the sign is decided by the accumulator's own fraction. Sorted by distance from the rounding tie, the disagreement rate rises monotonically -- 0.5% at 112/256 from the tie, 19% at 80, 33% at 48, 45% at 16 -- and never once crosses over: below the tie XNA is always the higher value and above it always the lower. That is a dither applied before quantisation, of roughly half a least-significant bit, and no filter change reaches it: the kernel was re-fitted here over every symmetric six-tap with integer weights and {1,7,7,1} is the optimum, and neither float32, float64, normalised nor pairwise-summed arithmetic, nor truncation, half-up, half-even or half-down rounding, moves the count by more than eight bytes in 65,536. (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-123.)",
    "paths": [
     "root/levelDigests"
    ]
@@ -338,13 +324,6 @@
   {
    "case": "xbox_png_texture_dxt",
    "reason": "Block compression is lossy and every encoder chooses its endpoints differently. XNA compresses through D3DX; CNA through its own encoder. The dimensions, mip count, format and level sizes agree -- only the compressed bytes differ, which is what two DXT encoders always do.",
-   "paths": [
-    "root/levelDigests"
-   ]
-  },
-  {
-   "case": "xbox_png_texture_mipmaps",
-   "reason": "XNA's own mip kernel, and the last unit of it. The filter is measured rather than guessed: a single white texel on black reduces to a 2x2 of 48, 7, 7, 1 out of 255, which is the outer product of the separable four-tap {1/16, 7/16, 7/16, 1/16}, and a step edge confirms both that and the edge rule -- taps that fall outside are clamped, where wrapping is wrong by up to 24 units at a border. An odd dimension has no such alignment and XNA area-averages there instead, exactly, on a 3x2's alpha channel. CNA does all of that now (XNAPP-254), and what is left over the six mipmapped cases is 61 bytes of 2944 differing by exactly one, never more. No symmetric four-tap does better: sweeping the tap weight finds no value that beats 1/16, and the residual sits in both directions, which is what a dither looks like. Before the kernel was implemented these levels differed by up to 29 units. Measured again over a real photograph, SAMPLE-059's 256x256 CatTexture.tga, the residual is characterised rather than merely small: level 0 is byte-identical, every generated level differs, every differing byte differs by exactly one, and the sign is decided by the accumulator's own fraction. Sorted by distance from the rounding tie, the disagreement rate rises monotonically -- 0.5% at 112/256 from the tie, 19% at 80, 33% at 48, 45% at 16 -- and never once crosses over: below the tie XNA is always the higher value and above it always the lower. That is a dither applied before quantisation, of roughly half a least-significant bit, and no filter change reaches it: the kernel was re-fitted here over every symmetric six-tap with integer weights and {1,7,7,1} is the optimum, and neither float32, float64, normalised nor pairwise-summed arithmetic, nor truncation, half-up, half-even or half-down rounding, moves the count by more than eight bytes in 65,536. (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-123.)",
    "paths": [
     "root/levelDigests"
    ]

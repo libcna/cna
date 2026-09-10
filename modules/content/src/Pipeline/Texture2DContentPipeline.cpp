@@ -853,6 +853,135 @@ namespace CNA::Content::Pipeline
         }
     }
 
+    /**
+     * @brief The ordered threshold XNA's mip filter dithers a destination texel against.
+     *
+     * The matrix is `XNASWEEP-136`'s, and the column an *odd* row starts from is `(-width) mod 4`
+     * rather than zero -- the same shift the block decoder's dither takes, which is what says the
+     * shift belongs to the dither and not to either consumer. Measured on eight uncompressed
+     * sources built with `GenerateMipmaps` through the genuine pipeline: every generated level
+     * whose parent is even is byte-identical with it and 6 to 102 bytes out without it
+     * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-223`, and `XNASWEEP-222` for the decoder).
+     *
+     * @param x Destination column.
+     * @param y Destination row.
+     * @param width The destination level's width.
+     * @return The threshold, 0 to 15.
+     */
+    [[nodiscard]] int MipDitherThreshold(const std::uint32_t x, const std::uint32_t y,
+                                         const std::uint32_t width)
+    {
+        static constexpr std::array<std::array<int, 4>, 4> kDither{{
+            {{0, 8, 2, 10}}, {{6, 14, 4, 12}}, {{3, 11, 1, 9}}, {{5, 13, 7, 15}}}};
+        const std::uint32_t shift = (y & 1u) * ((4u - (width & 3u)) & 3u);
+        return kDither[y % 4u][(x + shift) % 4u];
+    }
+
+    /**
+     * @brief A weighted sum narrowed to a byte the way the filter narrows one: dithered.
+     *
+     * @param sum The weighted sum.
+     * @param total The weights' total.
+     * @param x Destination column.
+     * @param y Destination row.
+     * @param width The destination level's width.
+     * @return The byte.
+     */
+    [[nodiscard]] std::uint8_t DitheredQuotient(const std::uint64_t sum, const std::uint64_t total,
+                                                const std::uint32_t x, const std::uint32_t y,
+                                                const std::uint32_t width)
+    {
+        const std::uint64_t base = sum / total;
+        const std::uint64_t remainder = sum - base * total;
+        const std::uint64_t cut =
+            total * static_cast<std::uint64_t>(2 * MipDitherThreshold(x, y, width) + 1);
+        const std::uint64_t value = base + (32u * remainder >= cut ? 1u : 0u);
+        return static_cast<std::uint8_t>(value > 255u ? 255u : value);
+    }
+
+    /**
+     * @brief The box weights one destination sample takes from a source axis.
+     *
+     * @param sourceLength The axis's source length.
+     * @param targetLength Its target length.
+     * @param at The destination sample.
+     * @return `(source index, weight)` pairs whose weights total `sourceLength`.
+     */
+    [[nodiscard]] std::vector<std::pair<std::uint32_t, std::uint64_t>> BoxWeights(
+        const std::uint32_t sourceLength, const std::uint32_t targetLength, const std::uint32_t at)
+    {
+        std::vector<std::pair<std::uint32_t, std::uint64_t>> weights;
+        const std::uint64_t start = static_cast<std::uint64_t>(at) * sourceLength;
+        const std::uint64_t end = static_cast<std::uint64_t>(at + 1u) * sourceLength;
+        const std::uint32_t first = static_cast<std::uint32_t>(start / targetLength);
+        const std::uint32_t last = static_cast<std::uint32_t>(
+            std::min<std::uint64_t>((end - 1u) / targetLength, sourceLength - 1u));
+        for (std::uint32_t sample = first; sample <= last; ++sample)
+        {
+            const std::uint64_t low =
+                std::max<std::uint64_t>(start, static_cast<std::uint64_t>(sample) * targetLength);
+            const std::uint64_t high = std::min<std::uint64_t>(
+                end, static_cast<std::uint64_t>(sample + 1u) * targetLength);
+            weights.emplace_back(sample, high - low);
+        }
+        return weights;
+    }
+
+    /**
+     * @brief The odd-dimension halving: one area average over the whole box, dithered once.
+     *
+     * An odd dimension has no exact halving, and `XNAPP-254` measured that XNA answers the area
+     * average there. What it does *not* do is round it: the same ordered dither narrows this
+     * quotient too, and taking two rounded one-dimensional passes instead answers one higher or
+     * lower wherever the fraction lands past a threshold. Over the same eight sources, dithering
+     * a single two-dimensional sum leaves 34 differing bytes of 8,084 where rounding two passes
+     * leaves 72 (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-223`).
+     *
+     * @param pixels The source level.
+     * @param width Its width.
+     * @param height Its height.
+     * @return The halved level.
+     */
+    [[nodiscard]] std::vector<std::uint8_t> HalveRgbaImageByArea(
+        const std::vector<std::uint8_t>& pixels, const std::uint32_t width,
+        const std::uint32_t height)
+    {
+        const std::uint32_t nextWidth = std::max(1u, width / 2u);
+        const std::uint32_t nextHeight = std::max(1u, height / 2u);
+        const std::uint64_t total = static_cast<std::uint64_t>(width) * height;
+        std::vector<std::uint8_t> out(static_cast<std::size_t>(nextWidth) * nextHeight * 4u);
+        std::vector<std::vector<std::pair<std::uint32_t, std::uint64_t>>> columns(nextWidth);
+        for (std::uint32_t x = 0; x < nextWidth; ++x) { columns[x] = BoxWeights(width, nextWidth, x); }
+        for (std::uint32_t y = 0; y < nextHeight; ++y)
+        {
+            const auto rows = BoxWeights(height, nextHeight, y);
+            for (std::uint32_t x = 0; x < nextWidth; ++x)
+            {
+                std::array<std::uint64_t, 4> sums{};
+                for (const auto& [sourceY, weightY] : rows)
+                {
+                    for (const auto& [sourceX, weightX] : columns[x])
+                    {
+                        const std::size_t at =
+                            ((static_cast<std::size_t>(sourceY) * width) + sourceX) * 4u;
+                        for (std::size_t channel = 0; channel < 4u; ++channel)
+                        {
+                            sums[channel] += weightY * weightX * pixels[at + channel];
+                        }
+                    }
+                }
+                const std::size_t destination =
+                    ((static_cast<std::size_t>(y) * nextWidth) + x) * 4u;
+                for (std::size_t channel = 0; channel < 4u; ++channel)
+                {
+                    out[destination + channel] =
+                        DitheredQuotient(sums[channel], total, x, y, nextWidth);
+                }
+            }
+        }
+        return out;
+    }
+
     std::vector<std::uint8_t> HalveRgbaImage(const std::vector<std::uint8_t>& pixels,
                                              const std::uint32_t width,
                                              const std::uint32_t height)
@@ -876,7 +1005,7 @@ namespace CNA::Content::Pipeline
         // (plans/plan_xnapipeline_parity.md XNAPP-254).
         if ((width % 2u) != 0u || (height % 2u) != 0u)
         {
-            return ResampleRgbaImage(pixels, width, height, nextWidth, nextHeight);
+            return HalveRgbaImageByArea(pixels, width, height);
         }
         std::vector<std::uint8_t> out(static_cast<std::size_t>(nextWidth) * nextHeight * 4u);
         for (std::uint32_t y = 0u; y < nextHeight; ++y)
@@ -914,13 +1043,10 @@ namespace CNA::Content::Pipeline
                     // expansion (`XNASWEEP-136`). Applied here it takes SAMPLE-059's `CatTexture`
                     // from 5,904 differing bytes in its first mip level to 9, and SAMPLE-059's
                     // `checker` and SAMPLE-130's `Grid` to none at all, on every level.
-                    static constexpr std::array<std::array<int, 4>, 4> kDither{{
-                        {{0, 8, 2, 10}}, {{6, 14, 4, 12}}, {{3, 11, 1, 9}}, {{5, 13, 7, 15}}}};
-                    const int threshold = 16 * kDither[y % 4u][x % 4u] + 8;
-                    const int value = (accumulated / kWeightTotal) +
-                                      ((accumulated % kWeightTotal) >= threshold ? 1 : 0);
                     out[((static_cast<std::size_t>(y) * nextWidth) + x) * 4u + channel] =
-                        static_cast<std::uint8_t>(std::clamp(value, 0, 255));
+                        DitheredQuotient(static_cast<std::uint64_t>(std::max(accumulated, 0)),
+                                         static_cast<std::uint64_t>(kWeightTotal), x, y,
+                                         nextWidth);
                 }
             }
         }

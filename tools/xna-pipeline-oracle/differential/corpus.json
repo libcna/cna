@@ -1330,6 +1330,19 @@
     "ColorKeyEnabled": "False",
     "PremultiplyAlpha": "False"
    }
+  },
+  {
+   "case": "texture/dds_mip_dither",
+   "source": "texture/probe_mip_dither.dds",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "ColorKeyEnabled": "False",
+    "PremultiplyAlpha": "False",
+    "GenerateMipmaps": "True"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
   }
  ]
 }

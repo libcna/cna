@@ -306,6 +306,13 @@
       "generator": "tools/xna-pipeline-oracle/texture/make_dxt_partial_level_fixtures.py",
       "note": "Its DXT1 twin, where the same index is also fully transparent (XNASWEEP-222).",
       "thirdParty": false
+    },
+    {
+      "file": "probe_mip_dither.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_mip_dither_fixture.py",
+      "note": "Twelve by twelve and uncompressed: the first generated level is six wide, which is where the mip filter's dither shifts its column (XNASWEEP-223).",
+      "thirdParty": false
     }
   ]
 }
