@@ -163,6 +163,46 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     set_tests_properties(SdlGpu_SpriteBatch_DisposedGuards PROPERTIES
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
+    # SDLGPU-77: the complete classic stock-effect matrix shared with EasyGL/WebGPU. These nine
+    # fixtures isolate every remaining BasicEffect, AlphaTestEffect, DualTextureEffect,
+    # EnvironmentMapEffect and SkinnedEffect term instead of accepting one smoke triangle per
+    # family. Any validation diagnostic is a test failure even when the final pixel looks right.
+    foreach(stock_effect_parity_test IN ITEMS
+            lit_untextured
+            basic_effect_light_terms
+            basic_effect_vertex_color
+            basic_effect_alpha_scale
+            alpha_test_sweep
+            alpha_test_sources
+            dual_texture_terms
+            env_map_terms
+            skinned_terms)
+        cna_sdlgpu_test(cna_test_sdlgpu_parity_${stock_effect_parity_test}
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/parity/parity_${stock_effect_parity_test}.cpp)
+        cna_register_renderer_test(NAME SdlGpu_Parity_${stock_effect_parity_test}
+            COMMAND cna_test_sdlgpu_parity_${stock_effect_parity_test}
+            TIMEOUT 180 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+        set_tests_properties(SdlGpu_Parity_${stock_effect_parity_test} PROPERTIES
+            FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+    endforeach()
+
+    # SDLGPU-77: three EasyGL corpus sources exercise distinctions the consolidated fixtures do
+    # not duplicate: BasicEffect and SkinnedEffect must genuinely switch between XNA's default
+    # per-vertex lighting and the requested per-pixel family, and WeightsPerVertex=2 must ignore
+    # deliberately nonzero influences 2/3. Compile the reference sources verbatim under SDL GPU.
+    foreach(stock_effect_oracle_test IN ITEMS
+            basiceffect_preferperpixellighting
+            skinnedeffect_preferperpixellighting
+            skinnedeffect_weightspervertex)
+        cna_sdlgpu_test(cna_test_sdlgpu_easygl_${stock_effect_oracle_test}
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_${stock_effect_oracle_test}_test.cpp)
+        cna_register_renderer_test(NAME SdlGpu_EasyGLOracle_${stock_effect_oracle_test}
+            COMMAND cna_test_sdlgpu_easygl_${stock_effect_oracle_test}
+            TIMEOUT 180 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+        set_tests_properties(SdlGpu_EasyGLOracle_${stock_effect_oracle_test} PROPERTIES
+            FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+    endforeach()
+
     # REMED-GFX-028: every real constructor acquisition is transactional, failed objects never
     # enter the window registry, and lazy command/pipeline/sampler/fallback failures remain
     # retryable. Resource callbacks make leaks/double-destruction observable independently of

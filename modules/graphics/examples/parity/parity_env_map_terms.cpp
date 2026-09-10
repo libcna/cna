@@ -307,7 +307,8 @@ protected:
         const Color expectedHalf(
             static_cast<SharpRuntime::bytecs>((lit.getRProperty() + env.getRProperty()) / 2),
             static_cast<SharpRuntime::bytecs>((lit.getGProperty() + env.getGProperty()) / 2),
-            static_cast<SharpRuntime::bytecs>((lit.getBProperty() + env.getBProperty()) / 2), 255);
+            static_cast<SharpRuntime::bytecs>((lit.getBProperty() + env.getBProperty()) / 2),
+            static_cast<SharpRuntime::bytecs>(255));
         ExpectAverage("amount 0.5 is the exact mean of amount 0 and amount 1 -- the environment is "
                       "LERPED in, not added, and the weight is not clamped or inverted",
                       at(2, 0), expectedHalf, 3);

@@ -88,7 +88,7 @@ namespace
         static_cast<SharpRuntime::bytecs>(kVertexR * kDiffuseColor.X + 0.5f),
         static_cast<SharpRuntime::bytecs>(kVertexG * kDiffuseColor.Y + 0.5f),
         static_cast<SharpRuntime::bytecs>(kVertexB * kDiffuseColor.Z + 0.5f),
-        255);
+        static_cast<SharpRuntime::bytecs>(255));
 
     struct Vertex { float x, y, z; std::uint32_t color; float u, v; };
     constexpr int kStride = 24;

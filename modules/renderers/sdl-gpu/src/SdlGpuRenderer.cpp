@@ -1463,7 +1463,11 @@ namespace CNA::Internal::Renderers::SdlGpu
             out[4] = p.light1Diffuse[0]; out[5] = p.light1Diffuse[1]; out[6] = p.light1Diffuse[2]; out[7] = 0.0f;
             out[8] = p.light2Dir[0]; out[9] = p.light2Dir[1]; out[10] = p.light2Dir[2]; out[11] = 0.0f;
             out[12] = p.light2Diffuse[0]; out[13] = p.light2Diffuse[1]; out[14] = p.light2Diffuse[2]; out[15] = 0.0f;
-            out[16] = p.emissiveColor[0]; out[17] = p.emissiveColor[1]; out[18] = p.emissiveColor[2]; out[19] = 0.0f;
+            // The fourth lane was padding. It now carries the public lighting-family selector to
+            // both stages without changing this established 56-float block: zero is XNA's default
+            // per-vertex/Gouraud path, one requests the per-pixel path.
+            out[16] = p.emissiveColor[0]; out[17] = p.emissiveColor[1]; out[18] = p.emissiveColor[2];
+            out[19] = p.preferPerPixelLighting ? 1.0f : 0.0f;
             for (int wi = 0; wi < 16; ++wi) out[20 + wi] = p.worldColMajor[wi];
             out[36] = p.eyePositionWorld[0]; out[37] = p.eyePositionWorld[1]; out[38] = p.eyePositionWorld[2]; out[39] = 0.0f;
             out[40] = p.light0Specular[0]; out[41] = p.light0Specular[1]; out[42] = p.light0Specular[2]; out[43] = 0.0f;
@@ -6016,6 +6020,11 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                       bool hasVertexColor,
                                                       const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout)
     {
+        // DualTextureEffect permits either texture property to be null. The shader still samples
+        // both slots, so an absent one is the multiplicative identity rather than a skipped draw.
+        // Create the same neutral-white texture the other stock families already use before the
+        // deferred command is queued.
+        EnsureDefaultPbrTextures();
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
         DualTextureDrawCommand command;
         command.hasVertexColor = hasVertexColor;
@@ -6164,6 +6173,110 @@ namespace CNA::Internal::Renderers::SdlGpu
         framePending_ = true;
     }
 
+    // Rewrite any semantically compatible SkinnedEffect declaration into the renderer's canonical
+    // stride-52/56 record. SDL_gpu's UBYTE4 input feeds the shader's uvec4 directly, so a legal
+    // Vector4 BLENDINDICES declaration cannot share the native pipeline unchanged. Capturing and
+    // converting it here keeps one shader/pipeline family while preserving XNA's semantic (rather
+    // than stride) vertex binding rule.
+    [[nodiscard]] static bool NormalizeSkinnedStreamEXT(
+        const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& declaredElements,
+        const std::vector<std::uint8_t>& source, std::size_t sourceStride,
+        std::vector<std::uint8_t>& out, std::size_t& outStride)
+    {
+        using CNA::Internal::Graphics::FindDeclaredSemanticEXT;
+        using Microsoft::Xna::Framework::Graphics::VertexElement;
+        using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+        using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+
+        if (sourceStride == 0 || declaredElements.empty())
+            return false;
+
+        const VertexElement* position =
+            FindDeclaredSemanticEXT(declaredElements, VertexElementUsage::Position, 0);
+        const VertexElement* normal =
+            FindDeclaredSemanticEXT(declaredElements, VertexElementUsage::Normal, 0);
+        const VertexElement* uv =
+            FindDeclaredSemanticEXT(declaredElements, VertexElementUsage::TextureCoordinate, 0);
+        const VertexElement* weights =
+            FindDeclaredSemanticEXT(declaredElements, VertexElementUsage::BlendWeight, 0);
+        const VertexElement* indices =
+            FindDeclaredSemanticEXT(declaredElements, VertexElementUsage::BlendIndices, 0);
+        const VertexElement* color =
+            FindDeclaredSemanticEXT(declaredElements, VertexElementUsage::Color, 0);
+        if (position == nullptr || normal == nullptr || uv == nullptr || weights == nullptr ||
+            indices == nullptr)
+            return false;
+        if (position->getVertexElementFormatProperty() != VertexElementFormat::Vector3 ||
+            normal->getVertexElementFormatProperty() != VertexElementFormat::Vector3 ||
+            uv->getVertexElementFormatProperty() != VertexElementFormat::Vector2 ||
+            weights->getVertexElementFormatProperty() != VertexElementFormat::Vector4)
+            return false;
+
+        const VertexElementFormat indexFormat = indices->getVertexElementFormatProperty();
+        if (indexFormat != VertexElementFormat::Byte4 && indexFormat != VertexElementFormat::Vector4)
+            return false;
+        const bool packedColor = color != nullptr &&
+            color->getVertexElementFormatProperty() == VertexElementFormat::Color;
+        const bool vectorColor = color != nullptr &&
+            color->getVertexElementFormatProperty() == VertexElementFormat::Vector4;
+        if (color != nullptr && !packedColor && !vectorColor)
+            return false;
+
+        const auto fits = [sourceStride](const VertexElement* element, std::size_t bytes) {
+            const int offset = element->getOffsetProperty();
+            return offset >= 0 && static_cast<std::size_t>(offset) <= sourceStride &&
+                   bytes <= sourceStride - static_cast<std::size_t>(offset);
+        };
+        if (!fits(position, 12) || !fits(normal, 12) || !fits(uv, 8) || !fits(weights, 16) ||
+            !fits(indices, indexFormat == VertexElementFormat::Byte4 ? 4 : 16) ||
+            (color != nullptr && !fits(color, packedColor ? 4 : 16)))
+            return false;
+
+        outStride = color != nullptr ? 56u : 52u;
+        const std::size_t vertexCount = source.size() / sourceStride;
+        out.assign(vertexCount * outStride, std::uint8_t{0});
+        for (std::size_t vertex = 0; vertex < vertexCount; ++vertex)
+        {
+            const std::size_t src = vertex * sourceStride;
+            std::uint8_t* dst = out.data() + vertex * outStride;
+            std::memcpy(dst, source.data() + src + position->getOffsetProperty(), 12);
+            std::memcpy(dst + 12, source.data() + src + normal->getOffsetProperty(), 12);
+            std::memcpy(dst + 24, source.data() + src + uv->getOffsetProperty(), 8);
+            std::memcpy(dst + 32, source.data() + src + weights->getOffsetProperty(), 16);
+            if (indexFormat == VertexElementFormat::Byte4)
+            {
+                std::memcpy(dst + 48, source.data() + src + indices->getOffsetProperty(), 4);
+            }
+            else
+            {
+                float declared[4]{};
+                std::memcpy(declared, source.data() + src + indices->getOffsetProperty(),
+                            sizeof(declared));
+                for (int lane = 0; lane < 4; ++lane)
+                {
+                    const float clamped = std::clamp(declared[lane], 0.0f, 255.0f);
+                    dst[48 + lane] = static_cast<std::uint8_t>(clamped + 0.5f);
+                }
+            }
+            if (packedColor)
+            {
+                std::memcpy(dst + 52, source.data() + src + color->getOffsetProperty(), 4);
+            }
+            else if (vectorColor)
+            {
+                float declared[4]{};
+                std::memcpy(declared, source.data() + src + color->getOffsetProperty(),
+                            sizeof(declared));
+                for (int lane = 0; lane < 4; ++lane)
+                {
+                    const float normalized = std::clamp(declared[lane], 0.0f, 1.0f);
+                    dst[52 + lane] = static_cast<std::uint8_t>(normalized * 255.0f + 0.5f);
+                }
+            }
+        }
+        return true;
+    }
+
     void SdlGpuRenderer::QueueSkinnedDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                                  const Matrix& world, const Matrix& view, const Matrix& projection,
                                                  PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
@@ -6175,16 +6288,35 @@ namespace CNA::Internal::Renderers::SdlGpu
         EnsureDefaultPbrTextures();
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
         const std::size_t stride = sdlGpuVb.Stride();
-        if (stride != 52 && stride != 56)
-            throw std::invalid_argument("CNA SDL_GPU: skinned3d requires a stride-52 "
-                                        "(VertexPositionNormalTextureSkinned) or stride-56 "
-                                        "(+ per-vertex Color) vertex buffer");
 
         SkinnedDrawCommand command;
-        command.hasVertexColor = (stride == 56);
+        std::vector<std::uint8_t> normalized;
+        std::size_t normalizedStride = 0;
+        const std::vector<std::uint8_t>* stream = &sdlGpuVb.ShadowData();
+        std::size_t sourceStride = stride;
+        const auto& declaredElements = sdlGpuVb.Declaration().GetElements();
+        if (!declaredElements.empty())
+        {
+            if (!NormalizeSkinnedStreamEXT(declaredElements, sdlGpuVb.ShadowData(), stride,
+                                           normalized, normalizedStride))
+                throw std::invalid_argument(
+                    "CNA SDL_GPU: SkinnedEffect needs POSITION0 (Vector3), NORMAL0 (Vector3), "
+                    "TEXCOORD0 (Vector2), BLENDWEIGHT0 (Vector4), and BLENDINDICES0 "
+                    "(Byte4 or Vector4), with an optional COLOR0 (Color or Vector4)");
+            stream = &normalized;
+            sourceStride = normalizedStride;
+        }
+        else if (stride != 52 && stride != 56)
+        {
+            throw std::invalid_argument(
+                "CNA SDL_GPU: SkinnedEffect received no VertexDeclaration and its stride is "
+                "neither the canonical 52 nor 56 bytes");
+        }
+
+        command.hasVertexColor = (sourceStride == 56);
         const int vertexStart = params.vertexStart;
-        const auto& shadow = sdlGpuVb.ShadowData();
-        const std::size_t byteOffset = static_cast<std::size_t>(vertexStart) * stride;
+        const auto& shadow = *stream;
+        const std::size_t byteOffset = static_cast<std::size_t>(vertexStart) * sourceStride;
         if (byteOffset <= shadow.size())
             command.vertexData.assign(shadow.begin() + static_cast<std::ptrdiff_t>(byteOffset), shadow.end());
         command.topology = ToTopology(primitive);
@@ -6772,7 +6904,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         // SDLGPU-21: texture0/texture1 are independent GraphicsDevice.SamplerStates[0]/[1]
         // slots in real XNA -- each gets its own sampler object, not a shared one.
         SDL_GPUTextureSamplerBinding samplerBindings[2]{};
-        samplerBindings[0].texture = command.texture0.texture;
+        samplerBindings[0].texture = command.texture0 ? command.texture0.texture
+                                                      : defaultWhiteTexture_->Texture();
         samplerBindings[0].sampler = GetOrCreateSampler(command.texture0Filter, command.texture0AddressU,
                                                       command.texture0AddressV,
                                                       command.texture0MaxAnisotropy,
@@ -6780,7 +6913,8 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                       command.texture0MaxMipLevel,
                                                       command.texture0LodBias,
                                                       command.texture0AddressW);
-        samplerBindings[1].texture = command.texture1.texture;
+        samplerBindings[1].texture = command.texture1 ? command.texture1.texture
+                                                      : defaultWhiteTexture_->Texture();
         samplerBindings[1].sampler = GetOrCreateSampler(command.texture1Filter, command.texture1AddressU,
                                                       command.texture1AddressV,
                                                       command.texture1MaxAnisotropy,
@@ -7503,7 +7637,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 case DrawKind::DualTexture:
                 {
                     const DualTextureDrawCommand& c = dualTextureDrawCommands_[ref.index];
-                    if (c.uploadedVertexBuffer != nullptr && c.texture0 && c.texture1 && c.target == target)
+                    if (c.uploadedVertexBuffer != nullptr && c.target == target)
                         IssueDualTextureDraw(pass, cmd, c, colorFormat, sampleCount,
                                              depthStencilFormat, colorTargetCount, boundPipeline);
                     break;
@@ -7531,7 +7665,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 case DrawKind::Skinned:
                 {
                     const SkinnedDrawCommand& c = skinnedDrawCommands_[ref.index];
-                    if (c.uploadedVertexBuffer != nullptr && c.uploadedBoneBuffer != nullptr && c.texture && c.target == target)
+                    if (c.uploadedVertexBuffer != nullptr && c.uploadedBoneBuffer != nullptr && c.target == target)
                         IssueSkinnedDraw(pass, cmd, c, colorFormat, sampleCount,
                                          depthStencilFormat, colorTargetCount, boundPipeline);
                     break;
@@ -8114,6 +8248,15 @@ namespace CNA::Internal::Renderers::SdlGpu
             streams.declarations.data(), streams.count, sdlGpuVb.Stride(), params);
         if (shape == StockVertexShapeEXT::StrideDerived)
         {
+            // A SkinnedEffect draw is selected by effect state, not by one magic byte stride.
+            // QueueSkinnedDraw validates and normalizes the declaration, including the legal
+            // Vector4 BLENDINDICES spelling whose record is 64 bytes instead of 52.
+            if (params.skinned && !params.pbr)
+            {
+                QueueSkinnedDraw(vb, ib, world, view, projection,
+                                 primitive, primitiveCount, params);
+                return;
+            }
             RequireFaithfulDeclarationEXT(vb, ib == nullptr ? "ordinary-nonindexed" : "ordinary-indexed");
             const std::size_t stride = sdlGpuVb.Stride();
             if (params.pbr &&
@@ -8121,11 +8264,6 @@ namespace CNA::Internal::Renderers::SdlGpu
                  (!params.skinned && (stride == 48 || stride == 60))))
             {
                 QueuePbrDraw(vb, ib, world, view, projection, primitive, primitiveCount, params);
-                return;
-            }
-            if (params.skinned && (stride == 52 || stride == 56))
-            {
-                QueueSkinnedDraw(vb, ib, world, view, projection, primitive, primitiveCount, params);
                 return;
             }
             throw System::NotSupportedException(

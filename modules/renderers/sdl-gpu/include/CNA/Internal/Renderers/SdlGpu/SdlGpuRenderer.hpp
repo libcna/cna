@@ -1869,8 +1869,11 @@ namespace CNA::Internal::Renderers::SdlGpu
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
         };
 
-        // SkinnedEffect (Phase SDLGPU-7, SDLGPU-34) -- stride 52 (VertexPositionNormalTextureSkinned)
-        // or stride 56 (the same layout plus a per-vertex Color, `hasVertexColor` selects it).
+        // SkinnedEffect (Phase SDLGPU-7, SDLGPU-34, SDLGPU-77) -- compatible semantic
+        // declarations are captured into stride 52 (VertexPositionNormalTextureSkinned) or stride
+        // 56 (the same layout plus a per-vertex Color, `hasVertexColor` selects it). In particular,
+        // legal Vector4 BLENDINDICES records are converted to the native UBYTE4 input here rather
+        // than rejected or misread by stride.
         // Stride 52 draws reuse litTexturedFragmentShader_ unchanged (byte-identical varying
         // interface and UBO layout to lit_textured3d's own fragment shader). Stride 56 draws use a
         // dedicated skinnedColoredVertexShader_/skinnedColoredFragmentShader_ pair instead (see
@@ -1910,7 +1913,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             int maxMipLevel = 0;
             float lodBias = 0.0f;
             int addressW = 1;
-            bool hasVertexColor = false;  ///< stride 56 vs stride 52
+            bool hasVertexColor = false;  ///< normalized stride 56 vs stride 52
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;

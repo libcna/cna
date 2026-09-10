@@ -1,5 +1,5 @@
 example,category,task,evidence
-easygl_alphatest_comparefunction_sweep_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-77,all compare functions
+easygl_alphatest_comparefunction_sweep_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,SDLGPU-77,shared alpha-test sources fixture verifies all compare functions and threshold boundaries
 easygl_alphatest_fog_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_alphatest_modes_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_alphatest_null_texture_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
@@ -9,24 +9,24 @@ easygl_animsprite_shader_test.cpp,modern-cnaext-out,-,ShaderEffect/PBR/glTF/samp
 easygl_anisotropic_gl_state_test.cpp,easygl-specific,-,OpenGL/EasyGL harness or native-resource diagnostic
 easygl_backbuffer_resize_test.cpp,classic-xna-direct-parity,SDLGPU-68,same source passes SDL GPU
 easygl_background_content_context_test.cpp,easygl-specific,-,OpenGL/EasyGL harness or native-resource diagnostic
-easygl_basiceffect_combinations_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-77,effect option combinations
+easygl_basiceffect_combinations_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,SDLGPU-77,shared BasicEffect terms fixture verifies texture color diffuse emissive alpha and lighting combinations
 easygl_basiceffect_combined_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
-easygl_basiceffect_default_lighting_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-77,default lighting
+easygl_basiceffect_default_lighting_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,SDLGPU-77,shared BasicEffect terms fixture verifies default three-light contribution
 easygl_basiceffect_emissive_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_basiceffect_fog_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_basiceffect_golden_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
-easygl_basiceffect_lit_vertex_color_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-77,lit vertex color
-easygl_basiceffect_multilight_emissive_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-77,multiple lights and emissive
-easygl_basiceffect_one_light_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-77,single-light isolation
+easygl_basiceffect_lit_vertex_color_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,SDLGPU-77,shared BasicEffect terms fixture verifies lit vertex-color multiplication
+easygl_basiceffect_multilight_emissive_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,SDLGPU-77,shared BasicEffect terms fixture isolates multiple lights and emissive
+easygl_basiceffect_one_light_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,SDLGPU-77,shared BasicEffect terms fixture isolates each directional light
 easygl_basiceffect_position_normal_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,SDLGPU-59,semantic POSITION0/Normal stock path passes the shared pixel oracle
-easygl_basiceffect_preferperpixellighting_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-77,per-pixel lighting
-easygl_basiceffect_specular_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-77,specular isolation
-easygl_basiceffect_texture_enabled_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-77,TextureEnabled gate
-easygl_basiceffect_texture_vertexcolor_enabled_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-77,texture and color product
-easygl_basiceffect_vertex_color_clamp_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-77,vertex-color clamp
+easygl_basiceffect_preferperpixellighting_test.cpp,classic-xna-direct-parity,SDLGPU-77,identical EasyGL source is registered under SDL GPU and distinguishes per-vertex from per-pixel lighting
+easygl_basiceffect_specular_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,SDLGPU-77,shared BasicEffect terms fixture isolates specular power and color
+easygl_basiceffect_texture_enabled_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,SDLGPU-77,shared BasicEffect terms fixture verifies the TextureEnabled gate and white fallback
+easygl_basiceffect_texture_vertexcolor_enabled_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,SDLGPU-77,shared BasicEffect terms fixture verifies texture and vertex-color product
+easygl_basiceffect_vertex_color_clamp_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,SDLGPU-77,shared BasicEffect terms fixture verifies clamped per-vertex lighting varyings
 easygl_basiceffect_vertexcolor_disabled_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_basiceffect_vertexcolor_enabled_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
-easygl_basiceffect_world_scale_precision_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-77,large world scale
+easygl_basiceffect_world_scale_precision_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,SDLGPU-77,shared BasicEffect transform fixture verifies nonidentity and nonuniform world transforms
 easygl_billboard_shader_test.cpp,modern-cnaext-out,-,ShaderEffect/PBR/glTF/sample-specific modern graphics path
 easygl_blendstate_additive_golden_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_blendstate_additive_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
@@ -97,12 +97,12 @@ easygl_environmentmapeffect_amount_zero_test.cpp,classic-xna-covered-by-existing
 easygl_environmentmapeffect_combined_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_environmentmapeffect_eyeposition_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_environmentmapeffect_fog_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
-easygl_environmentmapeffect_fresnel_gradient_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-77,Fresnel gradient
+easygl_environmentmapeffect_fresnel_gradient_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,SDLGPU-77,shared environment-map fixture verifies amount fresnel and gradient behavior
 easygl_environmentmapeffect_fresnel_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_environmentmapeffect_golden_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
-easygl_environmentmapeffect_multilight_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-77,environment-map light count
-easygl_environmentmapeffect_specular_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-77,environment-map specular
-easygl_environmentmapeffect_worldtransform_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-77,environment-map world transform
+easygl_environmentmapeffect_multilight_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,SDLGPU-77,shared environment-map terms fixture verifies directional light count
+easygl_environmentmapeffect_specular_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,SDLGPU-77,shared environment-map terms fixture isolates specular contribution
+easygl_environmentmapeffect_worldtransform_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,SDLGPU-77,shared environment-map terms fixture verifies nonidentity world and normal transforms
 easygl_flatshaded_shader_test.cpp,modern-cnaext-out,-,ShaderEffect/PBR/glTF/sample-specific modern graphics path
 easygl_fullscreen_field_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_gfx164_bound_msaa_alpha_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
@@ -188,14 +188,14 @@ easygl_skinnedeffect_combined_test.cpp,classic-xna-covered-by-existing-sdlgpu-te
 easygl_skinnedeffect_fog_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_skinnedeffect_golden_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_skinnedeffect_identity_bones_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
-easygl_skinnedeffect_multilight_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-77,skinned multiple lights
-easygl_skinnedeffect_preferperpixellighting_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-77,skinned per-pixel lighting
-easygl_skinnedeffect_specular_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-77,skinned specular
+easygl_skinnedeffect_multilight_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,SDLGPU-77,shared skinned terms fixture isolates multiple lights and emissive
+easygl_skinnedeffect_preferperpixellighting_test.cpp,classic-xna-direct-parity,SDLGPU-77,identical EasyGL source is registered under SDL GPU and distinguishes per-vertex from per-pixel skinned lighting
+easygl_skinnedeffect_specular_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,SDLGPU-77,shared skinned terms fixture isolates specular power and color
 easygl_skinnedeffect_translation_bone_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_skinnedeffect_twobone_blend_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
-easygl_skinnedeffect_vector4_bone_indices_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-77,Vector4 bone indices
+easygl_skinnedeffect_vector4_bone_indices_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,SDLGPU-77,shared skinned declaration fixture verifies Vector4 bone-index conversion by semantic and offset
 easygl_skinnedeffect_vertexcolor_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
-easygl_skinnedeffect_weightspervertex_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-77,weights-per-vertex variants
+easygl_skinnedeffect_weightspervertex_test.cpp,classic-xna-direct-parity,SDLGPU-77,identical EasyGL source is registered under SDL GPU and proves one two and four weight paths
 easygl_skinnedeffect_world_normal_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_skinnedpbreffect_golden_test.cpp,modern-cnaext-out,-,ShaderEffect/PBR/glTF/sample-specific modern graphics path
 easygl_sprite_effects_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
