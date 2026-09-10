@@ -69,34 +69,42 @@ namespace
 
         const auto& annotations = parameter.getAnnotationsProperty();
         for (int i = 0; i < annotations.getCountProperty(); ++i)
-            (void) annotations[i].getNameProperty();
+            if (const auto* annotation = annotations[i])
+                (void) annotation->getNameProperty();
 
         const auto& elements = parameter.getElementsProperty();
         for (int i = 0; i < elements.getCountProperty(); ++i)
-            WalkParameter(elements[i], depth + 1);
+            if (const auto* element = elements[i])
+                WalkParameter(*element, depth + 1);
 
         const auto& members = parameter.getStructureMembersProperty();
         for (int i = 0; i < members.getCountProperty(); ++i)
-            WalkParameter(members[i], depth + 1);
+            if (const auto* member = members[i])
+                WalkParameter(*member, depth + 1);
     }
 
     void ExerciseEffect(Effect& effect)
     {
         auto& parameters = effect.getParametersProperty();
         for (int i = 0; i < parameters.getCountProperty(); ++i)
-            WalkParameter(parameters[i], 0);
+            if (const auto* parameter = parameters[i])
+                WalkParameter(*parameter, 0);
 
         auto& techniques = effect.getTechniquesProperty();
         for (int i = 0; i < techniques.getCountProperty(); ++i)
         {
-            auto& technique = techniques[i];
-            (void) technique.getNameProperty();
-            effect.setCurrentTechniqueProperty(&technique);
-            auto& passes = technique.getPassesProperty();
+            auto* technique = techniques[i];
+            if (technique == nullptr) continue;
+            (void) technique->getNameProperty();
+            effect.setCurrentTechniqueProperty(technique);
+            auto& passes = technique->getPassesProperty();
             for (int pass = 0; pass < passes.getCountProperty(); ++pass)
             {
-                (void) passes[pass].getNameProperty();
-                passes[pass].Apply();
+                if (auto* effectPass = passes[pass])
+                {
+                    (void) effectPass->getNameProperty();
+                    effectPass->Apply();
+                }
             }
         }
     }

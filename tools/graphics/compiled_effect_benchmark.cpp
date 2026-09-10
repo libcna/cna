@@ -156,6 +156,13 @@ int main(int argc, char** argv)
     basic.getParametersProperty()["WorldViewProj"]->SetValue(Matrix::getIdentityProperty());
     basic.getParametersProperty()["DiffuseColor"]->SetValue(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
     basic.getParametersProperty()["ShaderIndex"]->SetValue(3);
+    EffectPass* const basicPass =
+        basic.getCurrentTechniqueProperty()->getPassesProperty()[0];
+    if (basicPass == nullptr)
+    {
+        std::cerr << "compiled effect benchmark: BasicEffect has no first pass\n";
+        return 4;
+    }
 
     Report("clone BasicEffect", Measure(200, [&] {
         std::unique_ptr<Effect> clone(basic.Clone());
@@ -163,7 +170,7 @@ int main(int argc, char** argv)
     }));
 
     Report("apply pass, nothing dirty", Measure(2000, [&] {
-        basic.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply();
+        basicPass->Apply();
     }));
 
     float phase = 0.0f;
@@ -171,7 +178,7 @@ int main(int argc, char** argv)
         phase += 0.001f;
         basic.getParametersProperty()["DiffuseColor"]->SetValue(
             Vector4(phase, 1.0f, 1.0f, 1.0f));
-        basic.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply();
+        basicPass->Apply();
     }));
 
     Report("set matrix + float4 + int + apply pass", Measure(2000, [&] {
@@ -181,12 +188,12 @@ int main(int argc, char** argv)
         basic.getParametersProperty()["DiffuseColor"]->SetValue(
             Vector4(phase, 1.0f, 1.0f, 1.0f));
         basic.getParametersProperty()["ShaderIndex"]->SetValue(3);
-        basic.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply();
+        basicPass->Apply();
     }));
 
     device.Clear(Color::Black);
     Report("compiled effect: apply + draw 2 triangles", Measure(500, [&] {
-        basic.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply();
+        basicPass->Apply();
         device.DrawUserPrimitives(PrimitiveType::TriangleList, FullScreenQuad(), 0, 2);
     }));
 
