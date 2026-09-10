@@ -2517,3 +2517,117 @@ TEST(XnaEffectProcessor, TheRealCompilerAnswersWhatXnaAnswered)
             << "XNA answered: " << xna << "\nCNA answered: " << said;
     }
 }
+
+// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-201: what the `0xBCF00BCF` header's per-pass pair of
+// dwords actually holds.
+//
+// It was recorded as the pass's state groups or'd with the sampler registers its shaders bind,
+// shifted up three places, and the second dword as those same registers. Thirty-one effects built
+// by the genuine pipeline say otherwise, and every one of the seventeen that fitted the old rule
+// fitted it only because its samplers carry a texture and a filter at once, which makes three
+// different masks equal. Both masks are properties of the effect's sampler *parameters*: the
+// second dword holds the registers whose parameter assigns `Texture`, and the first the pass's
+// state groups or'd with the registers whose parameter assigns anything else, shifted up three.
+//
+// The four sources below are the discriminators, and each answers something the old rule cannot.
+TEST(XnaEffectProcessor, TheContainerHeaderDescribesTheEffectsSamplersNotTheShadersRegisters)
+{
+    const std::optional<CNA::Content::Pipeline::ExternalEffectCompilerOptions> options = RealFxc();
+    if (!options.has_value())
+    {
+        GTEST_SKIP() << "no fxc on this machine; set CNA_FXC to one";
+    }
+    const std::shared_ptr<const CNA::Content::Pipeline::EffectCompilerService> compiler =
+        CNA::Content::Pipeline::MakeExternalEffectCompiler(*options);
+    if (!compiler->Available())
+    {
+        GTEST_SKIP() << "the effect compiler could not be started: " << compiler->UnavailableReason();
+    }
+
+    struct Expectation
+    {
+        const char* what;
+        const char* source;
+        std::vector<std::pair<std::uint32_t, std::uint32_t>> pairs;
+    };
+    const std::vector<Expectation> expectations = {
+        {"a sampler the shader declares and the effect assigns nothing to is in neither mask",
+         "sampler S : register(s0);\n"
+         "float4 PS(float2 uv : TEXCOORD0) : COLOR0 { return tex2D(S, uv); }\n"
+         "technique T { pass P { PixelShader = compile ps_2_0 PS(); } }\n",
+         {{0u, 0u}}},
+        {"a texture assignment reaches the second dword and nothing else",
+         "texture T0;\n"
+         "sampler S : register(s0) = sampler_state { Texture = <T0>; };\n"
+         "float4 PS(float2 uv : TEXCOORD0) : COLOR0 { return tex2D(S, uv); }\n"
+         "technique T { pass P { PixelShader = compile ps_2_0 PS(); } }\n",
+         {{0u, 1u}}},
+        {"sampler state other than a texture reaches the first dword, three places up",
+         "sampler S : register(s0) = sampler_state { MinFilter = Linear; };\n"
+         "float4 PS(float2 uv : TEXCOORD0) : COLOR0 { return tex2D(S, uv); }\n"
+         "technique T { pass P { PixelShader = compile ps_2_0 PS(); } }\n",
+         {{8u, 0u}}},
+        {"the register is the sampler's own, not its position in the parameter table",
+         "texture T0;\n"
+         "sampler S : register(s3) = sampler_state { Texture = <T0>; };\n"
+         "float4 PS(float2 uv : TEXCOORD0) : COLOR0 { return tex2D(S, uv); }\n"
+         "technique T { pass P { PixelShader = compile ps_2_0 PS(); } }\n",
+         {{0u, 8u}}},
+        {"of two samplers one pass binds, only the one the effect gives a texture is counted",
+         "texture T1;\n"
+         "sampler A : register(s0);\n"
+         "sampler B : register(s1) = sampler_state { Texture = <T1>; };\n"
+         "float4 PS(float2 uv : TEXCOORD0) : COLOR0 { return tex2D(A, uv) + tex2D(B, uv); }\n"
+         "technique T { pass P { PixelShader = compile ps_2_0 PS(); } }\n",
+         {{0u, 2u}}},
+        {"both dwords are the pass's own summary and not the effect's",
+         "texture T0;\n"
+         "sampler F : register(s0) = sampler_state { MinFilter = Point; };\n"
+         "sampler X : register(s1) = sampler_state { Texture = <T0>; };\n"
+         "float4 A(float2 uv : TEXCOORD0) : COLOR0 { return tex2D(F, uv); }\n"
+         "float4 B(float2 uv : TEXCOORD0) : COLOR0 { return tex2D(X, uv); }\n"
+         "technique T {\n"
+         "  pass P0 { PixelShader = compile ps_2_0 A(); }\n"
+         "  pass P1 { PixelShader = compile ps_2_0 B(); }\n"
+         "}\n",
+         {{8u, 0u}, {0u, 2u}}},
+        {"a pass's own render state still sets its group, beside the sampler bits",
+         "texture T0;\n"
+         "sampler S : register(s0) = sampler_state { Texture = <T0>; };\n"
+         "float4 PS(float2 uv : TEXCOORD0) : COLOR0 { return tex2D(S, uv); }\n"
+         "technique T { pass P { ZEnable = true; PixelShader = compile ps_2_0 PS(); } }\n",
+         {{2u, 1u}}},
+    };
+
+    const auto readWord = [](const std::vector<SharpRuntime::bytecs>& code, const std::size_t at)
+    {
+        return static_cast<std::uint32_t>(code[at]) |
+               (static_cast<std::uint32_t>(code[at + 1u]) << 8) |
+               (static_cast<std::uint32_t>(code[at + 2u]) << 16) |
+               (static_cast<std::uint32_t>(code[at + 3u]) << 24);
+    };
+
+    for (const Expectation& expectation : expectations)
+    {
+        Processors::EffectProcessor processor(compiler);
+        auto effect = std::make_shared<Graphics::EffectContent>();
+        effect->setEffectCodeProperty(expectation.source);
+        effect->setIdentityProperty(Xna::ContentIdentity("header.fx"));
+        RecordingContext context;
+        const auto compiled = processor.Process(effect, context);
+        ASSERT_NE(compiled, nullptr) << expectation.what;
+        const std::vector<SharpRuntime::bytecs> code = compiled->GetEffectCode();
+        ASSERT_GE(code.size(), 16u) << expectation.what;
+        EXPECT_EQ(readWord(code, 0u), 0xBCF00BCFu) << expectation.what;
+        const std::uint32_t headerBytes = readWord(code, 4u);
+        ASSERT_EQ(headerBytes, 8u + 8u * expectation.pairs.size())
+            << expectation.what << ": the header's length follows the pass count";
+        for (std::size_t pass = 0u; pass < expectation.pairs.size(); ++pass)
+        {
+            EXPECT_EQ(readWord(code, 8u + 8u * pass), expectation.pairs[pass].first)
+                << expectation.what << ", pass " << pass << " (first dword)";
+            EXPECT_EQ(readWord(code, 12u + 8u * pass), expectation.pairs[pass].second)
+                << expectation.what << ", pass " << pass << " (second dword)";
+        }
+    }
+}

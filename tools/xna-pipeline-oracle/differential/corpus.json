@@ -483,6 +483,38 @@
    "profile": "HiDef"
   },
   {
+   "case": "effect/fx_sampler_plain",
+   "source": "source/fx_sampler_plain.fx",
+   "importer": "EffectImporter",
+   "processor": "EffectProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "effect/fx_sampler_state_only",
+   "source": "source/fx_sampler_state_only.fx",
+   "importer": "EffectImporter",
+   "processor": "EffectProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "effect/fx_sampler_one_textured",
+   "source": "source/fx_sampler_one_textured.fx",
+   "importer": "EffectImporter",
+   "processor": "EffectProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "effect/fx_sampler_pass_split",
+   "source": "source/fx_sampler_pass_split.fx",
+   "importer": "EffectImporter",
+   "processor": "EffectProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
    "case": "effect/fx_state_blend_wide",
    "source": "source/fx_state_blend_wide.fx",
    "importer": "EffectImporter",

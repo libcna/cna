@@ -158,11 +158,30 @@ namespace CNA::Content::Pipeline
         /** @brief What one pass of a compiled effect disturbs, as XNA's header records it. */
         struct EffectPassStateSummary
         {
-            /** @brief Bit 0 blend, bit 1 depth-stencil, bit 2 rasterizer. */
+            /**
+             * @brief Bit 0 blend, bit 1 depth-stencil, bit 2 rasterizer, and from bit 3 one bit
+             *        per sampler register the pass binds whose sampler carries state of its own.
+             */
             std::uint32_t stateGroups = 0u;
-            /** @brief Bit per sampler register the pass's shaders bind. */
+            /** @brief Bit per sampler register the pass binds a texture into. */
             std::uint32_t samplerRegisters = 0u;
         };
+
+        /** @brief What one of an effect's sampler parameters assigns. */
+        struct EffectSamplerParameter
+        {
+            /** @brief The sampler assigns `Texture`, so the effect binds a texture into it. */
+            bool assignsTexture = false;
+            /** @brief The sampler assigns something other than `Texture` -- a filter, an address
+             *         mode, a border colour: device sampler state rather than a binding. */
+            bool assignsOtherState = false;
+        };
+
+        /** @brief The container's state number for a sampler's `Texture` assignment. */
+        constexpr std::uint32_t kEffectSamplerTextureState = 164u;
+
+        /** @brief The group answered for a render state this repository has not measured. */
+        constexpr std::uint32_t kUnmeasuredEffectStateGroup = 0xFFFFFFFFu;
 
         /**
          * @brief Which of XNA's three device states a container render state belongs to.
@@ -179,8 +198,8 @@ namespace CNA::Content::Pipeline
          * at all rather than describe it wrongly.
          *
          * @param stateType The container's dense render-state number.
-         * @return 1 blend, 2 depth-stencil, 4 rasterizer, 0 for a shader assignment, 8 for
-         *         anything unmeasured.
+         * @return 1 blend, 2 depth-stencil, 4 rasterizer, 0 for a shader assignment,
+         *         @ref kUnmeasuredEffectStateGroup for anything unmeasured.
          */
         [[nodiscard]] std::uint32_t EffectStateGroupOf(const std::uint32_t stateType)
         {
@@ -204,28 +223,36 @@ namespace CNA::Content::Pipeline
             case 146u: case 147u:
                 return 0u;
             default:
-                return 8u;
+                return kUnmeasuredEffectStateGroup;
             }
         }
 
         /**
-         * @brief The sampler registers one Direct3D 9 shader binds, as a bit per register.
+         * @brief The sampler parameters one Direct3D 9 shader binds, by name and register.
          *
-         * A shader declares each sampler with a `dcl` instruction whose destination names a
-         * register of type `D3DSPR_SAMPLER`, and the register type is split across two fields of
-         * that token, which is why it is reassembled rather than masked out in one go.
+         * The `dcl` instructions name the registers but not the effect parameters behind them,
+         * and the two masks XNA's header carries are properties of the *parameter* -- whether it
+         * assigns a texture, whether it assigns sampler state -- so the register alone cannot
+         * answer either. The constant table does: the compiler puts a `CTAB` comment block in
+         * front of the instruction stream naming every constant the shader binds together with
+         * the register set and index it occupies, and set 3 is the sampler file.
+         *
+         * Every read is bounds-checked; anything unexpected answers false, which makes the
+         * caller describe the effect not at all rather than wrongly.
          *
          * @param bytes The whole container.
          * @param start Offset of the shader's version token.
          * @param end One past the shader blob's last byte.
-         * @return The mask, or zero when the stream ends or stops making sense.
+         * @param bindings Receives one `(parameter name, sampler register)` pair per entry.
+         * @return False when the table is missing or stops making sense.
          */
-        [[nodiscard]] std::uint32_t SamplerRegistersOf(const std::vector<std::uint8_t>& bytes,
-                                                       const std::size_t start,
-                                                       const std::size_t end)
+        [[nodiscard]] bool SamplerBindingsOf(
+            const std::vector<std::uint8_t>& bytes, const std::size_t start, const std::size_t end,
+            std::vector<std::pair<std::string, std::uint32_t>>& bindings)
         {
-            const auto word = [&bytes](const std::size_t at)
+            const auto word = [&bytes, end](const std::size_t at, bool& bad) -> std::uint32_t
             {
+                if (at + 4u > end) { bad = true; return 0u; }
                 return static_cast<std::uint32_t>(bytes[at]) |
                        (static_cast<std::uint32_t>(bytes[at + 1u]) << 8) |
                        (static_cast<std::uint32_t>(bytes[at + 2u]) << 16) |
@@ -233,47 +260,93 @@ namespace CNA::Content::Pipeline
             };
             constexpr std::uint32_t kEndToken = 0x0000FFFFu;
             constexpr std::uint32_t kCommentOpcode = 0xFFFEu;
-            constexpr std::uint32_t kDeclareOpcode = 0x001Fu;
-            constexpr std::uint32_t kSamplerRegisterType = 10u;
-            std::uint32_t mask = 0u;
+            constexpr std::uint32_t kConstantTableFourCc = 0x42415443u;   // 'CTAB'
+            constexpr std::uint32_t kSamplerRegisterSet = 3u;
+            constexpr std::uint32_t kMaximumSamplerRegister = 16u;
+            constexpr std::uint32_t kMaximumConstants = 4096u;
+
             std::size_t at = start + 4u;
             while (at + 4u <= end)
             {
-                const std::uint32_t token = word(at);
-                if (token == kEndToken) { return mask; }
+                bool bad = false;
+                const std::uint32_t token = word(at, bad);
+                if (bad) { return false; }
+                if (token == kEndToken) { return true; }
                 const std::uint32_t opcode = token & 0xFFFFu;
-                if (opcode == kCommentOpcode)
+                if (opcode != kCommentOpcode)
                 {
-                    at += 4u + 4u * static_cast<std::size_t>((token >> 16) & 0x7FFFu);
+                    const std::uint32_t length = (token >> 24) & 0xFu;
+                    if (length == 0u) { return true; }
+                    at += 4u * (static_cast<std::size_t>(length) + 1u);
                     continue;
                 }
-                const std::uint32_t length = (token >> 24) & 0xFu;
-                if (opcode == kDeclareOpcode && length >= 2u && at + 12u <= end)
+                const std::size_t words = static_cast<std::size_t>((token >> 16) & 0x7FFFu);
+                const std::size_t body = at + 4u;
+                if (words == 0u || body + 4u * words > end)
                 {
-                    const std::uint32_t destination = word(at + 8u);
-                    const std::uint32_t registerType =
-                        ((destination >> 28) & 0x7u) | ((destination >> 8) & 0x18u);
-                    if (registerType == kSamplerRegisterType)
-                    {
-                        const std::uint32_t index = destination & 0x7FFu;
-                        if (index < 32u) { mask |= 1u << index; }
-                    }
+                    at += 4u + 4u * words;
+                    continue;
                 }
-                if (length == 0u) { return mask; }
-                at += 4u * (static_cast<std::size_t>(length) + 1u);
+                if (word(body, bad) != kConstantTableFourCc || bad)
+                {
+                    at += 4u + 4u * words;
+                    continue;
+                }
+
+                // Every offset in the table is relative to the dword after the four-character
+                // code, which is where the 28-byte header begins.
+                const std::size_t table = body + 4u;
+                const std::uint32_t constants = word(table + 12u, bad);
+                const std::uint32_t entries = word(table + 16u, bad);
+                if (bad || constants > kMaximumConstants) { return false; }
+                for (std::uint32_t index = 0u; index < constants; ++index)
+                {
+                    const std::size_t entry = table + entries + 20u * static_cast<std::size_t>(index);
+                    const std::uint32_t nameOffset = word(entry, bad);
+                    const std::uint32_t registers = word(entry + 4u, bad);
+                    if (bad) { return false; }
+                    const std::uint32_t registerSet = registers & 0xFFFFu;
+                    const std::uint32_t registerIndex = (registers >> 16) & 0xFFFFu;
+                    const std::uint32_t registerCount = word(entry + 8u, bad) & 0xFFFFu;
+                    if (bad || registerSet != kSamplerRegisterSet) { continue; }
+                    // A sampler array would span several registers under one parameter name, and
+                    // attributing them needs the element the effect declared. Nothing measured
+                    // has one, so it is refused rather than assumed.
+                    if (registerCount != 1u || registerIndex >= kMaximumSamplerRegister)
+                    {
+                        return false;
+                    }
+                    const std::size_t name = table + nameOffset;
+                    std::string parameter;
+                    for (std::size_t cursor = name; cursor < end; ++cursor)
+                    {
+                        if (bytes[cursor] == 0u) { break; }
+                        parameter.push_back(static_cast<char>(bytes[cursor]));
+                        if (parameter.size() > 1024u) { return false; }
+                    }
+                    if (parameter.empty()) { return false; }
+                    bindings.emplace_back(std::move(parameter), registerIndex);
+                }
+                return true;
             }
-            return mask;
+            return false;
         }
 
         /**
          * @brief Reads one summary per pass out of a compiled Direct3D 9 effect.
          *
-         * The container's own graph answers both halves: a pass lists the render states it
-         * assigns, and the large-object table records, for every shader blob, which technique and
-         * pass it belongs to, which is the attribution the sampler mask needs when two passes bind
-         * different samplers. Validated against fifteen effects built by the genuine pipeline: the
-         * header this reproduces is byte-identical in every one
-         * (plans/plan_xnapipeline_parity.md XNAPP-191).
+         * The container's own graph answers all three halves: a pass lists the render states it
+         * assigns, the parameter table records what each sampler assigns, and the large-object
+         * table records, for every shader blob, which technique and pass it belongs to -- the
+         * attribution the two sampler masks need when two passes bind different samplers.
+         *
+         * The masks are properties of the effect's sampler *parameters*, not of the registers the
+         * shader declares: a sampler written `sampler S : register(s0);` with no state block is
+         * declared by the shader and is in neither mask, which is what separates it from one
+         * written `sampler_state { Texture = <T>; }`. Measured on thirty-one effects built by the
+         * genuine pipeline -- the seventeen of plans/plan_xnapipeline_parity.md XNAPP-191 and
+         * fourteen written to vary one property at a time
+         * (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-201).
          *
          * Every read is bounds-checked and every unexpected shape answers empty, because a
          * summary this build is not sure of must not be written: the caller then emits the single
@@ -329,14 +402,66 @@ namespace CNA::Content::Pipeline
             {
                 return unreadable;
             }
+            // Absolute reads into the blob region, which the parameter table addresses by offset
+            // rather than walking.
+            const auto at32 = [&bytes, &failed](const std::size_t offset) -> std::uint32_t
+            {
+                if (failed || offset + 4u > bytes.size()) { failed = true; return 0u; }
+                return static_cast<std::uint32_t>(bytes[offset]) |
+                       (static_cast<std::uint32_t>(bytes[offset + 1u]) << 8) |
+                       (static_cast<std::uint32_t>(bytes[offset + 2u]) << 16) |
+                       (static_cast<std::uint32_t>(bytes[offset + 3u]) << 24);
+            };
+
+            std::map<std::string, EffectSamplerParameter> samplers;
             for (std::uint32_t index = 0u; index < parameterCount; ++index)
             {
-                static_cast<void>(read());
-                static_cast<void>(read());
+                const std::uint32_t typeOffset = read();
+                const std::uint32_t valueOffset = read();
                 static_cast<void>(read());
                 const std::uint32_t annotations = read();
                 if (failed || annotations > kMaximumItems) { return unreadable; }
                 skip(static_cast<std::size_t>(annotations) * 8u);
+                if (failed) { return unreadable; }
+
+                // D3DXPARAMETER_DESC: type, class, name, semantic, element count. Types 10 to 14
+                // are `sampler` and its four dimensioned spellings.
+                const std::uint32_t parameterType = at32(base + typeOffset);
+                const std::uint32_t nameOffset = at32(base + typeOffset + 8u);
+                const std::uint32_t elementCount = at32(base + typeOffset + 16u);
+                if (failed) { return unreadable; }
+                if (parameterType < 10u || parameterType > 14u) { continue; }
+                // A sampler array's value is one state list per element, and nothing measured has
+                // one; refusing it keeps the zero header rather than describing it wrongly.
+                if (elementCount != 0u) { return unreadable; }
+
+                const std::uint32_t nameLength = at32(base + nameOffset);
+                if (failed || nameLength == 0u || nameLength > 1024u ||
+                    base + nameOffset + 4u + nameLength > bytes.size())
+                {
+                    return unreadable;
+                }
+                std::string name;
+                for (std::uint32_t character = 0u; character < nameLength; ++character)
+                {
+                    const std::uint8_t byte = bytes[base + nameOffset + 4u + character];
+                    if (byte == 0u) { break; }
+                    name.push_back(static_cast<char>(byte));
+                }
+                if (name.empty()) { return unreadable; }
+
+                EffectSamplerParameter sampler;
+                const std::uint32_t stateCount = at32(base + valueOffset);
+                if (failed || stateCount > kMaximumItems) { return unreadable; }
+                for (std::uint32_t state = 0u; state < stateCount; ++state)
+                {
+                    const std::uint32_t stateType =
+                        at32(base + valueOffset + 4u + 16u * static_cast<std::size_t>(state));
+                    if (failed) { return unreadable; }
+                    if (stateType == kEffectSamplerTextureState) { sampler.assignsTexture = true; }
+                    else { sampler.assignsOtherState = true; }
+                }
+                samplers[name] = sampler;
             }
 
             std::vector<EffectPassStateSummary> passes;
@@ -373,7 +498,7 @@ namespace CNA::Content::Pipeline
                         const std::uint32_t group = EffectStateGroupOf(stateType);
                         // An unmeasured state: this build does not know which device state it
                         // belongs to, and a header that guesses is worse than the zero one.
-                        if (group == 8u) { return unreadable; }
+                        if (group == kUnmeasuredEffectStateGroup) { return unreadable; }
                         summary.stateGroups |= group;
                     }
                     located[{technique, pass}] = passes.size();
@@ -416,8 +541,24 @@ namespace CNA::Content::Pipeline
                 if (kind != 0xFFFE0000u && kind != 0xFFFF0000u) { continue; }
                 const auto found = located.find({technique, pass});
                 if (found == located.end()) { continue; }
-                passes[found->second].samplerRegisters |=
-                    SamplerRegistersOf(bytes, blob, blob + length);
+                std::vector<std::pair<std::string, std::uint32_t>> bindings;
+                if (!SamplerBindingsOf(bytes, blob, blob + length, bindings))
+                {
+                    return unreadable;
+                }
+                for (const auto& binding : bindings)
+                {
+                    const auto sampler = samplers.find(binding.first);
+                    if (sampler == samplers.end()) { return unreadable; }
+                    if (sampler->second.assignsTexture)
+                    {
+                        passes[found->second].samplerRegisters |= 1u << binding.second;
+                    }
+                    if (sampler->second.assignsOtherState)
+                    {
+                        passes[found->second].stateGroups |= 1u << (binding.second + 3u);
+                    }
+                }
             }
             return passes;
         }
@@ -476,7 +617,7 @@ namespace CNA::Content::Pipeline
             word32(static_cast<std::uint32_t>(headerBytes));
             for (const EffectPassStateSummary& pass : passes)
             {
-                word32(pass.stateGroups | (pass.samplerRegisters << 3));
+                word32(pass.stateGroups);
                 word32(pass.samplerRegisters);
             }
             wrapped.insert(wrapped.end(), bytecode.begin(), bytecode.end());

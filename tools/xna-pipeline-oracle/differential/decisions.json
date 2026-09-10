@@ -60,6 +60,34 @@
    ]
   },
   {
+   "case": "effect_fx_sampler_plain",
+   "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header. This case is one of four added by plans/plan_xna_sample_xnb_sweep.md XNASWEEP-201, which measured what that header's per-pass pair of dwords actually holds: both masks are properties of the effect's sampler parameters and not of the registers its shaders declare. The second dword holds the registers whose parameter assigns Texture, and the first the pass's state groups or'd with the registers whose parameter assigns anything else, shifted up three places. What is left here is the same two things every other effect case is left with: bytes inside the compiler's own version string, and padding. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap, where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+   "paths": [
+    "root/digest"
+   ]
+  },
+  {
+   "case": "effect_fx_sampler_state_only",
+   "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header. This case is one of four added by plans/plan_xna_sample_xnb_sweep.md XNASWEEP-201, which measured what that header's per-pass pair of dwords actually holds: both masks are properties of the effect's sampler parameters and not of the registers its shaders declare. The second dword holds the registers whose parameter assigns Texture, and the first the pass's state groups or'd with the registers whose parameter assigns anything else, shifted up three places. What is left here is the same two things every other effect case is left with: bytes inside the compiler's own version string, and padding. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap, where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+   "paths": [
+    "root/digest"
+   ]
+  },
+  {
+   "case": "effect_fx_sampler_one_textured",
+   "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header. This case is one of four added by plans/plan_xna_sample_xnb_sweep.md XNASWEEP-201, which measured what that header's per-pass pair of dwords actually holds: both masks are properties of the effect's sampler parameters and not of the registers its shaders declare. The second dword holds the registers whose parameter assigns Texture, and the first the pass's state groups or'd with the registers whose parameter assigns anything else, shifted up three places. What is left here is the same two things every other effect case is left with: bytes inside the compiler's own version string, and padding. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap, where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+   "paths": [
+    "root/digest"
+   ]
+  },
+  {
+   "case": "effect_fx_sampler_pass_split",
+   "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header. This case is one of four added by plans/plan_xna_sample_xnb_sweep.md XNASWEEP-201, which measured what that header's per-pass pair of dwords actually holds: both masks are properties of the effect's sampler parameters and not of the registers its shaders declare. The second dword holds the registers whose parameter assigns Texture, and the first the pass's state groups or'd with the registers whose parameter assigns anything else, shifted up three places. What is left here is the same two things every other effect case is left with: bytes inside the compiler's own version string, and padding. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap, where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
+   "paths": [
+    "root/digest"
+   ]
+  },
+  {
    "case": "effect_fx_source",
    "reason": "Everything in this effect that CNA decides is now XNA's, byte for byte, including the container header: the pair of dwords per pass that records which device state the pass disturbs and which sampler registers it binds (XNAPP-191). What is left, over all seventeen effect cases, is 195 bytes inside the compiler's own version string and 54 bytes of padding -- and nothing else at all. XNA's pipeline compiles in-process through d3dx9 and stamps 'Microsoft (R) HLSL Shader Compiler 9.26.952.2844' into each shader blob; the June 2010 SDK's fxc.exe, which is the newest legacy compiler that can write an fx_2_0 container, stamps 9.29.952.3111. The padding is the other side of the same coin: d3dx9 leaves the bytes after each aligned string as whatever was in its heap ('but', 'st_', fragments of other names), where fxc zeroes them. Neither is reproducible without running Microsoft's own in-process compiler, and the second should not be reproduced at all.",
    "paths": [
