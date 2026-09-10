@@ -2619,10 +2619,21 @@ namespace Microsoft::Xna::Framework::Graphics
         return rgba;
     }
 
+    static void ValidateSaveTargetDimensions(int targetWidth, int targetHeight)
+    {
+        if (targetWidth < 0)
+            throw System::ArgumentException("Resource size must be greater than zero.", "targetWidth");
+        if (targetHeight < 0)
+            throw System::ArgumentException("Resource size must be greater than zero.", "targetHeight");
+        if (targetWidth == 0 || targetHeight == 0)
+            throw System::ArgumentException("Value does not fall within the expected range.");
+    }
+
     void Texture2D::SaveAsPng(System::IO::Stream* stream, int targetWidth, int targetHeight) const
     {
         if (!stream)
-            throw std::invalid_argument("Texture2D::SaveAsPng: stream is null");
+            throw System::ArgumentNullException("stream");
+        ValidateSaveTargetDimensions(targetWidth, targetHeight);
         const std::vector<std::uint8_t> source = GetPixelsForSave("Texture2D::SaveAsPng");
         const ImageData pixels = ImageLoader::ResizeRgbaForXnaSave(
             source.data(), width, height, targetWidth, targetHeight);
@@ -2660,7 +2671,8 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SaveAsJpeg(System::IO::Stream* stream, int targetWidth, int targetHeight) const
     {
         if (!stream)
-            throw std::invalid_argument("Texture2D::SaveAsJpeg: stream is null");
+            throw System::ArgumentNullException("stream");
+        ValidateSaveTargetDimensions(targetWidth, targetHeight);
         const std::vector<std::uint8_t> source = GetPixelsForSave("Texture2D::SaveAsJpeg");
         const ImageData pixels = ImageLoader::ResizeRgbaForXnaSave(
             source.data(), width, height, targetWidth, targetHeight);

@@ -1957,17 +1957,55 @@ protected:
     GraphicsDevice gd;
 };
 
-TEST_F(SaveAsPngTest, NullStreamThrowsInvalidArgument)
+TEST_F(SaveAsPngTest, NullStreamThrowsArgumentNullException)
 {
-    Texture2D tex; // default-constructed; null-stream guard fires before the CPU-pixels guard
-    EXPECT_THROW(tex.SaveAsPng(nullptr, 0, 0), std::invalid_argument);
+    Texture2D tex(gd, 1, 1);
+    ExpectExactNamedException<System::ArgumentNullException>(
+        [&] { tex.SaveAsPng(nullptr, 1, 1); }, "stream");
 }
 
 TEST_F(SaveAsPngTest, NoCpuPixelDataThrowsRuntimeError)
 {
     Texture2D tex; // no SetData / renderer -> cpuPixels_ is empty
     MemoryStream stream;
-    EXPECT_THROW(tex.SaveAsPng(&stream, 0, 0), std::runtime_error);
+    EXPECT_THROW(tex.SaveAsPng(&stream, 1, 1), std::runtime_error);
+}
+
+TEST_F(SaveAsPngTest, TargetDimensionsUseXnaArgumentExceptions)
+{
+    Texture2D tex(gd, 1, 1);
+    MemoryStream stream;
+
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { tex.SaveAsPng(&stream, 0, 1); }, "");
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { tex.SaveAsPng(&stream, -1, 1); }, "targetWidth");
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { tex.SaveAsPng(&stream, 1, 0); }, "");
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { tex.SaveAsPng(&stream, 1, -1); }, "targetHeight");
+}
+
+TEST_F(SaveAsPngTest, DisposedTextureThrowsExactObjectDisposedException)
+{
+    Texture2D tex(gd, 1, 1);
+    tex.Dispose();
+    MemoryStream stream;
+
+    try
+    {
+        tex.SaveAsPng(&stream, 1, 1);
+        FAIL() << "expected ObjectDisposedException";
+    }
+    catch (const System::ObjectDisposedException& exception)
+    {
+        EXPECT_EQ(typeid(exception), typeid(System::ObjectDisposedException));
+        EXPECT_EQ(exception.getObjectNameProperty(), "Texture2D");
+    }
+    catch (...)
+    {
+        FAIL() << "unexpected exception type; expected ObjectDisposedException";
+    }
 }
 
 TEST_F(SaveAsPngTest, RoundTripPreservesDistinctPixelsAndAlpha)
@@ -2259,17 +2297,55 @@ protected:
     }
 };
 
-TEST_F(SaveAsJpegTest, NullStreamThrowsInvalidArgument)
+TEST_F(SaveAsJpegTest, NullStreamThrowsArgumentNullException)
 {
-    Texture2D tex;
-    EXPECT_THROW(tex.SaveAsJpeg(nullptr, 0, 0), std::invalid_argument);
+    Texture2D tex(gd, 1, 1);
+    ExpectExactNamedException<System::ArgumentNullException>(
+        [&] { tex.SaveAsJpeg(nullptr, 1, 1); }, "stream");
 }
 
 TEST_F(SaveAsJpegTest, NoCpuPixelDataThrowsRuntimeError)
 {
     Texture2D tex;
     MemoryStream stream;
-    EXPECT_THROW(tex.SaveAsJpeg(&stream, 0, 0), std::runtime_error);
+    EXPECT_THROW(tex.SaveAsJpeg(&stream, 1, 1), std::runtime_error);
+}
+
+TEST_F(SaveAsJpegTest, TargetDimensionsUseXnaArgumentExceptions)
+{
+    Texture2D tex(gd, 1, 1);
+    MemoryStream stream;
+
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { tex.SaveAsJpeg(&stream, 0, 1); }, "");
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { tex.SaveAsJpeg(&stream, -1, 1); }, "targetWidth");
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { tex.SaveAsJpeg(&stream, 1, 0); }, "");
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { tex.SaveAsJpeg(&stream, 1, -1); }, "targetHeight");
+}
+
+TEST_F(SaveAsJpegTest, DisposedTextureThrowsExactObjectDisposedException)
+{
+    Texture2D tex(gd, 1, 1);
+    tex.Dispose();
+    MemoryStream stream;
+
+    try
+    {
+        tex.SaveAsJpeg(&stream, 1, 1);
+        FAIL() << "expected ObjectDisposedException";
+    }
+    catch (const System::ObjectDisposedException& exception)
+    {
+        EXPECT_EQ(typeid(exception), typeid(System::ObjectDisposedException));
+        EXPECT_EQ(exception.getObjectNameProperty(), "Texture2D");
+    }
+    catch (...)
+    {
+        FAIL() << "unexpected exception type; expected ObjectDisposedException";
+    }
 }
 
 TEST_F(SaveAsJpegTest, RoundTripPreservesDistinctPixelsWithinTolerance)

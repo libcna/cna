@@ -327,6 +327,10 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
 - **Classic PNG/JPEG target-size changes use XNA's texel mapping** (`SOFTWARE-300`). Both encoders
   use floor-mapped nearest-neighbor source pixels for upscale and downscale, as pinned against the
   Microsoft runtime; the general image/content resize path remains bilinear.
+- **Classic PNG/JPEG validation exposes XNA exception identities** (`SOFTWARE-301`). Null streams
+  report `ArgumentNullException("stream")`; zero target dimensions report an unparameterized
+  `ArgumentException`; negative dimensions identify `targetWidth` or `targetHeight`; and a disposed
+  valid request continues to report `ObjectDisposedException("Texture2D")`.
 - **Every XNA-permitted ordinary `TextureCube` format has the same exact storage and sampling**
   (`SOFTWARE-145`, `SOFTWARE-149`, `SOFTWARE-150`). Each of the six faces and every declared mip
   independently retains Color, DXT1/3/5, normalized-integer, binary32 or binary16 bytes. Typed
