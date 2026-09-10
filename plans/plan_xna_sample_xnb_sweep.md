@@ -395,6 +395,15 @@ reference rather than by the totals: no reference that was `IDENTICAL` at run 35
 is anything but `IDENTICAL` or `REFERENCE_REMOVED` at run 36, and none lost it
 at 37 or 38.
 
+**Run 39 has no column because it has no numbers of its own.** It isolates
+`XNASWEEP-189`'s correction -- the basis change's two sides are not the same
+matrix -- and every one of the 7,726 references lands in the class it landed in
+at run 38, with not one movement in either direction. That is the expected
+answer and it is worth having measured: the two sign patterns the single-basis
+reading got wrong are rows where every term of a dot product is a negative zero,
+and no asset in the corpus has one. The correction is right in general and
+inert here, which is a different thing from being unnecessary.
+
 **Run 34 is the second falsified attempt, and its shape is why the build unit
 count is in this table.** It carried `XNASWEEP-179` *and* `XNASWEEP-174`'s
 importer half, and its numbers look better than run 35's -- one more reference
