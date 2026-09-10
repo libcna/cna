@@ -342,6 +342,24 @@ namespace
     };
     static_assert(sizeof(PackedPositionTexture) == 20, "the packed stream stride must be 20 bytes");
 
+    struct PackedDualPositionColorTexture
+    {
+        float x, y, z;
+        std::uint8_t r, g, b, a;
+        float u0, v0;
+        float u1, v1;
+    };
+    static_assert(sizeof(PackedDualPositionColorTexture) == 32);
+
+    const VertexDeclaration kDualColorDeclaration(
+        32,
+        {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Color, VertexElementUsage::Color, 0),
+            VertexElement(16, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+            VertexElement(24, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 1),
+        });
+
     struct PackedSkinned
     {
         float x, y, z;
@@ -655,8 +673,20 @@ class RenderTargetEffectSourceTest : public Game
             switch (mode)
             {
                 case DrawMode::UserPrimitives:
-                    if (family == Family::BasicVertexColor || family == Family::DualSlot0 ||
-                        family == Family::DualSlot1)
+                    if (family == Family::DualSlot0 || family == Family::DualSlot1)
+                    {
+                        PackedDualPositionColorTexture dual[6];
+                        for (int i = 0; i < 6; ++i)
+                            dual[i] = {q[i].Position.X, q[i].Position.Y, q[i].Position.Z,
+                                       255, 255, 255, 255,
+                                       q[i].TextureCoordinate.X, q[i].TextureCoordinate.Y,
+                                       q[i].TextureCoordinate.X, q[i].TextureCoordinate.Y};
+                        dev.DrawUserPrimitives(
+                            PrimitiveType::TriangleList, static_cast<const void*>(dual), 0, 2,
+                            kDualColorDeclaration);
+                        break;
+                    }
+                    if (family == Family::BasicVertexColor)
                     {
                         VertexPositionColorTexture colored[6];
                         for (int i = 0; i < 6; ++i)

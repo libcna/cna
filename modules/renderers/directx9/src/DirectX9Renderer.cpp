@@ -884,6 +884,15 @@ namespace CNA::Internal::Renderers::DirectX9
         return raw;
     }
 
+    IDirect3DVertexDeclaration9* DirectX9Renderer::GetOrCreateVertexDeclarationEXT(
+        const IVertexBufferRenderer& buffer, std::size_t strideInBytes)
+    {
+        const auto& d3dBuffer = static_cast<const D3D9VertexBufferRenderer&>(buffer);
+        if (IDirect3DVertexDeclaration9* declaration = d3dBuffer.GetNativeVertexDeclarationEXT())
+            return declaration;
+        return GetOrCreateVertexDeclarationEXT(strideInBytes);
+    }
+
     void DirectX9Renderer::DrawColoredPrimitives(const IVertexBufferRenderer& vb,
                                                      const Matrix& world, const Matrix& view, const Matrix& projection,
                                                      PrimitiveType primitive, int primitiveCount)
@@ -934,7 +943,7 @@ namespace CNA::Internal::Renderers::DirectX9
         // BasicEffect_PSBasicNoFog has no named constants at all (D9-72's own register table is
         // empty for it) -- nothing to upload for the pixel stage.
 
-        device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(stride));
+        device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(vb, stride));
         device_->SetStreamSource(0, d3dVb.GetBufferEXT(), 0, static_cast<UINT>(stride));
 
         device_->DrawPrimitive(ToD3D9Topology(primitive), 0, static_cast<UINT>(primitiveCount));
@@ -976,7 +985,7 @@ namespace CNA::Internal::Renderers::DirectX9
                                       static_cast<int>(std::size(Shaders::kBasicEffect_VSBasicVcNoFog_Registers)),
                                       "DiffuseColor", diffuseWhite);
 
-        device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(stride));
+        device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(vb, stride));
         device_->SetStreamSource(0, d3dVb.GetBufferEXT(), 0, static_cast<UINT>(stride));
         device_->SetIndices(d3dIb.GetBufferEXT());
 

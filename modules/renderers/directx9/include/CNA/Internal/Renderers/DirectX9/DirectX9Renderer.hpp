@@ -503,10 +503,14 @@ namespace CNA::Internal::Renderers::DirectX9
         void CacheDefaultDepthStencilSurfaceEXT();
         /// D9-82: returns (creating + caching on first request) the real IDirect3DVertexDeclaration9
         /// for `strideInBytes`, using D3D9VertexDeclarations.hpp's own stride-keyed
-        /// D3DVERTEXELEMENT9 tables. Throws if `strideInBytes` is not one of the 5 established
-        /// layouts. Not a D3DPOOL_DEFAULT resource -- vertex declarations survive Reset() unaffected
+        /// D3DVERTEXELEMENT9 tables. Throws if `strideInBytes` is not one of the established
+        /// fallback layouts. Not a D3DPOOL_DEFAULT resource -- vertex declarations survive Reset() unaffected
         /// (real D3D9 semantics), so this cache is never invalidated/re-registered.
         IDirect3DVertexDeclaration9* GetOrCreateVertexDeclarationEXT(std::size_t strideInBytes);
+        /// Returns the buffer's translated public declaration, falling back to the legacy
+        /// stride-keyed declaration only for internal buffers that do not carry one.
+        IDirect3DVertexDeclaration9* GetOrCreateVertexDeclarationEXT(
+            const IVertexBufferRenderer& buffer, std::size_t strideInBytes);
         /// D9-83: returns (creating on first request) the real 2-stream
         /// IDirect3DVertexDeclaration9 for CNA's own CNAEXT Instanced3D shader -- stream 0
         /// (per-vertex, step rate 1): POSITION0 (FLOAT3, offset 0); stream 1 (per-instance, step
@@ -549,10 +553,9 @@ namespace CNA::Internal::Renderers::DirectX9
                                     const Matrix& projection, PrimitiveType primitive, int primitiveCount,
                                     const GpuDrawParams& params);
         /// D9-82d: real `DualTextureEffect` dispatch -- two-sampler draw (`texture0`/`texture1` ->
-        /// `Texture`/`Texture2`). Uses a new, D3D9-only stride-28 vertex layout
-        /// (`D3D9VertexDeclarations.hpp`) since `DualTextureEffect.fx`'s real `VSInputTx2` needs two
-        /// distinct texture-coordinate sets, unlike D3D11's own simplified single-UV
-        /// reimplementation. Defined in `D3D9EffectDraw.cpp`.
+        /// `Texture`/`Texture2`). Uses the caller's translated stride-28 or vertex-colour stride-32
+        /// declaration because `DualTextureEffect.fx`'s real inputs require two distinct texture
+        /// coordinates. Defined in `D3D9EffectDraw.cpp`.
         void DrawDualTextureEffectEXT(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                       std::size_t stride, const Matrix& world, const Matrix& view,
                                       const Matrix& projection, PrimitiveType primitive, int primitiveCount,
