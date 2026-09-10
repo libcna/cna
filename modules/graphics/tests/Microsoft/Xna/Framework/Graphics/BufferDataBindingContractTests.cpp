@@ -13,6 +13,10 @@
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SetDataOptions.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBufferBinding.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
@@ -31,6 +35,10 @@ using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::IndexBuffer;
 using Microsoft::Xna::Framework::Graphics::IndexElementSize;
 using Microsoft::Xna::Framework::Graphics::SetDataOptions;
+using Microsoft::Xna::Framework::Graphics::VertexDeclaration;
+using Microsoft::Xna::Framework::Graphics::VertexElement;
+using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 using Microsoft::Xna::Framework::Graphics::VertexBuffer;
 using Microsoft::Xna::Framework::Graphics::VertexBufferBinding;
 using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
@@ -54,6 +62,20 @@ namespace
         {
             FAIL() << "unexpected exception type; expected " << typeid(TException).name();
         }
+    }
+
+    struct CompactVertex
+    {
+        float X;
+        float Y;
+    };
+
+    VertexDeclaration CompactVertexDeclaration()
+    {
+        return VertexDeclaration(
+            8,
+            {VertexElement(
+                0, VertexElementFormat::Vector2, VertexElementUsage::Position, 0)});
     }
 
     template<typename TException, typename TCallable>
@@ -165,6 +187,71 @@ TEST(BufferDataBindingContractTest, BoundDynamicIndexBufferHonorsStreamingOption
                                    SetDataOptions::Discard));
     EXPECT_NO_THROW(buffer.SetData(initial.data(), 0, static_cast<int>(initial.size()),
                                    SetDataOptions::NoOverwrite));
+}
+
+TEST(BufferDataBindingContractTest, DynamicStreamingOptionsUseXnaBitPrecedence)
+{
+    GraphicsDevice device;
+    DynamicVertexBuffer vertexBuffer(
+        device, VertexPositionColor::getVertexDeclarationStatic(), 1, BufferUsage::None);
+    DynamicIndexBuffer indexBuffer(
+        device, IndexElementSize::SixteenBits, 1, BufferUsage::None);
+    VertexPositionColor vertex(Vector3::Zero, Color::White);
+    std::uint16_t index = 0;
+    vertexBuffer.SetData(&vertex, 0, 1, SetDataOptions::Discard);
+    indexBuffer.SetData(&index, 0, 1, SetDataOptions::Discard);
+    device.SetVertexBuffer(&vertexBuffer);
+    device.SetIndexBuffer(&indexBuffer);
+
+    const SetDataOptions combined = SetDataOptions::Discard | SetDataOptions::NoOverwrite;
+    EXPECT_EQ(static_cast<SetDataOptions>(3), combined);
+    EXPECT_EQ(SetDataOptions::Discard, combined & SetDataOptions::Discard);
+    EXPECT_EQ(SetDataOptions::NoOverwrite, combined & SetDataOptions::NoOverwrite);
+    SetDataOptions assigned = SetDataOptions::Discard;
+    assigned |= SetDataOptions::NoOverwrite;
+    EXPECT_EQ(combined, assigned);
+    assigned &= SetDataOptions::NoOverwrite;
+    EXPECT_EQ(SetDataOptions::NoOverwrite, assigned);
+    EXPECT_EQ(combined, (~SetDataOptions::None) & combined);
+
+    for (const SetDataOptions options : {
+             combined,
+             static_cast<SetDataOptions>(5),
+             static_cast<SetDataOptions>(6)})
+    {
+        EXPECT_NO_THROW(vertexBuffer.SetData(&vertex, 0, 1, options));
+        EXPECT_NO_THROW(indexBuffer.SetData(&index, 0, 1, options));
+    }
+
+    EXPECT_THROW(vertexBuffer.SetData(&vertex, 0, 1, static_cast<SetDataOptions>(4)),
+                 System::InvalidOperationException);
+    EXPECT_THROW(indexBuffer.SetData(&index, 0, 1, static_cast<SetDataOptions>(4)),
+                 System::InvalidOperationException);
+}
+
+TEST(BufferDataBindingContractTest, GenericDynamicVertexCopyUsesClassicValidation)
+{
+    GraphicsDevice device;
+    DynamicVertexBuffer buffer(
+        device, CompactVertexDeclaration(), 1, BufferUsage::None);
+    CompactVertex vertex{0.0f, 0.0f};
+
+    ExpectExactNamedException<System::ArgumentNullException>(
+        [&] {
+            buffer.SetData(
+                static_cast<const CompactVertex*>(nullptr), 0, 0, SetDataOptions::None);
+        },
+        "data");
+    ExpectExactNamedException<System::ArgumentOutOfRangeException>(
+        [&] { buffer.SetData(&vertex, 0, 0, SetDataOptions::None); }, "elementCount");
+
+    buffer.SetData(&vertex, 0, 1, SetDataOptions::Discard);
+    device.SetVertexBuffer(&buffer);
+    ExpectExactException<System::InvalidOperationException>(
+        [&] { buffer.SetData(&vertex, 0, 1, SetDataOptions::None); });
+    ExpectExactException<System::InvalidOperationException>(
+        [&] { buffer.SetData(&vertex, -1, 0, SetDataOptions::None); });
+    EXPECT_NO_THROW(buffer.SetData(&vertex, 0, 1, SetDataOptions::Discard));
 }
 
 TEST(BufferDataBindingContractTest, ClassicCopiesRejectNullAndZeroCountExactly)

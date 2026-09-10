@@ -11,6 +11,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DynamicVertexBuffer.hpp"
@@ -20,7 +21,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
-#include "System/ArgumentException.hpp"
+#include "System/InvalidOperationException.hpp"
 
 using CNA::GraphicsCapability;
 using Microsoft::Xna::Framework::Matrix;
@@ -164,9 +165,9 @@ namespace
         EXPECT_EQ(0, std::memcmp(source.data(), read.data(), sizeof(source)));
     }
 
-    // A raw upload carries no packing step, so the declaration has to describe exactly the bytes
-    // the type occupies. A mismatch is a caller error, not something to silently reinterpret.
-    TEST_F(DynamicVertexBufferGenericSetDataTest, RejectsADeclarationOfADifferentStride)
+    // XNA compares the complete generic transfer span with the byte capacity established by the
+    // declaration and vertex count. It does not require sizeof(T) to equal the declaration stride.
+    TEST_F(DynamicVertexBufferGenericSetDataTest, RejectsTransferLargerThanBufferByteCapacity)
     {
         const VertexDeclaration halfWidth({
             VertexElement(0,  VertexElementFormat::Vector4, VertexElementUsage::BlendWeight, 0),
@@ -176,6 +177,35 @@ namespace
 
         const std::array<Matrix, 2> source{Numbered(0), Numbered(100)};
         EXPECT_THROW(buffer.SetData(source.data(), 0, 2, SetDataOptions::Discard),
-                     System::ArgumentException);
+                     System::InvalidOperationException);
+    }
+
+    TEST_F(DynamicVertexBufferGenericSetDataTest, TransferTypeNeedNotEqualDeclarationStride)
+    {
+        const VertexDeclaration positions(
+            16,
+            {VertexElement(
+                0, VertexElementFormat::Vector4, VertexElementUsage::Position, 0)});
+        DynamicVertexBuffer buffer(device, positions, 2, BufferUsage::None);
+
+        const std::array<float, 9> source{
+            -100.0f,
+            1.0f, 2.0f, 3.0f, 4.0f,
+            5.0f, 6.0f, 7.0f, 8.0f};
+        EXPECT_NO_THROW(buffer.SetData(source.data(), 1, 8, SetDataOptions::Discard));
+
+        std::array<float, 8> read{};
+        buffer.GetData(read.data(), 0, 8);
+        EXPECT_EQ(0, std::memcmp(source.data() + 1, read.data(), sizeof(read)));
+        EXPECT_EQ(2, buffer.GetRenderer().GetVertexCount())
+            << "the renderer's draw count remains the declared vertex capacity";
+
+        const std::array<float, 5> replacement{-200.0f, 9.0f, 10.0f, 11.0f, 12.0f};
+        EXPECT_NO_THROW(buffer.SetData(
+            replacement.data(), 1, 4, SetDataOptions::NoOverwrite));
+        buffer.GetData(read.data(), 0, 8);
+        EXPECT_EQ(
+            (std::array<float, 8>{9.0f, 10.0f, 11.0f, 12.0f, 5.0f, 6.0f, 7.0f, 8.0f}),
+            read) << "a short transfer replaces only the buffer prefix";
     }
 }

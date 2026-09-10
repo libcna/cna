@@ -93,6 +93,16 @@ namespace Microsoft::Xna::Framework::Graphics
                     "elementCount", std::to_string(elementCount),
                     "The element count must be positive.");
         }
+
+        constexpr SetDataOptions CanonicalizeSetDataOptions(SetDataOptions options) noexcept
+        {
+            const int bits = static_cast<int>(options);
+            if ((bits & static_cast<int>(SetDataOptions::Discard)) != 0)
+                return SetDataOptions::Discard;
+            if ((bits & static_cast<int>(SetDataOptions::NoOverwrite)) != 0)
+                return SetDataOptions::NoOverwrite;
+            return SetDataOptions::None;
+        }
     }
 
     IndexBuffer::IndexBuffer(GraphicsDevice& device, int indexCount)
@@ -270,6 +280,7 @@ namespace Microsoft::Xna::Framework::Graphics
             throw System::ObjectDisposedException("IndexBuffer");
         if (data == nullptr)
             throw System::ArgumentNullException("data");
+        options = CanonicalizeSetDataOptions(options);
         ThrowIfSetDataResourceInUse(options, useOptions);
 
         const std::size_t sourceByteOffset = CheckedByteOffset(startIndex, elementSize);

@@ -354,8 +354,9 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Uploads vertices of an application-defined XNA vertex type.
          *
          * This is the C++ equivalent of XNA's generic `SetData<T>(T[])` overload. The buffer's
-         * `VertexDeclaration` defines how the bytes are interpreted by the graphics device, and
-         * the C++ vertex type must therefore have the same stride and a directly copyable layout.
+         * `VertexDeclaration` defines how the bytes are interpreted by the graphics device. The
+         * transfer type only defines the contiguous source byte span; XNA permits its size to
+         * differ from the declaration stride when that span fits the buffer's byte capacity.
          * Built-in XNA vertex types continue to use their dedicated packing overloads.
          *
          * @tparam TVertex Application-defined, trivially-copyable vertex type.
@@ -613,9 +614,9 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Uploads raw vertex data with an explicit stride and a streaming hint.
          *
-         * Called by DynamicVertexBuffer's generic `SetData<T>` overload, for the vertex types
-         * that have no dedicated packing path: an application-defined type is uploaded exactly
-         * as it sits in memory, so there is nothing to pack and the stride is the type's own.
+         * Called by DynamicVertexBuffer's generic `SetData<T>` overload, for vertex types that
+         * have no dedicated packing path. The application-defined source is a contiguous byte
+         * stream; its element size need not equal the buffer declaration's drawing stride.
          *
          * @param data         Source vertex array.
          * @param startIndex   First element to read from @p data.

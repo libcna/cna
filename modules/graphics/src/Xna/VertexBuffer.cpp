@@ -69,6 +69,16 @@ namespace Microsoft::Xna::Framework::Graphics
                     "The element count must be positive.");
         }
 
+        constexpr SetDataOptions CanonicalizeSetDataOptions(SetDataOptions options) noexcept
+        {
+            const int bits = static_cast<int>(options);
+            if ((bits & static_cast<int>(SetDataOptions::Discard)) != 0)
+                return SetDataOptions::Discard;
+            if ((bits & static_cast<int>(SetDataOptions::NoOverwrite)) != 0)
+                return SetDataOptions::NoOverwrite;
+            return SetDataOptions::None;
+        }
+
         void ValidateClassicGetDataArguments(bool disposed,
                                              bool writeOnly,
                                              const void* data,
@@ -234,7 +244,8 @@ namespace Microsoft::Xna::Framework::Graphics
         if (!rawUpload)
             ValidatePositiveElementCount(elementCount);
         (void) CheckedByteCount(elementCount, sourceElementSize, "elementCount");
-        (void) CheckedByteCount(elementCount, uploadStride, "elementCount");
+        const std::size_t uploadByteCount =
+            CheckedByteCount(elementCount, uploadStride, "elementCount");
 
         if (uploadStride == 0 ||
             uploadStride > static_cast<std::size_t>(std::numeric_limits<int>::max()))
@@ -245,21 +256,16 @@ namespace Microsoft::Xna::Framework::Graphics
         }
 
         const auto& declarationElements = vertexDeclaration_.GetVertexElements();
-        if (!declarationElements.empty())
+        if (rawUpload && !declarationElements.empty())
         {
-            if (rawUpload &&
-                vertexDeclaration_.getVertexStrideProperty() !=
-                    static_cast<int>(uploadStride))
+            if (vertexDeclaration_.getVertexStrideProperty() !=
+                static_cast<int>(uploadStride))
             {
                 throw System::ArgumentException(
                     "The raw upload stride must match the VertexBuffer's VertexDeclaration.",
                     "stride");
             }
 
-            // Typed CNA vertices are packed into their GPU stream because the C++ object types
-            // contain ABI-only vtable/padding bytes. A built-in type's own declaration already
-            // describes exactly that stream, but this buffer may carry any declaration the caller
-            // chose, so every declared element still has to fit in the bytes actually uploaded.
             for (const VertexElement& element : declarationElements)
             {
                 const int offset = element.getOffsetProperty();
@@ -282,7 +288,12 @@ namespace Microsoft::Xna::Framework::Graphics
             return false;
         if (data == nullptr)
             throw System::ArgumentNullException("data");
-        if (elementCount > vertexCount_)
+        const int declarationStride = vertexDeclaration_.getVertexStrideProperty();
+        const std::size_t bufferStride =
+            declarationStride > 0 ? static_cast<std::size_t>(declarationStride) : uploadStride;
+        const std::size_t bufferCapacity =
+            CheckedByteCount(vertexCount_, bufferStride, "vertexCount");
+        if (uploadByteCount > bufferCapacity)
             throw System::InvalidOperationException(
                 "The data is not the correct size for this VertexBuffer.");
         return true;
@@ -294,7 +305,28 @@ namespace Microsoft::Xna::Framework::Graphics
                                            SetDataOptions options,
                                            bool useOptions)
     {
+        options = CanonicalizeSetDataOptions(options);
         ThrowIfSetDataResourceInUse(options, useOptions);
+        const int declarationStride = vertexDeclaration_.getVertexStrideProperty();
+        const std::size_t bufferStride =
+            declarationStride > 0 ? static_cast<std::size_t>(declarationStride) : uploadStride;
+        const std::size_t capacity =
+            CheckedByteCount(vertexCount_, bufferStride, "vertexCount");
+        const std::size_t byteCount =
+            CheckedByteCount(elementCount, uploadStride, "elementCount");
+
+        // XNA copies a contiguous byte span into fixed-size buffer storage; sizeof(T) controls
+        // that span but never changes the declaration stride used for drawing. The renderer
+        // contract has no prefix-update operation, so retain the remainder in the CPU shadow and
+        // submit the complete logical buffer. Discard makes the unnamed remainder undefined; zero
+        // is CNA's deterministic representation of that state.
+        if (cpuShadow_.size() != capacity)
+            cpuShadow_.resize(capacity, 0U);
+        if (useOptions && options == SetDataOptions::Discard)
+            std::fill(cpuShadow_.begin(), cpuShadow_.end(), 0U);
+        const auto* bytes = static_cast<const std::uint8_t*>(data);
+        std::copy(bytes, bytes + byteCount, cpuShadow_.begin());
+
         // GFX-043: propagate this buffer's complete declaration before every real upload. The
         // shared empty branch returns before this method, so even declaration propagation is not
         // a renderer call for an empty operation.
@@ -305,24 +337,16 @@ namespace Microsoft::Xna::Framework::Graphics
         }
         renderer_->SetVertexDeclaration(vertexDeclaration_);
         if (useOptions)
-            renderer_->SetDataWithOptions(data, elementCount, uploadStride, options);
+            renderer_->SetDataWithOptions(
+                cpuShadow_.data(), vertexCount_, bufferStride, options);
         else
-            renderer_->SetData(data, elementCount, uploadStride);
-
-        const std::size_t byteCount =
-            CheckedByteCount(elementCount, uploadStride, "elementCount");
-        const auto* bytes = static_cast<const std::uint8_t*>(data);
-        cpuShadow_.assign(bytes, bytes + byteCount);
-        const int declarationStride = vertexDeclaration_.getVertexStrideProperty();
-        const std::size_t bufferStride =
-            declarationStride > 0 ? static_cast<std::size_t>(declarationStride) : uploadStride;
-        cpuShadow_.resize(
-            CheckedByteCount(vertexCount_, bufferStride, "vertexCount"), 0U);
+            renderer_->SetData(cpuShadow_.data(), vertexCount_, bufferStride);
     }
 
     void VertexBuffer::ThrowIfSetDataResourceInUse(SetDataOptions options,
                                                    bool useOptions) const
     {
+        options = CanonicalizeSetDataOptions(options);
         if (useOptions &&
             (options == SetDataOptions::Discard || options == SetDataOptions::NoOverwrite))
         {
@@ -995,7 +1019,7 @@ namespace Microsoft::Xna::Framework::Graphics
         const std::size_t uploadStride =
             stride > 0 ? static_cast<std::size_t>(stride) : 0;
         if (!ValidateSetDataRange(
-                data, startIndex, elementCount, uploadStride, uploadStride, true,
+                data, startIndex, elementCount, uploadStride, uploadStride, false,
                 options, true))
         {
             return;

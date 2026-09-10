@@ -157,8 +157,9 @@ namespace Microsoft::Xna::Framework::Graphics
          * This is the C++ equivalent of XNA's generic
          * `SetData<T>(T[] data, int startIndex, int elementCount, SetDataOptions options)`.
          * A game supplies its own type here — a per-instance transform stream is the usual case,
-         * where the elements are plain `Matrix` values — so there is no packing step and the
-         * buffer's `VertexDeclaration` must describe exactly `sizeof(TVertex)` bytes.
+         * where the elements are plain `Matrix` values — so there is no packing step. As in XNA,
+         * the type determines the contiguous transfer span but need not equal the declaration's
+         * drawing stride, provided the span fits the buffer's byte capacity.
          *
          * The built-in XNA vertex types keep their dedicated overloads above, which pack the C++
          * object into the compact GPU stream first.
