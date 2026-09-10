@@ -476,12 +476,13 @@ namespace
               layout(set = 2, binding = 5) uniform sampler2D uSpecularMap;
               layout(set = 2, binding = 6) uniform sampler2D uSpecularColorMap;)"}}},
         {"vulkan", "descriptor set 0 bindings 0,1,2,3,4",
-         {{R"(VkImageView views[7] = { baseColor, normalMap, metallicRoughness, emissive, occlusion,
-                                      specular, specularColor })",
+         {{R"(VkImageView views[10] = { baseColor, normalMap, metallicRoughness, emissive, occlusion,
+                                       specular, specularColor, iblIrradiance,
+                                       iblPrefilteredSpecular, iblBrdfLut })",
            R"(writes[i].dstBinding = i)",
            R"(GetOrCreatePbrDescSet(
                 currentFrame_, vBase, vNorm, vMR, vEmis, vOcc, vSpec, vSpecColor,
-                                    PbrSlotSamplersRawEXT().s))",
+                    vIrr, vIblSpec, vBrdf, PbrSlotSamplersRawEXT().s))",
            R"(layout(set = 0, binding = 0) uniform sampler2D uTexture;
               layout(set = 0, binding = 1) uniform sampler2D uNormalMap;
               layout(set = 0, binding = 2) uniform sampler2D uMetallicRoughnessMap;
@@ -2222,7 +2223,7 @@ TEST(GltfRendererPbrFallbackPolicy, VulkanSamplesBothKhrMaterialsSpecularTexture
     ASSERT_FALSE(source.empty());
 
     for (const char* evidence : {
-             "float pbrUboData[124]",
+             "float pbrUboData[128]",
              "out[60] = p.pbrDielectricF0Unclamped[0]",
              "out[63] = p.pbrSpecularFactor",
              "p.pbrSpecularColorTextureIsSrgb ? 1.f : 0.f",
@@ -2230,7 +2231,7 @@ TEST(GltfRendererPbrFallbackPolicy, VulkanSamplesBothKhrMaterialsSpecularTexture
              "p.pbrTextureCoordinateSetMask & 0x7fu",
              "params.pbrSpecularMap",
              "params.pbrSpecularColorMap",
-             "VkImageView views[7] = { baseColor, normalMap, metallicRoughness, emissive, occlusion, specular, specularColor }",
+             "VkImageView views[10] = { baseColor, normalMap, metallicRoughness, emissive, occlusion, specular, specularColor, iblIrradiance, iblPrefilteredSpecular, iblBrdfLut }",
              "slotSamplers_[4], slotSamplers_[5], slotSamplers_[6]",
              "layout(set = 0, binding = 6) uniform sampler2D uSpecularMap",
              "layout(set = 0, binding = 7) uniform sampler2D uSpecularColorMap",
