@@ -1,6 +1,7 @@
 # SDL GPU Graphics Renderer — classic XNA / EasyGL parity plan and execution log
 
-> **Current verdict (audit opened 2026-09-09; platform re-audit opened 2026-09-10): B. CLASSIC
+> **Current verdict (audit opened 2026-09-09; platform re-audit opened 2026-09-10; final sweep
+> 2026-09-11): B. CLASSIC
 > SDL GPU ↔ EASYGL PARITY NOT YET REACHED across the renderer's advertised platforms.** On the
 > actually tested Linux/Vulkan configuration, every audited ordinary XNA 4.0 graphics family is
 > observably equivalent or is
@@ -57,11 +58,14 @@
 > `SDLGPU-116` gives each native platform its own SDL video-driver default and guarantees that
 > offscreen/dummy registrations clear both X11 and Wayland display variables; the real Vulkan
 > smoke passes 30/30 with `SDL_VIDEODRIVER=offscreen`, `DISPLAY=` and `WAYLAND_DISPLAY=`.
+> `SDLGPU-117` reruns the complete post-portability adversarial audit: 191/191 native integration
+> tests, 47/47 SDL GPU renderer-unit tests, all 226 contract hooks and all 246 EasyGL examples are
+> accounted for with no validation diagnostic or newly unclassified classic gap.
 > `SDLGPU-94`–`SDLGPU-96`
 > remain open because D3D12 swapchain presentation/recovery, Metal and Android/Vulkan still
 > require native runtime evidence. Seven EasyGL defect findings (six distinct
-> behavior families) are deliberately not copied. The final 188/188 SDL integration, 42/42
-> pre-portability renderer-unit, 33/33 EasyGL
+> behavior families) are deliberately not copied. The final 191/191 SDL integration, 47/47
+> renderer-unit, 33/33 EasyGL
 > oracle and 32/32 two-renderer corpus gates remain green on Linux/Vulkan. This verdict supersedes historical
 > completion banners below; those remain implementation history, not current truth.
 
@@ -86,10 +90,11 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
 | Item | Current evidence |
 |---|---|
 | Re-audit starting branch / commit | `sdlgpu` / `8cd9ab7f45a05bef3a727598c8d9ef5cf8b04442` |
-| Newly created tasks | 26 (`SDLGPU-91`–`SDLGPU-116`) |
-| Completed / open | 23 / 3 (`SDLGPU-91`–`93` and `SDLGPU-97`–`116` complete; `SDLGPU-94`–`96` open) |
+| Newly created tasks | 27 (`SDLGPU-91`–`SDLGPU-117`) |
+| Completed / open | 24 / 3 (`SDLGPU-91`–`93` and `SDLGPU-97`–`117` complete; `SDLGPU-94`–`96` open) |
+| Ending evidence commit | `SDLGPU-117` (the commit containing this status) |
 | Proven runtime configuration | Linux/Vulkan remains the complete behavioral configuration; D3D12 now has a real no-window device, all-26-stock-shader construction, stock-pipeline exact-pixel proof, a public windowless `GraphicsDevice` with exact backbuffer/RT2D clear readback, the unchanged public Game/Texture2D/SpriteBatch 2D scene for 120 frames, all nine shared classic stock-effect fixtures, the complete ten-fixture state/sampler matrix, the 24-test texture/format/transfer matrix, all 33 render-target registrations, all 25 buffer/draw registrations, all five model oracles and all 39 canonical compiled-effect runtime cases. The target evidence includes the 851-assertion mip/readback oracle and 40-assertion classic MRT matrix; the draw evidence includes instancing, multistream and declaration semantics. Six presentation/reset/resize programs, 73 individually isolated backbuffer/bound-target/Present lifecycle legs and 291/291 applicable constructor/lazy-resource rollback checks also pass through D3D12. There are now 191 registered native and 258 registered Windows SDL integration tests; the pre-platform full sweep plus the focused portability gates remain the Linux behavioral baseline. The D3D12 portability probes pass 2/2, 3/3, 6/6 and 3/3; the five skinned-effect/PBR executables add 25/25 discriminating assertions. |
-| Available local cross tools | MinGW-w64 and Wine are present; no Apple SDK/device, Android SDK/device, `dxc`, `spirv-cross`, SDL_shadercross executable or SDL_shadercross shared library was found |
+| Available local cross tools | MinGW-w64, Wine 10.0, DXVK v3.0.2-58 and vkd3d-proton 3.1.0 are present. There is no Apple SDK/device or `xcrun`/`xcodebuild`/`metal`. Android supplies only `adb`/platform-tools: no NDK, emulator, `sdkmanager`, `avdmanager` or attached device. No system `dxc`, `spirv-cross`, SDL_shadercross executable or SDL_shadercross shared library was found; CNA uses its pinned static ShaderCross dependency instead. |
 | Display constraint | All further Linux SDL tests must use `SDL_VIDEODRIVER=offscreen`; Windows GUI tests must use a headless/virtual display if runnable. Never use the host display. |
 
 ### SDLGPU-91 — correct the parity verdict's platform scope ✅
@@ -216,6 +221,13 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
   failure matrix at 291/291 applicable checks. Only real swapchain presentation/acquire/minimize/
   recovery remains open here;
   presentation still requires a presentation-capable isolated compositor or real Windows runner.
+  The 2026-09-11 retry used Wine 10.0 plus matching local DXVK v3.0.2-58 and vkd3d-proton 3.1.0
+  binaries from Proton Experimental. It selected the real AMD Radeon 780M, initialized the native
+  D3D12 device and reached `dxgi_vk_swap_chain_init` at 800x480 before reporting `No DRI3 support
+  detected - required for presentation` and `Surface is not supported for presentation` on the
+  fresh Xvfb. SDL's offscreen driver cannot substitute here because its window has no Win32 HWND;
+  Xvfb, including nested Xephyr/glamor, exposes no DRI3; and no headless Wayland compositor is
+  installed. This is an exact runner/display-stack blocker, not renderer success or failure.
 
 ### SDLGPU-95 — validate ordinary parity on Apple Metal ⬜
 
@@ -226,7 +238,11 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
 - **Acceptance/test:** build on a supported Apple SDK and execute the same discriminating ordinary
   corpus through the Metal driver with native diagnostics enabled; record any true SDL limitation
   rather than inferring success from source inspection.
-- **Status:** open; runtime validation currently has an external hardware/SDK dependency.
+- **Status:** open; runtime validation has an external hardware/SDK dependency. The 2026-09-11
+  environment audit found no `xcrun`, `xcodebuild` or `metal`, no Apple SDK and no Apple device, so
+  neither an honest Metal build nor runtime test can be produced on this Linux host. The pure
+  renderer-unit format-selection test does prove that MSL/metallib-only device formats select the
+  ShaderCross route, but it is not misreported as a Metal runtime result.
 
 ### SDLGPU-96 — validate the retained SPIR-V route on Android/Vulkan ⬜
 
@@ -238,7 +254,11 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
 - **Acceptance/test:** cross-build with a supported NDK and run construction/lifecycle,
   SpriteBatch, stock effect, texture, render-target and readback checks on an Android Vulkan
   device/emulator without weakening the desktop suite.
-- **Status:** open; runtime validation currently has an external SDK/device dependency.
+- **Status:** open; runtime validation has an external SDK/device dependency. The 2026-09-11 audit
+  found `/usr/lib/android-sdk/platform-tools/adb` only: no NDK/toolchain, emulator, `sdkmanager`,
+  `avdmanager` or attached device (`adb devices` returned an empty inventory). Desktop Vulkan's
+  complete SPIR-V proof is relevant implementation evidence but cannot replace Android surface and
+  lifecycle execution.
 
 ### SDLGPU-97 — make optional ShaderEffect compilation target-correct ✅
 
@@ -824,12 +844,51 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
   Windows registrations remain SDL dummy/forced-headless and their launcher alone creates an
   isolated Xvfb for Wine adapter enumeration. CMake regeneration required no rebuild or relink.
 
+### SDLGPU-117 — perform the post-portability adversarial closeout sweep ✅
+
+- **Problem/public behavior:** the prior Linux closeout recorded 188 integration and 42 focused
+  renderer-unit tests before the portability work added registrations and unit cases. A final
+  verdict must rerun the live inventory and repeat the contract/example/source audit rather than
+  carrying those historical totals forward.
+- **EasyGL/SDL evidence:** the machine-checkable inventories contain 226 common renderer hooks and
+  246 EasyGL examples. The SDL GPU directory now registers 191 native tests, 112 carrying the
+  explicit `Parity` label, and the focused renderer aggregate contains 47 `SdlGpu*` cases.
+- **Location:** generated test inventories, renderer-local source audit and this authoritative
+  status/ledger; no production code change.
+- **Acceptance/test:** execute every native SDL GPU integration test with the isolated offscreen
+  environment and global validation-fatal policy; execute every focused SDL GPU renderer-unit
+  case; rerun both mechanical audits; search ignored parameters, inherited defaults, unsupported
+  paths, null returns, hard-coded formats/state and cache/lifetime seams; state every remaining
+  difference and environment blocker precisely.
+- **Result (2026-09-11):** the stable incremental Vulkan tree passes **191/191** SDL GPU integration
+  tests sequentially in **159.19 s**, including all **112** parity-labelled registrations and all
+  32 shared renderer-neutral fixtures. It then passes **47/47** `SdlGpu*` renderer-unit cases.
+  No build or relink was needed. Every integration registration had empty X11/Wayland display
+  variables and the common Vulkan/D3D12 fatal-diagnostic expressions; no validation diagnostic was
+  emitted. The contract checker remains **226 classified** (`141 =`, `80 out`, five query hooks
+  `⛔` under `SDLGPU-80`). The example checker remains **246 classified** (128 covered, 52 direct,
+  two query-limit examples, three EasyGL defects, nine EasyGL-specific, 52 modern-out and zero
+  unclassified/new-test-needed). The source sweep found no new ordinary-XNA difference: ignored
+  requested depth-format parameters return the actually applied device format; cube-face MRT is
+  refused at the same seam in EasyGL; custom ShaderEffect instancing/uniform arrays are CNAEXT;
+  all remaining null/unsupported paths have explicit capability or validation coverage.
+
+  The exact renderer-wide result is therefore still verdict **B**, solely because the three open
+  platform evidence tasks cannot be executed in this environment: real D3D12 swapchain recovery
+  needs DRI3 or a real Windows runner (`SDLGPU-94`), Metal needs an Apple SDK/device (`SDLGPU-95`),
+  and Android needs an NDK plus emulator/device (`SDLGPU-96`). On the complete Linux/Vulkan runtime
+  surface and the extensively exercised windowless D3D12 surface, no remediable classic-XNA parity
+  gap remains. The only known EasyGL capability differences are exact half-rate
+  `PresentInterval::Two` and `OcclusionQuery`, both rigorously documented underlying SDL_gpu API
+  limits; non-default `MultiSampleMask` is an SDL_gpu limit but not an EasyGL difference because
+  EasyGL does not implement it either.
+
 ## 2026-09-10 parity audit final status
 
 | Item | Current evidence |
 |---|---|
 | Starting branch / commit | `sdlgpu` / `3a44315fdffe974e02a664cacae4fd388c9728aa` |
-| Ending parity-behavior/test commit | `9285b36e39106aecd85402c6f14688a4fa2f0fcb` (`SDLGPU-89`); the final diagnostic/audit closeout is `SDLGPU-90` (the commit containing this status) |
+| Ending parity-behavior/test commit | `9285b36e39106aecd85402c6f14688a4fa2f0fcb` (`SDLGPU-89`); the Linux audit closeout is `SDLGPU-90`; the platform/adversarial closeout is `SDLGPU-117` (the commit containing the current status) |
 | Renderer contract | `modules/graphics/include/CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp`; exact audit in `plans/sdlgpu_renderer_contract_audit.csv` |
 | Reference renderer | `modules/renderers/easygl/{include,src,examples}` |
 | Renderer under test | `modules/renderers/sdl-gpu/{include,src,tests,examples}` |
@@ -838,14 +897,14 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
 | SDL GPU registered integration tests | 191 CTests (85 baseline plus 106 parity/remediation registrations) |
 | Shared EasyGL parity fixtures available | 32 renderer-neutral sources in `modules/graphics/examples/parity` |
 | Shared parity fixtures registered for SDL GPU | 32/32 (all renderer-neutral sources, including the nine classic stock-effect fixtures) |
-| Tasks created by this audit | 36 (`SDLGPU-55`–`SDLGPU-90`); the later platform re-audit creates twenty-six more (`SDLGPU-91`–`116`) |
-| Completed / open / proven unavoidable | This closed Linux/Vulkan phase completed 36 / 0 tasks; the current renderer-wide ledger is 59 / 3. Three capability fields (`BlendState.MultiSampleMask`, exact half-rate `PresentInterval::Two`, and `OcclusionQuery`) are proven unavailable in current SDL_gpu; the first two are not separate tasks and the third is closed by `SDLGPU-80` |
+| Tasks created by this audit | 36 (`SDLGPU-55`–`SDLGPU-90`); the later platform re-audit creates twenty-seven more (`SDLGPU-91`–`117`) |
+| Completed / open / proven unavoidable | This closed Linux/Vulkan phase completed 36 / 0 tasks; the current renderer-wide ledger is 60 / 3. Three capability fields (`BlendState.MultiSampleMask`, exact half-rate `PresentInterval::Two`, and `OcclusionQuery`) are proven unavailable in current SDL_gpu; the first two are not separate tasks and the third is closed by `SDLGPU-80` |
 | SDL GPU build | Stable `cmake-build-sdlgpu`, Debug, `CNA_GRAPHICS_RENDERER=SDL_GPU`, tests/examples and `CNA_SDL_GPU_COMPILED_EFFECTS` ON |
 | EasyGL oracle build | Stable `cmake-build-debug`, Debug, `CNA_GRAPHICS_RENDERER=OPENGL33`, tests/examples ON |
 | Runtime driver | SDL 3.5.0 SDL_gpu Vulkan on AMD Radeon 780M / Mesa RADV 25.0.7; Khronos validation layer 1.4.309 present |
 | Display constraint | Sandboxed tests do not access the host display. All 191 SDL GPU registrations explicitly use `SDL_VIDEODRIVER=offscreen`, `DISPLAY=` and `WAYLAND_DISPLAY=` while still creating the real Vulkan device/swapchain; EasyGL alone uses isolated Xvfb `:179`. Native driver defaults are platform-specific rather than hard-coded to X11. |
-| Final SDL GPU verification | **188/188** registered SDL integration CTests and **42/42** SDL renderer unit tests pass from the stable incremental build. The integration total contains all 32 shared parity fixtures. After the final full sweep, `SDLGPU-87`'s validation-fatal capability/lifetime regression passes **295/295**; `SDLGPU-89` adds a 21/21 multistream result, isolated slot-15 parity pixels on SDL GPU and EasyGL, and a green validation-fatal smoke. |
-| Validation | SDL GPU debug mode is enabled. The final 188-test sweep passes with every shared fixture and the high-risk state/texture/target/effect/lifetime slices configured to make `Validation Error`, `Validation Warning`, or bare `VUID-` output fatal; no such diagnostic was reported. |
+| Final SDL GPU verification | **191/191** registered SDL integration CTests and **47/47** focused SDL GPU renderer-unit tests pass from the stable incremental build. The integration total contains all 32 shared parity fixtures and 112 parity-labelled registrations. `SDLGPU-87`'s capability/lifetime regression remains **295/295**; `SDLGPU-89` adds a 21/21 multistream result and isolated slot-15 parity pixels on both renderers. |
+| Validation | SDL GPU debug mode is enabled. All 191 integration registrations now make `Validation Error`, `Validation Warning`, bare `VUID-`, `D3D12 ERROR:` or `D3D12 WARNING:` output fatal; the final full Vulkan sweep reported none. |
 | Final EasyGL/parity oracle | **33/33** registered EasyGL oracle CTests pass under Xvfb/llvmpipe. The direct corpus executes all 32 shared sources under both renderers: 27 frames satisfy the strict byte policy, two use renderer-local discriminating invariants, and three stay within fixed measured line/edge coverage budgets. |
 | Exact remaining EasyGL differences | Exact half-rate `PresentInterval::Two` (`⛔`) and `OcclusionQuery` (`SDLGPU-80`, `⛔`). EasyGL's non-default `MultiSampleMask` is also unimplemented, so it is an SDL_gpu limitation but not an EasyGL difference. SDL GPU intentionally differs from the seven XNA/FNA-invalid findings in `EASYGL-PARITY-1`–`7`; findings 4 and 7 are two EasyGL examples of the same bound-FBO backbuffer-readback defect. |
 
