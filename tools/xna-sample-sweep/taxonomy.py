@@ -39,6 +39,7 @@ import collections
 import json
 import os
 import re
+import struct
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -103,6 +104,39 @@ def BlockCompressed(reference, root="/rv/tmp/samples"):
     _formatCache[reference] = answer
     return answer
 
+
+
+_chainCache = {}
+
+
+def SourceCarriesItsOwnChain(source, root="/rv/tmp/samples"):
+    """Whether the source file brings a mip chain of its own rather than one the pipeline made.
+
+    `generated mip levels only` is a statement about levels the *pipeline* produced, and a `.dds`
+    that declares more than one surface produced them itself -- so a difference in one of those is
+    not the mip filter's dither and must not be accepted as though it were. SAMPLE-073's
+    `Stripe2.dds` declares ten, and the three bytes it still differs in are a block decoder's, at
+    the two smallest levels (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-222`).
+
+    @param source The item's source, relative to @p root.
+    @param root The read-only sample tree.
+    @return True when the file says it carries more than one level.
+    """
+    if not source:
+        return False
+    if source in _chainCache:
+        return _chainCache[source]
+    answer = False
+    path = os.path.join(root, source)
+    try:
+        with open(path, "rb") as handle:
+            head = handle.read(32)
+        if len(head) >= 32 and head[:4] == b"DDS ":
+            answer = struct.unpack("<I", head[28:32])[0] > 1
+    except Exception:  # noqa: BLE001 - a source this cannot read simply does not claim a chain
+        answer = False
+    _chainCache[source] = answer
+    return answer
 
 
 def NestedOwnerIsCustom(rows, reference):
@@ -346,7 +380,8 @@ def main(argv=None):
                 levels = {int(found.group(1))
                           for found in (re.search(r"levelDigests\[(\d+)\]", one)
                                         for one in source_of_levels) if found}
-                if levels and 0 not in levels:
+                if (levels and 0 not in levels
+                        and not SourceCarriesItsOwnChain(source.get("sourceRelative"))):
                     assign(reference, "ACCEPTED_DIFFERENCE",
                            "generated mip levels only, from the dither in XNA's own filter")
                     continue
