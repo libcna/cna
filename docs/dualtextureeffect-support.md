@@ -63,17 +63,17 @@ workaround's reason no longer applies.
 
 ## 4. Texture null-fallback behavior (Tasks 386–387)
 
-`DualTextureEffect` has no `TextureEnabled` flag (like `AlphaTestEffect`) — CNA's established
-convention (Task 379) is to fall back to a 1×1 opaque white texture when a slot is left null.
+`DualTextureEffect` has no `TextureEnabled` flag (like `AlphaTestEffect`). Task 379 originally
+invented an opaque-white fallback without measuring XNA. SOFTWARE-302 later measured Microsoft
+XNA 4.0 and corrected the Software/EasyGL contract: either null slot samples opaque black.
 
-Task 386 verified the **first** texture slot (`Texture`) — **zero bugs, already correct on all 3
-renderers** (Bgfx's case was already covered by Task 379's general 7-call-site fix).
+Task 386's original first-slot white assertion was therefore not a conformance proof. The corrected
+Software/EasyGL test now draws a real texture first and requires exact opaque black after nulling
+`Texture`, including alpha.
 
-Task 387 verified the **second** slot (`Texture2`) and **found and fixed a real bug on Bgfx** —
-exactly the gap Task 379 explicitly predicted and left unfixed: `texColor3DSampler2_`'s binding
-had no else-branch fallback at all. EasyGL and Vulkan were already correct. **Fixed** with the same
-else-branch pattern as slot 0 — a small, single-call-site fix. This closed out
-`DualTextureEffect`'s texture-null coverage entirely across all 3 renderers.
+Task 387 removed Bgfx's stale second-slot binding, but its white value was the same unmeasured
+premise. SOFTWARE-302 closes both slots for the Software/EasyGL parity target; the other renderer
+families require their own Microsoft-XNA reconciliation.
 
 ## 5. Fog behavior (Task 388)
 

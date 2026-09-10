@@ -1330,8 +1330,10 @@ namespace CNA::Internal::Renderers::EasyGL
 
         ::easygl::Texture default_white_texture_;
         bool default_white_texture_ready_ = false;
-        ::easygl::Texture default_black_texture_;      ///< XNA null DualTextureEffect sampler
+        ::easygl::Texture default_black_texture_;      ///< XNA null classic 2D sampler
         bool default_black_texture_ready_ = false;
+        ::easygl::Texture default_black_cube_texture_; ///< XNA null EnvironmentMapEffect sampler
+        bool default_black_cube_texture_ready_ = false;
         ::easygl::Texture default_flat_normal_texture_;      ///< PbrEffect NormalMap fallback (CNB-58)
         bool default_flat_normal_texture_ready_ = false;
 
@@ -1455,6 +1457,7 @@ namespace CNA::Internal::Renderers::EasyGL
         void EnsurePbrSkinnedProgram(bool dualUv);
         void EnsureDefaultWhiteTexture();
         void EnsureDefaultBlackTexture();
+        void EnsureDefaultBlackCubeTexture();
         void EnsureDefaultFlatNormalTexture();
         /// REMED-GFX-218: which stock program a draw gets. SelectProgram(), declaration
         /// conversion validation and semantic attribute binding all read this single cascade.

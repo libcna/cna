@@ -2904,8 +2904,8 @@ namespace CNA::Internal::Renderers::Software
                 // color *= overlay*diffuse
                 // (FNA's PSDualTexture). Texture and Texture2 consume TEXCOORD0 and TEXCOORD1
                 // independently, with their corresponding sampler slots and footprints. A null
-                // sampler returns opaque black on Microsoft XNA 4.0; this is deliberately not
-                // BasicEffect's optional-texture opaque-white convention.
+                // sampler returns opaque black on Microsoft XNA 4.0, matching the other classic
+                // stock effects' unbound-sampler rule (SOFTWARE-303).
                 float t0r = 0.0f, t0g = 0.0f, t0b = 0.0f, t0a = 1.0f;
                 if (ctx.texture0 != nullptr)
                     SampleTexture(*ctx.texture0, ctx.sampler0, ctx.magnify0, ctx.lambda0, u, v,
@@ -2919,11 +2919,17 @@ namespace CNA::Internal::Renderers::Software
                 b *= (t0b * 2.0f) * t1b;
                 a *= t0a * t1a;
             }
-            else if (ctx.params.textureEnabled && ctx.texture0 != nullptr)
+            else if (ctx.params.textureEnabled)
             {
-                float texR, texG, texB, texA;
-                SampleTexture(*ctx.texture0, ctx.sampler0, ctx.magnify0, ctx.lambda0, u, v,
-                              texR, texG, texB, texA, &ctx.footprint0);
+                // D3D9 supplies opaque black for an unbound classic stock-effect sampler.
+                // CNAEXT PBR deliberately uses opaque white as its absent-base-map identity.
+                float texR = ctx.params.pbr ? 1.0f : 0.0f;
+                float texG = ctx.params.pbr ? 1.0f : 0.0f;
+                float texB = ctx.params.pbr ? 1.0f : 0.0f;
+                float texA = 1.0f;
+                if (ctx.texture0 != nullptr)
+                    SampleTexture(*ctx.texture0, ctx.sampler0, ctx.magnify0, ctx.lambda0, u, v,
+                                  texR, texG, texB, texA, &ctx.footprint0);
                 r *= texR;
                 g *= texG;
                 b *= texB;
@@ -3015,11 +3021,14 @@ namespace CNA::Internal::Renderers::Software
                 // reconstruct them here, because the stock pixel shader does neither.
                 const Vector3 reflDir(penvx / invW, penvy / invW, penvz / invW);
                 const float blendFactor = penvBlend / invW;
-                float envR, envG, envB, envA;
+                float envR = 0.0f, envG = 0.0f, envB = 0.0f, envA = 1.0f;
                 // REMED-GFX-182: the cube is filtered by the PUBLIC SamplerStates[1] this draw
                 // captured, through the same sampler every ordinary texture goes through.
-                SampleCubeMap(*ctx.envMap, ctx.sampler1, ctx.magnifyCube, ctx.lambdaCube, reflDir,
-                              envR, envG, envB, envA, &ctx.footprintCube);
+                // SOFTWARE-303: a null XNA cube sampler contributes opaque black, just like the
+                // 2D stock-effect samplers; no invalid resource dereference is required.
+                if (ctx.envMap != nullptr)
+                    SampleCubeMap(*ctx.envMap, ctx.sampler1, ctx.magnifyCube, ctx.lambdaCube,
+                                  reflDir, envR, envG, envB, envA, &ctx.footprintCube);
 
                 r = r * (1.0f - blendFactor) + (envR * a) * blendFactor + ctx.params.envMapSpecular[0] * envA * a;
                 g = g * (1.0f - blendFactor) + (envG * a) * blendFactor + ctx.params.envMapSpecular[1] * envA * a;
@@ -3101,12 +3110,11 @@ namespace CNA::Internal::Renderers::Software
 #endif
             const bool useDualTexture = params.dualTexture;
 #ifndef CNA_SOFTWARE_2D_ONLY
-            const bool useEnvMap = params.envMapping && envMap != nullptr;
+            const bool useEnvMap = params.envMapping;
 #else
             constexpr bool useEnvMap = false;
 #endif
-            const bool needUV = useDualTexture || useEnvMap ||
-                                (params.textureEnabled && texture0 != nullptr);
+            const bool needUV = useDualTexture || useEnvMap || params.textureEnabled;
             return ShadedContext{params, texture0, texture1, envMap, useDualTexture, useEnvMap,
                                  needUV, blendState, blendFactor, depthState, stencilState,
                                  colorWriteMask, multiSampleMask, occlusionQuery, sampler0, sampler1,
@@ -3219,11 +3227,11 @@ namespace CNA::Internal::Renderers::Software
 #endif
             const bool useDualTexture = params.dualTexture;
 #ifndef CNA_SOFTWARE_2D_ONLY
-            const bool useEnvMap = params.envMapping && envMap != nullptr;
+            const bool useEnvMap = params.envMapping;
 #else
             constexpr bool useEnvMap = false;
 #endif
-            const bool needUV = useDualTexture || useEnvMap || (params.textureEnabled && texture0 != nullptr);
+            const bool needUV = useDualTexture || useEnvMap || params.textureEnabled;
             // REMED-GFX-150: classify magnification once per triangle per bound texture. Only XNA
             // filters 5..8 distinguish the two halves, so this is inert for Point, Linear and
             // Anisotropic; it is computed only when a texture is actually sampled.
@@ -3247,7 +3255,7 @@ namespace CNA::Internal::Renderers::Software
             // REMED-GFX-182: the cube's own footprint, resolved once per triangle from the SAME
             // reflection expression the fragment path uses and only when a cube is actually bound.
 #ifndef CNA_SOFTWARE_2D_ONLY
-            const TextureFootprint footprintCube = useEnvMap
+            const TextureFootprint footprintCube = useEnvMap && envMap != nullptr
                 ? TriangleCubeTextureFootprint(v0, v1, v2,
                                                std::max(1, envMap->CubeSize()))
                 : TextureFootprint{};
@@ -4506,10 +4514,8 @@ namespace CNA::Internal::Renderers::Software
             primitive != PrimitiveType::LineStrip && primitive != PrimitiveType::PointListEXT)
             throw std::runtime_error(
                 "SoftwareRenderer::DrawPrimitivesEx: unsupported primitive topology");
-        // Optional PBR/Skinned base maps and XNA's opaque-black null DualTextureEffect samplers
-        // deliberately proceed to the shared fragment path rather than failing the draw.
-        if (params.envMapping && params.envMap == nullptr)
-            throw std::runtime_error("SoftwareRenderer::DrawPrimitivesEx: envMapping=true but envMap is null");
+        // Optional PBR maps and XNA's opaque-black null classic stock-effect samplers deliberately
+        // proceed to the shared fragment path rather than failing the draw.
 
         if (g_cubeTrace.enabled) { ++g_cubeTrace.drawId; g_cubeTrace.family = "DrawPrimitives"; }
 
@@ -4681,9 +4687,7 @@ namespace CNA::Internal::Renderers::Software
             primitive != PrimitiveType::LineStrip && primitive != PrimitiveType::PointListEXT)
             throw std::runtime_error(
                 "SoftwareRenderer::DrawIndexedPrimitivesEx: unsupported primitive topology");
-        // See DrawPrimitivesEx: optional base maps and null dual samplers are resolved by shading.
-        if (params.envMapping && params.envMap == nullptr)
-            throw std::runtime_error("SoftwareRenderer::DrawIndexedPrimitivesEx: envMapping=true but envMap is null");
+        // See DrawPrimitivesEx: optional PBR maps and null classic samplers resolve in shading.
 
         const auto& swVb = static_cast<const SoftwareVertexBufferRenderer&>(vb);
         const auto& swIb = static_cast<const SoftwareIndexBufferRenderer&>(ib);

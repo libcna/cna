@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// SOFTWARE-114: renderer-neutral EnvironmentMapEffect lighting, reflection, and Fresnel contract.
+// SOFTWARE-114/303: renderer-neutral EnvironmentMapEffect lighting, reflection, Fresnel, and
+// null-sampler contract.
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -49,6 +50,8 @@ namespace
 
     struct Scene
     {
+        bool bindTexture = true;
+        bool bindEnvironmentMap = true;
         Vector3 ambient = Vector3::Zero;
         Vector3 diffuse = Vector3::One;
         Vector3 emissive = Vector3::Zero;
@@ -158,8 +161,10 @@ class EnvironmentMapEffectContractTest final : public Game
     static void ConfigureEffect(EnvironmentMapEffect& effect, Texture2D& texture,
                                 TextureCube& cube, const Scene& scene)
     {
-        effect.setTextureProperty(&texture);
-        effect.setEnvironmentMapProperty(&cube);
+        if (scene.bindTexture)
+            effect.setTextureProperty(&texture);
+        if (scene.bindEnvironmentMap)
+            effect.setEnvironmentMapProperty(&cube);
         effect.setLightingEnabledProperty(true);
         effect.setAmbientLightColorProperty(scene.ambient);
         effect.setDiffuseColorProperty(scene.diffuse);
@@ -323,6 +328,24 @@ protected:
         Check("COLOR1 saturates negative EnvironmentMapAmount to zero",
               Render(device, target, texture, cube, negativeAmount),
               Color::White);
+
+        SetSolidCube(cube, Color(200, 100, 50, 255));
+        Scene noBaseTexture;
+        noBaseTexture.bindTexture = false;
+        noBaseTexture.emissive = Vector3::One;
+        noBaseTexture.environmentAmount = 0.0f;
+        Check("null base Texture samples XNA opaque black",
+              Render(device, target, texture, cube, noBaseTexture),
+              Color(0, 0, 0, 255));
+
+        Scene noEnvironmentMap;
+        noEnvironmentMap.bindEnvironmentMap = false;
+        noEnvironmentMap.emissive = Vector3::One;
+        noEnvironmentMap.textureColor = Color(80, 40, 120, 255);
+        noEnvironmentMap.environmentAmount = 1.0f;
+        Check("null EnvironmentMap samples XNA opaque black",
+              Render(device, target, texture, cube, noEnvironmentMap),
+              Color(0, 0, 0, 255));
 
         Scene nonUniformLighting;
         nonUniformLighting.normal = Vector3(0.70710678f, 0.0f, 0.70710678f);

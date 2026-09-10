@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// SOFTWARE-153: renderer-neutral BasicEffect unlit material and vertex-output contract.
+// SOFTWARE-153/303: renderer-neutral BasicEffect unlit material and vertex-output contract.
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -239,9 +239,10 @@ protected:
         Check(Render(device, vertex, vertex, true, false, &texture),
               Expected(vertex, white, true),
               "TextureEnabled=false ignores a non-null Texture");
+        const Color opaqueBlack(0, 0, 0, 255);
         Check(Render(device, vertex, vertex, true, true, nullptr),
-              Expected(vertex, white, true),
-              "TextureEnabled=true with null Texture samples opaque white");
+              Expected(vertex, opaqueBlack, true),
+              "TextureEnabled=true with null Texture samples XNA opaque black");
         Check(Render(device, vertex, vertex, true, true, &texture),
               Expected(vertex, textureValue, true),
               "texture * vertex * (diffuse+emissive) * alpha, including output alpha");

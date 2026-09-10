@@ -389,8 +389,8 @@ class TextureFilterOrdinalContractTest : public Game
     Pattern p4x4_ = Make4x4();
 
     Texture2D tex8x4_, tex5x3_, tex4x4_, white_;
-    /// TextureCube has no default constructor, so it is created in LoadContent once the device
-    /// exists. EnvironmentMapEffect needs a non-null cube even when its contribution is zeroed.
+    /// TextureCube has no default constructor, so the filter matrix creates one in LoadContent
+    /// once the device exists. Null-cube behavior is covered independently by SOFTWARE-303.
     std::unique_ptr<TextureCube> cube_;
 
     void check(bool ok, const std::string& label)

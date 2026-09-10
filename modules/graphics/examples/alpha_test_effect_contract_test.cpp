@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
-// SOFTWARE-111: renderer-neutral AlphaTestEffect fragment contract.
+// SOFTWARE-111/303: renderer-neutral AlphaTestEffect fragment contract.
 //
 // This public-API fixture characterizes all eight CompareFunction modes on both sides of the
 // byte reference, proves that texture/effect/vertex alpha are multiplied before comparison,
-// covers the implicit opaque-white null texture, and proves that discard does not write depth.
+// covers Microsoft XNA's opaque-black null texture, and proves that discard does not write depth.
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -135,9 +135,9 @@ class AlphaTestEffectContractTest final : public Game
                      kBackground, 1.0f, 0);
     }
 
-    bool DrawAlpha(GraphicsDevice& device, Texture2D* texture, float alpha,
-                   CompareFunction function, int reference,
-                   bool vertexColorEnabled = false, int vertexAlpha = 255)
+    Color RenderAlphaColor(GraphicsDevice& device, Texture2D* texture, float alpha,
+                           CompareFunction function, int reference,
+                           bool vertexColorEnabled = false, int vertexAlpha = 255)
     {
         Prepare(device, false);
         AlphaTestEffect effect(device);
@@ -159,7 +159,15 @@ class AlphaTestEffectContractTest final : public Game
             const auto quad = TexturedQuad(0.25f);
             device.DrawUserPrimitives(PrimitiveType::TriangleList, quad.data(), 0, 2);
         }
-        return IsDrawn(Center(device));
+        return Center(device);
+    }
+
+    bool DrawAlpha(GraphicsDevice& device, Texture2D* texture, float alpha,
+                   CompareFunction function, int reference,
+                   bool vertexColorEnabled = false, int vertexAlpha = 255)
+    {
+        return IsDrawn(RenderAlphaColor(device, texture, alpha, function, reference,
+                                        vertexColorEnabled, vertexAlpha));
     }
 
     void CheckFunctionSweep(GraphicsDevice& device, Texture2D& white)
@@ -179,8 +187,10 @@ class AlphaTestEffectContractTest final : public Game
 
     void CheckAlphaSources(GraphicsDevice& device, Texture2D& white, Texture2D& halfAlpha)
     {
-        Check(DrawAlpha(device, nullptr, 1.0f, CompareFunction::Greater, 254),
-              "a null AlphaTestEffect texture samples implicit opaque white");
+        const Color nullSample = RenderAlphaColor(
+            device, nullptr, 1.0f, CompareFunction::Greater, 254);
+        Check(nullSample == Color(0, 0, 0, 255),
+              "a null AlphaTestEffect texture samples XNA opaque black and passes on alpha one");
 
         Check(DrawAlpha(device, &halfAlpha, 1.0f, CompareFunction::Greater, 100),
               "texture alpha alone participates in the comparison");

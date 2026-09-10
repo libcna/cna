@@ -275,8 +275,8 @@ class StockEffectSamplerContractTest : public Game
     std::vector<Color> pattern_;
     std::vector<Color> pattern2_;
     Texture2D tex_, tex2_, white_;
-    /// TextureCube has no default constructor, so it is created in LoadContent once the device
-    /// exists. EnvironmentMapEffect needs a non-null cube even when its contribution is zeroed.
+    /// TextureCube has no default constructor, so the sampler matrix creates one in LoadContent
+    /// once the device exists. Null-cube behavior is covered independently by SOFTWARE-303.
     std::unique_ptr<TextureCube> cube_;
 
     void check(bool ok, const std::string& label)

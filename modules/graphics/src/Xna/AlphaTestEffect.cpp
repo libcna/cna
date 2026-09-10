@@ -316,11 +316,14 @@ namespace Microsoft::Xna::Framework::Graphics
         using namespace CNA::Internal::Renderers;
 
         p.alphaTestEffect   = true;
-        p.textureEnabled     = (texture_ != nullptr);
+        // AlphaTestEffect has no TextureEnabled switch: every XNA shader variant samples its
+        // texture even when the public property is null. Renderers provide D3D9's opaque-black
+        // null sample instead of silently selecting an untextured program (SOFTWARE-303).
+        p.textureEnabled     = true;
         p.vertexColorEnabled = vertexColorEnabled_;
         p.lightingEnabled    = false;
 
-        if (p.textureEnabled)
+        if (texture_ != nullptr)
             p.texture0 = &texture_->GetRenderer();
 
         p.diffuseColor[0] = diffuseColor_.X * alpha_;

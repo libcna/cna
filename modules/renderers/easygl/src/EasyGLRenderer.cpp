@@ -6220,6 +6220,8 @@ if (ProfileUsesGlslEs100())
         default_white_texture_ready_ = false;
         default_black_texture_.reset_handle_no_gl();
         default_black_texture_ready_ = false;
+        default_black_cube_texture_.reset_handle_no_gl();
+        default_black_cube_texture_ready_ = false;
         default_flat_normal_texture_.reset_handle_no_gl();
         default_flat_normal_texture_ready_ = false;
         for (auto& sampler : samplers_)
@@ -11143,6 +11145,29 @@ CNA_GL_PUNCTUAL_DECL
         default_black_texture_ready_ = true;
     }
 
+    void EasyGLRenderer::EnsureDefaultBlackCubeTexture()
+    {
+        if (default_black_cube_texture_ready_) return;
+        static const uint8_t black[4] = {0, 0, 0, 255};
+        default_black_cube_texture_.create();
+        default_black_cube_texture_.bind(::easygl::TextureTarget::TextureCubeMap);
+        for (const auto face : kCubeFaceTargets)
+            default_black_cube_texture_.set_image_2d(face, 0, 1, 1, black);
+        default_black_cube_texture_.set_parameter(
+            ::easygl::TextureTarget::TextureCubeMap,
+            ::easygl::TextureParameterSetter::MinFilter, kTexLinear);
+        default_black_cube_texture_.set_parameter(
+            ::easygl::TextureTarget::TextureCubeMap,
+            ::easygl::TextureParameterSetter::MagFilter, kTexLinear);
+        default_black_cube_texture_.set_parameter(
+            ::easygl::TextureTarget::TextureCubeMap,
+            ::easygl::TextureParameterSetter::WrapS, kTexClampToEdge);
+        default_black_cube_texture_.set_parameter(
+            ::easygl::TextureTarget::TextureCubeMap,
+            ::easygl::TextureParameterSetter::WrapT, kTexClampToEdge);
+        default_black_cube_texture_ready_ = true;
+    }
+
     // plans/plan_cnj.md CNB-58 (Phase 13A): fallback for PbrEffect::NormalMap when unbound -- a "flat"
     // tangent-space normal (0,0,1) encoded as RGB (128,128,255), so the sampled/decoded (rgb*2-1)
     // normal is exactly the geometric normal (no perturbation). The other 3 PBR map fallbacks
@@ -11817,13 +11842,16 @@ CNA_GL_PUNCTUAL_DECL
         // Cube map (unit 1 — bind before texture0 to leave unit 0 active)
         if (p.loc_envmap >= 0)
         {
-            EnsureDefaultWhiteTexture();
             p.prog.set_uniform(p.loc_envmap, 1);
             if (params.envMap)
                 params.envMap->BindGL(1);
             else
-                default_white_texture_.active_bind(::easygl::TextureUnit::Texture1,
-                                                   ::easygl::TextureTarget::Texture2D);
+            {
+                EnsureDefaultBlackCubeTexture();
+                default_black_cube_texture_.active_bind(
+                    ::easygl::TextureUnit::Texture1,
+                    ::easygl::TextureTarget::TextureCubeMap);
+            }
             ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
         }
 
@@ -12002,7 +12030,7 @@ CNA_GL_PUNCTUAL_DECL
             rtFlipV[0] = SampledRowOrderIsBottomUp(params.texture0) ? 1.0f : 0.0f;
             if (params.texture0)
                 params.texture0->BindGL(0);
-            else if (params.dualTexture)
+            else if (!params.pbr)
             {
                 EnsureDefaultBlackTexture();
                 default_black_texture_.active_bind(::easygl::TextureUnit::Texture0,

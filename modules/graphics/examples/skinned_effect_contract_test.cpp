@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// SOFTWARE-115: renderer-neutral FNA/XNA SkinnedEffect skinning and lighting contract.
+// SOFTWARE-115/303: renderer-neutral FNA/XNA SkinnedEffect skinning, lighting, and null-sampler
+// contract.
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -405,9 +406,9 @@ protected:
         noTexture.diffuse = Vector3(0.2f, 0.3f, 0.4f);
         noTexture.emissive = Vector3::One;
         noTexture.alpha = 0.5f;
-        Check("unbound optional texture contributes opaque white",
+        Check("unbound required texture samples XNA opaque black",
               Render(device, target, texture, noTexture),
-              FloatColor(0.5f, 0.5f, 0.5f, 0.5f));
+              FloatColor(0.0f, 0.0f, 0.0f, 0.5f));
 
         Scene defaultFront;
         Check("EnableDefaultLighting front normal uses the standard rig",

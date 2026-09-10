@@ -1,40 +1,17 @@
 // SPDX-License-Identifier: MS-PL
-// Task 379: AlphaTestEffect null/no-texture behavior (EasyGL renderer).
+// Task 379 / SOFTWARE-303: AlphaTestEffect null/no-texture behavior (EasyGL renderer).
 //
 // FNA reference: `AlphaTestEffect` has no `TextureEnabled` flag at all (unlike `BasicEffect`) —
 // every one of its 4 shader variants unconditionally does `SAMPLE_TEXTURE(Texture,pin.TexCoord) *
-// pin.Diffuse`. A texture is *required* for meaningful use; FNA itself does not define what
-// happens if `Texture` is left null (sampling an unbound texture unit is graphics-API-dependent
-// undefined behavior in real Direct3D9/OpenGL, not a documented XNA fallback).
+// pin.Diffuse`. Microsoft XNA 4.0 was measured directly: an unbound sampler contributes opaque
+// black. SOFTWARE-303 supersedes CNA's former invented opaque-white convention.
 //
-// CNA's own, already-established, cross-renderer convention (used by every texture-sampling
-// shader path, not just `AlphaTestEffect`): if no texture is bound, sample an internal 1×1 opaque
-// **white** texture instead of leaving the sampler unbound or stale — a safe, defined, documented
-// intentional deviation from FNA's undefined behavior (matches this project's `EnsureDefaultWhiteTexture()`
-// pattern, already used consistently by `BasicEffect`/`DualTextureEffect`/etc.).
+// Task 379 originally used this test to eliminate stale bindings, but chose opaque white without
+// measuring Microsoft XNA. The stale-binding structure remains useful; SOFTWARE-303 corrects its
+// authority and expected value.
 //
-// REAL BUG FOUND AND FIXED ON BGFX by writing this test (see the Bgfx variant of this test and
-// plans/plan_graphics.md's Task 379 entry for the full finding): Bgfx's texture-binding code only ever
-// called `bgfx::setTexture()` when a real texture was present (`if (params.texture0 && ...)`),
-// with **no fallback at all** — meaning a null-texture draw silently left whatever texture the
-// *previous* draw call had bound, a stale, undefined result inconsistent with EasyGL's and
-// Vulkan's own deliberate white-texture fallback. Fixed by adding a `defaultWhiteTexture3D_` and
-// an `else` branch to all 7 of Bgfx's texture-binding call sites (every one of the C++ dispatch
-// branches that samples `texColor3DSampler_`, not just the `AlphaTestEffect`-specific one — the
-// bug was general, not limited to this one effect). This EasyGL test itself found no bug — EasyGL
-// already had the correct fallback (`EnsureDefaultWhiteTexture()`/`default_white_texture_`, used
-// generically since before this task).
-//
-// Also confirmed, not fixed here (deliberately out of scope — `DualTextureEffect`, not
-// `AlphaTestEffect`, and much lower impact): Bgfx's *second* texture slot
-// (`texColor3DSampler2_`/`params.texture1`) has the exact same unconditional-skip shape and could
-// use the identical fix, but `DualTextureEffect` always requires both textures by design (unlike
-// `AlphaTestEffect`, where a null texture is a real, if unusual, usage pattern), so this is a much
-// narrower edge case — noted for a future task, not opened as its own numbered item.
-//
-// Uses a distinctive DiffuseColor=(0.6,0.4,0.8) (not white) so the 3 hypotheses are numerically
-// distinct: correct white-fallback multiplied by DiffuseColor (153,102,204), the previous draw's
-// real texture retained (120,40,40, same as the first sub-test), or a black-fallback (0,0,0).
+// Uses a distinctive DiffuseColor=(0.6,0.4,0.8) (not white) so the stale previous texture and
+// obsolete white fallback are both distinguishable from the measured opaque-black result.
 //
 // Exit code 0 = PASS, 1 = FAIL.
 
@@ -66,8 +43,8 @@ static const Vector3 kDiffuse(0.6f, 0.4f, 0.8f);
 
 // Expected with a real texture bound: TextureColor * DiffuseColor.
 static const Color kExpectedWithTexture(120, 40, 40, 255);
-// Expected with Texture=null: white fallback * DiffuseColor.
-static const Color kExpectedNullTexture(153, 102, 204, 255);
+static const Color kExpectedNullTexture(0, 0, 0, 255);
+static const Color kBackground(7, 199, 53, 255);
 
 class AlphaTestNullTextureTest : public Game
 {
@@ -97,7 +74,8 @@ class AlphaTestNullTextureTest : public Game
     {
         return closeTo(c.getRProperty(), expected.getRProperty(), 8)
             && closeTo(c.getGProperty(), expected.getGProperty(), 8)
-            && closeTo(c.getBProperty(), expected.getBProperty(), 8);
+            && closeTo(c.getBProperty(), expected.getBProperty(), 8)
+            && closeTo(c.getAProperty(), expected.getAProperty(), 8);
     }
 
     Color readCenter(GraphicsDevice& dev)
@@ -118,7 +96,7 @@ class AlphaTestNullTextureTest : public Game
         Color got(0, 0, 0, 0);
         for (int i = 0; i < 20; ++i)
         {
-            dev.Clear(Color(0, 0, 0, 255));
+            dev.Clear(kBackground);
             dev.setBlendStateProperty(BlendState::Opaque);
             // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): this quad's
             // winding is culled by the real default RasterizerState once EasyGL pushes it at
@@ -126,8 +104,8 @@ class AlphaTestNullTextureTest : public Game
             dev.setRasterizerStateProperty(RasterizerState::CullNone);
             dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
             got = readCenter(dev);
-            if (got.getRProperty() != 0 || got.getGProperty() != 0 || got.getBProperty() != 0)
-                break; // skip blank/black frames
+            if (!matches(got, kBackground))
+                break;
         }
         return got;
     }
@@ -153,11 +131,11 @@ protected:
         check(matches(withTexGot, kExpectedWithTexture),
               "real texture bound: TextureColor*DiffuseColor", withTexGot, "(120,40,40)");
 
-        // Sub-test 2: Texture=null. Must fall back to white, not retain sub-test 1's texture.
+        // Sub-test 2: Texture=null. Must sample opaque black, not retain sub-test 1's texture.
         const Color nullTexGot = renderWith(dev, nullptr, quad);
         check(matches(nullTexGot, kExpectedNullTexture),
-              "Texture=null: falls back to white (not the previous draw's stale texture)",
-              nullTexGot, "(153,102,204)");
+              "Texture=null: samples opaque black like Microsoft XNA",
+              nullTexGot, "(0,0,0,255)");
         check(!matches(nullTexGot, kExpectedWithTexture),
               "Texture=null: pixel != previous draw's texture (proves no stale-state leak)",
               nullTexGot, "not (120,40,40)");
