@@ -772,7 +772,7 @@ six resulting channel values with `AtmosphericSky::radiance`, so a flat or verti
 cannot satisfy it. Both Vulkan runs emit no validation message, and the standalone package has its
 own write-free reproducibility gate.
 
-### Portable engine-effect rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`–`MOD-2239v`, 2026-09-10)
+### Portable engine-effect rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`–`MOD-2239w`, 2026-09-10)
 
 `ChromaticAberrationPass` is the first engine post-process to use the portable package path. Its
 internal package shares one fullscreen vertex contract across GLSL ES, desktop GLSL and SPIR-V;
@@ -1014,6 +1014,21 @@ declares the same read-only matrix buffer at logical binding 6 (Vulkan set 2) an
 native instance index. The shared suite is **8/8** on Vulkan llvmpipe and EasyGL, including the
 5-visible/6-culled pixel oracle and stale-zero command check; `cna_test_cnaext_gpu_driven` is
 **4/4** on both. The two generated packages have independent write-free reproducibility gates.
+RADV was not used because it cannot present through the hidden Xvfb display; no visible window was
+opened.
+
+`ParticleSystem` now selects independent portable compute and draw packages instead of embedding
+GLSL ES strings. Five packed `vec4` constant-buffer rows carry the simulation inputs without
+depending on named Vulkan push-constant reflection. The draw consumes the compute-written particle
+buffer at logical binding 7 / Vulkan set 2, plus typed matrix, colour and scalar arrays through the
+existing custom-effect descriptor contract; its optional soft-depth input accepts either packed or
+single-channel prepass depth. GPU construction failures retain the existing CPU fallback rather
+than leaving a half-initialised subsystem. A zero emission direction also now takes the same finite
+up-axis fallback on CPU and GPU. `ParticleSystemTest` is **15/15** on Vulkan llvmpipe and EasyGL,
+including GPU/CPU agreement, soft-particle pixels, an actual instanced frame and the zero-direction
+regression. The low-level `cna_test_cnaext_compute_particles` example is **2/2** on both after its
+own compute package replaced a stale GLSL-only constructor; it intentionally retains readback as a
+measurable baseline. Both generated packages have independent write-free reproducibility gates.
 RADV was not used because it cannot present through the hidden Xvfb display; no visible window was
 opened.
 

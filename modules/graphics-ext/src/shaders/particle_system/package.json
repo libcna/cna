@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "namespace": "CNA::Graphics::detail::ParticleSystemGenerated",
+  "package": "particle_system",
+  "preprocessor_guard": "CNA_CNAEXT",
+  "payloads": [
+    {"symbol":"kSimulateEsComputeSource","source":"simulate.es.comp.glsl","language":"glsl-es","stage":"compute","format":"text","entry_point":"main"},
+    {"symbol":"kSimulateDesktopComputeSource","source":"simulate.desktop.comp.glsl","language":"glsl","stage":"compute","format":"text","entry_point":"main"},
+    {"symbol":"kSimulateVulkanComputeSpirV","source":"simulate.vulkan.comp.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"compute","format":"spirv","entry_point":"main"},
+    {"symbol":"kDrawEsVertexSource","source":"draw.es.vert.glsl","language":"glsl-es","stage":"vertex","format":"text","entry_point":"main"},
+    {"symbol":"kDrawEsFragmentSource","source":"draw.es.frag.glsl","language":"glsl-es","stage":"fragment","format":"text","entry_point":"main"},
+    {"symbol":"kDrawDesktopVertexSource","source":"draw.desktop.vert.glsl","language":"glsl","stage":"vertex","format":"text","entry_point":"main"},
+    {"symbol":"kDrawDesktopFragmentSource","source":"draw.desktop.frag.glsl","language":"glsl","stage":"fragment","format":"text","entry_point":"main"},
+    {"symbol":"kDrawVulkanVertexSpirV","source":"draw.vulkan.vert.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"vertex","format":"spirv","entry_point":"main"},
+    {"symbol":"kDrawVulkanFragmentSpirV","source":"draw.vulkan.frag.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"fragment","format":"spirv","entry_point":"main"}
+  ]
+}

@@ -218,7 +218,7 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 | Compute / storage buffers | ✅ GL ES ≥ 3.1 / GL ≥ 4.3, runtime-probed; ordinary texture image bindings desktop-GL only | ✅ SPIR-V, reflected SSBO/push constants, readonly vertex/fragment SSBOs, fifteen exact dedicated storage-image formats plus legal ordinary-texture/render-target bridges in one deferred order | ⬜ | ⬜ — both wrappers throw `System::NotSupportedException` naming the renderer |
 | Indirect draws | ✅ GL ES ≥ 3.1 / GL ≥ 4.0, runtime-probed; both routes, including per-instance streams | ✅ device-gated `drawIndirectFirstInstance`; both routes, deferred lifetime and compute-written commands | ⬜ | ⬜ — `SupportsIndirectDrawEXT()` is false by default and `GraphicsDevice` refuses the draw naming the renderer |
 | GPU culling into an indirect draw | ✅ portable GLSL package + vertex-stage SSBO | ✅ portable SPIR-V compute package, reflected vertex-stage SSBO and compute-written indirect command (`MOD-2239v`) | ⬜ | ⬜ — `GpuInstanceCuller` refuses and names the missing requirement; there is no fallback, because a CPU path would not remove the stall |
-| Particles | ✅ GPU simulation + instanced billboards | 🟨 CPU fallback remains active; the native SPIR-V fragment-SSBO dependency is proven, but the subsystem's GLSL payload cannot yet be selected on Vulkan (`MOD-2210`–`MOD-2214`) | 🟨 same | 🟨 — `ParticleSystem` falls back to its CPU path and the same particles appear, more slowly |
+| Particles | ✅ portable GPU simulation + instanced billboards | ✅ portable SPIR-V compute/draw package, reflected vertex SSBO and no readback (`MOD-2239w`) | 🟨 same | 🟨 — `ParticleSystem` falls back to its CPU path and the same particles appear, more slowly |
 | Transparency (sorted) | ✅ ordering is renderer-free; the phase needs only a scene target | ✅ | ✅ | ✅ — `TransparentDrawList` is plain arithmetic and runs everywhere |
 | Transparency (order-independent) | ✅ needs MRT, a half-float target and a usable custom-effect package | ✅ portable resolve plus GLSL/SPIR-V accumulation contract (`MOD-2239u`) | ⬜ | ⬜ — the pipeline falls back to the sorted phase and names the missing requirement |
 | `.cube` grading tables | ✅ parse is renderer-free; the strip needs only a 2D texture | ✅ | ✅ | ✅ — `CubeLut` is plain arithmetic and the strip layout runs everywhere |
@@ -261,8 +261,9 @@ true 3D-LUT colour grading; `MOD-2239h` adds analytic height fog from depth and 
 depth/normal/velocity producer, `MOD-2239m` adds screen-space reflections, `MOD-2239n` adds
 screen-space contact shadows, `MOD-2239o` adds projected decals, `MOD-2239p` adds aerial
 perspective, `MOD-2239r` adds volumetric fog, `MOD-2239s`/`MOD-2239t` add the legacy
-`CRTEffect`/`DepthEffect` pair, `MOD-2239u` adds weighted order-independent transparency, and
-`MOD-2239v` adds portable GPU instance culling. The remaining
+`CRTEffect`/`DepthEffect` pair, `MOD-2239u` adds weighted order-independent transparency,
+`MOD-2239v` adds portable GPU instance culling, and `MOD-2239w` adds portable GPU particle
+simulation and drawing. The remaining
 post-process paths still provide source alone and remain unavailable on Vulkan. Portable packages
 use the language/stage query to select a payload;
 subsystems still ask their own semantic capability before promising a visible result.
@@ -1259,11 +1260,15 @@ specification, down to the float expressions: the spawn values come from an inte
 bit-identical in GLSL and C++, so a comparison between the two paths is meaningful and is asserted
 rather than assumed.
 
-**The GPU path reads back nothing.** The vertex shader reads the buffer the compute shader wrote,
+**The GPU path reads back nothing.** A generated package selects GLSL ES, desktop GLSL or SPIR-V
+for both the compute and draw stages. The vertex shader reads the buffer the compute shader wrote,
 which needs a storage buffer readable from a vertex stage (see `GpuInstanceCuller` for why that is
-its own requirement) plus `GraphicsCapability::Instancing`. Where any of that is missing the system
-falls back to the CPU — and here a fallback is the right answer, unlike for GPU culling: the same
-particles appear, only simulated more slowly. `usesCompute()` says which ran.
+its own requirement) plus `GraphicsCapability::Instancing`. Where any of that or a usable package
+variant is missing the system falls back to the CPU — and here a fallback is the right answer,
+unlike for GPU culling: the same particles appear, only simulated more slowly. `usesCompute()` says
+which ran. The low-level `cna_test_cnaext_compute_particles` baseline also selects a portable
+compute variant, but deliberately reads back so the transfer avoided by `ParticleSystem` stays
+measurable.
 
 **`setSimulationOnCpuEXT` pins it to the CPU** on a device that has both. Worth having on a tile GPU
 where a dispatch and its barrier cost more than stepping a few hundred particles — and it is how the
