@@ -253,12 +253,32 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
+        /**
+         * @brief Returns the exact XNA SurfaceFormat ordinal represented by this texture.
+         *
+         * @return The logical SurfaceFormat ordinal, independent of native fallback storage.
+         */
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
 
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         /// REMED-GFX-176: uploads exactly @p level, sized by that level's own dimensions. An
         /// out-of-range level or a null source is ignored, matching VulkanTextureRenderer's
         /// established convention for this void-returning interface method.
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
+        /**
+         * @brief Returns exact DXT blocks for compressed textures.
+         *
+         * @param level Mip level to read.
+         * @param x Left edge in texels.
+         * @param y Top edge in texels.
+         * @param w Width in texels.
+         * @param h Height in texels.
+         * @param data Destination block buffer.
+         * @param dataLength Destination size in bytes.
+         * @return true when the requested compressed region was copied; otherwise false.
+         */
+        [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
 
         /** @brief Returns the underlying `SDL_GPUTexture`. CNAEXT — internal use only. */
         CNAEXT [[nodiscard]] SDL_GPUTexture* Texture() const { return state_->texture; }
@@ -269,6 +289,18 @@ namespace CNA::Internal::Renderers::SdlGpu
          */
         CNAEXT [[nodiscard]] int LevelCountEXT() const { return levelCount_; }
         /**
+         * @brief Returns the SDL_gpu storage format selected for this texture. Test-only CNAEXT.
+         *
+         * @return The native SDL_gpu format, including renderer-side fallback storage.
+         */
+        CNAEXT [[nodiscard]] SDL_GPUTextureFormat NativeFormatEXT() const { return nativeFormat_; }
+        /**
+         * @brief Reports whether DXT blocks are held in native compressed GPU storage. Test-only CNAEXT.
+         *
+         * @return true for native BC storage; false for renderer-decoded RGBA8 storage.
+         */
+        CNAEXT [[nodiscard]] bool UsesNativeCompressionEXT() const { return compressedNative_; }
+        /**
          * @brief Returns this texture as a bindable, lifetime-safe sampled resource. CNAEXT.
          *
          * @return The native handle paired with the shared state that keeps it alive.
@@ -276,9 +308,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         CNAEXT [[nodiscard]] SdlGpuSampledTextureEXT Sampled() const { return {state_->texture, state_}; }
 
     private:
-        /// The one upload path both public entry points share (REMED-GFX-176). @p stride is the
-        /// source row pitch in bytes; the destination region is always the whole of @p level.
-        void UploadLevel(int level, const uint8_t* rgba, int levelW, int levelH, int stride);
+        /// The one upload path both public entry points share (REMED-GFX-176/SDLGPU-69). @p stride
+        /// is the logical XNA-format source row pitch; the destination is all of @p level.
+        void UploadLevel(int level, const uint8_t* pixels, int levelW, int levelH, int stride);
 
         SdlGpuRenderer* owner_ = nullptr;
         // The actual GPU handle lives in this shared_ptr-owned struct, NOT directly here -- see
@@ -288,6 +320,16 @@ namespace CNA::Internal::Renderers::SdlGpu
         int height_ = 0;
         /// Mip levels SDL really allocated for this texture (REMED-GFX-176).
         int levelCount_ = 1;
+        /// Public XNA SurfaceFormat ordinal retained independently from the chosen native fallback.
+        int surfaceFormat_ = 0;
+        /// Actual SDL_gpu storage format, which may be RGBA8 for a renderer-side conversion.
+        SDL_GPUTextureFormat nativeFormat_ = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+        /// Logical bytes per texel, or bytes per 4x4 block when compressed.
+        int logicalBlockBytes_ = 4;
+        bool compressed_ = false;
+        bool compressedNative_ = false;
+        /// Exact caller-authored DXT blocks, authoritative for partial updates and GetData.
+        std::vector<std::vector<std::uint8_t>> compressedLevels_;
         /// Identifies this texture in CNA_SDLGPU_TEXTURE_TRACE output; 0 when tracing is off.
         int traceId_ = 0;
     };
@@ -1933,6 +1975,34 @@ namespace CNA::Internal::Renderers::SdlGpu
         bool TransformWindowToLogical(float windowX, float windowY, float& logicalX, float& logicalY) const override;
         /** @brief Converts a logical (virtual) game point to physical window coordinates. */
         bool TransformLogicalToWindow(float logicalX, float logicalY, float& windowX, float& windowY) const override;
+
+        /**
+         * @brief Classifies the ordinary Texture2D SurfaceFormats this renderer stores faithfully.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal to classify.
+         * @return The renderer's supported, unsupported or deferred verdict.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief Classifies whether Color-shaped transfers preserve the requested format.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal to classify.
+         * @return Supported only for Color, Unsupported for other classic formats, or Defer for CNAEXT formats.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyColorTransferFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief Reports the classic DXT formats whose public transfers are block-compressed.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal to inspect.
+         * @return true for Dxt1, Dxt3 or Dxt5; otherwise false.
+         */
+        [[nodiscard]] bool IsCompressedTransferFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief Reports whether DDS/XNB blocks can remain compressed during content loading.
+         *
+         * @return true only when the device natively stores all three classic DXT formats.
+         */
+        [[nodiscard]] bool LoadsCompressedContentNativelyEXT() const override;
 
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;

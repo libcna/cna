@@ -4,10 +4,12 @@
 
 #include "CNA/Logger.hpp"
 #include "CNA/LogCategory.hpp"
+#include "CNA/Internal/Graphics/DxtUtil.hpp"
 #include "shaders/spirv_shaders.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectPass.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectTechnique.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
 
@@ -989,6 +991,154 @@ namespace CNA::Internal::Renderers::SdlGpu
             int levels = 1;
             while (w > 1 || h > 1) { w = std::max(1, w / 2); h = std::max(1, h / 2); ++levels; }
             return levels;
+        }
+
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+
+        [[nodiscard]] constexpr bool IsClassicDxtFormat(SurfaceFormat format) noexcept
+        {
+            return format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
+                   format == SurfaceFormat::Dxt5;
+        }
+
+        [[nodiscard]] constexpr int LogicalTextureBlockBytes(SurfaceFormat format) noexcept
+        {
+            switch (format)
+            {
+                case SurfaceFormat::Bgr565:
+                case SurfaceFormat::Bgra5551:
+                case SurfaceFormat::Bgra4444:
+                case SurfaceFormat::NormalizedByte2:
+                    return 2;
+                case SurfaceFormat::Dxt1:
+                    return 8;
+                case SurfaceFormat::Dxt3:
+                case SurfaceFormat::Dxt5:
+                    return 16;
+                case SurfaceFormat::Color:
+                case SurfaceFormat::NormalizedByte4:
+                    return 4;
+                default:
+                    return 0;
+            }
+        }
+
+        [[nodiscard]] constexpr SDL_GPUTextureFormat PreferredTextureFormat(
+            SurfaceFormat format) noexcept
+        {
+            switch (format)
+            {
+                case SurfaceFormat::Color:           return SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+                case SurfaceFormat::Bgr565:          return SDL_GPU_TEXTUREFORMAT_B5G6R5_UNORM;
+                case SurfaceFormat::Bgra5551:        return SDL_GPU_TEXTUREFORMAT_B5G5R5A1_UNORM;
+                case SurfaceFormat::Bgra4444:        return SDL_GPU_TEXTUREFORMAT_B4G4R4A4_UNORM;
+                case SurfaceFormat::Dxt1:            return SDL_GPU_TEXTUREFORMAT_BC1_RGBA_UNORM;
+                case SurfaceFormat::Dxt3:            return SDL_GPU_TEXTUREFORMAT_BC2_RGBA_UNORM;
+                case SurfaceFormat::Dxt5:            return SDL_GPU_TEXTUREFORMAT_BC3_RGBA_UNORM;
+                // D3D9 expands missing channels to one. Store two caller bytes in four SNORM
+                // channels so every stock/custom sampling route sees (R,G,1,1) without requiring
+                // a format-dependent shader variant.
+                case SurfaceFormat::NormalizedByte2: return SDL_GPU_TEXTUREFORMAT_R8G8B8A8_SNORM;
+                case SurfaceFormat::NormalizedByte4: return SDL_GPU_TEXTUREFORMAT_R8G8B8A8_SNORM;
+                default:                             return SDL_GPU_TEXTUREFORMAT_INVALID;
+            }
+        }
+
+        [[nodiscard]] bool ForceDxtFallbackForTest()
+        {
+            const char* value = std::getenv("CNA_SDLGPU_FORCE_DXT_FALLBACK");
+            return value != nullptr && std::strcmp(value, "0") != 0;
+        }
+
+        [[nodiscard]] bool ForcePackedFallbackForTest()
+        {
+            const char* value = std::getenv("CNA_SDLGPU_FORCE_PACKED_FALLBACK");
+            return value != nullptr && std::strcmp(value, "0") != 0;
+        }
+
+        [[nodiscard]] constexpr std::uint8_t Expand5To8(std::uint16_t value) noexcept
+        {
+            return static_cast<std::uint8_t>((value << 3) | (value >> 2));
+        }
+
+        [[nodiscard]] constexpr std::uint8_t Expand6To8(std::uint16_t value) noexcept
+        {
+            return static_cast<std::uint8_t>((value << 2) | (value >> 4));
+        }
+
+        [[nodiscard]] constexpr std::uint8_t Expand4To8(std::uint16_t value) noexcept
+        {
+            return static_cast<std::uint8_t>((value << 4) | value);
+        }
+
+        [[nodiscard]] std::vector<std::uint8_t> ConvertTextureLevelForFallback(
+            SurfaceFormat format, const std::uint8_t* source, std::size_t sourceBytes,
+            int width, int height)
+        {
+            if (source == nullptr)
+                throw std::invalid_argument("CNA SDL_GPU: texture conversion source cannot be null");
+
+            if (IsClassicDxtFormat(format))
+            {
+                using CNA::Internal::Graphics::DxtUtil;
+                if (format == SurfaceFormat::Dxt1)
+                    return DxtUtil::DecompressDxt1(source, sourceBytes, width, height);
+                if (format == SurfaceFormat::Dxt3)
+                    return DxtUtil::DecompressDxt3(source, sourceBytes, width, height);
+                return DxtUtil::DecompressDxt5(source, sourceBytes, width, height);
+            }
+
+            const std::size_t texelCount = static_cast<std::size_t>(width) * height;
+            std::vector<std::uint8_t> result(texelCount * 4u);
+            if (format == SurfaceFormat::NormalizedByte2)
+            {
+                for (std::size_t i = 0; i < texelCount; ++i)
+                {
+                    result[i * 4u + 0u] = source[i * 2u + 0u];
+                    result[i * 4u + 1u] = source[i * 2u + 1u];
+                    result[i * 4u + 2u] = 0x7Fu;
+                    result[i * 4u + 3u] = 0x7Fu;
+                }
+                return result;
+            }
+
+            for (std::size_t i = 0; i < texelCount; ++i)
+            {
+                const std::uint16_t packed = static_cast<std::uint16_t>(source[i * 2u]) |
+                    static_cast<std::uint16_t>(source[i * 2u + 1u]) << 8;
+                std::uint8_t r = 0, g = 0, b = 0, a = 255;
+                if (format == SurfaceFormat::Bgr565)
+                {
+                    r = Expand5To8(static_cast<std::uint16_t>((packed >> 11) & 0x1Fu));
+                    g = Expand6To8(static_cast<std::uint16_t>((packed >> 5) & 0x3Fu));
+                    b = Expand5To8(static_cast<std::uint16_t>(packed & 0x1Fu));
+                }
+                else if (format == SurfaceFormat::Bgra5551)
+                {
+                    r = Expand5To8(static_cast<std::uint16_t>((packed >> 10) & 0x1Fu));
+                    g = Expand5To8(static_cast<std::uint16_t>((packed >> 5) & 0x1Fu));
+                    b = Expand5To8(static_cast<std::uint16_t>(packed & 0x1Fu));
+                    a = (packed & 0x8000u) != 0 ? 255 : 0;
+                }
+                else if (format == SurfaceFormat::Bgra4444)
+                {
+                    r = Expand4To8(static_cast<std::uint16_t>((packed >> 8) & 0xFu));
+                    g = Expand4To8(static_cast<std::uint16_t>((packed >> 4) & 0xFu));
+                    b = Expand4To8(static_cast<std::uint16_t>(packed & 0xFu));
+                    a = Expand4To8(static_cast<std::uint16_t>((packed >> 12) & 0xFu));
+                }
+                else
+                {
+                    throw std::invalid_argument(
+                        "CNA SDL_GPU: no renderer-side conversion for SurfaceFormat ordinal " +
+                        std::to_string(static_cast<int>(format)));
+                }
+                result[i * 4u + 0u] = r;
+                result[i * 4u + 1u] = g;
+                result[i * 4u + 2u] = b;
+                result[i * 4u + 3u] = a;
+            }
+            return result;
         }
 
         // SDLGPU-36: clamps an XNA multiSampleCount request down to the largest SDL_gpu sample
@@ -2808,6 +2958,102 @@ namespace CNA::Internal::Renderers::SdlGpu
         windowX = (viewport.x + logicalX * viewport.width / viewport.logicalWidth) * inverseDisplayScale;
         windowY = (viewport.y + logicalY * viewport.height / viewport.logicalHeight) * inverseDisplayScale;
         return true;
+    }
+
+    RendererFormatVerdict SdlGpuRenderer::ClassifySurfaceFormatEXT(int surfaceFormat) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+            // SDLGPU-69: this is exactly EasyGL's ordinary Texture2D set. Color and both SNORM
+            // formats have universally supported SDL sampler storage. Packed formats use their
+            // exact SDL representation when present and a lossless logical RGBA expansion when
+            // absent. DXT uses BC1/2/3 when present and the shared CPU decoder otherwise.
+            case SurfaceFormat::Color:
+            case SurfaceFormat::Bgr565:
+            case SurfaceFormat::Bgra5551:
+            case SurfaceFormat::Bgra4444:
+            case SurfaceFormat::Dxt1:
+            case SurfaceFormat::Dxt3:
+            case SurfaceFormat::Dxt5:
+            case SurfaceFormat::NormalizedByte2:
+            case SurfaceFormat::NormalizedByte4:
+                return RendererFormatVerdict::Supported;
+
+            // Truthful current boundary for the remaining classic XNA 4.0 Texture2D formats.
+            // SDL_gpu has candidate storage for many of these, but SDL GPU has not yet supplied
+            // their channel-expansion/filtering/sample verification. Advertising them before that
+            // would repeat the old RGBA8 substitution bug rather than improve parity.
+            case SurfaceFormat::Rgba1010102:
+            case SurfaceFormat::Rg32:
+            case SurfaceFormat::Rgba64:
+            case SurfaceFormat::Alpha8:
+            case SurfaceFormat::Single:
+            case SurfaceFormat::Vector2:
+            case SurfaceFormat::Vector4:
+            case SurfaceFormat::HalfSingle:
+            case SurfaceFormat::HalfVector2:
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::HdrBlendable:
+                return RendererFormatVerdict::Unsupported;
+
+            // Newer CNAEXT formats are owned by the modern plan. Preserve the common gate.
+            default:
+                return RendererFormatVerdict::Defer;
+        }
+    }
+
+    RendererFormatVerdict SdlGpuRenderer::ClassifyColorTransferFormatEXT(int surfaceFormat) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+            case SurfaceFormat::Color:
+                return RendererFormatVerdict::Supported;
+            case SurfaceFormat::Bgr565:
+            case SurfaceFormat::Bgra5551:
+            case SurfaceFormat::Bgra4444:
+            case SurfaceFormat::Dxt1:
+            case SurfaceFormat::Dxt3:
+            case SurfaceFormat::Dxt5:
+            case SurfaceFormat::NormalizedByte2:
+            case SurfaceFormat::NormalizedByte4:
+            case SurfaceFormat::Rgba1010102:
+            case SurfaceFormat::Rg32:
+            case SurfaceFormat::Rgba64:
+            case SurfaceFormat::Alpha8:
+            case SurfaceFormat::Single:
+            case SurfaceFormat::Vector2:
+            case SurfaceFormat::Vector4:
+            case SurfaceFormat::HalfSingle:
+            case SurfaceFormat::HalfVector2:
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::HdrBlendable:
+                return RendererFormatVerdict::Unsupported;
+            default:
+                return RendererFormatVerdict::Defer;
+        }
+    }
+
+    bool SdlGpuRenderer::IsCompressedTransferFormatEXT(int surfaceFormat) const
+    {
+        return IsClassicDxtFormat(
+            static_cast<Microsoft::Xna::Framework::Graphics::SurfaceFormat>(surfaceFormat));
+    }
+
+    bool SdlGpuRenderer::LoadsCompressedContentNativelyEXT() const
+    {
+        if (ForceDxtFallbackForTest())
+            return false;
+        constexpr std::array formats{
+            SDL_GPU_TEXTUREFORMAT_BC1_RGBA_UNORM,
+            SDL_GPU_TEXTUREFORMAT_BC2_RGBA_UNORM,
+            SDL_GPU_TEXTUREFORMAT_BC3_RGBA_UNORM,
+        };
+        return std::all_of(formats.begin(), formats.end(), [this](SDL_GPUTextureFormat format) {
+            return SDL_GPUTextureSupportsFormat(
+                device_, format, SDL_GPU_TEXTURETYPE_2D, SDL_GPU_TEXTUREUSAGE_SAMPLER);
+        });
     }
 
     std::unique_ptr<ITextureRenderer> SdlGpuRenderer::CreateTexture(const ImageData& data)
@@ -7509,7 +7755,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     SdlGpuTextureRenderer::SdlGpuTextureRenderer(SdlGpuRenderer& owner, const ImageData& data)
         : owner_(&owner),
           state_(std::make_shared<SdlGpuSampledTextureState>()),
-          width_(data.width), height_(data.height)
+          width_(data.width), height_(data.height), surfaceFormat_(data.surfaceFormat)
     {
         state_->owner = &owner;
 
@@ -7537,9 +7783,49 @@ namespace CNA::Internal::Renderers::SdlGpu
                 " has at most " + std::to_string(maxLevels));
         levelCount_ = requestedLevels;
 
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat_);
+        logicalBlockBytes_ = LogicalTextureBlockBytes(format);
+        if (logicalBlockBytes_ == 0)
+            throw std::invalid_argument(
+                "CNA SDL_GPU: Texture2D received unsupported SurfaceFormat ordinal " +
+                std::to_string(surfaceFormat_));
+        compressed_ = IsClassicDxtFormat(format);
+        if (compressed_)
+            compressedLevels_.resize(static_cast<std::size_t>(levelCount_));
+
+        const SDL_GPUTextureFormat preferredFormat = PreferredTextureFormat(format);
+        const bool forcedDxtFallback = compressed_ && ForceDxtFallbackForTest();
+        const bool packedFormat = format == SurfaceFormat::Bgr565 ||
+            format == SurfaceFormat::Bgra5551 || format == SurfaceFormat::Bgra4444;
+        const bool forcedPackedFallback = packedFormat && ForcePackedFallbackForTest();
+        const bool preferredSupported = !forcedDxtFallback && !forcedPackedFallback &&
+            SDL_GPUTextureSupportsFormat(
+            owner_->Device(), preferredFormat, SDL_GPU_TEXTURETYPE_2D,
+            SDL_GPU_TEXTUREUSAGE_SAMPLER);
+        // NormalizedByte2 deliberately uses RGBA8_SNORM even though RG8_SNORM exists: D3D9/XNA
+        // sampling fills the missing B/A channels with one, and materializing those values at
+        // upload makes the rule hold for every shader route without format-specific shader state.
+        // Packed and DXT storage fall back to RGBA8 only when the concrete driver lacks their
+        // exact native representation.
+        nativeFormat_ = preferredSupported
+            ? preferredFormat
+            : SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+        compressedNative_ = compressed_ && preferredSupported;
+
+        const std::size_t logicalLevelZeroBytes = compressed_
+            ? static_cast<std::size_t>((width_ + 3) / 4) *
+                  static_cast<std::size_t>((height_ + 3) / 4) *
+                  static_cast<std::size_t>(logicalBlockBytes_)
+            : static_cast<std::size_t>(width_) * static_cast<std::size_t>(height_) *
+                  static_cast<std::size_t>(logicalBlockBytes_);
+        if (data.pixels.size() < logicalLevelZeroBytes)
+            throw std::invalid_argument(
+                "CNA SDL_GPU: Texture2D pixel buffer is smaller than the requested format's "
+                "level-zero storage");
+
         SDL_GPUTextureCreateInfo createInfo{};
         createInfo.type = SDL_GPU_TEXTURETYPE_2D;
-        createInfo.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+        createInfo.format = nativeFormat_;
         createInfo.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
         createInfo.width = static_cast<Uint32>(width_);
         createInfo.height = static_cast<Uint32>(height_);
@@ -7555,10 +7841,12 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             traceId_ = NextTextureTraceId();
             std::fprintf(stderr,
-                         "[cna-sdlgpu-texture] id=%d created %dx%d format=R8G8B8A8_UNORM "
-                         "usage=SAMPLER requestedLevels=%d maxLevels=%d nativeLevels=%u "
-                         "texture=%p\n",
-                         traceId_, width_, height_, requestedLevels, maxLevels,
+                         "[cna-sdlgpu-texture] id=%d created %dx%d surfaceFormat=%d "
+                         "nativeFormat=%d logicalBlockBytes=%d compressed=%s nativeCompressed=%s "
+                         "usage=SAMPLER requestedLevels=%d maxLevels=%d nativeLevels=%u texture=%p\n",
+                         traceId_, width_, height_, surfaceFormat_, static_cast<int>(nativeFormat_),
+                         logicalBlockBytes_, compressed_ ? "yes" : "no",
+                         compressedNative_ ? "yes" : "no", requestedLevels, maxLevels,
                          static_cast<unsigned>(createInfo.num_levels),
                          static_cast<void*>(state_->texture));
             std::fflush(stderr);
@@ -7568,7 +7856,10 @@ namespace CNA::Internal::Renderers::SdlGpu
         // remaining declared levels are ALLOCATED, never generated -- SDL_GenerateMipmapsForGPU-
         // Texture is deliberately not called (XNA/FNA give Texture2D no implicit regeneration, and
         // REMED-GFX-175's contract makes level content the caller's).
-        UpdatePixels(data.pixels.data(), width_ * 4);
+        if (compressed_)
+            UpdatePixelsLevel(0, data.pixels.data(), width_, height_);
+        else
+            UpdatePixels(data.pixels.data(), width_ * logicalBlockBytes_);
         // A throwing UpdatePixels no longer needs its own cleanup: state_ is already constructed,
         // so unwinding destroys it and its destructor releases the texture through the same
         // deferred path every other exit uses.
@@ -7584,33 +7875,37 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
     }
 
-    void SdlGpuTextureRenderer::UpdatePixels(const uint8_t* rgba, int stride)
+    void SdlGpuTextureRenderer::UpdatePixels(const uint8_t* pixels, int stride)
     {
-        UploadLevel(0, rgba, width_, height_, stride);
+        UploadLevel(0, pixels, width_, height_, stride);
     }
 
-    void SdlGpuTextureRenderer::UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH)
+    void SdlGpuTextureRenderer::UpdatePixelsLevel(int level, const uint8_t* pixels,
+                                                  int levelW, int levelH)
     {
         // Same convention as VulkanTextureRenderer::UpdatePixelsLevel: this interface method
         // returns void, so an out-of-range level cannot be reported and must not be guessed at
         // either -- reaching SDL_UploadToGPUTexture with a nonexistent subresource is exactly the
         // class of failure REMED-GFX-135 removed from the Texture3D path.
-        if (rgba == nullptr || level < 0 || level >= levelCount_)
+        if (pixels == nullptr || level < 0 || level >= levelCount_)
         {
             if (TextureTraceEnabled() && traceId_ != 0)
             {
                 std::fprintf(stderr,
                              "[cna-sdlgpu-texture] id=%d level=%d IGNORED reason=%s levels=%d\n",
-                             traceId_, level, rgba == nullptr ? "null-source" : "level-out-of-range",
+                             traceId_, level, pixels == nullptr ? "null-source" : "level-out-of-range",
                              levelCount_);
                 std::fflush(stderr);
             }
             return;
         }
-        UploadLevel(level, rgba, levelW, levelH, levelW * 4);
+        const int stride = compressed_
+            ? ((levelW + 3) / 4) * logicalBlockBytes_
+            : levelW * logicalBlockBytes_;
+        UploadLevel(level, pixels, levelW, levelH, stride);
     }
 
-    void SdlGpuTextureRenderer::UploadLevel(int level, const uint8_t* rgba, int levelW, int levelH,
+    void SdlGpuTextureRenderer::UploadLevel(int level, const uint8_t* pixels, int levelW, int levelH,
                                             int stride)
     {
         // The destination extent is the LEVEL's own size, never the resource's. Uploading
@@ -7625,9 +7920,63 @@ namespace CNA::Internal::Renderers::SdlGpu
                 std::to_string(expectedW) + "x" + std::to_string(expectedH) + ", not " +
                 std::to_string(levelW) + "x" + std::to_string(levelH));
 
+        if (pixels == nullptr)
+            throw std::invalid_argument("CNA SDL_GPU: Texture2D upload source cannot be null");
+
+        const int logicalRows = compressed_ ? (levelH + 3) / 4 : levelH;
+        const int logicalRowBytes = compressed_
+            ? ((levelW + 3) / 4) * logicalBlockBytes_
+            : levelW * logicalBlockBytes_;
+        if (stride < logicalRowBytes)
+            throw std::invalid_argument("CNA SDL_GPU: Texture2D upload stride is too small");
+
+        std::vector<std::uint8_t> tightLogical;
+        const std::uint8_t* logicalPixels = pixels;
+        if (stride != logicalRowBytes)
+        {
+            tightLogical.resize(static_cast<std::size_t>(logicalRowBytes) * logicalRows);
+            for (int row = 0; row < logicalRows; ++row)
+            {
+                std::memcpy(tightLogical.data() + static_cast<std::size_t>(row) * logicalRowBytes,
+                            pixels + static_cast<std::size_t>(row) * stride,
+                            static_cast<std::size_t>(logicalRowBytes));
+            }
+            logicalPixels = tightLogical.data();
+        }
+        const std::size_t logicalBytes =
+            static_cast<std::size_t>(logicalRowBytes) * logicalRows;
+        if (compressed_)
+        {
+            compressedLevels_[static_cast<std::size_t>(level)].assign(
+                logicalPixels, logicalPixels + logicalBytes);
+        }
+
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat_);
+        const bool packedFallback =
+            (format == SurfaceFormat::Bgr565 || format == SurfaceFormat::Bgra5551 ||
+             format == SurfaceFormat::Bgra4444) &&
+            nativeFormat_ == SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+        const bool conversionNeeded = (!compressedNative_ && compressed_) ||
+            format == SurfaceFormat::NormalizedByte2 || packedFallback;
+        std::vector<std::uint8_t> converted;
+        const std::uint8_t* uploadPixels = logicalPixels;
+        std::size_t uploadBytes = logicalBytes;
+        if (conversionNeeded)
+        {
+            converted = ConvertTextureLevelForFallback(
+                format, logicalPixels, logicalBytes, levelW, levelH);
+            uploadPixels = converted.data();
+            uploadBytes = converted.size();
+        }
+
+        const Uint32 expectedUploadBytes = SDL_CalculateGPUTextureFormatSize(
+            nativeFormat_, static_cast<Uint32>(levelW), static_cast<Uint32>(levelH), 1);
+        if (uploadBytes != expectedUploadBytes)
+            throw std::runtime_error(
+                "CNA SDL_GPU: Texture2D converted upload size does not match SDL_gpu's format size");
+
         SDL_GPUDevice* device = owner_->Device();
-        const Uint32 rowBytes = static_cast<Uint32>(levelW) * 4;
-        const Uint32 sizeBytes = rowBytes * static_cast<Uint32>(levelH);
+        const Uint32 sizeBytes = expectedUploadBytes;
 
         SDL_GPUTransferBufferCreateInfo transferInfo{};
         transferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
@@ -7642,17 +7991,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
             throw std::runtime_error(std::string("CNA SDL_GPU: failed to map texture transfer buffer: ") + SDL_GetError());
         }
-        if (stride == static_cast<int>(rowBytes))
-        {
-            std::memcpy(mapped, rgba, sizeBytes);
-        }
-        else
-        {
-            auto* dst = static_cast<uint8_t*>(mapped);
-            for (int y = 0; y < levelH; ++y)
-                std::memcpy(dst + static_cast<std::size_t>(y) * rowBytes,
-                            rgba + static_cast<std::size_t>(y) * static_cast<std::size_t>(stride), rowBytes);
-        }
+        std::memcpy(mapped, uploadPixels, sizeBytes);
         SDL_UnmapGPUTransferBuffer(device, transferBuffer);
 
         SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device);
@@ -7664,8 +8003,10 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(cmd);
         SDL_GPUTextureTransferInfo source{};
         source.transfer_buffer = transferBuffer;
-        source.pixels_per_row = static_cast<Uint32>(levelW);
-        source.rows_per_layer = static_cast<Uint32>(levelH);
+        // Zero selects SDL's tightly-packed, format-aware defaults. This is important for BC
+        // formats, where one transfer row is a row of 4x4 blocks rather than levelW texels.
+        source.pixels_per_row = 0;
+        source.rows_per_layer = 0;
         SDL_GPUTextureRegion destination{};
         destination.texture = state_->texture;
         destination.mip_level = static_cast<Uint32>(level);
@@ -7693,16 +8034,61 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             std::fprintf(stderr,
                          "[cna-sdlgpu-texture] id=%d level=%d levelDims=%dx%d mip_level=%u "
-                         "region=(0,0,%ux%u) transferBytes=%u rowPitch=%u pixelsPerRow=%u "
-                         "srcStride=%d cycle=%s submit=ok\n",
+                         "region=(0,0,%ux%u) transferBytes=%u logicalRowPitch=%d pixelsPerRow=%u "
+                         "srcStride=%d conversion=%s cycle=%s submit=ok\n",
                          traceId_, level, levelW, levelH,
                          static_cast<unsigned>(destination.mip_level),
                          static_cast<unsigned>(destination.w), static_cast<unsigned>(destination.h),
-                         static_cast<unsigned>(sizeBytes), static_cast<unsigned>(rowBytes),
+                         static_cast<unsigned>(sizeBytes), logicalRowBytes,
                          static_cast<unsigned>(source.pixels_per_row), stride,
+                         conversionNeeded ? "yes" : "no",
                          cycle ? "yes" : "no");
             std::fflush(stderr);
         }
+    }
+
+    bool SdlGpuTextureRenderer::GetData(int level, int x, int y, int w, int h,
+                                        void* data, int dataLength) const
+    {
+        if (!compressed_ || data == nullptr || level < 0 || level >= levelCount_ ||
+            w <= 0 || h <= 0)
+            return false;
+
+        const int levelW = std::max(1, width_ >> level);
+        const int levelH = std::max(1, height_ >> level);
+        if (x < 0 || y < 0 || x + w > levelW || y + h > levelH ||
+            (x % 4) != 0 || (y % 4) != 0 ||
+            ((w % 4) != 0 && x + w != levelW) ||
+            ((h % 4) != 0 && y + h != levelH))
+            return false;
+
+        const int levelBlockCols = (levelW + 3) / 4;
+        const int rectBlockCols = (w + 3) / 4;
+        const int rectBlockRows = (h + 3) / 4;
+        const std::size_t required = static_cast<std::size_t>(rectBlockCols) * rectBlockRows *
+            static_cast<std::size_t>(logicalBlockBytes_);
+        if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required)
+            return false;
+
+        const auto& levelBytes = compressedLevels_[static_cast<std::size_t>(level)];
+        if (levelBytes.empty())
+            return false;
+        const std::size_t levelRowBytes =
+            static_cast<std::size_t>(levelBlockCols) * logicalBlockBytes_;
+        const std::size_t rectRowBytes =
+            static_cast<std::size_t>(rectBlockCols) * logicalBlockBytes_;
+        auto* destination = static_cast<std::uint8_t*>(data);
+        for (int row = 0; row < rectBlockRows; ++row)
+        {
+            const std::size_t sourceOffset =
+                static_cast<std::size_t>(y / 4 + row) * levelRowBytes +
+                static_cast<std::size_t>(x / 4) * logicalBlockBytes_;
+            if (sourceOffset + rectRowBytes > levelBytes.size())
+                return false;
+            std::memcpy(destination + static_cast<std::size_t>(row) * rectRowBytes,
+                        levelBytes.data() + sourceOffset, rectRowBytes);
+        }
+        return true;
     }
 
     // ---- SdlGpuTexture3DRenderer (Phase SDLGPU-9, SDLGPU-40/SDLGPU-41) ----

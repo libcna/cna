@@ -86,7 +86,7 @@ easygl_dualtextureeffect_golden_test.cpp,classic-xna-covered-by-existing-sdlgpu-
 easygl_dualtextureeffect_independent_uv_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,SDLGPU-59,shared independent TEXCOORD0/TEXCOORD1 frame is byte-identical
 easygl_dualtextureeffect_null_texture0_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_dualtextureeffect_null_texture2_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
-easygl_dxt_format_test.cpp,classic-xna-feature-missing,SDLGPU-69,compressed Texture2D formats
+easygl_dxt_format_test.cpp,classic-xna-direct-parity,SDLGPU-69,same source passes SDL GPU with native-or-decoded BC storage
 easygl_dynamic_buffer_stress_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_effect_clone_test.cpp,classic-xna-direct-parity,-,renderer-independent public API behavior
 easygl_effect_current_technique_test.cpp,classic-xna-direct-parity,-,renderer-independent public API behavior
@@ -138,7 +138,7 @@ easygl_normalmapping_shader_test.cpp,modern-cnaext-out,-,ShaderEffect/PBR/glTF/s
 easygl_npot_texture_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_occlusion_query_occluded_quad_test.cpp,classic-xna-feature-missing,SDLGPU-80,SDL_gpu has no query API
 easygl_occlusion_query_visible_quad_test.cpp,classic-xna-feature-missing,SDLGPU-80,SDL_gpu has no query API
-easygl_packed16_format_test.cpp,classic-xna-feature-missing,SDLGPU-69,packed Texture2D formats
+easygl_packed16_format_test.cpp,classic-xna-direct-parity,SDLGPU-69,same source passes SDL GPU with native packed storage
 easygl_particleeffect_shader_test.cpp,modern-cnaext-out,-,ShaderEffect/PBR/glTF/sample-specific modern graphics path
 easygl_pbr_fresnel_factors_test.cpp,modern-cnaext-out,-,ShaderEffect/PBR/glTF/sample-specific modern graphics path
 easygl_pbr_material_maps_test.cpp,modern-cnaext-out,-,ShaderEffect/PBR/glTF/sample-specific modern graphics path
@@ -212,7 +212,7 @@ easygl_spritefont_effects_rotation_scale_test.cpp,classic-xna-covered-by-existin
 easygl_spritefont_multiglyph_spacing_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_spritefont_newline_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_spritefont_single_glyph_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
-easygl_surface_format_throws_test.cpp,classic-xna-feature-missing,SDLGPU-69,truthful surface-format classification
+easygl_surface_format_throws_test.cpp,classic-xna-direct-parity,SDLGPU-69,same source passes SDL GPU with truthful format classification
 easygl_texture2d_anisotropic_singlelevel_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,SDLGPU-64,one-level anisotropic sampling is covered by the complete sampler suite
 easygl_texture2d_mip_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_texture2d_partial_rect_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog

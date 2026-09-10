@@ -401,6 +401,65 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
             FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
     endforeach()
 
+    # SDLGPU-69: exact EasyGL sources prove packed-16 and DXT sampling plus public construction
+    # boundaries without cloned expectations. The SDL-only matrix adds NPOT, partial-block,
+    # authored-mip and missing-channel checks. Run DXT twice to force both native BC and the
+    # renderer-side RGBA decode path on hardware that exposes BC normally.
+    foreach(texture2d_format_oracle_test IN ITEMS
+            dxt_format
+            packed16_format
+            surface_format_throws)
+        cna_sdlgpu_test(cna_test_sdlgpu_easygl_oracle_${texture2d_format_oracle_test}
+            ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_${texture2d_format_oracle_test}_test.cpp)
+        cna_register_renderer_test(NAME SdlGpu_EasyGLOracle_${texture2d_format_oracle_test}
+            COMMAND cna_test_sdlgpu_easygl_oracle_${texture2d_format_oracle_test}
+            TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+        set_tests_properties(SdlGpu_EasyGLOracle_${texture2d_format_oracle_test} PROPERTIES
+            FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+    endforeach()
+    cna_register_renderer_test(NAME SdlGpu_EasyGLOracle_dxt_format_fallback
+        COMMAND cna_test_sdlgpu_easygl_oracle_dxt_format
+        TIMEOUT 120 LABELS "SdlGpu;Parity"
+        ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT};CNA_SDLGPU_FORCE_DXT_FALLBACK=1")
+    set_tests_properties(SdlGpu_EasyGLOracle_dxt_format_fallback PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+    cna_register_renderer_test(NAME SdlGpu_EasyGLOracle_packed16_format_fallback
+        COMMAND cna_test_sdlgpu_easygl_oracle_packed16_format
+        TIMEOUT 120 LABELS "SdlGpu;Parity"
+        ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT};CNA_SDLGPU_FORCE_PACKED_FALLBACK=1")
+    set_tests_properties(SdlGpu_EasyGLOracle_packed16_format_fallback PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+
+    cna_sdlgpu_test(cna_test_sdlgpu_texture2d_format_matrix
+        sdlgpu_texture2d_format_matrix_test.cpp)
+    cna_register_renderer_test(NAME SdlGpu_Texture2D_FormatMatrix
+        COMMAND cna_test_sdlgpu_texture2d_format_matrix
+        TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    set_tests_properties(SdlGpu_Texture2D_FormatMatrix PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+    cna_register_renderer_test(NAME SdlGpu_Texture2D_FormatMatrixFallback
+        COMMAND cna_test_sdlgpu_texture2d_format_matrix
+        TIMEOUT 120 LABELS "SdlGpu;Parity"
+        ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT};CNA_SDLGPU_FORCE_DXT_FALLBACK=1")
+    set_tests_properties(SdlGpu_Texture2D_FormatMatrixFallback PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+
+    # The renderer-neutral WEBGPU-144 fixture already discriminates DDS and XNB content-loader
+    # policy, four authored mip levels and real SpriteBatch sampling. Reuse it unchanged here.
+    cna_sdlgpu_test(cna_test_sdlgpu_compressed_content
+        ${CMAKE_SOURCE_DIR}/modules/renderers/webgpu/examples/webgpu_compressed_content_test.cpp)
+    cna_register_renderer_test(NAME SdlGpu_CompressedContent
+        COMMAND cna_test_sdlgpu_compressed_content
+        TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    set_tests_properties(SdlGpu_CompressedContent PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+    cna_register_renderer_test(NAME SdlGpu_CompressedContentFallback
+        COMMAND cna_test_sdlgpu_compressed_content
+        TIMEOUT 120 LABELS "SdlGpu;Parity"
+        ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT};CNA_SDLGPU_FORCE_DXT_FALLBACK=1")
+    set_tests_properties(SdlGpu_CompressedContentFallback PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+
     # plans/plan_sdlgpu.md: render-target-destroyed-before-flush use-after-free regression proof.
     cna_sdlgpu_test(cna_test_sdlgpu_rt_lifetime sdlgpu_rendertarget_lifetime_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_RenderTargetLifetime COMMAND cna_test_sdlgpu_rt_lifetime

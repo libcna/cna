@@ -16,18 +16,18 @@
 | Renderer contract | `modules/graphics/include/CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp` |
 | Reference renderer | `modules/renderers/easygl/{include,src,examples}` |
 | Renderer under test | `modules/renderers/sdl-gpu/{include,src,tests,examples}` |
-| EasyGL / SDL GPU example sources | 246 / 38 `.cpp` files at audit start; 246 / 40 now (source count, not capability count) |
+| EasyGL / SDL GPU example sources | 246 / 38 `.cpp` files at audit start; 246 / 41 now (source count, not capability count) |
 | EasyGL / SDL GPU renderer unit-test sources | 2 / 2 `.cpp` files |
-| SDL GPU registered integration tests | 123 CTests (85 baseline plus 38 parity/remediation registrations) |
+| SDL GPU registered integration tests | 132 CTests (85 baseline plus 47 parity/remediation registrations) |
 | Shared EasyGL parity fixtures available | 31 renderer-neutral sources in `modules/graphics/examples/parity` |
 | Shared parity fixtures registered for SDL GPU | 16/31 (wireframe; four sampler; four vertex-semantic; multi-stream; instancing; and five render-state fixtures) |
 | Tasks created by this audit | 30 (`SDLGPU-55`–`SDLGPU-84`) |
-| Completed / open / proven unavoidable | 16 / 14 tasks; 2 capability fields (`BlendState.MultiSampleMask` and exact half-rate `PresentInterval::Two`) are proven unavailable in current SDL_gpu and are not separate tasks; `SDLGPU-80` remains a candidate limitation |
+| Completed / open / proven unavoidable | 17 / 13 tasks; 2 capability fields (`BlendState.MultiSampleMask` and exact half-rate `PresentInterval::Two`) are proven unavailable in current SDL_gpu and are not separate tasks; `SDLGPU-80` remains a candidate limitation |
 | SDL GPU build | Stable `cmake-build-sdlgpu`, Debug, `CNA_GRAPHICS_RENDERER=SDL_GPU`, tests/examples ON |
 | EasyGL oracle build | Stable `cmake-build-debug`, Debug, `CNA_GRAPHICS_RENDERER=OPENGL33`, tests/examples ON |
 | Runtime driver | SDL 3.5.0 SDL_gpu Vulkan on AMD Radeon 780M / Mesa RADV 25.0.7; Khronos validation layer 1.4.309 present |
 | Display constraint | Sandboxed tests cannot access host `:0`; SDL `offscreen` successfully creates the real Vulkan GPU device. Escalated preservation checks can use host `:0` (WebGPU), while EasyGL uses Xvfb `:179`. The SDL GPU test-driver cache setting defaults to `x11` and is locally set to `offscreen`. |
-| Validation | Debug mode is enabled in current source. The offscreen 85-test baseline, SDLGPU-58's 14-test state suite, SDLGPU-67's 13-test viewport/scissor suite and SDLGPU-68's 13-test presentation/lifecycle slice emitted no captured `VUID`, `Validation Error`, or `Validation Warning`; every new SDLGPU-68 CTest makes those diagnostics fatal. |
+| Validation | Debug mode is enabled in current source. The offscreen 85-test baseline, SDLGPU-58's 14-test state suite, SDLGPU-67's 13-test viewport/scissor suite, SDLGPU-68's 13-test presentation/lifecycle slice and SDLGPU-69's 9-test format slice emitted no captured `VUID`, `Validation Error`, or `Validation Warning`; every new parity CTest makes those diagnostics fatal. |
 | Focused EasyGL oracle baseline | 34/34 selected tests pass on Xvfb/llvmpipe: the prior 28 stock-effect/state/format/RT/texture/MRT/instancing/query tests plus six presentation/reset/resize/VSync programs. The VSync program's three CNA-forwarding checks pass; its real-vblank half is correctly skipped because raw GL cannot enable VSync under Xvfb. |
 
 The first attempted baseline used the suite's historical hard-coded `SDL_VIDEODRIVER=x11` and
@@ -93,8 +93,8 @@ underlying limitation with no correct reasonable emulation; `out` excluded moder
 | Constant/slope depth bias | GL polygon offset with XNA normalization | Per-format normalized-to-native conversion in every immutable pipeline; SpriteBatch uses projected layer depth | `=` — expanded 67/67 pixel/cache oracle, validation clean; `SDLGPU-65` |
 | Sampler filter/address/anisotropy | All stock/effect slots | Every stock, compiled-effect and SpriteBatch command captures the complete state | `=` — shared pixel oracles plus 29/29 descriptor-capacity checks; `SDLGPU-64` |
 | MaxMipLevel/LOD bias/AddressW | Applied on ordinary draws | MaxMipLevel/bias pixel-verified on stock 3D and SpriteBatch; W reaches the native descriptor | `=` for 2D/cube state delivery; volume AddressW remains `~` pending the sampling route in `SDLGPU-71/79` |
-| Texture2D Color/mips/partial/NPOT/readback | Real upload + CPU/GPU read paths | Real RGBA8 upload; shared CPU shadow; authored mips | `=` for Color baseline including 3D PointClamp; lifecycle sweep `SDLGPU-69`, `81` |
-| Texture2D ordinary non-Color formats | Packed, DXT native-or-decode, SNORM | classifier inherited and native resource hard-coded RGBA8 | `∅` though SDL has corresponding formats; `SDLGPU-69` |
+| Texture2D Color/mips/partial/NPOT/readback | Real upload + CPU/GPU read paths | Format-sized upload, shared CPU shadow and authored mips | `=` including 3D PointClamp; deferred lifetime sweep remains `SDLGPU-81` |
+| Texture2D ordinary non-Color formats | Packed, DXT native-or-decode, SNORM | Exact packed/BC/SNORM storage where available; lossless packed and DXT decode fallbacks; NormalizedByte2 semantic expansion | `=` for EasyGL's exact nine-format set, including typed transfers, sampling, NPOT/partial DXT blocks and authored mips; remaining classic formats are truthfully refused by both public paths; `SDLGPU-69` |
 | Texture3D Color/mips/boxes/readback | Native volume path | Native RGBA8 path | `~` — format and volume-sampling sweep remains `SDLGPU-71` |
 | Texture3D surface format | constructor forwards format internally | public seam rejects non-Color; SDL constructor ignores argument | `∅`; `SDLGPU-71` |
 | TextureCube faces/mips/partial/readback | Native cube, DXT and formats | RGBA8 path has isolated face upload/readback/mips | `=` for Color baseline; formats remain `∅`; `SDLGPU-70` |
@@ -117,36 +117,37 @@ underlying limitation with no correct reasonable emulation; `out` excluded moder
 | OcclusionQuery | native GL query (`any` on GLES, count on desktop) | inherited null creation; no query primitive in vendored SDL_gpu | candidate `⛔`, not final until `SDLGPU-80` closes |
 | ShaderEffect/PBR/glTF/compute/storage/indirect/timers/modern passes | EasyGL CNAEXT families | some existing SDL GPU implementations | `out` — preserve, do not expand |
 
-### Ordinary SurfaceFormat matrix (initial)
+### Ordinary SurfaceFormat matrix (current)
 
 The first twenty enum entries are the XNA-facing formats. `SDL native` means the vendored
 `SDL_gpu.h` exposes an exact or semantics-compatible storage format; runtime
 `SDL_GPUTextureSupportsFormat` still has to be asked for the intended usage. `EasyGL RT` is
-driver-probed where noted. SDL's **current observable result is Color-only** for every resource
-kind because its classifiers are inherited and its resource constructors hard-code RGBA8.
+driver-probed where noted. Since `SDLGPU-69`, Texture2D has an explicit renderer answer for all
+twenty classic entries: it implements the same nine-format public set as EasyGL and explicitly
+refuses the other eleven. Cube, volume and render-target columns remain owned by their tasks.
 
 | SurfaceFormat | EasyGL Texture2D/Cube | EasyGL render target | SDL native candidate | SDL current / task |
 |---|---|---|---|---|
 | Color | yes | yes | R8G8B8A8_UNORM | `=` |
-| Bgr565 | yes (desktop/ES3) | no | B5G6R5_UNORM | `∅` `SDLGPU-69/70` |
-| Bgra5551 | yes (desktop/ES3) | no | B5G5R5A1_UNORM | `∅` `SDLGPU-69/70` |
-| Bgra4444 | yes (desktop/ES3) | no | B4G4R4A4_UNORM | `∅` `SDLGPU-69/70` |
-| Dxt1 | native or renderer decode | no | BC1_RGBA_UNORM | `∅` `SDLGPU-69/70` |
-| Dxt3 | native or renderer decode | no | BC2_RGBA_UNORM | `∅` `SDLGPU-69/70` |
-| Dxt5 | native or renderer decode | no | BC3_RGBA_UNORM | `∅` `SDLGPU-69/70` |
-| NormalizedByte2 | yes (desktop/ES3); cube prohibited by public rule | no | R8G8_SNORM | `∅` `SDLGPU-69/71` |
-| NormalizedByte4 | yes (desktop/ES3); cube prohibited by public rule | no | R8G8B8A8_SNORM | `∅` `SDLGPU-69/71` |
-| Rgba1010102 | public EasyGL path defers/refuses | no | A2R10G10B10/A2B10G10R10_UNORM | `∅` `SDLGPU-69/70/71` |
-| Rg32 | public EasyGL path defers/refuses | no | R16G16_UNORM | `∅` `SDLGPU-69/70/71` |
-| Rgba64 | public texture path defers/refuses | desktop RT yes | R16G16B16A16_UNORM | `∅` `SDLGPU-69–73` |
-| Alpha8 | public EasyGL path defers/refuses | no | A8_UNORM | `∅` `SDLGPU-69/70/71` |
-| Single | public texture path defers/refuses | driver-probed R32F | R32_FLOAT | `∅` `SDLGPU-69–73` |
-| Vector2 | public texture path defers/refuses | driver-probed RG32F | R32G32_FLOAT | `∅` `SDLGPU-69–73` |
-| Vector4 | public texture path defers/refuses | driver-probed RGBA32F | R32G32B32A32_FLOAT | `∅` `SDLGPU-69–73` |
-| HalfSingle | public texture path defers/refuses | driver-probed R16F | R16_FLOAT | `∅` `SDLGPU-69–73` |
-| HalfVector2 | public texture path defers/refuses | driver-probed RG16F | R16G16_FLOAT | `∅` `SDLGPU-69–73` |
-| HalfVector4 | public texture path defers/refuses | driver-probed RGBA16F | R16G16B16A16_FLOAT | `∅` `SDLGPU-69–73` |
-| HdrBlendable | public texture path defers/refuses | driver-probed RGBA16F | R16G16B16A16_FLOAT | `∅` `SDLGPU-69–73` |
+| Bgr565 | yes (desktop/ES3) | no | B5G6R5_UNORM | Texture2D `=` native-or-RGBA8; cube `∅` `SDLGPU-70` |
+| Bgra5551 | yes (desktop/ES3) | no | B5G5R5A1_UNORM | Texture2D `=` native-or-RGBA8; cube `∅` `SDLGPU-70` |
+| Bgra4444 | yes (desktop/ES3) | no | B4G4R4A4_UNORM | Texture2D `=` native-or-RGBA8; cube `∅` `SDLGPU-70` |
+| Dxt1 | native or renderer decode | no | BC1_RGBA_UNORM | Texture2D `=` native-or-decode; cube `∅` `SDLGPU-70` |
+| Dxt3 | native or renderer decode | no | BC2_RGBA_UNORM | Texture2D `=` native-or-decode; cube `∅` `SDLGPU-70` |
+| Dxt5 | native or renderer decode | no | BC3_RGBA_UNORM | Texture2D `=` native-or-decode; cube `∅` `SDLGPU-70` |
+| NormalizedByte2 | yes (desktop/ES3); cube prohibited by public rule | no | R8G8_SNORM | Texture2D `=` via semantic RGBA8_SNORM expansion; cube `=` refusal; volume `SDLGPU-71` |
+| NormalizedByte4 | yes (desktop/ES3); cube prohibited by public rule | no | R8G8B8A8_SNORM | Texture2D `=` native; cube `=` refusal; volume `SDLGPU-71` |
+| Rgba1010102 | public EasyGL path defers/refuses | no | A2R10G10B10/A2B10G10R10_UNORM | Texture2D `=` refusal; cube/volume `SDLGPU-70/71` |
+| Rg32 | public EasyGL path defers/refuses | no | R16G16_UNORM | Texture2D `=` refusal; cube/volume `SDLGPU-70/71` |
+| Rgba64 | public texture path defers/refuses | desktop RT yes | R16G16B16A16_UNORM | Texture2D `=` refusal; cube/volume/RT `SDLGPU-70–73` |
+| Alpha8 | public EasyGL path defers/refuses | no | A8_UNORM | Texture2D `=` refusal; cube/volume `SDLGPU-70/71` |
+| Single | public texture path defers/refuses | driver-probed R32F | R32_FLOAT | Texture2D `=` refusal; cube/volume/RT `SDLGPU-70–73` |
+| Vector2 | public texture path defers/refuses | driver-probed RG32F | R32G32_FLOAT | Texture2D `=` refusal; cube/volume/RT `SDLGPU-70–73` |
+| Vector4 | public texture path defers/refuses | driver-probed RGBA32F | R32G32B32A32_FLOAT | Texture2D `=` refusal; cube/volume/RT `SDLGPU-70–73` |
+| HalfSingle | public texture path defers/refuses | driver-probed R16F | R16_FLOAT | Texture2D `=` refusal; cube/volume/RT `SDLGPU-70–73` |
+| HalfVector2 | public texture path defers/refuses | driver-probed RG16F | R16G16_FLOAT | Texture2D `=` refusal; cube/volume/RT `SDLGPU-70–73` |
+| HalfVector4 | public texture path defers/refuses | driver-probed RGBA16F | R16G16B16A16_FLOAT | Texture2D `=` refusal; cube/volume/RT `SDLGPU-70–73` |
+| HdrBlendable | public texture path defers/refuses | driver-probed RGBA16F | R16G16B16A16_FLOAT | Texture2D `=` refusal; cube/volume/RT `SDLGPU-70–73` |
 
 The seven `*EXT` enum entries after these twenty belong to modern/CNA-specific planning unless an
 ordinary call path proves otherwise. They are not silently counted toward this parity verdict.
@@ -162,7 +163,7 @@ were checked individually in the declarations and implementations.
 | `IVertexBufferRenderer::{SetData,SetDataWithOptions,SetVertexDeclaration,GetVertexCount}` | explicit | explicit | classic; declaration semantics are consumed faithfully for single-stream stock draws (`SDLGPU-59`); options/ranges remain `SDLGPU-78` |
 | `IIndexBufferRenderer::{SetData16,SetData32,*WithOptions,GetIndexCount,IsThirtyTwoBit}` | all explicit | all explicit | classic; verify options/ranges (`SDLGPU-78`) |
 | `IOcclusionQueryRenderer::{Begin,End,IsComplete,PixelCount,PixelCountIsPreciseEXT}` and factory | explicit | inherited null, no object | classic; candidate limitation (`SDLGPU-80`) |
-| `ITextureRenderer::{GetWidth,GetHeight,UpdatePixels,UpdatePixelsLevel,HasDefinedMipLevel,GetSurfaceFormatEXT,ShareCpuPixels,GetData}` | explicit except default mip query behavior is implemented through EasyGL state | width/height/update explicit; format/mip query/cpu-share defaults; RT GetData explicit | classic observable; formats and lifetime (`SDLGPU-69/81`) |
+| `ITextureRenderer::{GetWidth,GetHeight,UpdatePixels,UpdatePixelsLevel,HasDefinedMipLevel,GetSurfaceFormatEXT,ShareCpuPixels,GetData}` | explicit except default mip query behavior is implemented through EasyGL state | width/height/update/format/GetData explicit; mip query and CPU-share defaults remain appropriate because the XNA layer owns those shadows | classic format behavior `=` through `SDLGPU-69`; deferred lifetime remains `SDLGPU-81` |
 | `ITexture3DRenderer::{SetData,GetData,BindGL,GetDimensionsEXT}` | upload/readback/bind explicit | upload/readback explicit; GL/default dimensions irrelevant | classic; SDL ignores format (`SDLGPU-62/71`) |
 | `ITextureCubeRenderer::{SetData,SetCompressedDataEXT,GetData,BindGL,ShareCpuPixels,GetSizeEXT}` | all storage paths explicit | RGBA Set/Get explicit; compressed/size/cpu-share default | classic via cube public calls despite helper suffixes (`SDLGPU-70`) |
 | `IRenderTargetRenderer::{Bind/Unbind,GetData,GetMultiSampleCount,GetAppliedDepthStencilFormatEXT,HasRealDepthBuffer,DepthBufferBitsEXT,HasRealStencilBuffer}` | explicit where native facts differ | bind/read/MSAA/depth-present explicit; applied depth/bits/stencil use defaults | classic properties and behavior (`SDLGPU-72/74`) |
@@ -172,7 +173,7 @@ were checked individually in the declarations and implementations.
 | `AcquireThreadContextLeaseEXT`, surface changed/invalidated, context-loss hooks | context/registry explicit | surface change explicit; invalidation/recovery defaults retained | surface change is ordinary lifecycle and verified by `SDLGPU-68`; lease and simulated recovery are EasyGL-specific/CNAEXT, while resource lifetime remains `SDLGPU-81` |
 | `Clear`, all six depth/stencil variants, legacy depth/blend/write toggles | explicit | explicit | classic; discriminating sweep (`SDLGPU-58/66`) |
 | `Present`, viewport/default viewport, virtual resolution, presentation mode, swap interval, MSAA/application-format facts | explicit including default viewport and runtime facts | present/size/default-physical-viewport/virtual/mode/requested interval explicit; SDL-local applied-interval fact distinguishes fallbacks; applied-format hooks remain inherited | classic presentation behavior verified by `SDLGPU-68`; format facts remain `SDLGPU-69–74` |
-| format classifiers, compressed transfer policy, half-float filtering | explicit, runtime/profile aware | all inherited defaults | classic where reached from ordinary texture/RT constructors (`SDLGPU-69–73`) |
+| format classifiers, compressed transfer policy, half-float filtering | explicit, runtime/profile aware | Texture2D surface/color-transfer/compressed-content policy explicit; cube/volume/RT classifiers and half filtering still inherited | classic Texture2D `=` through `SDLGPU-69`; remaining resource kinds `SDLGPU-70–73` |
 | coordinate transforms and `ReadBackbuffer` | explicit | explicit | classic; readback baseline passes (`SDLGPU-68`) |
 | texture/sprite/RT2D/RTCube/Texture3D/TextureCube factories, including format-bearing `*EXT` RT factories | explicit | base factories explicit, format-bearing factories inherited and drop format | classic observable (`SDLGPU-69–74`) |
 | `SetRenderTarget2D`, `SetRenderTargetCubeFace`, `SetRenderTargets` | all explicit | 2D and plural explicit; single cube-face hook inherited and delegates to plural | classic; cube ordering verified, MRT semantics remain `SDLGPU-75` |
@@ -194,9 +195,9 @@ filesystem, rejects duplicates/unknown categories/missing evidence, and currentl
 | Category | Count |
 |---|---:|
 | `classic-xna-covered-by-existing-sdlgpu-test` | 124 |
-| `classic-xna-direct-parity` | 24 |
+| `classic-xna-direct-parity` | 27 |
 | `classic-xna-new-sdlgpu-test-needed` | 29 |
-| `classic-xna-feature-missing` | 9 |
+| `classic-xna-feature-missing` | 6 |
 | `modern-cnaext-out` | 51 |
 | `easygl-specific` | 9 |
 | `duplicate` | 0 |
@@ -209,9 +210,10 @@ the defect ledger without falsely reclassifying an unrelated EasyGL example sour
 
 Classification is a triage statement, not proof of parity. The 124 “covered” programs map to
 existing SDL GPU family tests or shared graphics regressions; `SDLGPU-81` must register the same
-31 renderer-neutral parity sources and confirm their discriminating checks. The 24 direct rows now
-include six exact EasyGL presentation/lifecycle sources compiled under SDL GPU by `SDLGPU-68`. A
-row moves whenever implementation evidence disproves its classification.
+31 renderer-neutral parity sources and confirm their discriminating checks. The 27 direct rows now
+include six exact EasyGL presentation/lifecycle sources compiled under SDL GPU by `SDLGPU-68` and
+the exact packed, DXT and format-refusal sources compiled under SDL GPU by `SDLGPU-69`. A row moves
+whenever implementation evidence disproves its classification.
 
 ### EasyGL defects discovered by the SDL GPU parity oracle
 
@@ -610,7 +612,7 @@ underlying API limitation proven after reasonable emulation analysis.
   Corpus classification remains machine-checked at **246/246** with zero unclassified; all six
   reused lifecycle sources are promoted to direct parity. Registered SDL GPU CTests: **123**.
 
-### SDLGPU-69 — implement ordinary Texture2D surface formats ⬜
+### SDLGPU-69 — implement ordinary Texture2D surface formats ✅
 
 - **Problem/public behavior:** every non-Color XNA texture format is currently rejected or would be
   stored as RGBA8 despite SDL_gpu exposing native formats.
@@ -621,6 +623,30 @@ underlying API limitation proven after reasonable emulation analysis.
 - **Acceptance/test:** every ordinary format gets truthful runtime classification; native storage
   is used where exact, renderer conversion where reasonable, and byte/typed SetData/GetData,
   partial rectangles, authored mips, NPOT, compressed blocks and sampling are discriminated.
+- **Result (2026-09-10):** accepted. SDL GPU now explicitly classifies all twenty classic
+  `SurfaceFormat` values for Texture2D: the exact nine-format EasyGL set (`Color`, the three packed
+  16-bit formats, DXT1/3/5 and both signed-normalized formats) is supported, while the other eleven
+  are explicitly refused instead of reaching a hard-coded RGBA8 allocation. Packed formats use
+  their exact SDL_gpu storage when the device supports it and a lossless logical-to-RGBA8 expansion
+  otherwise. DXT uses BC1/2/3 where all required device formats exist and the shared CNA decoder
+  otherwise; the content loader now retains compressed assets only when that native-storage fact is
+  true. `NormalizedByte4` uses native RGBA8 SNORM. `NormalizedByte2` expands to RGBA8 SNORM with
+  missing B/A channels set to signed one, preserving D3D9/XNA sampling semantics rather than SDL's
+  native two-channel zero/one defaults.
+
+  Format-sized transfers no longer assume four bytes per texel. Exact DXT block shadows preserve
+  caller-authored data across byte readback, block-aligned partial updates, NPOT edge blocks and
+  authored sub-4x4 mip levels; GPU uploads use format-aware SDL sizes and tightly packed rows.
+  Three exact EasyGL sources now compile unchanged under SDL GPU and pass: DXT sampling (3/3),
+  packed sampling (3/3), and format construction/refusal (30/30). Forced packed and DXT fallback
+  registrations pass the same pixel oracles. The SDL-specific native/fallback matrix passes 9/9 on
+  both paths, including all classifier rows and the `NormalizedByte2` blue-versus-black missing-
+  channel discriminator. The unchanged compressed-content loader fixture passes 3/3 both natively
+  and under forced decode, covering DDS DXT1, XNB DXT5, four authored mips and SpriteBatch sampling.
+  Shared graphics format/constructor tests pass 17/17. All nine registered format CTests make
+  validation diagnostics fatal and emit none. Corpus classification remains 246/246 with zero
+  unclassified; the three format sources move from feature-missing to direct parity. Registered SDL
+  GPU CTests: **132**.
 
 ### SDLGPU-70 — implement ordinary TextureCube formats ⬜
 
