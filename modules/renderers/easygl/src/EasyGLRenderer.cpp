@@ -8333,8 +8333,14 @@ else
         // driver makes with min_lod. Microsoft writes the signed property through D3D9's DWORD
         // sampler-state channel, so negative values first convert to UInt32 and clamp to the
         // resource's least-detailed available level rather than becoming zero.
-        s.set_parameter(::easygl::SamplerParameter::MinLod,
-                        static_cast<float>(static_cast<std::uint32_t>(maxMipLevel)));
+        // GL's default upper LOD is 1000, already far beyond XNA's largest possible mip index.
+        // Keeping the unsigned request inside that range avoids driver-dependent handling of
+        // uint32_t(-1) after its lossy conversion to a roughly 4.29-billion float.
+        constexpr std::uint32_t kGlDefaultMaxLod = 1000u;
+        const std::uint32_t requested = static_cast<std::uint32_t>(maxMipLevel);
+        s.set_parameter(
+            ::easygl::SamplerParameter::MinLod,
+            static_cast<float>(std::min(requested, kGlDefaultMaxLod)));
         if (ProfileIsDesktopCore())
         {
             // Desktop-only: GL_TEXTURE_LOD_BIAS (0x8501) does not exist in OpenGL ES at all, which
