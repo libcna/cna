@@ -906,8 +906,10 @@ TEST(Fna3dCompiledEffectTest, SyntheticFixtureAcceptsEveryFnaRenderStateToken)
         {MOJOSHADER_RS_SRCBLENDALPHA, MOJOSHADER_BLEND_ONE},
         {MOJOSHADER_RS_DESTBLENDALPHA, MOJOSHADER_BLEND_ZERO},
         {MOJOSHADER_RS_BLENDOPALPHA, MOJOSHADER_BLENDOP_ADD},
-        {178u, 0u}, // Effect compiler's undocumented SetSampler metadata token.
     };
+
+    // SetSampler metadata token 178 carries a sampler-parameter reference rather than a scalar
+    // render-state value. The sampler fixtures below exercise that separate encoding.
 
     GraphicsDevice device;
     Effect effect(device, BuildSyntheticConformanceEffect(states));
@@ -1020,20 +1022,12 @@ TEST(Fna3dCompiledEffectTest, SyntheticBlendFactorStateMatchesFnaByteOrderingInP
     EXPECT_NEAR(pixel.getBProperty(), 0x30, 2);
 }
 
-TEST(Fna3dCompiledEffectTest, SyntheticFixtureRejectsUnknownRenderStateTransactionally)
+TEST(Fna3dCompiledEffectTest, SyntheticFixtureRejectsUnknownRenderStateBeforeRuntimeCreation)
 {
     GraphicsDevice device;
-    Effect effect(device, BuildSyntheticConformanceEffect({{177u, 0u}}));
-    try
-    {
-        effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
-        FAIL() << "an unknown Effect Framework render state must never be ignored";
-    }
-    catch (const std::runtime_error& error)
-    {
-        EXPECT_NE(std::string(error.what()).find("unsupported render state 177"),
-                  std::string::npos);
-    }
+    EXPECT_THROW(Effect(device, BuildSyntheticConformanceEffect({{177u, 0u}})),
+                 System::ArgumentException)
+        << "an unknown Effect Framework render state must be rejected structurally";
 }
 
 TEST(Fna3dCompiledEffectTest, DeterministicMutationCorpusCompletesOrFailsCleanly)
