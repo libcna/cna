@@ -27,6 +27,9 @@ layout(set = 0, binding = 3) uniform sampler2D uEmissiveMap;
 layout(set = 0, binding = 4) uniform sampler2D uOcclusionMap;
 layout(set = 0, binding = 6) uniform sampler2D uSpecularMap;
 layout(set = 0, binding = 7) uniform sampler2D uSpecularColorMap;
+layout(set = 0, binding = 8) uniform samplerCube uIblIrradiance;
+layout(set = 0, binding = 9) uniform samplerCube uIblSpecular;
+layout(set = 0, binding = 10) uniform sampler2D uIblBrdfLut;
 
 layout(push_constant) uniform PC {
     mat4  mvp;
@@ -55,9 +58,8 @@ layout(set = 0, binding = 5) uniform PbrParams {
     vec4 specularFresnelInputs; // xyz = unclamped dielectric F0, w = specular factor
     vec4 textureTransformRows[10]; // two affine rows per PBR texture slot
     vec4 specularTextureTransformRows[4];
-#ifdef CNA_PBR_DUAL_UV
     vec4 textureCoordinateSets; // x = seven-bit per-map TEXCOORD_1 selector mask
-#endif
+    vec4 iblParams;             // x = enabled, y = prefiltered mip count, z = intensity
 } pbr;
 
 vec3 CnaSrgbToLinear(vec3 c) {
@@ -91,6 +93,22 @@ vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, vec
     vec3 diffuseColor = albedo * (1.0 - metallic);
     vec3 kd = vec3(1.0) - F;
     return (kd * diffuseColor / 3.14159265 + specular) * lightColor * NdotL;
+}
+
+vec3 CnaIblAmbient(vec3 N, vec3 V, vec3 albedo, vec3 F0, float roughness,
+                   float metallic, float occlusion) {
+    if (pbr.iblParams.x < 0.5) return vec3(0.0);
+    float NdotV = clamp(dot(N, V), 1e-4, 1.0);
+    vec3 kS = F0 + (max(vec3(1.0 - roughness), F0) - F0)
+                    * pow(1.0 - NdotV, 5.0);
+    vec3 kD = (1.0 - kS) * (1.0 - metallic);
+    vec3 diffuse = texture(uIblIrradiance, N).rgb * albedo * kD;
+    vec3 R = reflect(-V, N);
+    float lod = roughness * max(pbr.iblParams.y - 1.0, 0.0);
+    vec3 prefiltered = textureLod(uIblSpecular, R, lod).rgb;
+    vec2 ab = texture(uIblBrdfLut, vec2(NdotV, roughness)).rg;
+    vec3 specular = prefiltered * (kS * ab.x + ab.y);
+    return (diffuse + specular) * pbr.iblParams.z * occlusion;
 }
 
 vec2 CnaPbrTransformUV(vec2 uv, int slot) {
@@ -163,7 +181,8 @@ void main() {
     Lo += PbrLight(finalNormal, V, normalize(-pbr.light2Dir_pad.xyz), pbr.light2Diffuse_pad.xyz, albedo, F0, F90, roughness, metallic);
     float occlusionSample = texture(uOcclusionMap, CnaPbrTransformUV(CNA_PBR_UV(4), 4)).r;
     float occlusion = 1.0 + pbr.pbrMapScales.y * (occlusionSample - 1.0);
-    vec3 ambient = pc.ambientColor * albedo * occlusion;
+    vec3 ambient = pc.ambientColor * albedo * occlusion
+                 + CnaIblAmbient(finalNormal, V, albedo, F0, roughness, metallic, occlusion);
     vec3 emissiveSample = texture(uEmissiveMap, CnaPbrTransformUV(CNA_PBR_UV(3), 3)).rgb;
     emissiveSample = mix(emissiveSample, CnaSrgbToLinear(emissiveSample), pbr.srgbFlags.y);
     vec3 emissive = pbr.emissive_roughness.xyz * emissiveSample;

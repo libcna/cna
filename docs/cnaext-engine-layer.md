@@ -6,11 +6,11 @@ The **CNAEXT engine layer** is the opt-in `CNA::Graphics` namespace that sits *a
 API and orchestrates frame-level work the XNA 4.0 contract has no concept of: an HDR render
 pipeline, post-processing passes, shadow maps, skybox/IBL, and (long term) compute.
 
-**The HDR pipeline works; the scene-level subsystems do not exist yet.** As of 2026-08-17 a game
-can wrap its drawing in `RenderPipeline`, render into a float scene target, and get ambient
-occlusion, bloom, tonemapping and FXAA — verified on EasyGL against Mesa's software renderer. What
-is still only designed: shadow maps, the skybox, image-based lighting, compute shaders, and the
-instancing/LOD helpers. Do not describe those as available. The design is
+**The engine layer is implemented on its EasyGL reference path and is being rolled out to other
+renderers capability by capability.** Its HDR/post-process pipeline, shadows, skybox, image-based
+lighting, instancing/LOD helpers and compute/resource layer all have executable coverage; Vulkan
+now implements exact HDR targets, stock-PBR IBL, instancing and the modern compute/resource paths,
+while source-authored post-process, skybox and shadow shaders remain unavailable there. The design is
 [`../CNAEXT.md`](../misc/CNAEXT.md); the task backlog and its evidence trail are
 [`../plans/plan_modern.md`](../plans/plan_modern.md).
 
@@ -206,7 +206,7 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 | Contact shadows | ✅ needs the prepass depth and executed effect source | ⬜ | ⬜ | ⬜ — `ContactShadowPass::isSupported()` is false and the pass copies its input through, so the frame keeps the shadow map it already had |
 | Point / spot lights + shadows | ✅ punctual lighting and its cube/spot lookup on all four lit programs | ⬜ | ⬜ | ⬜ — same accepted-and-ignored convention |
 | Skybox | ✅ one fullscreen pass; needs `CustomEffects` | ⬜ | ⬜ | ⬜ — where the shader will not compile the sky is skipped and logged once |
-| Image-based lighting | ✅ CPU precompute (works on every renderer) + split-sum shading | 🟨 precompute works; `SupportsImageBasedLightingEXT()` false | ⬜ | ⬜ — the precompute runs anywhere; the shading needs the renderer's own shader path |
+| Image-based lighting | ✅ CPU precompute + split-sum shading | ✅ stock `PbrEffect` and `SkinnedPbrEffect`, same three-product split sum (`MOD-2235`) | ⬜ | ⬜ — precompute additionally requires working cube/2D texture storage; shading needs a renderer-specific stock PBR path |
 | Materials (`PbrMaterial` ↔ `PbrEffect`) | ✅ | ✅ | ✅ | ✅ — no renderer code at all: it moves values between two existing objects |
 | Instancing / LOD / culling | ✅ | ✅ measured — `cnaext_instancing_lod_test` passes 5/5 on a real Vulkan device | ⬜ | ⬜ — `LodGroupEXT` and `FrustumCullerEXT` are renderer-free and run everywhere; `InstancedRendererEXT` needs `GraphicsCapability::Instancing` and otherwise refuses (or falls back, on request) |
 | Compute / storage buffers | ✅ GL ES ≥ 3.1 / GL ≥ 4.3, runtime-probed; ordinary texture image bindings desktop-GL only | ✅ SPIR-V, reflected SSBO/push constants, readonly vertex/fragment SSBOs, fifteen exact dedicated storage-image formats plus legal ordinary-texture/render-target bridges in one deferred order | ⬜ | ⬜ — both wrappers throw `System::NotSupportedException` naming the renderer |
@@ -277,7 +277,7 @@ Legend: ✅ verified in this repository · 🟨 partial, or verified only by sha
 | `OpenGLES2` | 🟨 shares EasyGL | GLSL ES 1.00: the shaders are transformed, so no `textureLod` (rough IBL reflections read the base mip), no dynamic uniform-array indexing, statically countable loops only. |
 | `WebGL1` | 🟨 shares EasyGL | As `OpenGLES2`, plus: no compute in any WebGL version. |
 | `WebGL2` | 🟨 shares EasyGL | No compute; otherwise the ES 3.00 path. |
-| `Vulkan` | 🟨 measured | Verified against a real device (Mesa lavapipe 1.4): instancing works; float targets, the post-process passes, shadow sampling, IBL shading and compute do not. Its `ShaderEffect` takes SPIR-V, not this layer's GLSL. |
+| `Vulkan` | 🟨 measured | Verified on RADV and llvmpipe: exact float/HDR 2D and cube targets, instancing, stock-PBR IBL, compute/storage resources, indirect draws and GPU timers work. Source-authored post-process, skybox and shadow paths remain unavailable because Vulkan consumes packaged SPIR-V rather than this layer's GLSL; shadow sampling is still reported false. |
 | `Headless` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Three limits it does not advertise — no render-target readback, no cube-face storage, and a cube-face bind that records the face without making it current. The engine layer constructs and passes through; tests probe the three rather than assume them. |
 | `Software` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Render targets, readback and cube storage all work; what does **not** is custom shader source — it is accepted and then ignored, which is why every shader-based subsystem asks `ExecutesShaderEffectSourceEXT()` as well as `CustomEffects`. |
 | `Stub` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Stricter than `Headless` — it refuses to bind a `RenderTarget2D` at all, so a pipeline stops before it renders. Everything above that point constructs and reports false. |
@@ -1991,6 +1991,11 @@ pbrEffect.setImageBasedLightEXT(environment);   // SkinnedPbrEffect has the same
   On GLSL ES 1.00 profiles (WebGL1, GLES2) a fragment shader has no `textureLod`, so those read the
   base level and a rough surface reflects a sharp environment. That is a real, visible limitation
   of those two profiles rather than a silent one.
+- **Vulkan uses the same split sum.** `MOD-2235` binds the three products to both rigid and skinned
+  stock PBR programs, keeps the established 512-byte uniform stride, and tracks every sampled view
+  through deferred execution. The shared oracle passes 7/7 applicable checks on both RADV and
+  llvmpipe with validation; EasyGL passes 8/8 because it can additionally exercise the
+  shadow-plus-IBL interaction that Vulkan truthfully gates off.
 - **White furnace** (`cnaext_ibl_test`, environment at half intensity, albedo 1, no lights;
   128/255 would be exact energy conservation): roughness 0.1 → **159**, 0.4 → **139**, 0.7 → **129**,
   1.0 → **155**. The split sum with 8-bit products and an 8-sample irradiance sweep gains a little

@@ -73,9 +73,8 @@ layout(set = 0, binding = 5) uniform PbrParams {
     vec4 specularFresnelInputs; // xyz = unclamped dielectric F0, w = specular factor
     vec4 textureTransformRows[10];
     vec4 specularTextureTransformRows[4];
-#ifdef CNA_PBR_DUAL_UV
     vec4 textureCoordinateSets; // x = seven-bit per-map TEXCOORD_1 selector mask
-#endif
+    vec4 iblParams;             // x = enabled, y = prefiltered mip count, z = intensity
 } pbr;
 
 float cnaDirectionHandedness(mat3 m) {

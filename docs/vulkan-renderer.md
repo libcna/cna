@@ -2,7 +2,7 @@
 
 ## Status of this document
 
-**Complete as of 2026-09-10 (`VULKAN-480`, updated by `REMED-GFX-203`, `MOD-2222`–`MOD-2234`, `MOD-2240`–`MOD-2244`), and written after the re-audits it depends on**
+**Complete as of 2026-09-10 (`VULKAN-480`, updated by `REMED-GFX-203`, `MOD-2222`–`MOD-2235`, `MOD-2240`–`MOD-2244`), and written after the re-audits it depends on**
 (`VULKAN-470`–`VULKAN-474`) so that what it claims was checked rather than remembered. Every
 section names the row that put it there and the test that keeps it true; a claim with no test named
 beside it is not in here.
@@ -52,7 +52,8 @@ measures on (§*Environment* below).
 | XNA `Texture2D` / `RenderTarget2D` compute-image binding | supported when that exact allocation is storage-capable | device |
 | Float32 / Float16 `RenderTarget2D`, half-float linear filtering | supported | device |
 | GPU timers | supported when the selected graphics queue exposes timestamps | device |
-| Shadow sampling, image-based lighting | **unsupported** | fixed |
+| Shadow sampling | **unsupported** | fixed |
+| Stock PBR image-based lighting | supported | fixed |
 
 Two entries need their sentence rather than a cell:
 
@@ -657,6 +658,29 @@ covers it.
   `SamplerStates[0]` at the same publication points, matching XNA, so the value the collection
   holds after `End()` is the batch's and the **next 3D draw** samples with it.
 
+### Image-based lighting (`MOD-2235`, 2026-09-10)
+
+`PbrEffect` and `SkinnedPbrEffect` consume the same `ImageBasedLightEXT` bundle as EasyGL. A valid
+bundle binds the irradiance cube, prefiltered-specular cube and BRDF LUT after the seven ordinary
+PBR material images. The final `vec4` of the existing 512-byte PBR parameter stride carries the
+enabled flag, prefiltered mip count and intensity, so this addition does not enlarge or misalign
+the dynamic uniform-buffer records.
+
+Both stock fragment programs execute the reference split sum: irradiance diffuse plus a
+roughness-selected `textureLod` sample multiplied by the BRDF lookup, with ambient occlusion
+applied only to the environment term. A complete bundle suppresses the flat ambient term; an
+incomplete or cleared bundle uses valid neutral fallback descriptors and restores flat ambient.
+Deferred draws retain all ten sampled-image identities and dependencies, including render-target
+cube producers, so replacing or destroying an IBL product cannot leave a descriptor set pointing
+at a stale view.
+
+**Test:** the shared `CNAEXT_ImageBasedLighting` binary passes **7/7 applicable checks** on RADV
+and llvmpipe with Khronos validation: rigid/skinned agreement, flat-vs-IBL, roughness-selected
+reflection, occlusion and four white-furnace points. EasyGL passes **8/8**; its extra check combines
+IBL with shadow sampling, which Vulkan continues to report unsupported. The Vulkan capability
+snapshot, both PBR golden suites, hand-derived oracle, texture-slot oracle and descriptor-cache
+oracle also pass on both devices without validation messages.
+
 ### Instancing (`plans/plan_vulkan.md` VULKAN-217…VULKAN-234, 2026-09-08)
 
 `DrawInstancedPrimitives` adds an **optional per-instance world matrix to every stock 3D program**,
@@ -786,14 +810,13 @@ short form a reader needs before opening it.
 | `SpriteSortMode::Immediate` honoured at the renderer boundary | EasyGL does not override `SetImmediateMode` at all. |
 | Precise occlusion counts on real hardware | `VK_QUERY_CONTROL_PRECISE_BIT` with the feature enabled, answered honestly through `PixelCountIsPreciseEXT` (`VULKAN-370`). |
 
-**Differences that are gaps, and are owned:** shadow sampling and image-based lighting are `false`
-here and implemented on EasyGL. GPU timing reached parity in `MOD-2246`; it is enabled only from
-the selected queue/device facts. The two remaining gaps are outside
-this campaign's scope — the ordinary XNA graphics surface — and `plans/plan_modern.md` owns the
-engine layer that uses them. The capability profile reports them `false` rather than accepting the
-call and doing nothing, which is the property that matters: `GraphicsDevice`'s three relevant EXT queries
-(`ExecutesShaderEffectSourceEXT`, `SupportsShadowSamplingEXT`, `SupportsImageBasedLightingEXT`)
-Indirect execution is the additional device-gated path described above.
+**Difference that is still a gap, and is owned:** shadow sampling remains `false` here and is
+implemented on EasyGL. Image-based lighting reached stock-PBR parity in `MOD-2235`, and GPU timing
+did so in `MOD-2246`. The remaining shadow gap is outside this classic-XNA campaign and is owned by
+`plans/plan_modern.md`; the capability profile reports it `false` rather than accepting the call
+and doing nothing. `ExecutesShaderEffectSourceEXT()` likewise stays false because the renderer
+executes packaged SPIR-V, not caller-provided source text. Indirect execution is the additional
+device-gated path described above.
 
 ---
 

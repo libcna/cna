@@ -84,9 +84,8 @@ layout(set = 0, binding = 6) uniform PbrParams {
     vec4 specularFresnelInputs;  // xyz = unclamped dielectric F0, w = specular factor
     vec4 textureTransformRows[10];
     vec4 specularTextureTransformRows[4];
-#ifdef CNA_PBR_DUAL_UV
     vec4 textureCoordinateSets;  // x = seven-bit per-map TEXCOORD_1 selector mask
-#endif
+    vec4 iblParams;              // x = enabled, y = prefiltered mip count, z = intensity
 } pbr;
 
 vec3 cnaSkinNormal(mat3 m, vec3 n) {

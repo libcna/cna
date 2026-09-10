@@ -2604,6 +2604,9 @@ namespace CNA::Internal::Renderers::Vulkan
          */
         [[nodiscard]] bool SupportsShaderLanguageEXT(int language, int stage) const override;
 
+        /** @brief Reports that the stock Vulkan PBR shaders consume all three IBL products. */
+        [[nodiscard]] bool SupportsImageBasedLightingEXT() const override { return true; }
+
         /**
          * @brief CNAEXT. A `Texture3D` bound to a `ShaderEffect` is sampled by that shader here.
          *
@@ -4622,8 +4625,8 @@ namespace CNA::Internal::Renderers::Vulkan
         // lets EvictSampledViewFromCaches() drop (and fence-retire) every entry a dying view
         // participates in -- exactly as texSamplerDescSets_ is already evicted per (view,sampler)
         // key -- closing the reuse-aliasing window and giving these caches a bounded free path.
-        // Padded to the max sampled-view count of any effect (PbrEffect/SkinnedPbrEffect: 7).
-        static constexpr std::size_t kMaxEffectSampledViews = 7;
+        // Padded to the max sampled-view count of any effect (PbrEffect/SkinnedPbrEffect: 10).
+        static constexpr std::size_t kMaxEffectSampledViews = 10;
         struct EffectDescSetEntry {
             VkDescriptorSet                                  set = VK_NULL_HANDLE;
             /// plan_vulkan.md VULKAN-181: the pool this set came from. These caches used to have
@@ -4810,9 +4813,10 @@ namespace CNA::Internal::Renderers::Vulkan
 
         // PbrEffect resources (stride 48: VertexPositionNormalTangentTexture, or stride 60 with
         // the importer-appended TextureCoordinate1 channel).
-        // 7 combined image samplers (baseColor@0, normalMap@1, metallicRoughnessMap@2,
-        // emissiveMap@3, occlusionMap@4, specular strength@6, specular colour@7) plus one dynamic
-        // UBO (PbrParams@5, world/lights1-2/emissive/
+        // 10 combined image samplers (baseColor@0, normalMap@1, metallicRoughnessMap@2,
+        // emissiveMap@3, occlusionMap@4, specular strength@6, specular colour@7,
+        // irradiance cube@8, prefiltered cube@9, BRDF LUT@10) plus one dynamic UBO
+        // (PbrParams@5, world/lights1-2/emissive/
         // eyePos/metallic-roughness/fog -- everything FillExtPushConst's 128-byte PC has no room
         // for), mirroring descriptorSetLayoutSkinned_'s sampler+dynamic-UBO shape.
         VkDescriptorSetLayout descriptorSetLayoutPbr_ = VK_NULL_HANDLE;
@@ -4821,14 +4825,14 @@ namespace CNA::Internal::Renderers::Vulkan
         std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash>             pipelinesPbr3D_;
         std::array<std::unordered_map<uint64_t, EffectDescSetEntry>,
                    MaxFramesInFlight>                        pbrDescSets_;
-        static constexpr uint32_t kPbrUBOStride   = 512; // 496 bytes used (124 floats), padded to 512
+        static constexpr uint32_t kPbrUBOStride   = 512; // 512 bytes used (128 floats)
         static constexpr uint32_t kPbrUBOMaxDraws = 512;
         std::array<VkBuffer,       MaxFramesInFlight> pbrUBO_    = {};
         std::array<VkDeviceMemory, MaxFramesInFlight> pbrUBOMem_ = {};
         std::array<void*,          MaxFramesInFlight> pbrUBOPtr_ = {};
 
         // SkinnedPbrEffect resources (PBR + skinning combo, stride 68, or stride 76 with the
-        // importer-appended TextureCoordinate1 channel). Same 7 samplers as descriptorSetLayoutPbr_
+        // importer-appended TextureCoordinate1 channel). Same 10 samplers as descriptorSetLayoutPbr_
         // above, plus a dynamic bone-palette UBO (binding=5, same shape as
         // descriptorSetLayoutSkinned_'s own BoneBlock) and a PbrParams dynamic UBO at binding=6
         // (WeightsPerVertex packed alongside the fog vector, mirroring
@@ -4844,7 +4848,7 @@ namespace CNA::Internal::Renderers::Vulkan
         std::array<VkBuffer,       MaxFramesInFlight> pbrSkinnedBoneUBO_    = {};
         std::array<VkDeviceMemory, MaxFramesInFlight> pbrSkinnedBoneUBOMem_ = {};
         std::array<void*,          MaxFramesInFlight> pbrSkinnedBoneUBOPtr_ = {};
-        static constexpr uint32_t kPbrSkinnedUBOStride   = 512; // same 496-byte PbrParams block
+        static constexpr uint32_t kPbrSkinnedUBOStride   = 512; // same 512-byte PbrParams block
         static constexpr uint32_t kPbrSkinnedUBOMaxDraws = 32;
         std::array<VkBuffer,       MaxFramesInFlight> pbrSkinnedUBO_    = {};
         std::array<VkDeviceMemory, MaxFramesInFlight> pbrSkinnedUBOMem_ = {};
@@ -5022,7 +5026,7 @@ namespace CNA::Internal::Renderers::Vulkan
             float                   skinnedFogUboData[64] = {};
             bool                    usePbr            = false; // true = Pbr3D pipeline (unskinned)
             bool                    usePbrSkinned     = false; // true = PbrSkinned3D pipeline (combo)
-            VkDescriptorSet         pbrDescSet        = VK_NULL_HANDLE; // 7-sampler set
+            VkDescriptorSet         pbrDescSet        = VK_NULL_HANDLE; // 10-sampler set
             // PbrParams UBO layout (floats), matching pbr3d.vert/frag.glsl's and
             // pbr3d_skinned.vert/frag.glsl's own struct exactly: [0..15]=light1/2 dir+diffuse (4
             // vec4), [16..31]=world mat4, [32..35]=eyePos+metallicFactor, [36..39]=emissive+
@@ -5032,9 +5036,10 @@ namespace CNA::Internal::Renderers::Vulkan
             // [60..63]=unclamped dielectric F0 RGB + specular factor,
             // [64..103]=ten core affine texture-transform rows,
             // [104..119]=four specular affine texture-transform rows,
-            // [120]=seven-bit texture-coordinate-set mask, [121..123]=deterministic padding.
-            // 124 floats = 496 bytes; the dynamic UBO stride is padded to 512 bytes.
-            float                   pbrUboData[124]   = {};
+            // [120]=seven-bit texture-coordinate-set mask, [121..123]=deterministic padding,
+            // [124]=IBL enabled, [125]=prefiltered mip count, [126]=IBL intensity,
+            // [127]=deterministic padding. 128 floats = the 512-byte dynamic UBO stride.
+            float                   pbrUboData[128]   = {};
             bool                    useLitTextured    = false; // true = LitTextured3D pipeline (Task 897)
             /// plan_vulkan.md VULKAN-199: with useLitTextured, selects the UV-less vertex stage --
             /// XNA's Position+Normal layout, which has no texture coordinate to bind. The fragment
@@ -5802,13 +5807,16 @@ namespace CNA::Internal::Renderers::Vulkan
         // Metallic-roughness BRDF ported from EasyGLRenderer::EnsurePbrProgram()/
         // EnsurePbrSkinnedProgram() unchanged; only the resource-binding plumbing differs.
         void       EnsurePbrResources();
-        /// REMED-GFX-169: @p samplers are the SamplerStates of slots 0..6, one per material map.
-        /// All seven participate in the cache key.
+        /// REMED-GFX-169/MOD-2235: @p samplers are the seven material slots followed by IBL
+        /// slots 10..12. All ten views and samplers participate in the cache key.
         VkDescriptorSet GetOrCreatePbrDescSet(uint32_t frameIdx, VkImageView baseColor,
                                                VkImageView normalMap, VkImageView metallicRoughness,
                                                VkImageView emissive, VkImageView occlusion,
                                                VkImageView specular, VkImageView specularColor,
-                                               const VkSampler (&samplers)[7]);
+                                               VkImageView iblIrradiance,
+                                               VkImageView iblPrefilteredSpecular,
+                                               VkImageView iblBrdfLut,
+                                               const VkSampler (&samplers)[10]);
         // plans/plan_vulkan.md VULKAN-232: `instanced` selects the CNA_INSTANCED variant of the
         // same source and adds binding 1, as in every other family.
         VkPipeline GetOrCreatePipelinePbr3D(std::size_t stride, VkPrimitiveTopology,
@@ -5821,12 +5829,15 @@ namespace CNA::Internal::Renderers::Vulkan
                                          const VulkanVertexInputLayoutEXT& vertexLayout = {},
                                          bool instanced = false);
         void       EnsurePbrSkinnedResources();
-        /// REMED-GFX-169: as GetOrCreatePbrDescSet, slots 0..6.
+        /// REMED-GFX-169/MOD-2235: as GetOrCreatePbrDescSet, including the three IBL slots.
         VkDescriptorSet GetOrCreatePbrSkinnedDescSet(uint32_t frameIdx, VkImageView baseColor,
                                                       VkImageView normalMap, VkImageView metallicRoughness,
                                                       VkImageView emissive, VkImageView occlusion,
                                                       VkImageView specular, VkImageView specularColor,
-                                                      const VkSampler (&samplers)[7]);
+                                                      VkImageView iblIrradiance,
+                                                      VkImageView iblPrefilteredSpecular,
+                                                      VkImageView iblBrdfLut,
+                                                      const VkSampler (&samplers)[10]);
         VkPipeline GetOrCreatePipelinePbrSkinned3D(std::size_t stride, VkPrimitiveTopology,
                                              bool depthTest, bool depthWrite,
                                              bool blend, int cullMode,
@@ -5842,11 +5853,11 @@ namespace CNA::Internal::Renderers::Vulkan
         void       EnsureDefaultFlatNormalTexture();
         void       FillExtPushConst(float (&pc)[32], const Matrix& wvp, const GpuDrawParams& p);
         void       FillAlphaTestPushConst(float (&pc)[32], const Matrix& wvp, const GpuDrawParams& p);
-        // Fills the 124-float PbrParams UBO layout shared by pbr3d.vert/frag.glsl and
+        // Fills the 128-float PbrParams UBO layout shared by pbr3d.vert/frag.glsl and
         // pbr3d_skinned.vert/frag.glsl (see Pending3DDraw::pbrUboData's own layout comment).
         // weightsPerVertex is only meaningful for the pbr+skinned combo (stride 68); pass 0 for
         // the unskinned PbrEffect path (stride 48), where it's unused.
-        void       FillPbrUboData(float (&out)[124], const GpuDrawParams& p, float weightsPerVertex);
+        void       FillPbrUboData(float (&out)[128], const GpuDrawParams& p, float weightsPerVertex);
         // BasicEffect lit-textured path (Task 897) — DirectionalLight1/2 + EmissiveColor,
         // forwarded via a small UBO (set=0,binding=1) alongside the unchanged 128-byte PC
         // (set=0,binding=0 stays the texture sampler; PC content unchanged from FillExtPushConst).
@@ -5978,16 +5989,17 @@ namespace CNA::Internal::Renderers::Vulkan
         void ApplySamplerAddressW(int slot, int addressW) override;
         VkDescriptorSet GetOrCreateTexSamplerDescSet(VkImageView view, VkSampler sampler);
 
-        /// REMED-GFX-169: slots 0..6 as one array, for the two PBR descriptor builders whose
-        /// seven material maps occupy those slots.
+        /// REMED-GFX-169/MOD-2235: material slots 0..6 followed by IBL slots 10..12, for the
+        /// two PBR descriptor builders.
         /// A struct return keeps the array a value at the call site rather than a raw pointer
         /// into member storage that a later ApplySamplerState could mutate.
-        struct PbrSlotSamplersEXTResult { VkSampler s[7]; };
+        struct PbrSlotSamplersEXTResult { VkSampler s[10]; };
         [[nodiscard]] PbrSlotSamplersEXTResult PbrSlotSamplersRawEXT() const
         {
             return { { slotSamplers_[0], slotSamplers_[1], slotSamplers_[2],
                        slotSamplers_[3], slotSamplers_[4], slotSamplers_[5],
-                       slotSamplers_[6] } };
+                       slotSamplers_[6], slotSamplers_[10], slotSamplers_[11],
+                       slotSamplers_[12] } };
         }
 
         // --- Custom Effect / SPIR-V loading (Task 119) ---
