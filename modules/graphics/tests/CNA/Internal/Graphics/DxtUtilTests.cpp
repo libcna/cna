@@ -163,3 +163,54 @@ TEST(DxtUtil, DecompressDxt1_ExactlyEnoughData_DoesNotThrow)
 {
     EXPECT_NO_THROW(DxtUtil::DecompressDxt1(kSolidRedDxt1, sizeof(kSolidRedDxt1), 4, 4));
 }
+
+// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-220: D3DX narrows an interpolated *alpha* through
+// the same ordered dither it narrows an interpolated colour through.
+//
+// `XNASWEEP-136` measured that dither for the colour channels and this channel was left out of it,
+// so an interpolated alpha was the truncated quotient. A 1,024-block probe built by the genuine
+// pipeline says otherwise: truncating is exact on 60% of its interpolated texels and rounding on
+// 75%, and the deviation from rounding is what names the rule -- symmetric, plus or minus one, and
+// a function of the texel's *position* rather than of the endpoints. Through `D3dxChannel` it is
+// exact on all 16,384.
+//
+// One block of that probe, at the position it occupies in it, so the dither's threshold is the one
+// it was measured with.
+TEST(DxtUtilTests, AnInterpolatedAlphaTakesTheSameOrderedDitherAnInterpolatedColourTakes)
+{
+    // alpha0 = 255, alpha1 = 0, so the six interpolated values are sevenths; every index appears.
+    const uint8_t block[16] = {
+        0xFF, 0x00,
+        0x88, 0xC6, 0xFA, 0x88, 0xC6, 0xFA,        // indices 0..7 twice, three bits each
+        0xFF, 0xFF, 0xFF, 0xFF,                    // a flat colour half
+        0x00, 0x00, 0x00, 0x00
+    };
+    // Block (0,0) of a 4x4 surface: the dither threshold is kDitherThreshold[y & 3][x & 3].
+    const std::vector<uint8_t> decoded = DxtUtil::DecompressDxt5(
+        block, sizeof(block), 4, 4, CNA::Internal::Graphics::DxtEndpointExpansion::D3dx);
+
+    // 255 and 0 are the endpoints; the rest are 255*(7-i)/7 narrowed by the dither at that texel.
+    // These sixteen bytes are read off the genuine pipeline's own answer -- the block at (18, 6)
+    // of `tests/assets/xna40/texture/dxt5_alpha_table.dds` in
+    // `tests/reference/xna40/differential/texture_dxt5_alpha_table.xnb` -- rather than recomputed
+    // here, so the test asserts the measurement and not the formula fitted to it. The dither
+    // depends on the texel's position within its block and not on the block's position, which is
+    // why one block at (0, 0) says what one block at (18, 6) says.
+    static const uint8_t kExpected[16] = {
+        255,   0, 219, 182,
+        146, 109,  73,  36,
+        255,   0, 219, 182,
+        146, 109,  73,  36
+    };
+    for (int texel = 0; texel < 16; ++texel)
+    {
+        EXPECT_EQ(decoded[texel * 4 + 3], kExpected[texel])
+            << "texel " << texel << " (x " << (texel % 4) << ", y " << (texel / 4) << ")";
+    }
+
+    // Without the D3DX expansion nothing dithers: the plain decoder keeps the truncated quotient,
+    // which is what every renderer's own upload path has always seen.
+    const std::vector<uint8_t> plain = DxtUtil::DecompressDxt5(
+        block, sizeof(block), 4, 4, CNA::Internal::Graphics::DxtEndpointExpansion::Hardware);
+    EXPECT_EQ(plain[2 * 4 + 3], static_cast<uint8_t>((6 * 255 + 0 * 0) / 7));
+}

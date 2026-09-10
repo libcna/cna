@@ -413,23 +413,42 @@ namespace CNA::Internal::Graphics
                 uint8_t r = 0, g = 0, b = 0, a = 255;
                 uint32_t index = (lookupTable >> (2 * (4 * blockY + blockX))) & 0x03u;
 
+                int px = (x << 2) + blockX;
+                int py = (y << 2) + blockY;
+
                 uint32_t alphaIndex =
                     static_cast<uint32_t>((alphaMask >> (3 * (4 * blockY + blockX))) & 0x07u);
+                // D3DX narrows an interpolated alpha through the same ordered dither it narrows an
+                // interpolated colour through -- the rule `XNASWEEP-136` measured for the colour
+                // channels and this one was left out of. Over a 1,024-block probe carrying every
+                // alpha index against 1,024 endpoint pairs, built by the genuine pipeline, it is
+                // exact on **16,384 of 16,384** texels where truncating is exact on 60% and
+                // rounding on 75% (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-220`). The
+                // deviation from rounding is what named it: symmetric, +/-1, and a function of the
+                // texel's position rather than of the endpoints.
+                const bool dithered = expansion == DxtEndpointExpansion::D3dx;
                 if (alphaIndex == 0)
                     a = alpha0;
                 else if (alphaIndex == 1)
                     a = alpha1;
                 else if (alpha0 > alpha1)
-                    a = static_cast<uint8_t>(((8 - alphaIndex) * alpha0 + (alphaIndex - 1) * alpha1) / 7);
+                {
+                    const int numerator = static_cast<int>(8 - alphaIndex) * alpha0 +
+                                          static_cast<int>(alphaIndex - 1) * alpha1;
+                    a = dithered ? D3dxChannel(numerator, 7, px, py)
+                                 : static_cast<uint8_t>(numerator / 7);
+                }
                 else if (alphaIndex == 6)
                     a = 0;
                 else if (alphaIndex == 7)
                     a = 0xFF;
                 else
-                    a = static_cast<uint8_t>(((6 - alphaIndex) * alpha0 + (alphaIndex - 1) * alpha1) / 5);
-
-                int px = (x << 2) + blockX;
-                int py = (y << 2) + blockY;
+                {
+                    const int numerator = static_cast<int>(6 - alphaIndex) * alpha0 +
+                                          static_cast<int>(alphaIndex - 1) * alpha1;
+                    a = dithered ? D3dxChannel(numerator, 5, px, py)
+                                 : static_cast<uint8_t>(numerator / 5);
+                }
                 if (expansion == DxtEndpointExpansion::D3dx)
                 {
                     const EndpointChannels first = Channels(c0);
