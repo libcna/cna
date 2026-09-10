@@ -49,6 +49,8 @@
 > `SDLGPU-113` restores the Unix fixtures' per-process contract on Windows and passes all 33
 > backbuffer plus 40 bound-target/Present lifecycle legs on D3D12; six presentation/reset/resize
 > programs pass alongside them.
+> `SDLGPU-114` makes the constructor rollback oracle headless-aware without weakening its native
+> swapchain route: D3D12 passes 291/291 applicable checks and Vulkan still passes 299/299.
 > `SDLGPU-94`–`SDLGPU-96`
 > remain open because D3D12 swapchain presentation/recovery, Metal and Android/Vulkan still
 > require native runtime evidence. Seven EasyGL defect findings (six distinct
@@ -78,9 +80,9 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
 | Item | Current evidence |
 |---|---|
 | Re-audit starting branch / commit | `sdlgpu` / `8cd9ab7f45a05bef3a727598c8d9ef5cf8b04442` |
-| Newly created tasks | 23 (`SDLGPU-91`–`SDLGPU-113`) |
-| Completed / open | 20 / 3 (`SDLGPU-91`–`93` and `SDLGPU-97`–`113` complete; `SDLGPU-94`–`96` open) |
-| Proven runtime configuration | Linux/Vulkan remains the complete behavioral configuration; D3D12 now has a real no-window device, all-26-stock-shader construction, stock-pipeline exact-pixel proof, a public windowless `GraphicsDevice` with exact backbuffer/RT2D clear readback, the unchanged public Game/Texture2D/SpriteBatch 2D scene for 120 frames, all nine shared classic stock-effect fixtures, the complete ten-fixture state/sampler matrix, the 24-test texture/format/transfer matrix, all 33 render-target registrations, all 25 buffer/draw registrations, all five model oracles and all 39 canonical compiled-effect runtime cases. The target evidence includes the 851-assertion mip/readback oracle and 40-assertion classic MRT matrix; the draw evidence includes instancing, multistream and declaration semantics. Six presentation/reset/resize programs and 73 individually isolated backbuffer/bound-target/Present lifecycle legs also pass through D3D12. There are now 191 registered native and 258 registered Windows SDL integration tests; the pre-platform full sweep plus the focused portability gates remain the Linux behavioral baseline. The D3D12 portability probes pass 2/2, 3/3, 6/6 and 3/3; the five skinned-effect/PBR executables add 25/25 discriminating assertions. |
+| Newly created tasks | 24 (`SDLGPU-91`–`SDLGPU-114`) |
+| Completed / open | 21 / 3 (`SDLGPU-91`–`93` and `SDLGPU-97`–`114` complete; `SDLGPU-94`–`96` open) |
+| Proven runtime configuration | Linux/Vulkan remains the complete behavioral configuration; D3D12 now has a real no-window device, all-26-stock-shader construction, stock-pipeline exact-pixel proof, a public windowless `GraphicsDevice` with exact backbuffer/RT2D clear readback, the unchanged public Game/Texture2D/SpriteBatch 2D scene for 120 frames, all nine shared classic stock-effect fixtures, the complete ten-fixture state/sampler matrix, the 24-test texture/format/transfer matrix, all 33 render-target registrations, all 25 buffer/draw registrations, all five model oracles and all 39 canonical compiled-effect runtime cases. The target evidence includes the 851-assertion mip/readback oracle and 40-assertion classic MRT matrix; the draw evidence includes instancing, multistream and declaration semantics. Six presentation/reset/resize programs, 73 individually isolated backbuffer/bound-target/Present lifecycle legs and 291/291 applicable constructor/lazy-resource rollback checks also pass through D3D12. There are now 191 registered native and 258 registered Windows SDL integration tests; the pre-platform full sweep plus the focused portability gates remain the Linux behavioral baseline. The D3D12 portability probes pass 2/2, 3/3, 6/6 and 3/3; the five skinned-effect/PBR executables add 25/25 discriminating assertions. |
 | Available local cross tools | MinGW-w64 and Wine are present; no Apple SDK/device, Android SDK/device, `dxc`, `spirv-cross`, SDL_shadercross executable or SDL_shadercross shared library was found |
 | Display constraint | All further Linux SDL tests must use `SDL_VIDEODRIVER=offscreen`; Windows GUI tests must use a headless/virtual display if runnable. Never use the host display. |
 
@@ -204,8 +206,9 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
   family, `SDLGPU-110` closes the 25-test buffer/draw family, and `SDLGPU-111` closes all five
   model oracles. `SDLGPU-112` also runs the complete canonical 39-case compiled-effect suite on
   D3D12. `SDLGPU-113` adds six presentation/reset/resize programs plus 33 isolated backbuffer and
-  40 isolated bound-target/Present lifecycle legs. Headless constructor-failure coverage and real
-  swapchain presentation/recovery remain open here;
+  40 isolated bound-target/Present lifecycle legs. `SDLGPU-114` closes the headless constructor-
+  failure matrix at 291/291 applicable checks. Only real swapchain presentation/acquire/minimize/
+  recovery remains open here;
   presentation still requires a presentation-capable isolated compositor or real Windows runner.
 
 ### SDLGPU-95 — validate ordinary parity on Apple Metal ⬜
@@ -742,6 +745,33 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
   now 73 isolated legs, increasing its SDL GPU CTest inventory from 190 to 258 without adding or
   relinking another executable.
 
+### SDLGPU-114 — execute transactional construction and lazy rollback on D3D12 ✅
+
+- **Problem/public behavior:** SDL GPU defers or lazily acquires devices, shaders, command buffers,
+  pipelines, samplers and fallback textures. The constructor exception-safety oracle was neither
+  linkable as a small MinGW executable after modularization nor semantically valid in the forced
+  headless D3D12 route: it required one window claim per successful construction and injected a
+  failure into that skipped stage.
+- **EasyGL/SDL evidence:** the existing renderer-specific oracle uses resource callbacks to prove
+  balanced acquisition/release, retry after every failure, independent renderer instances,
+  truthful depth/stencil capability and ShaderCross lifetime. In headless mode the production
+  constructor intentionally performs no `SDL_ClaimWindowForGPUDevice`, while all other 32
+  construction stages still execute.
+- **Location:** constructor exception-safety fixture plus its target-local static archive link
+  group; no production renderer change. The archive group contains input, graphics, SDL GPU and
+  the compiled-effect bridge because those four form a real static-link cycle for this direct-
+  renderer executable.
+- **Acceptance/test:** skip only the inapplicable window-claim injection when the explicit test
+  headless switch is active; require zero rather than one claim in every successful retry; retain
+  the complete 33-stage swapchain oracle on native Vulkan; build and run both focused targets with
+  validation diagnostics visible and no host display.
+- **Result (2026-09-10):** isolated Windows D3D12 passes **291/291** checks across the 32 applicable
+  construction failures, three lazy resource failures, two fallback-texture failures, independent
+  instances, forced no-depth/stencil capability and ShaderCross construction. The same source with
+  SDL offscreen video and a real Vulkan swapchain still executes the window claim and passes its
+  full **299/299** matrix. Both are debug devices; neither emitted a configured validation failure
+  or fixture failure. Only the fixture source and its focused executable were rebuilt.
+
 ## 2026-09-10 parity audit final status
 
 | Item | Current evidence |
@@ -756,8 +786,8 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
 | SDL GPU registered integration tests | 191 CTests (85 baseline plus 106 parity/remediation registrations) |
 | Shared EasyGL parity fixtures available | 32 renderer-neutral sources in `modules/graphics/examples/parity` |
 | Shared parity fixtures registered for SDL GPU | 32/32 (all renderer-neutral sources, including the nine classic stock-effect fixtures) |
-| Tasks created by this audit | 36 (`SDLGPU-55`–`SDLGPU-90`); the later platform re-audit creates twenty-three more (`SDLGPU-91`–`113`) |
-| Completed / open / proven unavoidable | This closed Linux/Vulkan phase completed 36 / 0 tasks; the current renderer-wide ledger is 56 / 3. Three capability fields (`BlendState.MultiSampleMask`, exact half-rate `PresentInterval::Two`, and `OcclusionQuery`) are proven unavailable in current SDL_gpu; the first two are not separate tasks and the third is closed by `SDLGPU-80` |
+| Tasks created by this audit | 36 (`SDLGPU-55`–`SDLGPU-90`); the later platform re-audit creates twenty-four more (`SDLGPU-91`–`114`) |
+| Completed / open / proven unavoidable | This closed Linux/Vulkan phase completed 36 / 0 tasks; the current renderer-wide ledger is 57 / 3. Three capability fields (`BlendState.MultiSampleMask`, exact half-rate `PresentInterval::Two`, and `OcclusionQuery`) are proven unavailable in current SDL_gpu; the first two are not separate tasks and the third is closed by `SDLGPU-80` |
 | SDL GPU build | Stable `cmake-build-sdlgpu`, Debug, `CNA_GRAPHICS_RENDERER=SDL_GPU`, tests/examples and `CNA_SDL_GPU_COMPILED_EFFECTS` ON |
 | EasyGL oracle build | Stable `cmake-build-debug`, Debug, `CNA_GRAPHICS_RENDERER=OPENGL33`, tests/examples ON |
 | Runtime driver | SDL 3.5.0 SDL_gpu Vulkan on AMD Radeon 780M / Mesa RADV 25.0.7; Khronos validation layer 1.4.309 present |

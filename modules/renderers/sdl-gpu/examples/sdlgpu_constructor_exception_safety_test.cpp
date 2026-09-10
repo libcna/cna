@@ -14,6 +14,8 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdlib>
+#include <cstring>
 #include <cstdio>
 #include <memory>
 #include <string>
@@ -106,6 +108,8 @@ namespace
     class TestRun
     {
     public:
+        explicit TestRun(bool headless) : headless_(headless) {}
+
         void Check(bool ok, const std::string& label)
         {
             ++checks_;
@@ -178,15 +182,19 @@ namespace
             Check(usable, prefix + " permits an immediately usable succeeding renderer");
             Check(successTracker.Balanced(),
                   prefix + " succeeding renderer destroys every resource exactly once");
+            const int expectedWindowClaims = headless_ ? 0 : 1;
             Check(successTracker.Acquired(SdlGpuResourceKindEXT::Device) == 1 &&
                       successTracker.Released(SdlGpuResourceKindEXT::Device) == 1 &&
-                      successTracker.Acquired(SdlGpuResourceKindEXT::WindowClaim) == 1 &&
-                      successTracker.Released(SdlGpuResourceKindEXT::WindowClaim) == 1 &&
+                      successTracker.Acquired(SdlGpuResourceKindEXT::WindowClaim) ==
+                          expectedWindowClaims &&
+                      successTracker.Released(SdlGpuResourceKindEXT::WindowClaim) ==
+                          expectedWindowClaims &&
                       successTracker.Acquired(SdlGpuResourceKindEXT::Shader) ==
                           static_cast<int>(SdlGpuConstructionShaderCountEXT) &&
                       successTracker.Released(SdlGpuResourceKindEXT::Shader) ==
                           static_cast<int>(SdlGpuConstructionShaderCountEXT),
-                  prefix + " succeeding renderer owns one device/claim and " +
+                  prefix + " succeeding renderer owns one device, " +
+                      std::to_string(expectedWindowClaims) + " window claim(s), and " +
                       std::to_string(SdlGpuConstructionShaderCountEXT) + " shaders");
         }
 
@@ -448,6 +456,7 @@ namespace
 #endif
 
     private:
+        bool headless_ = false;
         int checks_ = 0;
         int failures_ = 0;
     };
@@ -476,9 +485,23 @@ int main()
         return 1;
     }
 
-    TestRun test;
+    const char* forceHeadlessValue = std::getenv("CNA_SDLGPU_TEST_FORCE_HEADLESS");
+    const bool forceHeadless =
+        forceHeadlessValue != nullptr && std::strcmp(forceHeadlessValue, "1") == 0;
+    if (forceHeadless)
+        std::printf("[INFO] headless construction: window-claim injection is inapplicable\n");
+
+    TestRun test(forceHeadless);
     for (const FailureCase& failure : kConstructionFailures)
+    {
+        // The production constructor never attempts a window claim when its explicit test-only
+        // headless route is active. Testing that skipped stage would turn "the failure hook did
+        // not fire" into a false leak report; every stage which actually executes is still
+        // injected, and the real swapchain/window-claim route remains covered by the native run.
+        if (forceHeadless && failure.point == SdlGpuFailurePointEXT::WindowClaim)
+            continue;
         test.ExerciseConstructionFailure(firstWindow, failure);
+    }
 
     test.ExerciseLazyFailure(
         firstWindow, SdlGpuFailurePointEXT::FrameCommandBufferAcquisition,

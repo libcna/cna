@@ -245,6 +245,16 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     # whether the selected failure point throws.
     cna_sdlgpu_test(cna_test_sdlgpu_constructor_exception_safety
                     sdlgpu_constructor_exception_safety_test.cpp)
+    # This direct-renderer fixture does not otherwise pull Game/input objects before the selected
+    # renderer makes GraphicsDevice.cpp live. Keep the static archive which satisfies that file's
+    # TouchPanel/TextInput/Mouse references after the renderer/graphics cycle as well.
+    if(CNA_SDL_GPU_COMPILED_EFFECTS)
+        target_link_libraries(cna_test_sdlgpu_constructor_exception_safety PRIVATE
+            "$<LINK_GROUP:RESCAN,cna_input,cna_graphics_core,${RENDERER_TARGET},cna_renderer_mojoshader_effect>")
+    else()
+        target_link_libraries(cna_test_sdlgpu_constructor_exception_safety PRIVATE
+            "$<LINK_GROUP:RESCAN,cna_input,cna_graphics_core,${RENDERER_TARGET}>")
+    endif()
     if(CNA_SDL_GPU_SHADERCROSS)
         target_compile_definitions(cna_test_sdlgpu_constructor_exception_safety PRIVATE
             CNA_SDL_GPU_SHADERCROSS)
