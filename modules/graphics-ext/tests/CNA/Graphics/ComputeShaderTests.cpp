@@ -1,11 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 // plans/plan_modern.md MOD-1510..MOD-1525: compute shaders and storage buffers, end to end.
 //
-// Every test here starts by asking the device whether it can do this at all, because the answer
-// genuinely varies -- GL ES 3.1 and desktop GL 4.3 can, and the ES 2.0/3.0 profiles several CNA
-// renderers target cannot. Where it can, the assertions are exact: a shader that doubles a
-// thousand floats produces exactly those floats back, and a shader that writes a gradient into a
-// texture produces exactly that gradient.
+// Every test first asks for the capability it exercises. The legacy string constructor consumes
+// the active renderer's own dialect, so tests whose payload is explicitly GLSL ES additionally
+// require GLSL ES compute-source support. Portable package tests select their own backend payload.
 
 #ifdef CNA_CNAEXT
 
@@ -70,6 +68,12 @@ namespace {
         [[nodiscard]] bool supported() const
         {
             return gd.SupportsCapability(GraphicsCapability::ComputeShaders);
+        }
+
+        [[nodiscard]] bool supportsGlslEsComputeSource() const
+        {
+            return gd.SupportsShaderLanguageEXT(
+                CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Compute);
         }
     };
 
@@ -335,6 +339,8 @@ TEST_F(ComputeTest, ABrokenShaderThrowsWithItsCompilerLog)
 {
     // MOD-1511: the log is the whole value of the failure, so it must reach the caller.
     if (!supported()) GTEST_SKIP() << "this renderer does not support compute shaders";
+    if (!supportsGlslEsComputeSource())
+        GTEST_SKIP() << "this test's legacy payload is GLSL ES, not the renderer's dialect";
     try
     {
         ComputeShader broken(gd, "#version 310 es\nthis is not a shader\n");
@@ -354,6 +360,8 @@ TEST_F(ComputeTest, ADispatchDoublesEveryElementOfABuffer)
 {
     // MOD-1513, the row's own example: 1024 floats, doubled.
     if (!supported()) GTEST_SKIP() << "this renderer does not support compute shaders";
+    if (!supportsGlslEsComputeSource())
+        GTEST_SKIP() << "this test's legacy payload is GLSL ES, not the renderer's dialect";
     constexpr int kCount = 1024;
     StorageBufferT<float> values(gd, kCount);
     std::vector<float> source(kCount);
@@ -552,6 +560,8 @@ TEST_F(ComputeTest, ImageBindingEitherWorksOrRefusesWithItsReason)
     // than let the driver reject the binding silently, the wrapper refuses it and says why. On
     // desktop GL the same code binds and the gradient below is asserted exactly.
     if (!supported()) GTEST_SKIP() << "this renderer does not support compute shaders";
+    if (!supportsGlslEsComputeSource())
+        GTEST_SKIP() << "this test's legacy payload is GLSL ES, not the renderer's dialect";
     constexpr int kSize = 16;
     Texture2D texture(gd, kSize, kSize);
     const std::vector<Color> initial(kSize * kSize, Color::Black);
@@ -639,6 +649,8 @@ TEST_F(ComputeTest, Texture2DGetDataDoesNotSeeComputeWrites)
     // was uploaded with. If CNA ever gives Texture2D a real GPU read-back this test fails, and the
     // note beside it has to be rewritten.
     if (!supported()) GTEST_SKIP() << "this renderer does not support compute shaders";
+    if (!supportsGlslEsComputeSource())
+        GTEST_SKIP() << "this test's legacy payload is GLSL ES, not the renderer's dialect";
     constexpr int kSize = 8;
     Texture2D texture(gd, kSize, kSize);
     const std::vector<Color> initial(kSize * kSize, Color::Black);
@@ -668,6 +680,8 @@ TEST_F(ComputeTest, UniformsReachTheProgram)
     // MOD-1515: an int and a float, checked by their effect on a buffer rather than by asking the
     // program back -- what matters is that the value the shader read is the value that was set.
     if (!supported()) GTEST_SKIP() << "this renderer does not support compute shaders";
+    if (!supportsGlslEsComputeSource())
+        GTEST_SKIP() << "this test's legacy payload is GLSL ES, not the renderer's dialect";
     StorageBufferT<float> values(gd, 64);
     values.setData(std::vector<float>(64, 1.0f));
 
@@ -694,6 +708,8 @@ TEST_F(ComputeTest, DispatchArgumentsAreValidatedBeforeSubmission)
 {
     // MOD-1523.
     if (!supported()) GTEST_SKIP() << "this renderer does not support compute shaders";
+    if (!supportsGlslEsComputeSource())
+        GTEST_SKIP() << "this test's legacy payload is GLSL ES, not the renderer's dialect";
     StorageBufferT<float> values(gd, 64);
     ComputeShader doubler(gd, kDoubler);
     doubler.bindStorageBuffer(0, values.getBuffer());
