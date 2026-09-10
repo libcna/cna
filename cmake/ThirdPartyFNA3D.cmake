@@ -54,7 +54,8 @@ function(cna_configure_mojoshader)
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-spirv-texcrd.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-spirv-ps1x-interface.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-spirv-entry-interface-unique.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-spirv-pointcoord-existence.patch")
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-spirv-pointcoord-existence.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-static-sdl-shadercross.patch")
     set(_cna_fna3d_mojoshader_patch_script
         "${CMAKE_CURRENT_LIST_DIR}/patches/apply-fna3d-mojoshader-patch.cmake")
 
@@ -165,6 +166,24 @@ function(cna_configure_mojoshader)
         USE_SDL3)
 
     message(STATUS "CNA: MojoShader pinned with FNA3D ${CNA_FNA3D_GIT_TAG} (${fna3d_SOURCE_DIR})")
+endfunction()
+
+# plans/plan_sdlgpu.md SDLGPU-93: use CNA's statically linked, process-initialized
+# SDL_shadercross rather than MojoShader's optional shared-library probe. This is a separate helper
+# because the same MojoShader target also serves renderers that do not use SDL_gpu or ShaderCross.
+function(cna_enable_mojoshader_sdl_gpu_shadercross)
+    if(NOT TARGET mojoshader OR NOT TARGET cna_mojoshader)
+        message(FATAL_ERROR
+            "CNA: the SDL_GPU ShaderCross bridge requires cna_configure_mojoshader() first")
+    endif()
+    if(NOT TARGET cna_sdl_shadercross)
+        message(FATAL_ERROR
+            "CNA: the SDL_GPU MojoShader bridge requires the pinned SDL_shadercross target")
+    endif()
+
+    target_compile_definitions(mojoshader PRIVATE
+        CNA_MOJOSHADER_SDL_GPU_SHADERCROSS_STATIC)
+    target_link_libraries(mojoshader PRIVATE cna_sdl_shadercross)
 endfunction()
 
 # Publishes `cna_fna3d`: FNA3D itself on top of the MojoShader target above.

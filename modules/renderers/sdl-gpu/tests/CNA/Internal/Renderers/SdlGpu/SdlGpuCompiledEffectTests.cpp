@@ -635,6 +635,27 @@ TEST(SdlGpuCompiledEffectDrawTest, RendersTheAppliedPassesExpectedPixelsIntoARen
     EXPECT_NEAR(flatPixel.getAProperty(), 82, 3);
 }
 
+TEST(SdlGpuCompiledEffectDrawTest, StaticShaderCrossCompilesAndDrawsARepresentativeEffect)
+{
+    GraphicsDevice device;
+    SdlGpuRenderer* renderer = RendererOf(device);
+    ASSERT_NE(renderer, nullptr) << "this build did not select the SDL_GPU renderer";
+
+    const SDL_GPUShaderFormat deviceFormats = SDL_GetGPUShaderFormats(renderer->Device());
+    EXPECT_NE(MOJOSHADER_sdlGetShaderFormats() & deviceFormats, 0u);
+
+    MOJOSHADER_sdlContext* context = renderer->GetMojoShaderContextEXT();
+    ASSERT_NE(context, nullptr) << MOJOSHADER_sdlGetError(context);
+    if (!MOJOSHADER_sdlSetShaderCrossTestMode(context, 1))
+        GTEST_SKIP() << "this configuration does not link ShaderCross into MojoShader";
+
+    // The shared matrix constructs a synthetic XNA Effect, links several shader pairs, executes
+    // buffered/user and indexed/non-indexed draws, and checks distinct read-back colours. A stale
+    // dynamic-loader path cannot pass: no SDL_shadercross shared object is present in this build,
+    // and forcing this context makes every link use the statically linked compiler.
+    CNA::TestSupport::RunCompiledEffectDrawContract(device);
+}
+
 TEST(SdlGpuCompiledEffectDrawTest, RefusesADrawWithNoVertexDeclaration)
 {
     GraphicsDevice device;

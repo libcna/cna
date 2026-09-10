@@ -10,9 +10,9 @@
 > `MultiSampleMask` is unimplemented in EasyGL too. SDL GPU reports the query limitation and
 > refuses construction instead of fabricating results. `SDLGPU-92` now gives every built-in shader
 > a pinned ShaderCross route to native D3D12/Metal formats while preserving direct SPIR-V on
-> Vulkan. However, `SDLGPU-93`–`SDLGPU-96` remain open: compiled XNA effects still need the same
-> statically linked route, and the D3D12, Metal and Android/Vulkan paths still require native
-> runtime evidence. Seven EasyGL defect findings (six distinct
+> Vulkan. `SDLGPU-93` now routes compiled XNA effects through that same static compiler. However,
+> `SDLGPU-94`–`SDLGPU-96` remain open because the D3D12, Metal and Android/Vulkan paths still
+> require native runtime evidence. Seven EasyGL defect findings (six distinct
 > behavior families) are deliberately not copied. The final 188/188 SDL integration, 42/42
 > pre-portability renderer-unit, 33/33 EasyGL
 > oracle and 32/32 two-renderer corpus gates remain green on Linux/Vulkan. This verdict supersedes historical
@@ -40,8 +40,8 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
 |---|---|
 | Re-audit starting branch / commit | `sdlgpu` / `8cd9ab7f45a05bef3a727598c8d9ef5cf8b04442` |
 | Newly created tasks | 6 (`SDLGPU-91`–`SDLGPU-96`) |
-| Completed / open | 2 / 4 (`SDLGPU-91`–`92` complete; `SDLGPU-93`–`96` open) |
-| Proven runtime configuration | Linux/Vulkan only; the existing 188 integration, 33 EasyGL-oracle and 32 shared-source gates remain the behavioral baseline; the portability work's focused SDL GPU unit slice is now 46/46 |
+| Completed / open | 3 / 3 (`SDLGPU-91`–`93` complete; `SDLGPU-94`–`96` open) |
+| Proven runtime configuration | Linux/Vulkan only; the existing 188 integration, 33 EasyGL-oracle and 32 shared-source gates remain the behavioral baseline; the portability work's focused SDL GPU unit slice is now 47/47 |
 | Available local cross tools | MinGW-w64 and Wine are present; no Apple SDK/device, Android SDK/device, `dxc`, `spirv-cross`, SDL_shadercross executable or SDL_shadercross shared library was found |
 | Display constraint | All further Linux SDL tests must use `SDL_VIDEODRIVER=offscreen`; Windows GUI tests must use a headless/virtual display if runnable. Never use the host display. |
 
@@ -103,22 +103,34 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
   The post-close re-audit's hand-written count of 25 was corrected to the live 26; the historical
   baseline's own 25 count remains accurate at its recorded starting commit.
 
-### SDLGPU-93 — align ordinary compiled-effect device formats with the portable shader route ⬜
+### SDLGPU-93 — align ordinary compiled-effect device formats with the portable shader route ✅
 
-- **Problem/public behavior:** the ordinary XNA compiled-effect adapter can dynamically invoke
-  SDL_shadercross after device creation, but the renderer currently creates a SPIR-V-only device
-  before MojoShader can advertise cross-compiled formats, and no matching ShaderCross runtime is
-  supplied.
+- **Problem/public behavior:** at re-audit start, the ordinary XNA compiled-effect adapter could
+  dynamically invoke SDL_shadercross only after device creation, while the renderer created a
+  SPIR-V-only device before MojoShader could advertise cross-compiled formats and CNA supplied no
+  matching ShaderCross runtime.
 - **EasyGL/SDL evidence:** EasyGL's MojoShader route generates GLSL for its active GL profile. The
   pinned SDL_gpu adapter ORs `SDL_ShaderCross_GetSPIRVShaderFormats()` into its supported-format
   result and cross-compiles linked shaders only when the device lacks its native profile.
 - **Location:** renderer device-format selection, SDL GPU compiled-effect dependency/package path
   and pinned MojoShader adapter integration.
 - **Acceptance/test:** device creation requests the same native formats available to stock and
-  compiled shaders; a compiled BasicEffect/representative custom XNA effect links and draws on a
-  non-SPIR-V driver; missing ShaderCross is detected before creating an unusable device; Linux
-  compiled-effect parity remains green.
-- **Status:** open.
+  compiled shaders; locally force the non-native compiler branch and pixel-verify a representative
+  custom XNA effect; missing ShaderCross is detected before creating an unusable device; Linux
+  compiled-effect parity remains green. Actual non-SPIR-V-driver execution remains the explicit
+  platform gate in `SDLGPU-94`/`SDLGPU-95` rather than being inferred here.
+- **Result (2026-09-10):** the pinned MojoShader SDL_gpu adapter now consumes CNA's static
+  SDL_shadercross target instead of probing for a separately deployed shared library. It shares
+  the renderer-owned process session, advertises the exact native format set used at device
+  creation, never unloads compiler functions while another renderer can own them, and passes the
+  current `resource_info` ABI rather than relying on the historical metadata-prefix layout.
+  Reflection failure and both shader-creation failures now release their partial allocations.
+
+  A forced-compiler test on the real offscreen Vulkan device proves the branch rather than merely
+  its descriptor: with no SDL_shadercross shared object installed, it constructs a synthetic
+  compiled XNA effect, cross-compiles its linked programs through the static route, executes the
+  shared buffered/user plus indexed/non-indexed draw matrix and verifies distinct read-back
+  colours. The complete focused renderer slice is **47/47** with no validation diagnostics.
 
 ### SDLGPU-94 — validate ordinary parity on Windows D3D12 ⬜
 
