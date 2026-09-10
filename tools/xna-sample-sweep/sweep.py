@@ -296,6 +296,19 @@ def main(argv=None):
 
     provenance = {}
     if os.path.exists(args.provenance):
+        # A run's whole answer for a sample can turn on this file: it decides whether the sample's
+        # project parameters are used or thrown away, and a classifier that has been corrected
+        # since it was written silently keeps the old answer. Run 47 built 78 of SAMPLE-014's
+        # textures against a reference that used `PremultiplyAlpha False` because this manifest
+        # predated the fix that reads its runner correctly
+        # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-208`).
+        generator = os.path.join(HERE, "runner_provenance.py")
+        if (os.path.exists(generator)
+                and os.path.getmtime(generator) > os.path.getmtime(args.provenance)):
+            print("sweep: %s is older than %s; regenerate it before sweeping." %
+                  (os.path.relpath(args.provenance, REPO), os.path.relpath(generator, REPO)),
+                  file=sys.stderr)
+            return 2
         with open(args.provenance, encoding="utf-8") as handle:
             provenance = json.load(handle).get("samples", {})
     os.makedirs(args.outdir, exist_ok=True)
