@@ -2060,6 +2060,114 @@ TEST_F(SaveAsPngTest, ResolvedRenderTargetSavesItsLivePixels)
     }));
 }
 
+TEST_F(SaveAsPngTest, ConvertsEverySupportedClassicSurfaceFormatToRgba)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    struct Case
+    {
+        SurfaceFormat format;
+        std::vector<std::uint8_t> texel;
+        Color expected;
+    };
+    const std::vector<Case> cases = {
+        {SurfaceFormat::Bgr565,         {0x00, 0xF8}, Color::Red},
+        {SurfaceFormat::Bgra5551,       {0x00, 0xFC}, Color::Red},
+        {SurfaceFormat::Bgra4444,       {0x00, 0xFF}, Color::Red},
+        {SurfaceFormat::NormalizedByte2,{0x40, 0x20}, Color(129, 64, 0, 255)},
+        {SurfaceFormat::NormalizedByte4,{0x40, 0x20, 0x7F, 0x40}, Color(129, 64, 255, 129)},
+        {SurfaceFormat::Rgba1010102,    {0xFF, 0x03, 0x00, 0xC0}, Color::Red},
+        {SurfaceFormat::Rg32,           {0xFF, 0xFF, 0x00, 0x80}, Color(255, 128, 0, 255)},
+        {SurfaceFormat::Rgba64,         {0xFF, 0xFF, 0x00, 0x80, 0, 0, 0xFF, 0xFF},
+                                         Color(255, 128, 0, 255)},
+        {SurfaceFormat::Alpha8,         {0x80}, Color(0, 0, 0, 128)},
+        {SurfaceFormat::Single,         {0x00, 0x00, 0x00, 0x3F}, Color(128, 0, 0, 255)},
+        {SurfaceFormat::Vector2,        {0x00, 0x00, 0x00, 0x3F,
+                                         0x00, 0x00, 0x80, 0x3E}, Color(128, 64, 0, 255)},
+        {SurfaceFormat::Vector4,        {0x00, 0x00, 0x00, 0x3F,
+                                         0x00, 0x00, 0x80, 0x3E,
+                                         0x00, 0x00, 0x80, 0x3F,
+                                         0x00, 0x00, 0x00, 0x3F}, Color(128, 64, 255, 128)},
+        {SurfaceFormat::HalfSingle,     {0x00, 0x38}, Color(128, 0, 0, 255)},
+        {SurfaceFormat::HalfVector2,    {0x00, 0x38, 0x00, 0x34}, Color(128, 64, 0, 255)},
+        {SurfaceFormat::HalfVector4,    {0x00, 0x38, 0x00, 0x34,
+                                         0x00, 0x3C, 0x00, 0x38}, Color(128, 64, 255, 128)},
+        {SurfaceFormat::HdrBlendable,   {0x00, 0x38, 0x00, 0x34,
+                                         0x00, 0x3C, 0x00, 0x38}, Color(128, 64, 255, 128)},
+    };
+
+    int exercised = 0;
+    for (const Case& value : cases)
+    {
+        if (device.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(value.format)) !=
+            CNA::Internal::Renderers::RendererFormatVerdict::Supported)
+            continue;
+        SCOPED_TRACE(static_cast<int>(value.format));
+        Texture2D source(device, 1, 1, false, value.format);
+        source.SetData(value.texel.data(), static_cast<int>(value.texel.size()));
+        MemoryStream encoded;
+        source.SaveAsPng(&encoded, 1, 1);
+        const auto bytes = encoded.GetBuffer();
+        MemoryStream stream(bytes.data(), static_cast<System::IO::intcs>(bytes.size()));
+        Texture2D decoded = Texture2D::FromStream(device, stream);
+        Color actual;
+        decoded.GetData(&actual, 1);
+        EXPECT_EQ(actual, value.expected);
+        ++exercised;
+    }
+    EXPECT_GT(exercised, 0);
+}
+
+TEST_F(SaveAsPngTest, DecompressesEveryClassicDxtFormatBeforeEncoding)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    const std::array<std::pair<SurfaceFormat, std::vector<std::uint8_t>>, 3> cases{{
+        {SurfaceFormat::Dxt1, {0x00, 0xF8, 0x00, 0xF8, 0, 0, 0, 0}},
+        {SurfaceFormat::Dxt3, {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                               0x00, 0xF8, 0x00, 0xF8, 0, 0, 0, 0}},
+        {SurfaceFormat::Dxt5, {0xFF, 0xFF, 0, 0, 0, 0, 0, 0,
+                               0x00, 0xF8, 0x00, 0xF8, 0, 0, 0, 0}},
+    }};
+    int exercised = 0;
+    for (const auto& [format, blocks] : cases)
+    {
+        if (!device.GetRenderer().IsCompressedTransferFormatEXT(static_cast<int>(format)))
+            continue;
+        SCOPED_TRACE(static_cast<int>(format));
+        Texture2D source(device, 4, 4, false, format);
+        source.SetData(blocks.data(), static_cast<int>(blocks.size()));
+        MemoryStream encoded;
+        source.SaveAsPng(&encoded, 4, 4);
+        const auto bytes = encoded.GetBuffer();
+        MemoryStream stream(bytes.data(), static_cast<System::IO::intcs>(bytes.size()));
+        Texture2D decoded = Texture2D::FromStream(device, stream);
+        std::array<Color, 16> actual{};
+        decoded.GetData(actual.data(), static_cast<int>(actual.size()));
+        EXPECT_TRUE(std::all_of(actual.begin(), actual.end(), [](const Color& pixel)
+        {
+            return pixel == Color::Red;
+        }));
+        ++exercised;
+    }
+    EXPECT_GT(exercised, 0);
+}
+
+TEST_F(SaveAsPngTest, FullyTransparentPixelsLoseRgbLikeXna)
+{
+    Texture2D source(gd, 1, 1);
+    const Color transparent(200, 50, 100, 0);
+    source.SetData(&transparent, 1);
+    MemoryStream encoded;
+    source.SaveAsPng(&encoded, 1, 1);
+    const auto bytes = encoded.GetBuffer();
+    MemoryStream stream(bytes.data(), static_cast<System::IO::intcs>(bytes.size()));
+    Texture2D decoded = Texture2D::FromStream(gd, stream);
+    Color actual;
+    decoded.GetData(&actual, 1);
+    EXPECT_EQ(actual, Color(0, 0, 0, 0));
+}
+
 TEST_F(SaveAsPngTest, FilenameOverloadWritesReadableFile)
 {
     Texture2D src(gd, 2, 2);
@@ -2232,6 +2340,56 @@ TEST_F(SaveAsJpegTest, ResolvedRenderTargetSavesItsLivePixels)
     EXPECT_TRUE(std::all_of(pixels.begin(), pixels.end(), [&](const Color& pixel)
     {
         return IsCloseTo(pixel, 30, 180, 70, 8);
+    }));
+}
+
+TEST_F(SaveAsJpegTest, ConvertsPackedSurfaceFormatBeforeEncoding)
+{
+    Texture2D source(gd, 4, 4, false, SurfaceFormat::Bgr565);
+    const std::array<std::uint8_t, 32> red = []
+    {
+        std::array<std::uint8_t, 32> result{};
+        for (std::size_t offset = 0; offset < result.size(); offset += 2)
+        {
+            result[offset] = 0x00;
+            result[offset + 1] = 0xF8;
+        }
+        return result;
+    }();
+    source.SetData(red.data(), static_cast<int>(red.size()));
+    MemoryStream encoded;
+    source.SaveAsJpeg(&encoded, 4, 4);
+    const auto bytes = encoded.GetBuffer();
+    MemoryStream stream(bytes.data(), static_cast<System::IO::intcs>(bytes.size()));
+    Texture2D decoded = Texture2D::FromStream(gd, stream);
+    std::array<Color, 16> actual{};
+    decoded.GetData(actual.data(), static_cast<int>(actual.size()));
+    EXPECT_TRUE(std::all_of(actual.begin(), actual.end(), [](const Color& pixel)
+    {
+        return IsCloseTo(pixel, 255, 0, 0, 3);
+    }));
+}
+
+TEST_F(SaveAsJpegTest, FullyTransparentPixelsLoseRgbLikeXna)
+{
+    Texture2D source(gd, 4, 4);
+    const std::array<Color, 16> transparent = []
+    {
+        std::array<Color, 16> result{};
+        result.fill(Color(200, 50, 100, 0));
+        return result;
+    }();
+    source.SetData(transparent.data(), static_cast<int>(transparent.size()));
+    MemoryStream encoded;
+    source.SaveAsJpeg(&encoded, 4, 4);
+    const auto bytes = encoded.GetBuffer();
+    MemoryStream stream(bytes.data(), static_cast<System::IO::intcs>(bytes.size()));
+    Texture2D decoded = Texture2D::FromStream(gd, stream);
+    std::array<Color, 16> actual{};
+    decoded.GetData(actual.data(), static_cast<int>(actual.size()));
+    EXPECT_TRUE(std::all_of(actual.begin(), actual.end(), [](const Color& pixel)
+    {
+        return IsCloseTo(pixel, 0, 0, 0, 2);
     }));
 }
 

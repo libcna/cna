@@ -320,6 +320,10 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
 - **Resolved render targets can be saved through the classic image APIs** (`SOFTWARE-298`).
   `SaveAsPng` and `SaveAsJpeg` obtain live level-zero Color pixels through renderer readback rather
   than requiring an upload shadow that rendered targets deliberately do not own.
+- **Classic PNG/JPEG saving converts the complete XNA surface-format matrix** (`SOFTWARE-299`).
+  Measured Microsoft XNA behavior is reproduced for all 17 uncompressed formats and DXT1/3/5,
+  including image-specific missing-channel expansion, float/half clamping, block decompression and
+  clearing hidden RGB at exact zero alpha. This also removes the former narrow-texel buffer over-read.
 - **Every XNA-permitted ordinary `TextureCube` format has the same exact storage and sampling**
   (`SOFTWARE-145`, `SOFTWARE-149`, `SOFTWARE-150`). Each of the six faces and every declared mip
   independently retains Color, DXT1/3/5, normalized-integer, binary32 or binary16 bytes. Typed

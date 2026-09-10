@@ -183,7 +183,11 @@
 > adjacent stream audit proved that both `Texture2D.FromStream` overloads ignored FNA's current-
 > position and rewind-at-end behavior (`SOFTWARE-297`). Following the image path in the opposite
 > direction exposed `SaveAsPng`/`SaveAsJpeg` reading stale-or-absent upload shadows instead of live
-> render-target storage; `SOFTWARE-298` restores FNA's native-readback behavior.
+> render-target storage; `SOFTWARE-298` restores FNA's native-readback behavior. A real Microsoft
+> XNA oracle pass then falsified the adjacent assumption that those bytes could always be encoded as
+> RGBA8: XNA converts all 17 uncompressed classic formats plus DXT1/3/5 and clears RGB at exactly
+> zero alpha, while CNA over-read narrow formats and encoded every other layout incorrectly.
+> `SOFTWARE-299` restores that complete save conversion contract.
 > The adjacent Effect reflection audit found another FNA divergence: Microsoft returns null for
 > every invalid integer index in the annotation, parameter, pass and technique collections, while
 > CNA's reference-returning API made that result impossible and leaked `std::out_of_range`.
@@ -549,6 +553,7 @@ its own tests and plan evidence in the same commit.
 | SOFTWARE-296 | Restore unresolved `SpriteFont` glyph exception identity | ✅ | **Closed 2026-09-10.** The native-throw audit found that `SpriteFont.MeasureString` and `SpriteBatch.DrawString` reported an unresolvable character without a default glyph as `std::invalid_argument`. FNA explicitly throws `ArgumentException(..., "text")` in the string and StringBuilder paths, matching the XNA-visible contract. Two existing measure tests required the wrong native type and no post-`Begin` DrawString test reached the glyph resolver. All three exact discriminators failed before repair; the shared text paths now expose `System::ArgumentException` with parameter name `text`. The complete Software `SpriteFontTest`/`SpriteBatchTest` family passes 80/80, and the focused 3/3 proof passes on EasyGL GLES and desktop compiled-effect EasyGL. |
 | SOFTWARE-297 | Restore classic `Texture2D.FromStream` position semantics | ✅ | **Closed 2026-09-10.** FNA decodes from the caller's current stream position and, for a seekable stream positioned exactly at its end, rewinds to the beginning first. CNA instead allocated the stream's complete `Length` and demanded that many bytes from the current position; any nonzero prefix over-read at EOF, and the documented rewind case read zero bytes. Two public-overload discriminators failed 0/2 before repair. The shared decoder now rewinds the exact end position and otherwise reads only `Length - Position`, retaining the caller's prefix semantics. The complete eight-test Software format/resize slice passes, and the focused two-test proof passes on EasyGL GLES and desktop compiled-effect EasyGL. |
 | SOFTWARE-298 | Save resolved render-target pixels through classic PNG/JPEG APIs | ✅ | **Closed 2026-09-10.** FNA's `SaveAsPng` and `SaveAsJpeg` always read level zero from the live native texture before encoding. CNA instead encoded only `cpuPixels_`, which is deliberately absent for a `RenderTarget2D` because draws mutate renderer-owned storage; both inherited save methods therefore failed every resolved render target without reading one pixel. Two end-to-end clear/save/decode/readback discriminators failed 0/2 before repair. Color saves now obtain encoder-ready bytes through the authoritative public texture readback, preserving ordinary uploads while also inheriting disposed/active-target validation. The complete Software PNG/JPEG family passes 16/16, and both focused round trips pass on EasyGL GLES and desktop compiled-effect EasyGL. |
+| SOFTWARE-299 | Convert every classic surface format for PNG/JPEG saving | ✅ | **Closed 2026-09-10.** A measured Microsoft XNA 4.0 probe succeeded for PNG and JPEG across Color, all 16 other classic uncompressed formats and DXT1/3/5, and showed image-save expansion differs from shader sampling: absent color channels become zero, absent alpha becomes one. It also confirmed both encoders clear RGB only at exact zero alpha. CNA instead passed declared-format bytes directly to an RGBA8 encoder, causing wrong output and out-of-bounds reads for one/two-byte texels, while compressed saves had no CPU shadow and failed outright. Five behavioral tests failed 0/5 before repair. A shared internal decoder now produces encoder-ready RGBA8 from authoritative raw level-zero storage, including DXT decompression, signed/packed/float/half conversion and XNA's transparent-pixel normalization. All 21 Software save tests pass, and the focused five-test proof passes on EasyGL GLES and desktop compiled-effect EasyGL. FNA/FNA3D was deliberately not followed here: its current save path allocates declared-format bytes but its native encoder interprets the pointer as RGBA8, contradicting the measured higher-authority Microsoft behavior. |
 
 ### Current dependency order
 Tasks through `SOFTWARE-161` plus `SOFTWARE-166/167/169/170/171/172/174/175/176/177/179..197/199..206/208..225` are complete except for the intentionally
@@ -580,7 +585,8 @@ draw ranges exist in the first place; `SOFTWARE-295` closes the exact public exc
 the remaining classic `Model` native-throw paths; `SOFTWARE-296` does the same for unresolved
 SpriteFont glyphs in both measurement and drawing; `SOFTWARE-297` restores both classic image-
 stream overloads' current-position and end-rewind rules; `SOFTWARE-298` makes the matching classic
-save APIs consume live resolved render-target content.
+save APIs consume live resolved render-target content; `SOFTWARE-299` completes that path by
+converting every classic declared surface layout to XNA's image representation before encoding.
 `SOFTWARE-175` closes the EasyGL context-lifecycle defect found while validating
 `SOFTWARE-174`; `SOFTWARE-176` closes the shared normalized-depth-bias defect exposed by the
 property-level rasterizer audit, while `SOFTWARE-177` closes the desktop wireframe half and leaves

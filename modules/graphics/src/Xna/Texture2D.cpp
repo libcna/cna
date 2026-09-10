@@ -16,6 +16,7 @@
 #include "CNA/Logger.hpp"
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
+#include "CNA/Internal/Graphics/SurfaceFormatDecoder.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
@@ -2584,31 +2585,38 @@ namespace Microsoft::Xna::Framework::Graphics
 
     std::vector<std::uint8_t> Texture2D::GetPixelsForSave(const char* api) const
     {
-        // FNA reads level zero from the live native texture for every save. In CNA an ordinary
-        // Color texture's upload shadow is normally equivalent, but a RenderTarget2D deliberately
-        // has no authoritative shadow because draws mutate its renderer storage. Route Color
-        // through the public readback path so render targets are resolved/read correctly and the
-        // same disposed/active-resource checks apply before encoding.
-        if (format_ == SurfaceFormat::Color && width > 0 && height > 0)
+        using namespace CNA::Internal::Graphics::SurfaceFormatDecoder;
+        if (width <= 0 || height <= 0)
+            throw std::runtime_error(std::string(api) + ": texture dimensions are invalid");
+
+        // XNA reads level zero from the live native texture, then converts its declared surface
+        // format to an image-compatible RGBA plane. Reading through the public transfer path also
+        // keeps render-target resolves and disposed/active-resource validation authoritative.
+        const int surfaceFormat = static_cast<int>(format_);
+        const std::size_t rawByteCount = RawByteCount(surfaceFormat, width, height);
+        if (rawByteCount > static_cast<std::size_t>((std::numeric_limits<int>::max)()))
+            throw std::overflow_error(std::string(api) + ": texture storage is too large");
+        std::vector<std::uint8_t> raw(rawByteCount);
+        GetData(raw.data(), static_cast<int>(raw.size()));
+
+        std::vector<std::uint8_t> rgba;
+        std::vector<float> samples;
+        DecodePixels(surfaceFormat, raw.data(), raw.size(),
+                     IsDxt(surfaceFormat) ? 0 : width * BytesPerTexel(surfaceFormat),
+                     width, height, rgba, samples, MissingColorChannels::ImageEncoding);
+
+        // Measured Microsoft XNA 4.0 normalizes fully transparent pixels for both encoders while
+        // preserving RGB for every nonzero alpha, rather than generally premultiplying colors.
+        for (std::size_t offset = 0; offset < rgba.size(); offset += 4u)
         {
-            const int total = width * height;
-            std::vector<Color> colors(static_cast<std::size_t>(total));
-            GetData(colors.data(), 0, total);
-
-            std::vector<std::uint8_t> rgba(static_cast<std::size_t>(total) * 4u);
-            for (int i = 0; i < total; ++i)
+            if (rgba[offset + 3u] == 0u)
             {
-                rgba[static_cast<std::size_t>(i) * 4u + 0u] = colors[i].getRProperty();
-                rgba[static_cast<std::size_t>(i) * 4u + 1u] = colors[i].getGProperty();
-                rgba[static_cast<std::size_t>(i) * 4u + 2u] = colors[i].getBProperty();
-                rgba[static_cast<std::size_t>(i) * 4u + 3u] = colors[i].getAProperty();
+                rgba[offset + 0u] = 0u;
+                rgba[offset + 1u] = 0u;
+                rgba[offset + 2u] = 0u;
             }
-            return rgba;
         }
-
-        if (!cpuPixels_ || cpuPixels_->empty())
-            throw std::runtime_error(std::string(api) + ": no CPU-side pixel data available");
-        return *cpuPixels_;
+        return rgba;
     }
 
     void Texture2D::SaveAsPng(System::IO::Stream* stream, int targetWidth, int targetHeight) const
