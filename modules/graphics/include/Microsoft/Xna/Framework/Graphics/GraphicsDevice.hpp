@@ -1473,6 +1473,9 @@ namespace Microsoft::Xna::Framework::Graphics
         bool renderTargetBound_ = false;
         std::vector<VertexBufferBinding> currentVertexBuffers_;
         std::vector<GraphicsResource*> resources_;
+        // Resources keep a weak copy so their C++ destructors can distinguish a live, explicitly
+        // disposed device from a GraphicsDevice object whose lifetime has actually ended.
+        std::shared_ptr<void> resourceDeviceLifetime_ = std::make_shared<int>(0);
 
         // Reusable byte buffers for DrawUserPrimitives / DrawUserIndexedPrimitives staging,
         // avoiding a heap allocation on every draw call once capacity has grown to fit.
@@ -1505,6 +1508,8 @@ namespace Microsoft::Xna::Framework::Graphics
         // handle is dereferenced so that use-after-dispose is a public exception, not null UB.
         void ThrowIfBoundVertexBufferDisposed() const;
         void ThrowIfBoundIndexBufferDisposed() const;
+        void DetachDestroyedVertexBuffer(const VertexBuffer* vertexBuffer) noexcept;
+        void DetachDestroyedIndexBuffer(const IndexBuffer* indexBuffer) noexcept;
 
         // REMED-GFX-201: copies every active declared VertexBufferBinding into `p.vertexStreams`,
         // in public slot order, and computes `p.combinedVertexStride`. `foldedOffset` is subtracted
@@ -1670,6 +1675,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
         friend class Texture2D;
         friend class RenderTargetCube;
+        friend class GraphicsResource;
+        friend class VertexBuffer;
+        friend class IndexBuffer;
         friend class ShaderEffect;
         friend class Effect;
         friend class SpriteBatch;

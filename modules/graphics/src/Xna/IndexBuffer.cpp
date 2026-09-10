@@ -113,7 +113,12 @@ namespace Microsoft::Xna::Framework::Graphics
     {
     }
 
-    IndexBuffer::~IndexBuffer() = default;
+    IndexBuffer::~IndexBuffer()
+    {
+        if (graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
+            graphicsDevice_->DetachDestroyedIndexBuffer(this);
+        Dispose(false);
+    }
     IndexBuffer::IndexBuffer(IndexBuffer&&) noexcept = default;
     IndexBuffer& IndexBuffer::operator=(IndexBuffer&&) noexcept = default;
 

@@ -108,7 +108,10 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
-    Texture3D::~Texture3D() = default;
+    Texture3D::~Texture3D()
+    {
+        Dispose(false);
+    }
     Texture3D::Texture3D(Texture3D&&) noexcept = default;
     Texture3D& Texture3D::operator=(Texture3D&&) noexcept = default;
 

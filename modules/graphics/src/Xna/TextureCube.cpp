@@ -119,7 +119,10 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
-    TextureCube::~TextureCube() = default;
+    TextureCube::~TextureCube()
+    {
+        Dispose(false);
+    }
 
     TextureCube::TextureCube(GraphicsDevice& device, int size, bool mipMap, SurfaceFormat format)
         : Texture(&device)

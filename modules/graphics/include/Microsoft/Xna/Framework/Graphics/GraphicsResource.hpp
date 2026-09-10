@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <memory>
 #include <string>
 
 #include "CNA/CNAHelper.hpp"
@@ -71,8 +72,8 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Copy-assigns a GraphicsResource, carrying device/name/tag but resetting disposal state. */
         GraphicsResource& operator=(const GraphicsResource& other);
 
-        GraphicsResource(GraphicsResource&&) = default;
-        GraphicsResource& operator=(GraphicsResource&&) = default;
+        GraphicsResource(GraphicsResource&& other) noexcept;
+        GraphicsResource& operator=(GraphicsResource&& other) noexcept;
 
         /**
          * @brief Releases managed and native resources.
@@ -85,6 +86,10 @@ namespace Microsoft::Xna::Framework::Graphics
         virtual void Dispose(bool disposing);
 
         GraphicsDevice* graphicsDevice_;
+        // The raw device pointer preserves XNA's public ownership identity after Dispose. This
+        // separate non-owning token says whether that C++ object still exists before a resource
+        // destructor performs CNA-only binding cleanup.
+        std::weak_ptr<void> graphicsDeviceLifetime_;
         std::string name_;
         System::Object* tag_ = nullptr;
         bool isDisposed_ = false;

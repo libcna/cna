@@ -405,6 +405,7 @@ namespace Microsoft::Xna::Framework::Graphics
     GraphicsDevice::~GraphicsDevice()
     {
         Dispose();
+        resourceDeviceLifetime_.reset();
     }
 
     GraphicsAdapter& GraphicsDevice::getAdapterProperty() const
@@ -1133,6 +1134,31 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (currentIndexBuffer_ != nullptr && currentIndexBuffer_->getIsDisposedProperty())
             throw System::ObjectDisposedException(currentIndexBuffer_->getNameProperty());
+    }
+
+    void GraphicsDevice::DetachDestroyedVertexBuffer(const VertexBuffer* vertexBuffer) noexcept
+    {
+        if (currentVertexBuffer_ == vertexBuffer)
+        {
+            currentVertexBuffer_ = nullptr;
+            currentVertexBuffers_.clear();
+            return;
+        }
+        for (const VertexBufferBinding& binding : currentVertexBuffers_)
+        {
+            if (binding.getVertexBufferProperty() == vertexBuffer)
+            {
+                currentVertexBuffer_ = nullptr;
+                currentVertexBuffers_.clear();
+                return;
+            }
+        }
+    }
+
+    void GraphicsDevice::DetachDestroyedIndexBuffer(const IndexBuffer* indexBuffer) noexcept
+    {
+        if (currentIndexBuffer_ == indexBuffer)
+            currentIndexBuffer_ = nullptr;
     }
 
     void GraphicsDevice::FillVertexStreamBindings(

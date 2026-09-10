@@ -134,7 +134,12 @@ namespace Microsoft::Xna::Framework::Graphics
         return device.GetRenderer().CreateVertexBuffer(vertexCount);
     }
 
-    VertexBuffer::~VertexBuffer() = default;
+    VertexBuffer::~VertexBuffer()
+    {
+        if (graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
+            graphicsDevice_->DetachDestroyedVertexBuffer(this);
+        Dispose(false);
+    }
     VertexBuffer::VertexBuffer(VertexBuffer&&) noexcept = default;
     VertexBuffer& VertexBuffer::operator=(VertexBuffer&&) noexcept = default;
 

@@ -435,7 +435,10 @@ namespace Microsoft::Xna::Framework::Graphics
         gpuOnlyContent_ = true;
     }
 
-    Texture2D::~Texture2D() = default;
+    Texture2D::~Texture2D()
+    {
+        Dispose(false);
+    }
 
     void Texture2D::Dispose(bool disposing)
     {

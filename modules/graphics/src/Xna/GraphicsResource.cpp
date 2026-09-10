@@ -6,6 +6,9 @@ namespace Microsoft::Xna::Framework::Graphics
 {
     GraphicsResource::GraphicsResource(GraphicsDevice* device)
         : graphicsDevice_(device)
+        , graphicsDeviceLifetime_(device != nullptr
+              ? std::weak_ptr<void>(device->resourceDeviceLifetime_)
+              : std::weak_ptr<void>{})
     {
         if (graphicsDevice_)
         {
@@ -16,6 +19,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     GraphicsResource::GraphicsResource(const GraphicsResource& other)
         : graphicsDevice_(other.graphicsDevice_)
+        , graphicsDeviceLifetime_(other.graphicsDeviceLifetime_)
         , name_(other.name_)
         , tag_(other.tag_)
         , isDisposed_(false)
@@ -28,10 +32,35 @@ namespace Microsoft::Xna::Framework::Graphics
         if (this != &other)
         {
             graphicsDevice_ = other.graphicsDevice_;
+            graphicsDeviceLifetime_ = other.graphicsDeviceLifetime_;
             name_ = other.name_;
             tag_ = other.tag_;
             isDisposed_ = false;
             // Disposing handlers deliberately not copied
+        }
+        return *this;
+    }
+
+    GraphicsResource::GraphicsResource(GraphicsResource&& other) noexcept
+        : Disposing(std::move(other.Disposing))
+        , graphicsDevice_(other.graphicsDevice_)
+        , graphicsDeviceLifetime_(other.graphicsDeviceLifetime_)
+        , name_(std::move(other.name_))
+        , tag_(other.tag_)
+        , isDisposed_(other.isDisposed_)
+    {
+    }
+
+    GraphicsResource& GraphicsResource::operator=(GraphicsResource&& other) noexcept
+    {
+        if (this != &other)
+        {
+            graphicsDevice_ = other.graphicsDevice_;
+            graphicsDeviceLifetime_ = other.graphicsDeviceLifetime_;
+            name_ = std::move(other.name_);
+            tag_ = other.tag_;
+            isDisposed_ = other.isDisposed_;
+            Disposing = std::move(other.Disposing);
         }
         return *this;
     }
@@ -91,7 +120,7 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             Disposing.Raise(this, System::EventArgs::Empty);
         }
-        if (graphicsDevice_)
+        if (graphicsDevice_ && !graphicsDeviceLifetime_.expired())
         {
             graphicsDevice_->OnResourceDestroyed(name_, tag_);
             graphicsDevice_->RemoveResourceReference(this);
