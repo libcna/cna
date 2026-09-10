@@ -202,7 +202,7 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 |---|---|---|---|---|
 | Post-process effects (`DepthEffect`, `CRTEffect`) | ✅ GLSL | ⛔ its `ShaderEffect` takes SPIR-V, not the passes' GLSL | ⬜ | `AsciiPostProcessEffect` is CPU-side and runs everywhere |
 | Float/HDR render targets | ✅ exact 2D/cube targets, runtime-probed | ✅ exact Float16/Float32 `RenderTarget2D` and `RenderTargetCube`, device-probed (`MOD-2223`/`MOD-2234`) | ⬜ | ⬜ — each reports `false` and the target constructor refuses the format rather than substituting `Color` |
-| `RenderPipeline` + post-process passes | ✅ | 🟨 thirteen portable passes/stages now run, including Bloom, colour grading, depth of field, motion blur, analytic height fog, light shafts, tonemap/deband and texture/file HDR display encoding; remaining source-only passes copy through | ⬜ | The passes need `GraphicsCapability::CustomEffects`; without it each copies its input and the frame still renders |
+| `RenderPipeline` + post-process passes | ✅ | 🟨 fourteen portable pass consumers now run, including SSAO, Bloom, colour grading, depth of field, motion blur, analytic height fog, light shafts, tonemap/deband and texture/file HDR display encoding; remaining source-only passes copy through | ⬜ | The passes need `GraphicsCapability::CustomEffects`; without it each copies its input and the frame still renders |
 | Shadow maps (directional, PCF) | ✅ generation + reception on all four lit effects | ✅ portable rigid/skinned generation (`MOD-2237`) + stock reception (`MOD-2236`) | ⬜ | ⬜ — an effect accepts the shadow state and a renderer without the shader ignores it, so the frame renders unshadowed rather than failing |
 | Cascaded shadow maps (2-4, atlas) | ✅ same four programs, one shared shader path | ✅ portable atlas generation + stock reception | ⬜ | ⬜ — same accepted-and-ignored convention |
 | Contact shadows | ✅ needs the prepass depth and executed effect source | ⬜ | ⬜ | ⬜ — `ContactShadowPass::isSupported()` is false and the pass copies its input through, so the frame keeps the shadow map it already had |
@@ -218,15 +218,15 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 | Transparency (sorted) | ✅ ordering is renderer-free; the phase needs only a scene target | ✅ | ✅ | ✅ — `TransparentDrawList` is plain arithmetic and runs everywhere |
 | Transparency (order-independent) | ✅ needs MRT, a half-float target and executed effect source | ⬜ | ⬜ | ⬜ — the pipeline falls back to the sorted phase and names the missing requirement |
 | `.cube` grading tables | ✅ parse is renderer-free; the strip needs only a 2D texture | ✅ | ✅ | ✅ — `CubeLut` is plain arithmetic and the strip layout runs everywhere |
-| Tetrahedral LUT interpolation, volume LUTs | ✅ needs executed effect source; the volume layout also needs `GraphicsCapability::Texture3D` | ⬜ | ⬜ | ⬜ — where the shader is not run the grade copies its input through, exactly as it did before |
-| Debanding dither | ✅ needs executed effect source | ⬜ | ⬜ | ⬜ — off by default everywhere, and a renderer that does not run the tonemap shader was not dithering before either |
+| Tetrahedral LUT interpolation, volume LUTs | ✅ needs executed effect source; the volume layout also needs `GraphicsCapability::Texture3D` | ✅ portable strip and volume packages (`MOD-2239g`) | ⬜ | ⬜ — where no package variant runs, the grade copies its input through |
+| Debanding dither | ✅ needs executed effect source | ✅ portable tonemap/deband package (`MOD-2239a`) | ⬜ | ⬜ — off by default everywhere, and a renderer that does not run the tonemap shader was not dithering before either |
 | Aerial perspective | ✅ needs the prepass depth and executed effect source | ⬜ | ⬜ | ⬜ — `AerialPerspectivePass::isSupported()` is false and the frame keeps the unaltered geometry it had |
 | Debug drawing and gizmos | ✅ needs only `BasicEffect` and a line draw | ✅ | ✅ | ✅ — `DebugDraw` uses nothing an XNA `BasicEffect` does not already provide |
 | GPU timer queries | ✅ probed: `GL_EXT_disjoint_timer_query` is present on this machine's Mesa ES driver | ✅ queue/device-gated timestamp queries, nonblocking and recycled (`MOD-2246`) | ⬜ | ⬜ — `GpuTimer::isSupported()` is false and names the missing native path; no CPU fallback is offered |
 | Decals | ✅ needs the prepass and `CustomEffects` | ⬜ | ⬜ | ⬜ — `DecalPass` reports `isSupported()` false and draws nothing rather than washing the frame |
-| Spatial upscaling | ✅ | ⬜ | ⬜ | ⬜ — without executed effect source the pass copies its input through at the target size, which is the hardware stretch it was replacing |
+| Spatial upscaling | ✅ | ✅ portable edge-adaptive/sharpen package (`MOD-2239d`) | ⬜ | ⬜ — without a usable package the pass copies its input through at the target size, which is the hardware stretch it was replacing |
 | Display colour space | 🟨 `Srgb` only — the encoding is complete, the swap chain is not | 🟨 same; the portable encoder runs, presentation remains sRGB | 🟨 same | 🟨 — no CNA platform back end offers an HDR swap chain, so every renderer answers `Srgb` and refuses the rest |
-| Per-object velocity | ✅ opt-in; a third target with MRT, a third pass without | ⬜ | ⬜ | ⬜ — off by default everywhere, and motion blur stays camera-only, which is what it was before |
+| Per-object velocity | ✅ opt-in; a third target with MRT, a third pass without | 🟨 the portable blur consumes velocity, but its producer `DepthNormalPrepass` remains source-only | ⬜ | ⬜ — off by default everywhere, and motion blur stays camera-only when no velocity image is supplied |
 
 **Asking a renderer what it will actually do.** These questions are related, but they are not the
 same question:
@@ -251,7 +251,8 @@ adds edge-adaptive spatial upscaling and neighbourhood-clamped sharpening; `MOD-
 occlusion-aware light-shaft radial walk; `MOD-2239f` adds Bloom's extract, separable blur,
 progressive pyramid upsample and final composite; `MOD-2239g` adds filtered/tetrahedral strip and
 true 3D-LUT colour grading; `MOD-2239h` adds analytic height fog from depth and camera state; and
-`MOD-2239i` adds thin-lens depth of field; and `MOD-2239j` adds camera/object motion blur. The remaining
+`MOD-2239i` adds thin-lens depth of field, `MOD-2239j` adds camera/object motion blur, and
+`MOD-2239k` adds the SSAO estimate plus blur/composite. The remaining
 post-process paths still provide source alone and remain unavailable on Vulkan. Portable packages
 use the language/stage query to select a payload;
 subsystems still ask their own semantic capability before promising a visible result.
@@ -545,8 +546,8 @@ what is left. The pipeline does not stop you, and on the reference renderer the 
 MSAA's memory plus FXAA's 3.5 ms.
 
 Per renderer, the practical position today: EasyGL has both (MSAA up to 4×, and it runs the FXAA
-shader). Vulkan reports `MultiSampleAntiAliasing` but its `ShaderEffect` takes SPIR-V, so FXAA is
-unavailable there and MSAA is the only option. The 2D-only identities have neither and
+shader). Vulkan also has both: it reports `MultiSampleAntiAliasing`, and since `MOD-2218` the FXAA
+pass selects its packaged SPIR-V variant. The 2D-only identities have neither and
 `RenderPipeline` passes through. The per-identity matrix below is the authority; this row is the
 guidance that goes with it.
 
@@ -586,6 +587,14 @@ much less quality than the pixel count suggests — but thin contact shadows los
 exactly where AO earns its keep. Both paths are asserted to produce occlusion rather than only the
 default one, since a half-resolution path that silently produced nothing would look like AO merely
 being weak.
+
+Since `MOD-2239k`, both SSAO stages select generated GLSL ES/desktop GLSL on EasyGL or SPIR-V on
+Vulkan. The estimate reads depth as its primary texture, normals and deterministic rotation noise at
+units 1 and 2, and sends its 64-element kernel plus controls through the established typed uniform
+arrays. The compose stage blurs the intermediate occlusion image and multiplies it into the scene.
+The standalone SSAO suites pass **15/15** on EasyGL, RADV and llvmpipe; three integration cases that
+generate their inputs through `DepthNormalPrepass` remain unavailable on Vulkan until that producer
+also receives a portable package.
 
 ### Screen-space reflections, and the two things they cannot do
 

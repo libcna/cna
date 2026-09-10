@@ -250,7 +250,8 @@ implementation tasks.**
   `MOD-2239f` adds the four-stage bloom pyramid, `MOD-2239g` adds filtered/tetrahedral 2D and
   true 3D-LUT colour grading, `MOD-2239h` adds analytic depth/camera-based height fog, and
   `MOD-2239i` adds thin-lens depth of field with its depth-aware bleed guard. `MOD-2239j` adds
-  camera reprojection and optional per-object velocity motion blur. The
+  camera reprojection and optional per-object velocity motion blur, and `MOD-2239k` adds the
+  64-sample SSAO estimate plus its blur/composite. The
   bloom work also fixes secondary
   `RenderTarget2D` sampling through Vulkan `ShaderEffect`, which previously substituted the white
   fallback because the binding accepted only the uploaded-texture concrete type.

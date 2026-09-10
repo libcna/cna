@@ -306,6 +306,42 @@ namespace CNA::Graphics::detail
             });
     }
 
+    ShaderPackageEXT CreateSsaoOcclusionShaderPackage()
+    {
+        using namespace CNA::Graphics::detail::PostProcessGenerated;
+        return MakeFullscreenPackage(
+            {kSsaoOcclusionEsFragmentSource,
+             "post_process/ssao_occlusion.es.frag.glsl"},
+            {kSsaoOcclusionDesktopFragmentSource,
+             "post_process/ssao_occlusion.desktop.frag.glsl"},
+            {kSsaoOcclusionVulkanFragmentSpirV,
+             kSsaoOcclusionVulkanFragmentSpirVByteSize,
+             "post_process/ssao_occlusion.vulkan.frag.spv"},
+            {
+                ShaderBindingRequirementEXT(
+                    "uNormalSampler", 1, ShaderBindingTypeEXT::SampledTexture2D,
+                    CNA::ShaderStageEXT::Fragment),
+                ShaderBindingRequirementEXT(
+                    "uNoiseSampler", 2, ShaderBindingTypeEXT::SampledTexture2D,
+                    CNA::ShaderStageEXT::Fragment),
+            });
+    }
+
+    ShaderPackageEXT CreateSsaoComposeShaderPackage()
+    {
+        using namespace CNA::Graphics::detail::PostProcessGenerated;
+        return MakeFullscreenPackage(
+            {kSsaoComposeEsFragmentSource, "post_process/ssao_compose.es.frag.glsl"},
+            {kSsaoComposeDesktopFragmentSource,
+             "post_process/ssao_compose.desktop.frag.glsl"},
+            {kSsaoComposeVulkanFragmentSpirV,
+             kSsaoComposeVulkanFragmentSpirVByteSize,
+             "post_process/ssao_compose.vulkan.frag.spv"},
+            {ShaderBindingRequirementEXT(
+                "uOcclusionSampler", 1, ShaderBindingTypeEXT::SampledTexture2D,
+                CNA::ShaderStageEXT::Fragment)});
+    }
+
     ShaderPackageEXT CreateSpatialUpscaleShaderPackage()
     {
         using namespace CNA::Graphics::detail::PostProcessGenerated;

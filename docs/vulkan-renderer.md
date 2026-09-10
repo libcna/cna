@@ -749,7 +749,7 @@ application orbit/yaw oracle passes **3/3** on all three paths with identical me
 Vulkan paths run under Khronos validation and emit no validation messages; the package also passes
 its write-free reproducibility check.
 
-### Portable post-process rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`–`MOD-2239j`, 2026-09-10)
+### Portable post-process rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`–`MOD-2239k`, 2026-09-10)
 
 `ChromaticAberrationPass` is the first engine post-process to use the portable package path. Its
 internal package shares one fullscreen vertex contract across GLSL ES, desktop GLSL and SPIR-V;
@@ -876,6 +876,18 @@ written velocity under a stationary camera, proving the optional descriptor, inv
 camera fallback and visible object smear even while `DepthNormalPrepass` itself remains source-only
 on Vulkan. The complete portable post-process regression set is now **137/137** on all three paths,
 with no Khronos validation messages.
+
+`SsaoPass` is the fourteenth consumer and uses two packages. The estimate reads depth as the primary
+SpriteBatch image, normals from set 1 binding 1 and its deterministic rotation noise from binding 2;
+the compose stage reads the intermediate occlusion image from binding 1. Its 64-element kernel,
+noise scale and five scalar controls reuse the typed vec3-, vec2- and float-array descriptors at
+bindings 14, 13 and 12. The public packed/unpacked GLSL projection is derived from the generated ES
+payload, so the half-float mechanism test still operates on production shader logic. The former
+18-case Vulkan run's 8 passes and 10 skips becomes **15 passes / 3 skips** on RADV and llvmpipe;
+EasyGL remains **18/18**. The three remaining Vulkan skips require the still source-only
+`DepthNormalPrepass`, while all standalone SSAO image and half-resolution paths now execute. The
+complete portable post-process regression set is now **152/152** on all three paths, with no
+Khronos validation messages.
 
 Other engine post-process effects remain source-only and keep their exact copy-through fallback;
 the shared package/helper is the landing point for their subsequent fragment variants.

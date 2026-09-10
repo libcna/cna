@@ -55,6 +55,12 @@ namespace CNA::Graphics::detail
     /** @brief Creates the portable camera/object motion-blur fullscreen shader package. */
     [[nodiscard]] ShaderPackageEXT CreateMotionBlurShaderPackage();
 
+    /** @brief Creates the portable SSAO-estimation fullscreen shader package. */
+    [[nodiscard]] ShaderPackageEXT CreateSsaoOcclusionShaderPackage();
+
+    /** @brief Creates the portable SSAO blur/composition fullscreen shader package. */
+    [[nodiscard]] ShaderPackageEXT CreateSsaoComposeShaderPackage();
+
     /** @brief Creates the portable spatial-upscale fullscreen shader package. */
     [[nodiscard]] ShaderPackageEXT CreateSpatialUpscaleShaderPackage();
 
