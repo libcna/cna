@@ -111,6 +111,9 @@ namespace
          */
         bool selectedXnbPlatform = false;
         bool selectedXnbProfile = false;
+
+        /** @brief Whether `--build-configuration` named one, rather than the default standing. */
+        bool selectedBuildConfiguration = false;
         bool selectedXnbCompression = false;
 
         /** @brief Whether the command line named an effect compiler or launcher explicitly. */
@@ -695,6 +698,7 @@ namespace
                 }
                 command.buildConfiguration = CNA::Internal::ContentPathToUtf8(arguments[index]);
                 command.services.buildConfiguration = command.buildConfiguration;
+                command.selectedBuildConfiguration = true;
             }
             else if (IsOption(argument, "--font-directory"))
             {
@@ -2588,8 +2592,10 @@ namespace
         // project with a `.fx` asset cannot be built at all with a compiler that was named
         // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-101`).
         const Pipeline::ContentCompilerOptions& selected = command.services;
+        const bool namedConfiguration = command.selectedBuildConfiguration;
         task.setRegistryFactoryEXT(
-            [&createRegistry, &selected](const Pipeline::ContentCompilerOptions& inner)
+            [&createRegistry, &selected, namedConfiguration](
+                const Pipeline::ContentCompilerOptions& inner)
             {
                 Pipeline::ContentCompilerOptions merged = inner;
                 merged.effectCompilerExecutable = selected.effectCompilerExecutable;
@@ -2600,8 +2606,18 @@ namespace
                 merged.fontDirectories = selected.fontDirectories;
                 // The project's own `Configuration` is what the inner command line carries, and
                 // it is the one XNA's `DebugMode.Auto` follows; the outer one wins only where it
-                // named a configuration, which is what `--build-configuration` is for.
-                if (!inner.buildConfiguration.empty() && inner.buildConfiguration != "Release")
+                // named a configuration, which is what `--build-configuration` is for. Testing
+                // that by comparing the inner value against `"Release"` could not tell a caller
+                // who asked for Release from one who asked for nothing, so an explicit
+                // `--build-configuration Release` was discarded in favour of a project's own
+                // `Debug` default -- and every effect of the twelve samples whose runner passes
+                // `Release` came out compiled `/Zi /Od` against a reference compiled optimized
+                // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-200`).
+                if (namedConfiguration)
+                {
+                    merged.buildConfiguration = selected.buildConfiguration;
+                }
+                else if (!inner.buildConfiguration.empty())
                 {
                     merged.buildConfiguration = inner.buildConfiguration;
                 }

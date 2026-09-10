@@ -141,6 +141,14 @@ def build_one(job):
             print("reconstruct failed for %s: %s" % (unit["project"], error), flush=True)
     if reconstructed:
         project = reconstructed
+    # The configuration the sample's own runner handed `BuildContent`, because
+    # `EffectProcessor.DebugMode` defaults to `Auto` and follows it: 101 of these runners pass
+    # `Debug` and 12 pass `Release`, and a content project's own `Configuration` -- which defaults
+    # to `Debug` and is what a build reads when nobody says otherwise -- is not what the runner
+    # used. Without this every effect of those twelve samples was compiled `/Zi /Od` against a
+    # reference compiled optimized, and came out at twice the length
+    # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-200`).
+    configuration = runner.get("buildConfiguration")
     arguments = [
         tool, "build", project, "-o", output,
         "--format", "xnb",
@@ -150,6 +158,8 @@ def build_one(job):
         "--fx-compiler", FXC,
         "--fx-compiler-launcher", "wine",
     ]
+    if configuration:
+        arguments += ["--build-configuration", configuration]
     for directory in FONT_DIRECTORIES:
         arguments += ["--font-directory", directory]
     if unit["platform"] == "x":

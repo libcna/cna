@@ -206,6 +206,71 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
          * @param name The item's `Name` metadata, empty if the project wrote none.
          * @return The content name to build the asset under.
          */
+        /**
+         * @brief The file a project's `Include` names, resolved the way NTFS resolved it.
+         *
+         * An XNA content project spells its sources with whatever case its author typed, and the
+         * reference build read them on a filesystem that folds case: SAMPLE-138's project names
+         * `Textures\backbreaking.png` and ships `Textures/Backbreaking.png`, SAMPLE-070's names
+         * `CombatBkgdDungeon.JPG` and ships `.jpg`, SAMPLE-146's names `Shaders/simplescreen.fx`
+         * and ships `SimpleScreen.fx`. Building the same project on a case-sensitive filesystem
+         * has to reach the same file or it is not building the same project -- 43 references of
+         * this corpus are exactly that and nothing else
+         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-163`).
+         *
+         * The exact path wins whenever it exists, so nothing changes on a filesystem that already
+         * answers. A component that matches more than one entry is **not** resolved: two files
+         * differing only in case is a tree the reference build could not have had, and picking one
+         * of them would be a guess.
+         *
+         * @param path The path the project names.
+         * @return The file that exists, or an empty path when none does or the answer is ambiguous.
+         */
+        [[nodiscard]] std::filesystem::path ResolveIgnoringCase(const std::filesystem::path& path)
+        {
+            std::error_code error;
+            if (std::filesystem::exists(path, error) && !error) { return path; }
+            std::filesystem::path resolved = path.root_path();
+            if (resolved.empty()) { resolved = std::filesystem::path("."); }
+            for (const std::filesystem::path& part : path.relative_path())
+            {
+                if (part.empty() || part == ".") { continue; }
+                if (part == "..") { resolved = resolved / part; continue; }
+                const std::filesystem::path candidate = resolved / part;
+                if (std::filesystem::exists(candidate, error) && !error)
+                {
+                    resolved = candidate;
+                    continue;
+                }
+                const std::string wanted = part.string();
+                std::filesystem::path match;
+                std::size_t matches = 0u;
+                std::filesystem::directory_iterator entries(resolved, error);
+                if (error) { return {}; }
+                for (const std::filesystem::directory_entry& entry : entries)
+                {
+                    const std::string found = entry.path().filename().string();
+                    if (found.size() != wanted.size()) { continue; }
+                    bool equal = true;
+                    for (std::size_t index = 0; index < found.size(); ++index)
+                    {
+                        if (std::tolower(static_cast<unsigned char>(found[index])) !=
+                            std::tolower(static_cast<unsigned char>(wanted[index])))
+                        {
+                            equal = false;
+                            break;
+                        }
+                    }
+                    if (!equal) { continue; }
+                    match = entry.path();
+                    ++matches;
+                }
+                if (matches != 1u) { return {}; }
+                resolved = match;
+            }
+            return resolved;
+        }
+
         [[nodiscard]] std::string ContentName(const std::string& key, const std::string& name)
         {
             const std::filesystem::path path(key);
@@ -491,8 +556,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
         {
             std::ostringstream assetJson;
             const std::filesystem::path spec(TaskDetail::HostPath(asset.getItemSpecProperty()));
-            const std::filesystem::path absolute = spec.is_absolute() ? spec : (root / spec);
-            if (!std::filesystem::exists(absolute, error) || error)
+            const std::filesystem::path named = spec.is_absolute() ? spec : (root / spec);
+            const std::filesystem::path absolute = TaskDetail::ResolveIgnoringCase(named);
+            if (absolute.empty())
             {
                 LogError("BuildContent: the source asset \"" + asset.getItemSpecProperty() +
                          "\" does not exist.");

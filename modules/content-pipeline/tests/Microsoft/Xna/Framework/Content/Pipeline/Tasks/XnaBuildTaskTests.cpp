@@ -234,6 +234,48 @@ TEST(XnaBuildContent, ASourceAssetThatIsNotThereIsNamed)
     EXPECT_NE(task.ErrorsEXT().front().find("NoSuchTexture.png"), std::string::npos);
 }
 
+TEST(XnaBuildContent, AnIncludeIsResolvedTheWayTheFilesystemItWasAuthoredOnResolvedIt)
+{
+    // An XNA content project spells its sources with whatever case its author typed, and the
+    // build that produced a reference read them on a filesystem that folds case. SAMPLE-138's
+    // project names `Textures\\backbreaking.png` and ships `Textures/Backbreaking.png`,
+    // SAMPLE-070's names `CombatBkgdDungeon.JPG` and ships `.jpg`, SAMPLE-146's names
+    // `Shaders/simplescreen.fx` and ships `SimpleScreen.fx`: 43 references of the public sample
+    // corpus were unbuildable here for that and nothing else
+    // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-163`).
+    Project project("case");
+    Tasks::BuildContent task = MakeBuild(project);
+    project.Add(Locate("tests/assets/xna40/texture/probe.png"), "Textures/Tree.PNG");
+    Tasks::TaskItem texture(
+        (project.Source() / "Textures" / "tree.png").string());
+    texture.SetMetadata("Name", "tree");
+    texture.SetMetadata("Importer", "TextureImporter");
+    texture.SetMetadata("Processor", "TextureProcessor");
+    task.setSourceAssetsProperty({texture});
+    ASSERT_TRUE(task.Execute()) << (task.ErrorsEXT().empty() ? "" : task.ErrorsEXT().front());
+    ASSERT_EQ(task.getOutputContentFilesProperty().size(), 1u);
+    // The item's own `Name` decides the output, so the project's spelling survives the resolution.
+    EXPECT_NE(task.getOutputContentFilesProperty().front().getItemSpecProperty().find("tree.xnb"),
+              std::string::npos)
+        << task.getOutputContentFilesProperty().front().getItemSpecProperty();
+
+    // Two files differing only in case is a tree the reference build could not have had, so the
+    // ambiguity is refused rather than guessed at.
+    Project ambiguous("case_ambiguous");
+    Tasks::BuildContent second = MakeBuild(ambiguous);
+    ambiguous.Add(Locate("tests/assets/xna40/texture/probe.png"), "Textures/Two.PNG");
+    ambiguous.Add(Locate("tests/assets/xna40/texture/probe.png"), "Textures/TWO.png");
+    Tasks::TaskItem two(
+        (ambiguous.Source() / "Textures" / "two.png").string());
+    two.SetMetadata("Name", "two");
+    two.SetMetadata("Importer", "TextureImporter");
+    two.SetMetadata("Processor", "TextureProcessor");
+    second.setSourceAssetsProperty({two});
+    EXPECT_FALSE(second.Execute());
+    ASSERT_FALSE(second.ErrorsEXT().empty());
+    EXPECT_NE(second.ErrorsEXT().front().find("two.png"), std::string::npos);
+}
+
 // The whole point of the task: a project's assets become .xnb files, and the three output
 // properties say what happened.
 TEST(XnaBuildContent, AProjectBuildsToXnbAndFillsItsOutputProperties)

@@ -45,13 +45,54 @@ def project_reference(path, root):
     return os.path.relpath(absolute, root) if absolute.startswith(inside) else absolute
 
 
+def ResolveIgnoringCase(path):
+    """The file a project's `Include` names, resolved the way the reference build's NTFS did.
+
+    An XNA content project spells its sources with whatever case its author typed, and the build
+    that produced the reference read them on a filesystem that folds case: SAMPLE-138's project
+    names `Textures\\backbreaking.png` and ships `Textures/Backbreaking.png`, SAMPLE-070's names
+    `.JPG` and ships `.jpg`, SAMPLE-146's names `simplescreen.fx` and ships `SimpleScreen.fx`. The
+    exact path wins whenever it exists; a component matching more than one entry is left alone,
+    because two files differing only in case is a tree the reference build could not have had
+    (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-163`). `cna-content` resolves the same way, so
+    the mapper and the build agree about which file an item names.
+    """
+    if os.path.exists(path):
+        return path
+    resolved = os.sep if path.startswith(os.sep) else ""
+    for part in path.strip(os.sep).split(os.sep):
+        if not part or part == ".":
+            continue
+        if part == "..":
+            resolved = os.path.join(resolved, part)
+            continue
+        candidate = os.path.join(resolved, part)
+        if os.path.exists(candidate):
+            resolved = candidate
+            continue
+        try:
+            found = [name for name in os.listdir(resolved or ".") if name.lower() == part.lower()]
+        except OSError:
+            return path
+        if len(found) != 1:
+            return path
+        resolved = os.path.join(resolved, found[0])
+    return resolved
+
+
 def sample_projects(root, sample, synthesized=None):
     """Every `.contentproj` of one sample, outside anybody else's output.
 
     A sample whose references were produced by a hand-written `BuildContent` runner ships no
     project at all, and `synthesize_projects.py` writes the one the runner describes beside a copy
-    of its sources. Those are used only when the sample's own tree has none, so a real project is
-    never displaced by a reconstruction of one (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-186`).
+    of its sources (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-186`).
+
+    A reconstruction is **added** to whatever the sample ships rather than replacing it, because a
+    sample can ship a project that is not the one its references came out of:
+    `SAMPLES-DEC-007-Win7-SongProcessor` holds a hand-written `NinjAcademySongExport.contentproj`
+    naming a source that tree has not got, while its own `.cmd` runner names five *other* samples'
+    projects and copies one asset out of each. Adding rather than replacing leaves the ownership
+    question to the root scoring below, which is where it belongs (`XNASWEEP-163`).
     """
     found = []
     base = os.path.join(root, sample)
@@ -61,7 +102,7 @@ def sample_projects(root, sample, synthesized=None):
         for name in sorted(files):
             if name.lower().endswith(".contentproj"):
                 found.append(os.path.join(directory, name))
-    if found or not synthesized:
+    if not synthesized:
         return found
     staged = os.path.join(synthesized, sample)
     if not os.path.isdir(staged):
@@ -240,7 +281,8 @@ def main(argv=None):
                     record["status"] = "no-item"
                     mappings.append(record)
                     continue
-                source = os.path.join(projects[owner].directory, item.source.replace("/", os.sep))
+                source = ResolveIgnoringCase(
+                    os.path.join(projects[owner].directory, item.source.replace("/", os.sep)))
                 # A project's `ProcessorParameters` reached the reference only where the sample's
                 # own runner passed them on. Most of these runners hand-list their assets and set
                 # none, so the reference carries the processor's defaults whatever the project

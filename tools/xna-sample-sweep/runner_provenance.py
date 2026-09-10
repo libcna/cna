@@ -313,6 +313,25 @@ def _findRunner(directory):
     return sorted(found, key=rank)[0]
 
 
+def buildConfiguration(text):
+    """The `BuildConfiguration` the runner hands `BuildContent`, when it names one literally.
+
+    It is not decoration: `EffectProcessor.DebugMode` defaults to `Auto`, which follows the build
+    configuration, and `Debug` means *debug information and optimizations disabled*. A content
+    project's own `Configuration` defaults to `Debug` and a runner that calls the task directly
+    never reads it -- 109 of these runners pass `Debug` and 12 pass `Release`, and for those 12 the
+    reference's effect blobs are optimized while a build following the project would compile them
+    unoptimized. SAMPLE-006's `desaturate.fx` is 516 bytes compiled with `/Qstrip_debug` and 1,188
+    with `/Zi /Od`, and its reference is the first (plans/plan_xna_sample_xnb_sweep.md
+    `XNASWEEP-200`).
+
+    A runner that computes the configuration rather than writing it -- six do -- answers nothing,
+    because what it computed is not in the source.
+    """
+    found = re.search(r'BuildConfiguration\s*=\s*"([^"]+)"', text)
+    return found.group(1) if found else None
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--root", default="/rv/tmp/samples")
@@ -335,6 +354,7 @@ def main(argv=None):
             "script": chosen.replace(os.sep, "/"),
             "kind": classify(text),
             "parameterOverrides": overrides(text),
+            "buildConfiguration": buildConfiguration(text),
         }
     counts = {}
     for entry in document["samples"].values():
