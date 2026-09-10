@@ -5,6 +5,7 @@
 #include <array>
 #include <cstdint>
 
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DynamicIndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -128,6 +129,35 @@ TEST(IndexBufferTransferContractTest, DynamicTypedTransferAlsoIgnoresDrawIndexWi
     std::array<std::uint16_t, 4> result{};
     EXPECT_NO_THROW(buffer.GetData(result.data(), static_cast<int>(result.size())));
     EXPECT_EQ(result, source);
+}
+
+TEST(IndexBufferTransferContractTest, ShortNativeTransfersReplaceOnlyPrefixAndKeepFixedCapacity)
+{
+    GraphicsDevice device;
+    IndexBuffer staticBuffer(
+        device, IndexElementSize::SixteenBits, 4, BufferUsage::None);
+    DynamicIndexBuffer dynamicBuffer(
+        device, IndexElementSize::SixteenBits, 4, BufferUsage::None);
+    const std::array<std::uint16_t, 4> initial{10, 20, 30, 40};
+    const std::array<std::uint16_t, 2> replacement{90, 91};
+    staticBuffer.SetData(initial.data(), static_cast<int>(initial.size()));
+    dynamicBuffer.SetData(
+        initial.data(), 0, static_cast<int>(initial.size()), SetDataOptions::Discard);
+
+    staticBuffer.SetData(replacement.data(), static_cast<int>(replacement.size()));
+    device.SetIndexBuffer(&dynamicBuffer);
+    dynamicBuffer.SetData(
+        replacement.data(), 0, static_cast<int>(replacement.size()),
+        SetDataOptions::NoOverwrite);
+
+    const std::array<std::uint16_t, 4> expected{90, 91, 30, 40};
+    std::array<std::uint16_t, 4> result{};
+    staticBuffer.GetData(result.data(), static_cast<int>(result.size()));
+    EXPECT_EQ(expected, result);
+    dynamicBuffer.GetData(result.data(), static_cast<int>(result.size()));
+    EXPECT_EQ(expected, result);
+    EXPECT_EQ(4, staticBuffer.GetRenderer().GetIndexCount());
+    EXPECT_EQ(4, dynamicBuffer.GetRenderer().GetIndexCount());
 }
 
 TEST(IndexBufferTransferContractTest, BufferCapacityFailuresUseInvalidOperationAndPreserveData)

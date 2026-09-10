@@ -300,46 +300,35 @@ namespace Microsoft::Xna::Framework::Graphics
                 "The data is not the correct size for this IndexBuffer.");
 
         const auto* source = static_cast<const std::uint8_t*>(data) + sourceByteOffset;
-        if (destinationOffset == 0 && elementSize == nativeElementSize)
-        {
-            if (auto* const losable =
-                    dynamic_cast<CNA::Internal::Graphics::IContentLosable*>(this))
-            {
-                losable->ClearContentLostEXT();
-            }
-            if (indexElementSize_ == IndexElementSize::ThirtyTwoBits)
-            {
-                if (useOptions)
-                    renderer_->SetData32WithOptions(source, elementCount, options);
-                else
-                    renderer_->SetData32(source, elementCount);
-            }
-            else
-            {
-                if (useOptions)
-                    renderer_->SetData16WithOptions(source, elementCount, options);
-                else
-                    renderer_->SetData16(source, elementCount);
-            }
-            cpuShadow_.assign(source, source + byteCount);
+        // XNA locks only the requested byte span in fixed-size index-buffer storage. The renderer
+        // contract has no prefix/window operation, so compose the exact result in the shared
+        // shadow and upload the full native buffer. A complete replacement can still forward its
+        // streaming hint; a partial whole-buffer upload cannot truthfully promise NoOverwrite.
+        if (cpuShadow_.size() != capacity)
             cpuShadow_.resize(capacity, 0U);
-            return;
-        }
-
-        // The renderer contract has no byte-window operation. Compose the exact XNA-visible bytes
-        // in the shared shadow, then upload the whole native index buffer without forwarding a
-        // NoOverwrite promise that a whole-buffer transfer could not truthfully make.
-        if (cpuShadow_.size() < capacity)
-            cpuShadow_.resize(capacity, 0U);
+        if (useOptions && options == SetDataOptions::Discard)
+            std::fill(cpuShadow_.begin(), cpuShadow_.end(), 0U);
         std::copy(source, source + byteCount,
                   cpuShadow_.begin() + static_cast<std::ptrdiff_t>(destinationOffset));
 
         if (auto* const losable = dynamic_cast<CNA::Internal::Graphics::IContentLosable*>(this))
             losable->ClearContentLostEXT();
+        const bool canForwardOptions =
+            useOptions && destinationOffset == 0 && byteCount == capacity;
         if (indexElementSize_ == IndexElementSize::ThirtyTwoBits)
-            renderer_->SetData32(cpuShadow_.data(), indexCount_);
+        {
+            if (canForwardOptions)
+                renderer_->SetData32WithOptions(cpuShadow_.data(), indexCount_, options);
+            else
+                renderer_->SetData32(cpuShadow_.data(), indexCount_);
+        }
         else
-            renderer_->SetData16(cpuShadow_.data(), indexCount_);
+        {
+            if (canForwardOptions)
+                renderer_->SetData16WithOptions(cpuShadow_.data(), indexCount_, options);
+            else
+                renderer_->SetData16(cpuShadow_.data(), indexCount_);
+        }
     }
 
     void IndexBuffer::SetDataInternal(const void* data,

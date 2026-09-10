@@ -422,8 +422,8 @@ TEST_F(IndexBufferEmptyDataTest, NonzeroUploadsRemainExactForBothWidthsAndBuffer
     static32.GetData(&single32, 1);
     EXPECT_EQ(source16.front(), single16);
     EXPECT_EQ(source32.front(), single32);
-    EXPECT_EQ(1, static16.GetRenderer().GetIndexCount());
-    EXPECT_EQ(1, static32.GetRenderer().GetIndexCount());
+    EXPECT_EQ(4, static16.GetRenderer().GetIndexCount());
+    EXPECT_EQ(4, static32.GetRenderer().GetIndexCount());
 }
 
 #ifdef CNA_TEST_WEBGPU_AVAILABLE
