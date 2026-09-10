@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# plans/plan_webgpu.md WEBGPU-193: run the WHOLE shared parity corpus under both renderers and
-# record a per-fixture verdict.
+# plans/plan_webgpu.md WEBGPU-193 / plans/plan_sdlgpu.md SDLGPU-81: run the WHOLE shared parity
+# corpus under EasyGL and one comparison renderer, and record a per-fixture verdict.
 #
 # scripts/run-parity-fixture.sh does one fixture. This does all of them, and adds the thing a
 # per-fixture run cannot: a POLICY for what "the frames agree" means for each one, written down in
@@ -17,14 +17,30 @@
 # The default for a new fixture is `strict`: a fixture is added to the exception table only with a
 # measurement and a sentence, never to make a run green.
 #
-# Usage:  scripts/run-parity-corpus.sh [easygl-build] [webgpu-build]
+# Usage:  scripts/run-parity-corpus.sh [easygl-build] [comparison-build] [webgpu|sdlgpu]
 # DISPLAY comes from CNA_PARITY_DISPLAY (default :131). Exit 0 = every fixture passed its own
 # assertions under both renderers AND met its frame policy.
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 EASYGL_BUILD="${1:-cmake-build-debug}"
-WEBGPU_BUILD="${2:-cmake-build-webgpu}"
+COMPARISON_RENDERER="${3:-webgpu}"
+case "$COMPARISON_RENDERER" in
+    webgpu)
+        COMPARISON_BUILD="${2:-cmake-build-webgpu}"
+        COMPARISON_LABEL="WEBGPU"
+        comparison_binary() { printf '%s/cna_parity_%s_webgpu' "$REPO_ROOT/$COMPARISON_BUILD" "$1"; }
+        ;;
+    sdlgpu)
+        COMPARISON_BUILD="${2:-cmake-build-sdlgpu}"
+        COMPARISON_LABEL="SDL_GPU"
+        comparison_binary() { printf '%s/cna_test_sdlgpu_parity_%s' "$REPO_ROOT/$COMPARISON_BUILD" "$1"; }
+        ;;
+    *)
+        echo "error: comparison renderer must be 'webgpu' or 'sdlgpu'" >&2
+        exit 2
+        ;;
+esac
 DISPLAY_VALUE="${CNA_PARITY_DISPLAY:-:131}"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -41,25 +57,37 @@ declare -A POLICY=(
   [fill_mode_wireframe]="allow:512:the drawn LINE pixels themselves -- GL line rules and a WebGPU line-list rasterize a diagonal differently, on top of the pixel-centre convention (WEBGPU-187). Measured 367 of 32768, 1.1 percent"
 )
 
+# SDLGPU-81 measured the SDL_GPU comparison independently. Do not inherit WebGPU exceptions merely
+# because both APIs commonly run over Vulkan: SDL_GPU's XNA half-pixel correction makes the
+# rasterizer/viewport, EnvironmentMap and Skinned frames exact. Only the genuinely inapplicable
+# reflection/filter pictures and the two coverage-rule cases remain exceptions.
+if [[ "$COMPARISON_RENDERER" == "sdlgpu" ]]; then
+    POLICY=()
+    POLICY[compressed_cube]="internal:a reflection's cube FACE is not a cross-renderer invariant; this fixture compares BC and RGBA8 cube results WITHIN each renderer"
+    POLICY[sampler_filters]="internal:linear magnification depends on the rasterizer's sample centres; the fixture's point-vs-linear assertions are renderer-local invariants"
+    POLICY[sprite_geometry]="allow:64:the single half-pixel-destination cell's top/left coverage edges -- measured 32 pixels, all in that cell"
+    POLICY[fill_mode_wireframe]="allow:512:the one-pixel LINE coverage itself; GL and SDL_gpu line rasterization rules may differ, while the fixture asserts every edge and the empty interior"
+fi
+
 FIXTURES="$(sed -n '/^set(CNA_PARITY_FIXTURES/,/^)/p' \
     "$REPO_ROOT/modules/graphics/examples/parity/ParityFixtures.cmake" \
     | grep -vE '^\s*#|^set\(|^\)' | tr -d ' \t' | grep -v '^$')"
 
-printf '%-26s %-8s %-8s %-10s %s\n' FIXTURE EASYGL WEBGPU FRAMES NOTE
+printf '%-26s %-8s %-8s %-10s %s\n' FIXTURE EASYGL "$COMPARISON_LABEL" FRAMES NOTE
 printf '%s\n' "-------------------------------------------------------------------------------"
 
 failures=0
 for fixture in $FIXTURES; do
     easygl_bin="$REPO_ROOT/$EASYGL_BUILD/cna_parity_${fixture}_easygl"
-    webgpu_bin="$REPO_ROOT/$WEBGPU_BUILD/cna_parity_${fixture}_webgpu"
-    if [[ ! -x "$easygl_bin" || ! -x "$webgpu_bin" ]]; then
+    comparison_bin="$(comparison_binary "$fixture")"
+    if [[ ! -x "$easygl_bin" || ! -x "$comparison_bin" ]]; then
         printf '%-26s %-8s %-8s %-10s %s\n' "$fixture" "-" "-" "-" "NOT BUILT"
         failures=$((failures + 1))
         continue
     fi
 
     easygl_png="$WORK/${fixture}_easygl.png"
-    webgpu_png="$WORK/${fixture}_webgpu.png"
+    comparison_png="$WORK/${fixture}_${COMPARISON_RENDERER}.png"
     if env DISPLAY="$DISPLAY_VALUE" SDL_VIDEODRIVER=x11 SDL_AUDIODRIVER=dummy \
             timeout 120 "$easygl_bin" "$easygl_png" > "$WORK/${fixture}_easygl.log" 2>&1; then
         easygl_verdict="pass"
@@ -67,17 +95,18 @@ for fixture in $FIXTURES; do
         easygl_verdict="FAIL"; failures=$((failures + 1))
     fi
     if env DISPLAY="$DISPLAY_VALUE" SDL_VIDEODRIVER=x11 SDL_AUDIODRIVER=dummy \
-            timeout 120 "$webgpu_bin" "$webgpu_png" > "$WORK/${fixture}_webgpu.log" 2>&1; then
-        webgpu_verdict="pass"
+            timeout 120 "$comparison_bin" "$comparison_png" \
+            > "$WORK/${fixture}_${COMPARISON_RENDERER}.log" 2>&1; then
+        comparison_verdict="pass"
     else
-        webgpu_verdict="FAIL"; failures=$((failures + 1))
+        comparison_verdict="FAIL"; failures=$((failures + 1))
     fi
 
     policy="${POLICY[$fixture]:-strict}"
     note=""
     frames="-"
-    if [[ -s "$easygl_png" && -s "$webgpu_png" ]]; then
-        differing="$(python3 - "$easygl_png" "$webgpu_png" <<'PY'
+    if [[ -s "$easygl_png" && -s "$comparison_png" ]]; then
+        differing="$(python3 - "$easygl_png" "$comparison_png" <<'PY'
 import sys
 a = open(sys.argv[1], "rb").read()
 b = open(sys.argv[2], "rb").read()
@@ -115,7 +144,7 @@ PY
                 ;;
         esac
     fi
-    printf '%-26s %-8s %-8s %-10s %s\n' "$fixture" "$easygl_verdict" "$webgpu_verdict" "$frames" \
+    printf '%-26s %-8s %-8s %-10s %s\n' "$fixture" "$easygl_verdict" "$comparison_verdict" "$frames" \
         "${note:0:64}"
 done
 

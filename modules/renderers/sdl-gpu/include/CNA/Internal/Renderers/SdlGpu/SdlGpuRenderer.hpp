@@ -1565,12 +1565,13 @@ namespace CNA::Internal::Renderers::SdlGpu
             float lodBias = 0.0f;
             int addressW = 1;
             DrawTarget target;  ///< default = swapchain
-            // SDLGPU-42/43: non-null if this sprite was queued during a SetCustomEffect(effect)
-            // Begin/End cycle with a validly-compiled custom shader -- customUniforms is a snapshot
-            // of the effect's uniform state AT QUEUE TIME (see QueueSprite), not read again at
-            // Present() time, so later SetUniform* calls on the same live effect object never
-            // retroactively change this already-queued sprite's rendered result.
-            SdlGpuEffectRenderer* customEffect = nullptr;
+            // SDLGPU-81: a custom ShaderEffect's target-compatible pipeline is resolved at queue
+            // time. The public effect and its renderer may be destroyed before this whole-frame-
+            // deferred command replays, so retaining a raw SdlGpuEffectRenderer* here would be a
+            // use-after-free. The effect renderer defers releasing cached pipelines until after
+            // the frame submit, while customUniforms keeps the draw-time values by value.
+            bool customEffectRequested = false;
+            SDL_GPUGraphicsPipeline* customPipeline = nullptr;
             std::array<float, 32> customUniforms{};
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
             // plans/plan_fx.md FX-071: the compiled-effect counterpart of customEffect/customUniforms
@@ -2611,6 +2612,15 @@ namespace CNA::Internal::Renderers::SdlGpu
         // (whatever was pending has now been handed to the GPU, so it's safe), and one final time
         // in ~SdlGpuRenderer() in case no further frame ever renders.
         void QueueTextureRelease(SDL_GPUTexture* texture);
+        /**
+         * @brief Defers a custom-effect pipeline release until queued draws have been submitted.
+         *
+         * SDL_gpu invalidates a pipeline handle for future API calls as soon as
+         * `SDL_ReleaseGPUGraphicsPipeline` is called. A short-lived `ShaderEffect` can therefore
+         * release its cache only through this queue: already-issued SpriteBatch commands bind the
+         * captured pipeline later, at frame replay.
+         */
+        void QueueGraphicsPipelineRelease(SDL_GPUGraphicsPipeline* pipeline);
         void SeedMultisampleTargetFromResolved(
             SDL_GPUTexture* resolvedTexture, int resolvedLayer,
             SDL_GPUTexture* multisampleTexture, SDL_GPUTextureFormat colorFormat,
@@ -3317,6 +3327,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         // See QueueTextureRelease's own doc comment -- GPU texture handles from a destroyed
         // render target, deferred until the next successful command-buffer submit.
         std::vector<SDL_GPUTexture*> pendingTextureReleases_;
+        /// SDLGPU-81: custom-effect pipelines whose wrappers died before deferred replay.
+        std::vector<SDL_GPUGraphicsPipeline*> pendingGraphicsPipelineReleases_;
 
         // SDLGPU-36: mirrors currentRenderTarget_ for RenderTargetCube faces -- currentRenderTarget_
         // and currentRenderTargetCube_ are mutually exclusive (binding one clears the other,

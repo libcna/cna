@@ -5,6 +5,7 @@ layout(location = 1) in vec3 fragNormal;
 layout(location = 2) in vec3 fragWorldPos;
 layout(location = 3) in vec4 fragTint;
 layout(location = 4) in vec4 fragFog;    // REMED-GFX-009
+layout(location = 5) in float fragFresnel;
 
 layout(location = 0) out vec4 outColor;
 
@@ -64,17 +65,9 @@ void main() {
     vec3 baseColor = litRGB * texColor.rgb;
     float combinedAlpha = fragTint.a * texColor.a;
 
-    // Fresnel-weighted blend factor (matches VulkanRenderer's env_map3d.frag.glsl and
-    // FNA's real PSEnvMap/PSEnvMapSpecular): a flat envMapAmount, or edge-weighted by view angle
-    // when FresnelEnabled.
-    float viewAngle = dot(E, N);
-    float blendFactor = (ep.eyePos_fresnelEnabled.w > 0.5)
-        ? pow(max(1.0 - abs(viewAngle), 0.0), ep.light0Dir_fresnelFactor.w) * pc.emissiveAmount.w
-        : pc.emissiveAmount.w;
-
     // FNA's real PSEnvMap/PSEnvMapSpecular scale the whole envmap sample (both the base lerp
     // target and the specular term) by combinedAlpha before use.
-    vec3 rgb = mix(baseColor, envSample.rgb * combinedAlpha, blendFactor)
+    vec3 rgb = mix(baseColor, envSample.rgb * combinedAlpha, fragFresnel)
              + ep.envMapSpecular_pad.xyz * envSample.a * combinedAlpha;
     outColor = vec4(rgb, combinedAlpha);
     // REMED-GFX-009: blend toward FogColor (RGB only). fragFog.a = keep (1 no fog, 0 full fog).

@@ -36,6 +36,20 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         endif()
     endmacro()
 
+    # SDLGPU-81: build the complete renderer-neutral EasyGL parity corpus from its one canonical
+    # inventory. TARGET_PREFIX preserves the established SDL_GPU executable names, so adopting the
+    # registry does not force 31 pointless relinks. Every fixture gets the validation-fatal policy
+    # that the former hand-maintained family loops applied individually.
+    include(${CNA_GRAPHICS_EXAMPLES_DIR}/parity/ParityFixtures.cmake)
+    cna_register_parity_fixtures(
+        BUILDER cna_sdlgpu_test
+        TARGET_PREFIX cna_test_sdlgpu_parity_
+        TEST_PREFIX SdlGpu
+        TIMEOUT 180
+        LABELS "SdlGpu;Parity"
+        ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}"
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+
     cna_sdlgpu_test(cna_test_sdlgpu_smoke sdlgpu_smoke_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_Smoke COMMAND cna_test_sdlgpu_smoke
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
@@ -52,66 +66,6 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
     set_tests_properties(SdlGpu_OcclusionQuery_Limitation PROPERTIES
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
-
-    # SDLGPU-61: SDL_gpu's native polygon-line fill draws every asymmetric triangle edge while
-    # leaving the interior empty. Reuse the exact EasyGL/WebGPU public fixture so the capability
-    # answer is backed by the same positive edge and negative interior oracle.
-    cna_sdlgpu_test(cna_test_sdlgpu_parity_fill_mode_wireframe
-                    ${CNA_GRAPHICS_EXAMPLES_DIR}/parity/parity_fill_mode_wireframe.cpp)
-    cna_register_renderer_test(NAME SdlGpu_Parity_fill_mode_wireframe
-        COMMAND cna_test_sdlgpu_parity_fill_mode_wireframe
-        TIMEOUT 60 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
-    set_tests_properties(SdlGpu_Parity_fill_mode_wireframe PROPERTIES
-        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
-
-    # SDLGPU-59: the same EasyGL/WebGPU semantic-declaration oracles now exercise SDL_GPU's
-    # declaration-resolved stock vertex inputs, including independent DualTexture TEXCOORD1 and
-    # the stock ModelProcessor's lit Position+Normal+Color+TextureCoordinate record.
-    foreach(vertex_parity_test IN ITEMS
-            vertex_semantics
-            lit_vertex_color
-            unlit_position_color
-            dual_texture_uv1)
-        cna_sdlgpu_test(cna_test_sdlgpu_parity_${vertex_parity_test}
-                        ${CNA_GRAPHICS_EXAMPLES_DIR}/parity/parity_${vertex_parity_test}.cpp)
-        cna_register_renderer_test(NAME SdlGpu_Parity_${vertex_parity_test}
-            COMMAND cna_test_sdlgpu_parity_${vertex_parity_test}
-            TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
-        set_tests_properties(SdlGpu_Parity_${vertex_parity_test} PROPERTIES
-            FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
-    endforeach()
-
-    # SDLGPU-60: reuse the renderer-neutral EasyGL/WebGPU fixtures. The first compares a packed
-    # vertex with POSITION0/COLOR0 split across independent strides and offsets; the second proves
-    # one draw advances a matrix stream once per instance and leaves alternating cells untouched.
-    foreach(stream_parity_test IN ITEMS multi_stream_split instanced_draw)
-        cna_sdlgpu_test(cna_test_sdlgpu_parity_${stream_parity_test}
-                        ${CNA_GRAPHICS_EXAMPLES_DIR}/parity/parity_${stream_parity_test}.cpp)
-        cna_register_renderer_test(NAME SdlGpu_Parity_${stream_parity_test}
-            COMMAND cna_test_sdlgpu_parity_${stream_parity_test}
-            TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
-        set_tests_properties(SdlGpu_Parity_${stream_parity_test} PROPERTIES
-            FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
-    endforeach()
-
-    # SDLGPU-58: renderer-neutral, discriminating state fixtures. The five compact shared
-    # matrices cover the broad equations; the verbatim EasyGL oracle sources below exercise
-    # independent colour/alpha fields, write-disable, stencil masks/operations/two-sided state,
-    # and the dynamic reference value without maintaining SDL-specific copies.
-    foreach(state_parity_test IN ITEMS
-            blend_states
-            depth_states
-            stencil_states
-            stencil_compare
-            rasterizer_viewport)
-        cna_sdlgpu_test(cna_test_sdlgpu_parity_${state_parity_test}
-                        ${CNA_GRAPHICS_EXAMPLES_DIR}/parity/parity_${state_parity_test}.cpp)
-        cna_register_renderer_test(NAME SdlGpu_Parity_${state_parity_test}
-            COMMAND cna_test_sdlgpu_parity_${state_parity_test}
-            TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
-        set_tests_properties(SdlGpu_Parity_${state_parity_test} PROPERTIES
-            FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
-    endforeach()
 
     foreach(state_oracle_test IN ITEMS
             blendstate_separate_factors
@@ -131,38 +85,6 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
             FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
     endforeach()
 
-    foreach(sampler_parity_test IN ITEMS
-            sampler_filters
-            sampler_max_mip_level
-            sampler_lod_bias
-            sprite_sampler_state)
-        cna_sdlgpu_test(cna_test_sdlgpu_parity_${sampler_parity_test}
-                        ${CNA_GRAPHICS_EXAMPLES_DIR}/parity/parity_${sampler_parity_test}.cpp)
-        cna_register_renderer_test(NAME SdlGpu_Parity_${sampler_parity_test}
-            COMMAND cna_test_sdlgpu_parity_${sampler_parity_test}
-            TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
-        set_tests_properties(SdlGpu_Parity_${sampler_parity_test} PROPERTIES
-            FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
-    endforeach()
-
-    # SDLGPU-76: reuse the complete renderer-neutral SpriteBatch/SpriteFont corpus. Together these
-    # distinguish all four classic sort modes (including Immediate), layer depth, transforms,
-    # source rectangles, origin/rotation/nonuniform scale/subpixel placement, all flip combinations,
-    # blend-state restoration, render-target-local coordinates, glyph spacing/newlines and default
-    # character substitution. Keep validation fatal just like the earlier parity registrations.
-    foreach(sprite_parity_test IN ITEMS
-            sprite_geometry
-            sprite_state
-            sprite_font)
-        cna_sdlgpu_test(cna_test_sdlgpu_parity_${sprite_parity_test}
-                        ${CNA_GRAPHICS_EXAMPLES_DIR}/parity/parity_${sprite_parity_test}.cpp)
-        cna_register_renderer_test(NAME SdlGpu_Parity_${sprite_parity_test}
-            COMMAND cna_test_sdlgpu_parity_${sprite_parity_test}
-            TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
-        set_tests_properties(SdlGpu_Parity_${sprite_parity_test} PROPERTIES
-            FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
-    endforeach()
-
     # SDLGPU-76: this older SDL_Renderer fixture is renderer-neutral despite its historical name.
     # Reuse its precise XNA/FNA disposal policy, including the disposed Texture2D Draw rejection
     # and the deliberately accepted disposed state/SpriteBatch cases, rather than cloning it.
@@ -173,29 +95,6 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
     set_tests_properties(SdlGpu_SpriteBatch_DisposedGuards PROPERTIES
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
-
-    # SDLGPU-77: the complete classic stock-effect matrix shared with EasyGL/WebGPU. These nine
-    # fixtures isolate every remaining BasicEffect, AlphaTestEffect, DualTextureEffect,
-    # EnvironmentMapEffect and SkinnedEffect term instead of accepting one smoke triangle per
-    # family. Any validation diagnostic is a test failure even when the final pixel looks right.
-    foreach(stock_effect_parity_test IN ITEMS
-            lit_untextured
-            basic_effect_light_terms
-            basic_effect_vertex_color
-            basic_effect_alpha_scale
-            alpha_test_sweep
-            alpha_test_sources
-            dual_texture_terms
-            env_map_terms
-            skinned_terms)
-        cna_sdlgpu_test(cna_test_sdlgpu_parity_${stock_effect_parity_test}
-                        ${CNA_GRAPHICS_EXAMPLES_DIR}/parity/parity_${stock_effect_parity_test}.cpp)
-        cna_register_renderer_test(NAME SdlGpu_Parity_${stock_effect_parity_test}
-            COMMAND cna_test_sdlgpu_parity_${stock_effect_parity_test}
-            TIMEOUT 180 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
-        set_tests_properties(SdlGpu_Parity_${stock_effect_parity_test} PROPERTIES
-            FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
-    endforeach()
 
     # SDLGPU-77: three EasyGL corpus sources exercise distinctions the consolidated fixtures do
     # not duplicate: BasicEffect and SkinnedEffect must genuinely switch between XNA's default
@@ -311,22 +210,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
     # SDLGPU-72: compile the exact EasyGL public constructor/property/Rgba64 readback oracle under
-    # SDL GPU, and the renderer-neutral HDR fixture whose half tint distinguishes real RGBA16F
-    # storage from the historical RGBA8 substitution.
+    # SDL GPU. The renderer-neutral HDR half-tint fixture is in the central SDLGPU-81 registry.
     cna_sdlgpu_test(cna_test_sdlgpu_easygl_oracle_rendertarget2d_properties
                     ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_rendertarget2d_properties_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_EasyGLOracle_rendertarget2d_properties
         COMMAND cna_test_sdlgpu_easygl_oracle_rendertarget2d_properties
         TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
-    cna_sdlgpu_test(cna_test_sdlgpu_parity_hdr_render_target
-                    ${CNA_GRAPHICS_EXAMPLES_DIR}/parity/parity_hdr_render_target.cpp)
-    cna_register_renderer_test(NAME SdlGpu_Parity_hdr_render_target
-        COMMAND cna_test_sdlgpu_parity_hdr_render_target
-        TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
-    set_tests_properties(
-        SdlGpu_EasyGLOracle_rendertarget2d_properties
-        SdlGpu_Parity_hdr_render_target
-        PROPERTIES FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+    set_tests_properties(SdlGpu_EasyGLOracle_rendertarget2d_properties PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
     # plans/plan_sdlgpu.md SDLGPU-36: RenderTargetCube.
     cna_sdlgpu_test(cna_test_sdlgpu_rendertargetcube sdlgpu_rendertargetcube_test.cpp)
@@ -356,18 +247,6 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         SdlGpu_EasyGLOracle_rendertargetcube_properties
         SdlGpu_EasyGLOracle_rendertargetcube_depthformat
         PROPERTIES FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
-
-    # SDLGPU-74: the shared target-mip fixture is stronger than EasyGL's historical local mip
-    # smoke test: it reads both ends of the generated chain and samples level zero versus the
-    # coarsest level in the same public frame. EasyGL builds this identical source through the
-    # central parity-fixture registry.
-    cna_sdlgpu_test(cna_parity_render_target_mip_sdlgpu
-                    ${CNA_GRAPHICS_EXAMPLES_DIR}/parity/parity_render_target_mip.cpp)
-    cna_register_renderer_test(NAME SdlGpu_Parity_render_target_mip
-        COMMAND cna_parity_render_target_mip_sdlgpu
-        TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
-    set_tests_properties(SdlGpu_Parity_render_target_mip PROPERTIES
-        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
     # REMED-GFX-188: mipMap and MSAA are independent on RenderTargetCube. The resolved cube owns
     # every public level, each one-level face attachment resolves before that face's chain is
@@ -670,16 +549,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
             FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
     endforeach()
 
-    # The shared fixture compares DXT1 and Color cube sampling through EnvironmentMapEffect; the
-    # SDL-local matrix covers DXT1/3/5 decoded readback, NPOT partial blocks, authored tail mips,
-    # exact classifier boundaries and a forced decode path.
-    cna_sdlgpu_test(cna_test_sdlgpu_parity_compressed_cube
-        ${CNA_GRAPHICS_EXAMPLES_DIR}/parity/parity_compressed_cube.cpp)
-    cna_register_renderer_test(NAME SdlGpu_Parity_compressed_cube
-        COMMAND cna_test_sdlgpu_parity_compressed_cube
-        TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
-    set_tests_properties(SdlGpu_Parity_compressed_cube PROPERTIES
-        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+    # The shared registry's DXT1/Color cube fixture also runs once through the forced decode path;
+    # the SDL-local matrix covers DXT1/3/5 readback, NPOT blocks and authored tail mips.
     cna_register_renderer_test(NAME SdlGpu_Parity_compressed_cube_fallback
         COMMAND cna_test_sdlgpu_parity_compressed_cube
         TIMEOUT 120 LABELS "SdlGpu;Parity"

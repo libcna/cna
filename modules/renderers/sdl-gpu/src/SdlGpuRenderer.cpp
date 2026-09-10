@@ -1926,6 +1926,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         for (SDL_GPUTexture* texture : pendingTextureReleases_)
             SDL_ReleaseGPUTexture(device_, texture);
         pendingTextureReleases_.clear();
+        for (SDL_GPUGraphicsPipeline* pipeline : pendingGraphicsPipelineReleases_)
+            SDL_ReleaseGPUGraphicsPipeline(device_, pipeline);
+        pendingGraphicsPipelineReleases_.clear();
         if (depthStencilTexture_ != nullptr)
             SDL_ReleaseGPUTexture(device_, depthStencilTexture_);
         if (backbufferProxy_ != nullptr)
@@ -2022,6 +2025,12 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         if (texture != nullptr)
             pendingTextureReleases_.push_back(texture);
+    }
+
+    void SdlGpuRenderer::QueueGraphicsPipelineRelease(SDL_GPUGraphicsPipeline* pipeline)
+    {
+        if (pipeline != nullptr)
+            pendingGraphicsPipelineReleases_.push_back(pipeline);
     }
 
     void SdlGpuRenderer::EnsureDepthStencilTexture(Uint32 width, Uint32 height)
@@ -2205,6 +2214,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         for (SDL_GPUTexture* texture : pendingTextureReleases_)
             SDL_ReleaseGPUTexture(device_, texture);
         pendingTextureReleases_.clear();
+        for (SDL_GPUGraphicsPipeline* pipeline : pendingGraphicsPipelineReleases_)
+            SDL_ReleaseGPUGraphicsPipeline(device_, pipeline);
+        pendingGraphicsPipelineReleases_.clear();
 
         ReleaseSceneDrawBuffers();
 
@@ -4342,13 +4354,9 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                 int colorTargetCount,
                                                 SDL_GPUGraphicsPipeline*& boundPipeline)
     {
-        if (command.customEffect != nullptr)
+        if (command.customEffectRequested)
         {
-            SDL_GPUGraphicsPipeline* pipeline = command.customEffect->GetOrCreatePipeline(
-                activeColorTargetFormats_, sampleCount, depthStencilFormat, colorTargetCount,
-                command.renderState.colorWriteMasks,
-                command.renderState.depthBias,
-                command.renderState.slopeScaleDepthBias);
+            SDL_GPUGraphicsPipeline* pipeline = command.customPipeline;
             if (pipeline == nullptr)
                 return;  // compile/pipeline-creation failure -- skip, matches IsValid()-gated sibling renderers
             if (pipeline != boundPipeline)
@@ -4541,7 +4549,48 @@ namespace CNA::Internal::Renderers::SdlGpu
         // see SpriteCommand's own doc comment for why.
         if (customEffect != nullptr && customEffect->IsValid())
         {
-            command.customEffect = customEffect;
+            SdlGpuColorTargetFormatsEXT colorFormats{};
+            colorFormats.fill(SDL_GPU_TEXTUREFORMAT_INVALID);
+            SDL_GPUSampleCount sampleCount = SDL_GPU_SAMPLECOUNT_1;
+            SDL_GPUTextureFormat depthStencilFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
+            int colorTargetCount = 1;
+
+            if (currentRenderTarget_ != nullptr)
+            {
+                const std::shared_ptr<SdlGpuRenderTarget2DState>& state =
+                    currentRenderTarget_->State();
+                colorFormats[0] = state->colorFormat;
+                sampleCount = state->sampleCount;
+                depthStencilFormat = state->depthTexture != nullptr
+                    ? state->depthFormat : SDL_GPU_TEXTUREFORMAT_INVALID;
+                if (PassSegment* segment = CurrentSegment())
+                {
+                    colorTargetCount = 1 + static_cast<int>(segment->extraAttachments.size());
+                    for (std::size_t i = 0; i < segment->extraAttachments.size(); ++i)
+                        colorFormats[i + 1] = segment->extraAttachments[i]->colorFormat;
+                }
+            }
+            else if (currentRenderTargetCube_ != nullptr)
+            {
+                const std::shared_ptr<SdlGpuRenderTargetCubeState>& state =
+                    currentRenderTargetCube_->State();
+                colorFormats[0] = state->colorFormat;
+                sampleCount = state->sampleCount;
+                depthStencilFormat = state->depthTexture != nullptr
+                    ? state->depthFormat : SDL_GPU_TEXTUREFORMAT_INVALID;
+            }
+            else
+            {
+                colorFormats[0] = SDL_GetGPUSwapchainTextureFormat(device_, window_);
+                depthStencilFormat = depthStencilFormat_;
+            }
+
+            command.customEffectRequested = true;
+            command.customPipeline = customEffect->GetOrCreatePipeline(
+                colorFormats, sampleCount, depthStencilFormat, colorTargetCount,
+                command.renderState.colorWriteMasks,
+                command.renderState.depthBias,
+                command.renderState.slopeScaleDepthBias);
             command.customUniforms = customEffect->SnapshotUniforms();
         }
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
@@ -10360,7 +10409,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     SdlGpuEffectRenderer::~SdlGpuEffectRenderer()
     {
         for (auto& [key, pipeline] : pipelines_)
-            if (pipeline != nullptr) SDL_ReleaseGPUGraphicsPipeline(owner_->Device(), pipeline);
+            owner_->QueueGraphicsPipelineRelease(pipeline);
         if (fragmentShader_ != nullptr) SDL_ReleaseGPUShader(owner_->Device(), fragmentShader_);
         if (vertexShader_ != nullptr) SDL_ReleaseGPUShader(owner_->Device(), vertexShader_);
     }
@@ -10370,7 +10419,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         compileError_.clear();
         valid_ = false;
         for (auto& [key, pipeline] : pipelines_)
-            if (pipeline != nullptr) SDL_ReleaseGPUGraphicsPipeline(owner_->Device(), pipeline);
+            owner_->QueueGraphicsPipelineRelease(pipeline);
         pipelines_.clear();
         if (fragmentShader_ != nullptr) { SDL_ReleaseGPUShader(owner_->Device(), fragmentShader_); fragmentShader_ = nullptr; }
         if (vertexShader_ != nullptr) { SDL_ReleaseGPUShader(owner_->Device(), vertexShader_); vertexShader_ = nullptr; }
