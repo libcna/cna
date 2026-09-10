@@ -119,6 +119,18 @@ namespace CNA::Graphics::detail
             {kTonemapVulkanFragmentSpirV, kTonemapVulkanFragmentSpirVByteSize,
              "post_process/tonemap.vulkan.frag.spv"});
     }
+
+    ShaderPackageEXT CreateLensFlareShaderPackage()
+    {
+        using namespace CNA::Graphics::detail::PostProcessGenerated;
+        return MakeFullscreenPackage(
+            {kLensFlareEsFragmentSource, "post_process/lens_flare.es.frag.glsl"},
+            {kLensFlareDesktopFragmentSource,
+             "post_process/lens_flare.desktop.frag.glsl"},
+            {kLensFlareVulkanFragmentSpirV,
+             kLensFlareVulkanFragmentSpirVByteSize,
+             "post_process/lens_flare.vulkan.frag.spv"});
+    }
 }
 
 #endif // CNA_CNAEXT

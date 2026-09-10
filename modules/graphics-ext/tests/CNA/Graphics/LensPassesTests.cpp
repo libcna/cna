@@ -283,12 +283,14 @@ TEST(LensFlareTest, TheGhostsLandOnTheOppositeSideOfTheCentre)
     // that stepped the other way would pile the ghosts on top of the light that made them.
     GraphicsDevice gd;
     LensFlarePass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer has no executable lens-flare shader variant";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
-    // A bright block in the top-left quadrant, on an otherwise black frame.
+    // A bright block left of the optical axis, vertically centred so backend Y orientation cannot
+    // change which side of the axis the assertion calls opposite.
     auto source = MakeImage(gd, [](const int x, const int y) {
-        const bool bright = x >= 8 && x < 16 && y >= 8 && y < 16;
+        const bool bright = x >= 8 && x < 16 && y >= 24 && y < 40;
         return bright ? Color(255, 255, 255, 255) : Color(0, 0, 0, 255);
     });
     RenderTarget2D destination(gd, kSize, kSize);
@@ -310,13 +312,13 @@ TEST(LensFlareTest, TheGhostsLandOnTheOppositeSideOfTheCentre)
         return best;
     };
 
-    // The opposite quadrant was black in the source and must not be now.
-    const int opposite = brightestIn(kSize / 2, kSize / 2, kSize, kSize);
+    // The opposite half was black in the source and must not be now.
+    const int opposite = brightestIn(kSize / 2, 0, kSize, kSize);
     EXPECT_GT(opposite, 30) << "no ghost reached the far side of the centre";
 
-    // And the quadrant *beyond* the light, away from the centre, must have stayed black: that is
+    // And the strip *beyond* the light, away from the centre, must have stayed black: that is
     // where the ghosts would be if the step ran the wrong way.
-    const int behindTheLight = brightestIn(0, 0, 8, 8);
+    const int behindTheLight = brightestIn(0, 0, 8, kSize);
     EXPECT_LT(behindTheLight, opposite)
         << "the ghosts landed on the light's own side of the frame";
 }
@@ -327,7 +329,8 @@ TEST(LensFlareTest, AFrameBelowTheThresholdIsUnchanged)
     // the frame throws ghosts and the image turns to soup.
     GraphicsDevice gd;
     LensFlarePass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer has no executable lens-flare shader variant";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto source = MakeImage(gd, [](int, int) { return Color(90, 90, 90, 255); });
@@ -350,7 +353,7 @@ TEST(LensFlareTest, ZeroIntensityLeavesTheFrameAlone)
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto source = MakeImage(gd, [](const int x, const int y) {
-        const bool bright = x >= 8 && x < 16 && y >= 8 && y < 16;
+        const bool bright = x >= 8 && x < 16 && y >= 24 && y < 40;
         return bright ? Color(255, 255, 255, 255) : Color(0, 0, 0, 255);
     });
     RenderTarget2D destination(gd, kSize, kSize);

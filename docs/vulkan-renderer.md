@@ -749,7 +749,7 @@ application orbit/yaw oracle passes **3/3** on all three paths with identical me
 Vulkan paths run under Khronos validation and emit no validation messages; the package also passes
 its write-free reproducibility check.
 
-### Portable post-process rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`, 2026-09-10)
+### Portable post-process rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`, `MOD-2239b`, 2026-09-10)
 
 `ChromaticAberrationPass` is the first engine post-process to use the portable package path. Its
 internal package shares one fullscreen vertex contract across GLSL ES, desktop GLSL and SPIR-V;
@@ -787,6 +787,12 @@ and gamma order is retained, and dither increases a six-level ramp to 181/175 me
 Vulkan devices while staying zero-mean and below one output step. The pipeline application passes
 **7/7** on all three paths with exact inert HDR-off output and matching curve samples. No Vulkan
 validation message is emitted.
+
+`LensFlarePass` packs threshold, intensity, dispersal and its fixed ghost count into the same `vec4`
+slot. Its existing thresholded ghost path passes **4/4** on EasyGL, RADV and llvmpipe: reflected
+light crosses the optical axis without appearing behind its source, frames below threshold and at
+zero intensity remain unchanged, and public setting clamps retain their behavior. The fixture is
+Y-orientation-neutral. This does not claim the halo that `MOD-2024` still explicitly leaves absent.
 
 Other engine post-process effects remain source-only and keep their exact copy-through fallback;
 the shared package/helper is the landing point for their subsequent fragment variants.
