@@ -2067,6 +2067,90 @@ namespace CNA::Internal::Renderers::Software
             }
         }
 
+        /// Rasterizes a one-pixel line under the active multisample mode.  A disabled
+        /// RasterizerState.MultiSampleAntiAlias deliberately retains the historical pixel-center
+        /// DDA and replicates each covered pixel to every sample.  When enabled, a one-pixel-wide
+        /// rectangle around the segment is evaluated at the same four quarter-pixel locations as
+        /// triangle coverage and the exact mask is forwarded to depth/stencil/color processing.
+        template <typename EmitFn>
+        void WalkRasterLine(const SoftwareFramebuffer& fb, bool multiSampleAntiAlias,
+                            const RasterClipRect& clip, const RasterVertex& a,
+                            const RasterVertex& b, EmitFn&& emit)
+        {
+            if (!fb.HasMultiSampleColor() || !multiSampleAntiAlias)
+            {
+                WalkWireEdge(clip, a, b, [&](int x, int y, float t) {
+                    emit(x, y, t, 0xFFFFFFFFu);
+                });
+                return;
+            }
+
+            float t0 = 0.0f;
+            float t1 = 1.0f;
+            if (!ClipSegmentToRect(a.x, a.y, b.x, b.y, clip, t0, t1))
+                return;
+
+            const float originalDx = b.x - a.x;
+            const float originalDy = b.y - a.y;
+            const float ax = a.x + t0 * originalDx;
+            const float ay = a.y + t0 * originalDy;
+            const float bx = a.x + t1 * originalDx;
+            const float by = a.y + t1 * originalDy;
+            const float dx = bx - ax;
+            const float dy = by - ay;
+            const float lengthSquared = dx * dx + dy * dy;
+            if (!(lengthSquared > 0.0f) || !std::isfinite(lengthSquared))
+            {
+                WalkWireEdge(clip, a, b, [&](int x, int y, float t) {
+                    emit(x, y, t, 0xFu);
+                });
+                return;
+            }
+
+            const int minX = std::max(
+                clip.minX, static_cast<int>(std::floor(std::min(ax, bx) - 0.5f)));
+            const int maxX = std::min(
+                clip.maxX, static_cast<int>(std::floor(std::max(ax, bx) + 0.5f)));
+            const int minY = std::max(
+                clip.minY, static_cast<int>(std::floor(std::min(ay, by) - 0.5f)));
+            const int maxY = std::min(
+                clip.maxY, static_cast<int>(std::floor(std::max(ay, by) + 0.5f)));
+
+            for (int y = minY; y <= maxY; ++y)
+            {
+                for (int x = minX; x <= maxX; ++x)
+                {
+                    unsigned int coverageMask = 0u;
+                    for (int sample = 0; sample < 4; ++sample)
+                    {
+                        const float sampleX = static_cast<float>(x) +
+                            ((sample & 1) == 0 ? 0.25f : 0.75f);
+                        const float sampleY = static_cast<float>(y) +
+                            (sample < 2 ? 0.25f : 0.75f);
+                        const float localT = ((sampleX - ax) * dx +
+                                              (sampleY - ay) * dy) / lengthSquared;
+                        if (localT < 0.0f || localT > 1.0f)
+                            continue;
+                        const float nearestX = ax + localT * dx;
+                        const float nearestY = ay + localT * dy;
+                        const float distanceX = sampleX - nearestX;
+                        const float distanceY = sampleY - nearestY;
+                        if (distanceX * distanceX + distanceY * distanceY <= 0.25f)
+                            coverageMask |= 1u << sample;
+                    }
+                    if (coverageMask == 0u)
+                        continue;
+
+                    const float centerX = static_cast<float>(x) + 0.5f;
+                    const float centerY = static_cast<float>(y) + 0.5f;
+                    const float localT = std::clamp(
+                        ((centerX - ax) * dx + (centerY - ay) * dy) / lengthSquared,
+                        0.0f, 1.0f);
+                    emit(x, y, t0 + localT * (t1 - t0), coverageMask);
+                }
+            }
+        }
+
         /// REMED-GFX-082: writes one already-interpolated colored fragment (the DrawColoredPrimitives
         /// path -- opaque, no texture/blend). `pr..pa` are the perspective-premultiplied color sums
         /// (color * invW), divided by invW here exactly as the fill loop did, so the shared helper is
@@ -2148,14 +2232,16 @@ namespace CNA::Internal::Renderers::Software
                 // REMED-GFX-082: rasterize the selected edges as perspective-correct lines, reusing
                 // WriteColoredFragment (the same depth-test/write + clip path as the fill below).
                 const auto drawEdge = [&](const RasterVertex& A, const RasterVertex& B) {
-                    WalkWireEdge(clip, A, B, [&](int x, int y, float t) {
+                    WalkRasterLine(fb, multiSampleAntiAlias, clip, A, B,
+                                   [&](int x, int y, float t, unsigned int coverageMask) {
                         const float invW  = A.invW  + t * (B.invW  - A.invW);
                         float depth = A.depth + t * (B.depth - A.depth);
                         if (hasBias) depth = std::clamp(depth + biasOffset, 0.0f, 1.0f);  // REMED-GFX-083
                         WriteColoredFragment(fb, depthState, faceStencil, clip, x, y, depth, invW,
                                              A.r + t * (B.r - A.r), A.g + t * (B.g - A.g),
                                              A.b + t * (B.b - A.b), A.a + t * (B.a - A.a),
-                                             colorWriteMask, multiSampleMask, occlusionQuery);
+                                             colorWriteMask, multiSampleMask, occlusionQuery,
+                                             coverageMask);
                     });
                 };
                 if (edgeMask & kEdgeV0V1) drawEdge(v0, v1);
@@ -3130,12 +3216,13 @@ namespace CNA::Internal::Renderers::Software
             const RasterClipRect& clip, const RasterVertex& a, const RasterVertex& b,
             int colorWriteMask, unsigned int multiSampleMask,
             const SoftwareSamplerState& sampler0, const SoftwareSamplerState& sampler1,
-            SoftwareOcclusionQueryRenderer* occlusionQuery)
+            SoftwareOcclusionQueryRenderer* occlusionQuery, bool multiSampleAntiAlias)
         {
             const ShadedContext ctx = MakeLinearShadedContext(
                 params, depthState, stencilState, blendState, blendFactor, colorWriteMask,
                 multiSampleMask, sampler0, sampler1, occlusionQuery);
-            WalkWireEdge(clip, a, b, [&](int x, int y, float t) {
+            WalkRasterLine(fb, multiSampleAntiAlias, clip, a, b,
+                           [&](int x, int y, float t, unsigned int coverageMask) {
                 const float invW = a.invW + t * (b.invW - a.invW);
                 WriteShadedFragment(
                     fb, ctx, clip, x, y, a.depth + t * (b.depth - a.depth), invW,
@@ -3151,7 +3238,8 @@ namespace CNA::Internal::Renderers::Software
                     a.envBlend + t * (b.envBlend - a.envBlend),
                     a.wpx + t * (b.wpx - a.wpx), a.wpy + t * (b.wpy - a.wpy),
                     a.wpz + t * (b.wpz - a.wpz), a.nx + t * (b.nx - a.nx),
-                    a.ny + t * (b.ny - a.ny), a.nz + t * (b.nz - a.nz));
+                    a.ny + t * (b.ny - a.ny), a.nz + t * (b.nz - a.nz),
+                    coverageMask);
             });
         }
 
@@ -3296,12 +3384,9 @@ namespace CNA::Internal::Renderers::Software
             {
                 // REMED-GFX-082: rasterize the selected edges as perspective-correct shaded lines,
                 // reusing WriteShadedFragment (identical texture/diffuse/env-map/blend + depth path).
-                // GDI-073: the established DDA visits whole pixels and intentionally omits a
-                // geometric coverage mask, so each visited wire pixel writes every sample enabled
-                // by MultiSampleMask when a sample plane is active. This is crisp pixel wireframe,
-                // not subpixel line AA.
                 const auto drawEdge = [&](const RasterVertex& A, const RasterVertex& B) {
-                    WalkWireEdge(clip, A, B, [&](int x, int y, float t) {
+                    WalkRasterLine(fb, multiSampleAntiAlias, clip, A, B,
+                                   [&](int x, int y, float t, unsigned int coverageMask) {
                         const float invW  = A.invW  + t * (B.invW  - A.invW);
                         float depth = A.depth + t * (B.depth - A.depth);
                         if (hasBias) depth = std::clamp(depth + biasOffset, 0.0f, 1.0f);  // REMED-GFX-083
@@ -3321,7 +3406,8 @@ namespace CNA::Internal::Renderers::Software
                                             A.envBlend + t * (B.envBlend - A.envBlend),
                                             A.wpx + t * (B.wpx - A.wpx), A.wpy + t * (B.wpy - A.wpy),
                                             A.wpz + t * (B.wpz - A.wpz), A.nx + t * (B.nx - A.nx),
-                                            A.ny + t * (B.ny - A.ny), A.nz + t * (B.nz - A.nz));
+                                            A.ny + t * (B.ny - A.ny), A.nz + t * (B.nz - A.nz),
+                                            coverageMask);
                     });
                 };
                 if (edgeMask & kEdgeV0V1) drawEdge(v0, v1);
@@ -4621,7 +4707,7 @@ namespace CNA::Internal::Renderers::Software
                         fb, depthState, stencilState, blendState, blendFactor, params, clip,
                         ClipVertexToRasterVertex(a, vpT), ClipVertexToRasterVertex(b, vpT),
                         colorWriteMasks_[0], multiSampleMask_, GetSamplerState(0), GetSamplerState(1),
-                        activeOcclusionQuery_);
+                        activeOcclusionQuery_, multiSampleAntiAlias_);
                 continue;
             }
 
@@ -4801,7 +4887,7 @@ namespace CNA::Internal::Renderers::Software
                         fb, depthState, stencilState, blendState, blendFactor, params, clip,
                         ClipVertexToRasterVertex(a, vpT), ClipVertexToRasterVertex(b, vpT),
                         colorWriteMasks_[0], multiSampleMask_, GetSamplerState(0), GetSamplerState(1),
-                        activeOcclusionQuery_);
+                        activeOcclusionQuery_, multiSampleAntiAlias_);
                 continue;
             }
 

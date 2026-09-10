@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
-// SOFTWARE-110/SOFTWARE-160/SOFTWARE-166: renderer-neutral 4x coverage, mask, depth, stencil,
-// RasterizerState.MultiSampleAntiAlias and GraphicsDevice.MultiSampleMask contract.
+// SOFTWARE-110/SOFTWARE-160/SOFTWARE-166/SOFTWARE-315: renderer-neutral 4x coverage, mask, depth,
+// stencil, triangle/line RasterizerState.MultiSampleAntiAlias and GraphicsDevice.MultiSampleMask
+// contract.
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -16,6 +17,7 @@
 #include "Microsoft/Xna/Framework/Graphics/CullMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/FillMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
@@ -108,6 +110,16 @@ class MsaaFragmentContractTest final : public Game
         };
         effect_->Apply();
         device.DrawUserPrimitives(PrimitiveType::TriangleList, vertices, 0, 1);
+    }
+
+    void DrawLine(GraphicsDevice& device, const Color& color, float y, float depth)
+    {
+        const VertexPositionColor vertices[2] = {
+            {Vector3(-0.75f, y, depth), color},
+            {Vector3( 0.75f, y, depth), color},
+        };
+        effect_->Apply();
+        device.DrawUserPrimitives(PrimitiveType::LineList, vertices, 0, 1);
     }
 
     Color FinishAndRead(GraphicsDevice& device, int x = kTargetSize / 2,
@@ -266,6 +278,79 @@ class MsaaFragmentContractTest final : public Game
         {
             std::printf("[NOTE] MultiSampleAntiAlias=false is unrepresentable on this OpenGL ES "
                         "profile; desktop GL and Software execute the toggle checks\n");
+        }
+
+        const auto renderLine = [&](bool enabled) {
+            Begin(device);
+            RasterizerState rasterizer;
+            rasterizer.setCullModeProperty(CullMode::None);
+            rasterizer.setMultiSampleAntiAliasProperty(enabled);
+            device.setRasterizerStateProperty(rasterizer);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setBlendStateProperty(BlendState::Opaque);
+            DrawLine(device, kFullGreen, 0.0f, 0.5f);
+            return FinishAndReadAll(device);
+        };
+        const auto independentlySampledLine = renderLine(true);
+        int partialLineWithMsaa = 0;
+        for (const Color& pixel : independentlySampledLine)
+            if (pixel.getGProperty() > 0 && pixel.getGProperty() < 255)
+                ++partialLineWithMsaa;
+        Check(partialLineWithMsaa > 0,
+              "MultiSampleAntiAlias=true independently covers line samples (partial pixels=" +
+                  std::to_string(partialLineWithMsaa) + ")");
+
+        if constexpr (kCanDisableMultisampleRasterization)
+        {
+            const auto replicatedCenterLine = renderLine(false);
+            int partialLineWithoutMsaa = 0;
+            for (const Color& pixel : replicatedCenterLine)
+                if (pixel.getGProperty() > 0 && pixel.getGProperty() < 255)
+                    ++partialLineWithoutMsaa;
+            Check(partialLineWithoutMsaa == 0,
+                  "MultiSampleAntiAlias=false evaluates one line pixel and replicates it to every "
+                  "sample (partial pixels=" + std::to_string(partialLineWithoutMsaa) + ")");
+            Check(independentlySampledLine != replicatedCenterLine,
+                  "MultiSampleAntiAlias true and false produce observably different line coverage");
+            Check(renderLine(true) == independentlySampledLine,
+                  "MultiSampleAntiAlias true/false/true restores independent line coverage");
+        }
+
+        const auto renderWireframe = [&](bool enabled) {
+            Begin(device);
+            RasterizerState rasterizer;
+            rasterizer.setCullModeProperty(CullMode::None);
+            rasterizer.setFillModeProperty(FillMode::WireFrame);
+            rasterizer.setMultiSampleAntiAliasProperty(enabled);
+            device.setRasterizerStateProperty(rasterizer);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setBlendStateProperty(BlendState::Opaque);
+            DrawHalfTriangle(device, kFullGreen, 0.5f);
+            return FinishAndReadAll(device);
+        };
+        const auto independentlySampledWireframe = renderWireframe(true);
+        int partialWireframeWithMsaa = 0;
+        for (const Color& pixel : independentlySampledWireframe)
+            if (pixel.getGProperty() > 0 && pixel.getGProperty() < 255)
+                ++partialWireframeWithMsaa;
+        Check(partialWireframeWithMsaa > 0,
+              "MultiSampleAntiAlias=true independently covers wireframe edge samples (partial "
+              "pixels=" + std::to_string(partialWireframeWithMsaa) + ")");
+
+        if constexpr (kCanDisableMultisampleRasterization)
+        {
+            const auto replicatedCenterWireframe = renderWireframe(false);
+            int partialWireframeWithoutMsaa = 0;
+            for (const Color& pixel : replicatedCenterWireframe)
+                if (pixel.getGProperty() > 0 && pixel.getGProperty() < 255)
+                    ++partialWireframeWithoutMsaa;
+            Check(partialWireframeWithoutMsaa == 0,
+                  "MultiSampleAntiAlias=false replicates wireframe edge pixels to every sample "
+                  "(partial pixels=" + std::to_string(partialWireframeWithoutMsaa) + ")");
+            Check(independentlySampledWireframe != replicatedCenterWireframe,
+                  "MultiSampleAntiAlias true and false produce different wireframe coverage");
+            Check(renderWireframe(true) == independentlySampledWireframe,
+                  "MultiSampleAntiAlias true/false/true restores wireframe coverage");
         }
     }
 
