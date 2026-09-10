@@ -90,6 +90,26 @@
       "thirdParty": false
     },
     {
+      "file": "fx_sampler_plain.fx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "fx_sampler_state_only.fx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "fx_sampler_one_textured.fx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "fx_sampler_pass_split.fx",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
       "file": "fx_state_blend.fx",
       "origin": "authored",
       "thirdParty": false
