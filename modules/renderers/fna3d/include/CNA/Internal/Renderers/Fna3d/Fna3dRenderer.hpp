@@ -146,7 +146,7 @@ namespace CNA::Internal::Renderers::Fna3d
         [[nodiscard]] const std::shared_ptr<Fna3dDeviceState>&
         GetFna3dDeviceStateEXT() const override { return deviceState_; }
         /** @brief CNAEXT. Raw XNA `SurfaceFormat` ordinal this texture was created with. */
-        [[nodiscard]] int GetSurfaceFormatEXT() const { return surfaceFormat_; }
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
         /** @brief CNAEXT. Allocated mip level count. */
         [[nodiscard]] int GetLevelCountEXT() const { return levelCount_; }
 
