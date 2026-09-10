@@ -579,6 +579,19 @@ namespace CNA::Internal::Renderers::EasyGL
         CNA::Platform::GlContextHandle context_ = nullptr;
     };
 
+    class EasyGLThreadContextLeaseControl
+    {
+    public:
+        explicit EasyGLThreadContextLeaseControl(
+            std::shared_ptr<EasyGLPlatformContext> platformContext)
+            : platformContext(std::move(platformContext))
+        {
+        }
+
+        std::shared_ptr<EasyGLPlatformContext> platformContext;
+        std::recursive_mutex mutex;
+    };
+
     namespace
     {
         class EasyGLThreadContextLease final : public IRendererThreadContextLease
@@ -606,12 +619,50 @@ namespace CNA::Internal::Renderers::EasyGL
                 RendererThreadContextLeaseRelease::RestorePreviousBinding;
         };
 
-        std::unordered_map<const EasyGLRenderer*, EasyGLThreadContextLeaseState>&
+        std::unordered_map<const EasyGLThreadContextLeaseControl*, EasyGLThreadContextLeaseState>&
         ThreadContextLeaseStates()
         {
-            static thread_local std::unordered_map<const EasyGLRenderer*,
+            static thread_local std::unordered_map<const EasyGLThreadContextLeaseControl*,
                                                    EasyGLThreadContextLeaseState> states;
             return states;
+        }
+
+        void ReleaseThreadContextLease(
+            const std::shared_ptr<EasyGLThreadContextLeaseControl>& control) noexcept
+        {
+            auto& states = ThreadContextLeaseStates();
+            const auto it = states.find(control.get());
+            if (it == states.end() || it->second.depth == 0)
+            {
+                CNA::Logger::Error(
+                    "EasyGL renderer context lease released without matching acquisition",
+                    CNA::LogCategory::RENDER);
+                return;
+            }
+
+            --it->second.depth;
+            if (it->second.depth == 0)
+            {
+#if !defined(__EMSCRIPTEN__)
+                // Web: nothing to restore. The context is current on the browser thread for every
+                // thread, so there is no per-thread binding that was captured on acquire, and
+                // restoring or clearing one would unbind the context the next frame needs. The
+                // mutual exclusion below is still released on every platform.
+                try
+                {
+                    control->platformContext->RestoreBinding(
+                        it->second.previousBinding, it->second.release);
+                }
+                catch (const std::exception& error)
+                {
+                    CNA::Logger::Error(
+                        std::string("Failed to release EasyGL context ownership: ") + error.what(),
+                        CNA::LogCategory::RENDER);
+                }
+#endif
+                states.erase(it);
+            }
+            control->mutex.unlock();
         }
     }
 
@@ -663,7 +714,8 @@ namespace CNA::Internal::Renderers::EasyGL
         int clientWidth = 0;
         int clientHeight = 0;
         GetClientSize(clientWidth, clientHeight);
-        if (virtualHeight_ <= 0)
+        if (presentationMode_ == CnaPresentationMode::NativeBackBuffer ||
+            virtualHeight_ <= 0)
         {
             width = clientWidth;
             height = clientHeight;
@@ -775,7 +827,10 @@ namespace CNA::Internal::Renderers::EasyGL
             static_cast<float>(logicalWidth) / clientViewportWidth;
         logicalY = (windowY - clientViewportY) *
             static_cast<float>(logicalHeight) / clientViewportHeight;
-        return true;
+        return windowX >= clientViewportX &&
+               windowX < clientViewportX + clientViewportWidth &&
+               windowY >= clientViewportY &&
+               windowY < clientViewportY + clientViewportHeight;
     }
 
     bool EasyGLSurfaceState::LogicalToWindow(const float logicalX, const float logicalY,
@@ -4229,6 +4284,17 @@ if (ProfileUsesGlslEs100())
         pendingAddressV_ = addressV;
     }
 
+    void EasyGLSpriteBatchRenderer::SetSamplerMipState(int maxMipLevel, float lodBias)
+    {
+        pendingMaxMipLevel_ = maxMipLevel;
+        pendingLodBias_ = lodBias;
+    }
+
+    void EasyGLSpriteBatchRenderer::SetSamplerAddressW(int addressW)
+    {
+        pendingAddressW_ = addressW;
+    }
+
     void EasyGLSpriteBatchRenderer::End()
     {
         FlushBatch();
@@ -4386,7 +4452,11 @@ if (ProfileUsesGlslEs100())
         current_texture_->BindGL();
         ApplyChannelExpansion(prog, current_texture_->GetSurfaceFormatEXT());
         if (graphicsRenderer_)
+        {
             graphicsRenderer_->ApplySamplerState(0, pendingFilter_, pendingAddressU_, pendingAddressV_, 1);
+            graphicsRenderer_->ApplySamplerMipState(0, pendingMaxMipLevel_, pendingLodBias_);
+            graphicsRenderer_->ApplySamplerAddressW(0, pendingAddressW_);
+        }
 
         vbo_.bind(::easygl::BufferTarget::Array);
         vbo_.set_data(::easygl::BufferTarget::Array,
@@ -4555,6 +4625,8 @@ if (ProfileUsesGlslEs100())
         }
         graphicsRenderer_->ApplySamplerState(0, pendingFilter_, pendingAddressU_,
                                              pendingAddressV_, 1);
+        graphicsRenderer_->ApplySamplerMipState(0, pendingMaxMipLevel_, pendingLodBias_);
+        graphicsRenderer_->ApplySamplerAddressW(0, pendingAddressW_);
 
         EasyGLRenderer::CompiledEffectStreamEXT stream;
         stream.buffer = easyVertexBuffer;
@@ -4751,8 +4823,10 @@ if (ProfileUsesGlslEs100())
         const int virtualWidth, const int virtualHeight, const CnaPresentationMode mode,
         const bool contextRecoveryEnabled, const int multiSampleCount, const int swapInterval,
         const GlProfile profile)
-        : platformContext_(std::make_unique<EasyGLPlatformContext>(
+        : platformContext_(std::make_shared<EasyGLPlatformContext>(
               glContext, RequireEasyGlWindowId(surface), RequestedGlContext(profile)))
+        , threadContextLeaseControl_(
+              std::make_shared<EasyGLThreadContextLeaseControl>(platformContext_))
         , surfaceState_(surface, virtualWidth, virtualHeight, mode)
         , contextRecoveryEnabled_(contextRecoveryEnabled)
         , sampleCount_(multiSampleCount > 1 ? multiSampleCount : 1)
@@ -4950,6 +5024,37 @@ if (ProfileUsesGlslEs100())
         msaaFbo_.attach_renderbuffer(::easygl::FramebufferTarget::Framebuffer,
                                       ::metagl::FramebufferAttachment::Depth,
                                       msaaDepthRbo_);
+    }
+
+    int EasyGLRenderer::ApplyMultiSampleCount(int requestedMultiSampleCount)
+    {
+        EnsureCallingThreadContext();
+
+        int newSampleCount = 1;
+        if (!ProfileIsEs2ApiGeneration() && requestedMultiSampleCount > 1)
+        {
+            GLint maxSamples = 0;
+            metagl::glGetIntegerv(::metagl::GetParameter::MaxSamples, &maxSamples);
+            int candidate = 1;
+            while (candidate <= requestedMultiSampleCount / 2) candidate *= 2;
+            if (maxSamples > 1)
+                newSampleCount = std::min(candidate, static_cast<int>(maxSamples));
+        }
+
+        if (newSampleCount == sampleCount_)
+            return GetMultiSampleCount();
+
+        sampleCount_ = newSampleCount;
+        if (sampleCount_ > 1)
+        {
+            int physW = 0;
+            int physH = 0;
+            surfaceState_.GetDrawableSize(physW, physH);
+            CreateMsaaBuffers(physW, physH);
+        }
+        if (bound_->height == 0)
+            BindDefaultFramebuffer();
+        return GetMultiSampleCount();
     }
 
     void EasyGLRenderer::BindDefaultFramebuffer()
@@ -5263,13 +5368,14 @@ if (!ProfileIsEs2ApiGeneration())
 }
         }
 
-        // Use the render-target's own height for the Y-flip when an RT is bound;
-        // fall back to the window/viewport height for the default framebuffer.
+        // Use the render target's own height when one is bound and the drawable's
+        // physical height for the default framebuffer. The logical presentation
+        // height can differ and cannot invert a physical glReadPixels rectangle.
         int fbH = bound_->height;
         if (fbH == 0)
         {
-            int vpW;
-            GetViewportSize(vpW, fbH);
+            int physicalWidth = 0;
+            getPhysicalSize(physicalWidth, fbH);
         }
 
         // OpenGL origin is bottom-left; flip y so caller gets top-left origin.
@@ -5436,17 +5542,18 @@ if (!ProfileIsEs2ApiGeneration())
         // as a different subset of background-loaded textures rendering black in 2 of 5 Firefox
         // and 1 of 5 Chrome runs, with no GL error reported anywhere.
         //
-        // What stays platform-specific is only the BINDING handover below: on the web the context
-        // is current on the browser thread for everyone, so there is no per-thread binding to
-        // capture and restoring or clearing one would unbind the context the next frame needs.
-        threadContextMutex_.lock();
+        // What stays platform-specific is only the BINDING handover: on the web the context is
+        // current on the browser thread for everyone, so there is no per-thread binding to
+        // capture, and restoring or clearing one would unbind the context the next frame needs.
+        const auto control = threadContextLeaseControl_;
+        control->mutex.lock();
         try
         {
-            auto& state = ThreadContextLeaseStates()[this];
+            auto& state = ThreadContextLeaseStates()[control.get()];
             if (state.depth == 0)
             {
 #if !defined(__EMSCRIPTEN__)
-                state.previousBinding = platformContext_->GetCurrentBinding();
+                state.previousBinding = control->platformContext->GetCurrentBinding();
                 state.release = release;
 #else
                 (void)release;
@@ -5457,54 +5564,21 @@ if (!ProfileIsEs2ApiGeneration())
         }
         catch (...)
         {
-            ThreadContextLeaseStates().erase(this);
-            threadContextMutex_.unlock();
+            ThreadContextLeaseStates().erase(control.get());
+            control->mutex.unlock();
             throw;
         }
 
         try
         {
             return std::make_unique<EasyGLThreadContextLease>(
-                [this]() { ReleaseCallingThreadContextLease(); });
+                [control]() { ReleaseThreadContextLease(control); });
         }
         catch (...)
         {
-            ReleaseCallingThreadContextLease();
+            ReleaseThreadContextLease(control);
             throw;
         }
-    }
-
-    void EasyGLRenderer::ReleaseCallingThreadContextLease() noexcept
-    {
-        auto& states = ThreadContextLeaseStates();
-        const auto it = states.find(this);
-        if (it == states.end() || it->second.depth == 0)
-        {
-            CNA::Logger::Error(
-                "EasyGL renderer context lease released without matching acquisition",
-                CNA::LogCategory::RENDER);
-            return;
-        }
-
-        --it->second.depth;
-        if (it->second.depth == 0)
-        {
-#if !defined(__EMSCRIPTEN__)
-            try
-            {
-                platformContext_->RestoreBinding(
-                    it->second.previousBinding, it->second.release);
-            }
-            catch (const std::exception& error)
-            {
-                CNA::Logger::Error(
-                    std::string("Failed to release EasyGL context ownership: ") + error.what(),
-                    CNA::LogCategory::RENDER);
-            }
-#endif
-            states.erase(it);
-        }
-        threadContextMutex_.unlock();
     }
 
     std::unique_ptr<ITextureRenderer> EasyGLRenderer::CreateTexture(const ImageData& data)
@@ -5968,6 +6042,7 @@ if (!ProfileIsEs2ApiGeneration())
             bound_->height = 0;
             BindDefaultFramebuffer();
         }
+        ApplyDepthBiasForCurrentTargetEXT();
         TargetTrace("set2d.exit", rt, TraceBindingDetailEXT());
     }
 
@@ -5983,6 +6058,7 @@ if (!ProfileIsEs2ApiGeneration())
         bound_->width = rt->GetSize();
         bound_->height = rt->GetSize();
         rt->BindAsRenderTargetFace(face);
+        ApplyDepthBiasForCurrentTargetEXT();
         TargetTrace("setcube.exit", rt, TraceBindingDetailEXT());
     }
 
@@ -6170,6 +6246,7 @@ if (!ProfileIsEs2ApiGeneration())
         bound_->width = renderTargets[0].GetWidth();
         bound_->height = renderTargets[0].GetHeight();
         ApplyCurrentColorWriteMasks();
+        ApplyDepthBiasForCurrentTargetEXT();
         TargetTrace("mrt.set", this,
                     TraceBindingDetailEXT() + " mrtFbo=" + std::to_string(mrtFbo_.native_handle()));
     }
@@ -6463,28 +6540,51 @@ if (!ProfileIsEs2ApiGeneration())
         // OpenGL ES has no glPolygonMode; FillMode::WireFrame (1) is emulated at draw
         // time by re-expanding triangles into GL_LINES (see DrawWireframe).
         wireframe_ = (fillMode == 1);
-        // DepthBias/SlopeScaleDepthBias become GL polygon offset -- but NOT one-for-one, which is
-        // what Task 767 originally did here.
-        //
-        // XNA's DepthBias is a NORMALIZED depth value added straight to the depth, exactly as
-        // D3D9's D3DRS_DEPTHBIAS is. GL's `units` argument is a multiple of the smallest
-        // resolvable depth step, about 2^-24 on a 24-bit buffer, so passing the same number
-        // through applies roughly a sixteen-millionth of what the game asked for. SAMPLE-073
-        // (SoccerPitch) is the measured case: its flattened ball shadow sets
-        // DepthBias = -0.0001f to lift itself off the pitch, that arrived as about -6e-12, and
-        // the shadow z-fought with the pitch into horizontal scanlines while real XNA on D3D9
-        // draws it solid. Scaling by the depth buffer's own resolution makes the request mean
-        // what the game meant. CLAUDE.md: where XNA and FNA disagree, XNA wins.
-        //
-        // SlopeScaleDepthBias needs no conversion: GL's `factor` multiplies the polygon's depth
-        // slope, which is the same quantity D3D9's D3DRS_SLOPESCALEDEPTHBIAS multiplies.
-        //
-        // Always enabled -- factor=0/units=0 is a genuine no-op in GL, so there is no need to
-        // conditionally disable it.
+        normalizedDepthBias_ = depthBias;
+        slopeScaleDepthBias_ = slopeScaleDepthBias;
+        ApplyDepthBiasForCurrentTargetEXT();
+    }
+
+    void EasyGLRenderer::ApplyDepthBiasForCurrentTargetEXT()
+    {
+        if (metagl::IsContextLost()) return;
+
+        int depthFormat = static_cast<int>(DepthFormat::Depth24Stencil8);
+        if (bound_->rt2D)
+        {
+            const auto* target = dynamic_cast<const EasyGLRenderTargetRenderer*>(bound_->rt2D);
+            depthFormat = target ? target->GetDepthFormatEXT()
+                                 : static_cast<int>(DepthFormat::None);
+        }
+        else if (bound_->cube)
+        {
+            const auto* target = dynamic_cast<const EasyGLRenderTargetCubeRenderer*>(bound_->cube);
+            depthFormat = target ? target->GetDepthFormatEXT()
+                                 : static_cast<int>(DepthFormat::None);
+        }
+        else if (bound_->mrtCount > 0)
+        {
+            depthFormat = bound_->mrt[0]->GetDepthFormatEXT();
+        }
+
+        float scale = 0.0f;
+        switch (static_cast<DepthFormat>(depthFormat))
+        {
+        case DepthFormat::Depth16:
+            scale = static_cast<float>((1u << 16u) - 1u);
+            break;
+        case DepthFormat::Depth24:
+        case DepthFormat::Depth24Stencil8:
+            scale = static_cast<float>((1u << 24u) - 1u);
+            break;
+        case DepthFormat::None:
+            break;
+        }
+        const float nativeUnits = normalizedDepthBias_ * scale;
+
+        // Always enabled: factor=0/units=0 is a genuine no-op in GL.
         device.set_polygon_offset_fill_enabled(true);
-        device.set_polygon_offset(
-            slopeScaleDepthBias,
-            EasyGLDepthBiasToPolygonOffsetUnits(depthBias, CurrentDepthBufferBits()));
+        device.set_polygon_offset(slopeScaleDepthBias_, nativeUnits);
     }
 
     void EasyGLRenderer::SetScissorRect(int x, int y, int w, int h)

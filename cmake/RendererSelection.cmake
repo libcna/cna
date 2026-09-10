@@ -819,12 +819,30 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11")
     set(RENDERER_TARGET "cna_renderer_directx11")
     list(APPEND _cna_identity_defines CNA_RENDERER_DIRECTX11)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_DIRECTX11")
+    # plans/plan_fx.md FX-063: MojoShader ships a native D3D11 adapter, but remains an optional
+    # dependency for builds that do not execute compiled XNA Effect Framework bytecode.
+    option(CNA_DIRECTX11_COMPILED_EFFECTS
+           "Build DirectX 11 support for compiled XNA Effect bytecode (plans/plan_fx.md FX-063)" OFF)
+    if(CNA_DIRECTX11_COMPILED_EFFECTS)
+        include(cmake/ThirdPartyFNA3D.cmake)
+        cna_configure_mojoshader()
+        add_compile_definitions(CNA_DIRECTX11_COMPILED_EFFECTS)
+    endif()
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12")
     message(STATUS "CNA: Using DIRECTX12 graphics renderer")
     set(RENDERER_DIR "modules/renderers/directx12")
     set(RENDERER_TARGET "cna_renderer_directx12")
     list(APPEND _cna_identity_defines CNA_RENDERER_DIRECTX12)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_DIRECTX12")
+    # plans/plan_fx.md FX-134: D3D12 has no MojoShader adapter, so CNA supplies the backend while
+    # keeping the dependency absent from ordinary D3D12 builds.
+    option(CNA_DIRECTX12_COMPILED_EFFECTS
+           "Build DirectX 12 support for compiled XNA Effect bytecode (plans/plan_fx.md FX-134)" OFF)
+    if(CNA_DIRECTX12_COMPILED_EFFECTS)
+        include(cmake/ThirdPartyFNA3D.cmake)
+        cna_configure_mojoshader()
+        add_compile_definitions(CNA_DIRECTX12_COMPILED_EFFECTS)
+    endif()
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECT2D")
     message(STATUS "CNA: Using DIRECT2D graphics renderer (Windows-only, 2D-only)")
     set(RENDERER_DIR "modules/renderers/direct2d")
@@ -863,6 +881,15 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
     set(RENDERER_TARGET "cna_renderer_directx9")
     list(APPEND _cna_identity_defines CNA_RENDERER_DIRECTX9)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_DIRECTX9")
+    # plans/plan_fx.md FX-070: compiled XNA effects already contain native D3D9 tokens;
+    # MojoShader is optional and is used only for the container runtime and reflection.
+    option(CNA_DIRECTX9_COMPILED_EFFECTS
+           "Build DirectX 9 support for compiled XNA Effect bytecode (plans/plan_fx.md FX-070)" OFF)
+    if(CNA_DIRECTX9_COMPILED_EFFECTS)
+        include(cmake/ThirdPartyFNA3D.cmake)
+        cna_configure_mojoshader()
+        add_compile_definitions(CNA_DIRECTX9_COMPILED_EFFECTS)
+    endif()
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX1")
     message(STATUS "CNA: Using DIRECTX1 (real DirectDraw v1) graphics renderer")
     set(RENDERER_DIR "modules/renderers/directx1")

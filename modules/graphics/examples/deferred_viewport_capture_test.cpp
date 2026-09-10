@@ -166,6 +166,8 @@ namespace
     constexpr Contract kContract{"HEADLESS", Support::Unsupported, Support::Unsupported, true, true, true, false};
 #elif defined(CNA_RENDERER_DIRECTX11)
     constexpr Contract kContract{"DIRECTX11", Support::Exact, Support::Exact, true, true, true, false};
+#elif defined(CNA_RENDERER_DIRECTX12)
+    constexpr Contract kContract{"DIRECTX12", Support::Exact, Support::Exact, true, true, true, false};
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr Contract kContract{"DIRECTX9", Support::Exact, Support::Exact, true, true, true, true};
 #elif defined(CNA_RENDERER_LLGL)

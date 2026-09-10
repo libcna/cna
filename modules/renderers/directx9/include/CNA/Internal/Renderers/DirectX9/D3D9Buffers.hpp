@@ -45,13 +45,7 @@ namespace CNA::Internal::Renderers::DirectX9
         D3D9VertexBufferRenderer& operator=(const D3D9VertexBufferRenderer&) = delete;
 
         void SetData(const void* data, int vertex_count, std::size_t stride_in_bytes) override;
-        // REMED-GFX-DECL-GUARD: this renderer still selects its IDirect3DVertexDeclaration9 from
-        // the shared D3DCommon stride table (REMED-GFX-217), but the declaration is remembered
-        // rather than discarded so a draw can refuse one that table would silently reinterpret.
-        void SetVertexDeclaration(const VertexDeclaration& vertexDeclaration) override
-        {
-            declaration_.Remember(vertexDeclaration);
-        }
+        void SetVertexDeclaration(const VertexDeclaration& vertexDeclaration) override;
         void SetDataWithOptions(const void* data, int vertex_count, std::size_t stride_in_bytes,
                                 SetDataOptions options) override;
         [[nodiscard]] int GetVertexCount() const override { return vertexCount_; }
@@ -60,6 +54,13 @@ namespace CNA::Internal::Renderers::DirectX9
         {
             return declaration_;
         }
+
+        /**
+         * @brief Returns the lazily translated native form of the caller's vertex declaration.
+         *
+         * @return The native declaration, or null when the buffer has no propagated declaration.
+         */
+        [[nodiscard]] IDirect3DVertexDeclaration9* GetNativeVertexDeclarationEXT() const;
 
         void ReleaseDefaultPoolResourceEXT() override;
 
@@ -82,14 +83,15 @@ namespace CNA::Internal::Renderers::DirectX9
         std::size_t stride_ = 0;
         UINT byteWidth_ = 0;
         CNA::Internal::Graphics::DeclaredVertexLayout declaration_;
+        mutable ComPtr<IDirect3DVertexDeclaration9> nativeDeclaration_;
     };
 
 
     /// REMED-GFX-DECL-GUARD: throws `System::NotSupportedException` unless @p vb's declaration can
-    /// be represented faithfully by the shared D3DCommon stride table's entry for its stride.
+    /// be represented faithfully by the instanced route's fixed stride layout.
     /// Pure: creates nothing, queues nothing and leaves no partial native object behind, so a
-    /// rejected draw cannot poison the device. An out-of-table stride is left to the table's own
-    /// established rejection.
+    /// rejected draw cannot poison the device. Ordinary draws translate the declaration directly
+    /// and no longer use this guard.
     inline void RequireFaithfulDeclarationEXT(const IVertexBufferRenderer& vb, const char* route)
     {
         const auto& d3dVb = static_cast<const D3D9VertexBufferRenderer&>(vb);

@@ -1,5 +1,6 @@
 // plans/plan_dx9.md Phase D9-4 (D9-40/D9-41).
 #include "CNA/Internal/Renderers/DirectX9/D3D9Buffers.hpp"
+#include "CNA/Internal/Renderers/DirectX9/D3D9VertexDeclarations.hpp"
 #include "CNA/Internal/Renderers/DirectX9/DirectX9Renderer.hpp"
 
 #include <cstdio>
@@ -42,6 +43,26 @@ namespace CNA::Internal::Renderers::DirectX9
     D3D9VertexBufferRenderer::~D3D9VertexBufferRenderer()
     {
         owner_.UnregisterDefaultPoolResourceEXT(this);
+    }
+
+    void D3D9VertexBufferRenderer::SetVertexDeclaration(const VertexDeclaration& vertexDeclaration)
+    {
+        declaration_.Remember(vertexDeclaration);
+        nativeDeclaration_.Reset();
+    }
+
+    IDirect3DVertexDeclaration9* D3D9VertexBufferRenderer::GetNativeVertexDeclarationEXT() const
+    {
+        if (declaration_.IsEmpty()) return nullptr;
+        if (nativeDeclaration_) return nativeDeclaration_.Get();
+
+        const auto elements = TranslateVertexElementsD3D9(declaration_.GetElements());
+        const HRESULT hr = device_->CreateVertexDeclaration(
+            elements.data(), nativeDeclaration_.ReleaseAndGetAddressOf());
+        if (FAILED(hr))
+            throw std::runtime_error(
+                "D3D9VertexBufferRenderer: CreateVertexDeclaration failed, hr=" + FormatHr(hr));
+        return nativeDeclaration_.Get();
     }
 
     void D3D9VertexBufferRenderer::ReleaseDefaultPoolResourceEXT()

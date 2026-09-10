@@ -31,6 +31,7 @@ namespace CNA::Internal::Renderers::EasyGL
     class EasyGLRenderTargetRenderer;
     class EasyGLRenderTargetCubeRenderer;
     class EasyGLPlatformContext;
+    class EasyGLThreadContextLeaseControl;
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
     class EasyGLCompiledEffect;
 #endif
@@ -277,6 +278,8 @@ namespace CNA::Internal::Renderers::EasyGL
         [[nodiscard]] unsigned int GetColorGLHandle() const override;
         [[nodiscard]] const ::easygl::Texture& GetEasyGLColorTexture() const { return colorTex_; }
         [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
+        /** @brief Returns the raw XNA `DepthFormat` ordinal backing this target. */
+        [[nodiscard]] int GetDepthFormatEXT() const noexcept { return depthFormat_; }
         /// plans/plan_modern.md MOD-115: the raw SurfaceFormat ordinal this target's colour storage was
         /// actually created with. Equal to what was requested -- an unsupported format is refused at
         /// creation rather than substituted, so this can never disagree with the caller's request.
@@ -354,6 +357,8 @@ namespace CNA::Internal::Renderers::EasyGL
         void UnbindAsRenderTarget() override;
         [[nodiscard]] unsigned int GetGLHandle() const override;
         [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
+        /** @brief Returns the raw XNA `DepthFormat` ordinal backing this target. */
+        [[nodiscard]] int GetDepthFormatEXT() const noexcept { return depthFormat_; }
 
         // ITextureCubeRenderer — bind and upload to the shared cube texture.
         void BindGL(int unit) const override;
@@ -753,6 +758,9 @@ namespace CNA::Internal::Renderers::EasyGL
         int pendingFilter_    = 0; // TextureFilter::Linear
         int pendingAddressU_  = 1; // TextureAddressMode::Clamp
         int pendingAddressV_  = 1; // TextureAddressMode::Clamp
+        int pendingAddressW_  = 1; // TextureAddressMode::Clamp
+        int pendingMaxMipLevel_ = 0;
+        float pendingLodBias_ = 0.0f;
 
     public:
         explicit EasyGLSpriteBatchRenderer(::easygl::Device& device, std::shared_ptr<::easygl::ResourceRegistry> registry,
@@ -765,6 +773,8 @@ namespace CNA::Internal::Renderers::EasyGL
         void SetCustomEffect(Effect* effect) override;
         void SetSamplerFilter(int textureFilter) override;
         void SetSamplerAddressMode(int addressU, int addressV) override;
+        void SetSamplerMipState(int maxMipLevel, float lodBias) override;
+        void SetSamplerAddressW(int addressW) override;
         void Draw(const ITextureRenderer& texture, float x, float y) override;
         void Draw(const ITextureRenderer& texture,
                   const Rectangle& destinationRectangle,
@@ -928,8 +938,8 @@ namespace CNA::Internal::Renderers::EasyGL
     private:
         // Declared first so it is destroyed last: all GL resources below release while the
         // platform context is still current and alive.
-        std::unique_ptr<EasyGLPlatformContext> platformContext_;
-        std::recursive_mutex threadContextMutex_;
+        std::shared_ptr<EasyGLPlatformContext> platformContext_;
+        std::shared_ptr<EasyGLThreadContextLeaseControl> threadContextLeaseControl_;
         // The viewport's own depth range. SetViewport() writes it unconditionally, so it cannot
         // live behind CNA_EASYGL_COMPILED_EFFECTS -- a build without compiled effects, which is
         // the default, would not compile. Compiled-effect draws narrow it and put it back
@@ -1051,7 +1061,6 @@ namespace CNA::Internal::Renderers::EasyGL
         void BindDefaultFramebuffer();
         void ResolveMsaa();
         void EnsureCallingThreadContext();
-        void ReleaseCallingThreadContextLease() noexcept;
 
         /// Returns the shared registry when context recovery is enabled, an empty pointer
         /// otherwise. Children keep only a weak reference to what this returns.
@@ -1233,6 +1242,10 @@ namespace CNA::Internal::Renderers::EasyGL
         int  stencilCcwFunc_ = 0;
         int  stencilReadMask_ = 0;
         int  referenceStencil_ = 0;
+
+        float normalizedDepthBias_ = 0.0f;
+        float slopeScaleDepthBias_ = 0.0f;
+        void ApplyDepthBiasForCurrentTargetEXT();
 
         /// REMED-GFX-168: the binding record as pointer VALUES only, for `CNA_EASYGL_TARGET_TRACE`.
         /// Never dereferences a recorded target -- one of them may already be destroyed storage,
@@ -1624,13 +1637,25 @@ namespace CNA::Internal::Renderers::EasyGL
 
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
-        // Task 902: EasyGL applies MultiSampleCount only at construction time (via the
-        // multiSampleCount ctor argument, clamped into sampleCount_ below) -- there is no way to
-        // resize the MSAA renderbuffers without recreating the whole GL context, so
-        // ApplyMultiSampleCount() uses IGraphicsRenderer's default (echoes back the current,
-        // already-applied value, ignoring the request). GetMultiSampleCount() reports that real
-        // value honestly instead of falling back to the interface default of 0.
+        /**
+         * @brief Reallocates the default-framebuffer MSAA attachments with a supported sample count.
+         * @param requestedMultiSampleCount Preferred number of samples; zero or one disables MSAA.
+         * @return The sample count actually applied, or zero when multisampling is disabled.
+         */
+        int ApplyMultiSampleCount(int requestedMultiSampleCount) override;
+        /** @brief Returns the sample count actually used by the default render surface. */
         [[nodiscard]] int GetMultiSampleCount() const override { return sampleCount_ > 1 ? sampleCount_ : 0; }
+        /**
+         * @brief Reports the sample count currently applied to the default render surface.
+         * @param requestedMultiSampleCount The caller's requested count.
+         * @return The current clamped sample count.
+         */
+        [[nodiscard]] int GetAppliedMultiSampleCountEXT(
+            int requestedMultiSampleCount) const override
+        {
+            (void) requestedMultiSampleCount;
+            return GetMultiSampleCount();
+        }
 
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;

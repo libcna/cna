@@ -2,7 +2,6 @@
 #include "CNA/Internal/Renderers/DirectX11/D3D11StateObjectCache.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DStateMapping.hpp"
 
-#include <cmath>
 #include <cstdio>
 #include <stdexcept>
 
@@ -136,41 +135,18 @@ namespace CNA::Internal::Renderers::DirectX11
         ID3D11Device* device,
         int cullMode, int fillMode,
         bool scissorTestEnable,
-        float depthBias, float slopeScaleDepthBias)
+        int depthBias, float slopeScaleDepthBias)
     {
-        // KNOWN DIVERGENCE, measured 2026-09-08 against real XNA on D3D9 (SAMPLE-073, SoccerPitch).
-        //
-        // This code, and the Vulkan/Magnum/OpenGL1/OpenGL2/PortableGL renderers with it, was
-        // written on the premise that "XNA's RasterizerState.DepthBias is a float already
-        // expressed in units of r, the depth buffer format's minimum resolvable difference".
-        // That premise is false for XNA, which is D3D9: D3DRS_DEPTHBIAS is a NORMALIZED depth
-        // value in [0,1] added straight to the depth. D3D10 and later changed to the r-scaled
-        // integer convention this comment described, and the premise is really that convention
-        // read back onto XNA.
-        //
-        // The measurement: SoccerPitch lifts its flattened ball shadow off the pitch with
-        // DepthBias = -0.0001f. Real XNA draws a solid shadow. EasyGL, passing the value through
-        // unscaled, produced roughly -6e-12 of offset and the shadow z-fought into scanlines;
-        // scaling by the depth buffer's own resolution made it solid. EasyGL was fixed
-        // accordingly -- see EasyGLDepthBiasToPolygonOffsetUnits and its tests.
-        //
-        // Here the same premise makes it worse than small: lround(-0.0001f) is 0, so an XNA
-        // game's depth bias is dropped entirely. The correction is the same one EasyGL took,
-        // scaling by the bound depth buffer's precision, but it is left undone because it cannot
-        // be verified on this host -- D3D11 needs Windows, and an unverified change to a
-        // renderer's rasterizer state is exactly what this project's rules exclude. Recorded in
-        // docs/easygl_bugs.md, "DepthBias is not in units of r".
-        const int depthBiasInt = static_cast<int>(std::lround(depthBias));
-        const Key key{cullMode, fillMode, scissorTestEnable, depthBiasInt, slopeScaleDepthBias};
+        const Key key{cullMode, fillMode, scissorTestEnable, depthBias, slopeScaleDepthBias};
         auto it = cache_.find(key);
         if (it != cache_.end()) return it->second;
 
         D3D11_RASTERIZER_DESC desc{};
         desc.FillMode = D3DCommon::FillModeToD3D11(fillMode);
         desc.CullMode = D3DCommon::CullModeToD3D11(cullMode);
-        // D3DCommon::CullModeToD3D11's own header doc: assumes FrontCounterClockwise = FALSE.
-        desc.FrontCounterClockwise = FALSE;
-        desc.DepthBias = depthBiasInt;
+        // FNA3D uses this convention so XNA's CounterClockwiseStencil* state maps to BackFace.
+        desc.FrontCounterClockwise = TRUE;
+        desc.DepthBias = depthBias;
         desc.DepthBiasClamp = 0.0f;
         desc.SlopeScaledDepthBias = slopeScaleDepthBias;
         desc.DepthClipEnable = TRUE;

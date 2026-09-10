@@ -126,6 +126,8 @@ change what the GPU samples. That was true of **every** renderer except FNA3D un
 | EasyGL `AddressW` | **implemented on the ES 3 and desktop profiles** since FX-092 — sampler-object `GL_TEXTURE_WRAP_R`; not representable on the ES 2 profiles, which have neither sampler objects nor volume textures | — |
 | WebGPU | **implemented** (`WEBGPU-161`) — `WGPUSamplerDescriptor::lodMinClamp`, and part of the 64-bit sampler cache key | **implemented** — by WGSL `textureSampleBias` on every stock 3D route (`WEBGPU-205`) and, by rewriting the compiled shader's SPIR-V, on compiled XNA Effects too (`WEBGPU-208`); `WGPUSamplerDescriptor` has no `lodBias` field at all, so both are shader emulations |
 | WebGPU `AddressW` | **implemented** (`WEBGPU-160`) — `WGPUSamplerDescriptor::addressModeW`, through the same ordinal table U and V use | — |
+| Direct3D 11 | **implemented** — `D3D11_SAMPLER_DESC::MinLOD`; behaviorally proven by `SamplerLodAddressWContract` | **implemented** — `D3D11_SAMPLER_DESC::MipLODBias`; behaviorally proven by `SamplerLodAddressWContract` |
+| Direct3D 12 | **implemented** — `D3D12_SAMPLER_DESC::MinLOD`; behaviorally proven by `SamplerLodAddressWContract` | **implemented** — `D3D12_SAMPLER_DESC::MipLODBias`; behaviorally proven by `SamplerLodAddressWContract` |
 | every other renderer | default no-op | default no-op |
 
 ### WebGPU's LOD bias is a SHADER emulation, and its boundary is named
@@ -216,6 +218,11 @@ cannot.
 
 EasyGL also adopted `ApplySamplerAddressW` in the same pass, so its `GL_TEXTURE_WRAP_R` row above is
 no longer "not adopted".
+
+Direct3D 11 and Direct3D 12 adopted all three fields in DX-216. DX-257 then added the shared
+`SamplerLodAddressWContract`: nine differential pixel checks prove level-zero and level-one mip
+selection, positive LOD bias and reset, independent V/W Clamp and Wrap behavior, and state reset.
+The same fixture passes 9/9 on Direct3D 11, Direct3D 12 and EasyGL `OPENGL33`.
 
 ## 7. Anisotropic filtering (Task 299, EasyGL row updated 2026-07-11 per Task 918)
 

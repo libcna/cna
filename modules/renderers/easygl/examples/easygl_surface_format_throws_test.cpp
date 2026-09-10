@@ -14,6 +14,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "System/NotSupportedException.hpp"
 
@@ -174,7 +175,8 @@ protected:
         // REMED-GFX-244: the packed 16-bit formats are ES 3 sized-internal-format storage, so they
         // take the same guard the signed-normalized pair does -- promoted off the ES 2 generation,
         // refused on it rather than falling back to an unsized layout the driver picks.
-#if defined(CNA_GL_PROFILE_OPENGLES3) || defined(CNA_GL_PROFILE_OPENGL33) || defined(CNA_GL_PROFILE_WEBGL2)
+#if defined(CNA_GL_PROFILE_OPENGLES3) || defined(CNA_GL_PROFILE_OPENGL33) || defined(CNA_GL_PROFILE_WEBGL2) \
+ || defined(CNA_RENDERER_DIRECTX11) || defined(CNA_RENDERER_DIRECTX12)
         expectNoThrow("Texture2D Bgra5551", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Bgra5551);
         });
@@ -192,7 +194,8 @@ protected:
         // NormalizedByte2 or NormalizedByte4 is accepted at BOTH GraphicsProfile.Reach and .HiDef,
         // and neither is among the eleven formats Reach refuses. Demanding a throw here was an
         // over-specification of XNA rather than a contract. See spikes/xna-pixel-center-spike/.
-#if defined(CNA_GL_PROFILE_OPENGLES3) || defined(CNA_GL_PROFILE_OPENGL33) || defined(CNA_GL_PROFILE_WEBGL2)
+#if defined(CNA_GL_PROFILE_OPENGLES3) || defined(CNA_GL_PROFILE_OPENGL33) || defined(CNA_GL_PROFILE_WEBGL2) \
+ || defined(CNA_RENDERER_DIRECTX11) || defined(CNA_RENDERER_DIRECTX12)
         expectNoThrow("Texture2D NormalizedByte2", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::NormalizedByte2);
         });
@@ -235,36 +238,25 @@ protected:
         // needs nothing, and GraphicsProfile.Reach promises the game these formats work -- so the
         // driver decides how they are stored, never whether they are refused.
         //
-        // Guarded rather than asserted because this file is shared with the Vulkan and Bgfx
-        // registrations, which carry no GL profile macro and store no block-compressed content.
-#if defined(CNA_GL_PROFILE_OPENGLES2) || defined(CNA_GL_PROFILE_OPENGLES3) \
- || defined(CNA_GL_PROFILE_OPENGL33)  || defined(CNA_GL_PROFILE_WEBGL1)    \
- || defined(CNA_GL_PROFILE_WEBGL2)
-        expectNoThrow("Texture2D Dxt1", [&]{
-            Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt1);
-        });
-        expectNoThrow("Texture2D Dxt3", [&]{
-            Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt3);
-        });
-        expectNoThrow("Texture2D Dxt5", [&]{
-            Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt5);
-        });
-#else
-        expectThrows("Texture2D Dxt1", [&]{
-            Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt1);
-        });
-        expectThrows("Texture2D Dxt3", [&]{
-            Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt3);
-        });
-        expectThrows("Texture2D Dxt5", [&]{
-            Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt5);
-        });
-#endif
+        // This source is shared across renderer families. Runtime capability is authoritative:
+        // EasyGL and DirectX transfer DXT blocks, while Vulkan/Bgfx currently do not. A compile-
+        // time GL-profile list became stale as soon as DX-225 enabled the same public contract.
+        const auto expectCompressedConstruction = [&](const char* label, SurfaceFormat format) {
+            const auto construct = [&]{ Texture2D t(dev, 4, 4, false, format); };
+            if (dev.GetRenderer().IsCompressedTransferFormatEXT(static_cast<int>(format)))
+                expectNoThrow(label, construct);
+            else
+                expectThrows(label, construct);
+        };
+        expectCompressedConstruction("Texture2D Dxt1", SurfaceFormat::Dxt1);
+        expectCompressedConstruction("Texture2D Dxt3", SurfaceFormat::Dxt3);
+        expectCompressedConstruction("Texture2D Dxt5", SurfaceFormat::Dxt5);
 #endif
 #if 1
         // REMED-GFX-244, same guard as Bgra5551 above. Bgra4444 had no non-Skia leg at all before
         // this ticket, so its behaviour on every GL profile was simply unstated.
-#if defined(CNA_GL_PROFILE_OPENGLES3) || defined(CNA_GL_PROFILE_OPENGL33) || defined(CNA_GL_PROFILE_WEBGL2)
+#if defined(CNA_GL_PROFILE_OPENGLES3) || defined(CNA_GL_PROFILE_OPENGL33) || defined(CNA_GL_PROFILE_WEBGL2) \
+ || defined(CNA_RENDERER_DIRECTX11) || defined(CNA_RENDERER_DIRECTX12)
         expectNoThrow("Texture2D Bgr565", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Bgr565);
         });

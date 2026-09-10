@@ -360,7 +360,7 @@ namespace CNA::Internal::Renderers
     public:
         virtual ~ITextureCubeRenderer() = default;
         /**
-         * @brief Uploads raw RGBA8 pixels into a sub-rectangle of a single cube face.
+         * @brief Uploads format-native texels into a sub-rectangle of a single cube face.
          *
          * REMED-GFX-135, the write-side counterpart of `GetData`'s contract below. Returns **true
          * only when the COMPLETE requested region was stored**, and false when this renderer stored
@@ -375,10 +375,9 @@ namespace CNA::Internal::Renderers
          * or never attempted at all. The shared layer now raises `System::NotSupportedException` on
          * false, so the one thing a renderer can never do is accept data it does not keep.
          *
-         * `data` holds the region as tightly packed RGBA8 rows, top row first, so its row pitch is
-         * `w * 4`. The caller's memory is valid only for the duration of the call: an implementation
-         * that hands it to an asynchronous native upload must copy or stage it before returning
-         * true.
+         * `data` holds the region as tightly packed rows in the texture's SurfaceFormat. The
+         * caller's memory is valid only for the duration of the call: an implementation that hands
+         * it to an asynchronous native upload must copy or stage it before returning true.
          *
          * @param face       Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
          * @param level      Mip level to write.
@@ -386,8 +385,8 @@ namespace CNA::Internal::Renderers
          * @param y          Top edge of the requested region, in texels.
          * @param w          Width of the requested region, in texels.
          * @param h          Height of the requested region, in texels.
-         * @param data       Source pixels, tightly packed RGBA8 rows, top row first.
-         * @param dataLength Size of @p data in bytes; at least w * h * 4.
+         * @param data       Source texels, tightly packed in the texture's SurfaceFormat.
+         * @param dataLength Size of @p data in bytes.
          * @return True if the whole region was stored; false if this renderer stored nothing.
          */
         [[nodiscard]] virtual bool SetData(int face, int level, int x, int y, int w, int h,
@@ -418,7 +417,7 @@ namespace CNA::Internal::Renderers
             return false;
         }
         /**
-         * @brief Reads back raw RGBA8 pixels from a sub-rectangle of a single cube face.
+         * @brief Reads back format-native texels from a sub-rectangle of a single cube face.
          *
          * REMED-GFX-130, extending REMED-GFX-127's contract to this interface. Returns **true only
          * when the complete requested region was written into @p data**, and false when this
@@ -441,8 +440,10 @@ namespace CNA::Internal::Renderers
          * @param y          Top edge of the requested region, in texels.
          * @param w          Width of the requested region, in texels.
          * @param h          Height of the requested region, in texels.
-         * @param data       Destination for tightly packed RGBA8 rows, top row first.
-         * @param dataLength Size of @p data in bytes; exactly w * h * 4.
+         * @param data       Destination for tightly packed texels in the texture's SurfaceFormat.
+         *                   A block-compressed cube renderer writes decoded RGBA8 because the
+         *                   public TextureCube readback contract receives Color elements.
+         * @param dataLength Size of @p data in bytes.
          * @return True if the whole region was written; false if this renderer read nothing back.
          */
         [[nodiscard]] virtual bool GetData(int face, int level, int x, int y, int w, int h,
@@ -466,6 +467,8 @@ namespace CNA::Internal::Renderers
         /// requiring a shared, cross-renderer `BindTextureCube` signature change. Defaults to 0
         /// ("unknown/unsupported"), harmless for every renderer that does not implement sampling.
         [[nodiscard]] virtual int GetSizeEXT() const noexcept { return 0; }
+        /** @brief Returns the raw SurfaceFormat ordinal used to create this texture. */
+        [[nodiscard]] virtual int GetSurfaceFormatEXT() const noexcept { return 0; }
     };
 
     /**
@@ -481,12 +484,11 @@ namespace CNA::Internal::Renderers
     public:
         virtual ~ITexture3DRenderer() = default;
         /**
-         * @brief Uploads raw RGBA8 voxels into a sub-volume of the given mip level.
+         * @brief Uploads format-native voxels into a sub-volume of the given mip level.
          *
          * REMED-GFX-135. Identical contract to `ITextureCubeRenderer::SetData` -- see its
          * documentation for why there is no default body. `data` holds the requested box slice by
-         * slice (front to back), each slice as tightly packed RGBA8 rows with the top row first, so
-         * the row pitch is `w * 4` and the slice pitch is `w * h * 4`.
+         * slice (front to back), each slice as tightly packed rows in the texture's SurfaceFormat.
          *
          * @param level      Mip level to write.
          * @param x          Left edge of the requested box, in voxels.
@@ -495,20 +497,20 @@ namespace CNA::Internal::Renderers
          * @param w          Width of the requested box, in voxels.
          * @param h          Height of the requested box, in voxels.
          * @param depth      Depth of the requested box, in voxels.
-         * @param data       Source voxels, tightly packed RGBA8.
-         * @param dataLength Size of @p data in bytes; at least w * h * depth * 4.
+         * @param data       Source voxels, tightly packed in the texture's SurfaceFormat.
+         * @param dataLength Size of @p data in bytes.
          * @return True if the whole box was stored; false if this renderer stored nothing.
          */
         [[nodiscard]] virtual bool SetData(int level, int x, int y, int z,
                                            int w, int h, int depth,
                                            const void* data, int dataLength) = 0;
         /**
-         * @brief Reads back raw RGBA8 voxels from a sub-volume of the given mip level.
+         * @brief Reads back format-native voxels from a sub-volume of the given mip level.
          *
          * REMED-GFX-130. Identical contract to `ITextureCubeRenderer::GetData` above -- see its
          * documentation for why the default is `false` rather than a silent no-op. `data` receives
-         * the requested box slice by slice (front to back), each slice as tightly packed RGBA8 rows
-         * with the top row first, so the row pitch is `w * 4` and the slice pitch is `w * h * 4`.
+         * the requested box slice by slice (front to back), each slice as tightly packed rows in
+         * the texture's SurfaceFormat.
          *
          * @param level      Mip level to read.
          * @param x          Left edge of the requested box, in voxels.
@@ -517,8 +519,10 @@ namespace CNA::Internal::Renderers
          * @param w          Width of the requested box, in voxels.
          * @param h          Height of the requested box, in voxels.
          * @param depth      Depth of the requested box, in voxels.
-         * @param data       Destination for the tightly packed RGBA8 box.
-         * @param dataLength Size of @p data in bytes; exactly w * h * depth * 4.
+         * @param data       Destination for a tightly packed format-native box. A
+         *                   block-compressed volume renderer writes decoded RGBA8 because the
+         *                   public Texture3D readback contract receives Color elements.
+         * @param dataLength Size of @p data in bytes.
          * @return True if the whole box was written; false if this renderer read nothing back.
          */
         [[nodiscard]] virtual bool GetData(int level, int x, int y, int z,
@@ -539,6 +543,8 @@ namespace CNA::Internal::Renderers
         {
             width = height = depth = 0;
         }
+        /** @brief Returns the raw SurfaceFormat ordinal used to create this texture. */
+        [[nodiscard]] virtual int GetSurfaceFormatEXT() const noexcept { return 0; }
     };
 
     /**
@@ -551,10 +557,10 @@ namespace CNA::Internal::Renderers
         virtual ~ITextureRenderer() = default;
         virtual int GetWidth() const = 0;
         virtual int GetHeight() const = 0;
-        /// Replaces full level-0 texture pixels in-place. stride = row bytes (width * 4 for RGBA).
-        virtual void UpdatePixels(const uint8_t* rgba, int stride) {}
+        /// Replaces full level-0 texture data in-place. stride is the format-native row size.
+        virtual void UpdatePixels(const uint8_t* data, int stride) {}
         /// Uploads a specific mip level. levelW/levelH are the dimensions at that level.
-        virtual void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) {}
+        virtual void UpdatePixelsLevel(int level, const uint8_t* data, int levelW, int levelH) {}
         /**
          * Reports whether the renderer owns deterministic readable bytes for a mip level even when
          * Texture2D has no caller-authored CPU shadow for it. The default is false: allocated GPU
@@ -579,7 +585,7 @@ namespace CNA::Internal::Renderers
         /// of keeping its own duplicate copy of the pixel data.
         virtual void ShareCpuPixels(std::shared_ptr<std::vector<uint8_t>> /*pixels*/) {}
         /**
-         * @brief Reads back raw RGBA8 pixels from a sub-rectangle of the given mip level.
+         * @brief Reads back format-native texels from a sub-rectangle of the given mip level.
          *
          * REMED-GFX-127. Returns **true only when the complete requested region was written into
          * @p data**, and false when this renderer performed no readback at all. There is no third
@@ -604,7 +610,7 @@ namespace CNA::Internal::Renderers
          * @param y          Top edge of the requested region, in pixels.
          * @param w          Width of the requested region, in pixels.
          * @param h          Height of the requested region, in pixels.
-         * @param data       Destination for tightly packed RGBA8 rows, top row first.
+         * @param data       Destination for tightly packed texels in the texture's SurfaceFormat.
          * @param dataLength Size of @p data in bytes.
          * @return True if the whole region was written; false if this renderer read nothing back.
          */
@@ -1005,6 +1011,19 @@ namespace CNA::Internal::Renderers
          * @param addressV Raw TextureAddressMode int value for V (0=Wrap, 1=Clamp, 2=Mirror).
          */
         virtual void SetSamplerAddressMode(int /*addressU*/, int /*addressV*/) {}
+        /**
+         * @brief Sets the mip-level clamp and bias applied to each Draw call.
+         *
+         * @param maxMipLevel Most detailed mip level the sampler may select.
+         * @param lodBias Bias added to the computed mip level.
+         */
+        virtual void SetSamplerMipState(int /*maxMipLevel*/, float /*lodBias*/) {}
+        /**
+         * @brief Sets the volume-texture W address mode applied to each Draw call.
+         *
+         * @param addressW Raw TextureAddressMode int value for W (0=Wrap, 1=Clamp, 2=Mirror).
+         */
+        virtual void SetSamplerAddressW(int /*addressW*/) {}
         /**
          * @brief CNAEXT. Tells the renderer whether the batch SpriteBatch::Begin() just started is
          *        SpriteSortMode::Immediate.
@@ -2941,15 +2960,12 @@ namespace CNA::Internal::Renderers
         /// vkCmdInsertDebugUtilsLabelEXT when VK_EXT_debug_utils is available.
         virtual void SetStringMarkerEXT(const char* /*marker*/) {}
 
-        /// Simulates an OpenGL context loss.
-        /// On Web (Emscripten): triggers WEBGL_lose_context.loseContext().
-        /// On desktop: destroys the SDL GL context and immediately recreates it,
-        /// forcing all GPU resources to be re-initialised.
+        /// Simulates a native graphics context or device loss.
+        /// Renderer implementations may recover atomically or remain unavailable until
+        /// DebugRestoreContext() is called.
         virtual void DebugSimulateContextLoss() {}
 
-        /// Simulates an OpenGL context restore after a previous DebugSimulateContextLoss().
-        /// On Web: triggers WEBGL_lose_context.restoreContext().
-        /// On desktop: equivalent to DebugSimulateContextLoss() (destroy + recreate).
+        /// Restores a native context or device after DebugSimulateContextLoss().
         virtual void DebugRestoreContext() {}
 
         // ---- Window id → renderer registry ----

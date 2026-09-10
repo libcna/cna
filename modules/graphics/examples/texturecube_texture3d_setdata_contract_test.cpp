@@ -192,12 +192,9 @@ namespace
                                  true, Support::Exact, Support::Exact,
                                  Support::Unsupported, false};
 #elif defined(CNA_RENDERER_DIRECTX12)
-    // D3D12TextureCubeRenderer's own constructor pins mipLevels_ to 1 whatever `mipMap` says (its
-    // header states so explicitly), so a cube mip level has no subresource to be written into here
-    // -- declared Unsupported rather than assumed, since this renderer's Game-harness tests are
-    // compile-verified only under this dev loop's Wine dxgi.dll. Texture3D does build its full
-    // chain.
-    constexpr Contract kContract{"DIRECTX12", true, Support::Exact, Support::Unsupported,
+    // DX-260: D3D12 allocates the complete cube mip chain and supports exact per-level transfers,
+    // matching its Texture3D path and the public TextureCube LevelCount contract.
+    constexpr Contract kContract{"DIRECTX12", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact,
                                  Support::Unsupported, false};
 #elif defined(CNA_RENDERER_LLGL)

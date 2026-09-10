@@ -14,8 +14,9 @@
 //   * repeated identical bindings consume NOTHING -- a cache hit must not take a descriptor;
 //   * a workload that creates and destroys in a loop reaches a bounded STEADY STATE: capacity stops
 //     growing and the never-used cursor stops advancing;
-//   * no heap object is created per draw, and no wait, idle or extra submit was added to make any
-//     of the above true.
+//   * no heap object is created per draw, and deferred upload recording does not inject a wait per
+//     resource. The fixture explicitly waits only between completed lifetime generations, where
+//     reuse is legal and deterministic.
 //
 // This is deliberately an off-screen renderer fixture (args.surface.windowId == 0), for the reason
 // examples/directx12_smoke_test.cpp's own header records: GraphicsDevice's constructor creates a real
@@ -133,13 +134,15 @@ int main()
               "B3: destroying it RETURNS the descriptor -- the exact behaviour DX-103 lacked (" +
                   Describe("srv", after) + ")");
 
-        // Submission here is synchronous, so the fence stamp taken at Free() has already completed
-        // and the next allocation may take the slot back with no wait of any kind.
+        // SetData is frame-deferred since DX-238. Complete that lifetime generation before asking
+        // for deterministic reuse; recycling an in-flight descriptor would be the actual bug.
+        renderer.WaitForGpuIdleEXT();
         D3D12TextureRenderer replacement(&renderer, TinyImage());
         Check(replacement.GetShaderResourceViewIndexEXT() == indexOfDoomed,
               "B4: the very next texture is given the freed slot back (index " +
                   std::to_string(indexOfDoomed) + ")");
     }
+    renderer.WaitForGpuIdleEXT();
 
     // ---- C: the pre-fix boundary. 200 created and destroyed in sequence --------------------------
     //
@@ -148,17 +151,17 @@ int main()
     {
         const D3D12DescriptorHeapStats before = heaps->cbvSrvUav.GetStatsEXT();
         bool threw = false;
-        std::uint32_t distinctIndices = 0;
-        std::uint32_t lastIndex = D3D12ShaderVisibleDescriptorAllocator::kInvalidIndex;
+        constexpr int kGenerationSize = 32;
         try
         {
             for (int i = 0; i < 200; ++i)
             {
                 D3D12TextureRenderer tex(&renderer, TinyImage());
-                const std::uint32_t idx = tex.GetShaderResourceViewIndexEXT();
-                if (idx != lastIndex) ++distinctIndices;
-                lastIndex = idx;
+                (void)tex.GetShaderResourceViewIndexEXT();
+                if ((i + 1) % kGenerationSize == 0)
+                    renderer.WaitForGpuIdleEXT();
             }
+            renderer.WaitForGpuIdleEXT();
         }
         catch (const std::exception& e)
         {
@@ -170,11 +173,11 @@ int main()
         Check(after.capacity == before.capacity,
               "C2: capacity did NOT grow -- one live resource never needs more than one slot (cap=" +
                   std::to_string(after.capacity) + ")");
-        Check(after.recycles >= 199,
-              "C3: every one of those 200 allocations came from the FREE LIST rather than the bump "
-              "cursor (recycled=" + std::to_string(after.recycles - before.recycles) + "/200)");
-        Check(after.neverUsed == before.neverUsed,
-              "C4: the bump cursor did not advance at all across the 200 cycles");
+        Check(after.recycles - before.recycles >= 200 - kGenerationSize,
+              "C3: after the first in-flight generation, later allocations came from the FREE "
+              "LIST (recycled=" + std::to_string(after.recycles - before.recycles) + "/200)");
+        Check(before.neverUsed - after.neverUsed <= kGenerationSize,
+              "C4: the bump cursor advanced by at most one in-flight generation");
     }
 
     // ---- D: growth on genuine simultaneous demand -------------------------------------------------
@@ -234,9 +237,8 @@ int main()
               "of the shader-visible one, which D3D12 forbids (descriptors copied=" +
                   std::to_string(after.bulkCopies) + ")");
 
-        // Retired heaps must not be released underneath a command list that bound them. Submission
-        // is synchronous here, so the retired pair is reclaimed on the next allocator touch --
-        // which is exactly what a fence-correct implementation should do, and is measurable.
+        // Retired heaps must not be released underneath a command list that could still reference
+        // them. They remain retained until an explicit frame completion boundary below.
         Check(after.heapObjects >= 2, "D8: the current heap pair is alive (" +
                                           std::to_string(after.heapObjects) + " heap objects)");
 
@@ -246,6 +248,8 @@ int main()
         const D3D12DescriptorHeapStats released = heaps->cbvSrvUav.GetStatsEXT();
         Check(released.live == 0,
               "D9: releasing all 300 returns every slot (live=" + std::to_string(released.live) + ")");
+        renderer.WaitForGpuIdleEXT();
+        const D3D12DescriptorHeapStats reclaimable = heaps->cbvSrvUav.GetStatsEXT();
 
         // And the reclaimed capacity is genuinely reusable: the next 300 must come entirely from the
         // free list, with no further growth.
@@ -253,27 +257,32 @@ int main()
         for (int i = 0; i < 300; ++i)
             again.push_back(std::make_unique<D3D12TextureRenderer>(&renderer, TinyImage()));
         const D3D12DescriptorHeapStats reused = heaps->cbvSrvUav.GetStatsEXT();
-        Check(reused.growths == released.growths && reused.capacity == released.capacity,
+        Check(reused.growths == reclaimable.growths && reused.capacity == reclaimable.capacity,
               "D10: a second wave of 300 needs NO further growth (grow=" +
                   std::to_string(reused.growths) + ", cap=" + std::to_string(reused.capacity) + ")");
-        Check(reused.recycles - released.recycles == 300,
+        Check(reused.recycles - reclaimable.recycles == 300,
               "D11: all 300 came from the free list (recycled=" +
-                  std::to_string(reused.recycles - released.recycles) + "/300)");
+                  std::to_string(reused.recycles - reclaimable.recycles) + "/300)");
         again.clear();
+        renderer.WaitForGpuIdleEXT();
     }
 
     // ---- E: bounded steady state under repeated churn ---------------------------------------------
     {
-        // Prime: a moderate live set, then 500 cycles of destroy-one/create-one around it. Capacity
-        // and the bump cursor must both stop moving; only the recycle count may rise.
+        // Prime a moderate live set, then churn it in ten frame-sized generations. Capacity and
+        // the bump cursor must both stop moving; only the recycle count may rise.
         std::vector<std::unique_ptr<D3D12TextureRenderer>> live;
         for (int i = 0; i < 50; ++i)
             live.push_back(std::make_unique<D3D12TextureRenderer>(&renderer, TinyImage()));
 
         const D3D12DescriptorHeapStats primed = heaps->cbvSrvUav.GetStatsEXT();
         for (int step = 0; step < 500; ++step)
+        {
             live[static_cast<std::size_t>(step % 50)] =
                 std::make_unique<D3D12TextureRenderer>(&renderer, TinyImage());
+            if ((step + 1) % 50 == 0)
+                renderer.WaitForGpuIdleEXT();
+        }
         const D3D12DescriptorHeapStats churned = heaps->cbvSrvUav.GetStatsEXT();
 
         Check(churned.capacity == primed.capacity && churned.growths == primed.growths,
@@ -288,6 +297,7 @@ int main()
               "E4: no heap object was created by the churn (heapObjs=" +
                   std::to_string(churned.heapObjects) + ")");
         live.clear();
+        renderer.WaitForGpuIdleEXT();
     }
 
     // ---- F: RTV and DSV -- the same defect, the same fix, different mechanics ---------------------
@@ -411,14 +421,15 @@ int main()
 
     // ---- I: fence stamping is real ----------------------------------------------------------------
     {
-        // The clock must have advanced past zero -- every submit above signalled it. A freed slot is
+        // The clock must have advanced past zero -- every explicit generation boundary above
+        // submitted and completed its frame. A freed slot is
         // stamped against it, so a fence that never moved would mean the deferral is vacuous.
         Check(heaps->clock.lastSubmitted > 0 && heaps->clock.fence != nullptr,
               "I1: the allocator set shares the renderer's real fence and sees submissions (last=" +
                   std::to_string(heaps->clock.lastSubmitted) + ")");
         Check(heaps->clock.Completed() >= heaps->clock.lastSubmitted,
-              "I2: this renderer submits synchronously, so every stamp is already complete when it is "
-              "taken -- the deferral is correct rather than merely unused (completed=" +
+              "I2: the explicit lifecycle boundary completed every submitted stamp "
+              "(completed=" +
                   std::to_string(heaps->clock.Completed()) + ")");
     }
 
@@ -441,20 +452,13 @@ int main()
             for (int i = 0; i < 40; ++i)
                 perFrame.push_back(std::make_unique<D3D12TextureRenderer>(&renderer, TinyImage()));
 
-            ID3D12CommandAllocator* allocator = renderer.GetCommandAllocatorEXT(frame % 2);
-            ID3D12GraphicsCommandList* cmdList = renderer.GetCommandListEXT();
-            allocator->Reset();
-            cmdList->Reset(allocator, nullptr);
-            ID3D12DescriptorHeap* bound[] = {renderer.GetCbvSrvUavHeapEXT(), renderer.GetSamplerHeapEXT()};
-            cmdList->SetDescriptorHeaps(2, bound);
-            cmdList->Close();
-            renderer.ExecuteCommandListAndWaitEXT(cmdList);
-            lastFrameFence = renderer.SignalAndWaitForFrameEXT(frame % 2);
+            lastFrameFence = renderer.SubmitFrameCommandsEXT();
 
             // Release the whole frame's set. Every slot is stamped against a fence value that is at
             // least the submission above.
             perFrame.clear();
             if (heaps->clock.lastSubmitted < lastFrameFence) ++reclaimedTooEarly;
+            renderer.WaitForGpuIdleEXT();
         }
 
         const D3D12DescriptorHeapStats after = heaps->cbvSrvUav.GetStatsEXT();
@@ -496,12 +500,11 @@ int main()
 
     // ---- K: device recreation ---------------------------------------------------------------------
     {
-        // A resource created against the OLD device must still be destructible after the device is
-        // recreated: it holds its own reference to the old allocator set, so freeing its slot cannot
-        // touch the new device's index space.
+        // A resource created against the old device must migrate to the replacement device. Its old
+        // descriptor is released before the allocator set is retired, and destruction later releases
+        // the replacement descriptor rather than touching the old set.
         auto survivor = std::make_unique<D3D12TextureRenderer>(&renderer, TinyImage());
         const std::shared_ptr<D3D12DescriptorHeaps> oldHeaps = renderer.GetDescriptorHeapsEXT();
-        const std::uint32_t survivorIndex = survivor->GetShaderResourceViewIndexEXT();
 
         bool recreated = true;
         try
@@ -523,23 +526,26 @@ int main()
             const std::shared_ptr<D3D12DescriptorHeaps>& newHeaps = renderer.GetDescriptorHeapsEXT();
             Check(newHeaps != oldHeaps,
                   "K1: device recreation builds a brand-new allocator set");
+            Check(oldHeaps->cbvSrvUav.GetStatsEXT().live == 0,
+                  "K2: recreation releases the survivor's descriptor from the old set");
             Check(newHeaps->cbvSrvUav.GetStatsEXT().capacity == 64 &&
-                      newHeaps->cbvSrvUav.GetStatsEXT().live == 0,
-                  "K2: the new set starts empty at the starting capacity (" +
+                      newHeaps->cbvSrvUav.GetStatsEXT().live == 1,
+                  "K3: the survivor is recreated in the new set at its starting capacity (" +
                       Describe("srv", newHeaps->cbvSrvUav.GetStatsEXT()) + ")");
+            Check(survivor->GetShaderResourceViewGpuHandleEXT().ptr != 0,
+                  "K4: the surviving texture resolves through the replacement heap");
 
-            const std::uint32_t oldLiveBefore = oldHeaps->cbvSrvUav.GetStatsEXT().live;
+            const std::uint32_t newLiveBefore = newHeaps->cbvSrvUav.GetStatsEXT().live;
             survivor.reset();
-            Check(oldHeaps->cbvSrvUav.GetStatsEXT().live == oldLiveBefore - 1,
-                  "K3: a resource outliving the device frees into the OLD set, not the new one "
-                  "(freed index " + std::to_string(survivorIndex) + ")");
-            Check(newHeaps->cbvSrvUav.GetStatsEXT().live == 0,
-                  "K4: and left the new device's index space untouched");
+            Check(newHeaps->cbvSrvUav.GetStatsEXT().live == newLiveBefore - 1,
+                  "K5: destroying the recovered resource frees its replacement descriptor");
+            Check(oldHeaps->cbvSrvUav.GetStatsEXT().live == 0,
+                  "K6: recovered-resource destruction leaves the retired set untouched");
 
             // The recreated device must be usable.
             D3D12TextureRenderer fresh(&renderer, TinyImage());
             Check(fresh.GetShaderResourceViewGpuHandleEXT().ptr != 0,
-                  "K5: a texture created after recreation resolves in the new heap");
+                  "K7: a texture created after recreation resolves in the new heap");
         }
     }
 

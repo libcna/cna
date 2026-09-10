@@ -216,6 +216,21 @@ namespace Microsoft::Xna::Framework::Graphics
             }
         }
 
+        /// plans/plan_dx.md DX-235: CNA_FORCE_HEADLESS_DEVICE_EXT names the renderers whose device is to
+        /// be created as if PresentationParameters::HeadlessEXT had been set on it -- no window, no
+        /// video subsystem, render into the renderer's own off-screen back buffer and read the
+        /// result back. It exists because the renderer-neutral example corpus builds its own
+        /// GraphicsDeviceManager inside each fixture's constructor, so there is no per-fixture place
+        /// to opt in, and a CI/dev-loop environment that cannot present is a property of the
+        /// environment rather than of any one fixture. Same comma-separated renderer-name list shape
+        /// as the two debug seams below, and deliberately NOT a plain boolean: a renderer that
+        /// cannot run without a swap chain (D3D11, EasyGL) must keep refusing by name rather than
+        /// being silently switched into a mode it does not have.
+        [[nodiscard]] bool isForcedHeadlessDevice(std::string_view rendererName)
+        {
+            return isRendererListedIn("CNA_FORCE_HEADLESS_DEVICE_EXT", rendererName);
+        }
+
         /// CNA_DEBUG_UNAVAILABLE_RENDERERS: treat these renderers' availability probe as failing.
         [[nodiscard]] bool isDebugForcedUnavailable(std::string_view rendererName)
         {
@@ -3081,6 +3096,11 @@ namespace Microsoft::Xna::Framework::Graphics
         // propagates unchanged, so a build that never opts in behaves as it always did.
         std::string firstFailure;
 
+        // DX-235: the caller's own answer, kept so the forced-headless override below is decided
+        // per candidate rather than leaking from one attempt into the next -- a fallback chain may
+        // legitimately cross the boundary, exactly as RTR-P5-15 established for the video subsystem.
+        const bool callerRequestedHeadless = presentationParameters_.getHeadlessEXTProperty();
+
         for (const CNA::GraphicsRendererType candidateType : attemptOrder)
         {
             const Renderers::GraphicsRendererDescriptor* candidate =
@@ -3133,6 +3153,27 @@ namespace Microsoft::Xna::Framework::Graphics
                         candidateType, GraphicsRendererFallbackReason::ProbeUnavailable,
                         "the renderer reported it cannot run on this machine"});
                 continue;
+            }
+
+            // DX-235: apply the environment override to the parameters themselves, not to a local
+            // flag, so everything downstream -- createOrAttachWindow(), the video-subsystem
+            // decision, the renderer's own construction, and getPresentationParametersProperty()
+            // for a caller that asks afterwards -- reads one consistent answer.
+            {
+                const bool headless =
+                    callerRequestedHeadless || isForcedHeadlessDevice(candidate->name);
+                if (headless != presentationParameters_.getHeadlessEXTProperty())
+                {
+                    presentationParameters_.setHeadlessEXTProperty(headless);
+                    if (headless)
+                    {
+                        CNA::Logger::Info(
+                            std::string("CNA: creating a windowless (HeadlessEXT) device for ")
+                                .append(candidate->name)
+                                .append(" because CNA_FORCE_HEADLESS_DEVICE_EXT names it"),
+                            CNA::LogCategory::RENDER);
+                    }
+                }
             }
 
             activeDescriptor_ = candidate;
@@ -3304,7 +3345,7 @@ namespace Microsoft::Xna::Framework::Graphics
                     // CABI-15: a renderer really did lose and recreate its resources, so the
                     // default-pool ones lost their contents. This is the only place ContentLost is
                     // raised: a caller-initiated Reset on a renderer that never loses anything must
-                    // not fire it, or the event becomes noise on 44 of the 47 families.
+                    // not fire it, or the event becomes noise on unaffected renderer families.
                     NotifyContentLostResourcesEXT();
                     DeviceReset.Raise(this, System::EventArgs::Empty);
                     break;

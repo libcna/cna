@@ -113,8 +113,8 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Raised when this render target's content is lost to a device reset.
          *
-         * Raised for real on the renderers whose API can lose a device (DirectX9,
-         * Direct2D, Skia). Families that cannot lose one never raise it.
+         * Raised for real on renderers whose native context or device was lost and rebuilt.
+         * Families that cannot lose one never raise it.
          */
         System::EventHandler<System::EventArgs> ContentLost;
 

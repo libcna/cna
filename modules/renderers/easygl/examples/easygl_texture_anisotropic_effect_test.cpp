@@ -12,25 +12,12 @@
 // MaxAnisotropy level entirely (the parameter is unused in BgfxRenderer::ApplySamplerState).
 //
 // A true visual anisotropic-quality pixel test (comparing detail preservation under oblique/
-// aspect-skewed minification) is inherently driver-dependent and fragile to assert precisely, so
-// this test instead verifies the "caps and fallback" half of the task literally: that requesting
-// an absurdly over-cap MaxAnisotropy (9999, far beyond any real GPU's limit) does not crash or
-// throw, and is clamped gracefully — the primary, load-bearing assertion.
+// aspect-skewed minification) is inherently driver-dependent and fragile to assert precisely.
+// This test instead verifies the deterministic caps path: an absurdly over-cap MaxAnisotropy
+// request must neither throw nor suppress sampling from an ordinary single-level texture. At the
+// exact Red/Green boundary, DualTextureEffect's doubling produces a saturated yellow pixel.
 //
-// A SEPARATE, additional finding surfaced while building this test, documented here rather than
-// silently asserted away: TextureFilter::Anisotropic (and every other *Mip*-suffixed filter) maps
-// to a GL/Vulkan filter that requires a *complete* mipmap chain. `tex2_` below is an ordinary,
-// non-mipmapped Texture2D (the common case — Texture2D::CreateFromPixels, like nearly every
-// texture a real game loads without explicitly requesting mips) — on EasyGL, binding it with
-// TextureFilter::Anisotropic renders **solid black**, a GL "mipmap incomplete texture" symptom,
-// because EasyGL never sets GL_TEXTURE_MAX_LEVEL to match each texture's real (here: 1-level)
-// mip count. This is the same root architectural gap as Task 867 (Texture2D mip-level metadata
-// never threaded into renderer resource creation) manifesting on EasyGL instead of Vulkan — Task
-// 867's tracked scope has been extended to cover it. This test does NOT fail on the black result
-// (that's Task 867's fix to make, not this test's job to paper over) — it only fails if the
-// extreme MaxAnisotropy value actually crashes/throws, which is this task's real, literal ask.
-//
-// Exit code 0 = PASS (no crash), 1 = FAIL (crashed/threw).
+// Exit code 0 = PASS (no crash and expected pixel), 1 = FAIL.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -135,29 +122,20 @@ protected:
             std::printf("[FAIL] MaxAnisotropy=9999 threw: %s\n", e.what());
         }
 
-        const bool isBlended = !threw
-            && sample.getRProperty() >= 90 && sample.getRProperty() <= 165
-            && sample.getGProperty() >= 90 && sample.getGProperty() <= 165;
-        const bool isBlack = !threw
-            && sample.getRProperty() <= 10 && sample.getGProperty() <= 10 && sample.getBProperty() <= 10;
+        const bool isExpected = !threw
+            && sample.getRProperty() >= 235
+            && sample.getGProperty() >= 235
+            && sample.getBProperty() <= 20;
 
         if (!threw)
         {
-            std::printf("[PASS] Anisotropic, MaxAnisotropy=9999 (over any real cap): no crash, sample=(%d,%d,%d)\n",
+            std::printf("[%s] Anisotropic, MaxAnisotropy=9999: sample=(%d,%d,%d), "
+                        "expected saturated yellow\n",
+                        isExpected ? "PASS" : "FAIL",
                         sample.getRProperty(), sample.getGProperty(), sample.getBProperty());
-            if (isBlack)
-            {
-                std::printf("[INFO] Sample is solid black - the documented Task 867 mipmap-incomplete-texture\n"
-                            "       finding (Anisotropic requires a complete mip chain; tex2_ has only 1 level).\n"
-                            "       Not a failure of THIS test's real ask (does extreme MaxAnisotropy crash?).\n");
-            }
-            else if (isBlended)
-            {
-                std::printf("[INFO] Sample is a normal blend - Task 867's finding appears fixed on this renderer.\n");
-            }
         }
 
-        result_ = threw ? 1 : 0;
+        result_ = isExpected ? 0 : 1;
         Exit();
     }
 

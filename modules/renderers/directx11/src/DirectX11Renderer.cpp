@@ -7,14 +7,26 @@
 #include "CNA/Internal/Renderers/DirectX11/D3D11OcclusionQuery.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11EffectRenderer.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11SpriteBatch.hpp"
+#if defined(CNA_DIRECTX11_COMPILED_EFFECTS)
+#include "CNA/Internal/Renderers/DirectX11/D3D11CompiledEffect.hpp"
+#endif
 #include "CNA/Internal/Renderers/D3DCommon/D3DShaderCache.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DConstantBuffers.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DFormatMapping.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DPresentation.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DRasterizationConvention.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DStateMapping.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace CNA::Internal::Renderers::DirectX11
 {
@@ -25,6 +37,27 @@ namespace CNA::Internal::Renderers::DirectX11
             char buf[32];
             std::snprintf(buf, sizeof(buf), "0x%08lX", static_cast<unsigned long>(hr));
             return buf;
+        }
+
+        int ClampBackBufferMultiSampleCount(
+            ID3D11Device* device, DXGI_FORMAT format, int requestedCount)
+        {
+            if (device == nullptr || requestedCount <= 1) return 0;
+
+            int candidate = 1;
+            while (candidate <= requestedCount / 2) candidate *= 2;
+            while (candidate > 1)
+            {
+                UINT qualityLevels = 0;
+                if (SUCCEEDED(device->CheckMultisampleQualityLevels(
+                        format, static_cast<UINT>(candidate), &qualityLevels)) &&
+                    qualityLevels > 0)
+                {
+                    return candidate;
+                }
+                candidate >>= 1;
+            }
+            return 0;
         }
 
         /// Same per-PrimitiveType vertex-count formula every other renderer duplicates locally
@@ -56,6 +89,102 @@ namespace CNA::Internal::Renderers::DirectX11
             }
             throw std::runtime_error(
                 "DirectX11 renderer does not support the requested PrimitiveType value");
+        }
+
+        void BuildVertexInputLayout(
+            const GpuDrawParams& params, bool includeInstanceStreams,
+            std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& combinedElements,
+            std::vector<D3DCommon::D3DVertexInputElement>& inputElements)
+        {
+            combinedElements.clear();
+            inputElements.clear();
+            for (int i = 0; i < params.vertexStreamCount; ++i)
+            {
+                const auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
+                if (stream.instanceFrequency != 0)
+                    continue;
+                const auto* buffer =
+                    static_cast<const D3D11VertexBufferRenderer*>(stream.buffer);
+                if (buffer == nullptr || buffer->GetDeclarationEXT().GetElements().empty())
+                    throw System::NotSupportedException(
+                        "DirectX11 multi-stream input requires every per-vertex buffer to carry "
+                        "a VertexDeclaration.");
+                for (const auto& source : buffer->GetDeclarationEXT().GetElements())
+                {
+                    auto combined = source;
+                    combined.setOffsetProperty(
+                        source.getOffsetProperty() + stream.combinedByteBase);
+                    combinedElements.push_back(combined);
+                }
+            }
+
+            for (const auto& combined : combinedElements)
+            {
+                const auto mapped =
+                    MapCombinedOffsetToStream(params, combined.getOffsetProperty());
+                const auto& stream =
+                    params.vertexStreams[static_cast<std::size_t>(mapped.streamIndex)];
+                auto local = combined;
+                local.setOffsetProperty(mapped.byteOffsetInStream);
+                inputElements.push_back({local, stream.slot, 0, false});
+            }
+
+            if (!includeInstanceStreams)
+                return;
+            for (int i = 0; i < params.vertexStreamCount; ++i)
+            {
+                const auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
+                if (stream.instanceFrequency <= 0)
+                    continue;
+                const auto* buffer =
+                    static_cast<const D3D11VertexBufferRenderer*>(stream.buffer);
+                if (buffer == nullptr || buffer->GetDeclarationEXT().GetElements().empty())
+                    throw System::NotSupportedException(
+                        "DirectX11 instancing requires every per-instance buffer to carry a "
+                        "VertexDeclaration.");
+                for (const auto& element : buffer->GetDeclarationEXT().GetElements())
+                {
+                    inputElements.push_back(
+                        {element, stream.slot, stream.instanceFrequency, true});
+                }
+            }
+        }
+
+        void BindVertexStreams(
+            ID3D11DeviceContext* context, const D3D11VertexBufferRenderer& fallback,
+            const GpuDrawParams& params)
+        {
+            ID3D11Buffer* buffers[kMaxVertexStreams]{};
+            UINT strides[kMaxVertexStreams]{};
+            UINT offsets[kMaxVertexStreams]{};
+            if (params.vertexStreamCount == 0)
+            {
+                buffers[0] = fallback.GetBufferEXT();
+                strides[0] = static_cast<UINT>(fallback.GetStrideEXT());
+            }
+            else
+            {
+                for (int i = 0; i < params.vertexStreamCount; ++i)
+                {
+                    const auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
+                    if (stream.slot < 0 || stream.slot >= kMaxVertexStreams ||
+                        stream.buffer == nullptr)
+                        continue;
+                    const auto& buffer =
+                        *static_cast<const D3D11VertexBufferRenderer*>(stream.buffer);
+                    const UINT stride = static_cast<UINT>(stream.strideInBytes > 0
+                        ? stream.strideInBytes : buffer.GetStrideEXT());
+                    buffers[stream.slot] = buffer.GetBufferEXT();
+                    strides[stream.slot] = stride;
+                    offsets[stream.slot] = static_cast<UINT>(
+                        static_cast<std::size_t>(std::max(stream.vertexOffset, 0)) * stride);
+                }
+            }
+
+            // D3D11 IA state survives draw calls. Rebinding all public slots explicitly clears a
+            // secondary stream left by a wider preceding draw.
+            context->IASetVertexBuffers(
+                0, static_cast<UINT>(kMaxVertexStreams), buffers, strides, offsets);
         }
 
         /// DX-62: resolves the real SRV to bind for a GpuDrawParams texture slot. Two concrete
@@ -91,7 +220,12 @@ namespace CNA::Internal::Renderers::DirectX11
         : surface_(args.surface, "DirectX11Renderer")
         , virtualWidth_(args.virtualWidth)
         , virtualHeight_(args.virtualHeight)
+        , requestedMultiSampleCount_(args.multiSampleCount)
+        , contextRecoveryEnabled_(args.contextRecoveryEnabled)
+        , deviceEventCallback_(args.deviceEventCallback)
     {
+        presentationMode_ = args.presentationMode;
+        swapInterval_ = args.swapInterval;
         vsyncEnabled_ = args.swapInterval > 0;
 
         CNA::Platform::Win32NativeWindow nativeWindow;
@@ -117,7 +251,61 @@ namespace CNA::Internal::Renderers::DirectX11
             CNA::LogCategory::RENDER);
     }
 
-    DirectX11Renderer::~DirectX11Renderer() = default;
+    DirectX11Renderer::~DirectX11Renderer()
+    {
+        lifetimeToken_.reset();
+#if defined(CNA_DIRECTX11_COMPILED_EFFECTS)
+        if (mojoShaderContext_ != nullptr)
+        {
+            MOJOSHADER_d3d11DestroyContext(mojoShaderContext_);
+            mojoShaderContext_ = nullptr;
+        }
+#endif
+    }
+
+    void DirectX11Renderer::SetContextRecoveryEnabled(bool enabled)
+    {
+        contextRecoveryEnabled_ = enabled;
+    }
+
+    void DirectX11Renderer::RegisterRecoverableResourceEXT(
+        D3DCommon::ID3DDeviceRecoverableEXT* resource)
+    {
+        if (!contextRecoveryEnabled_ || resource == nullptr)
+            return;
+        if (std::find(recoverableResources_.begin(), recoverableResources_.end(), resource) ==
+            recoverableResources_.end())
+        {
+            recoverableResources_.push_back(resource);
+        }
+    }
+
+    void DirectX11Renderer::UnregisterRecoverableResourceEXT(
+        D3DCommon::ID3DDeviceRecoverableEXT* resource) noexcept
+    {
+        std::erase(recoverableResources_, resource);
+    }
+
+    void DirectX11Renderer::DebugSimulateContextLoss()
+    {
+        if (deviceLost_)
+            return;
+        deviceLost_ = true;
+        if (deviceEventCallback_)
+            deviceEventCallback_(RendererDeviceEvent::Lost);
+    }
+
+    void DirectX11Renderer::DebugRestoreContext()
+    {
+        if (!deviceLost_)
+            return;
+        if (deviceEventCallback_)
+            deviceEventCallback_(RendererDeviceEvent::Resetting);
+        RecreateDeviceEXT();
+        deviceLost_ = false;
+        if (deviceEventCallback_)
+            deviceEventCallback_(RendererDeviceEvent::Reset);
+    }
 
     void DirectX11Renderer::CreateDeviceResources()
     {
@@ -233,26 +421,76 @@ namespace CNA::Internal::Renderers::DirectX11
         if (FAILED(hr))
             throw std::runtime_error("CreateRenderTargetView failed, hr=" + FormatHr(hr));
 
+        RecreateDefaultRenderSurfaces(requestedMultiSampleCount_);
+    }
+
+    ID3D11RenderTargetView* DirectX11Renderer::GetBackBufferDrawRtv() const
+    {
+        return backBufferMsaaRTV_ ? backBufferMsaaRTV_.Get() : backBufferRTV_.Get();
+    }
+
+    void DirectX11Renderer::RecreateDefaultRenderSurfaces(int requestedMultiSampleCount)
+    {
+        const int newSampleCount = ClampBackBufferMultiSampleCount(
+            device_.Get(), DXGI_FORMAT_R8G8B8A8_UNORM, requestedMultiSampleCount);
+
+        ComPtr<ID3D11Texture2D> newMsaaTexture;
+        ComPtr<ID3D11RenderTargetView> newMsaaRtv;
+        if (newSampleCount > 0)
+        {
+            D3D11_TEXTURE2D_DESC colorDesc{};
+            colorDesc.Width = static_cast<UINT>(width_);
+            colorDesc.Height = static_cast<UINT>(height_);
+            colorDesc.MipLevels = 1;
+            colorDesc.ArraySize = 1;
+            colorDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            colorDesc.SampleDesc.Count = static_cast<UINT>(newSampleCount);
+            colorDesc.Usage = D3D11_USAGE_DEFAULT;
+            colorDesc.BindFlags = D3D11_BIND_RENDER_TARGET;
+
+            HRESULT hr = device_->CreateTexture2D(
+                &colorDesc, nullptr, newMsaaTexture.GetAddressOf());
+            if (FAILED(hr))
+                throw std::runtime_error(
+                    "DirectX11Renderer: back-buffer MSAA color creation failed, hr=" +
+                    FormatHr(hr));
+            hr = device_->CreateRenderTargetView(
+                newMsaaTexture.Get(), nullptr, newMsaaRtv.GetAddressOf());
+            if (FAILED(hr))
+                throw std::runtime_error(
+                    "DirectX11Renderer: back-buffer MSAA RTV creation failed, hr=" + FormatHr(hr));
+        }
+
         D3D11_TEXTURE2D_DESC depthDesc{};
         depthDesc.Width = static_cast<UINT>(width_);
         depthDesc.Height = static_cast<UINT>(height_);
         depthDesc.MipLevels = 1;
         depthDesc.ArraySize = 1;
         depthDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
-        depthDesc.SampleDesc.Count = 1;
+        depthDesc.SampleDesc.Count = newSampleCount > 0
+            ? static_cast<UINT>(newSampleCount)
+            : 1u;
         depthDesc.Usage = D3D11_USAGE_DEFAULT;
         depthDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
 
-        hr = device_->CreateTexture2D(&depthDesc, nullptr, depthStencilTexture_.ReleaseAndGetAddressOf());
+        ComPtr<ID3D11Texture2D> newDepthTexture;
+        HRESULT hr = device_->CreateTexture2D(&depthDesc, nullptr, newDepthTexture.GetAddressOf());
         if (FAILED(hr))
             throw std::runtime_error("CreateTexture2D(depth) failed, hr=" + FormatHr(hr));
 
-        hr = device_->CreateDepthStencilView(
-            depthStencilTexture_.Get(), nullptr, depthStencilView_.ReleaseAndGetAddressOf());
+        ComPtr<ID3D11DepthStencilView> newDepthView;
+        hr = device_->CreateDepthStencilView(newDepthTexture.Get(), nullptr, newDepthView.GetAddressOf());
         if (FAILED(hr))
             throw std::runtime_error("CreateDepthStencilView failed, hr=" + FormatHr(hr));
 
-        ID3D11RenderTargetView* rtv = backBufferRTV_.Get();
+        context_->OMSetRenderTargets(0, nullptr, nullptr);
+        backBufferMsaaTexture_ = std::move(newMsaaTexture);
+        backBufferMsaaRTV_ = std::move(newMsaaRtv);
+        depthStencilTexture_ = std::move(newDepthTexture);
+        depthStencilView_ = std::move(newDepthView);
+        appliedMultiSampleCount_ = newSampleCount;
+
+        ID3D11RenderTargetView* rtv = GetBackBufferDrawRtv();
         context_->OMSetRenderTargets(1, &rtv, depthStencilView_.Get());
 
         D3D11_VIEWPORT vp{};
@@ -266,9 +504,18 @@ namespace CNA::Internal::Renderers::DirectX11
 
         // Phase DIRECTX6: Clear()/ClearX target whatever's tracked here -- initialise/reset it to the
         // back buffer every time this is (re)created (construction, and DX-29 resize).
-        currentColorRTVs_[0] = backBufferRTV_.Get();
+        currentColorRTVs_[0] = rtv;
         currentRTVCount_ = 1;
         currentDSV_ = depthStencilView_.Get();
+        RebindRasterizerState();
+    }
+
+    void DirectX11Renderer::ResolveBackBufferMsaa()
+    {
+        if (!backBufferMsaaTexture_ || !backBufferTexture_) return;
+        context_->ResolveSubresource(
+            backBufferTexture_.Get(), 0, backBufferMsaaTexture_.Get(), 0,
+            DXGI_FORMAT_R8G8B8A8_UNORM);
     }
 
     void DirectX11Renderer::ReleaseWindowSizeDependentViews()
@@ -277,8 +524,11 @@ namespace CNA::Internal::Renderers::DirectX11
         context_->OMSetRenderTargets(1, nullRtv, nullptr);
         depthStencilView_.Reset();
         depthStencilTexture_.Reset();
+        backBufferMsaaRTV_.Reset();
+        backBufferMsaaTexture_.Reset();
         backBufferRTV_.Reset();
         backBufferTexture_.Reset();
+        appliedMultiSampleCount_ = 0;
     }
 
     void DirectX11Renderer::EnsureSwapChainSize()
@@ -311,13 +561,107 @@ namespace CNA::Internal::Renderers::DirectX11
         CreateWindowSizeDependentViews();
     }
 
-    void DirectX11Renderer::CheckDeviceRemoved(HRESULT hr) const
+    void DirectX11Renderer::CheckDeviceRemoved(HRESULT hr)
     {
         if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
         {
             const HRESULT reason = device_ ? device_->GetDeviceRemovedReason() : hr;
             CNA::Logger::Error("D3D11 device removed/reset; reason=" + FormatHr(reason),
                                CNA::LogCategory::RENDER);
+            if (!deviceLost_)
+            {
+                deviceLost_ = true;
+                if (deviceEventCallback_)
+                    deviceEventCallback_(RendererDeviceEvent::Lost);
+            }
+        }
+    }
+
+    void DirectX11Renderer::RecreateDeviceEXT()
+    {
+        const auto resources = recoverableResources_;
+        if (context_)
+        {
+            context_->ClearState();
+            context_->Flush();
+        }
+        for (D3DCommon::ID3DDeviceRecoverableEXT* resource : resources)
+        {
+            if (resource != nullptr)
+                resource->ReleaseDeviceResourcesEXT();
+        }
+#if defined(CNA_DIRECTX11_COMPILED_EFFECTS)
+        if (mojoShaderContext_ != nullptr)
+        {
+            MOJOSHADER_d3d11DestroyContext(mojoShaderContext_);
+            mojoShaderContext_ = nullptr;
+        }
+#endif
+        ReleaseWindowSizeDependentViews();
+        swapChain_.Reset();
+
+        inputLayoutCache_ = D3D11InputLayoutCache();
+        samplerCache_ = D3D11SamplerCache();
+        blendStateCache_ = D3D11BlendStateCache();
+        depthStencilStateCache_ = D3D11DepthStencilStateCache();
+        rasterizerStateCache_ = D3D11RasterizerStateCache();
+        currentBlendState_.Reset();
+        currentDepthStencilState_.Reset();
+        perDrawConstantBuffer_.Reset();
+        fogConstantBuffer_.Reset();
+        lightingConstantBuffer_.Reset();
+        alphaTestConstantBuffer_.Reset();
+        dualTexFogConstantBuffer_.Reset();
+        envMapPerDrawConstantBuffer_.Reset();
+        envMapConstantBuffer_.Reset();
+        boneConstantBuffer_.Reset();
+        skinnedExtraConstantBuffer_.Reset();
+        pbrPerDrawConstantBuffer_.Reset();
+        pbrLightsConstantBuffer_.Reset();
+        defaultWhiteSrv_.Reset();
+        defaultWhiteTexture_.Reset();
+        defaultFlatNormalSrv_.Reset();
+        defaultFlatNormalTexture_.Reset();
+        currentCustomRT_ = nullptr;
+        currentCubeRT_ = nullptr;
+        currentMRTCount_ = 0;
+        for (auto& target : currentMRTTargets_)
+            target = nullptr;
+        currentRTVCount_ = 0;
+        for (auto& rtv : currentColorRTVs_)
+            rtv = nullptr;
+        currentDSV_ = nullptr;
+
+        context_.Reset();
+        device_.Reset();
+        factory_.Reset();
+        debugLayerEnabled_ = false;
+        allowTearingSupported_ = false;
+
+        CreateDeviceResources();
+        CreateSwapChainResources();
+        CreateWindowSizeDependentViews();
+
+        std::vector<std::string> failures;
+        for (D3DCommon::ID3DDeviceRecoverableEXT* resource : resources)
+        {
+            if (resource == nullptr)
+                continue;
+            try
+            {
+                resource->RecreateDeviceResourcesEXT();
+            }
+            catch (const std::exception& error)
+            {
+                failures.emplace_back(error.what());
+            }
+        }
+        if (!failures.empty())
+        {
+            throw std::runtime_error(
+                "D3D11 device recovery failed to recreate " +
+                std::to_string(failures.size()) + " resource(s); first failure: " +
+                failures.front());
         }
     }
 
@@ -336,10 +680,11 @@ namespace CNA::Internal::Renderers::DirectX11
     void DirectX11Renderer::Present()
     {
         EnsureSwapChainSize();
+        ResolveBackBufferMsaa();
 
         const bool mayTear =
             allowTearingSupported_ && allowTearingRequested_ && !vsyncEnabled_ && !exclusiveFullscreen_;
-        const UINT syncInterval = vsyncEnabled_ ? 1 : 0;
+        const UINT syncInterval = static_cast<UINT>(std::max(0, swapInterval_));
         const UINT flags = mayTear ? DXGI_PRESENT_ALLOW_TEARING : 0;
 
         const HRESULT hr = swapChain_->Present(syncInterval, flags);
@@ -350,8 +695,25 @@ namespace CNA::Internal::Renderers::DirectX11
     void DirectX11Renderer::GetViewportSize(int& width, int& height)
     {
         const auto drawableSize = surface_.GetDrawableSize();
-        width = drawableSize.width > 0 ? drawableSize.width : width_;
-        height = drawableSize.height > 0 ? drawableSize.height : height_;
+        const int physicalWidth = drawableSize.width > 0 ? drawableSize.width : width_;
+        const int physicalHeight = drawableSize.height > 0 ? drawableSize.height : height_;
+        const auto geometry = D3DCommon::ComputeD3DPresentationGeometry(
+            physicalWidth, physicalHeight, virtualWidth_, virtualHeight_, presentationMode_);
+        width = static_cast<int>(std::lround(geometry.logicalWidth));
+        height = static_cast<int>(std::lround(geometry.logicalHeight));
+    }
+
+    void DirectX11Renderer::GetDefaultViewportRect(int& x, int& y, int& width, int& height)
+    {
+        const auto drawableSize = surface_.GetDrawableSize();
+        const int physicalWidth = drawableSize.width > 0 ? drawableSize.width : width_;
+        const int physicalHeight = drawableSize.height > 0 ? drawableSize.height : height_;
+        const auto geometry = D3DCommon::ComputeD3DPresentationGeometry(
+            physicalWidth, physicalHeight, virtualWidth_, virtualHeight_, presentationMode_);
+        x = static_cast<int>(std::lround(geometry.x));
+        y = static_cast<int>(std::lround(geometry.y));
+        width = static_cast<int>(std::lround(geometry.width));
+        height = static_cast<int>(std::lround(geometry.height));
     }
 
     void DirectX11Renderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
@@ -365,22 +727,94 @@ namespace CNA::Internal::Renderers::DirectX11
         virtualHeight_ = height;
     }
 
+    int DirectX11Renderer::ApplyMultiSampleCount(int requestedMultiSampleCount)
+    {
+        requestedMultiSampleCount_ = requestedMultiSampleCount;
+        EnsureSwapChainSize();
+        const int clamped = ClampBackBufferMultiSampleCount(
+            device_.Get(), DXGI_FORMAT_R8G8B8A8_UNORM, requestedMultiSampleCount_);
+        if (clamped != appliedMultiSampleCount_ || !depthStencilTexture_)
+            RecreateDefaultRenderSurfaces(requestedMultiSampleCount_);
+        return appliedMultiSampleCount_;
+    }
+
+    int DirectX11Renderer::GetAppliedBackBufferFormatEXT(int requestedFormat) const
+    {
+        (void) requestedFormat;
+        return static_cast<int>(Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color);
+    }
+
+    int DirectX11Renderer::GetAppliedDepthStencilFormatEXT(int requestedFormat) const
+    {
+        (void) requestedFormat;
+        return static_cast<int>(Microsoft::Xna::Framework::Graphics::DepthFormat::Depth24Stencil8);
+    }
+
     void DirectX11Renderer::SetPresentationMode(int mode)
     {
-        (void)mode; // presentation-mode scaling: not yet implemented (out of Phase DIRECTX4's scope)
+        presentationMode_ = static_cast<CnaPresentationMode>(mode);
     }
 
     void DirectX11Renderer::SetSwapInterval(int interval)
     {
         // DX-26: sync interval is renderer state applied at the next Present(), not a direct
         // D3D11 API call -- there is no "set swap interval" entry point to call ahead of time.
+        swapInterval_ = interval;
         vsyncEnabled_ = interval > 0;
+    }
+
+    bool DirectX11Renderer::TransformWindowToLogical(
+        float windowX, float windowY, float& logX, float& logY) const
+    {
+        const auto drawableSize = surface_.GetDrawableSize();
+        const int physicalWidth = drawableSize.width > 0 ? drawableSize.width : width_;
+        const int physicalHeight = drawableSize.height > 0 ? drawableSize.height : height_;
+        const auto geometry = D3DCommon::ComputeD3DPresentationGeometry(
+            physicalWidth, physicalHeight, virtualWidth_, virtualHeight_, presentationMode_);
+        return D3DCommon::MapDrawableToLogical(
+            geometry, surface_.WindowToDrawable(windowX), surface_.WindowToDrawable(windowY),
+            logX, logY);
+    }
+
+    bool DirectX11Renderer::TransformLogicalToWindow(
+        float logX, float logY, float& windowX, float& windowY) const
+    {
+        const auto drawableSize = surface_.GetDrawableSize();
+        const int physicalWidth = drawableSize.width > 0 ? drawableSize.width : width_;
+        const int physicalHeight = drawableSize.height > 0 ? drawableSize.height : height_;
+        const auto geometry = D3DCommon::ComputeD3DPresentationGeometry(
+            physicalWidth, physicalHeight, virtualWidth_, virtualHeight_, presentationMode_);
+        float drawableX = 0.0f;
+        float drawableY = 0.0f;
+        if (!D3DCommon::MapLogicalToDrawable(
+                geometry, logX, logY, drawableX, drawableY))
+            return false;
+        windowX = surface_.DrawableToWindow(drawableX);
+        windowY = surface_.DrawableToWindow(drawableY);
+        return true;
     }
 
     void DirectX11Renderer::ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)
     {
-        if (!backBufferTexture_ || w <= 0 || h <= 0)
+        // plans/plan_dx.md DX-205: this used to be one `return` covering both conditions, which meant a
+        // device with no back buffer left GraphicsDevice's zero-initialised scratch buffer to be
+        // converted and handed to the caller -- a complete, uniformly transparent-black frame,
+        // reported as a successful read. That is the fabricate-rather-than-refuse anti-pattern
+        // REMED-GFX-127 removed from ITextureRenderer::GetData, and it is exactly the failure mode
+        // a readback oracle must never have. An empty rectangle stays a plain no-op (there is
+        // nothing to write and nothing was promised); a missing back buffer is now named.
+        if (w <= 0 || h <= 0)
             return;
+        if (!backBufferTexture_)
+        {
+            throw System::NotSupportedException(
+                "DirectX11Renderer::ReadBackbuffer: this device has no back buffer to read. D3D11 "
+                "creates its swap chain in the constructor, so reaching this means device creation "
+                "did not complete; PresentationParameters::HeadlessEXT is not supported by this "
+                "renderer (see its own documentation).");
+        }
+
+        ResolveBackBufferMsaa();
 
         D3D11_TEXTURE2D_DESC desc{};
         backBufferTexture_->GetDesc(&desc);
@@ -498,9 +932,100 @@ namespace CNA::Internal::Renderers::DirectX11
     // blend factors in XNA -- real blend configuration always arrives via ApplyBlendState().
     void DirectX11Renderer::SetBlendEnabled(bool enabled) { (void)enabled; }
 
+    RendererFormatVerdict DirectX11Renderer::ClassifySurfaceFormatEXT(int surfaceFormat) const
+    {
+        if (D3DCommon::IsXnaUncompressedSurfaceFormat(surfaceFormat) ||
+            D3DCommon::IsXnaBlockCompressedSurfaceFormat(surfaceFormat))
+            return RendererFormatVerdict::Supported;
+        if (D3DCommon::SurfaceFormatToDxgi(surfaceFormat) != DXGI_FORMAT_UNKNOWN)
+            return RendererFormatVerdict::Unsupported;
+        return RendererFormatVerdict::Defer;
+    }
+
+    RendererFormatVerdict DirectX11Renderer::ClassifyRenderTargetFormatEXT(int surfaceFormat) const
+    {
+        const DXGI_FORMAT format = D3DCommon::SurfaceFormatToDxgi(surfaceFormat);
+        if (!D3DCommon::IsXnaRenderTargetSurfaceFormat(surfaceFormat))
+            return format == DXGI_FORMAT_UNKNOWN
+                ? RendererFormatVerdict::Defer
+                : RendererFormatVerdict::Unsupported;
+        if (!device_) return RendererFormatVerdict::Unsupported;
+
+        UINT support = 0;
+        constexpr UINT required = D3D11_FORMAT_SUPPORT_TEXTURE2D |
+                                  D3D11_FORMAT_SUPPORT_RENDER_TARGET |
+                                  D3D11_FORMAT_SUPPORT_SHADER_SAMPLE;
+        if (FAILED(device_->CheckFormatSupport(format, &support)) || (support & required) != required)
+            return RendererFormatVerdict::Unsupported;
+        return RendererFormatVerdict::Supported;
+    }
+
+    RendererFormatVerdict DirectX11Renderer::ClassifyColorTransferFormatEXT(int surfaceFormat) const
+    {
+        if (surfaceFormat == 0) return RendererFormatVerdict::Supported;
+        if (D3DCommon::SurfaceFormatToDxgi(surfaceFormat) != DXGI_FORMAT_UNKNOWN)
+            return RendererFormatVerdict::Unsupported;
+        return RendererFormatVerdict::Defer;
+    }
+
+    bool DirectX11Renderer::IsCompressedTransferFormatEXT(int surfaceFormat) const
+    {
+        return D3DCommon::IsXnaBlockCompressedSurfaceFormat(surfaceFormat);
+    }
+
+    bool DirectX11Renderer::IsCompressedCubeTransferFormatEXT(int surfaceFormat) const
+    {
+        return D3DCommon::IsXnaBlockCompressedSurfaceFormat(surfaceFormat);
+    }
+
+    bool DirectX11Renderer::SupportsCapability(CNA::GraphicsCapability capability) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+
+        switch (capability)
+        {
+        case CNA::GraphicsCapability::ThreeD:
+        case CNA::GraphicsCapability::DepthStencilBuffer:
+        case CNA::GraphicsCapability::MultipleRenderTargets:
+        case CNA::GraphicsCapability::AnisotropicFiltering:
+        case CNA::GraphicsCapability::WireFrame:
+        case CNA::GraphicsCapability::OcclusionQuery:
+        case CNA::GraphicsCapability::CustomEffects:
+        case CNA::GraphicsCapability::Texture3D:
+        case CNA::GraphicsCapability::MultiStreamVertexInput:
+        case CNA::GraphicsCapability::Instancing:
+        case CNA::GraphicsCapability::StencilBuffer:
+        case CNA::GraphicsCapability::AdditiveBlending:
+            return true;
+        case CNA::GraphicsCapability::MultiSampleAntiAliasing:
+            return ClampBackBufferMultiSampleCount(
+                device_.Get(), DXGI_FORMAT_R8G8B8A8_UNORM, 4) > 1;
+        case CNA::GraphicsCapability::CompiledEffects:
+            return SupportsCompiledEffects();
+        case CNA::GraphicsCapability::FloatRenderTargets:
+            return ClassifyRenderTargetFormatEXT(static_cast<int>(SurfaceFormat::Vector4)) ==
+                   RendererFormatVerdict::Supported;
+        case CNA::GraphicsCapability::HalfFloatRenderTargets:
+            return ClassifyRenderTargetFormatEXT(static_cast<int>(SurfaceFormat::HdrBlendable)) ==
+                   RendererFormatVerdict::Supported;
+        case CNA::GraphicsCapability::HalfFloatTextureLinearFiltering:
+            return SupportsHalfFloatTextureLinearFilteringEXT();
+        case CNA::GraphicsCapability::ComputeShaders:
+            return SupportsComputeShadersEXT();
+        case CNA::GraphicsCapability::IndirectDraw:
+            return SupportsIndirectDrawEXT();
+        }
+        return false;
+    }
+
+    bool DirectX11Renderer::LoadsCompressedContentNativelyEXT() const
+    {
+        return true;
+    }
+
     std::unique_ptr<ITextureRenderer> DirectX11Renderer::CreateTexture(const ImageData& data)
     {
-        return std::make_unique<D3D11TextureRenderer>(device_.Get(), context_.Get(), data);
+        return std::make_unique<D3D11TextureRenderer>(this, data);
     }
 
     std::unique_ptr<ITexture3DRenderer> DirectX11Renderer::CreateTexture3D(
@@ -518,6 +1043,14 @@ namespace CNA::Internal::Renderers::DirectX11
     std::unique_ptr<IRenderTargetRenderer> DirectX11Renderer::CreateRenderTarget2D(
         int w, int h, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
+        return CreateRenderTarget2DEXT(
+            w, h, depthFormat, preserveContents, mipMap, multiSampleCount, 0);
+    }
+
+    std::unique_ptr<IRenderTargetRenderer> DirectX11Renderer::CreateRenderTarget2DEXT(
+        int w, int h, int depthFormat, bool preserveContents, bool mipMap,
+        int multiSampleCount, int surfaceFormat)
+    {
         (void)preserveContents; // D3D11_USAGE_DEFAULT + ResolveSubresource-on-unbind already always
                                  // preserves prior contents across binds (no "discard on bind" path
                                  // exists in this renderer) -- matches EasyGL/Vulkan's own honoring
@@ -525,7 +1058,8 @@ namespace CNA::Internal::Renderers::DirectX11
                                  // itself acts on (an explicit Clear() call), not something the
                                  // renderer needs to special-case at creation time.
         return std::make_unique<DirectX11::D3D11RenderTargetRenderer>(
-            this, device_.Get(), context_.Get(), w, h, depthFormat, mipMap, multiSampleCount);
+            this, device_.Get(), context_.Get(), w, h, depthFormat, mipMap, multiSampleCount,
+            surfaceFormat);
     }
 
     void DirectX11Renderer::FlushPendingMRTResolveEXT()
@@ -591,6 +1125,14 @@ namespace CNA::Internal::Renderers::DirectX11
     std::unique_ptr<IRenderTargetCubeRenderer> DirectX11Renderer::CreateRenderTargetCube(
         int size, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
+        return CreateRenderTargetCubeEXT(
+            size, depthFormat, preserveContents, mipMap, multiSampleCount, 0);
+    }
+
+    std::unique_ptr<IRenderTargetCubeRenderer> DirectX11Renderer::CreateRenderTargetCubeEXT(
+        int size, int depthFormat, bool preserveContents, bool mipMap,
+        int multiSampleCount, int surfaceFormat)
+    {
         // DX-152: multiSampleCount is now honored -- device-queried and clamped to 0 (off) by
         // D3D11RenderTargetCubeRenderer's own ClampMultiSampleCount() when unsupported.
         // REMED-GFX-136: preserveContents is consumed by being deliberately unused, for the same
@@ -600,7 +1142,8 @@ namespace CNA::Internal::Renderers::DirectX11
         // one.
         (void) preserveContents;
         return std::make_unique<DirectX11::D3D11RenderTargetCubeRenderer>(
-            this, device_.Get(), context_.Get(), size, depthFormat, mipMap, multiSampleCount);
+            this, device_.Get(), context_.Get(), size, depthFormat, mipMap, multiSampleCount,
+            surfaceFormat);
     }
 
     void DirectX11Renderer::SetRenderTargets(
@@ -684,8 +1227,50 @@ namespace CNA::Internal::Renderers::DirectX11
 
     void DirectX11Renderer::ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy)
     {
-        if (slot < 0 || slot >= D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT) return;
-        auto sampler = samplerCache_.GetOrCreate(device_.Get(), filter, addressU, addressV, maxAnisotropy);
+        if (slot < 0 || slot >= kMaxSamplerSlotsEXT) return;
+        samplerFilter_[slot] = filter;
+        samplerAddressU_[slot] = addressU;
+        samplerAddressV_[slot] = addressV;
+        samplerMaxAnisotropy_[slot] = maxAnisotropy;
+        // plans/plan_dx.md DX-216: XNA applies SamplerState as one object, so ApplySamplerState is also the
+        // point at which the W axis and the mip controls revert to their defaults unless the caller
+        // sets them again -- GraphicsDevice calls ApplySamplerAddressW/ApplySamplerMipState right
+        // after this for a state that carries non-default values. Resetting them here is what makes
+        // a slot's sampler state a state rather than an accumulation of every value ever set on it.
+        samplerAddressW_[slot] = addressV;
+        samplerMaxMipLevel_[slot] = 0;
+        samplerLodBias_[slot] = 0.0f;
+        RebindSamplerEXT(slot);
+    }
+
+    void DirectX11Renderer::ApplySamplerMipState(int slot, int maxMipLevel, float lodBias)
+    {
+        // DX-216: SamplerState.MaxMipLevel and MipMapLevelOfDetailBias. Tracked per slot exactly as
+        // the fields above, and applied by rebuilding this slot's sampler -- D3D11 bakes all of it
+        // into one immutable ID3D11SamplerState, so there is nothing finer-grained to set.
+        if (slot < 0 || slot >= kMaxSamplerSlotsEXT) return;
+        samplerMaxMipLevel_[slot] = maxMipLevel;
+        samplerLodBias_[slot] = lodBias;
+        RebindSamplerEXT(slot);
+    }
+
+    void DirectX11Renderer::ApplySamplerAddressW(int slot, int addressW)
+    {
+        // DX-216: the third addressing axis, which decides how a Texture3D sampled by a
+        // ShaderEffect wraps on W. Until this override existed the cache mirrored AddressV, which
+        // the interface documentation explicitly calls out as the thing a renderer must not do.
+        if (slot < 0 || slot >= kMaxSamplerSlotsEXT) return;
+        samplerAddressW_[slot] = addressW;
+        RebindSamplerEXT(slot);
+    }
+
+    void DirectX11Renderer::RebindSamplerEXT(int slot)
+    {
+        if (slot < 0 || slot >= kMaxSamplerSlotsEXT || !device_ || !context_) return;
+        auto sampler = samplerCache_.GetOrCreate(
+            device_.Get(), samplerFilter_[slot], samplerAddressU_[slot], samplerAddressV_[slot],
+            samplerMaxAnisotropy_[slot], samplerAddressW_[slot], samplerMaxMipLevel_[slot],
+            samplerLodBias_[slot]);
         ID3D11SamplerState* raw = sampler.Get();
         context_->PSSetSamplers(static_cast<UINT>(slot), 1, &raw);
     }
@@ -766,8 +1351,31 @@ namespace CNA::Internal::Renderers::DirectX11
                                                     bool scissorTestEnable,
                                                     float depthBias, float slopeScaleDepthBias)
     {
+        rsCullMode_ = cullMode;
+        rsFillMode_ = fillMode;
+        rsScissorTestEnable_ = scissorTestEnable;
+        rsDepthBias_ = depthBias;
+        rsSlopeScaleDepthBias_ = slopeScaleDepthBias;
+        rasterizerStateApplied_ = true;
+        RebindRasterizerState();
+    }
+
+    void DirectX11Renderer::RebindRasterizerState()
+    {
+        if (!rasterizerStateApplied_)
+            return;
+
+        DXGI_FORMAT depthFormat = DXGI_FORMAT_UNKNOWN;
+        if (currentDSV_ != nullptr)
+        {
+            D3D11_DEPTH_STENCIL_VIEW_DESC desc{};
+            currentDSV_->GetDesc(&desc);
+            depthFormat = desc.Format;
+        }
+        const int nativeDepthBias = D3DCommon::XnaDepthBiasToD3D(rsDepthBias_, depthFormat);
         auto state = rasterizerStateCache_.GetOrCreate(
-            device_.Get(), cullMode, fillMode, scissorTestEnable, depthBias, slopeScaleDepthBias);
+            device_.Get(), rsCullMode_, rsFillMode_, rsScissorTestEnable_,
+            nativeDepthBias, rsSlopeScaleDepthBias_);
         context_->RSSetState(state.Get());
     }
 
@@ -818,6 +1426,37 @@ namespace CNA::Internal::Renderers::DirectX11
         context_->RSSetViewports(1, &vp);
     }
 
+    void DirectX11Renderer::GetSpriteViewportSizeEXT(float& width, float& height) const
+    {
+        UINT count = 1;
+        D3D11_VIEWPORT viewport{};
+        context_->RSGetViewports(&count, &viewport);
+        width = viewport.Width;
+        height = viewport.Height;
+
+        const bool backBufferBound = currentRTVCount_ == 1 &&
+            currentColorRTVs_[0] == GetBackBufferDrawRtv();
+        if (!backBufferBound)
+            return;
+
+        const auto drawableSize = surface_.GetDrawableSize();
+        const int physicalWidth = drawableSize.width > 0 ? drawableSize.width : width_;
+        const int physicalHeight = drawableSize.height > 0 ? drawableSize.height : height_;
+        const auto geometry = D3DCommon::ComputeD3DPresentationGeometry(
+            physicalWidth, physicalHeight, virtualWidth_, virtualHeight_, presentationMode_);
+        const int logicalWidth = static_cast<int>(std::lround(geometry.logicalWidth));
+        const int logicalHeight = static_cast<int>(std::lround(geometry.logicalHeight));
+        const int presentationWidth = static_cast<int>(std::lround(geometry.width));
+        const int presentationHeight = static_cast<int>(std::lround(geometry.height));
+        if (presentationWidth > 0 && presentationHeight > 0)
+        {
+            width = viewport.Width * static_cast<float>(logicalWidth) /
+                static_cast<float>(presentationWidth);
+            height = viewport.Height * static_cast<float>(logicalHeight) /
+                static_cast<float>(presentationHeight);
+        }
+    }
+
     void DirectX11Renderer::TrackCurrentRenderTargetEXT(
         ID3D11RenderTargetView* const* rtvs, int count, ID3D11DepthStencilView* dsv)
     {
@@ -825,11 +1464,22 @@ namespace CNA::Internal::Renderers::DirectX11
         for (int i = 0; i < currentRTVCount_; ++i) currentColorRTVs_[i] = rtvs[i];
         for (int i = currentRTVCount_; i < D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT; ++i) currentColorRTVs_[i] = nullptr;
         currentDSV_ = dsv;
+        RebindRasterizerState();
+    }
+
+    bool DirectX11Renderer::IsRenderTargetActiveEXT(
+        const D3D11RenderTargetRenderer* target) const noexcept
+    {
+        if (target == nullptr) return false;
+        if (currentCustomRT_ == target) return true;
+        for (int i = 0; i < currentMRTCount_; ++i)
+            if (currentMRTTargets_[i] == target) return true;
+        return false;
     }
 
     void DirectX11Renderer::RestoreBackBufferRenderTargetEXT()
     {
-        ID3D11RenderTargetView* rtv = backBufferRTV_.Get();
+        ID3D11RenderTargetView* rtv = GetBackBufferDrawRtv();
         context_->OMSetRenderTargets(1, &rtv, depthStencilView_.Get());
 
         D3D11_VIEWPORT vp{};
@@ -841,10 +1491,50 @@ namespace CNA::Internal::Renderers::DirectX11
         vp.MaxDepth = 1.0f;
         context_->RSSetViewports(1, &vp);
 
-        currentColorRTVs_[0] = backBufferRTV_.Get();
+        currentColorRTVs_[0] = rtv;
         currentRTVCount_ = 1;
         for (int i = 1; i < D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT; ++i) currentColorRTVs_[i] = nullptr;
         currentDSV_ = depthStencilView_.Get();
+        RebindRasterizerState();
+    }
+
+    void DirectX11Renderer::NotifyRenderTargetDestroyedEXT(
+        D3D11RenderTargetRenderer* target) noexcept
+    {
+        bool wasBound = currentCustomRT_ == target;
+        if (wasBound) currentCustomRT_ = nullptr;
+        for (int i = 0; i < currentMRTCount_; ++i)
+        {
+            if (currentMRTTargets_[i] == target)
+            {
+                currentMRTTargets_[i] = nullptr;
+                wasBound = true;
+            }
+        }
+        if (wasBound)
+        {
+            try { RestoreBackBufferRenderTargetEXT(); }
+            catch (...)
+            {
+                currentRTVCount_ = 0;
+                for (auto& rtv : currentColorRTVs_) rtv = nullptr;
+                currentDSV_ = nullptr;
+            }
+        }
+    }
+
+    void DirectX11Renderer::NotifyRenderTargetCubeDestroyedEXT(
+        D3D11RenderTargetCubeRenderer* target) noexcept
+    {
+        if (currentCubeRT_ != target) return;
+        currentCubeRT_ = nullptr;
+        try { RestoreBackBufferRenderTargetEXT(); }
+        catch (...)
+        {
+            currentRTVCount_ = 0;
+            for (auto& rtv : currentColorRTVs_) rtv = nullptr;
+            currentDSV_ = nullptr;
+        }
     }
 
     std::unique_ptr<ISpriteBatchRenderer> DirectX11Renderer::CreateSpriteBatch()
@@ -854,17 +1544,17 @@ namespace CNA::Internal::Renderers::DirectX11
 
     std::unique_ptr<IVertexBufferRenderer> DirectX11Renderer::CreateVertexBuffer(int vertex_capacity)
     {
-        return std::make_unique<D3D11VertexBufferRenderer>(device_.Get(), context_.Get(), vertex_capacity);
+        return std::make_unique<D3D11VertexBufferRenderer>(this, vertex_capacity);
     }
 
     std::unique_ptr<IIndexBufferRenderer> DirectX11Renderer::CreateIndexBuffer16(int index_capacity)
     {
-        return std::make_unique<D3D11IndexBufferRenderer>(device_.Get(), context_.Get(), index_capacity, false);
+        return std::make_unique<D3D11IndexBufferRenderer>(this, index_capacity, false);
     }
 
     std::unique_ptr<IIndexBufferRenderer> DirectX11Renderer::CreateIndexBuffer32(int index_capacity)
     {
-        return std::make_unique<D3D11IndexBufferRenderer>(device_.Get(), context_.Get(), index_capacity, true);
+        return std::make_unique<D3D11IndexBufferRenderer>(this, index_capacity, true);
     }
 
     ID3D11Buffer* DirectX11Renderer::GetOrCreatePerDrawConstantBufferEXT()
@@ -910,6 +1600,30 @@ namespace CNA::Internal::Renderers::DirectX11
         context_->Unmap(buffer, 0);
     }
 
+    Matrix DirectX11Renderer::ApplyXnaPixelCenterEXT(const Matrix& transform) const
+    {
+        D3D11_VIEWPORT viewport{};
+        UINT viewportCount = 1;
+        context_->RSGetViewports(&viewportCount, &viewport);
+
+        bool multisampledDestination = false;
+        if (currentRTVCount_ > 0 && currentColorRTVs_[0] != nullptr)
+        {
+            ComPtr<ID3D11Resource> resource;
+            currentColorRTVs_[0]->GetResource(resource.GetAddressOf());
+            ComPtr<ID3D11Texture2D> texture;
+            if (resource && SUCCEEDED(resource.As(&texture)))
+            {
+                D3D11_TEXTURE2D_DESC desc{};
+                texture->GetDesc(&desc);
+                multisampledDestination = desc.SampleDesc.Count > 1;
+            }
+        }
+
+        return D3DCommon::ApplyXnaPixelCenter(
+            transform, viewport.Width, viewport.Height, multisampledDestination);
+    }
+
     void DirectX11Renderer::DrawColoredPrimitives(
         const IVertexBufferRenderer& vb, const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount)
@@ -933,7 +1647,8 @@ namespace CNA::Internal::Renderers::DirectX11
         if (!vs || !ps)
             throw std::runtime_error("DrawColoredPrimitives: failed to create colored3d shader objects");
 
-        auto layout = inputLayoutCache_.GetOrCreate(device_.Get(), variant, stride);
+        auto layout = inputLayoutCache_.GetOrCreate(
+            device_.Get(), variant, stride, d3dVb.GetDeclarationEXT().GetElements());
         if (!layout)
             throw std::runtime_error("DrawColoredPrimitives: failed to create colored3d input layout");
 
@@ -941,7 +1656,7 @@ namespace CNA::Internal::Renderers::DirectX11
         // legacy path (diffuseColor=white, vertexColorEnabled=true), matching every other renderer's
         // own DrawColoredPrimitives behavior (Task 364).
         D3DCommon::D3DPerDrawConstants perDraw{};
-        const Matrix wvp = world * view * projection;
+        const Matrix wvp = ApplyXnaPixelCenterEXT(world * view * projection);
         wvp.ToColumnMajor(perDraw.Mvp); // row-major flat layout, matches HLSL row_major cbuffer field
         perDraw.DiffuseColor[0] = perDraw.DiffuseColor[1] = perDraw.DiffuseColor[2] = perDraw.DiffuseColor[3] = 1.0f;
         perDraw.VertexColorEnabled = 1.0f;
@@ -995,12 +1710,13 @@ namespace CNA::Internal::Renderers::DirectX11
         if (!vs || !ps)
             throw std::runtime_error("DrawIndexedColoredPrimitives: failed to create colored3d shader objects");
 
-        auto layout = inputLayoutCache_.GetOrCreate(device_.Get(), variant, stride);
+        auto layout = inputLayoutCache_.GetOrCreate(
+            device_.Get(), variant, stride, d3dVb.GetDeclarationEXT().GetElements());
         if (!layout)
             throw std::runtime_error("DrawIndexedColoredPrimitives: failed to create colored3d input layout");
 
         D3DCommon::D3DPerDrawConstants perDraw{};
-        const Matrix wvp = world * view * projection;
+        const Matrix wvp = ApplyXnaPixelCenterEXT(world * view * projection);
         wvp.ToColumnMajor(perDraw.Mvp);
         perDraw.DiffuseColor[0] = perDraw.DiffuseColor[1] = perDraw.DiffuseColor[2] = perDraw.DiffuseColor[3] = 1.0f;
         perDraw.VertexColorEnabled = 1.0f;
@@ -1238,56 +1954,102 @@ namespace CNA::Internal::Renderers::DirectX11
         return defaultFlatNormalSrv_.Get();
     }
 
-    ID3D11InputLayout* DirectX11Renderer::GetOrCreateInstancedInputLayoutEXT(UINT instanceStepRate)
-    {
-        auto cached = instancedInputLayouts_.find(instanceStepRate);
-        if (cached != instancedInputLayouts_.end())
-            return cached->second.Get();
-
-        // REMED-GFX-123: InstanceDataStepRate carries the public
-        // VertexBufferBinding.InstanceFrequency -- "advance to the next per-instance record once
-        // every N drawn instances" -- instead of the hardcoded 1 this layout used to bake in.
-        const D3D11_INPUT_ELEMENT_DESC elements[] = {
-            { "POSITION",      0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 0,  D3D11_INPUT_PER_VERTEX_DATA,   0 },
-            { "INSTANCEWORLD", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 0,  D3D11_INPUT_PER_INSTANCE_DATA, instanceStepRate },
-            { "INSTANCEWORLD", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 16, D3D11_INPUT_PER_INSTANCE_DATA, instanceStepRate },
-            { "INSTANCEWORLD", 2, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 32, D3D11_INPUT_PER_INSTANCE_DATA, instanceStepRate },
-            { "INSTANCEWORLD", 3, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 48, D3D11_INPUT_PER_INSTANCE_DATA, instanceStepRate },
-        };
-
-        const uint8_t* vsBytes = nullptr;
-        std::size_t vsSize = 0;
-        D3DCommon::GetVertexShaderBytecode(D3DCommon::D3DShaderVariant::Instanced3d, vsBytes, vsSize);
-        if (vsBytes == nullptr || vsSize == 0)
-            return nullptr;
-
-        ComPtr<ID3D11InputLayout> layout;
-        const HRESULT hr = device_->CreateInputLayout(
-            elements, ARRAYSIZE(elements), vsBytes, vsSize, layout.ReleaseAndGetAddressOf());
-        if (FAILED(hr) || !layout)
-            return nullptr;
-
-        auto inserted = instancedInputLayouts_.emplace(instanceStepRate, std::move(layout));
-        return inserted.first->second.Get();
-    }
-
     void DirectX11Renderer::DrawPrimitivesExImpl(
         const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
-        // REMED-GFX-DECL-GUARD: before any ID3D11InputLayout is created and before any draw is
-        // issued. This renderer selects that layout from the shared D3DCommon stride table
-        // (REMED-GFX-217), so a declaration the table's entry cannot represent is refused rather
-        // than rendered from the wrong bytes. An out-of-table stride is left to
-        // InputElementsForStride's own established rejection.
-        RequireFaithfulDeclarationEXT(vb, ib != nullptr ? "ordinary-indexed" : "ordinary-nonindexed");
         // DX-62/DX-63/DX-64/DX-65/DX-66/DX-67: real effect-aware variant dispatch.
         const auto& d3dVb = static_cast<const D3D11VertexBufferRenderer&>(vb);
-        const std::size_t stride = d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
+        const std::size_t fallbackStride =
+            d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
+        const bool multiStream = HasMultipleVertexStreams(params);
+        std::vector<Microsoft::Xna::Framework::Graphics::VertexElement> combinedElements;
+        std::vector<D3DCommon::D3DVertexInputElement> inputElements;
+        if (multiStream)
+            BuildVertexInputLayout(params, false, combinedElements, inputElements);
+        const std::size_t stride = CombinedVertexStrideOr(params, fallbackStride);
+        const auto& vertexElements = multiStream
+            ? combinedElements : d3dVb.GetDeclarationEXT().GetElements();
 
-        // A PBR MASK draw keeps the PBR shader and evaluates alpha coverage there. The standalone
-        // AlphaTestEffect path only accepts stride 20/24 and cannot carry a tangent-space basis.
+#if defined(CNA_DIRECTX11_COMPILED_EFFECTS)
+        if (params.compiledEffectRuntime != nullptr)
+        {
+            BindCompiledEffectForDrawEXT(
+                d3dVb, params, *params.compiledEffectRuntime);
+            BindVertexStreams(context_.Get(), d3dVb, params);
+            if (ib != nullptr)
+            {
+                const auto& d3dIb = static_cast<const D3D11IndexBufferRenderer&>(*ib);
+                context_->IASetIndexBuffer(d3dIb.GetBufferEXT(), d3dIb.GetFormatEXT(), 0);
+            }
+            context_->IASetPrimitiveTopology(ToD3D11Topology(primitive));
+            const UINT elementCount = static_cast<UINT>(
+                VertexCountForPrimitives(primitive, primitiveCount));
+            if (ib != nullptr)
+                context_->DrawIndexed(elementCount, static_cast<UINT>(params.startIndex),
+                                      static_cast<INT>(params.baseVertex));
+            else
+                context_->Draw(elementCount, static_cast<UINT>(params.vertexStart));
+            return;
+        }
+#endif
+
+        if (params.customEffectRequested)
+        {
+            auto* customEffect = dynamic_cast<D3D11EffectRenderer*>(params.customEffectRenderer);
+            if (customEffect == nullptr || !customEffect->IsValid())
+                throw System::NotSupportedException(
+                    "DirectX11 custom 3D drawing requires a valid D3D11 ShaderEffect.");
+
+            float worldValues[16];
+            float viewValues[16];
+            float projectionValues[16];
+            world.ToColumnMajor(worldValues);
+            view.ToColumnMajor(viewValues);
+            projection.ToColumnMajor(projectionValues);
+            customEffect->SetUniformMat4("World", worldValues);
+            customEffect->SetUniformMat4("View", viewValues);
+            customEffect->SetUniformMat4("Projection", projectionValues);
+            if (!customEffect->BindForDrawEXT(vertexElements, inputElements))
+                throw System::NotSupportedException(
+                    "DirectX11 could not match the ShaderEffect vertex signature to the bound "
+                    "VertexDeclaration.");
+
+            BindVertexStreams(context_.Get(), d3dVb, params);
+            if (ib != nullptr)
+            {
+                const auto& d3dIb = static_cast<const D3D11IndexBufferRenderer&>(*ib);
+                context_->IASetIndexBuffer(d3dIb.GetBufferEXT(), d3dIb.GetFormatEXT(), 0);
+            }
+            context_->IASetPrimitiveTopology(ToD3D11Topology(primitive));
+            const UINT elementCount = static_cast<UINT>(
+                VertexCountForPrimitives(primitive, primitiveCount));
+            if (ib != nullptr)
+                context_->DrawIndexed(elementCount, static_cast<UINT>(params.startIndex),
+                                      static_cast<INT>(params.baseVertex));
+            else
+                context_->Draw(elementCount, static_cast<UINT>(params.vertexStart));
+            return;
+        }
+
+        using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+        using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+        const bool hasDeclaration = !vertexElements.empty();
+        const auto hasElement = [&](VertexElementUsage usage, int usageIndex = 0)
+        {
+            return D3DCommon::DeclarationHasElement(vertexElements, usage, usageIndex);
+        };
+        const bool hasNormal = hasDeclaration ? hasElement(VertexElementUsage::Normal)
+                                              : stride == 32;
+        const bool hasColor = hasDeclaration ? hasElement(VertexElementUsage::Color)
+                                             : stride == 16 || stride == 24;
+        const bool hasTexCoord = hasDeclaration ? hasElement(VertexElementUsage::TextureCoordinate)
+                                                : stride == 20 || stride == 24 || stride == 32;
+        const bool hasTexCoord1 = hasDeclaration &&
+                                  hasElement(VertexElementUsage::TextureCoordinate, 1);
+
+        // A PBR MASK draw keeps the PBR shader and evaluates alpha coverage there.
         const bool needsPbr         = params.pbr;
         const bool needsAlphaTest   = !needsPbr &&
                                       (params.alphaTest[3] < 0.0f || params.alphaTest[2] < 0.0f);
@@ -1300,40 +2062,47 @@ namespace CNA::Internal::Renderers::DirectX11
         // skinned3d's non-PBR shader).
         const bool needsSkinned     = params.skinned && !needsPbr
                                      && !needsAlphaTest && !needsDualTex && !needsEnvMap;
-        // stride==32 always uses lit_textured3d (BasicEffect's VertexPositionNormalTexture path,
-        // lit or not -- the shader itself branches on LightingEnabled), unless a higher-priority
-        // effect claims this draw first. Mirrors VulkanRenderer::DrawPrimitivesEx exactly.
-        const bool needsLitTextured = (stride == 32) && !needsAlphaTest && !needsDualTex
+        // A declared normal selects BasicEffect's lit family regardless of the record's byte size.
+        // The stride-only rule remains solely for internal buffers that carry no declaration.
+        const bool needsLitTextured = hasNormal && !needsAlphaTest && !needsDualTex
                                      && !needsEnvMap && !needsPbr && !needsSkinned;
 
-        // DX-136: alpha_test3d.vert.hlsl (stride 20, Position+UV) and its sibling
-        // alpha_test_colored3d.vert.hlsl (stride 24, Position+Color+UV -- gives
-        // AlphaTestEffect.VertexColorEnabled a real vertex-color attribute) are the only two
-        // strides this effect supports.
-        if (needsAlphaTest && stride != 20 && stride != 24)
+        if (needsAlphaTest && params.texture0 != nullptr && !hasTexCoord)
             throw std::runtime_error(
-                "DirectX11Renderer::DrawPrimitivesEx: AlphaTestEffect (alpha_test3d) only "
-                "supports stride 20 (VertexPositionTexture) or 24 "
-                "(VertexPositionColorTexture, plans/plan_dx.md DX-136)");
-        // DX-65: dual_texture3d.vert.hlsl's VSInput is Position+UV only (20 bytes) -- the 24-byte
-        // dual_texture_colored3d variant was deliberately not ported (DX-13-hlsl's own row notes).
-        if (needsDualTex && stride != 20)
+                "DirectX11Renderer::DrawPrimitivesEx: AlphaTestEffect requires TEXCOORD0 when "
+                "a real texture is bound");
+        if (needsDualTex && !hasTexCoord)
             throw std::runtime_error(
-                "DirectX11Renderer::DrawPrimitivesEx: DualTextureEffect (dual_texture3d) only "
-                "supports stride 20 (VertexPositionTexture); dual_texture_colored3d was not ported "
-                "(plans/plan_dx.md DX-13-hlsl)");
+                "DirectX11Renderer::DrawPrimitivesEx: DualTextureEffect requires TEXCOORD0");
         // DX-66: env_map3d.vert.hlsl's VSInput is Position+Normal+UV (32 bytes).
         if (needsEnvMap && stride != 32)
             throw std::runtime_error(
                 "DirectX11Renderer::DrawPrimitivesEx: EnvironmentMapEffect (env_map3d) requires "
                 "stride 32 (VertexPositionNormalTexture)");
-        // DX-67: skinned3d.vert.hlsl's VSInput is Position+Normal+UV+BoneWeights+BoneIndices (52
-        // bytes); CNB-67's own stride-56 sibling (skinned_colored3d) appends a per-vertex Color.
-        if (needsSkinned && stride != 52 && stride != 56)
+        // A declared skinned stream is identified by semantics, not by one packed record size:
+        // XNA content may legally spell BLENDINDICES as either Byte4 (stride 52) or Vector4
+        // (stride 64). Keep the legacy stride rule only for declaration-less internal buffers.
+        bool usesFloatBoneIndices = false;
+        bool hasSupportedBoneIndices = false;
+        for (const auto& element : vertexElements)
+        {
+            if (element.getVertexElementUsageProperty() != VertexElementUsage::BlendIndices
+                || element.getUsageIndexProperty() != 0)
+                continue;
+
+            const auto format = element.getVertexElementFormatProperty();
+            usesFloatBoneIndices = format == VertexElementFormat::Vector4;
+            hasSupportedBoneIndices = usesFloatBoneIndices || format == VertexElementFormat::Byte4;
+            break;
+        }
+        const bool hasSkinnedElements = hasElement(VertexElementUsage::Position) && hasNormal && hasTexCoord
+            && hasElement(VertexElementUsage::BlendWeight)
+            && hasSupportedBoneIndices;
+        if (needsSkinned && ((hasDeclaration && !hasSkinnedElements)
+                            || (!hasDeclaration && stride != 52 && stride != 56)))
             throw std::runtime_error(
-                "DirectX11Renderer::DrawPrimitivesEx: SkinnedEffect (skinned3d) requires stride "
-                "52 (VertexPositionNormalTextureSkinned) or 56 (skinned + per-vertex Color, "
-                "plans/plan_cnj.md CNB-67)");
+                "DirectX11Renderer::DrawPrimitivesEx: SkinnedEffect requires POSITION0, NORMAL0, "
+                "TEXCOORD0, BLENDWEIGHT0 and Byte4 or Vector4 BLENDINDICES0");
         // plans/plan_cnj.md CNB-58 follow-up: pbr3d.vert.hlsl (unskinned) is stride 48
         // (VertexPositionNormalTangentTexture); pbr_skinned3d.vert.hlsl (SkinnedPbrEffect) is
         // stride 68 (VertexPositionNormalTangentTextureSkinned).
@@ -1349,10 +2118,17 @@ namespace CNA::Internal::Renderers::DirectX11
 
         D3DCommon::D3DShaderVariant variant;
         if (needsAlphaTest)
-            variant = (stride == 24) ? D3DCommon::D3DShaderVariant::AlphaTestColored3d
-                                      : D3DCommon::D3DShaderVariant::AlphaTest3d;
+            variant = hasColor
+                ? (hasTexCoord ? D3DCommon::D3DShaderVariant::AlphaTestColored3d
+                               : D3DCommon::D3DShaderVariant::AlphaTestUntexturedColored3d)
+                : (hasTexCoord ? D3DCommon::D3DShaderVariant::AlphaTest3d
+                               : D3DCommon::D3DShaderVariant::AlphaTestUntextured3d);
         else if (needsDualTex)
-            variant = D3DCommon::D3DShaderVariant::DualTexture3d;
+            variant = hasColor
+                ? (hasTexCoord1 ? D3DCommon::D3DShaderVariant::DualTextureColoredDualUv3d
+                                : D3DCommon::D3DShaderVariant::DualTextureColored3d)
+                : (hasTexCoord1 ? D3DCommon::D3DShaderVariant::DualTextureDualUv3d
+                                : D3DCommon::D3DShaderVariant::DualTexture3d);
         else if (needsEnvMap)
             variant = D3DCommon::D3DShaderVariant::EnvMap3d;
         else if (needsPbr)
@@ -1367,34 +2143,51 @@ namespace CNA::Internal::Renderers::DirectX11
                 : ((stride == 60) ? D3DCommon::D3DShaderVariant::Pbr3dDualUv
                                   : D3DCommon::D3DShaderVariant::Pbr3d);
         else if (needsSkinned)
+        {
             // plans/plan_graphics.md Phase 80 (Task 1106): real XNA renders SkinnedEffect's lit path
             // per-vertex by default (PreferPerPixelLighting == false), not per-pixel. CNB-67:
-            // stride 56 (per-vertex Color present) routes to the *Colored siblings instead,
-            // mirroring AlphaTest3d/AlphaTestColored3d's own stride-selected-variant precedent.
-            variant = (stride == 56)
-                    ? ((params.lightingEnabled && !params.preferPerPixelLighting)
-                        ? D3DCommon::D3DShaderVariant::Skinned3dVertexLitColored
-                        : D3DCommon::D3DShaderVariant::Skinned3dColored)
-                    : ((params.lightingEnabled && !params.preferPerPixelLighting)
-                        ? D3DCommon::D3DShaderVariant::Skinned3dVertexLit
-                        : D3DCommon::D3DShaderVariant::Skinned3d);
+            // A COLOR0 declaration routes to the *Colored sibling independently of record stride.
+            // Declaration-less legacy buffers retain the canonical stride-56 fallback.
+            const bool colored = hasDeclaration ? hasColor : stride == 56;
+            const bool vertexLit = params.lightingEnabled && !params.preferPerPixelLighting;
+            if (usesFloatBoneIndices)
+                variant = colored
+                    ? (vertexLit ? D3DCommon::D3DShaderVariant::Skinned3dVertexLitColoredFloatIndices
+                                 : D3DCommon::D3DShaderVariant::Skinned3dColoredFloatIndices)
+                    : (vertexLit ? D3DCommon::D3DShaderVariant::Skinned3dVertexLitFloatIndices
+                                 : D3DCommon::D3DShaderVariant::Skinned3dFloatIndices);
+            else
+                variant = colored
+                    ? (vertexLit ? D3DCommon::D3DShaderVariant::Skinned3dVertexLitColored
+                                 : D3DCommon::D3DShaderVariant::Skinned3dColored)
+                    : (vertexLit ? D3DCommon::D3DShaderVariant::Skinned3dVertexLit
+                                 : D3DCommon::D3DShaderVariant::Skinned3d);
+        }
         else if (needsLitTextured)
             // Same real-default fix for BasicEffect's lit-textured bucket.
-            variant = (params.lightingEnabled && !params.preferPerPixelLighting)
-                    ? D3DCommon::D3DShaderVariant::LitTextured3dVertexLit
-                    : D3DCommon::D3DShaderVariant::LitTextured3d;
+            variant = hasTexCoord
+                ? (hasColor
+                    ? ((params.lightingEnabled && !params.preferPerPixelLighting)
+                        ? D3DCommon::D3DShaderVariant::LitTextured3dVertexLitColored
+                        : D3DCommon::D3DShaderVariant::LitTextured3dColored)
+                    : ((params.lightingEnabled && !params.preferPerPixelLighting)
+                        ? D3DCommon::D3DShaderVariant::LitTextured3dVertexLit
+                        : D3DCommon::D3DShaderVariant::LitTextured3d))
+                : ((params.lightingEnabled && !params.preferPerPixelLighting)
+                    ? D3DCommon::D3DShaderVariant::LitUntextured3dVertexLit
+                    : D3DCommon::D3DShaderVariant::LitUntextured3d);
         else
         {
-            switch (stride)
-            {
-            case 16: variant = D3DCommon::D3DShaderVariant::Colored3d; break;
-            case 20: variant = D3DCommon::D3DShaderVariant::Textured3d; break;
-            case 24: variant = D3DCommon::D3DShaderVariant::ColoredTextured3d; break;
-            default:
+            if (hasTexCoord && hasColor)
+                variant = D3DCommon::D3DShaderVariant::ColoredTextured3d;
+            else if (hasTexCoord)
+                variant = D3DCommon::D3DShaderVariant::Textured3d;
+            else if (hasColor || hasDeclaration)
+                variant = D3DCommon::D3DShaderVariant::Colored3d;
+            else
                 throw std::runtime_error(
                     "DirectX11Renderer::DrawPrimitivesEx: unsupported vertex stride " +
                     std::to_string(stride) + " for the colored/textured bundle (plans/plan_dx.md DX-62)");
-            }
         }
 
         auto vs = D3DCommon::CreateVertexShaderForVariant(device_.Get(), variant);
@@ -1402,11 +2195,12 @@ namespace CNA::Internal::Renderers::DirectX11
         if (!vs || !ps)
             throw std::runtime_error("DrawPrimitivesEx: failed to create shader objects for the selected variant");
 
-        auto layout = inputLayoutCache_.GetOrCreate(device_.Get(), variant, stride);
+        auto layout = inputLayoutCache_.GetOrCreate(
+            device_.Get(), variant, stride, vertexElements, inputElements);
         if (!layout)
             throw std::runtime_error("DrawPrimitivesEx: failed to create input layout for the selected variant/stride");
 
-        const Matrix wvp = world * view * projection;
+        const Matrix wvp = ApplyXnaPixelCenterEXT(world * view * projection);
 
         // DX-65/DX-66: dual_texture3d needs t0+t1 (both Texture2D); env_map3d needs t0 (Texture2D)
         // + t1 (TextureCube). PBR needs seven slots: the five core maps plus KHR_materials_specular
@@ -1418,8 +2212,10 @@ namespace CNA::Internal::Renderers::DirectX11
             nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
         if (needsDualTex)
         {
-            srvs[0] = GetSrvForTextureEXT(params.texture0);
-            srvs[1] = GetSrvForTextureEXT(params.texture1);
+            srvs[0] = params.texture0 ? GetSrvForTextureEXT(params.texture0)
+                                      : GetOrCreateDefaultWhiteSrvEXT();
+            srvs[1] = params.texture1 ? GetSrvForTextureEXT(params.texture1)
+                                      : GetOrCreateDefaultWhiteSrvEXT();
         }
         else if (needsEnvMap)
         {
@@ -1458,7 +2254,8 @@ namespace CNA::Internal::Renderers::DirectX11
         }
         else
         {
-            srvs[0] = GetSrvForTextureEXT(params.texture0);
+            srvs[0] = params.texture0 ? GetSrvForTextureEXT(params.texture0)
+                                      : GetOrCreateDefaultWhiteSrvEXT();
         }
 
         // 3 contiguous slots (b0/b1/b2) always fully rebound below (unused slots explicitly null)
@@ -1897,10 +2694,7 @@ namespace CNA::Internal::Renderers::DirectX11
             cbs[1] = fogCB;
         }
 
-        ID3D11Buffer* vbRaw = d3dVb.GetBufferEXT();
-        const UINT strideU = static_cast<UINT>(stride);
-        const UINT offset = 0;
-        context_->IASetVertexBuffers(0, 1, &vbRaw, &strideU, &offset);
+        BindVertexStreams(context_.Get(), d3dVb, params);
         if (ib != nullptr)
         {
             const auto& d3dIb = static_cast<const D3D11IndexBufferRenderer&>(*ib);
@@ -1969,36 +2763,42 @@ namespace CNA::Internal::Renderers::DirectX11
             DrawIndexedPrimitivesEx(vb, ib, world, view, projection, primitive, primitiveCount, params);
             return;
         }
-        // REMED-GFX-202: this renderer binds exactly one stream of each rate (REMED-GFX-207 tracks
-        // widening it), so a wider array is rejected rather than truncated.
-        RejectUnsupportedStreamCombination(params, "The D3D11 renderer");
-        // REMED-GFX-DECL-GUARD: the geometry stream's declaration, same stride table.
-        RequireFaithfulDeclarationEXT(vb, "instanced");
-        const auto* perVertexStream = FirstPerVertexStream(params);
-
-        const auto& d3dVb     = static_cast<const D3D11VertexBufferRenderer&>(vb);
-        const auto& d3dIb     = static_cast<const D3D11IndexBufferRenderer&>(ib);
-        const auto& d3dInstVb =
-            static_cast<const D3D11VertexBufferRenderer&>(*instanceStream->buffer);
-        const std::size_t perVertexStride = d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
-        // REMED-GFX-123: the per-instance stream's own declared stride, not a hardcoded 64. The
-        // instanced3d layout reads INSTANCEWORLD0-3 at 0/16/32/48, so a 64-byte record is what it
-        // needs, but the stride is also what turns the public element offset below into bytes --
-        // taking it from the bound buffer keeps those two uses of "one instance record" identical.
-        const std::size_t instanceStride =
-            d3dInstVb.GetStrideEXT() > 0 ? d3dInstVb.GetStrideEXT() : 64;
-
-        constexpr auto variant = D3DCommon::D3DShaderVariant::Instanced3d;
+        const auto& d3dVb = static_cast<const D3D11VertexBufferRenderer&>(vb);
+        const auto& d3dIb = static_cast<const D3D11IndexBufferRenderer&>(ib);
+#if defined(CNA_DIRECTX11_COMPILED_EFFECTS)
+        if (params.compiledEffectRuntime != nullptr)
+        {
+            BindCompiledEffectForDrawEXT(
+                d3dVb, params, *params.compiledEffectRuntime);
+            BindVertexStreams(context_.Get(), d3dVb, params);
+            context_->IASetIndexBuffer(d3dIb.GetBufferEXT(), d3dIb.GetFormatEXT(), 0);
+            context_->IASetPrimitiveTopology(ToD3D11Topology(primitive));
+            context_->DrawIndexedInstanced(
+                static_cast<UINT>(VertexCountForPrimitives(primitive, primitiveCount)),
+                static_cast<UINT>(std::max(1, instanceCount)),
+                static_cast<UINT>(params.startIndex),
+                static_cast<INT>(params.baseVertex), 0);
+            return;
+        }
+#endif
+        std::vector<Microsoft::Xna::Framework::Graphics::VertexElement> combinedElements;
+        std::vector<D3DCommon::D3DVertexInputElement> inputElements;
+        BuildVertexInputLayout(params, true, combinedElements, inputElements);
+        const bool hasColor = D3DCommon::DeclarationHasElement(
+            combinedElements,
+            Microsoft::Xna::Framework::Graphics::VertexElementUsage::Color);
+        const auto variant = hasColor
+            ? D3DCommon::D3DShaderVariant::InstancedColored3d
+            : D3DCommon::D3DShaderVariant::Instanced3d;
         auto vs = D3DCommon::CreateVertexShaderForVariant(device_.Get(), variant);
         auto ps = D3DCommon::CreatePixelShaderForVariant(device_.Get(), variant);
         if (!vs || !ps)
             throw std::runtime_error("DrawInstancedPrimitivesEx: failed to create instanced3d shader objects");
 
-        // REMED-GFX-123: instanceFrequency is zero only when no per-instance stream is bound, and
-        // the no-instance-stream fallback above already took that case.
-        const UINT instanceStepRate =
-            static_cast<UINT>(std::max(1, instanceStream->instanceFrequency));
-        ID3D11InputLayout* layout = GetOrCreateInstancedInputLayoutEXT(instanceStepRate);
+        const std::size_t combinedStride = CombinedVertexStrideOr(
+            params, d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16);
+        auto layout = inputLayoutCache_.GetOrCreate(
+            device_.Get(), variant, combinedStride, combinedElements, inputElements);
         if (!layout)
             throw std::runtime_error("DrawInstancedPrimitivesEx: failed to create instanced3d input layout");
 
@@ -2006,33 +2806,20 @@ namespace CNA::Internal::Renderers::DirectX11
         // first field is named "Vp" (view*projection only, world comes from the per-instance
         // buffer instead) rather than "Mvp", same struct reused for the byte layout only.
         D3DCommon::D3DPerDrawConstants perDraw{};
-        const Matrix vp = view * projection;
+        const Matrix vp = ApplyXnaPixelCenterEXT(view * projection);
         vp.ToColumnMajor(perDraw.Mvp);
         perDraw.DiffuseColor[0] = params.diffuseColor[0];
         perDraw.DiffuseColor[1] = params.diffuseColor[1];
         perDraw.DiffuseColor[2] = params.diffuseColor[2];
         perDraw.DiffuseColor[3] = params.diffuseColor[3];
+        perDraw.VertexColorEnabled = params.vertexColorEnabled ? 1.0f : 0.0f;
 
         ID3D11Buffer* perDrawCB = GetOrCreatePerDrawConstantBufferEXT();
         UpdateDynamicConstantBufferEXT(perDrawCB, &perDraw, sizeof(perDraw));
 
-        // REMED-GFX-123: IASetVertexBuffers takes BYTE offsets, while the public
-        // VertexBufferBinding.VertexOffset this carries is in vertex ELEMENTS -- convert with each
-        // stream's own stride, exactly once, and only here at the native binding. The per-vertex
-        // stream's offset is independent of BaseVertexLocation below: the IA adds the base vertex to
-        // the decoded index and then fetches at `offset + index * stride`, so both apply once.
-        ID3D11Buffer* vbs[2] = { d3dVb.GetBufferEXT(), d3dInstVb.GetBufferEXT() };
-        UINT strides[2] = { static_cast<UINT>(perVertexStride), static_cast<UINT>(instanceStride) };
-        UINT offsets[2] = {
-            static_cast<UINT>(
-                static_cast<std::size_t>(perVertexStream != nullptr ? perVertexStream->vertexOffset : 0) *
-                perVertexStride),
-            static_cast<UINT>(
-                static_cast<std::size_t>(instanceStream->vertexOffset) * instanceStride),
-        };
-        context_->IASetVertexBuffers(0, 2, vbs, strides, offsets);
+        BindVertexStreams(context_.Get(), d3dVb, params);
         context_->IASetIndexBuffer(d3dIb.GetBufferEXT(), d3dIb.GetFormatEXT(), 0);
-        context_->IASetInputLayout(layout);
+        context_->IASetInputLayout(layout.Get());
         context_->IASetPrimitiveTopology(ToD3D11Topology(primitive));
         context_->VSSetShader(vs.Get(), nullptr, 0);
         context_->PSSetShader(ps.Get(), nullptr, 0);

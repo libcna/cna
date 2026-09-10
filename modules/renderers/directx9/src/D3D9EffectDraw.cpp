@@ -291,10 +291,6 @@ namespace CNA::Internal::Renderers::DirectX9
             const Shaders::D3D9ShaderConstantSlot* ps; int psCount;
         };
 
-        /// D9-82d: only ShaderIndex 0/1 (no vertex color) are drawable -- the vertex-color variants
-        /// (VSInputTx2Vc, 32 bytes) collide with the existing Position+Normal+TexCoord 32-byte
-        /// layout, same category as BasicEffect's own D9-82b gaps. See DrawDualTextureEffectEXT's
-        /// own combo check, which throws before this function would ever see ShaderIndex 2/3.
         DualTextureEffectRegisterTables GetDualTextureEffectRegisterTablesEXT(int shaderIndex)
         {
             using namespace Shaders;
@@ -307,10 +303,17 @@ namespace CNA::Internal::Renderers::DirectX9
             case 1: return {kDualTextureEffect_VSDualTextureNoFog_Registers,
                             static_cast<int>(std::size(kDualTextureEffect_VSDualTextureNoFog_Registers)),
                             nullptr, 0};
+            case 2: return {kDualTextureEffect_VSDualTextureVc_Registers,
+                            static_cast<int>(std::size(kDualTextureEffect_VSDualTextureVc_Registers)),
+                            kDualTextureEffect_PSDualTexture_Registers,
+                            static_cast<int>(std::size(kDualTextureEffect_PSDualTexture_Registers))};
+            case 3: return {kDualTextureEffect_VSDualTextureVcNoFog_Registers,
+                            static_cast<int>(std::size(kDualTextureEffect_VSDualTextureVcNoFog_Registers)),
+                            nullptr, 0};
             default:
                 throw std::out_of_range(
                     "GetDualTextureEffectRegisterTablesEXT: ShaderIndex " + std::to_string(shaderIndex) +
-                    " has no matching CNA vertex layout (plans/plan_dx9.md D9-82d)");
+                    " out of range [0, 4)");
             }
         }
 
@@ -522,12 +525,15 @@ namespace CNA::Internal::Renderers::DirectX9
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
-        // REMED-GFX-DECL-GUARD: before EnsureRenderReadyEXT, before any IDirect3DVertexDeclaration9
-        // is created and before any draw is issued. This renderer selects that declaration from the
-        // shared D3DCommon stride table (REMED-GFX-217), so a declaration the table's entry cannot
-        // represent is refused rather than rendered from the wrong bytes. An out-of-table stride is
-        // left to GetOrCreateVertexDeclarationEXT's own established rejection.
-        RequireFaithfulDeclarationEXT(vb, ib != nullptr ? "ordinary-indexed" : "ordinary-nonindexed");
+#if defined(CNA_DIRECTX9_COMPILED_EFFECTS)
+        if (params.compiledEffectRuntime != nullptr)
+        {
+            EnsureRenderReadyEXT();
+            DrawCompiledEffectEXT(vb, ib, primitive, primitiveCount, 1, params,
+                                  *params.compiledEffectRuntime);
+            return;
+        }
+#endif
         EnsureRenderReadyEXT();
 
         const auto& d3dVb = static_cast<const D3D9VertexBufferRenderer&>(vb);
@@ -749,7 +755,7 @@ namespace CNA::Internal::Renderers::DirectX9
             device_->SetTexture(0, ResolveD3D9TextureEXT(params.texture0));
         }
 
-        device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(stride));
+        device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(vb, stride));
         const auto& d3dVb = static_cast<const D3D9VertexBufferRenderer&>(vb);
         device_->SetStreamSource(0, d3dVb.GetBufferEXT(), 0, static_cast<UINT>(stride));
 
@@ -833,7 +839,7 @@ namespace CNA::Internal::Renderers::DirectX9
 
         device_->SetTexture(0, ResolveD3D9TextureEXT(params.texture0));
 
-        device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(stride));
+        device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(vb, stride));
         const auto& d3dVb = static_cast<const D3D9VertexBufferRenderer&>(vb);
         device_->SetStreamSource(0, d3dVb.GetBufferEXT(), 0, static_cast<UINT>(stride));
 
@@ -866,14 +872,12 @@ namespace CNA::Internal::Renderers::DirectX9
                 "DirectX9Renderer::DrawPrimitivesEx (DualTextureEffect): requires non-null "
                 "texture0 AND texture1 (plans/plan_dx9.md D9-82d)");
 
-        // Only the no-vertex-color combination is drawable: VSInputTx2Vc (32 bytes) collides with
-        // the existing Position+Normal+TexCoord layout, same category as BasicEffect's own D9-82b
-        // gaps -- see D3D9VertexDeclarations.hpp's own header comment.
-        if (stride != 28 || params.vertexColorEnabled)
+        const std::size_t expectedStride = params.vertexColorEnabled ? 32 : 28;
+        if (stride != expectedStride)
             throw std::runtime_error(
                 "DirectX9Renderer::DrawPrimitivesEx (DualTextureEffect): stride " + std::to_string(stride) +
                 " with vertexColor=" + (params.vertexColorEnabled ? "true" : "false") +
-                " has no matching CNA vertex layout (plans/plan_dx9.md D9-82d)");
+                " does not match the required dual-UV declaration");
 
         const int shaderIndex = ComputeDualTextureEffectShaderIndex(params.fogEnabled, params.vertexColorEnabled);
         const DualTextureEffectRegisterTables regs = GetDualTextureEffectRegisterTablesEXT(shaderIndex);
@@ -900,7 +904,7 @@ namespace CNA::Internal::Renderers::DirectX9
         device_->SetTexture(0, ResolveD3D9TextureEXT(params.texture0));
         device_->SetTexture(1, ResolveD3D9TextureEXT(params.texture1));
 
-        device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(stride));
+        device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(vb, stride));
         const auto& d3dVb = static_cast<const D3D9VertexBufferRenderer&>(vb);
         device_->SetStreamSource(0, d3dVb.GetBufferEXT(), 0, static_cast<UINT>(stride));
 
@@ -1005,7 +1009,7 @@ namespace CNA::Internal::Renderers::DirectX9
         device_->SetTexture(0, ResolveD3D9TextureEXT(params.texture0));
         device_->SetTexture(1, ResolveD3D9TextureCubeEXT(params.envMap));
 
-        device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(stride));
+        device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(vb, stride));
         const auto& d3dVb = static_cast<const D3D9VertexBufferRenderer&>(vb);
         device_->SetStreamSource(0, d3dVb.GetBufferEXT(), 0, static_cast<UINT>(stride));
 
@@ -1139,7 +1143,7 @@ namespace CNA::Internal::Renderers::DirectX9
 
         device_->SetTexture(0, ResolveD3D9TextureEXT(params.texture0));
 
-        device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(stride));
+        device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(vb, stride));
         const auto& d3dVb = static_cast<const D3D9VertexBufferRenderer&>(vb);
         device_->SetStreamSource(0, d3dVb.GetBufferEXT(), 0, static_cast<UINT>(stride));
 

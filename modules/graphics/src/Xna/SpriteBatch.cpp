@@ -187,10 +187,16 @@ namespace Microsoft::Xna::Framework::Graphics
         if (begun)
             throw std::runtime_error("Begin has been called before calling End.");
 
+        const SamplerState& effectiveSampler =
+            samplerState ? *samplerState : SamplerState::LinearClamp;
         if (graphicsDevice_)
         {
             graphicsDevice_->setBlendStateProperty(
                 blendState ? *blendState : BlendState::AlphaBlend);
+            // FNA's PrepRenderState assigns the effective sampler through the public collection.
+            // Keeping only the renderer-local SpriteBatch state made the next 3D draw incorrectly
+            // restore the collection's stale sampler instead of inheriting SpriteBatch's state.
+            graphicsDevice_->getSamplerStatesProperty()[0] = effectiveSampler;
             // Task 803 finding: this parameter was previously entirely unused -- SpriteBatch
             // draws silently inherited whatever DepthStencilState the game's own 3D rendering
             // last configured (or each renderer's own construction-time default), instead of
@@ -227,10 +233,12 @@ namespace Microsoft::Xna::Framework::Graphics
                 renderer_->SetTransformMatrix(transformMatrix_);
                 // Matches FNA: a null samplerState defaults to SamplerState.LinearClamp, and the
                 // resolved state is always (re-)applied — never left over from a previous Begin().
-                const SamplerState& effectiveSampler = samplerState ? *samplerState : SamplerState::LinearClamp;
                 renderer_->SetSamplerFilter(static_cast<int>(effectiveSampler.getFilterProperty()));
                 renderer_->SetSamplerAddressMode(static_cast<int>(effectiveSampler.getAddressUProperty()),
                                                 static_cast<int>(effectiveSampler.getAddressVProperty()));
+                renderer_->SetSamplerMipState(effectiveSampler.getMaxMipLevelProperty(),
+                                              effectiveSampler.getMipMapLevelOfDetailBiasProperty());
+                renderer_->SetSamplerAddressW(static_cast<int>(effectiveSampler.getAddressWProperty()));
                 renderer_->SetImmediateMode(sortMode_ == SpriteSortMode::Immediate);
                 renderer_->Begin();
             }

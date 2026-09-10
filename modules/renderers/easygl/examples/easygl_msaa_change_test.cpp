@@ -1,115 +1,143 @@
 // SPDX-License-Identifier: MS-PL
-// Task 229: Verify MSAA MultiSampleCount changes after device creation.
+// Renderer-neutral runtime back-buffer MSAA contract (plans/plan_dx.md DX-219).
 //
-// MultiSampleCount is applied to the EasyGL renderer only at construction time
-// (via GraphicsRendererCreateArgs::multiSampleCount). There is no
-// IGraphicsRenderer::SetMultiSampleCount() — changing the sample count at
-// runtime would require recreating the renderer, which is not yet implemented.
-//
-// Task 902: GraphicsDeviceManager::applyToExistingRenderer() now calls the real
-// GraphicsDevice::Reset(), which writes the renderer's actual, honestly-reported
-// applied MultiSampleCount (IGraphicsRenderer::ApplyMultiSampleCount(), which for
-// EasyGL just echoes GetMultiSampleCount() since it can't reconfigure post-
-// construction) back into the stored PresentationParameters — matching real FNA's
-// PresentationParameters.MultiSampleCount = FNA3D_GetMaxMultiSampleCount(...)
-// write-back after FNA3D_ResetBackbuffer(). This means toggling
-// preferMultiSampling via ApplyChanges() on an *already-constructed* EasyGL
-// device can no longer retroactively report MultiSampleCount=8 in the PP: the
-// renderer genuinely never engaged MSAA, so honestly reports back 0.
-//
-// The invariants this test verifies:
-//   1. GDM with preferMultiSampling=false → device PP stores MultiSampleCount=0.
-//   2. GDM with preferMultiSampling=true, applied via ApplyChanges() on an
-//      already-constructed device (this device was first created with
-//      preferMultiSampling=false) → device PP stores MultiSampleCount=0, since
-//      EasyGL cannot actually engage MSAA post-construction and now honestly
-//      reports that back (does not throw).
-//   3. Direct GraphicsDevice::SetPresentationParameters() with arbitrary
-//      sample counts stores the value — does not throw (bypasses Reset()'s
-//      ApplyMultiSampleCount() write-back entirely).
-//
-// What is NOT tested: actual MSAA rendering quality (requires pixel readback
-// and a rendered scene with geometry edges — out of scope for this task), nor
-// MultiSampleCount reaching the renderer when preferMultiSampling=true is set
-// *before* the device's first construction (see vulkan_msaa_test.cpp, Task 902,
-// for that scenario on a renderer that does support runtime MSAA reconfiguration).
+// The fixture alternates single-sample and four-sample rendering through GraphicsDevice::Reset,
+// then compares the resolved diagonal edge. It also proves that an unreasonable request is
+// reported as a real device-clamped value rather than echoed back unchanged.
 
+#include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
+#include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
 #include <cstdio>
+#include <memory>
+#include <vector>
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 
-class MsaaChangeTest : public Game
+class MsaaChangeTest final : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
-    int pass_ = 0;
-    int fail_ = 0;
+    int failures_ = 0;
+    bool done_ = false;
 
-    void check(bool ok, const char* label)
+    void Check(bool condition, const char* label)
     {
-        std::printf("[%s] %s\n", ok ? "PASS" : "FAIL", label);
-        if (ok) ++pass_; else ++fail_;
+        std::printf("[%s] %s\n", condition ? "PASS" : "FAIL", label);
+        if (!condition) ++failures_;
     }
 
-    void checkCount(int actual, int expected, const char* label)
+    int ApplyCount(GraphicsDevice& device, int requested)
     {
-        char buf[256];
-        std::snprintf(buf, sizeof(buf), "%s: expected %d, got %d", label, expected, actual);
-        check(actual == expected, buf);
+        PresentationParameters parameters =
+            device.getPresentationParametersProperty().Clone();
+        parameters.setMultiSampleCountProperty(requested);
+        device.Reset(parameters);
+        return device.getPresentationParametersProperty().getMultiSampleCountProperty();
     }
 
-    void directSet(GraphicsDevice& dev, int count, const char* label)
+    int RenderDiagonal(GraphicsDevice& device)
     {
-        PresentationParameters pp = dev.getPresentationParametersProperty().Clone();
-        pp.setMultiSampleCountProperty(count);
-        dev.SetPresentationParameters(pp);
-        checkCount(dev.getPresentationParametersProperty().getMultiSampleCountProperty(),
-                   count, label);
+        device.setBlendStateProperty(BlendState::Opaque);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.Clear(Color::Black);
+
+        BasicEffect effect(device);
+        effect.setWorldProperty(Matrix::getIdentityProperty());
+        effect.setViewProperty(Matrix::getIdentityProperty());
+        effect.setProjectionProperty(Matrix::getIdentityProperty());
+        effect.setTextureEnabledProperty(false);
+        effect.VertexColorEnabled = true;
+        effect.Apply();
+
+        const VertexPositionColor triangle[3] = {
+            {Vector3(-0.85f, -0.75f, 0.5f), Color::White},
+            {Vector3( 0.85f, -0.75f, 0.5f), Color::White},
+            {Vector3(-0.85f,  0.75f, 0.5f), Color::White},
+        };
+        device.DrawUserPrimitives(PrimitiveType::TriangleList, triangle, 0, 1);
+
+        const auto& viewport = device.getViewportProperty();
+        const int width = viewport.getWidthProperty();
+        const int height = viewport.getHeightProperty();
+        std::vector<Color> pixels(
+            static_cast<std::size_t>(width) * static_cast<std::size_t>(height));
+        device.GetBackBufferData(
+            pixels.data(), 0, static_cast<int>(pixels.size()));
+
+        int blackPixels = 0;
+        int whitePixels = 0;
+        int intermediatePixels = 0;
+        for (const Color& pixel : pixels)
+        {
+            const int red = pixel.getRProperty();
+            if (red == 0) ++blackPixels;
+            else if (red == 255) ++whitePixels;
+            else ++intermediatePixels;
+        }
+        Check(blackPixels > 50 && whitePixels > 50,
+              "each reset leg preserves inside/outside control pixels");
+        return intermediatePixels;
     }
 
 protected:
     void Initialize() override
     {
-        auto& dev = getGraphicsDeviceProperty();
-
-        // GDM default: preferMultiSampling=false → MultiSampleCount=0
-        checkCount(dev.getPresentationParametersProperty().getMultiSampleCountProperty(),
-                   0, "GDM default MultiSampleCount=0 (preferMultiSampling=false)");
-
-        // Enable MSAA via GDM on an already-constructed EasyGL device — Task 902's
-        // Reset()-driven ApplyMultiSampleCount() write-back means the PP now honestly
-        // stores 0 (EasyGL cannot engage MSAA post-construction), not the requested 8.
-        gdm_->setPreferMultiSamplingProperty(true);
-        gdm_->ApplyChanges();
-        checkCount(dev.getPresentationParametersProperty().getMultiSampleCountProperty(),
-                   0, "GDM preferMultiSampling=true on existing device → MultiSampleCount=0 in PP (EasyGL can't reconfigure post-construction)");
-        check(gdm_->getPreferMultiSamplingProperty(),
-              "GDM getter returns true after setPreferMultiSampling(true)");
-
-        // Disable again — PP stores 0
-        gdm_->setPreferMultiSamplingProperty(false);
-        gdm_->ApplyChanges();
-        checkCount(dev.getPresentationParametersProperty().getMultiSampleCountProperty(),
-                   0, "GDM preferMultiSampling=false → MultiSampleCount=0 in PP");
-
-        // Direct path — arbitrary values round-trip in PP; renderer is unchanged
-        directSet(dev, 0, "Direct SetPP MultiSampleCount=0 stored");
-        directSet(dev, 1, "Direct SetPP MultiSampleCount=1 stored");
-        directSet(dev, 2, "Direct SetPP MultiSampleCount=2 stored");
-        directSet(dev, 4, "Direct SetPP MultiSampleCount=4 stored");
-        directSet(dev, 8, "Direct SetPP MultiSampleCount=8 stored");
-
         Game::Initialize();
     }
 
     void Draw(const GameTime&) override
     {
-        std::printf("=== %d/%d PASS ===\n", pass_, pass_ + fail_);
+        if (done_) return;
+        done_ = true;
+
+        auto& device = getGraphicsDeviceProperty();
+        Check(device.getPresentationParametersProperty().getMultiSampleCountProperty() == 0,
+              "default device starts single-sampled");
+
+        const int initialSingleIntermediate = RenderDiagonal(device);
+        Check(initialSingleIntermediate == 0,
+              "single-sample baseline has no partially covered pixels");
+
+        const int firstFourCount = ApplyCount(device, 4);
+        const int firstFourIntermediate = RenderDiagonal(device);
+        Check(firstFourCount == 4,
+              "Reset from zero to four reports four applied samples");
+        Check(firstFourIntermediate > 0,
+              "Reset from zero to four enables multisample edge coverage");
+
+        const int disabledCount = ApplyCount(device, 0);
+        const int disabledIntermediate = RenderDiagonal(device);
+        Check(disabledCount == 0,
+              "Reset from four to zero reports multisampling disabled");
+        Check(disabledIntermediate == 0,
+              "Reset from four to zero removes multisample edge coverage");
+
+        const int unreasonableCount = ApplyCount(device, 1024);
+        Check(unreasonableCount >= 0 && unreasonableCount < 1024 &&
+                  unreasonableCount != 1,
+              "unsupported request is reported as a legal device-clamped count");
+
+        const int secondFourCount = ApplyCount(device, 4);
+        const int secondFourIntermediate = RenderDiagonal(device);
+        Check(secondFourCount == 4 && secondFourIntermediate > 0,
+              "four-sample behavior survives disable and rejected-request legs without leakage");
+
+        std::printf(
+            "Intermediate pixels: initial=%d, first4x=%d, disabled=%d, second4x=%d; clamp=%d\n",
+            initialSingleIntermediate, firstFourIntermediate, disabledIntermediate,
+            secondFourIntermediate, unreasonableCount);
         Exit();
     }
 
@@ -117,14 +145,16 @@ public:
     MsaaChangeTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setPreferredBackBufferWidthProperty(160);
+        gdm_->setPreferredBackBufferHeightProperty(120);
     }
 
-    int getResult() const { return fail_ > 0 ? 1 : 0; }
+    [[nodiscard]] int GetResult() const { return failures_ == 0 ? 0 : 1; }
 };
 
 int main()
 {
-    MsaaChangeTest g;
-    g.Run();
-    return g.getResult();
+    MsaaChangeTest game;
+    game.Run();
+    return game.GetResult();
 }

@@ -622,6 +622,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_ShaderEffect_CustomVertexLayout COMMAND cna_test_easygl_shadereffect_custom_vertex_layout
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plans/plan_dx.md DX-223: the same public reflection/resource/layout oracle used by both
+        # modern DirectX renderers. EasyGL is the independent implementation control.
+        cna_easygl_test(cna_test_easygl_shader_effect_reflection
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/shader_effect_reflection_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_ShaderEffect_ReflectionContract
+            COMMAND cna_test_easygl_shader_effect_reflection
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 947: NormalMapping.fx (tangent-space normal mapping + Phong specular) -- with
         # this, NormalMapping sample's shader blocker is fully cleared. Uses Task 1080's custom
         # vertex layout (Position+TexCoord+Normal+Binormal+Tangent, stride 56).
@@ -2041,6 +2049,12 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_easygl_sampler_component_isolation
             TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        cna_easygl_test(cna_test_easygl_envmap_cube_sampler_state
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/envmap_cube_sampler_state_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_EnvMapCubeSamplerState
+            COMMAND cna_test_easygl_envmap_cube_sampler_state
+            TIMEOUT 600 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # REMED-GFX-175: a TextureFilter ordinal's MIPMAP component is a third, independent decision,
         # and ordinals 0 (Linear) and 1 (Point) were losing it -- both mapped onto a GL filter with no
         # mipmap term, so a texture that really owns a chain never mip-filtered under either, the
@@ -2051,6 +2065,22 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             ${CNA_GRAPHICS_EXAMPLES_DIR}/texture_filter_mip_contract_test.cpp)
         cna_register_renderer_test(NAME EasyGL_TextureFilterMipContract
             COMMAND cna_test_easygl_texture_filter_mip_contract
+            TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plans/plan_dx.md DX-257: flat-colour mip and volume-slice oracles prove MaxMipLevel,
+        # MipMapLevelOfDetailBias and AddressW by different rendered results, including reset legs.
+        cna_easygl_test(cna_test_easygl_sampler_lod_addressw_contract
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/sampler_lod_addressw_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_SamplerLodAddressWContract
+            COMMAND cna_test_easygl_sampler_lod_addressw_contract
+            TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plans/plan_dx.md DX-215 cross-renderer control: floating-point render-target values must
+        # survive rendering and native-format readback; unsupported DXT targets must be refused.
+        cna_easygl_test(cna_test_easygl_rendertarget_surface_format
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_surface_format_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_RenderTarget_SurfaceFormat
+            COMMAND cna_test_easygl_rendertarget_surface_format
             TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # REMED-GFX-177 cross-renderer control: descriptor/binding bookkeeping must be a function of what
@@ -2163,6 +2193,12 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             cna_register_renderer_test(NAME EasyGL_GFX164_BoundMsaaAlpha
                 COMMAND cna_test_easygl_gfx164_bound_msaa_alpha
                 TIMEOUT 900 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+            cna_easygl_test(cna_test_easygl_active_msaa_readback
+                ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_active_msaa_readback_test.cpp)
+            cna_register_renderer_test(NAME EasyGL_RenderTarget_ActiveMsaaReadback
+                COMMAND cna_test_easygl_active_msaa_readback
+                TIMEOUT 900 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
         endif()
 
         # REMED-GFX-186 cross-renderer control: the same PUBLIC generated-mip readback contract on this
@@ -2206,6 +2242,28 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             ${CNA_GRAPHICS_EXAMPLES_DIR}/backbuffer_headless_reject_test.cpp)
         cna_register_renderer_test(NAME EasyGL_BackbufferReject COMMAND cna_test_easygl_backbuffer_reject
             TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # DX-217 cross-renderer controls for the common presentation policy and
+        # GraphicsDeviceManager swap-interval forwarding contracts.
+        cna_easygl_test(cna_test_easygl_presentation_mode_contract
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/presentation_mode_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_PresentationModeContract
+            COMMAND cna_test_easygl_presentation_mode_contract
+            TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_easygl_test(cna_test_easygl_swap_interval_forwarding
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/swap_interval_forwarding_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_SwapIntervalForwarding
+            COMMAND cna_test_easygl_swap_interval_forwarding
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # DX-229's render-target variant independently proves that logical
+        # presentation scaling does not leak into an explicitly bound target.
+        cna_easygl_test(cna_test_easygl_spritebatch_custom_viewport_rt
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_custom_viewport_rt_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_SpriteBatch_CustomViewportRT
+            COMMAND cna_test_easygl_spritebatch_custom_viewport_rt
+            TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # REMED-GFX-155 cross-renderer control: a render target produced and unbound earlier in a public
         # frame must be visible to a consumer that draws on the BACKBUFFER later in that same frame. The

@@ -286,7 +286,7 @@ without changing either method's observable behavior for any valid input.
 | Area | Status |
 |---|---|
 | Automatic reflection over an undeclared C++ type | ❌ Not supported by design; implicit `ReflectiveReader<T>` payloads are supported when the game declares their serialized members through `ReflectiveTypeReaderBuilder<T>` |
-| General `EffectReader` on a renderer without `CompiledEffects` | ❌ loading fails with an asset-specific capability diagnostic rather than a silent shader fallback. FNA3D supports it unconditionally; SDL_GPU, the EasyGL family, and Vulkan support it behind their compiled-effect build options |
+| General `EffectReader` on a renderer without `CompiledEffects` | ❌ loading fails with an asset-specific capability diagnostic rather than a silent shader fallback. FNA3D supports it unconditionally; SDL_GPU, the EasyGL family, Vulkan, and DirectX 11 support it behind their compiled-effect build options |
 | LZ4 compression | ✅ MonoGame's raw-block XNB representation is supported; generic LZ4 frames are intentionally not an XNB format |
 | Generic collection readers for an unregistered `T` combination | ❌ Not supported — each closed combination needs its own explicit registration |
 | Texture formats beyond `Texture2D`'s `Color`/`NormalizedByte2`/`NormalizedByte4`/`Dxt1`/`Dxt3`/`Dxt5` and `Texture3D`/`TextureCube`'s existing Color/DXT scope | ❌ Not supported yet |

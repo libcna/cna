@@ -20,7 +20,9 @@ cbuffer PerDraw : register(b0)
 struct VSInput
 {
     float3 Position : POSITION0;
+#ifndef CNA_ALPHA_TEST_UNTEXTURED_INPUT
     float2 UV       : TEXCOORD0;
+#endif
 };
 
 struct VSOutput
@@ -37,7 +39,11 @@ VSOutput main(VSInput input)
 
     float4 pos = mul(float4(input.Position, 1.0), Mvp);
     output.Position = pos;
+#ifdef CNA_ALPHA_TEST_UNTEXTURED_INPUT
+    output.UV = float2(0.0, 0.0);
+#else
     output.UV = input.UV;
+#endif
     output.Tint = DiffuseColor;
 
     // REMED-GFX-005/010: FNA view-space fog. keep = 1 - saturate(dot(objectPos, fogVector)); the

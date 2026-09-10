@@ -35,6 +35,13 @@ namespace CNA::Internal::Renderers::DirectX12
         /// DX-110).
         void TrackResource(ID3D12Resource* resource, D3D12_RESOURCE_STATES initialState);
 
+        /**
+         * @brief Stops tracking a resource that is about to be released.
+         *
+         * @param resource Resource whose lifetime is ending. A null or unknown resource is ignored.
+         */
+        void UntrackResource(ID3D12Resource* resource);
+
         /// If @p resource's last-known tracked state differs from @p desiredState, records and
         /// submits (via ResourceBarrier on @p commandList) a single D3D12_RESOURCE_BARRIER_TYPE_
         /// TRANSITION barrier from the tracked state to @p desiredState, then updates the tracked

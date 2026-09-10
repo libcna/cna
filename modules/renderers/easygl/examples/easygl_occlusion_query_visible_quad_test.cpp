@@ -7,11 +7,11 @@
 // occlusion-query CORRECTNESS (that a query genuinely reports "visible" for something that really
 // is visible). This is the first test to do that (Task 441's own audit finding).
 //
-// A large, fully-visible quad is drawn (full NDC, no occlusion at all) with the draw call wrapped
-// in Begin()/End(). `GetBackBufferData` is used both to force the GL driver to synchronize/flush
-// pending commands (so the query's result becomes available) and to independently confirm the
-// quad actually rendered its expected colour -- verifying the SAME frame both via the query API and
-// via real pixel data, not just one or the other.
+// A large, fully-visible quad is drawn (full NDC, no occlusion at all) in three queries: one draw,
+// two identical draws, and zero draws. A precise renderer must report exactly twice the first count
+// for the two-draw query; boolean GL queries must at least remain positive. `GetBackBufferData` is
+// used both to force the driver to synchronize/flush pending commands and to independently confirm
+// the quad actually rendered its expected colour.
 //
 // Per OcclusionQuery.hpp's own documented GLES3 behavior, PixelCount() is 0 (none) or 1 (any) under
 // GL_ANY_SAMPLES_PASSED, not a literal on-screen pixel tally -- "positive" here means exactly 1.
@@ -108,18 +108,38 @@ protected:
         BasicEffect fx(device);
         fx.VertexColorEnabled = true;
 
-        OcclusionQuery query(device);
-
-        query.Begin();
         device.SetVertexBuffer(vb_.get());
         device.setIndicesProperty(ib_.get());
         EffectTechnique* technique = fx.getCurrentTechniqueProperty();
-        for (EffectPass& pass : technique->getPassesProperty())
-        {
-            pass.Apply();
-            device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2);
-        }
-        query.End();
+        auto drawQuad = [&]() {
+            for (EffectPass& pass : technique->getPassesProperty())
+            {
+                pass.Apply();
+                device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2);
+            }
+        };
+
+        OcclusionQuery oneDrawQuery(device);
+        oneDrawQuery.Begin();
+        drawQuad();
+        oneDrawQuery.End();
+
+        OcclusionQuery twoDrawQuery(device);
+        twoDrawQuery.Begin();
+        drawQuad();
+        drawQuad();
+        twoDrawQuery.End();
+
+        OcclusionQuery zeroDrawQuery(device);
+        zeroDrawQuery.Begin();
+        zeroDrawQuery.End();
+
+#if defined(CNA_RENDERER_DIRECTX12)
+        check(!oneDrawQuery.getIsCompleteProperty() &&
+                  !twoDrawQuery.getIsCompleteProperty() &&
+                  !zeroDrawQuery.getIsCompleteProperty(),
+              "D3D12 queries remain incomplete before their frame fence is submitted");
+#endif
 
         // Force the GL driver to synchronize/flush pending commands (GetBackBufferData reads back
         // via glReadPixels) so the occlusion query's result has a chance to become available;
@@ -133,17 +153,39 @@ protected:
 
         Color centre = sample(W / 2, H / 2);
 
-        bool complete = query.getIsCompleteProperty();
-        for (int attempt = 0; attempt < 30 && !complete; ++attempt)
+        bool oneComplete = oneDrawQuery.getIsCompleteProperty();
+        bool twoComplete = twoDrawQuery.getIsCompleteProperty();
+        bool zeroComplete = zeroDrawQuery.getIsCompleteProperty();
+        for (int attempt = 0;
+             attempt < 30 && (!oneComplete || !twoComplete || !zeroComplete);
+             ++attempt)
         {
             sample(W / 2, H / 2); // another readback, in case one flush wasn't enough
-            complete = query.getIsCompleteProperty();
+            oneComplete = oneDrawQuery.getIsCompleteProperty();
+            twoComplete = twoDrawQuery.getIsCompleteProperty();
+            zeroComplete = zeroDrawQuery.getIsCompleteProperty();
         }
 
         check(colourMatch(centre, kRed), "fully visible quad actually renders Red at centre");
-        check(complete, "OcclusionQuery becomes complete after the quad's draw call");
-        check(query.getPixelCountProperty() > 0,
-              "fully visible quad -> OcclusionQuery.PixelCount() is positive (> 0)");
+        check(oneComplete && twoComplete && zeroComplete,
+              "all OcclusionQuery instances become complete after frame synchronization");
+
+        const int oneDrawCount = oneDrawQuery.getPixelCountProperty();
+        const int twoDrawCount = twoDrawQuery.getPixelCountProperty();
+        check(oneDrawCount > 0,
+              "fully visible quad -> one-draw OcclusionQuery.PixelCount() is positive");
+        if (oneDrawQuery.isPixelCountPreciseEXT())
+        {
+            check(twoDrawCount == oneDrawCount * 2,
+                  "precise two-draw OcclusionQuery accumulates both draws exactly");
+        }
+        else
+        {
+            check(twoDrawCount > 0,
+                  "boolean two-draw OcclusionQuery remains positive");
+        }
+        check(zeroDrawQuery.getPixelCountProperty() == 0,
+              "zero-draw OcclusionQuery reports zero samples");
 
         Exit();
     }

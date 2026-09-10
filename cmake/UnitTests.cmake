@@ -68,6 +68,16 @@ if(CNA_BUILD_TESTS)
     # programs and the module probes above.
     list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/c-api/tests/.*\\.cpp$")
 
+    # plans/plan_dx.md DX-250/DX-269: XmlSerializationEXTTests includes the optional
+    # SharpRuntime::Xml.Serialization component directly. Windows intentionally omits that
+    # component while its Diagnostics dependency still includes POSIX-only <poll.h> outside its
+    # platform guard, so omitting only the link edge is insufficient: the source must leave the
+    # inventory with the unavailable component.
+    if(NOT CNA_SHARP_RUNTIME_HAS_XML_SERIALIZATION)
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX
+            ".*/modules/math/tests/Microsoft/Xna/Framework/XmlSerializationEXTTests\\.cpp$")
+    endif()
+
     # plans/plan_apple.md APPLE-11: the Apple smoke application (cmake/AppleSmoke.cmake) is a complete
     # program with its own main(), for the same reason as the two entries above. Swept into
     # CnaTests it does not merely add a case -- its main() replaces GTest's, so the test binary
@@ -328,8 +338,16 @@ if(CNA_BUILD_TESTS)
     set(CNA_TEST_GROUP_DEPENDENCY_input cna_input)
     set(CNA_TEST_GROUP_DEPENDENCY_integration CNA)
     # SAMPLE-066: XmlSerializationEXT.hpp opts the math value types into
-    # System::Xml::Serialization, so the group that tests it links that component too.
-    set(CNA_TEST_GROUP_DEPENDENCY_math cna_math SharpRuntime::Xml.Serialization)
+    # System::Xml::Serialization, so the group that tests it links that component too --
+    # everywhere the component exists. plans/plan_dx.md DX-250/DX-269: on a Windows target it does
+    # not (see cmake/SharpRuntimeConsumption.cmake for the exact upstream reason), so both the
+    # source and dependency are absent rather than naming a target CMake would reject at generate
+    # time or compiling a source whose include root is unavailable.
+    if(CNA_SHARP_RUNTIME_HAS_XML_SERIALIZATION)
+        set(CNA_TEST_GROUP_DEPENDENCY_math cna_math SharpRuntime::Xml.Serialization)
+    else()
+        set(CNA_TEST_GROUP_DEPENDENCY_math cna_math)
+    endif()
     # The phone service adapts Game's lifecycle events, so its tests construct a Game.
     set(CNA_TEST_GROUP_DEPENDENCY_phone cna_phone cna_runtime)
     set(CNA_TEST_GROUP_DEPENDENCY_media cna_media)
@@ -443,6 +461,16 @@ if(CNA_BUILD_TESTS)
         list(APPEND CNA_FOCUSED_TEST_TARGETS "${_cna_focused_test_target}")
     endforeach()
     message(STATUS "CNA: focused unit-test targets: ${CNA_FOCUSED_TEST_TARGETS}")
+
+    if(MINGW AND
+       ((CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9" AND CNA_DIRECTX9_COMPILED_EFFECTS) OR
+        (CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11" AND CNA_DIRECTX11_COMPILED_EFFECTS) OR
+        (CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12" AND CNA_DIRECTX12_COMPILED_EFFECTS)))
+        target_link_options(CnaRendererTests PRIVATE
+            -static-libgcc -static-libstdc++ -Wl,--allow-multiple-definition)
+        cna_copy_mingw_runtime(CnaRendererTests)
+        cna_copy_sdl_runtime(CnaRendererTests)
+    endif()
 
     target_link_libraries(CnaTests PRIVATE
         cna_test_build_config
@@ -634,7 +662,7 @@ if(CNA_BUILD_TESTS)
     # plans/plan_webgpu.md WEBGPU-167: the same is now true of WebGPU's compiled-effect headers,
     # which the renderer header includes unconditionally once the option is on -- so the condition
     # is the presence of the MojoShader target, not one family's option. Any family that configured
-    # it has public headers a test TU can reach.
+    # it -- EasyGL, Vulkan, WebGPU or DirectX 9/11/12 -- has public headers a test TU can reach.
     if(TARGET cna_mojoshader)
         target_link_libraries(cna_test_build_config INTERFACE cna_mojoshader)
     endif()

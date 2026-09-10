@@ -1,10 +1,9 @@
 #pragma once
 
-// plans/plan_dx.md Phase DX12 (DX-111, closing env_map3d): real D3D12 cube-map texture renderer, RGBA8
-// storage only (matches this project's own established simplification -- D3D12Textures.hpp's own
-// header comment applies identically here). Same explicit upload-heap-staging discipline as
-// D3D12Textures.hpp/.cpp's D3D12TextureRenderer::UploadRegion(), just parameterized per face: a
-// fresh UPLOAD-heap staging BUFFER per SetData() call, CopyTextureRegion into the face's own
+// plans/plan_dx.md Phase DX12 (DX-111/DX-214/DX-225): real D3D12 cube-map texture renderer. Storage
+// and transfer pitches follow the requested core XNA SurfaceFormat. Uploads use the same DX-238
+// persistently mapped frame ring as D3D12TextureRenderer::UploadRegion(), parameterized per face:
+// a ring range feeds CopyTextureRegion into the face's own
 // subresource, and D3D12ResourceStateTracker (DX-106) driving the
 // COPY_DEST -> {PIXEL_SHADER_RESOURCE | NON_PIXEL_SHADER_RESOURCE} transition.
 //
@@ -21,6 +20,7 @@
 // face-aware subresource-index formula.
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/DirectX12/D3D12RendererReference.hpp"
 #include "D3D12DescriptorHeaps.hpp"
 
 #include <d3d12.h>
@@ -28,6 +28,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <vector>
 
 namespace CNA::Internal::Renderers::DirectX12
 {
@@ -38,7 +39,7 @@ namespace CNA::Internal::Renderers::DirectX12
     /// Real D3D12 cube-map texture renderer (DX-111/env_map3d). Constructed with no initial pixel
     /// data (matches D3D11TextureCubeRenderer's own constructor shape) -- ends construction in a
     /// real, deliberate shader-readable resting state (empty/undefined content), then each SetData()
-    /// call uploads one face's sub-rectangle for real via an upload-heap staging buffer.
+    /// call uploads one face's sub-rectangle through the current frame's upload ring.
     class D3D12TextureCubeRenderer final : public ITextureCubeRenderer
     {
     public:
@@ -46,12 +47,27 @@ namespace CNA::Internal::Renderers::DirectX12
         /// REMED-GFX-177: returns this cube's SRV slot to the shader-visible allocator.
         ~D3D12TextureCubeRenderer() override;
 
-        /// REMED-GFX-135: true only once the staged copy has been submitted and waited on for the
-        /// whole requested face rectangle; false for an out-of-range face/level/rectangle, a null
-        /// source or a source buffer too small for the region. A failed D3D12 resource
-        /// creation/Map/Close still throws -- that is a broken device, not an unsupported request.
+        /// REMED-GFX-135/DX-238: true once the complete face copy has been recorded in the current
+        /// frame; false for an out-of-range face/level/rectangle, a null source or a source buffer
+        /// too small for the region. A failed D3D12 upload allocation still throws.
         [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
                                    const void* data, int dataLength) override;
+        /**
+         * @brief Uploads an exact DXT block payload to a cube face region.
+         *
+         * @param face Cube face index.
+         * @param level Mip level.
+         * @param x Left edge in texels.
+         * @param y Top edge in texels.
+         * @param w Width in texels.
+         * @param h Height in texels.
+         * @param data Source block payload.
+         * @param dataLength Source payload size in bytes.
+         * @return true when the complete region was stored.
+         */
+        [[nodiscard]] bool SetCompressedDataEXT(
+            int face, int level, int x, int y, int w, int h,
+            const void* data, int dataLength) override;
 
         /// REMED-GFX-130: true only once the READBACK-heap copy has completed and the whole
         /// requested face rectangle has been unpacked from it; false for an out-of-range
@@ -61,6 +77,7 @@ namespace CNA::Internal::Renderers::DirectX12
                                    void* data, int dataLength) const override;
 
         [[nodiscard]] int GetSizeEXT() const noexcept override { return size_; }
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
         [[nodiscard]] int GetMipLevelsEXT() const { return mipLevels_; }
         /// Raw GPU-resident ID3D12Resource* (CNAEXT diagnostics).
         [[nodiscard]] ID3D12Resource* GetResourceEXT() const { return texture_.Get(); }
@@ -76,12 +93,18 @@ namespace CNA::Internal::Renderers::DirectX12
     private:
         void TransitionToShaderReadableEXT();
 
-        DirectX12Renderer* renderer_ = nullptr;
+        D3D12RendererReference renderer_;
         ComPtr<ID3D12Resource> texture_;
         /// Kept alive independently of renderer_ so the destructor can always free the slot.
         std::shared_ptr<D3D12DescriptorHeaps> heaps_;
         std::uint32_t srvIndex_ = D3D12ShaderVisibleDescriptorAllocator::kInvalidIndex;
         int size_ = 0;
         int mipLevels_ = 1;
+        int surfaceFormat_ = 0;
+        DXGI_FORMAT dxgiFormat_ = DXGI_FORMAT_R8G8B8A8_UNORM;
+        int bytesPerTexel_ = 4;
+        bool compressed_ = false;
+        int bytesPerBlock_ = 0;
+        std::vector<std::vector<std::uint8_t>> compressedLevels_;
     };
 }
