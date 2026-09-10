@@ -19,6 +19,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
+#include "System/ArgumentNullException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 
@@ -127,6 +128,12 @@ TEST(TextureDataBindingContractTest, PixelBoundTextureCubeRejectsWrites)
     EXPECT_THROW(texture.SetData(CubeMapFace::PositiveX, data.data(),
                                  static_cast<int>(data.size())),
                  System::InvalidOperationException);
+    EXPECT_THROW(texture.SetData(CubeMapFace::PositiveX, 1, nullptr,
+                                 data.data(), -1, 0),
+                 System::InvalidOperationException);
+    EXPECT_THROW(texture.SetData(CubeMapFace::PositiveX, 1, nullptr,
+                                 static_cast<const Color*>(nullptr), -1, 0),
+                 System::ArgumentNullException);
 }
 
 TEST(TextureDataBindingContractTest, PixelBoundTexture3DRejectsWrites)
@@ -213,4 +220,10 @@ TEST(TextureDataBindingContractTest, ActiveRenderTargetCubeRejectsWritesAndReadb
     EXPECT_THROW(target->GetData(CubeMapFace::PositiveX, destination.data(),
                                  static_cast<int>(destination.size())),
                  System::InvalidOperationException);
+    EXPECT_THROW(target->GetData(CubeMapFace::PositiveX, 1, nullptr,
+                                 destination.data(), -1, 0),
+                 System::InvalidOperationException);
+    EXPECT_THROW(target->GetData(CubeMapFace::PositiveX, 1, nullptr,
+                                 static_cast<Color*>(nullptr), -1, 0),
+                 System::ArgumentNullException);
 }

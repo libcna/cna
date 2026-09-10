@@ -122,11 +122,15 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param startIndex   First element within @p data to start reading.
          * @param elementCount Exact number of Color elements required for the selected region.
          * @throws System::ObjectDisposedException if this TextureCube has been disposed.
+         * @throws System::ArgumentNullException if @p data is null.
+         * @throws System::InvalidOperationException if the texture is active, sampled while being
+         *         written, or @p face or @p level is invalid.
+         * @throws System::ArgumentOutOfRangeException if @p startIndex or @p elementCount is
+         *         invalid.
+         * @throws System::ArgumentException if the element width, rectangle, or total transfer
+         *         size is invalid.
          * @throws System::NotSupportedException if this renderer cannot store the requested face,
          *         mip level or region -- including a renderer that creates no cube-map resource.
-         * @throws std::invalid_argument if @p data is null.
-         * @throws std::out_of_range for an invalid face, level, startIndex, elementCount or
-         *         rectangle.
          */
         void SetData(CubeMapFace face, int level, const Microsoft::Xna::Framework::Rectangle* rect,
                      const Color* data, int startIndex, int elementCount);
@@ -176,12 +180,10 @@ namespace Microsoft::Xna::Framework::Graphics
                      const Microsoft::Xna::Framework::Rectangle* rect,
                      const T* data, int startIndex, int elementCount)
         {
-            if (data == nullptr)
-                throw std::invalid_argument("TextureCube::SetData: data must not be null");
             using Word = std::remove_cvref_t<decltype(data[0].getPackedValueProperty())>;
             static_assert(std::is_unsigned_v<Word>);
             const int required = ValidateTypedTransferEXT(
-                "TextureCube::SetData", face, level, rect,
+                "TextureCube::SetData", true, face, level, rect, data,
                 startIndex, elementCount, static_cast<int>(sizeof(Word)));
             std::vector<std::uint8_t> bytes(
                 static_cast<std::size_t>(required) * sizeof(Word));
@@ -241,14 +243,12 @@ namespace Microsoft::Xna::Framework::Graphics
                      const Microsoft::Xna::Framework::Rectangle* rect,
                      const T* data, int startIndex, int elementCount)
         {
-            if (data == nullptr)
-                throw std::invalid_argument("TextureCube::SetData: data must not be null");
             using Element = std::remove_cvref_t<T>;
             constexpr int components = std::same_as<Element, float> ? 1
                 : (std::same_as<Element, Microsoft::Xna::Framework::Vector2> ? 2 : 4);
             constexpr int elementBytes = components * static_cast<int>(sizeof(float));
             const int required = ValidateTypedTransferEXT(
-                "TextureCube::SetData", face, level, rect,
+                "TextureCube::SetData", true, face, level, rect, data,
                 startIndex, elementCount, elementBytes);
             std::vector<std::uint8_t> bytes(
                 static_cast<std::size_t>(required) * elementBytes);
@@ -327,11 +327,9 @@ namespace Microsoft::Xna::Framework::Graphics
                      const Microsoft::Xna::Framework::Rectangle* rect,
                      const T* data, int startIndex, int elementCount)
         {
-            if (data == nullptr)
-                throw std::invalid_argument("TextureCube::SetData: data must not be null");
             const int elementBytes = static_cast<int>(sizeof(T));
             (void) ValidateTypedTransferEXT(
-                "TextureCube::SetData", face, level, rect,
+                "TextureCube::SetData", true, face, level, rect, data,
                 startIndex, elementCount, elementBytes);
             const auto* bytes = reinterpret_cast<const std::uint8_t*>(data + startIndex);
             SetTypedDataBytesEXT(face, level, rect, bytes, elementBytes);
@@ -446,12 +444,16 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param startIndex   First element within @p data to write to.
          * @param elementCount Exact number of Color elements required for the selected region.
          * @throws System::ObjectDisposedException if this texture has been disposed.
+         * @throws System::ArgumentNullException if @p data is null.
+         * @throws System::InvalidOperationException if the texture is active or @p face or
+         *         @p level is invalid.
+         * @throws System::ArgumentOutOfRangeException if @p startIndex or @p elementCount is
+         *         invalid.
+         * @throws System::ArgumentException if the element width, rectangle, or total transfer
+         *         size is invalid.
          * @throws System::NotSupportedException if this graphics renderer cannot read the requested
          *         cube face/mip level back to the CPU (including renderers that create no cube-map
          *         resource at all).
-         * @throws std::invalid_argument if @p data is null.
-         * @throws std::out_of_range if @p face, @p level, @p startIndex, @p elementCount or the
-         *         rectangle is out of range.
          */
         void GetData(CubeMapFace face, int level, const Microsoft::Xna::Framework::Rectangle* rect,
                      Color* data, int startIndex, int elementCount) const;
@@ -501,12 +503,10 @@ namespace Microsoft::Xna::Framework::Graphics
                      const Microsoft::Xna::Framework::Rectangle* rect,
                      T* data, int startIndex, int elementCount) const
         {
-            if (data == nullptr)
-                throw std::invalid_argument("TextureCube::GetData: data must not be null");
             using Word = std::remove_cvref_t<decltype(data[0].getPackedValueProperty())>;
             static_assert(std::is_unsigned_v<Word>);
             const int required = ValidateTypedTransferEXT(
-                "TextureCube::GetData", face, level, rect,
+                "TextureCube::GetData", false, face, level, rect, data,
                 startIndex, elementCount, static_cast<int>(sizeof(Word)));
             std::vector<std::uint8_t> bytes(
                 static_cast<std::size_t>(required) * sizeof(Word));
@@ -568,14 +568,12 @@ namespace Microsoft::Xna::Framework::Graphics
                      const Microsoft::Xna::Framework::Rectangle* rect,
                      T* data, int startIndex, int elementCount) const
         {
-            if (data == nullptr)
-                throw std::invalid_argument("TextureCube::GetData: data must not be null");
             using Element = std::remove_cvref_t<T>;
             constexpr int components = std::same_as<Element, float> ? 1
                 : (std::same_as<Element, Microsoft::Xna::Framework::Vector2> ? 2 : 4);
             constexpr int elementBytes = components * static_cast<int>(sizeof(float));
             const int required = ValidateTypedTransferEXT(
-                "TextureCube::GetData", face, level, rect,
+                "TextureCube::GetData", false, face, level, rect, data,
                 startIndex, elementCount, elementBytes);
             std::vector<std::uint8_t> bytes(
                 static_cast<std::size_t>(required) * elementBytes);
@@ -657,11 +655,9 @@ namespace Microsoft::Xna::Framework::Graphics
                      const Microsoft::Xna::Framework::Rectangle* rect,
                      T* data, int startIndex, int elementCount) const
         {
-            if (data == nullptr)
-                throw std::invalid_argument("TextureCube::GetData: data must not be null");
             const int elementBytes = static_cast<int>(sizeof(T));
             (void) ValidateTypedTransferEXT(
-                "TextureCube::GetData", face, level, rect,
+                "TextureCube::GetData", false, face, level, rect, data,
                 startIndex, elementCount, elementBytes);
             auto* bytes = reinterpret_cast<std::uint8_t*>(data + startIndex);
             GetTypedDataBytesEXT(face, level, rect, bytes, elementBytes);
@@ -704,10 +700,17 @@ namespace Microsoft::Xna::Framework::Graphics
         void Dispose(bool disposing) override;
 
     private:
+        void ValidateCopyPreludeEXT(
+            const char* api, bool setting, int level, const void* data,
+            int startIndex, int elementCount) const;
         [[nodiscard]] int ValidateTypedTransferEXT(
-            const char* api, CubeMapFace face, int level,
+            const char* api, bool setting, CubeMapFace face, int level,
             const Microsoft::Xna::Framework::Rectangle* rect,
-            int startIndex, int elementCount, int elementBytes) const;
+            const void* data, int startIndex, int elementCount, int elementBytes) const;
+        [[nodiscard]] int ValidateCompressedTransferEXT(
+            const char* api, bool setting, CubeMapFace face, int level,
+            const Microsoft::Xna::Framework::Rectangle* rect,
+            const void* data, int startIndex, int elementCount) const;
         void SetTypedDataBytesEXT(
             CubeMapFace face, int level, const Microsoft::Xna::Framework::Rectangle* rect,
             const std::uint8_t* data, int elementBytes);

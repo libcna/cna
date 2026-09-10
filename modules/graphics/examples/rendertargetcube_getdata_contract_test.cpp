@@ -62,6 +62,8 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/ArgumentException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
@@ -151,7 +153,7 @@ namespace
     // SOFTWARE-119 owns six independent CPU colour/sample planes, generates every mip on unbind,
     // and exposes exact top-first upload/readback from the same storage the rasterizer writes.
     constexpr Contract kContract{"SOFTWARE", true, Support::Exact, Support::Exact,
-                                 true, true, Support::Exact, MipTargets::Real, true, true, true, false, false};
+                                 true, true, Support::Exact, MipTargets::Real, true, true, true, false, true};
 #elif defined(CNA_RENDERER_EASYGL) && defined(CNA_GL_PROFILE_OPENGLES2)
     // The OPENGLES2 GL profile of the EasyGL family: identical to the EASYGL contract below
     // except MSAA -- core OpenGL ES 2.0 has no multisample renderbuffers/blit
@@ -338,6 +340,7 @@ namespace
     struct Probe
     {
         bool threwNotSupported  = false;  ///< the deterministic "cannot read this back" rejection
+        bool threwInvalidOperation = false; ///< the XNA active-render-target rejection
         bool threwSomethingElse = false;  ///< any other exception
         std::string otherWhat;
         std::vector<Color> dest;          ///< the WHOLE destination buffer after the call
@@ -469,6 +472,7 @@ class RenderTargetCubeGetDataContractTest : public Game
                          static_cast<int>(p.window));
         }
         catch (const System::NotSupportedException&) { p.threwNotSupported = true; }
+        catch (const System::InvalidOperationException&) { p.threwInvalidOperation = true; }
         catch (const std::exception& e) { p.threwSomethingElse = true; p.otherWhat = e.what(); }
         catch (...) { p.threwSomethingElse = true; p.otherWhat = "non-std exception"; }
 
@@ -809,30 +813,31 @@ class RenderTargetCubeGetDataContractTest : public Game
     {
         (void)dev;
         std::vector<Color> buf(static_cast<std::size_t>(kCube) * kCube, SentinelCD());
-        check(Throws<std::out_of_range>([&] {
-                  cube.GetData(static_cast<CubeMapFace>(6), 0, nullptr, buf.data(), 0, 4);
+        check(Throws<System::InvalidOperationException>([&] {
+                  cube.GetData(static_cast<CubeMapFace>(6), 0, nullptr, buf.data(), 0,
+                               kCube * kCube);
               }),
-              "X1 reject: an out-of-range CubeMapFace throws std::out_of_range");
-        check(Throws<std::out_of_range>([&] {
+              "X1 reject: an out-of-range CubeMapFace throws InvalidOperationException");
+        check(Throws<System::InvalidOperationException>([&] {
                   cube.GetData(CubeMapFace::PositiveX, -1, nullptr, buf.data(), 0, 4);
               }),
-              "X2 reject: a negative mip level throws std::out_of_range");
+              "X2 reject: a negative mip level throws InvalidOperationException");
         {
             const Rectangle r(kCube - 1, kCube - 1, 2, 2);
-            check(Throws<std::out_of_range>([&] {
+            check(Throws<System::ArgumentException>([&] {
                       cube.GetData(CubeMapFace::PositiveX, 0, &r, buf.data(), 0, 4);
                   }),
-                  "X3 reject: a rectangle leaving the face throws std::out_of_range");
+                  "X3 reject: a rectangle leaving the face throws ArgumentException");
         }
-        check(Throws<std::out_of_range>([&] {
+        check(Throws<System::ArgumentException>([&] {
                   cube.GetData(CubeMapFace::PositiveX, 0, nullptr, buf.data(), 0, 4);
               }),
-              "X4 reject: elementCount below the requested region throws std::out_of_range");
-        check(Throws<std::invalid_argument>([&] {
+              "X4 reject: elementCount below the requested region throws ArgumentException");
+        check(Throws<System::ArgumentNullException>([&] {
                   cube.GetData(CubeMapFace::PositiveX, 0, nullptr, static_cast<Color*>(nullptr), 0,
                                kCube * kCube);
               }),
-              "X5 reject: a null destination throws std::invalid_argument");
+              "X5 reject: a null destination throws ArgumentNullException");
 
         std::size_t intact = 0;
         for (const Color& c : buf) if (Same(c, SentinelCD())) ++intact;
@@ -845,10 +850,10 @@ class RenderTargetCubeGetDataContractTest : public Game
         {
             Probe p = ProbeFace(cube, 0, 4, nullptr, 1, 1, 0, SentinelA5(),
                                 Uniform(SentinelA5(), 1));
-            check(p.threwNotSupported && !p.threwSomethingElse && p.sentinelSurvivors == 1,
-                  "X7 reject: a mip level this non-mipmapped target never allocated is refused with "
-                  "NotSupportedException, not answered with level 0 [threwNotSupported=" +
-                  std::string(p.threwNotSupported ? "1" : "0") + " threwOther=" +
+            check(p.threwInvalidOperation && !p.threwSomethingElse && p.sentinelSurvivors == 1,
+                  "X7 reject: a mip level this non-mipmapped target never allocated throws "
+                  "InvalidOperationException, not level-0 content [threwInvalidOperation=" +
+                  std::string(p.threwInvalidOperation ? "1" : "0") + " threwOther=" +
                   (p.threwSomethingElse ? ("1:" + p.otherWhat) : "0") + " sentinelSurvivors=" +
                   std::to_string(p.sentinelSurvivors) + "]");
         }
@@ -867,20 +872,18 @@ class RenderTargetCubeGetDataContractTest : public Game
         check(Throws<System::InvalidOperationException>([&] { cube.Dispose(); }),
               "A2 active: disposing the ACTIVE cube target is rejected (REMED-GFX-039)");
 
-        // GetData while the same face is bound. CNA establishes no rejection here for
-        // RenderTarget2D, so the only thing that is never acceptable is a fabricated face.
+        // XNA rejects data transfer while the resource is bound as a render target.
         {
             Probe p = ProbeFace(cube, 4, 0, nullptr, kCube, kCube, 0, SentinelCD(),
                                 ExpectedFace(4, 0));
-            const bool honest = (p.exact == p.window) ||
-                                (p.threwNotSupported && p.sentinelSurvivors == p.window);
-            check(honest && p.fabricated == 0 && !p.threwSomethingElse,
-                  "A3 active: GetData while the SAME face is bound returns the live face or refuses "
-                  "-- never a fabricated one, and never a face this readback itself wiped [exact=" +
+            check(p.threwInvalidOperation && p.sentinelSurvivors == p.window &&
+                      p.fabricated == 0 && !p.threwSomethingElse,
+                  "A3 active: GetData while the SAME face is bound throws InvalidOperationException "
+                  "without touching the destination [exact=" +
                   std::to_string(p.exact) + "/" + std::to_string(p.window) + " fabricated=" +
                   std::to_string(p.fabricated) + " sentinelSurvivors=" +
                   std::to_string(p.sentinelSurvivors) +
-                  " threwNotSupported=" + std::string(p.threwNotSupported ? "1" : "0") +
+                  " threwInvalidOperation=" + std::string(p.threwInvalidOperation ? "1" : "0") +
                   " threwOther=" + (p.threwSomethingElse ? ("1:" + p.otherWhat) : "0") +
                   p.firstMismatch + "]");
         }
@@ -891,14 +894,14 @@ class RenderTargetCubeGetDataContractTest : public Game
         {
             Probe p = ProbeFace(cube, 5, 0, nullptr, kCube, kCube, 0, SentinelCD(),
                                 ExpectedFace(5, 0));
-            const bool honest = (p.exact == p.window) ||
-                                (p.threwNotSupported && p.sentinelSurvivors == p.window);
-            check(honest && p.fabricated == 0 && !p.threwSomethingElse,
-                  "A4 active: GetData for ANOTHER face while face 4 is bound returns that face or "
-                  "refuses -- never face 4's content and never a fabricated one [exact=" +
+            check(p.threwInvalidOperation && p.sentinelSurvivors == p.window &&
+                      p.fabricated == 0 && !p.threwSomethingElse,
+                  "A4 active: GetData for another face of the bound cube throws "
+                  "InvalidOperationException without touching the destination [exact=" +
                   std::to_string(p.exact) + "/" + std::to_string(p.window) + " fabricated=" +
                   std::to_string(p.fabricated) + " sentinelSurvivors=" +
-                  std::to_string(p.sentinelSurvivors) + p.firstMismatch + "]");
+                  std::to_string(p.sentinelSurvivors) + " threwInvalidOperation=" +
+                  std::string(p.threwInvalidOperation ? "1" : "0") + p.firstMismatch + "]");
         }
         dev.SetRenderTargets({});
 
