@@ -34,9 +34,13 @@ RULES = [
      "difference there is not the filter's dither"),
     (r"rasterizers disagree about a glyph's ink",
      [r"^root/(?:atlas/)?levelDigests\[\d+\]$", r"^root/cropping\[\]", r"^root/glyphs\[\]",
-      r"^root/atlas/(?:width|height)$", r"^root/kerning\[\]"],
-     "a glyph's ink and the box it sits in may differ; the font's own metrics -- line spacing, "
-     "spacing, the default character, the character map -- may not"),
+      r"^root/atlas/(?:width|height)$", r"^root/kerning\[\]",
+      r"^root/atlas/levelByteSizes\[\]$"],
+     "a glyph's ink and the box it sits in may differ, and with them the sheet they are packed "
+     "into -- a different width or height is a different number of bytes, so `levelByteSizes` is "
+     "the same fact as `atlas/width` and not a second one. The font's own metrics -- line "
+     "spacing, spacing, the default character, the character map -- may not differ, and neither "
+     "may the atlas's surface format"),
     (r"block compressors choose different endpoints",
      [r"^root/(?:atlas/)?levelDigests\[\d+\]$"],
      "only the compressed blocks may differ; a size, a format or a mip count is not a "
@@ -48,13 +52,24 @@ RULES = [
      "only the compiled blob may differ (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-201` "
      "records what is inside it)"),
     (r"XMA has no publicly implementable encoder",
-     [r"^root/(?:digest|samples|dataLength|formatTag|bitsPerSample|blockAlign|"
-      r"averageBytesPerSecond|extensionData|durationMs|loopStart|loopLength)"],
-     "an Xbox target's audio payload and the WAVEFORMATEX describing it may differ; nothing else"),
+     [r"^root/(?:digest|samples|sampleDigest|sampleByteCount|dataLength|formatTag|bitsPerSample|"
+      r"blockAlign|averageBytesPerSecond|extensionData|extensionByteCount|sampleRate|channels|"
+      r"durationMs|loopStart|loopLength)"],
+     "an Xbox target's audio payload and the WAVEFORMATEX describing it may differ -- including "
+     "`cbSize`, which is `extensionByteCount` and is 34 for an XMA format and 0 for the PCM one "
+     "CNA writes instead; nothing outside that structure"),
     (r"re-encodes a song to WMA",
      [r"^root/(?:digest|duration|durationMs|mediaPath|streamReference|size)"],
      "the re-encoded media and what describes it may differ"),
 ]
+
+# Fields that describe the *container* rather than the asset: how long the payload is and how the
+# compressor framed it. They are not a mechanism of their own -- a payload the reason allows to
+# differ takes them with it whenever it differs in length -- so they are permitted, and only when
+# every other field is. A reference whose sole complaint is one of these has nothing to prove
+# beyond what its reason has already proved (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-215`).
+DERIVED = [re.compile(one) for one in (
+    r"^decompressedLength$", r"^compressedLength$", r"^lzxFrames\[\]/", r"^lz4Frames\[\]/")]
 
 
 def main(argv=None):
@@ -100,12 +115,23 @@ def main(argv=None):
                                    "rule": rule[0].pattern})
                 continue
             fields = [one.split(":", 1)[0].strip() for one in differences]
-        for field in fields:
+        semantic = [one for one in fields
+                    if not any(pattern.match(one) for pattern in DERIVED)]
+        for field in semantic:
             if any(pattern.match(field) for pattern in rule[1]):
                 continue
             violations.append({"reference": reference, "reason": reason, "field": field,
                                "difference": field, "rule": rule[0].pattern})
             break
+        else:
+            # Nothing semantic is left over. A container field alone is still a violation when it
+            # is the *only* thing that differs, because then the payload did not differ at all and
+            # the reason explains nothing.
+            if not semantic and fields:
+                violations.append({"reference": reference, "reason": reason, "field": fields[0],
+                                   "difference": "only container framing differs; the payload "
+                                                 "the reason names does not",
+                                   "rule": rule[0].pattern})
 
     print("=== accepted differences, by reason ===")
     for pattern, count in counts.most_common():

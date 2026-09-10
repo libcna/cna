@@ -300,13 +300,36 @@ def main(argv=None):
                 assign(reference, "ACCEPTED_DIFFERENCE",
                        "XNA re-encodes a song to WMA, for which no encoder is available here")
                 continue
-            if source.get("platform") == "x":
+            # Only the *audio* of an Xbox target: XMA is an audio codec, and accepting every
+            # asset built for `x` under it put twenty textures and two models under a reason that
+            # has nothing to do with them -- SAMPLE-031's `engine_diff_tex_0.xnb` is a texture and
+            # its level 0 differs, which no missing audio encoder explains. A reason has to be
+            # about the thing it is accepting (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-215`).
+            if source.get("platform") == "x" and (
+                    processor in ("SoundEffectProcessor", "WavImporter")
+                    or "SoundEffectReader" in (source.get("rootReader") or "")):
                 assign(reference, "ACCEPTED_DIFFERENCE",
-                       "an Xbox 360 target: XMA has no publicly implementable encoder")
+                       "an Xbox 360 target's audio: XMA has no publicly implementable encoder")
                 continue
             difference = answer.get("differences") or []
-            complete = answer.get("differenceCount", len(difference)) <= len(difference)
-            if difference and complete and all("levelDigests" in one for one in difference):
+            # `differenceFields` is the *whole* set of paths, with indices stripped;
+            # `differences` is capped at twelve for reading and cannot answer "is that all of
+            # them". Asking the truncated list made this rule unreachable for any reference with
+            # more than twelve differences -- a ten-level texture has sixteen, so every one of
+            # them fell through to `UNEXPLAINED` or was caught by a broader rule above
+            # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-215`).
+            fields = answer.get("differenceFields")
+            if fields is not None:
+                complete = True
+                interesting = [one for one in fields
+                               if not one.startswith(("lzxFrames[", "lz4Frames[",
+                                                      "decompressedLength", "compressedLength"))]
+                onlyLevels = bool(interesting) and all("levelDigests" in one
+                                                       for one in interesting)
+            else:
+                complete = answer.get("differenceCount", len(difference)) <= len(difference)
+                onlyLevels = bool(difference) and all("levelDigests" in one for one in difference)
+            if complete and onlyLevels:
                 # *Which* levels differ is the whole of the reason, and reading "every difference
                 # mentions a level digest" as "only the generated levels differ" put 304 of 320
                 # references under a reason that does not explain them: 226 are block-compressed
@@ -315,9 +338,14 @@ def main(argv=None):
                 # and 78 are *uncompressed* textures whose base image differs, which no filter and
                 # no compressor accounts for at all (plans/plan_xna_sample_xnb_sweep.md
                 # `XNASWEEP-204`).
+                # From the complete field set when there is one -- a level digest keeps its
+                # index there for exactly this -- because reading *which* levels differ off a
+                # list capped at twelve can miss level 0 and call a base-image difference the
+                # mip filter's dither.
+                source_of_levels = interesting if fields is not None else difference
                 levels = {int(found.group(1))
                           for found in (re.search(r"levelDigests\[(\d+)\]", one)
-                                        for one in difference) if found}
+                                        for one in source_of_levels) if found}
                 if levels and 0 not in levels:
                     assign(reference, "ACCEPTED_DIFFERENCE",
                            "generated mip levels only, from the dither in XNA's own filter")
