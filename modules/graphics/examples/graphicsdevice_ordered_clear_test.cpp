@@ -167,12 +167,12 @@ namespace
                                  true, true, true,
                                  true, true, true, true, true, true, false};
 #elif defined(CNA_RENDERER_EASYGL)
-    // `clearIgnoresScissor` false is an INDEPENDENT, separately recorded divergence, not this
-    // finding: EasyGL clears with glClear, which GL_SCISSOR_TEST narrows. Its Clear IS
-    // viewport-independent, which is why the two questions are declared separately.
+    // Microsoft XNA and FNA both disable scissor testing across Clear. This declaration is the
+    // XNA contract, not raw glClear behavior: the renderer must neutralise GL_SCISSOR_TEST and
+    // restore it after the clear.
     constexpr Contract kContract{"EASYGL", true, true, true, true, true,
                                  true, true, true,
-                                 true, true, true, false, false, true, true};
+                                 true, true, true, true, false, true, true};
 #elif defined(CNA_RENDERER_SOFTWARE)
     constexpr Contract kContract{"SOFTWARE", true, true, true, false, false,
                                  true, true, false,
@@ -208,11 +208,11 @@ namespace
                                  true, false, false,
                                  true, true, true, true, false, false, false};
 #elif defined(CNA_RENDERER_DIRECTX9)
-    // `clearIgnoresViewport` / `clearIgnoresScissor` BOTH false, and both measured: D3D9's
-    // IDirect3DDevice9::Clear is bounded by the current viewport and, with scissor testing enabled,
-    // by the scissor rectangle -- which is real XNA's own behaviour, since XNA ran on D3D9. It
-    // disagrees with REMED-GFX-018's cross-renderer contract and with the five other measurable
-    // renderers; recorded as an independent finding rather than standardised away here.
+    // Raw IDirect3DDevice9::Clear is bounded by native raster state, which this backend currently
+    // exposes. This is NOT Microsoft XNA's own behavior: recovered XNA temporarily disables
+    // scissor testing and expands the viewport to the complete target. DirectX9 remains declared
+    // here as the measured backend-specific divergence; SOFTWARE-311 corrects the in-scope
+    // Software/EasyGL pair rather than silently rewriting an unverified Windows backend.
     constexpr Contract kContract{"DIRECTX9", true, true, true, true, true,
                                  true, true, true,
                                  true, true, false, false, false, true, true};
@@ -1217,6 +1217,69 @@ class OrderedClearTest : public Game
                    "(declared divergence)");
     }
 
+    /// V3 -- a depth-only Clear is likewise independent of the active scissor rectangle.
+    void RunDepthClearUnderScissor(GraphicsDevice& dev)
+    {
+        if (!NeedRtReadback("V3 depth Clear under a scissor")) return;
+        if (!kContract.primitives3D || !kContract.depthBuffer3D)
+        {
+            skip("V3 depth Clear under a scissor: skipped -- no depth-tested 3D draws on this "
+                 "renderer");
+            return;
+        }
+        auto rt = MakeTarget(dev, RenderTargetUsage::PreserveContents, DepthFormat::Depth24Stencil8);
+        dev.SetRenderTarget(rt.get());
+        dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer, kRed, 1.0f, 0);
+        Draw3D(dev, DepthState(), -1.0f, 1.0f, 0.25f, kCyan);
+
+        RasterizerState scissored = RasterizerState::CullNone;
+        scissored.setScissorTestEnableProperty(true);
+        dev.setRasterizerStateProperty(scissored);
+        const Rectangle savedScissor = dev.getScissorRectangleProperty();
+        dev.setScissorRectangleProperty(Rectangle(0, 0, kHalf, kRT));
+        dev.Clear(ClearOptions::DepthBuffer, kWhite, 1.0f, 0);
+        dev.setScissorRectangleProperty(savedScissor);
+        dev.setRasterizerStateProperty(RasterizerState::CullNone);
+
+        Draw3D(dev, DepthState(), -1.0f, 1.0f, 0.75f, kBlue);
+        dev.SetRenderTarget(nullptr);
+        ExpectUniform(ReadTarget(*rt), kRT, kRT, kBlue,
+                      "V3 depth Clear under a scissor: the full depth attachment resets, not "
+                      "only the scissor rectangle");
+    }
+
+    /// V4 -- a stencil-only Clear is likewise independent of the active scissor rectangle.
+    void RunStencilClearUnderScissor(GraphicsDevice& dev)
+    {
+        if (!NeedRtReadback("V4 stencil Clear under a scissor")) return;
+        if (!kContract.primitives3D || !kContract.stencilBuffer3D)
+        {
+            skip("V4 stencil Clear under a scissor: skipped -- stencil testing does not gate "
+                 "fragments here");
+            return;
+        }
+        auto rt = MakeTarget(dev, RenderTargetUsage::PreserveContents, DepthFormat::Depth24Stencil8);
+        dev.SetRenderTarget(rt.get());
+        dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil,
+                  kRed, 1.0f, 0);
+        Draw3D(dev, StencilWriteState(1), -1.0f, 1.0f, 0.5f, kGreen);
+
+        RasterizerState scissored = RasterizerState::CullNone;
+        scissored.setScissorTestEnableProperty(true);
+        dev.setRasterizerStateProperty(scissored);
+        const Rectangle savedScissor = dev.getScissorRectangleProperty();
+        dev.setScissorRectangleProperty(Rectangle(0, 0, kHalf, kRT));
+        dev.Clear(ClearOptions::Stencil, kWhite, 1.0f, 0);
+        dev.setScissorRectangleProperty(savedScissor);
+        dev.setRasterizerStateProperty(RasterizerState::CullNone);
+
+        Draw3D(dev, StencilTestState(1), -1.0f, 1.0f, 0.5f, kBlue);
+        dev.SetRenderTarget(nullptr);
+        ExpectUniform(ReadTarget(*rt), kRT, kRT, kGreen,
+                      "V4 stencil Clear under a scissor: the full stencil attachment resets, "
+                      "so no stale region passes");
+    }
+
     // =====================================================================
     // S -- multisample targets
     // =====================================================================
@@ -1704,6 +1767,8 @@ protected:
         RunStencilClearValues(dev);
         RunClearUnderViewport(dev);
         RunClearUnderScissor(dev);
+        RunDepthClearUnderScissor(dev);
+        RunStencilClearUnderScissor(dev);
         RunMsaaOrderedClear(dev);
         // REMED-GFX-156: pass state across the boundary an ordered Clear creates, and the
         // destination arrangements that boundary has to stay correct in.

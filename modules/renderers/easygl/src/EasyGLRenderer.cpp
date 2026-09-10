@@ -6494,10 +6494,9 @@ if (!ProfileIsEs2ApiGeneration())
     void EasyGLRenderer::Clear(float r, float g, float b, float a)
     {
         if (metagl::IsContextLost()) return;
-        // Task 880: glClear() is viewport-independent (only the scissor rect, if enabled, can
-        // narrow it) -- no longer hardcodes the viewport to the full window here, so a
-        // previously-set custom Viewport (Task 880) survives across Clear() instead of being
-        // silently reset to full size as a side effect.
+        // SOFTWARE-311: XNA Clear covers the complete target. glClear is already independent of
+        // the viewport, but it is clipped by GL_SCISSOR_TEST, so neutralise only that state.
+        const bool scissorWasEnabled = DisableScissorForClear();
         device.set_clear_color(r, g, b, a);
         // REMED-GFX-077: XNA Clear() clears all channels regardless of BlendState.ColorWriteChannels,
         // but glClear respects glColorMask — so neutralise a non-default mask across the clear, then
@@ -6513,6 +6512,7 @@ if (!ProfileIsEs2ApiGeneration())
         // Target | DepthBuffer | Stencil precisely so this one does not have to guess.
         device.clear(::easygl::ClearFlags::Color);
         if (maskActive) ApplyCurrentColorWriteMasks();
+        RestoreScissorAfterClear(scissorWasEnabled);
     }
 
     void EasyGLRenderer::Present()
@@ -7801,6 +7801,19 @@ if (!ProfileIsEs2ApiGeneration())
         for (int i = 0; i < activeCount; ++i)
             if (currentColorWriteMasks_[i] != 15) return true;
         return false;
+    }
+
+    bool EasyGLRenderer::DisableScissorForClear()
+    {
+        const bool wasEnabled =
+            metagl::glIsEnabled(::metagl::Capability::ScissorTest) != 0;
+        if (wasEnabled) device.set_scissor_test_enabled(false);
+        return wasEnabled;
+    }
+
+    void EasyGLRenderer::RestoreScissorAfterClear(bool wasEnabled)
+    {
+        if (wasEnabled) device.set_scissor_test_enabled(true);
     }
 
     void EasyGLRenderer::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
@@ -12295,7 +12308,7 @@ if (ProfileIsEs2ApiGeneration())
     void EasyGLRenderer::ClearColorAndDepth(float r, float g, float b, float a, float depth)
     {
         if (metagl::IsContextLost()) return;
-        // Task 880: see Clear()'s identical comment -- glClear() is viewport-independent.
+        const bool scissorWasEnabled = DisableScissorForClear();
         device.set_clear_color(r, g, b, a);
         device.set_clear_depth(depth);
         device.set_depth_mask(true);
@@ -12307,6 +12320,7 @@ if (ProfileIsEs2ApiGeneration())
         device.clear(::easygl::ClearFlags::Color | ::easygl::ClearFlags::Depth);
         if (maskActive) ApplyCurrentColorWriteMasks();
         RestoreWriteMasksAfterClear(true, false);
+        RestoreScissorAfterClear(scissorWasEnabled);
     }
 
     // Task 871: glClear(GL_STENCIL_BUFFER_BIT) is itself masked by the currently-active
@@ -12317,26 +12331,31 @@ if (ProfileIsEs2ApiGeneration())
     void EasyGLRenderer::ClearStencil(int stencil)
     {
         if (metagl::IsContextLost()) return;
+        const bool scissorWasEnabled = DisableScissorForClear();
         device.set_clear_stencil(stencil);
         device.set_stencil_mask(0xFFFFFFFFu);
         device.clear(::easygl::ClearFlags::Stencil);
         RestoreWriteMasksAfterClear(false, true);
+        RestoreScissorAfterClear(scissorWasEnabled);
     }
 
     void EasyGLRenderer::ClearDepthAndStencil(float depth, int stencil)
     {
         if (metagl::IsContextLost()) return;
+        const bool scissorWasEnabled = DisableScissorForClear();
         device.set_clear_depth(depth);
         device.set_clear_stencil(stencil);
         device.set_depth_mask(true);
         device.set_stencil_mask(0xFFFFFFFFu);
         device.clear(::easygl::ClearFlags::Depth | ::easygl::ClearFlags::Stencil);
         RestoreWriteMasksAfterClear(true, true);
+        RestoreScissorAfterClear(scissorWasEnabled);
     }
 
     void EasyGLRenderer::ClearColorAndStencil(float r, float g, float b, float a, int stencil)
     {
         if (metagl::IsContextLost()) return;
+        const bool scissorWasEnabled = DisableScissorForClear();
         device.set_clear_color(r, g, b, a);
         device.set_clear_stencil(stencil);
         device.set_stencil_mask(0xFFFFFFFFu);
@@ -12345,11 +12364,13 @@ if (ProfileIsEs2ApiGeneration())
         if (maskActive) ForceAllColorWriteMasks();
         device.clear(::easygl::ClearFlags::Color | ::easygl::ClearFlags::Stencil);
         if (maskActive) ApplyCurrentColorWriteMasks();
+        RestoreScissorAfterClear(scissorWasEnabled);
     }
 
     void EasyGLRenderer::ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int stencil)
     {
         if (metagl::IsContextLost()) return;
+        const bool scissorWasEnabled = DisableScissorForClear();
         device.set_clear_color(r, g, b, a);
         device.set_clear_depth(depth);
         device.set_clear_stencil(stencil);
@@ -12362,15 +12383,18 @@ if (ProfileIsEs2ApiGeneration())
         device.clear(::easygl::ClearFlags::Color | ::easygl::ClearFlags::Depth | ::easygl::ClearFlags::Stencil);
         RestoreWriteMasksAfterClear(true, true);
         if (maskActive) ApplyCurrentColorWriteMasks();
+        RestoreScissorAfterClear(scissorWasEnabled);
     }
 
     void EasyGLRenderer::ClearDepth(float depth)
     {
         if (metagl::IsContextLost()) return;
+        const bool scissorWasEnabled = DisableScissorForClear();
         device.set_clear_depth(depth);
         device.set_depth_mask(true);
         device.clear(::easygl::ClearFlags::Depth);
         RestoreWriteMasksAfterClear(true, false);
+        RestoreScissorAfterClear(scissorWasEnabled);
     }
 
     void EasyGLRenderer::SetDepthTestEnabled(bool enabled)

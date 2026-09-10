@@ -1163,6 +1163,8 @@ namespace CNA::Internal::Renderers::EasyGL
         void ApplyCurrentColorWriteMasks();
         void ForceAllColorWriteMasks();
         [[nodiscard]] bool HasRestrictedActiveColorWriteMask() const;
+        [[nodiscard]] bool DisableScissorForClear();
+        void RestoreScissorAfterClear(bool wasEnabled);
 
         static constexpr int kMaxSamplerSlots = 16;
         ::easygl::Sampler samplers_[kMaxSamplerSlots];
