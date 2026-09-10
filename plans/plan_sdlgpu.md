@@ -2,10 +2,11 @@
 
 > **Current verdict (audit opened 2026-09-09): B. CLASSIC SDL GPU ↔ EASYGL PARITY NOT YET
 > REACHED.** The current renderer is a substantial, real Vulkan-backed implementation, but live
-> source and pixel tests demonstrate remaining ordinary-XNA gaps in query and deferred-lifetime
-> permutations. Core instancing, multiple streams and every ordinary draw/buffer family were
+> source and pixel tests leave deferred-lifetime permutations and the final adversarial sweep
+> open. Core instancing, multiple streams and every ordinary draw/buffer family were
 > closed by `SDLGPU-60/78`; independent MRT outputs, SpriteBatch, all five classic stock-effect
-> families, Models and ordinary compiled Effects were closed by `SDLGPU-75/76/77/79`. This verdict supersedes
+> families, Models and ordinary compiled Effects were closed by `SDLGPU-75/76/77/79`;
+> `SDLGPU-80` rigorously classifies OcclusionQuery as an underlying SDL_gpu limitation. This verdict supersedes
 > historical completion banners below; those remain as implementation history, not current truth.
 
 ## 2026-09-09 parity audit status
@@ -17,18 +18,18 @@
 | Renderer contract | `modules/graphics/include/CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp` |
 | Reference renderer | `modules/renderers/easygl/{include,src,examples}` |
 | Renderer under test | `modules/renderers/sdl-gpu/{include,src,tests,examples}` |
-| EasyGL / SDL GPU example sources | 246 / 38 `.cpp` files at audit start; 246 / 44 now (source count, not capability count) |
+| EasyGL / SDL GPU example sources | 246 / 38 `.cpp` files at audit start; 246 / 45 now (source count, not capability count) |
 | EasyGL / SDL GPU renderer unit-test sources | 2 / 2 `.cpp` files |
-| SDL GPU registered integration tests | 186 CTests (85 baseline plus 101 parity/remediation registrations) |
+| SDL GPU registered integration tests | 187 CTests (85 baseline plus 102 parity/remediation registrations) |
 | Shared EasyGL parity fixtures available | 31 renderer-neutral sources in `modules/graphics/examples/parity` |
 | Shared parity fixtures registered for SDL GPU | 31/31 (all renderer-neutral sources, including the nine classic stock-effect fixtures) |
 | Tasks created by this audit | 30 (`SDLGPU-55`–`SDLGPU-84`) |
-| Completed / open / proven unavoidable | 27 / 3 tasks; 2 capability fields (`BlendState.MultiSampleMask` and exact half-rate `PresentInterval::Two`) are proven unavailable in current SDL_gpu and are not separate tasks; `SDLGPU-80` remains a candidate limitation |
+| Completed / open / proven unavoidable | 28 / 2 tasks; 3 capability fields (`BlendState.MultiSampleMask`, exact half-rate `PresentInterval::Two`, and `OcclusionQuery`) are proven unavailable in current SDL_gpu; the first two are not separate tasks and the third is closed by `SDLGPU-80` |
 | SDL GPU build | Stable `cmake-build-sdlgpu`, Debug, `CNA_GRAPHICS_RENDERER=SDL_GPU`, tests/examples and `CNA_SDL_GPU_COMPILED_EFFECTS` ON |
 | EasyGL oracle build | Stable `cmake-build-debug`, Debug, `CNA_GRAPHICS_RENDERER=OPENGL33`, tests/examples ON |
 | Runtime driver | SDL 3.5.0 SDL_gpu Vulkan on AMD Radeon 780M / Mesa RADV 25.0.7; Khronos validation layer 1.4.309 present |
 | Display constraint | Sandboxed tests cannot access host `:0`; SDL `offscreen` successfully creates the real Vulkan GPU device. Escalated preservation checks can use host `:0` (WebGPU), while EasyGL uses Xvfb `:179`. The SDL GPU test-driver cache setting defaults to `x11` and is locally set to `offscreen`. |
-| Validation | Debug mode is enabled in current source. The offscreen 85-test baseline and every completed task slice through SDLGPU-75 emitted no captured `VUID`, `Validation Error`, or `Validation Warning`. SDLGPU-76's validation-fatal eight-test SpriteBatch/lifetime/order slice, SDLGPU-77's twelve-test stock-effect slice, SDLGPU-78's fourteen-test buffer/draw slice, and SDLGPU-79's 34 compiled-effect unit tests plus five validation-fatal model CTests are also clean; every new parity CTest makes those diagnostics fatal. |
+| Validation | Debug mode is enabled in current source. The offscreen 85-test baseline and every completed task slice through SDLGPU-75 emitted no captured `VUID`, `Validation Error`, or `Validation Warning`. SDLGPU-76's validation-fatal eight-test SpriteBatch/lifetime/order slice, SDLGPU-77's twelve-test stock-effect slice, SDLGPU-78's fourteen-test buffer/draw slice, SDLGPU-79's 34 compiled-effect unit tests plus five model CTests, and SDLGPU-80's five-check limitation CTest are also clean; every new parity CTest makes those diagnostics fatal. |
 | Focused EasyGL oracle baseline | 68/68 selected tests pass on Xvfb/llvmpipe: the prior 49 stock-effect/state/format/RT/texture/MRT/instancing/query/presentation/sprite tests, thirteen exact buffer/draw sources, the shared line-topology oracle and five exact model sources. The VSync program's three CNA-forwarding checks pass; its real-vblank half is correctly skipped because raw GL cannot enable VSync under Xvfb. |
 
 The first attempted baseline used the suite's historical hard-coded `SDL_VIDEODRIVER=x11` and
@@ -115,7 +116,7 @@ underlying limitation with no correct reasonable emulation; `out` excluded moder
 | Ordinary compiled effects | real compiled runtime | real deferred MojoShader runtime and draw routes | `=` — 34/34 shared/reflection/state/pixel/resource tests cover techniques, passes, clone values, multi-stream/instancing, SpriteBatch, RT/cube/volume samplers and deferred lifetime; `SDLGPU-79` |
 | Models where renderer participates | hierarchy/multi-mesh/skinning corpus | stock draw paths and ordinary content pipeline | `=` — five exact EasyGL sources prove Model.Draw, 32-bit indices, child transforms, per-mesh effects and skinned playback; `SDLGPU-79` |
 | Deferred resource/state lifetime | immediate GL plus registries | shared-state command snapshots and lifetime tests | `~` — mutation/destruction sweep; `SDLGPU-81` |
-| OcclusionQuery | native GL query (`any` on GLES, count on desktop) | inherited null creation; no query primitive in vendored SDL_gpu | candidate `⛔`, not final until `SDLGPU-80` closes |
+| OcclusionQuery | native GL query (`any` on GLES, count on desktop) | false capability and deterministic public construction refusal | `⛔` — vendored SDL_gpu 3.5.0 exposes completion fences but no occlusion/query-pool command, writable fragment-stage storage or native-device interop; exact renderer emulation fails arbitrary compiled shaders, four-target MRT, discard/depth/stencil/MSAA cases; `SDLGPU-80` |
 | ShaderEffect/PBR/glTF/compute/storage/indirect/timers/modern passes | EasyGL CNAEXT families | some existing SDL GPU implementations | `out` — preserve, do not expand |
 
 ### Ordinary SurfaceFormat matrix (current)
@@ -169,7 +170,7 @@ were checked individually in the declarations and implementations.
 |---|---|---|---|
 | `IVertexBufferRenderer::{SetData,SetDataWithOptions,SetVertexDeclaration,GetVertexCount}` | explicit | explicit | classic; semantic declarations, typed/raw/partial/empty transfers, CPU round-trip and every option are verified (`SDLGPU-59/78`) |
 | `IIndexBufferRenderer::{SetData16,SetData32,*WithOptions,GetIndexCount,IsThirtyTwoBit}` | all explicit | all explicit | classic; both widths, partial/empty transfers, CPU round-trip and every option are verified (`SDLGPU-78`) |
-| `IOcclusionQueryRenderer::{Begin,End,IsComplete,PixelCount,PixelCountIsPreciseEXT}` and factory | explicit | inherited null, no object | classic; candidate limitation (`SDLGPU-80`) |
+| `IOcclusionQueryRenderer::{Begin,End,IsComplete,PixelCount,PixelCountIsPreciseEXT}` and factory | explicit | factory explicitly throws the exact underlying SDL_gpu limitation; capability/profile false | classic `⛔`; silent inherited-null object removed and no false result is fabricated (`SDLGPU-80`) |
 | `ITextureRenderer::{GetWidth,GetHeight,UpdatePixels,UpdatePixelsLevel,HasDefinedMipLevel,GetSurfaceFormatEXT,ShareCpuPixels,GetData}` | explicit except default mip query behavior is implemented through EasyGL state | width/height/update/format/GetData explicit; mip query and CPU-share defaults remain appropriate because the XNA layer owns those shadows | classic format behavior `=` through `SDLGPU-69`; deferred lifetime remains `SDLGPU-81` |
 | `ITexture3DRenderer::{SetData,GetData,BindGL,GetDimensionsEXT}` | upload/readback/bind explicit; concrete storage is RGBA8 | upload/readback explicit; concrete resource records and guards its Color format; GL/default dimensions irrelevant | classic Color storage/transfers `=` (`SDLGPU-71`) |
 | `ITextureCubeRenderer::{SetData,SetCompressedDataEXT,GetData,BindGL,ShareCpuPixels,GetSizeEXT}` | all storage paths explicit | RGBA and DXT Set/Get explicit; exact DXT block shadow; size/cpu-share defaults are unused by ordinary SDL sampling | classic cube storage `=` through `SDLGPU-70`; `BindGL` is EasyGL-specific |
@@ -225,7 +226,8 @@ include exact EasyGL presentation/lifecycle sources compiled under SDL GPU by `S
 packed/DXT/format-refusal sources from `SDLGPU-69`, cube and volume sources from `SDLGPU-70/71`,
 the exact RenderTarget2D properties source from `SDLGPU-72`, and both cube property/depth sources
 from `SDLGPU-73`, plus the effect, buffer/draw and five model sources added by `SDLGPU-77/78/79`.
-The only two feature-missing sources are EasyGL's occlusion-query programs (`SDLGPU-80`); the
+The only two feature-missing sources are EasyGL's occlusion-query programs, retained as explicit
+`⛔` reference differences rather than falsely called covered (`SDLGPU-80`); the
 old instanced-model source is explicitly CNAEXT `ShaderEffect` and is classified `out`, while
 ordinary compiled Effect instancing is now verified. A row moves
 whenever implementation evidence disproves its classification.
@@ -1052,16 +1054,55 @@ underlying API limitation proven after reasonable emulation analysis.
   new-test-needed entries. The two remaining feature-missing rows are both occlusion queries owned
   by `SDLGPU-80`.
 
-### SDLGPU-80 — prove or close the occlusion-query limitation ⬜
+### SDLGPU-80 — prove or close the occlusion-query limitation ✅ (`⛔`)
 
-- **Problem/public behavior:** ordinary `OcclusionQuery` works on EasyGL and SDL currently returns
-  null while inherited capability reports true.
+- **Problem/public behavior:** ordinary `OcclusionQuery` works on EasyGL; SDL correctly reports the
+  capability false but inherits a null factory, so public construction succeeds and Begin/End
+  silently no-op instead of refusing the unavailable operation.
 - **Evidence:** vendored SDL 3.5.0 `SDL_gpu.h` contains fence queries only and no occlusion/query-pool
   primitive. CPU bounds or delayed fake values cannot reproduce samples-after-depth/stencil.
 - **Location:** vendored-header evidence, capability reporting and limitation text.
 - **Acceptance/test:** re-audit the exact current header/API; investigate a correct render/readback
   emulation and reject it only with measured correctness/cost reasoning. If no reasonable path
   exists, capability false + constructor refusal + exact limitation is `⛔`; never fake results.
+- **Result (2026-09-10):** confirmed as an underlying API limitation, not an unfinished CNA draw
+  path. The exact in-tree dependency is SDL **3.5.0** (`third_party/SDL` commit
+  `cbe3fbe9f367340dcd924de29c225c9f4ffea1f5`). A complete case-insensitive query/occlusion/
+  timestamp/fence scan of its 4,500-line public `SDL_gpu.h` finds only command-completion fences:
+  `SDL_SubmitGPUCommandBufferAndAcquireFence`, `SDL_WaitForGPUFences`, `SDL_QueryGPUFence` and
+  `SDL_ReleaseGPUFence` (lines 4376–4493). There is no occlusion-query handle, query-pool type,
+  begin/end command, result resolve or sample-count result. `SDL_GPUDevice`, command buffers and
+  render passes are opaque, and the device-properties surface publishes names/versions rather
+  than native Vulkan/Metal/D3D12 handles. This is independently corroborated by the exact pinned
+  FNA3D `3240147` SDL_gpu driver: its `CreateQuery`, dispose, Begin, End, Complete and PixelCount
+  functions at lines 4014–4056 all log “not supported by SDL_GPU”, with creation returning null.
+
+  Renderer-side alternatives were traced against the actual XNA semantics and fail correctness
+  before performance becomes the deciding factor. A query counts every sample surviving shader
+  discard/clip and rasterizer depth/stencil/MSAA tests even when color writes are disabled,
+  blended to the same value or overwritten later, so color/depth readback cannot reconstruct the
+  history. An auxiliary additive color target would require rewriting every stock and arbitrary
+  compiled pixel shader, consumes an unavailable fifth attachment during an ordinary four-target
+  MRT draw, and an MSAA resolve loses the per-sample tally. Atomic instrumentation is unavailable:
+  SDL_gpu 3.5 marks graphics-stage storage textures and buffers read-only (header lines 906–912,
+  986–991 and 3417–3535); writable storage exists only for compute. CPU replay cannot reproduce
+  arbitrary compiled shader sampling, discard, interpolation, depth/stencil and multisample rules.
+  Reaching behind SDL_gpu to one native backend is also impossible through its public opaque
+  handles and would cease to be an SDL_gpu renderer on Metal/D3D12. No timing benchmark can make
+  any of these semantically incorrect candidates reasonable.
+
+  SDL GPU already reported the legacy capability and detailed profile as false, but inherited
+  `CreateOcclusionQuery()` returned null, allowing the public constructor to succeed and silently
+  turn Begin/End into no-ops with a fabricated zero. The renderer now explicitly throws
+  `System::NotSupportedException` with the concrete API reason. The new validation-fatal
+  `SdlGpu_OcclusionQuery_Limitation` passes **5/5**: both capability surfaces are false, the public
+  constructor has the exact refusal, limitations distinguish fences from rasterizer queries, and
+  a subsequent real target clear/readback proves the device remains usable. The updated historical
+  smoke reaches and passes both query checks; its total remains the pre-existing **29/30** because
+  this offscreen device lacks the smoke's requested nonzero MSAA capability. EasyGL's cycle,
+  fully-visible-positive and depth-occluded-zero controls pass **3/3** under Xvfb, proving the
+  reference behavior being classified rather than weakening it. SDL GPU now registers **187**
+  integration CTests, and no relevant Vulkan validation diagnostic appeared.
 
 ### SDLGPU-81 — register and pass the shared EasyGL parity corpus; audit deferred lifetime ⬜
 

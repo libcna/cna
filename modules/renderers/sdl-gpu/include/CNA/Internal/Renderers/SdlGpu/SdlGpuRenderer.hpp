@@ -2231,6 +2231,14 @@ namespace CNA::Internal::Renderers::SdlGpu
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;
 
+        /**
+         * @brief Refuses XNA occlusion queries because the SDL_gpu API has no query primitive.
+         *
+         * @return Never returns.
+         * @throws System::NotSupportedException on every call.
+         */
+        std::unique_ptr<IOcclusionQueryRenderer> CreateOcclusionQuery() override;
+
         /** @brief Queues a combined color+depth clear, consumed on the next render pass. */
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         /** @brief Queues a depth-only clear, consumed on the next render pass. */

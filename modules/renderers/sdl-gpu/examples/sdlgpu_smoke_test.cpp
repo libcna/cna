@@ -141,8 +141,18 @@ protected:
                   "WireFrame is reported because native line fill is pixel-verified");
             check(!dev.SupportsCapability(CNA::GraphicsCapability::OcclusionQuery),
                   "OcclusionQuery is false because the underlying API exposes no query primitive");
-            check(renderer.CreateOcclusionQuery() == nullptr,
-                  "OcclusionQuery factory agrees with the false capability");
+            bool queryRefused = false;
+            try
+            {
+                (void)renderer.CreateOcclusionQuery();
+            }
+            catch (const std::exception& error)
+            {
+                queryRefused = std::string_view(error.what()).find(
+                    "no occlusion-query or query-pool commands") != std::string_view::npos;
+            }
+            check(queryRefused,
+                  "OcclusionQuery factory deterministically refuses the unsupported operation");
             check(dev.SupportsCapability(CNA::GraphicsCapability::MultiStreamVertexInput),
                   "MultiStreamVertexInput is reported after split-stream pixel verification");
             check(dev.SupportsCapability(CNA::GraphicsCapability::Instancing),

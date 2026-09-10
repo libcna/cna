@@ -42,6 +42,17 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     set_tests_properties(SdlGpu_Smoke PROPERTIES
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
+    # SDLGPU-80: SDL_gpu exposes command-completion fences but no occlusion-query/query-pool
+    # command. Lock the public contract to a truthful false capability and deterministic
+    # construction refusal; never let the inherited nullptr turn Begin/End into silent no-ops.
+    cna_sdlgpu_test(cna_test_sdlgpu_occlusionquery_limitation
+                    sdlgpu_occlusionquery_limitation_test.cpp)
+    cna_register_renderer_test(NAME SdlGpu_OcclusionQuery_Limitation
+        COMMAND cna_test_sdlgpu_occlusionquery_limitation
+        TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    set_tests_properties(SdlGpu_OcclusionQuery_Limitation PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+
     # SDLGPU-61: SDL_gpu's native polygon-line fill draws every asymmetric triangle edge while
     # leaving the interior empty. Reuse the exact EasyGL/WebGPU public fixture so the capability
     # answer is backed by the same positive edge and negative interior oracle.

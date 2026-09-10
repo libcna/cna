@@ -1984,8 +1984,10 @@ namespace CNA::Internal::Renderers::SdlGpu
     std::string_view SdlGpuRenderer::GetAdditionalLimitationsTextEXT() const
     {
         return "SDL GPU supports eight stock-effect vertex streams and four independently "
-               "writable, mixed-format color targets. Compiled/custom-effect instancing is not "
-               "implemented; SDL_gpu 3.5 exposes no OcclusionQuery primitive.";
+               "writable, mixed-format color targets. CNAEXT ShaderEffect instancing is not "
+               "implemented. OcclusionQuery is unavailable: vendored SDL_gpu 3.5.0 exposes no "
+               "occlusion-query or query-pool commands; GPU fences report only command-buffer "
+               "completion and cannot count samples that pass depth/stencil.";
     }
 
     SDL_GPUTextureFormat SdlGpuRenderer::QueryDepthStencilFormat(SDL_GPUDevice* device)
@@ -3472,6 +3474,14 @@ namespace CNA::Internal::Renderers::SdlGpu
     std::unique_ptr<ISpriteBatchRenderer> SdlGpuRenderer::CreateSpriteBatch()
     {
         return std::make_unique<SdlGpuSpriteBatchRenderer>(*this);
+    }
+
+    std::unique_ptr<IOcclusionQueryRenderer> SdlGpuRenderer::CreateOcclusionQuery()
+    {
+        throw System::NotSupportedException(
+            "CNA SDL_GPU: OcclusionQuery is unavailable because vendored SDL_gpu 3.5.0 exposes "
+            "no occlusion-query or query-pool commands; GPU fences report only command-buffer "
+            "completion and cannot count samples that pass depth/stencil.");
     }
 
     void SdlGpuRenderer::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,

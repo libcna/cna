@@ -761,6 +761,10 @@
       "category": "renderer-integration-executable",
       "max_references": 1
     },
+    "modules/renderers/sdl-gpu/examples/sdlgpu_occlusionquery_limitation_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 3
+    },
     "modules/renderers/sdl-gpu/examples/sdlgpu_presentation_surface_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 3

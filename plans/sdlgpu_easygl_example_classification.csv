@@ -136,8 +136,8 @@ easygl_msaa_change_test.cpp,classic-xna-direct-parity,SDLGPU-68,same source pass
 easygl_msaa_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_normalmapping_shader_test.cpp,modern-cnaext-out,-,ShaderEffect/PBR/glTF/sample-specific modern graphics path
 easygl_npot_texture_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
-easygl_occlusion_query_occluded_quad_test.cpp,classic-xna-feature-missing,SDLGPU-80,SDL_gpu has no query API
-easygl_occlusion_query_visible_quad_test.cpp,classic-xna-feature-missing,SDLGPU-80,SDL_gpu has no query API
+easygl_occlusion_query_occluded_quad_test.cpp,classic-xna-feature-missing,SDLGPU-80,⛔ vendored SDL_gpu 3.5.0 has no occlusion/query-pool API and exact renderer emulation cannot preserve depth/stencil/MSAA/discard semantics
+easygl_occlusion_query_visible_quad_test.cpp,classic-xna-feature-missing,SDLGPU-80,⛔ vendored SDL_gpu 3.5.0 has no occlusion/query-pool API and exact renderer emulation cannot preserve depth/stencil/MSAA/discard semantics
 easygl_packed16_format_test.cpp,classic-xna-direct-parity,SDLGPU-69,same source passes SDL GPU with native packed storage
 easygl_particleeffect_shader_test.cpp,modern-cnaext-out,-,ShaderEffect/PBR/glTF/sample-specific modern graphics path
 easygl_pbr_fresnel_factors_test.cpp,modern-cnaext-out,-,ShaderEffect/PBR/glTF/sample-specific modern graphics path
