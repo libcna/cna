@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// SOFTWARE-112: renderer-neutral classic stock-effect fog contract.
+// SOFTWARE-112/SOFTWARE-317: renderer-neutral classic stock-effect fog contract.
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -180,20 +180,20 @@ class StockEffectFogContractTest final : public Game
     }
 
     Color RenderAlpha(GraphicsDevice& device, RenderTarget2D& target,
-                      const FogCase& testCase)
+                      Texture2D& white, const FogCase& testCase)
     {
         Begin(device, target);
         AlphaTestEffect effect(device);
         ConfigureFog(effect, testCase);
+        effect.setTextureProperty(&white);
         effect.setVertexColorEnabledProperty(false);
         effect.setDiffuseColorProperty(FogRef::kGeomRGB);
         effect.Apply();
-        const Color ignored(0, 255, 0, 255);
         const float z = testCase.objectZ;
-        const VertexPositionColor vertices[6] = {
-            {Vector3(-1,  1, z), ignored}, {Vector3(-1, -1, z), ignored},
-            {Vector3( 1, -1, z), ignored}, {Vector3(-1,  1, z), ignored},
-            {Vector3( 1, -1, z), ignored}, {Vector3( 1,  1, z), ignored},
+        const VertexPositionTexture vertices[6] = {
+            {Vector3(-1,  1, z), Vector2(0, 0)}, {Vector3(-1, -1, z), Vector2(0, 1)},
+            {Vector3( 1, -1, z), Vector2(1, 1)}, {Vector3(-1,  1, z), Vector2(0, 0)},
+            {Vector3( 1, -1, z), Vector2(1, 1)}, {Vector3( 1,  1, z), Vector2(1, 0)},
         };
         device.DrawUserPrimitives(PrimitiveType::TriangleList, vertices, 0, 2);
         return Finish(device, target);
@@ -336,7 +336,7 @@ protected:
         for (const FogCase& testCase : cases)
         {
             Check("BasicEffect", testCase, RenderBasic(device, target, testCase));
-            Check("AlphaTestEffect", testCase, RenderAlpha(device, target, testCase));
+            Check("AlphaTestEffect", testCase, RenderAlpha(device, target, white, testCase));
             Check("DualTextureEffect", testCase,
                   RenderDual(device, target, white, gray, testCase));
             Check("EnvironmentMapEffect", testCase,
