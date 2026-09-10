@@ -135,8 +135,8 @@ protected:
             check(dev.SupportsCapability(CNA::GraphicsCapability::MultiSampleAntiAliasing),
                   "MSAA is reported after the renderer's live color/depth format query");
 
-            check(!dev.SupportsCapability(CNA::GraphicsCapability::MultipleRenderTargets),
-                  "MRT is false until independent fragment outputs are implemented");
+            check(dev.SupportsCapability(CNA::GraphicsCapability::MultipleRenderTargets),
+                  "MRT is reported after independent fragment outputs and mixed-format pipelines");
             check(dev.SupportsCapability(CNA::GraphicsCapability::WireFrame),
                   "WireFrame is reported because native line fill is pixel-verified");
             check(!dev.SupportsCapability(CNA::GraphicsCapability::OcclusionQuery),

@@ -21,6 +21,9 @@
 
 namespace CNA::Internal::Renderers::SdlGpu
 {
+    /** @brief Native colour formats for the four XNA MRT slots, in binding order. CNAEXT. */
+    using SdlGpuColorTargetFormatsEXT = std::array<SDL_GPUTextureFormat, 4>;
+
     class SdlGpuRenderer;
     class SdlGpuRenderTargetRenderer;
     class SdlGpuRenderTargetCubeRenderer;
@@ -1077,11 +1080,10 @@ namespace CNA::Internal::Renderers::SdlGpu
          * `SdlGpuRenderer::QueueSprite`, mirroring every sibling `EffectRenderer`'s own
          * "set automatically by the sprite-batch runtime" convention. CNAEXT. */
         CNAEXT void SetViewportSizeEXT(float width, float height);
-        /** @brief Returns the pipeline for @p colorFormat / @p sampleCount /
+        /** @brief Returns the pipeline for @p colorFormats / @p sampleCount /
          * @p depthStencilFormat / @p colorTargetCount,
          * compiling+caching it on first use. @p colorTargetCount > 1 (real MRT, SDLGPU-37) builds
-         * a pipeline with that many `color_target_descriptions`, all sharing @p colorFormat (every
-         * `RenderTarget2D` in this renderer is `R8G8B8A8_UNORM`) -- lets a custom multi-output
+         * a pipeline with that many slot-aligned `color_target_descriptions` -- lets a custom multi-output
          * fragment shader (the only kind of shader in this codebase that can genuinely write more
          * than one attachment) really render simultaneous MRT. @p depthStencilFormat is
          * `SDL_GPU_TEXTUREFORMAT_INVALID` when the active pass is genuinely depthless; it is part
@@ -1089,7 +1091,8 @@ namespace CNA::Internal::Renderers::SdlGpu
          * @p slopeScaleDepthBias are the queued sprite's by-value rasterizer snapshot and are
          * pipeline-static identity/state (REMED-GFX-051). Null if `CompileProgram()` did not
          * succeed. CNAEXT — internal use only. */
-        CNAEXT [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipeline(SDL_GPUTextureFormat colorFormat,
+        CNAEXT [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipeline(
+                                                                          const SdlGpuColorTargetFormatsEXT& colorFormats,
                                                                           SDL_GPUSampleCount sampleCount,
                                                                           SDL_GPUTextureFormat depthStencilFormat,
                                                                           int colorTargetCount,
@@ -2632,10 +2635,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         // RenderQueuedDraws() in real chronological (drawOrder_) order, not grouped with every
         // other sprite (adversarial-review finding #4: draw ordering). @p index is this sprite's
         // own position in spriteCommands_, needed for its vertex-buffer offset.
-        // colorTargetCount > 1 (real MRT, SDLGPU-37) is forwarded to a customEffect's own
-        // GetOrCreatePipeline() so a real multi-output fragment shader can build a pipeline
-        // matching this pass's actual attachment count -- stock (single-output) sprites are
-        // unaffected, since GetOrCreateSpritePipeline() always builds exactly 1 color target.
+        // colorTargetCount > 1 (real MRT, SDLGPU-37) is forwarded to every pipeline family so its
+        // immutable target layout matches the pass. A custom/compiled multi-output shader can
+        // write every slot; stock single-output shaders deliberately leave slots 1..3 undefined.
         void IssueSpriteDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, const SpriteCommand& command,
                              std::size_t index, const float* viewportSize, SDL_GPUTextureFormat colorFormat,
                              SDL_GPUSampleCount sampleCount, SDL_GPUTextureFormat depthStencilFormat,
@@ -3343,6 +3345,19 @@ namespace CNA::Internal::Renderers::SdlGpu
         // RenderStateSnapshot at Queue*Draw()/QueueSprite() time (see CaptureRenderState()).
         BlendKeyParams blendParams_;
         std::array<int, 4> colorWriteMasks_{{15, 15, 15, 15}};  ///< REMED-GFX-077/-098: current per-MRT-slot masks
+        /**
+         * @brief Slot-aligned formats of the native render pass currently being recorded.
+         *
+         * SDLGPU-75: pipeline creation happens only while replaying one native pass (or while an
+         * internal single-target helper explicitly seeds this value). Keeping the immutable
+         * pipeline compatibility tuple here lets every stock and compiled-effect family share the
+         * existing issue signatures while still keying/describing all four MRT slots exactly.
+         */
+        SdlGpuColorTargetFormatsEXT activeColorTargetFormats_{{
+            SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
+            SDL_GPU_TEXTUREFORMAT_INVALID,
+            SDL_GPU_TEXTUREFORMAT_INVALID,
+            SDL_GPU_TEXTUREFORMAT_INVALID}};
         int cullMode_ = 2;         ///< XNA CullMode ordinal; 2 = CullCounterClockwiseFace (RasterizerState's real default)
         bool fillModeWireframe_ = false;
         StencilKeyParams stencilParams_;  ///< readMask/writeMask live here now, see StencilKeyParams's own doc comment

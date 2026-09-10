@@ -2,9 +2,9 @@
 
 > **Current verdict (audit opened 2026-09-09): B. CLASSIC SDL GPU ↔ EASYGL PARITY NOT YET
 > REACHED.** The current renderer is a substantial, real Vulkan-backed implementation, but live
-> source and pixel tests demonstrate ordinary-XNA gaps in texture/render-target formats,
-> independent MRT outputs and several effect permutations. Core instancing and multiple streams
-> were closed by `SDLGPU-60`. This verdict supersedes
+> source and pixel tests demonstrate remaining ordinary-XNA gaps in several effect, SpriteBatch,
+> draw-family and lifetime permutations. Core instancing and multiple streams were closed by
+> `SDLGPU-60`; independent MRT outputs were closed by `SDLGPU-75`. This verdict supersedes
 > historical completion banners below; those remain as implementation history, not current truth.
 
 ## 2026-09-09 parity audit status
@@ -22,12 +22,12 @@
 | Shared EasyGL parity fixtures available | 31 renderer-neutral sources in `modules/graphics/examples/parity` |
 | Shared parity fixtures registered for SDL GPU | 19/31 (wireframe; compressed cube; HDR and mip target; four sampler; four vertex-semantic; multi-stream; instancing; and five render-state fixtures) |
 | Tasks created by this audit | 30 (`SDLGPU-55`–`SDLGPU-84`) |
-| Completed / open / proven unavoidable | 22 / 8 tasks; 2 capability fields (`BlendState.MultiSampleMask` and exact half-rate `PresentInterval::Two`) are proven unavailable in current SDL_gpu and are not separate tasks; `SDLGPU-80` remains a candidate limitation |
-| SDL GPU build | Stable `cmake-build-sdlgpu`, Debug, `CNA_GRAPHICS_RENDERER=SDL_GPU`, tests/examples ON |
+| Completed / open / proven unavoidable | 23 / 7 tasks; 2 capability fields (`BlendState.MultiSampleMask` and exact half-rate `PresentInterval::Two`) are proven unavailable in current SDL_gpu and are not separate tasks; `SDLGPU-80` remains a candidate limitation |
+| SDL GPU build | Stable `cmake-build-sdlgpu`, Debug, `CNA_GRAPHICS_RENDERER=SDL_GPU`, tests/examples and `CNA_SDL_GPU_COMPILED_EFFECTS` ON |
 | EasyGL oracle build | Stable `cmake-build-debug`, Debug, `CNA_GRAPHICS_RENDERER=OPENGL33`, tests/examples ON |
 | Runtime driver | SDL 3.5.0 SDL_gpu Vulkan on AMD Radeon 780M / Mesa RADV 25.0.7; Khronos validation layer 1.4.309 present |
 | Display constraint | Sandboxed tests cannot access host `:0`; SDL `offscreen` successfully creates the real Vulkan GPU device. Escalated preservation checks can use host `:0` (WebGPU), while EasyGL uses Xvfb `:179`. The SDL GPU test-driver cache setting defaults to `x11` and is locally set to `offscreen`. |
-| Validation | Debug mode is enabled in current source. The offscreen 85-test baseline, SDLGPU-58's 14-test state suite, SDLGPU-67's 13-test viewport/scissor suite, SDLGPU-68's 13-test presentation/lifecycle slice, SDLGPU-69's 9-test 2D-format slice, SDLGPU-70's 8-test cube-format slice, SDLGPU-71's 6-test volume slice, SDLGPU-72's 4-test 2D-target-format slice, SDLGPU-73's 9-test cube/depth slice and SDLGPU-74's 19-test target-lifecycle/upload slice emitted no captured `VUID`, `Validation Error`, or `Validation Warning`; every new parity CTest makes those diagnostics fatal. |
+| Validation | Debug mode is enabled in current source. The offscreen 85-test baseline, SDLGPU-58's 14-test state suite, SDLGPU-67's 13-test viewport/scissor suite, SDLGPU-68's 13-test presentation/lifecycle slice, SDLGPU-69's 9-test 2D-format slice, SDLGPU-70's 8-test cube-format slice, SDLGPU-71's 6-test volume slice, SDLGPU-72's 4-test 2D-target-format slice, SDLGPU-73's 9-test cube/depth slice, SDLGPU-74's 19-test target-lifecycle/upload slice and SDLGPU-75's 55-check MRT test emitted no captured `VUID`, `Validation Error`, or `Validation Warning`; every new parity CTest makes those diagnostics fatal. |
 | Focused EasyGL oracle baseline | 34/34 selected tests pass on Xvfb/llvmpipe: the prior 28 stock-effect/state/format/RT/texture/MRT/instancing/query tests plus six presentation/reset/resize/VSync programs. The VSync program's three CNA-forwarding checks pass; its real-vblank half is correctly skipped because raw GL cannot enable VSync under Xvfb. |
 
 The first attempted baseline used the suite's historical hard-coded `SDL_VIDEODRIVER=x11` and
@@ -102,7 +102,7 @@ underlying limitation with no correct reasonable emulation; `out` excluded moder
 | RenderTarget2D float/half/Rgba64 | Requested storage, runtime probed | Exact native storage, format-aware pipelines/transfers and XNA channel expansion | `=` — all nine EasyGL formats agree at query/construction, render, typed readback and sampling; 2/8/16-byte SetData is exact; `SDLGPU-72/74` |
 | RenderTargetCube Color/faces/depth/MSAA/mips | Full classic path | Exact color/depth storage, six-face uploads/resolves/readback/sampling and mips | `=` — six-face SetData/preserve/discard/PlatformContents, independent MSAA face stores, authored/generated mips, readback/sampling and 2D/cube/backbuffer transitions pass; `SDLGPU-73/74` |
 | RenderTargetCube non-Color | Requested storage, runtime probed | Exact native cube storage and cube-specific runtime probe | `=` — all nine EasyGL formats retain six faces; float sampling preserves >1; `SDLGPU-73` |
-| MRT binding/clear | Independent fragment outputs verified | attachments bind, but stock output only targets slot 0 | `≠`; `SDLGPU-75` |
+| MRT binding/clear | Independent fragment outputs verified | Up to four simultaneous independently writable, mixed-format attachments | `=` — ordinary compiled Effect oC0/oC1 outputs, mixed Color/RGBA16F targets, per-slot masks/blending and count/format/state cache transitions pass; `SDLGPU-75` |
 | Vertex buffers/declarations/dynamic options | declaration semantic+offset driven | classic single-stream stock inputs use semantic/index/format/offset and declaration-aware pipeline keys | `=` for declaration interpretation; dynamic/range cases remain `~` in `SDLGPU-78` |
 | Index buffers 16/32-bit/dynamic | Both sizes/options | Both sizes/options implemented | `~` — offsets/ranges/replacement sweep; `SDLGPU-78` |
 | Draw primitive/indexed/user ranges/order | Full public family | ordinary variants and chronological queue exist | `~` — range/topology/base/start adversarial sweep; `SDLGPU-78` |
@@ -182,7 +182,7 @@ were checked individually in the declarations and implementations.
 | format classifiers, compressed transfer policy, half-float filtering | explicit, runtime/profile aware; volume inherits Color-only framework fallback | Texture2D, TextureCube, Texture3D, RT2D and cube-target classification explicit; half filtering still inherited | classic textures/volume/targets `=` through `SDLGPU-69–73`; remaining filtering evidence is owned by its sampler/effect tasks |
 | coordinate transforms and `ReadBackbuffer` | explicit | explicit | classic; readback baseline passes (`SDLGPU-68`) |
 | texture/sprite/RT2D/RTCube/Texture3D/TextureCube factories, including format-bearing `*EXT` RT factories | explicit | Every texture and target factory preserves its classified format; cube and 2D targets retain per-resource depth and usage facts | classic format/factory/lifecycle surface `=` (`SDLGPU-69–74`) |
-| `SetRenderTarget2D`, `SetRenderTargetCubeFace`, `SetRenderTargets` | all explicit | 2D and plural explicit; single cube-face hook inherited and delegates to plural | classic; cube ordering verified, MRT semantics remain `SDLGPU-75` |
+| `SetRenderTarget2D`, `SetRenderTargetCubeFace`, `SetRenderTargets` | all explicit | 2D and plural explicit; single cube-face hook inherited and delegates to plural | classic; cube ordering and independent MRT output semantics verified (`SDLGPU-75`) |
 | blend/depth/raster/sampler applications; BlendFactor/reference/scissor/viewport | all explicit | all explicit | classic; immutable-key and propagation verification (`SDLGPU-58/63/65`) |
 | buffer factories and colored/extended primitive/indexed draw hooks | explicit | explicit | classic; semantic stock dispatch verified by `SDLGPU-59`, ranges remain `SDLGPU-78` |
 | `DrawInstancedPrimitivesEx`, `GetMaxVertexStreams`, multistream capability | explicit | explicit stock-effect draw, eight-stream limit and truthful capabilities | classic XNA 4.0; `=` for stock BasicEffect/multi-stream semantics (`SDLGPU-60`), compiled/custom/skinned combinations remain named boundaries for `SDLGPU-77/79` |
@@ -200,10 +200,10 @@ filesystem, rejects duplicates/unknown categories/missing evidence, and currentl
 
 | Category | Count |
 |---|---:|
-| `classic-xna-covered-by-existing-sdlgpu-test` | 116 |
+| `classic-xna-covered-by-existing-sdlgpu-test` | 117 |
 | `classic-xna-direct-parity` | 38 |
 | `classic-xna-new-sdlgpu-test-needed` | 27 |
-| `classic-xna-feature-missing` | 4 |
+| `classic-xna-feature-missing` | 3 |
 | `modern-cnaext-out` | 51 |
 | `easygl-specific` | 9 |
 | `duplicate` | 0 |
@@ -216,7 +216,7 @@ semantics (`EASYGL-PARITY-4`). The other defects below were exposed by shared re
 evidence and mechanical audits, so they remain ledger entries without falsely reclassifying an
 unrelated EasyGL example source.
 
-Classification is a triage statement, not proof of parity. The 116 “covered” programs map to
+Classification is a triage statement, not proof of parity. The 117 “covered” programs map to
 existing SDL GPU family tests or shared graphics regressions; `SDLGPU-81` must register the same
 31 renderer-neutral parity sources and confirm their discriminating checks. The 38 direct rows now
 include exact EasyGL presentation/lifecycle sources compiled under SDL GPU by `SDLGPU-68`, the
@@ -896,7 +896,7 @@ underlying API limitation proven after reasonable emulation analysis.
   and proves SDL behavior. Corpus classification remains 246/246 with zero unclassified, moving
   that file to `easygl-defect`. Only targeted incremental objects and relinks were built.
 
-### SDLGPU-75 — implement independently observable MRT outputs ⬜
+### SDLGPU-75 — implement independently observable MRT outputs ✅
 
 - **Problem/public behavior:** binding/clearing multiple attachments is not MRT parity if shaders
   cannot write distinct values to each target.
@@ -906,6 +906,19 @@ underlying API limitation proven after reasonable emulation analysis.
 - **Acceptance/test:** one ordinary Effect pass writes unique signatures to at least two targets,
   both read back correctly, masks/blend states per slot apply, and A→different format/count→A is
   cache-safe. CNAEXT ShaderEffect alone is not sufficient proof.
+- **Result (2026-09-10):** the immutable pipeline target tuple now records and hashes the exact
+  format of every active attachment instead of cloning slot zero. This applies to every stock,
+  ShaderEffect and ordinary compiled-Effect pipeline, so mixed-format MRTs cannot reuse an
+  incompatible pipeline. `MultipleRenderTargets` now reports true and the limitations report
+  truthfully describes four independently writable mixed-format targets. The public XNA `Effect`
+  bytecode fixture writes `Tint` to `oC0` and `Tint.yzxw` to `oC1`; `SdlGpu_MRT` reads distinct
+  Color outputs, then repeats through mixed `{Color, HdrBlendable/RGBA16F}` storage with exact
+  half-float readback, nontrivial Additive blending, independent Red/Green slot masks and
+  A→format/state→A restoration. The existing count-specific shaders separately cover 1→3→1→3,
+  all four counts, alternate target objects, depth and MSAA. Targeted incremental build passed;
+  the validation-fatal offscreen/Vulkan run passes **55/55** without `VUID`, `Validation Error` or
+  `Validation Warning`. The smoke capability branch also passes; that binary remains 29/30 only
+  because its pre-existing live-MSAA capability expectation is false on the offscreen device.
 
 ### SDLGPU-76 — complete SpriteBatch observable parity ⬜
 

@@ -7,19 +7,16 @@
 // codebase declares more than one fragment output. Checks A-C below prove exactly that boundary.
 //
 // Checks D/E go further (adversarial-review finding #2: the prior version of this row was marked
-// done despite this real gap) -- a custom multi-output ShaderEffect (the one kind of shader in
-// this codebase that CAN genuinely declare more than one fragment output, matching how real XNA
-// games actually implement G-buffer-style MRT: always via a custom Effect, never a stock one)
+// done despite this real gap) -- a custom multi-output ShaderEffect
 // drawn as a SpriteBatch sprite while 2 render targets are bound now really writes a DIFFERENT
 // value to each target from the SAME single draw call, in the SAME real render pass -- this is
 // what makes "several SDL_GPUColorTargetInfo entries in one render pass" real, not just Clear()
 // propagation.
 //
-// This renderer has no ReadBackbuffer() yet (SDLGPU-39's swapchain leg is a documented, unresolved
-// segfault -- see that row), so verification here follows the established convention: real draws
-// with no exception, plus sampling all 3 targets via SpriteBatch into distinct screen regions for
-// a real screenshot (not just "didn't throw"), PLUS (new) real RenderTarget2D::GetData() pixel
-// readback for the actual MRT discriminator.
+// SDLGPU-75 adds the ordinary path that matters for classic XNA parity: a synthetic Effect
+// Framework 9.1 program writes oC0/oC1 through public Effect. It also varies target count, changes
+// only slot 1 from Color to HdrBlendable, applies per-slot masks plus additive blending, and returns
+// to the original tuple. Every result is read back; Vulkan validation is fatal for the CTest.
 //
 // The render targets are members created once in LoadContent(), not Draw()-local variables --
 // this renderer defers all rendering to its own Present()-time EnsureFrameRendered() pass, so a
@@ -52,11 +49,15 @@
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
@@ -66,6 +67,17 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+
+#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#include "CNA/TestSupport/CompiledEffectFixtures.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectPass.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfVector4.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
+#endif
 
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
 
@@ -362,6 +374,108 @@ class SdlGpuMrtTest : public Game
               "second cycle's second output");
     }
 
+#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+    void RunCompiledEffectMrtCheck(GraphicsDevice& dev)
+    {
+        using Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector4;
+
+        Check(dev.SupportsCapability(CNA::GraphicsCapability::MultipleRenderTargets),
+              "MRT capability is true now that one ordinary Effect writes independent outputs");
+
+        Effect effect(dev, CNA::TestSupport::BuildSyntheticMrtDrawableEffect());
+        auto& parameters = effect.getParametersProperty();
+        parameters["Transform"]->SetValue(Matrix::getIdentityProperty());
+        EffectPass& pass = effect.getTechniquesProperty()[0].getPassesProperty()[1];
+
+        struct ClipVertex { float x, y, z; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(ClipVertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        });
+        const ClipVertex quad[6] = {
+            {-1.0f,  1.0f, 0.0f}, {-1.0f, -1.0f, 0.0f}, { 1.0f, -1.0f, 0.0f},
+            {-1.0f,  1.0f, 0.0f}, { 1.0f, -1.0f, 0.0f}, { 1.0f,  1.0f, 0.0f},
+        };
+        const Rectangle centre(kRTSize / 2, kRTSize / 2, 1, 1);
+
+        const auto draw = [&](RenderTarget2D& a, RenderTarget2D* b, const Vector4& tint,
+                              const BlendState& blend, const Color& clear) {
+            std::vector<RenderTargetBinding> bindings{RenderTargetBinding(&a)};
+            if (b != nullptr) bindings.emplace_back(b);
+            dev.SetRenderTargets(bindings);
+            dev.Clear(clear);
+            dev.setBlendStateProperty(blend);
+            dev.setDepthStencilStateProperty(DepthStencilState::None);
+            dev.setRasterizerStateProperty(RasterizerState::CullNone);
+            parameters["Tint"]->SetValue(tint);
+            pass.Apply();
+            dev.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                   static_cast<const void*>(quad), 0, 2, declaration);
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        };
+        const auto colorNear = [](const Color& got, const Color& expected) {
+            return Matches(got, expected, 3)
+                && CloseTo(got.getAProperty(), expected.getAProperty(), 3);
+        };
+
+        // A: an ordinary XNA compiled Effect (not ShaderEffect/CNAEXT) writes oC0 and oC1.
+        RenderTarget2D a0(dev, kRTSize, kRTSize, false, SurfaceFormat::Color, DepthFormat::None);
+        RenderTarget2D a1(dev, kRTSize, kRTSize, false, SurfaceFormat::Color, DepthFormat::None);
+        draw(a0, &a1, Vector4(0.2f, 0.4f, 0.8f, 1.0f), BlendState::Opaque, Color::Black);
+        Color a0Pixel, a1Pixel;
+        a0.GetData(0, &centre, &a0Pixel, 0, 1);
+        a1.GetData(0, &centre, &a1Pixel, 0, 1);
+        Check(colorNear(a0Pixel, Color(51, 102, 204, 255)),
+              "ordinary compiled Effect writes Tint to MRT slot 0");
+        Check(colorNear(a1Pixel, Color(102, 204, 51, 255)),
+              "ordinary compiled Effect writes Tint.yzxw independently to MRT slot 1");
+
+        // Format B differs from A while preserving the same ordinary shader pair. Count changes
+        // use the count-specific ShaderEffect fixtures above: binding this oC0/oC1 shader to one
+        // attachment would itself be invalid Vulkan usage and hide validation noise in the test.
+        Check(dev.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HdrBlendable),
+              "mixed-format MRT discriminator has an RGBA16F attachment");
+        RenderTarget2D mixed0(dev, kRTSize, kRTSize, false, SurfaceFormat::Color, DepthFormat::None);
+        RenderTarget2D mixed1(dev, kRTSize, kRTSize, false, SurfaceFormat::HdrBlendable,
+                              DepthFormat::None);
+        draw(mixed0, &mixed1, Vector4(0.25f, 0.5f, 0.75f, 1.0f),
+             BlendState::Opaque, Color::Black);
+        Color mixed0Pixel;
+        HalfVector4 mixed1Pixel;
+        mixed0.GetData(0, &centre, &mixed0Pixel, 0, 1);
+        mixed1.GetData(0, &centre, &mixed1Pixel, 0, 1);
+        const Vector4 mixed = mixed1Pixel.ToVector4();
+        Check(colorNear(mixed0Pixel, Color(64, 128, 191, 255)),
+              "mixed {Color,RGBA16F} MRT keeps slot 0's Color output");
+        Check(std::abs(mixed.X - 0.5f) <= 0.001f
+                  && std::abs(mixed.Y - 0.75f) <= 0.001f
+                  && std::abs(mixed.Z - 0.25f) <= 0.001f
+                  && std::abs(mixed.W - 1.0f) <= 0.001f,
+              "mixed {Color,RGBA16F} MRT writes the exact slot 1 float output");
+
+        // Per-slot masks and nontrivial global blending share one immutable pipeline tuple.
+        BlendState maskedAdditive = BlendState::Additive;
+        maskedAdditive.setColorWriteChannelsProperty(ColorWriteChannels::Red);
+        maskedAdditive.setColorWriteChannels1Property(ColorWriteChannels::Green);
+        draw(a0, &a1, Vector4(0.2f, 0.4f, 0.8f, 0.5f), maskedAdditive,
+             Color(10, 20, 30, 40));
+        a0.GetData(0, &centre, &a0Pixel, 0, 1);
+        a1.GetData(0, &centre, &a1Pixel, 0, 1);
+        Check(colorNear(a0Pixel, Color(36, 20, 30, 40)),
+              "MRT slot 0 Red mask combines with Additive blending");
+        Check(colorNear(a1Pixel, Color(10, 122, 30, 40)),
+              "MRT slot 1 Green mask combines with Additive blending");
+
+        // A again: count/format/write-state variants must not poison the original cache entry.
+        draw(a0, &a1, Vector4(0.6f, 0.3f, 0.1f, 1.0f), BlendState::Opaque, Color::Black);
+        a0.GetData(0, &centre, &a0Pixel, 0, 1);
+        a1.GetData(0, &centre, &a1Pixel, 0, 1);
+        Check(colorNear(a0Pixel, Color(153, 77, 26, 255)),
+              "A->format->state->A restores the compiled oC0 pipeline");
+        Check(colorNear(a1Pixel, Color(77, 26, 153, 255)),
+              "A->format->state->A restores the compiled oC1 pipeline");
+    }
+#endif
+
 protected:
     void LoadContent() override
     {
@@ -524,6 +638,10 @@ protected:
                 RunMrtWriteMaskCheck(dev);
                 stage = "MRT bind-cycle boundaries in one flush window";
                 RunMrtSegmentBoundaryCheck(dev);
+#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+                stage = "ordinary compiled Effect MRT outputs and mixed formats";
+                RunCompiledEffectMrtCheck(dev);
+#endif
             }
             catch (const std::exception& e)
             {
@@ -551,8 +669,13 @@ protected:
 
         if (frame_ == kTotalFrames)
         {
-            std::printf("=== %d/45 PASS ===\n", passCount_);
-            result_ = (passCount_ == 45) ? 0 : 1;
+#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+            constexpr int expectedPasses = 55;
+#else
+            constexpr int expectedPasses = 45;
+#endif
+            std::printf("=== %d/%d PASS ===\n", passCount_, expectedPasses);
+            result_ = (passCount_ == expectedPasses) ? 0 : 1;
             Exit();
         }
     }

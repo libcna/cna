@@ -273,6 +273,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
 
     # plans/plan_sdlgpu.md SDLGPU-37: Multiple Render Targets (MRT).
     cna_sdlgpu_test(cna_test_sdlgpu_mrt sdlgpu_mrt_test.cpp)
+    target_include_directories(cna_test_sdlgpu_mrt PRIVATE
+        "${CMAKE_SOURCE_DIR}/tests/support")
     cna_register_renderer_test(NAME SdlGpu_MRT COMMAND cna_test_sdlgpu_mrt
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
     # REMED-GFX-098: pixels alone were always correct; a color-attachment render-pass

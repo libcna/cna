@@ -131,7 +131,7 @@ easygl_model_json_reader_texture_test.cpp,classic-xna-direct-parity,-,renderer-i
 easygl_model_skinned_animation_playback_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-79,skinned model playback
 easygl_model_two_meshes_effects_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-79,per-mesh effects
 easygl_move_semantics_test.cpp,easygl-specific,-,OpenGL/EasyGL harness or native-resource diagnostic
-easygl_mrt_test.cpp,classic-xna-feature-missing,SDLGPU-75,independent MRT outputs
+easygl_mrt_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,SDLGPU-75,ordinary compiled Effect writes independent outputs to mixed-format MRTs with per-slot masks and cache transitions
 easygl_msaa_change_test.cpp,classic-xna-direct-parity,SDLGPU-68,same source passes SDL GPU
 easygl_msaa_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_normalmapping_shader_test.cpp,modern-cnaext-out,-,ShaderEffect/PBR/glTF/sample-specific modern graphics path

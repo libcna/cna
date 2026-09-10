@@ -227,6 +227,9 @@ namespace CNA::TestSupport
         /// suite still green: the read-back pixel was `Tint` whatever the backend did with its
         /// sampler state. Requires `includeSampler`.
         bool pixelShaderSamplesTexture = false;
+        /// SDLGPU-75: the drawable pixel shader also writes `oC1` with the opposite Tint swizzle,
+        /// making one ordinary compiled XNA Effect invocation observably target two MRT slots.
+        bool pixelShaderWritesMrt = false;
     };
 
     inline std::uint32_t AppendObjectType(std::vector<std::uint8_t>& bytes,
@@ -262,7 +265,8 @@ namespace CNA::TestSupport
         bool includeSampler = true,
         bool samplesTexture = false,
         bool swizzleTint = false,
-        SyntheticSamplerKind samplerKind = SyntheticSamplerKind::Sampler2D)
+        SyntheticSamplerKind samplerKind = SyntheticSamplerKind::Sampler2D,
+        bool writesMrt = false)
     {
         constexpr std::uint32_t versionToken = 0xFFFF0200u;
         const int constantCount = includeSampler ? 2 : 1;
@@ -410,6 +414,15 @@ namespace CNA::TestSupport
             AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
             AppendUInt32(shader, source(regConst, 0,
                                         swizzleTint ? swizzleYzxw : swizzleIdentity));
+        }
+        if (writesMrt)
+        {
+            // mov oC1, c0.yzxw (or identity for the alternate pass). The two values are deliberately
+            // different so a renderer that binds two attachments but exposes only output 0 fails.
+            AppendUInt32(shader, 0x00000001u | (2u << 24));
+            AppendUInt32(shader, destination(regColorOut, 1, 0xFu));
+            AppendUInt32(shader, source(regConst, 0,
+                                        swizzleTint ? swizzleIdentity : swizzleYzxw));
         }
         AppendUInt32(shader, 0x0000FFFFu);
         return shader;
@@ -935,7 +948,8 @@ namespace CNA::TestSupport
 
         const std::vector<std::uint8_t> shader = BuildSyntheticPixelShader(
             options.samplerRegister, options.breakShaderSymbolBinding, options.includeSampler,
-            options.pixelShaderSamplesTexture, /*swizzleTint=*/false, options.samplerKind);
+            options.pixelShaderSamplesTexture, /*swizzleTint=*/false, options.samplerKind,
+            options.pixelShaderWritesMrt);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
@@ -957,7 +971,8 @@ namespace CNA::TestSupport
             // bound, and its whole job is to differ from the primary program's output colour.
             const std::vector<std::uint8_t> alternate = BuildSyntheticPixelShader(
                 options.samplerRegister, /*breakSymbolBinding=*/false, /*includeSampler=*/false,
-                /*samplesTexture=*/false, /*swizzleTint=*/true);
+                /*samplesTexture=*/false, /*swizzleTint=*/true,
+                SyntheticSamplerKind::Sampler2D, options.pixelShaderWritesMrt);
             AppendUInt32(bytes, altPixelShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(alternate.size()));
             bytes.insert(bytes.end(), alternate.begin(), alternate.end());
@@ -989,6 +1004,22 @@ namespace CNA::TestSupport
         SyntheticEffectOptions options;
         options.includeDrawableProgram = true;
         options.vertexShaderReadsSecondStream = readsSecondStream;
+        return BuildSyntheticEffect(options);
+    }
+
+    /**
+     * @brief SDLGPU-75 fixture whose ordinary compiled pixel shader writes distinct MRT outputs.
+     *
+     * `StatePass` writes `Tint` to `oC0` and `Tint.yzxw` to `oC1`; unlike ShaderEffect this uses
+     * the XNA Effect Framework bytecode path exposed by the ordinary `Effect` constructor.
+     *
+     * @return The complete effect bytecode.
+     */
+    inline std::vector<std::uint8_t> BuildSyntheticMrtDrawableEffect()
+    {
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixelShaderWritesMrt = true;
         return BuildSyntheticEffect(options);
     }
 
