@@ -213,7 +213,7 @@ namespace CNA::Internal::Graphics
         return CopyDecoded(decoded, width, height, "Failed to load image: " + assetName);
     }
 
-    ImageData ImageLoader::LoadFromMemory(const uint8_t* data, const std::size_t size)
+    ImageData ImageLoader::LoadFromMemory(const uint8_t* data, std::size_t size)
     {
         if (data == nullptr || size == 0)
             throw std::invalid_argument("ImageLoader::LoadFromMemory: buffer must not be empty");
@@ -223,6 +223,19 @@ namespace CNA::Internal::Graphics
         int width = 0;
         int height = 0;
         int sourceChannels = 0;
+        // A bitmap of more than eight bits per pixel may put bytes between its header and its
+        // pixels -- a colour table for 256-colour displays is the usual one -- and the decoder
+        // under this reads such a file from the wrong place. Measured outside CNA by
+        // `spikes/bmp-offset-spike`, and the byte counts it produces are CNA's own
+        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-221`). Closing the gap costs one copy of
+        // a file that has one and nothing at all for a file that has not.
+        const std::vector<std::uint8_t> closed =
+            WithoutBitmapPixelGap(std::span<const std::uint8_t>(data, size));
+        if (!closed.empty())
+        {
+            data = closed.data();
+            size = closed.size();
+        }
         stbi_uc* decoded = stbi_load_from_memory(
             data, static_cast<int>(size), &width, &height, &sourceChannels, STBI_rgb_alpha);
         if (decoded == nullptr)

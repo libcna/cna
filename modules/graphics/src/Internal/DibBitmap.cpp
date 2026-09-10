@@ -96,4 +96,41 @@ namespace CNA::Internal::Graphics
         bytes.insert(bytes.end(), body.begin(), body.end());
         return bytes;
     }
+
+    std::vector<std::uint8_t> WithoutBitmapPixelGap(std::span<const std::uint8_t> bytes)
+    {
+        constexpr std::size_t kFileHeader = 14u;
+        if (bytes.size() < kFileHeader + 40u || bytes[0] != 'B' || bytes[1] != 'M')
+        {
+            return {};
+        }
+        const std::span<const std::uint8_t> body = bytes.subspan(kFileHeader);
+        const std::uint32_t headerSize = Word32(body, 0u);
+        if (headerSize != 40u && headerSize != 108u && headerSize != 124u) { return {}; }
+        // Eight bits or fewer means the table between the header and the pixels is the palette,
+        // which the decoder reads correctly and the image cannot be shown without.
+        const std::uint16_t bitCount = Word16(body, 14u);
+        if (bitCount <= 8u) { return {}; }
+        const std::uint64_t pixels = static_cast<std::uint64_t>(kFileHeader) + headerSize +
+                                     ExtraBeforePixels(body);
+        const std::uint32_t declared = Word32(bytes, 10u);
+        if (declared <= pixels || declared > bytes.size()) { return {}; }
+
+        std::vector<std::uint8_t> without;
+        without.reserve(bytes.size() - (declared - pixels));
+        without.insert(without.end(), bytes.begin(),
+                       bytes.begin() + static_cast<std::ptrdiff_t>(pixels));
+        without.insert(without.end(), bytes.begin() + static_cast<std::ptrdiff_t>(declared),
+                       bytes.end());
+        const auto write32 = [&without](const std::size_t at, const std::uint64_t value)
+        {
+            for (std::size_t step = 0; step < 4u; ++step)
+            {
+                without[at + step] = static_cast<std::uint8_t>((value >> (8u * step)) & 0xFFu);
+            }
+        };
+        write32(2u, without.size());
+        write32(10u, pixels);
+        return without;
+    }
 }
