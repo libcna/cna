@@ -611,7 +611,7 @@ Field-level differences inside those eight: **14,379**, of 224,517 over every
 differing reference in the corpus. The number is large because six of the eight
 are skeletons with hundreds of bones each, not because the disagreement is.
 
-**What this session's rules did.** Five rules landed, and each was measured
+**What this session's rules did.** Seven rules landed, and each was measured
 against the genuine pipeline before any code changed:
 
 * `XNASWEEP-201` -- the effect container's header describes the effect's
@@ -631,6 +631,17 @@ against the genuine pipeline before any code changed:
   row, a level that is not a whole number of blocks is re-encoded, and the
   three-colour rule is not DXT1's alone. 727 of 727 whole-block levels exact
   over 1,602,288 texels, and the three bytes `XNASWEEP-220` left are gone.
+* `XNASWEEP-213` -- the pivot residue is the *immediate parent's*, and only
+  where its `RotationActive` is set. Best of four policies on all three of the
+  committed FBX fixtures, 60 purpose-built chains and `PhantomBoss`; 581 fewer
+  differing bytes over the corpus, none more.
+* `XNASWEEP-223` -- the mip filter dithers through the same shifted matrix, on
+  its even path and on the area average it takes at an odd dimension. Three of
+  the differential corpus's accepted differences become identical, and
+  `XNASWEEP-123`'s *"no filter change reaches it"* is answered: the dither does.
+* `XNASWEEP-202` -- the genuine importer is nondeterministic on one fixture and
+  the committed recording was the outlier; a full regeneration reproduces 116 of
+  117 cases byte for byte.
 
 Everything else this session found was the *harness* measuring something other
 than what it claimed: a stale manifest that silently un-fixed two landed rules
