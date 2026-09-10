@@ -107,8 +107,8 @@ namespace Microsoft::Xna::Framework::Graphics
         //
         // plans/plan_modern.md MOD-107: the format is forwarded now (CreateRenderTargetCubeEXT), so the
         // rule that keeps that finding fixed is no longer "Color only" but "whatever the renderer
-        // says it really creates". The same tri-state verdict RenderTarget2D consults answers it,
-        // so a cube and a 2D target can never disagree about a format.
+        // says it really creates". The cube-specific tri-state verdict permits native APIs to
+        // distinguish cube attachment support from otherwise-identical 2D attachment support.
         // REMED-GFX-245: the profile is asked first, exactly as Texture2D does, and refuses with
         // XNA's own exception type. The cube list is measured, not inferred from the 2D one -- it
         // excludes NormalizedByte2/4 at BOTH profiles.
@@ -122,7 +122,8 @@ namespace Microsoft::Xna::Framework::Graphics
                      : std::string("Reach")) +
                 " -- this is the profile's own restriction, not the renderer's capability");
         }
-        switch (device.GetRenderer().ClassifyRenderTargetFormatEXT(static_cast<int>(format)))
+        switch (device.GetRenderer().ClassifyRenderTargetCubeFormatEXT(
+                    static_cast<int>(format)))
         {
             case CNA::Internal::Renderers::RendererFormatVerdict::Supported:
                 break;

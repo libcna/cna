@@ -694,6 +694,21 @@ namespace CNA::Internal::Renderers
         [[nodiscard]] virtual unsigned int GetGLHandle() const { return 0; }
         /// See IRenderTargetRenderer::GetMultiSampleCount.
         [[nodiscard]] virtual int GetMultiSampleCount() const { return 0; }
+        /**
+         * @brief Returns the depth/stencil format actually backing this cube target.
+         *
+         * This is the cube counterpart of
+         * `IRenderTargetRenderer::GetAppliedDepthStencilFormatEXT`. The identity default preserves
+         * existing renderers which allocate exactly what was requested.
+         *
+         * @param requestedDepthStencilFormat Requested DepthFormat ordinal.
+         * @return Applied DepthFormat ordinal.
+         */
+        [[nodiscard]] virtual int GetAppliedDepthStencilFormatEXT(
+            int requestedDepthStencilFormat) const
+        {
+            return requestedDepthStencilFormat;
+        }
         /// Cube equivalent of IRenderTargetRenderer::HasRealDepthBuffer.
         [[nodiscard]] virtual bool HasRealDepthBuffer(bool depthFormatWasRequested) const
         {
@@ -2151,6 +2166,22 @@ namespace CNA::Internal::Renderers
         {
             (void)surfaceFormat;
             return RendererFormatVerdict::Defer;
+        }
+
+        /**
+         * @brief Whether a RenderTargetCube may use the given surface format.
+         *
+         * Cube and 2D attachment support can differ in native APIs. Delegating preserves the
+         * historical answer for renderers where they are identical while allowing a cube-aware
+         * renderer to refuse a 2D-only format before its factory is called.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return This renderer's cube-target verdict.
+         */
+        [[nodiscard]] virtual RendererFormatVerdict ClassifyRenderTargetCubeFormatEXT(
+            int surfaceFormat) const
+        {
+            return ClassifyRenderTargetFormatEXT(surfaceFormat);
         }
 
         /**

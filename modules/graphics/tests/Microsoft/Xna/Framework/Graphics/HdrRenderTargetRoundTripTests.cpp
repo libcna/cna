@@ -10,15 +10,25 @@
 #include <gtest/gtest.h>
 
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfVector4.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 
 #include <vector>
 
@@ -33,6 +43,7 @@ using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 using Microsoft::Xna::Framework::Graphics::RenderTargetBinding;
 using Microsoft::Xna::Framework::Graphics::RenderTargetCube;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+using Microsoft::Xna::Framework::Graphics::Texture2D;
 using Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector4;
 
 namespace {
@@ -177,6 +188,64 @@ TEST(HdrRenderTargetRoundTripTest, AFloatCubeTargetIsCreatedInTheRequestedFormat
         gd.Clear(kRed, kGreen, kBlue, 1.0f);
     }
     gd.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+    Color incompatible = Color::Magenta;
+    EXPECT_ANY_THROW(cube.GetData(CubeMapFace::PositiveX, &incompatible, 1));
+    EXPECT_EQ(incompatible, Color::Magenta);
+
+    // Sample the cube into an RGBA32F 2D target. Reading the typed destination makes the >1
+    // witness observable through ordinary XNA effects; an RGBA8-substituted cube returns 1 here.
+    Texture2D white(gd, 1, 1);
+    const Color whitePixel = Color::White;
+    white.SetData(&whitePixel, 1);
+    RenderTarget2D sampled(gd, kSize, kSize, false, SurfaceFormat::Vector4,
+                           DepthFormat::None);
+    gd.SetRenderTarget(&sampled);
+    gd.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+    gd.setBlendStateProperty(Microsoft::Xna::Framework::Graphics::BlendState::Opaque);
+    gd.setDepthStencilStateProperty(
+        Microsoft::Xna::Framework::Graphics::DepthStencilState::None);
+    gd.setRasterizerStateProperty(
+        Microsoft::Xna::Framework::Graphics::RasterizerState::CullNone);
+
+    const Microsoft::Xna::Framework::Vector3 normal(0.0f, 0.0f, 1.0f);
+    const Microsoft::Xna::Framework::Graphics::VertexPositionNormalTexture quad[6] = {
+        {Microsoft::Xna::Framework::Vector3(-1.0f,  1.0f, 0.0f), normal,
+         Microsoft::Xna::Framework::Vector2(0.0f, 1.0f)},
+        {Microsoft::Xna::Framework::Vector3(-1.0f, -1.0f, 0.0f), normal,
+         Microsoft::Xna::Framework::Vector2(0.0f, 0.0f)},
+        {Microsoft::Xna::Framework::Vector3( 1.0f, -1.0f, 0.0f), normal,
+         Microsoft::Xna::Framework::Vector2(1.0f, 0.0f)},
+        {Microsoft::Xna::Framework::Vector3(-1.0f,  1.0f, 0.0f), normal,
+         Microsoft::Xna::Framework::Vector2(0.0f, 1.0f)},
+        {Microsoft::Xna::Framework::Vector3( 1.0f, -1.0f, 0.0f), normal,
+         Microsoft::Xna::Framework::Vector2(1.0f, 0.0f)},
+        {Microsoft::Xna::Framework::Vector3( 1.0f,  1.0f, 0.0f), normal,
+         Microsoft::Xna::Framework::Vector2(1.0f, 1.0f)},
+    };
+    Microsoft::Xna::Framework::Graphics::EnvironmentMapEffect effect(gd);
+    effect.setDiffuseColorProperty({0.0f, 0.0f, 0.0f});
+    effect.setEmissiveColorProperty({0.0f, 0.0f, 0.0f});
+    effect.setAmbientLightColorProperty({0.0f, 0.0f, 0.0f});
+    effect.setTextureProperty(&white);
+    effect.setEnvironmentMapProperty(&cube);
+    effect.setEnvironmentMapAmountProperty(1.0f);
+    effect.setEnvironmentMapSpecularProperty({0.0f, 0.0f, 0.0f});
+    effect.setWorldProperty(Microsoft::Xna::Framework::Matrix::getIdentityProperty());
+    effect.setViewProperty(Microsoft::Xna::Framework::Matrix::getIdentityProperty());
+    effect.setProjectionProperty(Microsoft::Xna::Framework::Matrix::getIdentityProperty());
+    effect.Apply();
+    gd.DrawUserPrimitives(
+        Microsoft::Xna::Framework::Graphics::PrimitiveType::TriangleList, quad, 0, 2);
+    gd.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+    std::vector<Vector4> sampledPixels(static_cast<std::size_t>(kSize) * kSize);
+    sampled.GetData(sampledPixels.data(), static_cast<int>(sampledPixels.size()));
+    const Vector4 centre = sampledPixels[static_cast<std::size_t>(kSize / 2) * kSize + kSize / 2];
+    EXPECT_FLOAT_EQ(centre.X, kRed);
+    EXPECT_FLOAT_EQ(centre.Y, kGreen);
+    EXPECT_FLOAT_EQ(centre.Z, kBlue);
+    EXPECT_FLOAT_EQ(centre.W, 1.0f);
 }
 
 TEST(HdrRenderTargetRoundTripTest, AnUnsupportedCubeFormatIsRefused)

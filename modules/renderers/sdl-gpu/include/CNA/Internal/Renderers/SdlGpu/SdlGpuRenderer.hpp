@@ -409,6 +409,14 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUTextureFormat colorFormat = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
         /// Exact transfer stride of @ref colorFormat; never inferred as RGBA8 at readback.
         Uint32 colorBytesPerPixel = 4;
+        /// Exact native depth/stencil attachment format, or INVALID for DepthFormat::None.
+        SDL_GPUTextureFormat depthFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
+        /// Public DepthFormat ordinal represented by @ref depthFormat.
+        int appliedDepthFormat = 0;
+        /// Actual depth precision used when normalizing XNA DepthBias.
+        int depthBits = 0;
+        /// Whether @ref depthFormat owns a stencil plane.
+        bool hasStencil = false;
         bool mipMap = false;
         // The native `num_levels` allocated for colorTexture.  The deferred pass-finalization
         // path owns only this state (the public wrapper may already be gone), so it must use the
@@ -477,9 +485,20 @@ namespace CNA::Internal::Renderers::SdlGpu
         void BindAsRenderTarget() override;
         void UnbindAsRenderTarget() override;
         [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
+        [[nodiscard]] int GetAppliedDepthStencilFormatEXT(
+            int /*requestedDepthStencilFormat*/) const override
+        {
+            return state_->appliedDepthFormat;
+        }
         [[nodiscard]] bool HasRealDepthBuffer(bool depthFormatWasRequested) const override
         {
             return depthFormatWasRequested && state_->depthTexture != nullptr;
+        }
+        [[nodiscard]] int DepthBufferBitsEXT() const override { return state_->depthBits; }
+        [[nodiscard]] bool HasRealStencilBuffer(bool stencilFormatWasRequested) const override
+        {
+            return stencilFormatWasRequested && state_->depthTexture != nullptr &&
+                   state_->hasStencil;
         }
 
         /** @brief Returns the sampleable (single-sample, resolved-into-if-MSAA) color texture. CNAEXT. */
@@ -551,6 +570,15 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         SdlGpuRenderer* owner = nullptr;
         int size = 0;
+        /// Exact public SurfaceFormat and corresponding native cube attachment storage.
+        int surfaceFormat = 0;
+        SDL_GPUTextureFormat colorFormat = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+        Uint32 colorBytesPerPixel = 4;
+        /// Exact per-target depth/stencil storage facts; INVALID means DepthFormat::None.
+        SDL_GPUTextureFormat depthFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
+        int appliedDepthFormat = 0;
+        int depthBits = 0;
+        bool hasStencil = false;
         bool mipMap = false;
         /// REMED-GFX-188: native `num_levels` on the resolved, single-sample cube texture.
         /// Pass finalization owns only this shared state, so allocation, mip generation and
@@ -627,7 +655,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         /// multisampled one could not be preserved at all. Now that each face owns its own
         /// multisample texture it selects that texture's store op.
         SdlGpuRenderTargetCubeRenderer(SdlGpuRenderer& owner, int size, int depthFormat,
-                                      bool preserveContents, bool mipMap, int multiSampleCount);
+                                      bool preserveContents, bool mipMap, int multiSampleCount,
+                                      int surfaceFormat = 0);
         ~SdlGpuRenderTargetCubeRenderer() override;
 
         SdlGpuRenderTargetCubeRenderer(const SdlGpuRenderTargetCubeRenderer&) = delete;
@@ -637,6 +666,21 @@ namespace CNA::Internal::Renderers::SdlGpu
         void BindAsRenderTargetFace(int face) override;
         void UnbindAsRenderTarget() override;
         [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
+        [[nodiscard]] int GetAppliedDepthStencilFormatEXT(
+            int /*requestedDepthStencilFormat*/) const override
+        {
+            return state_->appliedDepthFormat;
+        }
+        [[nodiscard]] bool HasRealDepthBuffer(bool depthFormatWasRequested) const override
+        {
+            return depthFormatWasRequested && state_->depthTexture != nullptr;
+        }
+        [[nodiscard]] int DepthBufferBitsEXT() const override { return state_->depthBits; }
+        [[nodiscard]] bool HasRealStencilBuffer(bool stencilFormatWasRequested) const override
+        {
+            return stencilFormatWasRequested && state_->depthTexture != nullptr &&
+                   state_->hasStencil;
+        }
         /**
          * @brief Real GPU readback of one face's pixels (pulled forward from `SDLGPU-39` -- this
          * targets a texture this renderer fully controls, unlike the swapchain-download path that
@@ -650,6 +694,16 @@ namespace CNA::Internal::Renderers::SdlGpu
         /// fills the transfer buffer with whatever it finds, so the guard has to be here.
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
+        /**
+         * @brief Downloads the cube attachment's exact native texel representation.
+         *
+         * The common ITextureCubeRenderer transfer contract is RGBA8 and therefore remains
+         * available only for Color. This renderer-local diagnostic is what validates 2/4/8/16-byte
+         * target storage without pretending the public TextureCube currently has typed overloads.
+         */
+        CNAEXT [[nodiscard]] bool GetNativeDataEXT(
+            int face, int level, int x, int y, int w, int h,
+            void* data, int dataLength) const;
 
         /** @brief Returns the single-sample, sampleable cube texture. CNAEXT — internal use only. */
         CNAEXT [[nodiscard]] SDL_GPUTexture* CubeTexture() const { return state_->cubeTexture; }
@@ -2069,6 +2123,9 @@ namespace CNA::Internal::Renderers::SdlGpu
          */
         [[nodiscard]] RendererFormatVerdict ClassifyRenderTargetFormatEXT(
             int surfaceFormat) const override;
+        /** @brief Classifies exact cube render-target storage on the live SDL_gpu device. */
+        [[nodiscard]] RendererFormatVerdict ClassifyRenderTargetCubeFormatEXT(
+            int surfaceFormat) const override;
         /**
          * @brief Classifies whether Color-shaped transfers preserve the requested format.
          *
@@ -2277,9 +2334,12 @@ namespace CNA::Internal::Renderers::SdlGpu
          * @brief Creates a `RenderTargetCube` (Phase `SDLGPU-8`, `SDLGPU-36`), including real MSAA.
          */
         std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCube(int size, int depthFormat,
-                                                                          bool preserveContents = false,
-                                                                          bool mipMap = false,
-                                                                          int multiSampleCount = 0) override;
+                                                                         bool preserveContents = false,
+                                                                         bool mipMap = false,
+                                                                         int multiSampleCount = 0) override;
+        std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCubeEXT(
+            int size, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount, int surfaceFormat) override;
 
         /** @brief Creates a `Texture3D` (Phase `SDLGPU-9`, `SDLGPU-40`/`SDLGPU-41`). */
         std::unique_ptr<ITexture3DRenderer> CreateTexture3D(int w, int h, int depth, bool mipMap,

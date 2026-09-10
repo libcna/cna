@@ -197,6 +197,30 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_RenderTargetCube COMMAND cna_test_sdlgpu_rendertargetcube
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
+    # SDLGPU-73: physical native-format matrix plus the exact EasyGL public property and
+    # depth/no-depth pixel oracles. Each native validation diagnostic is independently fatal.
+    cna_sdlgpu_test(cna_test_sdlgpu_rendertargetcube_formats
+                    sdlgpu_rendertargetcube_format_test.cpp)
+    cna_register_renderer_test(NAME SdlGpu_RenderTargetCube_Formats
+        COMMAND cna_test_sdlgpu_rendertargetcube_formats
+        TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    cna_sdlgpu_test(cna_test_sdlgpu_easygl_oracle_rendertargetcube_properties
+                    ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_rendertargetcube_properties_test.cpp)
+    cna_register_renderer_test(NAME SdlGpu_EasyGLOracle_rendertargetcube_properties
+        COMMAND cna_test_sdlgpu_easygl_oracle_rendertargetcube_properties
+        TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    cna_sdlgpu_test(cna_test_sdlgpu_easygl_oracle_rendertargetcube_depthformat
+                    ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_rendertargetcube_depthformat_test.cpp)
+    cna_register_renderer_test(NAME SdlGpu_EasyGLOracle_rendertargetcube_depthformat
+        COMMAND cna_test_sdlgpu_easygl_oracle_rendertargetcube_depthformat
+        TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    set_tests_properties(
+        SdlGpu_RenderTargetCube
+        SdlGpu_RenderTargetCube_Formats
+        SdlGpu_EasyGLOracle_rendertargetcube_properties
+        SdlGpu_EasyGLOracle_rendertargetcube_depthformat
+        PROPERTIES FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+
     # REMED-GFX-188: mipMap and MSAA are independent on RenderTargetCube. The resolved cube owns
     # every public level, each one-level face attachment resolves before that face's chain is
     # generated, and a later pass in the same frame can sample the generated levels. All native

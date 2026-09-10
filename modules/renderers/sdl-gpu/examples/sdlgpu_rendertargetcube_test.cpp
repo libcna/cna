@@ -166,8 +166,6 @@ protected:
 
         // Check C: real per-face depth test -- farther red quad, then nearer green quad.
         {
-            RenderTargetCube rt(dev, kCubeSize, false, SurfaceFormat::Color,
-                                DepthFormat::Depth24Stencil8, 0, RenderTargetUsage::DiscardContents);
             const VertexPositionColor farVerts[6] = {
                 { Vector3(-1.0f, -1.0f, 0.75f), Color::Red }, { Vector3(-1.0f, 1.0f, 0.75f), Color::Red }, { Vector3(1.0f, -1.0f, 0.75f), Color::Red },
                 { Vector3(-1.0f, 1.0f, 0.75f), Color::Red }, { Vector3(1.0f, 1.0f, 0.75f), Color::Red }, { Vector3(1.0f, -1.0f, 0.75f), Color::Red },
@@ -181,30 +179,43 @@ protected:
             VertexBuffer nearVb(dev, VertexPositionColor::getVertexDeclarationStatic(), 6, BufferUsage::None);
             nearVb.SetData(nearVerts, 0, 6);
 
-            dev.SetRenderTarget(&rt, CubeMapFace::NegativeX);
-            dev.Clear(Color(0, 0, 0, 255), 1.0f);
-            dev.SetDepthTestEnabled(true);
-            dev.SetDepthWriteEnabled(true);
             BasicEffect fx(dev);
             fx.VertexColorEnabled = true;
             fx.setWorldProperty(Matrix::getIdentityProperty());
             fx.setViewProperty(Matrix::getIdentityProperty());
             fx.setProjectionProperty(Matrix::getIdentityProperty());
             fx.Apply();
-            dev.SetVertexBuffer(&farVb);
-            dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
-            dev.SetVertexBuffer(&nearVb);
-            dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+
+            bool allDepthFormats = true;
+            for (const DepthFormat depthFormat : {
+                     DepthFormat::Depth16, DepthFormat::Depth24,
+                     DepthFormat::Depth24Stencil8, DepthFormat::Depth16})
+            {
+                RenderTargetCube rt(dev, kCubeSize, false, SurfaceFormat::Color,
+                                    depthFormat, 0, RenderTargetUsage::DiscardContents);
+                dev.SetRenderTarget(&rt, CubeMapFace::NegativeX);
+                dev.Clear(Color(0, 0, 0, 255), 1.0f);
+                dev.SetDepthTestEnabled(true);
+                dev.SetDepthWriteEnabled(true);
+                dev.SetVertexBuffer(&farVb);
+                dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+                dev.SetVertexBuffer(&nearVb);
+                dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+                dev.SetVertexBuffer(nullptr);
+                dev.SetDepthTestEnabled(false);
+                dev.SetDepthWriteEnabled(false);
+                dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+                const Color got = ReadCentrePixel(rt, CubeMapFace::NegativeX);
+                allDepthFormats = allDepthFormats &&
+                                  rt.getDepthStencilFormatProperty() == depthFormat &&
+                                  Matches(got, Color::Green);
+            }
             dev.SetVertexBuffer(nullptr);
             dev.SetDepthTestEnabled(false);
             dev.SetDepthWriteEnabled(false);
-            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
-
-            const Color got = ReadCentrePixel(rt, CubeMapFace::NegativeX);
-            Check(Matches(got, Color::Green),
-                  "depth-tested cube face: nearer quad wins over farther quad: got=("
-                  + std::to_string(got.getRProperty()) + "," + std::to_string(got.getGProperty())
-                  + "," + std::to_string(got.getBProperty()) + ")");
+            Check(allDepthFormats,
+                  "Depth16 -> Depth24 -> Depth24Stencil8 -> Depth16 all keep nearer green");
         }
 
         // Check D: MultiSampleCount property fidelity + real MSAA fill/resolve/readback.

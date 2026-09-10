@@ -9,6 +9,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectPass.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectTechnique.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
@@ -1088,6 +1089,77 @@ namespace CNA::Internal::Renderers::SdlGpu
             }
         }
 
+        struct DepthTargetFormatInfo
+        {
+            SDL_GPUTextureFormat nativeFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
+            int appliedDepthFormat = 0;
+            int depthBits = 0;
+            bool hasStencil = false;
+        };
+
+        [[nodiscard]] bool TryGetDepthTargetFormatInfo(
+            SDL_GPUDevice* device,
+            Microsoft::Xna::Framework::Graphics::DepthFormat format,
+            DepthTargetFormatInfo& out) noexcept
+        {
+            using Microsoft::Xna::Framework::Graphics::DepthFormat;
+            const auto supported = [device](SDL_GPUTextureFormat candidate) {
+                return SDL_GPUTextureSupportsFormat(
+                    device, candidate, SDL_GPU_TEXTURETYPE_2D,
+                    SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET);
+            };
+            switch (format)
+            {
+                case DepthFormat::None:
+                    out = {SDL_GPU_TEXTUREFORMAT_INVALID,
+                           static_cast<int>(DepthFormat::None), 0, false};
+                    return true;
+                case DepthFormat::Depth16:
+                    if (supported(SDL_GPU_TEXTUREFORMAT_D16_UNORM))
+                    {
+                        out = {SDL_GPU_TEXTUREFORMAT_D16_UNORM,
+                               static_cast<int>(DepthFormat::Depth16), 16, false};
+                        return true;
+                    }
+                    if (supported(SDL_GPU_TEXTUREFORMAT_D32_FLOAT))
+                    {
+                        out = {SDL_GPU_TEXTUREFORMAT_D32_FLOAT,
+                               static_cast<int>(DepthFormat::Depth16), 23, false};
+                        return true;
+                    }
+                    return false;
+                case DepthFormat::Depth24:
+                    if (supported(SDL_GPU_TEXTUREFORMAT_D24_UNORM))
+                    {
+                        out = {SDL_GPU_TEXTUREFORMAT_D24_UNORM,
+                               static_cast<int>(DepthFormat::Depth24), 24, false};
+                        return true;
+                    }
+                    if (supported(SDL_GPU_TEXTUREFORMAT_D32_FLOAT))
+                    {
+                        out = {SDL_GPU_TEXTUREFORMAT_D32_FLOAT,
+                               static_cast<int>(DepthFormat::Depth24), 23, false};
+                        return true;
+                    }
+                    return false;
+                case DepthFormat::Depth24Stencil8:
+                    if (supported(SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT))
+                    {
+                        out = {SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT,
+                               static_cast<int>(DepthFormat::Depth24Stencil8), 24, true};
+                        return true;
+                    }
+                    if (supported(SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT))
+                    {
+                        out = {SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT,
+                               static_cast<int>(DepthFormat::Depth24Stencil8), 23, true};
+                        return true;
+                    }
+                    return false;
+            }
+            return false;
+        }
+
         [[nodiscard]] std::array<float, 8> SpriteChannelExpansion(int surfaceFormat)
         {
             // mask.rgba followed by fill.rgba. XNA/D3D9 samples absent channels as one, whereas
@@ -1214,14 +1286,19 @@ namespace CNA::Internal::Renderers::SdlGpu
         // count this device/format actually supports, mirroring D3D12RenderTargetCubeRenderer's own
         // ClampMultiSampleCount() convention (XNA's RenderTargetCube.MultiSampleCount is documented
         // to reflect the real clamped value, not the raw constructor request).
-        [[nodiscard]] SDL_GPUSampleCount ClampSampleCount(SDL_GPUDevice* device, SDL_GPUTextureFormat format, int requested)
+        [[nodiscard]] SDL_GPUSampleCount ClampSampleCount(
+            SDL_GPUDevice* device, SDL_GPUTextureFormat colorFormat,
+            SDL_GPUTextureFormat depthFormat, int requested)
         {
             if (requested <= 1)
                 return SDL_GPU_SAMPLECOUNT_1;
             SDL_GPUSampleCount candidate = requested >= 8 ? SDL_GPU_SAMPLECOUNT_8
                                           : requested >= 4 ? SDL_GPU_SAMPLECOUNT_4
                                                             : SDL_GPU_SAMPLECOUNT_2;
-            while (candidate != SDL_GPU_SAMPLECOUNT_1 && !SDL_GPUTextureSupportsSampleCount(device, format, candidate))
+            while (candidate != SDL_GPU_SAMPLECOUNT_1 &&
+                   (!SDL_GPUTextureSupportsSampleCount(device, colorFormat, candidate) ||
+                    (depthFormat != SDL_GPU_TEXTUREFORMAT_INVALID &&
+                     !SDL_GPUTextureSupportsSampleCount(device, depthFormat, candidate))))
             {
                 candidate = candidate == SDL_GPU_SAMPLECOUNT_8 ? SDL_GPU_SAMPLECOUNT_4
                           : candidate == SDL_GPU_SAMPLECOUNT_4 ? SDL_GPU_SAMPLECOUNT_2
@@ -2373,10 +2450,12 @@ namespace CNA::Internal::Renderers::SdlGpu
             depthStencilTarget.store_op = SDL_GPU_STOREOP_STORE;
             depthStencilTarget.clear_stencil = segment.clearStencilRequested ? segment.clearStencil
                                                                              : target->clearStencil;
-            depthStencilTarget.stencil_load_op =
-                (segment.clearStencilRequested || target->clearStencilPending) ? SDL_GPU_LOADOP_CLEAR
-                                                                              : SDL_GPU_LOADOP_LOAD;
-            depthStencilTarget.stencil_store_op = SDL_GPU_STOREOP_STORE;
+            depthStencilTarget.stencil_load_op = target->hasStencil
+                ? ((segment.clearStencilRequested || target->clearStencilPending)
+                       ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD)
+                : SDL_GPU_LOADOP_DONT_CARE;
+            depthStencilTarget.stencil_store_op = target->hasStencil
+                ? SDL_GPU_STOREOP_STORE : SDL_GPU_STOREOP_DONT_CARE;
         }
 
         SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, colorTargets.data(), static_cast<Uint32>(colorTargetCount),
@@ -2397,7 +2476,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // REMED-GFX-068: scissor applied per draw in RenderQueuedDraws (see the swapchain pass note).
         const DrawTarget dt{target.get(), nullptr, -1};
         RenderQueuedDraws(pass, cmd, dt, target->colorFormat, target->sampleCount,
-                          hasDepth ? depthStencilFormat_ : SDL_GPU_TEXTUREFORMAT_INVALID,
+                          hasDepth ? target->depthFormat : SDL_GPU_TEXTUREFORMAT_INVALID,
                           colorTargetCount, segment.id);
         passOwner.End();
 
@@ -2431,7 +2510,6 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                        const PassSegment& segment,
                                                        bool colorLoadedLater)
     {
-        constexpr SDL_GPUTextureFormat kRenderTargetFormat = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
         const std::shared_ptr<SdlGpuRenderTargetCubeState>& cube = segment.cube;
         const int face = segment.face;
 
@@ -2510,10 +2588,12 @@ namespace CNA::Internal::Renderers::SdlGpu
             depthStencilTarget.store_op = SDL_GPU_STOREOP_STORE;
             depthStencilTarget.clear_stencil = segment.clearStencilRequested
                                                    ? segment.clearStencil : cube->clearStencil[face];
-            depthStencilTarget.stencil_load_op =
-                (segment.clearStencilRequested || cube->clearStencilPending[face])
-                    ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD;
-            depthStencilTarget.stencil_store_op = SDL_GPU_STOREOP_STORE;
+            depthStencilTarget.stencil_load_op = cube->hasStencil
+                ? ((segment.clearStencilRequested || cube->clearStencilPending[face])
+                       ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD)
+                : SDL_GPU_LOADOP_DONT_CARE;
+            depthStencilTarget.stencil_store_op = cube->hasStencil
+                ? SDL_GPU_STOREOP_STORE : SDL_GPU_STOREOP_DONT_CARE;
         }
 
         SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, &colorTarget, 1, hasDepth ? &depthStencilTarget : nullptr);
@@ -2532,8 +2612,8 @@ namespace CNA::Internal::Renderers::SdlGpu
                                        [&](const QueuedDrawRef& r) { return r.segment == segment.id; }));
         // REMED-GFX-068: scissor applied per draw in RenderQueuedDraws (see the swapchain pass note).
         const DrawTarget dt{nullptr, cube.get(), face};
-        RenderQueuedDraws(pass, cmd, dt, kRenderTargetFormat, cube->sampleCount,
-                          hasDepth ? depthStencilFormat_ : SDL_GPU_TEXTUREFORMAT_INVALID, 1,
+        RenderQueuedDraws(pass, cmd, dt, cube->colorFormat, cube->sampleCount,
+                          hasDepth ? cube->depthFormat : SDL_GPU_TEXTUREFORMAT_INVALID, 1,
                           segment.id);
         passOwner.End();
 
@@ -3213,6 +3293,27 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
     }
 
+    RendererFormatVerdict SdlGpuRenderer::ClassifyRenderTargetCubeFormatEXT(
+        int surfaceFormat) const
+    {
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat);
+        RenderTargetFormatInfo info{};
+        if (TryGetRenderTargetFormatInfo(format, info))
+        {
+            return SDL_GPUTextureSupportsFormat(
+                       device_, info.nativeFormat, SDL_GPU_TEXTURETYPE_CUBE,
+                       SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER)
+                ? RendererFormatVerdict::Supported
+                : RendererFormatVerdict::Unsupported;
+        }
+
+        const RendererFormatVerdict twoDimensional =
+            ClassifyRenderTargetFormatEXT(surfaceFormat);
+        return twoDimensional == RendererFormatVerdict::Defer
+            ? RendererFormatVerdict::Defer
+            : RendererFormatVerdict::Unsupported;
+    }
+
     bool SdlGpuRenderer::IsCompressedTransferFormatEXT(int surfaceFormat) const
     {
         return IsClassicDxtFormat(
@@ -3616,6 +3717,15 @@ namespace CNA::Internal::Renderers::SdlGpu
     std::unique_ptr<IRenderTargetCubeRenderer> SdlGpuRenderer::CreateRenderTargetCube(
         int size, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
+        return CreateRenderTargetCubeEXT(
+            size, depthFormat, preserveContents, mipMap, multiSampleCount,
+            static_cast<int>(SurfaceFormat::Color));
+    }
+
+    std::unique_ptr<IRenderTargetCubeRenderer> SdlGpuRenderer::CreateRenderTargetCubeEXT(
+        int size, int depthFormat, bool preserveContents, bool mipMap,
+        int multiSampleCount, int surfaceFormat)
+    {
         // REMED-GFX-136 threaded `preserveContents` here and left it unused: RenderToTargetCubeFace()
         // already picks SDL_GPU_LOADOP_LOAD unless a real Clear() is pending for that face
         // (clearColorPending[face]), and the only clear a cube target gets without the game asking
@@ -3623,9 +3733,16 @@ namespace CNA::Internal::Renderers::SdlGpu
         // single-sample face is preserved by construction. REMED-GFX-141 gives it a real consumer:
         // a multisampled face now owns its own multisample texture, and this flag decides whether
         // that texture's store op keeps the samples (RESOLVE_AND_STORE) or drops them (RESOLVE).
-        return std::make_unique<SdlGpuRenderTargetCubeRenderer>(*this, size, depthFormat,
-                                                               preserveContents, mipMap,
-                                                               multiSampleCount);
+        if (ClassifyRenderTargetCubeFormatEXT(surfaceFormat) !=
+            RendererFormatVerdict::Supported)
+        {
+            throw std::runtime_error(
+                "CNA SDL_GPU: SurfaceFormat ordinal " + std::to_string(surfaceFormat) +
+                " is not supported as an exact RenderTargetCube color attachment on this device");
+        }
+        return std::make_unique<SdlGpuRenderTargetCubeRenderer>(
+            *this, size, depthFormat, preserveContents, mipMap,
+            multiSampleCount, surfaceFormat);
     }
 
     std::unique_ptr<ITexture3DRenderer> SdlGpuRenderer::CreateTexture3D(
@@ -8890,8 +9007,23 @@ namespace CNA::Internal::Renderers::SdlGpu
         state_->colorFormat = formatInfo.nativeFormat;
         state_->colorBytesPerPixel = formatInfo.bytesPerPixel;
 
+        DepthTargetFormatInfo depthInfo{};
+        if (!TryGetDepthTargetFormatInfo(device,
+                static_cast<Microsoft::Xna::Framework::Graphics::DepthFormat>(depthFormat),
+                depthInfo))
+        {
+            throw std::invalid_argument(
+                "CNA SDL_GPU: RenderTarget2D received unsupported exact DepthFormat ordinal " +
+                std::to_string(depthFormat));
+        }
+        state_->depthFormat = depthInfo.nativeFormat;
+        state_->appliedDepthFormat = depthInfo.appliedDepthFormat;
+        state_->depthBits = depthInfo.depthBits;
+        state_->hasStencil = depthInfo.hasStencil;
+
         const SDL_GPUSampleCount sampleCount =
-            ClampSampleCount(device, state_->colorFormat, multiSampleCount);
+            ClampSampleCount(
+                device, state_->colorFormat, state_->depthFormat, multiSampleCount);
         multiSampleCount_ = SampleCountToInt(sampleCount);
         state_->sampleCount = sampleCount;
         // REMED-GFX-186: mipMap and multiSampleCount are INDEPENDENT, and they always were --
@@ -8946,20 +9078,17 @@ namespace CNA::Internal::Renderers::SdlGpu
             state_->msaaTexture = SDL_CreateGPUTexture(device, &msaaInfo);
             if (state_->msaaTexture == nullptr)
             {
-                SDL_ReleaseGPUTexture(device, state_->colorTexture);
                 throw std::runtime_error(std::string("CNA SDL_GPU: failed to create RenderTarget2D MSAA texture: ") + SDL_GetError());
             }
         }
 
-        // DepthFormat::None (0) requests no depth attachment at all; otherwise this target gets its
-        // own depth/stencil texture sized to its own width/height (which may differ from the
-        // swapchain's) -- reuses the one combined format this device supports, same simplification
-        // the swapchain's own depthStencilTexture_ already makes (see QueryDepthStencilFormat).
-        if (depthFormat != 0 && owner_->depthStencilFormat_ != SDL_GPU_TEXTUREFORMAT_INVALID)
+        // DepthFormat::None requests no attachment. Every other value uses its exact native
+        // D16/D24/D24S8 storage, never the swapchain's unrelated combined-format choice.
+        if (state_->depthFormat != SDL_GPU_TEXTUREFORMAT_INVALID)
         {
             SDL_GPUTextureCreateInfo depthInfo{};
             depthInfo.type = SDL_GPU_TEXTURETYPE_2D;
-            depthInfo.format = owner_->depthStencilFormat_;
+            depthInfo.format = state_->depthFormat;
             depthInfo.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET;
             depthInfo.width = static_cast<Uint32>(width);
             depthInfo.height = static_cast<Uint32>(height);
@@ -8969,8 +9098,6 @@ namespace CNA::Internal::Renderers::SdlGpu
             state_->depthTexture = SDL_CreateGPUTexture(device, &depthInfo);
             if (state_->depthTexture == nullptr)
             {
-                if (state_->msaaTexture != nullptr) SDL_ReleaseGPUTexture(device, state_->msaaTexture);
-                SDL_ReleaseGPUTexture(device, state_->colorTexture);
                 throw std::runtime_error(std::string("CNA SDL_GPU: failed to create RenderTarget2D depth texture: ") + SDL_GetError());
             }
         }
@@ -9142,21 +9269,49 @@ namespace CNA::Internal::Renderers::SdlGpu
         owner->QueueTextureRelease(cubeTexture);
     }
 
-    SdlGpuRenderTargetCubeRenderer::SdlGpuRenderTargetCubeRenderer(SdlGpuRenderer& owner, int size,
-                                                                  int depthFormat, bool preserveContents,
-                                                                  bool mipMap, int multiSampleCount)
+    SdlGpuRenderTargetCubeRenderer::SdlGpuRenderTargetCubeRenderer(
+        SdlGpuRenderer& owner, int size, int depthFormat, bool preserveContents,
+        bool mipMap, int multiSampleCount, int surfaceFormat)
         : owner_(&owner), mipMap_(mipMap)
     {
         state_ = std::make_shared<SdlGpuRenderTargetCubeState>();
         state_->owner = owner_;
         state_->size = size;
+        state_->surfaceFormat = surfaceFormat;
         // REMED-GFX-141: only the multisampled path consults it -- see the field's own comment.
         state_->preserveContents = preserveContents;
 
         SDL_GPUDevice* device = owner_->Device();
-        constexpr SDL_GPUTextureFormat kFormat = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+        RenderTargetFormatInfo formatInfo{};
+        if (!TryGetRenderTargetFormatInfo(
+                static_cast<SurfaceFormat>(surfaceFormat), formatInfo) ||
+            !SDL_GPUTextureSupportsFormat(
+                device, formatInfo.nativeFormat, SDL_GPU_TEXTURETYPE_CUBE,
+                SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER))
+        {
+            throw std::invalid_argument(
+                "CNA SDL_GPU: RenderTargetCube received unsupported SurfaceFormat ordinal " +
+                std::to_string(surfaceFormat));
+        }
+        state_->colorFormat = formatInfo.nativeFormat;
+        state_->colorBytesPerPixel = formatInfo.bytesPerPixel;
 
-        const SDL_GPUSampleCount sampleCount = ClampSampleCount(device, kFormat, multiSampleCount);
+        DepthTargetFormatInfo depthInfo{};
+        if (!TryGetDepthTargetFormatInfo(device,
+                static_cast<Microsoft::Xna::Framework::Graphics::DepthFormat>(depthFormat),
+                depthInfo))
+        {
+            throw std::invalid_argument(
+                "CNA SDL_GPU: RenderTargetCube received unsupported exact DepthFormat ordinal " +
+                std::to_string(depthFormat));
+        }
+        state_->depthFormat = depthInfo.nativeFormat;
+        state_->appliedDepthFormat = depthInfo.appliedDepthFormat;
+        state_->depthBits = depthInfo.depthBits;
+        state_->hasStencil = depthInfo.hasStencil;
+
+        const SDL_GPUSampleCount sampleCount = ClampSampleCount(
+            device, state_->colorFormat, state_->depthFormat, multiSampleCount);
         multiSampleCount_ = SampleCountToInt(sampleCount);
         state_->sampleCount = sampleCount;
         // The resolved cube owns the public mip chain even when rendering uses a separate
@@ -9165,7 +9320,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         SDL_GPUTextureCreateInfo cubeInfo{};
         cubeInfo.type = SDL_GPU_TEXTURETYPE_CUBE;
-        cubeInfo.format = kFormat;
+        cubeInfo.format = state_->colorFormat;
         cubeInfo.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
         cubeInfo.width = static_cast<Uint32>(size);
         cubeInfo.height = static_cast<Uint32>(size);
@@ -9197,7 +9352,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             // RenderToTargetCubeFace) -- no manual ResolveSubresource-equivalent needed.
             SDL_GPUTextureCreateInfo msaaInfo{};
             msaaInfo.type = SDL_GPU_TEXTURETYPE_2D;
-            msaaInfo.format = kFormat;
+            msaaInfo.format = state_->colorFormat;
             msaaInfo.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET;
             msaaInfo.width = static_cast<Uint32>(size);
             msaaInfo.height = static_cast<Uint32>(size);
@@ -9211,21 +9366,17 @@ namespace CNA::Internal::Renderers::SdlGpu
                 if (face == nullptr)
                 {
                     const std::string what = SDL_GetError();
-                    for (SDL_GPUTexture* made : state_->msaaTextures)
-                        if (made != nullptr) SDL_ReleaseGPUTexture(device, made);
-                    state_->msaaTextures.fill(nullptr);
-                    SDL_ReleaseGPUTexture(device, state_->cubeTexture);
                     throw std::runtime_error(
                         "CNA SDL_GPU: failed to create RenderTargetCube MSAA texture: " + what);
                 }
             }
         }
 
-        if (depthFormat != 0 && owner_->depthStencilFormat_ != SDL_GPU_TEXTUREFORMAT_INVALID)
+        if (state_->depthFormat != SDL_GPU_TEXTUREFORMAT_INVALID)
         {
             SDL_GPUTextureCreateInfo depthInfo{};
             depthInfo.type = SDL_GPU_TEXTURETYPE_2D;
-            depthInfo.format = owner_->depthStencilFormat_;
+            depthInfo.format = state_->depthFormat;
             depthInfo.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET;
             depthInfo.width = static_cast<Uint32>(size);
             depthInfo.height = static_cast<Uint32>(size);
@@ -9236,11 +9387,6 @@ namespace CNA::Internal::Renderers::SdlGpu
             if (state_->depthTexture == nullptr)
             {
                 const std::string what = SDL_GetError();
-                // REMED-GFX-141: all six, not one.
-                for (SDL_GPUTexture* msaa : state_->msaaTextures)
-                    if (msaa != nullptr) SDL_ReleaseGPUTexture(device, msaa);
-                state_->msaaTextures.fill(nullptr);
-                SDL_ReleaseGPUTexture(device, state_->cubeTexture);
                 throw std::runtime_error(
                     "CNA SDL_GPU: failed to create RenderTargetCube depth texture: " + what);
             }
@@ -9284,6 +9430,17 @@ namespace CNA::Internal::Renderers::SdlGpu
     bool SdlGpuRenderTargetCubeRenderer::GetData(int face, int level, int x, int y, int w, int h,
                                                 void* data, int dataLength) const
     {
+        // ITextureCubeRenderer's public transfer contract is tightly packed RGBA8. CNA's current
+        // TextureCube surface has no typed float/half/Rgba64 overload, so never expose native bytes
+        // through that Color-shaped virtual.
+        if (state_->surfaceFormat != static_cast<int>(SurfaceFormat::Color)) return false;
+        return GetNativeDataEXT(face, level, x, y, w, h, data, dataLength);
+    }
+
+    bool SdlGpuRenderTargetCubeRenderer::GetNativeDataEXT(
+        int face, int level, int x, int y, int w, int h,
+        void* data, int dataLength) const
+    {
         // REMED-GFX-130: see SdlGpuTexture3DRenderer::GetData above.
         if (w <= 0 || h <= 0 || data == nullptr || level < 0 || face < 0 || face >= 6)
             return false;
@@ -9295,7 +9452,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (level >= state_->levelCount) return false;
         const int levelSize = std::max(1, state_->size >> level);
         if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
-        const Uint32 sizeBytes = static_cast<Uint32>(w) * static_cast<Uint32>(h) * 4;
+        const Uint32 sizeBytes = static_cast<Uint32>(w) * static_cast<Uint32>(h) *
+                                 state_->colorBytesPerPixel;
         if (static_cast<Uint32>(dataLength) < sizeBytes)
             throw std::out_of_range("CNA SDL_GPU: RenderTargetCube::GetData: dataLength too small for the requested region");
 
