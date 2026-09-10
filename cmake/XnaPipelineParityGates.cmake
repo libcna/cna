@@ -166,11 +166,18 @@ endif()
 # The genuine-runtime harness. It needs mono, Wine, a display and a legally installed XNA 4.0, and
 # says so by exiting 3, which ctest reports as a skip rather than a failure -- the difference
 # between "this machine cannot answer" and "the answer was wrong".
+#
+# All three of these build into one scratch directory, `build/xna-interop`, and the first thing
+# each does is clear it. Run in parallel they delete each other's fixtures and report a
+# `FileNotFoundException` for every one -- eight failures that pass the moment they are run
+# serially, which reads exactly like a regression and is not one. A shared `RESOURCE_LOCK` keeps
+# ctest from starting two of them at once (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-214`).
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/interop/xna40/run-interop-harness.sh")
     add_test(NAME XnaPipelineGenuineRuntimeInterop
              COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/tests/interop/xna40/run-interop-harness.sh")
     set_tests_properties(XnaPipelineGenuineRuntimeInterop
                          PROPERTIES LABELS "parity;xnapipeline;interop"
+                                    RESOURCE_LOCK xna-interop-scratch
                                     SKIP_RETURN_CODE 3 TIMEOUT 900)
 endif()
 
@@ -182,6 +189,7 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/interop/xna40/run-built-families-in
              COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/tests/interop/xna40/run-built-families-interop.sh")
     set_tests_properties(XnaPipelineGenuineRuntimeBuiltFamilies
                          PROPERTIES LABELS "parity;xnapipeline;interop"
+                                    RESOURCE_LOCK xna-interop-scratch
                                     SKIP_RETURN_CODE 3 TIMEOUT 900)
 endif()
 
@@ -193,6 +201,7 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/interop/xna40/run-interop-harness.s
                      "${CMAKE_CURRENT_SOURCE_DIR}/tests/assets/xnb/cna/windows/lzx")
     set_tests_properties(XnaPipelineGenuineRuntimeInteropLzx
                          PROPERTIES LABELS "parity;xnapipeline;interop"
+                                    RESOURCE_LOCK xna-interop-scratch
                                     SKIP_RETURN_CODE 3 TIMEOUT 900)
 endif()
 
