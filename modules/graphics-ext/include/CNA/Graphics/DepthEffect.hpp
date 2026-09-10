@@ -17,7 +17,8 @@ namespace CNA::Graphics {
     /**
      * @brief Full-screen colour-depth-reduction post-process effect.
      *
-     * A `ShaderEffect` (GLSL, EasyGL renderer) that quantizes the rendered colour to a
+     * A portable `ShaderEffect` package (GLSL ES, desktop GLSL, and Vulkan SPIR-V) that
+     * quantizes the rendered colour to a
      * fixed number of levels per channel, emulating limited-palette display hardware:
      * 16-bit (RGB565) colour, 8-bit (RGB332) colour, 4-bit/2-bit/1-bit greyscale, or a
      * real nearest-colour palette match against a fixed 216-colour "web-safe" palette
@@ -38,7 +39,7 @@ namespace CNA::Graphics {
     {
     public:
         /**
-         * @brief Constructs a DepthEffect, compiling its built-in GLSL shader.
+         * @brief Constructs a DepthEffect and selects the renderer's supported shader variant.
          *
          * @param device GraphicsDevice that owns this effect.
          */

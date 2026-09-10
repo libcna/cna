@@ -772,7 +772,7 @@ six resulting channel values with `AtmosphericSky::radiance`, so a flat or verti
 cannot satisfy it. Both Vulkan runs emit no validation message, and the standalone package has its
 own write-free reproducibility gate.
 
-### Portable engine-effect rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`–`MOD-2239r`, 2026-09-10)
+### Portable engine-effect rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`–`MOD-2239t`, 2026-09-10)
 
 `ChromaticAberrationPass` is the first engine post-process to use the portable package path. Its
 internal package shares one fullscreen vertex contract across GLSL ES, desktop GLSL and SPIR-V;
@@ -986,6 +986,14 @@ uniform contract is deliberately name-independent. Vulkan converts upper-left fr
 to EasyGL's physical row convention before scanline and shadow-mask indexing. The suite expands
 from nine structural checks to **15/15** on EasyGL, RADV and llvmpipe, including exact disabled
 output and separate pixel oracles for all five settings, with no validation message.
+
+`DepthEffect`, its companion legacy effect, now selects the same three shader dialects. Mode,
+dithering mode and palette size occupy one `vec4` so Vulkan's name-independent scalar slot cannot
+collapse them. Its real 216-entry web-safe and 16-entry EGA lookup textures use set 1 binding 1;
+RGB565/RGB332 and all three BT.601 grayscale modes remain arithmetic. Vulkan converts fragment
+coordinates to EasyGL's physical row convention before indexing either Bayer matrix. The expanded
+suite is **15/15** on EasyGL, RADV and llvmpipe and pins exact channel quantization, alpha, both
+nearest-palette results and every ordered threshold in the 4x4 and 8x8 matrices.
 
 Other engine post-process effects remain source-only and keep their exact copy-through fallback;
 the shared package/helper is the landing point for their subsequent fragment variants.

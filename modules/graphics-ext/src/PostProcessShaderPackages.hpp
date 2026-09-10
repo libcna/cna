@@ -31,6 +31,9 @@ namespace CNA::Graphics::detail
     /** @brief Creates the portable screen-space decal shader package. */
     [[nodiscard]] ShaderPackageEXT CreateDecalShaderPackage();
 
+    /** @brief Creates the portable colour-depth reduction shader package. */
+    [[nodiscard]] ShaderPackageEXT CreateDepthEffectShaderPackage();
+
     /** @brief Creates the portable filtered-strip colour-grade shader package. */
     [[nodiscard]] ShaderPackageEXT CreateColorGradeStripShaderPackage();
 

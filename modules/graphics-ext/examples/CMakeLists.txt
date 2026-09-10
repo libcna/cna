@@ -33,7 +33,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_CNAEXT)
 endif()
 
 # ---- DepthEffect manual verification demo (renders + screenshots each colour-depth mode) -----
-if(CNA_BUILD_EXAMPLES AND CNA_CNAEXT AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33") AND NOT EMSCRIPTEN AND NOT ANDROID)
+if(CNA_BUILD_EXAMPLES AND CNA_CNAEXT AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33" OR CNA_GRAPHICS_RENDERER STREQUAL "VULKAN") AND NOT EMSCRIPTEN AND NOT ANDROID)
     add_executable(cna_depth_effect_demo depth_effect_demo_test.cpp)
     # The shared example-support headers ("common/ScreenshotEXT.hpp", ...) live with the
     # graphics module's examples.

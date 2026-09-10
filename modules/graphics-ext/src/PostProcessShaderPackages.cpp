@@ -213,6 +213,22 @@ namespace CNA::Graphics::detail
             });
     }
 
+    ShaderPackageEXT CreateDepthEffectShaderPackage()
+    {
+        using namespace CNA::Graphics::detail::PostProcessGenerated;
+        return MakeFullscreenPackage(
+            {kDepthEffectEsFragmentSource,
+             "post_process/depth_effect.es.frag.glsl"},
+            {kDepthEffectDesktopFragmentSource,
+             "post_process/depth_effect.desktop.frag.glsl"},
+            {kDepthEffectVulkanFragmentSpirV,
+             kDepthEffectVulkanFragmentSpirVByteSize,
+             "post_process/depth_effect.vulkan.frag.spv"},
+            {ShaderBindingRequirementEXT(
+                "uPalette", 1, ShaderBindingTypeEXT::SampledTexture2D,
+                CNA::ShaderStageEXT::Fragment)});
+    }
+
     ShaderPackageEXT CreateColorGradeStripShaderPackage()
     {
         using namespace CNA::Graphics::detail::PostProcessGenerated;
