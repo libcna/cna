@@ -96,7 +96,17 @@ function(cna_configure_sdl_shadercross)
     endif()
 
     add_library(cna_sdl_shadercross INTERFACE)
-    target_link_libraries(cna_sdl_shadercross INTERFACE SDL3_shadercross-static)
+    # SDLGPU-98: SDL_shadercross-static deliberately links only SDL's header target upstream.
+    # MinGW's GNU ld resolves archive references from left to right, while the wider CNA closure
+    # can place SDL's import library before this archive. Rescan the two as one dependency group
+    # there so ShaderCross's SDL calls are resolved regardless of an earlier SDL occurrence.
+    if(MINGW)
+        target_link_libraries(cna_sdl_shadercross INTERFACE
+            "$<LINK_GROUP:RESCAN,SDL3_shadercross-static,SDL3::SDL3>")
+    else()
+        target_link_libraries(cna_sdl_shadercross INTERFACE
+            SDL3_shadercross-static SDL3::SDL3)
+    endif()
     message(STATUS
         "CNA: SDL_shadercross pinned at ${CNA_SDL_SHADERCROSS_GIT_TAG} with SPIRV-Cross ${CNA_SPIRV_CROSS_GIT_TAG}")
 endfunction()

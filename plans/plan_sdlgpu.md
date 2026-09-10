@@ -39,8 +39,8 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
 | Item | Current evidence |
 |---|---|
 | Re-audit starting branch / commit | `sdlgpu` / `8cd9ab7f45a05bef3a727598c8d9ef5cf8b04442` |
-| Newly created tasks | 7 (`SDLGPU-91`–`SDLGPU-97`) |
-| Completed / open | 4 / 3 (`SDLGPU-91`–`93` and `SDLGPU-97` complete; `SDLGPU-94`–`96` open) |
+| Newly created tasks | 8 (`SDLGPU-91`–`SDLGPU-98`) |
+| Completed / open | 5 / 3 (`SDLGPU-91`–`93` and `SDLGPU-97`–`98` complete; `SDLGPU-94`–`96` open) |
 | Proven runtime configuration | Linux/Vulkan only; the existing 188 integration, 33 EasyGL-oracle and 32 shared-source gates remain the behavioral baseline; the portability work's focused SDL GPU unit slice is now 47/47 |
 | Available local cross tools | MinGW-w64 and Wine are present; no Apple SDK/device, Android SDK/device, `dxc`, `spirv-cross`, SDL_shadercross executable or SDL_shadercross shared library was found |
 | Display constraint | All further Linux SDL tests must use `SDL_VIDEODRIVER=offscreen`; Windows GUI tests must use a headless/virtual display if runnable. Never use the host display. |
@@ -143,11 +143,11 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
   SpriteBatch/stock-effect/texture/RT/state/readback/compiled-effect slices on the D3D12 driver,
   make D3D validation diagnostics fatal where available, and record exact environment evidence.
 - **Status:** open. The stable MinGW tree is configured with the existing Windows SDL3 package and
-  its SDL GPU renderer/smoke translation units compile. Its full first link is currently blocked
-  before CNA/SDL GPU by the selected external `sharp-runtimenext` checkout: Windows compilation of
-  `System::Diagnostics::Process.cpp` stops at its unconditional POSIX `<poll.h>` include. Continue
-  with a Windows-compatible dependency revision/configuration or another in-scope workaround;
-  do not treat this external failure as D3D12 runtime evidence.
+  now links its complete smoke PE. Two external `sharp-runtimenext` portability defects required
+  build-only workarounds: an empty temporary `<poll.h>` because the include is outside that
+  dependency's existing Windows guard, and its missing `bcrypt` link for `BCryptGenRandom`.
+  Neither external checkout nor CNA source was changed for those workarounds. Proceed to the
+  headless Wine/vkd3d runtime gate; successful cross-linking alone is not D3D12 runtime evidence.
 
 ### SDLGPU-95 — validate ordinary parity on Apple Metal ⬜
 
@@ -204,6 +204,28 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
   under `SDLGPU-94`, not misattributed here. On native Linux/Vulkan, the real ShaderEffect pixel
   test remains **4/4** and smoke remains **30/30**, both run with
   `SDL_VIDEODRIVER=offscreen`, `DISPLAY=` and no validation diagnostic.
+
+### SDLGPU-98 — order the static ShaderCross closure before SDL on GNU/MinGW ✅
+
+- **Problem/public behavior:** the first complete MinGW smoke link contained every required
+  library but placed `libSDL3.dll.a` before static `libSDL3_shadercross.a`. GNU ld's one-pass
+  archive resolution therefore left ShaderCross calls such as `SDL_SetError`,
+  `SDL_GetStringProperty` and `SDL_CreateGPUComputePipeline` unresolved, preventing any Windows
+  SDL GPU application from linking.
+- **EasyGL/SDL evidence:** this is not a behavioral EasyGL difference; it is a portability defect
+  introduced by the new static translation closure. The identical native Linux link happened to
+  succeed because shared-library resolution/linker behavior did not expose the ordering error.
+- **Location:** SDL GPU renderer target dependency order.
+- **Acceptance/test:** put SDL after every renderer-owned static archive that calls it; link the
+  MinGW smoke PE without unresolved SDL symbols; retain an incremental native smoke link/run.
+- **Result (2026-09-10):** `cna_sdl_shadercross` now publishes a MinGW `RESCAN` link group
+  containing static ShaderCross followed by SDL, while other linkers retain their ordinary
+  ordered dependency. The resulting PE link line contains
+  `--start-group libSDL3_shadercross.a libSDL3.dll.a --end-group` and the complete smoke executable
+  links without any unresolved SDL symbol. The only extra link flag, `bcrypt`, compensates for the
+  separately recorded external SharpRuntime defect and is not part of this change. Native Linux
+  was incrementally relinked and its offscreen/Vulkan smoke remains **30/30**, with no validation
+  diagnostic and no host display.
 
 ## 2026-09-10 parity audit final status
 

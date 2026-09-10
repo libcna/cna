@@ -2,7 +2,6 @@
 # into the same SDL3 library every other renderer links against) -- no separate find_package
 # or FetchContent is needed, unlike VULKAN/WEBGPU/BGFX.
 cna_add_renderer()
-target_link_libraries(${RENDERER_TARGET} PRIVATE SDL3::SDL3)
 set_property(TARGET ${RENDERER_TARGET} PROPERTY REQUIRES_PLATFORM SDL3)
 
 # plans/plan_sdlgpu.md SDLGPU-92: the built-in shader path links SDL_shadercross statically when
@@ -23,6 +22,11 @@ endif()
 if(CNA_SDL_GPU_COMPILED_EFFECTS)
     target_link_libraries(${RENDERER_TARGET} PUBLIC cna_renderer_mojoshader_effect)
 endif()
+
+# SDLGPU-98: keep SDL after every static archive which calls it. GNU/MinGW resolves archives in
+# one pass; putting SDL first left SDL_shadercross's SDL_SetError/SDL_CreateGPU* references
+# unresolved even though the correct import library was present on the link line.
+target_link_libraries(${RENDERER_TARGET} PRIVATE SDL3::SDL3)
 
 # plans/plan_sdlgpu.md SDLGPU-42/43/97: ShaderEffect needs a target-native runtime
 # GLSL->SPIR-V compiler, and the resulting SPIR-V needs a driver that accepts it. Never let a
