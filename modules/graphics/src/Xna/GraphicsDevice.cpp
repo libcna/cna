@@ -1161,6 +1161,78 @@ namespace Microsoft::Xna::Framework::Graphics
             currentIndexBuffer_ = nullptr;
     }
 
+    void GraphicsDevice::DetachMovedTexture(const Texture* texture) noexcept
+    {
+        textures_.RemoveDisposedTexture(texture);
+        vertexTextures_.RemoveDisposedTexture(texture);
+    }
+
+    void GraphicsDevice::TransferMovedVertexBuffer(
+        const VertexBuffer* source, const VertexBuffer* destination) noexcept
+    {
+        if (currentVertexBuffer_ == source)
+            currentVertexBuffer_ = destination;
+        for (VertexBufferBinding& binding : currentVertexBuffers_)
+        {
+            if (binding.getVertexBufferProperty() == source)
+            {
+                binding = VertexBufferBinding(
+                    const_cast<VertexBuffer*>(destination),
+                    binding.getVertexOffsetProperty(),
+                    binding.getInstanceFrequencyProperty());
+            }
+        }
+    }
+
+    void GraphicsDevice::TransferMovedIndexBuffer(
+        const IndexBuffer* source, const IndexBuffer* destination) noexcept
+    {
+        if (currentIndexBuffer_ == source)
+            currentIndexBuffer_ = destination;
+    }
+
+    void GraphicsDevice::TransferMovedTexture(
+        const Texture* source, Texture* destination) noexcept
+    {
+        for (Texture*& slot : textures_.textures_)
+        {
+            if (slot == source)
+                slot = destination;
+        }
+        for (Texture*& slot : vertexTextures_.textures_)
+        {
+            if (slot == source)
+                slot = destination;
+        }
+        for (RenderTargetBinding& binding : currentRenderTargets_)
+        {
+            binding.ReplaceRenderTargetAfterMove(source, destination);
+        }
+    }
+
+    void GraphicsDevice::TransferResourceReference(
+        GraphicsResource* source, GraphicsResource* destination) noexcept
+    {
+        auto sourceIt = resources_.end();
+        auto destinationIt = resources_.end();
+        for (auto it = resources_.begin(); it != resources_.end(); ++it)
+        {
+            if (*it == source)
+                sourceIt = it;
+            if (*it == destination)
+                destinationIt = it;
+        }
+        if (sourceIt == resources_.end())
+            return;
+        if (destinationIt == resources_.end())
+        {
+            *sourceIt = destination;
+            return;
+        }
+        *sourceIt = resources_.back();
+        resources_.pop_back();
+    }
+
     void GraphicsDevice::FillVertexStreamBindings(
         CNA::Internal::Renderers::GpuDrawParams& p, int foldedOffset,
         bool allowLegacyEmptyDeclarationFallback) const

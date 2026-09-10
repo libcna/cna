@@ -76,9 +76,9 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Copy-assigns a value wrapper that shares the underlying texture resource. */
         CNAEXT TextureCube& operator=(const TextureCube&) = default;
         /** @brief Movable — transfers ownership of the GPU renderer handle. */
-        CNAEXT TextureCube(TextureCube&&) noexcept = default;
+        CNAEXT TextureCube(TextureCube&& other) noexcept;
         /** @brief Movable — transfers ownership of the GPU renderer handle. */
-        CNAEXT TextureCube& operator=(TextureCube&&) noexcept = default;
+        CNAEXT TextureCube& operator=(TextureCube&& other) noexcept;
 
         /** @brief Returns the fully qualified .NET type name. */
         CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;

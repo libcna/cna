@@ -64,10 +64,14 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void Dispose(bool disposing) override;
 
-        RenderTarget2D(const RenderTarget2D&)            = delete;
-        RenderTarget2D& operator=(const RenderTarget2D&) = delete;
-        RenderTarget2D(RenderTarget2D&&)                 = default;
-        RenderTarget2D& operator=(RenderTarget2D&&)      = default;
+        /** @brief Copy construction is unavailable because a render target has unique wrapper identity. */
+        CNAEXT RenderTarget2D(const RenderTarget2D&) = delete;
+        /** @brief Copy assignment is unavailable because a render target has unique wrapper identity. */
+        CNAEXT RenderTarget2D& operator=(const RenderTarget2D&) = delete;
+        /** @brief Move-constructs a wrapper and transfers ownership of its render-target resource. */
+        CNAEXT RenderTarget2D(RenderTarget2D&& other) noexcept;
+        /** @brief Move-assigns an unbound wrapper and transfers its render-target resource. */
+        CNAEXT RenderTarget2D& operator=(RenderTarget2D&& other);
 
         /** @brief Returns the fully qualified CNA type name. */
         CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;

@@ -440,6 +440,49 @@ namespace Microsoft::Xna::Framework::Graphics
         Dispose(false);
     }
 
+    Texture2D::Texture2D(Texture2D&& other) noexcept
+        : Texture(std::move(other))
+        , renderer_(std::move(other.renderer_))
+        , width(other.width)
+        , height(other.height)
+        , cpuPixels_(std::move(other.cpuPixels_))
+        , extraMipLevels_(std::move(other.extraMipLevels_))
+        , gpuOnlyContent_(other.gpuOnlyContent_)
+    {
+        if (graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
+            graphicsDevice_->TransferMovedTexture(&other, this);
+        other.width = 0;
+        other.height = 0;
+        other.gpuOnlyContent_ = false;
+    }
+
+    Texture2D& Texture2D::operator=(Texture2D&& other) noexcept
+    {
+        if (this != &other)
+        {
+            GraphicsDevice* const previousDevice = graphicsDevice_;
+            const bool previousDeviceAlive = !graphicsDeviceLifetime_.expired();
+            if (previousDevice != nullptr && previousDeviceAlive &&
+                previousDevice != other.graphicsDevice_)
+            {
+                previousDevice->DetachMovedTexture(this);
+            }
+            Texture::operator=(std::move(other));
+            renderer_ = std::move(other.renderer_);
+            width = other.width;
+            height = other.height;
+            cpuPixels_ = std::move(other.cpuPixels_);
+            extraMipLevels_ = std::move(other.extraMipLevels_);
+            gpuOnlyContent_ = other.gpuOnlyContent_;
+            if (graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
+                graphicsDevice_->TransferMovedTexture(&other, this);
+            other.width = 0;
+            other.height = 0;
+            other.gpuOnlyContent_ = false;
+        }
+        return *this;
+    }
+
     void Texture2D::Dispose(bool disposing)
     {
         renderer_.reset();

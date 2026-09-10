@@ -93,10 +93,14 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Destructor. */
         CNAEXT ~Texture2D() override;
 
-        Texture2D(const Texture2D&) = default;
-        Texture2D& operator=(const Texture2D&) = default;
-        Texture2D(Texture2D&&) noexcept = default;
-        Texture2D& operator=(Texture2D&&) noexcept = default;
+        /** @brief Copy-constructs a value wrapper that shares the underlying texture resource. */
+        CNAEXT Texture2D(const Texture2D&) = default;
+        /** @brief Copy-assigns a value wrapper that shares the underlying texture resource. */
+        CNAEXT Texture2D& operator=(const Texture2D&) = default;
+        /** @brief Move-constructs a wrapper and transfers ownership of its renderer resource. */
+        CNAEXT Texture2D(Texture2D&& other) noexcept;
+        /** @brief Move-assigns a wrapper and transfers ownership of its renderer resource. */
+        CNAEXT Texture2D& operator=(Texture2D&& other) noexcept;
 
         /** @brief Returns the fully qualified .NET type name of this class. */
         CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;

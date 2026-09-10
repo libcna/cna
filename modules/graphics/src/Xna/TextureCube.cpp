@@ -124,6 +124,39 @@ namespace Microsoft::Xna::Framework::Graphics
         Dispose(false);
     }
 
+    TextureCube::TextureCube(TextureCube&& other) noexcept
+        : Texture(std::move(other))
+        , size_(other.size_)
+        , renderer_(std::move(other.renderer_))
+        , cpuPixels_(std::move(other.cpuPixels_))
+    {
+        if (graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
+            graphicsDevice_->TransferMovedTexture(&other, this);
+        other.size_ = 0;
+    }
+
+    TextureCube& TextureCube::operator=(TextureCube&& other) noexcept
+    {
+        if (this != &other)
+        {
+            GraphicsDevice* const previousDevice = graphicsDevice_;
+            const bool previousDeviceAlive = !graphicsDeviceLifetime_.expired();
+            if (previousDevice != nullptr && previousDeviceAlive &&
+                previousDevice != other.graphicsDevice_)
+            {
+                previousDevice->DetachMovedTexture(this);
+            }
+            Texture::operator=(std::move(other));
+            size_ = other.size_;
+            renderer_ = std::move(other.renderer_);
+            cpuPixels_ = std::move(other.cpuPixels_);
+            if (graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
+                graphicsDevice_->TransferMovedTexture(&other, this);
+            other.size_ = 0;
+        }
+        return *this;
+    }
+
     TextureCube::TextureCube(GraphicsDevice& device, int size, bool mipMap, SurfaceFormat format)
         : Texture(&device)
         , size_(size)

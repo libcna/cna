@@ -53,8 +53,12 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] CubeMapFace getCubeMapFaceProperty() const;
 
     private:
+        void ReplaceRenderTargetAfterMove(const Texture* source, Texture* destination) noexcept;
+
         Texture* renderTarget_ = nullptr;
         int arraySlice_ = 0;
         CubeMapFace cubeMapFace_ = CubeMapFace::PositiveX;
+
+        friend class GraphicsDevice;
     };
 }

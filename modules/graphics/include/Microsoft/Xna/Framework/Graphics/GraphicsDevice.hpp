@@ -63,6 +63,7 @@ namespace Microsoft::Xna::Framework::Graphics
     class Effect;
     class RenderTarget2D;
     class RenderTargetCube;
+    class Texture;
 }
 
 namespace Microsoft::Xna::Framework::Content
@@ -1510,6 +1511,14 @@ namespace Microsoft::Xna::Framework::Graphics
         void ThrowIfBoundIndexBufferDisposed() const;
         void DetachDestroyedVertexBuffer(const VertexBuffer* vertexBuffer) noexcept;
         void DetachDestroyedIndexBuffer(const IndexBuffer* indexBuffer) noexcept;
+        void DetachMovedTexture(const Texture* texture) noexcept;
+        void TransferMovedVertexBuffer(const VertexBuffer* source,
+                                       const VertexBuffer* destination) noexcept;
+        void TransferMovedIndexBuffer(const IndexBuffer* source,
+                                      const IndexBuffer* destination) noexcept;
+        void TransferMovedTexture(const Texture* source, Texture* destination) noexcept;
+        void TransferResourceReference(GraphicsResource* source,
+                                       GraphicsResource* destination) noexcept;
 
         // REMED-GFX-201: copies every active declared VertexBufferBinding into `p.vertexStreams`,
         // in public slot order, and computes `p.combinedVertexStride`. `foldedOffset` is subtracted
@@ -1674,6 +1683,8 @@ namespace Microsoft::Xna::Framework::Graphics
             AcquireRendererThreadContextLeaseForFrame();
 
         friend class Texture2D;
+        friend class Texture3D;
+        friend class TextureCube;
         friend class RenderTargetCube;
         friend class GraphicsResource;
         friend class VertexBuffer;

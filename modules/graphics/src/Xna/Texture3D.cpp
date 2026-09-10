@@ -112,8 +112,44 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         Dispose(false);
     }
-    Texture3D::Texture3D(Texture3D&&) noexcept = default;
-    Texture3D& Texture3D::operator=(Texture3D&&) noexcept = default;
+    Texture3D::Texture3D(Texture3D&& other) noexcept
+        : Texture(std::move(other))
+        , width_(other.width_)
+        , height_(other.height_)
+        , depth_(other.depth_)
+        , renderer_(std::move(other.renderer_))
+    {
+        if (graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
+            graphicsDevice_->TransferMovedTexture(&other, this);
+        other.width_ = 0;
+        other.height_ = 0;
+        other.depth_ = 0;
+    }
+
+    Texture3D& Texture3D::operator=(Texture3D&& other) noexcept
+    {
+        if (this != &other)
+        {
+            GraphicsDevice* const previousDevice = graphicsDevice_;
+            const bool previousDeviceAlive = !graphicsDeviceLifetime_.expired();
+            if (previousDevice != nullptr && previousDeviceAlive &&
+                previousDevice != other.graphicsDevice_)
+            {
+                previousDevice->DetachMovedTexture(this);
+            }
+            Texture::operator=(std::move(other));
+            width_ = other.width_;
+            height_ = other.height_;
+            depth_ = other.depth_;
+            renderer_ = std::move(other.renderer_);
+            if (graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
+                graphicsDevice_->TransferMovedTexture(&other, this);
+            other.width_ = 0;
+            other.height_ = 0;
+            other.depth_ = 0;
+        }
+        return *this;
+    }
 
     Texture3D::Texture3D(GraphicsDevice& device, int width, int height, int depth, bool mipMap, SurfaceFormat format)
         : Texture(&device)

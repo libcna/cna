@@ -140,8 +140,42 @@ namespace Microsoft::Xna::Framework::Graphics
             graphicsDevice_->DetachDestroyedVertexBuffer(this);
         Dispose(false);
     }
-    VertexBuffer::VertexBuffer(VertexBuffer&&) noexcept = default;
-    VertexBuffer& VertexBuffer::operator=(VertexBuffer&&) noexcept = default;
+    VertexBuffer::VertexBuffer(VertexBuffer&& other) noexcept
+        : GraphicsResource(std::move(other))
+        , renderer_(std::move(other.renderer_))
+        , vertexDeclaration_(std::move(other.vertexDeclaration_))
+        , bufferUsage_(other.bufferUsage_)
+        , vertexCount_(other.vertexCount_)
+        , cpuShadow_(std::move(other.cpuShadow_))
+    {
+        if (graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
+            graphicsDevice_->TransferMovedVertexBuffer(&other, this);
+        other.vertexCount_ = 0;
+    }
+
+    VertexBuffer& VertexBuffer::operator=(VertexBuffer&& other) noexcept
+    {
+        if (this != &other)
+        {
+            GraphicsDevice* const previousDevice = graphicsDevice_;
+            const bool previousDeviceAlive = !graphicsDeviceLifetime_.expired();
+            if (previousDevice != nullptr && previousDeviceAlive &&
+                previousDevice != other.graphicsDevice_)
+            {
+                previousDevice->DetachDestroyedVertexBuffer(this);
+            }
+            GraphicsResource::operator=(std::move(other));
+            renderer_ = std::move(other.renderer_);
+            vertexDeclaration_ = std::move(other.vertexDeclaration_);
+            bufferUsage_ = other.bufferUsage_;
+            vertexCount_ = other.vertexCount_;
+            cpuShadow_ = std::move(other.cpuShadow_);
+            if (graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
+                graphicsDevice_->TransferMovedVertexBuffer(&other, this);
+            other.vertexCount_ = 0;
+        }
+        return *this;
+    }
 
     void VertexBuffer::Dispose(bool disposing)
     {

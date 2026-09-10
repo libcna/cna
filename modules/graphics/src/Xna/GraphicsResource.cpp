@@ -49,18 +49,40 @@ namespace Microsoft::Xna::Framework::Graphics
         , tag_(other.tag_)
         , isDisposed_(other.isDisposed_)
     {
+        if (graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
+            graphicsDevice_->TransferResourceReference(&other, this);
+        other.graphicsDevice_ = nullptr;
+        other.graphicsDeviceLifetime_.reset();
+        other.tag_ = nullptr;
+        other.isDisposed_ = true;
     }
 
     GraphicsResource& GraphicsResource::operator=(GraphicsResource&& other) noexcept
     {
         if (this != &other)
         {
+            GraphicsDevice* const previousDevice = graphicsDevice_;
+            const std::weak_ptr<void> previousLifetime = graphicsDeviceLifetime_;
+            GraphicsDevice* const incomingDevice = other.graphicsDevice_;
+            const std::weak_ptr<void> incomingLifetime = other.graphicsDeviceLifetime_;
+
+            if (previousDevice != nullptr && !previousLifetime.expired() &&
+                previousDevice != incomingDevice)
+            {
+                previousDevice->RemoveResourceReference(this);
+            }
             graphicsDevice_ = other.graphicsDevice_;
             graphicsDeviceLifetime_ = other.graphicsDeviceLifetime_;
             name_ = std::move(other.name_);
             tag_ = other.tag_;
             isDisposed_ = other.isDisposed_;
             Disposing = std::move(other.Disposing);
+            if (incomingDevice != nullptr && !incomingLifetime.expired())
+                incomingDevice->TransferResourceReference(&other, this);
+            other.graphicsDevice_ = nullptr;
+            other.graphicsDeviceLifetime_.reset();
+            other.tag_ = nullptr;
+            other.isDisposed_ = true;
         }
         return *this;
     }

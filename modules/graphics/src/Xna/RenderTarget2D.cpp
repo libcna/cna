@@ -167,6 +167,49 @@ namespace Microsoft::Xna::Framework::Graphics
         if (rtRenderer_) multiSampleCount_ = rtRenderer_->GetMultiSampleCount();
     }
 
+    RenderTarget2D::RenderTarget2D(RenderTarget2D&& other) noexcept
+        : Texture2D(std::move(other))
+        , ContentLost(std::move(other.ContentLost))
+        , depthFormat_(other.depthFormat_)
+        , multiSampleCount_(other.multiSampleCount_)
+        , usage_(other.usage_)
+        , rtRenderer_(other.rtRenderer_)
+        , contentLost_(other.contentLost_)
+    {
+        other.rtRenderer_ = nullptr;
+        other.multiSampleCount_ = 0;
+        other.contentLost_ = false;
+    }
+
+    RenderTarget2D& RenderTarget2D::operator=(RenderTarget2D&& other)
+    {
+        if (this != &other)
+        {
+            if (graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
+            {
+                for (const RenderTargetBinding& binding : graphicsDevice_->GetRenderTargets())
+                {
+                    if (binding.getRenderTargetProperty() == this)
+                    {
+                        throw System::InvalidOperationException(
+                            "Moving over a render target that is still bound");
+                    }
+                }
+            }
+            Texture2D::operator=(std::move(other));
+            depthFormat_ = other.depthFormat_;
+            multiSampleCount_ = other.multiSampleCount_;
+            usage_ = other.usage_;
+            rtRenderer_ = other.rtRenderer_;
+            contentLost_ = other.contentLost_;
+            ContentLost = std::move(other.ContentLost);
+            other.rtRenderer_ = nullptr;
+            other.multiSampleCount_ = 0;
+            other.contentLost_ = false;
+        }
+        return *this;
+    }
+
     RenderTargetUsage RenderTarget2D::getRenderTargetUsageProperty() const { return usage_; }
     DepthFormat RenderTarget2D::getDepthStencilFormatProperty() const { return depthFormat_; }
     int RenderTarget2D::getMultiSampleCountProperty() const { return multiSampleCount_; }

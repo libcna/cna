@@ -119,8 +119,42 @@ namespace Microsoft::Xna::Framework::Graphics
             graphicsDevice_->DetachDestroyedIndexBuffer(this);
         Dispose(false);
     }
-    IndexBuffer::IndexBuffer(IndexBuffer&&) noexcept = default;
-    IndexBuffer& IndexBuffer::operator=(IndexBuffer&&) noexcept = default;
+    IndexBuffer::IndexBuffer(IndexBuffer&& other) noexcept
+        : GraphicsResource(std::move(other))
+        , renderer_(std::move(other.renderer_))
+        , indexElementSize_(other.indexElementSize_)
+        , bufferUsage_(other.bufferUsage_)
+        , indexCount_(other.indexCount_)
+        , cpuShadow_(std::move(other.cpuShadow_))
+    {
+        if (graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
+            graphicsDevice_->TransferMovedIndexBuffer(&other, this);
+        other.indexCount_ = 0;
+    }
+
+    IndexBuffer& IndexBuffer::operator=(IndexBuffer&& other) noexcept
+    {
+        if (this != &other)
+        {
+            GraphicsDevice* const previousDevice = graphicsDevice_;
+            const bool previousDeviceAlive = !graphicsDeviceLifetime_.expired();
+            if (previousDevice != nullptr && previousDeviceAlive &&
+                previousDevice != other.graphicsDevice_)
+            {
+                previousDevice->DetachDestroyedIndexBuffer(this);
+            }
+            GraphicsResource::operator=(std::move(other));
+            renderer_ = std::move(other.renderer_);
+            indexElementSize_ = other.indexElementSize_;
+            bufferUsage_ = other.bufferUsage_;
+            indexCount_ = other.indexCount_;
+            cpuShadow_ = std::move(other.cpuShadow_);
+            if (graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
+                graphicsDevice_->TransferMovedIndexBuffer(&other, this);
+            other.indexCount_ = 0;
+        }
+        return *this;
+    }
 
     void IndexBuffer::Dispose(bool disposing)
     {

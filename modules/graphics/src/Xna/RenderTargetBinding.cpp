@@ -34,4 +34,11 @@ namespace Microsoft::Xna::Framework::Graphics
     Texture* RenderTargetBinding::getRenderTargetProperty() const { return renderTarget_; }
     int RenderTargetBinding::getArraySliceProperty() const { return arraySlice_; }
     CubeMapFace RenderTargetBinding::getCubeMapFaceProperty() const { return cubeMapFace_; }
+
+    void RenderTargetBinding::ReplaceRenderTargetAfterMove(
+        const Texture* source, Texture* destination) noexcept
+    {
+        if (renderTarget_ == source)
+            renderTarget_ = destination;
+    }
 }
