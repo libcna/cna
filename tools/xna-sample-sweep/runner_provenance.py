@@ -349,70 +349,57 @@ def sourceRoot(text, sample):
     a build failure and the reference unexplainable; reading it against the tree the runner named
     builds it (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-212`).
 
-    Only a literal chain is followed -- a `const` assigned a string, or another `const` plus one --
-    because what a runner computes is not in its source.
+    The **whole** expression is resolved, not its first identifier. SAMPLE-003 writes
+    `RootDirectory = root + @"\\TexturesAndColors\\Content"`, and reading that as `root` moved
+    every one of its assets out from under the sources and made eight of them build failures --
+    a regression this function caused and this rule fixes (`XNASWEEP-216`). A part that is neither
+    a string literal nor a `const string` this file declares answers nothing at all, because a root
+    guessed at is worse than the project's own.
 
     @param text The runner's source.
     @param sample The sample directory's name, which anchors the path.
-    @return The root relative to the sample, or None when it is the project's own or not literal.
+    @return The root relative to the sample, or None when it is not literal or not under it.
     """
-    named = re.search(r"RootDirectory\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\s*,", text)
+    named = re.search(r"RootDirectory\s*=\s*([^\n;]+?)\s*,\s*$", text, re.MULTILINE)
     if named is None:
         return None
     constants = dict(re.findall(
         r'\bconst\s+string\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([^;]+);', text))
-    seen = set()
-    name = named.group(1)
-    while name in constants and name not in seen:
-        seen.add(name)
-        expression = constants[name].strip()
-        parts = [p.strip() for p in expression.split("+")]
-        literal = ""
-        base = None
-        for part in parts:
-            quoted = re.match(r'^@?"([^"]*)"$', part)
-            if quoted:
-                literal += quoted.group(1)
-            elif re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", part) and base is None:
-                base = part
-            else:
-                return None
-        if base is None:
-            whole = literal
-        else:
-            name = base
-            constants[name] = constants.get(name, "")
-            # Resolve the base first, then append what this level added.
-            resolved = sourceRoot_resolve(constants, base)
+    whole = _literalOf(named.group(1), constants)
+    if whole is None:
+        return None
+    marker = "\\" + sample + "\\"
+    if marker not in whole:
+        return None
+    relative = whole.split(marker, 1)[1].replace("\\", "/").strip("/")
+    return relative or None
+
+
+def _literalOf(expression, constants, depth=0):
+    """The string a `+` chain of literals and `const string` names spells, or None.
+
+    @param expression The C# expression's text.
+    @param constants Every `const string` the file declares, by name.
+    @param depth Guards a constant that refers to itself.
+    @return The whole literal, or None when any part of it is not one.
+    """
+    if depth > 8:
+        return None
+    whole = ""
+    for part in [one.strip() for one in expression.split("+")]:
+        quoted = re.match(r'^@?"((?:[^"\\]|\\.)*)"$', part)
+        if quoted:
+            whole += quoted.group(1) if part.startswith("@") else quoted.group(1).encode(
+                "utf-8").decode("unicode_escape")
+            continue
+        if re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", part) and part in constants:
+            resolved = _literalOf(constants[part], constants, depth + 1)
             if resolved is None:
                 return None
-            whole = resolved + literal
-        marker = "\\" + sample + "\\"
-        if marker not in whole:
-            return None
-        relative = whole.split(marker, 1)[1].replace("\\", "/").strip("/")
-        return relative or None
-    return None
-
-
-def sourceRoot_resolve(constants, name, depth=0):
-    """The literal a `const string` chain spells, or None when it is not literal."""
-    if depth > 8 or name not in constants:
+            whole += resolved
+            continue
         return None
-    literal = ""
-    base = None
-    for part in [p.strip() for p in constants[name].split("+")]:
-        quoted = re.match(r'^@?"([^"]*)"$', part)
-        if quoted:
-            literal += quoted.group(1)
-        elif re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", part) and base is None:
-            base = part
-        else:
-            return None
-    if base is None:
-        return literal
-    head = sourceRoot_resolve(constants, base, depth + 1)
-    return None if head is None else head + literal
+    return whole
 
 
 def main(argv=None):

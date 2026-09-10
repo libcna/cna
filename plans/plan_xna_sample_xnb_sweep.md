@@ -320,6 +320,7 @@ final qualification.
 | `XNASWEEP-213` | RobotGame's six mech skeletons: bone transforms about fifty ulps apart. | [ ] **Open, measured, and the last unexplained mechanism in the corpus.** Six references under `SAMPLE-142`'s `Content-stock`, every one an FBX mech, differ **only** in `root/bones[]/transform[]` -- 412 numbers in `PhantomBoss`, and the worst is `bones[18]/transform[1]: 0.9633218050003052 vs 0.9633251428604126`, **3.34e-06 of the larger magnitude**. That is above the 1e-6 the float tolerance accepts and below anything a wrong formula produces: about fifty-five ulps in a rotation element, which is what a long composition chain with cancellation does when its terms are taken in a different order. These skeletons are the deepest in the corpus, which is consistent and is not evidence. It belongs to `XNASWEEP-193`'s family -- the world-quotient rule that row settled is *right*, and this is the arithmetic left over after it. **Next**: the same discipline `XNASWEEP-193` used -- a probe family varying one property of one deep chain at a time, IEEE-754 bit patterns captured rather than printed decimals, and the stage where XNA narrows to `float` identified -- rather than widening a tolerance until it fits. |
 | `XNASWEEP-214` | Three interop tests share one scratch directory and delete each other's fixtures. | [x] **Fixed with a `RESOURCE_LOCK`.** Run at `-j4`, `XnaPipelineGenuineRuntimeInterop` and `XnaPipelineGenuineRuntimeBuiltFamilies` failed every fixture with `FileNotFoundException: ...\\build\\xna-interop\\<name>.expected.json` and passed the moment they were run serially. All three genuine-runtime harnesses build into `build/xna-interop` and each clears it first, so in parallel they remove each other's inputs. Eight errors that read exactly like a regression in the pipeline and were the test harness racing itself; ctest now holds a lock across the three. Found while running this campaign's gates rather than by a failure anybody reported, which is the point of running them at the parallelism a real run uses. |
 | `XNASWEEP-215` | The `ACCEPTED_DIFFERENCE` audit run as a gate, and the three things it found. | [x] **Done: 806 accepted references, every one proved by its own reason, `accepted_audit.py` exits 0.** Re-running `XNASWEEP-204`'s audit found 132 references accepted under a reason that could not account for something they differ in, and reading them split three ways. **One was the audit's own strictness**: `decompressedLength` and `lzxFrames[]/blockSize` describe the *container*, and a payload the reason allows to differ takes them with it whenever it differs in length -- they are permitted now, and only when every other field is, so a reference whose *only* difference is container framing is still a violation because then the payload the reason names did not differ at all. `root/atlas/levelByteSizes[]` is the same fact as `atlas/width`, which was already allowed. **One was a reason about the wrong thing**: every asset built for the Xbox target was accepted as *'XMA has no publicly implementable encoder'*, which put twenty textures and two models under an audio codec -- SAMPLE-031's `engine_diff_tex_0.xnb` is a texture and its level 0 differs, and no missing audio encoder explains that. The reason now applies only to audio; sixteen of the twenty fell through to the reason that does explain them (block compressors) and four to `UNEXPLAINED`, where they belong until something does. **One was a truncation bug in `taxonomy.py`**: the mip/compressor rule asked the *display* list of differences, which is capped at twelve, whether every difference was a level digest -- so a ten-level texture, which has sixteen, could never satisfy it and was answered by whatever broader rule came first. It asks the complete field set now, and reads *which* levels differ from it too, because missing level 0 off a truncated list is how a base-image difference gets called the mip filter's dither. The audit cannot be a ctest -- it needs a full sweep's classification, which no test produces -- so it is a step of the sweep recipe in §11 instead, and its exit status is the gate. |
+| `XNASWEEP-216` | `XNASWEEP-212` read the first identifier of an expression as the whole of it. | [x] **Fixed, and caught by comparing run 49 against run 47 reference by reference rather than by reading its total.** The `RootDirectory` extractor matched `RootDirectory\\s*=\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*,`, which reads SAMPLE-003's `RootDirectory = root + @"\\TexturesAndColors\\Content"` as `root` and throws the rest away. The sweep then staged the sample's whole `xna4-original` tree as the build root and every `Include` resolved to a file that is not there: eight `BuildContent: the source asset "Cube.fbx" does not exist` and sixteen references that had been `IDENTICAL` in run 47 became `UNEXPLAINED`. The extractor now resolves the **whole** expression -- a `+` chain of string literals and `const string` names this file declares -- and answers nothing when any part of it is neither, because a root guessed at is worse than the project's own. Of the 118 runners, 93 name a root and exactly **three** name one that is not the project's own directory: SAMPLE-146 (the reason the rule exists), SAMPLE-060 and SAMPLE-064, and neither of the last two moved a single reference in either direction. The two units this cost were rebuilt with the corrected manifest and merged; nothing else in the corpus is touched by the difference, which is checked rather than assumed. |
 
 
 ---
@@ -359,17 +360,25 @@ first run of this campaign was invalidated by a mid-run relink.
 
 ### 11.1 The corpus
 
-| | |
-|---|---:|
-| genuine reference `.xnb` | **7,734** |
-| distinct contents | 5,285 |
-| samples represented | 129 |
-| build units (project x output root) | **343** |
-| references mapped to a project item | **7,022** |
-| references under a root but named by no item (model side outputs) | **651** |
-| references in a sample with no `.contentproj` | **2** |
-| references under no project's output root at all | 8 |
-| references whose item names a source the tree has not got | 43 |
+| | | |
+|---|---:|---:|
+| | run 42 | run 49 |
+| genuine reference `.xnb` | 7,726 | **7,726** |
+| distinct contents | 5,277 | 5,277 |
+| samples represented | 129 | 129 |
+| build units (project x output root) | 343 | **433** |
+| references mapped to a project item | 7,022 | **7,076** |
+| references under a root but named by no item (model side outputs) | 651 | **650** |
+| references in a sample with no `.contentproj` | 2 | **0** |
+| references under no project's output root at all | 8 | **0** |
+| references whose item names a source the tree has not got | 43 | **0** |
+
+The last three rows reaching zero is `XNASWEEP-163` and `XNASWEEP-206`: the 43
+are `Include` values whose case the reference build's filesystem folded and this
+one does not, resolved component by component now; the 8 and the 2 are SAMPLE-108
+and SAMPLES-DEC-007, which have build-unit descriptions of their own. `7,734` and
+`5,285` in earlier revisions of this table counted eight references that were
+removed from the read-only tree before the corpus was re-inventoried; see §11.4.
 
 None of the movement here is a change to what CNA builds. `XNASWEEP-184` folded
 the two directories the reference tree's filesystem had as one, which is 115
@@ -379,9 +388,11 @@ references; and `XNASWEEP-194` did the same for the seventh and largest, SAMPLE-
 at 112. The figures were 328 units, 6,578 mapped, 746 `no-item` and 359 with no
 project before any of it; 333, 6,930, 631 and 114 after `XNASWEEP-186`.
 
-**The two left with no project are SAMPLE-108's**, which ships no runner at all
--- not a hand-written one this campaign could read, none. They are the floor of
-that class rather than work anybody has left undone.
+**SAMPLE-108 ships no runner at all** -- not a hand-written one this campaign
+could read, none. Its two references were the floor of that class until
+`XNASWEEP-163` read the sample's own `evidence/build-results.txt`, which records
+which file the run that produced them selected; a build-unit description now says
+so and they are built.
 
 ### 11.2 The sweep, run 42 (2026-09-10)
 
