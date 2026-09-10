@@ -23,7 +23,10 @@
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
@@ -34,7 +37,10 @@ using CNA::Content::Cnb::CnbTextureRepresentation;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Content::ContentLoadException;
 using Microsoft::Xna::Framework::Content::ContentManager;
+using Microsoft::Xna::Framework::Graphics::GraphicsAdapter;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
+using Microsoft::Xna::Framework::Graphics::PresentationParameters;
 
 namespace
 {
@@ -185,7 +191,10 @@ TEST(CnbTextureContentManagerTest, ATexture3DCnbLoadsAsASharedPointerWithItsDept
     source.representations.push_back(std::move(representation));
     WriteBytes(root.path() / "fog.cnb", CNA::Content::Cnb::EncodeTexture3DToCnb(source, "fog"));
 
-    GraphicsDevice device;
+    // SOFTWARE-274: XNA volume textures are HiDef-only. The old default-Reach fixture happened
+    // to pass only while CNA's Texture3D constructor failed to enforce that profile boundary.
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
     ContentManager cm(nullptr, root.path().string());
     cm.setGraphicsDevice(device);
     // Texture3D is non-copyable, so ContentManager boxes it as a shared_ptr -- the same shape the

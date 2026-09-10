@@ -475,6 +475,12 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   directly; EasyGL maps them to matching native volume images and uses an exact byte mirror for
   readback. Reach still refuses volume textures entirely, and compiled-effect sampling remains the
   separate `SOFTWARE-164` backlog.
+- **Classic XNB Texture3D content keeps its authored representation** (`SOFTWARE-274`) — the
+  FNA-order runtime reader constructs the serialized format and uploads each level's exact byte
+  payload instead of coercing every volume to RGBA8. All fifteen legal HiDef formats and a
+  depth-dominant `1x1x8` four-level chain round-trip identically on Software and EasyGL; DXT1/3/5
+  are rejected because XNA does not permit block-compressed volume textures. The separate frozen
+  CNB schema-1 transcoder intentionally remains canonical RGBA8.
 - **The classic SpriteBatch/SpriteFont parity corpus executes on the CPU** (`SOFTWARE-138`).
   Eighteen renderer-independent scenes shared with EasyGL cover flips, rotation/origin, both scale
   overloads, source rectangles, layer sorting, transforms, render targets, viewports, scissor,

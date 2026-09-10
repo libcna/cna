@@ -38,9 +38,15 @@ namespace CNA::Internal::Graphics
         std::same_as<std::remove_cvref_t<T>, Microsoft::Xna::Framework::Vector2> ||
         std::same_as<std::remove_cvref_t<T>, Microsoft::Xna::Framework::Vector4>;
 
+    /** @brief Identifies raw bytes used by the XNA Texture3D content reader. */
+    template<typename T>
+    concept Texture3DByteElement =
+        std::same_as<std::remove_cvref_t<T>, std::uint8_t>;
+
     /** @brief Identifies the typed elements supported by Texture3D's XNA transfer surface. */
     template<typename T>
-    concept Texture3DElement = Texture3DPackedElement<T> || Texture3DFloatElement<T>;
+    concept Texture3DElement =
+        Texture3DPackedElement<T> || Texture3DFloatElement<T> || Texture3DByteElement<T>;
 }
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -151,10 +157,10 @@ namespace Microsoft::Xna::Framework::Graphics
                      const Color* data, int startIndex, int elementCount);
 
         /**
-         * @brief Uploads typed packed or floating-point data to the entire volume.
+         * @brief Uploads typed byte, packed, or floating-point data to the entire volume.
          *
-         * @tparam T An XNA packed-vector, float, Vector2 or Vector4 whose byte width divides the
-         *           format width.
+         * @tparam T An XNA packed-vector, byte, float, Vector2 or Vector4 whose byte width divides
+         *           the format width.
          * @param data Source elements.
          * @param elementCount Number of elements to upload.
          */
@@ -167,8 +173,8 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Uploads a source window of typed data to the entire volume.
          *
-         * @tparam T An XNA packed-vector, float, Vector2 or Vector4 whose byte width divides the
-         *           format width.
+         * @tparam T An XNA packed-vector, byte, float, Vector2 or Vector4 whose byte width divides
+         *           the format width.
          * @param data Source elements.
          * @param startIndex First source element.
          * @param elementCount Number of elements to upload.
@@ -182,8 +188,8 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Uploads typed data to a box in one volume mip level.
          *
-         * @tparam T An XNA packed-vector, float, Vector2 or Vector4 whose byte width divides the
-         *           format width.
+         * @tparam T An XNA packed-vector, byte, float, Vector2 or Vector4 whose byte width divides
+         *           the format width.
          * @param level Mip level beginning at zero.
          * @param left Left box boundary.
          * @param top Top box boundary.
@@ -209,6 +215,10 @@ namespace Microsoft::Xna::Framework::Graphics
                 static_assert(std::is_unsigned_v<Word>);
                 elementBytes = static_cast<int>(sizeof(Word));
             }
+            else if constexpr (CNA::Internal::Graphics::Texture3DByteElement<Element>)
+            {
+                elementBytes = 1;
+            }
             else
             {
                 constexpr int components = std::same_as<Element, float> ? 1
@@ -230,6 +240,11 @@ namespace Microsoft::Xna::Framework::Graphics
                         bytes[static_cast<std::size_t>(index) * sizeof(Word) + byte] =
                             static_cast<std::uint8_t>(value >> (byte * 8u));
                 }
+            }
+            else if constexpr (CNA::Internal::Graphics::Texture3DByteElement<Element>)
+            {
+                for (int index = 0; index < required; ++index)
+                    bytes[static_cast<std::size_t>(index)] = data[startIndex + index];
             }
             else
             {
@@ -333,10 +348,10 @@ namespace Microsoft::Xna::Framework::Graphics
                      Color* data, int startIndex, int elementCount) const;
 
         /**
-         * @brief Reads the entire volume into typed packed or floating-point elements.
+         * @brief Reads the entire volume into typed byte, packed, or floating-point elements.
          *
-         * @tparam T An XNA packed-vector, float, Vector2 or Vector4 whose byte width divides the
-         *           format width.
+         * @tparam T An XNA packed-vector, byte, float, Vector2 or Vector4 whose byte width divides
+         *           the format width.
          * @param data Destination elements.
          * @param elementCount Number of elements to read.
          */
@@ -349,8 +364,8 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Reads the entire volume into a destination window of typed elements.
          *
-         * @tparam T An XNA packed-vector, float, Vector2 or Vector4 whose byte width divides the
-         *           format width.
+         * @tparam T An XNA packed-vector, byte, float, Vector2 or Vector4 whose byte width divides
+         *           the format width.
          * @param data Destination elements.
          * @param startIndex First destination element.
          * @param elementCount Number of elements to read.
@@ -364,8 +379,8 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Reads a box in one mip level into typed elements.
          *
-         * @tparam T An XNA packed-vector, float, Vector2 or Vector4 whose byte width divides the
-         *           format width.
+         * @tparam T An XNA packed-vector, byte, float, Vector2 or Vector4 whose byte width divides
+         *           the format width.
          * @param level Mip level beginning at zero.
          * @param left Left box boundary.
          * @param top Top box boundary.
@@ -390,6 +405,10 @@ namespace Microsoft::Xna::Framework::Graphics
                 using Word = std::remove_cvref_t<decltype(data[0].getPackedValueProperty())>;
                 static_assert(std::is_unsigned_v<Word>);
                 elementBytes = static_cast<int>(sizeof(Word));
+            }
+            else if constexpr (CNA::Internal::Graphics::Texture3DByteElement<Element>)
+            {
+                elementBytes = 1;
             }
             else
             {
@@ -416,6 +435,11 @@ namespace Microsoft::Xna::Framework::Graphics
                             << (byte * 8u);
                     data[startIndex + index].setPackedValueProperty(value);
                 }
+            }
+            else if constexpr (CNA::Internal::Graphics::Texture3DByteElement<Element>)
+            {
+                for (int index = 0; index < required; ++index)
+                    data[startIndex + index] = bytes[static_cast<std::size_t>(index)];
             }
             else
             {

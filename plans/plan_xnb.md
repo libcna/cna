@@ -1,5 +1,12 @@
 # XNB binary content pipeline: task plan
 
+> **Texture3D conformance correction (2026-09-10, `SOFTWARE-274`):** XNB-25's original
+> Color/DXT-only closure was not XNA-complete. FNA constructs the serialized volume format and
+> passes every mip as an exact `byte[]`; XNA permits fifteen uncompressed HiDef volume formats and
+> no DXT volume format. The runtime reader now preserves all fifteen, refuses DXT1/3/5, accepts
+> depth-dominant mip chains, and is behaviorally verified on Software and EasyGL. The historical
+> revision prose below remains as session history.
+
 > **LZ4 update (2026-08-30, Content Pipeline `CP-047`):** XNB-30C is complete. Inspection of
 > MonoGame's `ContentWriter.WriteCompressedStream` and `Lz4DecoderStream` proved that flag `0x40`
 > stores one raw LZ4 block after the usual decompressed-size field, not a generic LZ4 frame. CNA's
@@ -535,7 +542,7 @@ entirely the second one.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| XNB-25 | `Texture3DReader`/`TextureCubeReader`/base `TextureReader` | ✅ | **Implemented 2026-07-16; base-reader omission corrected by SAMPLE-005 on 2026-08-23.** `CNA::Internal::Xnb::Texture3DReader`/`TextureCubeReader` (`include`/`src`/`CNA/Internal/Xnb/Texture3DContentTypeReader.*`, `TextureCubeContentTypeReader.*`) implement the concrete volume/cube formats. The original closure text incorrectly claimed the inert FNA `TextureReader` base was registered too; `ReachGraphicsDemo_4_0/sky.xnb` proved it was absent because the reflective `Sky.Texture` field declares the abstract base in its reader manifest. Added the correctly named inert `ContentTypeReader<Texture*>`, which consumes no bytes and returns the existing instance exactly like FNA, plus registration/idempotence/behavior tests. `Texture3DReader` targets `std::shared_ptr<Texture3D>` because the asset is move-only; `TextureCubeReader` targets the move-only value directly. `TextureCubeReader` remains verified end-to-end against `SampleCube64DXT1Mips.xnb` (six faces, DXT1 mip chain 64→1), while no real volume fixture is available. `ContentManager::Load<TextureCube>()` also continues to probe `.xnb` before the loose DDS path. |
+| XNB-25 | `Texture3DReader`/`TextureCubeReader`/base `TextureReader` | ✅ | **Implemented 2026-07-16; base-reader omission corrected by SAMPLE-005 on 2026-08-23; volume-format conformance corrected by SOFTWARE-274 on 2026-09-10.** `CNA::Internal::Xnb::Texture3DReader`/`TextureCubeReader` (`include`/`src`/`CNA/Internal/Xnb/Texture3DContentTypeReader.*`, `TextureCubeContentTypeReader.*`) implement the concrete volume/cube formats. The original closure text incorrectly claimed the inert FNA `TextureReader` base was registered too; `ReachGraphicsDemo_4_0/sky.xnb` proved it was absent because the reflective `Sky.Texture` field declares the abstract base in its reader manifest. Added the correctly named inert `ContentTypeReader<Texture*>`, which consumes no bytes and returns the existing instance exactly like FNA, plus registration/idempotence/behavior tests. `Texture3DReader` targets `std::shared_ptr<Texture3D>` because the asset is move-only; it preserves all fifteen legal XNA HiDef volume formats, rejects DXT1/3/5, and accepts complete depth-dominant mip chains. `TextureCubeReader` targets the move-only value directly and remains verified end-to-end against `SampleCube64DXT1Mips.xnb` (six faces, DXT1 mip chain 64→1), while no real volume fixture is available. `ContentManager::Load<TextureCube>()` also continues to probe `.xnb` before the loose DDS path. |
 
 > **SAMPLE-014 TextureCube correction — 2026-08-24.** TextureCube is now a copyable
 > shared-resource wrapper, so its reader's value target participates in generic strong caching.

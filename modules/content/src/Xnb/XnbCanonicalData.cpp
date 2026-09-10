@@ -20,6 +20,7 @@
 #include "CNA/Internal/Xnb/XnbArithmetic.hpp"
 #include "CNA/Internal/Xnb/XnbDecompression.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/CurveKey.hpp"
 #include "System/IO/BinaryReader.hpp"
 #include "System/IO/MemoryStream.hpp"
@@ -75,11 +76,7 @@ namespace CNA::Internal::Xnb
         void ValidateMipCount(const char* readerName, const XnbTextureData& data,
                               const bool requireCompleteChain)
         {
-            // Texture3D's established XNA/FNA allocation derives its level count from width and
-            // height; depth shrinks per level but does not extend the number of allocated levels.
-            const std::uint32_t maximum = MaxMipCount(
-                data.width, data.height,
-                data.kind == XnbTextureKind::Texture3D ? 1u : data.depth);
+            const std::uint32_t maximum = MaxMipCount(data.width, data.height, data.depth);
             if (data.mipCount == 0u || data.mipCount > maximum)
             {
                 throw ContentLoadException(
@@ -111,7 +108,8 @@ namespace CNA::Internal::Xnb
             const std::uint32_t height, const std::uint32_t depth)
         {
             if (IsDxt(format)) { return DxtLevelBytes(format, width, height, depth); }
-            const std::size_t bytesPerPixel = format == SurfaceFormat::NormalizedByte2 ? 2u : 4u;
+            const std::size_t bytesPerPixel = static_cast<std::size_t>(
+                Microsoft::Xna::Framework::Graphics::Texture::GetFormatSizeEXT(format));
             return static_cast<std::size_t>(width) * height * depth * bytesPerPixel;
         }
 
@@ -134,12 +132,17 @@ namespace CNA::Internal::Xnb
         }
 
         void RequireTextureFormat(const char* readerName, const SurfaceFormat format,
-                                  const bool texture2D)
+                                  const XnbTextureKind kind)
         {
-            if (format == SurfaceFormat::Color || IsDxt(format) ||
-                (texture2D && (format == SurfaceFormat::ColorBgraEXT ||
-                               format == SurfaceFormat::NormalizedByte2 ||
-                               format == SurfaceFormat::NormalizedByte4)))
+            const bool accepted = kind == XnbTextureKind::Texture3D
+                ? Microsoft::Xna::Framework::Graphics::Texture::IsVolumeFormatAllowedByProfileEXT(
+                      Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef, format)
+                : (format == SurfaceFormat::Color || IsDxt(format) ||
+                   (kind == XnbTextureKind::Texture2D &&
+                    (format == SurfaceFormat::ColorBgraEXT ||
+                     format == SurfaceFormat::NormalizedByte2 ||
+                     format == SurfaceFormat::NormalizedByte4)));
+            if (accepted)
             {
                 return;
             }
@@ -184,10 +187,9 @@ namespace CNA::Internal::Xnb
                             std::to_string(bytes.size()) + ") does not match the required " +
                             std::to_string(expected) + " bytes.");
                     }
-                    const std::int64_t decodedLevelBytes = CheckedMultiplyOrThrow(
-                        {width, height, depth,
-                         data.surfaceFormat == SurfaceFormat::NormalizedByte2 ? 2 : 4},
-                        readerName);
+                    const std::int64_t decodedLevelBytes = IsDxt(data.surfaceFormat)
+                        ? CheckedMultiplyOrThrow({width, height, depth, 4}, readerName)
+                        : static_cast<std::int64_t>(expected);
                     if (cumulativeDecodedBytes >
                         std::numeric_limits<std::int64_t>::max() - decodedLevelBytes)
                     {
@@ -545,7 +547,7 @@ namespace CNA::Internal::Xnb
         XnbTextureData data;
         data.kind = XnbTextureKind::Texture2D;
         data.surfaceFormat = ReadTexture2DFormat(input);
-        RequireTextureFormat("Texture2DReader", data.surfaceFormat, true);
+        RequireTextureFormat("Texture2DReader", data.surfaceFormat, XnbTextureKind::Texture2D);
         data.width = PositiveDimension(input.ReadInt32(), "Texture2DReader", "width");
         data.height = PositiveDimension(input.ReadInt32(), "Texture2DReader", "height");
         data.depth = 1u;
@@ -581,7 +583,7 @@ namespace CNA::Internal::Xnb
         XnbTextureData data;
         data.kind = XnbTextureKind::Texture3D;
         data.surfaceFormat = static_cast<SurfaceFormat>(input.ReadInt32());
-        RequireTextureFormat("Texture3DReader", data.surfaceFormat, false);
+        RequireTextureFormat("Texture3DReader", data.surfaceFormat, XnbTextureKind::Texture3D);
         data.width = PositiveDimension(input.ReadInt32(), "Texture3DReader", "width");
         data.height = PositiveDimension(input.ReadInt32(), "Texture3DReader", "height");
         data.depth = PositiveDimension(input.ReadInt32(), "Texture3DReader", "depth");
@@ -595,7 +597,10 @@ namespace CNA::Internal::Xnb
         data.platform = input.getPlatformProperty();
         input.CheckDecodedByteSize(
             CheckedMultiplyOrThrow(
-                {data.width, data.height, data.depth, 4u}, "Texture3DReader"),
+                {data.width, data.height, data.depth,
+                 Microsoft::Xna::Framework::Graphics::Texture::GetFormatSizeEXT(
+                     data.surfaceFormat)},
+                "Texture3DReader"),
             "Texture3DReader");
         ValidateMipCount("Texture3DReader", data, false);
         ReadTextureLevels(input, data, "Texture3DReader");
@@ -607,7 +612,7 @@ namespace CNA::Internal::Xnb
         XnbTextureData data;
         data.kind = XnbTextureKind::TextureCube;
         data.surfaceFormat = static_cast<SurfaceFormat>(input.ReadInt32());
-        RequireTextureFormat("TextureCubeReader", data.surfaceFormat, false);
+        RequireTextureFormat("TextureCubeReader", data.surfaceFormat, XnbTextureKind::TextureCube);
         data.width = PositiveDimension(input.ReadInt32(), "TextureCubeReader", "size");
         data.height = data.width;
         data.depth = 1u;
