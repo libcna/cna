@@ -1,22 +1,16 @@
 // SPDX-License-Identifier: MS-PL
-// Task 387: verify DualTextureEffect's second texture (`Texture2`, slot 1) null behavior.
+// Task 387 / SOFTWARE-302: verify DualTextureEffect's second texture (`Texture2`, slot 1)
+// null behavior.
 //
-// See examples/easygl_dualtextureeffect_null_texture0_test.cpp (Task 386) for the full
-// derivation. Task 386's source-reading found EasyGL and Vulkan already correctly fall back
-// to white for `Texture2` when null, but Bgfx's `texColor3DSampler2_` had NO fallback at
-// all -- an unconditional-skip gap Task 379 explicitly flagged as deliberately not fixed
-// there (Task 379 only unified the other 7 texture-binding call sites, all of which used
-// `texColor3DSampler_`/slot 0, not this second-slot site).
-//
-// **Real bug found and fixed on Bgfx.** Fixed by adding an else-branch to Bgfx's
-// `texColor3DSampler2_` binding, mirroring slot 0's own Task 379 fix exactly.
+// See the slot-0 sibling for the authority. Microsoft XNA 4.0 returns opaque black for either
+// null sampler; SOFTWARE-302 supersedes this test's former white-fallback assumption.
 //
 // Draws a real, distinctive `Texture2` FIRST (establishes "previous draw" state), then
 // switches to `Texture2=null` with a non-saturated `Texture=(80,40,120)` so 3 hypotheses are
 // numerically distinct:
-//   correct white-fallback: Texture(80,40,120)*2(doubling)*white(1,1,1) = (160,80,240)
+//   obsolete white fallback: Texture(80,40,120)*2*white(1,1,1) = (160,80,240)
 //   stale-previous-texture: would retain the first draw's distinctive Texture2 color
-//   black-fallback:         (0,0,0)
+//   XNA opaque-black sample: (0,0,0,255)
 //
 // Exit code 0 = PASS, 1 = FAIL.
 
@@ -49,7 +43,8 @@ namespace
     {
         return closeTo(got.getRProperty(), want.getRProperty(), tol)
             && closeTo(got.getGProperty(), want.getGProperty(), tol)
-            && closeTo(got.getBProperty(), want.getBProperty(), tol);
+            && closeTo(got.getBProperty(), want.getBProperty(), tol)
+            && closeTo(got.getAProperty(), want.getAProperty(), tol);
     }
 }
 
@@ -62,13 +57,13 @@ class DualTextureNullTexture2Test : public Game
     void check(bool cond, const char* label, Color got, Color want)
     {
         if (cond)
-            std::printf("[PASS] %s: got=(%d,%d,%d)\n", label,
-                got.getRProperty(), got.getGProperty(), got.getBProperty());
+            std::printf("[PASS] %s: got=(%d,%d,%d,%d)\n", label,
+                got.getRProperty(), got.getGProperty(), got.getBProperty(), got.getAProperty());
         else
         {
-            std::printf("[FAIL] %s: got=(%d,%d,%d), expected≈(%d,%d,%d)\n", label,
-                got.getRProperty(), got.getGProperty(), got.getBProperty(),
-                want.getRProperty(), want.getGProperty(), want.getBProperty());
+            std::printf("[FAIL] %s: got=(%d,%d,%d,%d), expected≈(%d,%d,%d,%d)\n", label,
+                got.getRProperty(), got.getGProperty(), got.getBProperty(), got.getAProperty(),
+                want.getRProperty(), want.getGProperty(), want.getBProperty(), want.getAProperty());
             result_ = 1;
         }
     }
@@ -138,9 +133,9 @@ protected:
         }
 
         Color got = readCenter(dev);
-        check(colourMatch(got, Color(160, 80, 240, 255)),
-              "Texture2=null falls back to white (not the previous draw's texture)",
-              got, Color(160, 80, 240, 255));
+        check(colourMatch(got, Color(0, 0, 0, 255)),
+              "Texture2=null samples opaque black like XNA",
+              got, Color(0, 0, 0, 255));
         check(!colourMatch(got, kDistinctivePrev),
               "Texture2=null: pixel != previous draw's texture (proves no stale-state leak)",
               got, kDistinctivePrev);

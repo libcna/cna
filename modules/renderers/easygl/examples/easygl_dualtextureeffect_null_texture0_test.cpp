@@ -1,26 +1,19 @@
 // SPDX-License-Identifier: MS-PL
-// Task 386: verify DualTextureEffect's first texture (`Texture`, slot 0) null behavior.
+// Task 386 / SOFTWARE-302: verify DualTextureEffect's first texture (`Texture`, slot 0)
+// null behavior.
 //
 // FNA's DualTextureEffect has no `TextureEnabled` flag (like AlphaTestEffect, unlike
-// BasicEffect) -- every shader variant unconditionally samples both `Texture` and
-// `Texture2`. CNA's established cross-effect convention (Task 379's precedent) is to fall
-// back to a 1x1 opaque white texture when a texture slot is left null, rather than leaving
-// the sampler in an undefined/stale state.
-//
-// **Verify-only, zero bugs expected**: source-reading confirmed all 3 renderers already
-// correctly implement this for the first texture slot --
-//   EasyGL: EnsureDualTextured3DProgram()'s draw dispatch already has an else-branch
-//   binding default_white_texture_ when params.texture0 is null (part of Task 379's
-//   general fix, which covered every one of EasyGL/Vulkan/Bgfx's texture-binding sites).
-// This test empirically confirms that with a real pixel readback rather than trusting the
-// source read alone.
+// BasicEffect) -- every shader variant unconditionally samples both `Texture` and `Texture2`.
+// Microsoft XNA 4.0 was measured under the same HiDef draw: a null first sampler returns
+// opaque black. SOFTWARE-302 therefore supersedes CNA's earlier cross-effect white-fallback
+// assumption; BasicEffect's optional texture remains a separate white-fallback contract.
 //
 // Draws a real, distinctive texture0 FIRST (establishes "previous draw" state, following
 // Task 379's precedent for proving no stale-state leak), then switches to Texture=null with
 // a non-saturated Texture2 color chosen so 3 hypotheses are numerically distinct:
-//   correct white-fallback: white(1,1,1)*2(doubling)*texture2(80,40,120)/255 = (160,80,240)
+//   obsolete white fallback: white(1,1,1)*2*texture2(80,40,120)/255 = (160,80,240)
 //   stale-previous-texture: would retain the first draw's distinctive color
-//   black-fallback:         (0,0,0)
+//   XNA opaque-black sample: (0,0,0,255)
 //
 // Exit code 0 = PASS, 1 = FAIL.
 
@@ -53,7 +46,8 @@ namespace
     {
         return closeTo(got.getRProperty(), want.getRProperty(), tol)
             && closeTo(got.getGProperty(), want.getGProperty(), tol)
-            && closeTo(got.getBProperty(), want.getBProperty(), tol);
+            && closeTo(got.getBProperty(), want.getBProperty(), tol)
+            && closeTo(got.getAProperty(), want.getAProperty(), tol);
     }
 }
 
@@ -66,13 +60,13 @@ class DualTextureNullTexture0Test : public Game
     void check(bool cond, const char* label, Color got, Color want)
     {
         if (cond)
-            std::printf("[PASS] %s: got=(%d,%d,%d)\n", label,
-                got.getRProperty(), got.getGProperty(), got.getBProperty());
+            std::printf("[PASS] %s: got=(%d,%d,%d,%d)\n", label,
+                got.getRProperty(), got.getGProperty(), got.getBProperty(), got.getAProperty());
         else
         {
-            std::printf("[FAIL] %s: got=(%d,%d,%d), expected≈(%d,%d,%d)\n", label,
-                got.getRProperty(), got.getGProperty(), got.getBProperty(),
-                want.getRProperty(), want.getGProperty(), want.getBProperty());
+            std::printf("[FAIL] %s: got=(%d,%d,%d,%d), expected≈(%d,%d,%d,%d)\n", label,
+                got.getRProperty(), got.getGProperty(), got.getBProperty(), got.getAProperty(),
+                want.getRProperty(), want.getGProperty(), want.getBProperty(), want.getAProperty());
             result_ = 1;
         }
     }
@@ -143,9 +137,9 @@ protected:
         }
 
         Color got = readCenter(dev);
-        check(colourMatch(got, Color(160, 80, 240, 255)),
-              "Texture=null falls back to white (not the previous draw's texture)",
-              got, Color(160, 80, 240, 255));
+        check(colourMatch(got, Color(0, 0, 0, 255)),
+              "Texture=null samples opaque black like XNA",
+              got, Color(0, 0, 0, 255));
         check(!colourMatch(got, kDistinctivePrev),
               "Texture=null: pixel != previous draw's texture (proves no stale-state leak)",
               got, kDistinctivePrev);

@@ -191,14 +191,16 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
 - **An unbound optional base texture is white.** `PbrEffect`, `SkinnedPbrEffect` and
   `SkinnedEffect` deliberately keep their textured program selected with no base map; SOFTWARE
   preserves the vertex/factor colour in that case, matching the white fallback used by native
-  shader renderers. A missing second DualTexture map or environment cube remains a clear error.
+  shader renderers. This optional-map rule does not apply to `DualTextureEffect`: Microsoft XNA
+  samples either of its unbound samplers as opaque black (`SOFTWARE-302`). A missing environment
+  cube remains a clear error.
 - **Unlit classic stock material output matches XNA's vertex boundary** (`SOFTWARE-153`).
   `BasicEffect`, `AlphaTestEffect` and `DualTextureEffect` fold material alpha into diffuse colour
   exactly as FNA does, multiply any enabled vertex colour, and saturate the D3D9 `COLOR0` value
   before clipping and interpolation. Texture sampling follows that boundary, so a material value
   of two multiplied by a 0.4 texture produces 0.4, not 0.8. The shared 8/8 public contract also
   covers `(DiffuseColor+EmissiveColor)*Alpha`, disabled vertex colour, disabled texture, real
-  texture and the opaque-white null-texture fallback on both Software and EasyGL.
+  texture and Basic/AlphaTest's opaque-white optional-texture fallback on both renderers.
 - **`BasicEffect` lighting is complete** (`SOFTWARE-113`). Software evaluates FNA's three-light
   Blinn–Phong equation with ambient, diffuse, emissive and specular material terms, including
   `EnableDefaultLighting`, per-light enable/colour/direction, `SpecularPower`, texture, vertex
@@ -230,8 +232,10 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   - `DualTextureEffect`: real second-texture sampling, FNA's own
     `color.rgb*=2; color *= overlay*diffuse` formula. Declaration-driven `TextureCoordinate0/1`
     remain independent through clipping and perspective interpolation; each texture also has its
-    own sampler and mip footprint. The shared Software/EasyGL contract passes 122/122 across every
-    static/dynamic, indexed/non-indexed and user/buffer draw path.
+    own sampler and mip footprint. Either null slot supplies XNA's measured opaque-black sample,
+    with an explicit stale-binding and indexed/non-indexed regression (`SOFTWARE-302`). The shared
+    Software/EasyGL sampler contract passes 122/122 across every static/dynamic, indexed/non-indexed
+    and user/buffer draw path.
   - `EnvironmentMapEffect`: real six-face RGBA8 cube storage and mip chains, sampler-slot-1
     point/linear/min/mag/mip and address behavior, FNA vertex lighting, inverse-transpose normals,
     reflection/Fresnel, alpha-scaled lerp/specular and final fog semantics.

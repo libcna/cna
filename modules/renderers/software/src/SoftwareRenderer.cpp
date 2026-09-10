@@ -2900,15 +2900,20 @@ namespace CNA::Internal::Renderers::Software
 
             if (ctx.useDualTexture)
             {
-                // DualTextureEffect (SOFTWARE-82/116): color.rgb*=2; color *= overlay*diffuse
+                // DualTextureEffect (SOFTWARE-82/116/302): color.rgb*=2;
+                // color *= overlay*diffuse
                 // (FNA's PSDualTexture). Texture and Texture2 consume TEXCOORD0 and TEXCOORD1
-                // independently, with their corresponding sampler slots and footprints.
-                float t0r, t0g, t0b, t0a;
-                SampleTexture(*ctx.texture0, ctx.sampler0, ctx.magnify0, ctx.lambda0, u, v,
-                              t0r, t0g, t0b, t0a, &ctx.footprint0);
-                float t1r, t1g, t1b, t1a;
-                SampleTexture(*ctx.texture1, ctx.sampler1, ctx.magnify1, ctx.lambda1, u1, v1,
-                              t1r, t1g, t1b, t1a, &ctx.footprint1);
+                // independently, with their corresponding sampler slots and footprints. A null
+                // sampler returns opaque black on Microsoft XNA 4.0; this is deliberately not
+                // BasicEffect's optional-texture opaque-white convention.
+                float t0r = 0.0f, t0g = 0.0f, t0b = 0.0f, t0a = 1.0f;
+                if (ctx.texture0 != nullptr)
+                    SampleTexture(*ctx.texture0, ctx.sampler0, ctx.magnify0, ctx.lambda0, u, v,
+                                  t0r, t0g, t0b, t0a, &ctx.footprint0);
+                float t1r = 0.0f, t1g = 0.0f, t1b = 0.0f, t1a = 1.0f;
+                if (ctx.texture1 != nullptr)
+                    SampleTexture(*ctx.texture1, ctx.sampler1, ctx.magnify1, ctx.lambda1, u1, v1,
+                                  t1r, t1g, t1b, t1a, &ctx.footprint1);
                 r *= (t0r * 2.0f) * t1r;
                 g *= (t0g * 2.0f) * t1g;
                 b *= (t0b * 2.0f) * t1b;
@@ -3094,7 +3099,7 @@ namespace CNA::Internal::Renderers::Software
 #else
             const SoftwareCubeSurface* envMap = nullptr;
 #endif
-            const bool useDualTexture = params.dualTexture && texture0 != nullptr && texture1 != nullptr;
+            const bool useDualTexture = params.dualTexture;
 #ifndef CNA_SOFTWARE_2D_ONLY
             const bool useEnvMap = params.envMapping && envMap != nullptr;
 #else
@@ -3212,7 +3217,7 @@ namespace CNA::Internal::Renderers::Software
 #else
             const SoftwareCubeSurface* envMap = nullptr;
 #endif
-            const bool useDualTexture = params.dualTexture && texture0 != nullptr && texture1 != nullptr;
+            const bool useDualTexture = params.dualTexture;
 #ifndef CNA_SOFTWARE_2D_ONLY
             const bool useEnvMap = params.envMapping && envMap != nullptr;
 #else
@@ -4501,11 +4506,8 @@ namespace CNA::Internal::Renderers::Software
             primitive != PrimitiveType::LineStrip && primitive != PrimitiveType::PointListEXT)
             throw std::runtime_error(
                 "SoftwareRenderer::DrawPrimitivesEx: unsupported primitive topology");
-        // Stock PBR and Skinned effects deliberately keep texturing enabled when their optional
-        // base map is unbound. The native shader backends bind white in that case; this rasterizer's
-        // existing null-texture branch is the exact CPU equivalent (factor/vertex colour unchanged).
-        if (params.dualTexture && params.texture1 == nullptr)
-            throw std::runtime_error("SoftwareRenderer::DrawPrimitivesEx: dualTexture=true but texture1 is null");
+        // Optional PBR/Skinned base maps and XNA's opaque-black null DualTextureEffect samplers
+        // deliberately proceed to the shared fragment path rather than failing the draw.
         if (params.envMapping && params.envMap == nullptr)
             throw std::runtime_error("SoftwareRenderer::DrawPrimitivesEx: envMapping=true but envMap is null");
 
@@ -4679,9 +4681,7 @@ namespace CNA::Internal::Renderers::Software
             primitive != PrimitiveType::LineStrip && primitive != PrimitiveType::PointListEXT)
             throw std::runtime_error(
                 "SoftwareRenderer::DrawIndexedPrimitivesEx: unsupported primitive topology");
-        // See DrawPrimitivesEx: an unbound optional base map is the white fallback, not an error.
-        if (params.dualTexture && params.texture1 == nullptr)
-            throw std::runtime_error("SoftwareRenderer::DrawIndexedPrimitivesEx: dualTexture=true but texture1 is null");
+        // See DrawPrimitivesEx: optional base maps and null dual samplers are resolved by shading.
         if (params.envMapping && params.envMap == nullptr)
             throw std::runtime_error("SoftwareRenderer::DrawIndexedPrimitivesEx: envMapping=true but envMap is null");
 

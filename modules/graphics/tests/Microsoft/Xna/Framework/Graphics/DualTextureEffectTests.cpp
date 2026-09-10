@@ -7,12 +7,32 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
+#include <cstdint>
 #include <memory>
+#include <vector>
 
+#include "CNA/RendererTestGate.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 
@@ -22,6 +42,7 @@ using Microsoft::Xna::Framework::Graphics::DualTextureEffect;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 using CNA::Internal::Renderers::GpuDrawParams;
+using namespace CNA::Testing::Renderers;
 
 namespace
 {
@@ -333,4 +354,156 @@ TEST_F(DualTextureEffectDefaultsTest, AlphaZeroZeroesDiffuseRgbButNotStored)
     // DiffuseColor itself is untouched by Alpha -- only the forwarded GPU
     // parameter is premultiplied.
     EXPECT_EQ(fx.getDiffuseColorProperty(), Vector3(0.8f, 0.4f, 0.2f));
+}
+
+// -----------------------------------------------------------------------
+// SOFTWARE-302: real XNA 4.0 samples an unbound DualTextureEffect sampler as
+// opaque black. This is intentionally not BasicEffect's optional-texture
+// convention: DualTextureEffect unconditionally samples both texture slots.
+
+namespace
+{
+    using Microsoft::Xna::Framework::Color;
+    using Microsoft::Xna::Framework::Rectangle;
+    using namespace Microsoft::Xna::Framework::Graphics;
+
+    enum class MissingDualTextureSlot
+    {
+        Texture,
+        Texture2,
+    };
+
+    struct DualUvVertex
+    {
+        float x, y, z;
+        float u0, v0;
+        float u1, v1;
+    };
+    static_assert(sizeof(DualUvVertex) == 28);
+
+    [[nodiscard]] VertexDeclaration DualUvDeclaration()
+    {
+        return VertexDeclaration(
+            28,
+            {
+                VertexElement(0, VertexElementFormat::Vector3,
+                              VertexElementUsage::Position, 0),
+                VertexElement(12, VertexElementFormat::Vector2,
+                              VertexElementUsage::TextureCoordinate, 0),
+                VertexElement(20, VertexElementFormat::Vector2,
+                              VertexElementUsage::TextureCoordinate, 1),
+            });
+    }
+
+    class DualTextureEffectNullSamplerTest : public ::testing::Test
+    {
+    protected:
+        GraphicsDevice device;
+
+        void SetUp() override
+        {
+            device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
+            if (!CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
+                                 OpenGL4, Software))
+                GTEST_SKIP() << "requires the Software or EasyGL stock-effect raster path";
+        }
+
+        [[nodiscard]] Color DrawMissingSampler(MissingDualTextureSlot missing,
+                                               bool indexed)
+        {
+            constexpr int kSize = 8;
+            const VertexDeclaration declaration = DualUvDeclaration();
+            const std::array<DualUvVertex, 4> corners{{
+                {-1.0f, -1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f},
+                {-1.0f,  1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f},
+                { 1.0f,  1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f},
+                { 1.0f, -1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f},
+            }};
+            const std::array<DualUvVertex, 6> triangles{{
+                corners[0], corners[1], corners[2],
+                corners[0], corners[2], corners[3],
+            }};
+            const std::array<std::uint16_t, 6> indices{{0, 1, 2, 0, 2, 3}};
+
+            const Color texture0Pixel(80, 40, 120, 255);
+            const Color texture1Pixel(60, 100, 20, 255);
+            Texture2D texture0(device, 1, 1, false, SurfaceFormat::Color);
+            Texture2D texture1(device, 1, 1, false, SurfaceFormat::Color);
+            texture0.SetData(&texture0Pixel, 1);
+            texture1.SetData(&texture1Pixel, 1);
+
+            RenderTarget2D target(device, kSize, kSize, false, SurfaceFormat::Color,
+                                  DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setBlendStateProperty(BlendState::Opaque);
+            device.getSamplerStatesProperty()[0] = SamplerState::PointClamp;
+            device.getSamplerStatesProperty()[1] = SamplerState::PointClamp;
+            device.SetRenderTarget(&target);
+
+            DualTextureEffect effect(device);
+            effect.setTextureProperty(&texture0);
+            effect.setTexture2Property(&texture1);
+
+            const auto draw = [&]() {
+                effect.Apply();
+                if (indexed)
+                {
+                    device.DrawUserIndexedPrimitives(
+                        PrimitiveType::TriangleList, static_cast<const void*>(corners.data()),
+                        0, static_cast<int>(corners.size()), indices.data(), 0, 2, declaration);
+                }
+                else
+                {
+                    device.DrawUserPrimitives(
+                        PrimitiveType::TriangleList, static_cast<const void*>(triangles.data()),
+                        0, 2, declaration);
+                }
+            };
+
+            // Establish non-black bindings first. The measured draw below must neither use a CNA
+            // white fallback nor leak either texture from this preceding valid draw.
+            device.Clear(Color(7, 199, 53, 255));
+            draw();
+
+            if (missing == MissingDualTextureSlot::Texture)
+                effect.setTextureProperty(nullptr);
+            else
+                effect.setTexture2Property(nullptr);
+            device.Clear(Color(7, 199, 53, 255));
+            draw();
+            device.SetRenderTarget(nullptr);
+
+            std::vector<Color> pixels(static_cast<std::size_t>(kSize) * kSize,
+                                      Color::Transparent);
+            const Rectangle rectangle(0, 0, kSize, kSize);
+            target.GetData(0, &rectangle, pixels.data(), 0,
+                           static_cast<int>(pixels.size()));
+            return pixels[static_cast<std::size_t>(kSize / 2) * kSize + kSize / 2];
+        }
+    };
+}
+
+TEST_F(DualTextureEffectNullSamplerTest, NullTextureSamplesOpaqueBlackOnNonIndexedDraw)
+{
+    EXPECT_EQ(DrawMissingSampler(MissingDualTextureSlot::Texture, false),
+              Color(0, 0, 0, 255));
+}
+
+TEST_F(DualTextureEffectNullSamplerTest, NullTexture2SamplesOpaqueBlackOnNonIndexedDraw)
+{
+    EXPECT_EQ(DrawMissingSampler(MissingDualTextureSlot::Texture2, false),
+              Color(0, 0, 0, 255));
+}
+
+TEST_F(DualTextureEffectNullSamplerTest, NullTextureSamplesOpaqueBlackOnIndexedDraw)
+{
+    EXPECT_EQ(DrawMissingSampler(MissingDualTextureSlot::Texture, true),
+              Color(0, 0, 0, 255));
+}
+
+TEST_F(DualTextureEffectNullSamplerTest, NullTexture2SamplesOpaqueBlackOnIndexedDraw)
+{
+    EXPECT_EQ(DrawMissingSampler(MissingDualTextureSlot::Texture2, true),
+              Color(0, 0, 0, 255));
 }
