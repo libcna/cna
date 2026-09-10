@@ -35,6 +35,7 @@
 // Exit code 0 = both checks PASS, 1 = either FAILs.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
+#include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
@@ -43,12 +44,14 @@
 #include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
 #include <cstdio>
+#include <memory>
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -73,6 +76,7 @@ namespace
 
 class DepthStencilStateWriteEnableTest : public Game
 {
+    std::unique_ptr<GraphicsDeviceManager> graphics_;
     bool done_   = false;
     int  result_ = 1;
 
@@ -146,6 +150,13 @@ protected:
     }
 
 public:
+    DepthStencilStateWriteEnableTest()
+    {
+        graphics_ = std::make_unique<GraphicsDeviceManager>(this);
+        graphics_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
+        graphics_->setPreferredDepthStencilFormatProperty(DepthFormat::Depth24);
+    }
+
     int getResult() const { return result_; }
 };
 

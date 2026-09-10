@@ -111,6 +111,7 @@ class SkinnedBonesTest : public Game
         // RasterizerState — needs CullNone.
         dev.setRasterizerStateProperty(RasterizerState::CullNone);
         dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+        dev.SetVertexBuffer(nullptr);
     }
 
 protected:
@@ -245,6 +246,7 @@ public:
     SkinnedBonesTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(200);
         gdm_->setPreferredBackBufferHeightProperty(200);
     }

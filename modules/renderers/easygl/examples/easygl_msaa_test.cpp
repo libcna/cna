@@ -98,6 +98,7 @@ public:
         // GraphicsDeviceManager caps MultiSampleCount at 8; the GL renderer
         // clamps to GL_MAX_SAMPLES at runtime.
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(320);
         gdm_->setPreferredBackBufferHeightProperty(240);
         gdm_->setPreferMultiSamplingProperty(true);

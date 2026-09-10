@@ -166,6 +166,7 @@ public:
     Texture3DPartialBoxReadbackTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(1);
         gdm_->setPreferredBackBufferHeightProperty(1);
     }

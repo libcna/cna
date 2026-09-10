@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// Task 176: SurfaceFormat validation — unsupported formats must throw
-// std::runtime_error instead of silently using RGBA8.
+// Task 176: SurfaceFormat validation — unsupported formats must throw instead
+// of silently using RGBA8, while formats carried by the renderer must construct.
 //
 // Tests Texture2D, Texture3D, and TextureCube constructors against
 // representative unsupported formats (sRGB, HDR, compressed, packed).
@@ -157,7 +157,7 @@ protected:
         });
         if (hasTexture3D)
         {
-            expectThrows("Texture3D ColorSrgbEXT", [&]{
+            expectThrowsNotSupported("Texture3D ColorSrgbEXT", [&]{
                 Texture3D t(dev, 2, 2, 2, false, SurfaceFormat::ColorSrgbEXT);
             });
         }
@@ -207,25 +207,25 @@ protected:
             Texture2D t(dev, 2, 2, false, SurfaceFormat::NormalizedByte4);
         });
 #endif
-        expectThrowsNotSupported("Texture2D Single", [&]{
+        expectNoThrow("Texture2D Single", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Single);
         });
-        expectThrowsNotSupported("Texture2D Vector2", [&]{
+        expectNoThrow("Texture2D Vector2", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Vector2);
         });
-        expectThrowsNotSupported("Texture2D Vector4", [&]{
+        expectNoThrow("Texture2D Vector4", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Vector4);
         });
-        expectThrowsNotSupported("Texture2D HalfSingle", [&]{
+        expectNoThrow("Texture2D HalfSingle", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::HalfSingle);
         });
-        expectThrowsNotSupported("Texture2D HalfVector2", [&]{
+        expectNoThrow("Texture2D HalfVector2", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::HalfVector2);
         });
-        expectThrowsNotSupported("Texture2D HalfVector4", [&]{
+        expectNoThrow("Texture2D HalfVector4", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::HalfVector4);
         });
-        expectThrowsNotSupported("Texture2D HdrBlendable", [&]{
+        expectNoThrow("Texture2D HdrBlendable", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::HdrBlendable);
         });
 #endif
@@ -279,13 +279,13 @@ protected:
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Bgra4444);
         });
 #endif
-        expectThrowsNotSupported("Texture2D Alpha8", [&]{
+        expectNoThrow("Texture2D Alpha8", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Alpha8);
         });
-        expectThrowsNotSupported("Texture2D Rg32", [&]{
+        expectNoThrow("Texture2D Rg32", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Rg32);
         });
-        expectThrowsNotSupported("Texture2D Rgba64", [&]{
+        expectNoThrow("Texture2D Rgba64", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Rgba64);
         });
         expectThrows("Texture2D ByteEXT", [&]{
@@ -304,6 +304,7 @@ public:
     SurfaceFormatThrowsTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(1);
         gdm_->setPreferredBackBufferHeightProperty(1);
     }

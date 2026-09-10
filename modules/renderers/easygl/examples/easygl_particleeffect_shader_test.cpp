@@ -392,6 +392,7 @@ protected:
 
         Color c(0, 0, 0, 0);
         device.GetBackBufferData(&sampleRegion, &c, 0, 1);
+        device.SetVertexBuffer(nullptr);
         return c;
     }
 
@@ -439,6 +440,7 @@ public:
     EasyGLParticleEffectTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(64);
         gdm_->setPreferredBackBufferHeightProperty(64);
     }

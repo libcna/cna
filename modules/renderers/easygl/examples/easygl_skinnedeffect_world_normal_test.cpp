@@ -178,6 +178,7 @@ class EasyGLSkinnedEffectWorldNormalTest : public Game
         const Rectangle reg(vp.getWidthProperty() / 2, vp.getHeightProperty() / 2, 1, 1);
         Color px(0, 0, 0, 0);
         dev.GetBackBufferData(&reg, &px, 0, 1);
+        dev.SetVertexBuffer(nullptr);
         return px;
     }
 
@@ -270,6 +271,8 @@ public:
 int main()
 {
     EasyGLSkinnedEffectWorldNormalTest game;
+    game.getGraphicsDeviceProperty().SetGraphicsProfileEXT(
+        Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
     game.Run();
     return game.getResult();
 }

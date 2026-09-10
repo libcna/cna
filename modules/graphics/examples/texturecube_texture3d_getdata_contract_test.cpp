@@ -62,6 +62,7 @@
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
@@ -124,7 +125,7 @@ namespace
                                  true, Support::Exact, Support::Exact, true};
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr Contract kContract{"EASYGL", true, Support::Exact, Support::Exact,
-                                 true, Support::Exact, Support::Exact, false};
+                                 true, Support::Exact, Support::Exact, true};
 #elif defined(CNA_RENDERER_BGFX)
     constexpr Contract kContract{"BGFX", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact, false};
@@ -705,41 +706,41 @@ class CubeVolumeGetDataContractTest : public Game
         // ---- C21..C26: argument validation is deterministic on every renderer -------------------
         {
             std::vector<Color> buf(static_cast<std::size_t>(kCube) * kCube, SentinelCD());
-            check(Throws<std::invalid_argument>([&] {
+            check(Throws<System::ArgumentNullException>([&] {
                       cube.GetData(CubeMapFace::PositiveX, nullptr, static_cast<int>(buf.size()));
                   }),
-                  "C21 cube: null destination throws std::invalid_argument");
-            check(Throws<std::out_of_range>([&] {
+                  "C21 cube: null destination throws ArgumentNullException");
+            check(Throws<System::InvalidOperationException>([&] {
                       cube.GetData(static_cast<CubeMapFace>(-1), buf.data(), static_cast<int>(buf.size()));
                   }),
-                  "C22 cube: CubeMapFace below range throws std::out_of_range");
-            check(Throws<std::out_of_range>([&] {
+                  "C22 cube: CubeMapFace below range throws InvalidOperationException");
+            check(Throws<System::InvalidOperationException>([&] {
                       cube.GetData(static_cast<CubeMapFace>(6), buf.data(), static_cast<int>(buf.size()));
                   }),
-                  "C23 cube: CubeMapFace above range throws std::out_of_range");
-            check(Throws<std::out_of_range>([&] {
+                  "C23 cube: CubeMapFace above range throws InvalidOperationException");
+            check(Throws<System::InvalidOperationException>([&] {
                       cube.GetData(CubeMapFace::PositiveX, -1, nullptr, buf.data(), 0,
                                    static_cast<int>(buf.size()));
                   }),
-                  "C24 cube: negative mip level throws std::out_of_range");
-            check(Throws<std::out_of_range>([&] {
+                  "C24 cube: negative mip level throws InvalidOperationException");
+            check(Throws<System::ArgumentException>([&] {
                       const Rectangle outside(kCube - 1, kCube - 1, 4, 4);
                       cube.GetData(CubeMapFace::PositiveX, 0, &outside, buf.data(), 0, 16);
                   }),
-                  "C25 cube: a rectangle outside the face throws std::out_of_range");
+                  "C25 cube: a rectangle outside the face throws ArgumentException");
             check(Throws<System::ArgumentException>([&] {
                       const Rectangle r(0, 0, 4, 4);
                       cube.GetData(CubeMapFace::PositiveX, 0, &r, buf.data(), 0, 4);
                   }),
                   "C26 cube: elementCount below the requested region throws ArgumentException");
-            check(Throws<std::out_of_range>([&] {
+            check(Throws<System::ArgumentOutOfRangeException>([&] {
                       cube.GetData(CubeMapFace::PositiveX, buf.data(), -1, 4);
                   }),
-                  "C27 cube: negative startIndex throws std::out_of_range");
-            check(Throws<std::out_of_range>([&] {
+                  "C27 cube: negative startIndex throws ArgumentOutOfRangeException");
+            check(Throws<System::ArgumentOutOfRangeException>([&] {
                       cube.GetData(CubeMapFace::PositiveX, buf.data(), 0, 0);
                   }),
-                  "C28 cube: elementCount of 0 throws std::out_of_range");
+                  "C28 cube: elementCount of 0 throws ArgumentOutOfRangeException");
 
             // Validation must run BEFORE anything is written -- the buffer is still sentinel.
             std::size_t intact = 0;
@@ -986,11 +987,11 @@ class CubeVolumeGetDataContractTest : public Game
                       vol.GetData(buf.data(), -1, 4);
                   }),
                   "V16 volume: negative startIndex throws ArgumentOutOfRangeException");
-            check(Throws<std::out_of_range>([&] {
+            check(Throws<System::InvalidOperationException>([&] {
                       vol.GetData(-1, 0, 0, kVolW, kVolH, 0, kVolD, buf.data(), 0,
                                   static_cast<int>(buf.size()));
                   }),
-                  "V17 volume: negative mip level throws std::out_of_range");
+                  "V17 volume: negative mip level throws InvalidOperationException");
             check(Throws<System::ArgumentException>([&] {
                       vol.GetData(0, 2, 0, 2, kVolH, 0, kVolD, buf.data(), 0, 4);
                   }),

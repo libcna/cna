@@ -40,6 +40,8 @@
 // CNA_UPDATE_GOLDEN=1 in the environment, review the written PNG, then commit it.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
+#include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
+#include "Microsoft/Xna/Framework/IGraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -337,6 +339,22 @@ namespace CNA::Examples
         try
         {
             TGame game;
+            // Every PixelTestGame observes its result through GetBackBufferData, which XNA
+            // exposes only under HiDef.  Select that profile explicitly whether the derived
+            // fixture owns a GraphicsDeviceManager or relies on CNA's eager Game device.
+            if (auto* manager = dynamic_cast<Microsoft::Xna::Framework::GraphicsDeviceManager*>(
+                    game.getServicesProperty().template GetService<
+                        Microsoft::Xna::Framework::IGraphicsDeviceManager>());
+                manager != nullptr)
+            {
+                manager->setGraphicsProfileProperty(
+                    Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
+            }
+            else
+            {
+                game.getGraphicsDeviceProperty().SetGraphicsProfileEXT(
+                    Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
+            }
             game.Run();
             return game.getResultProperty();
         }

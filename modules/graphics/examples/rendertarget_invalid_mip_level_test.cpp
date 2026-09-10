@@ -88,6 +88,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "common/PixelTestGame.hpp"
 
 #if defined(CNA_RENDERER_SOFTWARE)
@@ -463,18 +464,23 @@ class RenderTargetInvalidMipLevelTest : public Game
              std::to_string(startIndex) + ", elementCount=" + std::to_string(elementCount) +
              ") must be REFUSED before any native call");
 
-        bool threw = false, wasOutOfRange = false;
+        bool threw = false, wasInvalidOperation = false;
         std::string what;
         try
         {
             rt.GetData(level, rect, buf.data(), startIndex, elementCount);
         }
-        catch (const std::out_of_range& e) { threw = true; wasOutOfRange = true; what = e.what(); }
+        catch (const System::InvalidOperationException& e)
+        {
+            threw = true;
+            wasInvalidOperation = true;
+            what = e.what();
+        }
         catch (const std::exception& e)    { threw = true; what = e.what(); }
 
         check(threw, label + ": rejected through a catchable public exception, not a signal and not "
                              "a normal return");
-        if (threw) note(label + ": " + std::string(wasOutOfRange ? "std::out_of_range -- " : "") + what);
+        if (threw) note(label + ": " + what);
 
         bool untouched = true;
         std::size_t firstTouched = 0;
@@ -486,8 +492,9 @@ class RenderTargetInvalidMipLevelTest : public Game
         check(untouched, label + ": the refused read left the WHOLE destination untouched -- no "
                                  "clamped level, no level 0, no zero fill, no staging memory");
 
-        check(wasOutOfRange, label + ": the refusal is a std::out_of_range from the shared "
-                                     "Texture2D mip-level validator");
+        check(wasInvalidOperation,
+              label + ": the refusal is an InvalidOperationException from the shared "
+                      "Texture2D mip-level validator");
         check(what.find("level") != std::string::npos,
               label + ": the exception identifies the level parameter");
         if (level >= rt.getLevelCountProperty())
@@ -756,14 +763,18 @@ class RenderTargetInvalidMipLevelTest : public Game
             std::vector<Color> source(7, kSentinel);
             source[static_cast<std::size_t>(sourceStart)] = Color(201, 111, 77, 255);
             const std::vector<Color> sourceBefore = source;
-            bool wasOutOfRange = false;
+            bool wasInvalidOperation = false;
             std::string what;
             try { texture.SetData(level, nullptr, source.data(), sourceStart, 1); }
-            catch (const std::out_of_range& e) { wasOutOfRange = true; what = e.what(); }
+            catch (const System::InvalidOperationException& e)
+            {
+                wasInvalidOperation = true;
+                what = e.what();
+            }
             catch (const std::exception& e) { what = e.what(); }
-            check(wasOutOfRange,
+            check(wasInvalidOperation,
                   "A1 Texture2D: SetData level " + std::to_string(level) +
-                      " is rejected by the shared std::out_of_range path");
+                      " is rejected by the shared InvalidOperationException path");
             if (!what.empty()) note("A1 Texture2D invalid SetData: " + what);
             bool sourceUntouched = source.size() == sourceBefore.size();
             for (std::size_t i = 0; sourceUntouched && i < source.size(); ++i)
@@ -774,19 +785,19 @@ class RenderTargetInvalidMipLevelTest : public Game
 
             std::vector<Color> rejectedDestination(9, kSentinel);
             const std::vector<Color> destinationBefore = rejectedDestination;
-            bool getWasOutOfRange = false;
+            bool getWasInvalidOperation = false;
             std::string getWhat;
             try
             {
                 texture.GetData(level, nullptr, rejectedDestination.data(), destinationStart, 1);
             }
-            catch (const std::out_of_range& e)
+            catch (const System::InvalidOperationException& e)
             {
-                getWasOutOfRange = true;
+                getWasInvalidOperation = true;
                 getWhat = e.what();
             }
             catch (const std::exception& e) { getWhat = e.what(); }
-            check(getWasOutOfRange && getWhat.find("level") != std::string::npos,
+            check(getWasInvalidOperation && getWhat.find("level") != std::string::npos,
                   "A1 Texture2D: GetData level " + std::to_string(level) +
                       " is rejected as the level argument by the same shared path");
             check(rejectedDestination == destinationBefore,
@@ -802,7 +813,7 @@ class RenderTargetInvalidMipLevelTest : public Game
             bool threw = false;
             try
             {
-                texture.GetData(level, nullptr, destination.data(), destinationStart, count + 2);
+                texture.GetData(level, nullptr, destination.data(), destinationStart, count);
             }
             catch (const std::exception& e)
             {
@@ -894,8 +905,8 @@ class RenderTargetInvalidMipLevelTest : public Game
         ExpectLevelRejected(*rt, n, &outside, 1, kGuard,
                             "A2 invalid level combined with invalid rectangle and capacity");
 
-        // The two validation stages that intentionally precede mip membership retain their own
-        // identity. A negative destination index wins over invalid level, as does elementCount 0.
+        // Microsoft XNA asks the native level description before validating the copy window, so
+        // an invalid mip wins over both a negative destination index and elementCount 0.
         {
             std::vector<Color> guarded(9, kSentinel);
             const std::vector<Color> before = guarded;
@@ -906,24 +917,24 @@ class RenderTargetInvalidMipLevelTest : public Game
             const std::size_t softwareCallsBefore = softwareRenderer != nullptr
                 ? softwareRenderer->GetReadbackCallCountEXT() : 0;
 #endif
-            bool startIndexWon = false;
+            bool levelWonForStartIndex = false;
             std::string startWhat;
             try { rt->GetData(n, &sub, guarded.data(), -1, 1); }
-            catch (const std::out_of_range& e)
+            catch (const System::InvalidOperationException& e)
             {
                 startWhat = e.what();
-                startIndexWon = startWhat.find("startIndex") != std::string::npos;
+                levelWonForStartIndex = startWhat.find("level") != std::string::npos;
             }
             catch (const std::exception& e) { startWhat = e.what(); }
-            check(startIndexWon,
-                  "A2 invalid level + negative startIndex: startIndex validation precedes level");
+            check(levelWonForStartIndex,
+                  "A2 invalid level + negative startIndex: level validation precedes the copy window");
 
-            bool elementCountWon = false;
+            bool levelWonForElementCount = false;
             try { rt->GetData(n, &sub, guarded.data(), 0, 0); }
-            catch (const std::invalid_argument&) { elementCountWon = true; }
+            catch (const System::InvalidOperationException&) { levelWonForElementCount = true; }
             catch (const std::exception&) {}
-            check(elementCountWon,
-                  "A2 invalid level + elementCount 0: data/elementCount validation precedes level");
+            check(levelWonForElementCount,
+                  "A2 invalid level + elementCount 0: level validation precedes the copy window");
             check(guarded == before,
                   "A2 precedence rejections leave destination prefix, range and suffix unchanged");
 #if defined(CNA_RENDERER_SOFTWARE)

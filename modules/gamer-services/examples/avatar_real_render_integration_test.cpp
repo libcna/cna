@@ -168,6 +168,7 @@ public:
 int main()
 {
     AvatarRealRenderIntegrationTest game;
+    game.getGraphicsDeviceProperty().SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     game.Run();
     return game.getResult();
 }

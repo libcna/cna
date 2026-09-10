@@ -273,7 +273,7 @@ namespace
     // persists -- exactly FNA3D's OpenGL driver.
     constexpr Contract kContract{"EASYGL", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true,
-                                 true, true, true, true, true, true, false, false};
+                                 true, true, true, true, true, true, false, true};
 #elif defined(CNA_RENDERER_BGFX)
     // Render-target views are left at BGFX_CLEAR_NONE, so the depth attachment persists.
     // `msaaDepthRT2D` was false while a multisampled depth-backed RenderTarget2D aborted the process

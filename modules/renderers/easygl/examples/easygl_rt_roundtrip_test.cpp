@@ -4,16 +4,12 @@
 // Sequence (all within one Initialize pass):
 //   1. Clear backbuffer Red (no RT bound).
 //   2. SetRenderTarget(rt1)  — DiscardContents → auto-Clear(black); then Clear(Green).
-//   3. Read RT1 pixel while FBO is still bound → expect Green.
-//   4. SetRenderTarget(nullptr) → back to backbuffer.
+//   3. Unbind/resolve RT1, then read its texture → expect Green.
 //   5. SetRenderTarget(rt2)  — DiscardContents → auto-Clear(black); then Clear(Blue).
-//   6. Read RT2 pixel while FBO is still bound → expect Blue.
-//   7. SetRenderTarget(nullptr) → back to backbuffer.
+//   6. Unbind/resolve RT2, then read its texture → expect Blue.
 //   8. Read backbuffer pixel → expect Red (never overwritten after step 1).
 //
-// GetBackBufferData reads from the currently bound FBO:
-//   currentRtHeight_ != 0  →  reads from the RT attachment.
-//   currentRtHeight_ == 0  →  reads from FBO 0 (backbuffer).
+// Texture data transfers are performed only after unbinding, matching XNA's active-target rule.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
@@ -46,7 +42,15 @@ class RtRoundtripTest : public Game
         if (ok) ++pass_; else { ++fail_; result_ = 1; }
     }
 
-    Color readPixel(GraphicsDevice& dev, int x = 0, int y = 0)
+    Color readTargetPixel(RenderTarget2D& target, int x = 0, int y = 0)
+    {
+        Color px(0, 0, 0, 0);
+        Rectangle reg(x, y, 1, 1);
+        target.GetData(0, &reg, &px, 0, 1);
+        return px;
+    }
+
+    Color readBackbufferPixel(GraphicsDevice& dev, int x = 0, int y = 0)
     {
         Color px(0, 0, 0, 0);
         Rectangle reg(x, y, 1, 1);
@@ -79,30 +83,26 @@ protected:
         dev.SetRenderTarget(&rt1);   // DiscardContents → auto-Clear(0,0,0,255)
         dev.Clear(Color::Green);
 
-        // Step 3: verify RT1 contains Green (FBO still bound).
-        Color px1 = readPixel(dev);
+        // Step 3: resolve and verify RT1 contains Green.
+        dev.SetRenderTarget(nullptr);
+        Color px1 = readTargetPixel(rt1);
         std::printf("RT1 readback: R=%d G=%d B=%d\n",
             px1.getRProperty(), px1.getGProperty(), px1.getBProperty());
         check(eq(px1, Color::Green), "RT1 contains Green after Clear");
-
-        // Step 4: back to backbuffer.
-        dev.SetRenderTarget(nullptr);
 
         // Step 5: switch to RT2, fill with Blue.
         dev.SetRenderTarget(&rt2);   // DiscardContents → auto-Clear(0,0,0,255)
         dev.Clear(Color::Blue);
 
-        // Step 6: verify RT2 contains Blue (FBO still bound).
-        Color px2 = readPixel(dev);
+        // Step 6: resolve and verify RT2 contains Blue.
+        dev.SetRenderTarget(nullptr);
+        Color px2 = readTargetPixel(rt2);
         std::printf("RT2 readback: R=%d G=%d B=%d\n",
             px2.getRProperty(), px2.getGProperty(), px2.getBProperty());
         check(eq(px2, Color::Blue), "RT2 contains Blue after Clear");
 
-        // Step 7: back to backbuffer.
-        dev.SetRenderTarget(nullptr);
-
         // Step 8: verify backbuffer still contains Red.
-        Color pxBB = readPixel(dev);
+        Color pxBB = readBackbufferPixel(dev);
         std::printf("Backbuffer readback: R=%d G=%d B=%d\n",
             pxBB.getRProperty(), pxBB.getGProperty(), pxBB.getBProperty());
         check(eq(pxBB, Color::Red), "Backbuffer preserved Red across RT switches");
@@ -117,6 +117,7 @@ public:
     RtRoundtripTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kSize);
         gdm_->setPreferredBackBufferHeightProperty(kSize);
     }

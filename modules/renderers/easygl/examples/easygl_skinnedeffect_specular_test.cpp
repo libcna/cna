@@ -175,6 +175,7 @@ class SkinnedEffectSpecularTest : public Game
             if (got.getRProperty() != 0 || got.getGProperty() != 0 || got.getBProperty() != 0)
                 break; // skip blank/black frames
         }
+        dev.SetVertexBuffer(nullptr);
         return got;
     }
 
@@ -212,6 +213,7 @@ public:
     SkinnedEffectSpecularTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kSize);
         gdm_->setPreferredBackBufferHeightProperty(kSize);
     }

@@ -86,6 +86,7 @@ public:
     SpriteBatchRotationGoldenTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(400);
         gdm_->setPreferredBackBufferHeightProperty(300);
     }

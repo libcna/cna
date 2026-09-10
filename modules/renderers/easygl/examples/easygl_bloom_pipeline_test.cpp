@@ -305,6 +305,7 @@ public:
     EasyGLBloomPipelineTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kSceneSize);
         gdm_->setPreferredBackBufferHeightProperty(kSceneSize);
     }

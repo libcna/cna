@@ -4,7 +4,7 @@
 // Verifies that GraphicsDevice throws the correct exception types for:
 //   1. SetVertexBuffers with more than 16 bindings (NotSupportedException)
 //   2. SetVertexBuffers with null entries (ArgumentException)
-//   3. GetBackBufferData with null data pointer (std::invalid_argument)
+//   3. GetBackBufferData with null data pointer (ArgumentNullException)
 //   4. Present() while a render target is bound (InvalidOperationException)
 
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -14,6 +14,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBufferBinding.hpp"
 #include "System/ArgumentException.hpp"
+#include "System/ArgumentNullException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 
@@ -81,14 +82,14 @@ protected:
         }
 #endif
 
-        // 4. GetBackBufferData with null data must throw std::invalid_argument
+        // 4. GetBackBufferData with null data must throw ArgumentNullException.
         {
             device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
             bool threw = false;
             try { device.GetBackBufferData(static_cast<Color*>(nullptr), 0); }
-            catch (const std::invalid_argument&) { threw = true; }
+            catch (const System::ArgumentNullException&) { threw = true; }
             catch (...) {}
-            check(threw, "GetBackBufferData(nullptr) throws invalid_argument");
+            check(threw, "GetBackBufferData(nullptr) throws ArgumentNullException");
         }
 
         // 5. Present while a render target is bound must throw InvalidOperationException

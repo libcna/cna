@@ -175,7 +175,7 @@ namespace
                                  false, true, true, true, true, true, true, true, true, true};
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr Contract kContract{"EASYGL", Support::Exact, true, Support::Exact,
-                                 true, true, true, true, true, true, true, true, true, false};
+                                 true, true, true, true, true, true, true, true, true, true};
 #elif defined(CNA_RENDERER_BGFX)
     // `mixedQueuesKeepPublicOrder` was false until REMED-GFX-157. bgfx submits both families
     // immediately into a view, and bgfx's DEFAULT view mode radix-sorts a view's draws by sort key

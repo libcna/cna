@@ -134,6 +134,7 @@ class EasyGLViewSpaceFogTest : public Game
             if (got.getRProperty() != 0 || got.getGProperty() != 0 || got.getBProperty() != 0)
                 break;
         }
+        dev.SetVertexBuffer(nullptr);
         return got;
     }
 
@@ -181,6 +182,7 @@ class EasyGLViewSpaceFogTest : public Game
             if (got.getRProperty() != 0 || got.getGProperty() != 0 || got.getBProperty() != 0)
                 break;
         }
+        dev.SetVertexBuffer(nullptr);
         return got;
     }
 
@@ -236,6 +238,7 @@ public:
     EasyGLViewSpaceFogTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kSize);
         gdm_->setPreferredBackBufferHeightProperty(kSize);
         gdm_->setSynchronizeWithVerticalRetraceProperty(false);

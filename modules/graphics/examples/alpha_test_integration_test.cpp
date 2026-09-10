@@ -142,6 +142,7 @@ public:
 int main()
 {
     AlphaTestIntegrationTest game;
+    game.getGraphicsDeviceProperty().SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     game.Run();
     return game.getResult();
 }

@@ -172,7 +172,7 @@ namespace
     // viewport-independent, which is why the two questions are declared separately.
     constexpr Contract kContract{"EASYGL", true, true, true, true, true,
                                  true, true, true,
-                                 true, true, true, false, false, true, false};
+                                 true, true, true, false, false, true, true};
 #elif defined(CNA_RENDERER_SOFTWARE)
     constexpr Contract kContract{"SOFTWARE", true, true, true, false, false,
                                  true, true, false,

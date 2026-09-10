@@ -68,6 +68,7 @@
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
@@ -146,10 +147,10 @@ namespace
                                  true, Support::Exact, Support::Exact,
                                  Support::Exact, true};
 #elif defined(CNA_RENDERER_EASYGL)
-    // EasyGL uploads into the shared GL cube texture and normalizes its differing row convention.
+    // EasyGL normalizes its GL cube row convention for both uploads and readback.
     constexpr Contract kContract{"EASYGL", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact,
-                                 Support::AcceptedRowMirrored, false};
+                                 Support::Exact, true};
 #elif defined(CNA_RENDERER_BGFX)
     constexpr Contract kContract{"BGFX", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact,
@@ -865,35 +866,35 @@ class CubeVolumeSetDataContractTest : public Game
         // ---- C20..C26: argument validation, and nothing stored by a rejected call -------------
         {
             const std::vector<Color> src = CubeFacePattern(0, 0);
-            check(Throws<std::invalid_argument>([&] {
+            check(Throws<System::ArgumentNullException>([&] {
                       cube.SetData(CubeMapFace::PositiveX, static_cast<const Color*>(nullptr), kCube * kCube);
                   }),
-                  "C20 cube: null source throws std::invalid_argument");
-            check(Throws<std::out_of_range>([&] {
+                  "C20 cube: null source throws ArgumentNullException");
+            check(Throws<System::ArgumentOutOfRangeException>([&] {
                       cube.SetData(CubeMapFace::PositiveX, src.data(), 0);
                   }),
-                  "C21 cube: elementCount of 0 throws std::out_of_range");
-            check(Throws<std::out_of_range>([&] {
+                  "C21 cube: elementCount of 0 throws ArgumentOutOfRangeException");
+            check(Throws<System::ArgumentOutOfRangeException>([&] {
                       cube.SetData(CubeMapFace::PositiveX, src.data(), -1, kCube * kCube);
                   }),
-                  "C22 cube: negative startIndex throws std::out_of_range");
-            check(Throws<std::out_of_range>([&] {
+                  "C22 cube: negative startIndex throws ArgumentOutOfRangeException");
+            check(Throws<System::InvalidOperationException>([&] {
                       cube.SetData(CubeMapFace::PositiveX, -1, nullptr, src.data(), 0, kCube * kCube);
                   }),
-                  "C23 cube: negative mip level throws std::out_of_range");
-            check(Throws<std::out_of_range>([&] {
+                  "C23 cube: negative mip level throws InvalidOperationException");
+            check(Throws<System::ArgumentException>([&] {
                       const Rectangle bad(kCube - 1, 0, 4, 4);
                       cube.SetData(CubeMapFace::PositiveX, 0, &bad, src.data(), 0, 16);
                   }),
-                  "C24 cube: a rectangle crossing the face edge throws std::out_of_range");
+                  "C24 cube: a rectangle crossing the face edge throws ArgumentException");
             check(Throws<System::ArgumentException>([&] {
                       cube.SetData(CubeMapFace::PositiveX, 0, nullptr, src.data(), 0, 4);
                   }),
                   "C25 cube: elementCount below the requested region throws ArgumentException");
-            check(Throws<std::out_of_range>([&] {
+            check(Throws<System::InvalidOperationException>([&] {
                       cube.SetData(static_cast<CubeMapFace>(9), src.data(), kCube * kCube);
                   }),
-                  "C26 cube: an out-of-range CubeMapFace throws std::out_of_range");
+                  "C26 cube: an out-of-range CubeMapFace throws InvalidOperationException");
 
             if (kContract.cubeLevel0 == Support::Exact)
             {
@@ -919,7 +920,7 @@ class CubeVolumeSetDataContractTest : public Game
             const Rectangle bad(kCube - 2, kCube - 2, 4, 4);
             bool rejectedB = false;
             try { cube.SetData(CubeMapFace::NegativeX, 0, &bad, a.data(), 0, 16); }
-            catch (const std::out_of_range&) { rejectedB = true; }
+            catch (const System::ArgumentException&) { rejectedB = true; }
             catch (...) {}
 
             const ReadProbe afterB = ReadCube(cube, 1, 0, nullptr, kCube, kCube);
@@ -1236,11 +1237,11 @@ class CubeVolumeSetDataContractTest : public Game
                       vol.SetData(src.data(), -1, kVolW * kVolH * kVolD);
                   }),
                   "V14 volume: negative startIndex throws ArgumentOutOfRangeException");
-            check(Throws<std::out_of_range>([&] {
+            check(Throws<System::InvalidOperationException>([&] {
                       vol.SetData(-1, 0, 0, kVolW, kVolH, 0, kVolD, src.data(), 0,
                                   static_cast<int>(src.size()));
                   }),
-                  "V15 volume: negative mip level throws std::out_of_range");
+                  "V15 volume: negative mip level throws InvalidOperationException");
             check(Throws<System::ArgumentException>([&] {
                       vol.SetData(0, 2, 0, 2, kVolH, 0, kVolD, src.data(), 0, 4);
                   }),

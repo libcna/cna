@@ -142,7 +142,7 @@ namespace
 #elif defined(CNA_RENDERER_VULKAN)
     constexpr Contract kContract{"VULKAN", Support::Exact, Support::Exact, true, true, true, false};
 #elif defined(CNA_RENDERER_EASYGL)
-    constexpr Contract kContract{"EASYGL", Support::Exact, Support::Exact, true, true, true, false};
+    constexpr Contract kContract{"EASYGL", Support::Exact, Support::Exact, true, true, true, true};
 #elif defined(CNA_RENDERER_BGFX)
     // `depthRangeApplies` false: measured here. bgfx has no per-view depth-range call at all --
     // `bgfx::setViewRect` carries no min/max depth and the range is expected to be folded into the

@@ -101,7 +101,9 @@ protected:
                 {Vector3( 1.0f, -1.0f, 0.0f), normal},
                 {Vector3( 1.0f,  1.0f, 0.0f), normal},
             }};
+            device.SetVertexBuffer(nullptr);
             vertices.SetData(vertexData.data(), static_cast<int>(vertexData.size()));
+            device.SetVertexBuffer(&vertices);
             device.Clear(Color(3, 7, 11, 255));
             effect.Apply();
             device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2);

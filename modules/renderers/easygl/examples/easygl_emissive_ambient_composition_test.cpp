@@ -200,6 +200,7 @@ class EmissiveAmbientCompositionTest : public Game
         dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
 
         check(label, readCenter(dev));
+        dev.SetVertexBuffer(nullptr);
     }
 
     void DrawEnvMap(GraphicsDevice& dev)
@@ -276,6 +277,7 @@ public:
     EmissiveAmbientCompositionTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kSize);
         gdm_->setPreferredBackBufferHeightProperty(kSize);
     }

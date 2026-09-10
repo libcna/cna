@@ -251,11 +251,10 @@ protected:
         const Rectangle adjacentReg(17, kSize / 2, 1, 1);
         const Rectangle farReg(40, kSize / 2, 1, 1);
         Sample s{ Color(0,0,0,0), Color(0,0,0,0), Color(0,0,0,0) };
-        device.GetBackBufferData(&onLineReg,   &s.onLine,   0, 1);
-        device.GetBackBufferData(&adjacentReg, &s.adjacent, 0, 1);
-        device.GetBackBufferData(&farReg,      &s.far,      0, 1);
-
         device.SetRenderTarget(nullptr);
+        destRt.GetData(0, &onLineReg,   &s.onLine,   0, 1);
+        destRt.GetData(0, &adjacentReg, &s.adjacent, 0, 1);
+        destRt.GetData(0, &farReg,      &s.far,      0, 1);
         return s;
     }
 
@@ -300,6 +299,7 @@ public:
     EasyGLDistortBlurTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kSize);
         gdm_->setPreferredBackBufferHeightProperty(kSize);
     }

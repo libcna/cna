@@ -132,8 +132,7 @@ namespace
         bool    preservesOnRebind; ///< RenderTargetUsage::PreserveContents survives a rebind cycle.
         bool    exactAlpha;        ///< A non-255 rendered alpha survives readback exactly.
         bool    rtCubeSetData;     ///< RenderTargetCube::SetData stores pixels (REMED-GFX-135).
-        /// True when an UPLOADED face reads back vertically mirrored, i.e. this renderer's rendering
-        /// and its CPU upload write the same face's rows in opposite order. See check W1.
+        /// True when an UPLOADED face reads back vertically mirrored. See check W1.
         bool    rtCubeUploadMirrored;
         bool    wantHiDefProfile;  ///< Request GraphicsProfile::HiDef.
     };
@@ -161,10 +160,10 @@ namespace
     // (applied 0, `msaaCubeTargets` false) and the "multisampled" readback probe reads the same
     // ordinary single-sample face exactly.
     constexpr Contract kContract{"EASYGL(OPENGLES2)", true, Support::Exact, Support::Exact,
-                                 true, false, Support::Exact, MipTargets::Real, true, true, true, true, false};
+                                 true, false, Support::Exact, MipTargets::Real, true, true, true, false, false};
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr Contract kContract{"EASYGL", true, Support::Exact, Support::Exact,
-                                 true, true, Support::Exact, MipTargets::Real, true, true, true, true, false};
+                                 true, true, Support::Exact, MipTargets::Real, true, true, true, false, false};
 #elif defined(CNA_RENDERER_BGFX)
     // REMED-GFX-138: GFX-154's ordered completion now exposes both bgfx's resolved cube level 0
     // and every auto-generated mip before the readback blit. The combined MSAA+mip path is exact
@@ -1218,8 +1217,8 @@ class RenderTargetCubeGetDataContractTest : public Game
      *
      * EasyGL and Skia implement this upload; other renderers inherit the deterministic refusal.
      * Where it is implemented, the round trip is measured rather than assumed because rendered
-     * and uploaded writers need not share row orientation. EasyGL intentionally records a mirrored
-     * upload/readback relationship; Skia's canonical CPU transfer shadow records the same order.
+     * and uploaded writers need not share row orientation. Current EasyGL normalizes both writers
+     * to the same top-row-first public order, as does Skia's canonical CPU transfer shadow.
      */
     void RunUploadRoundTrip(GraphicsDevice& dev)
     {
