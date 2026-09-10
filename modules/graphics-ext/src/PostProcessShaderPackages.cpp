@@ -109,6 +109,16 @@ namespace CNA::Graphics::detail
              kFilmGrainVulkanFragmentSpirVByteSize,
              "post_process/film_grain.vulkan.frag.spv"});
     }
+
+    ShaderPackageEXT CreateTonemapShaderPackage()
+    {
+        using namespace CNA::Graphics::detail::PostProcessGenerated;
+        return MakeFullscreenPackage(
+            {kTonemapEsFragmentSource, "post_process/tonemap.es.frag.glsl"},
+            {kTonemapDesktopFragmentSource, "post_process/tonemap.desktop.frag.glsl"},
+            {kTonemapVulkanFragmentSpirV, kTonemapVulkanFragmentSpirVByteSize,
+             "post_process/tonemap.vulkan.frag.spv"});
+    }
 }
 
 #endif // CNA_CNAEXT

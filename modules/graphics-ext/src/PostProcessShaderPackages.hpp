@@ -15,6 +15,9 @@ namespace CNA::Graphics::detail
 
     /** @brief Creates the portable film-grain fullscreen shader package. */
     [[nodiscard]] ShaderPackageEXT CreateFilmGrainShaderPackage();
+
+    /** @brief Creates the portable tonemap fullscreen shader package. */
+    [[nodiscard]] ShaderPackageEXT CreateTonemapShaderPackage();
 }
 
 #endif // CNA_CNAEXT

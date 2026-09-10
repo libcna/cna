@@ -749,7 +749,7 @@ application orbit/yaw oracle passes **3/3** on all three paths with identical me
 Vulkan paths run under Khronos validation and emit no validation messages; the package also passes
 its write-free reproducibility check.
 
-### Portable post-process rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, 2026-09-10)
+### Portable post-process rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`, 2026-09-10)
 
 `ChromaticAberrationPass` is the first engine post-process to use the portable package path. Its
 internal package shares one fullscreen vertex contract across GLSL ES, desktop GLSL and SPIR-V;
@@ -778,6 +778,15 @@ RADV and Vulkan llvmpipe, proving deterministic equal-time frames, temporal move
 midtone than near-black variation, inert zero intensity and the public clamp/name contract. The
 fixture uses left/right luminance regions so it does not confuse Vulkan's render-target Y orientation
 with a shader result. Both Vulkan paths remain validation-clean.
+
+`TonemapPass` brings the main HDR-to-display step onto the same route. Mode, exposure, inverse gamma
+and dither amplitude occupy one existing `vec4` push slot, with the exact 0–4 operator ordinal
+converted from float back to integer in the shader. The combined tonemap/deband suite passes
+**17/17** on EasyGL, RADV and llvmpipe: all five GPU curves agree with their CPU reference, exposure
+and gamma order is retained, and dither increases a six-level ramp to 181/175 mean levels on the two
+Vulkan devices while staying zero-mean and below one output step. The pipeline application passes
+**7/7** on all three paths with exact inert HDR-off output and matching curve samples. No Vulkan
+validation message is emitted.
 
 Other engine post-process effects remain source-only and keep their exact copy-through fallback;
 the shared package/helper is the landing point for their subsequent fragment variants.
