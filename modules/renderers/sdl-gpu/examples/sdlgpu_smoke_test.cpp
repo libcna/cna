@@ -147,9 +147,11 @@ protected:
                   "MultiStreamVertexInput is reported after split-stream pixel verification");
             check(dev.SupportsCapability(CNA::GraphicsCapability::Instancing),
                   "Instancing is reported after per-instance placement verification");
-            check(!dev.SupportsCapability(CNA::GraphicsCapability::FloatRenderTargets) &&
-                      !dev.SupportsCapability(CNA::GraphicsCapability::HalfFloatRenderTargets),
-                  "float render-target capabilities remain false while factories substitute Color");
+            check(dev.SupportsCapability(CNA::GraphicsCapability::FloatRenderTargets) ==
+                      dev.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Vector4) &&
+                      dev.SupportsCapability(CNA::GraphicsCapability::HalfFloatRenderTargets) ==
+                      dev.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HdrBlendable),
+                  "float render-target capabilities agree with exact live format support");
             check(!dev.SupportsCapability(
                       CNA::GraphicsCapability::HalfFloatTextureLinearFiltering),
                   "half-float filtering is false while half-float storage is absent");

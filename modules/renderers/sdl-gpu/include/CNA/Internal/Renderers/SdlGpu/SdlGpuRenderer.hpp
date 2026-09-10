@@ -403,6 +403,12 @@ namespace CNA::Internal::Renderers::SdlGpu
         SdlGpuRenderer* owner = nullptr;
         int width = 0;
         int height = 0;
+        /// Exact public SurfaceFormat this target represents (SDLGPU-72).
+        int surfaceFormat = 0;
+        /// Native attachment format threaded into every compatible immutable pipeline.
+        SDL_GPUTextureFormat colorFormat = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+        /// Exact transfer stride of @ref colorFormat; never inferred as RGBA8 at readback.
+        Uint32 colorBytesPerPixel = 4;
         bool mipMap = false;
         // The native `num_levels` allocated for colorTexture.  The deferred pass-finalization
         // path owns only this state (the public wrapper may already be gone), so it must use the
@@ -453,7 +459,8 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
     public:
         SdlGpuRenderTargetRenderer(SdlGpuRenderer& owner, int width, int height,
-                                  int depthFormat, bool mipMap, int multiSampleCount);
+                                  int depthFormat, bool mipMap, int multiSampleCount,
+                                  int surfaceFormat = 0);
         ~SdlGpuRenderTargetRenderer() override;
 
         SdlGpuRenderTargetRenderer(const SdlGpuRenderTargetRenderer&) = delete;
@@ -461,6 +468,11 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         [[nodiscard]] int GetWidth() const override { return state_->width; }
         [[nodiscard]] int GetHeight() const override { return state_->height; }
+        /** @brief Returns the exact SurfaceFormat represented by the native attachment. */
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override
+        {
+            return state_->surfaceFormat;
+        }
 
         void BindAsRenderTarget() override;
         void UnbindAsRenderTarget() override;
@@ -1413,6 +1425,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             // silent about the LIFETIME one -- this command is replayed at Present, by when a
             // short-lived public texture may already have released that handle.
             SdlGpuSampledTextureEXT texture;
+            /// SurfaceFormat captured with the sampled resource for XNA channel expansion.
+            int surfaceFormat = 0;
             std::array<SpriteVertex, 6> vertices{};
             // SDLGPU-68: the coordinate extent the sprite shader must project over. This is the
             // logical presentation size for the backbuffer's default letterbox/overscan/stretch
@@ -2047,6 +2061,15 @@ namespace CNA::Internal::Renderers::SdlGpu
         [[nodiscard]] RendererFormatVerdict ClassifyTexture3DFormatEXT(
             int surfaceFormat) const override;
         /**
+         * @brief Classifies exact ordinary RenderTarget2D storage on the live SDL_gpu device.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal to classify.
+         * @return Supported only when the exact color-target-and-sampler format is available,
+         *         Unsupported for the remaining classic formats, or Defer for CNAEXT formats.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyRenderTargetFormatEXT(
+            int surfaceFormat) const override;
+        /**
          * @brief Classifies whether Color-shaped transfers preserve the requested format.
          *
          * @param surfaceFormat SurfaceFormat ordinal to classify.
@@ -2232,6 +2255,21 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                                     bool preserveContents = false,
                                                                     bool mipMap = false,
                                                                     int multiSampleCount = 0) override;
+        /**
+         * @brief Creates an off-screen target in its exact requested SurfaceFormat.
+         *
+         * @param w Width in pixels.
+         * @param h Height in pixels.
+         * @param depthFormat Requested DepthFormat ordinal.
+         * @param preserveContents Whether prior contents must be preserved across bindings.
+         * @param mipMap Whether to allocate and regenerate a complete mip chain.
+         * @param multiSampleCount Requested sample count.
+         * @param surfaceFormat Requested SurfaceFormat ordinal.
+         * @return The exact-format render-target renderer.
+         */
+        std::unique_ptr<IRenderTargetRenderer> CreateRenderTarget2DEXT(
+            int w, int h, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount, int surfaceFormat) override;
         /** @brief Activates the given render target (pass nullptr to restore the swapchain). */
         void SetRenderTarget2D(IRenderTargetRenderer* rt) override;
 

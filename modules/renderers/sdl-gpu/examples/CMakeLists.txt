@@ -174,6 +174,24 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     set_tests_properties(SdlGpu_RenderTarget2D PROPERTIES
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
+    # SDLGPU-72: compile the exact EasyGL public constructor/property/Rgba64 readback oracle under
+    # SDL GPU, and the renderer-neutral HDR fixture whose half tint distinguishes real RGBA16F
+    # storage from the historical RGBA8 substitution.
+    cna_sdlgpu_test(cna_test_sdlgpu_easygl_oracle_rendertarget2d_properties
+                    ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_rendertarget2d_properties_test.cpp)
+    cna_register_renderer_test(NAME SdlGpu_EasyGLOracle_rendertarget2d_properties
+        COMMAND cna_test_sdlgpu_easygl_oracle_rendertarget2d_properties
+        TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    cna_sdlgpu_test(cna_test_sdlgpu_parity_hdr_render_target
+                    ${CNA_GRAPHICS_EXAMPLES_DIR}/parity/parity_hdr_render_target.cpp)
+    cna_register_renderer_test(NAME SdlGpu_Parity_hdr_render_target
+        COMMAND cna_test_sdlgpu_parity_hdr_render_target
+        TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    set_tests_properties(
+        SdlGpu_EasyGLOracle_rendertarget2d_properties
+        SdlGpu_Parity_hdr_render_target
+        PROPERTIES FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+
     # plans/plan_sdlgpu.md SDLGPU-36: RenderTargetCube.
     cna_sdlgpu_test(cna_test_sdlgpu_rendertargetcube sdlgpu_rendertargetcube_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_RenderTargetCube COMMAND cna_test_sdlgpu_rendertargetcube

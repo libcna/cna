@@ -159,7 +159,7 @@ easygl_render_target_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,cove
 easygl_render_target_usage_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-74,PreserveContents/DiscardContents
 easygl_rendertarget2d_mip_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_rendertarget2d_msaa_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
-easygl_rendertarget2d_properties_test.cpp,classic-xna-feature-missing,SDLGPU-72,RenderTarget2D surface formats
+easygl_rendertarget2d_properties_test.cpp,classic-xna-direct-parity,SDLGPU-72,exact source compiles under SDL GPU and verifies constructors properties and Rgba64 readback
 easygl_rendertargetcube_depthformat_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-73,cube depth/stencil formats
 easygl_rendertargetcube_properties_test.cpp,classic-xna-feature-missing,SDLGPU-73,RenderTargetCube surface formats
 easygl_rendertargetcube_sample_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog

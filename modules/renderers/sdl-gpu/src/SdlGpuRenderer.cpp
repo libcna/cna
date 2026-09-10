@@ -1044,6 +1044,75 @@ namespace CNA::Internal::Renderers::SdlGpu
             }
         }
 
+        struct RenderTargetFormatInfo
+        {
+            SDL_GPUTextureFormat nativeFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
+            Uint32 bytesPerPixel = 0;
+        };
+
+        // Exact XNA render-target storage shared by classification, allocation, pipeline
+        // compatibility and readback. This is the same nine-format set EasyGL actually creates;
+        // unsupported classic values are refused instead of being substituted with Color.
+        [[nodiscard]] constexpr bool TryGetRenderTargetFormatInfo(
+            SurfaceFormat format, RenderTargetFormatInfo& out) noexcept
+        {
+            switch (format)
+            {
+                case SurfaceFormat::Color:
+                    out = {SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM, 4};
+                    return true;
+                case SurfaceFormat::Rgba64:
+                    out = {SDL_GPU_TEXTUREFORMAT_R16G16B16A16_UNORM, 8};
+                    return true;
+                case SurfaceFormat::Single:
+                    out = {SDL_GPU_TEXTUREFORMAT_R32_FLOAT, 4};
+                    return true;
+                case SurfaceFormat::Vector2:
+                    out = {SDL_GPU_TEXTUREFORMAT_R32G32_FLOAT, 8};
+                    return true;
+                case SurfaceFormat::Vector4:
+                    out = {SDL_GPU_TEXTUREFORMAT_R32G32B32A32_FLOAT, 16};
+                    return true;
+                case SurfaceFormat::HalfSingle:
+                    out = {SDL_GPU_TEXTUREFORMAT_R16_FLOAT, 2};
+                    return true;
+                case SurfaceFormat::HalfVector2:
+                    out = {SDL_GPU_TEXTUREFORMAT_R16G16_FLOAT, 4};
+                    return true;
+                case SurfaceFormat::HalfVector4:
+                case SurfaceFormat::HdrBlendable:
+                    out = {SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT, 8};
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        [[nodiscard]] std::array<float, 8> SpriteChannelExpansion(int surfaceFormat)
+        {
+            // mask.rgba followed by fill.rgba. XNA/D3D9 samples absent channels as one, whereas
+            // Vulkan exposes zero for absent G/B channels. EasyGL applies this same correction in
+            // its sprite shader; Color and four-channel formats retain the identity pair.
+            std::array<float, 8> result{1.0f, 1.0f, 1.0f, 1.0f,
+                                        0.0f, 0.0f, 0.0f, 0.0f};
+            switch (static_cast<SurfaceFormat>(surfaceFormat))
+            {
+                case SurfaceFormat::Single:
+                case SurfaceFormat::HalfSingle:
+                    result[1] = result[2] = result[3] = 0.0f;
+                    result[5] = result[6] = result[7] = 1.0f;
+                    break;
+                case SurfaceFormat::Vector2:
+                case SurfaceFormat::HalfVector2:
+                    result[2] = result[3] = 0.0f;
+                    result[6] = result[7] = 1.0f;
+                    break;
+                default:
+                    break;
+            }
+            return result;
+        }
+
         [[nodiscard]] bool ForceDxtFallbackForTest()
         {
             const char* value = std::getenv("CNA_SDLGPU_FORCE_DXT_FALLBACK");
@@ -2277,7 +2346,6 @@ namespace CNA::Internal::Renderers::SdlGpu
     void SdlGpuRenderer::RenderToTarget(SDL_GPUCommandBuffer* cmd, const PassSegment& segment,
                                                bool colorLoadedLater)
     {
-        constexpr SDL_GPUTextureFormat kRenderTargetFormat = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
         const std::shared_ptr<SdlGpuRenderTarget2DState>& target = segment.rt;
 
         // SDLGPU-37: real MRT -- extraAttachments holds rts[1..] of the SetRenderTargets(count>1)
@@ -2328,7 +2396,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                                        [&](const QueuedDrawRef& r) { return r.segment == segment.id; }));
         // REMED-GFX-068: scissor applied per draw in RenderQueuedDraws (see the swapchain pass note).
         const DrawTarget dt{target.get(), nullptr, -1};
-        RenderQueuedDraws(pass, cmd, dt, kRenderTargetFormat, target->sampleCount,
+        RenderQueuedDraws(pass, cmd, dt, target->colorFormat, target->sampleCount,
                           hasDepth ? depthStencilFormat_ : SDL_GPU_TEXTUREFORMAT_INVALID,
                           colorTargetCount, segment.id);
         passOwner.End();
@@ -3113,6 +3181,38 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
     }
 
+    RendererFormatVerdict SdlGpuRenderer::ClassifyRenderTargetFormatEXT(int surfaceFormat) const
+    {
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat);
+        RenderTargetFormatInfo info{};
+        if (TryGetRenderTargetFormatInfo(format, info))
+        {
+            return SDL_GPUTextureSupportsFormat(
+                       device_, info.nativeFormat, SDL_GPU_TEXTURETYPE_2D,
+                       SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER)
+                ? RendererFormatVerdict::Supported
+                : RendererFormatVerdict::Unsupported;
+        }
+
+        switch (format)
+        {
+            case SurfaceFormat::Bgr565:
+            case SurfaceFormat::Bgra5551:
+            case SurfaceFormat::Bgra4444:
+            case SurfaceFormat::Dxt1:
+            case SurfaceFormat::Dxt3:
+            case SurfaceFormat::Dxt5:
+            case SurfaceFormat::NormalizedByte2:
+            case SurfaceFormat::NormalizedByte4:
+            case SurfaceFormat::Rgba1010102:
+            case SurfaceFormat::Rg32:
+            case SurfaceFormat::Alpha8:
+                return RendererFormatVerdict::Unsupported;
+            default:
+                return RendererFormatVerdict::Defer;
+        }
+    }
+
     bool SdlGpuRenderer::IsCompressedTransferFormatEXT(int surfaceFormat) const
     {
         return IsClassicDxtFormat(
@@ -3471,9 +3571,25 @@ namespace CNA::Internal::Renderers::SdlGpu
     }
 
     std::unique_ptr<IRenderTargetRenderer> SdlGpuRenderer::CreateRenderTarget2D(
-        int w, int h, int depthFormat, bool /*preserveContents*/, bool mipMap, int multiSampleCount)
+        int w, int h, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
-        return std::make_unique<SdlGpuRenderTargetRenderer>(*this, w, h, depthFormat, mipMap, multiSampleCount);
+        return CreateRenderTarget2DEXT(
+            w, h, depthFormat, preserveContents, mipMap, multiSampleCount,
+            static_cast<int>(SurfaceFormat::Color));
+    }
+
+    std::unique_ptr<IRenderTargetRenderer> SdlGpuRenderer::CreateRenderTarget2DEXT(
+        int w, int h, int depthFormat, bool /*preserveContents*/, bool mipMap,
+        int multiSampleCount, int surfaceFormat)
+    {
+        if (ClassifyRenderTargetFormatEXT(surfaceFormat) != RendererFormatVerdict::Supported)
+        {
+            throw std::runtime_error(
+                "CNA SDL_GPU: SurfaceFormat ordinal " + std::to_string(surfaceFormat) +
+                " is not supported as an exact RenderTarget2D color attachment on this device");
+        }
+        return std::make_unique<SdlGpuRenderTargetRenderer>(
+            *this, w, h, depthFormat, mipMap, multiSampleCount, surfaceFormat);
     }
 
     void SdlGpuRenderer::SetRenderTarget2D(IRenderTargetRenderer* rt)
@@ -3583,6 +3699,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         fsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         fsInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
         fsInfo.num_samplers = 1;
+        fsInfo.num_uniform_buffers = 1;
         resources.CreateShader(
             ConstructionShader::SpriteFragment,
             SdlGpuFailurePointEXT::SpriteFragmentShaderCreation, fsInfo,
@@ -3866,6 +3983,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             // pipeline yet want different stencil references).
             SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
             SDL_PushGPUVertexUniformData(cmd, 0, viewportSize, 2 * sizeof(float));
+            const std::array<float, 8> channelExpansion =
+                SpriteChannelExpansion(command.surfaceFormat);
+            SDL_PushGPUFragmentUniformData(
+                cmd, 0, channelExpansion.data(), sizeof(channelExpansion));
         }
 
         SDL_GPUBufferBinding vbBinding{};
@@ -3987,6 +4108,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         SpriteCommand command{};
         command.texture = nativeTexture;
+        command.surfaceFormat = texture.GetSurfaceFormatEXT();
         command.projectionWidth = spriteProjectionWidth;
         command.projectionHeight = spriteProjectionHeight;
         command.textureFilter = textureFilter;
@@ -8742,19 +8864,34 @@ namespace CNA::Internal::Renderers::SdlGpu
         owner->QueueTextureRelease(colorTexture);
     }
 
-    SdlGpuRenderTargetRenderer::SdlGpuRenderTargetRenderer(SdlGpuRenderer& owner, int width, int height,
-                                                          int depthFormat, bool mipMap, int multiSampleCount)
+    SdlGpuRenderTargetRenderer::SdlGpuRenderTargetRenderer(
+        SdlGpuRenderer& owner, int width, int height, int depthFormat, bool mipMap,
+        int multiSampleCount, int surfaceFormat)
         : owner_(&owner)
     {
         state_ = std::make_shared<SdlGpuRenderTarget2DState>();
         state_->owner = owner_;
         state_->width = width;
         state_->height = height;
+        state_->surfaceFormat = surfaceFormat;
 
         SDL_GPUDevice* device = owner_->Device();
-        constexpr SDL_GPUTextureFormat kFormat = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+        RenderTargetFormatInfo formatInfo{};
+        if (!TryGetRenderTargetFormatInfo(
+                static_cast<SurfaceFormat>(surfaceFormat), formatInfo) ||
+            !SDL_GPUTextureSupportsFormat(
+                device, formatInfo.nativeFormat, SDL_GPU_TEXTURETYPE_2D,
+                SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER))
+        {
+            throw std::invalid_argument(
+                "CNA SDL_GPU: RenderTarget2D received unsupported SurfaceFormat ordinal " +
+                std::to_string(surfaceFormat));
+        }
+        state_->colorFormat = formatInfo.nativeFormat;
+        state_->colorBytesPerPixel = formatInfo.bytesPerPixel;
 
-        const SDL_GPUSampleCount sampleCount = ClampSampleCount(device, kFormat, multiSampleCount);
+        const SDL_GPUSampleCount sampleCount =
+            ClampSampleCount(device, state_->colorFormat, multiSampleCount);
         multiSampleCount_ = SampleCountToInt(sampleCount);
         state_->sampleCount = sampleCount;
         // REMED-GFX-186: mipMap and multiSampleCount are INDEPENDENT, and they always were --
@@ -8777,7 +8914,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         SDL_GPUTextureCreateInfo colorInfo{};
         colorInfo.type = SDL_GPU_TEXTURETYPE_2D;
-        colorInfo.format = kFormat;
+        colorInfo.format = state_->colorFormat;
         colorInfo.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
         colorInfo.width = static_cast<Uint32>(width);
         colorInfo.height = static_cast<Uint32>(height);
@@ -8799,7 +8936,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             // SdlGpuRenderTargetCubeRenderer's own MSAA support.
             SDL_GPUTextureCreateInfo msaaInfo{};
             msaaInfo.type = SDL_GPU_TEXTURETYPE_2D;
-            msaaInfo.format = kFormat;
+            msaaInfo.format = state_->colorFormat;
             msaaInfo.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET;
             msaaInfo.width = static_cast<Uint32>(width);
             msaaInfo.height = static_cast<Uint32>(height);
@@ -8907,7 +9044,8 @@ namespace CNA::Internal::Renderers::SdlGpu
                 "CNA SDL_GPU: RenderTarget2D::GetData: mip level " + std::to_string(level) +
                 " does not exist (this target has " + std::to_string(levelCount_) +
                 (levelCount_ == 1 ? " level)" : " levels)"));
-        const Uint32 sizeBytes = static_cast<Uint32>(w) * static_cast<Uint32>(h) * 4;
+        const Uint32 sizeBytes = static_cast<Uint32>(w) * static_cast<Uint32>(h) *
+                                 state_->colorBytesPerPixel;
         if (static_cast<Uint32>(dataLength) < sizeBytes)
             throw std::out_of_range("CNA SDL_GPU: RenderTarget2D::GetData: dataLength too small for the requested region");
 

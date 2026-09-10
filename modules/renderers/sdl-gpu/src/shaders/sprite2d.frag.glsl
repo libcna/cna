@@ -9,6 +9,14 @@ layout(location = 0) out vec4 outColor;
 // fragment-stage uniform buffers, unused here) per SDL_gpu's SPIR-V graphics-pipeline convention.
 layout(set = 2, binding = 0) uniform sampler2D texSampler;
 
+// SDLGPU-72: Direct3D 9/XNA samples absent texture channels as one. Vulkan exposes zero for the
+// absent G/B channels of R/RG float render targets, so reproduce the EasyGL/XNA channel expansion
+// per queued sprite. Fragment uniform buffers live in set 3 under SDL_gpu's SPIR-V convention.
+layout(set = 3, binding = 0) uniform ChannelExpansion {
+    vec4 mask;
+    vec4 fill;
+} channels;
+
 void main() {
-    outColor = texture(texSampler, fragUV) * fragColor;
+    outColor = (texture(texSampler, fragUV) * channels.mask + channels.fill) * fragColor;
 }
