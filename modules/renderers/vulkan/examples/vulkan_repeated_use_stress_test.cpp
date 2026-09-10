@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_vulkan.md VULKAN-398 -- the "still correct after repeated use" clause of §6.8, made
-// testable.
+// plan_vulkan.md VULKAN-398/VULKAN-269 -- the "still correct after repeated use" clause of §6.8,
+// made testable and then corrected to submit every claimed frame.
 //
 // Every other test in this suite draws a frame or two and asserts what it drew. That measures a
 // renderer's first frame, and a deferred renderer with per-frame caches, retirement queues and a
@@ -19,15 +19,13 @@
 //      The per-frame texture is the discriminating half of B: it is created, drawn and destroyed
 //      every frame, so the (view, sampler) descriptor cache would grow by one per frame if the
 //      eviction `VULKAN-213` added did not run.
-//   C  A readback builds what it needs once. Both of B's samples are taken right after a present
-//      and before any readback, because a readback replays the frame and legitimately builds a
-//      pipeline the loop never needed -- the first version of this test compared a post-present
-//      sample with a post-readback one and reported that as growth. So the readback gets its own
-//      leg: two readbacks in a row must leave the counters where the first one put them.
+//   C  A readback builds what it needs once. Both of B's samples are taken after the same
+//      backbuffer-readback submission, so neither side gets a one-time cache cost the other lacks.
+//      Two later render-target readbacks in a row must also leave the counters unchanged.
 //   D  The deferred queues drain: no pending batch and no pending 3D draw survives the last
 //      present. A queue that grows by one record per frame is the other shape of the same defect.
-//   E  The resizes really happened -- three of them, counted through the swapchain-recreate
-//      counter -- so B and D cannot pass by never disturbing anything.
+//   E  All 120 frame submissions and the resizes really happened, counted through renderer
+//      counters, so B and D cannot pass while the test silently queues several iterations as one.
 //   F  No validation message across the whole run.
 //
 // Exit code 0 = all PASS, 1 = any FAIL.
@@ -61,6 +59,7 @@
 #include <cstring>
 #include <cstdio>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -149,6 +148,7 @@ protected:
         auto& dev = getGraphicsDeviceProperty();
         const std::size_t messagesBefore = Renderer().GetValidationMessagesEXT().size();
         const uint64_t recreatesBefore = Renderer().GetSwapchainRecreateCountEXT();
+        const uint64_t submitsBefore = Renderer().GetFrameSubmitCountEXT();
 
         // Long-lived resources, created once: what churns is deliberately the per-frame ones.
         RenderTarget2D rt(dev, kRT, kRT, false, SurfaceFormat::Color, DepthFormat::Depth24Stencil8,
@@ -162,9 +162,15 @@ protected:
 
         for (int frame = 0; frame < kFrames; ++frame)
         {
+            // The game loop called BeginDraw() for frame zero. Re-open the manager's frame gate
+            // after every manual EndDraw below; calling Game::EndDraw repeatedly without this is
+            // a no-op after the first call because GraphicsDeviceManager clears drawBegun_.
+            if (frame > 0 && !gdm_->BeginDraw())
+                throw std::runtime_error("Vulkan repeated-use stress could not begin a frame");
+
             // The frame's own colour, so a stale frame is visible as the wrong one.
             const std::uint8_t tint = static_cast<std::uint8_t>(40 + (frame % 8) * 20);
-            const Color frameColour(tint, tint, tint, 255);
+            const Color frameColour(tint, tint, tint, static_cast<std::uint8_t>(255));
 
             // (1) a texture uploaded every frame, into the same object
             {
@@ -237,13 +243,24 @@ protected:
                 gdm_->ApplyChanges();
             }
 
-            EndDraw();
+            if (frame == kWarmUp || frame == kFrames - 1)
+            {
+                // ReadBackbuffer submits and presents the pending frame itself. Use it at both
+                // cache-sample points, and retain the last result. Doing the final read after
+                // EndDraw would submit a new empty frame and measure that frame's clear instead.
+                const Rectangle probe(4, 4, 1, 1);
+                Color sampled(0, 0, 0, 0);
+                dev.GetBackBufferData(&probe, &sampled, 0, 1);
+                if (frame == kFrames - 1) lastBackbuffer = sampled;
+            }
+            else
+            {
+                gdm_->EndDraw();
+            }
 
-            // Both samples are taken at the SAME point in the frame cycle -- right after the
-            // present, before any readback. That is not fussiness: a readback replays the frame
-            // and legitimately builds a pipeline the loop never needed, which the first version of
-            // this test caught by comparing a post-present sample with a post-readback one and
-            // reporting a growth that was really the readback's. Leg C measures that separately.
+            // Both samples are taken at the SAME point in the frame cycle -- after the frame's
+            // backbuffer readback has submitted and presented it. That equality is important:
+            // charging a one-time readback pipeline to only one side looks like cache growth.
             if (frame == kWarmUp)      warm      = Sample();
             if (frame == kFrames - 1)  endOfLoop = Sample();
         }
@@ -252,16 +269,11 @@ protected:
             std::vector<Color> rtPixels(static_cast<std::size_t>(kRT * kRT), Color(0, 0, 0, 0));
             rt.GetData(rtPixels.data(), 0, kRT * kRT);
             lastRT = rtPixels[kRT * kRT / 2];
-            const Rectangle probe(4, 4, 1, 1);
-            dev.GetBackBufferData(&probe, &lastBackbuffer, 0, 1);
         }
         const Counters afterFirstReadback = Sample();
         {
             std::vector<Color> rtPixels(static_cast<std::size_t>(kRT * kRT), Color(0, 0, 0, 0));
             rt.GetData(rtPixels.data(), 0, kRT * kRT);
-            Color again(0, 0, 0, 0);
-            const Rectangle probe(4, 4, 1, 1);
-            dev.GetBackBufferData(&probe, &again, 0, 1);
         }
         const Counters afterSecondReadback = Sample();
 
@@ -271,10 +283,12 @@ protected:
                   ")");
         const std::uint8_t lastTint =
             static_cast<std::uint8_t>(40 + ((kFrames - 1) % 8) * 20);
-        check(Is(lastBackbuffer, Color(lastTint, lastTint, lastTint, 255)),
+        check(Is(lastBackbuffer,
+                 Color(lastTint, lastTint, lastTint, static_cast<std::uint8_t>(255))),
               "A the backbuffer holds the LAST frame's sprite colour, not an earlier one: " +
                   Text(lastBackbuffer) + " (want " +
-                  Text(Color(lastTint, lastTint, lastTint, 255)) + ")");
+                  Text(Color(lastTint, lastTint, lastTint,
+                             static_cast<std::uint8_t>(255))) + ")");
         check(warm == endOfLoop,
               "B eighty more frames of the same shapes add no cache entry: warm[" + warm.Text() +
                   "] end[" + endOfLoop.Text() + "]");
@@ -289,9 +303,11 @@ protected:
                   std::to_string(Renderer().GetPendingDrawCountEXT()) + " batches=" +
                   std::to_string(Renderer().GetPendingBatchCountEXT()));
         const uint64_t recreates = Renderer().GetSwapchainRecreateCountEXT() - recreatesBefore;
-        check(recreates >= 2,
-              "E the resizes really happened: " + std::to_string(recreates) +
-                  " swapchain recreations (a run with none would make B and D meaningless)");
+        const uint64_t submits = Renderer().GetFrameSubmitCountEXT() - submitsBefore;
+        check(submits == kFrames && recreates >= 2,
+              "E all frame cycles submitted and the resizes happened: submits=" +
+                  std::to_string(submits) + " recreates=" + std::to_string(recreates) +
+                  " (want submits=" + std::to_string(kFrames) + ", recreates>=2)");
         const std::size_t messagesAfter = Renderer().GetValidationMessagesEXT().size();
         check(!VulkanRenderer::IsValidationActiveEXT() || messagesAfter == messagesBefore,
               "F no validation message across " + std::to_string(kFrames) + " frames: " +
