@@ -257,13 +257,17 @@ implementation tasks.**
   depth/normal/velocity prepass and corrects Vulkan's deferred MRT constituent dependency, and
   `MOD-2239m` packages screen-space reflections, `MOD-2239n` packages screen-space contact
   shadows, `MOD-2239o` packages projected decals, `MOD-2239p` packages aerial perspective, and
-  `MOD-2239r` packages the shadow-aware volumetric-fog atlas and resolve, and `MOD-2239s`/`MOD-2239t`
-  package the older `CRTEffect`/`DepthEffect` pair used through `EffectPass`, all with an explicit
+  `MOD-2239r` packages the shadow-aware volumetric-fog atlas and resolve, `MOD-2239s`/`MOD-2239t`
+  package the older `CRTEffect`/`DepthEffect` pair used through `EffectPass`, and `MOD-2239u`
+  packages weighted order-independent transparency's resolve and portable accumulation fixtures,
+  all with an explicit
   texture-UV/XNA-camera-NDC bridge where reconstruction needs it. The
   bloom work also fixes secondary
   `RenderTarget2D` sampling through Vulkan `ShaderEffect`, which previously substituted the white
   fallback because the binding accepted only the uploaded-texture concrete type.
-  All are verified on RADV, Vulkan llvmpipe and EasyGL; the HDR encoder does not
+  All through `MOD-2239t` are verified on RADV, Vulkan llvmpipe and EasyGL; `MOD-2239u` is verified
+  on Vulkan llvmpipe and EasyGL because hardware Vulkan cannot present through Xvfb here and the
+  user's real desktop was deliberately not used. The HDR encoder does not
   claim an HDR swap chain, and the remaining source-only effects retain copy-through fallbacks;
 - the renderer-neutral immutable storage-buffer descriptor, exact range transfers/copy and tracked
   facade are complete (`MOD-2229`). Vulkan translates every declared role into exact

@@ -198,6 +198,28 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         set_tests_properties(ConstantBufferShaderPackageReproducibility PROPERTIES
             SKIP_RETURN_CODE 77 LABELS "graphics;shader;generator")
 
+        add_test(NAME TransparencyShaderPackageReproducibility
+            COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1
+                "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/shader_package/generate_shader_package.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/tests/CNA/Graphics/shaders/transparency/package.json"
+                --output
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/tests/CNA/Graphics/TransparencyShaderPackage.generated.hpp"
+                --check)
+        set_tests_properties(TransparencyShaderPackageReproducibility PROPERTIES
+            SKIP_RETURN_CODE 77 LABELS "graphics;shader;generator")
+
+        add_test(NAME TransparencyExampleShaderPackageReproducibility
+            COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1
+                "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/shader_package/generate_shader_package.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/examples/shaders/transparency/package.json"
+                --output
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/examples/TransparencyExampleShaderPackage.generated.hpp"
+                --check)
+        set_tests_properties(TransparencyExampleShaderPackageReproducibility PROPERTIES
+            SKIP_RETURN_CODE 77 LABELS "graphics;shader;generator")
+
         add_test(NAME SkyboxShaderPackageReproducibility
             COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1
                 "${Python3_EXECUTABLE}"

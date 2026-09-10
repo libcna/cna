@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Graphics/WeightedBlendedTransparency.hpp"
 #include "CNA/Graphics/ShaderDiagnostics.hpp"
+#include "PostProcessShaderPackages.hpp"
 
 #ifdef CNA_CNAEXT
 
 #include "CNA/Graphics/FullscreenPass.hpp"
 #include "CNA/GraphicsCapability.hpp"
-#include "LensPassVertexSource.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Blend.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendFunction.hpp"
@@ -40,41 +40,6 @@ namespace CNA::Graphics {
     using Microsoft::Xna::Framework::Graphics::ShaderEffect;
     using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
     using Microsoft::Xna::Framework::Graphics::Texture2D;
-
-    namespace {
-
-        constexpr const char* kVertexSource = detail::kLensVertexSource;
-
-        /// The smallest transmission a surface is allowed to have. A fully opaque surface would
-        /// otherwise accumulate log(0), and one of those poisons the whole pixel to black.
-        constexpr float kMinTransmission = 1e-4f;
-
-        constexpr const char* kResolveSource = R"(#version 300 es
-precision highp float;
-in vec2 TexCoord;
-out vec4 FragColor;
-uniform sampler2D texture1;        // accumulation: rgb = sum(colour * alpha * weight), a = sum(alpha * weight)
-uniform sampler2D uRevealage;      // r = sum(log(1 - alpha))
-
-void main() {
-    vec4 accumulation = texture(texture1, TexCoord);
-    // exp of the accumulated logs is the product of the transmissions -- the revealage the
-    // published technique accumulates multiplicatively. See the header for why it is a sum here.
-    float revealage = clamp(exp(texture(uRevealage, TexCoord).r), 0.0, 1.0);
-
-    // Nothing transparent covered this pixel: leave the frame exactly as it was. Not "blend with a
-    // zero contribution" -- an exact early-out, because a pass that perturbs untouched pixels
-    // cannot be left in a chain.
-    if (revealage > 0.9999) discard;
-
-    // The weights cancel: the ratio is a weighted average of the surfaces' colours, and the weight
-    // itself only decided how much each one counted towards it.
-    vec3 colour = accumulation.rgb / max(accumulation.a, 1e-5);
-    FragColor = vec4(colour, 1.0 - revealage);
-}
-)";
-
-    } // namespace
 
     std::string WeightedBlendedTransparency::getAccumulationGlsl()
     {
@@ -129,22 +94,24 @@ void cnaOitEmit(vec3 colour, float alpha, float viewDepth) {
             unsupportedReason_ =
                 "this renderer has no half-float render target, and the accumulation sums values "
                 "far outside 0..1";
-        else if (!device.ExecutesShaderEffectSourceEXT())
-            unsupportedReason_ =
-                "this renderer accepts effect source without running it, so neither the "
-                "accumulation nor the resolve would execute";
+        else if (!device.SupportsCapability(CNA::GraphicsCapability::CustomEffects))
+            unsupportedReason_ = "this renderer cannot execute custom effects";
 
         allocateTargets();
 
         if (unsupportedReason_.empty())
         {
-            resolveEffect_ = std::make_unique<ShaderEffect>(device, kVertexSource, kResolveSource);
+            const auto package = detail::CreateWeightedTransparencyResolveShaderPackage();
+            if (package.selectFor(device).isUsable())
+                resolveEffect_ = std::make_unique<ShaderEffect>(device, package);
             bool logged = false;
             detail::reportShaderCompileFailure(device, "WeightedBlendedTransparency",
                                                resolveEffect_.get(), logged);
-            if (!resolveEffect_->IsEffectValid())
+            if (resolveEffect_ == nullptr || !resolveEffect_->IsEffectValid())
             {
-                unsupportedReason_ = "the resolve shader did not compile on this device";
+                unsupportedReason_ = resolveEffect_ == nullptr
+                    ? "this renderer has no usable portable resolve shader variant"
+                    : "the resolve shader did not compile on this device";
                 resolveEffect_.reset();
             }
         }

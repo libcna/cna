@@ -309,6 +309,22 @@ namespace CNA::Graphics::detail
              "post_process/tonemap.vulkan.frag.spv"});
     }
 
+    ShaderPackageEXT CreateWeightedTransparencyResolveShaderPackage()
+    {
+        using namespace CNA::Graphics::detail::PostProcessGenerated;
+        return MakeFullscreenPackage(
+            {kWeightedTransparencyResolveEsFragmentSource,
+             "post_process/weighted_transparency_resolve.es.frag.glsl"},
+            {kWeightedTransparencyResolveDesktopFragmentSource,
+             "post_process/weighted_transparency_resolve.desktop.frag.glsl"},
+            {kWeightedTransparencyResolveVulkanFragmentSpirV,
+             kWeightedTransparencyResolveVulkanFragmentSpirVByteSize,
+             "post_process/weighted_transparency_resolve.vulkan.frag.spv"},
+            {ShaderBindingRequirementEXT(
+                "uRevealage", 1, ShaderBindingTypeEXT::SampledTexture2D,
+                CNA::ShaderStageEXT::Fragment)});
+    }
+
     ShaderPackageEXT CreateLensFlareShaderPackage()
     {
         using namespace CNA::Graphics::detail::PostProcessGenerated;

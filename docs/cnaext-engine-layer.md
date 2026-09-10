@@ -220,7 +220,7 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 | GPU culling into an indirect draw | ✅ needs compute, indirect draw, executed effect source and a vertex-stage SSBO — all four probed | 🟨 native SPIR-V compute→vertex/fragment SSBO→indirect path is complete and stale-frame-tested; `GpuInstanceCuller` still owns GLSL payloads, so it refuses until portable shader packages (`MOD-2210`–`MOD-2214`) select SPIR-V | ⬜ | ⬜ — `GpuInstanceCuller` refuses and names the missing requirement; there is no fallback, because a CPU path would not remove the stall |
 | Particles | ✅ GPU simulation + instanced billboards | 🟨 CPU fallback remains active; the native SPIR-V fragment-SSBO dependency is proven, but the subsystem's GLSL payload cannot yet be selected on Vulkan (`MOD-2210`–`MOD-2214`) | 🟨 same | 🟨 — `ParticleSystem` falls back to its CPU path and the same particles appear, more slowly |
 | Transparency (sorted) | ✅ ordering is renderer-free; the phase needs only a scene target | ✅ | ✅ | ✅ — `TransparentDrawList` is plain arithmetic and runs everywhere |
-| Transparency (order-independent) | ✅ needs MRT, a half-float target and executed effect source | ⬜ | ⬜ | ⬜ — the pipeline falls back to the sorted phase and names the missing requirement |
+| Transparency (order-independent) | ✅ needs MRT, a half-float target and a usable custom-effect package | ✅ portable resolve plus GLSL/SPIR-V accumulation contract (`MOD-2239u`) | ⬜ | ⬜ — the pipeline falls back to the sorted phase and names the missing requirement |
 | `.cube` grading tables | ✅ parse is renderer-free; the strip needs only a 2D texture | ✅ | ✅ | ✅ — `CubeLut` is plain arithmetic and the strip layout runs everywhere |
 | Tetrahedral LUT interpolation, volume LUTs | ✅ needs executed effect source; the volume layout also needs `GraphicsCapability::Texture3D` | ✅ portable strip and volume packages (`MOD-2239g`) | ⬜ | ⬜ — where no package variant runs, the grade copies its input through |
 | Debanding dither | ✅ needs executed effect source | ✅ portable tonemap/deband package (`MOD-2239a`) | ⬜ | ⬜ — off by default everywhere, and a renderer that does not run the tonemap shader was not dithering before either |
@@ -1196,8 +1196,11 @@ because a long object crossing a short one has a distant centre and a near end.
 **`OrderIndependent` cannot be got wrong by ordering, and is approximate everywhere.** Weighted
 blended transparency accumulates every surface with a depth-derived weight and resolves once;
 submitting in any order gives the same frame, measured at within 1/255 where plain alpha blending on
-the same pair differs by 57. Your transparent shader writes through
-`WeightedBlendedTransparency::getAccumulationGlsl()` instead of writing `FragColor`.
+the same pair differs by 57. On a source-capable GLSL renderer your transparent shader can write
+through `WeightedBlendedTransparency::getAccumulationGlsl()` instead of `FragColor`. On Vulkan it
+supplies an equivalent `ShaderPackageEXT` SPIR-V fragment variant with outputs at locations 0
+(weighted colour/coverage) and 1 (`log(1 - alpha)` revealage); the checked-in example demonstrates
+both dialect routes from one package.
 
 **How to choose, in one line each.** Few large surfaces at very different depths → `Sorted`; the
 approximation is worst exactly there, and against the exact frame it can differ by 142/255
@@ -1218,8 +1221,8 @@ without hiding the transparent ones behind it.
 
 **It is off by default.** `TransparencyMode::None` renders exactly the frame this pipeline rendered
 before any of this existed, even with a transparent draw registered. Where `OrderIndependent` is
-asked for and the renderer lacks multiple render targets, a half-float target or executed effect
-source, the pipeline **falls back to `Sorted` and names the missing requirement** through
+asked for and the renderer lacks multiple render targets, a half-float target or a usable portable
+resolve variant, the pipeline **falls back to `Sorted` and names the missing requirement** through
 `getTransparencyFallbackReasonEXT` rather than quietly drawing a different way.
 
 ### Particles

@@ -772,7 +772,7 @@ six resulting channel values with `AtmosphericSky::radiance`, so a flat or verti
 cannot satisfy it. Both Vulkan runs emit no validation message, and the standalone package has its
 own write-free reproducibility gate.
 
-### Portable engine-effect rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`–`MOD-2239t`, 2026-09-10)
+### Portable engine-effect rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`–`MOD-2239u`, 2026-09-10)
 
 `ChromaticAberrationPass` is the first engine post-process to use the portable package path. Its
 internal package shares one fullscreen vertex contract across GLSL ES, desktop GLSL and SPIR-V;
@@ -994,6 +994,17 @@ RGB565/RGB332 and all three BT.601 grayscale modes remain arithmetic. Vulkan con
 coordinates to EasyGL's physical row convention before indexing either Bayer matrix. The expanded
 suite is **15/15** on EasyGL, RADV and llvmpipe and pins exact channel quantization, alpha, both
 nearest-palette results and every ordered threshold in the 4x4 and 8x8 matrices.
+
+`WeightedBlendedTransparency` no longer rejects Vulkan merely because Vulkan truthfully declines
+runtime GLSL source. Its resolve now selects GLSL ES, desktop GLSL or checked-in SPIR-V and binds
+the revealage target through set 1 binding 1. Application accumulation shaders remain application
+owned: GLSL callers can use `getAccumulationGlsl()`, while Vulkan callers supply the same two MRT
+outputs in a `ShaderPackageEXT` SPIR-V variant. The permanent fixtures and end-to-end example do
+exactly that rather than hiding the dialect boundary. The combined `WeightedBlendedTransparency`
+and `TransparentPhase` suites are **13/13** on Vulkan llvmpipe and EasyGL, with no skip or validation
+message; both end-to-end examples report the same **3/3**, including the same 1-byte worst order
+difference and 39,330 lit pixels. Hardware RADV was not run for this row because the only available
+hardware display is the user's real desktop and Xvfb has no DRI3; no visible window was opened.
 
 Other engine post-process effects remain source-only and keep their exact copy-through fallback;
 the shared package/helper is the landing point for their subsequent fragment variants.

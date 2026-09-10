@@ -24,7 +24,7 @@ struct PayloadProvenance
 };
 
 inline constexpr std::string_view kPackageName = "post_process";
-inline constexpr std::string_view kManifestSha256 = "cdb7046a075aa380ee144a7b6faba5c9c6b1d14f770dd80ea5382050ea472fa0";
+inline constexpr std::string_view kManifestSha256 = "8eee8ade3b30c27247f91784b8b6dcd90a00feaece339ffacf6d7d6e72703b69";
 inline constexpr std::string_view kCompiler = "shaderc shared library";
 inline constexpr std::string_view kCompilerSoname = "libshaderc.so.1";
 inline constexpr std::string_view kCompilerSha256 = "31400b359d2f4b4a43168978412a72913474725befb87966068cfac1922ac6c9";
@@ -1678,6 +1678,29 @@ void main()
 }
 )CNA_SHADER";
 
+inline constexpr std::string_view kWeightedTransparencyResolveEsFragmentSource =
+    R"CNA_SHADER(#version 300 es
+precision highp float;
+
+in vec2 TexCoord;
+in vec4 SpriteColor;
+out vec4 FragColor;
+
+uniform sampler2D texture1;
+uniform sampler2D uRevealage;
+
+void main()
+{
+    vec4 accumulation = texture(texture1, TexCoord);
+    float revealage = clamp(exp(texture(uRevealage, TexCoord).r), 0.0, 1.0);
+    if (revealage > 0.9999)
+        discard;
+
+    vec3 colour = accumulation.rgb / max(accumulation.a, 1e-5);
+    FragColor = vec4(colour, 1.0 - revealage);
+}
+)CNA_SHADER";
+
 inline constexpr std::string_view kFullscreenDesktopVertexSource =
     R"CNA_SHADER(#version 330 core
 layout(location = 0) in vec2 aPos;
@@ -3292,6 +3315,28 @@ void main()
         color += vec3(cnaTriangularDither(gl_FragCoord.xy) * uTonemapParams.w);
 
     FragColor = vec4(color, source.a) * SpriteColor;
+}
+)CNA_SHADER";
+
+inline constexpr std::string_view kWeightedTransparencyResolveDesktopFragmentSource =
+    R"CNA_SHADER(#version 330 core
+
+in vec2 TexCoord;
+in vec4 SpriteColor;
+out vec4 FragColor;
+
+uniform sampler2D texture1;
+uniform sampler2D uRevealage;
+
+void main()
+{
+    vec4 accumulation = texture(texture1, TexCoord);
+    float revealage = clamp(exp(texture(uRevealage, TexCoord).r), 0.0, 1.0);
+    if (revealage > 0.9999)
+        discard;
+
+    vec3 colour = accumulation.rgb / max(accumulation.a, 1e-5);
+    FragColor = vec4(colour, 1.0 - revealage);
 }
 )CNA_SHADER";
 
@@ -6705,7 +6750,43 @@ inline constexpr std::uint32_t kTonemapVulkanFragmentSpirV[] = {
 };
 inline constexpr std::size_t kTonemapVulkanFragmentSpirVByteSize = sizeof(kTonemapVulkanFragmentSpirV);
 
-inline constexpr std::array<PayloadProvenance, 81> kPayloads = {{
+inline constexpr std::uint32_t kWeightedTransparencyResolveVulkanFragmentSpirV[] = {
+    0x07230203u, 0x00010000u, 0x000d000bu, 0x0000003du, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
+    0x00000001u, 0x4c534c47u, 0x6474732eu, 0x3035342eu, 0x00000000u, 0x0003000eu, 0x00000000u, 0x00000001u,
+    0x0007000fu, 0x00000004u, 0x00000004u, 0x6e69616du, 0x00000000u, 0x00000011u, 0x00000035u, 0x00030010u,
+    0x00000004u, 0x00000007u, 0x00040047u, 0x0000000du, 0x00000021u, 0x00000000u, 0x00040047u, 0x0000000du,
+    0x00000022u, 0x00000000u, 0x00040047u, 0x00000011u, 0x0000001eu, 0x00000000u, 0x00040047u, 0x00000016u,
+    0x00000021u, 0x00000001u, 0x00040047u, 0x00000016u, 0x00000022u, 0x00000001u, 0x00040047u, 0x00000035u,
+    0x0000001eu, 0x00000000u, 0x00020013u, 0x00000002u, 0x00030021u, 0x00000003u, 0x00000002u, 0x00030016u,
+    0x00000006u, 0x00000020u, 0x00040017u, 0x00000007u, 0x00000006u, 0x00000004u, 0x00090019u, 0x0000000au,
+    0x00000006u, 0x00000001u, 0x00000000u, 0x00000000u, 0x00000000u, 0x00000001u, 0x00000000u, 0x0003001bu,
+    0x0000000bu, 0x0000000au, 0x00040020u, 0x0000000cu, 0x00000000u, 0x0000000bu, 0x0004003bu, 0x0000000cu,
+    0x0000000du, 0x00000000u, 0x00040017u, 0x0000000fu, 0x00000006u, 0x00000002u, 0x00040020u, 0x00000010u,
+    0x00000001u, 0x0000000fu, 0x0004003bu, 0x00000010u, 0x00000011u, 0x00000001u, 0x0004003bu, 0x0000000cu,
+    0x00000016u, 0x00000000u, 0x0004002bu, 0x00000006u, 0x0000001eu, 0x00000000u, 0x0004002bu, 0x00000006u,
+    0x0000001fu, 0x3f800000u, 0x0004002bu, 0x00000006u, 0x00000022u, 0x3f7ff972u, 0x00020014u, 0x00000023u,
+    0x00040017u, 0x00000028u, 0x00000006u, 0x00000003u, 0x0004002bu, 0x00000006u, 0x00000030u, 0x3727c5acu,
+    0x00040020u, 0x00000034u, 0x00000003u, 0x00000007u, 0x0004003bu, 0x00000034u, 0x00000035u, 0x00000003u,
+    0x00050036u, 0x00000002u, 0x00000004u, 0x00000000u, 0x00000003u, 0x000200f8u, 0x00000005u, 0x0004003du,
+    0x0000000bu, 0x0000000eu, 0x0000000du, 0x0004003du, 0x0000000fu, 0x00000012u, 0x00000011u, 0x00050057u,
+    0x00000007u, 0x00000013u, 0x0000000eu, 0x00000012u, 0x0004003du, 0x0000000bu, 0x00000017u, 0x00000016u,
+    0x00050057u, 0x00000007u, 0x00000019u, 0x00000017u, 0x00000012u, 0x00050051u, 0x00000006u, 0x0000001cu,
+    0x00000019u, 0x00000000u, 0x0006000cu, 0x00000006u, 0x0000001du, 0x00000001u, 0x0000001bu, 0x0000001cu,
+    0x0008000cu, 0x00000006u, 0x00000020u, 0x00000001u, 0x0000002bu, 0x0000001du, 0x0000001eu, 0x0000001fu,
+    0x000500bau, 0x00000023u, 0x00000024u, 0x00000020u, 0x00000022u, 0x000300f7u, 0x00000026u, 0x00000000u,
+    0x000400fau, 0x00000024u, 0x00000025u, 0x00000026u, 0x000200f8u, 0x00000025u, 0x000100fcu, 0x000200f8u,
+    0x00000026u, 0x0008004fu, 0x00000028u, 0x0000002cu, 0x00000013u, 0x00000013u, 0x00000000u, 0x00000001u,
+    0x00000002u, 0x00050051u, 0x00000006u, 0x0000002fu, 0x00000013u, 0x00000003u, 0x0007000cu, 0x00000006u,
+    0x00000031u, 0x00000001u, 0x00000028u, 0x0000002fu, 0x00000030u, 0x00060050u, 0x00000028u, 0x00000032u,
+    0x00000031u, 0x00000031u, 0x00000031u, 0x00050088u, 0x00000028u, 0x00000033u, 0x0000002cu, 0x00000032u,
+    0x00050083u, 0x00000006u, 0x00000038u, 0x0000001fu, 0x00000020u, 0x00050051u, 0x00000006u, 0x00000039u,
+    0x00000033u, 0x00000000u, 0x00050051u, 0x00000006u, 0x0000003au, 0x00000033u, 0x00000001u, 0x00050051u,
+    0x00000006u, 0x0000003bu, 0x00000033u, 0x00000002u, 0x00070050u, 0x00000007u, 0x0000003cu, 0x00000039u,
+    0x0000003au, 0x0000003bu, 0x00000038u, 0x0003003eu, 0x00000035u, 0x0000003cu, 0x000100fdu, 0x00010038u,
+};
+inline constexpr std::size_t kWeightedTransparencyResolveVulkanFragmentSpirVByteSize = sizeof(kWeightedTransparencyResolveVulkanFragmentSpirV);
+
+inline constexpr std::array<PayloadProvenance, 84> kPayloads = {{
     {"kAerialPerspectiveEsFragmentSource", "aerial_perspective.es.frag.glsl", "e7d4744ae31835559a63e9cce1600bbb656fc476cc467ac833b2fe73abf98fea", "glsl-es", "glsl-es", "fragment", "text", "main"},
     {"kFullscreenEsVertexSource", "fullscreen.es.vert.glsl", "ec4dbe0b5e367feed5a59d1091c93da8004f83e95c0fa1697aa5c3ae13539ef7", "glsl-es", "glsl-es", "vertex", "text", "main"},
     {"kBloomBlurEsFragmentSource", "bloom_blur.es.frag.glsl", "e6b4ddc563374f57de7cc96a5bcccba77fbc7a6a0f9e8f4e0e54d3053bf46da7", "glsl-es", "glsl-es", "fragment", "text", "main"},
@@ -6733,6 +6814,7 @@ inline constexpr std::array<PayloadProvenance, 81> kPayloads = {{
     {"kSsaoOcclusionEsFragmentSource", "ssao_occlusion.es.frag.glsl", "4474ff5300143c5e1a9fb6675efc6b05c204d73e4d8c919beba47a9140035948", "glsl-es", "glsl-es", "fragment", "text", "main"},
     {"kSsrEsFragmentSource", "ssr.es.frag.glsl", "ac0983ff18b46f41f22d0aada0781878c91b6ccc6623623b1e71e3cfd4694d81", "glsl-es", "glsl-es", "fragment", "text", "main"},
     {"kTonemapEsFragmentSource", "tonemap.es.frag.glsl", "987008c0a70781b01d191f735513f7097acffbe8c4d851997fb5a7bdd54d7483", "glsl-es", "glsl-es", "fragment", "text", "main"},
+    {"kWeightedTransparencyResolveEsFragmentSource", "weighted_transparency_resolve.es.frag.glsl", "3ed11d5f05b0e60e4eac556e930cc993fefb894e37fca730c0d1c5e16fd6b174", "glsl-es", "glsl-es", "fragment", "text", "main"},
     {"kFullscreenDesktopVertexSource", "fullscreen.desktop.vert.glsl", "fb01bc5f383d2375067f9320830f51753bf5a6d84c9d63f078f4b4cce6d994bf", "glsl", "glsl", "vertex", "text", "main"},
     {"kBloomBlurDesktopFragmentSource", "bloom_blur.desktop.frag.glsl", "37df40a83adaac8c184343c54b2479f32b66fff3bd5f8dc4646f1c7cbcf81e9a", "glsl", "glsl", "fragment", "text", "main"},
     {"kBloomCombineDesktopFragmentSource", "bloom_combine.desktop.frag.glsl", "61aed17f36f009e5dc53bc454b962fdd0b1323d7f09d79dc2b00025b28f13e2f", "glsl", "glsl", "fragment", "text", "main"},
@@ -6760,6 +6842,7 @@ inline constexpr std::array<PayloadProvenance, 81> kPayloads = {{
     {"kSsaoOcclusionDesktopFragmentSource", "ssao_occlusion.desktop.frag.glsl", "a5ebad06e3d7b785fb57be960a8421dc3d8a825448f2321113802e160a81ca3e", "glsl", "glsl", "fragment", "text", "main"},
     {"kSsrDesktopFragmentSource", "ssr.desktop.frag.glsl", "551f9edb3d4acf389b9ddee7ef5df369b103bcba8953f56f2d833578e7673973", "glsl", "glsl", "fragment", "text", "main"},
     {"kTonemapDesktopFragmentSource", "tonemap.desktop.frag.glsl", "0e6a85e1cca4f96510a41412e1d5774920c59d1fa838c1215edc82e2ef9e7314", "glsl", "glsl", "fragment", "text", "main"},
+    {"kWeightedTransparencyResolveDesktopFragmentSource", "weighted_transparency_resolve.desktop.frag.glsl", "239a0b79ee68e9ccb74228a62b80b7bd508bc080c3535e7fbd85c04eb5731b3a", "glsl", "glsl", "fragment", "text", "main"},
     {"kFullscreenVulkanVertexSpirV", "fullscreen.vulkan.vert.glsl", "6d784f7a18b1ddafc05cb150ae9dc192bad43231c64b77d6659ade09246c3feb", "spirv", "vulkan-glsl", "vertex", "spirv", "main"},
     {"kBloomBlurVulkanFragmentSpirV", "bloom_blur.vulkan.frag.glsl", "08427f39eee25462f84670c22a8bd713b10a7c9605b129e0292fa951925634db", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
     {"kBloomCombineVulkanFragmentSpirV", "bloom_combine.vulkan.frag.glsl", "cb54f72ecadc78813385a73358e9074da923151ddf5cde45a813c645e1a89604", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
@@ -6787,6 +6870,7 @@ inline constexpr std::array<PayloadProvenance, 81> kPayloads = {{
     {"kSsaoOcclusionVulkanFragmentSpirV", "ssao_occlusion.vulkan.frag.glsl", "1796d7dc1253308851938c43c79695d3aa90c306372860600f80407a898c7e60", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
     {"kSsrVulkanFragmentSpirV", "ssr.vulkan.frag.glsl", "1fb0fb8d6cb20e26ac79388a76dccd01c361e49796b978a4874d37bf3af01dfa", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
     {"kTonemapVulkanFragmentSpirV", "tonemap.vulkan.frag.glsl", "c2e7dfb599f0c0368d6e380394c9c551c7b81e9f84a27c6c65a498b931337028", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kWeightedTransparencyResolveVulkanFragmentSpirV", "weighted_transparency_resolve.vulkan.frag.glsl", "b4bf191f8928db43d5ef4b2e491029a8774d1375977fc35003ef940c89048257", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
 }};
 
 } // namespace CNA::Graphics::detail::PostProcessGenerated

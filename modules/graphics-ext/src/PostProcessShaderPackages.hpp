@@ -52,6 +52,9 @@ namespace CNA::Graphics::detail
     /** @brief Creates the portable tonemap fullscreen shader package. */
     [[nodiscard]] ShaderPackageEXT CreateTonemapShaderPackage();
 
+    /** @brief Creates the portable weighted-transparency resolve shader package. */
+    [[nodiscard]] ShaderPackageEXT CreateWeightedTransparencyResolveShaderPackage();
+
     /** @brief Creates the portable lens-flare fullscreen shader package. */
     [[nodiscard]] ShaderPackageEXT CreateLensFlareShaderPackage();
 
