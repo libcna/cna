@@ -28,6 +28,15 @@
    "profile": "Reach"
   },
   {
+   "case": "texture/dxt5_alpha_table",
+   "source": "texture/dxt5_alpha_table.dds",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "platform": "Windows",
+   "profile": "Reach",
+   "parameters": {"PremultiplyAlpha": "False", "ColorKeyEnabled": "False"}
+  },
+  {
    "case": "texture/png_sprite_windows_hidef",
    "source": "texture/probe.png",
    "importer": "TextureImporter",
