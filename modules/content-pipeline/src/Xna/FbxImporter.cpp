@@ -634,6 +634,89 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             return narrowed;
         }
 
+        /** @brief Every entry narrowed to `float`, which is what an XNA `Matrix` holds. */
+        [[nodiscard]] Rows NarrowAll(const Rows& rows)
+        {
+            Rows narrowed = rows;
+            for (std::size_t row = 0; row < 4u; ++row)
+            {
+                for (std::size_t column = 0; column < 4u; ++column)
+                {
+                    narrowed[row][column] =
+                        static_cast<double>(static_cast<float>(rows[row][column]));
+                }
+            }
+            return narrowed;
+        }
+
+        /**
+         * @brief The inverse of an affine row-vector transform: the basis inverted, the
+         *        translation carried through it.
+         *
+         * Written out rather than taken from a general 4x4 solver because the matrices this
+         * inverts are affine by construction and because the arithmetic is what is being
+         * reproduced: a cofactor expansion over all sixteen entries rounds differently.
+         *
+         * @param rows The transform to invert.
+         * @return Its inverse, or the identity when the basis is singular.
+         */
+        [[nodiscard]] Rows AffineInverse(const Rows& rows)
+        {
+            const double a = rows[0][0], b = rows[0][1], c = rows[0][2];
+            const double d = rows[1][0], e = rows[1][1], f = rows[1][2];
+            const double g = rows[2][0], h = rows[2][1], i = rows[2][2];
+            const double determinant = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+            if (determinant == 0.0) { return IdentityRows(); }
+            const double inverse = 1.0 / determinant;
+            Rows out = IdentityRows();
+            out[0][0] = (e * i - f * h) * inverse;
+            out[0][1] = (c * h - b * i) * inverse;
+            out[0][2] = (b * f - c * e) * inverse;
+            out[1][0] = (f * g - d * i) * inverse;
+            out[1][1] = (a * i - c * g) * inverse;
+            out[1][2] = (c * d - a * f) * inverse;
+            out[2][0] = (d * h - e * g) * inverse;
+            out[2][1] = (b * g - a * h) * inverse;
+            out[2][2] = (a * e - b * d) * inverse;
+            for (std::size_t column = 0; column < 3u; ++column)
+            {
+                out[3][column] = -(rows[3][0] * out[0][column] + rows[3][1] * out[1][column] +
+                                   rows[3][2] * out[2][column]);
+            }
+            return out;
+        }
+
+        /**
+         * @brief A rotation seen from a frame the parent's world scaling has stretched.
+         *
+         * With a non-uniform parent scaling the child's answered rotation is not its own: XNA's is
+         * `S . R . S^-1` for the parent's accumulated world scale `S`, so a Z turn of 37 degrees
+         * under a parent scaled (2, 3, 5) comes back with 0.401 and -0.903 where the rotation
+         * itself has +/-0.602. Measured on `E parent scaling nonuni / child rotation` and its
+         * held-out twin (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-193`).
+         *
+         * @param rotation The node's own rotation.
+         * @param scale The parent's accumulated world scaling.
+         * @return The conjugated rotation, or the rotation itself when the scale is uniform.
+         */
+        [[nodiscard]] Rows ConjugateByScale(const Rows& rotation, const Triple& scale)
+        {
+            if ((scale[0] == scale[1] && scale[1] == scale[2]) ||
+                scale[0] == 0.0 || scale[1] == 0.0 || scale[2] == 0.0)
+            {
+                return rotation;
+            }
+            Rows out = rotation;
+            for (std::size_t row = 0; row < 3u; ++row)
+            {
+                for (std::size_t column = 0; column < 3u; ++column)
+                {
+                    out[row][column] = rotation[row][column] * scale[row] / scale[column];
+                }
+            }
+            return out;
+        }
+
         /**
          * @brief The rotation's Euler triple in degrees, XYZ order, row-vector convention.
          *
@@ -684,16 +767,12 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          * FBX's pivot set is not something an XNA `Matrix` can carry, so the conversion replaces a
          * node's `Rpost^-1 . R . Rpre` with a single Euler triple -- and the triple is decomposed
          * from the *float* matrix, which at a quarter turn cannot tell 90 from 90.0000839: `sin`
-         * of both is `1.0f`. A node's own answered transform is the composition, exactly; what
-         * carries the difference is its children, each expressed against the *decomposition of the
-         * node's global rotation* rather than against the rotation itself -- so the child's own
-         * rotation is multiplied on the right by `E . G^-1`, and its translation is not turned by
-         * it. Because the child's global then carries that residue, the child's own decomposition
-         * is exact and nothing below it moves again: the residue appears once on each path, at the
-         * first node whose rotation does not decompose (plans/plan_xna_sample_xnb_sweep.md
-         * `XNASWEEP-176`).
+         * of both is `1.0f`. What carries the difference is the node's children, whose own
+         * rotation is multiplied on the right by `E . G^-1` before their world is composed
+         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-176`, and `XNASWEEP-193` for the world
+         * quotient this now feeds rather than being the whole answer).
          *
-         * @param composed The rotation to decompose: a node's global rotation, in double.
+         * @param composed The rotation to decompose, in double.
          * @return The residue and whether there is one.
          */
         [[nodiscard]] PivotResidue RotationResidue(const Rows& composed)
@@ -715,12 +794,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             }
             if (!residue.lossy) { return residue; }
             // Both sides narrowed, and the inverse taken as the transpose a rotation's inverse is.
-            // The narrowing is not decoration: the difference this carries is a *float* difference
-            // -- it is what `sin` rounding to `1.0f` produced -- and multiplying a float-derived
-            // `E` by a double `P` leaves 1-ulp residues in the entries a quarter turn nearly
-            // zeroes. Narrowing both takes eighteen more of the thirty-eight measured compensated
-            // nodes to bit-identical, the corpus's own shape among them
-            // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-176`).
+            // The difference this carries is a *float* difference -- it is what `sin` rounding to
+            // `1.0f` produced -- and multiplying a float-derived `E` by a double `P` leaves 1-ulp
+            // residues in the entries a quarter turn nearly zeroes (`XNASWEEP-176`).
             Rows inverse = IdentityRows();
             for (std::size_t row = 0; row < 3u; ++row)
             {
@@ -747,9 +823,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          * @param rotations The node's own rotation with the parent's pivot residue already in it.
          * @return The local transform.
          */
-        [[nodiscard]] Matrix LocalTransform(const Object& object,
-                                            const Rows& parentGeometricInverse,
-                                            const Rows& rotations)
+        [[nodiscard]] Rows LocalRows(const Object& object,
+                                     const Rows& parentGeometricInverse,
+                                     const Rows& rotations)
         {
             // FBX's own transform formula, all ten terms of it. Written the way a row vector meets
             // them, which is the reverse of the order the SDK's documentation lists:
@@ -787,11 +863,36 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 Multiply(Multiply(GeometricRows(object), local), parentGeometricInverse);
             // The scene's unit multiplies the whole composed transform -- basis and translation
             // both -- and it reaches only the nodes the scene connects.
-            return ToMatrix(object.unitScale == 1.0
-                                ? placed
-                                : Multiply(placed, ScaleRows(Triple{object.unitScale,
-                                                                    object.unitScale,
-                                                                    object.unitScale})));
+            return object.unitScale == 1.0
+                       ? placed
+                       : Multiply(placed, ScaleRows(Triple{object.unitScale, object.unitScale,
+                                                           object.unitScale}));
+        }
+
+        /**
+         * @brief What a node answers as its transform: its world against its parent's.
+         *
+         * A node's local transform is not what the FBX file calls its local transform. XNA answers
+         * the *quotient of the two float world transforms* -- `float(W) . inverse(float(Wparent))`
+         * -- and that is why a child's translation moves when its parent's is large enough to lose
+         * it: a parent translated 1e7 and a child translated 0.1 answers 0, because `float` at 1e7
+         * cannot hold the tenth. Measured over 178 purpose-built nodes and confirmed on 46
+         * held-out ones, where it takes 138 to 170 and 25 to 37 bit-identical against the rule it
+         * replaces (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-193`).
+         *
+         * The scene's own children divide by nothing, so their answer is their world.
+         *
+         * @param world The node's world transform, in double.
+         * @param parentWorld The parent's world transform, in double; the identity at the root.
+         * @param hasParent Whether there is a parent to divide by.
+         * @return The transform to answer.
+         */
+        [[nodiscard]] Matrix QuotientTransform(const Rows& world, const Rows& parentWorld,
+                                               const bool hasParent)
+        {
+            if (!hasParent) { return ToMatrix(world); }
+            return ToMatrix(Multiply(NarrowAll(world),
+                                     NarrowAll(AffineInverse(NarrowAll(parentWorld)))));
         }
 
         /** @brief Whatever a layer element holds, resolved through its mapping and reference. */
@@ -1278,7 +1379,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         };
 
         const auto build = [&](const std::int64_t identity, const Rows& parentGeometricInverse,
-                               const Rows& parentGlobalRotation,
+                               const Rows& parentWorld, const Triple& parentWorldScale,
+                               const Rows& parentGlobalRotation, const bool hasParent,
                                auto&& self) -> std::shared_ptr<NodeContent>
         {
             const Object& object = objects.at(identity);
@@ -1953,13 +2055,30 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 node = std::make_shared<NodeContent>();
             }
             node->setNameProperty(object.name);
-            // A node is expressed against the *decomposition* of its parent's global rotation; see
-            // `RotationResidue`. The scene root has none, so the top-level nodes are their own.
+            // A node's rotation is seen from the frame its parent's world scaling stretched, its
+            // world is that local composed onto the parent's, and what it *answers* is the
+            // quotient of the two -- see `QuotientTransform` and `ConjugateByScale`.
+            // The residue is taken from the parent's *global* rotation rather than its own,
+            // which is what makes it appear once on each path: the child's global already carries
+            // it, so the child's own decomposition is exact and the grandchild gets none. Reading
+            // it off each node's own rotation doubles it -- measured, `fbx_pivot_residue_chain.fbx`
+            // answers -1.4647386e-06 at the grandchild and doubling gives -2.9294772e-06
+            // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-176`).
             const Rows rotated =
-                Multiply(RotationRows(object), RotationResidue(parentGlobalRotation).compensation);
-            node->setTransformProperty(LocalTransform(object, parentGeometricInverse, rotated));
+                hasParent
+                    ? ConjugateByScale(
+                          Multiply(RotationRows(object),
+                                   RotationResidue(parentGlobalRotation).compensation),
+                          parentWorldScale)
+                    : RotationRows(object);
+            const Rows localRows = LocalRows(object, parentGeometricInverse, rotated);
+            const Rows world = hasParent ? Multiply(localRows, parentWorld) : localRows;
+            node->setTransformProperty(QuotientTransform(world, parentWorld, hasParent));
             const Rows geometricInverse = InverseGeometricRows(object);
             const Rows globalRotation = Multiply(rotated, parentGlobalRotation);
+            const Triple worldScale{parentWorldScale[0] * object.scaling[0],
+                                    parentWorldScale[1] * object.scaling[1],
+                                    parentWorldScale[2] * object.scaling[2]};
             for (const std::int64_t child : object.children)
             {
                 if (objects.count(child) == 0 || objects.at(child).isGeometryData ||
@@ -1967,7 +2086,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 {
                     continue;
                 }
-                node->getChildrenProperty().Add(self(child, geometricInverse, globalRotation, self));
+                node->getChildrenProperty().Add(
+                    self(child, geometricInverse, world, worldScale, globalRotation, true, self));
             }
             return node;
         };
@@ -2045,14 +2165,16 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         {
             // One top-level model answers as the root itself, as the .x route's single frame does.
             return PromoteSkeletonRoot(
-                build(roots.front(), IdentityRows(), IdentityRows(), build), context);
+                build(roots.front(), IdentityRows(), IdentityRows(), Triple{1.0, 1.0, 1.0},
+                      IdentityRows(), false, build), context);
         }
         auto root = std::make_shared<NodeContent>();
         root->setNameProperty("RootNode");
         for (const std::int64_t identity : roots)
         {
             root->getChildrenProperty().Add(
-                build(identity, IdentityRows(), IdentityRows(), build));
+                build(identity, IdentityRows(), IdentityRows(), Triple{1.0, 1.0, 1.0},
+                          IdentityRows(), false, build));
         }
         return PromoteSkeletonRoot(root, context);
     }
