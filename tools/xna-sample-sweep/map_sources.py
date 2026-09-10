@@ -246,6 +246,28 @@ def main(argv=None):
             }
             units.append(unit)
 
+            # One output root can be written by more than one `BuildContent` call, and one is:
+            # SAMPLE-031's diagnostic runner writes two extra fonts into `bin-diag/Content` while
+            # the sample's own project writes the rest of it. The root's owner is the project that
+            # explains the most of it, and a *reconstruction* that names assets the owner does not
+            # is a second call rather than a rival, so it gets a unit of its own
+            # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-163`).
+            for other_path, items in sorted(roots[output_root].items()):
+                if other_path == owner or args.synthesized is None:
+                    continue
+                if not os.path.abspath(other_path).startswith(
+                        os.path.abspath(args.synthesized) + os.sep):
+                    continue
+                extra = sorted(set(items) - set(roots[output_root][owner]))
+                if not extra:
+                    continue
+                units.append(dict(unit, project=project_reference(other_path, root),
+                                  items=len(items), explained=len(extra),
+                                  secondPass=True,
+                                  customPipelineReferences=projects[other_path]
+                                      .custom_pipeline_references,
+                                  undecidableConditions=projects[other_path].undecidable))
+
             owned = roots[output_root][owner]
             for relative in sorted(under):
                 name = relative[len(output_root):-len(".xnb")]
@@ -258,11 +280,18 @@ def main(argv=None):
                 # the reference's lost 115 references to `no-item` that the project does name
                 # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-184`).
                 item = owned.get(name.lower())
+                itemProject = owner
                 if item is None:
-                    # Another project of the same sample may still name it.
+                    # Another project of the same sample may still name it -- and the source is
+                    # then relative to *that* project's directory, not the owner's. Joining it to
+                    # the winner's left SAMPLE-031's two diagnostic fonts `no-source`, because the
+                    # root is won by the sample's own project and the fonts are named by the
+                    # reconstruction of its diagnostic runner
+                    # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-163`).
                     for other_path, items in roots[output_root].items():
                         if name.lower() in items:
                             item = items[name.lower()]
+                            itemProject = other_path
                             break
                 record = {
                     "reference": relative,
@@ -282,7 +311,8 @@ def main(argv=None):
                     mappings.append(record)
                     continue
                 source = ResolveIgnoringCase(
-                    os.path.join(projects[owner].directory, item.source.replace("/", os.sep)))
+                    os.path.join(projects[itemProject].directory,
+                                 item.source.replace("/", os.sep)))
                 # A project's `ProcessorParameters` reached the reference only where the sample's
                 # own runner passed them on. Most of these runners hand-list their assets and set
                 # none, so the reference carries the processor's defaults whatever the project
@@ -297,7 +327,9 @@ def main(argv=None):
                     parameters = overrides.get(posixpath.basename(item.source), {})
                     parameterSource = "runner:" + runner["kind"]
                 record.update({
-                    "project": project_reference(owner, root),
+                    # The project that *declares* the item, which is the owner except where a
+                    # second `BuildContent` call named it (`XNASWEEP-163`).
+                    "project": project_reference(itemProject, root),
                     "source": item.source,
                     "sourceRelative": os.path.relpath(source, root) if os.path.exists(source) else None,
                     "importer": item.get("Importer"),

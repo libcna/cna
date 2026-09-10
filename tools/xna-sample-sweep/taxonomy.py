@@ -104,6 +104,41 @@ def BlockCompressed(reference, root="/rv/tmp/samples"):
     return answer
 
 
+
+def NestedOwnerIsCustom(rows, reference):
+    """The asset a `*_N.xnb` is the side output of, when that asset needs a sample's own component.
+
+    A model's own generated textures are named `<the texture's stem>_<n>.xnb` and no project item
+    names them, so they arrive as `no-item`. Reading that as a corpus gap is wrong twice over: the
+    sweep *did* reach them, and the reason CNA produced none of them is usually visible right
+    beside them -- the model they belong to failed for a processor the sample defines.
+    `customComponentsOnly` asks whether *every* asset the unit failed on is custom, which is too
+    strong for a unit that also builds ordinary assets; this asks the narrower question about the
+    one asset that would have written this file (plans/plan_xna_sample_xnb_sweep.md
+    `XNASWEEP-206`).
+
+    @param rows The mapping, keyed by reference.
+    @param reference The reference's path.
+    @return `(asset name, component)` when the owner needs a sample-defined component, else None.
+    """
+    if re.match(r"^.*_\d+\.xnb$", reference) is None:
+        return None
+    # The file is named after the *texture* the model referenced, not after the model, so the owner
+    # cannot be recovered from the name. What can be asked is whether anything in the directory it
+    # was written into needs a component the sample defines: a model's side outputs land beside the
+    # model, and a directory holding a model no XNA assembly can build is a directory whose side
+    # outputs nobody here can write either.
+    directory = os.path.dirname(reference)
+    for path, row in rows.items():
+        if os.path.dirname(path) != directory or path == reference:
+            continue
+        for key, known in (("processor", BUILT_IN_PROCESSORS), ("importer", BUILT_IN_IMPORTERS)):
+            value = row.get(key) or ""
+            if value and value not in known:
+                return (row.get("assetName") or os.path.basename(path), value)
+    return None
+
+
 def WhyNothingWasBuilt(source):
     """The class and reason for a reference the sweep built nothing for."""
     if not source:
@@ -228,6 +263,12 @@ def main(argv=None):
                 elif extension == ".xml":
                     assign(reference, "CUSTOM_PIPELINE_GAP",
                            "the document names a type the game's own assembly defines")
+                elif (source.get("status") == "no-item" and
+                      NestedOwnerIsCustom(rows, reference)):
+                    owner = NestedOwnerIsCustom(rows, reference)
+                    assign(reference, "CUSTOM_PIPELINE_GAP",
+                           "it is the side output of '%s', whose processor '%s' no XNA assembly "
+                           "defines" % (owner[0], owner[1]))
                 elif (source.get("status") == "no-item" and customComponentsOnly(unit)):
                     assign(reference, "CUSTOM_PIPELINE_GAP",
                            "no item names it, and every asset this unit failed on failed for a "

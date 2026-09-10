@@ -126,7 +126,13 @@ def reconstruct_project(project, runner, staged):
 
 def build_one(job):
     unit, root, tool, outdir, timeout, provenance, staging = job
-    output = os.path.join(outdir, slug(unit["outputRoot"]))
+    # A root written by more than one `BuildContent` call gets one output directory per call, and
+    # each compares only the references its own project names -- otherwise the second pass wipes
+    # the first's output and reports the whole root missing
+    # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-163`).
+    output = os.path.join(outdir, slug(unit["outputRoot"]) +
+                          ("__" + slug(os.path.basename(unit["project"])) if unit.get("secondPass")
+                           else ""))
     shutil.rmtree(output, ignore_errors=True)
     os.makedirs(output, exist_ok=True)
     project = os.path.join(root, unit["project"])
@@ -283,6 +289,9 @@ def main(argv=None):
         for unit in units:
             if mapping["reference"].startswith(unit["outputRoot"] + "/"):
                 by_root.setdefault(unit["outputRoot"], []).append(mapping)
+                if unit.get("secondPass") and mapping.get("project") == unit["project"]:
+                    by_root.setdefault(unit["outputRoot"] + "\x00" + unit["project"],
+                                       []).append(mapping)
                 break
 
     provenance = {}
@@ -296,7 +305,9 @@ def main(argv=None):
             for unit in units]
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as pool:
         for unit, build in zip(units, pool.map(build_one, jobs)):
-            rows = compare_unit(unit, root, build, by_root.get(unit["outputRoot"], []))
+            key = (unit["outputRoot"] + "\x00" + unit["project"]) if unit.get("secondPass") \
+                else unit["outputRoot"]
+            rows = compare_unit(unit, root, build, by_root.get(key, []))
             counts = {}
             for row in rows:
                 counts[row["result"]] = counts.get(row["result"], 0) + 1
