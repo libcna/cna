@@ -428,6 +428,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
 - **Model name lookups expose XNA collection failures** (`SOFTWARE-254`) — missing bones/meshes
   throw `KeyNotFoundException`; empty lookup names throw `ArgumentNullException` before changing
   the caller's out pointer, identically above Software and EasyGL.
+- **Classic `Model` failures retain XNA exception identity** (`SOFTWARE-295`) — undersized local or
+  absolute bone-transform arrays report `ArgumentOutOfRangeException` with the public array name,
+  and `Model.Draw` rejects an Effect without `IEffectMatrices` as `InvalidOperationException`.
 - **Effect integer indexers retain XNA's nullable object semantics** (`SOFTWARE-255`) — annotation,
   parameter, pass and technique collections return a stable object pointer for a valid index and
   null for either invalid direction. This intentionally follows recovered Microsoft XNA over
