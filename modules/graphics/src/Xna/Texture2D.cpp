@@ -2284,7 +2284,7 @@ namespace Microsoft::Xna::Framework::Graphics
             || blockWidth * blockHeight > std::numeric_limits<std::size_t>::max() / bytesPerBlock)
         {
             throw System::FormatException(
-                "Texture2D::FromStream: DDS mip byte count overflows the host address space");
+                "Texture2D::DDSFromStreamEXT: DDS mip byte count overflows the host address space");
         }
         return blockWidth * blockHeight * bytesPerBlock;
     }
@@ -2299,7 +2299,7 @@ namespace Microsoft::Xna::Framework::Graphics
         if (len < 4 || buf[0] != 'D' || buf[1] != 'D' || buf[2] != 'S' || buf[3] != ' ')
             return false;
         if (len < 128)
-            throw System::FormatException("Texture2D::FromStream: truncated DDS header");
+            throw System::FormatException("Texture2D::DDSFromStreamEXT: truncated DDS header");
 
         // DDS_HEADER fields (all little-endian uint32)
         auto r32 = [&](std::size_t off) -> uint32_t {
@@ -2307,7 +2307,7 @@ namespace Microsoft::Xna::Framework::Graphics
         };
 
         if (r32(4) != 124u || r32(76) != 32u)
-            throw System::FormatException("Texture2D::FromStream: invalid DDS header size");
+            throw System::FormatException("Texture2D::DDSFromStreamEXT: invalid DDS header size");
 
         const uint32_t rawHeight = r32(12);
         const uint32_t rawWidth = r32(16);
@@ -2315,14 +2315,14 @@ namespace Microsoft::Xna::Framework::Graphics
             || rawWidth > static_cast<uint32_t>(std::numeric_limits<int>::max())
             || rawHeight > static_cast<uint32_t>(std::numeric_limits<int>::max()))
         {
-            throw System::FormatException("Texture2D::FromStream: invalid DDS dimensions");
+            throw System::FormatException("Texture2D::DDSFromStreamEXT: invalid DDS dimensions");
         }
         const int width = static_cast<int>(rawWidth);
         const int height = static_cast<int>(rawHeight);
         if (width > maximumTextureDimension || height > maximumTextureDimension)
         {
             throw System::NotSupportedException(
-                "Texture2D::FromStream: DDS dimensions exceed this device's maximum texture "
+                "Texture2D::DDSFromStreamEXT: DDS dimensions exceed this device's maximum texture "
                 "dimension of " + std::to_string(maximumTextureDimension));
         }
 
@@ -2332,7 +2332,7 @@ namespace Microsoft::Xna::Framework::Graphics
         if (fourCC != 0x31545844u && fourCC != 0x33545844u && fourCC != 0x35545844u)
         {
             throw System::NotSupportedException(
-                "Texture2D::FromStream: unsupported DDS pixel format "
+                "Texture2D::DDSFromStreamEXT: unsupported DDS pixel format "
                 "(only DXT1/DXT3/DXT5 are supported)");
         }
 
@@ -2348,7 +2348,7 @@ namespace Microsoft::Xna::Framework::Graphics
         if (declaredMipCount > static_cast<uint32_t>(maximumLevels))
         {
             throw System::FormatException(
-                "Texture2D::FromStream: DDS declares more mip levels than its dimensions allow");
+                "Texture2D::DDSFromStreamEXT: DDS declares more mip levels than its dimensions allow");
         }
         const int mipCount = declaredMipCount == 0u ? 1 : static_cast<int>(declaredMipCount);
         // Texture2D's XNA-compatible public allocation is either level zero or a complete chain.
@@ -2357,7 +2357,7 @@ namespace Microsoft::Xna::Framework::Graphics
         if (mipCount != 1 && mipCount != maximumLevels)
         {
             throw System::FormatException(
-                "Texture2D::FromStream: DDS mip chain is incomplete; expected level zero only or "
+                "Texture2D::DDSFromStreamEXT: DDS mip chain is incomplete; expected level zero only or "
                 "the complete chain");
         }
 
@@ -2377,7 +2377,7 @@ namespace Microsoft::Xna::Framework::Graphics
             if (offset > len || levelBytes > len - offset)
             {
                 throw System::FormatException(
-                    "Texture2D::FromStream: truncated DDS mip level " + std::to_string(level));
+                    "Texture2D::DDSFromStreamEXT: truncated DDS mip level " + std::to_string(level));
             }
 
             const uint8_t* levelData = buf + offset;
@@ -2402,12 +2402,11 @@ namespace Microsoft::Xna::Framework::Graphics
         return true;
     }
 
-    // Reads the entire stream and decodes it into RGBA8 pixel data — DDS/DXT1/3/5 via
-    // DxtUtil, everything else through ImageLoader (see docs/texture-stream-formats.md for
-    // the formats verified by CI).
+    // Reads the entire stream and routes either an explicitly requested DDS through DxtUtil or a
+    // classic FromStream image through ImageLoader (see docs/texture-stream-formats.md).
     static DecodedTexture2D DecodeStreamToImageData(
         System::IO::Stream& stream, int maximumTextureDimension,
-        const GraphicsDevice* device, bool allowCompressed)
+        const GraphicsDevice* device, bool decodeDds, bool allowCompressed)
     {
         using System::IO::intcs;
         using System::IO::bytecs;
@@ -2450,8 +2449,16 @@ namespace Microsoft::Xna::Framework::Graphics
         const auto* raw = reinterpret_cast<const uint8_t*>(buf.data());
 
         DecodedTexture2D decoded;
-        if (!TryDecodeDds(raw, static_cast<std::size_t>(len), maximumTextureDimension,
-                          device, allowCompressed, decoded))
+        if (decodeDds)
+        {
+            if (!TryDecodeDds(raw, static_cast<std::size_t>(len), maximumTextureDimension,
+                              device, allowCompressed, decoded))
+            {
+                throw System::NotSupportedException(
+                    "Texture2D::DDSFromStreamEXT: the stream does not contain DDS data");
+            }
+        }
+        else
         {
             ImageData image;
             try
@@ -2579,7 +2586,8 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         ValidateImageStream(stream);
         DecodedTexture2D decoded = DecodeStreamToImageData(
-            stream, graphicsDevice.GetMaxTextureDimension(), &graphicsDevice, /*allowCompressed=*/true);
+            stream, graphicsDevice.GetMaxTextureDimension(), &graphicsDevice,
+            /*decodeDds=*/false, /*allowCompressed=*/false);
         if (decoded.compressed)
             return MakeCompressedTextureFromMipBlocks(
                 graphicsDevice, decoded.width, decoded.height, decoded.compressedFormat,
@@ -2601,7 +2609,42 @@ namespace Microsoft::Xna::Framework::Graphics
 
         // The resize overload must resample RGBA pixels, so it never keeps compressed blocks.
         DecodedTexture2D decoded = DecodeStreamToImageData(
-            stream, graphicsDevice.GetMaxTextureDimension(), &graphicsDevice, /*allowCompressed=*/false);
+            stream, graphicsDevice.GetMaxTextureDimension(), &graphicsDevice,
+            /*decodeDds=*/false, /*allowCompressed=*/false);
+        const std::vector<uint8_t>& levelZero = decoded.rgbaLevels.front();
+        ImageData resized = ImageLoader::ResizeRgba(
+            levelZero.data(), decoded.width, decoded.height, width, height, zoom);
+        return MakeTextureFromPixels(
+            graphicsDevice, resized.width, resized.height, std::move(resized.pixels));
+    }
+
+    Texture2D Texture2D::DDSFromStreamEXT(
+        GraphicsDevice& graphicsDevice, System::IO::Stream& stream)
+    {
+        ValidateImageStream(stream);
+        DecodedTexture2D decoded = DecodeStreamToImageData(
+            stream, graphicsDevice.GetMaxTextureDimension(), &graphicsDevice,
+            /*decodeDds=*/true, /*allowCompressed=*/true);
+        if (decoded.compressed)
+        {
+            return MakeCompressedTextureFromMipBlocks(
+                graphicsDevice, decoded.width, decoded.height, decoded.compressedFormat,
+                std::move(decoded.rgbaLevels));
+        }
+        return MakeTextureFromMipPixels(
+            graphicsDevice, decoded.width, decoded.height, std::move(decoded.rgbaLevels));
+    }
+
+    Texture2D Texture2D::DDSFromStreamEXT(
+        GraphicsDevice& graphicsDevice, System::IO::Stream& stream,
+        int width, int height, bool zoom)
+    {
+        ValidateImageStream(stream);
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(width, "width");
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(height, "height");
+        DecodedTexture2D decoded = DecodeStreamToImageData(
+            stream, graphicsDevice.GetMaxTextureDimension(), &graphicsDevice,
+            /*decodeDds=*/true, /*allowCompressed=*/false);
         const std::vector<uint8_t>& levelZero = decoded.rgbaLevels.front();
         ImageData resized = ImageLoader::ResizeRgba(
             levelZero.data(), decoded.width, decoded.height, width, height, zoom);

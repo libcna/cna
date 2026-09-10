@@ -517,6 +517,33 @@ namespace Microsoft::Xna::Framework::Graphics
                                     int width, int height, bool zoom);
 
         /**
+         * @brief Creates a Texture2D by decoding a DXT-compressed DDS stream.
+         *
+         * This explicit extension preserves DDS loading without changing the classic XNA
+         * `FromStream` image-format contract.
+         *
+         * @param graphicsDevice The device to create the texture on.
+         * @param stream The input stream containing DDS data.
+         * @return The decoded Texture2D, retaining compressed storage when supported.
+         */
+        CNAEXT static Texture2D DDSFromStreamEXT(
+            GraphicsDevice& graphicsDevice, System::IO::Stream& stream);
+
+        /**
+         * @brief Creates a resized or cropped Texture2D from a DXT-compressed DDS stream.
+         *
+         * @param graphicsDevice The device to create the texture on.
+         * @param stream The input stream containing DDS data.
+         * @param width Requested width in pixels.
+         * @param height Requested height in pixels.
+         * @param zoom False to fit while preserving aspect ratio; true to crop and fill.
+         * @return The decoded and resized Color texture.
+         */
+        CNAEXT static Texture2D DDSFromStreamEXT(
+            GraphicsDevice& graphicsDevice, System::IO::Stream& stream,
+            int width, int height, bool zoom);
+
+        /**
          * @brief Saves the texture as a PNG image to the given stream.
          * @param stream  Output stream to write the PNG data to.
          * @param width   Width to encode (should match the texture width).

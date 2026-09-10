@@ -1030,14 +1030,31 @@ CNA_Result cna_texture2d_create_from_encoded_memory(
         }
         System::IO::MemoryStream stream(
             encodedData, static_cast<int>(encodedByteCount), false);
-        Texture2D decoded = decodeInfo == nullptr
-            ? Texture2D::FromStream(*graphicsDevice->value, stream)
-            : Texture2D::FromStream(
-                *graphicsDevice->value,
-                stream,
-                static_cast<int>(decodeInfo->width),
-                static_cast<int>(decodeInfo->height),
-                decodeInfo->zoom == CNA_TRUE);
+        const bool isDds = encodedByteCount >= 4U
+            && encodedData[0] == 'D' && encodedData[1] == 'D'
+            && encodedData[2] == 'S' && encodedData[3] == ' ';
+        Texture2D decoded = [&]() -> Texture2D
+        {
+            if (decodeInfo == nullptr)
+            {
+                return isDds
+                    ? Texture2D::DDSFromStreamEXT(*graphicsDevice->value, stream)
+                    : Texture2D::FromStream(*graphicsDevice->value, stream);
+            }
+            return isDds
+                ? Texture2D::DDSFromStreamEXT(
+                    *graphicsDevice->value,
+                    stream,
+                    static_cast<int>(decodeInfo->width),
+                    static_cast<int>(decodeInfo->height),
+                    decodeInfo->zoom == CNA_TRUE)
+                : Texture2D::FromStream(
+                    *graphicsDevice->value,
+                    stream,
+                    static_cast<int>(decodeInfo->width),
+                    static_cast<int>(decodeInfo->height),
+                    decodeInfo->zoom == CNA_TRUE);
+        }();
         return CreateOwnedTexture2D(
             std::make_shared<Texture2D>(std::move(decoded)),
             graphicsDevice->parentGame,

@@ -1,20 +1,25 @@
-# Texture2D::FromStream — Supported Encoded Formats
+# Texture2D stream decoding — Supported Encoded Formats
 
-> Verified for Task 262 (Phase 32). Covers `Texture2D::FromStream` (both overloads).
+> Covers classic `Texture2D::FromStream` and the explicit `DDSFromStreamEXT` extension.
 
 ---
 
 ## How format detection works
 
-`Texture2D::FromStream` first checks for a DDS header (`"DDS "` magic + valid `DDS_HEADER`)
-via an internal parser (`TryDecodeDds` in `Texture2D.cpp`) that recognizes the
-`DXT1`/`DXT3`/`DXT5` FourCC codes and decodes each declared mip level itself via `DxtUtil`.
-Once DDS magic is present, malformed headers, unsupported FourCCs, incomplete chains and
-truncated per-level payloads raise a DDS-specific exception; they no longer fall through to an
-unrelated image decoder. Non-DDS streams use
+Classic `Texture2D::FromStream` uses
 `CNA::Internal::Graphics::ImageLoader::LoadFromMemory`, backed by the repository's pinned
 `stb_image` 2.30 decoder. It sniffs the container from bytes rather than trusting a file extension,
-and always returns packed RGBA8 to the rest of graphics.
+and always returns packed RGBA8 to the rest of graphics. `SOFTWARE-306` removed CNA's former silent
+DDS auto-detection from this classic method: an isolated Microsoft XNA 4.0 oracle rejects a valid
+DXT1 DDS with `InvalidOperationException` in both overloads, and FNA likewise keeps DDS outside its
+ordinary image path.
+
+The explicit `CNAEXT Texture2D::DDSFromStreamEXT` entry points check for a DDS header (`"DDS "`
+magic plus a valid `DDS_HEADER`) through `TryDecodeDds`. They recognize DXT1/DXT3/DXT5 and decode
+each declared mip level through `DxtUtil`, or retain native blocks when the renderer advertises that
+path. Once DDS magic is present, malformed headers, unsupported FourCCs, incomplete chains and
+truncated per-level payloads raise DDS-specific exceptions rather than falling through to the
+ordinary image decoder.
 
 This backend is compiled into `cna_graphics_core`; it has no host codec packages and neither SDL3
 nor SDL3_image participates in image loading. The selected decoder understands PNG, JPEG, BMP,
@@ -28,24 +33,25 @@ formats merely supported by the vendored decoder.
 | PNG | Vendored `stb_image` | ✅ | Round-tripped via `Texture2D::SaveAsPng` → `FromStream`; lossless, exact pixel match. |
 | JPEG | Vendored `stb_image` | ✅ | Round-tripped via `Texture2D::SaveAsJpeg` → `FromStream`; lossy, verified within tolerance. |
 | BMP | Vendored `stb_image` | ✅ | Verified via a hand-built minimal 24bpp uncompressed BMP; exact pixel match. |
-| DDS (DXT1/DXT3/DXT5) | CNA-internal `TryDecodeDds` + `DxtUtil` (bypasses `ImageLoader`) | ✅ | `Skia_Texture2D_ContentMips` verifies all three codecs across an exact four-level 8×8 chain, plus single-level and malformed/truncated cases (SKIA-130). Decoded storage is canonical RGBA8 `SurfaceFormat::Color`. |
+| DDS (DXT1/DXT3/DXT5) | `DDSFromStreamEXT` → CNA-internal `TryDecodeDds` + `DxtUtil` | ✅ | The explicit extension retains compressed blocks where supported and otherwise produces canonical RGBA8 `SurfaceFormat::Color`; its resize overload always returns Color. Classic `FromStream` deliberately rejects the same payload. |
 
 DDS and XNB Texture2D content may declare either level zero only or the complete floor-halved
 chain through 1×1. A partial prefix is rejected: allocating CNA/XNA's complete mip resource and
-generating the absent suffix would silently invent asset content. The resize/crop `FromStream`
-overload intentionally transforms level zero and returns a single-level output texture.
+generating the absent suffix would silently invent asset content. The resize/crop
+`DDSFromStreamEXT` overload intentionally transforms level zero and returns a single-level output
+texture.
 
 ## Decoder-supported but not verified by CNA tests
 
 GIF, TGA, PSD, HDR, PIC and PNM are enabled in the vendored decoder but are not covered by CNA's
 round-trip suite. AVIF, TIFF and WebP are not supported by this deliberately dependency-free
-backend. FNA/XNA conventionally documents PNG/JPG/BMP/GIF/TGA/DDS; callers that require an
+backend. Callers that require an
 unverified format should add a fixture before treating it as a compatibility guarantee.
 
-## `FromStream(GraphicsDevice&, Stream&, int width, int height, bool zoom)`
+## Resize/crop overloads
 
-Added in Task 262 (previously missing — see `AUDIT.md` "Texture2D detailed audit"). Mirrors
-FNA3D's native `FNA3D_Image_Load` resize/crop logic:
+Classic `FromStream(GraphicsDevice&, Stream&, int width, int height, bool zoom)` and CNA's explicit
+DDS counterpart share the established resize/crop logic:
 
 - **`zoom = false`** (fit): the decoded image is scaled down so it fits inside a
   `width x height` box while preserving aspect ratio. The scale factor is chosen from
@@ -68,5 +74,5 @@ and then `height` before it reads encoded data. Zero and negative values throw
 `ArgumentOutOfRangeException` naming the corresponding parameter; `width` wins when both are
 invalid. For either public overload, empty or otherwise undecodable non-DDS image data throws
 `InvalidOperationException`. `SOFTWARE-304` pins those types and the remaining validation order on
-both Software and EasyGL. DDS-specific parser diagnostics remain CNA's documented extension rather
-than being collapsed into the generic image-decode failure.
+both Software and EasyGL. DDS-specific parser diagnostics belong only to `DDSFromStreamEXT`; the
+classic method reports DDS as the same `InvalidOperationException` used for other undecodable data.

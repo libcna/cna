@@ -329,6 +329,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
 - **`Texture2D.FromStream` requires a seekable stream like Microsoft XNA** (`SOFTWARE-305`). Both
   overloads reject `CanSeek == false` with `ArgumentException("stream")` before querying any other
   stream property or data, including before resize-dimension validation.
+- **Classic `Texture2D.FromStream` does not silently absorb DDS** (`SOFTWARE-306`). Microsoft XNA
+  and FNA's classic image path reject DDS; CNA retains DXT1/3/5 loading through the explicitly
+  marked `DDSFromStreamEXT` extension instead of changing the classic method's format contract.
 - **Resolved render targets can be saved through the classic image APIs** (`SOFTWARE-298`).
   `SaveAsPng` and `SaveAsJpeg` obtain live level-zero Color pixels through renderer readback rather
   than requiring an upload shadow that rendered targets deliberately do not own.

@@ -1354,7 +1354,7 @@ namespace CNA::Internal::Renderers::WebGPU
         /**
          * @brief WEBGPU-144 Phase 2: WebGPU keeps loaded block-compressed content compressed.
          *
-         * The `Texture2D::FromStream` (DDS) and `.xnb` content loaders keep the raw DXT/BC blocks
+         * `Texture2D::DDSFromStreamEXT` and `.xnb` content loaders keep the raw DXT/BC blocks
          * and upload them to a `WGPUTextureFormat_BC*` instead of CPU-decompressing to `Color`. The
          * actual per-format capability (and the `bcSupported_` device-feature gate) is still enforced
          * by @ref IsCompressedTransferFormatEXT, which the loaders AND with this flag.

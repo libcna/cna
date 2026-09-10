@@ -2309,7 +2309,7 @@ namespace CNA::Internal::Renderers
         /**
          * @brief Whether the content loaders should keep block-compressed content compressed.
          *
-         * WEBGPU-144 Phase 2 / XNB-24: `Texture2D::FromStream` (DDS) and the `.xnb` Texture2D reader
+         * WEBGPU-144 Phase 2 / XNB-24: `Texture2D::DDSFromStreamEXT` and the `.xnb` Texture2D reader
          * force-decode DXT/BC to `Color` by default. A renderer that both stores compressed textures
          * natively and prefers to receive loaded content that way returns true here; the loaders
          * then keep the raw blocks and upload them through the compressed `SetData` path (guarded, in

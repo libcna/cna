@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 682: Verify Texture2D::FromStream (PNG/JPG/BMP/DDS) round-trip renders correctly
+// Task 682: Verify Texture2D::FromStream (PNG/JPG/BMP) round-trip renders correctly
 // when drawn via SDL_Renderer.
 //
 // The existing renderer-agnostic Texture2DTests.cpp (Task 262) already thoroughly verifies
@@ -10,8 +10,8 @@
 //
 // The genuinely renderer-specific question here: does the REAL GPU texture SDL_Renderer
 // creates from a FromStream-decoded image actually render the right pixels. Tracing the
-// code: Texture2D::FromStream -> DecodeStreamToImageData (DDS via DxtUtil, everything else
-// via the shared, renderer-agnostic ImageLoader::LoadFromMemory, built on vendored stb --
+// code: Texture2D::FromStream -> DecodeStreamToImageData -> the shared, renderer-agnostic
+// ImageLoader::LoadFromMemory, built on vendored stb --
 // independent of which CNA_GRAPHICS_RENDERER is active) -> MakeTextureFromPixels, which calls
 // `device.GetRenderer().CreateTexture(img)` -- the EXACT SAME call site already used by
 // Texture2D::SetData's full-array overload, which Task 678 already proved renders correctly

@@ -68,7 +68,7 @@ this row's original "will not compile at all" claim is stale.**
 |---|---|
 | 2D SpriteBatch — all overloads, sort modes, scissor, blend | ✅ |
 | SpriteFont DrawString / MeasureString | ✅ |
-| Texture2D — SetData/GetData, DXT1/3/5 FromStream | ✅ |
+| Texture2D — SetData/GetData, DXT1/3/5 `DDSFromStreamEXT` | ✅ |
 | Texture3D / TextureCube SetData/GetData | ✅ |
 | RenderTarget2D / RenderTargetCube / MRT | ✅ |
 | BasicEffect (MVP, lighting, vertex color, texture, fog) | ✅ |

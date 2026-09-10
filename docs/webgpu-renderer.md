@@ -646,7 +646,7 @@ bytes, and the renderer keeps the per-mip blocks as the authoritative `GetData` 
 `WebGPU_CompressedTexture` proves a DXT1 and a DXT5 texture sample correctly and round-trip their exact
 block bytes. Reachable via the direct `Texture2D(device, w, h, mipMap, SurfaceFormat::Dxt*)` +
 `SetData(blockBytes, count)` API **and now via the content loaders too** (Phase 2, XNB-24):
-`Texture2D::FromStream` (DDS) and the `.xnb` `Texture2DReader` keep DXT content compressed and upload
+`Texture2D::DDSFromStreamEXT` and the `.xnb` `Texture2DReader` keep DXT content compressed and upload
 the raw blocks instead of CPU-decoding to Color. Both loaders gate on a new renderer-opt-in capability
 `LoadsCompressedContentNativelyEXT()` (default false; WebGPU-only, so Skia and every other renderer
 keep their existing decode-to-Color loaders) AND the per-format `IsCompressedTransferFormatEXT`, so a

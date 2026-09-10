@@ -2,7 +2,7 @@
 // WEBGPU-144 Phase 2 (XNB-24): the content loaders reach the GPU-native block-compressed path.
 // Phase 1 proved a Texture2D built directly with a Dxt* format + SetData(blocks) uploads to a
 // WGPUTextureFormat_BC*. This test proves the two CONTENT loaders now do the same instead of
-// force-decoding DXT to Color: Texture2D::FromStream (DDS) and the .xnb Texture2DReader.
+// force-decoding DXT to Color: Texture2D::DDSFromStreamEXT and the .xnb Texture2DReader.
 //
 // WebGPU opts in via LoadsCompressedContentNativelyEXT(); the actual per-format capability (and the
 // bcSupported_ device gate) is IsCompressedTransferFormatEXT. The test asserts the CONTRACT rather
@@ -10,7 +10,7 @@
 // reports it can transfer that format as blocks, and decodes to Color otherwise -- so it is correct
 // on an adapter with or without BC support, while still proving the gate is wired.
 //
-// Check A -- FromStream(DDS DXT1, 8x8, 4 mips): Format() == Dxt1 (native) or Color (fallback),
+// Check A -- DDSFromStreamEXT(DXT1, 8x8, 4 mips): Format() == Dxt1 (native) or Color (fallback),
 //   matching the capability; the 4-level chain is preserved either way.
 // Check B -- that same texture renders its level-0 red through SpriteBatch (proves the native BC
 //   upload actually samples correctly end-to-end via FromStream, not just that a format was set).
@@ -189,7 +189,7 @@ protected:
         sb_ = std::make_unique<SpriteBatch>(getGraphicsDeviceProperty());
         auto dds = BuildDds(0x31545844u, 4);
         VectorStream stream(dds);
-        ddsTex_ = Texture2D::FromStream(getGraphicsDeviceProperty(), stream);
+        ddsTex_ = Texture2D::DDSFromStreamEXT(getGraphicsDeviceProperty(), stream);
     }
 
     void Draw(const GameTime&) override
@@ -205,12 +205,12 @@ protected:
         const bool nativeDxt5 = renderer.LoadsCompressedContentNativelyEXT()
             && renderer.IsCompressedTransferFormatEXT(static_cast<int>(SurfaceFormat::Dxt5));
 
-        // Check A: FromStream DDS DXT1 keeps its compressed format iff the renderer can transfer it.
+        // Check A: DDSFromStreamEXT keeps DXT1 compressed iff the renderer can transfer it.
         const SurfaceFormat expectedDds = nativeDxt1 ? SurfaceFormat::Dxt1 : SurfaceFormat::Color;
         check(ddsTex_.getFormatProperty() == expectedDds && ddsTex_.getLevelCountProperty() == 4,
               nativeDxt1
-                  ? "FromStream DDS DXT1 keeps native Dxt1 storage with its 4-level chain"
-                  : "FromStream DDS DXT1 decodes to Color (renderer reports no BC transfer)");
+                  ? "DDSFromStreamEXT keeps native Dxt1 storage with its 4-level chain"
+                  : "DDSFromStreamEXT decodes to Color (renderer reports no BC transfer)");
 
         // Check B: the loaded texture renders red -- native BC upload samples correctly via FromStream.
         dev.Clear(Color(0, 0, 0, 255));

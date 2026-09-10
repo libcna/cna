@@ -248,6 +248,32 @@ namespace
         return result;
     }
 
+    std::vector<std::uint8_t> SolidRedDxt1Dds()
+    {
+        std::vector<std::uint8_t> result(136u, 0u);
+        const auto put32 = [&result](std::size_t offset, std::uint32_t value)
+        {
+            result[offset] = static_cast<std::uint8_t>(value);
+            result[offset + 1u] = static_cast<std::uint8_t>(value >> 8u);
+            result[offset + 2u] = static_cast<std::uint8_t>(value >> 16u);
+            result[offset + 3u] = static_cast<std::uint8_t>(value >> 24u);
+        };
+        result[0] = 'D'; result[1] = 'D'; result[2] = 'S'; result[3] = ' ';
+        put32(4u, 124u);
+        put32(8u, 0x00081007u);
+        put32(12u, 4u);
+        put32(16u, 4u);
+        put32(20u, 8u);
+        put32(28u, 1u);
+        put32(76u, 32u);
+        put32(80u, 4u);
+        result[84] = 'D'; result[85] = 'X'; result[86] = 'T'; result[87] = '1';
+        put32(108u, 0x1000u);
+        result[128] = 0x00u; result[129] = 0xF8u;
+        result[130] = 0x00u; result[131] = 0xF8u;
+        return result;
+    }
+
     void ExpectDxtTransferContract(GraphicsDevice& device, SurfaceFormat format)
     {
         const int blockBytes = format == SurfaceFormat::Dxt1 ? 8 : 16;
@@ -1859,6 +1885,45 @@ TEST_F(Texture2DFromStreamFormatTest, BmpDecodesCorrectSizeAndColor)
     loaded.GetData(px.data(), 0, 4);
     for (int i = 0; i < 4; ++i)
         EXPECT_TRUE(IsCloseTo(px[i], 0, 0, 255, 0)) << "pixel " << i; // BMP is uncompressed
+}
+
+TEST_F(Texture2DFromStreamFormatTest, DdsIsRejectedLikeMicrosoftXna)
+{
+    const std::vector<std::uint8_t> dds = SolidRedDxt1Dds();
+
+    MemoryStream plain(dds.data(), static_cast<System::IO::intcs>(dds.size()));
+    ExpectExactException<System::InvalidOperationException>(
+        [&] { (void) Texture2D::FromStream(gd, plain); });
+
+    MemoryStream resized(dds.data(), static_cast<System::IO::intcs>(dds.size()));
+    ExpectExactException<System::InvalidOperationException>(
+        [&] { (void) Texture2D::FromStream(gd, resized, 8, 8, false); });
+}
+
+TEST_F(Texture2DFromStreamFormatTest, DdsRemainsAvailableOnlyThroughNamedExtension)
+{
+    const std::vector<std::uint8_t> dds = SolidRedDxt1Dds();
+
+    MemoryStream nativeStream(dds.data(), static_cast<System::IO::intcs>(dds.size()));
+    Texture2D native = Texture2D::DDSFromStreamEXT(gd, nativeStream);
+    EXPECT_EQ(native.getWidthProperty(), 4);
+    EXPECT_EQ(native.getHeightProperty(), 4);
+    EXPECT_EQ(native.getFormatProperty(), SurfaceFormat::Dxt1);
+    std::array<std::uint8_t, 8> block{};
+    native.GetData(block.data(), static_cast<int>(block.size()));
+    EXPECT_TRUE(std::equal(block.begin(), block.end(), dds.begin() + 128));
+
+    MemoryStream resizedStream(dds.data(), static_cast<System::IO::intcs>(dds.size()));
+    Texture2D resized = Texture2D::DDSFromStreamEXT(gd, resizedStream, 8, 8, false);
+    EXPECT_EQ(resized.getWidthProperty(), 8);
+    EXPECT_EQ(resized.getHeightProperty(), 8);
+    EXPECT_EQ(resized.getFormatProperty(), SurfaceFormat::Color);
+    std::array<Color, 64> pixels{};
+    resized.GetData(pixels.data(), static_cast<int>(pixels.size()));
+    EXPECT_TRUE(std::all_of(pixels.begin(), pixels.end(), [](const Color& pixel)
+    {
+        return pixel == Color::Red;
+    }));
 }
 
 TEST_F(Texture2DFromStreamFormatTest, DecodesFromTheCurrentStreamPosition)
