@@ -399,17 +399,19 @@ could read, none. Its two references were the floor of that class until
 which file the run that produced them selected; a build-unit description now says
 so and they are built.
 
-### 11.2 The sweep, run 52 (2026-09-10)
+### 11.2 The sweep, run 53 (2026-09-10)
 
-Printed by `python3 tools/xna-sample-sweep/status_table.py run42 run47 run51 run52`;
+Printed by `python3 tools/xna-sample-sweep/status_table.py run42 run47 run52 run53`;
 nothing below is typed. Run 42 is the last run of the previous session, 47 the
-first of this one, 51 the state before the last rule and 52 the current one.
+first of this one, 52 the last full sweep and 53 that sweep with SAMPLE-141
+rebuilt for `XNASWEEP-221` -- the one source in the corpus that rule touches, so
+the two runs differ by exactly the two references it names and nothing else.
 
-| | run42 | run47 | run51 | run52 |
+| | run42 | run47 | run52 | run53 |
 |---|---:|---:|---:|---:|
-| byte-identical | 4192 | 4245 | 4307 | **4321** |
-| differing | 1632 | 1645 | 1591 | **1578** |
-| missing (CNA produced nothing) | 1871 | 1815 | 1807 | **1806** |
+| byte-identical | 4192 | 4245 | 4321 | **4323** |
+| differing | 1632 | 1645 | 1578 | **1576** |
+| missing (CNA produced nothing) | 1871 | 1815 | 1806 | **1806** |
 | build units that finished | 168 | 260 | 260 | **260** |
 
 Run 47 is worth keeping for one reason: it looks like a regression and is not.
@@ -522,16 +524,16 @@ ship, so four units failed to build. `XNASWEEP-175` is what finally explained it
 
 `taxonomy.py` puts all 7,726 into one class each, with the reason beside it.
 
-| class | run42 | run47 | run51 | run52 | what it means |
+| class | run42 | run47 | run52 | run53 | what it means |
 |---|---:|---:|---:|---:|---|
-| `IDENTICAL` | 4192 | 4245 | 4307 | **4321** | CNA's build is the reference, byte for byte. |
-| `SEMANTICALLY_IDENTICAL` | 761 | 742 | 748 | **751** | Everything a runtime reads is equal; the LZX stream, or a float's last bits, is not. |
+| `IDENTICAL` | 4192 | 4245 | 4321 | **4323** | CNA's build is the reference, byte for byte. |
+| `SEMANTICALLY_IDENTICAL` | 761 | 742 | 751 | **751** | Everything a runtime reads is equal; the LZX stream, or a float's last bits, is not. |
 | `ACCEPTED_DIFFERENCE` | 851 | 808 | 815 | **815** | Measured, understood, not closable from here -- and every one now *proved* by its own reason (`XNASWEEP-215`). |
 | `CUSTOM_PIPELINE_GAP` | 1763 | 1797 | 1797 | **1797** | The asset needs a component the *sample* defines, in a .NET assembly C++ cannot load. |
 | `ENVIRONMENT_GAP` | 15 | 15 | 9 | **9** | This machine's, not CNA's: effects the June-2010 fxc refuses and fonts Windows has and this machine has not. |
 | `CORPUS_GAP` | 103 | 0 | 0 | **0** | The reference is in the corpus and the sweep has no way to build it. Closed by `XNASWEEP-163`. |
 | `REFERENCE_REMOVED` | 21 | 21 | 21 | **21** | The frozen reference is no longer in the read-only tree; §11.4.3 accounts for all 21. |
-| `UNEXPLAINED` | 20 | 98 | 29 | **12** | Everything else. |
+| `UNEXPLAINED` | 20 | 98 | 12 | **10** | Everything else. |
 | **total** | 7726 | 7726 | 7726 | **7726** | |
 
 **The accepted differences, and what proves each of them.**
@@ -555,37 +557,45 @@ target rather than only its audio.
 
 ### 11.3.1 What is still unexplained
 
-**Twelve references, four mechanisms, every one owned by a row with a
-measurement under it.** There is no unexplained reference outside `.fbx`, `.x`,
-one `.dds` and one `.bmp`.
+**Ten references, three mechanisms, every one owned by a row with a measurement
+under it.** There is no unexplained reference outside `.fbx`, `.x` and one
+`.dds`.
 
 | count | what differs, measured | row |
 |---:|---|---|
 | 6 | RobotGame's mech skeletons: `root/bones[]/transform[]` and nothing else, worst **3.34e-06** of the larger magnitude -- above the 1e-6 the float tolerance accepts and far below anything a wrong formula gives. Two of the six also disagree about a mesh part's vertex buffer, which follows the bone. | `XNASWEEP-213` |
 | 2 | SAMPLE-141's `xwing.xnb`: `NORMAL0` and nothing else, worst **1.25e-05** (0.00073 of a degree). The index buffer is byte-identical and every position is, so both sides keep the same triangles and sum the same faces in a different order. | `XNASWEEP-199` |
-| 2 | SAMPLE-073's `Stripe2.dds`: the **alpha** channel of every level of the file's own chain, one lower, 350 texels at level 0 and falling with the level. A DXT5 decoder's interpolation, with the processor touching alpha not at all. | `XNASWEEP-220` |
-| 2 | SAMPLE-141's `riemerstexture.bmp`: a fifth of the image, all three colour channels, deltas spread rather than clustered, the first differing texel white against black. A decode disagreement, not a tolerance. | `XNASWEEP-221` |
+| 2 | SAMPLE-073's `Stripe2.dds`: the **alpha** channel of every level of the file's own chain, one lower. CNA truncates the DXT5 interpolation where the genuine decoder rounds, and the residue after that is a **+/-1 dither** whose frequency depends on the texel's position in a 4x4 cell. A 1,024-block probe and the genuine pipeline's answer to it are committed. | `XNASWEEP-220` |
 
-Field-level differences inside those twelve: **14,401**, of 224,539 over every
-differing reference in the corpus. The number is large because six of the twelve
+Field-level differences inside those ten: **14,264**, of 224,401 over every
+differing reference in the corpus. The number is large because six of the ten
 are skeletons with hundreds of bones each, not because the disagreement is.
 
-**What this session's rules did.** `XNASWEEP-201` (the effect container's header
-describes the effect's samplers, not its shaders' registers) closed the last
-component of the `.fx` accepted difference on 31 measured effects.
-`XNASWEEP-218` (a PNG's `gAMA` reaches GDI+ only when the image carries an alpha
-channel) took 14 references to byte-identical and was confirmed on two files
-built for it. Everything else this session found was the *harness* measuring
-something other than what it claimed: a stale manifest that silently un-fixed two
-landed rules (`XNASWEEP-208`), a mapper that scored the asset's name instead of
-the series above it (`XNASWEEP-209`), a buffer compared as a digest rather than
-as numbers (`XNASWEEP-210`), a runner's build root read as its first identifier
+**What this session's rules did.** Four rules landed, and each was measured
+against the genuine pipeline before any code changed:
+
+* `XNASWEEP-201` -- the effect container's header describes the effect's
+  *samplers*, not its shaders' registers. 31 effects, byte-identical headers.
+* `XNASWEEP-218` -- a PNG's `gAMA` reaches GDI+ only when the image carries an
+  alpha channel. 14 references to byte-identical, confirmed on two files built
+  for it.
+* `XNASWEEP-221` -- a bitmap whose pixels do not follow its header decodes from
+  the wrong place, in the vendored decoder rather than in CNA. 2 references, and
+  `spikes/bmp-offset-spike` attributes it.
+* `XNASWEEP-220` -- not a rule but the instrument for one: a purpose-built DXT5
+  probe that reads a decoder's whole alpha table in a single build.
+
+Everything else this session found was the *harness* measuring something other
+than what it claimed: a stale manifest that silently un-fixed two landed rules
+(`XNASWEEP-208`), a mapper that scored the asset's name instead of the series
+above it (`XNASWEEP-209`), a buffer compared as a digest rather than as numbers
+(`XNASWEEP-210`), a runner's build root read as its first identifier
 (`XNASWEEP-212`, `XNASWEEP-216`), two units racing on one staging directory
 (`XNASWEEP-217`), three tests racing on one scratch directory (`XNASWEEP-214`),
 an accepted reason that was about a different asset kind entirely
 (`XNASWEEP-215`), and a decoder reading a big-endian container little-endian
-(`XNASWEEP-219`). Seven of the nine were found by comparing a run against the one
-before it reference by reference rather than by reading its total.
+(`XNASWEEP-219`). Seven of the nine were found by comparing a run against the
+one before it reference by reference rather than by reading its total.
 
 ### 11.4 The read-only roots, re-audited 2026-09-10 (fifth pass)
 
@@ -748,11 +758,14 @@ needs first.
    the next probe is one vertex shared by faces in several material batches with
    the batch order varied.
 
-3. **`XNASWEEP-220` and `XNASWEEP-221`: one `.dds` and one `.bmp`.** Two
-   references each, and neither has had its decoder read yet. `220` is a DXT5
-   block with known endpoints through both decoders -- a fixture, not a corpus.
-   `221` is a `.bmp` header: bit depth, compression, palette, row order, read
-   before any code is touched, because a 21% disagreement is a shape difference.
+3. **`XNASWEEP-220`: `Stripe2.dds`.** Two references, and the instrument is
+   built: a 1,024-block probe and the genuine pipeline's answer to it are
+   committed, so the next step needs no Wine. What it needs deciding is whether
+   CNA should round rather than truncate -- it would take `Stripe2`'s level 0
+   from 368 differing alpha texels to 190 -- and whether the +/-1 positional
+   dither that remains is then an accepted difference. `XNASWEEP-221` closed the
+   `.bmp` beside it: reading the header first, as that row insisted, found the
+   defect in the vendored decoder rather than in CNA.
 
 4. **What the harness owes.** `accepted_audit.py` exits nonzero on an accepted
    reference its reason cannot account for, and it cannot be a ctest because it
