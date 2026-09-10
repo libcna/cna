@@ -123,8 +123,17 @@ protected:
                   "StencilBuffer agrees with the selected combined format");
             check(dev.SupportsCapability(CNA::GraphicsCapability::AnisotropicFiltering),
                   "AnisotropicFiltering is enabled by the default SDL GPU device contract");
+#if defined(CNA_SDL_GPU_SHADER_EFFECTS)
             check(dev.SupportsCapability(CNA::GraphicsCapability::CustomEffects),
-                  "CustomEffects is reported because ShaderEffect executes");
+                  "CustomEffects is reported because target-native ShaderEffect compilation is available");
+#else
+            check(!dev.SupportsCapability(CNA::GraphicsCapability::CustomEffects),
+                  "CustomEffects is refused without a target-native ShaderEffect compiler");
+            auto unavailableEffect = renderer.CreateEffectRenderer("void main() {}", "void main() {}");
+            check(!unavailableEffect->IsValid() &&
+                      unavailableEffect->GetCompileError().find("target-native") != std::string::npos,
+                  "unavailable ShaderEffect construction returns a precise diagnostic");
+#endif
             check(dev.SupportsCapability(CNA::GraphicsCapability::Texture3D),
                   "Texture3D is reported because storage and transfer are real");
             check(dev.SupportsCapability(CNA::GraphicsCapability::AdditiveBlending),

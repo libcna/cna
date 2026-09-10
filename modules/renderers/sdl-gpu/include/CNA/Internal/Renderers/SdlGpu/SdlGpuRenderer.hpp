@@ -2517,10 +2517,11 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         /**
          * @brief Creates a custom-`ShaderEffect` renderer (Phase `SDLGPU-10`, `SDLGPU-42`/`SDLGPU-43`),
-         * compiling @p vertSrc/@p fragSrc (GLSL source) to SPIR-V at runtime via `libshaderc`.
-         * Compilation failure is reported via the returned renderer's `IsValid()`/`GetCompileError()`
-         * (matches `VulkanRenderer`/`DirectX11Renderer`'s own convention), not an
-         * exception.
+         * compiling @p vertSrc/@p fragSrc (GLSL source) to SPIR-V at runtime when this build has
+         * a target-native `libshaderc` and a SPIR-V-capable SDL_gpu driver. An unavailable compiler
+         * or compilation failure is reported via the returned renderer's
+         * `IsValid()`/`GetCompileError()` (matching `VulkanRenderer`/`DirectX11Renderer`'s own
+         * convention), not an exception.
          */
         std::unique_ptr<IEffectRenderer> CreateEffectRenderer(const std::string& vertSrc,
                                                             const std::string& fragSrc) override;

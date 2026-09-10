@@ -39,8 +39,8 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
 | Item | Current evidence |
 |---|---|
 | Re-audit starting branch / commit | `sdlgpu` / `8cd9ab7f45a05bef3a727598c8d9ef5cf8b04442` |
-| Newly created tasks | 6 (`SDLGPU-91`–`SDLGPU-96`) |
-| Completed / open | 3 / 3 (`SDLGPU-91`–`93` complete; `SDLGPU-94`–`96` open) |
+| Newly created tasks | 7 (`SDLGPU-91`–`SDLGPU-97`) |
+| Completed / open | 4 / 3 (`SDLGPU-91`–`93` and `SDLGPU-97` complete; `SDLGPU-94`–`96` open) |
 | Proven runtime configuration | Linux/Vulkan only; the existing 188 integration, 33 EasyGL-oracle and 32 shared-source gates remain the behavioral baseline; the portability work's focused SDL GPU unit slice is now 47/47 |
 | Available local cross tools | MinGW-w64 and Wine are present; no Apple SDK/device, Android SDK/device, `dxc`, `spirv-cross`, SDL_shadercross executable or SDL_shadercross shared library was found |
 | Display constraint | All further Linux SDL tests must use `SDL_VIDEODRIVER=offscreen`; Windows GUI tests must use a headless/virtual display if runnable. Never use the host display. |
@@ -142,7 +142,12 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
 - **Acceptance/test:** cross-compile incrementally, run constructor plus discriminating
   SpriteBatch/stock-effect/texture/RT/state/readback/compiled-effect slices on the D3D12 driver,
   make D3D validation diagnostics fatal where available, and record exact environment evidence.
-- **Status:** open; implementation can proceed before runtime availability is known.
+- **Status:** open. The stable MinGW tree is configured with the existing Windows SDL3 package and
+  its SDL GPU renderer/smoke translation units compile. Its full first link is currently blocked
+  before CNA/SDL GPU by the selected external `sharp-runtimenext` checkout: Windows compilation of
+  `System::Diagnostics::Process.cpp` stops at its unconditional POSIX `<poll.h>` include. Continue
+  with a Windows-compatible dependency revision/configuration or another in-scope workaround;
+  do not treat this external failure as D3D12 runtime evidence.
 
 ### SDLGPU-95 — validate ordinary parity on Apple Metal ⬜
 
@@ -166,6 +171,39 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
   SpriteBatch, stock effect, texture, render-target and readback checks on an Android Vulkan
   device/emulator without weakening the desktop suite.
 - **Status:** open; runtime validation currently has an external SDK/device dependency.
+
+### SDLGPU-97 — make optional ShaderEffect compilation target-correct ✅
+
+- **Problem/public behavior:** the Windows cross-build selected the build host's absolute
+  `/usr/lib/x86_64-linux-gnu/libshaderc.so.1`. That ELF library cannot be linked into a PE binary,
+  and even a target-native shaderc would currently produce raw SPIR-V that SDL_gpu's D3D12/Metal
+  drivers cannot consume. Nevertheless SDL GPU reported `CustomEffects` unconditionally.
+- **EasyGL/SDL evidence:** EasyGL delegates GLSL compilation to the active GL driver. SDL GPU's
+  CNA-specific `ShaderEffect` path requires a runtime compiler in addition to the portable stock
+  and compiled-XNA-effect routes. This feature is outside classic-XNA parity, but must not break a
+  supported cross-build or make a false capability claim.
+- **Location:** SDL GPU dependency discovery, `SupportsCapability`, `CompileProgram`, smoke
+  assertions and conditional ShaderEffect test registration.
+- **Acceptance/test:** never search explicit host library directories while cross-compiling;
+  retain and execute the native Linux/Vulkan ShaderEffect test; on targets without a complete
+  target-native GLSL-to-driver route, report `CustomEffects == false`, return an invalid effect
+  with a precise diagnostic, and cross-compile the affected SDL GPU renderer/smoke translation
+  units without a host ELF input. Do not alter compiled XNA effects, which use
+  MojoShader/ShaderCross. The full Windows executable link remains part of `SDLGPU-94`, so a later
+  dependency outside these translation units cannot disguise whether this defect itself is fixed.
+- **Result (2026-09-10):** dependency discovery now runs only for targets whose SDL_gpu driver can
+  consume the generated SPIR-V; the explicit `/usr/lib` fallback is native-build-only. The feature
+  compile switch is renderer-private, so toggling this optional path does not rebuild the complete
+  graphics module. On an unavailable target `SupportsCapability(CustomEffects)` is false,
+  `CompileProgram` deterministically returns a diagnostic naming the missing target-native path,
+  and the positive ShaderEffect integration test is not registered. The MinGW configuration
+  reports the disabled path, its generated Ninja graph contains neither the host shaderc path nor
+  the enable define, and both changed Windows translation units compile successfully. The full
+  target then reaches an independent pre-existing `sharp-runtimenext` failure where its Windows
+  build unconditionally includes POSIX `poll.h`; that external dependency blocker is recorded
+  under `SDLGPU-94`, not misattributed here. On native Linux/Vulkan, the real ShaderEffect pixel
+  test remains **4/4** and smoke remains **30/30**, both run with
+  `SDL_VIDEODRIVER=offscreen`, `DISPLAY=` and no validation diagnostic.
 
 ## 2026-09-10 parity audit final status
 

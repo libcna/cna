@@ -1621,6 +1621,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 out[i] = 0.0f;
         }
 
+#if defined(CNA_SDL_GPU_SHADER_EFFECTS)
         // ---- Runtime GLSL->SPIR-V compile for SdlGpuEffectRenderer (SDLGPU-42/43) ----
         // No libshaderc-dev package is available in this environment (see CMakeLists.txt's own
         // find_library fallback comment), so there is no shaderc.h to include -- these extern "C"
@@ -1682,6 +1683,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             shaderc_compiler_release(compiler);
             return true;
         }
+#endif
     }
 
     struct SdlGpuRenderer::ConstructionResources
@@ -2103,13 +2105,18 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             case CNA::GraphicsCapability::ThreeD:
             case CNA::GraphicsCapability::AnisotropicFiltering:
-            case CNA::GraphicsCapability::CustomEffects:
             case CNA::GraphicsCapability::Texture3D:
             case CNA::GraphicsCapability::AdditiveBlending:
             case CNA::GraphicsCapability::MultiStreamVertexInput:
             case CNA::GraphicsCapability::Instancing:
             case CNA::GraphicsCapability::MultipleRenderTargets:
                 return true;
+            case CNA::GraphicsCapability::CustomEffects:
+#if defined(CNA_SDL_GPU_SHADER_EFFECTS)
+                return true;
+#else
+                return false;
+#endif
             case CNA::GraphicsCapability::DepthStencilBuffer:
             case CNA::GraphicsCapability::StencilBuffer:
                 return depthStencilFormat_ != SDL_GPU_TEXTUREFORMAT_INVALID;
@@ -10680,6 +10687,14 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (fragmentShader_ != nullptr) { SDL_ReleaseGPUShader(owner_->Device(), fragmentShader_); fragmentShader_ = nullptr; }
         if (vertexShader_ != nullptr) { SDL_ReleaseGPUShader(owner_->Device(), vertexShader_); vertexShader_ = nullptr; }
 
+#if !defined(CNA_SDL_GPU_SHADER_EFFECTS)
+        (void) vertSrc;
+        (void) fragSrc;
+        compileError_ =
+            "SDL_GPU ShaderEffect is unavailable: this build has no target-native "
+            "GLSL-to-driver shader compiler";
+        return false;
+#else
         std::vector<std::uint8_t> vertSpirv;
         if (!CompileGlslToSpirv(vertSrc, kShadercVertexShader, "ShaderEffect_vs", vertSpirv, compileError_))
             return false;
@@ -10720,6 +10735,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         valid_ = true;
         return true;
+#endif
     }
 
     SDL_GPUGraphicsPipeline* SdlGpuEffectRenderer::GetOrCreatePipeline(

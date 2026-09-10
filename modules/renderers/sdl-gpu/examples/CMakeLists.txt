@@ -60,6 +60,9 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
     cna_sdlgpu_test(cna_test_sdlgpu_smoke sdlgpu_smoke_test.cpp)
+    if(CNA_SDL_GPU_SHADER_EFFECTS_AVAILABLE)
+        target_compile_definitions(cna_test_sdlgpu_smoke PRIVATE CNA_SDL_GPU_SHADER_EFFECTS)
+    endif()
     cna_register_renderer_test(NAME SdlGpu_Smoke COMMAND cna_test_sdlgpu_smoke
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
     set_tests_properties(SdlGpu_Smoke PROPERTIES
@@ -431,10 +434,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_ViewSpace_Fog COMMAND cna_test_sdlgpu_viewspace_fog
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # plans/plan_sdlgpu.md SDLGPU-42/43: custom ShaderEffect (runtime GLSL->SPIR-V via libshaderc).
-    cna_sdlgpu_test(cna_test_sdlgpu_shadereffect sdlgpu_shadereffect_test.cpp)
-    cna_register_renderer_test(NAME SdlGpu_ShaderEffect COMMAND cna_test_sdlgpu_shadereffect
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    # plans/plan_sdlgpu.md SDLGPU-42/43/97: custom ShaderEffect requires a target-native runtime
+    # compiler. Do not build or register a test which promises that optional CNA-specific feature
+    # on a target where the renderer truthfully reports it unavailable.
+    if(CNA_SDL_GPU_SHADER_EFFECTS_AVAILABLE)
+        cna_sdlgpu_test(cna_test_sdlgpu_shadereffect sdlgpu_shadereffect_test.cpp)
+        cna_register_renderer_test(NAME SdlGpu_ShaderEffect COMMAND cna_test_sdlgpu_shadereffect
+            TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    endif()
 
     # plans/plan_sdlgpu.md SDLGPU-18/19/20: dynamic BlendState/DepthStencilState/RasterizerState.
     cna_sdlgpu_test(cna_test_sdlgpu_renderstate sdlgpu_renderstate_test.cpp)
