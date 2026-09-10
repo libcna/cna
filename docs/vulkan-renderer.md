@@ -749,7 +749,7 @@ application orbit/yaw oracle passes **3/3** on all three paths with identical me
 Vulkan paths run under Khronos validation and emit no validation messages; the package also passes
 its write-free reproducibility check.
 
-### Portable engine-effect rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`–`MOD-2239o`, 2026-09-10)
+### Portable engine-effect rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`–`MOD-2239p`, 2026-09-10)
 
 `ChromaticAberrationPass` is the first engine post-process to use the portable package path. Its
 internal package shares one fullscreen vertex contract across GLSL ES, desktop GLSL and SPIR-V;
@@ -930,6 +930,17 @@ its top-left texture coordinate to XNA camera NDC before reconstructing the view
 original Vulkan baseline's **3 passed / 5 skipped** becomes an expanded **10/10** on RADV and
 llvmpipe, matching EasyGL. The added asymmetric red/blue image pins the local vertical axis and the
 tint/opacity case pins exact straight-alpha source-over composition. Neither Vulkan run emits a
+validation message.
+
+`AerialPerspectivePass` is the seventeenth portable pipeline consumer. Scene colour and prepass
+depth use bindings 0 and 1; two matrices, the sun direction and five scalars reuse the typed custom-
+effect arrays. The generated GLSL ES, desktop GLSL and SPIR-V fragments retain the sky model's
+Rayleigh/Mie constants, Kasten–Young air mass, finite-path cap, view-ray length correction and sky
+early-out. A new 100-km vertical oracle exposed that the legacy EasyGL-only source reconstructed
+the upper screen as camera -Y; every packaged variant now maps top-left texture UV to XNA camera
+NDC. The previous Vulkan result of 6 passes, 6 source-execution skips and 2 masked fallback failures
+is now **14 passed / 1 intentional arbitrary-source diagnostic skip** on RADV and llvmpipe, while
+EasyGL passes **15/15** with the same measured upper/lower gradient. Neither Vulkan run emits a
 validation message.
 
 Other engine post-process effects remain source-only and keep their exact copy-through fallback;

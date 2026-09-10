@@ -10,7 +10,7 @@ pipeline, post-processing passes, shadow maps, skybox/IBL, and (long term) compu
 renderers capability by capability.** Its HDR/post-process pipeline, shadows, skybox, image-based
 lighting, instancing/LOD helpers and compute/resource layer all have executable coverage; Vulkan
 now implements exact HDR targets, stock-PBR IBL, portable directional/cascade/point/spot shadow
-generation and stock-effect reception, a portable skybox, sixteen portable post-process consumers,
+generation and stock-effect reception, a portable skybox, seventeen portable post-process consumers,
 a portable decal projector, a portable depth/normal/velocity producer, instancing and the modern
 compute/resource paths. The
 remaining post-process effects are still
@@ -204,7 +204,7 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 |---|---|---|---|---|
 | Post-process effects (`DepthEffect`, `CRTEffect`) | ✅ GLSL | ⛔ its `ShaderEffect` takes SPIR-V, not the passes' GLSL | ⬜ | `AsciiPostProcessEffect` is CPU-side and runs everywhere |
 | Float/HDR render targets | ✅ exact 2D/cube targets, runtime-probed | ✅ exact Float16/Float32 `RenderTarget2D` and `RenderTargetCube`, device-probed (`MOD-2223`/`MOD-2234`) | ⬜ | ⬜ — each reports `false` and the target constructor refuses the format rather than substituting `Color` |
-| `RenderPipeline` + post-process passes | ✅ | 🟨 sixteen portable pass consumers now run, including contact shadows, SSR, SSAO, Bloom, colour grading, depth of field, motion blur, analytic height fog, light shafts, tonemap/deband and texture/file HDR display encoding; remaining source-only passes copy through | ⬜ | The passes need `GraphicsCapability::CustomEffects`; without it each copies its input and the frame still renders |
+| `RenderPipeline` + post-process passes | ✅ | 🟨 seventeen portable pass consumers now run, including aerial perspective, contact shadows, SSR, SSAO, Bloom, colour grading, depth of field, motion blur, analytic height fog, light shafts, tonemap/deband and texture/file HDR display encoding; remaining source-only passes copy through | ⬜ | The passes need `GraphicsCapability::CustomEffects`; without it each copies its input and the frame still renders |
 | Depth/normal/velocity prepass | ✅ rigid/skinned producer | ✅ portable rigid/skinned GLSL/SPIR-V package (`MOD-2239l`) | ⬜ | ⬜ — consumers needing these scene images remain unsupported unless this producer or equivalent application inputs run |
 | Shadow maps (directional, PCF) | ✅ generation + reception on all four lit effects | ✅ portable rigid/skinned generation (`MOD-2237`) + stock reception (`MOD-2236`) | ⬜ | ⬜ — an effect accepts the shadow state and a renderer without the shader ignores it, so the frame renders unshadowed rather than failing |
 | Cascaded shadow maps (2-4, atlas) | ✅ same four programs, one shared shader path | ✅ portable atlas generation + stock reception | ⬜ | ⬜ — same accepted-and-ignored convention |
@@ -223,7 +223,7 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 | `.cube` grading tables | ✅ parse is renderer-free; the strip needs only a 2D texture | ✅ | ✅ | ✅ — `CubeLut` is plain arithmetic and the strip layout runs everywhere |
 | Tetrahedral LUT interpolation, volume LUTs | ✅ needs executed effect source; the volume layout also needs `GraphicsCapability::Texture3D` | ✅ portable strip and volume packages (`MOD-2239g`) | ⬜ | ⬜ — where no package variant runs, the grade copies its input through |
 | Debanding dither | ✅ needs executed effect source | ✅ portable tonemap/deband package (`MOD-2239a`) | ⬜ | ⬜ — off by default everywhere, and a renderer that does not run the tonemap shader was not dithering before either |
-| Aerial perspective | ✅ needs the prepass depth and executed effect source | ⬜ | ⬜ | ⬜ — `AerialPerspectivePass::isSupported()` is false and the frame keeps the unaltered geometry it had |
+| Aerial perspective | ✅ needs the prepass depth and a selected package | ✅ GLSL/SPIR-V package (`MOD-2239p`) | ⬜ | ⬜ — without a usable variant `AerialPerspectivePass::isSupported()` is false and the frame keeps the unaltered geometry it had |
 | Debug drawing and gizmos | ✅ needs only `BasicEffect` and a line draw | ✅ | ✅ | ✅ — `DebugDraw` uses nothing an XNA `BasicEffect` does not already provide |
 | GPU timer queries | ✅ probed: `GL_EXT_disjoint_timer_query` is present on this machine's Mesa ES driver | ✅ queue/device-gated timestamp queries, nonblocking and recycled (`MOD-2246`) | ⬜ | ⬜ — `GpuTimer::isSupported()` is false and names the missing native path; no CPU fallback is offered |
 | Decals | ✅ needs the prepass and a selected package | ✅ GLSL/SPIR-V package (`MOD-2239o`) | ⬜ | ⬜ — `DecalPass` reports `isSupported()` false and draws nothing rather than washing the frame |
@@ -257,7 +257,8 @@ true 3D-LUT colour grading; `MOD-2239h` adds analytic height fog from depth and 
 `MOD-2239i` adds thin-lens depth of field, `MOD-2239j` adds camera/object motion blur, and
 `MOD-2239k` adds the SSAO estimate plus blur/composite, `MOD-2239l` adds the shared rigid/skinned
 depth/normal/velocity producer, `MOD-2239m` adds screen-space reflections, `MOD-2239n` adds
-screen-space contact shadows, and `MOD-2239o` adds projected decals. The remaining
+screen-space contact shadows, `MOD-2239o` adds projected decals, and `MOD-2239p` adds aerial
+perspective. The remaining
 post-process paths still provide source alone and remain unavailable on Vulkan. Portable packages
 use the language/stage query to select a payload;
 subsystems still ask their own semantic capability before promising a visible result.
@@ -295,7 +296,7 @@ Legend: ✅ verified in this repository · 🟨 partial, or verified only by sha
 | `OpenGLES2` | 🟨 shares EasyGL | GLSL ES 1.00: the shaders are transformed, so no `textureLod` (rough IBL reflections read the base mip), no dynamic uniform-array indexing, statically countable loops only. |
 | `WebGL1` | 🟨 shares EasyGL | As `OpenGLES2`, plus: no compute in any WebGL version. |
 | `WebGL2` | 🟨 shares EasyGL | No compute; otherwise the ES 3.00 path. |
-| `Vulkan` | 🟨 measured | Verified on RADV and llvmpipe: exact float/HDR 2D and cube targets, instancing, stock-PBR IBL, portable skybox, sixteen portable post-process consumers plus their depth/normal/velocity prepass producer, directional/cascade/point/spot shadow generation and reception, compute/storage resources, indirect draws and GPU timers work. Remaining source-authored post-process paths are unavailable because Vulkan consumes packaged SPIR-V rather than this layer's GLSL; presentation remains sRGB-only. |
+| `Vulkan` | 🟨 measured | Verified on RADV and llvmpipe: exact float/HDR 2D and cube targets, instancing, stock-PBR IBL, portable skybox, seventeen portable post-process consumers plus their depth/normal/velocity prepass producer, directional/cascade/point/spot shadow generation and reception, compute/storage resources, indirect draws and GPU timers work. Remaining source-authored post-process paths are unavailable because Vulkan consumes packaged SPIR-V rather than this layer's GLSL; presentation remains sRGB-only. |
 | `Headless` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Three limits it does not advertise — no render-target readback, no cube-face storage, and a cube-face bind that records the face without making it current. The engine layer constructs and passes through; tests probe the three rather than assume them. |
 | `Software` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Render targets, readback and cube storage all work; what does **not** is custom shader source — it is accepted and then ignored, which is why every shader-based subsystem asks `ExecutesShaderEffectSourceEXT()` as well as `CustomEffects`. |
 | `Stub` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Stricter than `Headless` — it refuses to bind a `RenderTarget2D` at all, so a pipeline stops before it renders. Everything above that point constructs and reports false. |
@@ -1921,11 +1922,21 @@ air.setScaleHeight(8400.0f);           // the one number tied to the game's worl
 air.apply(context);                    // needs sourceDepth, farPlane and the camera matrices
 ```
 
-**One model, not two.** `AtmosphericSky::getModelGlsl()` emits the scattering functions and both
-passes compile the same string. The sky is `cnaScatteringAlongPath` with the path set to the whole
-atmosphere; aerial perspective is the same call with the path set to however far the geometry is.
-Two copies of one model agree until somebody edits one of them, and the symptom is a frame that looks
-slightly wrong with nothing to point at — `MOD-2035` charged this layer for exactly that.
+**One physical model, expressed in the payload each renderer can consume.** The sky is
+`cnaScatteringAlongPath` with the path set to the whole atmosphere; aerial perspective is the same
+equation with the path set to however far the geometry is. `AtmosphericSky::getModelGlsl()` remains
+the source-execution form, while the aerial package spells the same constants and functions in GLSL
+ES, desktop GLSL and Vulkan GLSL compiled to checked-in SPIR-V. The far-horizon image oracle compares
+the packaged pass directly with `AtmosphericSky::radiance`, so drift between those representations
+is a test failure rather than a subtly different frame.
+
+Since `MOD-2239p`, `AerialPerspectivePass` selects that generated package instead of assuming the
+renderer executes a GLSL string. Scene depth is binding 1, and typed float, vec3 and mat4 arrays carry
+the packed-depth policy, atmosphere settings, sun direction and two reconstruction matrices. A
+100-km vertical transmittance oracle also found that the old EasyGL source interpreted the upper
+screen as camera -Y. All three packaged variants now bridge top-left texture UV to XNA camera NDC.
+The suite passes **15/15** on EasyGL and **14 passed / 1 intentional arbitrary-source diagnostic
+skip** on RADV and llvmpipe; both Vulkan runs are validation-clean.
 
 **Scale height is where a game's world scale enters, and it is the only dial worth touching.** The
 model's coefficients are optical depth through one *vertical column* of atmosphere, so a distance

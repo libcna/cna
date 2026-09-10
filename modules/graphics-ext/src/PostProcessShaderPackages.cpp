@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "PostProcessShaderPackages.hpp"
+#include "AerialPerspectiveShaderPackage.hpp"
 
 #ifdef CNA_CNAEXT
 
@@ -82,6 +83,22 @@ namespace CNA::Graphics::detail
                 {CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment},
                 std::move(requirements));
         }
+    }
+
+    ShaderPackageEXT CreateAerialPerspectiveShaderPackage()
+    {
+        using namespace CNA::Graphics::detail::PostProcessGenerated;
+        return MakeFullscreenPackage(
+            {kAerialPerspectiveEsFragmentSource,
+             "post_process/aerial_perspective.es.frag.glsl"},
+            {kAerialPerspectiveDesktopFragmentSource,
+             "post_process/aerial_perspective.desktop.frag.glsl"},
+            {kAerialPerspectiveVulkanFragmentSpirV,
+             kAerialPerspectiveVulkanFragmentSpirVByteSize,
+             "post_process/aerial_perspective.vulkan.frag.spv"},
+            {ShaderBindingRequirementEXT(
+                "uDepthSampler", 1, ShaderBindingTypeEXT::SampledTexture2D,
+                CNA::ShaderStageEXT::Fragment)});
     }
 
     ShaderPackageEXT CreateBloomExtractShaderPackage()

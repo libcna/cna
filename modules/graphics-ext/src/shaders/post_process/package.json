@@ -4,6 +4,7 @@
   "package": "post_process",
   "preprocessor_guard": "CNA_CNAEXT",
   "payloads": [
+    {"symbol":"kAerialPerspectiveEsFragmentSource","source":"aerial_perspective.es.frag.glsl","language":"glsl-es","stage":"fragment","format":"text","entry_point":"main"},
     {"symbol":"kFullscreenEsVertexSource","source":"fullscreen.es.vert.glsl","language":"glsl-es","stage":"vertex","format":"text","entry_point":"main"},
     {"symbol":"kBloomBlurEsFragmentSource","source":"bloom_blur.es.frag.glsl","language":"glsl-es","stage":"fragment","format":"text","entry_point":"main"},
     {"symbol":"kBloomCombineEsFragmentSource","source":"bloom_combine.es.frag.glsl","language":"glsl-es","stage":"fragment","format":"text","entry_point":"main"},
@@ -48,6 +49,7 @@
     {"symbol":"kLightShaftDesktopFragmentSource","source":"light_shaft.desktop.frag.glsl","language":"glsl","stage":"fragment","format":"text","entry_point":"main"},
     {"symbol":"kMotionBlurDesktopFragmentSource","source":"motion_blur.desktop.frag.glsl","language":"glsl","stage":"fragment","format":"text","entry_point":"main"},
     {"symbol":"kSpatialUpscaleDesktopFragmentSource","source":"spatial_upscale.desktop.frag.glsl","language":"glsl","stage":"fragment","format":"text","entry_point":"main"},
+    {"symbol":"kAerialPerspectiveDesktopFragmentSource","source":"aerial_perspective.desktop.frag.glsl","language":"glsl","stage":"fragment","format":"text","entry_point":"main"},
     {"symbol":"kSsaoComposeDesktopFragmentSource","source":"ssao_compose.desktop.frag.glsl","language":"glsl","stage":"fragment","format":"text","entry_point":"main"},
     {"symbol":"kSsaoOcclusionDesktopFragmentSource","source":"ssao_occlusion.desktop.frag.glsl","language":"glsl","stage":"fragment","format":"text","entry_point":"main"},
     {"symbol":"kSsrDesktopFragmentSource","source":"ssr.desktop.frag.glsl","language":"glsl","stage":"fragment","format":"text","entry_point":"main"},
@@ -72,6 +74,7 @@
     {"symbol":"kLightShaftVulkanFragmentSpirV","source":"light_shaft.vulkan.frag.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"fragment","format":"spirv","entry_point":"main"},
     {"symbol":"kMotionBlurVulkanFragmentSpirV","source":"motion_blur.vulkan.frag.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"fragment","format":"spirv","entry_point":"main"},
     {"symbol":"kSpatialUpscaleVulkanFragmentSpirV","source":"spatial_upscale.vulkan.frag.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"fragment","format":"spirv","entry_point":"main"},
+    {"symbol":"kAerialPerspectiveVulkanFragmentSpirV","source":"aerial_perspective.vulkan.frag.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"fragment","format":"spirv","entry_point":"main"},
     {"symbol":"kSsaoComposeVulkanFragmentSpirV","source":"ssao_compose.vulkan.frag.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"fragment","format":"spirv","entry_point":"main"},
     {"symbol":"kSsaoOcclusionVulkanFragmentSpirV","source":"ssao_occlusion.vulkan.frag.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"fragment","format":"spirv","entry_point":"main"},
     {"symbol":"kSsrVulkanFragmentSpirV","source":"ssr.vulkan.frag.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"fragment","format":"spirv","entry_point":"main"},
