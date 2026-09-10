@@ -749,7 +749,7 @@ application orbit/yaw oracle passes **3/3** on all three paths with identical me
 Vulkan paths run under Khronos validation and emit no validation messages; the package also passes
 its write-free reproducibility check.
 
-### Portable post-process rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`–`MOD-2239h`, 2026-09-10)
+### Portable post-process rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`–`MOD-2239i`, 2026-09-10)
 
 `ChromaticAberrationPass` is the first engine post-process to use the portable package path. Its
 internal package shares one fullscreen vertex contract across GLSL ES, desktop GLSL and SPIR-V;
@@ -855,6 +855,16 @@ set 1 binding 1. No renderer API, layout or push range changed. The former eight
 EasyGL. The added repeated-upload oracle changes only camera height and proves the second matrix
 really moves the view out of the fog layer. The complete portable post-process regression set is
 now **116/116** on all three paths, with no Khronos validation messages.
+
+`DepthOfFieldPass` is the twelfth consumer. Its far plane, focus distance, focal length, f-number,
+maximum blur radius and packed-depth policy reuse six entries in the typed float-array descriptor at
+set 1 binding 12; the prepass depth remains set 1 binding 1. The package preserves the sixteen-tap
+golden-angle gather, thin-lens formula and per-tap circle-of-confusion bleed guard without a renderer
+API, layout or push-range change. The former Vulkan baseline's 9 passes and 5 source-execution skips
+become **14/14** on RADV and llvmpipe, matching EasyGL. Its image oracles move the focus between two
+depth layers, retain the sharp layer's contrast, suppress focused-subject bleed and agree with the
+public CPU optics reference. The complete portable post-process regression set is now **130/130**
+on all three paths, with no Khronos validation messages.
 
 Other engine post-process effects remain source-only and keep their exact copy-through fallback;
 the shared package/helper is the landing point for their subsequent fragment variants.

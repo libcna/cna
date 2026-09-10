@@ -248,7 +248,8 @@ implementation tasks.**
   `MOD-2239c` adds sRGB/scRGB/HDR10 encoding to textures or files. `MOD-2239d` adds edge-adaptive
   spatial upscaling, `MOD-2239e` adds the existing occlusion-aware light-shaft radial walk, and
   `MOD-2239f` adds the four-stage bloom pyramid, `MOD-2239g` adds filtered/tetrahedral 2D and
-  true 3D-LUT colour grading, and `MOD-2239h` adds analytic depth/camera-based height fog. The
+  true 3D-LUT colour grading, `MOD-2239h` adds analytic depth/camera-based height fog, and
+  `MOD-2239i` adds thin-lens depth of field with its depth-aware bleed guard. The
   bloom work also fixes secondary
   `RenderTarget2D` sampling through Vulkan `ShaderEffect`, which previously substituted the white
   fallback because the binding accepted only the uploaded-texture concrete type.

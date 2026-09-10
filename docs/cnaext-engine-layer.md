@@ -10,7 +10,7 @@ pipeline, post-processing passes, shadow maps, skybox/IBL, and (long term) compu
 renderers capability by capability.** Its HDR/post-process pipeline, shadows, skybox, image-based
 lighting, instancing/LOD helpers and compute/resource layer all have executable coverage; Vulkan
 now implements exact HDR targets, stock-PBR IBL, portable directional/cascade/point/spot shadow
-generation and stock-effect reception, a portable skybox, eleven portable post-process consumers,
+generation and stock-effect reception, a portable skybox, twelve portable post-process consumers,
 instancing and the modern compute/resource paths. The remaining post-process effects are still
 source-authored shader gaps. The design is
 [`../CNAEXT.md`](../misc/CNAEXT.md); the task backlog and its evidence trail are
@@ -202,7 +202,7 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 |---|---|---|---|---|
 | Post-process effects (`DepthEffect`, `CRTEffect`) | ✅ GLSL | ⛔ its `ShaderEffect` takes SPIR-V, not the passes' GLSL | ⬜ | `AsciiPostProcessEffect` is CPU-side and runs everywhere |
 | Float/HDR render targets | ✅ exact 2D/cube targets, runtime-probed | ✅ exact Float16/Float32 `RenderTarget2D` and `RenderTargetCube`, device-probed (`MOD-2223`/`MOD-2234`) | ⬜ | ⬜ — each reports `false` and the target constructor refuses the format rather than substituting `Color` |
-| `RenderPipeline` + post-process passes | ✅ | 🟨 eleven portable passes/stages now run, including Bloom, colour grading, analytic height fog, light shafts, tonemap/deband and texture/file HDR display encoding; remaining source-only passes copy through | ⬜ | The passes need `GraphicsCapability::CustomEffects`; without it each copies its input and the frame still renders |
+| `RenderPipeline` + post-process passes | ✅ | 🟨 twelve portable passes/stages now run, including Bloom, colour grading, depth of field, analytic height fog, light shafts, tonemap/deband and texture/file HDR display encoding; remaining source-only passes copy through | ⬜ | The passes need `GraphicsCapability::CustomEffects`; without it each copies its input and the frame still renders |
 | Shadow maps (directional, PCF) | ✅ generation + reception on all four lit effects | ✅ portable rigid/skinned generation (`MOD-2237`) + stock reception (`MOD-2236`) | ⬜ | ⬜ — an effect accepts the shadow state and a renderer without the shader ignores it, so the frame renders unshadowed rather than failing |
 | Cascaded shadow maps (2-4, atlas) | ✅ same four programs, one shared shader path | ✅ portable atlas generation + stock reception | ⬜ | ⬜ — same accepted-and-ignored convention |
 | Contact shadows | ✅ needs the prepass depth and executed effect source | ⬜ | ⬜ | ⬜ — `ContactShadowPass::isSupported()` is false and the pass copies its input through, so the frame keeps the shadow map it already had |
@@ -250,7 +250,8 @@ swap-chain capability: Vulkan still truthfully advertises sRGB presentation only
 adds edge-adaptive spatial upscaling and neighbourhood-clamped sharpening; `MOD-2239e` adds the
 occlusion-aware light-shaft radial walk; `MOD-2239f` adds Bloom's extract, separable blur,
 progressive pyramid upsample and final composite; `MOD-2239g` adds filtered/tetrahedral strip and
-true 3D-LUT colour grading; and `MOD-2239h` adds analytic height fog from depth and camera state. The remaining
+true 3D-LUT colour grading; `MOD-2239h` adds analytic height fog from depth and camera state; and
+`MOD-2239i` adds thin-lens depth of field. The remaining
 post-process paths still provide source alone and remain unavailable on Vulkan. Portable packages
 use the language/stage query to select a payload;
 subsystems still ask their own semantic capability before promising a visible result.
@@ -288,7 +289,7 @@ Legend: ✅ verified in this repository · 🟨 partial, or verified only by sha
 | `OpenGLES2` | 🟨 shares EasyGL | GLSL ES 1.00: the shaders are transformed, so no `textureLod` (rough IBL reflections read the base mip), no dynamic uniform-array indexing, statically countable loops only. |
 | `WebGL1` | 🟨 shares EasyGL | As `OpenGLES2`, plus: no compute in any WebGL version. |
 | `WebGL2` | 🟨 shares EasyGL | No compute; otherwise the ES 3.00 path. |
-| `Vulkan` | 🟨 measured | Verified on RADV and llvmpipe: exact float/HDR 2D and cube targets, instancing, stock-PBR IBL, portable skybox, eleven portable post-process consumers (including Bloom, colour grading, analytic height fog, light shafts, texture/file HDR encoding and spatial upscaling), directional/cascade/point/spot shadow generation and reception, compute/storage resources, indirect draws and GPU timers work. Remaining source-authored post-process paths are unavailable because Vulkan consumes packaged SPIR-V rather than this layer's GLSL; presentation remains sRGB-only. |
+| `Vulkan` | 🟨 measured | Verified on RADV and llvmpipe: exact float/HDR 2D and cube targets, instancing, stock-PBR IBL, portable skybox, twelve portable post-process consumers (including Bloom, colour grading, depth of field, analytic height fog, light shafts, texture/file HDR encoding and spatial upscaling), directional/cascade/point/spot shadow generation and reception, compute/storage resources, indirect draws and GPU timers work. Remaining source-authored post-process paths are unavailable because Vulkan consumes packaged SPIR-V rather than this layer's GLSL; presentation remains sRGB-only. |
 | `Headless` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Three limits it does not advertise — no render-target readback, no cube-face storage, and a cube-face bind that records the face without making it current. The engine layer constructs and passes through; tests probe the three rather than assume them. |
 | `Software` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Render targets, readback and cube storage all work; what does **not** is custom shader source — it is accepted and then ignored, which is why every shader-based subsystem asks `ExecutesShaderEffectSourceEXT()` as well as `CustomEffects`. |
 | `Stub` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Stricter than `Headless` — it refuses to bind a `RenderTarget2D` at all, so a pipeline stops before it renders. Everything above that point constructs and reports false. |
@@ -681,6 +682,12 @@ means. It is the difference between depth of field and a depth-weighted blur.
 `maxRadius` caps the gather. It is a budget rather than a look: raising it costs nothing until
 something is far enough out of focus to reach it, and lowering it below what the optics ask for
 makes the frame sharper than the lens would.
+
+Since `MOD-2239i`, the pass selects generated GLSL ES/desktop GLSL on EasyGL or SPIR-V on Vulkan.
+The prepass depth remains texture unit 1 (Vulkan set 1 binding 1), while the far plane, four lens
+controls and packed-depth policy occupy six elements of the established float-array block. The
+same 14-case image/optics suite passes on EasyGL, RADV and llvmpipe; it includes the focus swap,
+contrast loss, foreground bleed guard and shader-versus-CPU formula comparison.
 
 ### Bloom: what the numbers mean, and what they do not
 

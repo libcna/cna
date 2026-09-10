@@ -270,6 +270,22 @@ namespace CNA::Graphics::detail
                 CNA::ShaderStageEXT::Fragment)});
     }
 
+    ShaderPackageEXT CreateDepthOfFieldShaderPackage()
+    {
+        using namespace CNA::Graphics::detail::PostProcessGenerated;
+        return MakeFullscreenPackage(
+            {kDepthOfFieldEsFragmentSource,
+             "post_process/depth_of_field.es.frag.glsl"},
+            {kDepthOfFieldDesktopFragmentSource,
+             "post_process/depth_of_field.desktop.frag.glsl"},
+            {kDepthOfFieldVulkanFragmentSpirV,
+             kDepthOfFieldVulkanFragmentSpirVByteSize,
+             "post_process/depth_of_field.vulkan.frag.spv"},
+            {ShaderBindingRequirementEXT(
+                "uDepthSampler", 1, ShaderBindingTypeEXT::SampledTexture2D,
+                CNA::ShaderStageEXT::Fragment)});
+    }
+
     ShaderPackageEXT CreateSpatialUpscaleShaderPackage()
     {
         using namespace CNA::Graphics::detail::PostProcessGenerated;
