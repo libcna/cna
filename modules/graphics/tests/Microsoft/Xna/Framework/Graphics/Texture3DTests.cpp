@@ -37,6 +37,7 @@
 using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgra4444.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
@@ -45,10 +46,12 @@ using namespace CNA::Testing::Renderers;
 #include "System/ArgumentNullException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::PackedVector::Bgra4444;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 using Microsoft::Xna::Framework::Graphics::Texture;
 using Microsoft::Xna::Framework::Graphics::Texture3D;
@@ -68,6 +71,43 @@ void ExpectExactNamedException(TCallable&& callable, const char* parameterName)
     {
         EXPECT_EQ(typeid(exception), typeid(TException));
         EXPECT_EQ(exception.getParamNameProperty(), parameterName);
+    }
+    catch (...)
+    {
+        FAIL() << "unexpected exception type; expected " << typeid(TException).name();
+    }
+}
+
+template<typename TException, typename TCallable>
+void ExpectExactException(TCallable&& callable)
+{
+    try
+    {
+        callable();
+        FAIL() << "expected " << typeid(TException).name();
+    }
+    catch (const TException& exception)
+    {
+        EXPECT_EQ(typeid(exception), typeid(TException));
+    }
+    catch (...)
+    {
+        FAIL() << "unexpected exception type; expected " << typeid(TException).name();
+    }
+}
+
+template<typename TException, typename TCallable>
+void ExpectExactExceptionContaining(TCallable&& callable, const char* text)
+{
+    try
+    {
+        callable();
+        FAIL() << "expected " << typeid(TException).name();
+    }
+    catch (const TException& exception)
+    {
+        EXPECT_EQ(typeid(exception), typeid(TException));
+        EXPECT_NE(std::string(exception.what()).find(text), std::string::npos);
     }
     catch (...)
     {
@@ -441,11 +481,13 @@ TEST_F(Texture3DTest, SetDataBoxOverflowingTransferWindowThrowsArgumentOutOfRang
                  System::ArgumentOutOfRangeException);
 }
 
-TEST_F(Texture3DTest, SetDataBoxNegativeLevelThrowsOutOfRange)
+TEST_F(Texture3DTest, SetDataBoxNegativeLevelThrowsExactInvalidOperationException)
 {
     Texture3D tex(gd, 2, 2, 2, false, SurfaceFormat::Color);
     std::vector<Color> buf(4, Color(0, 0, 0, 0));
-    EXPECT_THROW(tex.SetData(-1, 0, 0, 2, 2, 0, 1, buf.data(), 0, 4), std::out_of_range);
+    ExpectExactException<System::InvalidOperationException>([&] {
+        tex.SetData(-1, 0, 0, 2, 2, 0, 1, buf.data(), 0, 4);
+    });
 }
 
 TEST_F(Texture3DTest, SetDataBoxNegativeLeftThrowsNamedArgumentException)
@@ -479,7 +521,9 @@ TEST_F(Texture3DTest, SetDataRejectsLevelAndBoxesOutsideMipBoundsWithoutMutation
     std::vector<Color> replacement(27, Color(90, 80, 70, 60));
     tex.SetData(1, 0, 0, 2, 2, 0, 2, baseline.data(), 0, 8);
 
-    EXPECT_THROW(tex.SetData(3, 0, 0, 1, 1, 0, 1, replacement.data(), 0, 1), std::out_of_range);
+    ExpectExactException<System::InvalidOperationException>([&] {
+        tex.SetData(3, 0, 0, 1, 1, 0, 1, replacement.data(), 0, 1);
+    });
     EXPECT_THROW(tex.SetData(1, 0, 0, 3, 2, 0, 2, replacement.data(), 0, 12), System::ArgumentException);
     EXPECT_THROW(tex.SetData(1, 0, 0, 2, 3, 0, 2, replacement.data(), 0, 12), System::ArgumentException);
     EXPECT_THROW(tex.SetData(1, 0, 0, 2, 2, 0, 3, replacement.data(), 0, 12), System::ArgumentException);
@@ -539,6 +583,101 @@ TEST_F(Texture3DTest, SetDataRequiresExactElementCountForTheRequestedVolume)
         EXPECT_EQ(color, baseline);
 }
 
+TEST_F(Texture3DTest, CopyValidationRejectsInvalidMipBeforeWindowAcrossEveryRoute)
+{
+    Texture3D texture(gd, 2, 2, 2, false, SurfaceFormat::Color);
+    std::array<Color, 4> colors{};
+    std::array<std::uint8_t, 4> bytes{};
+    std::array<Bgra4444, 4> packed{};
+    std::array<float, 4> floats{};
+    std::array<std::uint32_t, 4> raw{};
+    const int badLevel = texture.getLevelCountProperty();
+
+    ExpectExactException<System::InvalidOperationException>([&] {
+        texture.SetData(badLevel, 0, 0, 1, 1, 0, 1, colors.data(), -1, 0);
+    });
+    ExpectExactException<System::InvalidOperationException>([&] {
+        texture.SetData(badLevel, 0, 0, 1, 1, 0, 1, bytes.data(), -1, 0);
+    });
+    ExpectExactException<System::InvalidOperationException>([&] {
+        texture.SetData(badLevel, 0, 0, 1, 1, 0, 1, packed.data(), -1, 0);
+    });
+    ExpectExactException<System::InvalidOperationException>([&] {
+        texture.SetData(badLevel, 0, 0, 1, 1, 0, 1, floats.data(), -1, 0);
+    });
+    ExpectExactException<System::InvalidOperationException>([&] {
+        texture.SetData(badLevel, 0, 0, 1, 1, 0, 1, raw.data(), -1, 0);
+    });
+
+    ExpectExactException<System::InvalidOperationException>([&] {
+        texture.GetData(badLevel, 0, 0, 1, 1, 0, 1, colors.data(), -1, 0);
+    });
+    ExpectExactException<System::InvalidOperationException>([&] {
+        texture.GetData(badLevel, 0, 0, 1, 1, 0, 1, bytes.data(), -1, 0);
+    });
+    ExpectExactException<System::InvalidOperationException>([&] {
+        texture.GetData(badLevel, 0, 0, 1, 1, 0, 1, packed.data(), -1, 0);
+    });
+    ExpectExactException<System::InvalidOperationException>([&] {
+        texture.GetData(badLevel, 0, 0, 1, 1, 0, 1, floats.data(), -1, 0);
+    });
+    ExpectExactException<System::InvalidOperationException>([&] {
+        texture.GetData(badLevel, 0, 0, 1, 1, 0, 1, raw.data(), -1, 0);
+    });
+}
+
+TEST_F(Texture3DTest, CopyValidationUsesResourceThenMipThenWindowThenWidthThenBox)
+{
+    Texture3D texture(gd, 2, 2, 2, false, SurfaceFormat::Color);
+    std::array<Color, 8> colors{};
+    std::array<std::uint32_t, 8> raw{};
+    gd.getTexturesProperty()(0, &texture);
+
+    ExpectExactExceptionContaining<System::InvalidOperationException>([&] {
+        texture.SetData(1, 0, 0, 1, 1, 0, 1, colors.data(), -1, 0);
+    }, "resource is in use");
+    ExpectExactExceptionContaining<System::InvalidOperationException>([&] {
+        texture.SetData(1, 0, 0, 1, 1, 0, 1, raw.data(), -1, 0);
+    }, "resource is in use");
+    ExpectExactNamedException<System::ArgumentNullException>([&] {
+        texture.SetData(1, 0, 0, 1, 1, 0, 1,
+                        static_cast<const std::uint32_t*>(nullptr), -1, 0);
+    }, "data");
+
+    gd.getTexturesProperty()(0, nullptr);
+    const std::uint64_t tooWide = 0;
+    ExpectExactNamedException<System::ArgumentOutOfRangeException>([&] {
+        texture.SetData(0, 2, 0, 2, 1, 0, 1, &tooWide, -1, 0);
+    }, "dataIndex");
+    ExpectExactNamedException<System::ArgumentException>([&] {
+        texture.SetData(0, 2, 0, 2, 1, 0, 1, &tooWide, 0, 1);
+    }, "");
+    ExpectExactNamedException<System::ArgumentException>([&] {
+        texture.SetData(0, 2, 0, 2, 1, 0, 1, colors.data(), 0, 1);
+    }, "box");
+}
+
+TEST_F(Texture3DTest, DisposedValidationPrecedesNullAcrossConcreteAndGenericRoutes)
+{
+    Texture3D texture(gd, 2, 2, 2, false, SurfaceFormat::Color);
+    texture.Dispose();
+
+    ExpectExactException<System::ObjectDisposedException>([&] {
+        texture.SetData(0, 0, 0, 1, 1, 0, 1, static_cast<const Color*>(nullptr), -1, 0);
+    });
+    ExpectExactException<System::ObjectDisposedException>([&] {
+        texture.SetData(0, 0, 0, 1, 1, 0, 1,
+                        static_cast<const std::uint32_t*>(nullptr), -1, 0);
+    });
+    ExpectExactException<System::ObjectDisposedException>([&] {
+        texture.GetData(0, 0, 0, 1, 1, 0, 1, static_cast<Color*>(nullptr), -1, 0);
+    });
+    ExpectExactException<System::ObjectDisposedException>([&] {
+        texture.GetData(0, 0, 0, 1, 1, 0, 1,
+                        static_cast<std::uint32_t*>(nullptr), -1, 0);
+    });
+}
+
 // -----------------------------------------------------------------------
 // SetDataPointerEXT — null-data guard
 // -----------------------------------------------------------------------
@@ -593,11 +732,13 @@ TEST_F(Texture3DTest, GetDataBoxNullDataThrowsNamedArgumentNullException)
         [&] { tex.GetData(0, 0, 0, 2, 2, 0, 2, nullptr, 0, 4); }, "data");
 }
 
-TEST_F(Texture3DTest, GetDataBoxNegativeLevelThrowsOutOfRange)
+TEST_F(Texture3DTest, GetDataBoxNegativeLevelThrowsExactInvalidOperationException)
 {
     Texture3D tex(gd, 2, 2, 2, false, SurfaceFormat::Color);
     std::vector<Color> buf(4, Color(0, 0, 0, 0));
-    EXPECT_THROW(tex.GetData(-1, 0, 0, 2, 2, 0, 1, buf.data(), 0, 4), std::out_of_range);
+    ExpectExactException<System::InvalidOperationException>([&] {
+        tex.GetData(-1, 0, 0, 2, 2, 0, 1, buf.data(), 0, 4);
+    });
 }
 
 TEST_F(Texture3DTest, GetDataBoxLeftNotLessThanRightThrowsNamedArgumentException)
@@ -614,8 +755,9 @@ TEST_F(Texture3DTest, GetDataRejectsLevelAndBoxesOutsideMipBoundsWithoutMutation
     const Color sentinel(0xCD, 0xCD, 0xCD, 0xCD);
     std::vector<Color> destination(27, sentinel);
 
-    EXPECT_THROW(tex.GetData(3, 0, 0, 1, 1, 0, 1,
-                             destination.data(), 0, 1), std::out_of_range);
+    ExpectExactException<System::InvalidOperationException>([&] {
+        tex.GetData(3, 0, 0, 1, 1, 0, 1, destination.data(), 0, 1);
+    });
 
     const auto rejectedBoxWithoutMutation = [&](int right, int bottom, int back, int count)
     {

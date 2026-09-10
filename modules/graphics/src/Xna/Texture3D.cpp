@@ -7,6 +7,7 @@
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
@@ -153,13 +154,21 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
     int Texture3D::ValidateTypedTransferEXT(
-        const char* api, int level, int left, int top, int right, int bottom,
-        int front, int back, int startIndex, int elementCount, int elementBytes) const
+        const char* api, bool setting, int level, int left, int top, int right, int bottom,
+        int front, int back, const void* data, int startIndex, int elementCount,
+        int elementBytes) const
     {
         if (getIsDisposedProperty())
             throw System::ObjectDisposedException("Texture3D");
+        if (data == nullptr)
+            throw System::ArgumentNullException("data");
+        ThrowIfDataTransferResourceInUseEXT(setting);
         if (level < 0 || level >= levelCount_)
-            throw std::out_of_range(std::string(api) + ": level is outside the mip chain");
+        {
+            throw System::InvalidOperationException(
+                std::string(api) + ": level " + std::to_string(level) +
+                " must be in [0, LevelCount " + std::to_string(levelCount_) + ")");
+        }
         ValidateCopyArguments(startIndex, elementCount);
         const int formatBytes = Texture::GetFormatSizeEXT(format_);
         if (Texture::GetBlockSizeSquaredEXT(format_) != 1 ||
@@ -194,7 +203,6 @@ namespace Microsoft::Xna::Framework::Graphics
         int level, int left, int top, int right, int bottom, int front, int back,
         const std::uint8_t* data)
     {
-        ThrowIfDataTransferResourceInUseEXT(true);
         if (!renderer_)
             throw System::NotSupportedException(
                 "Texture3D::SetData: this renderer creates no volume texture resource");
@@ -214,7 +222,6 @@ namespace Microsoft::Xna::Framework::Graphics
         int level, int left, int top, int right, int bottom, int front, int back,
         std::uint8_t* data) const
     {
-        ThrowIfDataTransferResourceInUseEXT(false);
         if (!renderer_)
             throw System::NotSupportedException(
                 "Texture3D::GetData: this renderer creates no volume texture resource");
@@ -261,29 +268,9 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture3D::SetData(int level, int left, int top, int right, int bottom, int front, int back,
                             const Color* data, int startIndex, int elementCount)
     {
-        if (getIsDisposedProperty())
-            throw System::ObjectDisposedException("Texture3D");
-        if (!data)
-            throw System::ArgumentNullException("data");
-        ThrowIfDataTransferResourceInUseEXT(true);
-        if (level < 0 || level >= levelCount_)
-            throw std::out_of_range("Texture3D::SetData: level is outside the mip chain");
-        ValidateCopyArguments(startIndex, elementCount);
-        if (left < 0 || left >= right || top < 0 || top >= bottom || front < 0 || front >= back)
-            throw System::ArgumentException("The box position or size is invalid.", "box");
-        if (right > MipDimension(width_, level) || bottom > MipDimension(height_, level) ||
-            back > MipDimension(depth_, level))
-            throw System::ArgumentException("The box is outside the mip level.", "box");
-        const std::size_t boxVoxels =
-            static_cast<std::size_t>(right - left) * static_cast<std::size_t>(bottom - top) *
-            static_cast<std::size_t>(back - front);
-        const int formatBytes = Texture::GetFormatSizeEXT(format_);
-        if (formatBytes % 4 != 0)
-            throw System::ArgumentException(
-                "Texture3D::SetData: Color element width does not divide the volume format.");
-        const std::size_t requiredColorElements =
-            boxVoxels * static_cast<std::size_t>(formatBytes) / 4u;
-        ValidateTotalSize(elementCount, requiredColorElements);
+        const int requiredColorElements = ValidateTypedTransferEXT(
+            "Texture3D::SetData", true, level, left, top, right, bottom, front, back,
+            data, startIndex, elementCount, 4);
 
         // REMED-GFX-135 -- see TextureCube::SetData's identical note: converted to the REQUESTED
         // BOX rather than to elementCount, so the call never reads source elements it does not
@@ -351,30 +338,14 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture3D::GetData(int level, int left, int top, int right, int bottom, int front, int back,
                             Color* data, int startIndex, int elementCount) const
     {
-        if (getIsDisposedProperty())
-            throw System::ObjectDisposedException("Texture3D");
-        if (!data)
-            throw System::ArgumentNullException("data");
-        ThrowIfDataTransferResourceInUseEXT(false);
-        if (level < 0 || level >= levelCount_)
-            throw std::out_of_range("Texture3D::GetData: level is outside the mip chain");
-        ValidateCopyArguments(startIndex, elementCount);
-        if (left < 0 || left >= right || top < 0 || top >= bottom || front < 0 || front >= back)
-            throw System::ArgumentException("The box position or size is invalid.", "box");
-        if (right > MipDimension(width_, level) || bottom > MipDimension(height_, level) ||
-            back > MipDimension(depth_, level))
-            throw System::ArgumentException("The box is outside the mip level.", "box");
+        const int requiredColorElements = ValidateTypedTransferEXT(
+            "Texture3D::GetData", false, level, left, top, right, bottom, front, back,
+            data, startIndex, elementCount, 4);
 
         const int boxW = right - left;
         const int boxH = bottom - top;
         const int boxD = back - front;
-        const std::size_t boxVoxels =
-            static_cast<std::size_t>(boxW) * static_cast<std::size_t>(boxH) *
-            static_cast<std::size_t>(boxD);
         Texture::ValidateGetDataFormat(format_, 4);
-        const std::size_t requiredColorElements =
-            boxVoxels * static_cast<std::size_t>(Texture::GetFormatSizeEXT(format_)) / 4u;
-        ValidateTotalSize(elementCount, requiredColorElements);
 
         // REMED-GFX-130 -- see TextureCube::GetData for the full reasoning. `rgba` is scratch memory
         // this layer zero-initializes, so it is never handed to the caller unless the renderer
@@ -390,7 +361,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         // Sized to the REQUESTED BOX, not to elementCount -- see TextureCube::GetData's identical
         // note: a larger elementCount would otherwise return this buffer's untouched tail as content.
-        std::vector<uint8_t> rgba(requiredColorElements * 4u, 0);
+        std::vector<uint8_t> rgba(static_cast<std::size_t>(requiredColorElements) * 4u, 0);
         const bool read = format_ == SurfaceFormat::Color
             ? renderer_->GetData(level, left, top, front, boxW, boxH, boxD,
                                  rgba.data(), static_cast<int>(rgba.size()))

@@ -161,7 +161,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @throws System::ArgumentNullException if @p data is null.
          * @throws System::ArgumentOutOfRangeException for an invalid startIndex or elementCount.
          * @throws System::ArgumentException if the box or total transfer size is invalid.
-         * @throws std::out_of_range if @p level is invalid.
+         * @throws System::InvalidOperationException if @p level is invalid or this resource is
+         *         currently bound for sampling.
          */
         void SetData(int level, int left, int top, int right, int bottom, int front, int back,
                      const Color* data, int startIndex, int elementCount);
@@ -212,8 +213,6 @@ namespace Microsoft::Xna::Framework::Graphics
         void SetData(int level, int left, int top, int right, int bottom, int front, int back,
                      const T* data, int startIndex, int elementCount)
         {
-            if (data == nullptr)
-                throw System::ArgumentNullException("data");
             using Element = std::remove_cvref_t<T>;
             int elementBytes = 0;
             if constexpr (CNA::Internal::Graphics::Texture3DPackedElement<Element>)
@@ -237,8 +236,8 @@ namespace Microsoft::Xna::Framework::Graphics
                 elementBytes = static_cast<int>(sizeof(Element));
             }
             const int required = ValidateTypedTransferEXT(
-                "Texture3D::SetData", level, left, top, right, bottom, front, back,
-                startIndex, elementCount, elementBytes);
+                "Texture3D::SetData", true, level, left, top, right, bottom, front, back,
+                data, startIndex, elementCount, elementBytes);
             std::vector<std::uint8_t> bytes(
                 static_cast<std::size_t>(required) * static_cast<std::size_t>(elementBytes));
             if constexpr (CNA::Internal::Graphics::Texture3DPackedElement<Element>)
@@ -357,7 +356,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @throws System::ArgumentNullException if @p data is null.
          * @throws System::ArgumentOutOfRangeException for an invalid startIndex or elementCount.
          * @throws System::ArgumentException if the box or total transfer size is invalid.
-         * @throws std::out_of_range if @p level is invalid.
+         * @throws System::InvalidOperationException if @p level is invalid.
          */
         void GetData(int level, int left, int top, int right, int bottom, int front, int back,
                      Color* data, int startIndex, int elementCount) const;
@@ -408,8 +407,6 @@ namespace Microsoft::Xna::Framework::Graphics
         void GetData(int level, int left, int top, int right, int bottom, int front, int back,
                      T* data, int startIndex, int elementCount) const
         {
-            if (data == nullptr)
-                throw System::ArgumentNullException("data");
             using Element = std::remove_cvref_t<T>;
             int elementBytes = 0;
             if constexpr (CNA::Internal::Graphics::Texture3DPackedElement<Element>)
@@ -433,8 +430,8 @@ namespace Microsoft::Xna::Framework::Graphics
                 elementBytes = static_cast<int>(sizeof(Element));
             }
             const int required = ValidateTypedTransferEXT(
-                "Texture3D::GetData", level, left, top, right, bottom, front, back,
-                startIndex, elementCount, elementBytes);
+                "Texture3D::GetData", false, level, left, top, right, bottom, front, back,
+                data, startIndex, elementCount, elementBytes);
             std::vector<std::uint8_t> bytes(
                 static_cast<std::size_t>(required) * static_cast<std::size_t>(elementBytes));
             GetTypedDataBytesEXT(level, left, top, right, bottom, front, back,
@@ -504,8 +501,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
     private:
         [[nodiscard]] int ValidateTypedTransferEXT(
-            const char* api, int level, int left, int top, int right, int bottom,
-            int front, int back, int startIndex, int elementCount, int elementBytes) const;
+            const char* api, bool setting, int level, int left, int top, int right, int bottom,
+            int front, int back, const void* data, int startIndex, int elementCount,
+            int elementBytes) const;
         void SetTypedDataBytesEXT(
             int level, int left, int top, int right, int bottom, int front, int back,
             const std::uint8_t* data);
