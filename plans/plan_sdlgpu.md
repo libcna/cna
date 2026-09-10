@@ -1,16 +1,135 @@
 # SDL GPU Graphics Renderer — classic XNA / EasyGL parity plan and execution log
 
-> **Current verdict (audit opened 2026-09-09, closed 2026-09-10): A. CLASSIC SDL GPU ↔ EASYGL
-> PARITY REACHED.** Every audited ordinary XNA 4.0 graphics family is observably equivalent or is
+> **Current verdict (audit opened 2026-09-09; platform re-audit opened 2026-09-10): B. CLASSIC
+> SDL GPU ↔ EASYGL PARITY NOT YET REACHED across the renderer's advertised platforms.** On the
+> actually tested Linux/Vulkan configuration, every audited ordinary XNA 4.0 graphics family is
+> observably equivalent or is
 > one of three rigorously documented SDL_gpu API limits: arbitrary `MultiSampleMask`, exact
 > half-rate `PresentInterval::Two`, and `OcclusionQuery`. Exact half-rate presentation and
 > occlusion queries are the two remaining EasyGL capabilities SDL_gpu cannot express;
 > `MultiSampleMask` is unimplemented in EasyGL too. SDL GPU reports the query limitation and
-> refuses construction instead of fabricating results. Seven EasyGL defect findings (six distinct
+> refuses construction instead of fabricating results. However, `SDLGPU-92`–`SDLGPU-96` remain
+> open: the renderer descriptor advertises SDL GPU without a platform qualification while device
+> creation and all built-in shaders currently require SPIR-V, so the ordinary renderer is not yet
+> a viable Metal or D3D12 implementation. Seven EasyGL defect findings (six distinct
 > behavior families) are deliberately not copied. The final 188/188 SDL integration, 42/42
 > renderer-unit, 33/33 EasyGL
-> oracle and 32/32 two-renderer corpus gates are green. This verdict supersedes historical
+> oracle and 32/32 two-renderer corpus gates remain green on Linux/Vulkan. This verdict supersedes historical
 > completion banners below; those remain implementation history, not current truth.
+
+## 2026-09-10 platform portability re-audit
+
+The behavioral closeout below was accurate for its recorded Linux/Vulkan device, but its verdict
+was not qualified narrowly enough. The post-close audit started at
+`8cd9ab7f45a05bef3a727598c8d9ef5cf8b04442`: `SdlGpuRendererDescriptor` uses
+`AlwaysAvailable`, while the constructor passes only `SDL_GPU_SHADERFORMAT_SPIRV` to
+`SDL_CreateGPUDevice` and all 25 construction shaders pass that same format to
+`SDL_CreateGPUShader`. Vendored SDL 3.5 exposes Vulkan/SPIR-V, D3D12/DXBC-or-DXIL and
+Metal/MSL-or-metallib drivers. The current implementation therefore cannot substantiate the
+unqualified cross-platform capability that its descriptor advertises.
+
+This is an ordinary-XNA gap rather than modern CNAEXT work: `GraphicsDevice` construction and all
+stock effects/SpriteBatch reach these shaders. The pinned MojoShader SDL_gpu adapter provides a
+useful implementation precedent: it dynamically loads SDL_shadercross, asks which native formats
+can be produced from SPIR-V, reflects the resource layout and compiles for the selected device.
+That adapter alone is insufficient today because device creation ignores those formats, CNA does
+not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
+
+| Item | Current evidence |
+|---|---|
+| Re-audit starting branch / commit | `sdlgpu` / `8cd9ab7f45a05bef3a727598c8d9ef5cf8b04442` |
+| Newly created tasks | 6 (`SDLGPU-91`–`SDLGPU-96`) |
+| Completed / open | 1 / 5 after the scope correction (`SDLGPU-91` complete; `SDLGPU-92`–`96` open) |
+| Proven runtime configuration | Linux/Vulkan only; the existing 188 integration, 42 renderer-unit, 33 EasyGL-oracle and 32 shared-source gates remain the behavioral baseline |
+| Available local cross tools | MinGW-w64 and Wine are present; no Apple SDK/device, Android SDK/device, `dxc`, `spirv-cross`, SDL_shadercross executable or SDL_shadercross shared library was found |
+| Display constraint | All further Linux SDL tests must use `SDL_VIDEODRIVER=offscreen`; Windows GUI tests must use a headless/virtual display if runnable. Never use the host display. |
+
+### SDLGPU-91 — correct the parity verdict's platform scope ✅
+
+- **Problem/public behavior:** the prior top-level verdict generalized a Linux/Vulkan result to an
+  unqualified renderer-wide result. An application can select the advertised SDL GPU renderer on
+  Windows or Apple platforms, but its ordinary `GraphicsDevice` construction has no native shader
+  route there.
+- **EasyGL/SDL evidence:** EasyGL builds its stock programs for the active OpenGL profile. SDL GPU's
+  descriptor is `AlwaysAvailable`, yet its constructor and all construction shaders hardcode
+  SPIR-V. SDL's vendored headers enumerate native D3D12 and Metal shader formats that CNA never
+  supplies.
+- **Location:** top-level verdict, this dated re-audit and the new remediation ledger in this plan.
+- **Acceptance/test:** qualify every existing runtime claim to its actual Linux/Vulkan evidence;
+  identify exact source and API evidence; create bounded implementation and platform-validation
+  tasks without weakening the completed Linux behavior gates.
+- **Result (2026-09-10):** verdict B now records the platform gap explicitly while preserving the
+  fully green Linux/Vulkan result. `SDLGPU-92`–`96` separate portable shader construction,
+  compiled-effect integration and each unavailable platform validation so one external SDK or
+  device cannot block independent work.
+
+### SDLGPU-92 — compile built-in SPIR-V shaders for the active native SDL_gpu driver ⬜
+
+- **Problem/public behavior:** SpriteBatch and every built-in XNA effect depend on 25 construction
+  shaders, all tagged SPIR-V. SDL_gpu's D3D12 and Metal drivers cannot consume those blobs.
+- **EasyGL/SDL evidence:** EasyGL compiles renderer-native stock GLSL; SDL_shadercross exposes
+  SPIR-V reflection plus native `SDL_GPUShader` compilation and the pinned MojoShader adapter
+  already demonstrates its ABI and dynamic-loader names.
+- **Location:** SDL GPU dependency wiring and a renderer-local shader-format/ShaderCross bridge;
+  central `ConstructionResources::CreateShader` call path.
+- **Acceptance/test:** retain direct SPIR-V creation on Vulkan; when the selected device does not
+  support SPIR-V, reflect and compile every stock vertex/fragment shader to a device-supported
+  native format; fail with a precise dependency/format diagnostic rather than a generic device
+  error; unit-test selection, loading and failure cleanup; rerun constructor exception safety,
+  renderer unit tests and validation-fatal stock-effect/SpriteBatch slices offscreen.
+- **Status:** open.
+
+### SDLGPU-93 — align ordinary compiled-effect device formats with the portable shader route ⬜
+
+- **Problem/public behavior:** the ordinary XNA compiled-effect adapter can dynamically invoke
+  SDL_shadercross after device creation, but the renderer currently creates a SPIR-V-only device
+  before MojoShader can advertise cross-compiled formats, and no matching ShaderCross runtime is
+  supplied.
+- **EasyGL/SDL evidence:** EasyGL's MojoShader route generates GLSL for its active GL profile. The
+  pinned SDL_gpu adapter ORs `SDL_ShaderCross_GetSPIRVShaderFormats()` into its supported-format
+  result and cross-compiles linked shaders only when the device lacks its native profile.
+- **Location:** renderer device-format selection, SDL GPU compiled-effect dependency/package path
+  and pinned MojoShader adapter integration.
+- **Acceptance/test:** device creation requests the same native formats available to stock and
+  compiled shaders; a compiled BasicEffect/representative custom XNA effect links and draws on a
+  non-SPIR-V driver; missing ShaderCross is detected before creating an unusable device; Linux
+  compiled-effect parity remains green.
+- **Status:** open.
+
+### SDLGPU-94 — validate ordinary parity on Windows D3D12 ⬜
+
+- **Problem/public behavior:** no current runtime evidence proves that SDL GPU constructs or draws
+  the ordinary XNA surface through SDL_gpu's D3D12 driver.
+- **EasyGL/SDL evidence:** Windows is an EasyGL platform and SDL advertises a D3D12 driver accepting
+  DXBC/DXIL; the current local host has MinGW-w64 and Wine but no confirmed headless D3D12 runtime.
+- **Location:** stable cross-build configuration and portable renderer/oracle test registration.
+- **Acceptance/test:** cross-compile incrementally, run constructor plus discriminating
+  SpriteBatch/stock-effect/texture/RT/state/readback/compiled-effect slices on the D3D12 driver,
+  make D3D validation diagnostics fatal where available, and record exact environment evidence.
+- **Status:** open; implementation can proceed before runtime availability is known.
+
+### SDLGPU-95 — validate ordinary parity on Apple Metal ⬜
+
+- **Problem/public behavior:** no macOS/iOS build or Metal runtime evidence exists.
+- **EasyGL/SDL evidence:** SDL_gpu's Metal driver consumes MSL/metallib, while CNA currently ships
+  only SPIR-V stock shaders and this Linux host has no Apple SDK or device.
+- **Location:** Apple build/package integration and the portable renderer corpus.
+- **Acceptance/test:** build on a supported Apple SDK and execute the same discriminating ordinary
+  corpus through the Metal driver with native diagnostics enabled; record any true SDL limitation
+  rather than inferring success from source inspection.
+- **Status:** open; runtime validation currently has an external hardware/SDK dependency.
+
+### SDLGPU-96 — validate the retained SPIR-V route on Android/Vulkan ⬜
+
+- **Problem/public behavior:** Android is an SDL GPU target but has no current construction,
+  lifecycle or ordinary-draw evidence in this plan.
+- **EasyGL/SDL evidence:** the built-in SPIR-V representation should remain usable through Android
+  Vulkan, but the claim is untested and window/swapchain lifecycle differs from desktop.
+- **Location:** Android build configuration plus a compact portable SDL GPU corpus.
+- **Acceptance/test:** cross-build with a supported NDK and run construction/lifecycle,
+  SpriteBatch, stock effect, texture, render-target and readback checks on an Android Vulkan
+  device/emulator without weakening the desktop suite.
+- **Status:** open; runtime validation currently has an external SDK/device dependency.
 
 ## 2026-09-10 parity audit final status
 
@@ -26,8 +145,8 @@
 | SDL GPU registered integration tests | 188 CTests (85 baseline plus 103 parity/remediation registrations) |
 | Shared EasyGL parity fixtures available | 32 renderer-neutral sources in `modules/graphics/examples/parity` |
 | Shared parity fixtures registered for SDL GPU | 32/32 (all renderer-neutral sources, including the nine classic stock-effect fixtures) |
-| Tasks created by this audit | 36 (`SDLGPU-55`–`SDLGPU-90`) |
-| Completed / open / proven unavoidable | 36 / 0 tasks; 3 capability fields (`BlendState.MultiSampleMask`, exact half-rate `PresentInterval::Two`, and `OcclusionQuery`) are proven unavailable in current SDL_gpu; the first two are not separate tasks and the third is closed by `SDLGPU-80` |
+| Tasks created by this audit | 36 (`SDLGPU-55`–`SDLGPU-90`); the later platform re-audit creates six more (`SDLGPU-91`–`96`) |
+| Completed / open / proven unavoidable | This closed Linux/Vulkan phase completed 36 / 0 tasks; the current renderer-wide ledger is 37 / 5. Three capability fields (`BlendState.MultiSampleMask`, exact half-rate `PresentInterval::Two`, and `OcclusionQuery`) are proven unavailable in current SDL_gpu; the first two are not separate tasks and the third is closed by `SDLGPU-80` |
 | SDL GPU build | Stable `cmake-build-sdlgpu`, Debug, `CNA_GRAPHICS_RENDERER=SDL_GPU`, tests/examples and `CNA_SDL_GPU_COMPILED_EFFECTS` ON |
 | EasyGL oracle build | Stable `cmake-build-debug`, Debug, `CNA_GRAPHICS_RENDERER=OPENGL33`, tests/examples ON |
 | Runtime driver | SDL 3.5.0 SDL_gpu Vulkan on AMD Radeon 780M / Mesa RADV 25.0.7; Khronos validation layer 1.4.309 present |
