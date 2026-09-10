@@ -65,6 +65,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
     cna_register_renderer_test(NAME DirectX9_Smoke COMMAND ${_directx9_smoke_cmd}
         TIMEOUT 60 LABELS "DIRECTX9")
 
+    if(CNA_DIRECTX9_COMPILED_EFFECTS)
+        cna_directx9_ctest_command(_directx9_compiled_effects_cmd CnaRendererTests)
+        cna_register_renderer_test(NAME DirectX9_CompiledEffects
+            COMMAND ${_directx9_compiled_effects_cmd}
+                    --gtest_filter=DirectX9CompiledEffect*
+            TIMEOUT 300 LABELS "DIRECTX9;CompiledEffects")
+    endif()
+
     # REMED-GFX-092: deterministic, renderer-instance-local HRESULT injection for D3D9 state,
     # target/depth binding, depth allocation, retry, rollback, and lost-device mapping.  The
     # native success path is still exercised by DirectX9_Smoke and this test's setup/retry operations.

@@ -1496,6 +1496,25 @@ namespace CNA::Internal::Renderers::DirectX9
         device_->SetSamplerState(sampler, D3DSAMP_ADDRESSU, static_cast<DWORD>(TextureAddressModeToD3D9(addressU)));
         device_->SetSamplerState(sampler, D3DSAMP_ADDRESSV, static_cast<DWORD>(TextureAddressModeToD3D9(addressV)));
         device_->SetSamplerState(sampler, D3DSAMP_MAXANISOTROPY, static_cast<DWORD>(maxAnisotropy));
+        device_->SetSamplerState(sampler, D3DSAMP_ADDRESSW, static_cast<DWORD>(TextureAddressModeToD3D9(addressV)));
+        device_->SetSamplerState(sampler, D3DSAMP_MAXMIPLEVEL, 0);
+        device_->SetSamplerState(sampler, D3DSAMP_MIPMAPLODBIAS, std::bit_cast<DWORD>(0.0f));
+    }
+
+    void DirectX9Renderer::ApplySamplerMipState(int slot, int maxMipLevel, float lodBias)
+    {
+        if (slot < 0 || slot >= static_cast<int>(caps_.MaxSimultaneousTextures)) return;
+        const DWORD sampler = static_cast<DWORD>(slot);
+        device_->SetSamplerState(sampler, D3DSAMP_MAXMIPLEVEL,
+                                 static_cast<DWORD>(std::max(0, maxMipLevel)));
+        device_->SetSamplerState(sampler, D3DSAMP_MIPMAPLODBIAS, std::bit_cast<DWORD>(lodBias));
+    }
+
+    void DirectX9Renderer::ApplySamplerAddressW(int slot, int addressW)
+    {
+        if (slot < 0 || slot >= static_cast<int>(caps_.MaxSimultaneousTextures)) return;
+        device_->SetSamplerState(static_cast<DWORD>(slot), D3DSAMP_ADDRESSW,
+                                 static_cast<DWORD>(TextureAddressModeToD3D9(addressW)));
     }
 
     void DirectX9Renderer::SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth)

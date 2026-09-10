@@ -21,6 +21,11 @@
 #include <unordered_map>
 #include <vector>
 
+namespace Microsoft::Xna::Framework::Graphics
+{
+    class TextureCollection;
+}
+
 namespace CNA::Internal::Renderers::DirectX9
 {
     using Microsoft::WRL::ComPtr;
@@ -28,6 +33,10 @@ namespace CNA::Internal::Renderers::DirectX9
     class D3D9RenderTargetRenderer;
     class D3D9RenderTargetCubeRenderer;
     class D3D9ShaderCache;
+#if defined(CNA_DIRECTX9_COMPILED_EFFECTS)
+    class D3D9CompiledEffect;
+    struct D3D9MojoShaderContextEXT;
+#endif
 
     /// Narrow operation list for REMED-GFX-092's checked D3D9 state/target/depth path.  This is
     /// deliberately not a general D3D9 interception layer: it exists both to centralize the
@@ -269,6 +278,48 @@ namespace CNA::Internal::Renderers::DirectX9
         std::unique_ptr<IEffectRenderer> CreateEffectRenderer(const std::string& vertSrc,
                                                              const std::string& fragSrc) override;
 
+#if defined(CNA_DIRECTX9_COMPILED_EFFECTS)
+        /** @brief Creates a compiled XNA effect using its native D3D9 shader tokens. */
+        std::unique_ptr<ICompiledEffectRuntime> CreateCompiledEffect(
+            const std::uint8_t* effectCode, std::size_t effectCodeBytes) override;
+
+        /** @brief Reports compiled effects only in the conformance-gated opt-in build. */
+        [[nodiscard]] bool SupportsCompiledEffects() const override { return true; }
+
+        /** @brief Returns the renderer-wide compiled-effect shader/register context. */
+        CNAEXT D3D9MojoShaderContextEXT* GetMojoShaderContextEXT();
+
+        /** @brief Returns a weak token that expires before this renderer can be dereferenced. */
+        [[nodiscard]] std::weak_ptr<void> GetLifetimeTokenEXT() const noexcept
+        {
+            return lifetimeToken_;
+        }
+
+        /**
+         * @brief Draws with the currently applied compiled-effect pass.
+         * @param fallback Primary vertex buffer used when @p params has no explicit stream list.
+         * @param indexBuffer Optional index buffer.
+         * @param primitive Primitive topology.
+         * @param primitiveCount Number of primitives.
+         * @param instanceCount Number of instances; one for an ordinary draw.
+         * @param params Complete public draw parameters and stream bindings.
+         * @param runtime Applied compiled-effect runtime.
+         * @param spriteBatchSlotZeroTexture Optional SpriteBatch source overriding pixel slot zero.
+         * @param spriteBatchTextures Optional public texture collection for unassigned pixel slots.
+         */
+        CNAEXT void DrawCompiledEffectEXT(
+            const IVertexBufferRenderer& fallback,
+            const IIndexBufferRenderer* indexBuffer,
+            PrimitiveType primitive,
+            int primitiveCount,
+            int instanceCount,
+            const GpuDrawParams& params,
+            ICompiledEffectRuntime& runtime,
+            const ITextureRenderer* spriteBatchSlotZeroTexture = nullptr,
+            const Microsoft::Xna::Framework::Graphics::TextureCollection*
+                spriteBatchTextures = nullptr);
+#endif
+
         // ---- IGraphicsRenderer: real (D9-30/D9-6 -- GraphicsDevice's own constructor unconditionally
         // pushes BlendState::Opaque/DepthStencilState::Default/RasterizerState::CullCounterClockwise
         // and the viewport right after construction (Task 896/955, UpdateViewportFromWindow()), so
@@ -307,6 +358,8 @@ namespace CNA::Internal::Renderers::DirectX9
         /// exist to sample -- previously listed there since nothing forced it in early the way
         /// `ApplyBlendState`/`ApplyDepthStencilState`/`ApplyRasterizerState` were.
         void ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy) override;
+        void ApplySamplerMipState(int slot, int maxMipLevel, float lodBias) override;
+        void ApplySamplerAddressW(int slot, int addressW) override;
 
         // ---- IGraphicsRenderer: silently-empty-default virtuals, explicitly loud until real ----
         // (D9-11's own distinction: these have a `{}` default on IGraphicsRenderer itself, so an
@@ -385,6 +438,11 @@ namespace CNA::Internal::Renderers::DirectX9
         void UnregisterDefaultPoolResourceEXT(ID3D9DefaultPoolResourceEXT* resource);
 
     private:
+#if defined(CNA_DIRECTX9_COMPILED_EFFECTS)
+        friend class D3D9CompiledEffect;
+#endif
+        std::shared_ptr<void> lifetimeToken_ = std::make_shared<int>(0);
+
         void CreateDeviceResources(const GraphicsRendererCreateArgs& args);
         /// D9-33/D9-34: (re)builds currentPresentParams_ from the tracked width_/height_/format/
         /// fullscreen/swap-interval fields -- shared by construction, resize, and device-lost
@@ -602,6 +660,9 @@ namespace CNA::Internal::Renderers::DirectX9
 
         ComPtr<IDirect3D9> d3d9_;
         ComPtr<IDirect3DDevice9> device_;
+#if defined(CNA_DIRECTX9_COMPILED_EFFECTS)
+        std::shared_ptr<D3D9MojoShaderContextEXT> mojoShaderContext_;
+#endif
         D3DCAPS9 caps_{};
         /// D9-53: the device's own implicit default depth-stencil surface, cached by
         /// CacheDefaultDepthStencilSurfaceEXT() so RestoreBackBufferRenderTargetEXT() can restore it

@@ -5,14 +5,26 @@
 #include "CNA/Internal/Renderers/DirectX9/D3D9VertexDeclarations.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9ConstantUpload.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9EffectRenderer.hpp"
+#if defined(CNA_DIRECTX9_COMPILED_EFFECTS)
+#include "CNA/Internal/Renderers/DirectX9/D3D9CompiledEffect.hpp"
+#include "Fna3dStockEffectBlobs.hpp"
+#endif
 #include "shaders/d3d9_shaders.hpp"
 #include "CNA/Internal/Renderers/DirectX9/shaders/D3D9ShaderRegisters.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "System/InvalidOperationException.hpp"
 
+#include <algorithm>
+#include <cstddef>
 #include <cmath>
 #include <stdexcept>
 #include <string>
@@ -64,7 +76,42 @@ namespace CNA::Internal::Renderers::DirectX9
         , vb_(*owner_, device_.Get(), 256)
         , ib_(*owner_, device_.Get(), 384, false)
     {
+        using Microsoft::Xna::Framework::Graphics::VertexDeclaration;
+        using Microsoft::Xna::Framework::Graphics::VertexElement;
+        using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+        using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+        static const VertexDeclaration kSpriteDeclaration(
+            static_cast<int>(sizeof(SpriteVertex)),
+            {
+                VertexElement(static_cast<int>(offsetof(SpriteVertex, x)),
+                              VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+                VertexElement(static_cast<int>(offsetof(SpriteVertex, r)),
+                              VertexElementFormat::Color, VertexElementUsage::Color, 0),
+                VertexElement(static_cast<int>(offsetof(SpriteVertex, u)),
+                              VertexElementFormat::Vector2,
+                              VertexElementUsage::TextureCoordinate, 0),
+            });
+        vb_.SetVertexDeclaration(kSpriteDeclaration);
+#if defined(CNA_DIRECTX9_COMPILED_EFFECTS)
+        const auto& bytes =
+            CNA::Internal::Renderers::Fna3d::StockEffectBlobs::kSpriteEffectFxb;
+        spriteCompiledEffect_ = std::make_unique<D3D9CompiledEffect>(
+            *owner_, bytes, sizeof(bytes));
+        const auto& parameters = spriteCompiledEffect_->GetDescription().parameters;
+        const auto matrix = std::find_if(
+            parameters.begin(), parameters.end(),
+            [](const CompiledEffectParameterDescription& parameter)
+            {
+                return parameter.name == "MatrixTransform";
+            });
+        if (matrix == parameters.end())
+            throw std::runtime_error(
+                "DirectX9 SpriteBatch: embedded XNA SpriteEffect has no MatrixTransform parameter.");
+        spriteMatrixParameterIndex_ = matrix->runtimeIndex;
+#endif
     }
+
+    D3D9SpriteBatchRenderer::~D3D9SpriteBatchRenderer() = default;
 
     void D3D9SpriteBatchRenderer::Begin()
     {
@@ -104,6 +151,17 @@ namespace CNA::Internal::Renderers::DirectX9
     {
         pendingAddressU_ = addressU;
         pendingAddressV_ = addressV;
+    }
+
+    void D3D9SpriteBatchRenderer::SetSamplerMipState(int maxMipLevel, float lodBias)
+    {
+        pendingMaxMipLevel_ = maxMipLevel;
+        pendingLodBias_ = lodBias;
+    }
+
+    void D3D9SpriteBatchRenderer::SetSamplerAddressW(int addressW)
+    {
+        pendingAddressW_ = addressW;
     }
 
     void D3D9SpriteBatchRenderer::GetCurrentViewportSizeEXT(float& width, float& height) const
@@ -190,6 +248,14 @@ namespace CNA::Internal::Renderers::DirectX9
     {
         if (pendingVertices_.empty()) return;
 
+#if defined(CNA_DIRECTX9_COMPILED_EFFECTS)
+        if (customEffect_ != nullptr && customEffect_->GetCompiledRuntimePtr() != nullptr)
+        {
+            FlushBatchWithCompiledEffectEXT();
+            return;
+        }
+#endif
+
         owner_->EnsureRenderReadyEXT();
 
         EnsureShadersEXT();
@@ -240,6 +306,8 @@ namespace CNA::Internal::Renderers::DirectX9
         device_->SetTexture(0, ResolveD3D9TextureEXT(currentTexture_));
 
         owner_->ApplySamplerState(0, pendingFilter_, pendingAddressU_, pendingAddressV_, 1);
+        owner_->ApplySamplerMipState(0, pendingMaxMipLevel_, pendingLodBias_);
+        owner_->ApplySamplerAddressW(0, pendingAddressW_);
 
         device_->SetVertexDeclaration(vertexDecl_.Get());
 
@@ -256,6 +324,79 @@ namespace CNA::Internal::Renderers::DirectX9
         pendingIndices_.clear();
         currentTexture_ = nullptr;
     }
+
+#if defined(CNA_DIRECTX9_COMPILED_EFFECTS)
+    void D3D9SpriteBatchRenderer::ApplyCompiledSpriteVertexShaderEXT(
+        float viewportWidth, float viewportHeight)
+    {
+        if (spriteCompiledEffect_ == nullptr || customEffect_ == nullptr ||
+            viewportWidth <= 0.0f || viewportHeight <= 0.0f)
+            throw std::runtime_error(
+                "DirectX9 SpriteBatch: compiled stock vertex effect is unavailable.");
+
+        const Matrix combined = BuildMatrixTransformEXT(viewportWidth, viewportHeight);
+        float values[16];
+        combined.ToColumnMajor(values);
+        spriteCompiledEffect_->SetParameterValue(
+            spriteMatrixParameterIndex_, values, sizeof(values));
+        spriteCompiledEffect_->SetTechnique(0);
+
+        auto& graphicsDevice = customEffect_->getGraphicsDeviceInternal();
+        CompiledEffectDeviceState state;
+        state.blend = &graphicsDevice.getBlendStateProperty();
+        state.depthStencil = &graphicsDevice.getDepthStencilStateProperty();
+        state.rasterizer = &graphicsDevice.getRasterizerStateProperty();
+        state.samplerStates = &graphicsDevice.getSamplerStatesProperty();
+        state.vertexSamplerStates = &graphicsDevice.getVertexSamplerStatesProperty();
+        CompiledEffectPassStateChanges ignored;
+        spriteCompiledEffect_->ApplyPass(0, state, ignored);
+    }
+
+    void D3D9SpriteBatchRenderer::FlushBatchWithCompiledEffectEXT()
+    {
+        ICompiledEffectRuntime* runtime = customEffect_->GetCompiledRuntimePtr();
+        if (runtime == nullptr || currentTexture_ == nullptr)
+            throw std::runtime_error(
+                "DirectX9 SpriteBatch: compiled-effect batch state is incomplete.");
+
+        owner_->EnsureRenderReadyEXT();
+        vb_.SetData(pendingVertices_.data(), static_cast<int>(pendingVertices_.size()),
+                    sizeof(SpriteVertex));
+        ib_.SetData16(pendingIndices_.data(), static_cast<int>(pendingIndices_.size()));
+        owner_->ApplySamplerState(
+            0, pendingFilter_, pendingAddressU_, pendingAddressV_, 1);
+        owner_->ApplySamplerMipState(0, pendingMaxMipLevel_, pendingLodBias_);
+        owner_->ApplySamplerAddressW(0, pendingAddressW_);
+
+        float viewportWidth = 0.0f;
+        float viewportHeight = 0.0f;
+        GetCurrentViewportSizeEXT(viewportWidth, viewportHeight);
+        auto* technique = customEffect_->getCurrentTechniqueProperty();
+        const int passCount = technique != nullptr
+            ? technique->getPassesProperty().getCountProperty() : 0;
+        if (passCount == 0)
+            throw System::InvalidOperationException(
+                "DirectX9 SpriteBatch: a compiled Effect needs a current technique with at "
+                "least one pass.");
+
+        ApplyCompiledSpriteVertexShaderEXT(viewportWidth, viewportHeight);
+        const auto& deviceTextures =
+            customEffect_->getGraphicsDeviceInternal().getTexturesProperty();
+        GpuDrawParams params;
+        for (int pass = 0; pass < passCount; ++pass)
+        {
+            technique->getPassesProperty()[pass].Apply();
+            owner_->DrawCompiledEffectEXT(
+                vb_, &ib_, PrimitiveType::TriangleList,
+                static_cast<int>(pendingIndices_.size() / 3u), 1, params, *runtime,
+                currentTexture_, &deviceTextures);
+        }
+
+        pendingVertices_.clear();
+        pendingIndices_.clear();
+        currentTexture_ = nullptr;
+    }
+#endif
 
     void D3D9SpriteBatchRenderer::Draw(const ITextureRenderer& texture, float x, float y)
     {

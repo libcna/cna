@@ -862,6 +862,15 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
     set(RENDERER_TARGET "cna_renderer_directx9")
     list(APPEND _cna_identity_defines CNA_RENDERER_DIRECTX9)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_DIRECTX9")
+    # plans/plan_fx.md FX-070: compiled XNA effects already contain native D3D9 tokens;
+    # MojoShader is optional and is used only for the container runtime and reflection.
+    option(CNA_DIRECTX9_COMPILED_EFFECTS
+           "Build DirectX 9 support for compiled XNA Effect bytecode (plans/plan_fx.md FX-070)" OFF)
+    if(CNA_DIRECTX9_COMPILED_EFFECTS)
+        include(cmake/ThirdPartyFNA3D.cmake)
+        cna_configure_mojoshader()
+        add_compile_definitions(CNA_DIRECTX9_COMPILED_EFFECTS)
+    endif()
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX1")
     message(STATUS "CNA: Using DIRECTX1 (real DirectDraw v1) graphics renderer")
     set(RENDERER_DIR "modules/renderers/directx1")

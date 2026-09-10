@@ -522,6 +522,15 @@ namespace CNA::Internal::Renderers::DirectX9
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
+#if defined(CNA_DIRECTX9_COMPILED_EFFECTS)
+        if (params.compiledEffectRuntime != nullptr)
+        {
+            EnsureRenderReadyEXT();
+            DrawCompiledEffectEXT(vb, ib, primitive, primitiveCount, 1, params,
+                                  *params.compiledEffectRuntime);
+            return;
+        }
+#endif
         // REMED-GFX-DECL-GUARD: before EnsureRenderReadyEXT, before any IDirect3DVertexDeclaration9
         // is created and before any draw is issued. This renderer selects that declaration from the
         // shared D3DCommon stride table (REMED-GFX-217), so a declaration the table's entry cannot

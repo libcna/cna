@@ -19,6 +19,7 @@
 
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 
+#include <algorithm>
 #include <cstdio>
 #include <stdexcept>
 #include <string>
@@ -88,6 +89,15 @@ namespace CNA::Internal::Renderers::DirectX9
 
         const auto& d3dVb     = static_cast<const D3D9VertexBufferRenderer&>(vb);
         const auto& d3dIb     = static_cast<const D3D9IndexBufferRenderer&>(ib);
+#if defined(CNA_DIRECTX9_COMPILED_EFFECTS)
+        if (params.compiledEffectRuntime != nullptr)
+        {
+            DrawCompiledEffectEXT(vb, &ib, primitive, primitiveCount,
+                                  std::max(1, instanceCount), params,
+                                  *params.compiledEffectRuntime);
+            return;
+        }
+#endif
         // REMED-GFX-202: one stream of each rate (REMED-GFX-208 tracks widening it).
         RejectUnsupportedStreamCombination(params, "The D3D9 renderer");
         // REMED-GFX-DECL-GUARD: the geometry stream's declaration, same stride table.

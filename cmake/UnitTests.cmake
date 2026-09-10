@@ -454,7 +454,8 @@ if(CNA_BUILD_TESTS)
     message(STATUS "CNA: focused unit-test targets: ${CNA_FOCUSED_TEST_TARGETS}")
 
     if(MINGW AND
-       ((CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11" AND CNA_DIRECTX11_COMPILED_EFFECTS) OR
+       ((CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9" AND CNA_DIRECTX9_COMPILED_EFFECTS) OR
+        (CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11" AND CNA_DIRECTX11_COMPILED_EFFECTS) OR
         (CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12" AND CNA_DIRECTX12_COMPILED_EFFECTS)))
         target_link_options(CnaRendererTests PRIVATE
             -static-libgcc -static-libstdc++ -Wl,--allow-multiple-definition)
@@ -649,7 +650,8 @@ if(CNA_BUILD_TESTS)
     # mojoshader.h. The focused object groups copy renderer include directories above, but include
     # directories alone do not carry MojoShader's required public compile definitions (notably
     # MOJOSHADER_NO_VERSION_INCLUDE for its ungenerated source-tree version header).
-    if((CNA_EASYGL_COMPILED_EFFECTS OR CNA_DIRECTX11_COMPILED_EFFECTS OR
+    if((CNA_EASYGL_COMPILED_EFFECTS OR CNA_DIRECTX9_COMPILED_EFFECTS OR
+        CNA_DIRECTX11_COMPILED_EFFECTS OR
         CNA_DIRECTX12_COMPILED_EFFECTS) AND TARGET cna_mojoshader)
         target_link_libraries(cna_test_build_config INTERFACE cna_mojoshader)
     endif()
