@@ -278,30 +278,78 @@ namespace Microsoft::Xna::Framework::Graphics
         }
 
         /**
-         * @brief Uploads exact block-compressed bytes to an entire cube face.
+         * @brief Uploads exact bytes to an entire cube face.
          *
-         * This represents XNA's generic byte-array SetData route for Dxt1, Dxt3 and Dxt5 cube
-         * textures. The byte count is the padded 4x4 block payload, not a texel count.
+         * This represents XNA's generic byte-array SetData route. For Dxt1, Dxt3 and Dxt5 the
+         * byte count is the padded 4x4 block payload, not a texel count.
          *
          * @param face         The cube face to update.
-         * @param data         Source block bytes.
+         * @param data         Source bytes.
          * @param elementCount Number of available bytes.
          */
-        CNAEXT void SetData(CubeMapFace face, const std::uint8_t* data, int elementCount);
+        void SetData(CubeMapFace face, const std::uint8_t* data, int elementCount);
 
         /**
-         * @brief Uploads exact block-compressed bytes to a cube-face mip or block-aligned region.
+         * @brief Uploads exact bytes to a cube-face mip or region.
          *
          * @param face         The cube face to update.
          * @param level        Mip level to update.
          * @param rect         Region in texel coordinates, or null for the whole mip.
-         * @param data         Source block bytes.
+         * @param data         Source bytes.
          * @param startIndex   First source byte.
          * @param elementCount Number of available source bytes from @p startIndex.
          */
-        CNAEXT void SetData(CubeMapFace face, int level,
-                            const Microsoft::Xna::Framework::Rectangle* rect,
-                            const std::uint8_t* data, int startIndex, int elementCount);
+        void SetData(CubeMapFace face, int level,
+                     const Microsoft::Xna::Framework::Rectangle* rect,
+                     const std::uint8_t* data, int startIndex, int elementCount);
+
+        /**
+         * @brief Reads an entire cube face into exact bytes.
+         *
+         * @param face Cube face to read.
+         * @param data Destination bytes.
+         * @param elementCount Number of available destination bytes.
+         */
+        void GetData(CubeMapFace face, std::uint8_t* data, int elementCount) const;
+
+        /**
+         * @brief Reads an entire cube face into a destination byte window.
+         *
+         * @param face Cube face to read.
+         * @param data Destination bytes.
+         * @param startIndex First destination byte.
+         * @param elementCount Number of available destination bytes from @p startIndex.
+         */
+        void GetData(CubeMapFace face, std::uint8_t* data,
+                     int startIndex, int elementCount) const;
+
+        /**
+         * @brief Reads exact bytes from a cube-face mip or rectangle.
+         *
+         * @param face Cube face to read.
+         * @param level Mip level beginning at zero.
+         * @param rect Source rectangle, or null for the complete level.
+         * @param data Destination bytes.
+         * @param startIndex First destination byte.
+         * @param elementCount Number of available destination bytes from @p startIndex.
+         */
+        void GetData(CubeMapFace face, int level,
+                     const Microsoft::Xna::Framework::Rectangle* rect,
+                     std::uint8_t* data, int startIndex, int elementCount) const;
+
+        /** @brief Preserves null-pointer overload resolution for an entire cube face. */
+        void GetData(CubeMapFace face, std::nullptr_t, int elementCount) const
+        {
+            GetData(face, static_cast<Color*>(nullptr), elementCount);
+        }
+
+        /** @brief Preserves null-pointer overload resolution for a cube-face mip or rectangle. */
+        void GetData(CubeMapFace face, int level,
+                     const Microsoft::Xna::Framework::Rectangle* rect,
+                     std::nullptr_t, int startIndex, int elementCount) const
+        {
+            GetData(face, level, rect, static_cast<Color*>(nullptr), startIndex, elementCount);
+        }
 
         /**
          * @brief Reads all data from the specified cube face into the provided array.

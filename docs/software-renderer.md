@@ -481,6 +481,13 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   depth-dominant `1x1x8` four-level chain round-trip identically on Software and EasyGL; DXT1/3/5
   are rejected because XNA does not permit block-compressed volume textures. The separate frozen
   CNB schema-1 transcoder intentionally remains canonical RGBA8.
+- **Classic XNB Texture2D and TextureCube content keeps every legal authored representation**
+  (`SOFTWARE-275`) — the runtime readers now construct the serialized format and upload exact
+  uncompressed mip/face bytes for all 20 Texture2D formats and all 18 XNA-permitted cube formats.
+  Software and EasyGL also expose exact DXT1/3/5 cube block readback through the classic generic
+  byte transfer shape, proving the compressed content was retained rather than merely decoded for
+  sampling. Backends without exact DXT transfer continue to receive FNA's lossless Color fallback;
+  `NormalizedByte2/4` cubes remain correctly rejected by XNA's format table.
 - **The classic SpriteBatch/SpriteFont parity corpus executes on the CPU** (`SOFTWARE-138`).
   Eighteen renderer-independent scenes shared with EasyGL cover flips, rotation/origin, both scale
   overloads, source rectangles, layer sorting, transforms, render targets, viewports, scissor,

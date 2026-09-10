@@ -290,6 +290,31 @@ TEST_F(TextureCubeTest, SetDataStartIndexNegativeStartIndexThrowsOutOfRange)
     EXPECT_THROW(tex.SetData(CubeMapFace::PositiveX, buf.data(), -1, 4), std::out_of_range);
 }
 
+// SOFTWARE-275: the XNA generic byte instantiation addresses byte-array windows for every
+// uncompressed cube format. CNA previously exposed byte writes only for DXT and had no byte
+// GetData overload at all, so the exact payload used by TextureCubeReader could not round-trip.
+TEST_F(TextureCubeTest, ByteTransfersUseByteCountsAndCallerArrayWindowsForClassicFormats)
+{
+    if (!CubeStorageSupported())
+        GTEST_SKIP() << "The active renderer creates no cube texture storage.";
+
+    TextureCube texture(gd, 1, false, SurfaceFormat::Color);
+    const std::array<std::uint8_t, 8> source{
+        0xEEu, 0xEEu, 0x11u, 0x22u, 0x33u, 0x44u, 0xEEu, 0xEEu};
+    texture.SetData(CubeMapFace::NegativeX, 0, nullptr, source.data(), 2, 6);
+
+    std::array<std::uint8_t, 10> destination{};
+    destination.fill(0xCDu);
+    texture.GetData(CubeMapFace::NegativeX, 0, nullptr,
+                    destination.data(), 3, 7);
+    EXPECT_TRUE(std::equal(source.begin() + 2, source.begin() + 6,
+                           destination.begin() + 3));
+    EXPECT_TRUE(std::all_of(destination.begin(), destination.begin() + 3,
+                            [](std::uint8_t value) { return value == 0xCDu; }));
+    EXPECT_TRUE(std::all_of(destination.begin() + 7, destination.end(),
+                            [](std::uint8_t value) { return value == 0xCDu; }));
+}
+
 // REMED-GFX-135: both overloads used to be bare EXPECT_NO_THROWs, which a renderer that dropped
 // the upload passed just as easily as one that stored it. They now assert the real outcome, and
 // the readback proves the second (startIndex) overload really stored ITS OWN data rather than
@@ -365,6 +390,13 @@ TEST_F(TextureCubeTest, SetDataCompressedBytesDecodesEveryClassicDxtFormat)
         TextureCube texture(gd, 4, false, format);
         ASSERT_NO_THROW(texture.SetData(CubeMapFace::NegativeY, block.data(),
                                         static_cast<int>(block.size())));
+        std::vector<std::uint8_t> exact(block.size() + 4u, 0xCDu);
+        ASSERT_NO_THROW(texture.GetData(
+            CubeMapFace::NegativeY, 0, nullptr, exact.data(), 2,
+            static_cast<int>(block.size() + 2u)));
+        EXPECT_TRUE(std::equal(block.begin(), block.end(), exact.begin() + 2));
+        EXPECT_EQ(exact.front(), 0xCDu);
+        EXPECT_EQ(exact.back(), 0xCDu);
         std::vector<Color> pixels(16, Color::Transparent);
         ASSERT_NO_THROW(texture.GetData(CubeMapFace::NegativeY, pixels.data(), 16));
         for (const Color& pixel : pixels)
@@ -390,6 +422,14 @@ TEST_F(TextureCubeTest, SetDataCompressedPartialBlockPreservesTheRestOfTheFace)
     const Rectangle upperRight(4, 0, 4, 4);
     texture.SetData(CubeMapFace::PositiveZ, 0, &upperRight,
                     greenBlock, 0, 8);
+
+    std::array<std::uint8_t, 10> exact{};
+    exact.fill(0xCDu);
+    texture.GetData(CubeMapFace::PositiveZ, 0, &upperRight,
+                    exact.data(), 1, 9);
+    EXPECT_TRUE(std::equal(std::begin(greenBlock), std::end(greenBlock), exact.begin() + 1));
+    EXPECT_EQ(exact.front(), 0xCDu);
+    EXPECT_EQ(exact.back(), 0xCDu);
 
     std::vector<Color> pixels(64, Color::Transparent);
     texture.GetData(CubeMapFace::PositiveZ, pixels.data(), 64);

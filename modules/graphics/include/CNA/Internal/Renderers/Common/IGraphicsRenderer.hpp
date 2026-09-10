@@ -433,6 +433,32 @@ namespace CNA::Internal::Renderers
             return false;
         }
         /**
+         * @brief Reads exact block-compressed bytes from a cube face.
+         *
+         * Coordinates remain in texel space and must describe a block-aligned region, except that
+         * its right and bottom edges may coincide with an NPOT mip edge. The destination receives
+         * tightly packed block rows for only the requested region. The default refuses because a
+         * converted RGBA8 readback is not an exact compressed transfer.
+         *
+         * @param face       Cube face index.
+         * @param level      Mip level.
+         * @param x          Left edge in texels, block aligned.
+         * @param y          Top edge in texels, block aligned.
+         * @param w          Width in texels, block aligned or reaching the mip edge.
+         * @param h          Height in texels, block aligned or reaching the mip edge.
+         * @param data       Destination for the exact compressed block payload.
+         * @param dataLength Available destination bytes.
+         * @return True only when the complete requested payload was copied.
+         */
+        [[nodiscard]] virtual bool GetCompressedDataEXT(
+            int face, int level, int x, int y, int w, int h,
+            void* data, int dataLength) const
+        {
+            (void)face; (void)level; (void)x; (void)y; (void)w; (void)h;
+            (void)data; (void)dataLength;
+            return false;
+        }
+        /**
          * @brief Uploads exact uncompressed declared-format texels into one cube face.
          *
          * Unlike @ref SetData, this route does not imply RGBA8. The concrete cube resource knows

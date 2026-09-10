@@ -134,14 +134,17 @@ namespace CNA::Internal::Xnb
         void RequireTextureFormat(const char* readerName, const SurfaceFormat format,
                                   const XnbTextureKind kind)
         {
+            using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
+            using Microsoft::Xna::Framework::Graphics::Texture;
+            const int ordinal = static_cast<int>(format);
+            const bool classic = ordinal >= static_cast<int>(SurfaceFormat::Color) &&
+                ordinal <= static_cast<int>(SurfaceFormat::HdrBlendable);
             const bool accepted = kind == XnbTextureKind::Texture3D
-                ? Microsoft::Xna::Framework::Graphics::Texture::IsVolumeFormatAllowedByProfileEXT(
-                      Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef, format)
-                : (format == SurfaceFormat::Color || IsDxt(format) ||
-                   (kind == XnbTextureKind::Texture2D &&
-                    (format == SurfaceFormat::ColorBgraEXT ||
-                     format == SurfaceFormat::NormalizedByte2 ||
-                     format == SurfaceFormat::NormalizedByte4)));
+                ? Texture::IsVolumeFormatAllowedByProfileEXT(GraphicsProfile::HiDef, format)
+                : (kind == XnbTextureKind::TextureCube
+                    ? classic && Texture::IsCubeFormatAllowedByProfileEXT(
+                        GraphicsProfile::HiDef, format)
+                    : classic || format == SurfaceFormat::ColorBgraEXT);
             if (accepted)
             {
                 return;

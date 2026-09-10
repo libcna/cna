@@ -210,16 +210,15 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Uploads exact packed RGBA binary16 values to a mip level or rectangle. */
         void SetData(int level, const Rectangle* rect, const PackedVector::HalfVector4* data,
                      int startIndex, int elementCount);
-        /** @brief Uploads exact unsigned bytes to a ByteEXT texture, or compressed blocks to a Dxt1/Dxt3/Dxt5 texture. */
-        CNAEXT void SetData(const std::uint8_t* data, int elementCount);
+        /** @brief Uploads exact bytes to any classic texture format or compressed block payload. */
+        void SetData(const std::uint8_t* data, int elementCount);
         /**
-         * @brief Uploads exact unsigned bytes to a ByteEXT texture, or exact compressed blocks
-         * to a Dxt1/Dxt3/Dxt5 texture. For a compressed format, level/rect coordinates are texel
-         * space and must be block-aligned or reach the level's edge; elementCount is the exact
-         * padded block byte count for the requested region.
+         * @brief Uploads exact bytes to a mip level or rectangle. For a compressed format,
+         * level/rect coordinates are texel space and must be block-aligned or reach the level's
+         * edge; elementCount is the exact padded block byte count for the requested region.
          */
-        CNAEXT void SetData(int level, const Rectangle* rect, const std::uint8_t* data,
-                           int startIndex, int elementCount);
+        void SetData(int level, const Rectangle* rect, const std::uint8_t* data,
+                     int startIndex, int elementCount);
         /** @brief Uploads exact unsigned 16-bit values to a UShortEXT texture. */
         CNAEXT void SetData(const std::uint16_t* data, int elementCount);
         /** @brief Uploads exact unsigned 16-bit values to a UShortEXT mip level or rectangle. */
@@ -368,18 +367,17 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Reads exact packed RGBA binary16 values from a mip level or rectangle. */
         void GetData(int level, const Rectangle* rect, PackedVector::HalfVector4* data,
                      int startIndex, int elementCount) const;
-        /** @brief Reads exact unsigned bytes from a ByteEXT texture. */
-        CNAEXT void GetData(std::uint8_t* data, int startIndex, int elementCount) const;
-        /** @brief Reads all exact unsigned bytes from a ByteEXT texture, or compressed blocks from a Dxt1/Dxt3/Dxt5 texture. */
-        CNAEXT void GetData(std::uint8_t* data, int elementCount) const;
+        /** @brief Reads exact bytes from any classic texture format into a destination window. */
+        void GetData(std::uint8_t* data, int startIndex, int elementCount) const;
+        /** @brief Reads all exact texture bytes, including compressed block payloads. */
+        void GetData(std::uint8_t* data, int elementCount) const;
         /**
-         * @brief Reads exact unsigned bytes from a ByteEXT mip level or rectangle, or exact
-         * compressed blocks from a Dxt1/Dxt3/Dxt5 mip level or rectangle. For a compressed
-         * format, rect coordinates are texel space and must be block-aligned or reach the
-         * level's edge; elementCount is the exact padded block byte count for the region.
+         * @brief Reads exact bytes from a mip level or rectangle. For a compressed format, rect
+         * coordinates are texel space and must be block-aligned or reach the level's edge;
+         * elementCount is the exact padded block byte count for the region.
          */
-        CNAEXT void GetData(int level, const Rectangle* rect, std::uint8_t* data,
-                           int startIndex, int elementCount) const;
+        void GetData(int level, const Rectangle* rect, std::uint8_t* data,
+                     int startIndex, int elementCount) const;
         /** @brief Reads exact unsigned 16-bit values from a UShortEXT texture. */
         CNAEXT void GetData(std::uint16_t* data, int startIndex, int elementCount) const;
         /** @brief Reads all exact unsigned 16-bit values from a UShortEXT texture. */

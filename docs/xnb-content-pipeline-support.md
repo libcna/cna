@@ -51,9 +51,9 @@ below) — both need their own explicit registration.
 | Math (`Vector2/3/4`, `Matrix`, `Quaternion`, `Color`, `Plane`, `Point`, `Rectangle`, `BoundingBox`, `BoundingSphere`, `BoundingFrustum`, `Ray`) | ✅ Full | |
 | `Decimal`/`DateTime`/`TimeSpan` | ✅ Full | Faithful field-for-field decoding, not a lossy `double` shortcut |
 | `Curve` | ✅ Full | |
-| `Texture2DReader` | ✅ `SurfaceFormat.Color`/`NormalizedByte2`/`NormalizedByte4`/`Dxt1`/`Dxt3`/`Dxt5` | Both normalized formats preserve their exact signed packed texels and require a renderer that supports them. DXT blocks stay compressed when the active renderer opts into native compressed-content upload (currently WebGPU); other renderers losslessly software-decompress them to `Color` |
+| `Texture2DReader` | ✅ all 20 classic XNA formats | All 17 uncompressed formats preserve the serialized format and exact mip bytes. DXT1/3/5 blocks stay compressed when the active renderer supports exact compressed transfer; other renderers losslessly software-decompress them to `Color`, matching FNA's backend-capability fallback |
 | `Texture3DReader` | ✅ all 15 legal XNA HiDef volume formats | Preserves the serialized uncompressed format and each mip's exact bytes; DXT1/3/5 are correctly refused because XNA excludes compressed volume textures. No real fixture exists anywhere in the available test-asset library (volume textures are rare in real XNA content), so all formats and a depth-dominant chain are verified through hand-constructed streams matching FNA's exact field order |
-| `TextureCubeReader` | ✅ `SurfaceFormat.Color`/`Dxt1`/`Dxt3`/`Dxt5` | Verified against a real MonoGame fixture covering all 6 faces and a full DXT1 mip chain (including the sub-4×4 block-rounding edge cases) |
+| `TextureCubeReader` | ✅ all 18 XNA-permitted cube formats | Preserves the 15 legal uncompressed formats and exact face/mip bytes; `NormalizedByte2/4` are rejected because XNA excludes them from ordinary cubes. DXT1/3/5 use the same exact-transfer-or-Color-fallback policy as 2D. A real MonoGame fixture covers all 6 faces and a full DXT1 mip chain, including sub-4×4 block rounding |
 | `SpriteFontReader` | ✅ Full | Depends on `Texture2DReader` and 3 closed generic-collection readers (see below) |
 | `SoundEffectReader` | ✅ PCM8/16, IEEE float, MS-ADPCM, IMA-ADPCM | Non-PCM formats are decoded through the shared WAV-import path into the PCM16 representation CNA's runtime owns. XMA2 is recognized but explicitly rejected because no decoder exists. See the support matrix below |
 | `SongReader` | ✅ Full | `Song` is always an external audio file reference (`.ogg`/etc, matching FNA), never embedded PCM |
@@ -289,7 +289,6 @@ without changing either method's observable behavior for any valid input.
 | General `EffectReader` on a renderer without `CompiledEffects` | ❌ loading fails with an asset-specific capability diagnostic rather than a silent shader fallback. FNA3D supports it unconditionally; SDL_GPU, the EasyGL family, and Vulkan support it behind their compiled-effect build options |
 | LZ4 compression | ✅ MonoGame's raw-block XNB representation is supported; generic LZ4 frames are intentionally not an XNB format |
 | Generic collection readers for an unregistered `T` combination | ❌ Not supported — each closed combination needs its own explicit registration |
-| Texture formats beyond `Texture2D`'s `Color`/`NormalizedByte2`/`NormalizedByte4`/`Dxt1`/`Dxt3`/`Dxt5` and `TextureCube`'s existing Color/DXT scope | ❌ Not supported yet |
 | `SoundEffect` XMA2 and unknown codecs | ❌ Not supported — see the audio support matrix above |
 | Platform identifiers MonoGame added after FNA's fork point (`'b'`/`'5'`/`'O'`/`'S'`/`'V'`) | ❌ Not accepted, matching FNA exactly (deliberate, not an oversight) |
 

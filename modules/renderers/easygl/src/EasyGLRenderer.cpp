@@ -2560,6 +2560,53 @@ if (ProfileIsEs2ApiGeneration())
         return true;
     }
 
+    bool EasyGLTextureCubeRenderer::GetCompressedDataEXT(
+        int face, int level, int x, int y, int w, int h,
+        void* data, int dataLength) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat_);
+        if ((format != SurfaceFormat::Dxt1 && format != SurfaceFormat::Dxt3 &&
+             format != SurfaceFormat::Dxt5) ||
+            face < 0 || face >= 6 || data == nullptr || level < 0 || level >= levelCount_ ||
+            w <= 0 || h <= 0)
+            return false;
+
+        const int levelSize = std::max(1, size_ >> level);
+        if (x < 0 || y < 0 || w > levelSize || h > levelSize ||
+            x > levelSize - w || y > levelSize - h ||
+            (x % 4) != 0 || (y % 4) != 0 ||
+            ((w % 4) != 0 && x + w != levelSize) ||
+            ((h % 4) != 0 && y + h != levelSize))
+            return false;
+
+        const std::size_t blockBytes = DxtBlockBytesEXT(format);
+        const int levelBlockColumns = (levelSize + 3) / 4;
+        const int regionBlockColumns = (w + 3) / 4;
+        const int regionBlockRows = (h + 3) / 4;
+        const std::size_t required = static_cast<std::size_t>(regionBlockColumns) *
+                                     static_cast<std::size_t>(regionBlockRows) * blockBytes;
+        if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required)
+            return false;
+
+        const auto& blocks =
+            compressedLevels_[static_cast<std::size_t>(face * levelCount_ + level)];
+        auto* destination = static_cast<std::uint8_t*>(data);
+        for (int row = 0; row < regionBlockRows; ++row)
+        {
+            const std::size_t sourceOffset =
+                (static_cast<std::size_t>(y / 4 + row) *
+                     static_cast<std::size_t>(levelBlockColumns) +
+                 static_cast<std::size_t>(x / 4)) * blockBytes;
+            const std::size_t destinationOffset =
+                static_cast<std::size_t>(row) *
+                static_cast<std::size_t>(regionBlockColumns) * blockBytes;
+            std::memcpy(destination + destinationOffset, blocks.data() + sourceOffset,
+                        static_cast<std::size_t>(regionBlockColumns) * blockBytes);
+        }
+        return true;
+    }
+
     bool EasyGLTextureCubeRenderer::GetData(int face, int level, int x, int y, int w, int h,
                                             void* data, int dataLength) const
     {

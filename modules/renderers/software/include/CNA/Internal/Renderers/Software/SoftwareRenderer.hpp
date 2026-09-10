@@ -691,6 +691,22 @@ namespace CNA::Internal::Renderers::Software
             int face, int level, int x, int y, int w, int h,
             const void* data, int dataLength) override;
         /**
+         * @brief Reads exact DXT blocks retained for a cube face or block-aligned region.
+         *
+         * @param face Raw CubeMapFace ordinal.
+         * @param level Mip level beginning at zero.
+         * @param x Block-aligned source x coordinate in texels.
+         * @param y Block-aligned source y coordinate in texels.
+         * @param w Region width in texels, block-aligned or reaching the mip edge.
+         * @param h Region height in texels, block-aligned or reaching the mip edge.
+         * @param data Destination for the exact DXT block payload.
+         * @param dataLength Available destination bytes.
+         * @return True when the complete requested block region was copied.
+         */
+        [[nodiscard]] bool GetCompressedDataEXT(
+            int face, int level, int x, int y, int w, int h,
+            void* data, int dataLength) const override;
+        /**
          * @brief Stores exact uncompressed declared-format cube texels.
          *
          * @param face Raw CubeMapFace ordinal.

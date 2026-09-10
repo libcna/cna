@@ -1324,13 +1324,12 @@ namespace Microsoft::Xna::Framework::Graphics
             SetCompressedDataBytes(level, rect, data, startIndex, elementCount);
             return;
         }
-        if (format_ != SurfaceFormat::ByteEXT)
-            throw std::invalid_argument("Texture2D::SetData: byte data requires ByteEXT format");
-        const int requiredElements = ValidatedRequestedTexelCount(
+        const int requiredTexels = ValidatedRequestedTexelCount(
             "Texture2D::SetData", width, height, level, levelCount_, rect);
-        validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
-        const auto bytes = EncodeUnsignedElements(data, startIndex, requiredElements);
-        SetDataBytes(level, rect, bytes.data(), 0, requiredElements, 1);
+        const int bytesPerTexel = Texture::GetFormatSizeEXT(format_);
+        const int requiredBytes = requiredTexels * bytesPerTexel;
+        validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredBytes);
+        SetDataBytes(level, rect, data + startIndex, 0, requiredTexels, bytesPerTexel);
     }
 
     void Texture2D::SetData(const std::uint16_t* data, int elementCount)
@@ -2178,16 +2177,14 @@ namespace Microsoft::Xna::Framework::Graphics
             GetCompressedDataBytes(level, rect, data, startIndex, elementCount);
             return;
         }
-        if (format_ != SurfaceFormat::ByteEXT)
-            throw std::invalid_argument("Texture2D::GetData: byte data requires ByteEXT format");
         if (!data)
             throw std::invalid_argument("Texture2D::GetData: data must not be null");
-        const int requiredElements = ValidatedRequestedTexelCount(
+        const int requiredTexels = ValidatedRequestedTexelCount(
             "Texture2D::GetData", width, height, level, levelCount_, rect);
-        validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
-        std::vector<std::uint8_t> bytes(static_cast<std::size_t>(requiredElements));
-        GetDataBytes(level, rect, bytes.data(), 0, requiredElements, 1);
-        DecodeUnsignedElements(bytes, requiredElements, data, startIndex);
+        const int bytesPerTexel = Texture::GetFormatSizeEXT(format_);
+        const int requiredBytes = requiredTexels * bytesPerTexel;
+        validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredBytes);
+        GetDataBytes(level, rect, data + startIndex, 0, requiredTexels, bytesPerTexel);
     }
 
     void Texture2D::GetData(std::uint16_t* data, int startIndex, int elementCount) const

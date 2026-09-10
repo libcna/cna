@@ -594,6 +594,11 @@ namespace CNA::Internal::Renderers::EasyGL
             int face, int level, int x, int y, int w, int h,
             const void* data, int dataLength) override;
 
+        /** @brief Reads exact DXT blocks retained for a cube face or block-aligned region. */
+        [[nodiscard]] bool GetCompressedDataEXT(
+            int face, int level, int x, int y, int w, int h,
+            void* data, int dataLength) const override;
+
         /**
          * @brief Uploads exact uncompressed declared-format texels into one cube face.
          *

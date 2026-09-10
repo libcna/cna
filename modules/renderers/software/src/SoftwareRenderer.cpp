@@ -3885,6 +3885,53 @@ namespace CNA::Internal::Renderers::Software
         return true;
     }
 
+    bool SoftwareTextureCubeRenderer::GetCompressedDataEXT(
+        int face, int level, int x, int y, int w, int h,
+        void* data, int dataLength) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const auto format = static_cast<SurfaceFormat>(surfaceFormat_);
+        if ((format != SurfaceFormat::Dxt1 && format != SurfaceFormat::Dxt3 &&
+             format != SurfaceFormat::Dxt5) ||
+            data == nullptr || face < 0 || face > 5 || level < 0 || level >= levelCount_ ||
+            w <= 0 || h <= 0)
+            return false;
+
+        const int dim = LevelDim(level);
+        if (x < 0 || y < 0 || w > dim || h > dim || x > dim - w || y > dim - h ||
+            (x % 4) != 0 || (y % 4) != 0 ||
+            ((w % 4) != 0 && x + w != dim) ||
+            ((h % 4) != 0 && y + h != dim))
+            return false;
+
+        const std::size_t blockBytes = format == SurfaceFormat::Dxt1 ? 8u : 16u;
+        const int levelBlockColumns = (dim + 3) / 4;
+        const int regionBlockColumns = (w + 3) / 4;
+        const int regionBlockRows = (h + 3) / 4;
+        const std::size_t required = static_cast<std::size_t>(regionBlockColumns) *
+                                     static_cast<std::size_t>(regionBlockRows) * blockBytes;
+        if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required)
+            return false;
+
+        const auto& blocks =
+            compressedLevels_[static_cast<std::size_t>(level)][static_cast<std::size_t>(face)];
+        auto* destination = static_cast<std::uint8_t*>(data);
+        for (int row = 0; row < regionBlockRows; ++row)
+        {
+            const std::size_t sourceOffset =
+                (static_cast<std::size_t>(y / 4 + row) *
+                     static_cast<std::size_t>(levelBlockColumns) +
+                 static_cast<std::size_t>(x / 4)) * blockBytes;
+            const std::size_t destinationOffset =
+                static_cast<std::size_t>(row) *
+                static_cast<std::size_t>(regionBlockColumns) * blockBytes;
+            std::copy_n(blocks.data() + sourceOffset,
+                        static_cast<std::size_t>(regionBlockColumns) * blockBytes,
+                        destination + destinationOffset);
+        }
+        return true;
+    }
+
     bool SoftwareTextureCubeRenderer::GetData(int face, int level, int x, int y, int w, int h,
                                              void* data, int dataLength) const
     {

@@ -300,6 +300,30 @@ TEST(Texture2DTest, DefaultConstructorLevelCountIsOne)
     EXPECT_EQ(tex.getLevelCountProperty(), 1);
 }
 
+// SOFTWARE-275: byte is an ordinary XNA SetData<T>/GetData<T> element type, not a CNA-only
+// one-channel texture route. FNA measures elementCount in bytes here and applies startIndex to the
+// caller's array, including for a four-byte Color texel.
+TEST(Texture2DTest, ByteTransfersUseByteCountsAndCallerArrayWindowsForClassicFormats)
+{
+    GraphicsDevice device;
+    Texture2D texture(device, 2, 1, false, SurfaceFormat::Color);
+    const std::array<std::uint8_t, 12> source{
+        0xEEu, 0xEEu, 0xEEu,
+        0x11u, 0x22u, 0x33u, 0x44u, 0x55u, 0x66u, 0x77u, 0x88u,
+        0xEEu};
+    texture.SetData(0, nullptr, source.data(), 3, 9);
+
+    std::array<std::uint8_t, 14> destination{};
+    destination.fill(0xCDu);
+    texture.GetData(0, nullptr, destination.data(), 4, 10);
+    EXPECT_TRUE(std::equal(source.begin() + 3, source.begin() + 11,
+                           destination.begin() + 4));
+    EXPECT_TRUE(std::all_of(destination.begin(), destination.begin() + 4,
+                            [](std::uint8_t value) { return value == 0xCDu; }));
+    EXPECT_TRUE(std::all_of(destination.begin() + 12, destination.end(),
+                            [](std::uint8_t value) { return value == 0xCDu; }));
+}
+
 // -----------------------------------------------------------------------
 // LevelCount — mipmapped vs non-mipmapped construction (Task 267)
 //
