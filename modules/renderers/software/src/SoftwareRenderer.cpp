@@ -2071,7 +2071,8 @@ namespace CNA::Internal::Renderers::Software
         /// RasterizerState.MultiSampleAntiAlias deliberately retains the historical pixel-center
         /// DDA and replicates each covered pixel to every sample.  When enabled, a one-pixel-wide
         /// rectangle around the segment is evaluated at the same four quarter-pixel locations as
-        /// triangle coverage and the exact mask is forwarded to depth/stencil/color processing.
+        /// triangle coverage.  The exact mask and the original-segment parameter at each sample
+        /// are forwarded so depth can be evaluated independently by the fragment pipeline.
         template <typename EmitFn>
         void WalkRasterLine(const SoftwareFramebuffer& fb, bool multiSampleAntiAlias,
                             const RasterClipRect& clip, const RasterVertex& a,
@@ -2080,7 +2081,7 @@ namespace CNA::Internal::Renderers::Software
             if (!fb.HasMultiSampleColor() || !multiSampleAntiAlias)
             {
                 WalkWireEdge(clip, a, b, [&](int x, int y, float t) {
-                    emit(x, y, t, 0xFFFFFFFFu);
+                    emit(x, y, t, 0xFFFFFFFFu, nullptr);
                 });
                 return;
             }
@@ -2102,7 +2103,7 @@ namespace CNA::Internal::Renderers::Software
             if (!(lengthSquared > 0.0f) || !std::isfinite(lengthSquared))
             {
                 WalkWireEdge(clip, a, b, [&](int x, int y, float t) {
-                    emit(x, y, t, 0xFu);
+                    emit(x, y, t, 0xFu, nullptr);
                 });
                 return;
             }
@@ -2121,6 +2122,7 @@ namespace CNA::Internal::Renderers::Software
                 for (int x = minX; x <= maxX; ++x)
                 {
                     unsigned int coverageMask = 0u;
+                    std::array<float, 4> sampleTs{};
                     for (int sample = 0; sample < 4; ++sample)
                     {
                         const float sampleX = static_cast<float>(x) +
@@ -2136,7 +2138,11 @@ namespace CNA::Internal::Renderers::Software
                         const float distanceX = sampleX - nearestX;
                         const float distanceY = sampleY - nearestY;
                         if (distanceX * distanceX + distanceY * distanceY <= 0.25f)
+                        {
                             coverageMask |= 1u << sample;
+                            sampleTs[static_cast<std::size_t>(sample)] =
+                                t0 + localT * (t1 - t0);
+                        }
                     }
                     if (coverageMask == 0u)
                         continue;
@@ -2146,7 +2152,7 @@ namespace CNA::Internal::Renderers::Software
                     const float localT = std::clamp(
                         ((centerX - ax) * dx + (centerY - ay) * dy) / lengthSquared,
                         0.0f, 1.0f);
-                    emit(x, y, t0 + localT * (t1 - t0), coverageMask);
+                    emit(x, y, t0 + localT * (t1 - t0), coverageMask, &sampleTs);
                 }
             }
         }
@@ -2233,15 +2239,30 @@ namespace CNA::Internal::Renderers::Software
                 // WriteColoredFragment (the same depth-test/write + clip path as the fill below).
                 const auto drawEdge = [&](const RasterVertex& A, const RasterVertex& B) {
                     WalkRasterLine(fb, multiSampleAntiAlias, clip, A, B,
-                                   [&](int x, int y, float t, unsigned int coverageMask) {
+                                   [&](int x, int y, float t, unsigned int coverageMask,
+                                       const std::array<float, 4>* sampleTs) {
                         const float invW  = A.invW  + t * (B.invW  - A.invW);
                         float depth = A.depth + t * (B.depth - A.depth);
                         if (hasBias) depth = std::clamp(depth + biasOffset, 0.0f, 1.0f);  // REMED-GFX-083
+                        std::array<float, 4> sampleDepths{};
+                        if (sampleTs != nullptr)
+                        {
+                            for (int sample = 0; sample < 4; ++sample)
+                            {
+                                float sampleDepth = A.depth +
+                                    (*sampleTs)[static_cast<std::size_t>(sample)] *
+                                    (B.depth - A.depth);
+                                if (hasBias)
+                                    sampleDepth = std::clamp(sampleDepth + biasOffset, 0.0f, 1.0f);
+                                sampleDepths[static_cast<std::size_t>(sample)] = sampleDepth;
+                            }
+                        }
                         WriteColoredFragment(fb, depthState, faceStencil, clip, x, y, depth, invW,
                                              A.r + t * (B.r - A.r), A.g + t * (B.g - A.g),
                                              A.b + t * (B.b - A.b), A.a + t * (B.a - A.a),
                                              colorWriteMask, multiSampleMask, occlusionQuery,
-                                             coverageMask);
+                                             coverageMask,
+                                             sampleTs != nullptr ? &sampleDepths : nullptr);
                     });
                 };
                 if (edgeMask & kEdgeV0V1) drawEdge(v0, v1);
@@ -3222,8 +3243,19 @@ namespace CNA::Internal::Renderers::Software
                 params, depthState, stencilState, blendState, blendFactor, colorWriteMask,
                 multiSampleMask, sampler0, sampler1, occlusionQuery);
             WalkRasterLine(fb, multiSampleAntiAlias, clip, a, b,
-                           [&](int x, int y, float t, unsigned int coverageMask) {
+                           [&](int x, int y, float t, unsigned int coverageMask,
+                               const std::array<float, 4>* sampleTs) {
                 const float invW = a.invW + t * (b.invW - a.invW);
+                std::array<float, 4> sampleDepths{};
+                if (sampleTs != nullptr)
+                {
+                    for (int sample = 0; sample < 4; ++sample)
+                    {
+                        const float sampleT = (*sampleTs)[static_cast<std::size_t>(sample)];
+                        sampleDepths[static_cast<std::size_t>(sample)] =
+                            a.depth + sampleT * (b.depth - a.depth);
+                    }
+                }
                 WriteShadedFragment(
                     fb, ctx, clip, x, y, a.depth + t * (b.depth - a.depth), invW,
                     a.r + t * (b.r - a.r), a.g + t * (b.g - a.g),
@@ -3239,7 +3271,7 @@ namespace CNA::Internal::Renderers::Software
                     a.wpx + t * (b.wpx - a.wpx), a.wpy + t * (b.wpy - a.wpy),
                     a.wpz + t * (b.wpz - a.wpz), a.nx + t * (b.nx - a.nx),
                     a.ny + t * (b.ny - a.ny), a.nz + t * (b.nz - a.nz),
-                    coverageMask);
+                    coverageMask, sampleTs != nullptr ? &sampleDepths : nullptr);
             });
         }
 
@@ -3386,10 +3418,24 @@ namespace CNA::Internal::Renderers::Software
                 // reusing WriteShadedFragment (identical texture/diffuse/env-map/blend + depth path).
                 const auto drawEdge = [&](const RasterVertex& A, const RasterVertex& B) {
                     WalkRasterLine(fb, multiSampleAntiAlias, clip, A, B,
-                                   [&](int x, int y, float t, unsigned int coverageMask) {
+                                   [&](int x, int y, float t, unsigned int coverageMask,
+                                       const std::array<float, 4>* sampleTs) {
                         const float invW  = A.invW  + t * (B.invW  - A.invW);
                         float depth = A.depth + t * (B.depth - A.depth);
                         if (hasBias) depth = std::clamp(depth + biasOffset, 0.0f, 1.0f);  // REMED-GFX-083
+                        std::array<float, 4> sampleDepths{};
+                        if (sampleTs != nullptr)
+                        {
+                            for (int sample = 0; sample < 4; ++sample)
+                            {
+                                float sampleDepth = A.depth +
+                                    (*sampleTs)[static_cast<std::size_t>(sample)] *
+                                    (B.depth - A.depth);
+                                if (hasBias)
+                                    sampleDepth = std::clamp(sampleDepth + biasOffset, 0.0f, 1.0f);
+                                sampleDepths[static_cast<std::size_t>(sample)] = sampleDepth;
+                            }
+                        }
                         WriteShadedFragment(fb, ctx, clip, x, y, depth, invW,
                                             A.r + t * (B.r - A.r), A.g + t * (B.g - A.g),
                                             A.b + t * (B.b - A.b), A.a + t * (B.a - A.a),
@@ -3407,7 +3453,8 @@ namespace CNA::Internal::Renderers::Software
                                             A.wpx + t * (B.wpx - A.wpx), A.wpy + t * (B.wpy - A.wpy),
                                             A.wpz + t * (B.wpz - A.wpz), A.nx + t * (B.nx - A.nx),
                                             A.ny + t * (B.ny - A.ny), A.nz + t * (B.nz - A.nz),
-                                            coverageMask);
+                                            coverageMask,
+                                            sampleTs != nullptr ? &sampleDepths : nullptr);
                     });
                 };
                 if (edgeMask & kEdgeV0V1) drawEdge(v0, v1);

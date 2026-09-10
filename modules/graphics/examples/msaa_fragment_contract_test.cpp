@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// SOFTWARE-110/SOFTWARE-160/SOFTWARE-166/SOFTWARE-315: renderer-neutral 4x coverage, mask, depth,
+// SOFTWARE-110/SOFTWARE-160/SOFTWARE-166/SOFTWARE-315/SOFTWARE-316: renderer-neutral 4x coverage, mask, depth,
 // stencil, triangle/line RasterizerState.MultiSampleAntiAlias and GraphicsDevice.MultiSampleMask
 // contract.
 
@@ -120,6 +120,27 @@ class MsaaFragmentContractTest final : public Game
         };
         effect_->Apply();
         device.DrawUserPrimitives(PrimitiveType::LineList, vertices, 0, 1);
+    }
+
+    void DrawDepthGradientLine(GraphicsDevice& device, const Color& color, float y)
+    {
+        const VertexPositionColor vertices[2] = {
+            {Vector3(-0.75f, y, 0.0f), color},
+            {Vector3( 0.75f, y, 1.0f), color},
+        };
+        effect_->Apply();
+        device.DrawUserPrimitives(PrimitiveType::LineList, vertices, 0, 1);
+    }
+
+    void DrawDepthGradientWireframe(GraphicsDevice& device, const Color& color)
+    {
+        const VertexPositionColor vertices[3] = {
+            {Vector3(-0.75f, 0.0f, 0.0f), color},
+            {Vector3( 0.75f, 0.0f, 1.0f), color},
+            {Vector3( 0.0f, 0.75f, 1.0f), color},
+        };
+        effect_->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList, vertices, 0, 1);
     }
 
     Color FinishAndRead(GraphicsDevice& device, int x = kTargetSize / 2,
@@ -354,6 +375,73 @@ class MsaaFragmentContractTest final : public Game
         }
     }
 
+    void CheckLineDepthAtSampleLocations(GraphicsDevice& device)
+    {
+        const auto render = [&](bool wireframe, bool overlayDepth)
+        {
+            Begin(device);
+            RasterizerState rasterizer;
+            rasterizer.setCullModeProperty(CullMode::None);
+            rasterizer.setMultiSampleAntiAliasProperty(true);
+            if (wireframe)
+                rasterizer.setFillModeProperty(FillMode::WireFrame);
+            device.setRasterizerStateProperty(rasterizer);
+            device.setDepthStencilStateProperty(DepthStencilState::Default);
+            device.setBlendStateProperty(BlendState::Opaque);
+            if (wireframe)
+                DrawDepthGradientWireframe(device, kFullGreen);
+            else
+                DrawDepthGradientLine(device, kFullGreen, 0.0f);
+            if (overlayDepth)
+            {
+                RasterizerState solid;
+                solid.setCullModeProperty(CullMode::None);
+                solid.setMultiSampleAntiAliasProperty(true);
+                device.setRasterizerStateProperty(solid);
+                DrawQuad(device, Color::Red, 0.45f);
+            }
+            return FinishAndReadAll(device);
+        };
+
+        const auto lineCoverage = render(false, false);
+        const auto linePixels = render(false, true);
+        bool lineWitness = false;
+        for (int y = 2; y <= 5 && !lineWitness; ++y)
+            for (int x = 2; x <= 5; ++x)
+            {
+                const Color& coverage = lineCoverage[
+                    static_cast<std::size_t>(y * kTargetSize + x)];
+                const Color& pixel = linePixels[static_cast<std::size_t>(y * kTargetSize + x)];
+                if (NearByte(coverage.getGProperty(), 127) &&
+                    NearByte(pixel.getRProperty(), 191) &&
+                    NearByte(pixel.getGProperty(), 64))
+                {
+                    lineWitness = true;
+                    break;
+                }
+            }
+        Check(lineWitness,
+              "a depth-gradient LineList evaluates depth independently at its covered samples");
+
+        const auto wireframeCoverage = render(true, false);
+        const auto wireframePixels = render(true, true);
+        bool wireframeWitness = false;
+        for (int y = 1; y <= 6 && !wireframeWitness; ++y)
+            for (int x = 1; x <= 6; ++x)
+            {
+                const std::size_t index = static_cast<std::size_t>(y * kTargetSize + x);
+                if (NearByte(wireframeCoverage[index].getGProperty(), 127) &&
+                    NearByte(wireframePixels[index].getRProperty(), 191) &&
+                    NearByte(wireframePixels[index].getGProperty(), 64))
+                {
+                    wireframeWitness = true;
+                    break;
+                }
+            }
+        Check(wireframeWitness,
+              "a depth-gradient wireframe evaluates depth independently at its covered samples");
+    }
+
     void CheckDeviceMultiSampleMask(GraphicsDevice& device)
     {
         const auto render = [&](unsigned int deviceMask, const BlendState& blendState) {
@@ -419,6 +507,7 @@ protected:
         CheckDepthAtCoveredSamples(device);
         CheckIndependentStencilSamples(device);
         CheckMultiSampleAntiAliasToggle(device);
+        CheckLineDepthAtSampleLocations(device);
         CheckDeviceMultiSampleMask(device);
 
         std::printf("=== %d/%d PASS ===\n", passed_, total_);
