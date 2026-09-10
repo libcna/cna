@@ -41,6 +41,9 @@ import os
 import re
 import sys
 
+HERE = os.path.dirname(os.path.abspath(__file__))
+REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
+
 # A processor no XNA 4.0 assembly defines is a sample's own, whatever it is called. The built-in
 # set is the twelve the metadata oracle read out of Microsoft's assemblies, plus the two names
 # CNA's own registry adds for the same components.
@@ -74,6 +77,31 @@ _NOT_BUILT = {
     "no-source": ("CORPUS_GAP", "the project item names a source file the tree has not got"),
     "no-root": ("CORPUS_GAP", "the reference is under no build unit's output root"),
 }
+
+
+
+# The surface format is not in the corpus manifest and is needed to tell a compressor's choice from
+# a decoder's error, so it is read from the reference itself -- for the handful of references whose
+# every difference is a level digest, which is a few hundred parses and only where it decides
+# something (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-204`).
+_formatCache = {}
+
+
+def BlockCompressed(reference, root="/rv/tmp/samples"):
+    """Whether a reference's own texture format is one a block compressor produced."""
+    if reference in _formatCache:
+        return _formatCache[reference]
+    answer = False
+    try:
+        sys.path.insert(0, os.path.join(REPO, "tools", "xnb"))
+        import xnb_conformance  # noqa: PLC0415 - imported lazily, only where it decides something
+        parsed = xnb_conformance.parse(os.path.join(root, reference))
+        surface = str((parsed.get("root") or {}).get("surfaceFormat") or "")
+        answer = surface.startswith("Dxt")
+    except Exception:  # noqa: BLE001 - a reference this cannot parse is simply not proved
+        answer = False
+    _formatCache[reference] = answer
+    return answer
 
 
 def WhyNothingWasBuilt(source):
@@ -236,10 +264,27 @@ def main(argv=None):
                        "an Xbox 360 target: XMA has no publicly implementable encoder")
                 continue
             difference = answer.get("differences") or []
-            if difference and all("levelDigests" in one for one in difference):
-                assign(reference, "ACCEPTED_DIFFERENCE",
-                       "generated mip levels only, from the dither in XNA's own filter")
-                continue
+            complete = answer.get("differenceCount", len(difference)) <= len(difference)
+            if difference and complete and all("levelDigests" in one for one in difference):
+                # *Which* levels differ is the whole of the reason, and reading "every difference
+                # mentions a level digest" as "only the generated levels differ" put 304 of 320
+                # references under a reason that does not explain them: 226 are block-compressed
+                # textures whose level 0 differs -- two conformant DXT compressors choosing
+                # different endpoints for the same pixels, which is a different accepted reason --
+                # and 78 are *uncompressed* textures whose base image differs, which no filter and
+                # no compressor accounts for at all (plans/plan_xna_sample_xnb_sweep.md
+                # `XNASWEEP-204`).
+                levels = {int(found.group(1))
+                          for found in (re.search(r"levelDigests\[(\d+)\]", one)
+                                        for one in difference) if found}
+                if levels and 0 not in levels:
+                    assign(reference, "ACCEPTED_DIFFERENCE",
+                           "generated mip levels only, from the dither in XNA's own filter")
+                    continue
+                if BlockCompressed(reference):
+                    assign(reference, "ACCEPTED_DIFFERENCE",
+                           "two block compressors choose different endpoints for the same pixels")
+                    continue
             assign(reference, "UNEXPLAINED",
                    (difference[0] if difference else "the bytes differ") if difference
                    else "the bytes differ")

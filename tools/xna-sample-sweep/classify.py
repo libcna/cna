@@ -129,12 +129,36 @@ def explain(job):
         answer["detail"] = "every differing number agrees to %.3g of the larger magnitude" % worst
         answer["differences"] = found[:12]
         answer["differenceCount"] = len(found)
+        answer["differenceFields"] = difference_fields(found)
         answer["worstRelative"] = worst
         return answer
     answer["classification"] = "differs"
     answer["differences"] = found[:12]
     answer["differenceCount"] = len(found)
+    answer["differenceFields"] = difference_fields(found)
     return answer
+
+
+
+def difference_fields(found):
+    """The distinct field paths a difference list touches, with indices stripped.
+
+    The listed differences are capped at twelve, which is enough to read and not enough to prove
+    anything: a gate asking "does everything that differs belong to the reason this was accepted
+    under" cannot answer from a truncated list. This is the whole set, and it stays small because
+    an index is not a field -- 501 differing glyph rectangles are one path
+    (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-204`).
+    """
+    fields = set()
+    for one in found:
+        path = one.split(":", 1)[0].strip()
+        # A level digest keeps its index, because *which* level differs is the whole of what
+        # separates a mip filter's dither from a base image that is simply not the same.
+        if "levelDigests[" in path:
+            fields.add(re.sub(r"(?<!levelDigests)\[\d+\]", "[]", path))
+        else:
+            fields.add(re.sub(r"\[\d+\]", "[]", path))
+    return sorted(fields)
 
 
 def main(argv=None):
