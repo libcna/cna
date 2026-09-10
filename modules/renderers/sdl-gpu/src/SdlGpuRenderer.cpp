@@ -106,6 +106,18 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     namespace
     {
+        bool TestForceHeadlessEnabled()
+        {
+            const char* value = std::getenv("CNA_SDLGPU_TEST_FORCE_HEADLESS");
+            return value != nullptr && std::strcmp(value, "1") == 0;
+        }
+
+        bool IsIsolatedVideoDriver(const char* driver)
+        {
+            return driver != nullptr &&
+                (std::strcmp(driver, "dummy") == 0 || std::strcmp(driver, "offscreen") == 0);
+        }
+
 #if defined(CNA_SDL_GPU_SHADERCROSS)
         std::mutex shaderCrossSessionMutex;
         std::size_t shaderCrossSessionReferences = 0;
@@ -2205,7 +2217,20 @@ namespace CNA::Internal::Renderers::SdlGpu
           presentationMode_(presentationMode)
     {
         ConstructionResources resources(window_, testHooks);
-        resources.headless = window_ == nullptr;
+        // SDLGPU-102: retain the caller's real platform window for the public Game lifecycle,
+        // but let renderer integration tests opt out of the swapchain alone. This exercises the
+        // same GraphicsDevice/SpriteBatch/effect paths on drivers whose presentation stack is not
+        // available in the isolated test environment. The explicitly test-named switch is inert
+        // unless set to exactly "1"; a null window remains the public HeadlessEXT path.
+        const bool forceTestHeadless = TestForceHeadlessEnabled();
+        if (forceTestHeadless && window_ != nullptr &&
+            !IsIsolatedVideoDriver(SDL_GetCurrentVideoDriver()))
+        {
+            throw std::runtime_error(
+                "CNA SDL_GPU: CNA_SDLGPU_TEST_FORCE_HEADLESS=1 requires the SDL dummy or "
+                "offscreen video driver");
+        }
+        resources.headless = window_ == nullptr || forceTestHeadless;
 
         // plans/plan_sdlgpu.md SDLGPU-92: Vulkan consumes the committed SPIR-V directly. When
         // configured, SDL_shadercross adds the formats it can translate that SPIR-V into, allowing
@@ -2322,7 +2347,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
 
         resources.FailAt(SdlGpuFailurePointEXT::RendererRegistration);
-        if (!resources.headless)
+        if (window_ != nullptr)
         {
             IGraphicsRenderer::RegisterForWindow(SDL_GetWindowID(window_), this);
             resources.rendererRegistered = true;
@@ -3585,7 +3610,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     void SdlGpuRenderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
     {
-        if (headless_ || window_ == nullptr)
+        if (window_ == nullptr)
             throw std::invalid_argument(
                 "CNA SDL_GPU: a headless renderer has no platform surface to change");
         if (surface.windowId != SDL_GetWindowID(window_))

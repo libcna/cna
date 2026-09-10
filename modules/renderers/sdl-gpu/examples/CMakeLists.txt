@@ -21,6 +21,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         "SDL video driver used by SDL_GPU renderer integration tests")
     set(CNA_SDLGPU_TEST_ENVIRONMENT
         "SDL_VIDEODRIVER=${CNA_SDLGPU_TEST_VIDEO_DRIVER};DISPLAY=${CNA_TEST_DISPLAY}")
+    if(WIN32)
+        set(CNA_SDLGPU_HEADLESS_TEST_DRIVER "direct3d12")
+        set(CNA_SDLGPU_HEADLESS_TEST_ENVIRONMENT
+            "SDL_VIDEODRIVER=dummy;DISPLAY=;WAYLAND_DISPLAY=")
+    else()
+        set(CNA_SDLGPU_HEADLESS_TEST_DRIVER "vulkan")
+        set(CNA_SDLGPU_HEADLESS_TEST_ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    endif()
 
     macro(cna_sdlgpu_test target src)
         add_executable(${target} ${src})
@@ -71,17 +79,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     # SDLGPU-101: exercise the real public GraphicsDevice path without a window or swapchain.
     # This is a routine Vulkan CTest on Linux; the same executable/command is also the portable
     # D3D12 probe run through the repository's isolated Wine/vkd3d launcher.
-    if(WIN32)
-        set(CNA_SDLGPU_HEADLESS_TEST_DRIVER "direct3d12")
-    else()
-        set(CNA_SDLGPU_HEADLESS_TEST_DRIVER "vulkan")
-    endif()
     cna_register_renderer_test(NAME SdlGpu_HeadlessGraphicsDevice
         COMMAND cna_test_sdlgpu_smoke --headless-graphics-device
                 ${CNA_SDLGPU_HEADLESS_TEST_DRIVER}
         TIMEOUT 60 LABELS "SdlGpu;Parity"
         ENVIRONMENT
-            "${CNA_SDLGPU_TEST_ENVIRONMENT};SDL_GPU_DRIVER=${CNA_SDLGPU_HEADLESS_TEST_DRIVER}")
+            "${CNA_SDLGPU_HEADLESS_TEST_ENVIRONMENT};SDL_GPU_DRIVER=${CNA_SDLGPU_HEADLESS_TEST_DRIVER}")
     set_tests_properties(SdlGpu_HeadlessGraphicsDevice PROPERTIES
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
@@ -219,6 +222,18 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_2d sdlgpu_2d_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_2D COMMAND cna_test_sdlgpu_2d
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+
+    # SDLGPU-102: run the canonical, unchanged Game-based Texture2D/SpriteBatch scene with a
+    # normal platform window and public lifecycle while replacing only SDL_gpu presentation with
+    # the renderer-owned virtual backbuffer. This same invocation is portable to isolated D3D12
+    # runners where a real swapchain is unavailable.
+    cna_register_renderer_test(NAME SdlGpu_2D_HeadlessDriver
+        COMMAND cna_test_sdlgpu_2d
+        TIMEOUT 60 LABELS "SdlGpu;Parity"
+        ENVIRONMENT
+            "${CNA_SDLGPU_HEADLESS_TEST_ENVIRONMENT};SDL_GPU_DRIVER=${CNA_SDLGPU_HEADLESS_TEST_DRIVER};CNA_SDLGPU_TEST_FORCE_HEADLESS=1")
+    set_tests_properties(SdlGpu_2D_HeadlessDriver PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
     # Ad-hoc manual diagnostic (not a CTest) -- see the file's own header comment.
     cna_sdlgpu_test(cna_diag_sdlgpu_single_sprite sdlgpu_diag_single_sprite.cpp)
