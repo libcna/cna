@@ -1367,6 +1367,18 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         SdlGpu_Parity_render_target_mip
         SdlGpu_RenderTarget_SetData
         PROPERTIES FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+
+    # SDLGPU-115: every SDL GPU integration test is a validation gate, including tests that
+    # predate the per-fixture policy above. APPEND preserves focused historical expressions while
+    # also recognizing the standard Direct3D 12 debug-layer prefix used by native Windows runs.
+    get_property(_cna_sdlgpu_registered_tests DIRECTORY PROPERTY TESTS)
+    if(_cna_sdlgpu_registered_tests)
+        set_property(TEST ${_cna_sdlgpu_registered_tests} APPEND PROPERTY
+            FAIL_REGULAR_EXPRESSION
+                "Validation (Error|Warning)"
+                "VUID-"
+                "D3D12 (ERROR|WARNING):")
+    endif()
 endif()
 
 # Module-local tests get the same headless-safe skip convention the root one-shot
