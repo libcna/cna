@@ -39,6 +39,7 @@
 
 #include "common/PixelTestGame.hpp"
 
+#include <array>
 #include <cstdint>
 #include <cstdio>
 #include <memory>
@@ -245,6 +246,47 @@ int main(int argc, char** argv)
         catch (const std::exception& exception)
         {
             std::printf("[FAIL] headless stock-shader portability probe: %s\n",
+                        exception.what());
+            SDL_Quit();
+            return 1;
+        }
+    }
+
+    if (argc == 3 && std::string_view(argv[1]) == "--headless-stock-pixel")
+    {
+        if (!SDL_Init(SDL_INIT_VIDEO))
+        {
+            std::printf("[FAIL] SDL_Init: %s\n", SDL_GetError());
+            return 1;
+        }
+
+        try
+        {
+            constexpr std::array<std::uint8_t, 4> expectedDraw{17, 83, 201, 239};
+            constexpr std::array<std::uint8_t, 4> expectedClear{3, 7, 13, 255};
+            const SdlGpuHeadlessStockDrawResultEXT result =
+                SdlGpuRenderer::ValidateStockDrawForDriverEXT(argv[2]);
+            const bool driverMatches = result.driverName == argv[2];
+            const bool drawMatches = result.drawnPixel == expectedDraw;
+            const bool clearMatches = result.clearPixel == expectedClear;
+            std::printf("[%s] requested SDL_gpu driver '%s' was selected\n",
+                        driverMatches ? "PASS" : "FAIL", result.driverName.c_str());
+            std::printf("[%s] stock colored triangle centre is RGBA=(%u,%u,%u,%u)\n",
+                        drawMatches ? "PASS" : "FAIL", result.drawnPixel[0],
+                        result.drawnPixel[1], result.drawnPixel[2], result.drawnPixel[3]);
+            std::printf("[%s] untouched corner retains clear RGBA=(%u,%u,%u,%u)\n",
+                        clearMatches ? "PASS" : "FAIL", result.clearPixel[0],
+                        result.clearPixel[1], result.clearPixel[2], result.clearPixel[3]);
+            SDL_Quit();
+            const int passed = static_cast<int>(driverMatches) +
+                               static_cast<int>(drawMatches) +
+                               static_cast<int>(clearMatches);
+            std::printf("=== %d/3 PASS ===\n", passed);
+            return passed == 3 ? 0 : 1;
+        }
+        catch (const std::exception& exception)
+        {
+            std::printf("[FAIL] headless stock-pixel portability probe: %s\n",
                         exception.what());
             SDL_Quit();
             return 1;

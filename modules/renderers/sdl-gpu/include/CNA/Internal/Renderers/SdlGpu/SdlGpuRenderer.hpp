@@ -221,6 +221,17 @@ namespace CNA::Internal::Renderers::SdlGpu
         bool forceShaderCrossCompilation = false;
     };
 
+    /** @brief Result of the no-window stock-pipeline portability probe. CNAEXT. */
+    struct SdlGpuHeadlessStockDrawResultEXT
+    {
+        /** @brief Exact SDL_gpu driver selected for the probe device. */
+        std::string driverName;
+        /** @brief RGBA8 texel sampled from inside the rendered stock-shader triangle. */
+        std::array<std::uint8_t, 4> drawnPixel{};
+        /** @brief RGBA8 texel sampled outside the triangle after the render-pass clear. */
+        std::array<std::uint8_t, 4> clearPixel{};
+    };
+
     /**
      * @brief The one bindable form of a sampled texture in this renderer (REMED-GFX-152). CNAEXT.
      *
@@ -2108,6 +2119,20 @@ namespace CNA::Internal::Renderers::SdlGpu
         CNAEXT [[nodiscard]] static std::string ValidateStockShadersForDriverEXT(
             const char* driverName);
 
+        /**
+         * @brief Draws through a production stock shader pair and reads back an offscreen target.
+         *
+         * The test-only probe creates no window or swapchain. It uses the same portable shader
+         * construction as the renderer, a `VertexPositionColor` pipeline, real upload/render/copy
+         * commands and synchronous RGBA8 readback.
+         *
+         * @param driverName SDL_gpu driver name, such as `direct3d12`, `metal` or `vulkan`.
+         * @return Selected driver plus discriminating drawn and untouched target pixels.
+         * @throws std::runtime_error If any native resource, command or readback operation fails.
+         */
+        CNAEXT [[nodiscard]] static SdlGpuHeadlessStockDrawResultEXT
+        ValidateStockDrawForDriverEXT(const char* driverName);
+
         /** @brief Releases the window from the `SDL_GPUDevice` and destroys the device. */
         ~SdlGpuRenderer() override;
 
@@ -2661,6 +2686,8 @@ namespace CNA::Internal::Renderers::SdlGpu
     private:
         struct ConstructionResources;
 
+        [[nodiscard]] static std::string InitializeHeadlessStockShaders(
+            ConstructionResources& resources, const char* driverName);
         static void CreateConstructionShaders(ConstructionResources& resources);
 
         struct LogicalViewport

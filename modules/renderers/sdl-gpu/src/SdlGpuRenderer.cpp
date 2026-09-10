@@ -1901,14 +1901,14 @@ namespace CNA::Internal::Renderers::SdlGpu
         CreatePbrResources(resources);
     }
 
-    std::string SdlGpuRenderer::ValidateStockShadersForDriverEXT(const char* driverName)
+    std::string SdlGpuRenderer::InitializeHeadlessStockShaders(
+        ConstructionResources& resources, const char* driverName)
     {
         if (driverName == nullptr || driverName[0] == '\0')
             throw std::invalid_argument(
                 "CNA SDL_GPU: stock-shader portability probe requires a driver name");
 
 #if defined(CNA_SDL_GPU_SHADERCROSS)
-        ConstructionResources resources(/*constructionWindow=*/nullptr, SdlGpuTestHooksEXT{});
         if (!AcquireShaderCrossSession())
             throw std::runtime_error(
                 std::string("CNA SDL_GPU: SDL_shadercross initialization failed: ") +
@@ -1938,11 +1938,228 @@ namespace CNA::Internal::Renderers::SdlGpu
         CreateConstructionShaders(resources);
         return actualDriver;
 #else
+        (void)resources;
         (void)driverName;
         throw std::runtime_error(
             "CNA SDL_GPU: stock-shader portability probe requires "
             "CNA_SDL_GPU_SHADERCROSS=ON");
 #endif
+    }
+
+    std::string SdlGpuRenderer::ValidateStockShadersForDriverEXT(const char* driverName)
+    {
+        ConstructionResources resources(/*constructionWindow=*/nullptr, SdlGpuTestHooksEXT{});
+        return InitializeHeadlessStockShaders(resources, driverName);
+    }
+
+    SdlGpuHeadlessStockDrawResultEXT SdlGpuRenderer::ValidateStockDrawForDriverEXT(
+        const char* driverName)
+    {
+        ConstructionResources construction(/*constructionWindow=*/nullptr, SdlGpuTestHooksEXT{});
+        SdlGpuHeadlessStockDrawResultEXT result;
+        result.driverName = InitializeHeadlessStockShaders(construction, driverName);
+
+        constexpr Uint32 kWidth = 8;
+        constexpr Uint32 kHeight = 8;
+        constexpr std::array<std::uint8_t, 4> kDrawColor{17, 83, 201, 239};
+        constexpr std::array<std::uint8_t, 4> kClearColor{3, 7, 13, 255};
+        struct ProbeVertex
+        {
+            float x;
+            float y;
+            float z;
+            std::array<std::uint8_t, 4> color;
+        };
+        static_assert(sizeof(ProbeVertex) == 16);
+        const std::array<ProbeVertex, 3> vertices{{
+            {-0.75f, -0.75f, 0.0f, kDrawColor},
+            { 0.75f, -0.75f, 0.0f, kDrawColor},
+            { 0.00f,  0.75f, 0.0f, kDrawColor},
+        }};
+
+        struct DrawResources
+        {
+            SDL_GPUDevice* device = nullptr;
+            SDL_GPUGraphicsPipeline* pipeline = nullptr;
+            SDL_GPUTexture* target = nullptr;
+            SDL_GPUBuffer* vertexBuffer = nullptr;
+            SDL_GPUTransferBuffer* upload = nullptr;
+            SDL_GPUTransferBuffer* download = nullptr;
+
+            ~DrawResources()
+            {
+                if (pipeline != nullptr) SDL_ReleaseGPUGraphicsPipeline(device, pipeline);
+                if (target != nullptr) SDL_ReleaseGPUTexture(device, target);
+                if (vertexBuffer != nullptr) SDL_ReleaseGPUBuffer(device, vertexBuffer);
+                if (upload != nullptr) SDL_ReleaseGPUTransferBuffer(device, upload);
+                if (download != nullptr) SDL_ReleaseGPUTransferBuffer(device, download);
+            }
+        } draw{construction.device};
+
+        const auto fail = [](const char* operation)
+        {
+            throw std::runtime_error(
+                std::string("CNA SDL_GPU: headless stock draw failed during ") + operation +
+                ": " + SDL_GetError());
+        };
+
+        SDL_GPUTextureCreateInfo textureInfo{};
+        textureInfo.type = SDL_GPU_TEXTURETYPE_2D;
+        textureInfo.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+        textureInfo.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET;
+        textureInfo.width = kWidth;
+        textureInfo.height = kHeight;
+        textureInfo.layer_count_or_depth = 1;
+        textureInfo.num_levels = 1;
+        textureInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
+        draw.target = SDL_CreateGPUTexture(draw.device, &textureInfo);
+        if (draw.target == nullptr) fail("target creation");
+
+        SDL_GPUBufferCreateInfo bufferInfo{};
+        bufferInfo.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
+        bufferInfo.size = sizeof(vertices);
+        draw.vertexBuffer = SDL_CreateGPUBuffer(draw.device, &bufferInfo);
+        if (draw.vertexBuffer == nullptr) fail("vertex-buffer creation");
+
+        SDL_GPUTransferBufferCreateInfo uploadInfo{};
+        uploadInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+        uploadInfo.size = sizeof(vertices);
+        draw.upload = SDL_CreateGPUTransferBuffer(draw.device, &uploadInfo);
+        if (draw.upload == nullptr) fail("upload-buffer creation");
+        void* uploadBytes = SDL_MapGPUTransferBuffer(draw.device, draw.upload, false);
+        if (uploadBytes == nullptr) fail("upload-buffer mapping");
+        std::memcpy(uploadBytes, vertices.data(), sizeof(vertices));
+        SDL_UnmapGPUTransferBuffer(draw.device, draw.upload);
+
+        SDL_GPUTransferBufferCreateInfo downloadInfo{};
+        downloadInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD;
+        downloadInfo.size = kWidth * kHeight * 4;
+        draw.download = SDL_CreateGPUTransferBuffer(draw.device, &downloadInfo);
+        if (draw.download == nullptr) fail("download-buffer creation");
+
+        SDL_GPUVertexBufferDescription vertexBufferDescription{};
+        vertexBufferDescription.slot = 0;
+        vertexBufferDescription.pitch = sizeof(ProbeVertex);
+        vertexBufferDescription.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+        std::array<SDL_GPUVertexAttribute, 2> attributes{};
+        attributes[0].location = 0;
+        attributes[0].buffer_slot = 0;
+        attributes[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
+        attributes[0].offset = 0;
+        attributes[1].location = 1;
+        attributes[1].buffer_slot = 0;
+        attributes[1].format = SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM;
+        attributes[1].offset = 12;
+
+        SDL_GPUColorTargetDescription colorTargetDescription{};
+        colorTargetDescription.format = textureInfo.format;
+        SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
+        pipelineInfo.vertex_shader = construction.shaders[
+            static_cast<std::size_t>(ConstructionShader::ColoredVertex)];
+        pipelineInfo.fragment_shader = construction.shaders[
+            static_cast<std::size_t>(ConstructionShader::ColoredFragment)];
+        pipelineInfo.vertex_input_state.vertex_buffer_descriptions = &vertexBufferDescription;
+        pipelineInfo.vertex_input_state.num_vertex_buffers = 1;
+        pipelineInfo.vertex_input_state.vertex_attributes = attributes.data();
+        pipelineInfo.vertex_input_state.num_vertex_attributes =
+            static_cast<Uint32>(attributes.size());
+        pipelineInfo.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+        pipelineInfo.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
+        pipelineInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
+        pipelineInfo.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
+        pipelineInfo.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
+        pipelineInfo.target_info.color_target_descriptions = &colorTargetDescription;
+        pipelineInfo.target_info.num_color_targets = 1;
+        draw.pipeline = SDL_CreateGPUGraphicsPipeline(draw.device, &pipelineInfo);
+        if (draw.pipeline == nullptr) fail("graphics-pipeline creation");
+
+        SDL_GPUCommandBuffer* command = SDL_AcquireGPUCommandBuffer(draw.device);
+        if (command == nullptr) fail("command-buffer acquisition");
+        FrameCommandBufferOwner commandOwner(command, SdlGpuTestHooksEXT{});
+
+        SDL_GPUCopyPass* uploadPass = SDL_BeginGPUCopyPass(command);
+        if (uploadPass == nullptr) fail("upload copy-pass begin");
+        {
+            CopyPassOwner uploadPassOwner(uploadPass);
+            SDL_GPUTransferBufferLocation source{};
+            source.transfer_buffer = draw.upload;
+            SDL_GPUBufferRegion destination{};
+            destination.buffer = draw.vertexBuffer;
+            destination.size = sizeof(vertices);
+            SDL_UploadToGPUBuffer(uploadPass, &source, &destination, false);
+        }
+
+        SDL_GPUColorTargetInfo colorTarget{};
+        colorTarget.texture = draw.target;
+        colorTarget.clear_color = {
+            kClearColor[0] / 255.0f, kClearColor[1] / 255.0f,
+            kClearColor[2] / 255.0f, kClearColor[3] / 255.0f};
+        colorTarget.load_op = SDL_GPU_LOADOP_CLEAR;
+        colorTarget.store_op = SDL_GPU_STOREOP_STORE;
+        SDL_GPURenderPass* renderPass =
+            SDL_BeginGPURenderPass(command, &colorTarget, 1, nullptr);
+        if (renderPass == nullptr) fail("render-pass begin");
+        {
+            RenderPassOwner renderPassOwner(renderPass);
+            SDL_BindGPUGraphicsPipeline(renderPass, draw.pipeline);
+
+            std::array<float, 32> uniforms{};
+            uniforms[0] = 1.0f;
+            uniforms[5] = 1.0f;
+            uniforms[10] = 1.0f;
+            uniforms[15] = 1.0f;
+            uniforms[16] = 1.0f;
+            uniforms[17] = 1.0f;
+            uniforms[18] = 1.0f;
+            uniforms[19] = 1.0f;
+            uniforms[31] = 1.0f;
+            const std::array<float, 8> fogUniforms{};
+            SDL_PushGPUVertexUniformData(
+                command, 0, uniforms.data(), sizeof(uniforms));
+            SDL_PushGPUVertexUniformData(
+                command, 1, fogUniforms.data(), sizeof(fogUniforms));
+
+            SDL_GPUViewport viewport{};
+            viewport.w = static_cast<float>(kWidth);
+            viewport.h = static_cast<float>(kHeight);
+            viewport.min_depth = 0.0f;
+            viewport.max_depth = 1.0f;
+            SDL_SetGPUViewport(renderPass, &viewport);
+            const SDL_Rect scissor{0, 0, static_cast<int>(kWidth), static_cast<int>(kHeight)};
+            SDL_SetGPUScissor(renderPass, &scissor);
+            SDL_GPUBufferBinding binding{};
+            binding.buffer = draw.vertexBuffer;
+            SDL_BindGPUVertexBuffers(renderPass, 0, &binding, 1);
+            SDL_DrawGPUPrimitives(renderPass, 3, 1, 0, 0);
+        }
+
+        SDL_GPUCopyPass* downloadPass = SDL_BeginGPUCopyPass(command);
+        if (downloadPass == nullptr) fail("download copy-pass begin");
+        {
+            CopyPassOwner downloadPassOwner(downloadPass);
+            SDL_GPUTextureRegion region{};
+            region.texture = draw.target;
+            region.w = kWidth;
+            region.h = kHeight;
+            region.d = 1;
+            SDL_GPUTextureTransferInfo destination{};
+            destination.transfer_buffer = draw.download;
+            destination.pixels_per_row = kWidth;
+            destination.rows_per_layer = kHeight;
+            SDL_DownloadFromGPUTexture(downloadPass, &region, &destination);
+        }
+
+        if (!commandOwner.Submit()) fail("command-buffer submission");
+        if (!SDL_WaitForGPUIdle(draw.device)) fail("GPU-idle wait");
+        const auto* pixels = static_cast<const std::uint8_t*>(
+            SDL_MapGPUTransferBuffer(draw.device, draw.download, false));
+        if (pixels == nullptr) fail("download-buffer mapping");
+        std::memcpy(result.clearPixel.data(), pixels, 4);
+        const std::size_t centerOffset =
+            (static_cast<std::size_t>(kHeight / 2) * kWidth + kWidth / 2) * 4;
+        std::memcpy(result.drawnPixel.data(), pixels + centerOffset, 4);
+        SDL_UnmapGPUTransferBuffer(draw.device, draw.download);
+        return result;
     }
 
     SdlGpuRenderer::SdlGpuRenderer(SDL_Window* window, int virtualWidth,
