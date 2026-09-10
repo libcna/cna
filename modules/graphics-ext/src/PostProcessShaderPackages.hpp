@@ -21,6 +21,9 @@ namespace CNA::Graphics::detail
 
     /** @brief Creates the portable lens-flare fullscreen shader package. */
     [[nodiscard]] ShaderPackageEXT CreateLensFlareShaderPackage();
+
+    /** @brief Creates the portable HDR-display-output fullscreen shader package. */
+    [[nodiscard]] ShaderPackageEXT CreateHdrDisplayShaderPackage();
 }
 
 #endif // CNA_CNAEXT

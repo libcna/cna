@@ -131,6 +131,18 @@ namespace CNA::Graphics::detail
              kLensFlareVulkanFragmentSpirVByteSize,
              "post_process/lens_flare.vulkan.frag.spv"});
     }
+
+    ShaderPackageEXT CreateHdrDisplayShaderPackage()
+    {
+        using namespace CNA::Graphics::detail::PostProcessGenerated;
+        return MakeFullscreenPackage(
+            {kHdrDisplayEsFragmentSource, "post_process/hdr_display.es.frag.glsl"},
+            {kHdrDisplayDesktopFragmentSource,
+             "post_process/hdr_display.desktop.frag.glsl"},
+            {kHdrDisplayVulkanFragmentSpirV,
+             kHdrDisplayVulkanFragmentSpirVByteSize,
+             "post_process/hdr_display.vulkan.frag.spv"});
+    }
 }
 
 #endif // CNA_CNAEXT

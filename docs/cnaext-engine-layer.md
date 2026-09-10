@@ -10,9 +10,9 @@ pipeline, post-processing passes, shadow maps, skybox/IBL, and (long term) compu
 renderers capability by capability.** Its HDR/post-process pipeline, shadows, skybox, image-based
 lighting, instancing/LOD helpers and compute/resource layer all have executable coverage; Vulkan
 now implements exact HDR targets, stock-PBR IBL, portable directional/cascade/point/spot shadow
-generation and stock-effect reception, a portable skybox, instancing and the modern
-compute/resource paths. Its post-process package rollout has begun with chromatic aberration; the
-remaining effects are still source-authored shader gaps. The design is
+generation and stock-effect reception, a portable skybox, six portable post-process consumers,
+instancing and the modern compute/resource paths. The remaining post-process effects are still
+source-authored shader gaps. The design is
 [`../CNAEXT.md`](../misc/CNAEXT.md); the task backlog and its evidence trail are
 [`../plans/plan_modern.md`](../plans/plan_modern.md).
 
@@ -202,7 +202,7 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 |---|---|---|---|---|
 | Post-process effects (`DepthEffect`, `CRTEffect`) | ✅ GLSL | ⛔ its `ShaderEffect` takes SPIR-V, not the passes' GLSL | ⬜ | `AsciiPostProcessEffect` is CPU-side and runs everywhere |
 | Float/HDR render targets | ✅ exact 2D/cube targets, runtime-probed | ✅ exact Float16/Float32 `RenderTarget2D` and `RenderTargetCube`, device-probed (`MOD-2223`/`MOD-2234`) | ⬜ | ⬜ — each reports `false` and the target constructor refuses the format rather than substituting `Color` |
-| `RenderPipeline` + post-process passes | ✅ | 🟨 portable tonemap/deband, chromatic aberration, FXAA, film grain and lens-flare ghosts run; remaining source-only passes copy through | ⬜ | The passes need `GraphicsCapability::CustomEffects`; without it each copies its input and the frame still renders |
+| `RenderPipeline` + post-process passes | ✅ | 🟨 portable tonemap/deband, chromatic aberration, FXAA, film grain, lens-flare ghosts and texture/file HDR display encoding run; remaining source-only passes copy through | ⬜ | The passes need `GraphicsCapability::CustomEffects`; without it each copies its input and the frame still renders |
 | Shadow maps (directional, PCF) | ✅ generation + reception on all four lit effects | ✅ portable rigid/skinned generation (`MOD-2237`) + stock reception (`MOD-2236`) | ⬜ | ⬜ — an effect accepts the shadow state and a renderer without the shader ignores it, so the frame renders unshadowed rather than failing |
 | Cascaded shadow maps (2-4, atlas) | ✅ same four programs, one shared shader path | ✅ portable atlas generation + stock reception | ⬜ | ⬜ — same accepted-and-ignored convention |
 | Contact shadows | ✅ needs the prepass depth and executed effect source | ⬜ | ⬜ | ⬜ — `ContactShadowPass::isSupported()` is false and the pass copies its input through, so the frame keeps the shadow map it already had |
@@ -225,7 +225,7 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 | GPU timer queries | ✅ probed: `GL_EXT_disjoint_timer_query` is present on this machine's Mesa ES driver | ✅ queue/device-gated timestamp queries, nonblocking and recycled (`MOD-2246`) | ⬜ | ⬜ — `GpuTimer::isSupported()` is false and names the missing native path; no CPU fallback is offered |
 | Decals | ✅ needs the prepass and `CustomEffects` | ⬜ | ⬜ | ⬜ — `DecalPass` reports `isSupported()` false and draws nothing rather than washing the frame |
 | Spatial upscaling | ✅ | ⬜ | ⬜ | ⬜ — without executed effect source the pass copies its input through at the target size, which is the hardware stretch it was replacing |
-| Display colour space | 🟨 `Srgb` only — the encoding is complete, the swap chain is not | 🟨 same | 🟨 same | 🟨 — no CNA platform back end offers an HDR swap chain, so every renderer answers `Srgb` and refuses the rest |
+| Display colour space | 🟨 `Srgb` only — the encoding is complete, the swap chain is not | 🟨 same; the portable encoder runs, presentation remains sRGB | 🟨 same | 🟨 — no CNA platform back end offers an HDR swap chain, so every renderer answers `Srgb` and refuses the rest |
 | Per-object velocity | ✅ opt-in; a third target with MRT, a third pass without | ⬜ | ⬜ | ⬜ — off by default everywhere, and motion blur stays camera-only, which is what it was before |
 
 **Asking a renderer what it will actually do.** These questions are related, but they are not the
@@ -244,7 +244,9 @@ SPIR-V programs consume the latter two states. Since `MOD-2237`, every shadow ca
 portable package containing GLSL ES, desktop GLSL and SPIR-V instead of handing only GLSL source to
 the renderer; `MOD-2238` does the same for `Skybox`, `MOD-2239` starts the post-process rollout
 with chromatic aberration, `MOD-2218`/`MOD-2219` add FXAA and film grain, and `MOD-2239a` adds the
-main HDR tonemap/deband step; `MOD-2239b` adds the implemented lens-flare ghost path. The remaining
+main HDR tonemap/deband step; `MOD-2239b` adds the implemented lens-flare ghost path and
+`MOD-2239c` adds sRGB/scRGB/HDR10 texture/file encoding. The last path does not alter the
+swap-chain capability: Vulkan still truthfully advertises sRGB presentation only. The remaining
 post-process paths still provide source alone and remain unavailable on Vulkan. Portable packages
 use the language/stage query to select a payload;
 subsystems still ask their own semantic capability before promising a visible result.
@@ -282,7 +284,7 @@ Legend: ✅ verified in this repository · 🟨 partial, or verified only by sha
 | `OpenGLES2` | 🟨 shares EasyGL | GLSL ES 1.00: the shaders are transformed, so no `textureLod` (rough IBL reflections read the base mip), no dynamic uniform-array indexing, statically countable loops only. |
 | `WebGL1` | 🟨 shares EasyGL | As `OpenGLES2`, plus: no compute in any WebGL version. |
 | `WebGL2` | 🟨 shares EasyGL | No compute; otherwise the ES 3.00 path. |
-| `Vulkan` | 🟨 measured | Verified on RADV and llvmpipe: exact float/HDR 2D and cube targets, instancing, stock-PBR IBL, portable skybox and chromatic aberration, directional/cascade/point/spot shadow generation and reception, compute/storage resources, indirect draws and GPU timers work. Remaining source-authored post-process paths are unavailable because Vulkan consumes packaged SPIR-V rather than this layer's GLSL. |
+| `Vulkan` | 🟨 measured | Verified on RADV and llvmpipe: exact float/HDR 2D and cube targets, instancing, stock-PBR IBL, portable skybox, six portable post-process consumers (including texture/file HDR encoding), directional/cascade/point/spot shadow generation and reception, compute/storage resources, indirect draws and GPU timers work. Remaining source-authored post-process paths are unavailable because Vulkan consumes packaged SPIR-V rather than this layer's GLSL; presentation remains sRGB-only. |
 | `Headless` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Three limits it does not advertise — no render-target readback, no cube-face storage, and a cube-face bind that records the face without making it current. The engine layer constructs and passes through; tests probe the three rather than assume them. |
 | `Software` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Render targets, readback and cube storage all work; what does **not** is custom shader source — it is accepted and then ignored, which is why every shader-based subsystem asks `ExecutesShaderEffectSourceEXT()` as well as `CustomEffects`. |
 | `Stub` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Stricter than `Headless` — it refuses to bind a `RenderTarget2D` at all, so a pipeline stops before it renders. Everything above that point constructs and reports false. |
@@ -1257,6 +1259,11 @@ display.setPaperWhiteNits(200.0f);   // what a scene value of 1.0 is worth
 display.setPeakNits(1000.0f);
 display.draw(&sceneTarget, &output, width, height);
 ```
+
+Since `MOD-2239c`, that same encoder selects GLSL ES on EasyGL and packaged SPIR-V on Vulkan. Its
+11-case oracle passes on EasyGL, RADV and Vulkan llvmpipe, including exact sRGB pixels and GPU/CPU
+agreement for scRGB and HDR10. This changes no presentation claim: the capability calls above still
+refuse an HDR swap chain on every platform back end.
 
 **In `Srgb` it copies through, pixel for pixel**, so the pass can sit at the end of the chain on every
 machine: `TonemapPass` has already produced display-encoded sRGB, and a second transfer function

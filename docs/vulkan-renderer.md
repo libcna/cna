@@ -749,7 +749,7 @@ application orbit/yaw oracle passes **3/3** on all three paths with identical me
 Vulkan paths run under Khronos validation and emit no validation messages; the package also passes
 its write-free reproducibility check.
 
-### Portable post-process rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`, `MOD-2239b`, 2026-09-10)
+### Portable post-process rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`, `MOD-2239b`, `MOD-2239c`, 2026-09-10)
 
 `ChromaticAberrationPass` is the first engine post-process to use the portable package path. Its
 internal package shares one fullscreen vertex contract across GLSL ES, desktop GLSL and SPIR-V;
@@ -793,6 +793,15 @@ slot. Its existing thresholded ghost path passes **4/4** on EasyGL, RADV and llv
 light crosses the optical axis without appearing behind its source, frames below threshold and at
 zero intensity remain unchanged, and public setting clamps retain their behavior. The fixture is
 Y-orientation-neutral. This does not claim the halo that `MOD-2024` still explicitly leaves absent.
+
+`HdrDisplayOutput` adds the sixth portable consumer. The colour-space ordinal, paper-white nits and
+peak nits fit the existing `vec4` slot; its variants preserve exact sRGB output, scale linear scRGB
+and apply roll-off, Rec. 709-to-2020 conversion and PQ for HDR10. The first non-symmetric RADV run
+exposed that the shared Vulkan fullscreen vertex shader negated SpriteBatch's already-correct Y
+coordinate. Matching the stock Vulkan SpriteBatch transform fixes the reversal without changing
+UVs, and the strong fixture remains. The HDR suite is **11/11** and the complete portable
+post-process regression set is **43/43** on EasyGL, RADV and llvmpipe. This encodes a texture or file;
+it does not make the Vulkan swap chain HDR-capable, and display-space queries still report sRGB only.
 
 Other engine post-process effects remain source-only and keep their exact copy-through fallback;
 the shared package/helper is the landing point for their subsequent fragment variants.
