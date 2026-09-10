@@ -12,16 +12,66 @@
    "profile": "Reach",
    "compress": false,
    "items": [
-    {"match": "*.jpg", "importer": "TextureImporter", "processor": "TextureProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.jpeg", "importer": "TextureImporter", "processor": "TextureProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.png", "importer": "TextureImporter", "processor": "TextureProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.bmp", "importer": "TextureImporter", "processor": "TextureProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.dds", "importer": "TextureImporter", "processor": "TextureProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.wav", "importer": "WavImporter", "processor": "SoundEffectProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.mp3", "importer": "Mp3Importer", "processor": "SongProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.spritefont", "importer": "FontDescriptionImporter", "processor": "FontDescriptionProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.fx", "importer": "EffectImporter", "processor": "EffectProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.x", "importer": "XImporter", "processor": "ModelProcessor", "assetName": "{stem}/{stem}"}
+    {
+     "match": "*.jpg",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.jpeg",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.png",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.bmp",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.dds",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.wav",
+     "importer": "WavImporter",
+     "processor": "SoundEffectProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.mp3",
+     "importer": "Mp3Importer",
+     "processor": "SongProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.spritefont",
+     "importer": "FontDescriptionImporter",
+     "processor": "FontDescriptionProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.fx",
+     "importer": "EffectImporter",
+     "processor": "EffectProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.x",
+     "importer": "XImporter",
+     "processor": "ModelProcessor",
+     "assetName": "{stem}/{stem}"
+    }
    ]
   },
   {
@@ -32,16 +82,66 @@
    "profile": "HiDef",
    "compress": false,
    "items": [
-    {"match": "*.jpg", "importer": "TextureImporter", "processor": "TextureProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.jpeg", "importer": "TextureImporter", "processor": "TextureProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.png", "importer": "TextureImporter", "processor": "TextureProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.bmp", "importer": "TextureImporter", "processor": "TextureProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.dds", "importer": "TextureImporter", "processor": "TextureProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.wav", "importer": "WavImporter", "processor": "SoundEffectProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.mp3", "importer": "Mp3Importer", "processor": "SongProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.spritefont", "importer": "FontDescriptionImporter", "processor": "FontDescriptionProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.fx", "importer": "EffectImporter", "processor": "EffectProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.x", "importer": "XImporter", "processor": "ModelProcessor", "assetName": "{stem}/{stem}"}
+    {
+     "match": "*.jpg",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.jpeg",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.png",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.bmp",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.dds",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.wav",
+     "importer": "WavImporter",
+     "processor": "SoundEffectProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.mp3",
+     "importer": "Mp3Importer",
+     "processor": "SongProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.spritefont",
+     "importer": "FontDescriptionImporter",
+     "processor": "FontDescriptionProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.fx",
+     "importer": "EffectImporter",
+     "processor": "EffectProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.x",
+     "importer": "XImporter",
+     "processor": "ModelProcessor",
+     "assetName": "{stem}/{stem}"
+    }
    ]
   },
   {
@@ -52,16 +152,66 @@
    "profile": "HiDef",
    "compress": false,
    "items": [
-    {"match": "*.jpg", "importer": "TextureImporter", "processor": "TextureProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.jpeg", "importer": "TextureImporter", "processor": "TextureProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.png", "importer": "TextureImporter", "processor": "TextureProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.bmp", "importer": "TextureImporter", "processor": "TextureProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.dds", "importer": "TextureImporter", "processor": "TextureProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.wav", "importer": "WavImporter", "processor": "SoundEffectProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.mp3", "importer": "Mp3Importer", "processor": "SongProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.spritefont", "importer": "FontDescriptionImporter", "processor": "FontDescriptionProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.fx", "importer": "EffectImporter", "processor": "EffectProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.x", "importer": "XImporter", "processor": "ModelProcessor", "assetName": "{stem}/{stem}"}
+    {
+     "match": "*.jpg",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.jpeg",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.png",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.bmp",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.dds",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.wav",
+     "importer": "WavImporter",
+     "processor": "SoundEffectProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.mp3",
+     "importer": "Mp3Importer",
+     "processor": "SongProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.spritefont",
+     "importer": "FontDescriptionImporter",
+     "processor": "FontDescriptionProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.fx",
+     "importer": "EffectImporter",
+     "processor": "EffectProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.x",
+     "importer": "XImporter",
+     "processor": "ModelProcessor",
+     "assetName": "{stem}/{stem}"
+    }
    ]
   },
   {
@@ -72,17 +222,71 @@
    "profile": "HiDef",
    "compress": false,
    "items": [
-    {"match": "*.jpg", "importer": "TextureImporter", "processor": "TextureProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.jpeg", "importer": "TextureImporter", "processor": "TextureProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.png", "importer": "TextureImporter", "processor": "TextureProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.bmp", "importer": "TextureImporter", "processor": "TextureProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.dds", "importer": "TextureImporter", "processor": "TextureProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.wav", "importer": "WavImporter", "processor": "SoundEffectProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.mp3", "importer": "Mp3Importer", "processor": "SongProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.spritefont", "importer": "FontDescriptionImporter", "processor": "FontDescriptionProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.fx", "importer": "EffectImporter", "processor": "EffectProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.x", "importer": "XImporter", "processor": "ModelProcessor", "assetName": "{stem}/{stem}"}
-   ]
+    {
+     "match": "*.jpg",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.jpeg",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.png",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.bmp",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.dds",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.wav",
+     "importer": "WavImporter",
+     "processor": "SoundEffectProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.mp3",
+     "importer": "Mp3Importer",
+     "processor": "SongProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.spritefont",
+     "importer": "FontDescriptionImporter",
+     "processor": "FontDescriptionProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.fx",
+     "importer": "EffectImporter",
+     "processor": "EffectProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.x",
+     "importer": "XImporter",
+     "processor": "ModelProcessor",
+     "assetName": "{stem}/{stem}"
+    }
+   ],
+   "skip": [
+    "streettexture.dds"
+   ],
+   "skipComment": "`streettexture.dds` and `streettexture.jpg` share a stem, so both would be the asset `streettexture/streettexture`. The runner builds one asset per `BuildContent` call with `RebuildAll`, so it never saw a collision -- it simply wrote the second over the first, and its loop is sorted ordinal-ignore-case, which puts `.dds` first and lets `.jpg` win. The corpus agrees: the reference is 1,048,763 bytes, which is 512x512 in `Color` and not a compressed surface. A single project cannot express 'build both, keep the last', so the loser is skipped by name."
   },
   {
    "project": "3d-series-4-advanced-terrain.contentproj",
@@ -92,16 +296,66 @@
    "profile": "HiDef",
    "compress": false,
    "items": [
-    {"match": "*.jpg", "importer": "TextureImporter", "processor": "TextureProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.jpeg", "importer": "TextureImporter", "processor": "TextureProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.png", "importer": "TextureImporter", "processor": "TextureProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.bmp", "importer": "TextureImporter", "processor": "TextureProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.dds", "importer": "TextureImporter", "processor": "TextureProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.wav", "importer": "WavImporter", "processor": "SoundEffectProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.mp3", "importer": "Mp3Importer", "processor": "SongProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.spritefont", "importer": "FontDescriptionImporter", "processor": "FontDescriptionProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.fx", "importer": "EffectImporter", "processor": "EffectProcessor", "assetName": "{stem}/{stem}"},
-    {"match": "*.x", "importer": "XImporter", "processor": "ModelProcessor", "assetName": "{stem}/{stem}"}
+    {
+     "match": "*.jpg",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.jpeg",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.png",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.bmp",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.dds",
+     "importer": "TextureImporter",
+     "processor": "TextureProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.wav",
+     "importer": "WavImporter",
+     "processor": "SoundEffectProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.mp3",
+     "importer": "Mp3Importer",
+     "processor": "SongProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.spritefont",
+     "importer": "FontDescriptionImporter",
+     "processor": "FontDescriptionProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.fx",
+     "importer": "EffectImporter",
+     "processor": "EffectProcessor",
+     "assetName": "{stem}/{stem}"
+    },
+    {
+     "match": "*.x",
+     "importer": "XImporter",
+     "processor": "ModelProcessor",
+     "assetName": "{stem}/{stem}"
+    }
    ]
   }
  ]
