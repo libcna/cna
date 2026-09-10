@@ -646,6 +646,17 @@ namespace CNA::Content::Pipeline
      * `iCCP` profile is ignored, which is measured rather than assumed -- 770 of the corpus's
      * 788 references whose source carries one are byte-identical without touching it.
      *
+     * **Only a PNG that carries an alpha channel is corrected.** GDI+ loads a truecolour PNG
+     * without one as `Format24bppRgb` and one with it as `Format32bppArgb`, and only the second
+     * path applies the file gamma. The corpus splits on it exactly: of the sources that declare a
+     * non-standard `gAMA` and no `sRGB` or `iCCP`, all **94** whose colour type is 6 are
+     * byte-identical or semantically identical with the correction, and all **14** whose colour
+     * type is 2 differ -- every channel one unit low, which is what this correction subtracts --
+     * and are byte-identical without it. There is no counterexample either way. A palette or
+     * greyscale source with a non-standard gamma is not in the corpus, so it takes the same
+     * answer as the truecolour one it resembles rather than a guess of its own
+     * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-218`).
+     *
      * @param file The source file's bytes.
      * @param pixels The decoded RGBA8 texels, corrected in place.
      */
@@ -666,6 +677,14 @@ namespace CNA::Content::Pipeline
                    (static_cast<std::uint32_t>(file[at + 2u]) << 8) |
                    static_cast<std::uint32_t>(file[at + 3u]);
         };
+        // IHDR's colour type is its tenth byte: bit 2 is the alpha channel (4 greyscale+alpha,
+        // 6 truecolour+alpha), and without it GDI+ never applies the file gamma.
+        constexpr std::size_t kColourTypeOffset = 25u;
+        if (file.size() <= kColourTypeOffset ||
+            (file[kColourTypeOffset] & 0x04u) == 0u)
+        {
+            return;
+        }
         std::optional<std::uint32_t> gamma;
         for (std::size_t at = 8u; at + 12u <= file.size();)
         {

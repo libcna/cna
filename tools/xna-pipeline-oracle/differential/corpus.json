@@ -12,6 +12,22 @@
    "profile": "Reach"
   },
   {
+   "case": "texture/png_gamma_no_alpha",
+   "source": "texture/png_gamma_no_alpha.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "texture/png_gamma_with_alpha",
+   "source": "texture/png_gamma_with_alpha.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
    "case": "texture/png_sprite_windows_hidef",
    "source": "texture/probe.png",
    "importer": "TextureImporter",

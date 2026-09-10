@@ -17,7 +17,21 @@
       "note": "A font sheet in XNA's own shape for FontTextureProcessor: three 5x7 glyph cells separated by magenta.",
       "thirdParty": false
     },
+
     {
+      "file": "png_gamma_no_alpha.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_png_gamma_fixtures.py",
+      "note": "Eight by eight, one gradient, a non-standard gAMA of 0.45 and no an alpha channel: GDI+ applies a file gamma to the second and not the first (XNASWEEP-218).",
+      "thirdParty": false
+    },
+    {
+      "file": "png_gamma_with_alpha.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_png_gamma_fixtures.py",
+      "note": "Eight by eight, one gradient, a non-standard gAMA of 0.45 and with an alpha channel: GDI+ applies a file gamma to the second and not the first (XNASWEEP-218).",
+      "thirdParty": false
+    },    {
       "file": "font_sheet_alpha_border.png",
       "origin": "generated",
       "generator": "tools/xna-pipeline-oracle/texture/make_font_sheet_fixtures.py",
