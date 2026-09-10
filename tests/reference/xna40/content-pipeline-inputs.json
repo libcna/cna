@@ -34,7 +34,7 @@
         "windowsPhone": "SUPPORTED",
         "xbox360": "SUPPORTED",
         "status": "IMPLEMENTED+TESTED",
-        "note": "Importer, the three processors, every TextureProcessor property and every target/profile leg are compared against the genuine importer over this committed fixture. The source-to-XNB and source-to-CNB legs are named too, so all six are."
+        "note": "Importer, the three processors, every TextureProcessor property and every target/profile leg are compared against the genuine importer over this committed fixture. The source-to-XNB and source-to-CNB legs are named too, so all six are. One rule of the importer's is measured rather than documented: a bitmap of more than eight bits per pixel may put bytes between its DIB header and its pixels -- a colour table written for 256-colour displays is the usual one -- and the decoder CNA vendors reads such a file from the wrong place. spikes/bmp-offset-spike reproduces that in the decoder alone, and CNA closes the gap before the bytes reach it, so a .bmp with a colour table now decodes to what the file describes and to what XNA's own build produced (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-221)."
       }
     },
     ".dds": {
@@ -304,7 +304,7 @@
         "windowsPhone": "SUPPORTED",
         "xbox360": "SUPPORTED",
         "status": "IMPLEMENTED+TESTED",
-        "note": "Importer, the three processors, every TextureProcessor property and every target/profile leg are compared against the genuine importer over this committed fixture. The source-to-XNB and source-to-CNB legs are named too, so all six are."
+        "note": "Importer, the three processors, every TextureProcessor property and every target/profile leg are compared against the genuine importer over this committed fixture. The source-to-XNB and source-to-CNB legs are named too, so all six are. One rule of the importer's is worth naming here because it is not in the XNA documentation and is measured: XNA loads an image through GDI+, which honours a PNG's own gAMA chunk, and it does so only when the image carries an alpha channel -- a truecolour PNG without one is loaded as Format24bppRgb and is not corrected. Over the public sample corpus the split is exact: all 94 colour-type-6 sources with a non-standard gAMA match with the correction and all 14 colour-type-2 sources match without it, and two purpose-built eight-by-eight PNGs built through the genuine BuildContent confirm both halves (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-218)."
       }
     },
     ".ppm": {
