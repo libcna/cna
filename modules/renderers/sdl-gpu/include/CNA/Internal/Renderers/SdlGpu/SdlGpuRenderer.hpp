@@ -417,11 +417,15 @@ namespace CNA::Internal::Renderers::SdlGpu
         int depthBits = 0;
         /// Whether @ref depthFormat owns a stencil plane.
         bool hasStencil = false;
+        /// Whether multisample contents must survive the final resolve for a later bind.
+        bool preserveContents = false;
         bool mipMap = false;
         // The native `num_levels` allocated for colorTexture.  The deferred pass-finalization
         // path owns only this state (the public wrapper may already be gone), so it must use the
         // allocation fact rather than mipMap alone before asking SDL to generate a chain.
         int levelCount = 1;
+        /// Levels with deterministic uploaded or rendered content, for partial authored updates.
+        std::vector<bool> definedMipLevels;
         SDL_GPUTexture* colorTexture = nullptr;
         SDL_GPUTexture* msaaTexture = nullptr;
         SDL_GPUTexture* depthTexture = nullptr;
@@ -467,7 +471,8 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
     public:
         SdlGpuRenderTargetRenderer(SdlGpuRenderer& owner, int width, int height,
-                                  int depthFormat, bool mipMap, int multiSampleCount,
+                                  int depthFormat, bool preserveContents, bool mipMap,
+                                  int multiSampleCount,
                                   int surfaceFormat = 0);
         ~SdlGpuRenderTargetRenderer() override;
 
@@ -484,6 +489,31 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         void BindAsRenderTarget() override;
         void UnbindAsRenderTarget() override;
+        /**
+         * @brief Uploads the complete public level zero into the resolved target texture.
+         * @param rgba Native-format texel bytes for the complete level.
+         * @param stride Source row stride in bytes.
+         */
+        void UpdatePixels(const uint8_t* rgba, int stride) override;
+        /**
+         * @brief Uploads one complete authored mip level into the resolved target texture.
+         * @param level Mip level to replace.
+         * @param rgba Native-format texel bytes for the complete level.
+         * @param levelW Width of the supplied level.
+         * @param levelH Height of the supplied level.
+         */
+        void UpdatePixelsLevel(int level, const uint8_t* rgba,
+                               int levelW, int levelH) override;
+        /**
+         * @brief Reports whether an authored or rendered mip can seed a partial update.
+         * @param level Mip level to query.
+         * @return True when the renderer owns deterministic readable bytes for the level.
+         */
+        [[nodiscard]] bool HasDefinedMipLevel(int level) const noexcept override
+        {
+            return level >= 0 && level < static_cast<int>(state_->definedMipLevels.size()) &&
+                   state_->definedMipLevels[static_cast<std::size_t>(level)];
+        }
         [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
         [[nodiscard]] int GetAppliedDepthStencilFormatEXT(
             int /*requestedDepthStencilFormat*/) const override
@@ -552,6 +582,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         CNAEXT void AttachToCurrentSegment();
 
     private:
+        void UploadLevel(int level, const uint8_t* pixels,
+                         int levelW, int levelH, int stride);
         SdlGpuRenderer* owner_ = nullptr;
         bool mipMap_ = false;
         int multiSampleCount_ = 0;
@@ -694,6 +726,20 @@ namespace CNA::Internal::Renderers::SdlGpu
         /// fills the transfer buffer with whatever it finds, so the guard has to be here.
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
+        /**
+         * @brief Uploads a complete Color region into one rendered cube face and mip.
+         * @param face Cube face index, zero through five.
+         * @param level Mip level to update.
+         * @param x Left edge in texels.
+         * @param y Top edge in texels.
+         * @param w Region width in texels.
+         * @param h Region height in texels.
+         * @param data Tightly packed RGBA8 source texels.
+         * @param dataLength Available source bytes.
+         * @return True when the complete region was stored; false for an unsupported request.
+         */
+        [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
+                                   const void* data, int dataLength) override;
         /**
          * @brief Downloads the cube attachment's exact native texel representation.
          *
@@ -2530,6 +2576,11 @@ namespace CNA::Internal::Renderers::SdlGpu
         // (whatever was pending has now been handed to the GPU, so it's safe), and one final time
         // in ~SdlGpuRenderer() in case no further frame ever renders.
         void QueueTextureRelease(SDL_GPUTexture* texture);
+        void SeedMultisampleTargetFromResolved(
+            SDL_GPUTexture* resolvedTexture, int resolvedLayer,
+            SDL_GPUTexture* multisampleTexture, SDL_GPUTextureFormat colorFormat,
+            SDL_GPUSampleCount sampleCount, int surfaceFormat,
+            int width, int height, const char* diagnostic);
 
         // sprite2d pipeline: shader modules, compatibility-keyed pipelines, and the renderer-wide
         // sampler cache, keyed by the COMPLETE description (filter, addressU, addressV,

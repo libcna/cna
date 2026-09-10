@@ -156,7 +156,7 @@ easygl_rasterizerstate_cullmode_golden_test.cpp,classic-xna-covered-by-existing-
 easygl_rasterizerstate_cullmode_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_real_window_resize_test.cpp,classic-xna-direct-parity,SDLGPU-68,same source passes SDL GPU
 easygl_render_target_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
-easygl_render_target_usage_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-74,PreserveContents/DiscardContents
+easygl_render_target_usage_test.cpp,easygl-defect,SDLGPU-74,uses GetBackBufferData while a target is bound and therefore tests EasyGL current-FBO readback rather than XNA backbuffer readback; shared RenderTargetSemantics is the valid usage oracle
 easygl_rendertarget2d_mip_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_rendertarget2d_msaa_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_rendertarget2d_properties_test.cpp,classic-xna-direct-parity,SDLGPU-72,exact source compiles under SDL GPU and verifies constructors properties and Rgba64 readback

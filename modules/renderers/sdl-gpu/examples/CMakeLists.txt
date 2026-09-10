@@ -221,6 +221,18 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         SdlGpu_EasyGLOracle_rendertargetcube_depthformat
         PROPERTIES FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
+    # SDLGPU-74: the shared target-mip fixture is stronger than EasyGL's historical local mip
+    # smoke test: it reads both ends of the generated chain and samples level zero versus the
+    # coarsest level in the same public frame. EasyGL builds this identical source through the
+    # central parity-fixture registry.
+    cna_sdlgpu_test(cna_parity_render_target_mip_sdlgpu
+                    ${CNA_GRAPHICS_EXAMPLES_DIR}/parity/parity_render_target_mip.cpp)
+    cna_register_renderer_test(NAME SdlGpu_Parity_render_target_mip
+        COMMAND cna_parity_render_target_mip_sdlgpu
+        TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    set_tests_properties(SdlGpu_Parity_render_target_mip PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+
     # REMED-GFX-188: mipMap and MSAA are independent on RenderTargetCube. The resolved cube owns
     # every public level, each one-level face attachment resolves before that face's chain is
     # generated, and a later pass in the same frame can sample the generated levels. All native
@@ -1112,6 +1124,43 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
                     ${CNA_GRAPHICS_EXAMPLES_DIR}/backbuffer_headless_reject_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_BackbufferReject COMMAND cna_test_sdlgpu_backbuffer_reject
         TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+
+    # SDLGPU-74: RenderTarget2D inherits Texture2D::SetData and RenderTargetCube inherits
+    # TextureCube::SetData. The SDL_GPU 2D target used to accept-and-discard both level-zero and
+    # authored-mip writes through ITextureRenderer's empty defaults, while the cube inherited an
+    # explicit refusal despite EasyGL having a real face upload. Exercise full and partial uploads,
+    # authored mips, multiple cube faces, PreserveContents first bind, render->upload chronology and
+    # render-time mip replacement through the public XNA surface.
+    cna_sdlgpu_test(cna_test_sdlgpu_rendertarget_setdata
+                    sdlgpu_rendertarget_setdata_test.cpp)
+    cna_register_renderer_test(NAME SdlGpu_RenderTarget_SetData
+        COMMAND cna_test_sdlgpu_rendertarget_setdata
+        TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+
+    # SDLGPU-74: all existing controls which jointly prove target load/store, resolve, generated
+    # mips and mixed pass ordering must also fail on a native validation diagnostic. Several were
+    # written before the project adopted validation-fatal CTests, so pixels alone were not enough.
+    set_tests_properties(
+        SdlGpu_RenderTarget2D
+        SdlGpu_RenderTargetCube
+        SdlGpu_RenderTargetCube_MsaaMip
+        SdlGpu_RenderTarget2DMSAA
+        SdlGpu_RenderTarget_ProducerConsumer
+        SdlGpu_RenderTarget_BackbufferConsumer
+        SdlGpu_RenderTarget_FirstUse
+        SdlGpu_MsaaDepthContract
+        SdlGpu_MsaaFirstReadback
+        SdlGpu_MsaaMipReadback
+        SdlGpu_InvalidMipLevel
+        SdlGpu_RenderTargetCube_Usage
+        SdlGpu_RenderTargetCube_MsaaFace
+        SdlGpu_RenderTarget_DepthStencilUsage
+        SdlGpu_RenderTarget_PassBoundary
+        SdlGpu_GraphicsDevice_OrderedClear
+        SdlGpu_Backbuffer_PassOrder
+        SdlGpu_Parity_render_target_mip
+        SdlGpu_RenderTarget_SetData
+        PROPERTIES FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 endif()
 
 # Module-local tests get the same headless-safe skip convention the root one-shot

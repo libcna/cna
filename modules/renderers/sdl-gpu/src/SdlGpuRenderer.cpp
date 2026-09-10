@@ -433,6 +433,94 @@ namespace CNA::Internal::Renderers::SdlGpu
             return enabled;
         }
 
+        void UploadTargetRegion(SDL_GPUDevice* device, SDL_GPUTexture* texture,
+                                SDL_GPUTextureFormat format, Uint32 bytesPerPixel,
+                                int layer, int level, int x, int y, int w, int h,
+                                const std::uint8_t* pixels, int stride,
+                                const char* diagnostic)
+        {
+            if (pixels == nullptr)
+                throw std::invalid_argument(std::string(diagnostic) + ": upload source is null");
+            const int rowBytes = w * static_cast<int>(bytesPerPixel);
+            if (stride < rowBytes)
+                throw std::invalid_argument(std::string(diagnostic) + ": upload stride is too small");
+
+            std::vector<std::uint8_t> tight;
+            const std::uint8_t* upload = pixels;
+            if (stride != rowBytes)
+            {
+                tight.resize(static_cast<std::size_t>(rowBytes) * h);
+                for (int row = 0; row < h; ++row)
+                    std::memcpy(tight.data() + static_cast<std::size_t>(row) * rowBytes,
+                                pixels + static_cast<std::size_t>(row) * stride,
+                                static_cast<std::size_t>(rowBytes));
+                upload = tight.data();
+            }
+
+            const Uint32 sizeBytes = SDL_CalculateGPUTextureFormatSize(
+                format, static_cast<Uint32>(w), static_cast<Uint32>(h), 1);
+            if (sizeBytes != static_cast<Uint32>(rowBytes * h))
+                throw std::runtime_error(std::string(diagnostic) +
+                                         ": native upload size disagrees with texel size");
+
+            SDL_GPUTransferBufferCreateInfo transferInfo{};
+            transferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+            transferInfo.size = sizeBytes;
+            SDL_GPUTransferBuffer* transfer = SDL_CreateGPUTransferBuffer(device, &transferInfo);
+            if (transfer == nullptr)
+                throw std::runtime_error(std::string(diagnostic) +
+                                         ": failed to create transfer buffer: " + SDL_GetError());
+
+            void* mapped = SDL_MapGPUTransferBuffer(device, transfer, false);
+            if (mapped == nullptr)
+            {
+                SDL_ReleaseGPUTransferBuffer(device, transfer);
+                throw std::runtime_error(std::string(diagnostic) +
+                                         ": failed to map transfer buffer: " + SDL_GetError());
+            }
+            std::memcpy(mapped, upload, sizeBytes);
+            SDL_UnmapGPUTransferBuffer(device, transfer);
+
+            SDL_GPUCommandBuffer* command = SDL_AcquireGPUCommandBuffer(device);
+            if (command == nullptr)
+            {
+                SDL_ReleaseGPUTransferBuffer(device, transfer);
+                throw std::runtime_error(std::string(diagnostic) +
+                                         ": failed to acquire command buffer: " + SDL_GetError());
+            }
+            SDL_GPUCopyPass* pass = SDL_BeginGPUCopyPass(command);
+            if (pass == nullptr)
+            {
+                (void)SDL_CancelGPUCommandBuffer(command);
+                SDL_ReleaseGPUTransferBuffer(device, transfer);
+                throw std::runtime_error(std::string(diagnostic) +
+                                         ": failed to begin copy pass: " + SDL_GetError());
+            }
+
+            SDL_GPUTextureTransferInfo source{};
+            source.transfer_buffer = transfer;
+            SDL_GPUTextureRegion destination{};
+            destination.texture = texture;
+            destination.mip_level = static_cast<Uint32>(level);
+            destination.layer = static_cast<Uint32>(layer);
+            destination.x = static_cast<Uint32>(x);
+            destination.y = static_cast<Uint32>(y);
+            destination.w = static_cast<Uint32>(w);
+            destination.h = static_cast<Uint32>(h);
+            destination.d = 1;
+            // Never cycle a render-target texture: every queued draw and public target wrapper
+            // retains this exact handle, and cycling would replace untouched faces/mip levels.
+            SDL_UploadToGPUTexture(pass, &source, &destination, false);
+            SDL_EndGPUCopyPass(pass);
+            if (!SDL_SubmitGPUCommandBuffer(command))
+            {
+                SDL_ReleaseGPUTransferBuffer(device, transfer);
+                throw std::runtime_error(std::string(diagnostic) +
+                                         ": failed to submit upload: " + SDL_GetError());
+            }
+            SDL_ReleaseGPUTransferBuffer(device, transfer);
+        }
+
         /**
          * Regenerates exactly the allocated 2D target mip chain with the FNA/XNA level extents.
          *
@@ -2164,8 +2252,8 @@ namespace CNA::Internal::Renderers::SdlGpu
                 // wrong for any earlier one, because a following pass -- which is exactly what an
                 // ordered Clear() that does not name the colour attachment creates -- LOADs those
                 // samples. Same correction REMED-GFX-141 made for preserving cube faces.
-                out.store_op = colorLoadedLater ? SDL_GPU_STOREOP_RESOLVE_AND_STORE
-                                                : SDL_GPU_STOREOP_RESOLVE;
+                out.store_op = (state.preserveContents || colorLoadedLater)
+                    ? SDL_GPU_STOREOP_RESOLVE_AND_STORE : SDL_GPU_STOREOP_RESOLVE;
             }
             else
             {
@@ -2485,11 +2573,15 @@ namespace CNA::Internal::Renderers::SdlGpu
         target->clearColorPending = false;
         target->clearDepthPending = false;
         target->clearStencilPending = false;
+        if (!target->definedMipLevels.empty())
+            target->definedMipLevels[0] = true;
         for (const auto& extra : segment.extraAttachments)
         {
             extra->clearColorPending = false;
             extra->clearDepthPending = false;
             extra->clearStencilPending = false;
+            if (!extra->definedMipLevels.empty())
+                extra->definedMipLevels[0] = true;
         }
 
         // REMED-GFX-187: regenerate through clamped per-level GPU blits outside the pass. This
@@ -2498,12 +2590,20 @@ namespace CNA::Internal::Renderers::SdlGpu
         // ordering. Per segment, since each segment's result is what a LATER segment or the
         // swapchain pass may sample.
         if (target->mipMap && target->levelCount > 1)
+        {
             GenerateRenderTargetMipChain(cmd, target->colorTexture, target->width,
                                          target->height, target->levelCount);
+            std::fill(target->definedMipLevels.begin(), target->definedMipLevels.end(), true);
+        }
         for (const auto& extra : segment.extraAttachments)
+        {
             if (extra->mipMap && extra->levelCount > 1)
+            {
                 GenerateRenderTargetMipChain(cmd, extra->colorTexture, extra->width,
                                              extra->height, extra->levelCount);
+                std::fill(extra->definedMipLevels.begin(), extra->definedMipLevels.end(), true);
+            }
+        }
     }
 
     void SdlGpuRenderer::RenderToTargetCubeFace(SDL_GPUCommandBuffer* cmd,
@@ -3680,7 +3780,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     }
 
     std::unique_ptr<IRenderTargetRenderer> SdlGpuRenderer::CreateRenderTarget2DEXT(
-        int w, int h, int depthFormat, bool /*preserveContents*/, bool mipMap,
+        int w, int h, int depthFormat, bool preserveContents, bool mipMap,
         int multiSampleCount, int surfaceFormat)
     {
         if (ClassifyRenderTargetFormatEXT(surfaceFormat) != RendererFormatVerdict::Supported)
@@ -3690,7 +3790,8 @@ namespace CNA::Internal::Renderers::SdlGpu
                 " is not supported as an exact RenderTarget2D color attachment on this device");
         }
         return std::make_unique<SdlGpuRenderTargetRenderer>(
-            *this, w, h, depthFormat, mipMap, multiSampleCount, surfaceFormat);
+            *this, w, h, depthFormat, preserveContents, mipMap,
+            multiSampleCount, surfaceFormat);
     }
 
     void SdlGpuRenderer::SetRenderTarget2D(IRenderTargetRenderer* rt)
@@ -3970,6 +4071,171 @@ namespace CNA::Internal::Renderers::SdlGpu
                          hit ? "HIT" : "CREATE");
         }
         return sampler;
+    }
+
+    void SdlGpuRenderer::SeedMultisampleTargetFromResolved(
+        SDL_GPUTexture* resolvedTexture, int resolvedLayer,
+        SDL_GPUTexture* multisampleTexture, SDL_GPUTextureFormat colorFormat,
+        SDL_GPUSampleCount sampleCount, int surfaceFormat,
+        int width, int height, const char* diagnostic)
+    {
+        RenderStateSnapshot seedState{};
+        SDL_GPUGraphicsPipeline* pipeline = GetOrCreateSpritePipeline(
+            colorFormat, sampleCount, SDL_GPU_TEXTUREFORMAT_INVALID, 1,
+            false, false, 3, seedState);
+        SDL_GPUSampler* sampler = GetOrCreateSampler(
+            1, 1, 1, 1, "RenderTargetSetData/MSAASeed");
+
+        const float right = static_cast<float>(width);
+        const float bottom = static_cast<float>(height);
+        const std::array<SpriteVertex, 6> vertices{{
+            {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f},
+            {right, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f},
+            {0.0f, bottom, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f},
+            {0.0f, bottom, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f},
+            {right, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f},
+            {right, bottom, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f},
+        }};
+
+        SDL_GPUBufferCreateInfo bufferInfo{};
+        bufferInfo.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
+        bufferInfo.size = sizeof(vertices);
+        SDL_GPUBuffer* vertexBuffer = SDL_CreateGPUBuffer(device_, &bufferInfo);
+        if (vertexBuffer == nullptr)
+            throw std::runtime_error(std::string(diagnostic) +
+                                     ": failed to create MSAA seed vertex buffer: " +
+                                     SDL_GetError());
+
+        SDL_GPUTransferBufferCreateInfo transferInfo{};
+        transferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+        transferInfo.size = sizeof(vertices);
+        SDL_GPUTransferBuffer* transfer = SDL_CreateGPUTransferBuffer(device_, &transferInfo);
+        SDL_GPUTexture* sampleTexture = resolvedTexture;
+        SDL_GPUTexture* faceTexture = nullptr;
+        try
+        {
+            if (transfer == nullptr)
+                throw std::runtime_error(std::string(diagnostic) +
+                                         ": failed to create MSAA seed transfer buffer: " +
+                                         SDL_GetError());
+            void* mapped = SDL_MapGPUTransferBuffer(device_, transfer, false);
+            if (mapped == nullptr)
+                throw std::runtime_error(std::string(diagnostic) +
+                                         ": failed to map MSAA seed transfer buffer: " +
+                                         SDL_GetError());
+            std::memcpy(mapped, vertices.data(), sizeof(vertices));
+            SDL_UnmapGPUTransferBuffer(device_, transfer);
+
+            // The stock sprite shader samples a 2D texture. A cube face is first copied, on the
+            // same command-buffer timeline, into a temporary 2D view-compatible texture rather
+            // than binding a cube resource to an incompatible sampler2D declaration.
+            if (resolvedLayer >= 0)
+            {
+                SDL_GPUTextureCreateInfo faceInfo{};
+                faceInfo.type = SDL_GPU_TEXTURETYPE_2D;
+                faceInfo.format = colorFormat;
+                faceInfo.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+                faceInfo.width = static_cast<Uint32>(width);
+                faceInfo.height = static_cast<Uint32>(height);
+                faceInfo.layer_count_or_depth = 1;
+                faceInfo.num_levels = 1;
+                faceInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
+                faceTexture = SDL_CreateGPUTexture(device_, &faceInfo);
+                if (faceTexture == nullptr)
+                    throw std::runtime_error(std::string(diagnostic) +
+                                             ": failed to create cube-face seed texture: " +
+                                             SDL_GetError());
+                sampleTexture = faceTexture;
+            }
+
+            SDL_GPUCommandBuffer* command = SDL_AcquireGPUCommandBuffer(device_);
+            if (command == nullptr)
+                throw std::runtime_error(std::string(diagnostic) +
+                                         ": failed to acquire MSAA seed command buffer: " +
+                                         SDL_GetError());
+            FrameCommandBufferOwner commandOwner(command, testHooks_);
+            {
+                SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(command);
+                if (copyPass == nullptr)
+                    throw std::runtime_error(std::string(diagnostic) +
+                                             ": failed to begin MSAA seed copy pass: " +
+                                             SDL_GetError());
+                CopyPassOwner copyOwner(copyPass);
+                SDL_GPUTransferBufferLocation vertexSource{};
+                vertexSource.transfer_buffer = transfer;
+                SDL_GPUBufferRegion vertexDestination{};
+                vertexDestination.buffer = vertexBuffer;
+                vertexDestination.size = sizeof(vertices);
+                SDL_UploadToGPUBuffer(
+                    copyPass, &vertexSource, &vertexDestination, false);
+
+                if (faceTexture != nullptr)
+                {
+                    SDL_GPUTextureLocation faceSource{};
+                    faceSource.texture = resolvedTexture;
+                    faceSource.layer = static_cast<Uint32>(resolvedLayer);
+                    SDL_GPUTextureLocation faceDestination{};
+                    faceDestination.texture = faceTexture;
+                    SDL_CopyGPUTextureToTexture(
+                        copyPass, &faceSource, &faceDestination,
+                        static_cast<Uint32>(width), static_cast<Uint32>(height), 1, false);
+                }
+            }
+            SDL_ReleaseGPUTransferBuffer(device_, transfer);
+            transfer = nullptr;
+
+            SDL_GPUColorTargetInfo colorTarget{};
+            colorTarget.texture = multisampleTexture;
+            colorTarget.load_op = SDL_GPU_LOADOP_DONT_CARE;
+            colorTarget.store_op = SDL_GPU_STOREOP_STORE;
+            colorTarget.cycle = false;
+            SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(command, &colorTarget, 1, nullptr);
+            if (pass == nullptr)
+                throw std::runtime_error(std::string(diagnostic) +
+                                         ": failed to begin MSAA seed render pass: " +
+                                         SDL_GetError());
+            {
+                RenderPassOwner passOwner(pass);
+                SDL_BindGPUGraphicsPipeline(pass, pipeline);
+                const float viewportSize[2] = {right, bottom};
+                SDL_PushGPUVertexUniformData(command, 0, viewportSize, sizeof(viewportSize));
+                const std::array<float, 8> expansion = SpriteChannelExpansion(surfaceFormat);
+                SDL_PushGPUFragmentUniformData(
+                    command, 0, expansion.data(), sizeof(expansion));
+
+                SDL_GPUViewport viewport{};
+                viewport.w = right;
+                viewport.h = bottom;
+                viewport.min_depth = 0.0f;
+                viewport.max_depth = 1.0f;
+                SDL_SetGPUViewport(pass, &viewport);
+                SDL_Rect scissor{0, 0, width, height};
+                SDL_SetGPUScissor(pass, &scissor);
+
+                SDL_GPUBufferBinding vertexBinding{};
+                vertexBinding.buffer = vertexBuffer;
+                SDL_BindGPUVertexBuffers(pass, 0, &vertexBinding, 1);
+                SDL_GPUTextureSamplerBinding textureBinding{};
+                textureBinding.texture = sampleTexture;
+                textureBinding.sampler = sampler;
+                SDL_BindGPUFragmentSamplers(pass, 0, &textureBinding, 1);
+                SDL_DrawGPUPrimitives(pass, 6, 1, 0, 0);
+            }
+
+            if (!commandOwner.Submit())
+                throw std::runtime_error(std::string(diagnostic) +
+                                         ": failed to submit MSAA seed render: " + SDL_GetError());
+        }
+        catch (...)
+        {
+            if (transfer != nullptr) SDL_ReleaseGPUTransferBuffer(device_, transfer);
+            if (faceTexture != nullptr) SDL_ReleaseGPUTexture(device_, faceTexture);
+            SDL_ReleaseGPUBuffer(device_, vertexBuffer);
+            throw;
+        }
+
+        if (faceTexture != nullptr) SDL_ReleaseGPUTexture(device_, faceTexture);
+        SDL_ReleaseGPUBuffer(device_, vertexBuffer);
     }
 
     void SdlGpuRenderer::InitializeSpritePipelineAndSamplerForTestEXT()
@@ -8982,8 +9248,8 @@ namespace CNA::Internal::Renderers::SdlGpu
     }
 
     SdlGpuRenderTargetRenderer::SdlGpuRenderTargetRenderer(
-        SdlGpuRenderer& owner, int width, int height, int depthFormat, bool mipMap,
-        int multiSampleCount, int surfaceFormat)
+        SdlGpuRenderer& owner, int width, int height, int depthFormat,
+        bool preserveContents, bool mipMap, int multiSampleCount, int surfaceFormat)
         : owner_(&owner)
     {
         state_ = std::make_shared<SdlGpuRenderTarget2DState>();
@@ -8991,6 +9257,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         state_->width = width;
         state_->height = height;
         state_->surfaceFormat = surfaceFormat;
+        state_->preserveContents = preserveContents;
 
         SDL_GPUDevice* device = owner_->Device();
         RenderTargetFormatInfo formatInfo{};
@@ -9055,6 +9322,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // REMED-GFX-186: what SDL really allocated, so GetData can refuse a level with no storage.
         levelCount_ = static_cast<int>(colorInfo.num_levels);
         state_->levelCount = levelCount_;
+        state_->definedMipLevels.assign(static_cast<std::size_t>(levelCount_), false);
         colorInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;  // the sampleable texture itself is always single-sample
 
         state_->colorTexture = SDL_CreateGPUTexture(device, &colorInfo);
@@ -9148,6 +9416,54 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             owner_->currentRenderTarget_ = nullptr;
             owner_->EndRenderTargetSegment();
+        }
+    }
+
+    void SdlGpuRenderTargetRenderer::UpdatePixels(const uint8_t* pixels, int stride)
+    {
+        UploadLevel(0, pixels, state_->width, state_->height, stride);
+    }
+
+    void SdlGpuRenderTargetRenderer::UpdatePixelsLevel(
+        int level, const uint8_t* pixels, int levelW, int levelH)
+    {
+        if (level < 0 || level >= levelCount_ || pixels == nullptr)
+            return;
+        const int expectedW = std::max(1, state_->width >> level);
+        const int expectedH = std::max(1, state_->height >> level);
+        if (levelW != expectedW || levelH != expectedH)
+            throw std::invalid_argument(
+                "CNA SDL_GPU: RenderTarget2D::SetData supplied incorrect mip dimensions");
+        UploadLevel(level, pixels, levelW, levelH,
+                    levelW * static_cast<int>(state_->colorBytesPerPixel));
+    }
+
+    void SdlGpuRenderTargetRenderer::UploadLevel(
+        int level, const uint8_t* pixels, int levelW, int levelH, int stride)
+    {
+        if (level < 0 || level >= levelCount_)
+            throw std::out_of_range(
+                "CNA SDL_GPU: RenderTarget2D::SetData mip level is outside the native chain");
+
+        // Public SetData is chronological with queued draws. Flush every earlier segment before
+        // the copy so a subsequent upload cannot be overwritten by work recorded before it.
+        owner_->EnsureFrameRendered();
+        UploadTargetRegion(owner_->Device(), state_->colorTexture, state_->colorFormat,
+                           state_->colorBytesPerPixel, 0, level, 0, 0, levelW, levelH,
+                           pixels, stride, "CNA SDL_GPU: RenderTarget2D::SetData");
+        if (level == 0 && state_->msaaTexture != nullptr)
+        {
+            owner_->SeedMultisampleTargetFromResolved(
+                state_->colorTexture, -1, state_->msaaTexture,
+                state_->colorFormat, state_->sampleCount, state_->surfaceFormat,
+                levelW, levelH, "CNA SDL_GPU: RenderTarget2D::SetData");
+        }
+        state_->definedMipLevels[static_cast<std::size_t>(level)] = true;
+        if (level == 0)
+        {
+            // A first PreserveContents bind must LOAD the bytes authored through SetData instead
+            // of applying the target's uninitialized-storage safety clear over them.
+            state_->clearColorPending = false;
         }
     }
 
@@ -9425,6 +9741,49 @@ namespace CNA::Internal::Renderers::SdlGpu
             owner_->currentActiveCubeFace_ = -1;
             owner_->EndRenderTargetSegment();
         }
+    }
+
+    bool SdlGpuRenderTargetCubeRenderer::SetData(
+        int face, int level, int x, int y, int w, int h,
+        const void* data, int dataLength)
+    {
+        // TextureCube's classic transfer overload supplies unpacked RGBA8 Color texels. Formats
+        // with another native element shape have no typed cube transfer surface in CNA yet, so do
+        // not reinterpret those four-byte values as half/float/packed target storage.
+        if (state_->surfaceFormat != static_cast<int>(SurfaceFormat::Color) || data == nullptr ||
+            face < 0 || face >= 6 || level < 0 || level >= state_->levelCount ||
+            w <= 0 || h <= 0)
+        {
+            return false;
+        }
+        const int levelSize = std::max(1, state_->size >> level);
+        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize)
+            return false;
+        const Uint32 sizeBytes = static_cast<Uint32>(w) * static_cast<Uint32>(h) * 4;
+        if (dataLength < 0 || static_cast<Uint32>(dataLength) < sizeBytes)
+            return false;
+
+        // Match the 2D path's chronology: every draw queued before SetData reaches the target
+        // first, then this face/level copy becomes the content observed by later work.
+        owner_->EnsureFrameRendered();
+        UploadTargetRegion(owner_->Device(), state_->cubeTexture, state_->colorFormat,
+                           4, face, level, x, y, w, h,
+                           static_cast<const std::uint8_t*>(data), w * 4,
+                           "CNA SDL_GPU: RenderTargetCube::SetData");
+        if (level == 0 && state_->msaaTextures[static_cast<std::size_t>(face)] != nullptr)
+        {
+            owner_->SeedMultisampleTargetFromResolved(
+                state_->cubeTexture, face,
+                state_->msaaTextures[static_cast<std::size_t>(face)],
+                state_->colorFormat, state_->sampleCount, state_->surfaceFormat,
+                state_->size, state_->size, "CNA SDL_GPU: RenderTargetCube::SetData");
+        }
+        if (level == 0)
+        {
+            // PreserveContents must not erase an authored face on its first bind.
+            state_->clearColorPending[static_cast<std::size_t>(face)] = false;
+        }
+        return true;
     }
 
     bool SdlGpuRenderTargetCubeRenderer::GetData(int face, int level, int x, int y, int w, int h,
