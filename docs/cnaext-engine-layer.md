@@ -10,7 +10,7 @@ pipeline, post-processing passes, shadow maps, skybox/IBL, and (long term) compu
 renderers capability by capability.** Its HDR/post-process pipeline, shadows, skybox, image-based
 lighting, instancing/LOD helpers and compute/resource layer all have executable coverage; Vulkan
 now implements exact HDR targets, stock-PBR IBL, portable directional/cascade/point/spot shadow
-generation and stock-effect reception, portable cube and atmospheric skies, seventeen portable post-process consumers,
+generation and stock-effect reception, portable cube and atmospheric skies, eighteen portable post-process consumers,
 a portable decal projector, a portable depth/normal/velocity producer, instancing and the modern
 compute/resource paths. The
 remaining post-process effects are still
@@ -204,7 +204,7 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 |---|---|---|---|---|
 | Post-process effects (`DepthEffect`, `CRTEffect`) | ✅ GLSL | ⛔ its `ShaderEffect` takes SPIR-V, not the passes' GLSL | ⬜ | `AsciiPostProcessEffect` is CPU-side and runs everywhere |
 | Float/HDR render targets | ✅ exact 2D/cube targets, runtime-probed | ✅ exact Float16/Float32 `RenderTarget2D` and `RenderTargetCube`, device-probed (`MOD-2223`/`MOD-2234`) | ⬜ | ⬜ — each reports `false` and the target constructor refuses the format rather than substituting `Color` |
-| `RenderPipeline` + post-process passes | ✅ | 🟨 seventeen portable pass consumers now run, including aerial perspective, contact shadows, SSR, SSAO, Bloom, colour grading, depth of field, motion blur, analytic height fog, light shafts, tonemap/deband and texture/file HDR display encoding; remaining source-only passes copy through | ⬜ | The passes need `GraphicsCapability::CustomEffects`; without it each copies its input and the frame still renders |
+| `RenderPipeline` + post-process passes | ✅ | 🟨 eighteen portable pass consumers now run, including aerial perspective, volumetric fog, contact shadows, SSR, SSAO, Bloom, colour grading, depth of field, motion blur, analytic height fog, light shafts, tonemap/deband and texture/file HDR display encoding; remaining source-only passes copy through | ⬜ | The passes need `GraphicsCapability::CustomEffects`; without it each copies its input and the frame still renders |
 | Depth/normal/velocity prepass | ✅ rigid/skinned producer | ✅ portable rigid/skinned GLSL/SPIR-V package (`MOD-2239l`) | ⬜ | ⬜ — consumers needing these scene images remain unsupported unless this producer or equivalent application inputs run |
 | Shadow maps (directional, PCF) | ✅ generation + reception on all four lit effects | ✅ portable rigid/skinned generation (`MOD-2237`) + stock reception (`MOD-2236`) | ⬜ | ⬜ — an effect accepts the shadow state and a renderer without the shader ignores it, so the frame renders unshadowed rather than failing |
 | Cascaded shadow maps (2-4, atlas) | ✅ same four programs, one shared shader path | ✅ portable atlas generation + stock reception | ⬜ | ⬜ — same accepted-and-ignored convention |
@@ -298,7 +298,7 @@ Legend: ✅ verified in this repository · 🟨 partial, or verified only by sha
 | `OpenGLES2` | 🟨 shares EasyGL | GLSL ES 1.00: the shaders are transformed, so no `textureLod` (rough IBL reflections read the base mip), no dynamic uniform-array indexing, statically countable loops only. |
 | `WebGL1` | 🟨 shares EasyGL | As `OpenGLES2`, plus: no compute in any WebGL version. |
 | `WebGL2` | 🟨 shares EasyGL | No compute; otherwise the ES 3.00 path. |
-| `Vulkan` | 🟨 measured | Verified on RADV and llvmpipe: exact float/HDR 2D and cube targets, instancing, stock-PBR IBL, portable cube and atmospheric skies, seventeen portable post-process consumers plus their depth/normal/velocity prepass producer, directional/cascade/point/spot shadow generation and reception, compute/storage resources, indirect draws and GPU timers work. Remaining source-authored post-process paths are unavailable because Vulkan consumes packaged SPIR-V rather than this layer's GLSL; presentation remains sRGB-only. |
+| `Vulkan` | 🟨 measured | Verified on RADV and llvmpipe: exact float/HDR 2D and cube targets, instancing, stock-PBR IBL, portable cube and atmospheric skies, eighteen portable post-process consumers plus their depth/normal/velocity prepass producer, directional/cascade/point/spot shadow generation and reception, compute/storage resources, indirect draws and GPU timers work. Remaining source-authored post-process paths are unavailable because Vulkan consumes packaged SPIR-V rather than this layer's GLSL; presentation remains sRGB-only. |
 | `Headless` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Three limits it does not advertise — no render-target readback, no cube-face storage, and a cube-face bind that records the face without making it current. The engine layer constructs and passes through; tests probe the three rather than assume them. |
 | `Software` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Render targets, readback and cube storage all work; what does **not** is custom shader source — it is accepted and then ignored, which is why every shader-based subsystem asks `ExecutesShaderEffectSourceEXT()` as well as `CustomEffects`. |
 | `Stub` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Stricter than `Headless` — it refuses to bind a `RenderTarget2D` at all, so a pipeline stops before it renders. Everything above that point constructs and reports false. |
@@ -817,6 +817,11 @@ settings.setVolumetricFogDensity(0.3f);   // 0 is off
   writes into one, and filling a volume with compute needs the image stores GL ES refuses
   (`MOD-1514`). Slices are spaced quadratically, so the near ones are thinner and the resolution
   stays where the eye is.
+  Since `MOD-2239r`, both the atlas build and its depth-limited resolve select generated GLSL ES,
+  desktop GLSL or SPIR-V. The GLSL route distinguishes logical screen UV from each render target's
+  bottom-up storage through `uRtFlipV`; Vulkan stays top-left. The expanded suite passes **7/7** on
+  EasyGL, RADV and Vulkan llvmpipe, including a real generated shadow map and a non-symmetric
+  upper/lower camera-ray oracle.
 - **Order in the chain**: shafts, then volumetric fog, then height fog, all before motion blur.
   Shafts are light travelling through air, so the fog that dims distance should dim them too; and
   fog is part of what the shutter collected, so a moving camera smears the fogged image rather than

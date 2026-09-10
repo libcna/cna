@@ -255,8 +255,9 @@ implementation tasks.**
   64-sample SSAO estimate plus its blur/composite, `MOD-2239l` packages the shared rigid/skinned
   depth/normal/velocity prepass and corrects Vulkan's deferred MRT constituent dependency, and
   `MOD-2239m` packages screen-space reflections, `MOD-2239n` packages screen-space contact
-  shadows, `MOD-2239o` packages projected decals, and `MOD-2239p` packages aerial perspective,
-  all with an explicit texture-UV/XNA-camera-NDC bridge where reconstruction needs it. The
+  shadows, `MOD-2239o` packages projected decals, `MOD-2239p` packages aerial perspective, and
+  `MOD-2239r` packages the shadow-aware volumetric-fog atlas and resolve, all with an explicit
+  texture-UV/XNA-camera-NDC bridge where reconstruction needs it. The
   bloom work also fixes secondary
   `RenderTarget2D` sampling through Vulkan `ShaderEffect`, which previously substituted the white
   fallback because the binding accepted only the uploaded-texture concrete type.

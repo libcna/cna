@@ -765,7 +765,7 @@ six resulting channel values with `AtmosphericSky::radiance`, so a flat or verti
 cannot satisfy it. Both Vulkan runs emit no validation message, and the standalone package has its
 own write-free reproducibility gate.
 
-### Portable engine-effect rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`–`MOD-2239p`, 2026-09-10)
+### Portable engine-effect rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`–`MOD-2239r`, 2026-09-10)
 
 `ChromaticAberrationPass` is the first engine post-process to use the portable package path. Its
 internal package shares one fullscreen vertex contract across GLSL ES, desktop GLSL and SPIR-V;
@@ -958,6 +958,19 @@ NDC. The previous Vulkan result of 6 passes, 6 source-execution skips and 2 mask
 is now **14 passed / 1 intentional arbitrary-source diagnostic skip** on RADV and llvmpipe, while
 EasyGL passes **15/15** with the same measured upper/lower gradient. Neither Vulkan run emits a
 validation message.
+
+`VolumetricFogPass` is the eighteenth consumer and selects two complete programs from its isolated
+package. The first fills the existing 32 × 96² quadratically spaced froxel atlas and optionally
+samples a directional shadow map; the second marches those slices only as far as the scene depth.
+Source, shadow, depth and volume images retain bindings 0–2. Three matrices, two `vec3` values and
+six floats carry the build state, while five floats carry the resolve dimensions, range, far plane
+and depth encoding through the existing typed custom-effect blocks. The GLSL variants also recover
+logical screen UV from SpriteBatch's render-target correction and map depth/atlas storage
+independently with `uRtFlipV`; Vulkan remains top-left. That distinction was found by the new
+upper/lower-ray test rather than assumed. The old Vulkan result of **3 passes / 3 source-execution
+skips** is now an expanded **7/7** on RADV and llvmpipe, matching EasyGL. It includes real
+directional-shadow generation and sampling, anisotropic scattering and exact disabled/missing-input
+fallbacks, with no Vulkan validation message.
 
 Other engine post-process effects remain source-only and keep their exact copy-through fallback;
 the shared package/helper is the landing point for their subsequent fragment variants.
