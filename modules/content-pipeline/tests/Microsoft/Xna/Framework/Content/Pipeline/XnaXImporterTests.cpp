@@ -974,11 +974,15 @@ TEST(XnaFbxImporter, EveryFileAnswersTheGraphXnaAnswers)
           // one that is not, the second's the other way round
           // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-140`).
           "fbx_texture_path_filename.fbx", "fbx_texture_path_relative.fbx",
-          // Which texture a batch gets is its polygons' own `TextureId`, and this one's first
-          // polygon carries -1: the genuine importer answers a material with no texture at all,
-          // where taking the first *non-negative* id would have given it one
-          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-141`).
-          "fbx_texture_second_batch.fbx",
+          // `fbx_texture_second_batch.fbx` is deliberately NOT compared here. Which texture a
+          // batch gets is its polygons' own `TextureId` and this one's first polygon carries -1,
+          // which is where `XNASWEEP-141`'s rule came from -- but the genuine importer's answer
+          // for this one file is not a property of the file. `XNASWEEP-147` recorded it answering
+          // a material with no texture, and with one, depending on what else was in the directory;
+          // regenerating the reference on 2026-09-10 answered *with* the texture, and so did a
+          // copy of the same directory with eight unrelated files removed. Comparing CNA against
+          // one of two answers would be asserting a coin toss, so the fixture and its recording
+          // stay and the comparison does not (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-202`).
           // A UV set's channel index is its `Layer` block's own number, and two sets in one block
           // take consecutive indices: the first of these declares its only UV in `Layer: 1` and
           // answers `TextureCoordinate1`, the second declares a `LayerElementUV` and a

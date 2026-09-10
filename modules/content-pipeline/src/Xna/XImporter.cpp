@@ -764,6 +764,93 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     throw InvalidContentException(Unreadable("E_FAIL"));
                 }
             }
+            // A triangle two of whose corners are the same corner is discarded, and the rest of
+            // its polygon is not: SAMPLE-141's `racer.x` declares 2,447 faces in its chassis and
+            // the genuine importer answers 2,445, the two it drops being `(1067,1068,1067)` and
+            // `(1077,1078,1077)` (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-198`). What makes
+            // two corners the same is the *vertex* and not the index: `x_face_degenerate.x` names
+            // one vertex twice in a face and loses it, and `x_face_degenerate_normals.x` names the
+            // same vertex twice with two different normals and keeps it, because those are two
+            // vertices. An n-gon loses only the fan triangles that are degenerate
+            // (`x_face_degenerate_quad.x`), a material whose faces all go produces no geometry,
+            // and a position no surviving triangle names is not in the mesh's position list.
+            // `VertexDuplicationIndices` says which vertex each one was split from, and the
+            // genuine importer treats two corners whose vertices share an entry as one corner even
+            // where their positions and their normals differ. SAMPLE-141's `target.x` declares 180
+            // faces and XNA answers 170: the ten it drops are exactly the ten that name two
+            // vertices of one duplication group, and collapsing a single pair of that file's map
+            // drops exactly the faces naming both (`XNASWEEP-198`).
+            //
+            // The two conditions on it are measured rather than derived, and are stated as
+            // measurements: the same map is *inert* when the mesh declares no `MeshNormals`
+            // (`target.x`'s own data with that block removed answers all 180) and when it declares
+            // `MeshTextureCoords` (the genuine importer splits a vertex instead of dropping the
+            // face). What is behind that gate is not understood, so the rule is kept inside the
+            // window it was measured in rather than generalized past it; §11.3.1 of the plan
+            // records the probe families the window does not explain.
+            std::vector<std::size_t> originalOf;
+            if (const Canon::DirectXFileObject* duplication = Find(object, "VertexDuplicationIndices");
+                duplication != nullptr && !normals.empty() && Find(object, "MeshTextureCoords") == nullptr)
+            {
+                std::size_t duplicationAt = 0u;
+                const std::size_t count = Count(*duplication, duplicationAt++);
+                // `nOriginalVertices`: declaring it wrongly changes nothing the importer answers.
+                ++duplicationAt;
+                originalOf.resize(vertexCount);
+                for (std::size_t i = 0; i < vertexCount; ++i) { originalOf[i] = i; }
+                for (std::size_t i = 0; i < count && i < vertexCount; ++i)
+                {
+                    originalOf[i] = Count(*duplication, duplicationAt + i);
+                }
+            }
+
+            const auto normalOfCorner = [&](const std::size_t face, const std::size_t corner)
+            {
+                if (face < normalFaces.size() && corner < normalFaces[face].size())
+                {
+                    return normalFaces[face][corner];
+                }
+                return faces[face][corner];
+            };
+            const auto sameCorner = [&](const std::size_t face, const std::size_t left,
+                                        const std::size_t right)
+            {
+                const std::size_t leftVertex = faces[face][left];
+                const std::size_t rightVertex = faces[face][right];
+                if (!originalOf.empty() && originalOf[leftVertex] == originalOf[rightVertex])
+                {
+                    return true;
+                }
+                // The file's own vertex index, not the merged position: `x_position_merge.x`
+                // names vertices 7 and 0 in one face, they hold the same position *and* the same
+                // normal so they are one vertex in the geometry, and the genuine importer keeps
+                // the triangle -- a face with two corners at the same point is not the same thing
+                // as a face that names one corner twice.
+                if (leftVertex != rightVertex) { return false; }
+                const std::size_t leftNormal = normalOfCorner(face, left);
+                const std::size_t rightNormal = normalOfCorner(face, right);
+                const std::size_t leftKey =
+                    leftNormal < canonicalNormal.size() ? canonicalNormal[leftNormal] : leftNormal;
+                const std::size_t rightKey =
+                    rightNormal < canonicalNormal.size() ? canonicalNormal[rightNormal] : rightNormal;
+                return leftKey == rightKey;
+            };
+            std::vector<std::vector<std::array<std::size_t, 3>>> keptTriangles(faces.size());
+            for (std::size_t face = 0; face < faces.size(); ++face)
+            {
+                for (std::size_t corner = 2; corner < faces[face].size(); ++corner)
+                {
+                    const std::array<std::size_t, 3> triangle{0u, corner - 1u, corner};
+                    if (sameCorner(face, triangle[0], triangle[1]) ||
+                        sameCorner(face, triangle[1], triangle[2]) ||
+                        sameCorner(face, triangle[0], triangle[2]))
+                    {
+                        continue;
+                    }
+                    keptTriangles[face].push_back(triangle);
+                }
+            }
+
             const std::size_t batches = materials.empty() ? 1u : materials.size();
 
             for (std::size_t batch = 0; batch < batches; ++batch)
@@ -778,7 +865,13 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                         {
                             continue;
                         }
-                        referenced.insert(faces[face].begin(), faces[face].end());
+                        for (const std::array<std::size_t, 3>& triangle : keptTriangles[face])
+                        {
+                            for (const std::size_t corner : triangle)
+                            {
+                                referenced.insert(faces[face][corner]);
+                            }
+                        }
                     }
                     for (const std::size_t vertex : referenced)
                     {
@@ -798,9 +891,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                         continue;
                     }
                     // A polygon becomes a triangle fan, which is how every reader of this format
-                    // turns an n-gon into triangles.
-                    std::vector<SharpRuntime::intcs> corners;
-                    for (std::size_t corner = 0; corner < faces[face].size(); ++corner)
+                    // turns an n-gon into triangles; the fan triangles a corner test discarded are
+                    // not emitted and their corners create no vertex (`XNASWEEP-198`).
+                    const auto place = [&](const std::size_t corner)
                     {
                         const std::size_t vertex = faces[face][corner];
                         // The key is the position *and* the normal the corner names, because a
@@ -825,18 +918,16 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                             local.emplace(key, assigned);
                             used.push_back(vertex);
                             usedNormals.push_back(normalIndex);
-                            corners.push_back(assigned);
+                            return assigned;
                         }
-                        else
-                        {
-                            corners.push_back(found->second);
-                        }
-                    }
-                    for (std::size_t corner = 2; corner < corners.size(); ++corner)
+                        return found->second;
+                    };
+                    for (const std::array<std::size_t, 3>& triangle : keptTriangles[face])
                     {
-                        indices.push_back(corners[0]);
-                        indices.push_back(corners[corner - 1u]);
-                        indices.push_back(corners[corner]);
+                        for (const std::size_t corner : triangle)
+                        {
+                            indices.push_back(place(corner));
+                        }
                     }
                 }
                 if (used.empty())
@@ -928,6 +1019,13 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 }
                 if (normals.empty()) { addNormals(); }
             }
+            // A mesh no triangle survived is not a node: the genuine importer answers a root with
+            // no children at all for a file whose every face is degenerate, and for one that
+            // declares no faces (measured, `x_face_degenerate_all.x` and `x_no_faces.x`).
+            if (mesh->getGeometryProperty().getCountProperty() == 0)
+            {
+                return nullptr;
+            }
             return mesh;
         }
 
@@ -949,7 +1047,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             {
                 if (child.TypeIs("Mesh"))
                 {
-                    node->getChildrenProperty().Add(ReadMesh(child, importing));
+                    if (std::shared_ptr<MeshContent> mesh = ReadMesh(child, importing); mesh != nullptr)
+                    {
+                        node->getChildrenProperty().Add(std::move(mesh));
+                    }
                 }
             }
             for (const Canon::DirectXFileObject& child : object.children)
@@ -1315,7 +1416,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 }
                 else if (object.TypeIs("Mesh"))
                 {
-                    root->getChildrenProperty().Add(ReadMesh(object, importing));
+                    if (std::shared_ptr<MeshContent> mesh = ReadMesh(object, importing); mesh != nullptr)
+                    {
+                        root->getChildrenProperty().Add(std::move(mesh));
+                    }
                 }
             }
         }
