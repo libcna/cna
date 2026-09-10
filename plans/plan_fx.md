@@ -130,9 +130,6 @@ tests; configuring the same checkout again confirmed that patch application is i
 
 Still open before the FNA3D slice can satisfy every aspirational exit criterion in this plan:
 
-- the pixel half of the FNA oracle (`FX-005`). Reflection and pass-state observations from FNA now
-  both exist and pass; what is still missing is FNA-produced pixels, which depend on the GPU and
-  driver rather than only on CNA's translation and are correspondingly less portable as a fixture;
 - proof rather than a bound for hostile input (`FX-051`). The gate is met on both FNA3D drivers --
   over three million and over two and a half million coverage-guided executions with no finding --
   after forty-one crash-class fixes, but fuzzing cannot establish absence and the SPIR-V emitter
@@ -623,7 +620,7 @@ must be accepted before a row can close.
 | FX-002 | Record the FNA `Effect`, `EffectPass`, reflection, state translation, clone, and `EffectReader` behavior as the compatibility oracle | FX-001 | Reviewable mapping from every CNA behavior to FNA/XNA semantics |
 | FX-003 | Inventory the six existing `.fxb` fixtures and preserve provenance, hashes, upstream revision, and license | FX-001 | CI verifies fixture hashes and provenance is auditable |
 | FX-004 | Create a purpose-built conformance `.fx` source and committed `.fxb` covering techniques, passes, defaults, arrays, structures, annotations, textures, samplers, and states | FX-002 | **Done.** `modules/renderers/fna3d/effects/CnaConformanceEffect.fx` and its `.fxb`, compiled with `fxc` 9.29.952.3111 from the June 2010 DirectX SDK at profile `fx_2_0` -- the compiler XNA's own Content Pipeline used. Compiler identity, SDK hash, origin URL, output hash, reproduction commands and legal provenance are in that directory's README |
-| FX-005 | Extend the FNA reference tool to emit normalized JSON reflection and deterministic pixels/state observations for all fixtures | FX-003, FX-004 | **Reflection and state halves done.** `tools/fna-reference --effects` runs FNA's own `Effect.INTERNAL_parseEffectStruct` over all seven committed binaries and writes `fna-effect-reflection.json`; `StockFixtureReflectionMatchesTheFnaOracle` compares CNA's reflection against it subtree by subtree. `--effect-states` goes further and builds a real managed FNA `GraphicsDevice` straight from an SDL window, applies every pass of every technique, and records what FNA's own `PipelineCache` installs on the public `BlendState`/`DepthStencilState`/`RasterizerState`/`SamplerStates` properties -- the same properties CNA writes in `Effect::ApplyCompiledPassState`, so they compare directly. `Fna3dEffectStateOracleTest.EveryPassInstallsTheStateFnaInstalls` replays every pass from the same starting device state the generator used and matches FNA on all seven binaries. Deterministic *pixel* observations from FNA remain the one piece not done; they are the least portable part of the oracle, since they depend on the GPU and driver rather than only on the translation |
+| FX-005 | Extend the FNA reference tool to emit normalized JSON reflection and deterministic pixels/state observations for all fixtures | FX-003, FX-004 | **Done (2026-09-10).** `--effects` runs FNA's own `Effect.INTERNAL_parseEffectStruct` over all seven committed binaries and `StockFixtureReflectionMatchesTheFnaOracle` compares CNA's reflection subtree by subtree. `--effect-states` builds a real managed FNA `GraphicsDevice`, applies every technique/pass, records the public blend/depth/rasterizer/sampler properties installed by FNA's `PipelineCache`, and the CNA replay matches every observation. The new `--effect-pixels` completes the independent execution half: it renders all seven binaries and all nine passes into a clean 8x8 target with deterministic flat resources, records the changed-pixel count plus three interior RGBA samples, and fails generation if a pass draws nothing. All nine FNA passes changed 64/64 pixels; two runs were byte-identical (`SHA-256 b3045bf35de9e5744102d0e4225be9148a559bdec4a7370fa0439a8f075bdab8`). `Fna3dEffectPixelOracleTest.EveryCompilerProducedPassMatchesFnaPixels` replays the exact public `Effect`/`GraphicsDevice` path and matches the checked-in FNA output with an explicit three-byte per-channel tolerance. Measurement used managed FNA 26.05 with its matching FNA3D 26.05/MojoShader revision, llvmpipe OpenGL 4.5 and `glsl120`, private headless display `:4`, and SDL's offscreen video driver; no physical display was used. This corrected a false documentation premise: managed FNA 26.05 is not executable-effect compatible with CNA's FNA3D 26.08 pin. Both executable oracle modes now reject that mismatch through `FNA3D_LinkedVersion` instead of crashing. |
 | FX-006 | Add format sniffing tests for empty, random, truncated, valid FX bytecode, and MGFX | FX-001, FX-003 | Each category yields a stable, specific result |
 
 ### Phase B - Common compiled-effect architecture
@@ -1055,7 +1052,7 @@ which is the file a backend must pass before `CompiledEffects` may be true.
 | Drawing | `RunCompiledEffectDrawContract` (buffered/user, indexed/not, non-zero base/start offsets, built-in vertex types), `...MultiStreamDrawContract`, `...InstancingDrawContract`, `...SpriteBatchContract`, `...OrientationContract` |
 | Clone | `RunCompiledEffectCloneContract`, and the clone leg of `RunCompiledEffectSwitchingContract` |
 | Lifecycle | `RunCompiledEffectLifecycleContract` |
-| Compatibility | FNA3D's own `StockFixtureReflectionMatchesTheFnaOracle` and `Fna3dEffectStateOracleTest` -- not portable, so backend-local |
+| Compatibility | FNA3D's own `StockFixtureReflectionMatchesTheFnaOracle`, `Fna3dEffectStateOracleTest`, and `Fna3dEffectPixelOracleTest` -- not portable, so backend-local |
 | Regression | each backend's full `CnaTests` run |
 | Robustness | `FX-051`'s fuzz harness and corpus, `FX-052`'s sanitizer run -- FNA3D-local |
 
@@ -1087,8 +1084,9 @@ something outside the project's control, and neither turned out to be.
 
 The oracle criterion was blocked on having no independent implementation to compare against. It
 closed once `mono` and the June 2010 DirectX SDK's `fxc` were available: CNA now has a conformance
-source it controls, compiled by the same Effect compiler XNA's Content Pipeline used, and FNA's own
-reflection of every committed binary checked in as test data.
+source it controls, compiled by the same Effect compiler XNA's Content Pipeline used, plus FNA's
+own reflection, pass-state observations, and deterministic rendered pixels for every committed
+binary checked in as test data.
 
 The fuzz gate was the last, and it was not a formality. The campaign found **forty-one distinct
 ways untrusted bytecode crashed the process**. Forty were in the pinned MojoShader and are fixed by
