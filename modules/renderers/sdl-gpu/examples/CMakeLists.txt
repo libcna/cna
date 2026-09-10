@@ -203,6 +203,42 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
             FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
     endforeach()
 
+    # SDLGPU-78: compile the EasyGL buffer/draw corpus verbatim under SDL GPU. These programs cover
+    # typed and declaration-driven user draws, nonzero vertex/index offsets, 16/32-bit indices,
+    # every ordinary primitive topology, public range/resource guards, CPU readback, zero/partial
+    # uploads, disposal, BufferUsage and repeated None/Discard/NoOverwrite replacement. Keeping the
+    # exact reference sources prevents renderer suites from drifting apart.
+    foreach(buffer_draw_oracle_test IN ITEMS
+            buffer_usage
+            disposed_buffer
+            draw_noindexbuffer
+            draw_novertexbuffer
+            draw_range_validation
+            draw_user_indexed_primitives_32
+            draw_user_indexed_primitives_vpc
+            draw_user_primitives_custom
+            draw_user_primitives_vpc
+            dynamic_buffer_stress
+            primitivetype_validation
+            vertexbuffer_indexbuffer_getdata
+            vertexbuffer_setdata)
+        cna_sdlgpu_test(cna_test_sdlgpu_easygl_${buffer_draw_oracle_test}
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_${buffer_draw_oracle_test}_test.cpp)
+        cna_register_renderer_test(NAME SdlGpu_EasyGLOracle_${buffer_draw_oracle_test}
+            COMMAND cna_test_sdlgpu_easygl_${buffer_draw_oracle_test}
+            TIMEOUT 180 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+        set_tests_properties(SdlGpu_EasyGLOracle_${buffer_draw_oracle_test} PROPERTIES
+            FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+    endforeach()
+
+    cna_sdlgpu_test(cna_test_sdlgpu_draw_line_topology
+                    ${CNA_GRAPHICS_EXAMPLES_DIR}/draw_line_topology_test.cpp)
+    cna_register_renderer_test(NAME SdlGpu_DrawLineTopology
+        COMMAND cna_test_sdlgpu_draw_line_topology
+        TIMEOUT 180 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    set_tests_properties(SdlGpu_DrawLineTopology PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+
     # REMED-GFX-028: every real constructor acquisition is transactional, failed objects never
     # enter the window registry, and lazy command/pipeline/sampler/fallback failures remain
     # retryable. Resource callbacks make leaks/double-destruction observable independently of
