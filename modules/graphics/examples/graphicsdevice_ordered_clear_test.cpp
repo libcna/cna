@@ -174,8 +174,8 @@ namespace
                                  true, true, true,
                                  true, true, true, true, false, true, true};
 #elif defined(CNA_RENDERER_SOFTWARE)
-    constexpr Contract kContract{"SOFTWARE", true, true, true, false, false,
-                                 true, true, false,
+    constexpr Contract kContract{"SOFTWARE", true, true, true, true, true,
+                                 true, true, true,
                                  true, true, true, true, false, true, true};
 #elif defined(CNA_RENDERER_SDL_GPU)
     // SDL_gpu delivers a clear colour only through SDL_GPUColorTargetInfo.load_op, and a render pass

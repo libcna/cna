@@ -454,6 +454,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   afterward. Software already cleared the complete attachment. EasyGL now does the same across
   every color/depth/stencil combination; the shared ordered-Clear fixture proves all three aspects
   independently and proves that subsequent drawing still sees the original scissor state.
+  `SOFTWARE-312` also removes stale Software-only skips from that fixture, so its 51 checks now
+  execute cube-face isolation/readback and the complete stencil clear/state matrix instead of
+  merely relying on separate capability tests.
 - **`SpriteBatch` destinations remain sub-pixel precise** (`SOFTWARE-137`) — Vector2 positions,
   scalar/non-uniform scales and per-glyph DrawString rectangles reach CPU quad generation as floats
   rather than being truncated by the renderer interface's compatibility fallback. A shared
