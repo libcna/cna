@@ -167,6 +167,25 @@ namespace CNA::Graphics::detail
                 CNA::ShaderStageEXT::Fragment)});
     }
 
+    ShaderPackageEXT CreateDecalShaderPackage()
+    {
+        using namespace CNA::Graphics::detail::PostProcessGenerated;
+        return MakeFullscreenPackage(
+            {kDecalEsFragmentSource, "post_process/decal.es.frag.glsl"},
+            {kDecalDesktopFragmentSource,
+             "post_process/decal.desktop.frag.glsl"},
+            {kDecalVulkanFragmentSpirV, kDecalVulkanFragmentSpirVByteSize,
+             "post_process/decal.vulkan.frag.spv"},
+            {
+                ShaderBindingRequirementEXT(
+                    "uDecalSampler", 1, ShaderBindingTypeEXT::SampledTexture2D,
+                    CNA::ShaderStageEXT::Fragment),
+                ShaderBindingRequirementEXT(
+                    "uNormalSampler", 2, ShaderBindingTypeEXT::SampledTexture2D,
+                    CNA::ShaderStageEXT::Fragment),
+            });
+    }
+
     ShaderPackageEXT CreateColorGradeStripShaderPackage()
     {
         using namespace CNA::Graphics::detail::PostProcessGenerated;

@@ -138,7 +138,6 @@ namespace CNA::Graphics {
             const Microsoft::Xna::Framework::Vector3& decalLocalPosition);
 
     private:
-        Microsoft::Xna::Framework::Graphics::GraphicsDevice& device_;
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::SpriteBatch> spriteBatch_;
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::ShaderEffect> effect_;
 
@@ -150,6 +149,7 @@ namespace CNA::Graphics {
         float farPlane_      = 0.0f;
         float opacity_       = 1.0f;
         float maxSlopeAngle_ = 1.2217305f;   // 70 degrees
+        bool  packedDepth_   = true;
         bool  supported_     = false;
     };
 

@@ -749,7 +749,7 @@ application orbit/yaw oracle passes **3/3** on all three paths with identical me
 Vulkan paths run under Khronos validation and emit no validation messages; the package also passes
 its write-free reproducibility check.
 
-### Portable post-process rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`–`MOD-2239n`, 2026-09-10)
+### Portable engine-effect rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`–`MOD-2239o`, 2026-09-10)
 
 `ChromaticAberrationPass` is the first engine post-process to use the portable package path. Its
 internal package shares one fullscreen vertex contract across GLSL ES, desktop GLSL and SPIR-V;
@@ -921,6 +921,16 @@ travels toward the same screen side on all three paths. The former 23-case Vulka
 intentional arbitrary-source diagnostic skip** on RADV and llvmpipe; EasyGL is **24/24**. Excluding
 only that diagnostic projection, the complete portable execution set is now **197/197** on all
 three paths, with no Khronos validation messages.
+
+`DecalPass` is the next packaged engine effect, but not a seventeenth pipeline post-process: it
+composites directly onto the currently bound scene target through `BlendState::NonPremultiplied`.
+Prepass depth, decal image and optional normals use bindings 0, 1 and 2; typed matrix, vec3 and float
+arrays carry the reconstruction, decal transform, axis/tint and five scalar controls. Vulkan maps
+its top-left texture coordinate to XNA camera NDC before reconstructing the view position. The
+original Vulkan baseline's **3 passed / 5 skipped** becomes an expanded **10/10** on RADV and
+llvmpipe, matching EasyGL. The added asymmetric red/blue image pins the local vertical axis and the
+tint/opacity case pins exact straight-alpha source-over composition. Neither Vulkan run emits a
+validation message.
 
 Other engine post-process effects remain source-only and keep their exact copy-through fallback;
 the shared package/helper is the landing point for their subsequent fragment variants.

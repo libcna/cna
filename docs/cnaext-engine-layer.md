@@ -11,7 +11,8 @@ renderers capability by capability.** Its HDR/post-process pipeline, shadows, sk
 lighting, instancing/LOD helpers and compute/resource layer all have executable coverage; Vulkan
 now implements exact HDR targets, stock-PBR IBL, portable directional/cascade/point/spot shadow
 generation and stock-effect reception, a portable skybox, sixteen portable post-process consumers,
-a portable depth/normal/velocity producer, instancing and the modern compute/resource paths. The
+a portable decal projector, a portable depth/normal/velocity producer, instancing and the modern
+compute/resource paths. The
 remaining post-process effects are still
 source-authored shader gaps. The design is
 [`../CNAEXT.md`](../misc/CNAEXT.md); the task backlog and its evidence trail are
@@ -225,7 +226,7 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 | Aerial perspective | ✅ needs the prepass depth and executed effect source | ⬜ | ⬜ | ⬜ — `AerialPerspectivePass::isSupported()` is false and the frame keeps the unaltered geometry it had |
 | Debug drawing and gizmos | ✅ needs only `BasicEffect` and a line draw | ✅ | ✅ | ✅ — `DebugDraw` uses nothing an XNA `BasicEffect` does not already provide |
 | GPU timer queries | ✅ probed: `GL_EXT_disjoint_timer_query` is present on this machine's Mesa ES driver | ✅ queue/device-gated timestamp queries, nonblocking and recycled (`MOD-2246`) | ⬜ | ⬜ — `GpuTimer::isSupported()` is false and names the missing native path; no CPU fallback is offered |
-| Decals | ✅ needs the prepass and `CustomEffects` | ⬜ | ⬜ | ⬜ — `DecalPass` reports `isSupported()` false and draws nothing rather than washing the frame |
+| Decals | ✅ needs the prepass and a selected package | ✅ GLSL/SPIR-V package (`MOD-2239o`) | ⬜ | ⬜ — `DecalPass` reports `isSupported()` false and draws nothing rather than washing the frame |
 | Spatial upscaling | ✅ | ✅ portable edge-adaptive/sharpen package (`MOD-2239d`) | ⬜ | ⬜ — without a usable package the pass copies its input through at the target size, which is the hardware stretch it was replacing |
 | Display colour space | 🟨 `Srgb` only — the encoding is complete, the swap chain is not | 🟨 same; the portable encoder runs, presentation remains sRGB | 🟨 same | 🟨 — no CNA platform back end offers an HDR swap chain, so every renderer answers `Srgb` and refuses the rest |
 | Per-object velocity | ✅ opt-in; a third target with MRT, a third pass without | ✅ portable producer and consumer (`MOD-2239j`/`MOD-2239l`) | ⬜ | ⬜ — off by default everywhere, and motion blur stays camera-only when no velocity image is supplied |
@@ -255,8 +256,8 @@ progressive pyramid upsample and final composite; `MOD-2239g` adds filtered/tetr
 true 3D-LUT colour grading; `MOD-2239h` adds analytic height fog from depth and camera state; and
 `MOD-2239i` adds thin-lens depth of field, `MOD-2239j` adds camera/object motion blur, and
 `MOD-2239k` adds the SSAO estimate plus blur/composite, `MOD-2239l` adds the shared rigid/skinned
-depth/normal/velocity producer, `MOD-2239m` adds screen-space reflections, and `MOD-2239n` adds
-screen-space contact shadows. The remaining
+depth/normal/velocity producer, `MOD-2239m` adds screen-space reflections, `MOD-2239n` adds
+screen-space contact shadows, and `MOD-2239o` adds projected decals. The remaining
 post-process paths still provide source alone and remain unavailable on Vulkan. Portable packages
 use the language/stage query to select a payload;
 subsystems still ask their own semantic capability before promising a visible result.
@@ -1147,6 +1148,12 @@ nothing to glue anything to, and painting it is how a decal ends up floating in 
 destination; a decal blends onto the frame, so it uses `BlendState::NonPremultiplied` and the decal
 image's own alpha is the mask. Draw decals after the scene and before the post-process chain, so
 they are tonemapped and graded with everything else.
+
+Since MOD-2239o the projection selects one GLSL ES, desktop GLSL, or Vulkan SPIR-V package. Depth,
+decal image and optional normals keep bindings 0, 1 and 2; typed arrays carry both matrices, the
+view-space axis, tint and scalar controls. Vulkan's explicit texture-UV/XNA-camera-NDC bridge is
+pinned by a vertically asymmetric decal, while a second oracle checks the exact tint/opacity result
+through straight-alpha blending. The expanded suite is 10/10 on EasyGL, RADV and llvmpipe.
 
 **Cost is one fullscreen pass per decal**, which is what a screen-space projection costs when it is
 not batched. `DecalPass::isInsideDecalBox` is offered as a plain static so a game can decide whether
