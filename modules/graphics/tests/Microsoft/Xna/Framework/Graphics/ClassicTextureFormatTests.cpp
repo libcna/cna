@@ -38,6 +38,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
@@ -48,6 +49,7 @@
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
+#include "System/ArgumentException.hpp"
 #include "System/NotSupportedException.hpp"
 
 using namespace CNA::Testing::Renderers;
@@ -212,6 +214,65 @@ namespace
 
         std::vector<T> finalRead(16, makeValue(95));
         cube.GetData(CubeMapFace::PositiveZ, finalRead.data(), 16);
+        EXPECT_EQ(finalRead, expected);
+    }
+
+    template<typename T, typename Factory>
+    void VerifyExactVolumeTransfers(GraphicsDevice& device, SurfaceFormat format, Factory makeValue)
+    {
+        const RendererFormatVerdict verdict =
+            device.GetRenderer().ClassifyTexture3DFormatEXT(static_cast<int>(format));
+        if (verdict != RendererFormatVerdict::Supported)
+        {
+            if (CNA_RENDERER_IS(Software))
+                ADD_FAILURE() << "Software must support classic volume SurfaceFormat ordinal "
+                              << static_cast<int>(format);
+            return;
+        }
+
+        SCOPED_TRACE(static_cast<int>(format));
+        Texture3D volume(device, 4, 2, 2, true, format);
+        std::vector<T> source(18, makeValue(90));
+        std::vector<T> expected;
+        expected.reserve(16);
+        for (int index = 0; index < 16; ++index)
+        {
+            expected.push_back(makeValue(index));
+            source[static_cast<std::size_t>(index + 1)] = expected.back();
+        }
+        volume.SetData(source.data(), 1, 16);
+
+        std::vector<T> readback(18, makeValue(91));
+        volume.GetData(readback.data(), 1, 16);
+        EXPECT_EQ(readback.front(), makeValue(91));
+        EXPECT_EQ(readback.back(), makeValue(91));
+        for (int index = 0; index < 16; ++index)
+            EXPECT_EQ(readback[static_cast<std::size_t>(index + 1)], expected[index]);
+
+        std::vector<T> patch(6, makeValue(92));
+        for (int index = 0; index < 4; ++index)
+            patch[static_cast<std::size_t>(index + 1)] = makeValue(20 + index);
+        volume.SetData(0, 1, 0, 3, 2, 0, 1, patch.data(), 1, 4);
+        expected[1] = patch[1];
+        expected[2] = patch[2];
+        expected[5] = patch[3];
+        expected[6] = patch[4];
+
+        std::vector<T> boxRead(6, makeValue(93));
+        volume.GetData(0, 1, 0, 3, 2, 0, 1, boxRead.data(), 1, 4);
+        EXPECT_EQ(boxRead.front(), makeValue(93));
+        EXPECT_EQ(boxRead.back(), makeValue(93));
+        for (int index = 0; index < 4; ++index)
+            EXPECT_EQ(boxRead[static_cast<std::size_t>(index + 1)], patch[index + 1]);
+
+        const T mipValue = makeValue(40);
+        volume.SetData(2, 0, 0, 1, 1, 0, 1, &mipValue, 0, 1);
+        T mipRead = makeValue(94);
+        volume.GetData(2, 0, 0, 1, 1, 0, 1, &mipRead, 0, 1);
+        EXPECT_EQ(mipRead, mipValue);
+
+        std::vector<T> finalRead(16, makeValue(95));
+        volume.GetData(finalRead.data(), 16);
         EXPECT_EQ(finalRead, expected);
     }
 
@@ -673,4 +734,161 @@ TEST(ClassicTextureFormat, PlainCubeCapabilityDoesNotInheritTexture2DFormatClaim
         else
             EXPECT_THROW(TextureCube(device, 4, false, format), System::NotSupportedException);
     }
+}
+
+TEST(ClassicTextureFormat, HiDefVolumeFormatsHaveAnExplicitCompleteRendererContract)
+{
+    if (!CNA_RENDERER_IS(Software, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2))
+        GTEST_SKIP() << "the audited volume capability belongs to Software and EasyGL";
+
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    if (!device.SupportsCapability(CNA::GraphicsCapability::Texture3D))
+        GTEST_SKIP() << "this renderer does not support Texture3D";
+
+    for (const SurfaceFormat format : {
+             SurfaceFormat::Color, SurfaceFormat::Bgr565, SurfaceFormat::Bgra5551,
+             SurfaceFormat::Bgra4444, SurfaceFormat::Rgba1010102, SurfaceFormat::Rg32,
+             SurfaceFormat::Rgba64, SurfaceFormat::Alpha8, SurfaceFormat::Single,
+             SurfaceFormat::Vector2, SurfaceFormat::Vector4, SurfaceFormat::HalfSingle,
+             SurfaceFormat::HalfVector2, SurfaceFormat::HalfVector4,
+             SurfaceFormat::HdrBlendable})
+    {
+        SCOPED_TRACE(static_cast<int>(format));
+        EXPECT_EQ(device.GetRenderer().ClassifyTexture3DFormatEXT(
+                      static_cast<int>(format)),
+                  RendererFormatVerdict::Supported);
+        EXPECT_NO_THROW(Texture3D(device, 2, 2, 2, false, format));
+    }
+
+    for (const SurfaceFormat format : {
+             SurfaceFormat::Dxt1, SurfaceFormat::Dxt3, SurfaceFormat::Dxt5,
+             SurfaceFormat::NormalizedByte2, SurfaceFormat::NormalizedByte4})
+    {
+        SCOPED_TRACE(static_cast<int>(format));
+        EXPECT_EQ(device.GetRenderer().ClassifyTexture3DFormatEXT(
+                      static_cast<int>(format)),
+                  RendererFormatVerdict::Unsupported);
+        EXPECT_THROW(Texture3D(device, 2, 2, 2, false, format),
+                     System::NotSupportedException);
+    }
+}
+
+TEST(ClassicTextureFormat, NormalizedIntegerVolumeFormatsPreserveExactTransfers)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    if (!device.SupportsCapability(CNA::GraphicsCapability::Texture3D))
+        GTEST_SKIP() << "this renderer does not support Texture3D";
+
+    VerifyExactVolumeTransfers<Bgr565>(device, SurfaceFormat::Bgr565, [](int index) {
+        return Bgr565((index % 11) / 10.0f, (index % 7) / 6.0f,
+                      (index % 5) / 4.0f);
+    });
+    VerifyExactVolumeTransfers<Bgra5551>(device, SurfaceFormat::Bgra5551, [](int index) {
+        return Bgra5551((index % 11) / 10.0f, (index % 7) / 6.0f,
+                        (index % 5) / 4.0f, (index % 2) * 1.0f);
+    });
+    VerifyExactVolumeTransfers<Bgra4444>(device, SurfaceFormat::Bgra4444, [](int index) {
+        return Bgra4444((index % 11) / 10.0f, (index % 7) / 6.0f,
+                        (index % 5) / 4.0f, (index % 4) / 3.0f);
+    });
+    VerifyExactVolumeTransfers<Rgba1010102>(device, SurfaceFormat::Rgba1010102, [](int index) {
+        return Rgba1010102((index % 11) / 10.0f, (index % 7) / 6.0f,
+                           (index % 5) / 4.0f, (index % 4) / 3.0f);
+    });
+    VerifyExactVolumeTransfers<Rg32>(device, SurfaceFormat::Rg32, [](int index) {
+        return Rg32((index % 13) / 12.0f, (index % 9) / 8.0f);
+    });
+    VerifyExactVolumeTransfers<Rgba64>(device, SurfaceFormat::Rgba64, [](int index) {
+        return Rgba64((index % 13) / 12.0f, (index % 11) / 10.0f,
+                      (index % 7) / 6.0f, (index % 5) / 4.0f);
+    });
+    VerifyExactVolumeTransfers<Alpha8>(device, SurfaceFormat::Alpha8, [](int index) {
+        return Alpha8((index % 17) / 16.0f);
+    });
+}
+
+TEST(ClassicTextureFormat, FloatVolumeFormatsPreserveExactTransfers)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    if (!device.SupportsCapability(CNA::GraphicsCapability::Texture3D))
+        GTEST_SKIP() << "this renderer does not support Texture3D";
+
+    VerifyExactVolumeTransfers<float>(device, SurfaceFormat::Single, [](int index) {
+        return static_cast<float>(index - 8) * 0.375f;
+    });
+    VerifyExactVolumeTransfers<Vector2>(device, SurfaceFormat::Vector2, [](int index) {
+        return Vector2(static_cast<float>(index - 8) * 0.25f,
+                       static_cast<float>(7 - index) * 0.125f);
+    });
+    VerifyExactVolumeTransfers<Vector4>(device, SurfaceFormat::Vector4, [](int index) {
+        return Vector4(static_cast<float>(index - 8) * 0.25f,
+                       static_cast<float>(7 - index) * 0.125f,
+                       static_cast<float>(index % 5) * 0.5f,
+                       static_cast<float>(index % 3) * 0.25f);
+    });
+    VerifyExactVolumeTransfers<HalfSingle>(device, SurfaceFormat::HalfSingle, [](int index) {
+        return HalfSingle(static_cast<float>(index - 8) * 0.25f);
+    });
+    VerifyExactVolumeTransfers<HalfVector2>(device, SurfaceFormat::HalfVector2, [](int index) {
+        return HalfVector2(static_cast<float>(index - 8) * 0.25f,
+                           static_cast<float>(7 - index) * 0.125f);
+    });
+    VerifyExactVolumeTransfers<HalfVector4>(device, SurfaceFormat::HalfVector4, [](int index) {
+        return HalfVector4(static_cast<float>(index - 8) * 0.25f,
+                           static_cast<float>(7 - index) * 0.125f,
+                           static_cast<float>(index % 5) * 0.5f,
+                           static_cast<float>(index % 3) * 0.25f);
+    });
+    VerifyExactVolumeTransfers<HalfVector4>(device, SurfaceFormat::HdrBlendable, [](int index) {
+        return HalfVector4(static_cast<float>(index - 8) * 0.5f,
+                           static_cast<float>(7 - index) * 0.25f,
+                           static_cast<float>(index % 5), 1.0f);
+    });
+}
+
+TEST(ClassicTextureFormat, VolumeGenericTransfersUseTotalByteSize)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    if (!device.SupportsCapability(CNA::GraphicsCapability::Texture3D))
+        GTEST_SKIP() << "this renderer does not support Texture3D";
+    if (device.GetRenderer().ClassifyTexture3DFormatEXT(
+            static_cast<int>(SurfaceFormat::Vector4)) != RendererFormatVerdict::Supported)
+        GTEST_SKIP() << "this renderer does not support Vector4 volume storage";
+
+    Texture3D volume(device, 2, 1, 1, false, SurfaceFormat::Vector4);
+    const std::vector<float> source{
+        -99.0f,
+        1.0f, 2.0f, 3.0f, 4.0f,
+        5.0f, 6.0f, 7.0f, 8.0f,
+        -98.0f};
+    volume.SetData(source.data(), 1, 8);
+
+    std::vector<float> readback(10, -97.0f);
+    volume.GetData(readback.data(), 1, 8);
+    EXPECT_FLOAT_EQ(readback.front(), -97.0f);
+    EXPECT_FLOAT_EQ(readback.back(), -97.0f);
+    for (int index = 0; index < 8; ++index)
+        EXPECT_FLOAT_EQ(readback[static_cast<std::size_t>(index + 1)],
+                        source[static_cast<std::size_t>(index + 1)]);
+
+    const std::vector<float> patch{-96.0f, 9.0f, 10.0f, 11.0f, 12.0f, -95.0f};
+    volume.SetData(0, 1, 0, 2, 1, 0, 1, patch.data(), 1, 4);
+    std::vector<float> voxel(6, -94.0f);
+    volume.GetData(0, 1, 0, 2, 1, 0, 1, voxel.data(), 1, 4);
+    EXPECT_FLOAT_EQ(voxel.front(), -94.0f);
+    EXPECT_FLOAT_EQ(voxel.back(), -94.0f);
+    for (int index = 0; index < 4; ++index)
+        EXPECT_FLOAT_EQ(voxel[static_cast<std::size_t>(index + 1)],
+                        patch[static_cast<std::size_t>(index + 1)]);
+
+    std::vector<Vector4> wrongCount(2);
+    EXPECT_THROW(volume.GetData(wrongCount.data(), 1), System::ArgumentException);
+
+    Texture3D vector2Volume(device, 1, 1, 1, false, SurfaceFormat::Vector2);
+    Vector4 tooWide;
+    EXPECT_THROW(vector2Volume.SetData(&tooWide, 1), System::ArgumentException);
 }

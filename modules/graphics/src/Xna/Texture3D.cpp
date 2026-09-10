@@ -85,6 +85,28 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
+    static void ValidateTexture3DFormatEXT(const GraphicsDevice& device, SurfaceFormat format)
+    {
+        if (!Texture::IsVolumeFormatAllowedByProfileEXT(
+                device.getGraphicsProfileProperty(), format))
+        {
+            throw System::NotSupportedException(
+                "Texture3D: this SurfaceFormat is not available for a volume texture on the "
+                "selected GraphicsProfile.");
+        }
+        switch (device.GetRenderer().ClassifyTexture3DFormatEXT(static_cast<int>(format)))
+        {
+            case CNA::Internal::Renderers::RendererFormatVerdict::Supported:
+                return;
+            case CNA::Internal::Renderers::RendererFormatVerdict::Unsupported:
+                throw System::NotSupportedException(
+                    "Texture3D: this SurfaceFormat is not supported by the active renderer.");
+            case CNA::Internal::Renderers::RendererFormatVerdict::Defer:
+                Texture::ValidateFormat(format);
+                return;
+        }
+    }
+
     Texture3D::~Texture3D() = default;
     Texture3D::Texture3D(Texture3D&&) noexcept = default;
     Texture3D& Texture3D::operator=(Texture3D&&) noexcept = default;
@@ -108,7 +130,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 "Texture3D: this renderer does not support real volume (3D) texture storage");
         }
         ValidateVolumeSizeForProfileEXT(device, width, height, depth);
-        Texture::ValidateFormat(format);
+        ValidateTexture3DFormatEXT(device, format);
         format_     = format;
         levelCount_ = mipMap ? CalculateMipLevels(width, height, depth) : 1;
         renderer_ = device.GetRenderer().CreateTexture3D(width, height, depth, mipMap, static_cast<int>(format));
@@ -128,6 +150,84 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         static const std::string name = "Microsoft.Xna.Framework.Graphics.Texture3D";
         return name;
+    }
+
+    int Texture3D::ValidateTypedTransferEXT(
+        const char* api, int level, int left, int top, int right, int bottom,
+        int front, int back, int startIndex, int elementCount, int elementBytes) const
+    {
+        if (getIsDisposedProperty())
+            throw System::ObjectDisposedException("Texture3D");
+        if (level < 0 || level >= levelCount_)
+            throw std::out_of_range(std::string(api) + ": level is outside the mip chain");
+        ValidateCopyArguments(startIndex, elementCount);
+        const int formatBytes = Texture::GetFormatSizeEXT(format_);
+        if (Texture::GetBlockSizeSquaredEXT(format_) != 1 ||
+            formatBytes % elementBytes != 0)
+        {
+            throw System::ArgumentException(
+                std::string(api) +
+                ": element width does not divide the uncompressed volume format.");
+        }
+        if (left < 0 || left >= right || top < 0 || top >= bottom ||
+            front < 0 || front >= back)
+        {
+            throw System::ArgumentException("The box position or size is invalid.", "box");
+        }
+        if (right > MipDimension(width_, level) || bottom > MipDimension(height_, level) ||
+            back > MipDimension(depth_, level))
+        {
+            throw System::ArgumentException("The box is outside the mip level.", "box");
+        }
+        const std::size_t boxVoxels =
+            static_cast<std::size_t>(right - left) *
+            static_cast<std::size_t>(bottom - top) *
+            static_cast<std::size_t>(back - front);
+        const std::size_t requiredElements =
+            boxVoxels * static_cast<std::size_t>(formatBytes) /
+            static_cast<std::size_t>(elementBytes);
+        ValidateTotalSize(elementCount, requiredElements);
+        return static_cast<int>(requiredElements);
+    }
+
+    void Texture3D::SetTypedDataBytesEXT(
+        int level, int left, int top, int right, int bottom, int front, int back,
+        const std::uint8_t* data)
+    {
+        ThrowIfDataTransferResourceInUseEXT(true);
+        if (!renderer_)
+            throw System::NotSupportedException(
+                "Texture3D::SetData: this renderer creates no volume texture resource");
+        const int dataLength = (right - left) * (bottom - top) * (back - front) *
+            Texture::GetFormatSizeEXT(format_);
+        if (!renderer_->SetDataBytesEXT(
+                level, left, top, front, right - left, bottom - top, back - front,
+                data, dataLength))
+        {
+            throw System::NotSupportedException(
+                "Texture3D::SetData: the active renderer did not store the complete "
+                "declared-format volume region");
+        }
+    }
+
+    void Texture3D::GetTypedDataBytesEXT(
+        int level, int left, int top, int right, int bottom, int front, int back,
+        std::uint8_t* data) const
+    {
+        ThrowIfDataTransferResourceInUseEXT(false);
+        if (!renderer_)
+            throw System::NotSupportedException(
+                "Texture3D::GetData: this renderer creates no volume texture resource");
+        const int dataLength = (right - left) * (bottom - top) * (back - front) *
+            Texture::GetFormatSizeEXT(format_);
+        if (!renderer_->GetDataBytesEXT(
+                level, left, top, front, right - left, bottom - top, back - front,
+                data, dataLength))
+        {
+            throw System::NotSupportedException(
+                "Texture3D::GetData: the active renderer did not return the complete "
+                "declared-format volume region");
+        }
     }
 
     // Color has a vtable pointer (sizeof(Color) == 24), so we must never pass
@@ -177,14 +277,28 @@ namespace Microsoft::Xna::Framework::Graphics
         const std::size_t boxVoxels =
             static_cast<std::size_t>(right - left) * static_cast<std::size_t>(bottom - top) *
             static_cast<std::size_t>(back - front);
-        ValidateTotalSize(elementCount, boxVoxels);
+        const int formatBytes = Texture::GetFormatSizeEXT(format_);
+        if (formatBytes % 4 != 0)
+            throw System::ArgumentException(
+                "Texture3D::SetData: Color element width does not divide the volume format.");
+        const std::size_t requiredColorElements =
+            boxVoxels * static_cast<std::size_t>(formatBytes) / 4u;
+        ValidateTotalSize(elementCount, requiredColorElements);
 
         // REMED-GFX-135 -- see TextureCube::SetData's identical note: converted to the REQUESTED
         // BOX rather than to elementCount, so the call never reads source elements it does not
         // upload and the buffer length always matches the region the renderer is told to write.
-        const auto rgba = colorsToRgba(data, startIndex, static_cast<int>(boxVoxels));
-        SetDataPointerEXT(level, left, top, right, bottom, front, back,
-                          rgba.data(), static_cast<int>(rgba.size()));
+        const auto rgba = colorsToRgba(
+            data, startIndex, static_cast<int>(requiredColorElements));
+        if (format_ == SurfaceFormat::Color)
+        {
+            SetDataPointerEXT(level, left, top, right, bottom, front, back,
+                              rgba.data(), static_cast<int>(rgba.size()));
+        }
+        else
+        {
+            SetTypedDataBytesEXT(level, left, top, right, bottom, front, back, rgba.data());
+        }
     }
 
     void Texture3D::SetDataPointerEXT(int level, int left, int top, int right, int bottom, int front, int back,
@@ -257,8 +371,10 @@ namespace Microsoft::Xna::Framework::Graphics
         const std::size_t boxVoxels =
             static_cast<std::size_t>(boxW) * static_cast<std::size_t>(boxH) *
             static_cast<std::size_t>(boxD);
-        ValidateTotalSize(elementCount, boxVoxels);
         Texture::ValidateGetDataFormat(format_, 4);
+        const std::size_t requiredColorElements =
+            boxVoxels * static_cast<std::size_t>(Texture::GetFormatSizeEXT(format_)) / 4u;
+        ValidateTotalSize(elementCount, requiredColorElements);
 
         // REMED-GFX-130 -- see TextureCube::GetData for the full reasoning. `rgba` is scratch memory
         // this layer zero-initializes, so it is never handed to the caller unless the renderer
@@ -274,16 +390,18 @@ namespace Microsoft::Xna::Framework::Graphics
 
         // Sized to the REQUESTED BOX, not to elementCount -- see TextureCube::GetData's identical
         // note: a larger elementCount would otherwise return this buffer's untouched tail as content.
-        std::vector<uint8_t> rgba(
-            static_cast<std::size_t>(boxW) * static_cast<std::size_t>(boxH) *
-            static_cast<std::size_t>(boxD) * 4, 0);
-        if (!renderer_->GetData(level, left, top, front, boxW, boxH, boxD,
-                               rgba.data(), static_cast<int>(rgba.size())))
+        std::vector<uint8_t> rgba(requiredColorElements * 4u, 0);
+        const bool read = format_ == SurfaceFormat::Color
+            ? renderer_->GetData(level, left, top, front, boxW, boxH, boxD,
+                                 rgba.data(), static_cast<int>(rgba.size()))
+            : renderer_->GetDataBytesEXT(level, left, top, front, boxW, boxH, boxD,
+                                         rgba.data(), static_cast<int>(rgba.size()));
+        if (!read)
         {
             throw System::NotSupportedException(
                 "Texture3D::GetData: this graphics renderer cannot read a volume texture back to the "
                 "CPU at the requested mip level");
         }
-        rgbaToColors(rgba, data, startIndex, static_cast<int>(boxVoxels));
+        rgbaToColors(rgba, data, startIndex, static_cast<int>(requiredColorElements));
     }
 }

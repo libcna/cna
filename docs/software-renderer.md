@@ -236,7 +236,7 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
     inverse-transpose World normals, full classic lighting in vertex/pixel modes, texture, alpha
     and fog.
 - **MRT and render-target cube maps are real.** Ordinary `Texture2D` and `TextureCube`
-  mip storage and sampling are real. `Texture3D` has exact CPU RGBA8 storage for its full XNA mip
+  mip storage and sampling are real. `Texture3D` has exact CPU declared-format storage for its full XNA mip
   chain plus bounded full/partial `SetData` and `GetData`; this storage capability does not imply
   either CNAEXT `ShaderEffect` or classic compiled-Effect volume sampling. The latter is an
   in-scope gap tracked by `SOFTWARE-159`/`SOFTWARE-164` because opt-in EasyGL demonstrably supports
@@ -469,6 +469,12 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   allocate all four levels. Software, EasyGL and the other real volume backends now agree with the
   shared `LevelCount`; a final-level upload/readback proves the allocation rather than only the
   property value.
+- **All XNA HiDef Texture3D formats preserve their declared storage** (`SOFTWARE-173`) — the
+  public volume gate accepts exactly XNA's fifteen uncompressed Color/packed/float/half formats,
+  and typed full/window/box/mip transfers preserve their exact bytes. Software stores those bytes
+  directly; EasyGL maps them to matching native volume images and uses an exact byte mirror for
+  readback. Reach still refuses volume textures entirely, and compiled-effect sampling remains the
+  separate `SOFTWARE-164` backlog.
 - **The classic SpriteBatch/SpriteFont parity corpus executes on the CPU** (`SOFTWARE-138`).
   Eighteen renderer-independent scenes shared with EasyGL cover flips, rotation/origin, both scale
   overloads, source rectangles, layer sorting, transforms, render targets, viewports, scissor,

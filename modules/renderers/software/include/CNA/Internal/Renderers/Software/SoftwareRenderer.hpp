@@ -1085,22 +1085,23 @@ namespace CNA::Internal::Renderers::Software
         std::vector<std::uint8_t> sharedMultiSampleStencil_;
     };
 
-    /** @brief SOFTWARE-118 CPU-owned RGBA8 storage for an XNA volume texture and all mip levels. */
+    /** @brief CPU-owned declared-format storage for an XNA volume texture and all mip levels. */
     class SoftwareTexture3DRenderer final : public ITexture3DRenderer
     {
     public:
         /**
          * @brief Allocates zeroed storage for the requested volume and optional full mip chain.
          *
-         * XNA/FNA determine the number of levels from width and height; depth still halves at each
-         * allocated level.
+         * XNA requests the complete chain through the largest of width, height and depth.
          *
          * @param width Volume width at level zero.
          * @param height Volume height at level zero.
          * @param depth Volume depth at level zero.
          * @param mipMap Whether to allocate the full XNA mip chain.
+         * @param surfaceFormat Raw XNA SurfaceFormat ordinal retained by the volume.
          */
-        SoftwareTexture3DRenderer(int width, int height, int depth, bool mipMap);
+        SoftwareTexture3DRenderer(int width, int height, int depth, bool mipMap,
+                                  int surfaceFormat);
 
         /**
          * @brief Copies a tightly packed RGBA8 box into one mip level.
@@ -1121,6 +1122,40 @@ namespace CNA::Internal::Renderers::Software
                                    void* data, int dataLength) const override;
 
         /**
+         * @brief Stores exact declared-format voxels for the requested box.
+         * @param level Mip level.
+         * @param x Left edge.
+         * @param y Top edge.
+         * @param z Front edge.
+         * @param w Box width.
+         * @param h Box height.
+         * @param depth Box depth.
+         * @param data Source bytes.
+         * @param dataLength Available source bytes.
+         * @return True when the complete box was stored.
+         */
+        [[nodiscard]] bool SetDataBytesEXT(
+            int level, int x, int y, int z, int w, int h, int depth,
+            const void* data, int dataLength) override;
+
+        /**
+         * @brief Returns exact declared-format voxels for the requested box.
+         * @param level Mip level.
+         * @param x Left edge.
+         * @param y Top edge.
+         * @param z Front edge.
+         * @param w Box width.
+         * @param h Box height.
+         * @param depth Box depth.
+         * @param data Destination bytes.
+         * @param dataLength Available destination bytes.
+         * @return True when the complete box was returned.
+         */
+        [[nodiscard]] bool GetDataBytesEXT(
+            int level, int x, int y, int z, int w, int h, int depth,
+            void* data, int dataLength) const override;
+
+        /**
          * @brief Reports the level-zero volume dimensions to renderer-side consumers.
          *
          * @param width Receives the width.
@@ -1138,7 +1173,8 @@ namespace CNA::Internal::Renderers::Software
         int height_ = 0;
         int depth_ = 0;
         int levelCount_ = 1;
-        /// levels_[level] is slice-major, row-major, tightly packed RGBA8 storage.
+        int surfaceFormat_ = 0;
+        /// levels_[level] is slice-major, row-major, tightly packed declared-format storage.
         std::vector<std::vector<std::uint8_t>> levels_;
     };
 
@@ -1453,6 +1489,13 @@ namespace CNA::Internal::Renderers::Software
          * @return Supported for Color and DXT1/3/5, Unsupported for known unfinished formats.
          */
         [[nodiscard]] RendererFormatVerdict ClassifyTextureCubeFormatEXT(
+            int surfaceFormat) const override;
+        /**
+         * @brief Classifies formats whose complete CPU volume-transfer path is implemented.
+         * @param surfaceFormat Raw SurfaceFormat ordinal.
+         * @return Supported for the fifteen XNA HiDef volume formats.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyTexture3DFormatEXT(
             int surfaceFormat) const override;
         /**
          * @brief Reports exactly the classic colour target formats backed by CPU storage.

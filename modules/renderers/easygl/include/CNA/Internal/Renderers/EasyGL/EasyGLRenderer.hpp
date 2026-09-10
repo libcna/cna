@@ -523,6 +523,40 @@ namespace CNA::Internal::Renderers::EasyGL
                                    int w, int h, int depth,
                                    void* data, int dataLength) const override;
 
+        /**
+         * @brief Stores exact declared-format voxels and mirrors them for typed readback.
+         * @param level Mip level.
+         * @param x Left edge.
+         * @param y Top edge.
+         * @param z Front edge.
+         * @param w Box width.
+         * @param h Box height.
+         * @param depth Box depth.
+         * @param data Source bytes.
+         * @param dataLength Available source bytes.
+         * @return True when the complete box was stored.
+         */
+        [[nodiscard]] bool SetDataBytesEXT(
+            int level, int x, int y, int z, int w, int h, int depth,
+            const void* data, int dataLength) override;
+
+        /**
+         * @brief Returns exact declared-format voxels from the CPU mirror.
+         * @param level Mip level.
+         * @param x Left edge.
+         * @param y Top edge.
+         * @param z Front edge.
+         * @param w Box width.
+         * @param h Box height.
+         * @param depth Box depth.
+         * @param data Destination bytes.
+         * @param dataLength Available destination bytes.
+         * @return True when the complete box was returned.
+         */
+        [[nodiscard]] bool GetDataBytesEXT(
+            int level, int x, int y, int z, int w, int h, int depth,
+            void* data, int dataLength) const override;
+
         /// Binds this volume texture to the requested GL texture unit.
         void BindGL(int unit) const override;
 
@@ -533,6 +567,8 @@ namespace CNA::Internal::Renderers::EasyGL
         int depth_  = 0;
         /// Mip levels this texture really allocated storage for (REMED-GFX-135).
         int levelCount_ = 1;
+        int surfaceFormat_ = 0;
+        std::vector<std::vector<std::uint8_t>> rawLevels_;
     };
 
     /// EasyGL cube map texture renderer.
@@ -1823,6 +1859,13 @@ namespace CNA::Internal::Renderers::EasyGL
          * @return Supported for Color and DXT1/3/5, Unsupported for known unfinished cube formats.
          */
         [[nodiscard]] RendererFormatVerdict ClassifyTextureCubeFormatEXT(
+            int surfaceFormat) const override;
+        /**
+         * @brief Reports formats whose EasyGL volume allocation and transfer path is complete.
+         * @param surfaceFormat Raw XNA SurfaceFormat ordinal.
+         * @return The active GL profile's volume-specific support verdict.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyTexture3DFormatEXT(
             int surfaceFormat) const override;
         /**
          * @brief Reports whether Color transfers preserve the requested texture's texel meaning.

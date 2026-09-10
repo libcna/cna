@@ -104,6 +104,19 @@ namespace Microsoft::Xna::Framework::Graphics
                                                                          SurfaceFormat fmt) noexcept;
 
         /**
+         * @brief Whether a GraphicsProfile permits this SurfaceFormat for a Texture3D.
+         *
+         * XNA volume textures are HiDef-only and accept exactly fifteen uncompressed formats.
+         * This resource-specific table is narrower than either the Texture2D or cube table.
+         *
+         * @param profile The profile the device was created with.
+         * @param fmt The SurfaceFormat to test.
+         * @return True when the profile permits the format for a volume texture.
+         */
+        CNAEXT [[nodiscard]] static bool IsVolumeFormatAllowedByProfileEXT(
+            GraphicsProfile profile, SurfaceFormat fmt) noexcept;
+
+        /**
          * @brief Whether a GraphicsProfile permits this SurfaceFormat for a render target.
          *
          * The render-target list is the Texture2D list minus the three block-compressed formats,

@@ -164,6 +164,34 @@ namespace Microsoft::Xna::Framework::Graphics
         return fmt != SurfaceFormat::NormalizedByte2 && fmt != SurfaceFormat::NormalizedByte4;
     }
 
+    bool Texture::IsVolumeFormatAllowedByProfileEXT(
+        GraphicsProfile profile, SurfaceFormat fmt) noexcept
+    {
+        if (profile != GraphicsProfile::HiDef)
+            return false;
+        switch (fmt)
+        {
+            case SurfaceFormat::Color:
+            case SurfaceFormat::Bgr565:
+            case SurfaceFormat::Bgra5551:
+            case SurfaceFormat::Bgra4444:
+            case SurfaceFormat::Rgba1010102:
+            case SurfaceFormat::Rg32:
+            case SurfaceFormat::Rgba64:
+            case SurfaceFormat::Alpha8:
+            case SurfaceFormat::Single:
+            case SurfaceFormat::Vector2:
+            case SurfaceFormat::Vector4:
+            case SurfaceFormat::HalfSingle:
+            case SurfaceFormat::HalfVector2:
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::HdrBlendable:
+                return true;
+            default:
+                return false;
+        }
+    }
+
     bool Texture::IsRenderTargetFormatAllowedByProfileEXT(GraphicsProfile profile,
                                                           SurfaceFormat fmt) noexcept
     {

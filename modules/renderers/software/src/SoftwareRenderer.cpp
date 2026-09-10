@@ -4135,17 +4135,19 @@ namespace CNA::Internal::Renderers::Software
     }
 
     std::unique_ptr<ITexture3DRenderer> SoftwareRenderer::CreateTexture3D(
-        int w, int h, int depth, bool mipMap, int)
+        int w, int h, int depth, bool mipMap, int surfaceFormat)
     {
 #ifdef CNA_SOFTWARE_2D_ONLY
         (void)w;
         (void)h;
         (void)depth;
         (void)mipMap;
+        (void)surfaceFormat;
         throw System::NotSupportedException(
             "Software's GDI 2D compilation unit does not include Texture3D resources.");
 #else
-        return std::make_unique<SoftwareTexture3DRenderer>(w, h, depth, mipMap);
+        return std::make_unique<SoftwareTexture3DRenderer>(
+            w, h, depth, mipMap, surfaceFormat);
 #endif
     }
 

@@ -663,8 +663,7 @@ TEST_F(Texture3DTest, DisposeUnbindsFromGraphicsDeviceTextures)
 
 TEST_F(Texture3DTest, ColorCannotBindToGraphicsDeviceVertexTextures)
 {
-    // XNA vertex texture fetch accepts only its seven float/half layouts. Texture3D currently
-    // exposes only Color until SOFTWARE-173, so this is the only truthful volume binding test.
+    // XNA vertex texture fetch accepts only its seven float/half layouts; Color remains invalid.
     auto tex = std::make_unique<Texture3D>(gd, 2, 2, 2, false, SurfaceFormat::Color);
     EXPECT_THROW(
         gd.getVertexTexturesProperty()(0, tex.get()),

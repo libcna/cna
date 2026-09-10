@@ -567,6 +567,31 @@ namespace CNA::Internal::Renderers
                                            int w, int h, int depth,
                                            const void* data, int dataLength) = 0;
         /**
+         * @brief Uploads exact uncompressed declared-format voxels into a sub-volume.
+         *
+         * Unlike @ref SetData, this route does not imply RGBA8. The concrete resource interprets
+         * each tightly packed voxel in the SurfaceFormat used at construction.
+         *
+         * @param level Mip level to write.
+         * @param x Left edge of the box.
+         * @param y Top edge of the box.
+         * @param z Front edge of the box.
+         * @param w Box width.
+         * @param h Box height.
+         * @param depth Box depth.
+         * @param data Tightly packed declared-format source voxels.
+         * @param dataLength Available source bytes.
+         * @return True only when the complete requested box was stored.
+         */
+        [[nodiscard]] virtual bool SetDataBytesEXT(
+            int level, int x, int y, int z, int w, int h, int depth,
+            const void* data, int dataLength)
+        {
+            (void)level; (void)x; (void)y; (void)z; (void)w; (void)h; (void)depth;
+            (void)data; (void)dataLength;
+            return false;
+        }
+        /**
          * @brief Reads back raw RGBA8 voxels from a sub-volume of the given mip level.
          *
          * REMED-GFX-130. Identical contract to `ITextureCubeRenderer::GetData` above -- see its
@@ -588,6 +613,28 @@ namespace CNA::Internal::Renderers
         [[nodiscard]] virtual bool GetData(int level, int x, int y, int z,
                                            int w, int h, int depth,
                                            void* data, int dataLength) const
+        {
+            (void)level; (void)x; (void)y; (void)z; (void)w; (void)h; (void)depth;
+            (void)data; (void)dataLength;
+            return false;
+        }
+        /**
+         * @brief Reads exact uncompressed declared-format voxels from a sub-volume.
+         *
+         * @param level Mip level to read.
+         * @param x Left edge of the box.
+         * @param y Top edge of the box.
+         * @param z Front edge of the box.
+         * @param w Box width.
+         * @param h Box height.
+         * @param depth Box depth.
+         * @param data Destination for tightly packed declared-format voxels.
+         * @param dataLength Available destination bytes.
+         * @return True only when the complete requested box was copied.
+         */
+        [[nodiscard]] virtual bool GetDataBytesEXT(
+            int level, int x, int y, int z, int w, int h, int depth,
+            void* data, int dataLength) const
         {
             (void)level; (void)x; (void)y; (void)z; (void)w; (void)h; (void)depth;
             (void)data; (void)dataLength;
@@ -2145,6 +2192,22 @@ namespace CNA::Internal::Renderers
          * @return This renderer's cube-specific verdict, or Defer to accept the framework rule.
          */
         [[nodiscard]] virtual RendererFormatVerdict ClassifyTextureCubeFormatEXT(
+            int surfaceFormat) const
+        {
+            (void)surfaceFormat;
+            return RendererFormatVerdict::Defer;
+        }
+
+        /**
+         * @brief Whether a plain Texture3D may be created with the given surface format.
+         *
+         * A separate verdict prevents Texture2D support from being mistaken for a complete volume
+         * allocation, box-transfer and sampling path. The default retains the Color-only baseline.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return This renderer's volume-specific verdict, or Defer for the framework baseline.
+         */
+        [[nodiscard]] virtual RendererFormatVerdict ClassifyTexture3DFormatEXT(
             int surfaceFormat) const
         {
             (void)surfaceFormat;

@@ -1,15 +1,46 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <bit>
+#include <concepts>
+#include <cstdint>
 #include <memory>
+#include <stdexcept>
+#include <type_traits>
+#include <vector>
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
+#include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "System/ArgumentNullException.hpp"
 
 namespace CNA::Internal::Renderers
 {
     class ITexture3DRenderer;
+}
+
+namespace CNA::Internal::Graphics
+{
+    /** @brief Identifies XNA packed-vector elements that expose their exact storage word. */
+    template<typename T>
+    concept Texture3DPackedElement = requires(T value, const T constantValue)
+    {
+        constantValue.getPackedValueProperty();
+        value.setPackedValueProperty(constantValue.getPackedValueProperty());
+    };
+
+    /** @brief Identifies scalar/vector binary32 elements accepted by float volume formats. */
+    template<typename T>
+    concept Texture3DFloatElement =
+        std::same_as<std::remove_cvref_t<T>, float> ||
+        std::same_as<std::remove_cvref_t<T>, Microsoft::Xna::Framework::Vector2> ||
+        std::same_as<std::remove_cvref_t<T>, Microsoft::Xna::Framework::Vector4>;
+
+    /** @brief Identifies the typed elements supported by Texture3D's XNA transfer surface. */
+    template<typename T>
+    concept Texture3DElement = Texture3DPackedElement<T> || Texture3DFloatElement<T>;
 }
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -106,9 +137,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param front        Front boundary of the sub-volume in texels (slice index).
          * @param back         Back boundary (exclusive) of the sub-volume in texels.
          * @param data         Pointer to the source Color array.
-         * @param startIndex   First element within @p data to start reading.
          * @param elementCount Number of Color elements to upload; must exactly match the number
-         *                     of voxels in the requested box.
+         *                     of format bytes in the requested box when multiplied by four.
          * @throws System::ObjectDisposedException if this Texture3D has been disposed.
          * @throws System::NotSupportedException if this renderer cannot store the requested mip
          *         level or box.
@@ -119,6 +149,116 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void SetData(int level, int left, int top, int right, int bottom, int front, int back,
                      const Color* data, int startIndex, int elementCount);
+
+        /**
+         * @brief Uploads typed packed or floating-point data to the entire volume.
+         *
+         * @tparam T An XNA packed-vector, float, Vector2 or Vector4 whose byte width divides the
+         *           format width.
+         * @param data Source elements.
+         * @param elementCount Number of elements to upload.
+         */
+        template<CNA::Internal::Graphics::Texture3DElement T>
+        void SetData(const T* data, int elementCount)
+        {
+            SetData(data, 0, elementCount);
+        }
+
+        /**
+         * @brief Uploads a source window of typed data to the entire volume.
+         *
+         * @tparam T An XNA packed-vector, float, Vector2 or Vector4 whose byte width divides the
+         *           format width.
+         * @param data Source elements.
+         * @param startIndex First source element.
+         * @param elementCount Number of elements to upload.
+         */
+        template<CNA::Internal::Graphics::Texture3DElement T>
+        void SetData(const T* data, int startIndex, int elementCount)
+        {
+            SetData(0, 0, 0, width_, height_, 0, depth_, data, startIndex, elementCount);
+        }
+
+        /**
+         * @brief Uploads typed data to a box in one volume mip level.
+         *
+         * @tparam T An XNA packed-vector, float, Vector2 or Vector4 whose byte width divides the
+         *           format width.
+         * @param level Mip level beginning at zero.
+         * @param left Left box boundary.
+         * @param top Top box boundary.
+         * @param right Exclusive right box boundary.
+         * @param bottom Exclusive bottom box boundary.
+         * @param front Front box boundary.
+         * @param back Exclusive back box boundary.
+         * @param data Source elements.
+         * @param startIndex First source element.
+         * @param elementCount Number of elements whose total bytes must equal the box storage.
+         */
+        template<CNA::Internal::Graphics::Texture3DElement T>
+        void SetData(int level, int left, int top, int right, int bottom, int front, int back,
+                     const T* data, int startIndex, int elementCount)
+        {
+            if (data == nullptr)
+                throw System::ArgumentNullException("data");
+            using Element = std::remove_cvref_t<T>;
+            int elementBytes = 0;
+            if constexpr (CNA::Internal::Graphics::Texture3DPackedElement<Element>)
+            {
+                using Word = std::remove_cvref_t<decltype(data[0].getPackedValueProperty())>;
+                static_assert(std::is_unsigned_v<Word>);
+                elementBytes = static_cast<int>(sizeof(Word));
+            }
+            else
+            {
+                constexpr int components = std::same_as<Element, float> ? 1
+                    : (std::same_as<Element, Microsoft::Xna::Framework::Vector2> ? 2 : 4);
+                elementBytes = components * static_cast<int>(sizeof(float));
+            }
+            const int required = ValidateTypedTransferEXT(
+                "Texture3D::SetData", level, left, top, right, bottom, front, back,
+                startIndex, elementCount, elementBytes);
+            std::vector<std::uint8_t> bytes(
+                static_cast<std::size_t>(required) * static_cast<std::size_t>(elementBytes));
+            if constexpr (CNA::Internal::Graphics::Texture3DPackedElement<Element>)
+            {
+                using Word = std::remove_cvref_t<decltype(data[0].getPackedValueProperty())>;
+                for (int index = 0; index < required; ++index)
+                {
+                    const Word value = data[startIndex + index].getPackedValueProperty();
+                    for (std::size_t byte = 0; byte < sizeof(Word); ++byte)
+                        bytes[static_cast<std::size_t>(index) * sizeof(Word) + byte] =
+                            static_cast<std::uint8_t>(value >> (byte * 8u));
+                }
+            }
+            else
+            {
+                constexpr int components = std::same_as<Element, float> ? 1
+                    : (std::same_as<Element, Microsoft::Xna::Framework::Vector2> ? 2 : 4);
+                for (int index = 0; index < required; ++index)
+                {
+                    const Element& value = data[startIndex + index];
+                    for (int component = 0; component < components; ++component)
+                    {
+                        float channel = 0.0f;
+                        if constexpr (std::same_as<Element, float>) channel = value;
+                        else if constexpr (std::same_as<Element, Microsoft::Xna::Framework::Vector2>)
+                            channel = component == 0 ? value.X : value.Y;
+                        else if (component == 0) channel = value.X;
+                        else if (component == 1) channel = value.Y;
+                        else if (component == 2) channel = value.Z;
+                        else channel = value.W;
+                        const std::uint32_t bits = std::bit_cast<std::uint32_t>(channel);
+                        const std::size_t offset =
+                            (static_cast<std::size_t>(index) * components + component) * sizeof(float);
+                        for (std::size_t byte = 0; byte < sizeof(float); ++byte)
+                            bytes[offset + byte] = static_cast<std::uint8_t>(bits >> (byte * 8u));
+                    }
+                }
+            }
+            SetTypedDataBytesEXT(level, left, top, right, bottom, front, back,
+                                 bytes.data());
+        }
 
         /**
          * @brief Uploads raw byte data to a sub-volume using a native pointer.
@@ -178,8 +318,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param back         Back boundary (exclusive) in texels.
          * @param data         Output array to receive the Color data.
          * @param startIndex   First element within @p data to write to.
-         * @param elementCount Number of Color elements to read; must exactly match the number of
-         *                     voxels in the requested box.
+         * @param elementCount Number of Color elements whose total four-byte storage must exactly
+         *                     match the requested box storage.
          * @throws System::ObjectDisposedException if this texture has been disposed.
          * @throws System::NotSupportedException if this graphics renderer cannot read the requested
          *         volume/mip level back to the CPU (including renderers that create no volume
@@ -193,6 +333,121 @@ namespace Microsoft::Xna::Framework::Graphics
                      Color* data, int startIndex, int elementCount) const;
 
         /**
+         * @brief Reads the entire volume into typed packed or floating-point elements.
+         *
+         * @tparam T An XNA packed-vector, float, Vector2 or Vector4 whose byte width divides the
+         *           format width.
+         * @param data Destination elements.
+         * @param elementCount Number of elements to read.
+         */
+        template<CNA::Internal::Graphics::Texture3DElement T>
+        void GetData(T* data, int elementCount) const
+        {
+            GetData(data, 0, elementCount);
+        }
+
+        /**
+         * @brief Reads the entire volume into a destination window of typed elements.
+         *
+         * @tparam T An XNA packed-vector, float, Vector2 or Vector4 whose byte width divides the
+         *           format width.
+         * @param data Destination elements.
+         * @param startIndex First destination element.
+         * @param elementCount Number of elements to read.
+         */
+        template<CNA::Internal::Graphics::Texture3DElement T>
+        void GetData(T* data, int startIndex, int elementCount) const
+        {
+            GetData(0, 0, 0, width_, height_, 0, depth_, data, startIndex, elementCount);
+        }
+
+        /**
+         * @brief Reads a box in one mip level into typed elements.
+         *
+         * @tparam T An XNA packed-vector, float, Vector2 or Vector4 whose byte width divides the
+         *           format width.
+         * @param level Mip level beginning at zero.
+         * @param left Left box boundary.
+         * @param top Top box boundary.
+         * @param right Exclusive right box boundary.
+         * @param bottom Exclusive bottom box boundary.
+         * @param front Front box boundary.
+         * @param back Exclusive back box boundary.
+         * @param data Destination elements.
+         * @param startIndex First destination element.
+         * @param elementCount Number of elements whose total bytes must equal the box storage.
+         */
+        template<CNA::Internal::Graphics::Texture3DElement T>
+        void GetData(int level, int left, int top, int right, int bottom, int front, int back,
+                     T* data, int startIndex, int elementCount) const
+        {
+            if (data == nullptr)
+                throw System::ArgumentNullException("data");
+            using Element = std::remove_cvref_t<T>;
+            int elementBytes = 0;
+            if constexpr (CNA::Internal::Graphics::Texture3DPackedElement<Element>)
+            {
+                using Word = std::remove_cvref_t<decltype(data[0].getPackedValueProperty())>;
+                static_assert(std::is_unsigned_v<Word>);
+                elementBytes = static_cast<int>(sizeof(Word));
+            }
+            else
+            {
+                constexpr int components = std::same_as<Element, float> ? 1
+                    : (std::same_as<Element, Microsoft::Xna::Framework::Vector2> ? 2 : 4);
+                elementBytes = components * static_cast<int>(sizeof(float));
+            }
+            const int required = ValidateTypedTransferEXT(
+                "Texture3D::GetData", level, left, top, right, bottom, front, back,
+                startIndex, elementCount, elementBytes);
+            std::vector<std::uint8_t> bytes(
+                static_cast<std::size_t>(required) * static_cast<std::size_t>(elementBytes));
+            GetTypedDataBytesEXT(level, left, top, right, bottom, front, back,
+                                 bytes.data());
+            if constexpr (CNA::Internal::Graphics::Texture3DPackedElement<Element>)
+            {
+                using Word = std::remove_cvref_t<decltype(data[0].getPackedValueProperty())>;
+                for (int index = 0; index < required; ++index)
+                {
+                    Word value = 0;
+                    for (std::size_t byte = 0; byte < sizeof(Word); ++byte)
+                        value |= static_cast<Word>(
+                            bytes[static_cast<std::size_t>(index) * sizeof(Word) + byte])
+                            << (byte * 8u);
+                    data[startIndex + index].setPackedValueProperty(value);
+                }
+            }
+            else
+            {
+                constexpr int components = std::same_as<Element, float> ? 1
+                    : (std::same_as<Element, Microsoft::Xna::Framework::Vector2> ? 2 : 4);
+                for (int index = 0; index < required; ++index)
+                {
+                    Element& value = data[startIndex + index];
+                    for (int component = 0; component < components; ++component)
+                    {
+                        const std::size_t offset =
+                            (static_cast<std::size_t>(index) * components + component) * sizeof(float);
+                        std::uint32_t bits = 0u;
+                        for (std::size_t byte = 0; byte < sizeof(float); ++byte)
+                            bits |= static_cast<std::uint32_t>(bytes[offset + byte]) << (byte * 8u);
+                        const float channel = std::bit_cast<float>(bits);
+                        if constexpr (std::same_as<Element, float>) value = channel;
+                        else if constexpr (std::same_as<Element, Microsoft::Xna::Framework::Vector2>)
+                        {
+                            if (component == 0) value.X = channel;
+                            else value.Y = channel;
+                        }
+                        else if (component == 0) value.X = channel;
+                        else if (component == 1) value.Y = channel;
+                        else if (component == 2) value.Z = channel;
+                        else value.W = channel;
+                    }
+                }
+            }
+        }
+
+        /**
          * @brief Returns a reference to the renderer implementation object.
          *
          * @return Reference to the renderer ITexture3DRenderer.
@@ -204,6 +459,16 @@ namespace Microsoft::Xna::Framework::Graphics
         void Dispose(bool disposing) override;
 
     private:
+        [[nodiscard]] int ValidateTypedTransferEXT(
+            const char* api, int level, int left, int top, int right, int bottom,
+            int front, int back, int startIndex, int elementCount, int elementBytes) const;
+        void SetTypedDataBytesEXT(
+            int level, int left, int top, int right, int bottom, int front, int back,
+            const std::uint8_t* data);
+        void GetTypedDataBytesEXT(
+            int level, int left, int top, int right, int bottom, int front, int back,
+            std::uint8_t* data) const;
+
         int width_;
         int height_;
         int depth_;

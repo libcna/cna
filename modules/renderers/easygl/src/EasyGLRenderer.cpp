@@ -1740,10 +1740,179 @@ if (ProfileIsEs2ApiGeneration())
         return levels;
     }
 
-    EasyGLTexture3DRenderer::EasyGLTexture3DRenderer(int w, int h, int depth, bool mipMap, int /*surfaceFormat*/)
+    static void UploadUncompressedVolumeTexelsEXT(
+        ::easygl::Texture& texture, int level, int x, int y, int z,
+        int width, int height, int depth,
+        Microsoft::Xna::Framework::Graphics::SurfaceFormat format,
+        const void* pixels, bool wholeLevel)
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        ::easygl::InternalFormat internalFormat = RgbaTexImageInternalFormat();
+        ::easygl::PixelFormat pixelFormat = ::easygl::PixelFormat::Rgba;
+        ::easygl::PixelType pixelType = ::easygl::PixelType::UnsignedByte;
+        int unpackAlignment = 4;
+        const void* upload = pixels;
+        std::vector<float> expandedFloat;
+        std::vector<std::uint16_t> expanded16;
+        std::vector<std::uint8_t> expanded8;
+        const std::size_t texels = static_cast<std::size_t>(width) *
+            static_cast<std::size_t>(height) * static_cast<std::size_t>(depth);
+
+        switch (format)
+        {
+            case SurfaceFormat::Color:
+                break;
+            case SurfaceFormat::Bgr565:
+                internalFormat = ::easygl::InternalFormat::Rgb565;
+                pixelFormat = ::easygl::PixelFormat::Rgb;
+                pixelType = ::easygl::PixelType::UnsignedShort565;
+                unpackAlignment = 2;
+                break;
+            case SurfaceFormat::Bgra5551:
+            case SurfaceFormat::Bgra4444:
+            {
+                internalFormat = format == SurfaceFormat::Bgra5551
+                    ? ::easygl::InternalFormat::Rgb5A1
+                    : ::easygl::InternalFormat::Rgba4;
+                pixelType = format == SurfaceFormat::Bgra5551
+                    ? ::easygl::PixelType::UnsignedShort5551
+                    : ::easygl::PixelType::UnsignedShort4444;
+                unpackAlignment = 2;
+                if (pixels != nullptr)
+                {
+                    const int rotate = format == SurfaceFormat::Bgra5551 ? 1 : 4;
+                    const auto* source = static_cast<const std::uint8_t*>(pixels);
+                    expanded16.resize(texels);
+                    for (std::size_t index = 0; index < texels; ++index)
+                    {
+                        std::uint16_t value = 0;
+                        std::memcpy(&value, source + index * 2u, 2u);
+                        expanded16[index] = static_cast<std::uint16_t>(
+                            (value << rotate) | (value >> (16 - rotate)));
+                    }
+                    upload = expanded16.data();
+                }
+                break;
+            }
+            case SurfaceFormat::Rgba1010102:
+                internalFormat = ::easygl::InternalFormat::Rgb10A2;
+                pixelType = ::easygl::PixelType::UnsignedInt2101010Rev;
+                break;
+            case SurfaceFormat::Rg32:
+                internalFormat = ::easygl::InternalFormat::Rgba16;
+                pixelType = ::easygl::PixelType::UnsignedShort;
+                unpackAlignment = 8;
+                if (pixels != nullptr)
+                {
+                    const auto* source = static_cast<const std::uint8_t*>(pixels);
+                    expanded16.assign(texels * 4u, 65535u);
+                    for (std::size_t index = 0; index < texels; ++index)
+                    {
+                        std::memcpy(&expanded16[index * 4u], source + index * 4u, 4u);
+                    }
+                    upload = expanded16.data();
+                }
+                break;
+            case SurfaceFormat::Rgba64:
+                internalFormat = ::easygl::InternalFormat::Rgba16;
+                pixelType = ::easygl::PixelType::UnsignedShort;
+                unpackAlignment = 8;
+                break;
+            case SurfaceFormat::Alpha8:
+                if (pixels != nullptr)
+                {
+                    const auto* source = static_cast<const std::uint8_t*>(pixels);
+                    expanded8.assign(texels * 4u, 0u);
+                    for (std::size_t index = 0; index < texels; ++index)
+                        expanded8[index * 4u + 3u] = source[index];
+                    upload = expanded8.data();
+                }
+                break;
+            case SurfaceFormat::Single:
+            case SurfaceFormat::Vector2:
+            {
+                const int channels = format == SurfaceFormat::Single ? 1 : 2;
+                internalFormat = ::easygl::InternalFormat::Rgba32F;
+                pixelType = ::easygl::PixelType::Float;
+                unpackAlignment = 8;
+                if (pixels != nullptr)
+                {
+                    const auto* source = static_cast<const std::uint8_t*>(pixels);
+                    expandedFloat.assign(texels * 4u, 1.0f);
+                    for (std::size_t index = 0; index < texels; ++index)
+                    {
+                        std::memcpy(&expandedFloat[index * 4u],
+                                    source + index * static_cast<std::size_t>(channels) * 4u,
+                                    static_cast<std::size_t>(channels) * 4u);
+                    }
+                    upload = expandedFloat.data();
+                }
+                break;
+            }
+            case SurfaceFormat::Vector4:
+                internalFormat = ::easygl::InternalFormat::Rgba32F;
+                pixelType = ::easygl::PixelType::Float;
+                unpackAlignment = 8;
+                break;
+            case SurfaceFormat::HalfSingle:
+            case SurfaceFormat::HalfVector2:
+            {
+                const int channels = format == SurfaceFormat::HalfSingle ? 1 : 2;
+                internalFormat = ::easygl::InternalFormat::Rgba16F;
+                pixelType = ::easygl::PixelType::HalfFloat;
+                unpackAlignment = 8;
+                if (pixels != nullptr)
+                {
+                    const auto* source = static_cast<const std::uint8_t*>(pixels);
+                    expanded16.assign(texels * 4u, 0x3c00u);
+                    for (std::size_t index = 0; index < texels; ++index)
+                    {
+                        std::memcpy(&expanded16[index * 4u],
+                                    source + index * static_cast<std::size_t>(channels) * 2u,
+                                    static_cast<std::size_t>(channels) * 2u);
+                    }
+                    upload = expanded16.data();
+                }
+                break;
+            }
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::HdrBlendable:
+                internalFormat = ::easygl::InternalFormat::Rgba16F;
+                pixelType = ::easygl::PixelType::HalfFloat;
+                unpackAlignment = 8;
+                break;
+            default:
+                throw std::runtime_error("EasyGL: unsupported uncompressed volume SurfaceFormat");
+        }
+
+        ::metagl::glPixelStorei(::metagl::PixelStoreParam::UnpackAlignment, unpackAlignment);
+        texture.bind(::easygl::TextureTarget::Texture3D);
+        if (wholeLevel)
+        {
+            texture.set_image_3d(::easygl::TextureTarget::Texture3D, level,
+                                 internalFormat, width, height, depth,
+                                 pixelFormat, pixelType, upload);
+        }
+        else
+        {
+            texture.set_sub_image_3d(::easygl::TextureTarget::Texture3D, level,
+                                     x, y, z, width, height, depth,
+                                     pixelFormat, pixelType, upload);
+        }
+        ::metagl::glPixelStorei(::metagl::PixelStoreParam::UnpackAlignment, 4);
+    }
+
+    EasyGLTexture3DRenderer::EasyGLTexture3DRenderer(
+        int w, int h, int depth, bool mipMap, int surfaceFormat)
         : width_(w), height_(h), depth_(depth)
         , levelCount_(mipMap ? CalculateTexture3DMipLevels(w, h, depth) : 1)
+        , surfaceFormat_(surfaceFormat)
     {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat_);
+        const int bytesPerTexel =
+            Microsoft::Xna::Framework::Graphics::Texture::GetFormatSizeEXT(format);
+        rawLevels_.resize(static_cast<std::size_t>(levelCount_));
         tex_.create();
         tex_.bind(::easygl::TextureTarget::Texture3D);
         // Pre-allocate GPU storage for every mip level (not just level 0): SetData's box writes
@@ -1754,12 +1923,10 @@ if (ProfileIsEs2ApiGeneration())
         int levelW = w, levelH = h, levelD = depth;
         for (int level = 0; level < levelCount; ++level)
         {
-            tex_.set_image_3d(::easygl::TextureTarget::Texture3D, level,
-                              ::metagl::InternalFormat::Rgba8,
-                              levelW, levelH, levelD,
-                              ::metagl::PixelFormat::Rgba,
-                              ::metagl::PixelType::UnsignedByte,
-                              nullptr);
+            rawLevels_[static_cast<std::size_t>(level)].assign(
+                static_cast<std::size_t>(levelW) * levelH * levelD * bytesPerTexel, 0u);
+            UploadUncompressedVolumeTexelsEXT(
+                tex_, level, 0, 0, 0, levelW, levelH, levelD, format, nullptr, true);
             levelW = std::max(1, levelW / 2);
             levelH = std::max(1, levelH / 2);
             levelD = std::max(1, levelD / 2);
@@ -1794,6 +1961,16 @@ if (ProfileIsEs2ApiGeneration())
                                           int w, int h, int depth,
                                           const void* data, int dataLength)
     {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        if (static_cast<SurfaceFormat>(surfaceFormat_) != SurfaceFormat::Color)
+            return false;
+        return SetDataBytesEXT(level, x, y, z, w, h, depth, data, dataLength);
+    }
+
+    bool EasyGLTexture3DRenderer::SetDataBytesEXT(
+        int level, int x, int y, int z, int w, int h, int depth,
+        const void* data, int dataLength)
+    {
         if (data == nullptr || w <= 0 || h <= 0 || depth <= 0) return false;
         if (level < 0 || level >= levelCount_) return false;
         const int levelW = std::max(1, width_ >> level);
@@ -1801,16 +1978,35 @@ if (ProfileIsEs2ApiGeneration())
         const int levelD = std::max(1, depth_ >> level);
         if (x < 0 || y < 0 || z < 0 || x + w > levelW || y + h > levelH || z + depth > levelD)
             return false;
-        if (dataLength < w * h * depth * 4) return false;
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat_);
+        const int bytesPerTexel =
+            Microsoft::Xna::Framework::Graphics::Texture::GetFormatSizeEXT(format);
+        if (dataLength < w * h * depth * bytesPerTexel) return false;
 
         DrainGlErrors();
-        tex_.bind(::easygl::TextureTarget::Texture3D);
-        tex_.set_sub_image_3d(::easygl::TextureTarget::Texture3D, level,
-                              x, y, z, w, h, depth,
-                              ::metagl::PixelFormat::Rgba,
-                              ::metagl::PixelType::UnsignedByte,
-                              data);
-        return GlUploadSucceeded();
+        UploadUncompressedVolumeTexelsEXT(
+            tex_, level, x, y, z, w, h, depth, format, data, false);
+        if (!GlUploadSucceeded()) return false;
+
+        auto& saved = rawLevels_[static_cast<std::size_t>(level)];
+        const auto* source = static_cast<const std::uint8_t*>(data);
+        const std::size_t rowBytes = static_cast<std::size_t>(w) * bytesPerTexel;
+        const std::size_t sourceSliceBytes = rowBytes * static_cast<std::size_t>(h);
+        for (int slice = 0; slice < depth; ++slice)
+        {
+            for (int row = 0; row < h; ++row)
+            {
+                const std::size_t destinationOffset =
+                    ((static_cast<std::size_t>(z + slice) * levelH + (y + row)) * levelW + x) *
+                    static_cast<std::size_t>(bytesPerTexel);
+                const std::size_t sourceOffset =
+                    static_cast<std::size_t>(slice) * sourceSliceBytes +
+                    static_cast<std::size_t>(row) * rowBytes;
+                std::memcpy(saved.data() + destinationOffset, source + sourceOffset, rowBytes);
+            }
+        }
+        return true;
     }
 
     void EasyGLTexture3DRenderer::BindGL(int unit) const
@@ -2162,40 +2358,51 @@ else
                                           int w, int h, int depth,
                                           void* data, int dataLength) const
     {
-        // REMED-GFX-130: every early-out below used to be impossible to express -- this method
-        // returned void, so the shared layer converted its own zeroed scratch buffer into a
-        // complete transparent-black volume whenever nothing was actually read.
-        if (data == nullptr || level < 0 || w <= 0 || h <= 0 || depth <= 0) return false;
-        if (dataLength < w * h * depth * 4) return false;
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        if (static_cast<SurfaceFormat>(surfaceFormat_) != SurfaceFormat::Color)
+            return false;
+        return GetDataBytesEXT(level, x, y, z, w, h, depth, data, dataLength);
+    }
 
-        // GLES3 does not have glGetTexImage. Use a temporary FBO per Z-slice
-        // with glReadPixels to read back the pixel data.
-        const int bytesPerPixel = 4; // RGBA8
-        auto* dest = static_cast<uint8_t*>(data);
+    bool EasyGLTexture3DRenderer::GetDataBytesEXT(
+        int level, int x, int y, int z, int w, int h, int depth,
+        void* data, int dataLength) const
+    {
+        if (data == nullptr || level < 0 || level >= levelCount_ ||
+            w <= 0 || h <= 0 || depth <= 0)
+            return false;
+        const int levelW = std::max(1, width_ >> level);
+        const int levelH = std::max(1, height_ >> level);
+        const int levelD = std::max(1, depth_ >> level);
+        if (x < 0 || y < 0 || z < 0 || w > levelW || h > levelH || depth > levelD ||
+            x > levelW - w || y > levelH - h || z > levelD - depth)
+            return false;
 
-        ::easygl::Framebuffer fbo;
-        fbo.create();
-        fbo.bind(::easygl::FramebufferTarget::Framebuffer);
-        fbo.set_read_buffer(::metagl::to_read_buffer(::metagl::ColorAttachment::Color0));
+        const int bytesPerTexel =
+            Microsoft::Xna::Framework::Graphics::Texture::GetFormatSizeEXT(
+                static_cast<Microsoft::Xna::Framework::Graphics::SurfaceFormat>(surfaceFormat_));
+        if (dataLength < w * h * depth * bytesPerTexel) return false;
+        const auto& source = rawLevels_[static_cast<std::size_t>(level)];
+        if (source.size() < static_cast<std::size_t>(levelW) * levelH * levelD * bytesPerTexel)
+            return false;
 
-        bool complete = true;
-        for (int slice = z; slice < z + depth; ++slice)
+        auto* destination = static_cast<std::uint8_t*>(data);
+        const std::size_t rowBytes = static_cast<std::size_t>(w) * bytesPerTexel;
+        const std::size_t destinationSliceBytes = rowBytes * static_cast<std::size_t>(h);
+        for (int slice = 0; slice < depth; ++slice)
         {
-            fbo.attach_texture_layer(::easygl::FramebufferTarget::Framebuffer,
-                                     ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
-                                     tex_, level, slice);
-            // A slice whose attachment is not framebuffer-complete reads back nothing at all, so
-            // the requested box would only be partly written -- report that, never half-succeed.
-            if (!fbo.is_complete(::easygl::FramebufferTarget::Framebuffer)) { complete = false; break; }
-            ::metagl::glReadPixels(x, y, w, h,
-                                   ::metagl::PixelFormat::Rgba,
-                                   ::metagl::PixelType::UnsignedByte,
-                                   dest);
-            dest += w * h * bytesPerPixel;
+            for (int row = 0; row < h; ++row)
+            {
+                const std::size_t sourceOffset =
+                    ((static_cast<std::size_t>(z + slice) * levelH + (y + row)) * levelW + x) *
+                    static_cast<std::size_t>(bytesPerTexel);
+                const std::size_t destinationOffset =
+                    static_cast<std::size_t>(slice) * destinationSliceBytes +
+                    static_cast<std::size_t>(row) * rowBytes;
+                std::memcpy(destination + destinationOffset, source.data() + sourceOffset, rowBytes);
+            }
         }
-
-        ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::Framebuffer);
-        return complete;
+        return true;
     }
 
     EasyGLTextureCubeRenderer::~EasyGLTextureCubeRenderer()
@@ -6655,6 +6862,49 @@ if (!ProfileIsEs2ApiGeneration())
                 return ProfileIsEs2ApiGeneration()
                     ? RendererFormatVerdict::Unsupported
                     : RendererFormatVerdict::Supported;
+            default:
+                return RendererFormatVerdict::Defer;
+        }
+    }
+
+    RendererFormatVerdict EasyGLRenderer::ClassifyTexture3DFormatEXT(
+        int surfaceFormat) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat);
+        switch (format)
+        {
+            case SurfaceFormat::Color:
+            case SurfaceFormat::Alpha8:
+                return RendererFormatVerdict::Supported;
+            case SurfaceFormat::Bgr565:
+            case SurfaceFormat::Bgra5551:
+            case SurfaceFormat::Bgra4444:
+            case SurfaceFormat::Rgba1010102:
+                return ProfileIsEs2ApiGeneration()
+                    ? RendererFormatVerdict::Unsupported
+                    : RendererFormatVerdict::Supported;
+            case SurfaceFormat::Rg32:
+            case SurfaceFormat::Rgba64:
+                return ContextHasTextureNorm16EXT()
+                    ? RendererFormatVerdict::Supported
+                    : RendererFormatVerdict::Unsupported;
+            case SurfaceFormat::Single:
+            case SurfaceFormat::Vector2:
+            case SurfaceFormat::Vector4:
+            case SurfaceFormat::HalfSingle:
+            case SurfaceFormat::HalfVector2:
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::HdrBlendable:
+                return ProfileIsEs2ApiGeneration()
+                    ? RendererFormatVerdict::Unsupported
+                    : RendererFormatVerdict::Supported;
+            case SurfaceFormat::Dxt1:
+            case SurfaceFormat::Dxt3:
+            case SurfaceFormat::Dxt5:
+            case SurfaceFormat::NormalizedByte2:
+            case SurfaceFormat::NormalizedByte4:
+                return RendererFormatVerdict::Unsupported;
             default:
                 return RendererFormatVerdict::Defer;
         }

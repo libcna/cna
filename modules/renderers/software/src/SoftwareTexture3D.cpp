@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/Internal/Renderers/Software/SoftwareRenderer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -25,33 +26,39 @@ namespace CNA::Internal::Renderers::Software
             return levels;
         }
 
-        bool RequiredBytes(int width, int height, int depth, std::size_t& result)
+        bool RequiredBytes(int width, int height, int depth, int bytesPerTexel,
+                           std::size_t& result)
         {
-            if (width <= 0 || height <= 0 || depth <= 0) return false;
+            if (width <= 0 || height <= 0 || depth <= 0 || bytesPerTexel <= 0) return false;
             const std::size_t w = static_cast<std::size_t>(width);
             const std::size_t h = static_cast<std::size_t>(height);
             const std::size_t d = static_cast<std::size_t>(depth);
             const std::size_t maximum = (std::numeric_limits<std::size_t>::max)();
-            if (w > maximum / h || w * h > maximum / d || w * h * d > maximum / 4u)
+            const std::size_t bpp = static_cast<std::size_t>(bytesPerTexel);
+            if (w > maximum / h || w * h > maximum / d || w * h * d > maximum / bpp)
                 return false;
-            result = w * h * d * 4u;
+            result = w * h * d * bpp;
             return true;
         }
     }
 
     SoftwareTexture3DRenderer::SoftwareTexture3DRenderer(
-        int width, int height, int depth, bool mipMap)
+        int width, int height, int depth, bool mipMap, int surfaceFormat)
         : width_(width), height_(height), depth_(depth)
         , levelCount_(mipMap ? CalculateVolumeMipLevels(width, height, depth) : 1)
+        , surfaceFormat_(surfaceFormat)
     {
         if (width <= 0 || height <= 0 || depth <= 0)
             throw std::invalid_argument("SoftwareTexture3DRenderer: dimensions must be positive");
 
         levels_.resize(static_cast<std::size_t>(levelCount_));
+        const int bytesPerTexel = Microsoft::Xna::Framework::Graphics::Texture::GetFormatSizeEXT(
+            static_cast<Microsoft::Xna::Framework::Graphics::SurfaceFormat>(surfaceFormat_));
         for (int level = 0; level < levelCount_; ++level)
         {
             std::size_t bytes = 0;
-            if (!RequiredBytes(LevelWidth(level), LevelHeight(level), LevelDepth(level), bytes))
+            if (!RequiredBytes(LevelWidth(level), LevelHeight(level), LevelDepth(level),
+                               bytesPerTexel, bytes))
                 throw std::length_error("SoftwareTexture3DRenderer: volume byte size overflows");
             levels_[static_cast<std::size_t>(level)].assign(bytes, 0u);
         }
@@ -76,6 +83,16 @@ namespace CNA::Internal::Renderers::Software
         int level, int x, int y, int z, int w, int h, int depth,
         const void* data, int dataLength)
     {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        if (static_cast<SurfaceFormat>(surfaceFormat_) != SurfaceFormat::Color)
+            return false;
+        return SetDataBytesEXT(level, x, y, z, w, h, depth, data, dataLength);
+    }
+
+    bool SoftwareTexture3DRenderer::SetDataBytesEXT(
+        int level, int x, int y, int z, int w, int h, int depth,
+        const void* data, int dataLength)
+    {
         if (data == nullptr || level < 0 || level >= levelCount_ || dataLength < 0)
             return false;
         const int levelW = LevelWidth(level);
@@ -85,14 +102,17 @@ namespace CNA::Internal::Renderers::Software
             x > levelW - w || y > levelH - h || z > levelD - depth)
             return false;
 
+        const int bytesPerTexel = Microsoft::Xna::Framework::Graphics::Texture::GetFormatSizeEXT(
+            static_cast<Microsoft::Xna::Framework::Graphics::SurfaceFormat>(surfaceFormat_));
         std::size_t required = 0;
-        if (!RequiredBytes(w, h, depth, required) ||
+        if (!RequiredBytes(w, h, depth, bytesPerTexel, required) ||
             static_cast<std::size_t>(dataLength) < required)
             return false;
 
         const auto* source = static_cast<const std::uint8_t*>(data);
         std::vector<std::uint8_t>& destination = levels_[static_cast<std::size_t>(level)];
-        const std::size_t rowBytes = static_cast<std::size_t>(w) * 4u;
+        const std::size_t rowBytes =
+            static_cast<std::size_t>(w) * static_cast<std::size_t>(bytesPerTexel);
         const std::size_t sourceSliceBytes = rowBytes * static_cast<std::size_t>(h);
         for (int slice = 0; slice < depth; ++slice)
         {
@@ -104,7 +124,7 @@ namespace CNA::Internal::Renderers::Software
                 const std::size_t destinationOffset =
                     ((static_cast<std::size_t>(z + slice) * static_cast<std::size_t>(levelH) +
                       static_cast<std::size_t>(y + row)) * static_cast<std::size_t>(levelW) +
-                     static_cast<std::size_t>(x)) * 4u;
+                     static_cast<std::size_t>(x)) * static_cast<std::size_t>(bytesPerTexel);
                 std::copy_n(source + sourceOffset, rowBytes,
                             destination.begin() + static_cast<std::ptrdiff_t>(destinationOffset));
             }
@@ -113,6 +133,16 @@ namespace CNA::Internal::Renderers::Software
     }
 
     bool SoftwareTexture3DRenderer::GetData(
+        int level, int x, int y, int z, int w, int h, int depth,
+        void* data, int dataLength) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        if (static_cast<SurfaceFormat>(surfaceFormat_) != SurfaceFormat::Color)
+            return false;
+        return GetDataBytesEXT(level, x, y, z, w, h, depth, data, dataLength);
+    }
+
+    bool SoftwareTexture3DRenderer::GetDataBytesEXT(
         int level, int x, int y, int z, int w, int h, int depth,
         void* data, int dataLength) const
     {
@@ -125,14 +155,17 @@ namespace CNA::Internal::Renderers::Software
             x > levelW - w || y > levelH - h || z > levelD - depth)
             return false;
 
+        const int bytesPerTexel = Microsoft::Xna::Framework::Graphics::Texture::GetFormatSizeEXT(
+            static_cast<Microsoft::Xna::Framework::Graphics::SurfaceFormat>(surfaceFormat_));
         std::size_t required = 0;
-        if (!RequiredBytes(w, h, depth, required) ||
+        if (!RequiredBytes(w, h, depth, bytesPerTexel, required) ||
             static_cast<std::size_t>(dataLength) < required)
             return false;
 
         const std::vector<std::uint8_t>& source = levels_[static_cast<std::size_t>(level)];
         auto* destination = static_cast<std::uint8_t*>(data);
-        const std::size_t rowBytes = static_cast<std::size_t>(w) * 4u;
+        const std::size_t rowBytes =
+            static_cast<std::size_t>(w) * static_cast<std::size_t>(bytesPerTexel);
         const std::size_t destinationSliceBytes = rowBytes * static_cast<std::size_t>(h);
         for (int slice = 0; slice < depth; ++slice)
         {
@@ -141,7 +174,7 @@ namespace CNA::Internal::Renderers::Software
                 const std::size_t sourceOffset =
                     ((static_cast<std::size_t>(z + slice) * static_cast<std::size_t>(levelH) +
                       static_cast<std::size_t>(y + row)) * static_cast<std::size_t>(levelW) +
-                     static_cast<std::size_t>(x)) * 4u;
+                     static_cast<std::size_t>(x)) * static_cast<std::size_t>(bytesPerTexel);
                 const std::size_t destinationOffset =
                     static_cast<std::size_t>(slice) * destinationSliceBytes +
                     static_cast<std::size_t>(row) * rowBytes;
