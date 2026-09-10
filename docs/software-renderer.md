@@ -187,8 +187,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   stream advances from its own binding offset by `floor(instanceIndex / InstanceFrequency)` while
   base vertex affects only per-vertex streams. Split geometry/matrix streams, both index widths,
   arbitrary positive frequencies, dynamic updates, queued lifetime and ordinary/instanced state
-  transitions share one renderer-neutral public test corpus. This is deterministic CPU expansion,
-  not delegation to EasyGL or a GPU.
+  transitions share one renderer-neutral public test corpus. `SOFTWARE-323` removed a stale compile
+  guard and now runs all 17 applicable complete range/state/target/lifecycle cases under Software.
+  This is deterministic CPU expansion, not delegation to EasyGL or a GPU.
 - **Static and dynamic vertex/index buffers share EasyGL's public contract** (`SOFTWARE-109`,
   `SOFTWARE-294`). The complete fixed-size resource exists at construction, so readable buffers
   support `GetData` and valid draw ranges before their first upload, matching XNA/FNA native

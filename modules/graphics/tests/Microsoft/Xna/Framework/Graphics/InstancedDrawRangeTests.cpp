@@ -914,7 +914,7 @@ namespace
 #if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_VULKAN) || \
     defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_DIRECTX9) || \
     defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_DIRECTX11) || \
-    defined(CNA_RENDERER_DIRECTX12)
+    defined(CNA_RENDERER_DIRECTX12) || defined(CNA_RENDERER_SOFTWARE)
 
 // Zero-offset control. Identical state, buffers and instance stream to every case below, with
 // startIndex = baseVertex = 0 and the geometry range covering the complete first three slots. It
