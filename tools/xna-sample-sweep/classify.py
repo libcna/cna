@@ -83,6 +83,100 @@ def float_distance(found):
     return worst
 
 
+_SHARED_DIGEST = re.compile(r"^sharedResources\[(\d+)\]/digest: ")
+
+_VERTEX_USAGE = {0: "POSITION", 1: "COLOR", 2: "TEXCOORD", 3: "NORMAL", 4: "BINORMAL",
+                 5: "TANGENT", 6: "BLENDINDICES", 7: "BLENDWEIGHT", 8: "DEPTH", 9: "FOG",
+                 10: "POINTSIZE", 11: "SAMPLE", 12: "TESSELLATEFACTOR"}
+# Vertex element formats that are a run of 32-bit floats, and how many.
+_VERTEX_FLOATS = {0: 1, 1: 2, 2: 3, 3: 4}
+
+
+def buffer_differences(reference, mine, found):
+    """Two differing buffer digests, reopened as the numbers they are.
+
+    A vertex buffer reaches the report as one digest, so a model whose generated normals differ in
+    their last bits is indistinguishable from one whose geometry is wrong: both say `digest: 'a' vs
+    'b'` and nothing else. Nine references sat in `UNEXPLAINED` for that reason alone, and reading
+    them showed every one to be a normal off in the mantissa -- worst 0.00073 of a degree -- which
+    is what a sum of face normals taken in a different order does
+    (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-210`).
+
+    Only when *every* difference is a buffer digest, because a report that also disagrees about a
+    bone or a bounding sphere is answered by those and not by this.
+
+    @param reference The genuine container.
+    @param mine CNA's.
+    @param found The difference list the parses produced.
+    @return A per-element difference list, or None when this does not apply.
+    """
+    indices = []
+    for entry in found:
+        match = _SHARED_DIGEST.match(entry)
+        if match is None:
+            return None
+        indices.append(int(match.group(1)))
+    try:
+        left = X.parse(reference, keep_payloads=True)
+        right = X.parse(mine, keep_payloads=True)
+    except Exception:  # noqa: BLE001 - a payload that will not decode leaves the digests as found
+        return None
+    expanded = []
+    for index in indices:
+        try:
+            one, two = left["sharedResources"][index], right["sharedResources"][index]
+        except (KeyError, IndexError):
+            return None
+        if "payload" not in one or "payload" not in two:
+            return None
+        if one["reader"] != two["reader"] or len(one["payload"]) != len(two["payload"]):
+            return None
+        if "VertexBufferReader" in one["reader"]:
+            if one["declaration"] != two["declaration"]:
+                return None
+            stride = one["declaration"]["stride"]
+            for element in one["declaration"]["elements"]:
+                count = _VERTEX_FLOATS.get(element["format"])
+                if count is None:
+                    # A packed element -- a colour, a normalized short. Reading it as a number
+                    # would invent a scale it has not got, so the digest stands.
+                    if _element_differs(one["payload"], two["payload"], stride, element, 4):
+                        return None
+                    continue
+                name = "%s%d" % (_VERTEX_USAGE.get(element["usage"], str(element["usage"])),
+                                 element["usageIndex"])
+                width = 4 * count
+                for vertex in range(one["vertexCount"]):
+                    at = stride * vertex + element["offset"]
+                    a = struct.unpack("<%df" % count, one["payload"][at:at + width])
+                    b = struct.unpack("<%df" % count, two["payload"][at:at + width])
+                    for lane in range(count):
+                        if a[lane] != b[lane]:
+                            expanded.append("sharedResources[%d]/vertices[%d]/%s[%d]: %r vs %r"
+                                            % (index, vertex, name, lane, a[lane], b[lane]))
+        elif "IndexBufferReader" in one["reader"]:
+            width = one["indexElementSize"]
+            code = "<H" if width == 2 else "<I"
+            for position in range(one["indexCount"]):
+                at = width * position
+                a = struct.unpack(code, one["payload"][at:at + width])[0]
+                b = struct.unpack(code, two["payload"][at:at + width])[0]
+                if a != b:
+                    expanded.append("sharedResources[%d]/indices[%d]: %d vs %d"
+                                    % (index, position, a, b))
+        else:
+            return None
+    return expanded or None
+
+
+def _element_differs(left, right, stride, element, width):
+    """Whether one vertex element's bytes differ anywhere in two equal-length buffers."""
+    for at in range(element["offset"], len(left), stride):
+        if left[at:at + width] != right[at:at + width]:
+            return True
+    return False
+
+
 def explain(job):
     reference, mine = job
     answer = {"reference": reference, "cna": mine}
@@ -123,6 +217,11 @@ def explain(job):
     # computed over the same positions in a different order lands within a couple of ULPs. It is
     # reported as its own class rather than hidden -- the numbers and the worst relative distance
     # are in the record -- because "the same value" and "a value near it" are not the same claim.
+    # A buffer reaches the parse as a digest; when that is the only thing that differs, it is
+    # reopened as the numbers it holds so the tolerance below can judge them.
+    expanded = buffer_differences(reference, mine, found)
+    if expanded is not None:
+        found = expanded
     worst = float_distance(found)
     if worst is not None and worst < 1.0e-6:
         answer["classification"] = "float-tolerance"

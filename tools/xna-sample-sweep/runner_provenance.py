@@ -337,6 +337,84 @@ def buildConfiguration(text):
     return found.group(1) if found else None
 
 
+def sourceRoot(text, sample):
+    """The directory the runner hands `BuildContent` as `RootDirectory`, when it is not the
+    project's own.
+
+    An `Include` is relative to that directory, so a runner that points it somewhere else is
+    building *different files* under the same project. One does: SAMPLE-146's runner sets it to
+    `xna4-diagnostic\\content-source`, a copy of the game's `Content` whose `SimpleScreen.fx`
+    compiles its pixel shader `ps_2_0` where the shipped one says `ps_1_1`, which XNA 4.0 and the
+    June 2010 `fxc` both refuse. Reading the project against the shipped tree makes that one asset
+    a build failure and the reference unexplainable; reading it against the tree the runner named
+    builds it (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-212`).
+
+    Only a literal chain is followed -- a `const` assigned a string, or another `const` plus one --
+    because what a runner computes is not in its source.
+
+    @param text The runner's source.
+    @param sample The sample directory's name, which anchors the path.
+    @return The root relative to the sample, or None when it is the project's own or not literal.
+    """
+    named = re.search(r"RootDirectory\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\s*,", text)
+    if named is None:
+        return None
+    constants = dict(re.findall(
+        r'\bconst\s+string\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([^;]+);', text))
+    seen = set()
+    name = named.group(1)
+    while name in constants and name not in seen:
+        seen.add(name)
+        expression = constants[name].strip()
+        parts = [p.strip() for p in expression.split("+")]
+        literal = ""
+        base = None
+        for part in parts:
+            quoted = re.match(r'^@?"([^"]*)"$', part)
+            if quoted:
+                literal += quoted.group(1)
+            elif re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", part) and base is None:
+                base = part
+            else:
+                return None
+        if base is None:
+            whole = literal
+        else:
+            name = base
+            constants[name] = constants.get(name, "")
+            # Resolve the base first, then append what this level added.
+            resolved = sourceRoot_resolve(constants, base)
+            if resolved is None:
+                return None
+            whole = resolved + literal
+        marker = "\\" + sample + "\\"
+        if marker not in whole:
+            return None
+        relative = whole.split(marker, 1)[1].replace("\\", "/").strip("/")
+        return relative or None
+    return None
+
+
+def sourceRoot_resolve(constants, name, depth=0):
+    """The literal a `const string` chain spells, or None when it is not literal."""
+    if depth > 8 or name not in constants:
+        return None
+    literal = ""
+    base = None
+    for part in [p.strip() for p in constants[name].split("+")]:
+        quoted = re.match(r'^@?"([^"]*)"$', part)
+        if quoted:
+            literal += quoted.group(1)
+        elif re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", part) and base is None:
+            base = part
+        else:
+            return None
+    if base is None:
+        return literal
+    head = sourceRoot_resolve(constants, base, depth + 1)
+    return None if head is None else head + literal
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--root", default="/rv/tmp/samples")
@@ -360,6 +438,7 @@ def main(argv=None):
             "kind": classify(text),
             "parameterOverrides": overrides(text),
             "buildConfiguration": buildConfiguration(text),
+            "sourceRoot": sourceRoot(text, sample),
         }
     counts = {}
     for entry in document["samples"].values():

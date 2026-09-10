@@ -83,7 +83,7 @@ def first_difference(left, right):
 MSBUILD_NS = "http://schemas.microsoft.com/developer/msbuild/2003"
 
 
-def reconstruct_project(project, runner, staged):
+def reconstruct_project(project, runner, staged, source_root=None):
     """The project as the sample's runner actually built it, beside a copy of its sources.
 
     Most of these runners hand-list their assets and pass no `ProcessorParameters` at all, so the
@@ -95,6 +95,9 @@ def reconstruct_project(project, runner, staged):
     @param project The original `.contentproj`.
     @param runner The sample's entry in `runner-provenance.json`.
     @param staged Directory to build the reconstruction in.
+    @param source_root The directory the runner handed `BuildContent` as `RootDirectory`, when it
+           is not the project's own. An `Include` is relative to it, so a runner that points it
+           elsewhere is building different files under the same project.
     @return The reconstructed project's path, or None when the project needs no reconstruction.
     """
     overrides = {posixpath.basename(k): v for k, v in runner.get("parameterOverrides", {}).items()}
@@ -113,9 +116,9 @@ def reconstruct_project(project, runner, staged):
             element = ET.SubElement(item, "{%s}ProcessorParameters_%s" % (MSBUILD_NS, name))
             element.text = wanted[name]
             changed = True
-    if not changed:
+    if not changed and source_root is None:
         return None
-    source = os.path.dirname(project)
+    source = source_root or os.path.dirname(project)
     if not os.path.isdir(staged):
         shutil.copytree(source, staged,
                         ignore=shutil.ignore_patterns("bin", "obj", "*.xnb"))
@@ -138,10 +141,22 @@ def build_one(job):
     project = os.path.join(root, unit["project"])
     runner = provenance.get(unit["sample"], {})
     reconstructed = None
-    if runner.get("kind") in ("explicit", "enumerated"):
+    # `BuildContent`'s `RootDirectory` is what an `Include` is relative to, and one runner points
+    # it at a tree that is not the project's: SAMPLE-146 builds `xna4-diagnostic/content-source`,
+    # whose `SimpleScreen.fx` compiles `ps_2_0` where the shipped copy says `ps_1_1` -- which XNA
+    # 4.0 and the June 2010 `fxc` both refuse, so reading the project against the shipped tree
+    # makes that asset a build failure (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-212`).
+    source_root = None
+    named = runner.get("sourceRoot")
+    if named and os.path.abspath(project).startswith(os.path.abspath(root) + os.sep):
+        candidate = os.path.join(root, unit["sample"], named)
+        if (os.path.isdir(candidate)
+                and os.path.normpath(candidate) != os.path.normpath(os.path.dirname(project))):
+            source_root = candidate
+    if runner.get("kind") in ("explicit", "enumerated") or source_root:
         staged = os.path.join(staging, slug(unit["project"]).replace(".contentproj", ""))
         try:
-            reconstructed = reconstruct_project(project, runner, staged)
+            reconstructed = reconstruct_project(project, runner, staged, source_root)
         except Exception as error:  # noqa: BLE001 - a reconstruction that fails is a finding
             reconstructed = None
             print("reconstruct failed for %s: %s" % (unit["project"], error), flush=True)
@@ -284,15 +299,23 @@ def main(argv=None):
     units = document["buildUnits"]
     if args.only:
         units = [u for u in units if args.only in u["outputRoot"]]
+    # A reference belongs to exactly one call. A second-pass unit builds into its own directory,
+    # so a reference its project declares must be compared there and *not* in the owner's, where
+    # it is bound to be missing: SAMPLE-031's two diagnostic fonts were reported missing by the
+    # owner and extra by the second pass, which is the same two files counted twice and explained
+    # neither time (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-212`).
+    second_pass = {(u["outputRoot"], u["project"]) for u in units if u.get("secondPass")}
     by_root = {}
     for mapping in document["mappings"]:
         for unit in units:
-            if mapping["reference"].startswith(unit["outputRoot"] + "/"):
+            if not mapping["reference"].startswith(unit["outputRoot"] + "/"):
+                continue
+            if (unit["outputRoot"], mapping.get("project")) in second_pass:
+                by_root.setdefault(unit["outputRoot"] + "\x00" + mapping["project"],
+                                   []).append(mapping)
+            else:
                 by_root.setdefault(unit["outputRoot"], []).append(mapping)
-                if unit.get("secondPass") and mapping.get("project") == unit["project"]:
-                    by_root.setdefault(unit["outputRoot"] + "\x00" + unit["project"],
-                                       []).append(mapping)
-                break
+            break
 
     provenance = {}
     if os.path.exists(args.provenance):

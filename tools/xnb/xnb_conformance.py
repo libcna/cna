@@ -678,6 +678,7 @@ class Reader:
         self.table = table
         self.version = version
         self.shared_count = shared_count
+        self.keep_payloads = False
         # The Xbox 360 is big-endian, and the one payload in XNA 4.0 that carries multi-byte
         # fields outside the object graph's own little-endian encoding is the SoundEffect's
         # WAVEFORMATEX block. Reading it the wrong way round makes a well-formed file look
@@ -988,16 +989,26 @@ class Reader:
             declaration = self.vertex_declaration()
             count = self.cursor.u32()
             payload = self.cursor.take(count * declaration["stride"])
-            return {"reader": name, "declaration": declaration, "vertexCount": count,
-                    "byteCount": len(payload), "digest": _digest(payload)}
+            record = {"reader": name, "declaration": declaration, "vertexCount": count,
+                      "byteCount": len(payload), "digest": _digest(payload)}
+            # Opt-in, because a payload is not a measurement and every comparison of two parses
+            # would otherwise be comparing megabytes. A caller that has already found two digests
+            # differing asks for them to read what actually differs
+            # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-210`).
+            if self.keep_payloads:
+                record["payload"] = payload
+            return record
         if name == "Microsoft.Xna.Framework.Content.IndexBufferReader":
             sixteen = self.cursor.boolean()
             payload = self.cursor.blob()
             width = 2 if sixteen else 4
             if len(payload) % width != 0:
                 self.cursor.fail("index payload is not a whole number of indices")
-            return {"reader": name, "indexElementSize": width,
-                    "indexCount": len(payload) // width, "digest": _digest(payload)}
+            record = {"reader": name, "indexElementSize": width,
+                      "indexCount": len(payload) // width, "digest": _digest(payload)}
+            if self.keep_payloads:
+                record["payload"] = payload
+            return record
         if name == "Microsoft.Xna.Framework.Content.BasicEffectReader":
             return {"reader": name, "texture": self.cursor.string(),
                     "diffuse": self.cursor.vector3(), "emissive": self.cursor.vector3(),
@@ -1145,8 +1156,15 @@ def _digest(data: bytes) -> str:
     return f"{value:016x}"
 
 
-def parse(path: str) -> dict:
-    """Parses one `.xnb` file completely and returns a structured report."""
+def parse(path: str, keep_payloads: bool = False) -> dict:
+    """Parses one `.xnb` file completely and returns a structured report.
+
+    @param path The container to read.
+    @param keep_payloads Keeps each vertex and index buffer's raw bytes in its record under
+           `payload`, so a caller that has found two digests differing can read what differs.
+           Off by default: a payload is not a measurement, and carrying one makes every
+           comparison of two reports compare megabytes.
+    """
     size = os.path.getsize(path)
     if size > MAX_FILE_BYTES:
         raise XnbError(f"{path}: {size} bytes exceeds this parser's ceiling")
@@ -1236,6 +1254,7 @@ def parse(path: str) -> dict:
     report["sharedResourceCount"] = shared_count
 
     reader = Reader(cursor, table, version, shared_count, platform)
+    reader.keep_payloads = keep_payloads
     root_entry = reader.reader_reference()
     report["rootReader"] = root_entry["canonical"]
     report["root"] = reader.root(root_entry)

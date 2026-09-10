@@ -188,12 +188,20 @@ def main(argv=None):
             # exercise's `sky.png` and came out 800x720 against a reference of 800x480. The
             # variant's own name is what tells them apart, so it is scored: the words in the
             # output root's directory that also appear in the project's path.
-            variant = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", output_root.rstrip("/").split("/")[-2]
-                             if output_root.rstrip("/").split("/")[-1].lower().startswith("content")
-                             and len(output_root.rstrip("/").split("/")) > 1
-                             else output_root.rstrip("/").split("/")[-1])
-            variant_words = [w for w in re.split(r"[^A-Za-z0-9]+", variant.lower())
-                             if len(w) > 3 and w not in ("content", "build", "xna4", "bin")]
+            # Two components rather than one, because a runner that gives every asset an output
+            # directory of its own puts the *asset* last and the thing that tells two assets of the
+            # same name apart one above it. SAMPLE-141's five series each hold an `explosion`, and
+            # the last component alone scores every one of them equally: the reference under
+            # `3d-series-2-flightsim/explosion` was read against `2d-shooters/explosion.png` and
+            # came out a 512x512 texture where the reference is a mono 8-bit sound
+            # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-209`).
+            components = output_root.rstrip("/").split("/")
+            meaningful = [c for c in components if not c.lower().startswith("content")]
+            variant_words = []
+            for component in (meaningful[-2:] if len(meaningful) > 1 else meaningful[-1:]):
+                spread = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", component)
+                variant_words += [w for w in re.split(r"[^A-Za-z0-9]+", spread.lower())
+                                  if len(w) > 3 and w not in ("content", "build", "xna4", "bin")]
 
             def rank(project_path, explained):
                 relative = os.path.relpath(project_path, root).replace(os.sep, "/").lower()
