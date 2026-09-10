@@ -204,7 +204,7 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 |---|---|---|---|---|
 | Legacy post-process effects (`DepthEffect`, `CRTEffect`) | ✅ GLSL | ✅ both select portable GLSL/SPIR-V packages (`MOD-2239s`/`MOD-2239t`) | ⬜ | `AsciiPostProcessEffect` is CPU-side and runs everywhere |
 | Float/HDR render targets | ✅ exact 2D/cube targets, runtime-probed | ✅ exact Float16/Float32 `RenderTarget2D` and `RenderTargetCube`, device-probed (`MOD-2223`/`MOD-2234`) | ⬜ | ⬜ — each reports `false` and the target constructor refuses the format rather than substituting `Color` |
-| `RenderPipeline` + post-process passes | ✅ | 🟨 eighteen built-in portable pass consumers plus portable `CRTEffect` and `DepthEffect` through `EffectPass` now run, including aerial perspective, volumetric fog, contact shadows, SSR, SSAO, Bloom, colour grading, depth of field, motion blur, analytic height fog, light shafts, tonemap/deband and texture/file HDR display encoding; remaining source-only passes copy through | ⬜ | The passes need `GraphicsCapability::CustomEffects`; without it each copies its input and the frame still renders |
+| `RenderPipeline` + post-process passes | ✅ | ✅ all eighteen built-in pass consumers plus portable `CRTEffect` and `DepthEffect` through `EffectPass` run, including aerial perspective, volumetric fog, contact shadows, SSR, SSAO, Bloom, colour grading, depth of field, motion blur, analytic height fog, light shafts, tonemap/deband and texture/file HDR display encoding | ⬜ | The shader-based passes need a usable package variant; without one each copies its input and the frame still renders |
 | Depth/normal/velocity prepass | ✅ rigid/skinned producer | ✅ portable rigid/skinned GLSL/SPIR-V package (`MOD-2239l`) | ⬜ | ⬜ — consumers needing these scene images remain unsupported unless this producer or equivalent application inputs run |
 | Shadow maps (directional, PCF) | ✅ generation + reception on all four lit effects | ✅ portable rigid/skinned generation (`MOD-2237`) + stock reception (`MOD-2236`) | ⬜ | ⬜ — an effect accepts the shadow state and a renderer without the shader ignores it, so the frame renders unshadowed rather than failing |
 | Cascaded shadow maps (2-4, atlas) | ✅ same four programs, one shared shader path | ✅ portable atlas generation + stock reception | ⬜ | ⬜ — same accepted-and-ignored convention |
@@ -216,6 +216,7 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 | Materials (`PbrMaterial` ↔ `PbrEffect`) | ✅ | ✅ | ✅ | ✅ — no renderer code at all: it moves values between two existing objects |
 | Instancing / LOD / culling | ✅ | ✅ measured — `cnaext_instancing_lod_test` passes 5/5 on a real Vulkan device | ⬜ | ⬜ — `LodGroupEXT` and `FrustumCullerEXT` are renderer-free and run everywhere; `InstancedRendererEXT` needs `GraphicsCapability::Instancing` and otherwise refuses (or falls back, on request) |
 | Compute / storage buffers | ✅ GL ES ≥ 3.1 / GL ≥ 4.3, runtime-probed; ordinary texture image bindings desktop-GL only | ✅ SPIR-V, reflected SSBO/push constants, readonly vertex/fragment SSBOs, fifteen exact dedicated storage-image formats plus legal ordinary-texture/render-target bridges in one deferred order | ⬜ | ⬜ — both wrappers throw `System::NotSupportedException` naming the renderer |
+| Auto-exposure | ✅ portable compute reduction over uploaded or rendered textures | ✅ portable SPIR-V reduction with tracked render-target sampling (`MOD-2239x`) | ⬜ | ⬜ — construction refuses when no compute/package variant exists rather than reporting a fabricated exposure |
 | Indirect draws | ✅ GL ES ≥ 3.1 / GL ≥ 4.0, runtime-probed; both routes, including per-instance streams | ✅ device-gated `drawIndirectFirstInstance`; both routes, deferred lifetime and compute-written commands | ⬜ | ⬜ — `SupportsIndirectDrawEXT()` is false by default and `GraphicsDevice` refuses the draw naming the renderer |
 | GPU culling into an indirect draw | ✅ portable GLSL package + vertex-stage SSBO | ✅ portable SPIR-V compute package, reflected vertex-stage SSBO and compute-written indirect command (`MOD-2239v`) | ⬜ | ⬜ — `GpuInstanceCuller` refuses and names the missing requirement; there is no fallback, because a CPU path would not remove the stall |
 | Particles | ✅ portable GPU simulation + instanced billboards | ✅ portable SPIR-V compute/draw package, reflected vertex SSBO and no readback (`MOD-2239w`) | 🟨 same | 🟨 — `ParticleSystem` falls back to its CPU path and the same particles appear, more slowly |
@@ -262,11 +263,12 @@ depth/normal/velocity producer, `MOD-2239m` adds screen-space reflections, `MOD-
 screen-space contact shadows, `MOD-2239o` adds projected decals, `MOD-2239p` adds aerial
 perspective, `MOD-2239r` adds volumetric fog, `MOD-2239s`/`MOD-2239t` add the legacy
 `CRTEffect`/`DepthEffect` pair, `MOD-2239u` adds weighted order-independent transparency,
-`MOD-2239v` adds portable GPU instance culling, and `MOD-2239w` adds portable GPU particle
-simulation and drawing. The remaining
-post-process paths still provide source alone and remain unavailable on Vulkan. Portable packages
-use the language/stage query to select a payload;
-subsystems still ask their own semantic capability before promising a visible result.
+`MOD-2239v` adds portable GPU instance culling, `MOD-2239w` adds portable GPU particle
+simulation and drawing, and `MOD-2239x` adds portable auto-exposure reduction. The remaining
+shader-based built-in post-process rollout is now complete. Portable packages use the
+language/stage query to select a payload; third-party source-only passes remain conservatively
+unsupported on a binary-only renderer, and subsystems still ask their own semantic capability
+before promising a visible result.
 
 **Explicit code values.** `ShaderCodeEXT` is the owned input atom for portable shader packages. It
 stores one exact language/dialect, stage, non-empty entry point, diagnostic label and either owned
@@ -301,7 +303,7 @@ Legend: ✅ verified in this repository · 🟨 partial, or verified only by sha
 | `OpenGLES2` | 🟨 shares EasyGL | GLSL ES 1.00: the shaders are transformed, so no `textureLod` (rough IBL reflections read the base mip), no dynamic uniform-array indexing, statically countable loops only. |
 | `WebGL1` | 🟨 shares EasyGL | As `OpenGLES2`, plus: no compute in any WebGL version. |
 | `WebGL2` | 🟨 shares EasyGL | No compute; otherwise the ES 3.00 path. |
-| `Vulkan` | 🟨 measured | Verified on RADV and llvmpipe: exact float/HDR 2D and cube targets, instancing, stock-PBR IBL, portable cube and atmospheric skies, eighteen portable post-process consumers, both legacy post-process effects and their depth/normal/velocity prepass producer, directional/cascade/point/spot shadow generation and reception, compute/storage resources, indirect draws and GPU timers work. Remaining source-authored post-process paths are unavailable because Vulkan consumes packaged SPIR-V rather than this layer's GLSL; presentation remains sRGB-only. |
+| `Vulkan` | 🟨 measured | Verified on RADV and llvmpipe: exact float/HDR 2D and cube targets, instancing, stock-PBR IBL, portable cube and atmospheric skies, all eighteen built-in post-process consumers, both legacy post-process effects and their depth/normal/velocity prepass producer, directional/cascade/point/spot shadow generation and reception, portable auto-exposure, compute/storage resources, indirect draws and GPU timers work. The remaining engine-layer shader-package gaps are clustered assignment/shading; arbitrary third-party GLSL source remains intentionally unavailable, and presentation remains sRGB-only. |
 | `Headless` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Three limits it does not advertise — no render-target readback, no cube-face storage, and a cube-face bind that records the face without making it current. The engine layer constructs and passes through; tests probe the three rather than assume them. |
 | `Software` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Render targets, readback and cube storage all work; what does **not** is custom shader source — it is accepted and then ignored, which is why every shader-based subsystem asks `ExecutesShaderEffectSourceEXT()` as well as `CustomEffects`. |
 | `Stub` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Stricter than `Headless` — it refuses to bind a `RenderTarget2D` at all, so a pipeline stops before it renders. Everything above that point constructs and reports false. |
@@ -2402,9 +2404,11 @@ if (device.SupportsCapability(GraphicsCapability::ComputeShaders)) {
 - **`Texture2D::GetData` never shows compute writes.** It answers from the CPU pixels the texture
   was uploaded with. Compute output reaches the CPU through a storage buffer, or reaches the screen
   by being sampled in a draw.
-- **The gap worth naming**: a storage buffer cannot be bound as a vertex stream, so a
-  GPU-resident particle system has to come back through the CPU. Measured at 100 000 particles on
-  llvmpipe: GPU step **0.881 ms**, CPU step **2.401 ms**, read-back **0.806 ms**.
+- **The avoided transfer worth measuring**: a storage buffer is not a vertex stream, but portable
+  custom vertex shaders can read it directly. Production `ParticleSystem` therefore stays on the
+  GPU. The low-level baseline deliberately reads 100 000 particles back before building an ordinary
+  instance stream; its historical llvmpipe measurements were GPU step **0.881 ms**, CPU step
+  **2.401 ms**, read-back **0.806 ms**.
 
 **Auto-exposure** (`AutoExposureEXT`) is the first consumer inside the engine layer, and the reason
 `MOD-308` deferred auto-exposure until compute existed:
@@ -2415,12 +2419,16 @@ exposure.update(*pipeline.getSceneTarget(), elapsedSeconds);
 exposure.applyTo(pipeline.getSettings());     // TonemapPass already reads getExposure()
 ```
 
-It reduces a 64×64 sample grid in shared memory to 64 partials and finishes the sum on the CPU —
-64 floats cost less to fetch than a second kernel launch costs to start. The average is a
+Its generated package selects GLSL ES, desktop GLSL or SPIR-V and samples both ordinary uploaded
+textures and a rendered scene target. It reduces a 64×64 sample grid in shared memory to 64
+partials and finishes the sum on the CPU — 64 floats cost less to fetch than a second kernel launch
+costs to start. The average is a
 **log**-average, so a handful of very bright pixels cannot crush the frame, and adaptation is
 exponential and **asymmetric**: adapting to a brighter scene is fast, to a darker one slow, as an
 eye is. The speeds are named for the scene, not the exposure — a brighter scene means a *lower*
-exposure, and getting that comparison backwards is invisible until something moves.
+exposure, and getting that comparison backwards is invisible until something moves. The same
+seven behavior cases pass on Vulkan llvmpipe and EasyGL, including the render-target path with no
+CPU texture readback.
 
 Legend: ✅ implemented and verified · 🟨 partial · ⬜ not implemented · ⛔ deliberately unsupported.
 

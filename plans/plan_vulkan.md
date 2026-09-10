@@ -262,17 +262,19 @@ implementation tasks.**
   packages weighted order-independent transparency's resolve and portable accumulation fixtures,
   and `MOD-2239v` packages `GpuInstanceCuller`'s compute stage plus its cross-language
   vertex-storage contract, while `MOD-2239w` packages `ParticleSystem`'s compute and draw stages
-  plus the low-level compute-particle example,
+  plus the low-level compute-particle example, and `MOD-2239x` packages `AutoExposureEXT`'s
+  sampled-texture compute reduction,
   all with an explicit
   texture-UV/XNA-camera-NDC bridge where reconstruction needs it. The
   bloom work also fixes secondary
   `RenderTarget2D` sampling through Vulkan `ShaderEffect`, which previously substituted the white
   fallback because the binding accepted only the uploaded-texture concrete type.
   All through `MOD-2239t` are verified on RADV, Vulkan llvmpipe and EasyGL; `MOD-2239u` through
-  `MOD-2239w` are verified on Vulkan llvmpipe and EasyGL because hardware Vulkan cannot present
+  `MOD-2239x` are verified on Vulkan llvmpipe and EasyGL because hardware Vulkan cannot present
   through Xvfb here and the
   user's real desktop was deliberately not used. The HDR encoder does not
-  claim an HDR swap chain, and the remaining source-only effects retain copy-through fallbacks;
+  claim an HDR swap chain; all built-in shader-based post-process passes are packaged, while
+  third-party source-only passes retain copy-through fallbacks;
 - the renderer-neutral immutable storage-buffer descriptor, exact range transfers/copy and tracked
   facade are complete (`MOD-2229`). Vulkan translates every declared role into exact
   `VkBufferUsageFlags`, keeps CPU-none buffers device-local and unmapped, and has byte-exact
