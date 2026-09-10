@@ -170,7 +170,8 @@ TEST(FilmGrainTest, TheGrainIsDeterministicForAGivenTime)
     // not. Two applications at the same time must agree exactly.
     GraphicsDevice gd;
     FilmGrainPass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer has no executable film-grain shader variant";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto source = MakeImage(gd, [](int, int) { return Color(128, 128, 128, 255); });
@@ -204,12 +205,14 @@ TEST(FilmGrainTest, TheMidtonesCarryMoreGrainThanTheBlacks)
     // highlights; uniform noise across the range reads as a broken sensor.
     GraphicsDevice gd;
     FilmGrainPass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer has no executable film-grain shader variant";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
-    // Top half near black, bottom half mid grey.
-    auto source = MakeImage(gd, [](int, const int y) {
-        const int value = y < kSize / 2 ? 4 : 128;
+    // Left half near black, right half mid grey. A left/right split keeps this property test
+    // independent of the render-target Y orientation used by the backend.
+    auto source = MakeImage(gd, [](const int x, int) {
+        const int value = x < kSize / 2 ? 4 : 128;
         return Color(value, value, value, 255);
     });
     RenderTarget2D destination(gd, kSize, kSize);
@@ -220,11 +223,11 @@ TEST(FilmGrainTest, TheMidtonesCarryMoreGrainThanTheBlacks)
     pass.apply(context);
 
     const std::vector<Color> pixels = ReadTarget(destination);
-    const auto spreadOver = [&](const int firstRow, const int lastRow) {
+    const auto spreadOver = [&](const int firstColumn, const int lastColumn) {
         double sum = 0.0, sumSquares = 0.0;
         int count = 0;
-        for (int y = firstRow; y <= lastRow; ++y)
-            for (int x = 0; x < kSize; ++x)
+        for (int y = 0; y < kSize; ++y)
+            for (int x = firstColumn; x <= lastColumn; ++x)
             {
                 const double v = pixels[At(x, y)].getRProperty();
                 sum += v; sumSquares += v * v; ++count;

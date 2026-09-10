@@ -97,6 +97,18 @@ namespace CNA::Graphics::detail
             {kFxaaVulkanFragmentSpirV, kFxaaVulkanFragmentSpirVByteSize,
              "post_process/fxaa.vulkan.frag.spv"});
     }
+
+    ShaderPackageEXT CreateFilmGrainShaderPackage()
+    {
+        using namespace CNA::Graphics::detail::PostProcessGenerated;
+        return MakeFullscreenPackage(
+            {kFilmGrainEsFragmentSource, "post_process/film_grain.es.frag.glsl"},
+            {kFilmGrainDesktopFragmentSource,
+             "post_process/film_grain.desktop.frag.glsl"},
+            {kFilmGrainVulkanFragmentSpirV,
+             kFilmGrainVulkanFragmentSpirVByteSize,
+             "post_process/film_grain.vulkan.frag.spv"});
+    }
 }
 
 #endif // CNA_CNAEXT

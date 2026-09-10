@@ -12,6 +12,9 @@ namespace CNA::Graphics::detail
 
     /** @brief Creates the portable FXAA fullscreen shader package. */
     [[nodiscard]] ShaderPackageEXT CreateFxaaShaderPackage();
+
+    /** @brief Creates the portable film-grain fullscreen shader package. */
+    [[nodiscard]] ShaderPackageEXT CreateFilmGrainShaderPackage();
 }
 
 #endif // CNA_CNAEXT

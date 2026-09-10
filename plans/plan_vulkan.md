@@ -243,8 +243,9 @@ implementation tasks.**
   GLSL ES/desktop GLSL/SPIR-V package and verifies the same six-face, yaw, tint/intensity, HDR and
   foreground-visibility contract on RADV, Vulkan llvmpipe and EasyGL;
 - engine-layer post-processing remains owned by the modern plan. `MOD-2239` begins its portable
-  package rollout with chromatic aberration and `MOD-2218` adds FXAA, verified on RADV, Vulkan
-  llvmpipe and EasyGL; the remaining source-only effects retain copy-through fallbacks;
+  package rollout with chromatic aberration, `MOD-2218` adds FXAA and `MOD-2219` adds film grain,
+  verified on RADV, Vulkan llvmpipe and EasyGL; the remaining source-only effects retain
+  copy-through fallbacks;
 - the renderer-neutral immutable storage-buffer descriptor, exact range transfers/copy and tracked
   facade are complete (`MOD-2229`). Vulkan translates every declared role into exact
   `VkBufferUsageFlags`, keeps CPU-none buffers device-local and unmapped, and has byte-exact
