@@ -83,6 +83,43 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
             FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
     endforeach()
 
+    # SDLGPU-58: renderer-neutral, discriminating state fixtures. The five compact shared
+    # matrices cover the broad equations; the verbatim EasyGL oracle sources below exercise
+    # independent colour/alpha fields, write-disable, stencil masks/operations/two-sided state,
+    # and the dynamic reference value without maintaining SDL-specific copies.
+    foreach(state_parity_test IN ITEMS
+            blend_states
+            depth_states
+            stencil_states
+            stencil_compare
+            rasterizer_viewport)
+        cna_sdlgpu_test(cna_test_sdlgpu_parity_${state_parity_test}
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/parity/parity_${state_parity_test}.cpp)
+        cna_register_renderer_test(NAME SdlGpu_Parity_${state_parity_test}
+            COMMAND cna_test_sdlgpu_parity_${state_parity_test}
+            TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+        set_tests_properties(SdlGpu_Parity_${state_parity_test} PROPERTIES
+            FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+    endforeach()
+
+    foreach(state_oracle_test IN ITEMS
+            blendstate_separate_factors
+            blendstate_separate_functions
+            depthstencilstate_compare_function
+            depthstencilstate_write_enable
+            depthstencilstate_stencil_mask
+            depthstencilstate_stencil_ops
+            depthstencilstate_stencil_twosided
+            graphicsdevice_reference_stencil)
+        cna_sdlgpu_test(cna_test_sdlgpu_easygl_oracle_${state_oracle_test}
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_${state_oracle_test}_test.cpp)
+        cna_register_renderer_test(NAME SdlGpu_EasyGLOracle_${state_oracle_test}
+            COMMAND cna_test_sdlgpu_easygl_oracle_${state_oracle_test}
+            TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+        set_tests_properties(SdlGpu_EasyGLOracle_${state_oracle_test} PROPERTIES
+            FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+    endforeach()
+
     foreach(sampler_parity_test IN ITEMS
             sampler_filters
             sampler_max_mip_level

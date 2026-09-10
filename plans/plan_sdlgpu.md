@@ -18,16 +18,16 @@
 | Renderer under test | `modules/renderers/sdl-gpu/{include,src,tests,examples}` |
 | EasyGL / SDL GPU example sources | 246 / 38 `.cpp` files (source count, not capability count) |
 | EasyGL / SDL GPU renderer unit-test sources | 2 / 2 `.cpp` files |
-| SDL GPU registered integration tests | 96 CTests (85 baseline plus eleven shared parity fixtures) |
-| Shared EasyGL parity fixtures available | 30 renderer-neutral sources in `modules/graphics/examples/parity` |
-| Shared parity fixtures registered for SDL GPU | 11/30 (wireframe, four sampler, four vertex-semantic, multi-stream and instancing fixtures) |
+| SDL GPU registered integration tests | 109 CTests (85 baseline plus 24 parity/remediation registrations) |
+| Shared EasyGL parity fixtures available | 31 renderer-neutral sources in `modules/graphics/examples/parity` |
+| Shared parity fixtures registered for SDL GPU | 16/31 (wireframe; four sampler; four vertex-semantic; multi-stream; instancing; and five render-state fixtures) |
 | Tasks created by this audit | 30 (`SDLGPU-55`–`SDLGPU-84`) |
-| Completed / open / proven unavoidable | 13 / 17 / 0; `SDLGPU-80` is a candidate limitation, not yet counted complete |
+| Completed / open / proven unavoidable | 14 / 16 tasks; 1 capability field (`BlendState.MultiSampleMask`) is proven unavailable in current SDL_gpu and is not a separate task; `SDLGPU-80` remains a candidate limitation |
 | SDL GPU build | Stable `cmake-build-sdlgpu`, Debug, `CNA_GRAPHICS_RENDERER=SDL_GPU`, tests/examples ON |
 | EasyGL oracle build | Stable `cmake-build-debug`, Debug, `CNA_GRAPHICS_RENDERER=OPENGL33`, tests/examples ON |
 | Runtime driver | SDL 3.5.0 SDL_gpu Vulkan on AMD Radeon 780M / Mesa RADV 25.0.7; Khronos validation layer 1.4.309 present |
 | Display constraint | Sandboxed tests cannot access host `:0`; SDL `offscreen` successfully creates the real Vulkan GPU device. Escalated preservation checks can use host `:0` (WebGPU), while EasyGL uses Xvfb `:179`. The SDL GPU test-driver cache setting defaults to `x11` and is locally set to `offscreen`. |
-| Validation | Debug mode is enabled in current source. The offscreen 85-test baseline emitted no captured `VUID`, `Validation Error`, or `Validation Warning`; all new GPU regressions must retain fatal validation regexes. |
+| Validation | Debug mode is enabled in current source. The offscreen 85-test baseline and SDLGPU-58's 14-test state suite emitted no captured `VUID`, `Validation Error`, or `Validation Warning`; all new GPU regressions retain fatal validation regexes. |
 | Focused EasyGL oracle baseline | 28/28 selected tests pass on Xvfb/llvmpipe: five stock-effect goldens, blend/depth/raster goldens, packed/DXT formats, surface-format refusal, 2D/cube RT properties, volume/cube data paths, MRT, instancing (including nonidentity effect World) and occlusion lifecycle/rendering |
 
 The first attempted baseline used the suite's historical hard-coded `SDL_VIDEODRIVER=x11` and
@@ -79,15 +79,16 @@ underlying limitation with no correct reasonable emulation; `out` excluded moder
 
 | Family | EasyGL reference | SDL GPU current state | State / owner |
 |---|---|---|---|
-| Clear color/depth/stencil overloads | Direct GL clears; ordered-clear corpus | Deferred clear commands and all combinations | `~` — all ordering tests pass; exhaustive state aspects remain `SDLGPU-58` |
+| Clear color/depth/stencil overloads | Direct GL clears; ordered-clear corpus | Deferred clear commands and all combinations | `=` — ordered clear/draw/cube-target tests and state suites pass; `SDLGPU-58/66` |
 | Present, interval and modes | Runtime swap interval; resize examples | SDL claim/present modes and proxy copy | `~` — reset/resize/minimize recheck; `SDLGPU-68` |
 | Backbuffer size/readback/channel order | Direct readback, RGBA contract | Real `backbufferProxy_` download, contrary to old SDLGPU-39 text | `=` — dimension/first-read/range tests pass; recheck in `SDLGPU-68` |
 | Logical resolution/transforms/letterbox | Explicit default viewport and transforms | Explicit physical/logical transforms | `~` — resize and viewport restoration pending; `SDLGPU-68` |
-| Blend factors/functions/BlendFactor | Full separate RGB/A state | Immutable pipeline state and dynamic factor | `~` — broad shared equation oracle pending; `SDLGPU-58` |
-| ColorWriteChannels/MultiSampleMask | Four masks; coverage where native | Four pipeline masks; sample mask in key | `~` — adversarial MRT/mask test pending; `SDLGPU-58` |
-| Depth compare/write | All comparisons | Mapped into immutable pipeline | `~` — shared 8×3 oracle pending; `SDLGPU-58` |
-| Stencil masks/ops/two-sided/reference | Full front/back state | Full descriptor and dynamic reference | `~` — shared exhaustive oracle/cache A→B→A pending; `SDLGPU-58` |
-| Cull/scissor/viewport/depth range | Full GL state | Deferred snapshots, most targeted tests pass | `~` — shared cross-renderer oracle pending; `SDLGPU-58`, `68` |
+| Blend factors/functions/BlendFactor | Full separate RGB/A state | Complete immutable pipeline state and per-draw dynamic factor | `=` — all 13 factors in all four roles, all five equations for RGB/A, separate fields and A→B→A are pixel-verified; `SDLGPU-58` |
+| ColorWriteChannels | Four slot-aligned masks | Four slot-aligned immutable pipeline masks | `=` — every slot-0 mask value plus distinct four-MRT-slot masks and cache restoration pass; `SDLGPU-58` |
+| MultiSampleMask | EasyGL also documents non-default masks as unimplemented | SDL receives the value but cannot apply it | `⛔` — SDL 3.5 requires `sample_mask=0` and `enable_mask=false`; arbitrary-shader emulation cannot preserve sample coverage/depth/stencil side effects; `SDLGPU-58` |
+| Depth compare/write | All comparisons | Complete immutable depth state | `=` — shared 8×3 signature matrix, exact EasyGL frame, direct EasyGL source and write-enable oracle pass; `SDLGPU-58` |
+| Stencil masks/ops/two-sided/reference | Full front/back state | Complete immutable descriptor and per-draw dynamic reference | `=` — all eight compares and operations, masks, two-sided state and reference pass, including A→B→A; `SDLGPU-58` |
+| Cull/scissor/viewport/depth range | Full GL state | Cull/bias immutable; scissor/viewport/range captured per draw | `~` — cull/scissor/bias are verified; target-switch and depth-range lifecycle remains `SDLGPU-67/68` |
 | FillMode.WireFrame | Renderer-side triangle-edge expansion | Native `SDL_GPU_FILLMODE_LINE` in every ordinary pipeline | `=` — shared asymmetric three-edge fixture passes; `SDLGPU-61` |
 | Constant/slope depth bias | GL polygon offset with XNA normalization | Per-format normalized-to-native conversion in every immutable pipeline; SpriteBatch uses projected layer depth | `=` — expanded 67/67 pixel/cache oracle, validation clean; `SDLGPU-65` |
 | Sampler filter/address/anisotropy | All stock/effect slots | Every stock, compiled-effect and SpriteBatch command captures the complete state | `=` — shared pixel oracles plus 29/29 descriptor-capacity checks; `SDLGPU-64` |
@@ -192,20 +193,30 @@ filesystem, rejects duplicates/unknown categories/missing evidence, and currentl
 
 | Category | Count |
 |---|---:|
-| `classic-xna-covered-by-existing-sdlgpu-test` | 121 |
-| `classic-xna-direct-parity` | 8 |
-| `classic-xna-new-sdlgpu-test-needed` | 44 |
-| `classic-xna-feature-missing` | 13 |
+| `classic-xna-covered-by-existing-sdlgpu-test` | 128 |
+| `classic-xna-direct-parity` | 16 |
+| `classic-xna-new-sdlgpu-test-needed` | 33 |
+| `classic-xna-feature-missing` | 9 |
 | `modern-cnaext-out` | 51 |
 | `easygl-specific` | 9 |
 | `duplicate` | 0 |
 | `easygl-defect` | 0 |
 | `unclassified` | **0** |
 
-Classification is a triage statement, not proof of parity. The 121 “covered” programs map to
+The `easygl-defect` count describes the 246 files physically under EasyGL's example directory.
+`EASYGL-PARITY-1` below was newly exposed by a shared renderer-neutral fixture, so it is recorded in
+the defect ledger without falsely reclassifying an unrelated EasyGL example source.
+
+Classification is a triage statement, not proof of parity. The 128 “covered” programs map to
 existing SDL GPU family tests or shared graphics regressions; `SDLGPU-81` must register the same
-30 renderer-neutral parity sources and confirm their discriminating checks. A row moves whenever
+31 renderer-neutral parity sources and confirm their discriminating checks. A row moves whenever
 implementation evidence disproves its classification.
+
+### EasyGL defects discovered by the SDL GPU parity oracle
+
+| ID | Evidence and disposition |
+|---|---|
+| `EASYGL-PARITY-1` | `EasyGLRenderer::ApplyBlendState` disables blending whenever both RGB and alpha use One/Zero factors, without also requiring both equations to be Add. The SDLGPU-58 equation oracle demonstrated that ReverseSubtract then copies the source under EasyGL instead of evaluating `0 - source`; SDL GPU now evaluates the public XNA equation correctly. This EasyGL defect is not copied and is not an SDL parity blocker. A future EasyGL-local task should add the same two regression legs and include the blend functions in its opaque shortcut. |
 
 ## Executable EasyGL-parity backlog
 
@@ -262,7 +273,7 @@ underlying API limitation proven after reasonable emulation analysis.
   `SdlGpu_MRT` compatibility test also passes; the non-production SDL ratchet remains at/below its
   existing budget.
 
-### SDLGPU-58 — exhaustively verify immutable blend/depth/stencil/raster keys ⬜
+### SDLGPU-58 — exhaustively verify immutable blend/depth/stencil/raster keys ✅
 
 - **Problem/public behavior:** partial tests cannot prove every XNA state or cache identity.
 - **Evidence:** EasyGL has factor/function/compare/mask/op/two-sided suites and shared equation
@@ -271,6 +282,51 @@ underlying API limitation proven after reasonable emulation analysis.
 - **Acceptance/test:** all blend factors/functions/separate alpha/BlendFactor/write masks/sample
   mask, all depth compares, stencil masks/ops/two-sided/reference, cull/scissor/bias pass pixel
   oracles including A→B→A, with no validation output.
+- **Result (2026-09-10):** accepted, with the one rigorously bounded SDL_gpu limitation called out
+  below. Mechanical inspection confirms that every pipeline-static field used by the SDL
+  descriptors is also represented in `PipelineCacheKey`: topology; depth enable/write/function;
+  active color count/formats; sample count; depth/stencil format; blend enable and all six separate
+  factor/equation fields; every active write mask; cull/fill; normalized constant/slope bias; and
+  stencil enable, masks, front operations/function, two-sided enable and back operations/function.
+  The dynamic blend constant, stencil reference, viewport and scissor are captured per queued draw
+  and replayed through SDL_gpu's dynamic commands instead of being incorrectly baked into or read
+  late from that key.
+
+  The shared blend oracle now exhausts all 13 `Blend` values independently as color source,
+  color destination, alpha source and alpha destination; all five `BlendFunction` values for both
+  color and alpha; all 16 slot-0 channel masks; independent alpha/color fields; a nontrivial
+  `BlendFactor`; and function A→B→A. This exposed and fixed one real SDL bug: One/Zero factors only
+  permit the disabled-blend copy shortcut when both equations are Add. Two SDL-specific pixel legs
+  retain ReverseSubtract One/Zero for color and alpha, because the old shortcut would respectively
+  return the source color/source alpha instead of zero. The same experiment exposed
+  `EASYGL-PARITY-1` above; the EasyGL bug is documented rather than copied.
+
+  The depth fixture distinguishes all eight compares with the unique nearer/equal/farther
+  signatures. The new stencil fixture does the corresponding reference-less/equal/greater sweep
+  for all eight stencil compares and includes Always→Never→Always restoration. Existing shared and
+  verbatim EasyGL sources additionally discriminate all eight stencil operations (including
+  wrapping versus saturation at zero), read/write masks, fail/depth-fail/pass operations,
+  two-sided front/back state, dynamic reference, depth-write enable, culling, scissor, viewport and
+  bias. Four complete shared output frames—blend, depth, stencil operation and stencil compare—are
+  byte-identical between EasyGL and SDL GPU (**maximum channel difference 0**).
+
+  `BlendState.MultiSampleMask` is the sole unavoidable field in this family. Vendored SDL 3.5's
+  `SDL_gpu.h` lines 1862–1863 mark `SDL_GPUMultisampleState::sample_mask` and `enable_mask` reserved
+  for future use and require `0`/`false`. Rewriting arbitrary compiled/stock fragment shaders to
+  discard by sample ID would not reproduce coverage before depth/stencil or all sample side
+  effects, so there is no correct general renderer-side emulation. EasyGL also explicitly leaves
+  non-default masks unimplemented. The all-ones default remains equivalent; non-default masks are
+  classified `⛔`, never falsely claimed as working.
+
+  Targeted incremental builds only were used. The SDL state selection passes **14/14 CTests** on
+  offscreen Vulkan: five shared state fixtures, eight verbatim EasyGL sources, and the expanded
+  20/20 SDL render-state regression. All have validation-error/warning fatal patterns and emitted
+  none. `SdlGpu_MRT`, `SdlGpu_ColorWriteChannels` and the 67/67 `SdlGpu_DepthBias` control also pass,
+  making the final focused SDL run **17/17**. The five shared controls pass **5/5** on EasyGL/Xvfb.
+  The audit classifier remains complete at 246/246 with zero unclassified rows; eight now-direct
+  state sources moved to direct parity. This periodic re-audit also moved the completed SDLGPU-59
+  declaration and SDLGPU-64 sampler leads, plus the depth-bias source, out of stale gap buckets;
+  custom ShaderEffect instancing remains correctly owned by `SDLGPU-79`.
 
 ### SDLGPU-59 — resolve stock vertex inputs from VertexDeclaration semantics ✅
 

@@ -34,7 +34,10 @@
 #include "Microsoft/Xna/Framework/Graphics/BlendFunction.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ColorWriteChannels.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
@@ -45,6 +48,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdlib>
 #include <cstdio>
 #include <string>
 
@@ -65,6 +69,9 @@ namespace
     const Color kSource(200, 60, 30, 128);
     /// The BlendFactor cell's constant.
     const Color kFactor(64, 128, 192, 255);
+    /// Non-opaque alpha values keep the exhaustive alpha-factor sweep discriminating.
+    const Color kSweepDestination(40, 90, 220, 96);
+    const Color kSweepFactor(64, 128, 192, 80);
 
     [[nodiscard]] int Clamp255(int v) { return std::clamp(v, 0, 255); }
 
@@ -74,6 +81,93 @@ namespace
         const float value = static_cast<float>(src) * srcFactor +
                             static_cast<float>(sign) * static_cast<float>(dst) * dstFactor;
         return Clamp255(static_cast<int>(value + (value >= 0.0f ? 0.5f : -0.5f)));
+    }
+
+    [[nodiscard]] int Component(const Color& color, int channel)
+    {
+        switch (channel)
+        {
+            case 0: return color.getRProperty();
+            case 1: return color.getGProperty();
+            case 2: return color.getBProperty();
+            default: return color.getAProperty();
+        }
+    }
+
+    [[nodiscard]] float FactorComponent(Blend factor, int channel)
+    {
+        const bool alpha = channel == 3;
+        const float source = static_cast<float>(Component(kSource, channel)) / 255.0f;
+        const float destination =
+            static_cast<float>(Component(kSweepDestination, channel)) / 255.0f;
+        switch (factor)
+        {
+            case Blend::One: return 1.0f;
+            case Blend::Zero: return 0.0f;
+            case Blend::SourceColor: return source;
+            case Blend::InverseSourceColor: return 1.0f - source;
+            case Blend::SourceAlpha:
+                return static_cast<float>(kSource.getAProperty()) / 255.0f;
+            case Blend::InverseSourceAlpha:
+                return 1.0f - static_cast<float>(kSource.getAProperty()) / 255.0f;
+            case Blend::DestinationColor: return destination;
+            case Blend::InverseDestinationColor: return 1.0f - destination;
+            case Blend::DestinationAlpha:
+                return static_cast<float>(kSweepDestination.getAProperty()) / 255.0f;
+            case Blend::InverseDestinationAlpha:
+                return 1.0f - static_cast<float>(kSweepDestination.getAProperty()) / 255.0f;
+            case Blend::BlendFactor:
+                return static_cast<float>(Component(kSweepFactor, channel)) / 255.0f;
+            case Blend::InverseBlendFactor:
+                return 1.0f - static_cast<float>(Component(kSweepFactor, channel)) / 255.0f;
+            case Blend::SourceAlphaSaturation:
+                return alpha ? 1.0f
+                             : std::min(static_cast<float>(kSource.getAProperty()) / 255.0f,
+                                        1.0f - static_cast<float>(kSweepDestination.getAProperty()) /
+                                                   255.0f);
+        }
+        return 0.0f;
+    }
+
+    [[nodiscard]] int ApplyBlendFunction(BlendFunction function, float source, float destination)
+    {
+        float value = 0.0f;
+        switch (function)
+        {
+            case BlendFunction::Add: value = source + destination; break;
+            case BlendFunction::Subtract: value = source - destination; break;
+            case BlendFunction::ReverseSubtract: value = destination - source; break;
+            case BlendFunction::Max: value = std::max(source, destination); break;
+            case BlendFunction::Min: value = std::min(source, destination); break;
+        }
+        return Clamp255(static_cast<int>(value + (value >= 0.0f ? 0.5f : -0.5f)));
+    }
+
+    [[nodiscard]] Color ExpectedBlend(
+        Blend colorSource, Blend colorDestination, BlendFunction colorFunction,
+        Blend alphaSource, Blend alphaDestination, BlendFunction alphaFunction,
+        ColorWriteChannels write = ColorWriteChannels::All)
+    {
+        std::array<int, 4> output{};
+        for (int channel = 0; channel < 4; ++channel)
+        {
+            const Blend sourceFactor = channel == 3 ? alphaSource : colorSource;
+            const Blend destinationFactor = channel == 3 ? alphaDestination : colorDestination;
+            const BlendFunction function = channel == 3 ? alphaFunction : colorFunction;
+            const float source = static_cast<float>(Component(kSource, channel)) *
+                                 FactorComponent(sourceFactor, channel);
+            const float destination = static_cast<float>(Component(kSweepDestination, channel)) *
+                                      FactorComponent(destinationFactor, channel);
+            output[static_cast<std::size_t>(channel)] =
+                ApplyBlendFunction(function, source, destination);
+            if ((static_cast<int>(write) & (1 << channel)) == 0)
+                output[static_cast<std::size_t>(channel)] =
+                    Component(kSweepDestination, channel);
+        }
+        return Color(static_cast<SharpRuntime::bytecs>(output[0]),
+                     static_cast<SharpRuntime::bytecs>(output[1]),
+                     static_cast<SharpRuntime::bytecs>(output[2]),
+                     static_cast<SharpRuntime::bytecs>(output[3]));
     }
 }
 
@@ -130,7 +224,7 @@ protected:
                 static_cast<SharpRuntime::bytecs>(BlendChannel(kSource.getBProperty(), srcFactorB,
                                                                kDestination.getBProperty(),
                                                                dstFactorB, sign)),
-                255);
+                static_cast<SharpRuntime::bytecs>(255));
         };
 
         const std::array<Cell, kColumns * kRows> cells{{
@@ -161,7 +255,7 @@ protected:
                        Clamp255(kDestination.getGProperty() - kSource.getGProperty())),
                    static_cast<SharpRuntime::bytecs>(
                        Clamp255(kDestination.getBProperty() - kSource.getBProperty())),
-                   255)},
+                   static_cast<SharpRuntime::bytecs>(255))},
             {"Separate: colour additive, alpha keeps dst", Blend::One, Blend::One,
              BlendFunction::Add, Blend::Zero, Blend::One, BlendFunction::Add,
              ColorWriteChannels::All, false, expect(1, 1, 1, 1, 1, 1, +1)},
@@ -173,7 +267,7 @@ protected:
             {"ColorWriteChannels: red only", Blend::One, Blend::Zero, BlendFunction::Add,
              Blend::One, Blend::Zero, BlendFunction::Add, ColorWriteChannels::Red, false,
              Color(kSource.getRProperty(), kDestination.getGProperty(),
-                   kDestination.getBProperty(), 255)},
+                   kDestination.getBProperty(), static_cast<SharpRuntime::bytecs>(255))},
         }};
 
         for (std::size_t index = 0; index < cells.size(); ++index)
@@ -229,6 +323,113 @@ protected:
         Require(distinctPairs >= 30,
                 "the nine expected colours are mostly distinct from one another, so no single "
                 "wrong blend can satisfy the table by coincidence");
+
+        // Exhaustive immutable-state sweep. Each pair varies exactly one descriptor field, so a
+        // missing cache-key member makes the later result reuse an earlier pipeline and fail. The
+        // final Add repeats the first function after all four alternatives (A -> B -> A).
+        RenderTarget2D probe(device, 12, 12, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                             RenderTargetUsage::PreserveContents);
+        const auto render = [&](Blend colorSource, Blend colorDestination,
+                                BlendFunction colorFunction, Blend alphaSource,
+                                Blend alphaDestination, BlendFunction alphaFunction,
+                                ColorWriteChannels write = ColorWriteChannels::All) {
+            BlendState state;
+            state.setColorSourceBlendProperty(colorSource);
+            state.setColorDestinationBlendProperty(colorDestination);
+            state.setColorBlendFunctionProperty(colorFunction);
+            state.setAlphaSourceBlendProperty(alphaSource);
+            state.setAlphaDestinationBlendProperty(alphaDestination);
+            state.setAlphaBlendFunctionProperty(alphaFunction);
+            state.setColorWriteChannelsProperty(write);
+            state.setBlendFactorProperty(kSweepFactor);
+
+            device.SetRenderTarget(&probe);
+            device.setBlendStateProperty(BlendState::Opaque);
+            device.Clear(kSweepDestination);
+            SpriteBatch batch(device);
+            batch.Begin(SpriteSortMode::Deferred, &state, &pointClamp, nullptr, nullptr);
+            batch.Draw(source, Rectangle(0, 0, 12, 12), Color::White);
+            batch.End();
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+            std::array<Color, 144> pixels{};
+            probe.GetData(pixels.data(), static_cast<int>(pixels.size()));
+            return pixels[6 * 12 + 6];
+        };
+        const auto expectState = [&](const char* label, Blend colorSource,
+                                     Blend colorDestination, BlendFunction colorFunction,
+                                     Blend alphaSource, Blend alphaDestination,
+                                     BlendFunction alphaFunction,
+                                     ColorWriteChannels write = ColorWriteChannels::All) {
+            const Color got = render(colorSource, colorDestination, colorFunction,
+                                     alphaSource, alphaDestination, alphaFunction, write);
+            const Color expected = ExpectedBlend(
+                colorSource, colorDestination, colorFunction,
+                alphaSource, alphaDestination, alphaFunction, write);
+            const auto near = [](int a, int b) { return std::abs(a - b) <= 3; };
+            const std::string message = std::string(label) + " produced (" +
+                std::to_string(got.getRProperty()) + ',' +
+                std::to_string(got.getGProperty()) + ',' +
+                std::to_string(got.getBProperty()) + ',' +
+                std::to_string(got.getAProperty()) + "), expected (" +
+                std::to_string(expected.getRProperty()) + ',' +
+                std::to_string(expected.getGProperty()) + ',' +
+                std::to_string(expected.getBProperty()) + ',' +
+                std::to_string(expected.getAProperty()) + ')';
+            Require(near(got.getRProperty(), expected.getRProperty()) &&
+                        near(got.getGProperty(), expected.getGProperty()) &&
+                        near(got.getBProperty(), expected.getBProperty()) &&
+                        near(got.getAProperty(), expected.getAProperty()),
+                    message.c_str());
+        };
+
+        const std::array<Blend, 13> factors{
+            Blend::One, Blend::Zero, Blend::SourceColor, Blend::InverseSourceColor,
+            Blend::SourceAlpha, Blend::InverseSourceAlpha, Blend::DestinationColor,
+            Blend::InverseDestinationColor, Blend::DestinationAlpha,
+            Blend::InverseDestinationAlpha, Blend::BlendFactor, Blend::InverseBlendFactor,
+            Blend::SourceAlphaSaturation};
+        const std::array<const char*, 13> factorNames{
+            "One", "Zero", "SourceColor", "InverseSourceColor", "SourceAlpha",
+            "InverseSourceAlpha", "DestinationColor", "InverseDestinationColor",
+            "DestinationAlpha", "InverseDestinationAlpha", "BlendFactor",
+            "InverseBlendFactor", "SourceAlphaSaturation"};
+        for (std::size_t i = 0; i < factors.size(); ++i)
+        {
+            const std::string name = factorNames[i];
+            expectState((name + " color-source").c_str(), factors[i], Blend::Zero,
+                        BlendFunction::Add, Blend::One, Blend::Zero, BlendFunction::Add);
+            expectState((name + " color-destination").c_str(), Blend::Zero, factors[i],
+                        BlendFunction::Add, Blend::One, Blend::Zero, BlendFunction::Add);
+            expectState((name + " alpha-source").c_str(), Blend::One, Blend::Zero,
+                        BlendFunction::Add, factors[i], Blend::Zero, BlendFunction::Add);
+            expectState((name + " alpha-destination").c_str(), Blend::One, Blend::Zero,
+                        BlendFunction::Add, Blend::Zero, factors[i], BlendFunction::Add);
+        }
+
+        const std::array<BlendFunction, 5> functions{
+            BlendFunction::Add, BlendFunction::Subtract, BlendFunction::ReverseSubtract,
+            BlendFunction::Max, BlendFunction::Min};
+        const std::array<const char*, 5> functionNames{
+            "Add", "Subtract", "ReverseSubtract", "Max", "Min"};
+        for (std::size_t i = 0; i < functions.size(); ++i)
+        {
+            const std::string name = functionNames[i];
+            expectState((name + " color-function").c_str(), Blend::One, Blend::One,
+                        functions[i], Blend::One, Blend::Zero, BlendFunction::Add);
+            expectState((name + " alpha-function").c_str(), Blend::One, Blend::Zero,
+                        BlendFunction::Add, Blend::One, Blend::One, functions[i]);
+        }
+        expectState("Add color-function after all alternatives", Blend::One, Blend::One,
+                    BlendFunction::Add, Blend::One, Blend::Zero, BlendFunction::Add);
+
+        for (int mask = 0; mask <= 15; ++mask)
+        {
+            const std::string name = "ColorWriteChannels mask " + std::to_string(mask);
+            expectState(name.c_str(), Blend::One, Blend::Zero, BlendFunction::Add,
+                        Blend::One, Blend::Zero, BlendFunction::Add,
+                        static_cast<ColorWriteChannels>(mask));
+        }
     }
 };
 

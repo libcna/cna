@@ -2785,8 +2785,12 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         // Blend::One=0, Blend::Zero=1 -> Opaque preset: src=One, dst=Zero -> no blending. Matches
         // VulkanRenderer::ApplyBlendState's own derivation exactly.
+        // One/Zero is a copy only under Add. Subtract/ReverseSubtract/Min/Max remain observable
+        // with those same factors, so collapsing them to SDL's disabled-blend path would both
+        // change the equation and make function-only A -> B -> A transitions reuse Opaque.
         blendEnabled_ = !(colorSrcBlend == 0 && colorDstBlend == 1 &&
-                          alphaSrcBlend == 0 && alphaDstBlend == 1);
+                          alphaSrcBlend == 0 && alphaDstBlend == 1 &&
+                          colorBlendFunc == 0 && alphaBlendFunc == 0);
         blendParams_.colorSrc  = colorSrcBlend;
         blendParams_.colorDst  = colorDstBlend;
         blendParams_.alphaSrc  = alphaSrcBlend;

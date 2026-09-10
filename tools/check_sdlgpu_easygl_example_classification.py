@@ -27,11 +27,8 @@ CATEGORIES = {
 # These exercise public classic-XNA calls for which the live SDL_GPU baseline has a demonstrated
 # gap, a false capability claim, or no implementation. The task is the remediation owner.
 MISSING = {
-    "easygl_basiceffect_position_normal_test.cpp": ("SDLGPU-59", "stock vertex semantics"),
-    "easygl_draw_user_primitives_custom_test.cpp": ("SDLGPU-59", "stock vertex semantics"),
-    "easygl_dualtextureeffect_independent_uv_test.cpp": ("SDLGPU-59", "TEXCOORD1 semantics"),
-    "easygl_instancedmodel_shader_test.cpp": ("SDLGPU-60", "DrawInstancedPrimitives and multi-stream input"),
-    "easygl_depth_bias_test.cpp": ("SDLGPU-65", "SpriteBatch depth-bias baseline failure"),
+    "easygl_instancedmodel_shader_test.cpp":
+        ("SDLGPU-79", "custom ShaderEffect instancing remains a named boundary; core XNA instance streams are covered by SDLGPU-60"),
     "easygl_mrt_test.cpp": ("SDLGPU-75", "independent MRT outputs"),
     "easygl_packed16_format_test.cpp": ("SDLGPU-69", "packed Texture2D formats"),
     "easygl_dxt_format_test.cpp": ("SDLGPU-69", "compressed Texture2D formats"),
@@ -57,12 +54,6 @@ NEEDS_TEST = {
     "easygl_basiceffect_texture_vertexcolor_enabled_test.cpp": ("SDLGPU-77", "texture and color product"),
     "easygl_basiceffect_vertex_color_clamp_test.cpp": ("SDLGPU-77", "vertex-color clamp"),
     "easygl_basiceffect_world_scale_precision_test.cpp": ("SDLGPU-77", "large world scale"),
-    "easygl_blendstate_separate_factors_test.cpp": ("SDLGPU-58", "separate alpha factors"),
-    "easygl_blendstate_separate_functions_test.cpp": ("SDLGPU-58", "separate alpha functions"),
-    "easygl_depthstencilstate_compare_function_test.cpp": ("SDLGPU-58", "all depth comparisons"),
-    "easygl_depthstencilstate_stencil_mask_test.cpp": ("SDLGPU-58", "stencil masks"),
-    "easygl_depthstencilstate_stencil_ops_test.cpp": ("SDLGPU-58", "all stencil operations"),
-    "easygl_depthstencilstate_stencil_twosided_test.cpp": ("SDLGPU-58", "two-sided stencil"),
     "easygl_environmentmapeffect_fresnel_gradient_test.cpp": ("SDLGPU-77", "Fresnel gradient"),
     "easygl_environmentmapeffect_multilight_test.cpp": ("SDLGPU-77", "environment-map light count"),
     "easygl_environmentmapeffect_specular_test.cpp": ("SDLGPU-77", "environment-map specular"),
@@ -76,7 +67,6 @@ NEEDS_TEST = {
     "easygl_real_window_resize_test.cpp": ("SDLGPU-68", "real resize lifecycle"),
     "easygl_render_target_usage_test.cpp": ("SDLGPU-74", "PreserveContents/DiscardContents"),
     "easygl_rendertargetcube_depthformat_test.cpp": ("SDLGPU-73", "cube depth/stencil formats"),
-    "easygl_sampler_state_effect_test.cpp": ("SDLGPU-64", "stock-effect sampler propagation"),
     "easygl_skinnedeffect_multilight_test.cpp": ("SDLGPU-77", "skinned multiple lights"),
     "easygl_skinnedeffect_preferperpixellighting_test.cpp": ("SDLGPU-77", "skinned per-pixel lighting"),
     "easygl_skinnedeffect_specular_test.cpp": ("SDLGPU-77", "skinned specular"),
@@ -84,10 +74,6 @@ NEEDS_TEST = {
     "easygl_skinnedeffect_weightspervertex_test.cpp": ("SDLGPU-77", "weights-per-vertex variants"),
     "easygl_spritebatch_layerdepth_test.cpp": ("SDLGPU-76", "sort modes and layer depth"),
     "easygl_spritebatch_rendertarget_size_test.cpp": ("SDLGPU-76", "render-target-local sprite coordinates"),
-    "easygl_texture2d_anisotropic_singlelevel_test.cpp": ("SDLGPU-64", "anisotropy on one-level texture"),
-    "easygl_texture_address_mode_mirror_effect_test.cpp": ("SDLGPU-64", "stock-effect mirror addressing"),
-    "easygl_texture_anisotropic_effect_test.cpp": ("SDLGPU-64", "stock-effect anisotropy"),
-    "easygl_texture_mip_filter_effect_test.cpp": ("SDLGPU-64", "stock-effect mip filter"),
     "easygl_viewport_state_test.cpp": ("SDLGPU-68", "viewport reset/restoration"),
 }
 
@@ -124,8 +110,48 @@ DIRECT = {
     "easygl_presentation_parameters_test.cpp",
 }
 
+# These exact EasyGL sources are also compiled and registered under SDL GPU. Unlike the CPU-only
+# DIRECT set, they are renderer-discriminating and retain the task that established the evidence.
+VERIFIED_DIRECT = {
+    "easygl_blendstate_separate_factors_test.cpp": ("SDLGPU-58", "same source passes SDL GPU"),
+    "easygl_blendstate_separate_functions_test.cpp": ("SDLGPU-58", "same source passes SDL GPU"),
+    "easygl_depthstencilstate_compare_function_test.cpp": ("SDLGPU-58", "same source passes SDL GPU"),
+    "easygl_depthstencilstate_stencil_mask_test.cpp": ("SDLGPU-58", "same source passes SDL GPU"),
+    "easygl_depthstencilstate_stencil_ops_test.cpp": ("SDLGPU-58", "same source passes SDL GPU"),
+    "easygl_depthstencilstate_stencil_twosided_test.cpp": ("SDLGPU-58", "same source passes SDL GPU"),
+    "easygl_depthstencilstate_write_enable_test.cpp": ("SDLGPU-58", "same source passes SDL GPU"),
+    "easygl_graphicsdevice_reference_stencil_test.cpp": ("SDLGPU-58", "same source passes SDL GPU"),
+}
+
+VERIFIED_COVERED = {
+    "easygl_basiceffect_position_normal_test.cpp":
+        ("SDLGPU-59", "semantic POSITION0/Normal stock path passes the shared pixel oracle"),
+    "easygl_depth_bias_test.cpp":
+        ("SDLGPU-65", "expanded SDL GPU depth-bias pixel/cache oracle passes 67/67"),
+    "easygl_draw_user_primitives_custom_test.cpp":
+        ("SDLGPU-59", "custom declarations are resolved by semantic/index/format/offset"),
+    "easygl_dualtextureeffect_independent_uv_test.cpp":
+        ("SDLGPU-59", "shared independent TEXCOORD0/TEXCOORD1 frame is byte-identical"),
+    "easygl_sampler_state_effect_test.cpp":
+        ("SDLGPU-64", "complete stock sampler snapshots pass shared and SDL pixel oracles"),
+    "easygl_texture2d_anisotropic_singlelevel_test.cpp":
+        ("SDLGPU-64", "one-level anisotropic sampling is covered by the complete sampler suite"),
+    "easygl_texture_address_mode_mirror_effect_test.cpp":
+        ("SDLGPU-64", "stock mirror addressing passes the shared sampler suite"),
+    "easygl_texture_anisotropic_effect_test.cpp":
+        ("SDLGPU-64", "stock anisotropy passes the shared sampler suite"),
+    "easygl_texture_mip_filter_effect_test.cpp":
+        ("SDLGPU-64", "authored mip filter and level selection pass shared pixel oracles"),
+}
+
 
 def classify(name: str) -> tuple[str, str, str]:
+    if name in VERIFIED_DIRECT:
+        task, note = VERIFIED_DIRECT[name]
+        return "classic-xna-direct-parity", task, note
+    if name in VERIFIED_COVERED:
+        task, note = VERIFIED_COVERED[name]
+        return "classic-xna-covered-by-existing-sdlgpu-test", task, note
     if name in MISSING:
         task, note = MISSING[name]
         return "classic-xna-feature-missing", task, note

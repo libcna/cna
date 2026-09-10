@@ -78,6 +78,9 @@ set(CNA_PARITY_FIXTURES
     # WEBGPU-190 (stencil family): every StencilOperation, verified by gating a second quad on the
     # value the operation should have written.
     stencil_states
+    # SDLGPU-58: all eight stencil CompareFunctions, plus an Always -> Never -> Always sequence
+    # that detects incomplete immutable-pipeline cache identity and bad restoration.
+    stencil_compare
     # WEBGPU-190 (rasterizer/viewport family): cull modes with BOTH windings, the scissor, a
     # viewport sub-region, a render-target round trip, cull-state leakage and depth bias.
     rasterizer_viewport
