@@ -17,10 +17,34 @@ include_directories(${CNA_GRAPHICS_EXAMPLES_DIR})
 if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     enable_testing()
 
-    set(CNA_SDLGPU_TEST_VIDEO_DRIVER "x11" CACHE STRING
+    if(WIN32)
+        set(_cna_sdlgpu_default_test_video_driver "windows")
+    elseif(ANDROID)
+        set(_cna_sdlgpu_default_test_video_driver "android")
+    elseif(CMAKE_SYSTEM_NAME STREQUAL "iOS" OR CMAKE_SYSTEM_NAME STREQUAL "tvOS")
+        set(_cna_sdlgpu_default_test_video_driver "uikit")
+    elseif(APPLE)
+        set(_cna_sdlgpu_default_test_video_driver "cocoa")
+    else()
+        set(_cna_sdlgpu_default_test_video_driver "x11")
+    endif()
+    set(CNA_SDLGPU_TEST_VIDEO_DRIVER "${_cna_sdlgpu_default_test_video_driver}" CACHE STRING
         "SDL video driver used by SDL_GPU renderer integration tests")
-    set(CNA_SDLGPU_TEST_ENVIRONMENT
-        "SDL_VIDEODRIVER=${CNA_SDLGPU_TEST_VIDEO_DRIVER};DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # SDLGPU-116: only X11 consumes CNA_TEST_DISPLAY. Offscreen/dummy runs explicitly clear both
+    # display transports, while native Windows/Apple/Android drivers do not inherit an unrelated
+    # Unix display hint. This keeps a locally cached DISPLAY from leaking into isolated GPU tests.
+    if(CNA_SDLGPU_TEST_VIDEO_DRIVER STREQUAL "offscreen" OR
+       CNA_SDLGPU_TEST_VIDEO_DRIVER STREQUAL "dummy")
+        set(CNA_SDLGPU_TEST_ENVIRONMENT
+            "SDL_VIDEODRIVER=${CNA_SDLGPU_TEST_VIDEO_DRIVER};DISPLAY=;WAYLAND_DISPLAY=")
+    elseif(CNA_SDLGPU_TEST_VIDEO_DRIVER STREQUAL "x11")
+        set(CNA_SDLGPU_TEST_ENVIRONMENT
+            "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};WAYLAND_DISPLAY=")
+    else()
+        set(CNA_SDLGPU_TEST_ENVIRONMENT
+            "SDL_VIDEODRIVER=${CNA_SDLGPU_TEST_VIDEO_DRIVER}")
+    endif()
     if(WIN32)
         set(CNA_SDLGPU_HEADLESS_TEST_DRIVER "direct3d12")
         if(CMAKE_CROSSCOMPILING)

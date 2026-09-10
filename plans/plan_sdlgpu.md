@@ -54,6 +54,9 @@
 > `SDLGPU-115` makes all 191 native and all 258 Windows SDL GPU integration registrations fail on
 > Vulkan validation or standard D3D12 debug-layer errors/warnings, preserving narrower historical
 > failure expressions instead of replacing them.
+> `SDLGPU-116` gives each native platform its own SDL video-driver default and guarantees that
+> offscreen/dummy registrations clear both X11 and Wayland display variables; the real Vulkan
+> smoke passes 30/30 with `SDL_VIDEODRIVER=offscreen`, `DISPLAY=` and `WAYLAND_DISPLAY=`.
 > `SDLGPU-94`–`SDLGPU-96`
 > remain open because D3D12 swapchain presentation/recovery, Metal and Android/Vulkan still
 > require native runtime evidence. Seven EasyGL defect findings (six distinct
@@ -83,8 +86,8 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
 | Item | Current evidence |
 |---|---|
 | Re-audit starting branch / commit | `sdlgpu` / `8cd9ab7f45a05bef3a727598c8d9ef5cf8b04442` |
-| Newly created tasks | 25 (`SDLGPU-91`–`SDLGPU-115`) |
-| Completed / open | 22 / 3 (`SDLGPU-91`–`93` and `SDLGPU-97`–`115` complete; `SDLGPU-94`–`96` open) |
+| Newly created tasks | 26 (`SDLGPU-91`–`SDLGPU-116`) |
+| Completed / open | 23 / 3 (`SDLGPU-91`–`93` and `SDLGPU-97`–`116` complete; `SDLGPU-94`–`96` open) |
 | Proven runtime configuration | Linux/Vulkan remains the complete behavioral configuration; D3D12 now has a real no-window device, all-26-stock-shader construction, stock-pipeline exact-pixel proof, a public windowless `GraphicsDevice` with exact backbuffer/RT2D clear readback, the unchanged public Game/Texture2D/SpriteBatch 2D scene for 120 frames, all nine shared classic stock-effect fixtures, the complete ten-fixture state/sampler matrix, the 24-test texture/format/transfer matrix, all 33 render-target registrations, all 25 buffer/draw registrations, all five model oracles and all 39 canonical compiled-effect runtime cases. The target evidence includes the 851-assertion mip/readback oracle and 40-assertion classic MRT matrix; the draw evidence includes instancing, multistream and declaration semantics. Six presentation/reset/resize programs, 73 individually isolated backbuffer/bound-target/Present lifecycle legs and 291/291 applicable constructor/lazy-resource rollback checks also pass through D3D12. There are now 191 registered native and 258 registered Windows SDL integration tests; the pre-platform full sweep plus the focused portability gates remain the Linux behavioral baseline. The D3D12 portability probes pass 2/2, 3/3, 6/6 and 3/3; the five skinned-effect/PBR executables add 25/25 discriminating assertions. |
 | Available local cross tools | MinGW-w64 and Wine are present; no Apple SDK/device, Android SDK/device, `dxc`, `spirv-cross`, SDL_shadercross executable or SDL_shadercross shared library was found |
 | Display constraint | All further Linux SDL tests must use `SDL_VIDEODRIVER=offscreen`; Windows GUI tests must use a headless/virtual display if runnable. Never use the host display. |
@@ -797,6 +800,30 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
   missing the policy. Regeneration changed no compiled input, so this task performed no rebuild or
   relink.
 
+### SDLGPU-116 — isolate SDL GPU tests from unrelated host display transports ✅
+
+- **Problem/public behavior:** the Linux stable tree correctly selected SDL's offscreen video
+  driver, but every generated test still carried the cached EasyGL Xvfb value `DISPLAY=:179`.
+  SDL offscreen ignored it, yet the registration did not make that isolation auditable. A fresh
+  native Windows configuration also inherited the Linux-specific `x11` default before the cross-
+  Wine override replaced it.
+- **EasyGL/SDL evidence:** EasyGL needs an X server on this host; SDL GPU's Vulkan offscreen path
+  creates a real window, swapchain and GPU device without one. SDL's native driver names are
+  platform-specific (`windows`, `android`, `cocoa` and `uikit`), while only the X11 selection needs
+  `CNA_TEST_DISPLAY`.
+- **Location:** renderer-local test environment/default selection; no production renderer change.
+- **Acceptance/test:** select a valid default driver for each native target; explicitly clear
+  `DISPLAY` and `WAYLAND_DISPLAY` for offscreen/dummy runs; preserve X11's configured virtual-
+  display route and the Windows cross wrapper's fresh per-test Xvfb; mechanically inspect all
+  native registrations and execute a real Vulkan smoke without any host display variable.
+- **Result (2026-09-10):** fresh Windows, Android, macOS and iOS/tvOS configurations now default to
+  `windows`, `android`, `cocoa` and `uikit`; Unix desktop retains `x11`. The stable Linux inventory
+  reports **191/191** SDL GPU registrations with `SDL_VIDEODRIVER=offscreen`, empty `DISPLAY` and
+  empty `WAYLAND_DISPLAY`, with no nonempty display transport. Validation-fatal real-Vulkan smoke
+  then passes **30/30**, including a real swapchain and 60 `Clear()+Present()` frames. Stable
+  Windows registrations remain SDL dummy/forced-headless and their launcher alone creates an
+  isolated Xvfb for Wine adapter enumeration. CMake regeneration required no rebuild or relink.
+
 ## 2026-09-10 parity audit final status
 
 | Item | Current evidence |
@@ -811,12 +838,12 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
 | SDL GPU registered integration tests | 191 CTests (85 baseline plus 106 parity/remediation registrations) |
 | Shared EasyGL parity fixtures available | 32 renderer-neutral sources in `modules/graphics/examples/parity` |
 | Shared parity fixtures registered for SDL GPU | 32/32 (all renderer-neutral sources, including the nine classic stock-effect fixtures) |
-| Tasks created by this audit | 36 (`SDLGPU-55`–`SDLGPU-90`); the later platform re-audit creates twenty-five more (`SDLGPU-91`–`115`) |
-| Completed / open / proven unavoidable | This closed Linux/Vulkan phase completed 36 / 0 tasks; the current renderer-wide ledger is 58 / 3. Three capability fields (`BlendState.MultiSampleMask`, exact half-rate `PresentInterval::Two`, and `OcclusionQuery`) are proven unavailable in current SDL_gpu; the first two are not separate tasks and the third is closed by `SDLGPU-80` |
+| Tasks created by this audit | 36 (`SDLGPU-55`–`SDLGPU-90`); the later platform re-audit creates twenty-six more (`SDLGPU-91`–`116`) |
+| Completed / open / proven unavoidable | This closed Linux/Vulkan phase completed 36 / 0 tasks; the current renderer-wide ledger is 59 / 3. Three capability fields (`BlendState.MultiSampleMask`, exact half-rate `PresentInterval::Two`, and `OcclusionQuery`) are proven unavailable in current SDL_gpu; the first two are not separate tasks and the third is closed by `SDLGPU-80` |
 | SDL GPU build | Stable `cmake-build-sdlgpu`, Debug, `CNA_GRAPHICS_RENDERER=SDL_GPU`, tests/examples and `CNA_SDL_GPU_COMPILED_EFFECTS` ON |
 | EasyGL oracle build | Stable `cmake-build-debug`, Debug, `CNA_GRAPHICS_RENDERER=OPENGL33`, tests/examples ON |
 | Runtime driver | SDL 3.5.0 SDL_gpu Vulkan on AMD Radeon 780M / Mesa RADV 25.0.7; Khronos validation layer 1.4.309 present |
-| Display constraint | Sandboxed tests cannot access host `:0`; SDL `offscreen` successfully creates the real Vulkan GPU device and EasyGL uses Xvfb `:179`. No parity runtime test used the host display. The SDL GPU test-driver cache setting defaults to `x11` and is locally set to `offscreen`. |
+| Display constraint | Sandboxed tests do not access the host display. All 191 SDL GPU registrations explicitly use `SDL_VIDEODRIVER=offscreen`, `DISPLAY=` and `WAYLAND_DISPLAY=` while still creating the real Vulkan device/swapchain; EasyGL alone uses isolated Xvfb `:179`. Native driver defaults are platform-specific rather than hard-coded to X11. |
 | Final SDL GPU verification | **188/188** registered SDL integration CTests and **42/42** SDL renderer unit tests pass from the stable incremental build. The integration total contains all 32 shared parity fixtures. After the final full sweep, `SDLGPU-87`'s validation-fatal capability/lifetime regression passes **295/295**; `SDLGPU-89` adds a 21/21 multistream result, isolated slot-15 parity pixels on SDL GPU and EasyGL, and a green validation-fatal smoke. |
 | Validation | SDL GPU debug mode is enabled. The final 188-test sweep passes with every shared fixture and the high-risk state/texture/target/effect/lifetime slices configured to make `Validation Error`, `Validation Warning`, or bare `VUID-` output fatal; no such diagnostic was reported. |
 | Final EasyGL/parity oracle | **33/33** registered EasyGL oracle CTests pass under Xvfb/llvmpipe. The direct corpus executes all 32 shared sources under both renderers: 27 frames satisfy the strict byte policy, two use renderer-local discriminating invariants, and three stay within fixed measured line/edge coverage budgets. |
