@@ -264,8 +264,9 @@ screen-space contact shadows, `MOD-2239o` adds projected decals, `MOD-2239p` add
 perspective, `MOD-2239r` adds volumetric fog, `MOD-2239s`/`MOD-2239t` add the legacy
 `CRTEffect`/`DepthEffect` pair, `MOD-2239u` adds weighted order-independent transparency,
 `MOD-2239v` adds portable GPU instance culling, `MOD-2239w` adds portable GPU particle
-simulation and drawing, `MOD-2239x` adds portable auto-exposure reduction, and `MOD-2239y`
-adds portable clustered-light assignment. The shader-based built-in post-process rollout is now
+simulation and drawing, `MOD-2239x` adds portable auto-exposure reduction, `MOD-2239y`
+adds portable clustered-light assignment, and `MOD-2239z` adds portable clustered forward
+shading with a Vulkan SSBO light-list mirror. The shader-based built-in engine-layer rollout is now
 complete. Portable packages use the
 language/stage query to select a payload; third-party source-only passes remain conservatively
 unsupported on a binary-only renderer, and subsystems still ask their own semantic capability
@@ -304,7 +305,7 @@ Legend: ✅ verified in this repository · 🟨 partial, or verified only by sha
 | `OpenGLES2` | 🟨 shares EasyGL | GLSL ES 1.00: the shaders are transformed, so no `textureLod` (rough IBL reflections read the base mip), no dynamic uniform-array indexing, statically countable loops only. |
 | `WebGL1` | 🟨 shares EasyGL | As `OpenGLES2`, plus: no compute in any WebGL version. |
 | `WebGL2` | 🟨 shares EasyGL | No compute; otherwise the ES 3.00 path. |
-| `Vulkan` | 🟨 measured | Verified on RADV and llvmpipe: exact float/HDR 2D and cube targets, instancing, stock-PBR IBL, portable cube and atmospheric skies, all eighteen built-in post-process consumers, both legacy post-process effects and their depth/normal/velocity prepass producer, directional/cascade/point/spot shadow generation and reception, portable auto-exposure and clustered assignment, compute/storage resources, indirect draws and GPU timers work. The remaining engine-layer shader-package gap is clustered forward shading; arbitrary third-party GLSL source remains intentionally unavailable, and presentation remains sRGB-only. |
+| `Vulkan` | ✅ measured | Exact float/HDR 2D and cube targets, instancing, stock-PBR IBL, portable cube and atmospheric skies, all eighteen built-in post-process consumers, both legacy post-process effects and their depth/normal/velocity prepass producer, directional/cascade/point/spot shadow generation and reception, auto-exposure, clustered assignment and clustered forward shading, compute/storage resources, indirect draws and GPU timers work. The main rollout was verified on RADV and llvmpipe; `MOD-2239u`–`MOD-2239z` use llvmpipe because RADV cannot present through the hidden Xvfb display available here. Arbitrary third-party GLSL source remains intentionally unavailable, and presentation remains truthfully sRGB-only. |
 | `Headless` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Three limits it does not advertise — no render-target readback, no cube-face storage, and a cube-face bind that records the face without making it current. The engine layer constructs and passes through; tests probe the three rather than assume them. |
 | `Software` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Render targets, readback and cube storage all work; what does **not** is custom shader source — it is accepted and then ignored, which is why every shader-based subsystem asks `ExecutesShaderEffectSourceEXT()` as well as `CustomEffects`. |
 | `Stub` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Stricter than `Headless` — it refuses to bind a `RenderTarget2D` at all, so a pipeline stops before it renders. Everything above that point constructs and reports false. |
@@ -1596,12 +1597,14 @@ device.DrawUserPrimitives(PrimitiveType::TriangleList, vertices, 0, triangles);
   approximations err the same way: a light may be assigned to a cell it only nearly touches, which
   costs an iteration of the shader's light loop. Neither can drop a light, which would be a hole in
   the lighting.
-- **The light list reaches the shader as three textures** — the light data, the cluster table, and
-  the index list — with every value stored as the four bytes of its IEEE representation and read
-  back with `texelFetch` and `uintBitsToFloat`. That is forced, not chosen: this renderer's textures
-  are 8-bit only, and uniform arrays cannot hold 256 lights inside GL ES 3.0's limits. A storage
-  buffer would be the natural answer and is not available here, because an SSBO in a *fragment*
-  shader needs GLSL ES 3.10 and this layer's shader floor is 3.00.
+- **The light list has texture and storage-buffer representations.** GLSL ES 3.00 receives three
+  textures — light data, cluster table and index list — with every value stored as the four bytes
+  of its IEEE representation and read with `texelFetch`/`uintBitsToFloat`. This remains exact on
+  EasyGL without raising the layer's shader floor merely to obtain fragment SSBOs. A fragment
+  SPIR-V renderer also receives mirrors of the same arrays as three storage buffers; Vulkan reads
+  them at set 2 bindings 6–8, leaving its four explicit sampled-texture slots available for material
+  inputs. `ClusteredLightBuffer::upload` creates both forms when that binary path is available, so
+  package selection changes the transport and not the light-list contents.
 - **`ClusteredLightCompute` sorts on the GPU and produces the identical list**, element for element,
   not a similar one — everything downstream refers to a light by index. Its generated package
   selects GLSL ES, desktop GLSL or SPIR-V, and it falls back to the CPU where compute or a usable
@@ -1620,6 +1623,9 @@ device.DrawUserPrimitives(PrimitiveType::TriangleList, vertices, 0, triangles);
   light loop there would be a change to EasyGL's built-in effect family — code compiled into every
   game whether `CNA_CNAEXT` is on or off. What a game gives up by using this instead is
   `PbrEffect`'s texture set and its shadowed punctual light; what it gains is the light count.
+  Its generated GLSL ES/SPIR-V package is verified by the same 34-case render suite on EasyGL and
+  Vulkan llvmpipe; the ES payload retains the exact former composed shader and the binary path packs
+  matrices, vectors and scalars into the renderer's typed parameter arrays.
 
 ### Shadows, and the contract they put on the app
 

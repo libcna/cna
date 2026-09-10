@@ -772,7 +772,7 @@ six resulting channel values with `AtmosphericSky::radiance`, so a flat or verti
 cannot satisfy it. Both Vulkan runs emit no validation message, and the standalone package has its
 own write-free reproducibility gate.
 
-### Portable engine-effect rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`–`MOD-2239y`, 2026-09-10)
+### Portable engine-effect rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`–`MOD-2239z`, 2026-09-10)
 
 `ChromaticAberrationPass` is the first engine post-process to use the portable package path. Its
 internal package shares one fullscreen vertex contract across GLSL ES, desktop GLSL and SPIR-V;
@@ -1054,11 +1054,20 @@ overflow and argument handling. Package/constant-buffer creation failure still s
 documented CPU fallback. The generated package has a write-free reproducibility gate. RADV was not
 used because it cannot present through the hidden Xvfb display; no visible window was opened.
 
-This closes the shader-based built-in post-process rollout. The base support query remains
+`ClusteredForwardEffect` closes the last embedded production engine-layer shader source. Its
+generated package keeps the former GLSL ES vertex and fragment payloads exactly for EasyGL and adds
+SPIR-V variants for Vulkan. Four matrices, nineteen vec3 values and twenty-four scalar values use
+the existing typed parameter arrays. Vulkan reads the light records, cluster table and light-index
+list from storage buffers at set 2 bindings 6–8, leaving set 1 bindings 0–1 for the independent area
+BRDF and opaque-frame textures. EasyGL keeps the byte-exact three-texture representation at units
+2–4. The shared suite is **34/34** on Vulkan llvmpipe and EasyGL, including 256 lights, numerical
+CPU/GPU agreement and a simultaneous area-light/transmission render. The Vulkan run emits no
+validation message, and the generated package has a write-free reproducibility gate.
+
+This closes the shader-based built-in engine-layer rollout. The base support query remains
 conservative for third-party passes that provide only source text, and `EffectPass` follows the
 actual effect supplied by its caller rather than pretending Vulkan can translate arbitrary GLSL.
-The only remaining embedded production engine-layer shader source is clustered forward shading,
-not a post-process pass.
+There are no remaining embedded production shaders in `modules/graphics-ext/src/*.cpp`.
 
 ### Instancing (`plans/plan_vulkan.md` VULKAN-217…VULKAN-234, 2026-09-08)
 

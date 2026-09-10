@@ -253,6 +253,17 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         set_tests_properties(ClusteredLightComputeShaderPackageReproducibility PROPERTIES
             SKIP_RETURN_CODE 77 LABELS "graphics;shader;generator")
 
+        add_test(NAME ClusteredForwardShaderPackageReproducibility
+            COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1
+                "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/shader_package/generate_shader_package.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/src/shaders/clustered_forward/package.json"
+                --output
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/src/shaders/clustered_forward/ClusteredForwardShaderPackage.generated.hpp"
+                --check)
+        set_tests_properties(ClusteredForwardShaderPackageReproducibility PROPERTIES
+            SKIP_RETURN_CODE 77 LABELS "graphics;shader;generator")
+
         add_test(NAME ComputeParticlesExampleShaderPackageReproducibility
             COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1
                 "${Python3_EXECUTABLE}"
