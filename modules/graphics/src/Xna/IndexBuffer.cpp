@@ -271,10 +271,6 @@ namespace Microsoft::Xna::Framework::Graphics
         if (data == nullptr)
             throw System::ArgumentNullException("data");
         ThrowIfSetDataResourceInUse(options, useOptions);
-        if (offsetInBytes < 0)
-            throw System::ArgumentOutOfRangeException(
-                "offsetInBytes", std::to_string(offsetInBytes),
-                "This parameter must not be negative.");
 
         const std::size_t sourceByteOffset = CheckedByteOffset(startIndex, elementSize);
         ValidatePositiveElementCount(elementCount);
@@ -388,10 +384,6 @@ namespace Microsoft::Xna::Framework::Graphics
         if (bufferUsage_ == BufferUsage::WriteOnly)
             throw System::NotSupportedException(
                 "Calling GetData on a resource that was created with BufferUsage.WriteOnly is not supported.");
-        if (offsetInBytes < 0)
-            throw System::ArgumentOutOfRangeException(
-                "offsetInBytes", std::to_string(offsetInBytes),
-                "This parameter must not be negative.");
 
         const std::size_t destinationByteOffset = CheckedByteOffset(startIndex, elementSize);
         ValidatePositiveElementCount(elementCount);

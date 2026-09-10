@@ -56,6 +56,24 @@ namespace
         }
     }
 
+    template<typename TException, typename TCallable>
+    void ExpectExactException(TCallable&& callable)
+    {
+        try
+        {
+            callable();
+            FAIL() << "expected " << typeid(TException).name();
+        }
+        catch (const TException& exception)
+        {
+            EXPECT_EQ(typeid(exception), typeid(TException));
+        }
+        catch (...)
+        {
+            FAIL() << "unexpected exception type; expected " << typeid(TException).name();
+        }
+    }
+
     const std::array<VertexPositionColor, 3> kVertices{
         VertexPositionColor(Vector3(-1.0f, -1.0f, 0.0f), Color::Red),
         VertexPositionColor(Vector3(0.0f, 1.0f, 0.0f), Color::Green),
@@ -238,4 +256,33 @@ TEST(BufferDataBindingContractTest, ResourceStatePrecedesCopyWindowValidation)
                  System::NotSupportedException);
     EXPECT_THROW(writeOnlyIndex.GetData(&index, -1, 0),
                  System::NotSupportedException);
+}
+
+TEST(BufferDataBindingContractTest, CopyWindowPrecedesBufferOffsetAndUsesResourceSizeFailure)
+{
+    GraphicsDevice device;
+    VertexBuffer vertexBuffer(
+        device, VertexPositionColor::getVertexDeclarationStatic(), 1, BufferUsage::None);
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::SixteenBits, 1, BufferUsage::None);
+    VertexPositionColor vertex(Vector3::Zero, Color::White);
+    std::uint16_t index = 0;
+
+    ExpectExactNamedException<System::ArgumentOutOfRangeException>(
+        [&] { vertexBuffer.SetData(-64, &vertex, -1, 1, 16); }, "dataIndex");
+    ExpectExactNamedException<System::ArgumentOutOfRangeException>(
+        [&] { indexBuffer.SetData(-64, &index, -1, 1); }, "dataIndex");
+    ExpectExactNamedException<System::ArgumentOutOfRangeException>(
+        [&] { vertexBuffer.GetData(-64, &vertex, -1, 1, 16); }, "dataIndex");
+    ExpectExactNamedException<System::ArgumentOutOfRangeException>(
+        [&] { indexBuffer.GetData(-64, &index, -1, 1); }, "dataIndex");
+
+    ExpectExactException<System::InvalidOperationException>(
+        [&] { vertexBuffer.SetData(-64, &vertex, 0, 1, 16); });
+    ExpectExactException<System::InvalidOperationException>(
+        [&] { indexBuffer.SetData(-64, &index, 0, 1); });
+    ExpectExactException<System::InvalidOperationException>(
+        [&] { vertexBuffer.GetData(-64, &vertex, 0, 1, 16); });
+    ExpectExactException<System::InvalidOperationException>(
+        [&] { indexBuffer.GetData(-64, &index, 0, 1); });
 }
