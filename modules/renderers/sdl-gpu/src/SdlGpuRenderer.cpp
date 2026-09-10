@@ -1887,6 +1887,64 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
     };
 
+    void SdlGpuRenderer::CreateConstructionShaders(ConstructionResources& resources)
+    {
+        CreateSpriteResources(resources);
+        CreateColoredResources(resources);
+        CreateTexturedResources(resources);
+        CreateLitTexturedResources(resources);
+        CreateAlphaTestResources(resources);
+        CreateDualTextureResources(resources);
+        CreateEnvMapResources(resources);
+        CreateInstancedResources(resources);
+        CreateSkinnedResources(resources);
+        CreatePbrResources(resources);
+    }
+
+    std::string SdlGpuRenderer::ValidateStockShadersForDriverEXT(const char* driverName)
+    {
+        if (driverName == nullptr || driverName[0] == '\0')
+            throw std::invalid_argument(
+                "CNA SDL_GPU: stock-shader portability probe requires a driver name");
+
+#if defined(CNA_SDL_GPU_SHADERCROSS)
+        ConstructionResources resources(/*constructionWindow=*/nullptr, SdlGpuTestHooksEXT{});
+        if (!AcquireShaderCrossSession())
+            throw std::runtime_error(
+                std::string("CNA SDL_GPU: SDL_shadercross initialization failed: ") +
+                SDL_GetError());
+        resources.shaderCrossAcquired = true;
+        resources.shaderCrossFormats = SDL_ShaderCross_GetSPIRVShaderFormats();
+        const SDL_GPUShaderFormat requestedShaderFormats =
+            static_cast<SDL_GPUShaderFormat>(
+                SDL_GPU_SHADERFORMAT_SPIRV | resources.shaderCrossFormats);
+
+        resources.device = SDL_CreateGPUDevice(
+            requestedShaderFormats, /*debug_mode=*/false, driverName);
+        if (resources.device == nullptr)
+            throw std::runtime_error(
+                std::string("CNA SDL_GPU: headless SDL_CreateGPUDevice failed for '") +
+                driverName + "': " + SDL_GetError());
+
+        const char* actualDriver = SDL_GetGPUDeviceDriver(resources.device);
+        if (actualDriver == nullptr)
+            throw std::runtime_error(
+                "CNA SDL_GPU: headless device did not report its selected driver");
+        if (std::string_view(actualDriver) != driverName)
+            throw std::runtime_error(
+                std::string("CNA SDL_GPU: requested headless driver '") + driverName +
+                "' but SDL selected '" + actualDriver + "'");
+
+        CreateConstructionShaders(resources);
+        return actualDriver;
+#else
+        (void)driverName;
+        throw std::runtime_error(
+            "CNA SDL_GPU: stock-shader portability probe requires "
+            "CNA_SDL_GPU_SHADERCROSS=ON");
+#endif
+    }
+
     SdlGpuRenderer::SdlGpuRenderer(SDL_Window* window, int virtualWidth,
                                    int virtualHeight,
                                    CnaPresentationMode presentationMode,
@@ -1981,16 +2039,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         resources.backbufferMultiSampleCount =
             SampleCountToInt(resources.backbufferSampleCount);
 
-        CreateSpriteResources(resources);
-        CreateColoredResources(resources);
-        CreateTexturedResources(resources);
-        CreateLitTexturedResources(resources);
-        CreateAlphaTestResources(resources);
-        CreateDualTextureResources(resources);
-        CreateEnvMapResources(resources);
-        CreateInstancedResources(resources);
-        CreateSkinnedResources(resources);
-        CreatePbrResources(resources);
+        CreateConstructionShaders(resources);
 
         resources.FailAt(SdlGpuFailurePointEXT::WindowMetricsInitialization);
         if (!SDL_GetWindowSizeInPixels(

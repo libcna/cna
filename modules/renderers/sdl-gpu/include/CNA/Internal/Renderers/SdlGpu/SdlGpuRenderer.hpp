@@ -16,6 +16,7 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -2091,6 +2092,22 @@ namespace CNA::Internal::Renderers::SdlGpu
                               CnaPresentationMode presentationMode, int swapInterval,
                               const SdlGpuTestHooksEXT& testHooks,
                               int multiSampleCount = 0);
+
+        /**
+         * @brief Creates every production stock shader on a named SDL_gpu driver without a window.
+         *
+         * This test-only portability probe uses the same device-format negotiation, ShaderCross
+         * reflection checks and 26 shader-create descriptors as ordinary renderer construction,
+         * but deliberately does not claim a window or create a swapchain.
+         *
+         * @param driverName SDL_gpu driver name, such as `direct3d12`, `metal` or `vulkan`.
+         * @return The actual driver name reported by the successfully created device.
+         * @throws std::runtime_error If the compiler session, device or any stock shader cannot be
+         * created.
+         */
+        CNAEXT [[nodiscard]] static std::string ValidateStockShadersForDriverEXT(
+            const char* driverName);
+
         /** @brief Releases the window from the `SDL_GPUDevice` and destroys the device. */
         ~SdlGpuRenderer() override;
 
@@ -2644,6 +2661,8 @@ namespace CNA::Internal::Renderers::SdlGpu
     private:
         struct ConstructionResources;
 
+        static void CreateConstructionShaders(ConstructionResources& resources);
+
         struct LogicalViewport
         {
             float x = 0.0f;
@@ -2721,7 +2740,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // DepthStencilState.None disables tests/writes but does NOT erase pipeline target
         // metadata: REMED-GFX-097 therefore passes the active pass's actual depth format (or
         // INVALID for no attachment) into creation and cache selection.
-        void CreateSpriteResources(ConstructionResources& resources);
+        static void CreateSpriteResources(ConstructionResources& resources);
         void DestroySpriteResources();
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreateSpritePipeline(SDL_GPUTextureFormat colorFormat,
                                                                           SDL_GPUSampleCount sampleCount,
@@ -2847,11 +2866,11 @@ namespace CNA::Internal::Renderers::SdlGpu
             const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& layout);
 
         // Phase SDLGPU-6: colored3d/textured3d/colored_textured3d/lit_textured3d.
-        void CreateColoredResources(ConstructionResources& resources);
+        static void CreateColoredResources(ConstructionResources& resources);
         void DestroyColoredResources();
-        void CreateTexturedResources(ConstructionResources& resources);   ///< also creates colored_textured3d's vertex shader (shares textured3d's fragment shader)
+        static void CreateTexturedResources(ConstructionResources& resources);   ///< also creates colored_textured3d's vertex shader (shares textured3d's fragment shader)
         void DestroyTexturedResources();
-        void CreateLitTexturedResources(ConstructionResources& resources);
+        static void CreateLitTexturedResources(ConstructionResources& resources);
         void DestroyLitTexturedResources();
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineColored3D(
             const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
@@ -2891,9 +2910,9 @@ namespace CNA::Internal::Renderers::SdlGpu
                                   const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout);
 
         // Phase SDLGPU-7: AlphaTestEffect / DualTextureEffect.
-        void CreateAlphaTestResources(ConstructionResources& resources);
+        static void CreateAlphaTestResources(ConstructionResources& resources);
         void DestroyAlphaTestResources();
-        void CreateDualTextureResources(ConstructionResources& resources);
+        static void CreateDualTextureResources(ConstructionResources& resources);
         void DestroyDualTextureResources();
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineAlphaTest3D(
             bool hasVertexColor,
@@ -2927,7 +2946,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                                  SDL_GPUGraphicsPipeline*& boundPipeline);
 
         // Phase SDLGPU-9: EnvironmentMapEffect (SDLGPU-33).
-        void CreateEnvMapResources(ConstructionResources& resources);
+        static void CreateEnvMapResources(ConstructionResources& resources);
         void DestroyEnvMapResources();
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineEnvMap3D(
             const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
@@ -2943,7 +2962,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                             SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount,
                             SDL_GPUGraphicsPipeline*& boundPipeline);
 
-        void CreateInstancedResources(ConstructionResources& resources);
+        static void CreateInstancedResources(ConstructionResources& resources);
         void DestroyInstancedResources();
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineInstanced3D(
             const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
@@ -2962,7 +2981,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // Phase SDLGPU-7: SkinnedEffect (SDLGPU-34). GetOrCreatePipelineSkinned3D's `hasVertexColor`
         // selects the stride-56 skinnedColoredVertexShader_/skinnedColoredFragmentShader_ pair
         // instead of the stride-52 skinnedVertexShader_/litTexturedFragmentShader_ pair.
-        void CreateSkinnedResources(ConstructionResources& resources);
+        static void CreateSkinnedResources(ConstructionResources& resources);
         void DestroySkinnedResources();
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineSkinned3D(
             bool hasVertexColor, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
@@ -2981,7 +3000,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // EnsureDefaultPbrTextures() lazily creates the 1x1 fallback textures the 4 optional maps
         // bind when the effect leaves them unset, mirroring EasyGLRenderer::
         // EnsureDefaultWhiteTexture()/EnsureDefaultFlatNormalTexture()'s identical role.
-        void CreatePbrResources(ConstructionResources& resources);
+        static void CreatePbrResources(ConstructionResources& resources);
         void DestroyPbrResources();
         void EnsureDefaultPbrTextures();
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelinePbr3D(

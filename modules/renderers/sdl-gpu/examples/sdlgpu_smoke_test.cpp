@@ -43,6 +43,7 @@
 #include <cstdio>
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 
 using namespace Microsoft::Xna::Framework;
@@ -218,8 +219,38 @@ public:
     int getResult() const { return result_; }
 };
 
-int main()
+int main(int argc, char** argv)
 {
+    if (argc == 3 && std::string_view(argv[1]) == "--headless-stock-shaders")
+    {
+        // SDL_gpu device creation requires the video subsystem even though this probe never
+        // creates or claims a window. The caller still selects an offscreen/headless driver.
+        if (!SDL_Init(SDL_INIT_VIDEO))
+        {
+            std::printf("[FAIL] SDL_Init: %s\n", SDL_GetError());
+            return 1;
+        }
+
+        try
+        {
+            const std::string driver =
+                SdlGpuRenderer::ValidateStockShadersForDriverEXT(argv[2]);
+            std::printf("[PASS] requested SDL_gpu driver '%s' was selected\n", driver.c_str());
+            std::printf("[PASS] all %zu production stock shaders were created and released\n",
+                        SdlGpuConstructionShaderCountEXT);
+            SDL_Quit();
+            std::printf("=== 2/2 PASS ===\n");
+            return 0;
+        }
+        catch (const std::exception& exception)
+        {
+            std::printf("[FAIL] headless stock-shader portability probe: %s\n",
+                        exception.what());
+            SDL_Quit();
+            return 1;
+        }
+    }
+
     if (!CNA::Examples::ProbeGpuDisplayAvailable())
         return CNA::Examples::kSkipExitCode;
 
