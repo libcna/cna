@@ -1260,11 +1260,16 @@ namespace CNA::Internal::Renderers::DirectX9
             SetRenderTarget2D(nullptr);
             return;
         }
-        if (count == 1 && renderTargets[0].IsRenderTargetCubeFace())
+        // GraphicsDevice normalizes both singular public overloads through SetRenderTargets().
+        // Keep one target on the tracked path so its resolve runs before the next transition.
+        if (count == 1)
         {
-            SetRenderTargetCubeFace(
-                renderTargets[0].GetRenderTargetCube(),
-                renderTargets[0].GetCubeFace());
+            if (renderTargets[0].IsRenderTargetCubeFace())
+                SetRenderTargetCubeFace(
+                    renderTargets[0].GetRenderTargetCube(),
+                    renderTargets[0].GetCubeFace());
+            else
+                SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
             return;
         }
         for (int i = 0; i < count; ++i)

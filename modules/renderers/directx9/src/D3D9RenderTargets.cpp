@@ -101,7 +101,12 @@ namespace CNA::Internal::Renderers::DirectX9
     {
         if (appliedMultiSampleCount_ > 1 && msaaSurface_ && colorSurface_)
         {
-            device_->StretchRect(msaaSurface_.Get(), nullptr, colorSurface_.Get(), nullptr, D3DTEXF_NONE);
+            const HRESULT hr = device_->StretchRect(
+                msaaSurface_.Get(), nullptr, colorSurface_.Get(), nullptr, D3DTEXF_NONE);
+            if (FAILED(hr))
+                throw std::runtime_error(
+                    "D3D9RenderTargetRenderer::ResolveForTransitionEXT: StretchRect failed, hr=" +
+                    FormatHr(hr));
         }
     }
 
