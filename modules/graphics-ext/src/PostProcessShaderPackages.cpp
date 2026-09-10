@@ -151,6 +151,54 @@ namespace CNA::Graphics::detail
              "post_process/chromatic.vulkan.frag.spv"});
     }
 
+    ShaderPackageEXT CreateColorGradeStripShaderPackage()
+    {
+        using namespace CNA::Graphics::detail::PostProcessGenerated;
+        return MakeFullscreenPackage(
+            {kColorGradeStripEsFragmentSource,
+             "post_process/color_grade_strip.es.frag.glsl"},
+            {kColorGradeStripDesktopFragmentSource,
+             "post_process/color_grade_strip.desktop.frag.glsl"},
+            {kColorGradeStripVulkanFragmentSpirV,
+             kColorGradeStripVulkanFragmentSpirVByteSize,
+             "post_process/color_grade_strip.vulkan.frag.spv"},
+            {ShaderBindingRequirementEXT(
+                "uLutSampler", 1, ShaderBindingTypeEXT::SampledTexture2D,
+                CNA::ShaderStageEXT::Fragment)});
+    }
+
+    ShaderPackageEXT CreateColorGradeInterpolatedStripShaderPackage()
+    {
+        using namespace CNA::Graphics::detail::PostProcessGenerated;
+        return MakeFullscreenPackage(
+            {kColorGradeInterpolatedStripEsFragmentSource,
+             "post_process/color_grade_interpolated_strip.es.frag.glsl"},
+            {kColorGradeInterpolatedStripDesktopFragmentSource,
+             "post_process/color_grade_interpolated_strip.desktop.frag.glsl"},
+            {kColorGradeInterpolatedStripVulkanFragmentSpirV,
+             kColorGradeInterpolatedStripVulkanFragmentSpirVByteSize,
+             "post_process/color_grade_interpolated_strip.vulkan.frag.spv"},
+            {ShaderBindingRequirementEXT(
+                "uLutSampler", 1, ShaderBindingTypeEXT::SampledTexture2D,
+                CNA::ShaderStageEXT::Fragment)});
+    }
+
+    ShaderPackageEXT CreateColorGradeVolumeShaderPackage()
+    {
+        using namespace CNA::Graphics::detail::PostProcessGenerated;
+        return MakeFullscreenPackage(
+            {kColorGradeVolumeEsFragmentSource,
+             "post_process/color_grade_volume.es.frag.glsl"},
+            {kColorGradeVolumeDesktopFragmentSource,
+             "post_process/color_grade_volume.desktop.frag.glsl"},
+            {kColorGradeVolumeVulkanFragmentSpirV,
+             kColorGradeVolumeVulkanFragmentSpirVByteSize,
+             "post_process/color_grade_volume.vulkan.frag.spv"},
+            {ShaderBindingRequirementEXT(
+                "uLutVolume", 1, ShaderBindingTypeEXT::SampledTexture3D,
+                CNA::ShaderStageEXT::Fragment)});
+    }
+
     ShaderPackageEXT CreateFxaaShaderPackage()
     {
         using namespace CNA::Graphics::detail::PostProcessGenerated;

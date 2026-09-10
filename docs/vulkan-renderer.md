@@ -749,7 +749,7 @@ application orbit/yaw oracle passes **3/3** on all three paths with identical me
 Vulkan paths run under Khronos validation and emit no validation messages; the package also passes
 its write-free reproducibility check.
 
-### Portable post-process rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`–`MOD-2239f`, 2026-09-10)
+### Portable post-process rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`–`MOD-2239g`, 2026-09-10)
 
 `ChromaticAberrationPass` is the first engine post-process to use the portable package path. Its
 internal package shares one fullscreen vertex contract across GLSL ES, desktop GLSL and SPIR-V;
@@ -833,6 +833,17 @@ The previous Vulkan run's 10 passes and 9 shader-execution skips become **20/20*
 llvmpipe, matching EasyGL and covering the real multi-level halo, HDR retention, exact zero
 intensity, resource reuse and an asymmetric uploaded-source orientation check. The complete portable
 post-process regression set is now **76/76** on all three paths, with no Khronos validation messages.
+
+`ColorGradePass` is the tenth consumer and selects three packages: the original filtered 2D strip,
+the explicit trilinear/tetrahedral 2D strip and the true `Texture3D` volume. LUT size, strength and
+interpolation mode share the existing `vec4` push slot. The strip stays on sampler unit 1/set 1
+binding 1; the volume reuses unit 1's established set 1 binding 9. Linear-clamp is explicit for the
+filtered path, exact texel-fetch routes use point-clamp, and the application's prior sampler is
+restored. The former 30-case Vulkan selection's 22 passes and 8 source-execution skips become an
+expanded **31/31** on RADV and llvmpipe, matching EasyGL. This includes identity/channel-swap grades,
+tetrahedral neutral preservation, exact strip-versus-volume agreement and sampler-state isolation.
+The complete portable post-process regression set is now **107/107** on all three paths, with no
+Khronos validation messages.
 
 Other engine post-process effects remain source-only and keep their exact copy-through fallback;
 the shared package/helper is the landing point for their subsequent fragment variants.

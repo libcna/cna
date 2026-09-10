@@ -17,6 +17,8 @@
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerStateCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
 #include <functional>
@@ -32,6 +34,7 @@ using CNA::Graphics::RenderPipelineSettings;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
+using Microsoft::Xna::Framework::Graphics::SamplerState;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 
 constexpr int kSize    = 32;
@@ -156,7 +159,8 @@ TEST(ColorGradeTest, AnIdentityTableReproducesTheFrame)
     // -- slightly washed, slightly shifted, entirely plausible. Only an exact identity catches it.
     GraphicsDevice gd;
     ColorGradePass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer has no usable colour-grade shader package";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto source = MakeSpread(gd);
@@ -193,7 +197,8 @@ TEST(ColorGradeTest, ATableThatSwapsChannelsSwapsThem)
     // convincingly as the identity does, and this is what separates them.
     GraphicsDevice gd;
     ColorGradePass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer has no usable colour-grade shader package";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto source = MakeImage(gd, [](int, int) { return Color(230, 60, 20, 255); });
@@ -214,7 +219,8 @@ TEST(ColorGradeTest, StrengthMixesBetweenTheOriginalAndTheGrade)
 {
     GraphicsDevice gd;
     ColorGradePass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer has no usable colour-grade shader package";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto source = MakeImage(gd, [](int, int) { return Color(230, 60, 20, 255); });
@@ -260,7 +266,8 @@ TEST(ColorGradeTest, TheSettingsBagWinsOverThePassLocalStrength)
 {
     GraphicsDevice gd;
     ColorGradePass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer has no usable colour-grade shader package";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto source = MakeImage(gd, [](int, int) { return Color(230, 60, 20, 255); });
@@ -279,6 +286,33 @@ TEST(ColorGradeTest, TheSettingsBagWinsOverThePassLocalStrength)
     const Color pixel = ReadTarget(destination)[static_cast<std::size_t>(kSize / 2) * kSize + kSize / 2];
     EXPECT_NEAR(pixel.getRProperty(), 230, 6)
         << "the pass used its own strength instead of the settings bag's";
+}
+
+TEST(ColorGradeTest, ApplyingDoesNotLeakItsLutSamplerState)
+{
+    GraphicsDevice gd;
+    ColorGradePass pass(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer has no usable colour-grade shader";
+
+    auto source = MakeImage(gd, [](int, int) { return Color(230, 60, 20, 255); });
+    RenderTarget2D destination(gd, kSize, kSize);
+    auto lut = MakeSwapRedAndBlueLut(gd, kLutSize);
+    pass.setLut(lut.get());
+
+    gd.getSamplerStatesProperty()[1] = SamplerState::PointWrap;
+    PostProcessContext context = MakeContext(*source, destination);
+    pass.apply(context);
+
+    const SamplerState& restored = gd.getSamplerStatesProperty()[1];
+    EXPECT_EQ(restored.getFilterProperty(),
+              Microsoft::Xna::Framework::Graphics::TextureFilter::Point);
+    EXPECT_EQ(restored.getAddressUProperty(),
+              Microsoft::Xna::Framework::Graphics::TextureAddressMode::Wrap);
+    EXPECT_EQ(restored.getAddressVProperty(),
+              Microsoft::Xna::Framework::Graphics::TextureAddressMode::Wrap);
+    EXPECT_EQ(restored.getAddressWProperty(),
+              Microsoft::Xna::Framework::Graphics::TextureAddressMode::Wrap);
 }
 
 TEST(ColorGradeTest, TheStrengthIsClampedAndTheNameIsStable)

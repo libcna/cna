@@ -22,6 +22,15 @@ namespace CNA::Graphics::detail
     /** @brief Creates the portable chromatic-aberration fullscreen shader package. */
     [[nodiscard]] ShaderPackageEXT CreateChromaticAberrationShaderPackage();
 
+    /** @brief Creates the portable filtered-strip colour-grade shader package. */
+    [[nodiscard]] ShaderPackageEXT CreateColorGradeStripShaderPackage();
+
+    /** @brief Creates the portable exact/tetrahedral strip colour-grade shader package. */
+    [[nodiscard]] ShaderPackageEXT CreateColorGradeInterpolatedStripShaderPackage();
+
+    /** @brief Creates the portable volume-LUT colour-grade shader package. */
+    [[nodiscard]] ShaderPackageEXT CreateColorGradeVolumeShaderPackage();
+
     /** @brief Creates the portable FXAA fullscreen shader package. */
     [[nodiscard]] ShaderPackageEXT CreateFxaaShaderPackage();
 

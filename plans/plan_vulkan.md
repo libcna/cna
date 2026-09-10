@@ -247,7 +247,8 @@ implementation tasks.**
   while `MOD-2239a` adds tonemapping/debanding, `MOD-2239b` adds lens-flare ghosts and
   `MOD-2239c` adds sRGB/scRGB/HDR10 encoding to textures or files. `MOD-2239d` adds edge-adaptive
   spatial upscaling, `MOD-2239e` adds the existing occlusion-aware light-shaft radial walk, and
-  `MOD-2239f` adds the four-stage bloom pyramid. The bloom work also fixes secondary
+  `MOD-2239f` adds the four-stage bloom pyramid, and `MOD-2239g` adds filtered/tetrahedral 2D and
+  true 3D-LUT colour grading. The bloom work also fixes secondary
   `RenderTarget2D` sampling through Vulkan `ShaderEffect`, which previously substituted the white
   fallback because the binding accepted only the uploaded-texture concrete type.
   All are verified on RADV, Vulkan llvmpipe and EasyGL; the HDR encoder does not

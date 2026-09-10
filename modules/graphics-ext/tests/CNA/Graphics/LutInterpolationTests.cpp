@@ -208,7 +208,6 @@ TEST(LutInterpolationTest, TetrahedralKeepsANeutralNeutralAndTrilinearDoesNot)
     GraphicsDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
 
     const CubeLut lut = CubeLut::parse(GradeAsCubeText(kTableSize));
     auto strip = lut.createStripTexture(gd);
@@ -245,7 +244,6 @@ TEST(LutInterpolationTest, TetrahedralIsTheMoreAccurateOfTheTwoAgainstTheExactGr
     GraphicsDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
 
     const CubeLut lut = CubeLut::parse(GradeAsCubeText(kTableSize));
     auto strip = lut.createStripTexture(gd);
@@ -281,7 +279,6 @@ TEST(LutInterpolationTest, BothAgreeExactlyOnTheTablesOwnEntries)
     GraphicsDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
 
     const CubeLut lut = CubeLut::parse(GradeAsCubeText(kTableSize));
     auto strip = lut.createStripTexture(gd);
@@ -321,7 +318,6 @@ TEST(LutInterpolationTest, TheVolumeLayoutGivesTheSameAnswerAsTheStrip)
     GraphicsDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
     if (!gd.SupportsCapability(CNA::GraphicsCapability::Texture3D))
         GTEST_SKIP() << "this renderer has no volume textures";
 
