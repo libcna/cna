@@ -255,6 +255,21 @@ namespace CNA::Graphics::detail
              "post_process/hdr_display.vulkan.frag.spv"});
     }
 
+    ShaderPackageEXT CreateHeightFogShaderPackage()
+    {
+        using namespace CNA::Graphics::detail::PostProcessGenerated;
+        return MakeFullscreenPackage(
+            {kHeightFogEsFragmentSource, "post_process/height_fog.es.frag.glsl"},
+            {kHeightFogDesktopFragmentSource,
+             "post_process/height_fog.desktop.frag.glsl"},
+            {kHeightFogVulkanFragmentSpirV,
+             kHeightFogVulkanFragmentSpirVByteSize,
+             "post_process/height_fog.vulkan.frag.spv"},
+            {ShaderBindingRequirementEXT(
+                "uDepthSampler", 1, ShaderBindingTypeEXT::SampledTexture2D,
+                CNA::ShaderStageEXT::Fragment)});
+    }
+
     ShaderPackageEXT CreateSpatialUpscaleShaderPackage()
     {
         using namespace CNA::Graphics::detail::PostProcessGenerated;

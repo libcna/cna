@@ -46,6 +46,9 @@ namespace CNA::Graphics::detail
     /** @brief Creates the portable HDR-display-output fullscreen shader package. */
     [[nodiscard]] ShaderPackageEXT CreateHdrDisplayShaderPackage();
 
+    /** @brief Creates the portable analytic height-fog fullscreen shader package. */
+    [[nodiscard]] ShaderPackageEXT CreateHeightFogShaderPackage();
+
     /** @brief Creates the portable spatial-upscale fullscreen shader package. */
     [[nodiscard]] ShaderPackageEXT CreateSpatialUpscaleShaderPackage();
 

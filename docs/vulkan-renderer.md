@@ -749,7 +749,7 @@ application orbit/yaw oracle passes **3/3** on all three paths with identical me
 Vulkan paths run under Khronos validation and emit no validation messages; the package also passes
 its write-free reproducibility check.
 
-### Portable post-process rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`–`MOD-2239g`, 2026-09-10)
+### Portable post-process rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`–`MOD-2239h`, 2026-09-10)
 
 `ChromaticAberrationPass` is the first engine post-process to use the portable package path. Its
 internal package shares one fullscreen vertex contract across GLSL ES, desktop GLSL and SPIR-V;
@@ -844,6 +844,17 @@ expanded **31/31** on RADV and llvmpipe, matching EasyGL. This includes identity
 tetrahedral neutral preservation, exact strip-versus-volume agreement and sampler-state isolation.
 The complete portable post-process regression set is now **107/107** on all three paths, with no
 Khronos validation messages.
+
+`HeightFogPass` is the eleventh consumer. Its analytic integral needs inverse projection and view,
+fog colour, far plane, density, falloff, base height and the depth-encoding policy: more independent
+values than Vulkan's deliberately name-independent scalar push slots can carry. The package instead
+reuses the existing typed uniform-array descriptors at set 1 bindings 12, 14 and 15 for five
+floats, one `vec3` and two `mat4` values; the prepass depth remains the ordinary sampled texture at
+set 1 binding 1. No renderer API, layout or push range changed. The former eight-case Vulkan run's
+7 passes and 1 source-execution skip become an expanded **9/9** on RADV and llvmpipe, matching
+EasyGL. The added repeated-upload oracle changes only camera height and proves the second matrix
+really moves the view out of the fog layer. The complete portable post-process regression set is
+now **116/116** on all three paths, with no Khronos validation messages.
 
 Other engine post-process effects remain source-only and keep their exact copy-through fallback;
 the shared package/helper is the landing point for their subsequent fragment variants.
