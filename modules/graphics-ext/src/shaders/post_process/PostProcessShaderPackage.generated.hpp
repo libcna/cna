@@ -24,7 +24,7 @@ struct PayloadProvenance
 };
 
 inline constexpr std::string_view kPackageName = "post_process";
-inline constexpr std::string_view kManifestSha256 = "b33f4c99620e34cb861f30feab843910ec6e38cc292c81a4e23a5fcf447ab4aa";
+inline constexpr std::string_view kManifestSha256 = "8c32c28aeb2b50c85d71a016b5b42101e1f06f9e3b3c462e36af75b6985fa319";
 inline constexpr std::string_view kCompiler = "shaderc shared library";
 inline constexpr std::string_view kCompilerSoname = "libshaderc.so.1";
 inline constexpr std::string_view kCompilerSha256 = "31400b359d2f4b4a43168978412a72913474725befb87966068cfac1922ac6c9";
@@ -192,6 +192,102 @@ void main()
                      texture(texture1, TexCoord).g,
                      texture(texture1, blueUv).b,
                      texture(texture1, TexCoord).a) * SpriteColor;
+}
+)CNA_SHADER";
+
+inline constexpr std::string_view kContactShadowEsFragmentSource =
+    R"CNA_SHADER(#version 300 es
+precision highp float;
+
+in vec2 TexCoord;
+in vec4 SpriteColor;
+out vec4 FragColor;
+
+uniform sampler2D texture1;
+uniform sampler2D uDepthSampler;
+uniform float uContactScalars[7];
+uniform vec2 uContactVectors[1];
+uniform vec3 uContactDirections[1];
+uniform mat4 uContactMatrices[2];
+
+const float kCnaSkyDepth = 0.999;
+
+float cnaDecodeLinearDepth(vec4 channels)
+{
+    if (uContactScalars[6] < 0.5)
+        return channels.r;
+    const vec4 shift = vec4(1.0 / 16581375.0, 1.0 / 65025.0, 1.0 / 255.0, 1.0);
+    return dot(channels, shift);
+}
+
+vec3 cnaViewPositionFromDepth(vec2 uv, float linearDepth)
+{
+    vec4 clip = vec4(uv * 2.0 - 1.0, 1.0, 1.0);
+    vec4 ray = uContactMatrices[1] * clip;
+    vec3 direction = ray.xyz / ray.w;
+    return direction * (linearDepth / max(-direction.z, 1e-6));
+}
+
+vec2 cnaSnapToTexel(vec2 uv)
+{
+    return (floor(uv * uContactVectors[0]) + 0.5) / uContactVectors[0];
+}
+
+bool cnaContactOccluded(float rayViewDepth, float sceneViewDepth,
+                        float bias, float thickness)
+{
+    float difference = rayViewDepth - sceneViewDepth;
+    return difference > bias && difference < thickness;
+}
+
+void main()
+{
+    vec4 scene = texture(texture1, TexCoord);
+    float centerDepth = cnaDecodeLinearDepth(
+        texture(uDepthSampler, cnaSnapToTexel(TexCoord)));
+    if (centerDepth <= 0.0 || centerDepth >= kCnaSkyDepth)
+    {
+        FragColor = scene * SpriteColor;
+        return;
+    }
+
+    vec3 position = cnaViewPositionFromDepth(TexCoord, centerDepth)
+                  * uContactScalars[0];
+    float stepLength = uContactScalars[1] / uContactScalars[5];
+    float occluded = 0.0;
+
+    for (int i = 1; i <= 64; ++i)
+    {
+        if (float(i) > uContactScalars[5])
+            break;
+        vec3 samplePosition = position
+                            + uContactDirections[0] * (stepLength * float(i));
+        if (samplePosition.z >= -1e-6)
+            break;
+
+        vec4 clip = uContactMatrices[0] * vec4(samplePosition, 1.0);
+        if (clip.w <= 0.0)
+            break;
+        vec2 sampleUv = (clip.xy / clip.w) * 0.5 + 0.5;
+        if (sampleUv.x < 0.0 || sampleUv.x > 1.0 ||
+            sampleUv.y < 0.0 || sampleUv.y > 1.0)
+            break;
+
+        float sceneDepth = cnaDecodeLinearDepth(
+            textureLod(uDepthSampler, cnaSnapToTexel(sampleUv), 0.0));
+        if (sceneDepth <= 0.0 || sceneDepth >= kCnaSkyDepth)
+            continue;
+
+        if (cnaContactOccluded(-samplePosition.z, sceneDepth * uContactScalars[0],
+                               uContactScalars[3], uContactScalars[2]))
+        {
+            occluded = 1.0;
+            break;
+        }
+    }
+
+    float visibility = 1.0 - occluded * clamp(uContactScalars[4], 0.0, 1.0);
+    FragColor = vec4(scene.rgb * visibility, scene.a) * SpriteColor;
 }
 )CNA_SHADER";
 
@@ -1408,6 +1504,101 @@ void main()
                      texture(texture1, TexCoord).g,
                      texture(texture1, blueUv).b,
                      texture(texture1, TexCoord).a) * SpriteColor;
+}
+)CNA_SHADER";
+
+inline constexpr std::string_view kContactShadowDesktopFragmentSource =
+    R"CNA_SHADER(#version 330 core
+
+in vec2 TexCoord;
+in vec4 SpriteColor;
+out vec4 FragColor;
+
+uniform sampler2D texture1;
+uniform sampler2D uDepthSampler;
+uniform float uContactScalars[7];
+uniform vec2 uContactVectors[1];
+uniform vec3 uContactDirections[1];
+uniform mat4 uContactMatrices[2];
+
+const float kCnaSkyDepth = 0.999;
+
+float cnaDecodeLinearDepth(vec4 channels)
+{
+    if (uContactScalars[6] < 0.5)
+        return channels.r;
+    const vec4 shift = vec4(1.0 / 16581375.0, 1.0 / 65025.0, 1.0 / 255.0, 1.0);
+    return dot(channels, shift);
+}
+
+vec3 cnaViewPositionFromDepth(vec2 uv, float linearDepth)
+{
+    vec4 clip = vec4(uv * 2.0 - 1.0, 1.0, 1.0);
+    vec4 ray = uContactMatrices[1] * clip;
+    vec3 direction = ray.xyz / ray.w;
+    return direction * (linearDepth / max(-direction.z, 1e-6));
+}
+
+vec2 cnaSnapToTexel(vec2 uv)
+{
+    return (floor(uv * uContactVectors[0]) + 0.5) / uContactVectors[0];
+}
+
+bool cnaContactOccluded(float rayViewDepth, float sceneViewDepth,
+                        float bias, float thickness)
+{
+    float difference = rayViewDepth - sceneViewDepth;
+    return difference > bias && difference < thickness;
+}
+
+void main()
+{
+    vec4 scene = texture(texture1, TexCoord);
+    float centerDepth = cnaDecodeLinearDepth(
+        texture(uDepthSampler, cnaSnapToTexel(TexCoord)));
+    if (centerDepth <= 0.0 || centerDepth >= kCnaSkyDepth)
+    {
+        FragColor = scene * SpriteColor;
+        return;
+    }
+
+    vec3 position = cnaViewPositionFromDepth(TexCoord, centerDepth)
+                  * uContactScalars[0];
+    float stepLength = uContactScalars[1] / uContactScalars[5];
+    float occluded = 0.0;
+
+    for (int i = 1; i <= 64; ++i)
+    {
+        if (float(i) > uContactScalars[5])
+            break;
+        vec3 samplePosition = position
+                            + uContactDirections[0] * (stepLength * float(i));
+        if (samplePosition.z >= -1e-6)
+            break;
+
+        vec4 clip = uContactMatrices[0] * vec4(samplePosition, 1.0);
+        if (clip.w <= 0.0)
+            break;
+        vec2 sampleUv = (clip.xy / clip.w) * 0.5 + 0.5;
+        if (sampleUv.x < 0.0 || sampleUv.x > 1.0 ||
+            sampleUv.y < 0.0 || sampleUv.y > 1.0)
+            break;
+
+        float sceneDepth = cnaDecodeLinearDepth(
+            textureLod(uDepthSampler, cnaSnapToTexel(sampleUv), 0.0));
+        if (sceneDepth <= 0.0 || sceneDepth >= kCnaSkyDepth)
+            continue;
+
+        if (cnaContactOccluded(-samplePosition.z, sceneDepth * uContactScalars[0],
+                               uContactScalars[3], uContactScalars[2]))
+        {
+            occluded = 1.0;
+            break;
+        }
+    }
+
+    float visibility = 1.0 - occluded * clamp(uContactScalars[4], 0.0, 1.0);
+    FragColor = vec4(scene.rgb * visibility, scene.a) * SpriteColor;
 }
 )CNA_SHADER";
 
@@ -2760,6 +2951,173 @@ inline constexpr std::uint32_t kChromaticVulkanFragmentSpirV[] = {
     0x00010038u,
 };
 inline constexpr std::size_t kChromaticVulkanFragmentSpirVByteSize = sizeof(kChromaticVulkanFragmentSpirV);
+
+inline constexpr std::uint32_t kContactShadowVulkanFragmentSpirV[] = {
+    0x07230203u, 0x00010000u, 0x000d000bu, 0x00000214u, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
+    0x00000001u, 0x4c534c47u, 0x6474732eu, 0x3035342eu, 0x00000000u, 0x0003000eu, 0x00000000u, 0x00000001u,
+    0x0008000fu, 0x00000004u, 0x00000004u, 0x6e69616du, 0x00000000u, 0x000000acu, 0x000000c2u, 0x000000c5u,
+    0x00030010u, 0x00000004u, 0x00000007u, 0x00040047u, 0x00000028u, 0x00000006u, 0x00000010u, 0x00030047u,
+    0x00000029u, 0x00000002u, 0x00050048u, 0x00000029u, 0x00000000u, 0x00000023u, 0x00000000u, 0x00040047u,
+    0x0000002bu, 0x00000021u, 0x0000000cu, 0x00040047u, 0x0000002bu, 0x00000022u, 0x00000001u, 0x00040047u,
+    0x00000056u, 0x00000006u, 0x00000040u, 0x00030047u, 0x00000057u, 0x00000002u, 0x00040048u, 0x00000057u,
+    0x00000000u, 0x00000005u, 0x00050048u, 0x00000057u, 0x00000000u, 0x00000007u, 0x00000010u, 0x00050048u,
+    0x00000057u, 0x00000000u, 0x00000023u, 0x00000000u, 0x00040047u, 0x00000059u, 0x00000021u, 0x0000000fu,
+    0x00040047u, 0x00000059u, 0x00000022u, 0x00000001u, 0x00040047u, 0x00000088u, 0x00000006u, 0x00000010u,
+    0x00030047u, 0x00000089u, 0x00000002u, 0x00050048u, 0x00000089u, 0x00000000u, 0x00000023u, 0x00000000u,
+    0x00040047u, 0x0000008bu, 0x00000021u, 0x0000000du, 0x00040047u, 0x0000008bu, 0x00000022u, 0x00000001u,
+    0x00040047u, 0x000000a9u, 0x00000021u, 0x00000000u, 0x00040047u, 0x000000a9u, 0x00000022u, 0x00000000u,
+    0x00040047u, 0x000000acu, 0x0000001eu, 0x00000000u, 0x00040047u, 0x000000b0u, 0x00000021u, 0x00000001u,
+    0x00040047u, 0x000000b0u, 0x00000022u, 0x00000001u, 0x00040047u, 0x000000c2u, 0x0000001eu, 0x00000000u,
+    0x00040047u, 0x000000c5u, 0x0000001eu, 0x00000001u, 0x00040047u, 0x000000eeu, 0x00000006u, 0x00000010u,
+    0x00030047u, 0x000000efu, 0x00000002u, 0x00050048u, 0x000000efu, 0x00000000u, 0x00000023u, 0x00000000u,
+    0x00040047u, 0x000000f1u, 0x00000021u, 0x0000000eu, 0x00040047u, 0x000000f1u, 0x00000022u, 0x00000001u,
+    0x00020013u, 0x00000002u, 0x00030021u, 0x00000003u, 0x00000002u, 0x00030016u, 0x00000006u, 0x00000020u,
+    0x00040017u, 0x00000007u, 0x00000006u, 0x00000004u, 0x00040017u, 0x0000000du, 0x00000006u, 0x00000002u,
+    0x00040017u, 0x00000010u, 0x00000006u, 0x00000003u, 0x00020014u, 0x0000001eu, 0x00040015u, 0x00000026u,
+    0x00000020u, 0x00000000u, 0x0004002bu, 0x00000026u, 0x00000027u, 0x00000048u, 0x0004001cu, 0x00000028u,
+    0x00000006u, 0x00000027u, 0x0003001eu, 0x00000029u, 0x00000028u, 0x00040020u, 0x0000002au, 0x00000002u,
+    0x00000029u, 0x0004003bu, 0x0000002au, 0x0000002bu, 0x00000002u, 0x00040015u, 0x0000002cu, 0x00000020u,
+    0x00000001u, 0x0004002bu, 0x0000002cu, 0x0000002du, 0x00000000u, 0x0004002bu, 0x0000002cu, 0x0000002eu,
+    0x00000006u, 0x00040020u, 0x0000002fu, 0x00000002u, 0x00000006u, 0x0004002bu, 0x00000006u, 0x00000032u,
+    0x3f000000u, 0x0004002bu, 0x00000026u, 0x00000036u, 0x00000000u, 0x0004002bu, 0x00000006u, 0x0000003bu,
+    0x33818305u, 0x0004002bu, 0x00000006u, 0x0000003cu, 0x37810182u, 0x0004002bu, 0x00000006u, 0x0000003du,
+    0x3b808081u, 0x0004002bu, 0x00000006u, 0x0000003eu, 0x3f800000u, 0x0007002cu, 0x00000007u, 0x0000003fu,
+    0x0000003bu, 0x0000003cu, 0x0000003du, 0x0000003eu, 0x0004002bu, 0x00000006u, 0x0000004du, 0x40000000u,
+    0x00040018u, 0x00000055u, 0x00000007u, 0x00000004u, 0x0004001cu, 0x00000056u, 0x00000055u, 0x00000027u,
+    0x0003001eu, 0x00000057u, 0x00000056u, 0x00040020u, 0x00000058u, 0x00000002u, 0x00000057u, 0x0004003bu,
+    0x00000058u, 0x00000059u, 0x00000002u, 0x0004002bu, 0x0000002cu, 0x0000005au, 0x00000001u, 0x00040020u,
+    0x0000005bu, 0x00000002u, 0x00000055u, 0x0004002bu, 0x00000006u, 0x0000006fu, 0x358637bdu, 0x0004001cu,
+    0x00000088u, 0x0000000du, 0x00000027u, 0x0003001eu, 0x00000089u, 0x00000088u, 0x00040020u, 0x0000008au,
+    0x00000002u, 0x00000089u, 0x0004003bu, 0x0000008au, 0x0000008bu, 0x00000002u, 0x00040020u, 0x0000008cu,
+    0x00000002u, 0x0000000du, 0x00090019u, 0x000000a6u, 0x00000006u, 0x00000001u, 0x00000000u, 0x00000000u,
+    0x00000000u, 0x00000001u, 0x00000000u, 0x0003001bu, 0x000000a7u, 0x000000a6u, 0x00040020u, 0x000000a8u,
+    0x00000000u, 0x000000a7u, 0x0004003bu, 0x000000a8u, 0x000000a9u, 0x00000000u, 0x00040020u, 0x000000abu,
+    0x00000001u, 0x0000000du, 0x0004003bu, 0x000000abu, 0x000000acu, 0x00000001u, 0x0004003bu, 0x000000a8u,
+    0x000000b0u, 0x00000000u, 0x0004002bu, 0x00000006u, 0x000000b9u, 0x00000000u, 0x0004002bu, 0x00000006u,
+    0x000000bcu, 0x3f7fbe77u, 0x00040020u, 0x000000c1u, 0x00000003u, 0x00000007u, 0x0004003bu, 0x000000c1u,
+    0x000000c2u, 0x00000003u, 0x00040020u, 0x000000c4u, 0x00000001u, 0x00000007u, 0x0004003bu, 0x000000c4u,
+    0x000000c5u, 0x00000001u, 0x0004002bu, 0x0000002cu, 0x000000d5u, 0x00000005u, 0x0004002bu, 0x0000002cu,
+    0x000000e2u, 0x00000040u, 0x0004001cu, 0x000000eeu, 0x00000010u, 0x00000027u, 0x0003001eu, 0x000000efu,
+    0x000000eeu, 0x00040020u, 0x000000f0u, 0x00000002u, 0x000000efu, 0x0004003bu, 0x000000f0u, 0x000000f1u,
+    0x00000002u, 0x00040020u, 0x000000f2u, 0x00000002u, 0x00000010u, 0x0004002bu, 0x00000006u, 0x000000fdu,
+    0xb58637bdu, 0x0004002bu, 0x0000002cu, 0x00000147u, 0x00000003u, 0x0004002bu, 0x0000002cu, 0x00000148u,
+    0x00000002u, 0x0004002bu, 0x0000002cu, 0x00000159u, 0x00000004u, 0x0005002cu, 0x0000000du, 0x00000212u,
+    0x00000032u, 0x00000032u, 0x0005002cu, 0x0000000du, 0x00000213u, 0x0000003eu, 0x0000003eu, 0x00050036u,
+    0x00000002u, 0x00000004u, 0x00000000u, 0x00000003u, 0x000200f8u, 0x00000005u, 0x000300f7u, 0x0000016bu,
+    0x00000000u, 0x000300fbu, 0x00000036u, 0x0000016cu, 0x000200f8u, 0x0000016cu, 0x0004003du, 0x000000a7u,
+    0x000000aau, 0x000000a9u, 0x0004003du, 0x0000000du, 0x000000adu, 0x000000acu, 0x00050057u, 0x00000007u,
+    0x000000aeu, 0x000000aau, 0x000000adu, 0x0004003du, 0x000000a7u, 0x000000b1u, 0x000000b0u, 0x00060041u,
+    0x0000008cu, 0x00000179u, 0x0000008bu, 0x0000002du, 0x0000002du, 0x0004003du, 0x0000000du, 0x0000017au,
+    0x00000179u, 0x00050085u, 0x0000000du, 0x0000017bu, 0x000000adu, 0x0000017au, 0x0006000cu, 0x0000000du,
+    0x0000017cu, 0x00000001u, 0x00000008u, 0x0000017bu, 0x00050081u, 0x0000000du, 0x0000017eu, 0x0000017cu,
+    0x00000212u, 0x00050088u, 0x0000000du, 0x00000181u, 0x0000017eu, 0x0000017au, 0x00050057u, 0x00000007u,
+    0x000000b5u, 0x000000b1u, 0x00000181u, 0x000300f7u, 0x00000190u, 0x00000000u, 0x000300fbu, 0x00000036u,
+    0x00000186u, 0x000200f8u, 0x00000186u, 0x00060041u, 0x0000002fu, 0x00000187u, 0x0000002bu, 0x0000002du,
+    0x0000002eu, 0x0004003du, 0x00000006u, 0x00000188u, 0x00000187u, 0x000500b8u, 0x0000001eu, 0x00000189u,
+    0x00000188u, 0x00000032u, 0x000300f7u, 0x0000018du, 0x00000000u, 0x000400fau, 0x00000189u, 0x0000018au,
+    0x0000018du, 0x000200f8u, 0x0000018au, 0x00050051u, 0x00000006u, 0x0000018cu, 0x000000b5u, 0x00000000u,
+    0x000200f9u, 0x00000190u, 0x000200f8u, 0x0000018du, 0x00050094u, 0x00000006u, 0x0000018fu, 0x000000b5u,
+    0x0000003fu, 0x000200f9u, 0x00000190u, 0x000200f8u, 0x00000190u, 0x000700f5u, 0x00000006u, 0x00000203u,
+    0x0000018cu, 0x0000018au, 0x0000018fu, 0x0000018du, 0x000500bcu, 0x0000001eu, 0x000000bau, 0x00000203u,
+    0x000000b9u, 0x000500beu, 0x0000001eu, 0x000000bdu, 0x00000203u, 0x000000bcu, 0x000500a6u, 0x0000001eu,
+    0x000000beu, 0x000000bau, 0x000000bdu, 0x000300f7u, 0x000000c0u, 0x00000000u, 0x000400fau, 0x000000beu,
+    0x000000bfu, 0x000000c0u, 0x000200f8u, 0x000000bfu, 0x0004003du, 0x00000007u, 0x000000c6u, 0x000000c5u,
+    0x00050085u, 0x00000007u, 0x000000c7u, 0x000000aeu, 0x000000c6u, 0x0003003eu, 0x000000c2u, 0x000000c7u,
+    0x000200f9u, 0x0000016bu, 0x000200f8u, 0x000000c0u, 0x00050051u, 0x00000006u, 0x00000199u, 0x000000adu,
+    0x00000000u, 0x00050051u, 0x00000006u, 0x0000019bu, 0x000000adu, 0x00000001u, 0x00050083u, 0x00000006u,
+    0x0000019cu, 0x0000003eu, 0x0000019bu, 0x00050050u, 0x0000000du, 0x0000019du, 0x00000199u, 0x0000019cu,
+    0x0005008eu, 0x0000000du, 0x0000019fu, 0x0000019du, 0x0000004du, 0x00050083u, 0x0000000du, 0x000001a1u,
+    0x0000019fu, 0x00000213u, 0x00050051u, 0x00000006u, 0x000001a2u, 0x000001a1u, 0x00000000u, 0x00050051u,
+    0x00000006u, 0x000001a3u, 0x000001a1u, 0x00000001u, 0x00070050u, 0x00000007u, 0x000001a4u, 0x000001a2u,
+    0x000001a3u, 0x0000003eu, 0x0000003eu, 0x00060041u, 0x0000005bu, 0x000001a5u, 0x00000059u, 0x0000002du,
+    0x0000005au, 0x0004003du, 0x00000055u, 0x000001a6u, 0x000001a5u, 0x00050091u, 0x00000007u, 0x000001a8u,
+    0x000001a6u, 0x000001a4u, 0x0008004fu, 0x00000010u, 0x000001aau, 0x000001a8u, 0x000001a8u, 0x00000000u,
+    0x00000001u, 0x00000002u, 0x00050051u, 0x00000006u, 0x000001acu, 0x000001a8u, 0x00000003u, 0x00060050u,
+    0x00000010u, 0x000001adu, 0x000001acu, 0x000001acu, 0x000001acu, 0x00050088u, 0x00000010u, 0x000001aeu,
+    0x000001aau, 0x000001adu, 0x00050051u, 0x00000006u, 0x000001b2u, 0x000001aeu, 0x00000002u, 0x0004007fu,
+    0x00000006u, 0x000001b3u, 0x000001b2u, 0x0007000cu, 0x00000006u, 0x000001b4u, 0x00000001u, 0x00000028u,
+    0x000001b3u, 0x0000006fu, 0x00050088u, 0x00000006u, 0x000001b5u, 0x00000203u, 0x000001b4u, 0x0005008eu,
+    0x00000010u, 0x000001b6u, 0x000001aeu, 0x000001b5u, 0x00060041u, 0x0000002fu, 0x000000cfu, 0x0000002bu,
+    0x0000002du, 0x0000002du, 0x0004003du, 0x00000006u, 0x000000d0u, 0x000000cfu, 0x0005008eu, 0x00000010u,
+    0x000000d1u, 0x000001b6u, 0x000000d0u, 0x00060041u, 0x0000002fu, 0x000000d3u, 0x0000002bu, 0x0000002du,
+    0x0000005au, 0x0004003du, 0x00000006u, 0x000000d4u, 0x000000d3u, 0x00060041u, 0x0000002fu, 0x000000d6u,
+    0x0000002bu, 0x0000002du, 0x000000d5u, 0x0004003du, 0x00000006u, 0x000000d7u, 0x000000d6u, 0x00050088u,
+    0x00000006u, 0x000000d8u, 0x000000d4u, 0x000000d7u, 0x000200f9u, 0x000000dcu, 0x000200f8u, 0x000000dcu,
+    0x000700f5u, 0x0000002cu, 0x00000204u, 0x0000005au, 0x000000c0u, 0x00000156u, 0x000000dfu, 0x000500b3u,
+    0x0000001eu, 0x000000e3u, 0x00000204u, 0x000000e2u, 0x000400f6u, 0x000000deu, 0x000000dfu, 0x00000000u,
+    0x000400fau, 0x000000e3u, 0x000000ddu, 0x000000deu, 0x000200f8u, 0x000000ddu, 0x0004006fu, 0x00000006u,
+    0x000000e5u, 0x00000204u, 0x000500bau, 0x0000001eu, 0x000000e8u, 0x000000e5u, 0x000000d7u, 0x000300f7u,
+    0x000000eau, 0x00000000u, 0x000400fau, 0x000000e8u, 0x000000e9u, 0x000000eau, 0x000200f8u, 0x000000e9u,
+    0x000200f9u, 0x000000deu, 0x000200f8u, 0x000000eau, 0x00060041u, 0x000000f2u, 0x000000f3u, 0x000000f1u,
+    0x0000002du, 0x0000002du, 0x0004003du, 0x00000010u, 0x000000f4u, 0x000000f3u, 0x00050085u, 0x00000006u,
+    0x000000f8u, 0x000000d8u, 0x000000e5u, 0x0005008eu, 0x00000010u, 0x000000f9u, 0x000000f4u, 0x000000f8u,
+    0x00050081u, 0x00000010u, 0x000000fau, 0x000000d1u, 0x000000f9u, 0x00050051u, 0x00000006u, 0x000000fcu,
+    0x000000fau, 0x00000002u, 0x000500beu, 0x0000001eu, 0x000000feu, 0x000000fcu, 0x000000fdu, 0x000300f7u,
+    0x00000100u, 0x00000000u, 0x000400fau, 0x000000feu, 0x000000ffu, 0x00000100u, 0x000200f8u, 0x000000ffu,
+    0x000200f9u, 0x000000deu, 0x000200f8u, 0x00000100u, 0x00060041u, 0x0000005bu, 0x00000103u, 0x00000059u,
+    0x0000002du, 0x0000002du, 0x0004003du, 0x00000055u, 0x00000104u, 0x00000103u, 0x00050051u, 0x00000006u,
+    0x00000106u, 0x000000fau, 0x00000000u, 0x00050051u, 0x00000006u, 0x00000107u, 0x000000fau, 0x00000001u,
+    0x00070050u, 0x00000007u, 0x00000109u, 0x00000106u, 0x00000107u, 0x000000fcu, 0x0000003eu, 0x00050091u,
+    0x00000007u, 0x0000010au, 0x00000104u, 0x00000109u, 0x00050051u, 0x00000006u, 0x0000010cu, 0x0000010au,
+    0x00000003u, 0x000500bcu, 0x0000001eu, 0x0000010du, 0x0000010cu, 0x000000b9u, 0x000300f7u, 0x0000010fu,
+    0x00000000u, 0x000400fau, 0x0000010du, 0x0000010eu, 0x0000010fu, 0x000200f8u, 0x0000010eu, 0x000200f9u,
+    0x000000deu, 0x000200f8u, 0x0000010fu, 0x0007004fu, 0x0000000du, 0x000001bbu, 0x0000010au, 0x0000010au,
+    0x00000000u, 0x00000001u, 0x00050050u, 0x0000000du, 0x000001beu, 0x0000010cu, 0x0000010cu, 0x00050088u,
+    0x0000000du, 0x000001bfu, 0x000001bbu, 0x000001beu, 0x00050051u, 0x00000006u, 0x000001c1u, 0x000001bfu,
+    0x00000000u, 0x00050085u, 0x00000006u, 0x000001c2u, 0x000001c1u, 0x00000032u, 0x00050081u, 0x00000006u,
+    0x000001c3u, 0x000001c2u, 0x00000032u, 0x00050051u, 0x00000006u, 0x000001c5u, 0x000001bfu, 0x00000001u,
+    0x00050085u, 0x00000006u, 0x000001c6u, 0x000001c5u, 0x00000032u, 0x00050083u, 0x00000006u, 0x000001c7u,
+    0x00000032u, 0x000001c6u, 0x00050050u, 0x0000000du, 0x000001c8u, 0x000001c3u, 0x000001c7u, 0x000500b8u,
+    0x0000001eu, 0x00000117u, 0x000001c3u, 0x000000b9u, 0x000400a8u, 0x0000001eu, 0x00000118u, 0x00000117u,
+    0x000300f7u, 0x0000011au, 0x00000000u, 0x000400fau, 0x00000118u, 0x00000119u, 0x0000011au, 0x000200f8u,
+    0x00000119u, 0x000500bau, 0x0000001eu, 0x0000011du, 0x000001c3u, 0x0000003eu, 0x000200f9u, 0x0000011au,
+    0x000200f8u, 0x0000011au, 0x000700f5u, 0x0000001eu, 0x0000011eu, 0x00000117u, 0x0000010fu, 0x0000011du,
+    0x00000119u, 0x000400a8u, 0x0000001eu, 0x0000011fu, 0x0000011eu, 0x000300f7u, 0x00000121u, 0x00000000u,
+    0x000400fau, 0x0000011fu, 0x00000120u, 0x00000121u, 0x000200f8u, 0x00000120u, 0x000500b8u, 0x0000001eu,
+    0x00000124u, 0x000001c7u, 0x000000b9u, 0x000200f9u, 0x00000121u, 0x000200f8u, 0x00000121u, 0x000700f5u,
+    0x0000001eu, 0x00000125u, 0x0000011eu, 0x0000011au, 0x00000124u, 0x00000120u, 0x000400a8u, 0x0000001eu,
+    0x00000126u, 0x00000125u, 0x000300f7u, 0x00000128u, 0x00000000u, 0x000400fau, 0x00000126u, 0x00000127u,
+    0x00000128u, 0x000200f8u, 0x00000127u, 0x000500bau, 0x0000001eu, 0x0000012bu, 0x000001c7u, 0x0000003eu,
+    0x000200f9u, 0x00000128u, 0x000200f8u, 0x00000128u, 0x000700f5u, 0x0000001eu, 0x0000012cu, 0x00000125u,
+    0x00000121u, 0x0000012bu, 0x00000127u, 0x000300f7u, 0x0000012eu, 0x00000000u, 0x000400fau, 0x0000012cu,
+    0x0000012du, 0x0000012eu, 0x000200f8u, 0x0000012du, 0x000200f9u, 0x000000deu, 0x000200f8u, 0x0000012eu,
+    0x00050085u, 0x0000000du, 0x000001ceu, 0x000001c8u, 0x0000017au, 0x0006000cu, 0x0000000du, 0x000001cfu,
+    0x00000001u, 0x00000008u, 0x000001ceu, 0x00050081u, 0x0000000du, 0x000001d1u, 0x000001cfu, 0x00000212u,
+    0x00050088u, 0x0000000du, 0x000001d4u, 0x000001d1u, 0x0000017au, 0x00070058u, 0x00000007u, 0x00000135u,
+    0x000000b1u, 0x000001d4u, 0x00000002u, 0x000000b9u, 0x000300f7u, 0x000001e3u, 0x00000000u, 0x000300fbu,
+    0x00000036u, 0x000001d9u, 0x000200f8u, 0x000001d9u, 0x000300f7u, 0x000001e0u, 0x00000000u, 0x000400fau,
+    0x00000189u, 0x000001ddu, 0x000001e0u, 0x000200f8u, 0x000001ddu, 0x00050051u, 0x00000006u, 0x000001dfu,
+    0x00000135u, 0x00000000u, 0x000200f9u, 0x000001e3u, 0x000200f8u, 0x000001e0u, 0x00050094u, 0x00000006u,
+    0x000001e2u, 0x00000135u, 0x0000003fu, 0x000200f9u, 0x000001e3u, 0x000200f8u, 0x000001e3u, 0x000700f5u,
+    0x00000006u, 0x00000205u, 0x000001dfu, 0x000001ddu, 0x000001e2u, 0x000001e0u, 0x000500bcu, 0x0000001eu,
+    0x00000139u, 0x00000205u, 0x000000b9u, 0x000500beu, 0x0000001eu, 0x0000013bu, 0x00000205u, 0x000000bcu,
+    0x000500a6u, 0x0000001eu, 0x0000013cu, 0x00000139u, 0x0000013bu, 0x000300f7u, 0x0000013eu, 0x00000000u,
+    0x000400fau, 0x0000013cu, 0x0000013du, 0x0000013eu, 0x000200f8u, 0x0000013du, 0x000200f9u, 0x000000dfu,
+    0x000200f8u, 0x0000013eu, 0x0004007fu, 0x00000006u, 0x00000142u, 0x000000fcu, 0x00050085u, 0x00000006u,
+    0x00000146u, 0x00000205u, 0x000000d0u, 0x00060041u, 0x0000002fu, 0x0000014cu, 0x0000002bu, 0x0000002du,
+    0x00000147u, 0x0004003du, 0x00000006u, 0x0000014du, 0x0000014cu, 0x00060041u, 0x0000002fu, 0x0000014fu,
+    0x0000002bu, 0x0000002du, 0x00000148u, 0x0004003du, 0x00000006u, 0x00000150u, 0x0000014fu, 0x00050083u,
+    0x00000006u, 0x000001eau, 0x00000142u, 0x00000146u, 0x000500bau, 0x0000001eu, 0x000001edu, 0x000001eau,
+    0x0000014du, 0x000500b8u, 0x0000001eu, 0x000001f0u, 0x000001eau, 0x00000150u, 0x000500a7u, 0x0000001eu,
+    0x000001f1u, 0x000001edu, 0x000001f0u, 0x000300f7u, 0x00000153u, 0x00000000u, 0x000400fau, 0x000001f1u,
+    0x00000152u, 0x00000153u, 0x000200f8u, 0x00000152u, 0x000200f9u, 0x000000deu, 0x000200f8u, 0x00000153u,
+    0x000200f9u, 0x000000dfu, 0x000200f8u, 0x000000dfu, 0x00050080u, 0x0000002cu, 0x00000156u, 0x00000204u,
+    0x0000005au, 0x000200f9u, 0x000000dcu, 0x000200f8u, 0x000000deu, 0x000f00f5u, 0x00000006u, 0x0000020bu,
+    0x000000b9u, 0x000000dcu, 0x000000b9u, 0x000000e9u, 0x000000b9u, 0x000000ffu, 0x000000b9u, 0x0000010eu,
+    0x000000b9u, 0x0000012du, 0x0000003eu, 0x00000152u, 0x00060041u, 0x0000002fu, 0x0000015au, 0x0000002bu,
+    0x0000002du, 0x00000159u, 0x0004003du, 0x00000006u, 0x0000015bu, 0x0000015au, 0x0008000cu, 0x00000006u,
+    0x0000015cu, 0x00000001u, 0x0000002bu, 0x0000015bu, 0x000000b9u, 0x0000003eu, 0x00050085u, 0x00000006u,
+    0x0000015du, 0x0000020bu, 0x0000015cu, 0x00050083u, 0x00000006u, 0x0000015eu, 0x0000003eu, 0x0000015du,
+    0x0008004fu, 0x00000010u, 0x00000160u, 0x000000aeu, 0x000000aeu, 0x00000000u, 0x00000001u, 0x00000002u,
+    0x0005008eu, 0x00000010u, 0x00000162u, 0x00000160u, 0x0000015eu, 0x00050051u, 0x00000006u, 0x00000164u,
+    0x000000aeu, 0x00000003u, 0x00050051u, 0x00000006u, 0x00000165u, 0x00000162u, 0x00000000u, 0x00050051u,
+    0x00000006u, 0x00000166u, 0x00000162u, 0x00000001u, 0x00050051u, 0x00000006u, 0x00000167u, 0x00000162u,
+    0x00000002u, 0x00070050u, 0x00000007u, 0x00000168u, 0x00000165u, 0x00000166u, 0x00000167u, 0x00000164u,
+    0x0004003du, 0x00000007u, 0x00000169u, 0x000000c5u, 0x00050085u, 0x00000007u, 0x0000016au, 0x00000168u,
+    0x00000169u, 0x0003003eu, 0x000000c2u, 0x0000016au, 0x000200f9u, 0x0000016bu, 0x000200f8u, 0x0000016bu,
+    0x000100fdu, 0x00010038u,
+};
+inline constexpr std::size_t kContactShadowVulkanFragmentSpirVByteSize = sizeof(kContactShadowVulkanFragmentSpirV);
 
 inline constexpr std::uint32_t kColorGradeInterpolatedStripVulkanFragmentSpirV[] = {
     0x07230203u, 0x00010000u, 0x000d000bu, 0x000006aeu, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
@@ -4948,13 +5306,14 @@ inline constexpr std::uint32_t kTonemapVulkanFragmentSpirV[] = {
 };
 inline constexpr std::size_t kTonemapVulkanFragmentSpirVByteSize = sizeof(kTonemapVulkanFragmentSpirV);
 
-inline constexpr std::array<PayloadProvenance, 66> kPayloads = {{
+inline constexpr std::array<PayloadProvenance, 69> kPayloads = {{
     {"kFullscreenEsVertexSource", "fullscreen.es.vert.glsl", "ec4dbe0b5e367feed5a59d1091c93da8004f83e95c0fa1697aa5c3ae13539ef7", "glsl-es", "glsl-es", "vertex", "text", "main"},
     {"kBloomBlurEsFragmentSource", "bloom_blur.es.frag.glsl", "e6b4ddc563374f57de7cc96a5bcccba77fbc7a6a0f9e8f4e0e54d3053bf46da7", "glsl-es", "glsl-es", "fragment", "text", "main"},
     {"kBloomCombineEsFragmentSource", "bloom_combine.es.frag.glsl", "0fef99e753945bbba3fed554330ef98a5a9db0ff003d23fdf16e21a5dedd3e10", "glsl-es", "glsl-es", "fragment", "text", "main"},
     {"kBloomExtractEsFragmentSource", "bloom_extract.es.frag.glsl", "8c5587e42a626b3164cccfef6304b759ec830f9f9e93c556d655b777d387622c", "glsl-es", "glsl-es", "fragment", "text", "main"},
     {"kBloomUpsampleEsFragmentSource", "bloom_upsample.es.frag.glsl", "8bb530ad247f7e70b836dc3469e8247627ec4d01b8e8287fa1a9b656ebf03241", "glsl-es", "glsl-es", "fragment", "text", "main"},
     {"kChromaticEsFragmentSource", "chromatic.es.frag.glsl", "74123544eb9f93443685d52e2fa34832021fc752c238511594517a40a0c10c67", "glsl-es", "glsl-es", "fragment", "text", "main"},
+    {"kContactShadowEsFragmentSource", "contact_shadow.es.frag.glsl", "6cf247e0ea585f0068684742c2aeaaa3189dab647368737bd153d24972949ccd", "glsl-es", "glsl-es", "fragment", "text", "main"},
     {"kColorGradeInterpolatedStripEsFragmentSource", "color_grade_interpolated_strip.es.frag.glsl", "e1c0a23437e260915fc358b65ec79f669bc3583913c480faf73cca6020fa5426", "glsl-es", "glsl-es", "fragment", "text", "main"},
     {"kColorGradeStripEsFragmentSource", "color_grade_strip.es.frag.glsl", "24e75c4b62bc468746acad7a2b3c56be30a738f977e8c528bc6bcf9f12b97877", "glsl-es", "glsl-es", "fragment", "text", "main"},
     {"kColorGradeVolumeEsFragmentSource", "color_grade_volume.es.frag.glsl", "b25658746fff6c290238dd827a90f5bd30516a28ea5d71975e0409dc276fb9a8", "glsl-es", "glsl-es", "fragment", "text", "main"},
@@ -4977,6 +5336,7 @@ inline constexpr std::array<PayloadProvenance, 66> kPayloads = {{
     {"kBloomExtractDesktopFragmentSource", "bloom_extract.desktop.frag.glsl", "aa82bd6cc1663346ddcbb0ee45f18975321067f525c174256d80d8cc77039b6a", "glsl", "glsl", "fragment", "text", "main"},
     {"kBloomUpsampleDesktopFragmentSource", "bloom_upsample.desktop.frag.glsl", "dba3315dd343f78860c3e87535e0ba8a154dc3670259d0cc09ea079146d89c01", "glsl", "glsl", "fragment", "text", "main"},
     {"kChromaticDesktopFragmentSource", "chromatic.desktop.frag.glsl", "5d1b4561e0d0078712c9223a8fa6166412b6e6da808edccfadf644acdc14e3a4", "glsl", "glsl", "fragment", "text", "main"},
+    {"kContactShadowDesktopFragmentSource", "contact_shadow.desktop.frag.glsl", "e9f3cdb307d2d02b46932c7f7d25d52b38576b54bee31c04ea8680ef64f2ed17", "glsl", "glsl", "fragment", "text", "main"},
     {"kColorGradeInterpolatedStripDesktopFragmentSource", "color_grade_interpolated_strip.desktop.frag.glsl", "9001b0ed771cf079957565f59b217cd4486e1a34fc8ef5fb901ca8285ef9f087", "glsl", "glsl", "fragment", "text", "main"},
     {"kColorGradeStripDesktopFragmentSource", "color_grade_strip.desktop.frag.glsl", "014e5a3069a67f30fca49d1150024cb790befe498aac7a7c7896c22dbbfa5b29", "glsl", "glsl", "fragment", "text", "main"},
     {"kColorGradeVolumeDesktopFragmentSource", "color_grade_volume.desktop.frag.glsl", "d48cdbbe22484c59de960cdbc2ce86cfb15625d28da8ed4d542c17782bd63094", "glsl", "glsl", "fragment", "text", "main"},
@@ -4999,6 +5359,7 @@ inline constexpr std::array<PayloadProvenance, 66> kPayloads = {{
     {"kBloomExtractVulkanFragmentSpirV", "bloom_extract.vulkan.frag.glsl", "6fbb3429cce34154dcb5cc926ba0e08bd2cd7e37f1e4cf4fa5e0015e083d9e8a", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
     {"kBloomUpsampleVulkanFragmentSpirV", "bloom_upsample.vulkan.frag.glsl", "d548699956ba5de5de240ed823fa26d5df72f8f83fb0f41924777bb0aad9c3cc", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
     {"kChromaticVulkanFragmentSpirV", "chromatic.vulkan.frag.glsl", "ba84740abf65410ffe208652abb9f7e2cf9c915f2c28c2e1a8bd7d18b2537f32", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
+    {"kContactShadowVulkanFragmentSpirV", "contact_shadow.vulkan.frag.glsl", "43d1e86ce0209e628ece72df95f404161cacab42d4712ab88f3950c4e4cf2037", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
     {"kColorGradeInterpolatedStripVulkanFragmentSpirV", "color_grade_interpolated_strip.vulkan.frag.glsl", "b3953ca618c907b8d868ce575e5e410d4575f221515785726b6e965f263a24c6", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
     {"kColorGradeStripVulkanFragmentSpirV", "color_grade_strip.vulkan.frag.glsl", "97d13bba7d44a6e64a31550a7493c71b6e7389be1abdb921281cd94c6dbb5908", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},
     {"kColorGradeVolumeVulkanFragmentSpirV", "color_grade_volume.vulkan.frag.glsl", "b1d51788e372e0b90a767d408a4a6a0dbff18fecb249cb258fbddb974a525424", "spirv", "vulkan-glsl", "fragment", "spirv", "main"},

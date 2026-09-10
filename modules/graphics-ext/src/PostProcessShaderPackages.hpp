@@ -22,6 +22,9 @@ namespace CNA::Graphics::detail
     /** @brief Creates the portable chromatic-aberration fullscreen shader package. */
     [[nodiscard]] ShaderPackageEXT CreateChromaticAberrationShaderPackage();
 
+    /** @brief Creates the portable screen-space contact-shadow shader package. */
+    [[nodiscard]] ShaderPackageEXT CreateContactShadowShaderPackage();
+
     /** @brief Creates the portable filtered-strip colour-grade shader package. */
     [[nodiscard]] ShaderPackageEXT CreateColorGradeStripShaderPackage();
 

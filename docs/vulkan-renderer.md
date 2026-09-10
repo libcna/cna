@@ -749,7 +749,7 @@ application orbit/yaw oracle passes **3/3** on all three paths with identical me
 Vulkan paths run under Khronos validation and emit no validation messages; the package also passes
 its write-free reproducibility check.
 
-### Portable post-process rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`–`MOD-2239m`, 2026-09-10)
+### Portable post-process rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`–`MOD-2239n`, 2026-09-10)
 
 `ChromaticAberrationPass` is the first engine post-process to use the portable package path. Its
 internal package shares one fullscreen vertex contract across GLSL ES, desktop GLSL and SPIR-V;
@@ -910,6 +910,17 @@ after projection; four positive-reflection cases failed before that bridge while
 continued to pass. The former Vulkan baseline's 6 passes and 16 source-execution skips become
 **22/22** on RADV and llvmpipe, matching EasyGL. The complete portable post-process regression set is
 now **174/174** on all three paths, with no Khronos validation messages.
+
+`ContactShadowPass` is the sixteenth consumer. Scene and depth use bindings 0 and 1; two matrices,
+one light direction, depth dimensions and seven scalar controls reuse the typed arrays. The short
+world-unit ray, snapped depth reads, bias/thickness predicate and multiplicative composition remain
+unchanged. Vulkan applies the same texture-UV/XNA-camera-NDC bridge as SSR. A new vertical fixture
+uses render targets for both scene and depth, matching the real pipeline and proving that light
+travels toward the same screen side on all three paths. The former 23-case Vulkan baseline's
+11 passes, 9 skips and 3 fallback-diagnostic failures becomes an expanded **23 passed / 1
+intentional arbitrary-source diagnostic skip** on RADV and llvmpipe; EasyGL is **24/24**. Excluding
+only that diagnostic projection, the complete portable execution set is now **197/197** on all
+three paths, with no Khronos validation messages.
 
 Other engine post-process effects remain source-only and keep their exact copy-through fallback;
 the shared package/helper is the landing point for their subsequent fragment variants.

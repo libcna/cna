@@ -253,7 +253,8 @@ implementation tasks.**
   camera reprojection and optional per-object velocity motion blur, `MOD-2239k` adds the
   64-sample SSAO estimate plus its blur/composite, `MOD-2239l` packages the shared rigid/skinned
   depth/normal/velocity prepass and corrects Vulkan's deferred MRT constituent dependency, and
-  `MOD-2239m` packages screen-space reflections with the Vulkan texture-UV/XNA-camera-NDC bridge. The
+  `MOD-2239m` packages screen-space reflections and `MOD-2239n` packages screen-space contact
+  shadows, both with an explicit Vulkan texture-UV/XNA-camera-NDC bridge. The
   bloom work also fixes secondary
   `RenderTarget2D` sampling through Vulkan `ShaderEffect`, which previously substituted the white
   fallback because the binding accepted only the uploaded-texture concrete type.

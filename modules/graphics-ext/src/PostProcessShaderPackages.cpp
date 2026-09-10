@@ -151,6 +151,22 @@ namespace CNA::Graphics::detail
              "post_process/chromatic.vulkan.frag.spv"});
     }
 
+    ShaderPackageEXT CreateContactShadowShaderPackage()
+    {
+        using namespace CNA::Graphics::detail::PostProcessGenerated;
+        return MakeFullscreenPackage(
+            {kContactShadowEsFragmentSource,
+             "post_process/contact_shadow.es.frag.glsl"},
+            {kContactShadowDesktopFragmentSource,
+             "post_process/contact_shadow.desktop.frag.glsl"},
+            {kContactShadowVulkanFragmentSpirV,
+             kContactShadowVulkanFragmentSpirVByteSize,
+             "post_process/contact_shadow.vulkan.frag.spv"},
+            {ShaderBindingRequirementEXT(
+                "uDepthSampler", 1, ShaderBindingTypeEXT::SampledTexture2D,
+                CNA::ShaderStageEXT::Fragment)});
+    }
+
     ShaderPackageEXT CreateColorGradeStripShaderPackage()
     {
         using namespace CNA::Graphics::detail::PostProcessGenerated;
