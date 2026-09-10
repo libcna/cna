@@ -88,8 +88,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * normally does want a window.
          *
          * Only renderers that can genuinely operate without a swap chain support this. Today that
-         * means D3D12 (its renderer already treats a null window as a real off-screen mode).
-         * Renderers whose device creation is inseparable from a window/swap chain -- notably D3D11,
+         * means D3D12 and SDL GPU; SDL GPU uses a renderer-owned color target as its off-screen
+         * backbuffer. Renderers whose device creation is inseparable from a window/swap chain -- notably D3D11,
          * whose constructor always creates a swap chain, and EasyGL, whose GL context is bound to a
          * window -- will throw if this is set.
          *

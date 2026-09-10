@@ -2085,7 +2085,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         /**
          * @brief Constructs the renderer against an already-created SDL window.
          *
-         * @param window SDL window to claim for `SDL_gpu` rendering. Must not be null.
+         * @param window SDL window to claim for `SDL_gpu` rendering, or null for the existing
+         * `PresentationParameters::HeadlessEXT` off-screen mode.
          * @param virtualWidth Initial virtual (game-logic) resolution width.
          * @param virtualHeight Initial virtual (game-logic) resolution height.
          * @param presentationMode Initial presentation/scaling policy.
@@ -2682,6 +2683,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             forceNextNullSwapchainTextureForTest_ = true;
         }
+        /** @brief Whether this renderer was created without a window/swapchain. CNAEXT. */
+        CNAEXT [[nodiscard]] bool IsHeadlessEXT() const noexcept { return headless_; }
+        /**
+         * @brief Gets the active native graphics-driver name reported by the device. CNAEXT.
+         * @return Driver name, or an empty string if the device reports none.
+         */
+        CNAEXT [[nodiscard]] std::string GetDriverNameEXT() const;
 
     private:
         struct ConstructionResources;
@@ -3314,6 +3322,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         SdlGpuTestHooksEXT testHooks_{};
         bool testFailureInjected_ = false;
         bool registeredForWindow_ = false;
+        bool windowClaimed_ = false;
+        bool headless_ = false;
         bool shaderCrossAcquired_ = false;
         SDL_GPUTexture* depthStencilTexture_ = nullptr;
         SDL_GPUTextureFormat depthStencilFormat_ = SDL_GPU_TEXTUREFORMAT_INVALID;
@@ -3328,12 +3338,14 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUTextureFormat backbufferMsaaFormat_ = SDL_GPU_TEXTUREFORMAT_INVALID;
         SDL_GPUSampleCount backbufferSampleCount_ = SDL_GPU_SAMPLECOUNT_1;
         int backbufferMultiSampleCount_ = 0;
+        SDL_GPUTextureFormat backbufferFormat_ = SDL_GPU_TEXTUREFORMAT_INVALID;
 
         // REMED-GFX-165: the swapchain texture is write-only by permanent SDL contract
         // (SDL_WaitAndAcquireGPUSwapchainTexture cannot be a sampler/copy/blit SOURCE), so the
         // backbuffer cannot be read back directly. Once GetBackBufferData is first called, the
         // backbuffer pass renders into this self-owned SAMPLER|COLOR_TARGET proxy instead of straight
-        // into the swapchain texture, and one SDL_BlitGPUTexture(proxy -> swapchain) presents it;
+        // into the swapchain texture, and one SDL_BlitGPUTexture(proxy -> swapchain) presents it.
+        // HeadlessEXT has no swapchain, so the same proxy is its permanent off-screen backbuffer;
         // ReadBackbuffer then downloads from the proxy through the same transfer-buffer+fence path the
         // render targets already use. Lazily created on the first read, so a game that never reads the
         // backbuffer pays NOTHING (this resolves plans/plan_sdlgpu.md SDLGPU-39's per-frame-cost objection --

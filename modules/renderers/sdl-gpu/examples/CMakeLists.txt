@@ -68,6 +68,23 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     set_tests_properties(SdlGpu_Smoke PROPERTIES
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
+    # SDLGPU-101: exercise the real public GraphicsDevice path without a window or swapchain.
+    # This is a routine Vulkan CTest on Linux; the same executable/command is also the portable
+    # D3D12 probe run through the repository's isolated Wine/vkd3d launcher.
+    if(WIN32)
+        set(CNA_SDLGPU_HEADLESS_TEST_DRIVER "direct3d12")
+    else()
+        set(CNA_SDLGPU_HEADLESS_TEST_DRIVER "vulkan")
+    endif()
+    cna_register_renderer_test(NAME SdlGpu_HeadlessGraphicsDevice
+        COMMAND cna_test_sdlgpu_smoke --headless-graphics-device
+                ${CNA_SDLGPU_HEADLESS_TEST_DRIVER}
+        TIMEOUT 60 LABELS "SdlGpu;Parity"
+        ENVIRONMENT
+            "${CNA_SDLGPU_TEST_ENVIRONMENT};SDL_GPU_DRIVER=${CNA_SDLGPU_HEADLESS_TEST_DRIVER}")
+    set_tests_properties(SdlGpu_HeadlessGraphicsDevice PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+
     # SDLGPU-80: SDL_gpu exposes command-completion fences but no occlusion-query/query-pool
     # command. Lock the public contract to a truthful false capability and deterministic
     # construction refusal; never let the inherited nullptr turn Begin/End into silent no-ops.

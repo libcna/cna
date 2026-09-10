@@ -1694,11 +1694,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         bool rendererRegistered = false;
         bool failureInjected = false;
         bool debugModeEnabled = false;
+        bool headless = false;
         int swapInterval = 1;
         int appliedSwapInterval = 1;
         int physicalWidth = 0;
         int physicalHeight = 0;
         SDL_GPUTextureFormat depthStencilFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
+        SDL_GPUTextureFormat backbufferFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
         SDL_GPUSampleCount backbufferSampleCount = SDL_GPU_SAMPLECOUNT_1;
         int backbufferMultiSampleCount = 0;
         SDL_GPUShaderFormat shaderCrossFormats = static_cast<SDL_GPUShaderFormat>(0);
@@ -1836,7 +1838,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             owner.testHooks_ = hooks;
             owner.testFailureInjected_ = failureInjected;
             owner.registeredForWindow_ = rendererRegistered;
+            owner.windowClaimed_ = windowClaimed;
+            owner.headless_ = headless;
             owner.shaderCrossAcquired_ = shaderCrossAcquired;
+            owner.backbufferFormat_ = backbufferFormat;
 
             owner.spriteVertexShader_ = shaders[static_cast<std::size_t>(ConstructionShader::SpriteVertex)];
             owner.spriteFragmentShader_ = shaders[static_cast<std::size_t>(ConstructionShader::SpriteFragment)];
@@ -1948,6 +1953,14 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     std::string SdlGpuRenderer::ValidateStockShadersForDriverEXT(const char* driverName)
     {
+        if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+            throw std::runtime_error(
+                std::string("CNA SDL_GPU: headless probe video initialization failed: ") +
+                SDL_GetError());
+        struct VideoGuard
+        {
+            ~VideoGuard() { SDL_QuitSubSystem(SDL_INIT_VIDEO); }
+        } videoGuard;
         ConstructionResources resources(/*constructionWindow=*/nullptr, SdlGpuTestHooksEXT{});
         return InitializeHeadlessStockShaders(resources, driverName);
     }
@@ -1955,6 +1968,14 @@ namespace CNA::Internal::Renderers::SdlGpu
     SdlGpuHeadlessStockDrawResultEXT SdlGpuRenderer::ValidateStockDrawForDriverEXT(
         const char* driverName)
     {
+        if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+            throw std::runtime_error(
+                std::string("CNA SDL_GPU: headless probe video initialization failed: ") +
+                SDL_GetError());
+        struct VideoGuard
+        {
+            ~VideoGuard() { SDL_QuitSubSystem(SDL_INIT_VIDEO); }
+        } videoGuard;
         ConstructionResources construction(/*constructionWindow=*/nullptr, SdlGpuTestHooksEXT{});
         SdlGpuHeadlessStockDrawResultEXT result;
         result.driverName = InitializeHeadlessStockShaders(construction, driverName);
@@ -2183,10 +2204,8 @@ namespace CNA::Internal::Renderers::SdlGpu
           virtualHeight_(virtualHeight),
           presentationMode_(presentationMode)
     {
-        if (window_ == nullptr)
-            throw std::invalid_argument("CNA SDL_GPU: SDL window cannot be null");
-
         ConstructionResources resources(window_, testHooks);
+        resources.headless = window_ == nullptr;
 
         // plans/plan_sdlgpu.md SDLGPU-92: Vulkan consumes the committed SPIR-V directly. When
         // configured, SDL_shadercross adds the formats it can translate that SPIR-V into, allowing
@@ -2227,31 +2246,61 @@ namespace CNA::Internal::Renderers::SdlGpu
         NotifyResource(testHooks, SdlGpuResourceKindEXT::Device,
                        SdlGpuResourceEventEXT::Acquired);
 
-        resources.FailAt(SdlGpuFailurePointEXT::WindowClaim);
-        if (!SDL_ClaimWindowForGPUDevice(resources.device, window_))
+        if (!resources.headless)
         {
-            const std::string error = SDL_GetError();
-            throw std::runtime_error(
-                "CNA SDL_GPU: SDL_ClaimWindowForGPUDevice failed: " + error);
+            resources.FailAt(SdlGpuFailurePointEXT::WindowClaim);
+            if (!SDL_ClaimWindowForGPUDevice(resources.device, window_))
+            {
+                const std::string error = SDL_GetError();
+                throw std::runtime_error(
+                    "CNA SDL_GPU: SDL_ClaimWindowForGPUDevice failed: " + error);
+            }
+            resources.windowClaimed = true;
+            NotifyResource(testHooks, SdlGpuResourceKindEXT::WindowClaim,
+                           SdlGpuResourceEventEXT::Acquired);
         }
-        resources.windowClaimed = true;
-        NotifyResource(testHooks, SdlGpuResourceKindEXT::WindowClaim,
-                       SdlGpuResourceEventEXT::Acquired);
 
         resources.FailAt(SdlGpuFailurePointEXT::SwapchainSetup);
         resources.swapInterval = std::max(0, swapInterval);
-        resources.appliedSwapInterval =
-            ConfigureSwapchain(resources.device, window_, resources.swapInterval);
-        if (resources.appliedSwapInterval < 0)
-            resources.appliedSwapInterval = 1;
+        if (resources.headless)
+        {
+            resources.appliedSwapInterval = resources.swapInterval == 0 ? 0 : 1;
+            constexpr SDL_GPUTextureUsageFlags usage =
+                SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+            if (SDL_GPUTextureSupportsFormat(
+                    resources.device, SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
+                    SDL_GPU_TEXTURETYPE_2D, usage))
+            {
+                resources.backbufferFormat = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+            }
+            else if (SDL_GPUTextureSupportsFormat(
+                         resources.device, SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM,
+                         SDL_GPU_TEXTURETYPE_2D, usage))
+            {
+                resources.backbufferFormat = SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM;
+            }
+            else
+            {
+                throw std::runtime_error(
+                    "CNA SDL_GPU: headless mode requires an RGBA8 or BGRA8 color target");
+            }
+        }
+        else
+        {
+            resources.appliedSwapInterval =
+                ConfigureSwapchain(resources.device, window_, resources.swapInterval);
+            if (resources.appliedSwapInterval < 0)
+                resources.appliedSwapInterval = 1;
+            resources.backbufferFormat =
+                SDL_GetGPUSwapchainTextureFormat(resources.device, window_);
+        }
 
         resources.FailAt(SdlGpuFailurePointEXT::DepthStencilFormatQuery);
         resources.depthStencilFormat = QueryDepthStencilFormat(resources.device);
         if (testHooks.forceNoDepthStencilFormat)
             resources.depthStencilFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
         resources.backbufferSampleCount = ClampSampleCount(
-            resources.device,
-            SDL_GetGPUSwapchainTextureFormat(resources.device, window_),
+            resources.device, resources.backbufferFormat,
             resources.depthStencilFormat, multiSampleCount);
         resources.backbufferMultiSampleCount =
             SampleCountToInt(resources.backbufferSampleCount);
@@ -2259,8 +2308,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         CreateConstructionShaders(resources);
 
         resources.FailAt(SdlGpuFailurePointEXT::WindowMetricsInitialization);
-        if (!SDL_GetWindowSizeInPixels(
-                window_, &resources.physicalWidth, &resources.physicalHeight))
+        if (resources.headless)
+        {
+            resources.physicalWidth = std::max(1, virtualWidth_);
+            resources.physicalHeight = std::max(1, virtualHeight_);
+        }
+        else if (!SDL_GetWindowSizeInPixels(
+                     window_, &resources.physicalWidth, &resources.physicalHeight))
         {
             const std::string error = SDL_GetError();
             throw std::runtime_error(
@@ -2268,8 +2322,11 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
 
         resources.FailAt(SdlGpuFailurePointEXT::RendererRegistration);
-        IGraphicsRenderer::RegisterForWindow(SDL_GetWindowID(window_), this);
-        resources.rendererRegistered = true;
+        if (!resources.headless)
+        {
+            IGraphicsRenderer::RegisterForWindow(SDL_GetWindowID(window_), this);
+            resources.rendererRegistered = true;
+        }
         resources.FailAt(SdlGpuFailurePointEXT::AfterRendererRegistration);
 
         // Every operation above may throw. Raw member handles become owning only here, after all
@@ -2282,8 +2339,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         // would never be recorded at all.
         BeginBackbufferSegment();
 
-        SDL_Log("[SDL_GPU] Renderer initialised (%dx%d), debug mode %s",
-                physicalWidth_, physicalHeight_, debugModeEnabled_ ? "enabled" : "disabled");
+        SDL_Log("[SDL_GPU] Renderer initialised (%dx%d), debug mode %s, %s",
+                physicalWidth_, physicalHeight_, debugModeEnabled_ ? "enabled" : "disabled",
+                headless_ ? "headless" : "swapchain");
     }
 
     SdlGpuRenderer::~SdlGpuRenderer()
@@ -2346,9 +2404,13 @@ namespace CNA::Internal::Renderers::SdlGpu
             SDL_ReleaseGPUTexture(device_, backbufferProxy_);   // REMED-GFX-165 readback proxy
         if (device_ != nullptr)
         {
-            SDL_ReleaseWindowFromGPUDevice(device_, window_);
-            NotifyResourceEvent(SdlGpuResourceKindEXT::WindowClaim,
-                                SdlGpuResourceEventEXT::Released);
+            if (windowClaimed_)
+            {
+                SDL_ReleaseWindowFromGPUDevice(device_, window_);
+                NotifyResourceEvent(SdlGpuResourceKindEXT::WindowClaim,
+                                    SdlGpuResourceEventEXT::Released);
+                windowClaimed_ = false;
+            }
             SDL_DestroyGPUDevice(device_);
             NotifyResourceEvent(SdlGpuResourceKindEXT::Device,
                                 SdlGpuResourceEventEXT::Released);
@@ -2363,6 +2425,12 @@ namespace CNA::Internal::Renderers::SdlGpu
             shaderCrossAcquired_ = false;
         }
 #endif
+    }
+
+    std::string SdlGpuRenderer::GetDriverNameEXT() const
+    {
+        const char* name = device_ != nullptr ? SDL_GetGPUDeviceDriver(device_) : nullptr;
+        return name != nullptr ? name : "";
     }
 
     bool SdlGpuRenderer::SupportsCapability(const CNA::GraphicsCapability capability) const
@@ -2391,8 +2459,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 // routine resource creation uses whether ANY ordinary 2/4/8x mode survives,
                 // rather than treating lack of exactly 2x as lack of multisampling altogether.
                 return device_ != nullptr && SampleCountToInt(ClampSampleCount(
-                    device_, SDL_GetGPUSwapchainTextureFormat(device_, window_),
-                    depthStencilFormat_, 8)) > 1;
+                    device_, backbufferFormat_, depthStencilFormat_, 8)) > 1;
             case CNA::GraphicsCapability::CompiledEffects:
                 return SupportsCompiledEffects();
             case CNA::GraphicsCapability::WireFrame:
@@ -2506,8 +2573,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (width == 0 || height == 0)
             return false;
 
-        const SDL_GPUTextureFormat format =
-            SDL_GetGPUSwapchainTextureFormat(device_, window_);
+        const SDL_GPUTextureFormat format = backbufferFormat_;
         if (backbufferMsaaTexture_ != nullptr &&
             backbufferMsaaWidth_ == static_cast<int>(width) &&
             backbufferMsaaHeight_ == static_cast<int>(height) &&
@@ -2562,32 +2628,44 @@ namespace CNA::Internal::Renderers::SdlGpu
         try
         {
             SDL_GPUTexture* swapchainTexture = nullptr;
-            Uint32 swapchainWidth = 0;
-            Uint32 swapchainHeight = 0;
-            // Per SDL_gpu.h, a command buffer that has attempted swapchain acquisition must be
-            // submitted rather than cancelled, including every exceptional exit below.
-            commandBuffer.SwapchainAcquisitionStarted();
-            const bool acquired = SDL_WaitAndAcquireGPUSwapchainTexture(
-                cmd, window_, &swapchainTexture, &swapchainWidth, &swapchainHeight);
-            if (!acquired)
+            Uint32 swapchainWidth = static_cast<Uint32>(std::max(1, physicalWidth_));
+            Uint32 swapchainHeight = static_cast<Uint32>(std::max(1, physicalHeight_));
+            if (headless_)
             {
-                const std::string error = SDL_GetError();
-                (void)commandBuffer.Submit();
-                throw std::runtime_error(
-                    "CNA SDL_GPU: SDL_WaitAndAcquireGPUSwapchainTexture failed: " + error);
+                if (!EnsureBackbufferProxy(swapchainWidth, swapchainHeight))
+                    throw std::runtime_error(
+                        "CNA SDL_GPU: failed to create the headless backbuffer proxy");
+                swapchainTexture = backbufferProxy_;
             }
-
-            if (forceNextNullSwapchainTextureForTest_)
+            else
             {
-                forceNextNullSwapchainTextureForTest_ = false;
-                swapchainTexture = nullptr;
-            }
+                swapchainWidth = 0;
+                swapchainHeight = 0;
+                // Per SDL_gpu.h, a command buffer that has attempted swapchain acquisition must be
+                // submitted rather than cancelled, including every exceptional exit below.
+                commandBuffer.SwapchainAcquisitionStarted();
+                const bool acquired = SDL_WaitAndAcquireGPUSwapchainTexture(
+                    cmd, window_, &swapchainTexture, &swapchainWidth, &swapchainHeight);
+                if (!acquired)
+                {
+                    const std::string error = SDL_GetError();
+                    (void)commandBuffer.Submit();
+                    throw std::runtime_error(
+                        "CNA SDL_GPU: SDL_WaitAndAcquireGPUSwapchainTexture failed: " + error);
+                }
 
-            if (swapchainTexture == nullptr)
-            {
-                // Documented, non-error case (e.g. a minimized window) -- still must submit.
-                (void)commandBuffer.Submit();
-                return false;
+                if (forceNextNullSwapchainTextureForTest_)
+                {
+                    forceNextNullSwapchainTextureForTest_ = false;
+                    swapchainTexture = nullptr;
+                }
+
+                if (swapchainTexture == nullptr)
+                {
+                    // Documented, non-error case (e.g. a minimized window) -- still must submit.
+                    (void)commandBuffer.Submit();
+                    return false;
+                }
             }
 
         physicalWidth_ = static_cast<int>(swapchainWidth);
@@ -2601,7 +2679,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         // downloads from. Zero cost until the first read (backbufferReadbackEnabled_ stays false).
         SDL_GPUTexture* backbufferColorTarget = swapchainTexture;
         bool renderedThroughProxy = false;
-        if (backbufferReadbackEnabled_ && EnsureBackbufferProxy(swapchainWidth, swapchainHeight))
+        if (!headless_ && backbufferReadbackEnabled_ &&
+            EnsureBackbufferProxy(swapchainWidth, swapchainHeight))
         {
             backbufferColorTarget = backbufferProxy_;
             renderedThroughProxy = true;
@@ -2831,7 +2910,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             depthStencilTarget.stencil_store_op = SDL_GPU_STOREOP_STORE;
         }
 
-        const SDL_GPUTextureFormat swapchainFormat = SDL_GetGPUSwapchainTextureFormat(device_, window_);
+        const SDL_GPUTextureFormat swapchainFormat = backbufferFormat_;
         activeColorTargetFormats_.fill(SDL_GPU_TEXTUREFORMAT_INVALID);
         activeColorTargetFormats_[0] = swapchainFormat;
         SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(
@@ -2864,7 +2943,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         if (width == 0 || height == 0)
             return false;
-        const SDL_GPUTextureFormat format = SDL_GetGPUSwapchainTextureFormat(device_, window_);
+        const SDL_GPUTextureFormat format = backbufferFormat_;
         if (backbufferProxy_ != nullptr && backbufferProxyWidth_ == static_cast<int>(width) &&
             backbufferProxyHeight_ == static_cast<int>(height) && backbufferProxyFormat_ == format)
             return true;
@@ -3506,6 +3585,9 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     void SdlGpuRenderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
     {
+        if (headless_ || window_ == nullptr)
+            throw std::invalid_argument(
+                "CNA SDL_GPU: a headless renderer has no platform surface to change");
         if (surface.windowId != SDL_GetWindowID(window_))
         {
             throw std::invalid_argument(
@@ -3622,6 +3704,12 @@ namespace CNA::Internal::Renderers::SdlGpu
     void SdlGpuRenderer::SetSwapInterval(int interval)
     {
         interval = std::max(0, interval);
+        if (headless_)
+        {
+            swapInterval_ = interval;
+            appliedSwapInterval_ = interval == 0 ? 0 : 1;
+            return;
+        }
         const int appliedInterval = ConfigureSwapchain(device_, window_, interval);
         swapInterval_ = interval;
         if (appliedInterval >= 0)
@@ -3631,8 +3719,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     int SdlGpuRenderer::ApplyMultiSampleCount(int requestedMultiSampleCount)
     {
         const SDL_GPUSampleCount applied = ClampSampleCount(
-            device_, SDL_GetGPUSwapchainTextureFormat(device_, window_),
-            depthStencilFormat_, requestedMultiSampleCount);
+            device_, backbufferFormat_, depthStencilFormat_, requestedMultiSampleCount);
         if (applied == backbufferSampleCount_)
             return backbufferMultiSampleCount_;
 
@@ -4808,8 +4895,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     void SdlGpuRenderer::InitializeSpritePipelineAndSamplerForTestEXT()
     {
-        const SDL_GPUTextureFormat colorFormat =
-            SDL_GetGPUSwapchainTextureFormat(device_, window_);
+        const SDL_GPUTextureFormat colorFormat = backbufferFormat_;
         activeColorTargetFormats_.fill(SDL_GPU_TEXTUREFORMAT_INVALID);
         activeColorTargetFormats_[0] = colorFormat;
         (void)GetOrCreateSpritePipeline(
@@ -5110,7 +5196,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             }
             else
             {
-                colorFormats[0] = SDL_GetGPUSwapchainTextureFormat(device_, window_);
+                colorFormats[0] = backbufferFormat_;
                 depthStencilFormat = depthStencilFormat_;
             }
 

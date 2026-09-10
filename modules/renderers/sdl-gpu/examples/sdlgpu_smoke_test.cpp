@@ -31,14 +31,19 @@
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SetDataOptions.hpp"
 
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstdio>
@@ -55,6 +60,68 @@ namespace
 {
     constexpr int kTotalFrames = 60;
     constexpr int kExpectedChecks = 30;
+
+    int RunHeadlessGraphicsDeviceProbe(const char* requestedDriver)
+    {
+        int passed = 0;
+        constexpr int kExpected = 6;
+        const auto check = [&](bool ok, const char* label)
+        {
+            std::printf("[%s] %s\n", ok ? "PASS" : "FAIL", label);
+            if (ok) ++passed;
+        };
+
+        try
+        {
+            PresentationParameters parameters;
+            parameters.setBackBufferWidthProperty(32);
+            parameters.setBackBufferHeightProperty(24);
+            parameters.setPresentationIntervalProperty(PresentInterval::Immediate);
+            parameters.setHeadlessEXTProperty(true);
+
+            GraphicsAdapter& adapter = GraphicsAdapter::getDefaultAdapterProperty();
+            GraphicsDevice device(adapter, GraphicsProfile::HiDef, parameters);
+            auto* renderer = dynamic_cast<SdlGpuRenderer*>(&device.GetRenderer());
+            check(renderer != nullptr,
+                  "headless public GraphicsDevice uses SdlGpuRenderer");
+            check(renderer != nullptr && renderer->IsHeadlessEXT(),
+                  "renderer creates no window or swapchain in HeadlessEXT mode");
+            const std::string actualDriver = renderer != nullptr
+                ? renderer->GetDriverNameEXT() : std::string{};
+            check(actualDriver == requestedDriver,
+                  "headless GraphicsDevice selects the requested native graphics driver");
+
+            const Viewport viewport = device.getViewportProperty();
+            check(viewport.getWidthProperty() == 32 && viewport.getHeightProperty() == 24,
+                  "headless public viewport preserves the requested backbuffer dimensions");
+
+            const Color backbufferColor(13, 71, 199, 233);
+            device.Clear(backbufferColor);
+            const Rectangle backbufferProbe(11, 7, 1, 1);
+            Color backbufferPixel;
+            device.GetBackBufferData(&backbufferProbe, &backbufferPixel, 0, 1);
+            check(backbufferPixel == backbufferColor,
+                  "headless public Clear/GetBackBufferData round-trips exact RGBA");
+
+            const Color targetColor(219, 41, 87, 157);
+            RenderTarget2D target(device, 4, 4);
+            device.SetRenderTarget(&target);
+            device.Clear(targetColor);
+            device.SetRenderTarget(nullptr);
+            std::array<Color, 16> targetPixels{};
+            target.GetData(targetPixels.data(), static_cast<int>(targetPixels.size()));
+            check(std::all_of(targetPixels.begin(), targetPixels.end(),
+                              [&](const Color& pixel) { return pixel == targetColor; }),
+                  "headless public RenderTarget2D clear/readback is exact on every pixel");
+        }
+        catch (const std::exception& exception)
+        {
+            std::printf("[FAIL] headless GraphicsDevice probe raised: %s\n", exception.what());
+        }
+
+        std::printf("=== %d/%d PASS ===\n", passed, kExpected);
+        return passed == kExpected ? 0 : 1;
+    }
 }
 
 class SdlGpuSmokeTest : public Game
@@ -222,24 +289,19 @@ public:
 
 int main(int argc, char** argv)
 {
+    if (argc == 3 && std::string_view(argv[1]) == "--headless-graphics-device")
+        return RunHeadlessGraphicsDeviceProbe(argv[2]);
+
     if (argc == 3 && std::string_view(argv[1]) == "--headless-stock-shaders")
     {
-        // SDL_gpu device creation requires the video subsystem even though this probe never
-        // creates or claims a window. The caller still selects an offscreen/headless driver.
-        if (!SDL_Init(SDL_INIT_VIDEO))
-        {
-            std::printf("[FAIL] SDL_Init: %s\n", SDL_GetError());
-            return 1;
-        }
-
         try
         {
             const std::string driver =
                 SdlGpuRenderer::ValidateStockShadersForDriverEXT(argv[2]);
-            std::printf("[PASS] requested SDL_gpu driver '%s' was selected\n", driver.c_str());
+            std::printf("[PASS] requested native graphics driver '%s' was selected\n",
+                        driver.c_str());
             std::printf("[PASS] all %zu production stock shaders were created and released\n",
                         SdlGpuConstructionShaderCountEXT);
-            SDL_Quit();
             std::printf("=== 2/2 PASS ===\n");
             return 0;
         }
@@ -247,19 +309,12 @@ int main(int argc, char** argv)
         {
             std::printf("[FAIL] headless stock-shader portability probe: %s\n",
                         exception.what());
-            SDL_Quit();
             return 1;
         }
     }
 
     if (argc == 3 && std::string_view(argv[1]) == "--headless-stock-pixel")
     {
-        if (!SDL_Init(SDL_INIT_VIDEO))
-        {
-            std::printf("[FAIL] SDL_Init: %s\n", SDL_GetError());
-            return 1;
-        }
-
         try
         {
             constexpr std::array<std::uint8_t, 4> expectedDraw{17, 83, 201, 239};
@@ -269,7 +324,7 @@ int main(int argc, char** argv)
             const bool driverMatches = result.driverName == argv[2];
             const bool drawMatches = result.drawnPixel == expectedDraw;
             const bool clearMatches = result.clearPixel == expectedClear;
-            std::printf("[%s] requested SDL_gpu driver '%s' was selected\n",
+            std::printf("[%s] requested native graphics driver '%s' was selected\n",
                         driverMatches ? "PASS" : "FAIL", result.driverName.c_str());
             std::printf("[%s] stock colored triangle centre is RGBA=(%u,%u,%u,%u)\n",
                         drawMatches ? "PASS" : "FAIL", result.drawnPixel[0],
@@ -277,7 +332,6 @@ int main(int argc, char** argv)
             std::printf("[%s] untouched corner retains clear RGBA=(%u,%u,%u,%u)\n",
                         clearMatches ? "PASS" : "FAIL", result.clearPixel[0],
                         result.clearPixel[1], result.clearPixel[2], result.clearPixel[3]);
-            SDL_Quit();
             const int passed = static_cast<int>(driverMatches) +
                                static_cast<int>(drawMatches) +
                                static_cast<int>(clearMatches);
@@ -288,7 +342,6 @@ int main(int argc, char** argv)
         {
             std::printf("[FAIL] headless stock-pixel portability probe: %s\n",
                         exception.what());
-            SDL_Quit();
             return 1;
         }
     }
