@@ -29,6 +29,9 @@
 > sampler matrix at 10/10 fixtures.
 > `SDLGPU-106` closes D3D12 Texture2D/3D/Cube formats, transfers, mips, compressed native/fallback
 > paths and public range semantics at 24/24 tests.
+> `SDLGPU-107` fixes the D3D12/Metal shader-blit zero-extent defect for thin/rectangular NPOT
+> render-target mip chains; the complete shared 851-assertion target-mip oracle now passes on
+> D3D12 as well as all 63 isolated Vulkan legs.
 > `SDLGPU-94`–`SDLGPU-96`
 > remain open because D3D12 presentation plus the rest of the comprehensive public corpus, Metal and Android/Vulkan still
 > require native runtime evidence. Seven EasyGL defect findings (six distinct
@@ -58,9 +61,9 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
 | Item | Current evidence |
 |---|---|
 | Re-audit starting branch / commit | `sdlgpu` / `8cd9ab7f45a05bef3a727598c8d9ef5cf8b04442` |
-| Newly created tasks | 16 (`SDLGPU-91`–`SDLGPU-106`) |
-| Completed / open | 13 / 3 (`SDLGPU-91`–`93` and `SDLGPU-97`–`106` complete; `SDLGPU-94`–`96` open) |
-| Proven runtime configuration | Linux/Vulkan remains the complete behavioral configuration; D3D12 now has a real no-window device, all-26-stock-shader construction, stock-pipeline exact-pixel proof, a public windowless `GraphicsDevice` with exact backbuffer/RT2D clear readback, the unchanged public Game/Texture2D/SpriteBatch 2D scene for 120 frames, all nine shared classic stock-effect fixtures, the shared instanced-draw fixture, the complete ten-fixture state/sampler matrix, and the 24-test texture/format/transfer matrix. There are now 190 registered SDL integration tests; the pre-platform full sweep plus the focused portability gates remain the Linux behavioral baseline. The D3D12 portability probes pass 2/2, 3/3, 6/6 and 3/3; the five skinned-effect/PBR executables add 25/25 discriminating assertions. |
+| Newly created tasks | 17 (`SDLGPU-91`–`SDLGPU-107`) |
+| Completed / open | 14 / 3 (`SDLGPU-91`–`93` and `SDLGPU-97`–`107` complete; `SDLGPU-94`–`96` open) |
+| Proven runtime configuration | Linux/Vulkan remains the complete behavioral configuration; D3D12 now has a real no-window device, all-26-stock-shader construction, stock-pipeline exact-pixel proof, a public windowless `GraphicsDevice` with exact backbuffer/RT2D clear readback, the unchanged public Game/Texture2D/SpriteBatch 2D scene for 120 frames, all nine shared classic stock-effect fixtures, the shared instanced-draw fixture, the complete ten-fixture state/sampler matrix, the 24-test texture/format/transfer matrix, and the 851-assertion render-target mip/readback matrix across MSAA/non-MSAA, NPOT/thin shapes, MRT, cube, sampling and lifetime. There are now 190 registered SDL integration tests; the pre-platform full sweep plus the focused portability gates remain the Linux behavioral baseline. The D3D12 portability probes pass 2/2, 3/3, 6/6 and 3/3; the five skinned-effect/PBR executables add 25/25 discriminating assertions. |
 | Available local cross tools | MinGW-w64 and Wine are present; no Apple SDK/device, Android SDK/device, `dxc`, `spirv-cross`, SDL_shadercross executable or SDL_shadercross shared library was found |
 | Display constraint | All further Linux SDL tests must use `SDL_VIDEODRIVER=offscreen`; Windows GUI tests must use a headless/virtual display if runnable. Never use the host display. |
 
@@ -178,7 +181,8 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
   all nine shared classic effect fixtures and the shared instanced-draw fixture now execute through
   D3D12, with the skinned path adding 25/25 focused assertions. `SDLGPU-105` closes the shared
   blend/depth/stencil/rasterizer/sampler matrix at 10/10, and `SDLGPU-106` closes Texture2D/3D/
-  Cube format, transfer and sampling coverage at 24/24. Comprehensive render-target/buffer-draw/
+  Cube format, transfer and sampling coverage at 24/24. `SDLGPU-107` fixes and closes the complete
+  shared render-target mip/readback matrix at 851/851 assertions. Broader render-target/buffer-draw/
   model/compiled-effect/lifecycle coverage and real presentation remain open here;
   presentation still requires a presentation-capable isolated compositor or real Windows runner.
 
@@ -512,6 +516,42 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
   process passed the vkd3d-proton gate under its own Xvfb/SDL dummy/virtual backbuffer and emitted
   no SDL debug failure. Native D3D12 debug-layer validation remains unavailable and is not claimed.
 
+### SDLGPU-107 — preserve thin/NPOT render-target mip chains on shader-blit drivers ✅
+
+- **Problem/public behavior:** the first comprehensive D3D12 render-target run failed 70 of 851
+  assertions. Generated late mips of ordinary mipmapped `RenderTarget2D`s such as 13x7, 1x13,
+  13x1, 2x13 and 13x2 became exactly transparent black, with the same bad value observed both by
+  direct `GetData` and by sampling. MSAA=4 and MSAA=0 both failed, so this was mip generation—not
+  resolve or transfer. Public `LevelCount` remained correct, making the advertised levels real but
+  observably unpopulated.
+- **EasyGL/SDL evidence:** EasyGL and SDL GPU/Vulkan pass the renderer-neutral oracle. Vendored
+  SDL_gpu's common shader blit used by D3D12 and Metal computes UV denominators as
+  `base >> sourceMip`, while their render-pass setup likewise uses an unclamped shifted target
+  extent. For a legal XNA chain whose shorter axis has already clamped to one, one of those native
+  values becomes zero. CNA already passed correct `max(1, ...)` blit regions, but the shared SDL
+  implementation recomputed the invalid zero internally. Vulkan's direct image-blit path does not
+  have this failure.
+- **Location:** renderer-local `GenerateRenderTargetMipChain`; no public API or vendored SDL source
+  change.
+- **Acceptance/test:** retain the direct GPU path for levels with nonzero native shifted extents;
+  generate every later level through valid single-level GPU resources and copy it into the public
+  target; preserve post-resolve ordering, all MRT attachments, sampling and deferred lifetime;
+  pass every MSAA/non-MSAA square, odd, rectangular, 1-wide/1-high, repeated-use, MRT, cube and
+  sampled-final-mip leg on Vulkan and D3D12 without host-display use or validation diagnostics.
+- **Result (2026-09-10):** once a destination's raw shifted axis would become zero, the renderer
+  creates a one-level scratch target at the true clamped extent. The shader blit therefore always
+  reads/writes mip zero of valid resources; a following GPU copy pass stores the result into the
+  corresponding public mip, and that scratch becomes the next level's source. Earlier levels keep
+  the existing direct path. Scratch handles join the renderer's post-submit texture-release queue,
+  so deferred command replay cannot outlive them.
+
+  Before the change, the D3D12 fixture reported **781/851** and its 13x7 final mip was exactly
+  `(0,0,0,0)`. After an incremental renderer/test relink, the unchanged shared fixture passes
+  **851/851** through real `direct3d12` under the per-test Xvfb/SDL-dummy/virtual-backbuffer wrapper.
+  The native Vulkan supervisor passes all **63/63** isolated legs, including both MSAA modes,
+  every thin orientation, MRT, cube and two repeated sample/readback cycles. No host display,
+  swapchain or new modern CNAEXT feature was used; no SDL/Vulkan validation diagnostic appeared.
+
 ## 2026-09-10 parity audit final status
 
 | Item | Current evidence |
@@ -526,8 +566,8 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
 | SDL GPU registered integration tests | 190 CTests (85 baseline plus 105 parity/remediation registrations) |
 | Shared EasyGL parity fixtures available | 32 renderer-neutral sources in `modules/graphics/examples/parity` |
 | Shared parity fixtures registered for SDL GPU | 32/32 (all renderer-neutral sources, including the nine classic stock-effect fixtures) |
-| Tasks created by this audit | 36 (`SDLGPU-55`–`SDLGPU-90`); the later platform re-audit creates sixteen more (`SDLGPU-91`–`106`) |
-| Completed / open / proven unavoidable | This closed Linux/Vulkan phase completed 36 / 0 tasks; the current renderer-wide ledger is 49 / 3. Three capability fields (`BlendState.MultiSampleMask`, exact half-rate `PresentInterval::Two`, and `OcclusionQuery`) are proven unavailable in current SDL_gpu; the first two are not separate tasks and the third is closed by `SDLGPU-80` |
+| Tasks created by this audit | 36 (`SDLGPU-55`–`SDLGPU-90`); the later platform re-audit creates seventeen more (`SDLGPU-91`–`107`) |
+| Completed / open / proven unavoidable | This closed Linux/Vulkan phase completed 36 / 0 tasks; the current renderer-wide ledger is 50 / 3. Three capability fields (`BlendState.MultiSampleMask`, exact half-rate `PresentInterval::Two`, and `OcclusionQuery`) are proven unavailable in current SDL_gpu; the first two are not separate tasks and the third is closed by `SDLGPU-80` |
 | SDL GPU build | Stable `cmake-build-sdlgpu`, Debug, `CNA_GRAPHICS_RENDERER=SDL_GPU`, tests/examples and `CNA_SDL_GPU_COMPILED_EFFECTS` ON |
 | EasyGL oracle build | Stable `cmake-build-debug`, Debug, `CNA_GRAPHICS_RENDERER=OPENGL33`, tests/examples ON |
 | Runtime driver | SDL 3.5.0 SDL_gpu Vulkan on AMD Radeon 780M / Mesa RADV 25.0.7; Khronos validation layer 1.4.309 present |

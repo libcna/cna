@@ -581,27 +581,71 @@ namespace CNA::Internal::Renderers::SdlGpu
         /**
          * Regenerates exactly the allocated 2D target mip chain with the FNA/XNA level extents.
          *
-         * SDL3's Vulkan `GenerateMipmaps` path does not clamp an axis after right-shifting it,
-         * unlike SDL3's D3D12 path. Calling SDL's public blit operation for each declared level
-         * keeps the correction inside CNA's SDL_GPU integration while retaining GPU generation,
-         * the existing command buffer, and the existing post-resolve ordering.
+         * SDL_gpu's shader-based blit shared by D3D12 and Metal derives both its UV denominator
+         * and render-pass extent with an unclamped `base >> mip`. Once either axis of a legal XNA
+         * chain has reached one, a later level therefore becomes a zero-sized native pass even
+         * though CNA correctly supplies a clamped 1-pixel region. The first such level switches to
+         * a chain of single-level scratch targets: every blit then names mip zero of a texture whose
+         * base is its real clamped extent, and a copy pass writes the result into the corresponding
+         * mip of the public target. Vulkan also accepts this portable path, so no backend-name
+         * special case can leave another shader-blit driver with the same latent defect.
          */
-        void GenerateRenderTargetMipChain(SDL_GPUCommandBuffer* commandBuffer,
+        void GenerateRenderTargetMipChain(SDL_GPUDevice* device,
+                                          SDL_GPUCommandBuffer* commandBuffer,
                                           SDL_GPUTexture* texture,
-                                          int width, int height, int levelCount)
+                                          SDL_GPUTextureFormat format,
+                                          int width, int height, int levelCount,
+                                          std::vector<SDL_GPUTexture*>& pendingTextureReleases)
         {
+            SDL_GPUTexture* scratchSource = nullptr;
             for (int level = 1; level < levelCount; ++level)
             {
-                SDL_GPUBlitInfo blit{};
-                blit.source.texture = texture;
-                blit.source.mip_level = static_cast<Uint32>(level - 1);
-                blit.source.w = static_cast<Uint32>(std::max(1, width >> (level - 1)));
-                blit.source.h = static_cast<Uint32>(std::max(1, height >> (level - 1)));
+                const Uint32 sourceWidth = static_cast<Uint32>(std::max(1, width >> (level - 1)));
+                const Uint32 sourceHeight = static_cast<Uint32>(std::max(1, height >> (level - 1)));
+                const Uint32 destinationWidth = static_cast<Uint32>(std::max(1, width >> level));
+                const Uint32 destinationHeight = static_cast<Uint32>(std::max(1, height >> level));
 
-                blit.destination.texture = texture;
-                blit.destination.mip_level = static_cast<Uint32>(level);
-                blit.destination.w = static_cast<Uint32>(std::max(1, width >> level));
-                blit.destination.h = static_cast<Uint32>(std::max(1, height >> level));
+                const bool originalDestinationHasNativeExtent =
+                    (width >> level) > 0 && (height >> level) > 0;
+                SDL_GPUTexture* scratchDestination = nullptr;
+                if (scratchSource != nullptr || !originalDestinationHasNativeExtent)
+                {
+                    SDL_GPUTextureCreateInfo scratchInfo{};
+                    scratchInfo.type = SDL_GPU_TEXTURETYPE_2D;
+                    scratchInfo.format = format;
+                    scratchInfo.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET |
+                                        SDL_GPU_TEXTUREUSAGE_SAMPLER;
+                    scratchInfo.width = destinationWidth;
+                    scratchInfo.height = destinationHeight;
+                    scratchInfo.layer_count_or_depth = 1;
+                    scratchInfo.num_levels = 1;
+                    scratchInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
+                    scratchDestination = SDL_CreateGPUTexture(device, &scratchInfo);
+                    if (scratchDestination == nullptr)
+                    {
+                        throw std::runtime_error(
+                            std::string("CNA SDL_GPU: failed to create render-target mip scratch texture: ") +
+                            SDL_GetError());
+                    }
+                    // Keep the scratch alive through submission. SDL_gpu's resource release is
+                    // deferred internally too, but this matches CNA's explicit lifetime rule for
+                    // every texture referenced by a frame command buffer.
+                    pendingTextureReleases.push_back(scratchDestination);
+                }
+
+                SDL_GPUBlitInfo blit{};
+                blit.source.texture = scratchSource != nullptr ? scratchSource : texture;
+                blit.source.mip_level = scratchSource != nullptr
+                    ? 0 : static_cast<Uint32>(level - 1);
+                blit.source.w = sourceWidth;
+                blit.source.h = sourceHeight;
+
+                blit.destination.texture = scratchDestination != nullptr
+                    ? scratchDestination : texture;
+                blit.destination.mip_level = scratchDestination != nullptr
+                    ? 0 : static_cast<Uint32>(level);
+                blit.destination.w = destinationWidth;
+                blit.destination.h = destinationHeight;
 
                 blit.load_op = SDL_GPU_LOADOP_DONT_CARE;
                 blit.filter = SDL_GPU_FILTER_LINEAR;
@@ -620,6 +664,27 @@ namespace CNA::Internal::Renderers::SdlGpu
                 }
 
                 SDL_BlitGPUTexture(commandBuffer, &blit);
+
+                if (scratchDestination != nullptr)
+                {
+                    SDL_GPUTextureLocation source{};
+                    source.texture = scratchDestination;
+                    SDL_GPUTextureLocation destination{};
+                    destination.texture = texture;
+                    destination.mip_level = static_cast<Uint32>(level);
+                    SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(commandBuffer);
+                    if (copyPass == nullptr)
+                    {
+                        throw std::runtime_error(
+                            std::string("CNA SDL_GPU: failed to begin render-target mip copy pass: ") +
+                            SDL_GetError());
+                    }
+                    CopyPassOwner copyPassOwner(copyPass);
+                    SDL_CopyGPUTextureToTexture(copyPass, &source, &destination,
+                                                destinationWidth, destinationHeight, 1, false);
+                    copyPassOwner.End();
+                    scratchSource = scratchDestination;
+                }
             }
         }
 
@@ -3212,16 +3277,18 @@ namespace CNA::Internal::Renderers::SdlGpu
         // swapchain pass may sample.
         if (target->mipMap && target->levelCount > 1)
         {
-            GenerateRenderTargetMipChain(cmd, target->colorTexture, target->width,
-                                         target->height, target->levelCount);
+            GenerateRenderTargetMipChain(device_, cmd, target->colorTexture, target->colorFormat,
+                                         target->width, target->height, target->levelCount,
+                                         pendingTextureReleases_);
             std::fill(target->definedMipLevels.begin(), target->definedMipLevels.end(), true);
         }
         for (const auto& extra : segment.extraAttachments)
         {
             if (extra->mipMap && extra->levelCount > 1)
             {
-                GenerateRenderTargetMipChain(cmd, extra->colorTexture, extra->width,
-                                             extra->height, extra->levelCount);
+                GenerateRenderTargetMipChain(device_, cmd, extra->colorTexture, extra->colorFormat,
+                                             extra->width, extra->height, extra->levelCount,
+                                             pendingTextureReleases_);
                 std::fill(extra->definedMipLevels.begin(), extra->definedMipLevels.end(), true);
             }
         }
