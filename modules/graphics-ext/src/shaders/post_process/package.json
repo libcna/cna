@@ -10,6 +10,7 @@
     {"symbol":"kFxaaEsFragmentSource","source":"fxaa.es.frag.glsl","language":"glsl-es","stage":"fragment","format":"text","entry_point":"main"},
     {"symbol":"kHdrDisplayEsFragmentSource","source":"hdr_display.es.frag.glsl","language":"glsl-es","stage":"fragment","format":"text","entry_point":"main"},
     {"symbol":"kLensFlareEsFragmentSource","source":"lens_flare.es.frag.glsl","language":"glsl-es","stage":"fragment","format":"text","entry_point":"main"},
+    {"symbol":"kSpatialUpscaleEsFragmentSource","source":"spatial_upscale.es.frag.glsl","language":"glsl-es","stage":"fragment","format":"text","entry_point":"main"},
     {"symbol":"kTonemapEsFragmentSource","source":"tonemap.es.frag.glsl","language":"glsl-es","stage":"fragment","format":"text","entry_point":"main"},
     {"symbol":"kFullscreenDesktopVertexSource","source":"fullscreen.desktop.vert.glsl","language":"glsl","stage":"vertex","format":"text","entry_point":"main"},
     {"symbol":"kChromaticDesktopFragmentSource","source":"chromatic.desktop.frag.glsl","language":"glsl","stage":"fragment","format":"text","entry_point":"main"},
@@ -17,6 +18,7 @@
     {"symbol":"kFxaaDesktopFragmentSource","source":"fxaa.desktop.frag.glsl","language":"glsl","stage":"fragment","format":"text","entry_point":"main"},
     {"symbol":"kHdrDisplayDesktopFragmentSource","source":"hdr_display.desktop.frag.glsl","language":"glsl","stage":"fragment","format":"text","entry_point":"main"},
     {"symbol":"kLensFlareDesktopFragmentSource","source":"lens_flare.desktop.frag.glsl","language":"glsl","stage":"fragment","format":"text","entry_point":"main"},
+    {"symbol":"kSpatialUpscaleDesktopFragmentSource","source":"spatial_upscale.desktop.frag.glsl","language":"glsl","stage":"fragment","format":"text","entry_point":"main"},
     {"symbol":"kTonemapDesktopFragmentSource","source":"tonemap.desktop.frag.glsl","language":"glsl","stage":"fragment","format":"text","entry_point":"main"},
     {"symbol":"kFullscreenVulkanVertexSpirV","source":"fullscreen.vulkan.vert.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"vertex","format":"spirv","entry_point":"main"},
     {"symbol":"kChromaticVulkanFragmentSpirV","source":"chromatic.vulkan.frag.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"fragment","format":"spirv","entry_point":"main"},
@@ -24,6 +26,7 @@
     {"symbol":"kFxaaVulkanFragmentSpirV","source":"fxaa.vulkan.frag.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"fragment","format":"spirv","entry_point":"main"},
     {"symbol":"kHdrDisplayVulkanFragmentSpirV","source":"hdr_display.vulkan.frag.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"fragment","format":"spirv","entry_point":"main"},
     {"symbol":"kLensFlareVulkanFragmentSpirV","source":"lens_flare.vulkan.frag.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"fragment","format":"spirv","entry_point":"main"},
+    {"symbol":"kSpatialUpscaleVulkanFragmentSpirV","source":"spatial_upscale.vulkan.frag.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"fragment","format":"spirv","entry_point":"main"},
     {"symbol":"kTonemapVulkanFragmentSpirV","source":"tonemap.vulkan.frag.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"fragment","format":"spirv","entry_point":"main"}
   ]
 }

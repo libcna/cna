@@ -24,6 +24,9 @@ namespace CNA::Graphics::detail
 
     /** @brief Creates the portable HDR-display-output fullscreen shader package. */
     [[nodiscard]] ShaderPackageEXT CreateHdrDisplayShaderPackage();
+
+    /** @brief Creates the portable spatial-upscale fullscreen shader package. */
+    [[nodiscard]] ShaderPackageEXT CreateSpatialUpscaleShaderPackage();
 }
 
 #endif // CNA_CNAEXT

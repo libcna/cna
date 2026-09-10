@@ -749,7 +749,7 @@ application orbit/yaw oracle passes **3/3** on all three paths with identical me
 Vulkan paths run under Khronos validation and emit no validation messages; the package also passes
 its write-free reproducibility check.
 
-### Portable post-process rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`, `MOD-2239b`, `MOD-2239c`, 2026-09-10)
+### Portable post-process rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`–`MOD-2239d`, 2026-09-10)
 
 `ChromaticAberrationPass` is the first engine post-process to use the portable package path. Its
 internal package shares one fullscreen vertex contract across GLSL ES, desktop GLSL and SPIR-V;
@@ -802,6 +802,14 @@ coordinate. Matching the stock Vulkan SpriteBatch transform fixes the reversal w
 UVs, and the strong fixture remains. The HDR suite is **11/11** and the complete portable
 post-process regression set is **43/43** on EasyGL, RADV and llvmpipe. This encodes a texture or file;
 it does not make the Vulkan swap chain HDR-capable, and display-space queries still report sRGB only.
+
+`SpatialUpscalePass` is the seventh consumer. Source size, sharpness and edge-adaptive state occupy
+the existing `vec4`, the shader derives reciprocal source size, and exact 1:1 identity occupies the
+scalar slot. The suite changes from four Vulkan shader-execution skips to **8/8** on EasyGL, RADV and
+llvmpipe: a diagonal has lower staircase residual than the bilinear control, sharpening stays inside
+the sampled neighbourhood, its strength is observable and identity is pixel-exact. The GPU-driven
+application is **4/4** and the complete portable post-process regression set is **51/51** on all
+three paths, including its independent pixel-exact identity leg.
 
 Other engine post-process effects remain source-only and keep their exact copy-through fallback;
 the shared package/helper is the landing point for their subsequent fragment variants.

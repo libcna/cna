@@ -245,9 +245,9 @@ implementation tasks.**
 - engine-layer post-processing remains owned by the modern plan. `MOD-2239` begins its portable
   package rollout with chromatic aberration, `MOD-2218` adds FXAA and `MOD-2219` adds film grain,
   while `MOD-2239a` adds tonemapping/debanding, `MOD-2239b` adds lens-flare ghosts and
-  `MOD-2239c` adds sRGB/scRGB/HDR10 encoding to textures or files. All are verified on RADV,
-  Vulkan llvmpipe and EasyGL; the HDR encoder does not claim an HDR swap chain, and the remaining
-  source-only effects retain copy-through fallbacks;
+  `MOD-2239c` adds sRGB/scRGB/HDR10 encoding to textures or files. `MOD-2239d` adds edge-adaptive
+  spatial upscaling. All are verified on RADV, Vulkan llvmpipe and EasyGL; the HDR encoder does not
+  claim an HDR swap chain, and the remaining source-only effects retain copy-through fallbacks;
 - the renderer-neutral immutable storage-buffer descriptor, exact range transfers/copy and tracked
   facade are complete (`MOD-2229`). Vulkan translates every declared role into exact
   `VkBufferUsageFlags`, keeps CPU-none buffers device-local and unmapped, and has byte-exact

@@ -143,6 +143,19 @@ namespace CNA::Graphics::detail
              kHdrDisplayVulkanFragmentSpirVByteSize,
              "post_process/hdr_display.vulkan.frag.spv"});
     }
+
+    ShaderPackageEXT CreateSpatialUpscaleShaderPackage()
+    {
+        using namespace CNA::Graphics::detail::PostProcessGenerated;
+        return MakeFullscreenPackage(
+            {kSpatialUpscaleEsFragmentSource,
+             "post_process/spatial_upscale.es.frag.glsl"},
+            {kSpatialUpscaleDesktopFragmentSource,
+             "post_process/spatial_upscale.desktop.frag.glsl"},
+            {kSpatialUpscaleVulkanFragmentSpirV,
+             kSpatialUpscaleVulkanFragmentSpirVByteSize,
+             "post_process/spatial_upscale.vulkan.frag.spv"});
+    }
 }
 
 #endif // CNA_CNAEXT
