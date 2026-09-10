@@ -218,7 +218,8 @@ namespace CNA::Internal::Renderers::DirectX9
         /// target transition.  Used only by the D3D9 render-target implementations.
         void BindRenderTargetSurfacesEXT(IDirect3DSurface9* const* colorSurfaces, int colorCount,
                                          IDirect3DSurface9* depthStencilSurface,
-                                         int width, int height, const char* context);
+                                         int depthStencilFormat, int width, int height,
+                                         const char* context);
         /// REMED-GFX-092: checked creation wrapper used only for render-target depth surfaces.
         /// It guarantees a failed call leaves the supplied output slot null and maps device-lost
         /// results through this renderer's established lost-device lifecycle.
@@ -628,6 +629,9 @@ namespace CNA::Internal::Renderers::DirectX9
         // BuildPresentParameters() without needing the original GraphicsRendererCreateArgs again.
         int backBufferFormatOrdinal_ = 0;   // Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color
         int depthStencilFormatOrdinal_ = 0; // Microsoft::Xna::Framework::Graphics::DepthFormat::None
+        /// D9-128: format of the currently bound depth-stencil surface. Offscreen targets can
+        /// differ from the presentation format, and native clear flags must follow this value.
+        int activeDepthStencilFormatOrdinal_ = 0;
         bool isFullScreen_ = false;
         int swapInterval_ = 1;
         /// D9-32: the game's requested Microsoft::Xna::Framework::Graphics::GraphicsProfile

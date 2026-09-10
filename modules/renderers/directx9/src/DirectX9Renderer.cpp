@@ -138,6 +138,7 @@ namespace CNA::Internal::Renderers::DirectX9
         , presentationMode_(static_cast<int>(args.presentationMode))
         , backBufferFormatOrdinal_(args.backBufferFormat)
         , depthStencilFormatOrdinal_(args.depthStencilFormat)
+        , activeDepthStencilFormatOrdinal_(args.depthStencilFormat)
         , isFullScreen_(args.isFullScreen)
         , swapInterval_(args.swapInterval)
         , graphicsProfileOrdinal_(args.graphicsProfile)
@@ -524,6 +525,7 @@ namespace CNA::Internal::Renderers::DirectX9
         // D3DPOOL_DEFAULT resources were just released above anyway.
         currentCustomRT_ = nullptr;
         currentCustomCubeRT_ = nullptr;
+        activeDepthStencilFormatOrdinal_ = depthStencilFormatOrdinal_;
     }
 
     void DirectX9Renderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
@@ -606,6 +608,7 @@ namespace CNA::Internal::Renderers::DirectX9
         // just released above.
         currentCustomRT_ = nullptr;
         currentCustomCubeRT_ = nullptr;
+        activeDepthStencilFormatOrdinal_ = depthStencilFormatOrdinal_;
         if (deviceEventCallback_) deviceEventCallback_(RendererDeviceEvent::Reset);
     }
 
@@ -680,7 +683,7 @@ namespace CNA::Internal::Renderers::DirectX9
     {
         EnsureRenderReadyEXT();
         DWORD flags = D3DCLEAR_TARGET;
-        if (HasDepthBuffer(depthStencilFormatOrdinal_)) flags |= D3DCLEAR_ZBUFFER;
+        if (HasDepthBuffer(activeDepthStencilFormatOrdinal_)) flags |= D3DCLEAR_ZBUFFER;
         HRESULT hr = device_->Clear(0, nullptr, flags, D3DCOLOR_COLORVALUE(r, g, b, a), depth, 0);
         if (FAILED(hr))
             throw std::runtime_error("D3D9 ClearColorAndDepth failed, hr=" + FormatHr(hr));
@@ -689,7 +692,7 @@ namespace CNA::Internal::Renderers::DirectX9
     void DirectX9Renderer::ClearDepth(float depth)
     {
         EnsureRenderReadyEXT();
-        if (!HasDepthBuffer(depthStencilFormatOrdinal_)) return;
+        if (!HasDepthBuffer(activeDepthStencilFormatOrdinal_)) return;
         HRESULT hr = device_->Clear(0, nullptr, D3DCLEAR_ZBUFFER, 0, depth, 0);
         if (FAILED(hr))
             throw std::runtime_error("D3D9 ClearDepth failed, hr=" + FormatHr(hr));
@@ -698,7 +701,7 @@ namespace CNA::Internal::Renderers::DirectX9
     void DirectX9Renderer::ClearStencil(int stencil)
     {
         EnsureRenderReadyEXT();
-        if (!HasStencilBuffer(depthStencilFormatOrdinal_)) return;
+        if (!HasStencilBuffer(activeDepthStencilFormatOrdinal_)) return;
         HRESULT hr = device_->Clear(0, nullptr, D3DCLEAR_STENCIL, 0, 1.0f,
                                      static_cast<DWORD>(stencil));
         if (FAILED(hr))
@@ -708,9 +711,9 @@ namespace CNA::Internal::Renderers::DirectX9
     void DirectX9Renderer::ClearDepthAndStencil(float depth, int stencil)
     {
         EnsureRenderReadyEXT();
-        if (!HasDepthBuffer(depthStencilFormatOrdinal_)) return;
+        if (!HasDepthBuffer(activeDepthStencilFormatOrdinal_)) return;
         DWORD flags = D3DCLEAR_ZBUFFER;
-        if (HasStencilBuffer(depthStencilFormatOrdinal_)) flags |= D3DCLEAR_STENCIL;
+        if (HasStencilBuffer(activeDepthStencilFormatOrdinal_)) flags |= D3DCLEAR_STENCIL;
         HRESULT hr = device_->Clear(0, nullptr, flags, 0, depth, static_cast<DWORD>(stencil));
         if (FAILED(hr))
             throw std::runtime_error("D3D9 ClearDepthAndStencil failed, hr=" + FormatHr(hr));
@@ -720,7 +723,7 @@ namespace CNA::Internal::Renderers::DirectX9
     {
         EnsureRenderReadyEXT();
         DWORD flags = D3DCLEAR_TARGET;
-        if (HasStencilBuffer(depthStencilFormatOrdinal_)) flags |= D3DCLEAR_STENCIL;
+        if (HasStencilBuffer(activeDepthStencilFormatOrdinal_)) flags |= D3DCLEAR_STENCIL;
         HRESULT hr = device_->Clear(0, nullptr, flags, D3DCOLOR_COLORVALUE(r, g, b, a), 1.0f,
                                      static_cast<DWORD>(stencil));
         if (FAILED(hr))
@@ -732,8 +735,8 @@ namespace CNA::Internal::Renderers::DirectX9
     {
         EnsureRenderReadyEXT();
         DWORD flags = D3DCLEAR_TARGET;
-        if (HasDepthBuffer(depthStencilFormatOrdinal_)) flags |= D3DCLEAR_ZBUFFER;
-        if (HasStencilBuffer(depthStencilFormatOrdinal_)) flags |= D3DCLEAR_STENCIL;
+        if (HasDepthBuffer(activeDepthStencilFormatOrdinal_)) flags |= D3DCLEAR_ZBUFFER;
+        if (HasStencilBuffer(activeDepthStencilFormatOrdinal_)) flags |= D3DCLEAR_STENCIL;
         HRESULT hr = device_->Clear(0, nullptr, flags, D3DCOLOR_COLORVALUE(r, g, b, a), depth,
                                      static_cast<DWORD>(stencil));
         if (FAILED(hr))
@@ -1059,7 +1062,8 @@ namespace CNA::Internal::Renderers::DirectX9
 
         IDirect3DSurface9* color = backBuffer.Get();
         BindRenderTargetSurfacesEXT(&color, 1, defaultDepthStencilSurface_.Get(),
-                                    width_, height_, "restoring the default render target");
+                                    depthStencilFormatOrdinal_, width_, height_,
+                                    "restoring the default render target");
     }
 
     void DirectX9Renderer::CacheDefaultDepthStencilSurfaceEXT()
@@ -1094,7 +1098,8 @@ namespace CNA::Internal::Renderers::DirectX9
 
     void DirectX9Renderer::BindRenderTargetSurfacesEXT(
         IDirect3DSurface9* const* colorSurfaces, int colorCount,
-        IDirect3DSurface9* depthStencilSurface, int width, int height, const char* context)
+        IDirect3DSurface9* depthStencilSurface, int depthStencilFormat,
+        int width, int height, const char* context)
     {
         ThrowIfDeviceLost();
         const int targetSlots = std::max(1, static_cast<int>(caps_.NumSimultaneousRTs));
@@ -1218,6 +1223,7 @@ namespace CNA::Internal::Renderers::DirectX9
         }
 
         MarkStateKnownEXT(kUnsafeTargetBinding);
+        activeDepthStencilFormatOrdinal_ = depthStencilFormat;
     }
 
     void DirectX9Renderer::SetRenderTarget2D(IRenderTargetRenderer* rt)
@@ -1312,7 +1318,8 @@ namespace CNA::Internal::Renderers::DirectX9
             renderTargets[0].GetRenderTarget2D());
         if (currentCustomRT_) currentCustomRT_->ResolveForTransitionEXT();
         BindRenderTargetSurfacesEXT(colorSurfaces.data(), count, first->GetDepthStencilSurfaceEXT(),
-                                    first->GetWidth(), first->GetHeight(), "binding multiple render targets");
+                                    first->GetDepthStencilFormatEXT(), first->GetWidth(),
+                                    first->GetHeight(), "binding multiple render targets");
         currentCustomRT_ = nullptr;
         currentCustomCubeRT_ = nullptr;
 
