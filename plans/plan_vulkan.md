@@ -258,15 +258,18 @@ implementation tasks.**
   `MOD-2239m` packages screen-space reflections, `MOD-2239n` packages screen-space contact
   shadows, `MOD-2239o` packages projected decals, `MOD-2239p` packages aerial perspective, and
   `MOD-2239r` packages the shadow-aware volumetric-fog atlas and resolve, `MOD-2239s`/`MOD-2239t`
-  package the older `CRTEffect`/`DepthEffect` pair used through `EffectPass`, and `MOD-2239u`
+  package the older `CRTEffect`/`DepthEffect` pair used through `EffectPass`, `MOD-2239u`
   packages weighted order-independent transparency's resolve and portable accumulation fixtures,
+  and `MOD-2239v` packages `GpuInstanceCuller`'s compute stage plus its cross-language
+  vertex-storage contract,
   all with an explicit
   texture-UV/XNA-camera-NDC bridge where reconstruction needs it. The
   bloom work also fixes secondary
   `RenderTarget2D` sampling through Vulkan `ShaderEffect`, which previously substituted the white
   fallback because the binding accepted only the uploaded-texture concrete type.
-  All through `MOD-2239t` are verified on RADV, Vulkan llvmpipe and EasyGL; `MOD-2239u` is verified
-  on Vulkan llvmpipe and EasyGL because hardware Vulkan cannot present through Xvfb here and the
+  All through `MOD-2239t` are verified on RADV, Vulkan llvmpipe and EasyGL; `MOD-2239u` and
+  `MOD-2239v` are verified on Vulkan llvmpipe and EasyGL because hardware Vulkan cannot present
+  through Xvfb here and the
   user's real desktop was deliberately not used. The HDR encoder does not
   claim an HDR swap chain, and the remaining source-only effects retain copy-through fallbacks;
 - the renderer-neutral immutable storage-buffer descriptor, exact range transfers/copy and tracked

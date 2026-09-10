@@ -48,9 +48,10 @@ namespace CNA::Graphics {
      *
      * The shape is the standard GPU-driven one, and it puts one requirement on the caller's shader:
      * the per-instance world matrix arrives through a storage buffer the vertex shader reads by
-     * `gl_InstanceID`, not through a per-instance vertex stream, because a compute shader cannot
-     * write a vertex buffer in this profile. @ref getInstanceLookupGlsl is the two lines that read
-     * it, and a vertex shader using them must declare `#version 310 es` or later.
+     * its instance index, not through a per-instance vertex stream, because a compute shader cannot
+     * write a vertex buffer in this profile. @ref getInstanceLookupGlsl is the GLSL convenience
+     * block; another shader language declares the equivalent read-only matrix buffer at
+     * @ref kInstanceBinding in its portable package variant.
      *
      * **It refuses rather than falls back.** Unlike `ClusteredLightCompute`, whose CPU path is a
      * correct if slower answer, there is no CPU equivalent of "the draw call itself came from the
@@ -136,7 +137,9 @@ namespace CNA::Graphics {
          *
          * Declares the buffer at @ref kInstanceBinding and one function, `cnaInstanceWorld()`. The
          * matrix arrives in the same layout every other CNA shader receives one, so a shader
-         * multiplies it on the left exactly as it does `uWorld`.
+         * multiplies it on the left exactly as it does `uWorld`. This is a convenience for
+         * source-capable GLSL renderers; other renderers provide the equivalent read-only storage
+         * buffer and instance-index lookup in a `ShaderPackageEXT` variant.
          *
          * @return The declarations, ready to concatenate after a `#version 310 es` line.
          */

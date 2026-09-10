@@ -772,7 +772,7 @@ six resulting channel values with `AtmosphericSky::radiance`, so a flat or verti
 cannot satisfy it. Both Vulkan runs emit no validation message, and the standalone package has its
 own write-free reproducibility gate.
 
-### Portable engine-effect rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`–`MOD-2239u`, 2026-09-10)
+### Portable engine-effect rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`–`MOD-2239v`, 2026-09-10)
 
 `ChromaticAberrationPass` is the first engine post-process to use the portable package path. Its
 internal package shares one fullscreen vertex contract across GLSL ES, desktop GLSL and SPIR-V;
@@ -1005,6 +1005,17 @@ and `TransparentPhase` suites are **13/13** on Vulkan llvmpipe and EasyGL, with 
 message; both end-to-end examples report the same **3/3**, including the same 1-byte worst order
 difference and 39,330 lit pixels. Hardware RADV was not run for this row because the only available
 hardware display is the user's real desktop and Xvfb has no DRI3; no visible window was opened.
+
+`GpuInstanceCuller` now selects a standalone generated GLSL ES, desktop GLSL or SPIR-V compute
+package instead of keeping an internal GLSL ES string. Its compute pass compacts world matrices and
+atomically authors the indirect command's instance count; the offered count travels in an otherwise
+unused padded command word, avoiding a name-dependent scalar uniform. The caller's draw package
+declares the same read-only matrix buffer at logical binding 6 (Vulkan set 2) and indexes it by the
+native instance index. The shared suite is **8/8** on Vulkan llvmpipe and EasyGL, including the
+5-visible/6-culled pixel oracle and stale-zero command check; `cna_test_cnaext_gpu_driven` is
+**4/4** on both. The two generated packages have independent write-free reproducibility gates.
+RADV was not used because it cannot present through the hidden Xvfb display; no visible window was
+opened.
 
 Other engine post-process effects remain source-only and keep their exact copy-through fallback;
 the shared package/helper is the landing point for their subsequent fragment variants.

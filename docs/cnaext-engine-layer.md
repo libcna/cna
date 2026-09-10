@@ -217,7 +217,7 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 | Instancing / LOD / culling | ✅ | ✅ measured — `cnaext_instancing_lod_test` passes 5/5 on a real Vulkan device | ⬜ | ⬜ — `LodGroupEXT` and `FrustumCullerEXT` are renderer-free and run everywhere; `InstancedRendererEXT` needs `GraphicsCapability::Instancing` and otherwise refuses (or falls back, on request) |
 | Compute / storage buffers | ✅ GL ES ≥ 3.1 / GL ≥ 4.3, runtime-probed; ordinary texture image bindings desktop-GL only | ✅ SPIR-V, reflected SSBO/push constants, readonly vertex/fragment SSBOs, fifteen exact dedicated storage-image formats plus legal ordinary-texture/render-target bridges in one deferred order | ⬜ | ⬜ — both wrappers throw `System::NotSupportedException` naming the renderer |
 | Indirect draws | ✅ GL ES ≥ 3.1 / GL ≥ 4.0, runtime-probed; both routes, including per-instance streams | ✅ device-gated `drawIndirectFirstInstance`; both routes, deferred lifetime and compute-written commands | ⬜ | ⬜ — `SupportsIndirectDrawEXT()` is false by default and `GraphicsDevice` refuses the draw naming the renderer |
-| GPU culling into an indirect draw | ✅ needs compute, indirect draw, executed effect source and a vertex-stage SSBO — all four probed | 🟨 native SPIR-V compute→vertex/fragment SSBO→indirect path is complete and stale-frame-tested; `GpuInstanceCuller` still owns GLSL payloads, so it refuses until portable shader packages (`MOD-2210`–`MOD-2214`) select SPIR-V | ⬜ | ⬜ — `GpuInstanceCuller` refuses and names the missing requirement; there is no fallback, because a CPU path would not remove the stall |
+| GPU culling into an indirect draw | ✅ portable GLSL package + vertex-stage SSBO | ✅ portable SPIR-V compute package, reflected vertex-stage SSBO and compute-written indirect command (`MOD-2239v`) | ⬜ | ⬜ — `GpuInstanceCuller` refuses and names the missing requirement; there is no fallback, because a CPU path would not remove the stall |
 | Particles | ✅ GPU simulation + instanced billboards | 🟨 CPU fallback remains active; the native SPIR-V fragment-SSBO dependency is proven, but the subsystem's GLSL payload cannot yet be selected on Vulkan (`MOD-2210`–`MOD-2214`) | 🟨 same | 🟨 — `ParticleSystem` falls back to its CPU path and the same particles appear, more slowly |
 | Transparency (sorted) | ✅ ordering is renderer-free; the phase needs only a scene target | ✅ | ✅ | ✅ — `TransparentDrawList` is plain arithmetic and runs everywhere |
 | Transparency (order-independent) | ✅ needs MRT, a half-float target and a usable custom-effect package | ✅ portable resolve plus GLSL/SPIR-V accumulation contract (`MOD-2239u`) | ⬜ | ⬜ — the pipeline falls back to the sorted phase and names the missing requirement |
@@ -260,8 +260,9 @@ true 3D-LUT colour grading; `MOD-2239h` adds analytic height fog from depth and 
 `MOD-2239k` adds the SSAO estimate plus blur/composite, `MOD-2239l` adds the shared rigid/skinned
 depth/normal/velocity producer, `MOD-2239m` adds screen-space reflections, `MOD-2239n` adds
 screen-space contact shadows, `MOD-2239o` adds projected decals, `MOD-2239p` adds aerial
-perspective, `MOD-2239r` adds volumetric fog, and `MOD-2239s`/`MOD-2239t` add the legacy
-`CRTEffect`/`DepthEffect` pair. The remaining
+perspective, `MOD-2239r` adds volumetric fog, `MOD-2239s`/`MOD-2239t` add the legacy
+`CRTEffect`/`DepthEffect` pair, `MOD-2239u` adds weighted order-independent transparency, and
+`MOD-2239v` adds portable GPU instance culling. The remaining
 post-process paths still provide source alone and remain unavailable on Vulkan. Portable packages
 use the language/stage query to select a payload;
 subsystems still ask their own semantic capability before promising a visible result.
@@ -1289,10 +1290,11 @@ culler.draw(PrimitiveType::TriangleList);
 ```
 
 **Your vertex shader reads its own transform from a storage buffer**, not from a per-instance vertex
-stream, because a compute shader cannot write a vertex buffer in this profile. Paste
-`GpuInstanceCuller::getInstanceLookupGlsl()` after a `#version 310 es` line and call
-`cnaInstanceWorld()`; the matrix arrives in the same layout the `World` uniform does, so it
-multiplies the same way.
+stream, because a compute shader cannot write a vertex buffer in this profile. A GLSL package may
+paste `GpuInstanceCuller::getInstanceLookupGlsl()` after a `#version 310 es` line and call
+`cnaInstanceWorld()`. A Vulkan package declares the equivalent read-only matrix buffer at descriptor
+set 2 and `GpuInstanceCuller::kInstanceBinding`, indexed by `gl_InstanceIndex`. The matrix arrives in
+the same layout the `World` uniform does, so it multiplies the same way.
 
 ```glsl
 #version 310 es
@@ -1301,9 +1303,10 @@ void main() { gl_Position = Projection * View * cnaInstanceWorld() * vec4(aPos, 
 ```
 
 **Four requirements, and the fourth is the one that surprises people.** Compute shaders, indirect
-draws, an effect source the renderer really executes — and at least one storage buffer readable from
-a *vertex* shader. GL ES 3.1 allows `GL_MAX_VERTEX_SHADER_STORAGE_BLOCKS` to be **zero**, so a
-context can implement compute completely and still refuse this.
+draws, a usable custom-effect package — and at least one storage buffer readable from a *vertex*
+shader. GL ES 3.1 allows `GL_MAX_VERTEX_SHADER_STORAGE_BLOCKS` to be **zero**, so a context can
+implement compute completely and still refuse this. The culler selects its own generated GLSL ES,
+desktop GLSL or SPIR-V compute payload; it does not ask Vulkan to execute GLSL source.
 
 **It refuses rather than falling back**, which is the opposite of what `ClusteredLightCompute` does,
 deliberately. That class has a CPU path that is a correct if slower answer; there is no CPU
