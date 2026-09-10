@@ -15,7 +15,7 @@
 
 ## 1. Current status
 
-**Parity reached — see §28.1 for the dated verdict, its evidence and, as importantly, its scope, then §28.2–§28.7 for the post-verdict corrections.** **Two hundred and thirty-five tasks are ✅ and three ⛔** as of 2026-09-10 (`awk -F'|' '/^\| VULKAN-[0-9]+ \|/ {print $4}' plans/plan_vulkan.md | sort | uniq -c`, which is the authority for these counts and is what every row-status change is re-run against). The paragraph below is the inline list as it stood at **one hundred and nineteen** ✅ and is kept as history rather than maintained; it names the hundred and eighteen listed here (`VULKAN-004`, `-009`, `-008`, `-020`, `-021`, `-022`, `-023`, `-025`, `-026`, `-027`,
+**Parity reached — see §28.1 for the dated verdict, its evidence and, as importantly, its scope, then §28.2–§28.8 for the post-verdict corrections.** **Two hundred and thirty-six tasks are ✅ and three ⛔** as of 2026-09-10 (`awk -F'|' '/^\| VULKAN-[0-9]+ \|/ {print $4}' plans/plan_vulkan.md | sort | uniq -c`, which is the authority for these counts and is what every row-status change is re-run against). The paragraph below is the inline list as it stood at **one hundred and nineteen** ✅ and is kept as history rather than maintained; it names the hundred and eighteen listed here (`VULKAN-004`, `-009`, `-008`, `-020`, `-021`, `-022`, `-023`, `-025`, `-026`, `-027`,
 `-055`, `-090`, `-091`, `-094`, `-095`, `-215`, `-097`, `-098`, `-130`, `-131`, `-132`, `-133`, `-134`, `-141`, `-144`, `-145`, `-146`, `-147`, `-148`, `-149`, `-150`,
 `-151`, `-152`, `-153`, `-154`, `-155`, `-156`, `-157`, `-158`, `-159`, `-160`, `-161`, `-162`, `-163`, `-170`, `-171`, `-172`, `-173`, `-174`, `-175`, `-176`, `-177`, `-179`, `-250`, `-251`, `-265`, `-332`, `-333`,
 `-330`, `-331`, `-339`, `-340`, `-341`, `-342`, `-343`, `-346`, `-347`, `-348`, `-349`, `-370`, `-390`, `-391`, `-392`, `-393`, `-394`, `-395`, `-396`, `-399`, `-400`, `-401`, `-402`, `-403`, `-404`, `-405`, `-406`, `-407`, `-408`, `-470`, `-471`, `-474`, `-475`, `-476`, `-477`, `-481`, `-482`), plus
@@ -997,6 +997,7 @@ measurement before a task can be written honestly.
 | F-45 | **The parity verdict treated an honest multi-stream refusal as equivalent capability.** §2 explicitly places multi-stream input in scope, while §10 recorded EasyGL as supported and Vulkan as `SEMANTIC_DIVERGENCE`; a deterministic exception is a safe boundary, not parity. The already-owned `REMED-GFX-203` was still pending in `plan_postaudit.md`. **Resolved 2026-09-08:** Vulkan interleaves every public stream of the same input rate into the immutable host snapshot its deferred draw already owns, preserving the existing native binding count and adding no submit. Ordinary, indexed, instanced, stock-effect and custom-SPIR-V routes consume the combined declaration. The selected 16-/32-bit index data determines the compact source window, so `startIndex`, `baseVertex`, a non-exact `minVertexIndex`, per-binding `VertexOffset`, mixed `InstanceFrequency` values and later source-buffer mutation all retain their meanings. The shared conformance sources pass **48/48 Vulkan and 48/48 EasyGL**; `Vulkan_ShaderEffect_3D` passes **8/8**, including both split-stream ordinary routes and custom instancing, with zero validation messages. | `VulkanRenderer::PackVulkanStreamsEXT`, `VulkanIndexedStreamWindow`, `OrdinaryDrawMultiStreamTests.cpp`, `InstancedDrawMultiStreamTests.cpp`, `vulkan_shader_effect_3d_test.cpp` | `REMED-GFX-203` ✅ |
 
 | F-46 | **A preferred 2× MSAA request was rejected instead of downgraded.** `CreateRenderTarget2DEXT` and `CreateRenderTargetCubeEXT` threw whenever their exact colour/depth query had no multisample count, while their own constructors already implemented the FNA rule of choosing the highest supported count no greater than requested. On llvmpipe the public 2D path therefore threw for a legal preference it should report as applied 0; the cube path carried the same untested gate. The full renderer corpus exposed the 2D failure, the FNA `RenderTarget2D`/`RenderTargetCube` plus FNA3D D3D11/OpenGL implementations settle the expected fallback, and separate permanent legs now pin both target types. **Resolved 2026-09-10:** the redundant gates are gone; exact formats are still mandatory, and both 2× requests construct with `applied=0` on llvmpipe. | `VulkanRenderer::CreateRenderTarget2DEXT`, `VulkanRenderer::CreateRenderTargetCubeEXT`, `vulkan_float_render_target_test.cpp`; FNA `RenderTarget2D.cs` / `RenderTargetCube.cs` and FNA3D D3D11/OpenGL `GetMaxMultiSampleCount` | `VULKAN-267` ✅ |
+| F-47 | **The renderer-interface census stopped at the eleven classic interfaces and omitted 28 modern virtuals.** The five omitted contracts are GPU timer, storage buffer, compute shader, texture array and storage texture. Extending the old name-only override scan naively would also have produced false positives: EasyGL has unrelated `SetData`/`GetData` overrides although it does not implement either texture-resource interface. The same flaw had already misclassified `ITextureRenderer::GetData` for both backends and the cube `HasRealDepthBuffer` for EasyGL by finding those names in sibling classes. **Resolved 2026-09-10:** the tool discovers all 16 `I*Renderer` interfaces and searches only a class that actually inherits the queried interface. It reports **237 total: 165 both, 19 EasyGL-only, 30 Vulkan-only and 23 neither**. The 28 newly covered entries are 22 both plus six intentional Vulkan-only entries; neither those nor the two corrected shared defaults expose a missing Vulkan implementation. | `tools/vulkan/iface_contract_table.py`; `IGraphicsRenderer.hpp`; Appendix A | `VULKAN-268` ✅ |
 
 ### 9.2 Documentation contradicted by the current tree
 
@@ -1501,6 +1502,7 @@ phase owns Vulkan's own stock-effect and `ShaderEffect` surface.
 | VULKAN-265 | Refuse the four array uniform setters until `VULKAN-252` implements them | ✅ | **Scope, stated precisely because the first draft of this row got it wrong:** `VULKAN-252` has owned *implementing* the array setters since the planning session, and this row does not do that. What `VULKAN-027`'s contract table found is what `VULKAN-252` leaves untouched while it waits — the calls are **silently accepted**, so a caller cannot tell an unimplemented path from a working one. This row closes that interim, and is a predecessor of `VULKAN-252` rather than a duplicate. **Observed:** `IEffectRenderer` declares four array setters whose bodies are `{}` (`IGraphicsRenderer.hpp:931`–`947`). `VulkanEffectRenderer` overrode the six scalar/vector setters (`VulkanRenderer.hpp:373`–`378`) and none of the four, presenting itself as a working effect renderer and then discarding every array upload without a word. **Classification:** implementation bug — a silent no-op on a reachable public call, the same class as F-31. **Reachability, checked rather than assumed:** `ShaderEffect` lives in `modules/graphics`, the XNA-public module; its array setters carry the `CNAEXT` marker but no `CNA_CNAEXT` build guard (`ShaderEffect.hpp:95`–`128`, forwarding at `ShaderEffect.cpp:77`), so the call compiles and runs in every build. **EasyGL evidence:** overrides all four (`EasyGLRenderer.hpp:516`–`522`) and uploads them. **Vulkan evidence:** the `ShaderEffect` payload is a fixed 128-byte push-constant block with fixed slots — one `mat4`, one `vec4`, eight floats (`VulkanRenderer.hpp:450`–`452`) — and no shader reflection, so an array of arbitrary length has nowhere to go. That is why the setters were never written, and it is the same reason `VULKAN-252` says a uniform buffer is required. **Intended behaviour, by §5's authority order:** XNA has no opinion — these are CNA extensions — so the governing rule is this project's own, that unsupported behaviour refuses explicitly rather than pretends (`CLAUDE.md`, Platform Boundary). **Done:** new `RefuseEffectUniformArrayEXT(setter, name, count)` (`VulkanRenderer.cpp:4074`), deliberately separate from `RefuseEffectTextureBindEXT` because the limit it reports is a different one, and four one-line overrides that call it. **Test, and why it discriminates:** `Vulkan_ShaderEffect_SpirV` gains four legs asserting the throw **plus the control that was already there** — the red centre pixel proves the same `fx` still reaches the shader through `SetUniformVec4`, so four throws cannot be explained by an effect that is broken end to end. **Mutation-checked:** restoring the silent no-op on `SetUniformMat4Array` alone turns the test red with `SetUniformMat4Array was accepted and silently ignored` while the control still reports `centre=(255,0,0) bg=(0,255,0)` — so the leg fails for the defect it claims, and for that defect only. **Evidence:** `Vulkan_ShaderEffect_SpirV` still passes, `^Vulkan_` **238/238**. **Consequence handed to a new row rather than assumed away:** three CNAEXT passes call these setters, so with `CNA_CNAEXT=ON` they now throw where they previously fell silent. That build does not exist here, so it was **not** verified — `VULKAN-266` owns it. **Explicit non-goal:** the uniform-buffer implementation, which stays with `VULKAN-252`. **Superseded 2026-09-07 (`VULKAN-252`):** the refusal this row installed is gone, replaced by the implementation it was holding the place for. What survives is the rule — a setter never falls silent — and the two refusals that are still real, a count past the block's 72 elements and a null array with a non-zero count. |
 | VULKAN-266 | Determine whether the three CNAEXT passes can reach the now-refusing array setters on Vulkan | ✅ | **Closed by runtime measurement on 2026-09-08; no production change was needed.** The existing Vulkan build was temporarily configured with `CNA_CNAEXT=ON`, and the three exact registered examples named by this row were built and run under Xvfb on llvmpipe. `CNAEXT_ShadowMap` initialised Vulkan and exited at its documented 3D/shader/shadow-support gate; `CNAEXT_ClusteredLights` refused its GLSL payload as non-SPIR-V and exited at `ExecutesShaderEffectSourceEXT`; `CNAEXT_Ssao` ran its 4096-texel disabled-pipeline identity control with **0 differing texels**, then refused the depth-normal/SSAO GLSL payloads and exited at its shader-support gate. All three returned CTest's intentional skip code rather than throwing, crashing or silently running a broken pass. The array setters therefore remain unreachable through these source-shader CNAEXT passes on native Vulkan, while direct compiled-SPIR-V array delivery remains covered by `Vulkan_ShaderEffect_UniformArrays` (`VULKAN-252`). **Exact validation:** `xvfb-run -a ctest --test-dir cmake-build-vulkan -R '^(CNAEXT_Ssao|CNAEXT_ShadowMap|CNAEXT_ClusteredLights)$' -V -j1` — 3/3 safe capability skips, zero failures. **Historical reason this row existed:** `VULKAN-265` replaced silent array-setter no-ops with explicit refusal before `VULKAN-252` implemented arrays; source reading could not prove whether these three passes reached the calls. The runtime configuration now supplies that missing evidence. **Non-goal:** adding GLSL-source compilation to native Vulkan; its public contract is compiled SPIR-V (`VULKAN-264`). |
 | VULKAN-267 | Restore FNA-compatible preferred MSAA downgrade for 2D and cube render targets (F-46) | ✅ | **Found by the first full `^Vulkan_` corpus after the modern engine-layer backlog closed: 381/382 passed, and only `Vulkan_MsaaFirstReadback` failed.** Its B2 child requested a `Color` `RenderTarget2D` with preferred count 2 on llvmpipe, whose exact image-usage query offers 1× and 4× but not 2×; the factory threw *“has no multisample support”*. The isolated serial rerun failed identically, so this was not contention. **Authority:** FNA's `RenderTarget2D.cs` and `RenderTargetCube.cs` both call `FNA3D_GetMaxMultiSampleCount` after `ClosestMSAAPower`; FNA3D's D3D11 backend repeatedly halves until supported and its OpenGL backend clamps to the supported maximum. The parameter is named **preferred** because an unavailable count is allowed to become a lower count, including zero/single-sampled — construction is not refused. **Cause:** `MOD-2223`/`MOD-2234` added redundant public-factory preflights that threw when the exact colour/depth pair had no multisample count, although both native target constructors already intersect those exact formats and use `PickSampleCountFromFlags` to select the highest supported value no greater than requested. **Fix:** remove only the duplicate throw gates for both 2D and cube; exact format, extent, mip and cube-compatibility refusals remain unchanged, and the constructors keep reporting the count actually applied. **Permanent evidence:** `Vulkan_FloatRenderTarget` grows 13/13 → **15/15** with separate 2D and cube 2× legs; both construct and report `applied=0` on llvmpipe. The original 34-leg `Vulkan_MsaaFirstReadback` is green, and the focused affected set is **10/10** across applied-count, 2D/cube resolve, MRT, format queries, depth, first readback, cube-face preservation and own-MSAA tests. All ran serially on hidden Xvfb with llvmpipe. |
+| VULKAN-268 | Extend the renderer-interface census over the modern contracts (F-47) | ✅ | **The “interface-by-interface” appendix was complete only for the eleven interfaces present when `VULKAN-027` wrote it.** Five later modern interfaces — GPU timer, storage buffer, compute shader, texture array and storage texture — contributed 28 virtuals that the committed tool deliberately omitted; §31 mentioned only one of them, `BindConstantBufferEXT`, so the stated boundary itself had gone stale. **The tool now discovers every `I*Renderer` interface from the contract header instead of maintaining a second list, and searches for an override only inside a class that inherits that exact interface.** The exact-class rule matters twice: without it, EasyGL's unrelated storage-buffer `SetData`/`GetData` methods falsely make its absent array/storage-texture records look implemented; it also exposes two historical false positives, where sibling-class names made both backends appear to override `ITextureRenderer::GetData` and EasyGL appear to override `IRenderTargetCubeRenderer::HasRealDepthBuffer`. Both correctly use the shared defaults. **Current result:** **237 virtuals in 16 interfaces: 165 both, 19 EasyGL-only, 30 Vulkan-only, 23 neither.** The added 28 split into 22 both and six Vulkan-only. The 22 are all four timer operations, all eight storage-buffer operations and ten of twelve compute operations. The six Vulkan-only entries are compute storage-texture binding and direct-descriptor identity plus array/storage-texture transfer pairs; EasyGL cannot construct either resource and correctly inherits their false/default refusal, while `UsesDirectSampledTextureBindingsEXT=false` is exactly its named-uniform model. **No implementation gap found.** The behavior evidence is independently owned by `MOD-2163`, `MOD-2230`/`2231`, `MOD-2226`/`2228` and `MOD-2241`–`2253`; this row changes only the reproducible audit and its report, so no renderer build is evidence for it. |
 | VULKAN-251 | Prove `ShaderEffect` uniform delivery through `SpriteBatch` on Vulkan | ✅ | **Done with **no new SPIR-V**, which is a simplification found by reading rather than a shortcut — and the row's real requirement turned out to be sharper than "author the twin".** **What the row asked for:** that the drawn colour be a *function* of the uniform, so a dropped uniform fails. **What was already there:** `Vulkan_ShaderEffect_SpirV` set `uColor` **once**, to red, and asserted the centre was red. That does catch a uniform dropped *entirely* — the shader would draw the untinted white texture and `G <= 50` would fail — but it cannot catch a value delivered to the wrong push-constant slot, or with only one channel arriving, because "reddish" satisfies it either way. One value is not a function. **Done:** two batches with two distinct values into two regions — red on the left, blue on the right — and both are asserted. The existing tint shader already reads `uColor`, so the "author the SPIR-V twin" step the row anticipated was unnecessary; recording that is more useful than quietly skipping it. **Checked before relying on it:** two batches in one frame do not collapse onto the last value, because `End()` copies the effect's push constants into the batch's snapshot (`VulkanRenderer.cpp:1355`) — the same snapshot-at-submission discipline `VULKAN-132` measured for vertex buffers. Had that not been so, this test would have been measuring a defect instead of the uniform. **Mutation-checked:** making `SetUniformVec4` write a constant tint regardless of its arguments turns the right-hand region red and fails the leg — **and would have passed the single-value check completely**, which is the clearest statement of what this row added. **Evidence:** `^Vulkan_` **253/253**. Full `ctest` not re-run: the change is confined to one test source. |
 | VULKAN-252 | Implement the array uniform setters on `VulkanEffectRenderer` | ✅ | **Implemented as four uniform-buffer ranges in descriptor set 1, and the row's own warning was the first thing that had to be obeyed: the refusal came out in the same commit as the feature.** **The design decision, and it is the row.** Set 1 gains **four** bindings, one per element type — 12 `float`, 13 `vec2`, 14 `vec3`, 15 `mat4` — rather than one block holding all four. With a single block a shader wanting only a bone palette would have had to declare the three arrays it does not use, in the right order, or silently read the wrong offset; with four, it declares `layout(set = 1, binding = 15) uniform Mat4Array { mat4 uBones[72]; };` and reads the right bytes. They are four **ranges of one buffer**, so the split costs descriptors, not allocations. **72 elements each**, which is XNA's own `SkinnedEffect.MaxBones`, so the array a custom effect is most likely to want fits exactly; the whole block is 8448 bytes against the 16384 every Vulkan device must allow, and the device's actual `maxUniformBufferRange` is checked once rather than discovered as a validation error. **Visible to both stages**, because a bone palette is read in the vertex shader — fragment-only would have made the headline use case impossible. **Three lessons this renderer had already paid for, applied rather than re-learned.** (1) The buffer is built at `SpriteBatch::End()` and captured by value into the batch snapshot, beside the bound textures and the push constants, so a later write cannot change what an already recorded batch reads. (2) A new buffer is allocated only when the **contents** changed, and the old one is retired on the same fence as the descriptor set that names it — the set is the only thing that still references it. (3) The bindings are written **unconditionally**, with zeros for an effect that never set an array, because `VULKAN-253` measured what an unwritten binding in a statically used set does. **Refusals kept where they are real:** a count past 72 and a null array with a non-zero count are refused **by name**; only the push-constant refusal is gone. **Test:** new `Vulkan_ShaderEffect_UniformArrays`, **5/5 on llvmpipe and on RADV**. Its two shaders are built so a plumbing mistake cannot look like success — the vector one takes one channel from each of the three bindings at a **different element index** in each (1, 2, 3), and the matrix one reads element 0 column 0 row 0, element 1 column 1 row 1, element 2 column 2 row 2, so a transposed matrix, a wrong element stride and a wrong element index each fail independently. **Mutation, three, each predicted first:** packing the vector elements tightly instead of padding them to std140's 16 bytes fails leg C only (`(0,0,0)`); never refreshing the buffer fails leg B only, which is exactly the stale-descriptor shape `VULKAN-164` had to fix for the sampler; giving every binding the same whole-buffer range fails A, B and C and leaves D and E green. **One existing test changed, and the row said it would have to:** `Vulkan_ShaderEffect_SpirV`'s four refusal legs now assert the opposite — each setter is accepted, and one past the capacity is still refused by name — because leaving them would have failed the feature this row adds. **Evidence:** `^Vulkan_` **341/341** on llvmpipe and on RADV. Full `ctest` **not re-run**: every changed line is inside `VulkanEffectRenderer` and its two examples, so nothing outside this renderer's own set can move. **`VULKAN-266`'s premise moves with this row** — the three CNAEXT passes it is about no longer meet a throw, provided their arrays fit in 72 elements — and it is annotated rather than closed, because that is its own verification to do. |
 | VULKAN-253 | Implement `IEffectRenderer::BindTexture` on `VulkanEffectRenderer` | ✅ | **Implemented: a custom effect can now sample a texture it was explicitly bound, and the pixels prove it.** New `Vulkan_ShaderEffect_BoundTexture`, **4/4 on llvmpipe and on RADV**. **The design decision, and it is the whole row:** bound textures live in **descriptor set 1**; the `SpriteBatch` texture stays at **set 0**. Set 0 changes per sprite and set 1 is fixed for the batch, so one shared set would have meant rebuilding a descriptor set for every sprite in the batch. A shader reaches a bound texture as `layout(set = 1, binding = <unit>) uniform sampler2D`, and every existing SPIR-V shader keeps working because set 0 is untouched. That numbering differs from EasyGL's, where unit 0 IS the sprite texture -- `ShaderEffect` takes renderer-specific source by contract (`VULKAN-250`), so the divergence is documented rather than papered over. **Four sampler units**, allocated through `VULKAN-181`'s growing pool, with the set built at `SpriteBatch::End()` and captured **by value** into the batch snapshot -- the same rule the effect's pipeline and push constants already follow, so a texture unbound or disposed after `End()` cannot change what the recorded frame samples. The previous set is retired rather than freed, because a recorded frame may still name it. **Two holes found by mutation and closed, not worked around.** (1) Writing only the bound units left the rest `VK_NULL_HANDLE`: the layer reported three `pImageInfo[0].imageView is VK_NULL_HANDLE` per set. Every binding is now written, the unbound ones with the renderer's own white 1×1 -- so a shader sampling a unit nothing was bound to reads white rather than undefined memory, and the default texture is created on this path because nothing had ever needed it there. (2) Building the set **only when something was bound** meant a shader that declares `set = 1` and gets no binding drew with set 1 unbound: `vkCmdDrawIndexed(): The VkPipeline … statically uses descriptor set 1, but all sets 0 to 1 [were not bound]`, then a segfault. The set is now unconditional -- one descriptor per effect, and the whole class of failure is gone. **The test is built so that failure reads as white**, because white is what an unbound unit produces: the sprite's own texture is white and the effect samples only set 1, so blue can only come from the binding. With `BindTexture` mutated to store nothing, legs A and B fail with `(255,255,255)` and nothing crashes. **One existing test changed, and it had to.** `Vulkan_SamplerAddressW`'s leg C asserted that binding a `Texture2D` to a `ShaderEffect` is **refused by name** -- `VULKAN-163`'s contract, correct until this row replaced it. It now asserts the pair that must hold: the volume still refused, the flat texture accepted. Leaving it would have failed the feature this row adds, which is exactly what `VULKAN-252`'s row warns about for the array setters. **And one gap in `VULKAN-013`'s guard, found by this row's own verification run and fixed in the same commit:** a RADV suite run came back with **55 subprocess aborts**, every one of them `CNA::Platform: AcquireSubsystem(Video) failed: x11 not available` -- the scaffolding display had died. That is precisely the environment-versus-regression confusion `VULKAN-013` exists to prevent, and it is further from "a device that WAS created" than the two cases already matched, since no device is reached at all. The guard now covers it: exit **77** with `[SKIP]`, verified against `DISPLAY=:9999`. Re-running with the display restored gives **339/339**. **Evidence:** `^Vulkan_` **339/339 on llvmpipe and 339/339 on RADV**. |
@@ -1952,6 +1954,32 @@ therefore **235 ✅ and 3 ⛔**; the remaining rows are still the same three cro
 
 ---
 
+## 28.8 Post-verdict audit correction — all renderer interfaces (`VULKAN-268`)
+
+Appendix A called itself an interface-by-interface census but still bounded its parser to the eleven
+interfaces that existed when `VULKAN-027` was written. Five modern interfaces added 28 virtuals:
+`IGpuTimerRenderer`, `IStorageBufferRenderer`, `IComputeShaderRenderer`,
+`ITexture2DArrayRenderer` and `IStorageTexture2DRenderer`. Only one of them was mentioned outside
+the count, so the published boundary and the reproducible tool no longer described the full
+contract header.
+
+The tool now discovers all 16 `I*Renderer` interfaces from the header. It also searches only the
+body of a class that derives from the queried interface; otherwise EasyGL's storage-buffer
+`SetData`/`GetData` methods falsely satisfy the two texture-resource contracts it does not
+implement. That exact-class rule also corrects two old collisions: `ITextureRenderer::GetData` is a
+shared default on both backends, and `IRenderTargetCubeRenderer::HasRealDepthBuffer` is a shared
+default rather than an EasyGL override found in its 2D sibling. The corrected census is **237 total:
+165 both, 19 EasyGL-only, 30 Vulkan-only and 23 neither**. The added 28 split into 22 both and six
+Vulkan-only. Those six are intentional: Vulkan owns array/storage-texture resources and their
+transfers while EasyGL cannot construct them, and Vulkan's direct SPIR-V descriptor identity
+correctly differs from EasyGL's named-uniform model.
+
+No Vulkan implementation gap was found. The modern behavior remains tested and owned by
+`plans/plan_modern.md`; this row corrects the audit boundary and its reproducible report. The current
+plan count is therefore **236 ✅ and 3 ⛔**.
+
+---
+
 ## 29. Dependencies on other plans
 
 | Plan | Relationship |
@@ -2002,8 +2030,11 @@ current-status claim**, and none of it may be used to suppress a gap this plan m
 
 Produced 2026-09-05 by `tools/vulkan/iface_contract_table.py` (committed with this row, so the
 table is reproducible rather than remembered), which reads every `virtual` declaration out of
-`modules/graphics/include/CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp` between the eleven
+`modules/graphics/include/CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp` between all renderer
 interface class boundaries, then asks whether each renderer family declares an `override` for it.
+The original tool named eleven interfaces explicitly; `VULKAN-268` replaces that stale list with
+discovery of all 16 current `I*Renderer` contracts and requires actual interface inheritance before
+accepting a same-named override.
 Destructors are excluded. Two parser hazards were found and fixed before the numbers below were
 trusted, and both are worth knowing if this table is ever regenerated: a declaration whose parameter
 list contains a braced default (`= {}`) defeats a naive `[^;{]*override` pattern and reports a real
@@ -2020,15 +2051,16 @@ The movement is accounted for
 exactly at every step. The interface itself grew from 186 virtuals to 189 before the compressed
 overrides moved categories, then to 202 through the detailed format/limit contract, and to 207
 through the three portable resource facades completed by `MOD-2225`–`MOD-2229`, then to 209 through
-the language and base-instance queries.**
+the language and base-instance queries. `VULKAN-268` then brought the five previously omitted modern
+interface boundaries into scope, raising the reproducible total to 237.**
 
 | Group | 2026-09-05 | 2026-09-06 | 2026-09-07 | `VULKAN-241` | Current | Meaning |
 |---|---|---|---|---|---|---|
-| Both override | 102 | 106 | **114** | **117** | **144** | Vulkan implements what EasyGL implements. |
-| **EasyGL overrides, Vulkan does not** | **54** | **50** | **44** | **41** | **20** | The live survivor set — table A.1. |
-| Vulkan overrides, EasyGL does not | 3 | 7 | **8** | **8** | **24** | Renderer-specific answers and modern rollout queries. |
-| Neither overrides | 27 | 23 | **23** | **23** | **21** | Both take the shared default, so there is no Vulkan-specific divergence. |
-| *total virtuals* | *186* | *186* | ***189*** | ***189*** | ***209*** | |
+| Both override | 102 | 106 | **114** | **117** | **165** | Vulkan implements what EasyGL implements. |
+| **EasyGL overrides, Vulkan does not** | **54** | **50** | **44** | **41** | **19** | The live survivor set — table A.1. |
+| Vulkan overrides, EasyGL does not | 3 | 7 | **8** | **8** | **30** | Renderer-specific answers and modern rollout queries. |
+| Neither overrides | 27 | 23 | **23** | **23** | **23** | Both take the shared default, so there is no Vulkan-specific divergence. |
+| *total virtuals* | *186* | *186* | ***189*** | ***189*** | ***237*** | |
 
 **The 2026-09-05 → 2026-09-06 movement** was four virtuals: `IEffectRenderer`'s array uniform
 setters, which `VULKAN-265` made Vulkan override — to **refuse**, which counts as implementing the
@@ -2077,8 +2109,9 @@ changed. `MOD-2225`–`MOD-2229` subsequently added five false-by-default facade
 live tool output at that point was **207 / 127 both / 31 EasyGL-only / 28 Vulkan-only / 21
 neither**.
 
-The current rerun reports **209 / 144 both / 20 EasyGL-only / 24 Vulkan-only / 21 neither**.
-Two new counted virtuals explain the total: `MOD-2210` added
+The last rerun restricted to the eleven classic interface boundaries reported
+**209 / 144 both / 20 EasyGL-only / 24 Vulkan-only / 21 neither**. Two new counted virtuals explain
+that total: `MOD-2210` added
 `SupportsShaderLanguageEXT` with both overrides, while `MOD-2232` added the Vulkan-only
 `SupportsBaseInstanceDrawingEXT`. Fifteen movements into *both* are also explicit: the six older
 `VULKAN-170`/`171`/`172`/`331` rows already named above were missing only from A.2's printed table;
@@ -2093,10 +2126,24 @@ shared IBL oracle executes. `MOD-2236` makes the final one-step movement:
 `SupportsShadowSamplingEXT` leaves EasyGL-only for both after a shared 11-check receiver oracle
 matched EasyGL on RADV and llvmpipe.
 
-The census tool intentionally retains its original eleven classic interface boundaries. The new
-`IComputeShaderRenderer::BindConstantBufferEXT` seam from `MOD-2230` is therefore outside the 209;
-its shared default refuses and both EasyGL and Vulkan override it. Its package, lifetime and
-two-driver evidence lives in `plans/plan_modern.md` and this renderer's compute documentation.
+`VULKAN-268` removes the obsolete boundary. The current rerun covers all 16 interfaces and reports
+**237 / 165 both / 19 EasyGL-only / 30 Vulkan-only / 23 neither**. The five added interfaces contain
+28 virtuals: all four GPU-timer operations, all eight storage-buffer operations and ten of the
+twelve compute operations are implemented by both renderers. The six Vulkan-only entries are
+`IComputeShaderRenderer::BindStorageTexture2DEXT`, its
+`UsesDirectSampledTextureBindingsEXT` identity, both texture-array transfers and both
+storage-texture transfers. EasyGL cannot construct the two resource types, so inheriting their
+refusals is honest; its `false` direct-binding identity is likewise correct for its named-uniform
+model. Their package, lifetime and two-driver evidence remains in `plans/plan_modern.md`; this
+appendix records the full contract without taking ownership away from that plan.
+
+The exact-class lookup also fixes two classifications inside the old 209. Both renderers inherit
+`ITextureRenderer::GetData`; the old global method search found the same name on their volume/cube
+classes and called it *both*. EasyGL likewise overrides the 2D
+`IRenderTargetRenderer::HasRealDepthBuffer`, not the cube interface's sibling virtual. Those two
+rows move to *neither*, and the latter simultaneously leaves the EasyGL-only survivor set. Both
+defaults already describe the actual resources, so this is an audit correction rather than an
+implementation gap.
 
 **The finding, as `VULKAN-027` wrote it against the 54.** Of the 54, exactly **one family is a real defect**: the four array uniform setters
 of `IEffectRenderer` are silently ignored on Vulkan while EasyGL implements them. The gap itself was
@@ -2109,13 +2156,14 @@ because the deferred draw model copies vertex and index bytes at draw time; and
 `CreateRenderTarget2DEXT` looks like a dropped `SurfaceFormat` but cannot be, because Vulkan's
 `Defer` verdict reduces to *Color only* and a non-`Color` render target is refused one layer above.
 
-### A.1 EasyGL overrides, Vulkan does not (20 current; 41 at `VULKAN-241`)
+### A.1 EasyGL overrides, Vulkan does not (19 current; 41 at `VULKAN-241`)
 
-The table below still has **50** rows. Twenty-nine of them are struck through in their Classification
+The table below still has **50** rows. Thirty-one of them are struck through in their Classification
 cell and marked **NO LONGER IN A.1**: those virtuals moved into A.2 when the rows named in §31's
-movement table gave Vulkan its own override. They stay here because why a virtual was once a
-survivor — and what justified leaving it that way — is the history this appendix exists to keep;
-deleting the row would leave the count smaller with no account of why.
+movement table gave Vulkan its own override, except the cube depth row, which `VULKAN-268` moved to
+A.4 after the exact-class scan proved EasyGL also inherits it. They stay here because why a virtual
+was once a survivor — and what justified leaving it that way — is the history this appendix exists
+to keep; deleting the row would leave the count smaller with no account of why.
 
 | Interface | Virtual | Kind | Inherited default | Classification | Justification |
 |---|---|---|---|---|---|
@@ -2133,7 +2181,7 @@ deleting the row would leave the count smaller with no account of why.
 | `IRenderTargetRenderer` | `GetColorGLHandle` | default | `return 0` | NOT_APPLICABLE | Names a GL object handle. |
 | `IRenderTargetRenderer` | `HasRealDepthBuffer` | default | `return depthFormatWasRequested` | DEFAULT_CORRECT | Vulkan allocates a real per-RT depth attachment exactly when a depth format was requested and none at all otherwise (`VulkanRenderTargetRenderer`, `PickDepthFormat`), so the default already tells the truth. |
 | `IRenderTargetCubeRenderer` | `GetGLHandle` | default | `return 0` | NOT_APPLICABLE | Names a GL object handle. |
-| `IRenderTargetCubeRenderer` | `HasRealDepthBuffer` | default | `return depthFormatWasRequested` | DEFAULT_CORRECT | Vulkan allocates a real per-RT depth attachment exactly when a depth format was requested and none at all otherwise (`VulkanRenderTargetRenderer`, `PickDepthFormat`), so the default already tells the truth. |
+| `IRenderTargetCubeRenderer` | `HasRealDepthBuffer` | default | `return depthFormatWasRequested` | ~~DEFAULT_CORRECT~~ → **NO LONGER IN A.1** | The default was always correct for Vulkan. `VULKAN-268` additionally proves EasyGL inherits this cube virtual too: the old global name search had found its 2D target's override and put the cube row in the wrong category. It is now in A.4. |
 | `IGraphicsRenderer` | `AcquireThreadContextLeaseEXT` | default | returns a null lease | OWNED_ELSEWHERE | Already owned by `VULKAN-025`, which must decide what a lease means with no context to lease. |
 | `IGraphicsRenderer` | `GetDefaultViewportRect` | default | `x=y=0` then `GetViewportSize(w,h)` | ~~DEFAULT_CORRECT, **conditionally**~~ → **NO LONGER IN A.1** | Vulkan overrides `GetViewportSize`, so the default composes into the right answer — **but only because this renderer has no letterbox/overscan rectangle to be wrong about.** That is F-04's point and this cell missed it when first written: the correctness is a consequence of F-03 (`SetPresentationMode` is a silent no-op, `VULKAN-330`), not an independent property. Whoever implements presentation modes must revisit this row — `VULKAN-331` owns it. **Left the survivor set on 2026-09-07: `VULKAN-331` gave Vulkan its own override, so this virtual is now in the *both* column and needs no justification. Kept struck through rather than deleted, because why it was once a survivor is this appendix's history.** |
 | `IGraphicsRenderer` | `ClassifySurfaceFormatEXT` | default | `Defer` | ~~DEFERRED_POLICY~~ → **NO LONGER IN A.1** | `Defer` hands the decision to the shared framework rule rather than asserting an answer. Observed by `Vulkan_SurfaceFormat_Throws`. **Left the survivor set on 2026-09-07: `VULKAN-170` gave Vulkan its own override, so this virtual is now in the *both* column and needs no justification. Kept struck through rather than deleted, because why it was once a survivor is this appendix's history.** |
@@ -2170,12 +2218,34 @@ deleting the row would leave the count smaller with no account of why.
 | `IGraphicsRenderer` | `DebugSimulateContextLoss` | default | no-op | OWNED_ELSEWHERE | Owned by `VULKAN-334`. |
 | `IGraphicsRenderer` | `DebugRestoreContext` | default | no-op | OWNED_ELSEWHERE | Owned by `VULKAN-334`. |
 
-### A.2 Both renderers override (144 current; 114 at `VULKAN-207`)
+### A.2 Both renderers override (165 current; 114 at `VULKAN-207`)
 
 Listed for completeness; no divergence to classify.
 
-| Interface | Virtual | Kind |
-|---|---|---|
+| Interface | Virtual | Kind | Notes |
+|---|---|---|---|
+| `IGpuTimerRenderer` | `Begin` | PURE | *(`MOD-2163`/`MOD-2246` timer implementations)* |
+| `IGpuTimerRenderer` | `End` | PURE | *(`MOD-2163`/`MOD-2246` timer implementations)* |
+| `IGpuTimerRenderer` | `IsResultAvailable` | PURE | *(`MOD-2163`/`MOD-2246` timer implementations)* |
+| `IGpuTimerRenderer` | `ElapsedNanoseconds` | PURE | *(`MOD-2163`/`MOD-2246` timer implementations)* |
+| `IStorageBufferRenderer` | `SetData` | PURE | *(`MOD-2230`/`MOD-2241` storage-buffer implementations)* |
+| `IStorageBufferRenderer` | `GetData` | PURE | *(`MOD-2230`/`MOD-2241` storage-buffer implementations)* |
+| `IStorageBufferRenderer` | `SetDataRangeEXT` | default | *(`MOD-2231` range contract)* |
+| `IStorageBufferRenderer` | `GetDataRangeEXT` | default | *(`MOD-2231` range contract)* |
+| `IStorageBufferRenderer` | `CopyToEXT` | default | *(`MOD-2231` copy contract)* |
+| `IStorageBufferRenderer` | `GetByteSize` | PURE | *(`MOD-2230`/`MOD-2241` storage-buffer implementations)* |
+| `IStorageBufferRenderer` | `GetUsageEXT` | default | *(`MOD-2231` usage contract)* |
+| `IStorageBufferRenderer` | `GetCpuAccessEXT` | default | *(`MOD-2231` CPU-access contract)* |
+| `IComputeShaderRenderer` | `CompileProgram` | PURE | *(EasyGL and Vulkan compute implementations)* |
+| `IComputeShaderRenderer` | `Bind` | PURE | *(EasyGL and Vulkan compute implementations)* |
+| `IComputeShaderRenderer` | `SetUniformInt` | default | *(EasyGL and Vulkan compute implementations)* |
+| `IComputeShaderRenderer` | `SetUniformFloat` | default | *(EasyGL and Vulkan compute implementations)* |
+| `IComputeShaderRenderer` | `BindStorageBuffer` | default | *(EasyGL and Vulkan compute implementations)* |
+| `IComputeShaderRenderer` | `BindConstantBufferEXT` | default | *(`MOD-2230` constant-buffer seam)* |
+| `IComputeShaderRenderer` | `BindImageTexture` | default | *(EasyGL and Vulkan compute implementations)* |
+| `IComputeShaderRenderer` | `BindTexture` | default | *(EasyGL and Vulkan compute implementations)* |
+| `IComputeShaderRenderer` | `IsValid` | PURE | *(EasyGL and Vulkan compute implementations)* |
+| `IComputeShaderRenderer` | `GetCompileError` | PURE | *(EasyGL and Vulkan compute implementations)* |
 | `ITextureRenderer` | `GetSurfaceFormatEXT` | default | *(Vulkan override by `VULKAN-170`)* |
 | `IGraphicsRenderer` | `GetDefaultViewportRect` | default | *(Vulkan override by `VULKAN-331`)* |
 | `IGraphicsRenderer` | `ClassifySurfaceFormatEXT` | default | *(Vulkan override by `VULKAN-170`)* |
@@ -2312,7 +2382,6 @@ Listed for completeness; no divergence to classify.
 | `ITexture3DRenderer` | `SetData` | PURE |
 | `ITextureCubeRenderer` | `GetData` | default |
 | `ITextureCubeRenderer` | `SetData` | PURE |
-| `ITextureRenderer` | `GetData` | default |
 | `ITextureRenderer` | `GetHeight` | PURE |
 | `ITextureRenderer` | `GetWidth` | PURE |
 | `ITextureRenderer` | `UpdatePixels` | default |
@@ -2321,10 +2390,16 @@ Listed for completeness; no divergence to classify.
 | `IVertexBufferRenderer` | `SetData` | PURE |
 | `IVertexBufferRenderer` | `SetVertexDeclaration` | PURE |
 
-### A.3 Vulkan overrides, EasyGL does not (24 current; 8 at `VULKAN-207`)
+### A.3 Vulkan overrides, EasyGL does not (30 current; 8 at `VULKAN-207`)
 
-| Interface | Virtual | Kind |
-|---|---|---|
+| Interface | Virtual | Kind | Notes |
+|---|---|---|---|
+| `IComputeShaderRenderer` | `BindStorageTexture2DEXT` | default | *(Vulkan storage-image resource path by `MOD-2228`; EasyGL cannot create the resource)* |
+| `IComputeShaderRenderer` | `UsesDirectSampledTextureBindingsEXT` | default | *(true for Vulkan's direct SPIR-V descriptors; false is correct for EasyGL's named uniforms)* |
+| `ITexture2DArrayRenderer` | `SetData` | default | *(Vulkan resource path by `MOD-2226`/`MOD-2243`)* |
+| `ITexture2DArrayRenderer` | `GetData` | default | *(Vulkan resource path by `MOD-2226`/`MOD-2243`)* |
+| `IStorageTexture2DRenderer` | `SetData` | default | *(Vulkan resource path by `MOD-2228`/`MOD-2244`)* |
+| `IStorageTexture2DRenderer` | `GetData` | default | *(Vulkan resource path by `MOD-2228`/`MOD-2244`)* |
 | `IEffectRenderer` | `BindTexture2DArrayEXT` | default | *(Vulkan override by `MOD-2226`)* |
 | `IEffectRenderer` | `BindStorageTexture2DEXT` | default | *(Vulkan override by `MOD-2228`)* |
 | `IGraphicsRenderer` | `GetSurfaceFormatUsageSupportEXT` | default |
@@ -2350,7 +2425,7 @@ Listed for completeness; no divergence to classify.
 | `IRenderTargetCubeRenderer` | `GetAppliedDepthStencilFormatEXT` | default | *(added by `VULKAN-215`)* |
 | `ISpriteBatchRenderer` | `SetImmediateMode` | default |
 
-### A.4 Neither renderer overrides (21 current; 23 at `VULKAN-207`) — shared default, no Vulkan-specific divergence
+### A.4 Neither renderer overrides (23 current; 23 at `VULKAN-207`) — shared default, no Vulkan-specific divergence
 
 | Interface | Virtual | Kind |
 |---|---|---|
@@ -2371,7 +2446,9 @@ Listed for completeness; no divergence to classify.
 | `IGraphicsRenderer` | `SupportsStencilBuffer` | default |
 | `IGraphicsRenderer` | `UpdatePresentationFormatEXT` | default |
 | `IRenderTargetCubeRenderer` | `HasRealStencilBuffer` | default |
+| `IRenderTargetCubeRenderer` | `HasRealDepthBuffer` | default | *(exact-class correction by `VULKAN-268`)* |
 | `IRenderTargetRenderer` | `HasRealStencilBuffer` | default |
 | `ISpriteBatchRenderer` | `DrawMeshEXT` | default |
 | `ITexture3DRenderer` | `GetDimensionsEXT` | default |
+| `ITextureRenderer` | `GetData` | default | *(exact-class correction by `VULKAN-268`)* |
 | `ITextureRenderer` | `HasDefinedMipLevel` | default |

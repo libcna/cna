@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
-"""Census of the eleven renderer interfaces, per renderer family.
+"""Census of all renderer interfaces, per renderer family.
 
 Produces the raw material for `plans/plan_vulkan.md` §31 (Appendix A, `VULKAN-027`):
 every `virtual` declared between the interface class boundaries of
 `IGraphicsRenderer.hpp`, and whether EasyGL and Vulkan each declare an `override`
 for it.
+
+`VULKAN-268` extends the original eleven-interface census over the five modern
+resource/compute/timer interfaces.  Interface names are discovered from the
+contract header instead of kept in another hand-maintained list.  The implementation
+check searches only the body of a class that actually derives from the queried
+interface; without that boundary an unrelated `SetData` override made an absent
+texture-array implementation look real.
 
 Two traps this script exists to avoid, both of which produced wrong counts before
 they were caught:
@@ -18,13 +25,14 @@ they were caught:
 Usage:  python3 tools/vulkan/iface_contract_table.py
 """
 
-import re, os, glob
+import glob
+import os
+import re
 ROOT=os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 HDR=os.path.join(ROOT,"modules/graphics/include/CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp")
-IFACES=["IGraphicsRenderer","IVertexBufferRenderer","IIndexBufferRenderer","ITextureRenderer",
-        "ITexture3DRenderer","ITextureCubeRenderer","IRenderTargetRenderer","IRenderTargetCubeRenderer",
-        "IEffectRenderer","ISpriteBatchRenderer","IOcclusionQueryRenderer"]
 src=open(HDR).read().splitlines()
+IFACES=sorted({m.group(1) for line in src
+               if (m := re.match(r'\s*class\s+(I\w+Renderer)\b', line))})
 starts={}
 for i,l in enumerate(src):
     m=re.match(r'\s*class\s+(\w+)\b',l)
@@ -55,16 +63,39 @@ for r in rows:
     if (r[0],r[1]) in seen: continue
     seen.add((r[0],r[1])); out.append(r)
 
-def load(tree):
-    txt=[]
-    for p in glob.glob(os.path.join(tree,"**","*.[ch]pp"),recursive=True):
-        if "/examples/" in p or "/tests/" in p: continue
-        try: txt.append(re.sub(r'\s+',' ',open(p,errors="ignore").read()))
-        except Exception: pass
-    return " ".join(txt)
-EG=load(os.path.join(ROOT,"modules/renderers/easygl"))
-VK=load(os.path.join(ROOT,"modules/renderers/vulkan"))
-def has(txt,m): return bool(re.search(r'\b%s\s*\([^;]{0,800}?\boverride\b'%re.escape(m), txt))
+def load_implementations(tree):
+    implementations={iface: [] for iface in IFACES}
+    class_re=re.compile(r'\bclass\s+\w+(?:\s+final)?\s*:\s*([^\{;]+)\{', re.DOTALL)
+    for path in glob.glob(os.path.join(tree,"**","*.[ch]pp"),recursive=True):
+        if "/examples/" in path or "/tests/" in path: continue
+        try: text=open(path,errors="ignore").read()
+        except Exception: continue
+        for match in class_re.finditer(text):
+            bases=match.group(1)
+            inherited=[iface for iface in IFACES if re.search(
+                r'\bpublic\s+(?:[A-Za-z_]\w*::)*%s\b' % re.escape(iface), bases)]
+            if not inherited: continue
+            opening=match.end()-1
+            depth=0
+            closing=None
+            for pos in range(opening,len(text)):
+                if text[pos]=='{': depth+=1
+                elif text[pos]=='}':
+                    depth-=1
+                    if depth==0:
+                        closing=pos
+                        break
+            if closing is None: continue
+            body=re.sub(r'\s+',' ',text[opening+1:closing])
+            for iface in inherited: implementations[iface].append(body)
+    return implementations
+EG=load_implementations(os.path.join(ROOT,"modules/renderers/easygl"))
+VK=load_implementations(os.path.join(ROOT,"modules/renderers/vulkan"))
+def has(implementations, iface, method):
+    return any(re.search(
+        r'\b%s\s*\([^;]{0,800}?\boverride\b' % re.escape(method), body)
+        for body in implementations[iface])
 print("iface\tmethod\tkind\tline\teasygl\tvulkan")
 for name,meth,pure,ln in out:
-    print(f"{name}\t{meth}\t{'PURE' if pure else 'default'}\t{ln}\t{'Y' if has(EG,meth) else '-'}\t{'Y' if has(VK,meth) else '-'}")
+    print(f"{name}\t{meth}\t{'PURE' if pure else 'default'}\t{ln}\t"
+          f"{'Y' if has(EG,name,meth) else '-'}\t{'Y' if has(VK,name,meth) else '-'}")
