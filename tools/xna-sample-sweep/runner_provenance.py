@@ -48,7 +48,12 @@ _BUILD_CONTENT = re.compile(r"\bnew\s+BuildContent\b")
 # `BuildContent`, which reads only that prefix, saw none of them and built the defaults.
 _READS_XML = re.compile(r"\bXmlDocument\b|\bXDocument\b")
 _WALKS_COMPILE = re.compile(r"[\"':]Compile[\"']|Descendants\(\s*\w+\s*\+\s*\"Compile\"")
-_COPIES_METADATA = re.compile(r"SetMetadata\(\s*\w+\.(?:LocalName|Name)\s*,")
+# `SetMetadata(x.LocalName, ...)` and `SetMetadata(x.Name.LocalName, ...)` are the same runner;
+# requiring a single dotted step read SAMPLE-014's as hand-listed, which threw away the
+# `PremultiplyAlpha False` its project sets on 60 of its textures and marked every one of them a
+# difference (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-205`).
+_COPIES_METADATA = re.compile(
+    r"SetMetadata\(\s*[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\.(?:LocalName|Name)\s*,")
 _STRIPS_PARAMETER_PREFIX = re.compile(
     r"SetMetadata\(\s*\w+\.Substring\(\s*\"ProcessorParameters_\"\.Length")
 
