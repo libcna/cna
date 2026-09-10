@@ -112,6 +112,20 @@ class MsaaFragmentContractTest final : public Game
         device.DrawUserPrimitives(PrimitiveType::TriangleList, vertices, 0, 1);
     }
 
+    void DrawHorizontalSlab(GraphicsDevice& device, const Color& color, float bottom)
+    {
+        const VertexPositionColor vertices[6] = {
+            {Vector3(-1.0f, 1.0f, 0.5f), color},
+            {Vector3(-1.0f, bottom, 0.5f), color},
+            {Vector3( 1.0f, bottom, 0.5f), color},
+            {Vector3(-1.0f, 1.0f, 0.5f), color},
+            {Vector3( 1.0f, bottom, 0.5f), color},
+            {Vector3( 1.0f, 1.0f, 0.5f), color},
+        };
+        effect_->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList, vertices, 0, 2);
+    }
+
     void DrawLine(GraphicsDevice& device, const Color& color, float y, float depth)
     {
         const VertexPositionColor vertices[2] = {
@@ -255,6 +269,27 @@ class MsaaFragmentContractTest final : public Game
         Check(result.getRProperty() == 0 && result.getGProperty() == 0 &&
                   NearByte(result.getBProperty(), 191) && result.getAProperty() == 255,
               "stencil written in sample 0 does not reject samples 1..3: " + Text(result));
+    }
+
+    void CheckStandardFourSamplePattern(GraphicsDevice& device)
+    {
+        Begin(device);
+        RasterizerState rasterizer;
+        rasterizer.setCullModeProperty(CullMode::None);
+        rasterizer.setMultiSampleAntiAliasProperty(true);
+        device.setRasterizerStateProperty(rasterizer);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+
+        // On an 8-pixel target, NDC y=-0.05 maps to screen y=4.2. The standard 4x
+        // D3D pattern has one sample above that boundary in pixel row 4; a regular
+        // quarter-pixel 2x2 grid has none.
+        DrawHorizontalSlab(device, kFullGreen, -0.05f);
+        const Color result = FinishAndRead(device, 4, 4);
+        Check(result.getRProperty() == 0 && NearByte(result.getGProperty(), 64) &&
+                  result.getBProperty() == 0 && result.getAProperty() == 255,
+              "4x MSAA uses the standard rotated sample pattern at a 0.2-pixel boundary: " +
+                  Text(result));
     }
 
     void CheckMultiSampleAntiAliasToggle(GraphicsDevice& device)
@@ -506,6 +541,7 @@ protected:
         CheckIndependentDepthSamples(device);
         CheckDepthAtCoveredSamples(device);
         CheckIndependentStencilSamples(device);
+        CheckStandardFourSamplePattern(device);
         CheckMultiSampleAntiAliasToggle(device);
         CheckLineDepthAtSampleLocations(device);
         CheckDeviceMultiSampleMask(device);

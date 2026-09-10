@@ -414,7 +414,7 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   instead of letting floating-point weight-sum drift create one-byte bands. As on EasyGL, the
   near-half-pixel geometry displacement is a single-sample compatibility rule and is omitted for a
   multisampled destination;
-  applying it to quarter-pixel 4x locations would incorrectly remove outer-edge coverage.
+  applying it to the four 4x sample locations would incorrectly remove outer-edge coverage.
 - **Complete `AlphaTestEffect` comparisons** (`SOFTWARE-111`) — all eight XNA `CompareFunction`
   values use FNA's half-byte threshold encoding after texture, vertex and effect alpha are
   multiplied. A rejected fragment is discarded before colour, depth or stencil writes; a null
@@ -426,8 +426,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   counter-clockwise tuple, and the stencil-fail/depth-fail/pass ordering. This applies to colored
   and stock-effect triangles, strips, lines, points, wireframe and SpriteBatch, with alpha discard
   occurring first.
-- **Sample-correct 4x MSAA** (`SOFTWARE-110`, `SOFTWARE-160`, `SOFTWARE-315`, `SOFTWARE-316`) — color, depth and stencil are stored and tested
-  independently at four rotated 2x2 coverage locations. `MultiSampleMask` gates those same samples,
+- **Sample-correct 4x MSAA** (`SOFTWARE-110`, `SOFTWARE-160`, `SOFTWARE-315`, `SOFTWARE-316`, `SOFTWARE-319`) — color, depth and stencil are stored and tested
+  independently at the standard D3D 4x coverage locations `(3/8,1/8)`, `(7/8,3/8)`,
+  `(1/8,5/8)`, `(5/8,7/8)`. `MultiSampleMask` gates those same samples,
   triangle depth is evaluated at each covered location, and resolve deterministically averages the
   surviving colors. `RasterizerState.MultiSampleAntiAlias=false` leaves four-sample storage intact
   but evaluates triangle coverage/depth once at the pixel center and replicates that result to the
@@ -435,7 +436,8 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   former whole-pixel DDA: the shared boundary fixture observes 12 partially covered pixels for a
   selected `LineList` and independently covers wireframe. Depth-gradient line and wireframe probes
   additionally prove that two covered samples can pass/fail depth independently rather than sharing
-  the pixel-center value. Each false result has no partial pixels,
+  the pixel-center value. A separate 0.2-pixel horizontal-boundary discriminator prevents the former
+  regular quarter-grid approximation from returning. Each false result has no partial pixels,
   and true/false/true transitions restore all three independently sampled images. The same
   contract exposed and repaired EasyGL's former silent omission of non-default sample masks and now
   maps this rasterizer toggle to desktop `GL_MULTISAMPLE`; OpenGL ES has no equivalent.

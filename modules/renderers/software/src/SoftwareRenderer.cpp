@@ -12,6 +12,7 @@
 #include "System/NotSupportedException.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -29,6 +30,22 @@ namespace CNA::Internal::Renderers::Software
     {
         using Vector3 = Microsoft::Xna::Framework::Vector3;
         using Vector4 = Microsoft::Xna::Framework::Vector4;
+
+        struct MultiSamplePosition
+        {
+            float x;
+            float y;
+        };
+
+        // SOFTWARE-319: FNA3D's D3D11 path requests D3D11_STANDARD_MULTISAMPLE_PATTERN.
+        // Keep its canonical 4x locations in one table so every CPU primitive route evaluates
+        // coverage and depth at the same positions.
+        constexpr std::array<MultiSamplePosition, 4> kStandardFourSamplePositions{{
+            {3.0f / 8.0f, 1.0f / 8.0f},
+            {7.0f / 8.0f, 3.0f / 8.0f},
+            {1.0f / 8.0f, 5.0f / 8.0f},
+            {5.0f / 8.0f, 7.0f / 8.0f},
+        }};
 
         // ---- Phase S4 rasterizer core ----
         //
@@ -624,7 +641,7 @@ namespace CNA::Internal::Renderers::Software
             // 63/128-pixel amount. Staying just below one half selects the XNA side of exact fill
             // edges after finite subpixel precision instead of leaving the result on the tie.
             // REMED-GFX-235/SOFTWARE-134: the single-sample correction is deliberately absent
-            // from multisampled destinations. Moving four quarter-pixel sample locations by
+            // from multisampled destinations. Moving four subpixel sample locations by
             // almost half a pixel drops three samples at the outer corner and two on each outer
             // edge. EasyGL established the same distinction against the shared render-target
             // readback corpus; XNA's measured one-pixel triangle remains protected on ordinary
@@ -2070,7 +2087,7 @@ namespace CNA::Internal::Renderers::Software
         /// Rasterizes a one-pixel line under the active multisample mode.  A disabled
         /// RasterizerState.MultiSampleAntiAlias deliberately retains the historical pixel-center
         /// DDA and replicates each covered pixel to every sample.  When enabled, a one-pixel-wide
-        /// rectangle around the segment is evaluated at the same four quarter-pixel locations as
+        /// rectangle around the segment is evaluated at the same four standard locations as
         /// triangle coverage.  The exact mask and the original-segment parameter at each sample
         /// are forwarded so depth can be evaluated independently by the fragment pipeline.
         template <typename EmitFn>
@@ -2125,10 +2142,11 @@ namespace CNA::Internal::Renderers::Software
                     std::array<float, 4> sampleTs{};
                     for (int sample = 0; sample < 4; ++sample)
                     {
+                        const auto& samplePosition =
+                            kStandardFourSamplePositions[static_cast<std::size_t>(sample)];
                         const float sampleX = static_cast<float>(x) +
-                            ((sample & 1) == 0 ? 0.25f : 0.75f);
-                        const float sampleY = static_cast<float>(y) +
-                            (sample < 2 ? 0.25f : 0.75f);
+                            samplePosition.x;
+                        const float sampleY = static_cast<float>(y) + samplePosition.y;
                         const float localT = ((sampleX - ax) * dx +
                                               (sampleY - ay) * dy) / lengthSquared;
                         if (localT < 0.0f || localT > 1.0f)
@@ -2314,10 +2332,11 @@ namespace CNA::Internal::Renderers::Software
                         coverageMask = 0u;
                         for (int sample = 0; sample < 4; ++sample)
                         {
+                            const auto& samplePosition =
+                                kStandardFourSamplePositions[static_cast<std::size_t>(sample)];
                             const float sampleX = static_cast<float>(x) +
-                                ((sample & 1) == 0 ? 0.25f : 0.75f);
-                            const float sampleY = static_cast<float>(y) +
-                                (sample < 2 ? 0.25f : 0.75f);
+                                samplePosition.x;
+                            const float sampleY = static_cast<float>(y) + samplePosition.y;
                             const float sampleW0 = EdgeFunction(
                                 v1.x, v1.y, v2.x, v2.y, sampleX, sampleY);
                             const float sampleW1 = EdgeFunction(
@@ -3502,16 +3521,17 @@ namespace CNA::Internal::Renderers::Software
                     }
                     else
                     {
-                        // Four actual coverage samples at (1/4,1/4), (3/4,1/4),
-                        // (1/4,3/4), (3/4,3/4). A partially covered edge therefore blends only
-                        // its covered samples and ResolveColor() averages them before GDI blits.
+                        // SOFTWARE-319: evaluate the canonical standard 4x positions. A partially
+                        // covered edge blends only its covered samples and ResolveColor() averages
+                        // them before GDI blits.
                         coverageMask = 0u;
                         for (int sample = 0; sample < 4; ++sample)
                         {
+                            const auto& samplePosition =
+                                kStandardFourSamplePositions[static_cast<std::size_t>(sample)];
                             const float sampleX = static_cast<float>(x) +
-                                ((sample & 1) == 0 ? 0.25f : 0.75f);
-                            const float sampleY = static_cast<float>(y) +
-                                (sample < 2 ? 0.25f : 0.75f);
+                                samplePosition.x;
+                            const float sampleY = static_cast<float>(y) + samplePosition.y;
                             const float sampleW0 = EdgeFunction(v1.x, v1.y, v2.x, v2.y,
                                                                 sampleX, sampleY);
                             const float sampleW1 = EdgeFunction(v2.x, v2.y, v0.x, v0.y,
